@@ -160,6 +160,8 @@ Write `docs/research/09-snapshot-strategy.md`. Self-contained. Structure:
 - *Failure semantics* — every snapshot write/read failure is non-fatal. A read failure logs and falls through to full replay. A write failure logs and skips this snapshot opportunity (the next command cycle may write again).
 - *GC* — `DELETE FROM keiro_snapshots WHERE taken_at < now() - interval '30 days'` is safe at any time. Document the operator playbook.
 - *Operator commands* — `keiro snapshot rebuild --aggregate Counter` re-snapshots all existing streams of an aggregate; `keiro snapshot purge --before <date>` deletes old snapshots.
+- *Integration with EP-1's Streamly hydration pipeline* — EP-1 (`docs/plans/1-command-cycle-design-and-spike.md`) expresses hydration as a Streamly `Stream (Eff es) RecordedEvent` consumed by a `Fold (Eff es) RecordedEvent (s, RegFile rs)`. The snapshot path is *not* a separate code path; it is the same pipeline with two differences: (1) the source `Stream` is sourced from `readStreamForward sn (snapshot.streamVersion + 1) maxBound` instead of `(StreamVersion 0)`; (2) the `Fold`'s initial accumulator is the decoded snapshot state instead of `(initial t, initialRegs t)`. This means snapshot-accelerated hydration retains constant-memory behaviour for the tail and reuses every Streamly combinator EP-1 sets up. State this explicitly in the design doc so reviewers do not look for a parallel snapshot-load implementation.
+
 - *Integration with EP-1* — the modified `runCommand` pseudocode (joint state `(s, RegFile rs)` written as `t`):
 
       runCommand agg aid cmd = do
@@ -248,3 +250,5 @@ Downstream consumers:
 ## Revisions
 
 - 2026-05-04: Replaced `Decider`/`s` references with `SymTransducer`/`(s, RegFile rs)` throughout. Snapshots now persist the joint state including the register file — required because the register file is where keiki keeps timers, retry counters, and other workflow-relevant slot values that ε-edges and `step` consume. Added a Wanted keiki-side gap for a `RegFile`-serialization helper, since keiro cannot decode the typed heterogeneous tuple without keiki's cooperation. Reason: aligning EP-4 with the EP-1 contract correction (SymTransducer, not Decider).
+
+- 2026-05-04: Added an *Integration with EP-1's Streamly hydration pipeline* subsection to the M1 design-doc outline, making explicit that snapshot-accelerated hydration is the same Streamly `Stream → Fold` pipeline as full hydration — only the source's start `StreamVersion` and the fold's initial accumulator differ. Reason: matches the MasterPlan's new "Streamly substrate" Integration Point and the corresponding EP-1 revision; prevents reviewers from looking for a parallel snapshot-load code path.

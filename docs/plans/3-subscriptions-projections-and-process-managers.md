@@ -75,6 +75,10 @@ The user-visible behaviour the eventual library will deliver: an aggregate autho
   Rationale: Without it the framework is at-least-once for the *source event* but only at-least-once for the *emitted command* on a different code path; this means duplicates that the target aggregate must dedupe. Single-transaction emission gives effective exactly-once for emitted commands provided the target aggregate's `runCommand` is idempotent on a `commandId` (EP-1's design).
   Date: 2026-05-04.
 
+- Decision: Express the async-projection runner, the process-manager event loop, the outbox drain loop, the outbox consumer, and the gap-free read demonstration as Streamly `Stream`/`Fold` pipelines, *not* as ad-hoc `forever (readBatch >>= mapM_ handle)` loops.
+  Rationale: The MasterPlan's "Streamly substrate" Integration Point (`docs/masterplans/1-keiro-research-foundation.md`) makes Streamly the canonical streaming substrate. Shibuya already hands sources back as `Stream (Eff es) (Ingested es msg)` and runs them as `Stream.fold Fold.drain $ Stream.mapM handler source` (`Shibuya/Runner/Serial.hs:37-38`); reusing the same shape for projections, PMs, the outbox, and the contention test means zero impedance-matching at adapter boundaries, constant-memory operation across long event histories, and free interop with `Stream.morphInner`, `Stream.foldMany`, and the rest of the Streamly toolbox. The design doc's *Streamly pipeline shapes* section names the concrete `Stream`/`Fold` types each lifecycle exposes; reviewers can sanity-check that no parallel streaming abstraction (`conduit`, `pipes`, `Vector`-in-memory) has crept in. The inline-projection lifecycle is explicitly the exception — it is one synchronous call inside `runCommandWithSql` and not a streamly pipeline at all.
+  Date: 2026-05-04.
+
 
 ## Outcomes & Retrospective
 
@@ -172,6 +176,14 @@ Write `docs/research/08-subscription-and-process-manager-design.md`. Self-contai
 - *Inbox design* — dual table, dedup-on-insert, how it composes with handlers.
 - *Failure semantics* — `AckRetry`, `AckDeadLetter`, projection errors, PM emission errors, outbox-relay failure.
 - *Concurrency policy* — strict-in-order for inline, partitioned-in-order for async (partition by stream id), unordered for outbox relay.
+- *Streamly pipeline shapes* — name the concrete `Stream`/`Fold` types each lifecycle exposes, since the MasterPlan (`docs/masterplans/1-keiro-research-foundation.md`'s "Streamly substrate" Integration Point) makes Streamly the canonical substrate. Specifically:
+  - **Async projection** — the source is `shibuya-kiroku-adapter`'s `Stream (Eff es) (Ingested es RecordedEvent)`; the runner is `Stream.fold Fold.drain $ Stream.mapM (decodeAndProject codec project) source` (this is the same shape as `Shibuya/Runner/Serial.hs:37-38`). The projection function is lifted into the stream's `Eff es`, so the per-event Hasql transaction (projection update + checkpoint advance) sits inside the `Stream.mapM` step.
+  - **Inline projection** — *not* a `Stream` at all: it is one synchronous call inside `runCommandWithSql` from EP-1. Document this asymmetry explicitly so reviewers do not look for a streamly pipeline where there isn't one.
+  - **Process manager** — same source `Stream` as the async projection, but the `Stream.mapM` step folds the PM's joint state via `Fold.foldlM' pmStep (initialPMState, [])` over a *batched* slice (`Stream.foldMany (Fold.take n Fold.toList)`-style batching, mirroring `Shibuya/Stream.hs:38`'s `batchStream`) when the PM emits multi-stream commands, so multiple input events can collapse into one `appendMultiStream` transaction. The trade-off (latency vs. throughput) is documented; default is no batching for clarity.
+  - **Outbox relay** — two pipelines composed: (a) the *drain* loop is `Stream.unfoldrM` over `SELECT … FROM outbox … LIMIT n FOR UPDATE SKIP LOCKED` mapped through `Stream.mapM enqueueAndDelete` then `Fold.drain`; (b) the *consume* loop is `shibuya-pgmq-adapter`'s `Stream (Eff es) (Ingested es OutboxPayload)` consumed by `Stream.fold Fold.drain $ Stream.mapM deliverExternally source`.
+  - **Gap-free read demo (M1.7)** — built on `shibuya-kiroku-adapter`'s `Stream (Eff es) (Ingested es RecordedEvent)` with `Fold.foldlM' assertContiguousGlobalPosition (GlobalPosition 0)` as the validating fold.
+
+  The point of naming these shapes in the design doc is twofold: (1) reviewers can sanity-check that no parallel streaming abstraction (`conduit`, `pipes`, `Vector`-of-events held in memory) has crept into a sub-pipeline; (2) implementers know exactly which Streamly primitives they will reach for, so the spike's module structure (`Spike.Async`, `Spike.PM`, `Spike.Outbox`, `Spike.GapFree`) is straightforward.
 - *Observability* — what spans/metrics each lifecycle emits; tie to shibuya-metrics + OpenTelemetry hooks already in shibuya.
 - *Test strategy* — for each lifecycle, the acceptance behavior to verify.
 - *Open questions / upstream gaps* — likely items to forward to EP-6: a kiroku-side combinator that exposes `runInTransaction :: Hasql.Session a -> Eff es a` so handlers can append events plus update projection rows plus advance the subscription checkpoint inside one transaction; possibly a kiroku-side durable-timer table.
@@ -242,6 +254,7 @@ Libraries used:
 - `shibuya-pgmq-adapter` — pulls outbox-relayed messages from pgmq.
 - `pgmq-hs` — Postgres queue for the outbox relay.
 - `effectful`, `hasql`, `aeson`, `text`, `vector`, `ephemeral-pg` — supporting infrastructure.
+- `streamly` and `streamly-core` (registered as `composewell/streamly`) — `Streamly.Data.Stream` (`Stream`, `unfoldrM`, `mapM`, `morphInner`, `foldMany`, `take`, `repeatM`, `catMaybes`, `filter`) and `Streamly.Data.Fold` (`Fold`, `foldlM'`, `drain`, `take`, `toList`). Already a transitive dependency through shibuya-core (`Shibuya/Adapter.hs:12`, `Shibuya/Stream.hs`, `Shibuya/Runner/{Serial,Ingester,Supervised}.hs`) and through kiroku-store (`kiroku-store/src/Kiroku/Store/Subscription/Stream.hs`); the spike depends on it directly so the projection / PM / outbox-relay pipelines can be assembled without going through shibuya for sub-pipelines that do not consume from a queue.
 
 Function signatures that must exist by the end of M1:
 
@@ -279,3 +292,5 @@ Downstream consumers:
 ## Revisions
 
 - 2026-05-04: Removed Marten high-water-mark machinery (decision, milestone, design-doc subsection, validation criterion, signature, upstream request). Replaced with explicit reliance on kiroku's existing Strategy E global-position guarantee, documented in `kiroku/docs/DESIGN.md`. Added a corresponding "gap-free reads" demonstration milestone that asserts the absence of gaps under concurrent appenders, citing Strategy E in the test header. Reason: kiroku deliberately chose Strategy E *to avoid* the operational complexity of HWM; recommending HWM at the subscriber layer would have re-paid the very tax kiroku declined.
+
+- 2026-05-04: Made the use of Streamly's `Stream` and `Fold` explicit. Added a *Streamly pipeline shapes* subsection to the M2 design-doc outline that names the concrete `Stream (Eff es) …` and `Fold (Eff es) …` types each lifecycle exposes (async projection, inline projection's deliberate non-pipeline shape, process-manager loop with optional `Stream.foldMany` batching, outbox drain + consume, gap-free read demo). Added `streamly` and `streamly-core` as direct dependencies of the spike. Added a Decision Log entry. Reason: matches the MasterPlan's new "Streamly substrate" Integration Point; reuses the substrate shibuya and kiroku-store already hand back; avoids parallel streaming abstractions creeping in per sub-pipeline.
