@@ -1,0 +1,161 @@
+---
+id: 1
+slug: keiro-research-foundation
+title: "keiro Research Foundation"
+kind: master-plan
+created_at: 2026-05-04T20:11:59Z
+intention: "intention_01kqt8d9t8ehb84kgs19qa1rs9"
+---
+
+# keiro Research Foundation
+
+This MasterPlan is a living document. The sections Progress, Surprises & Discoveries, Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
+
+
+## Vision & Scope
+
+経路 ("keiro") is a Haskell library that turns the existing components — kiroku (Postgres event store), keiki (pure decider/evolve core), shibuya (subscription engine), shibuya-pgmq-adapter, shibuya-kiroku-adapter, pgmq-hs — into a single, production-quality event-sourcing and workflow engine. The framework will replace an in-production system, so correctness, observability, and operational simplicity are non-negotiable. The framework is library-shaped: applications import keiro and connect to a Postgres database; there is no separate server to operate.
+
+The single user-visible behavior keiro must enable is the canonical command-handling cycle: a caller submits a command targeting an aggregate, the framework loads that aggregate's events from kiroku, folds them into state via keiki, runs the decider, and appends new events back to kiroku with optimistic concurrency. The same primitive supports projections (synchronous or asynchronous), process managers (event-sourced workflow coordinators), and — in a later phase — durable execution of long-running workflows.
+
+This MasterPlan is **not** the implementation plan. Its purpose is to take keiro from "scaffold" to "ready to implement". After the surveys in `docs/research/01-...` through `docs/research/05-...` (which describe the current state of the dependencies and the prior art), each child ExecPlan in this MasterPlan produces a concrete *design document* — and where appropriate a small Haskell *spike* — that resolves a specific design question. Together they yield a complete, internally consistent design for keiro v1.
+
+In scope: the design and validation of (1) the load → fold → decide → append cycle including its transactional semantics and retry behaviour, (2) the codec / event-schema layer, (3) projections, subscriptions, and process managers (including the transactional outbox), (4) snapshots, (5) the workflow / durable-execution roadmap, and (6) the consolidated set of upstream feature gaps that kiroku and keiki must close in parallel.
+
+Out of scope: writing the production keiro library itself; that is a separate MasterPlan to be authored after this one is complete. Stretch features identified for v2 (full deterministic-replay durable execution, awakeables, child workflows, multi-region, schema registry, LISTEN/NOTIFY-based push delivery, consumer-group sharding, field-level encryption) are documented in the workflow roadmap but are deliberately deferred.
+
+
+## Decomposition Strategy
+
+The decomposition is by functional concern, with one ExecPlan per top-level keiro capability. The choice of six plans follows the principle in `MASTERPLAN.md` (two-to-seven plans per MasterPlan; introduce phases when more are needed). Each plan owns a coherent design surface, can be reviewed independently by a domain expert, and produces an artifact (a `docs/research/NN-*.md` design document, sometimes accompanied by a Haskell spike under a clearly labelled directory) that is independently verifiable.
+
+The user explicitly identified the load → fold → decide → append cycle as the most important research surface. That cycle is therefore plan 1 and is the only plan with a substantive *implementation* spike — every other plan validates its design with prose and (where necessary) a tiny throwaway prototype rather than production-shaped code. Plan 1 is also the foundation that the other plans assume: codecs (plan 2), subscriptions and process managers (plan 3), and snapshots (plan 4) all extend or accelerate the same cycle, and the workflow roadmap (plan 5) builds on top of process managers introduced in plan 3.
+
+Alternatives considered:
+
+- **One mega-plan covering the entire framework design.** Rejected: it would breach the "fewer than seven" guidance only by replacing six well-bounded plans with one unwieldy plan. Independent reviewability would be lost.
+- **Splitting the command cycle into separate "hydration" and "command bus" plans.** Rejected: hydration without an append target is meaningless, and the optimistic-retry loop straddles both halves. Splitting would create artificial integration points where there are none.
+- **A separate plan per upstream gap (kiroku-side, keiki-side).** Rejected: gaps can only be enumerated correctly *after* the keiro-facing design is settled, so they collapse naturally into a single synthesis plan (plan 6).
+- **A plan dedicated to the transactional outbox.** Rejected: the outbox is one feature inside the projections / process-managers concern (plan 3) and does not warrant its own plan.
+
+The result is one foundation plan, four parallel research plans, and one synthesis plan, in a phased shape:
+
+- **Phase A — Foundation.** Plan 1 (command cycle) must complete first, because every other plan refers to its types and combinators.
+- **Phase B — Parallel research.** Plans 2, 3, 4, and 5 can run concurrently after Phase A. Each is self-contained relative to the others: plan 2 does not need plan 3's snapshots, and so on.
+- **Phase C — Synthesis.** Plan 6 (upstream roadmap) reads the outputs of plans 1–5 and produces a single consolidated list of upstream feature work to land in kiroku and keiki.
+
+
+## Exec-Plan Registry
+
+| # | Title | Path | Hard Deps | Soft Deps | Status |
+|---|-------|------|-----------|-----------|--------|
+| 1 | Command Cycle Design and Spike | docs/plans/1-command-cycle-design-and-spike.md | None | None | Not Started |
+| 2 | Codec and Event Schema Strategy | docs/plans/2-codec-and-event-schema-strategy.md | EP-1 | None | Not Started |
+| 3 | Subscriptions, Projections and Process Managers | docs/plans/3-subscriptions-projections-and-process-managers.md | EP-1 | EP-2 | Not Started |
+| 4 | Snapshot Strategy and Hydration Acceleration | docs/plans/4-snapshot-strategy-and-hydration-acceleration.md | EP-1 | EP-2 | Not Started |
+| 5 | Workflow Engine and Durable Execution Roadmap | docs/plans/5-workflow-engine-and-durable-execution-roadmap.md | None | EP-3 | Not Started |
+| 6 | Upstream Roadmap for Kiroku and Keiki | docs/plans/6-upstream-roadmap-for-kiroku-and-keiki.md | EP-1, EP-2, EP-3, EP-4, EP-5 | None | Not Started |
+
+Status values: Not Started, In Progress, Complete, Cancelled. Hard Deps and Soft Deps reference other rows by their `EP-N` prefix.
+
+
+## Dependency Graph
+
+The plan order is foundation → parallel research → synthesis.
+
+EP-1 (command cycle) is the foundation. It defines the types and combinators every other plan refers to: `AggregateId a`, `runCommand`, the optimistic-retry loop, and the transactional-step primitive. Until those types are written down, EP-2 cannot pick a codec signature, EP-3 cannot describe how a process manager runs a mini command cycle, and EP-4 cannot describe how a snapshot accelerates the hydration phase. EP-1 therefore has no dependencies and must complete first.
+
+EP-2 (codecs) hard-depends on EP-1 because the codec layer must produce the exact types the command cycle expects (typed events going into `EventData.payload`, decoded back into the keiki domain type). EP-2 can be drafted in parallel with EP-1 once the latter has fixed its public types in the design document, but a clean validation of EP-2 requires EP-1's spike.
+
+EP-3 (subscriptions, projections, process managers) hard-depends on EP-1 because a subscription handler that reacts to events and emits commands runs a *miniature* command cycle internally, including optimistic retry. It soft-depends on EP-2 because subscription handlers prefer typed events over raw `Value` payloads. If EP-2 slips, EP-3 can use untyped payloads in its prototype with a clearly labelled "TODO swap to typed".
+
+EP-4 (snapshots) hard-depends on EP-1 because the snapshot path is an optimization of EP-1's hydration phase, and the snapshot decoder must agree with the codec layer (soft dep on EP-2). It does not block any other plan; it can be deferred safely.
+
+EP-5 (workflow roadmap) does not hard-depend on any other plan: it is mostly literature work derived from `docs/research/05-workflow-prior-art.md`. It soft-depends on EP-3 because process managers are the v1 stand-in for a "real" workflow engine, and the roadmap must align with what EP-3 actually delivers. EP-5 can run early and in parallel with the others.
+
+EP-6 (upstream roadmap) hard-depends on every other plan because it consolidates the feature gaps each plan identifies in kiroku and keiki. It is the final synthesis step.
+
+Plans that can proceed in parallel: EP-2, EP-3, EP-4, and EP-5 once EP-1 is complete.
+
+
+## Integration Points
+
+Several artifacts are touched by more than one child plan; each must be defined once and consumed elsewhere identically.
+
+**`Keiro.Command.runCommand` and supporting types.** Defined in EP-1's design document and demonstrated by EP-1's spike. Consumed verbatim by EP-3 (process managers wrap `runCommand` for their internal write path) and EP-4 (snapshot-accelerated hydration must produce a result indistinguishable from full replay). EP-2 must agree with the codec types `runCommand` expects on its event payload boundary. The canonical type signature, error model, and retry semantics live in EP-1 and are referenced by file path from the other plans.
+
+**`AggregateId a` newtype and aggregate-type machinery.** Defined in EP-1. Consumed by every other plan whenever a stream is named at a type level. EP-2 may extend it with a `HasCodec` superclass; EP-3 reuses it for process-manager identity; EP-4 keys snapshots by it; EP-6 lists "no typed `StreamId` per aggregate" as a kiroku-side gap and decides whether the typed wrapper lives in keiro or migrates upstream.
+
+**Codec typeclass / interface for events.** Defined in EP-2. Consumed by EP-1 (encode/decode at the kiroku boundary), EP-3 (subscription handlers decode `RecordedEvent.payload` into the typed event sum), and EP-4 (snapshot serialization). EP-2 owns the version-evolution / upcaster story; the other plans reference EP-2 for the canonical signature and *do not* invent their own.
+
+**Transactional-step primitive.** Defined in EP-1 (combinator that opens a hasql `TxSessions.transaction ReadCommitted Write` block, performs the append plus user-supplied SQL, commits as one). Consumed by EP-3 for inline projections (append events + update read-model rows in one tx) and the outbox (append events + insert outbox rows). EP-4 may use it for the snapshot write path. EP-6 must record any kiroku-store change required for the primitive to be expressible cleanly (currently single-stream append does not open a Haskell-layer transaction).
+
+**Subscription checkpoint table.** Defined in EP-3 in the new `subscriptions` Postgres table layout (extending kiroku's existing `subscriptions(subscription_name, last_seen)` row). EP-4 must not collide with this table when writing snapshots. EP-6 records any required schema migrations for kiroku.
+
+**Process-manager state stream.** Defined in EP-3: a process manager is itself event-sourced, with its own kiroku stream (e.g., `pm-OrderFulfillment-<id>`). EP-5 references this stream as the v1 substrate for "workflow state" and must explain how a future v2 durable-execution layer relates to it.
+
+**`docs/research/` numbering convention.** EP-1 produces `docs/research/06-command-cycle-design.md`. EP-2 produces `07-codec-strategy.md`. EP-3 produces `08-subscription-and-process-manager-design.md`. EP-4 produces `09-snapshot-strategy.md`. EP-5 produces `10-workflow-roadmap.md`. EP-6 produces `11-upstream-roadmap.md`. The numbers continue from the surveys (01–05) already in place. Each plan must use exactly its assigned number to keep the index in `docs/research/00-overview.md` accurate.
+
+
+## Progress
+
+Track milestone-level progress across all child plans. Each entry names the child plan and the milestone.
+
+- [ ] EP-1 M1: Spike — minimal `runCommand` end-to-end against a Postgres test database.
+- [ ] EP-1 M2: Design document — types, error model, retry semantics, transactional step, multi-aggregate command shape.
+- [ ] EP-2 M1: Spike — round-trip a sample aggregate's events through the codec.
+- [ ] EP-2 M2: Design document — codec interface, schema versioning, upcasters, unknown-event policy.
+- [ ] EP-3 M1: Spike — inline projection + async projection + tiny process manager.
+- [ ] EP-3 M2: Design document — projection lifecycles, transactional outbox, process-manager state.
+- [ ] EP-4 M1: Design document — sidecar snapshots table, write/read path, GC, rebuild on schema change.
+- [ ] EP-5 M1: Roadmap document — v1 process-manager substrate and v2 named-step durable execution.
+- [ ] EP-6 M1: Synthesis — consolidated kiroku/keiki feature list with priority and rationale.
+
+
+## Surprises & Discoveries
+
+Document cross-plan insights, dependency changes, scope adjustments, or unexpected interactions between child plans. Provide concise evidence.
+
+(None yet — to be filled as the child plans are executed.)
+
+
+## Decision Log
+
+- Decision: Decompose research into six child plans (command cycle, codecs, subscriptions/projections/process-managers, snapshots, workflow roadmap, upstream roadmap).
+  Rationale: One plan per functional concern; satisfies MASTERPLAN.md's two-to-seven guidance; matches the user's stated priority that the load → fold → decide → append cycle is the single most important surface.
+  Date: 2026-05-04.
+
+- Decision: Treat EP-1 as the foundation; gate every other plan on it (hard dep for EP-2, EP-3, EP-4, EP-6; soft for EP-5).
+  Rationale: Every other capability extends or consumes the command cycle's types, error model, and transactional primitives. Letting them race ahead with placeholders would force expensive rework when EP-1 lands.
+  Date: 2026-05-04.
+
+- Decision: Ship a working spike (Haskell code under a `spikes/` directory the plan creates) for EP-1, EP-2, and EP-3; treat EP-4, EP-5, and EP-6 as design-only.
+  Rationale: The cycle, codecs, and subscriptions are where unknowns concentrate; a small executable end-to-end demo is the only way to retire those risks. Snapshots (EP-4), the workflow roadmap (EP-5), and the upstream synthesis (EP-6) are dominated by literature and design choices, not feasibility.
+  Date: 2026-05-04.
+
+- Decision: Number new design documents `docs/research/06-…` through `docs/research/11-…`, continuing from the five current-state surveys (01–05).
+  Rationale: Preserves a single linear index. EP-6 (the upstream roadmap) lands at `11-` so reviewers can read the synthesis last.
+  Date: 2026-05-04.
+
+- Decision: Adopt the prior-art guidance from `docs/research/05-workflow-prior-art.md` as the starting opinion: Postgres-only, `hasql`-only, `effectful`-only; defer Temporal/Restate-style deterministic replay to v2; v1 ships event-sourced process managers.
+  Rationale: The five reference systems converge on this trade-off. Litigating it again per child plan would waste effort.
+  Date: 2026-05-04.
+
+- Decision: Develop kiroku and keiki feature gaps in parallel with keiro design (recorded in EP-6) rather than blocking keiro on upstream releases.
+  Rationale: User stated explicitly that both libraries still need more features and that the work would proceed in parallel. EP-6 produces the prioritized list for the upstream maintainers; the keiro design proceeds against the current versions plus EP-6's anticipated additions documented as TODOs.
+  Date: 2026-05-04.
+
+- Decision: Reject `Keiki.Decider` as the keiro ⇄ keiki contract. EP-1 must derive the proper contract from first principles, anchored on keiki's native `SymTransducer phi rs s ci co` (and the operations `step`, `delta`, `omega`, `applyEvent`, `applyEvents`, `reconstitute`).
+  Rationale: User clarified that `Keiki.Decider` is a legacy compatibility facade. The richer keiki primitive — `SymTransducer` with its register file `RegFile rs`, ε-edges, and symbolic predicates — is what supports both event sourcing *and* workflows. Adopting the facade as the contract would amputate every workflow feature keiki actually offers (timers and retry counters in registers, silent state transitions via ε-edges, future symbolic verification via z3). Supersedes the earlier "Adopt Chassaing's decider" guidance in EP-5's preliminary Decision Log.
+  Date: 2026-05-04.
+
+- Decision: Remove the recommendation to adopt Marten's high-water-mark for async-subscription gap handling. Rely on kiroku's existing Strategy E global-position guarantees instead.
+  Rationale: Kiroku's `docs/DESIGN.md` documents Strategy E (atomic `UPDATE ... RETURNING` on the `$all` row, `stream_id = 0`, claiming contiguous positions inside the same transaction that inserts events). This produces *gap-free contiguous* `globalPosition`s (1, 2, 3, …), immediate read-your-own-writes, and no MVCC vulnerability — explicitly chosen to *avoid* Marten's HWM operational tax. Recommending HWM would have re-introduced the very complexity kiroku rejected. The earlier guidance in EP-3's Decision Log and `docs/research/05-workflow-prior-art.md`'s synthesis (which was authored without seeing kiroku's design notes) is superseded.
+  Date: 2026-05-04.
+
+
+## Outcomes & Retrospective
+
+Summarize outcomes, gaps, and lessons learned at major milestones or at completion. Compare the result against the original vision.
+
+(To be filled during and after the research is complete. The expected exit criterion is: a self-consistent design across `docs/research/06-` through `docs/research/11-`, three working spikes, and a kiroku/keiki upstream-feature backlog ready to feed an implementation MasterPlan.)
