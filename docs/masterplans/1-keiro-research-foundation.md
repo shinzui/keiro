@@ -52,7 +52,7 @@ The result is one foundation plan, four parallel research plans, and one synthes
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Command Cycle Design and Spike | docs/plans/1-command-cycle-design-and-spike.md | None | None | Complete |
-| 2 | Codec and Event Schema Strategy | docs/plans/2-codec-and-event-schema-strategy.md | EP-1 | None | In Progress |
+| 2 | Codec and Event Schema Strategy | docs/plans/2-codec-and-event-schema-strategy.md | EP-1 | None | Complete |
 | 3 | Subscriptions, Projections and Process Managers | docs/plans/3-subscriptions-projections-and-process-managers.md | EP-1 | EP-2 | Not Started |
 | 4 | Snapshot Strategy and Hydration Acceleration | docs/plans/4-snapshot-strategy-and-hydration-acceleration.md | EP-1 | EP-2 | Not Started |
 | 5 | Workflow Engine and Durable Execution Roadmap | docs/plans/5-workflow-engine-and-durable-execution-roadmap.md | None | EP-3 | Not Started |
@@ -107,8 +107,8 @@ Track milestone-level progress across all child plans. Each entry names the chil
 
 - [x] EP-1 M1: Spike — minimal `runCommand` end-to-end against a Postgres test database. Completed 2026-05-05 (`spikes/command-cycle/`; transcript ends `[spike] OK`).
 - [x] EP-1 M2: Design document — types, error model, retry semantics, transactional step, multi-aggregate command shape. Completed 2026-05-05 (`docs/research/06-command-cycle-design.md`).
-- [ ] EP-2 M1: Spike — round-trip a sample aggregate's events through the codec.
-- [ ] EP-2 M2: Design document — codec interface, schema versioning, upcasters, unknown-event policy.
+- [x] EP-2 M1: Spike — round-trip a sample aggregate's events through the codec. Completed 2026-05-05 (`spikes/codec/`; v1 → v2 OrderPlaced upcaster + 10 000-event stress test; transcript ends `[codec-spike] OK`).
+- [x] EP-2 M2: Design document — codec interface, schema versioning, upcasters, unknown-event policy. Completed 2026-05-05 (`docs/research/07-codec-strategy.md`).
 - [ ] EP-3 M1: Spike — inline projection + async projection + tiny process manager.
 - [ ] EP-3 M2: Design document — projection lifecycles, transactional outbox, process-manager state.
 - [ ] EP-4 M1: Design document — sidecar snapshots table, write/read path, GC, rebuild on schema change.
@@ -124,6 +124,8 @@ Document cross-plan insights, dependency changes, scope adjustments, or unexpect
 - 2026-05-05 (EP-1): kiroku's embedded `schema.sql` uses Postgres 18's `uuidv7()` function. Production deployments must run PG 18+; the user's outer nix profile ships PG 17.9, kiroku-project's flake pins `pkgs.postgresql_18`. **Cascade**: EP-6 must record this as a deployment prerequisite for the production keiro library. No EP-2/EP-3/EP-4/EP-5 impact at the design layer; the constraint surfaces only at the running-process layer.
 - 2026-05-05 (EP-1): kiroku-store's single-stream `appendToStream` does not open a Haskell-layer transaction (only `appendMultiStream` does). The transactional-step combinator (§10 of `docs/research/06-command-cycle-design.md`) cannot be implemented cleanly until kiroku-store exposes a public combinator that wraps a single-stream append plus a user-supplied `Hasql.Transaction.Transaction a` in one tx. **Cascade**: EP-3's inline projections and outbox depend on this; the EP-3 design doc must explicitly describe the workaround (route through `appendMultiStream` with a singleton list) until the upstream lands. EP-6 records the request.
 - 2026-05-05 (EP-1): The Effectful effect-stack ordering for `runStorePool` plus `Error StoreError` is non-obvious — the StoreError handler must be applied *outside* `runStorePool` because `runStorePool` requires `Error StoreError :> es` to throw. The spike's first runner-composition put the handler in the wrong position and produced `[GHC-64725] There is no handler for 'Error StoreError'`. **Cascade**: design-doc §4 records the working order. Every plan that wires keiro's effects (EP-3 process managers, EP-4 snapshot writes, EP-5 workflow runtime) needs to follow the same convention.
+- 2026-05-05 (EP-2): The `hindsight` Haskell library evaluation produced a "selectively borrow" verdict (recorded in EP-2's Decision Log; full evaluation at `spikes/codec/notes/hindsight-evaluation.md`). Adopt three patterns at the value level: consecutive upcasters, the per-event version-vector concept, and the test discipline (roundtrip property + golden tests per old version + version-vector exhaustiveness). Reject the type-level machinery (`MaxVersion`/`Versions` type families, Peano-numbered `Upcast n` instances, `SomeLatestEvent` existential wrapper, `MigrateVersion` automatic composition) and hindsight's own `EventStore`/subscription abstractions. **Cascade**: EP-3, EP-4, and EP-6 inherit the value-level `Codec e` record verbatim — no parallel codec interface. EP-4 will write a separate `StateCodec (s, RegFile rs)` for snapshots, informed by this plan's patterns but with its own versioning semantics (per `docs/research/07-codec-strategy.md` §8). The trade-off (compile-time exhaustiveness lost in exchange for ~6 lines per event vs hindsight's 20+) is honest and mitigated by the mandatory test battery.
+- 2026-05-05 (EP-2): The codec layer needs *no* upstream change to kiroku — `EventData.metadata`, `EventData.eventType`, and `EventData.payload` already have the right shapes for the value-level codec. **Cascade**: EP-6's kiroku backlog gains nothing from EP-2; the only EP-2-flagged upstream item is keiki-side (`RegFile rs <-> Aeson.Value` helper for EP-4's snapshot codec, which EP-1 already requested independently).
 
 
 ## Decision Log
