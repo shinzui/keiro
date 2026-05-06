@@ -51,7 +51,7 @@ The result is one foundation plan, four parallel research plans, and one synthes
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Command Cycle Design and Spike | docs/plans/1-command-cycle-design-and-spike.md | None | None | Not Started |
+| 1 | Command Cycle Design and Spike | docs/plans/1-command-cycle-design-and-spike.md | None | None | In Progress |
 | 2 | Codec and Event Schema Strategy | docs/plans/2-codec-and-event-schema-strategy.md | EP-1 | None | Not Started |
 | 3 | Subscriptions, Projections and Process Managers | docs/plans/3-subscriptions-projections-and-process-managers.md | EP-1 | EP-2 | Not Started |
 | 4 | Snapshot Strategy and Hydration Acceleration | docs/plans/4-snapshot-strategy-and-hydration-acceleration.md | EP-1 | EP-2 | Not Started |
