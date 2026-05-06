@@ -28,19 +28,23 @@ The user-visible behaviour the eventual library will deliver: aggregate authors 
 
 ## Progress
 
-- [ ] M1.1 — Survey snapshot designs from `docs/research/05-workflow-prior-art.md` (Marten, Akka, Eventide); pick one shape.
-- [ ] M1.2 — Design the `keiro_snapshots` table layout.
-- [ ] M1.3 — Design the snapshot read path: load snapshot, read events from `snapshot_version+1`, fold through `evolve`.
-- [ ] M1.4 — Design the snapshot write path: pure post-hydration policy hook, written outside the command-cycle's optimistic-concurrency tx.
-- [ ] M1.5 — Design the schema-change invalidation: codec version of `state` recorded with the snapshot; hydration falls back to full replay when codec versions disagree.
-- [ ] M1.6 — Design the GC story: snapshots are never load-bearing for correctness, so they can be deleted at any time.
-- [ ] M2.1 — Write `docs/research/09-snapshot-strategy.md`.
-- [ ] M2.2 — Update `docs/research/00-overview.md`.
+- [x] M1.1 — Survey snapshot designs from `docs/research/05-workflow-prior-art.md` (Marten, Akka, Eventide); pick one shape. Completed 2026-05-06: adopted the Marten sidecar shape; rejected Akka's pluggability (parent MasterPlan's "Postgres-only" decision) and Eventide's silence on the topic; recorded in §1 of `docs/research/09-snapshot-strategy.md`.
+- [x] M1.2 — Design the `keiro_snapshots` table layout. Completed 2026-05-06: full DDL plus the `regfile_shape_hash` secondary discriminant added per the keiki survey's "register-file shape hash" hint. Rationale recorded column-by-column in §2 of `docs/research/09-snapshot-strategy.md`.
+- [x] M1.3 — Design the snapshot read path: load snapshot, read events from `snapshot_version+1`, fold through `evolve`. Completed 2026-05-06: §6 of `docs/research/09-snapshot-strategy.md`. Includes the `SnapshotRead` outcome enumeration (`Hit` / `Miss` / `IncompatibleCodec` / `IncompatibleShape` / `DecodeError`) and the read-during-write race analysis.
+- [x] M1.4 — Design the snapshot write path: pure post-hydration policy hook, written outside the command-cycle's optimistic-concurrency tx. Completed 2026-05-06: §7 of `docs/research/09-snapshot-strategy.md`. Includes the `INSERT … ON CONFLICT (stream_id) DO UPDATE … WHERE keiro_snapshots.stream_version < EXCLUDED.stream_version` monotonicity guard and the fire-and-forget rationale (vs. queue-backed retry).
+- [x] M1.5 — Design the schema-change invalidation: codec version of `state` recorded with the snapshot; hydration falls back to full replay when codec versions disagree. Completed 2026-05-06: §8 of `docs/research/09-snapshot-strategy.md`. Promoted to *two* discriminants (`state_codec_version` plus `regfile_shape_hash`) to handle slot-list reshapes the codec-version integer alone cannot detect.
+- [x] M1.6 — Design the GC story: snapshots are never load-bearing for correctness, so they can be deleted at any time. Completed 2026-05-06: §9 of `docs/research/09-snapshot-strategy.md`. 30-day default retention; `ix_keiro_snapshots_taken_at` index supports the GC query; operator playbook cross-referenced from §10.
+- [x] M2.1 — Write `docs/research/09-snapshot-strategy.md`. Completed 2026-05-06. 18 sections, ~31 KB. Self-contained per the ExecPlan spec; a reviewer with EP-1, EP-2, and this doc can write the migration, the Haskell skeleton, and answer every operational question §17 enumerates.
+- [x] M2.2 — Update `docs/research/00-overview.md`. Completed 2026-05-06: added the index entry summarizing the sidecar table, the value-level `StateCodec`, the policy types, the Streamly hydration short-circuit, and the shared keiki gap (consolidated by EP-6).
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-05-06: The keiki survey at `docs/research/02-keiki-decide-loop.md` §"Schema" carries a one-line hint that "register-file shape changes invalidate existing snapshots (snapshot validation uses a register-file shape hash)." This hint was not anchored anywhere else in the plan inputs; without it, the EP-4 plan's single `state_codec_version` integer would have silently failed to detect slot-list reshapes (swapping two slots of the same JSON type, renaming a slot whose `Symbol` is not visible in the encoded JSON). Promoted the hash to a first-class column (`regfile_shape_hash TEXT NOT NULL`) and a `SnapshotRead` outcome (`SnapshotIncompatibleShape`). **Cascade**: EP-6 gains a second keiki-side gap (a `KnownRegFileShape` class with a stable `shapeHash` derivation) sharing customers with the existing `RegFile <-> Aeson.Value` helper. Evidence: §2 of `docs/research/09-snapshot-strategy.md` (column rationale); §3 (the `regFileShapeHash :: Text` field on `StateCodec`); §6 (the read-path classification of incompatible-shape rows); §15 gap (2).
+
+- 2026-05-06: kiroku's hard-delete protection (`protect_deletion` / `protect_truncation` triggers in `kiroku-store/sql/schema.sql`, gated by the `kiroku.enable_hard_deletes` GUC) means the `ON DELETE CASCADE` on `fk_keiro_snapshots_stream` is *defensively correct but rarely fires*. Under normal operation an operator cannot delete a row from `streams`; the cascade only triggers under the explicit GDPR / maintenance opt-in. This is fine — the cascade is the right semantic when it does fire — but the design doc must call it out so reviewers do not assume snapshot rows are auto-purged on every stream-level cleanup. Documented in §2 ("`ON DELETE CASCADE`" rationale paragraph) of `docs/research/09-snapshot-strategy.md`. No EP-1/EP-2/EP-3/EP-5 impact; EP-6 may want to record that keiro should expose its own hard-delete GUC analogue for the `keiro snapshot purge --all` operator command (§10).
+
+- 2026-05-06: The snapshot codec deliberately does *not* use an upcaster chain — a structural departure from EP-2's `Codec e` design. The reason is that snapshots are advisory: a stale row falls through to full replay, so there is no correctness reason to read an old format; aggregate authors bumping the codec version reset every snapshot for the aggregate. This makes the snapshot codec dramatically simpler (one integer version, no upcaster chain) but is easy to misread as inconsistency between EP-2 and EP-4. Documented in §3 ("What this plan does *not* inherit") and §12 ("No upcaster chain on `StateCodec`") of `docs/research/09-snapshot-strategy.md`. **Cascade**: none beyond the cross-link; EP-6 records the asymmetry as intentional rather than as a gap.
 
 
 ## Decision Log
@@ -69,10 +73,58 @@ The user-visible behaviour the eventual library will deliver: aggregate authors 
   Rationale: Snapshots are written *after* a successful append, and the snapshot's `version` is the per-stream `StreamVersion`, which is monotonic without bigserial gaps. The high-water-mark concern applies to global-position-based subscribers, not per-stream readers.
   Date: 2026-05-04.
 
+- Decision: Promote the register-file shape hash to a first-class column (`regfile_shape_hash TEXT NOT NULL`) and a `SnapshotRead` outcome (`SnapshotIncompatibleShape`), independent of `state_codec_version`.
+  Rationale: The keiki survey at `docs/research/02-keiki-decide-loop.md` §"Schema" notes that "register-file shape changes invalidate existing snapshots (snapshot validation uses a register-file shape hash)." The codec-version integer alone does not detect every register-file reshape: an aggregate author can swap two slots of the same JSON type or rename a slot whose `Symbol` does not appear in the encoded JSON without bumping the codec version, and the joint state would silently round-trip to a wrong shape. The shape hash is a cheap secondary discriminant (`Text`, derived once at compile time) that closes this gap. EP-4 is the only customer for the shape hash today; the helper is a single-line keiki-side gap consolidated by EP-6.
+  Date: 2026-05-06.
+
+- Decision: `StateCodec` carries one `stateCodecVersion :: Int` and *no* upcaster chain, in deliberate contrast to EP-2's `Codec e`.
+  Rationale: Snapshots are advisory — a stale row falls through to full replay rather than blocking a working command path. There is no correctness reason to read an old snapshot format; the next command-cycle's policy fire writes a fresh snapshot at the current version. An upcaster chain on `StateCodec` would be both unused (no production load reads the chain) and a maintenance burden. The asymmetry with EP-2 is intentional and documented in §3 ("What this plan does *not* inherit") and §12 ("No upcaster chain on `StateCodec`") of `docs/research/09-snapshot-strategy.md`.
+  Date: 2026-05-06.
+
+- Decision: Snapshot writes are fire-and-forget (post-commit, asynchronous, no durable retry queue). A failed write is logged and discarded; the next policy fire writes a fresher snapshot.
+  Rationale: A pgmq-backed retry queue (the substrate EP-3 §6 uses for the outbox) would give durable retry, but the use case is wrong: a stale failed-write has no value once a fresher one is queueable, and pgmq's at-least-once redelivery would re-do work indefinitely against a snapshot that the next command's policy fire will overwrite anyway. EP-3's outbox uses pgmq because *missed messages are correctness failures*; here, missed snapshots are cache misses. The asymmetry justifies the simpler shape (`forkAsync` style fire-and-forget) recorded in §7 of `docs/research/09-snapshot-strategy.md`.
+  Date: 2026-05-06.
+
+- Decision: The `ON CONFLICT (stream_id) DO UPDATE` clause carries a monotonicity guard `WHERE keiro_snapshots.stream_version < EXCLUDED.stream_version`.
+  Rationale: Two concurrent retry-winners — a command at `streamVersion 100` whose snapshot write is delayed and a later command at `streamVersion 110` whose snapshot write completes first — must converge to the higher-version snapshot. Without the guard, the `100`-writer's late-arriving update overwrites the `110`-writer's row, regressing the snapshot to a stale version. The guard makes the lower-version writer's update a no-op; the higher-version snapshot wins. Recorded in §7 of `docs/research/09-snapshot-strategy.md`.
+  Date: 2026-05-06.
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-4 closed 2026-05-06 with `docs/research/09-snapshot-strategy.md` (18 sections, ~31 KB) and an updated `docs/research/00-overview.md` index. Design-only; no spike, per the EP-4 plan's Decision Log (snapshots are storage plumbing whose every component has been implemented many times and would not retire any unknown if prototyped).
+
+What the design fixes:
+
+- **Storage**: a single sidecar `keiro_snapshots` table keyed on kiroku's `stream_id`, holding the encoded joint state `(s, RegFile rs)` plus two independent staleness discriminants (`state_codec_version :: Int` and `regfile_shape_hash :: Text`). Rationale recorded column-by-column in §2 of the design doc; full DDL fits the EP-4 plan's M1.2 acceptance.
+- **Codec**: a value-level `StateCodec t` record-of-functions, sibling of EP-2's `Codec e` but versioned at the aggregate level rather than per record, with no upcaster chain (snapshots are advisory; bumping the version invalidates every existing snapshot). §3 of the design doc.
+- **Policy**: a pure function `(s, RegFile rs) -> StreamVersion -> Bool` with three named constructors (`snapshotPolicyEvery n`, `snapshotPolicyOnTerminal isTerminal`, `snapshotPolicyNever`). §4.
+- **Read path**: hydration short-circuits the EP-1 Streamly `Stream → Fold` pipeline by parameterizing the source's start cursor (`StreamVersion (snap.streamVersion + 1)` on hit, `StreamVersion 0` on miss) and the fold's initial accumulator (decoded snapshot state on hit, `(initial t, initialRegs t)` on miss). Same pipeline, no parallel code path — matching the parent MasterPlan's "Streamly substrate" Integration Point. §6.
+- **Write path**: post-commit, asynchronous, gated by an `INSERT … ON CONFLICT (stream_id) DO UPDATE … WHERE keiro_snapshots.stream_version < EXCLUDED.stream_version` monotonicity guard so stale writes cannot regress fresher snapshots. §7.
+- **Schema-change invalidation**: the read path's two-discriminant fall-through (`state_codec_version` mismatch *or* `regfile_shape_hash` mismatch returns `Nothing` to the caller, with a logged warning); operators can `TRUNCATE keiro_snapshots` to accelerate convergence. §8.
+- **GC**: 30-day default retention via `DELETE FROM keiro_snapshots WHERE taken_at < now() - interval '30 days'` (`ix_keiro_snapshots_taken_at` index). Snapshots are advisory; deletion is correctness-safe. §9.
+- **Operator commands**: five `keiro snapshot` subcommands (`list`, `show`, `purge`, `rebuild`, `stats`). §10.
+- **Integrations**: §§11–14 record the EP-1, EP-2, EP-3 (no use of snapshots), and EP-5 cross-links explicitly so reviewers do not look for snapshot use in the wrong place.
+- **Testing**: three test classes the production library will run — round-trip (per-codec QuickCheck), hydration equivalence (snapshot + tail = full replay), schema-change fall-through. §16.
+- **How to verify**: §17 lists seven concrete questions a reviewer must be able to answer purely from the doc.
+
+Gaps forwarded to EP-6:
+
+1. **keiki: `RegFile rs <-> Aeson.Value` helper** — shared with EP-1 (`docs/research/06-command-cycle-design.md` §14) and EP-2 (`docs/research/07-codec-strategy.md` §12). Three customers, one helper.
+2. **keiki: `KnownRegFileShape rs` class with stable `shapeHash` derivation** — EP-4 is the only customer; could land alongside (1).
+3. **kiroku: optional `lookupStreamId :: StreamName -> Eff es (Maybe StreamId)` helper** — performance-only, not correctness; recorded as a candidate optimization rather than a requirement.
+
+Compared against the original EP-4 plan: the design grew one column (`regfile_shape_hash`) beyond what the plan sketched, prompted by the keiki survey hint about register-file shape hashes — see Surprises & Discoveries entry 1. Otherwise the design landed as the plan sketched, with prose elaboration (constant-memory Streamly inheritance, monotonicity guard rationale, fire-and-forget vs. queue-backed retry comparison, EP-3 explicit non-use, EP-5 explicit relationship to v2 named-step snapshots) added to make the doc self-contained per the ExecPlan spec.
+
+Acceptance per §17 of the design doc:
+
+1. ✓ DDL present (§2), idempotent, references operative Postgres types precisely.
+2. ✓ Read path's three branches (hit / miss / mismatch) all specified (§6).
+3. ✓ Write path's three branches (policy fires / does not / write fails) all specified (§§4, 7).
+4. ✓ Upstream gaps recorded for EP-6 consumption (§15).
+5. ✓ Failure semantics make snapshots advisory throughout (§§6, 7, 8).
+
+The next implementable plans in the parent MasterPlan are EP-5 (workflow roadmap; no hard deps) and EP-6 (upstream roadmap; hard-deps on every other plan, so blocked until EP-5 closes).
 
 
 ## Context and Orientation
