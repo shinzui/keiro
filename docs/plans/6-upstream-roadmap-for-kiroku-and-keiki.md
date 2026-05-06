@@ -31,20 +31,29 @@ The user-visible behaviour the eventual library will deliver: when keiro v1 is b
 
 ## Progress
 
-- [ ] M1.1 — Read EP-1's `docs/research/06-command-cycle-design.md`; extract every kiroku/keiki gap.
-- [ ] M1.2 — Read EP-2's `docs/research/07-codec-strategy.md`; extract.
-- [ ] M1.3 — Read EP-3's `docs/research/08-subscription-and-process-manager-design.md`; extract.
-- [ ] M1.4 — Read EP-4's `docs/research/09-snapshot-strategy.md`; extract.
-- [ ] M1.5 — Read EP-5's `docs/research/10-workflow-roadmap.md`; extract.
-- [ ] M1.6 — Cross-check against the gap lists in `docs/research/01-kiroku-read-side.md` and `docs/research/02-keiki-decide-loop.md`.
-- [ ] M1.7 — Group, deduplicate, and prioritize gaps.
-- [ ] M2.1 — Write `docs/research/11-upstream-roadmap.md` with separate sections for kiroku and keiki, each prioritized.
-- [ ] M2.2 — Update `docs/research/00-overview.md`.
+- [x] M1.1 — Read EP-1's `docs/research/06-command-cycle-design.md`; extracted gaps. Completed 2026-05-06.
+- [x] M1.2 — Read EP-2's `docs/research/07-codec-strategy.md`; extracted gaps. Completed 2026-05-06.
+- [x] M1.3 — Read EP-3's `docs/research/08-subscription-and-process-manager-design.md`; extracted gaps. Completed 2026-05-06.
+- [x] M1.4 — Read EP-4's `docs/research/09-snapshot-strategy.md`; extracted gaps. Completed 2026-05-06.
+- [x] M1.5 — Read EP-5's `docs/research/10-workflow-roadmap.md`; extracted gaps. Completed 2026-05-06.
+- [x] M1.6 — Cross-checked against gap lists in `docs/research/01-kiroku-read-side.md` and `docs/research/02-keiki-decide-loop.md`. Completed 2026-05-06.
+- [x] M1.7 — Grouped, deduplicated, and prioritised gaps into Blocking / Wanted / Optional buckets across kiroku-store, shibuya-kiroku-adapter, shibuya-core, and keiki. Completed 2026-05-06.
+- [x] M1.8 — Spot-checked three load-bearing citations against the live upstream sources (`kiroku-store/src/Kiroku/Store/Effect.hs:160,190` for the `TxSessions.transaction` boundary; `kiroku-store/sql/schema.sql:2,25,74-78` for the Postgres-18/`uuidv7()` requirement and the subscriptions table; `shibuya-kiroku-adapter/src/Shibuya/Adapter/Kiroku/Convert.hs:42-47` for the "checkpoint managed internally" comment). All three matched. Completed 2026-05-06.
+- [x] M2.1 — Wrote `docs/research/11-upstream-roadmap.md`: 13 sections, 17 prioritised entries plus 3 cross-cutting items plus 6 explicitly-not-gaps, four-block sequencing recommendation, three open questions forwarded to upstream maintainers, citation snapshot for forward-compatibility. Completed 2026-05-06.
+- [x] M2.2 — Updated `docs/research/00-overview.md` to add the `11-upstream-roadmap.md` entry after the `10-workflow-roadmap.md` entry. Completed 2026-05-06.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-05-06: The four-block sequencing collapses cleanly to a single Block-1 item: kiroku-store's single-stream `runInTransaction` combinator (§4.1 of `docs/research/11-upstream-roadmap.md`). Every other gap is either Wanted or Optional; the implementation MasterPlan's gating reduces to "wait for one combinator." The pre-synthesis expectation (informed by the EP-1 anticipated-gaps list) was that two or three Blocking items would emerge; in practice, EP-3's at-least-once async-projection design and EP-4's snapshot-as-advisory design absorbed the would-be-Blocking items into Wanted. **Cascade**: the implementation MasterPlan can begin work as soon as kiroku-store ships §4.1; everything else parallelises. Recorded in `docs/research/11-upstream-roadmap.md` §3 Block 1.
+
+- 2026-05-06: Three keiki-side requests collapse onto a single keiki PR: §7.1 (register-file `<-> Aeson.Value` helper), §7.2 (register-file shape hash), and the §7.3 structured-error-model on `step`/`omega`. The first two share a compile-time slot-list walk and a shared customer set (EP-1, EP-2, EP-4 for the helper; EP-4 alone for the hash); the third is a separate pure-keiki signature change. Landing all three together is the natural keiki-side scoping. **Cascade**: EP-6's recommendation to keiki is "one PR" rather than "three small PRs"; the keiki maintainer can decide. Recorded in `docs/research/11-upstream-roadmap.md` §7.
+
+- 2026-05-06: The shibuya-kiroku-adapter `HandlerInTransaction` shape (§5.1) is a kiroku-store change as well as a shibuya-kiroku-adapter change — the runner needs to call kiroku's checkpoint-advance SQL inside the user's `Hasql.Transaction.Transaction`, which means the SQL must be exposed through the kiroku-store boundary. Co-scheduling §4.1 and §5.1 in one upstream coordination window (likely a single shared release of kiroku-store + shibuya-kiroku-adapter) is the recommended shape. The §5.1 entry's *Suggested sequencing* paragraph records this. **Cascade**: the implementation MasterPlan can use this co-scheduling as a marker — when both items land, the at-least-once → exactly-once async projection migration is unblocked.
+
+- 2026-05-06: §9 ("Explicitly NOT gaps") records six items that earlier drafts (or a maintainer reading only the surveys) might have logged as gaps. Three were absorbed by deliberate design choices in the parent MasterPlan or the child plans (Strategy E supersedes HWM; `SymTransducer` already is the right process-manager primitive; `Codec e` and `StateCodec` asymmetry is intentional, not an inconsistency); two by the existing Streamly substrate; one by the prior-art-survey rejection of server-side scripted projections. The "explicitly NOT" framing prevents the next reader from re-litigating decisions that have already cost discussion time. **Cascade**: future EP-6-readers can stop a "wait, shouldn't we …?" thread by pointing at §9.
+
+- 2026-05-06: The MasterPlan's anticipated mention of `hs-opentelemetry` version skew between shibuya-core and pgmq-hs (recorded in the MasterPlan's Surprises & Discoveries entry of 2026-05-05, EP-3) was not captured by any single child plan's gap list — it surfaces only when both libraries land in the same workspace. EP-6 picked it up at synthesis time and added §8.3 as a cross-cutting "Wanted" item to be coordinated by shibuya/pgmq-hs at the build-environment level. **Cascade**: the implementation MasterPlan's first build pass should treat this as a known-coordination point rather than a surprise.
 
 
 ## Decision Log
@@ -65,10 +74,40 @@ The user-visible behaviour the eventual library will deliver: when keiro v1 is b
   Rationale: Designing kiroku/keiki changes is the upstream's responsibility. This plan provides the requirements; each upstream MasterPlan will design and implement.
   Date: 2026-05-04.
 
+- Decision: Reclassify the `shibuya-kiroku-adapter` `HandlerInTransaction` shape from Blocking to Wanted (Blocking-for-exactly-once). Recorded in `docs/research/11-upstream-roadmap.md` §5.1.
+  Rationale: EP-3's published design (`docs/research/08-subscription-and-process-manager-design.md` §3) explicitly accepts at-least-once async projections as the v1 default with user-side idempotency; v1 keiro can ship without the shape. The "Blocking-for-exactly-once" qualifier preserves the urgency for the implementation MasterPlan's v1.x window without overstating the v1 gating.
+  Date: 2026-05-06.
+
+- Decision: Group the kiroku-store roadmap by upstream package, not by priority. Each subsection (`§4`, `§5`, `§6`, `§7`) is one upstream package; within each, entries are ordered Blocking → Wanted → Optional.
+  Rationale: An upstream maintainer reading the document is interested in their own package, not in cross-package priority. The four-block sequencing recommendation (`§3`) provides the cross-package view for the implementation MasterPlan; the per-package sections serve the upstream maintainers.
+  Date: 2026-05-06.
+
+- Decision: Add an "Explicitly NOT a gap" section (§9) recording six items that might be mistaken for gaps with the rationale for each rejection.
+  Rationale: Earlier drafts of this plan logged some of these (HWM, parallel `Process` primitive in keiki). Recording the rejections inline prevents the next reader from re-litigating settled decisions and gives EP-6 a place to point future readers at when they re-raise the question.
+  Date: 2026-05-06.
+
+- Decision: Add a "Citation snapshot" section (§11) listing every cited file:line.
+  Rationale: Citations rot. A future reader checking against then-current upstream needs a single index of "what we cited and where" to quickly identify which gaps have been closed by upstream changes since synthesis. The §12 "How to verify" point #6 makes this index a load-bearing artifact, not a courtesy.
+  Date: 2026-05-06.
+
+- Decision: Forward three open questions to upstream maintainers (§10) — codec ownership to keiki, compensate direction to keiki, supervisor generalisation to shibuya — without prejudging the answer.
+  Rationale: Each question is one the upstream maintainer is better positioned to answer than EP-6 (it depends on roadmap items keiro has no visibility into). EP-6's job is to identify and forward, not to decide unilaterally.
+  Date: 2026-05-06.
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-6 closed on 2026-05-06 with `docs/research/11-upstream-roadmap.md` published. The synthesis identified one Blocking item (kiroku-store's single-stream `runInTransaction` combinator), six Wanted items in Block 2, six Wanted items in Block 3, and eight Optional items in Block 4, plus three cross-cutting items, plus six explicitly-not-gaps. The pre-synthesis expectation (recorded in this plan's anticipated-gaps section, written 2026-05-04) was that two-to-three Blocking items would emerge; in practice, EP-3's at-least-once async-projection design and EP-4's snapshot-as-advisory design absorbed the would-be-Blocking items into Wanted, leaving exactly one true gate.
+
+Compared to the original vision: the plan delivered exactly what was asked — a single, prioritised, rationale-bearing backlog that an upstream maintainer can schedule against without further keiro-side conversation. The §12 verification questions are answerable from the document alone; the §11 citation snapshot makes future drift detectable without re-running the whole synthesis. Three open questions (§10) are forwarded to the relevant upstream maintainers — none of these questions could be answered unilaterally by EP-6.
+
+What remains: nothing in this plan. EP-6 is a terminal plan in the research-foundation MasterPlan; the implementation MasterPlan that follows will consume `docs/research/11-upstream-roadmap.md` as its upstream-gating artefact.
+
+Lessons for future synthesis plans:
+
+- *Spot-checking citations before drafting saves rework.* Three citations were spot-checked against the live upstream (recorded in M1.8); all three matched. If any had drifted, the synthesis would have surfaced wrong file:line numbers and a future reader could not have validated the gap. The cost of the spot-check was ~5 minutes; the value is permanent (the §11 snapshot records the verified citations).
+- *"Explicitly NOT a gap" entries earn their keep.* Three of the §9 entries (HWM, `Process` primitive, codec layer changes) were items that earlier draft thinking logged as gaps and that later design work absorbed. Recording the rejection with rationale prevents the next reader from re-litigating; without it, the conversation would re-occur in every implementation MasterPlan that touches the relevant surface.
+- *Upstream PRs cluster by maintainer's mental model, not by keiro-customer priority.* §7.1 + §7.2 (and possibly §7.3) all touch keiki's pure core; landing them in one keiki PR is the natural shape for the keiki maintainer even though they are scattered across keiro plans. EP-6's per-package grouping (Decision Log entry of 2026-05-06) reflects this.
 
 
 ## Context and Orientation
@@ -225,6 +264,8 @@ This is the terminal plan in this MasterPlan. Once it is complete, the keiro res
 
 
 ## Revisions
+
+- 2026-05-06: Closed EP-6. `docs/research/11-upstream-roadmap.md` published (13 sections); `docs/research/00-overview.md` updated; M1.1–M1.8 and M2.1–M2.2 ticked off in Progress; five new entries appended to Surprises & Discoveries (the single-Blocking-item collapse, the keiki one-PR grouping, the §4.1+§5.1 co-scheduling marker, the §9 "explicitly NOT" framing as a regret-prevention device, and the `hs-opentelemetry` skew lift); five new Decision-Log entries (the `HandlerInTransaction` reclassification, the per-package grouping, the §9 addition, the §11 citation snapshot, the §10 forwarded questions); Outcomes & Retrospective filled in. EP-6 is the terminal plan; the research-foundation MasterPlan's implementation phase can begin once kiroku-store ships §4.1.
 
 - 2026-05-04: Removed `highWaterMark` from kiroku-side anticipated gaps; added an "Explicitly NOT a gap" subsection citing kiroku's Strategy E (`kiroku/docs/DESIGN.md`). Reframed keiki-side gaps around the native `SymTransducer` contract: structured error model targets `step`/`omega` instead of the legacy `Decider.decide`; the register-file serialization helper is added as a Wanted (Blocking for EP-4); a saga/compensate-direction question is added; and the previous "Process or ProcessManager primitive" gap is moved to "Explicitly NOT a gap" because `SymTransducer` already is that primitive. Added an EP-4-derived optional kiroku gap (combined snapshot + tail-events query). Reason: aligning EP-6 with the keiki-team's clarification that `Decider` is a legacy compat facade and with kiroku's deliberate Strategy-E choice.
 
