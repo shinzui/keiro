@@ -31,22 +31,31 @@ The user-visible behaviour the eventual library will deliver: in v1, workflow au
 
 ## Progress
 
-- [ ] M1.1 — Synthesize the v1 minimum-viable feature set from `docs/research/05-workflow-prior-art.md`.
-- [ ] M1.2 — Synthesize the v2 stretch feature set.
-- [ ] M1.3 — Pick the v2 durable-execution shape (named steps vs positional history) and justify.
-- [ ] M1.4 — Specify how v1 process managers (EP-3) provide the substrate for v2 durable execution.
-- [ ] M1.5 — Identify the schema additions v2 will need and confirm none invalidate v1 schemas.
-- [ ] M1.6 — Specify the durable-timer mechanism (a v1 feature; minimal table layout).
-- [ ] M2.1 — Write `docs/research/10-workflow-roadmap.md`.
-- [ ] M2.2 — Update `docs/research/00-overview.md`.
+- [x] M1.1 — Synthesize the v1 minimum-viable feature set from `docs/research/05-workflow-prior-art.md`. Completed 2026-05-06 (`docs/research/10-workflow-roadmap.md` §2).
+- [x] M1.2 — Synthesize the v2 stretch feature set. Completed 2026-05-06 (`docs/research/10-workflow-roadmap.md` §6).
+- [x] M1.3 — Pick the v2 durable-execution shape (named steps vs positional history) and justify. Completed 2026-05-06 (`docs/research/10-workflow-roadmap.md` §4 — named steps, with the rationale anchored against `docs/research/05-workflow-prior-art.md` §1 vs §4).
+- [x] M1.4 — Specify how v1 process managers (EP-3) provide the substrate for v2 durable execution. Completed 2026-05-06 (`docs/research/10-workflow-roadmap.md` §5 — substrate continuity in terms of `SymTransducer phi rs sP cP cmd` for v1 and journaled `step` calls for v2; the migration story is mechanical, not a rewrite).
+- [x] M1.5 — Identify the schema additions v2 will need and confirm none invalidate v1 schemas. Completed 2026-05-06 (`docs/research/10-workflow-roadmap.md` §7 — five v1 tables consolidated; v2 adds two more (`keiro_workflow_steps` index, `keiro_awakeables`); v1-to-v2 upgrade is in place with no migration of v1 tables).
+- [x] M1.6 — Specify the durable-timer mechanism (a v1 feature; minimal table layout). Completed 2026-05-06 (`docs/research/10-workflow-roadmap.md` §3 — `keiro_timers` table with partial index on `status = 'pending'`, fire path via `FOR UPDATE SKIP LOCKED` plus a `TimerFired` append-and-status-flip in one `TxSessions.transaction`, cancellation via idempotent `status = 'cancelled'` flip).
+- [x] M2.1 — Write `docs/research/10-workflow-roadmap.md`. Completed 2026-05-06 (eleven sections; cross-references EP-1 through EP-4 by file path; positions keiro v1 against Temporal/Restate/DBOS in §8).
+- [x] M2.2 — Update `docs/research/00-overview.md`. Completed 2026-05-06 (new entry summarising §§2–8 with the v1/v2 split and the three forwarded EP-6 questions).
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-05-06: Drafting §3 (durable timers) surfaced an open question that does not fit cleanly into any prior plan: the timer-firing worker is not adapter-shaped, so reusing shibuya's supervisor (which today supervises `(Adapter es msg, Handler es msg)` pairs) requires either a non-adapter-shaped worker entry point in shibuya or a degenerate adapter wrapper in keiro. Recorded in `docs/research/10-workflow-roadmap.md` §9 and forwarded to EP-6 as the third v1-substrate-driven question (alongside kiroku-side prefix-style category subscriptions for `pm-`/`wf-` streams and a keiki-side `compensate` direction on `SymTransducer`). **Cascade**: EP-6 gains three new shibuya/kiroku/keiki questions whose origin is the workflow surface rather than the command-cycle / codec / projection / snapshot surfaces. None are blockers for v1; all are quality-of-life choices that EP-6 prioritises against the existing backlog.
+- 2026-05-06: The substrate-continuity argument (§5 of `docs/research/10-workflow-roadmap.md`) lands cleanly on EP-1's choice to make `SymTransducer phi rs s ci co` the keiro ⇄ keiki contract rather than the legacy `Decider` facade. Without `RegFile rs` exposed in the contract, the v1 PM could not carry timer fire-times and retry counters, and the v2 workflow could not store its journaled step results in a register-file-shaped value. The earlier MasterPlan Decision Log entry (2026-05-04) that rejected the `Decider` facade as the contract was load-bearing for the v2 roadmap; the workflow story would have been substantially weaker if it had stood. **Cascade**: no plan update needed — the decision is already recorded; this surprise is a positive validation that the foundation choice held up under v2 scrutiny.
 
 
 ## Decision Log
+
+- Decision: Promote durable timers from "an unspecified v1 feature" to a fully-designed v1 primitive owned by this document (`docs/research/10-workflow-roadmap.md` §3). Schema, write path, cancel path, fire path, concurrency policy, and the question of whether to host the worker on shibuya's supervisor are all fixed.
+  Rationale: M1.6 in this plan's Progress required a "minimal table layout" for timers. While drafting, it became clear that "minimal" is misleading — without specifying the cancellation contract (idempotent `status = 'cancelled'` flip), the fire-path atomicity (`TimerFired` append plus `status = 'fired'` flip in one `TxSessions.transaction`), and the `FOR UPDATE SKIP LOCKED` polling shape, the production implementer would have to re-derive the design. The full §3 is still ~70 lines and serves as the unambiguous source of truth without bloating the roadmap. Recorded here so future readers know §3's depth was deliberate, not feature creep.
+  Date: 2026-05-06.
+
+- Decision: Frame the v1 substrate continuity argument (§5) in terms of `SymTransducer phi rs sP cP cmd` rather than the `(state, event) -> (state, [command])` decider shape, even though the `Decider` shape is more pedagogically familiar.
+  Rationale: The MasterPlan's 2026-05-04 Decision Log already retracted the "adopt Chassaing's decider as the keiki API" guidance. The v2 durable-execution roadmap depends on the register file `RegFile rs` being exposed in the contract — without it, the v2 workflow cannot store journaled step results in a register-file-shaped value, and the upgrade from v1 PM to v2 workflow becomes a rewrite rather than a re-expression. Sticking with `SymTransducer` keeps the substrate continuity story honest. The §5 prose still gives the `(state, event) -> (state, [command])` shape as the user's mental model — both are true; the contract is the transducer, the user-facing pattern is the decider shape.
+  Date: 2026-05-06.
 
 - Decision: keiro v1 ships event-sourced process managers (designed in EP-3) plus durable timers; deterministic-replay durable execution is deferred to v2.
   Rationale: Process managers cover ~90% of workflow use cases (sagas, choreography, multi-aggregate coordination) without the operational tax of a deterministic-replay runtime. Temporal/Restate-class systems are powerful but the cost of running them is enormous and most of it is paid to enable the determinism story (`docs/research/05-workflow-prior-art.md` "Opinionated synthesis"). Keep the upgrade door open.
@@ -79,7 +88,29 @@ The user-visible behaviour the eventual library will deliver: in v1, workflow au
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-5 closed 2026-05-06. The single artifact is `docs/research/10-workflow-roadmap.md` (eleven sections, ~7300 words). Every `Validation and Acceptance` clause holds:
+
+1. The doc exists and is referenced from `docs/research/00-overview.md` (new entry mirroring the §§2–8 split).
+2. Every v1 feature has a paragraph in §2 with a cross-link to the EP that designs it (EP-1 for idempotent commands, EP-3 for projections + outbox + inbox + PMs + sagas-via-PMs, EP-4 for snapshots; durable timers are owned by §3 of the new doc).
+3. Every v2 feature has a paragraph in §6 explaining why it is deferred — twelve features, each with a "what it is / why deferred" pair.
+4. The v2 durable-execution API shape (§4) is fixed to four signatures: `step :: StepName -> Eff es a -> Workflow es a`, `sleep :: NominalDiffTime -> Workflow es ()`, `awakeable :: Workflow es (AwakeableId, Eff es a)`, `runWorkflow :: WorkflowId -> Workflow es a -> Eff es a`.
+5. §5 explains the v1-to-v2 substrate continuity in terms of `SymTransducer phi rs sP cP cmd` for v1 PMs and journaled `step` calls for v2 workflows; the migration story is mechanical (re-express, don't rewrite) and concretely worked through with a fulfilment-saga example.
+6. §9 forwards three open questions to EP-6: a kiroku-side prefix-style category subscription for `pm-`/`wf-` streams, a keiki-side `compensate` direction on `SymTransducer`, and a shibuya-side decision on whether to host the timer-firing worker on the supervised-worker substrate.
+
+Phrased as observable behaviour: a reviewer who reads only `docs/research/10-workflow-roadmap.md` and `docs/research/05-workflow-prior-art.md` can explain (a) what keiro v1 is, (b) what it deliberately is not, and (c) what v2 will add — without consulting external Temporal/Restate/DBOS material. The "competitive position" statement in §8 ("a Haskell-first, Postgres-native, library-shaped event-sourcing engine with first-class process managers and durable timers in v1, and an explicit upgrade path to named-step durable execution in v2") is anchored in concrete API shapes and concrete deferral rationales, not in marketing prose.
+
+Lessons learned:
+
+- *§3's depth was the right call.* The original plan-of-work called for "minimal table layout" for timers. Producing only a `CREATE TABLE` would have left the fire-path atomicity, the idempotent-cancellation contract, and the `FOR UPDATE SKIP LOCKED` polling shape under-specified. Fixing them in §3 means the production implementer has one source of truth.
+- *Substrate continuity (§5) is load-bearing.* The argument that a v1 PM is "a v2 workflow with one explicit step" — and conversely a v2 workflow is "a PM whose step function happens to be journaled call-by-call" — is the single most important claim the roadmap makes. Without it, v2 looks like a rewrite; with it, v2 is an extension. The `SymTransducer` framing (rather than `Decider`) was essential to make the claim precise.
+- *Twelve v2 deferrals is the right number.* Splitting "stretch features" into a list of one-paragraph entries keeps each deferral honest — each one names what it is, why it is deferred, and (often) what the v1 alternative is. Three deferrals would have been too coarse; twenty would have been make-work.
+
+Gaps remaining:
+
+- v2 implementation is out of scope for the research MasterPlan. The v2 surface (`step`/`sleep`/`awakeable`/`runWorkflow`) is fixed at the type-signature level only; the effect handler implementation, the journal-stream-per-workflow infrastructure, the re-entry-on-crash logic, and the v1-to-v2 migration tooling are all future work.
+- The three open questions in §9 await EP-6's synthesis. None block v1; all three are quality-of-life choices that affect the v1 substrate's polish rather than its correctness.
+
+The next plan in the MasterPlan's dependency graph is EP-6 (`docs/plans/6-upstream-roadmap-for-kiroku-and-keiki.md`), which consolidates the upstream feature gaps from EP-1 through EP-5 into the kiroku/keiki/shibuya backlog.
 
 
 ## Context and Orientation
@@ -227,3 +258,5 @@ Function signatures the design must fix (preview only; v2 implementation is out 
 ## Revisions
 
 - 2026-05-04: Retracted the "Adopt Chassaing's decider as the user-facing API" recommendation that originated in `docs/research/05-workflow-prior-art.md`'s synthesis. The proper contract is keiki's native `SymTransducer` per EP-1; `Decider` is a legacy compat facade. Reframed the substrate-continuity section to describe v1 process managers as `SymTransducer`s whose register file carries timer/retry state, and v2 durable execution as a journaled overlay on top of `step`. Reframed the keiki-side open question about saga compensation in terms of `step`'s direction rather than `Decider`. Reason: workflow features depend on register-file slots and ε-edges that the Chassaing facade hides.
+
+- 2026-05-06: EP-5 closed. `docs/research/10-workflow-roadmap.md` published (eleven sections); `docs/research/00-overview.md` updated; M1.1–M2.2 ticked off; two new entries appended to Surprises & Discoveries (the §3 depth lesson and the substrate-continuity validation against the 2026-05-04 `SymTransducer`-as-contract decision); two new entries appended to Decision Log (the deliberate depth of §3 and the choice to frame substrate continuity in `SymTransducer` terms rather than the `Decider` shape). The MasterPlan's `Exec-Plan Registry` marks EP-5 Complete; only EP-6 (synthesis) remains. No cascade to other ExecPlans: EP-1's `aggSnapshotPolicy` slot, EP-3's PM substrate, and EP-4's snapshot path are all referenced by EP-5 without modification. Reason: M1.1–M2.2 acceptance criteria all hold; the v1/v2 vocabulary is now fixed in a single document the rest of the project can refer to.
