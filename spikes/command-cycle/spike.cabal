@@ -1,0 +1,83 @@
+cabal-version:      3.0
+name:               spike
+version:            0.0.0
+synopsis:           Throwaway spike validating the keiro command cycle (EP-1).
+description:
+    Implements the load -> fold -> decide -> append cycle on top of
+    kiroku-store (event store) and keiki (SymTransducer pure core).
+    Demonstrates optimistic-retry under a deliberate write contention
+    and a workflow-flavoured ε-edge driven by a register-file timer.
+    Exists only to validate the contract recorded in
+    docs/research/06-command-cycle-design.md; not the production
+    keiro library.
+license:            BSD-3-Clause
+author:             Nadeem Bitar
+maintainer:         nadeem@gmail.com
+copyright:          2026 Nadeem Bitar
+build-type:         Simple
+tested-with:        GHC == 9.12.*
+
+common shared
+    default-language:   GHC2024
+    default-extensions: BlockArguments
+                        DataKinds
+                        DeriveAnyClass
+                        DerivingStrategies
+                        DuplicateRecordFields
+                        GADTs
+                        OverloadedLabels
+                        OverloadedRecordDot
+                        OverloadedStrings
+                        PolyKinds
+                        QualifiedDo
+                        TemplateHaskell
+                        TypeFamilies
+                        UndecidableInstances
+    ghc-options:        -Wall -Wcompat -Widentities
+                        -Wincomplete-record-updates -Wincomplete-uni-patterns
+                        -Wpartial-fields -Wredundant-constraints
+
+library
+    import:             shared
+    hs-source-dirs:     src
+    exposed-modules:    Spike.Aggregate
+                        Spike.Codec
+                        Spike.Command
+                        Spike.Counter
+                        Spike.Retry
+    build-depends:      aeson            >= 2.1   && < 2.3,
+                        base             ^>= 4.21,
+                        bytestring       >= 0.11,
+                        effectful        >= 2.4,
+                        effectful-core   >= 2.4,
+                        keiki,
+                        kiroku-store,
+                        streamly-core    >= 0.3,
+                        text             >= 2.0,
+                        time             >= 1.12,
+                        uuid             >= 1.3,
+                        vector           >= 0.13
+
+executable spike
+    import:             shared
+    hs-source-dirs:     app
+    main-is:            Main.hs
+    ghc-options:        -threaded -rtsopts -with-rtsopts=-N
+    build-depends:      aeson,
+                        async            >= 2.2,
+                        base,
+                        bytestring,
+                        effectful,
+                        effectful-core,
+                        ephemeral-pg     >= 0.2,
+                        hasql            >= 1.10,
+                        hasql-pool       >= 1.2,
+                        keiki,
+                        kiroku-store,
+                        spike,
+                        stm,
+                        streamly-core    >= 0.3,
+                        text,
+                        time,
+                        uuid,
+                        vector

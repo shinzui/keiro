@@ -1,0 +1,23 @@
+-- Spike-only cabal.project. The keiro repo as a whole does not yet
+-- carry a workspace cabal.project (the production keiro library is a
+-- future MasterPlan). This file pins the spike against absolute paths
+-- of the local sister checkouts so it builds without touching Hackage
+-- for those packages.
+
+packages:
+    spike.cabal
+
+with-compiler: ghc-9.12.3
+
+tests: False
+benchmarks: False
+
+-- Local sister projects. `optional-packages` only adds them if they're
+-- referenced by some build-depends; we list them all and let cabal
+-- pull in only what's actually used (kiroku-store transitively pulls
+-- hasql-notifications).
+optional-packages:
+    /Users/shinzui/Keikaku/bokuno/keiki/keiki.cabal
+    /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store/kiroku-store.cabal
+    /Users/shinzui/Keikaku/bokuno/ephemeral-pg-project/ephemeral-pg/ephemeral-pg.cabal
+    /Users/shinzui/Keikaku/hub/haskell/hasql-project/hasql-notifications/hasql-notifications.cabal
