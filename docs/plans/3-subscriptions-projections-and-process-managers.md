@@ -34,8 +34,8 @@ The user-visible behaviour the eventual library will deliver: an aggregate autho
 ## Progress
 
 - [~] M1.1 through M1.7 — 2026-05-05: **Deferred** (see Decision Log entry "Defer the M1 spike"). The seven sub-spikes are blocked on two upstream gaps that EP-3 cannot close from inside keiro: `shibuya-kiroku-adapter` does not expose a handler shape that can advance the kiroku subscription checkpoint in the *same* `Hasql.Transaction.Transaction` as the user's projection write, and `kiroku-store` does not expose a single-stream `runInTransaction` combinator (already an EP-1 forward to EP-6). Without them the spike's central verifiable claim — exactly-once async projections via transactional checkpoint advance — degenerates to at-least-once delivery with user-side idempotency, which the design doc covers in prose without standing up a 6-package dependency closure. The design doc (M2) validates every pattern at the prose+citation layer; the deferred spike is a v2 follow-up once the upstream combinators land. EP-6 records both gaps.
-- [ ] M2.1 — Write `docs/research/08-subscription-and-process-manager-design.md`.
-- [ ] M2.2 — Update `docs/research/00-overview.md`.
+- [x] M2.1 — 2026-05-05: Wrote `docs/research/08-subscription-and-process-manager-design.md`. 15 sections covering: problem statement; inline projection design (built on EP-1's `runCommandWithSql`); async projection design (with explicit at-least-once-with-idempotency caveat citing the shibuya-kiroku-adapter gap); the gap-free-read inheritance from kiroku's Strategy E (and explicit rejection of a Marten-style HWM); process-manager design (event-sourced state in `pm-<pmName>-<correlationId>` streams, `appendMultiStream`-backed multi-stream emission, deterministic `commandId`s for idempotency); outbox design (Postgres table + `SKIP LOCKED` drain + `pgmq-hs` + `shibuya-pgmq-adapter`); inbox dual; failure semantics (per ack-decision rubric); concurrency / ordering policy per lifecycle; the Streamly pipeline shapes each lifecycle exposes; observability fields and OpenTelemetry span layout; test strategy (validating each lifecycle by citation when the spike is deferred); and three keiro-side production-library follow-ups. Two upstream gaps forwarded to EP-6: kiroku-store single-stream `runInTransaction` (reiterates EP-1) and shibuya-kiroku-adapter `HandlerInTransaction` shape.
+- [x] M2.2 — 2026-05-05: Cross-referenced from `docs/research/00-overview.md` (one-line entry under the Document Index, with the design-only-because-of-upstream-gaps note attached).
 
 
 ## Surprises & Discoveries
@@ -80,7 +80,20 @@ The user-visible behaviour the eventual library will deliver: an aggregate autho
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+**Outcome (2026-05-05).** EP-3 delivered the design-only half of its purpose statement:
+
+1. A self-contained design document at `docs/research/08-subscription-and-process-manager-design.md` (15 sections) that fixes the three projection lifecycles (inline, async, live), the transactional outbox/inbox patterns, the event-sourced process-manager substrate that stands in for v1 workflows, the gap-free-read guarantee inherited from kiroku's Strategy E, the failure / observability / concurrency contracts, and the Streamly pipeline shapes each lifecycle exposes. Two upstream gaps blocking exactly-once async projections were forwarded to EP-6 with explicit rationale.
+
+2. The originally-planned spike at `spikes/subscriptions/` was deferred (recorded in this plan's Decision Log entry of 2026-05-05). The spike's central verifiable insight — exactly-once async projections via a transactional checkpoint advance — depends on a `shibuya-kiroku-adapter` shape that does not yet exist. Without that shape the spike degenerates to "demonstrate at-least-once with idempotent user code", a pattern the design doc captures in prose without standing up a 6-package dependency closure (kiroku-store + keiki + shibuya-core + shibuya-kiroku-adapter + shibuya-pgmq-adapter + pgmq-hs) whose hs-opentelemetry pins disagree across projects. The MasterPlan's "three spikes" claim becomes "two spikes" (EP-1 and EP-2 ship spikes; EP-3 ships design-only).
+
+**Gaps and lessons.**
+
+- **The shibuya-kiroku-adapter checkpoint-control gap is the central blocker.** The adapter handles checkpointing internally (per the EP-3 pre-flight survey). For exactly-once async projections, a `HandlerInTransaction es msg = Ingested es msg -> Hasql.Transaction.Transaction AckDecision` shape consumed by a runner that wraps the kiroku-side checkpoint advance and the user's projection write in one `TxSessions.transaction` is required. EP-6 records the request.
+- **The kiroku-store single-stream `runInTransaction` gap returns from EP-1.** EP-1 §10 first surfaced the need; EP-3's inline-projection lifecycle and outbox write path are the second and third use cases. EP-6 already has it; EP-3 reinforces.
+- **Marten's high-water-mark is the wrong solution.** Several drafts of this plan recommended HWM at the subscriber layer; the final version explicitly rejects it (§4 of the design doc) because kiroku's Strategy E supersedes the bigserial-gap problem HWM solves. Recommending HWM in keiro would re-pay a tax kiroku deliberately declined.
+- **shibuya-core and pgmq-hs pin different `hs-opentelemetry` revisions** (`adc464b…` vs `894c77f…`); the spike's `cabal.project` would have had to negotiate a single tag. This is a build-environment concern that surfaces once both libraries land in the same workspace; the production keiro library inherits it. EP-6 may want to record the version-skew as a coordination item among the upstream maintainers.
+
+**Comparison against the original purpose.** EP-3's purpose was to take keiro from "command cycle works" to "subscriptions, projections, and process managers work". The design fixes the contracts and is internally consistent with EP-1 (`runCommandWithSql`, `appendMultiStream`, `runCommandRetry`) and EP-2 (`Codec co` for the decoder boundary). The deferred spike is the only outstanding deliverable; once the upstream gaps land, the spike at `spikes/subscriptions/` becomes the empirical demonstration of the design. EP-4 (snapshots) and EP-5 (workflow roadmap) are unblocked by this plan's contracts; EP-6 has three new backlog items (the two upstream gaps plus the version-skew coordination concern).
 
 
 ## Context and Orientation
