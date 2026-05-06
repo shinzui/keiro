@@ -53,7 +53,7 @@ The result is one foundation plan, four parallel research plans, and one synthes
 |---|-------|------|-----------|-----------|--------|
 | 1 | Command Cycle Design and Spike | docs/plans/1-command-cycle-design-and-spike.md | None | None | Complete |
 | 2 | Codec and Event Schema Strategy | docs/plans/2-codec-and-event-schema-strategy.md | EP-1 | None | Complete |
-| 3 | Subscriptions, Projections and Process Managers | docs/plans/3-subscriptions-projections-and-process-managers.md | EP-1 | EP-2 | Not Started |
+| 3 | Subscriptions, Projections and Process Managers | docs/plans/3-subscriptions-projections-and-process-managers.md | EP-1 | EP-2 | In Progress |
 | 4 | Snapshot Strategy and Hydration Acceleration | docs/plans/4-snapshot-strategy-and-hydration-acceleration.md | EP-1 | EP-2 | Not Started |
 | 5 | Workflow Engine and Durable Execution Roadmap | docs/plans/5-workflow-engine-and-durable-execution-roadmap.md | None | EP-3 | Not Started |
 | 6 | Upstream Roadmap for Kiroku and Keiki | docs/plans/6-upstream-roadmap-for-kiroku-and-keiki.md | EP-1, EP-2, EP-3, EP-4, EP-5 | None | Not Started |
