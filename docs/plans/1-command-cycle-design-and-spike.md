@@ -52,8 +52,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 - [x] M1.5 — 2026-05-05: Standalone driver in `app/Main.hs` boots `Pg.with` + `withStore` (which auto-applies kiroku's schema), submits `[Increment, Increment, Decrement, Tick(early), Tick(late), Increment]`, asserts the early Tick is rejected by the cooldown guard, and reads the stream back to verify the final event sequence is `[Incremented, Incremented, Decremented, CooldownEnded, Incremented]`. Acceptance log line: `[spike] appended 5 events to counter-42: Incremented, Incremented, Decremented, CooldownEnded, Incremented`.
 - [x] M1.6 — 2026-05-05: Contention scenario in `app/Main.hs::scenario2` runs two `Async`-spawned threads each issuing 10 increments through `runCommandRetry`. Observed 17 retries across 20 commands (heavy contention exercising the retry loop), final counter delta computed from the event log = 22 = 2 (scenario 1 baseline) + 2*10 (scenario 2 increments). Acceptance log: `contention test: 20 commands across 2 threads, observed 17 retries; final counter (computed from event log): 22`.
 - [x] M1.7 — 2026-05-05: The Counter's `Tick` edge in `Cooldown` carries a register-file-driven guard: `requireGuard (PEq (TApp2 cooldownExpired d.now #cooldownUntil) (TLit True))`. The transition fires only when the supplied `now` has reached/passed the slot's `cooldownUntil`, demonstrating that keiki's workflow primitives (a transition predicated on register-file state, not on input alone) flow through the chosen contract unchanged. The spike emits a synthetic `CooldownEnded` event for replay determinism (per the M2 outline's preliminary recommendation against true ε-edges with no observable output); replay fidelity verified by scenario 1's hydration succeeding through the full event sequence.
-- [ ] M2.1 — Write `docs/research/06-command-cycle-design.md` covering: contract derivation, public types, `runCommand` signature, error model, retry policy, transactional-step combinator, multi-aggregate command shape, idempotency story.
-- [ ] M2.2 — Cross-reference the design from `docs/research/00-overview.md` so future plans can find it.
+- [x] M2.1 — 2026-05-05: Wrote `docs/research/06-command-cycle-design.md`. 16 sections covering: problem statement; first-principles contract derivation; aggregate identity (`AggregateId a`); public API surface (`runCommand`, `runCommandRetry`, `tick`, `runCommandMulti`, `runCommandWithSql`); the hydration pipeline (Streamly `Stream` + `Fold` with `Stream.unfoldrM` paginating `readStreamForward`); decide phase semantics; tick / silent-advance entry-point; append phase (`NoStream` vs `ExactVersion`); retry policy (`WrongExpectedVersion` handling, `DuplicateEvent` as success); transactional-step combinator (with explicit upstream gap on kiroku-store); multi-aggregate commands; observability fields on `EventData.metadata`; test plan (spike transcript as v1 acceptance); open questions / upstream gaps for EP-6. The aggregate-author invariant about `solveOutput` only inverting direct field projections is documented in §5 with EP-2 / keiki-side gap forwarding.
+- [x] M2.2 — 2026-05-05: Cross-referenced from `docs/research/00-overview.md` (one-line entry under the Document Index).
 
 
 ## Surprises & Discoveries
@@ -107,7 +107,19 @@ Record every decision made while working on the plan.
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion. Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-05-05).** EP-1 delivered everything its purpose statement promised:
+
+1. A working Haskell spike at `spikes/command-cycle/` that exercises the load → fold → decide → append cycle end-to-end against a real Postgres database started by `ephemeral-pg`. The spike uses the contract derived from first principles (the `Aggregate phi rs s ci co` record over keiki's native `SymTransducer`, *not* the `Decider` facade), demonstrates an optimistic-retry loop under deliberate concurrent contention (17 retries observed across 20 commands; all 20 committed), and demonstrates a workflow-flavoured register-file-driven guard (the cooldown transition).
+2. A self-contained design document at `docs/research/06-command-cycle-design.md` that fixes the contract, the public API, the error model, retry semantics, the transactional-step combinator, multi-aggregate commands, observability fields, and the upstream gaps every other child plan needs to know about.
+
+**Gaps and lessons.**
+
+- **The keiki `solveOutput` invariant** (event payloads must be direct projections of input fields, no `TApp1`/`TApp2`) was invisible in the keiki documentation and only surfaced when the spike's first run crashed at the second command. Forwarded to EP-2 (so its codec design calls it out) and to EP-6 (so keiki may consider lifting it to a compile-time error).
+- **The Postgres-version requirement** (kiroku schema needs PG 18+ for `uuidv7()`) is currently undocumented. Forwarded to EP-6.
+- **The transactional-step primitive** depends on a kiroku-store upstream feature that does not exist today (single-stream `appendToStream` does not open a Haskell-layer transaction). The spike does not implement `runCommandWithSql`; it is unblocked by the upstream addition. EP-3 picks it up.
+- **Effectful's effect-stack ordering** for `runStorePool` plus `Error StoreError` is non-obvious; the spike's first runner-composition put the error handler too early in the pipeline. The design doc's §4 records the working order. Worth a cookbook entry in any keiro author guide.
+
+**Comparison against the original purpose.** EP-1's purpose was to take keiro from "scaffold" to "ready for EP-2/EP-3/EP-4/EP-5/EP-6 to build on top of". The contract is fixed, the cycle is proved implementable, and every downstream plan has either an explicit signature to consume (`runCommand`, `Aggregate`, `AggregateId a`) or an explicit upstream-gap callout to track. EP-2 (codecs), EP-3 (subscriptions/process managers), and EP-4 (snapshots) are now unblocked. EP-5 and EP-6 can also proceed in parallel, with EP-6's backlog already seeded with five concrete items from §14 of the design doc.
 
 
 ## Context and Orientation

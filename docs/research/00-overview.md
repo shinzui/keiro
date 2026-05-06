@@ -23,6 +23,7 @@ keiro itself is currently empty (`agents/skills/`, `docs/`). The work this resea
 - `03-shibuya-subscriptions.md` — Current state of shibuya: adapter pattern, handler/ack model, concurrency, supervision, observability, gaps.
 - `04-kiroku-keiki-integration.md` — The core integration question: does the load → fold → decide → append cycle work today? What must keiro add?
 - `05-workflow-prior-art.md` — Survey of Temporal, Restate, DBOS, Inngest, Eventide/message-db, Akka, EventStoreDB/Marten, Reactive/DDD, Haskell prior art. Distils a v1 minimum-viable feature set and a v2 stretch list.
+- `06-command-cycle-design.md` — Design of keiro's load → fold → decide → append cycle. The keiro ⇄ keiki contract (an `Aggregate phi rs s ci co` record over keiki's native `SymTransducer`), `runCommand`, `runCommandRetry`, hydration as a Streamly `Stream`/`Fold`, the optimistic-retry policy, the transactional-step combinator, and multi-aggregate commands. Validated by the working spike at `spikes/command-cycle/`. Produced by ExecPlan EP-1 of the research-foundation MasterPlan.
 
 The above five documents are *current-state* surveys. The MasterPlan (`docs/masterplans/1-keiro-research.md`) decomposes the *design* research that produces concrete keiro design proposals (load/decide/append cycle, codecs, subscriptions, snapshots, workflow roadmap, upstream gaps).
 
