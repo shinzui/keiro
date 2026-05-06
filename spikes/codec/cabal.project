@@ -1,0 +1,16 @@
+-- Spike-only cabal.project for the codec spike. Same setup as
+-- spikes/command-cycle/cabal.project: pin GHC, point at local
+-- sister checkouts via optional-packages.
+
+packages:
+    spike.cabal
+
+with-compiler: ghc-9.12.3
+
+tests: False
+benchmarks: False
+
+optional-packages:
+    /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store/kiroku-store.cabal
+    /Users/shinzui/Keikaku/bokuno/ephemeral-pg-project/ephemeral-pg/ephemeral-pg.cabal
+    /Users/shinzui/Keikaku/hub/haskell/hasql-project/hasql-notifications/hasql-notifications.cabal
