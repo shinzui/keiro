@@ -2,6 +2,9 @@ set shell := ["zsh", "-cu"]
 
 site := "site-dist"
 
+default:
+    just --list
+
 install:
     pnpm install --frozen-lockfile
 
