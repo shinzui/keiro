@@ -22,6 +22,8 @@
           nativeBuildInputs = [
             pkgs.zlib
             pkgs.just
+            pkgs.nodejs_22
+            pkgs.pnpm
             pkgs.cabal-install
             pkgs.pkg-config
             pkgs.postgresql
