@@ -10,8 +10,10 @@
   },
   "scripts": {
     "build": "node site/build.mjs",
-    "dev": "pnpm run build && vite site-dist --host 127.0.0.1",
-    "preview": "pnpm run build && vite preview site-dist --host 127.0.0.1"
+    "dev": "pnpm run build && portless run --name keiro-docs vite site-dist",
+    "dev:raw": "pnpm run build && vite site-dist --host 127.0.0.1",
+    "preview": "pnpm run build && portless run --name keiro-docs-preview vite preview site-dist",
+    "preview:raw": "pnpm run build && vite preview site-dist --host 127.0.0.1"
   },
   "repository": {
     "type": "git",
@@ -33,5 +35,8 @@
     "markdown-it-table-of-contents": "^1.2.0",
     "shiki": "^4.0.2",
     "vite": "^8.0.11"
+  },
+  "devDependencies": {
+    "portless": "^0.13.0"
   }
 }
