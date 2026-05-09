@@ -9,13 +9,13 @@ install:
     pnpm install --frozen-lockfile
 
 website-build:
-    pnpm run build
+    BUNDLE_PRAGMATA_PRO=1 pnpm run build
 
 website-dev:
-    pnpm run dev
+    BUNDLE_PRAGMATA_PRO=1 pnpm run dev
 
 website-preview:
-    pnpm run preview
+    BUNDLE_PRAGMATA_PRO=1 pnpm run preview
 
 website-linkcheck:
     node site/check-links.mjs {{site}}
