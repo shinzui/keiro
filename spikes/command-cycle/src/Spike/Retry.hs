@@ -23,7 +23,7 @@ import Kiroku.Store.Types (StreamName)
 
 import Keiki.Core (BoolAlg, RegFile)
 
-import Spike.Aggregate (Aggregate)
+import Spike.EventStream (EventStream)
 import Spike.Command (CommandError, runCommand)
 
 
@@ -66,15 +66,15 @@ runCommandRetry
      , Show ci
      )
   => RetryConfig
-  -> Aggregate phi rs s ci co
+  -> EventStream phi rs s ci co
   -> StreamName
   -> ci
   -> Eff es (Maybe co)
-runCommandRetry cfg agg sn cmd = go 0
+runCommandRetry cfg evstream sn cmd = go 0
   where
     go :: Int -> Eff es (Maybe co)
     go n =
-      runCommand agg sn cmd `catchError` \_callstack err -> case err of
+      runCommand evstream sn cmd `catchError` \_callstack err -> case err of
         WrongExpectedVersion {}
           | n < maxRetries cfg -> do
               liftIO (threadDelay (sleepMicros cfg))

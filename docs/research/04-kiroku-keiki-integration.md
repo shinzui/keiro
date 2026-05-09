@@ -2,7 +2,7 @@
 
 Survey author: research subagent (Explore), 2026-05-04.
 
-> **Corrections note (2026-05-08).** The integration sketches in this survey use `Keiki.Decider c e s` and `Keiki.Decider c e (s, RegFile rs)` as the keiro ⇄ keiki contract (e.g., the `runCommand` signature on line 103, the sample `runCommand` body on lines 104-113, and the proposed `Keiro.Command.runCommand` signature on lines 173-175). **This is not the contract keiro adopted.** `Keiki.Decider` is a legacy compatibility facade for the old system that keiro is replacing — its `decide :: c -> s -> [e]` masks `omega`'s `Maybe co` and is invisible to ε-edges; its `evolve :: s -> e -> s` ignores the register file. **Keiro must never rely on `Keiki.Decider`.** Per the parent MasterPlan's Decision Log entry of 2026-05-04 ("Reject `Keiki.Decider` as the keiro ⇄ keiki contract"), the actual contract is `Aggregate phi rs s ci co` over keiki's native `SymTransducer phi rs s ci co` (operations `step`, `delta`, `omega`, `applyEvent`, `applyEvents`, `reconstitute`). The authoritative contract is documented in `docs/research/06-command-cycle-design.md` (produced by EP-1 of the research-foundation MasterPlan) and validated by the working spike at `spikes/command-cycle/`. This survey is preserved verbatim below for traceability; treat any `Decider`-shaped sample code in it as a pre-decision sketch superseded by EP-1's design.
+> **Corrections note (2026-05-08).** The integration sketches in this survey use `Keiki.Decider c e s` and `Keiki.Decider c e (s, RegFile rs)` as the keiro ⇄ keiki contract (e.g., the `runCommand` signature on line 103, the sample `runCommand` body on lines 104-113, and the proposed `Keiro.Command.runCommand` signature on lines 173-175). **This is not the contract keiro adopted.** `Keiki.Decider` is a legacy compatibility facade for the old system that keiro is replacing — its `decide :: c -> s -> [e]` masks `omega`'s `Maybe co` and is invisible to ε-edges; its `evolve :: s -> e -> s` ignores the register file. **Keiro must never rely on `Keiki.Decider`.** Per the parent MasterPlan's Decision Log entry of 2026-05-04 ("Reject `Keiki.Decider` as the keiro ⇄ keiki contract"), the actual contract is `EventStream phi rs s ci co` over keiki's native `SymTransducer phi rs s ci co` (operations `step`, `delta`, `omega`, `applyEvent`, `applyEvents`, `reconstitute`). The authoritative contract is documented in `docs/research/06-command-cycle-design.md` (produced by EP-1 of the research-foundation MasterPlan) and validated by the working spike at `spikes/command-cycle/`. This survey is preserved verbatim below for traceability; treat any `Decider`-shaped sample code in it as a pre-decision sketch superseded by EP-1's design.
 
 ## The cycle keiro must run
 
@@ -210,7 +210,7 @@ Companion modules:
 - `Keiro.Decoding` — Aeson bridge; pluggable for MessagePack/Protobuf.
 - `Keiro.Idempotency` — wrap commands with `(UUID, ci)`, thread through append.
 - `Keiro.Snapshot` — stub initially.
-- `Keiro.Batch` — `appendMultiStream`-based multi-aggregate commands.
+- `Keiro.Batch` — `appendMultiStream`-based multi-stream commands.
 
 File placement (estimates):
 

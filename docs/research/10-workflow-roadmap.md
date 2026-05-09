@@ -143,7 +143,7 @@ The v2 stretch feature — full deterministic-replay durable execution — is de
 
 **Why kiroku for the journal.** Per the EP-5 plan's Decision Log: uniformity. Workflow journals share the storage substrate with domain events; operators view a workflow's journal alongside the events it consumed by reading two streams from the same store. A separate `journal` table would force a parallel storage mechanism and a parallel observability story.
 
-**Step-result snapshots.** Long-running workflows (millions of steps) face the same hydration cost as long-lived process managers. EP-4's snapshot machinery applies: `Keiro.Workflow` uses an `aggSnapshotPolicy` of `Every n` over the journal stream, with the joint state being the workflow's accumulated step results (encoded as a register-file analogue). The snapshot path treats the workflow's `step` map as a `RegFile`-shaped value; EP-4's `regfile_shape_hash` discriminant covers schema evolution of step-result types.
+**Step-result snapshots.** Long-running workflows (millions of steps) face the same hydration cost as long-lived process managers. EP-4's snapshot machinery applies: `Keiro.Workflow` uses an `esSnapshotPolicy` of `Every n` over the journal stream, with the joint state being the workflow's accumulated step results (encoded as a register-file analogue). The snapshot path treats the workflow's `step` map as a `RegFile`-shaped value; EP-4's `regfile_shape_hash` discriminant covers schema evolution of step-result types.
 
 **What this is *not*.** It is not Temporal-style deterministic replay over user code — there is no requirement that the workflow function be deterministic outside `step` calls. Code between steps can be anything (logging, decisions, branching); the journal only constrains the *side-effects* (each `step`'s `action`). This is a much weaker — and simpler — model than Temporal/Cadence; it forgives ordinary code changes between checkpoints, at the cost of not being able to deterministically reconstruct arbitrary intermediate variables (`docs/research/05-workflow-prior-art.md` §3 calls out this trade-off explicitly).
 
@@ -165,14 +165,14 @@ A v2 durable workflow sits on top: a workflow function `Workflow es a` is sugar 
 
     pmStep :: OrderState -> OrderEvent -> (OrderState, [PMCommand])
     pmStep AwaitingInventory (InventoryReserved sku qty) =
-      (AwaitingPayment, [PMCommand chargeCardAggregate orderId (ChargeCard ...)])
+      (AwaitingPayment, [PMCommand chargeCardEventStream orderId (ChargeCard ...)])
 
 becomes a v2 workflow that runs
 
     orderFulfillment :: OrderId -> Workflow es ()
     orderFulfillment orderId = do
-      _ <- step (StepName "reserve-inventory") (runCommand inventoryAggregate ... (ReserveInventory ...))
-      _ <- step (StepName "charge-card")       (runCommand chargeCardAggregate ... (ChargeCard ...))
+      _ <- step (StepName "reserve-inventory") (runCommand inventoryEventStream ... (ReserveInventory ...))
+      _ <- step (StepName "charge-card")       (runCommand chargeCardEventStream ... (ChargeCard ...))
       ...
 
 Both are correct expressions of "fulfil this order"; the v1 form is reactive (driven by source events), the v2 form is imperative (driven by the workflow function's control flow). The v2 form's journal carries the same information the v1 form's PM stream carries — the sequence of steps observed and their results. An operator inspecting a stuck workflow reads `wf-<id>` rather than `pm-orderfulfillment-<id>`; the on-disk data shape is the same shape (a kiroku stream of typed events, each carrying its `StepRecorded` or `PMStateAdvanced` payload).
@@ -184,7 +184,7 @@ Both are correct expressions of "fulfil this order"; the v1 form is reactive (dr
 
 Deferred until v1 is in production. Each entry one paragraph: what it is, why deferred. None of these block v1; none of them block EP-6's upstream synthesis.
 
-**1. Deterministic-replay durable execution with named steps.** §4 of this document fixes the shape; the implementation is v2. Deferred because (a) the v1 process-manager substrate covers ~90% of "workflow" use cases (sagas, choreography, multi-aggregate coordination) without paying the determinism cost, (b) named-step durability needs the journal-stream-per-workflow infrastructure plus the `step`/`sleep`/`awakeable` effect handler, and (c) re-entry on crash needs a workflow runtime that finds and resumes unfinished workflows on startup. Adding it post-v1 is mechanical; getting v1 right first is the priority.
+**1. Deterministic-replay durable execution with named steps.** §4 of this document fixes the shape; the implementation is v2. Deferred because (a) the v1 process-manager substrate covers ~90% of "workflow" use cases (sagas, choreography, multi-stream coordination) without paying the determinism cost, (b) named-step durability needs the journal-stream-per-workflow infrastructure plus the `step`/`sleep`/`awakeable` effect handler, and (c) re-entry on crash needs a workflow runtime that finds and resumes unfinished workflows on startup. Adding it post-v1 is mechanical; getting v1 right first is the priority.
 
 **2. Awakeables.** A durable promise resolved by an external system, identified by an opaque id. Useful for human-in-the-loop ("wait for a manager to approve"), third-party callbacks ("wait for the payment processor's webhook"), agentic AI loops ("wait for the LLM to return a tool result"). Deferred because (a) the v1 alternative — receive the external event into a kiroku stream and let a process manager react — works for every awakeable use case, and (b) awakeables introduce a global-id namespace and an external-completion API (`signal :: AwakeableId -> Result -> IO ()`) that v1 has no consumer for. Per `docs/research/05-workflow-prior-art.md` §2 ("Avoid"): "Awakeables are powerful but introduce a global-id namespace and external-completion API; treat as a v2 feature, not v1."
 

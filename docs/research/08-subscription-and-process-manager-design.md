@@ -38,7 +38,7 @@ The inline projection lifecycle reuses the transactional-step combinator EP-1 sk
          , Error CommandError :> es
          , BoolAlg phi (RegFile rs, ci)
          )
-      => Aggregate phi rs s ci co
+      => EventStream phi rs s ci co
       -> AggregateId a
       -> ci
       -> Hasql.Session.Session ()    -- user-supplied SQL action committed in the same tx
@@ -53,7 +53,7 @@ Inline-projection registration is sugar over `runCommandWithSql`:
 
     runCommandWithProjections
       :: (... same constraints as runCommandWithSql ...)
-      => Aggregate phi rs s ci co
+      => EventStream phi rs s ci co
       -> AggregateId a
       -> ci
       -> [InlineProjection co]
@@ -161,14 +161,14 @@ A process manager (PM) is an event-sourced coordinator. Its shape:
     data PMCommand eOut where
       PMCommand
         :: ( BoolAlg phi (RegFile rs, ci), Show ci )
-        => Aggregate phi rs s ci co
+        => EventStream phi rs s ci co
         -> AggregateId a
         -> ci
         -> PMCommand co
 
 The PM subscribes to a kiroku category (e.g. `order`) via the same async-projection adapter. On each event:
 
-1. Decode the event through `aggEventCodec` (EP-2's codec).
+1. Decode the event through `esEventCodec` (EP-2's codec).
 2. Reconstruct the PM's joint state `s` by hydrating its own kiroku stream (`pm-<pmName>-<correlationId>`) — the same Streamly `Stream`/`Fold` pipeline EP-1 §5 uses for aggregate hydration. The PM's stream stores PM-emitted events, not commands; the step function's history is the log.
 3. Run `pmStep s ev` to compute `(s', [PMCommand])`.
 4. Persist the new PM state by appending a synthetic `PMStateAdvanced { newState = s' }` event to the PM's stream.
@@ -335,7 +335,7 @@ shibuya already emits OpenTelemetry spans for every adapter pull and handler inv
 
 **Span shape per lifecycle:**
 
-- *Inline projection*: a child span of the command's `runCommand` span, named `keiro.projection.inline.<projectionName>`. Attributes: `keiro.aggregate.id`, `keiro.event.tag`, projection name. Errors: span status is set to `error` and the projection's exception is attached.
+- *Inline projection*: a child span of the command's `runCommand` span, named `keiro.projection.inline.<projectionName>`. Attributes: `keiro.event_stream.id`, `keiro.event.tag`, projection name. Errors: span status is set to `error` and the projection's exception is attached.
 - *Async projection*: a child span of the adapter's pull span, named `keiro.projection.async.<projectionName>`. Same attributes plus `keiro.subscription.checkpoint` (the post-commit `last_seen` value).
 - *Process manager*: a child span of the source-event handler, named `keiro.pm.<pmName>`. Attributes: `keiro.pm.correlation_id`, `keiro.pm.commands_emitted` (count). One additional child span per emitted command, named `keiro.pm.emit.<commandTag>`, carrying the deterministic `keiro.command.id`.
 - *Outbox drain*: per-batch span named `keiro.outbox.drain` with `keiro.outbox.batch_size` and `keiro.outbox.destination` attributes. One child span per row, named `keiro.outbox.enqueue`, with the message id and destination.

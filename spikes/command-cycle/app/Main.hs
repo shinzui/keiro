@@ -68,7 +68,7 @@ import Kiroku.Store.Types
   , StreamVersion (..)
   )
 
-import Spike.Codec (counterAggregate)
+import Spike.Codec (counterEventStream)
 import Spike.Command (CommandError, runCommand)
 import Spike.Counter
   ( CounterCmd (..)
@@ -187,14 +187,14 @@ scenario1 store = do
       tLate  = addUTCTime 1.000 t0   -- 1s after t0; well past cooldown
 
   _ <- runSpike store $
-    runCommand counterAggregate counterStream (Increment (IncrementData t0))
+    runCommand counterEventStream counterStream (Increment (IncrementData t0))
   _ <- runSpike store $
-    runCommand counterAggregate counterStream (Increment (IncrementData t0))
+    runCommand counterEventStream counterStream (Increment (IncrementData t0))
   _ <- runSpike store $
-    runCommand counterAggregate counterStream (Decrement (DecrementData t0))
+    runCommand counterEventStream counterStream (Decrement (DecrementData t0))
 
   earlyResult <- runWithCommand store $
-    runCommand counterAggregate counterStream (Tick (TickData tEarly))
+    runCommand counterEventStream counterStream (Tick (TickData tEarly))
   case earlyResult of
     Right (Left _cmdErr) -> T.putStrLn "[spike] early Tick correctly rejected"
     Right (Right v)      -> failIO $ "early Tick should have been rejected, got: "
@@ -203,9 +203,9 @@ scenario1 store = do
                               <> T.pack (show sErr)
 
   _ <- runSpike store $
-    runCommand counterAggregate counterStream (Tick (TickData tLate))
+    runCommand counterEventStream counterStream (Tick (TickData tLate))
   _ <- runSpike store $
-    runCommand counterAggregate counterStream (Increment (IncrementData t0))
+    runCommand counterEventStream counterStream (Increment (IncrementData t0))
 
   -- Read the stream back and verify the event-type sequence.
   events <-
@@ -293,7 +293,7 @@ runOneCommand
   -> IO ()
 runOneCommand store cfg sn cmd retryCounter = do
   startVersion <- currentVersion store sn
-  _ <- runSpike store (runCommandRetry cfg counterAggregate sn cmd)
+  _ <- runSpike store (runCommandRetry cfg counterEventStream sn cmd)
   endVersion   <- currentVersion store sn
   let raced = max 0 (endVersion - startVersion - 1)
   when (raced > 0) $

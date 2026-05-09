@@ -45,7 +45,7 @@ import Keiki.Core
   , step
   )
 
-import Spike.Aggregate (Aggregate (..))
+import Spike.EventStream (EventStream (..))
 
 
 -- | Outcomes the spike's command cycle can refuse with. Distinct from
@@ -54,7 +54,7 @@ import Spike.Aggregate (Aggregate (..))
 -- and decide-time refusals to this layer.
 data CommandError
   = -- | The stored event payload could not be decoded against the
-    -- aggregate's codec.
+    -- event stream's codec.
     DecodeError !StreamName !EventType !String
   | -- | A decoded event did not match any active outgoing edge under
     -- replay (malformed log; constructor renamed without an
@@ -85,7 +85,7 @@ hydrationPageSize = 256
 --   * @'Just' ev@ — an event was emitted and appended to kiroku.
 --   * @'Nothing'@ — 'step' returned @'Just' (s', regs', 'Nothing')@,
 --     a silent (ε-edge-style) advance with no observable event. The
---     spike's Counter aggregate does not exercise this path
+--     spike's Counter event stream does not exercise this path
 --     (CooldownEnded is emitted, not silent), so 'Nothing' here
 --     would surprise the driver; it is left expressible because
 --     the contract permits it.
@@ -99,20 +99,20 @@ runCommand
      , BoolAlg phi (RegFile rs, ci)
      , Show ci
      )
-  => Aggregate phi rs s ci co
+  => EventStream phi rs s ci co
   -> StreamName
   -> ci
   -> Eff es (Maybe co)
-runCommand agg sn cmd = do
-  (s, regs, version) <- hydrate agg sn
-  case step (aggTransducer agg) (s, regs) cmd of
+runCommand evstream sn cmd = do
+  (s, regs, version) <- hydrate evstream sn
+  case step (esTransducer evstream) (s, regs) cmd of
     Nothing -> throwError (CommandRejected sn (T.pack (show cmd)))
     Just (_s', _regs', Nothing) -> pure Nothing
     Just (_s', _regs', Just ev) -> do
       let evData = EventData
             { eventId       = Nothing
-            , eventType     = EventType (aggEventTag agg ev)
-            , payload       = aggEncode agg ev
+            , eventType     = EventType (esEventTag evstream ev)
+            , payload       = esEncode evstream ev
             , metadata      = Nothing
             , causationId   = Nothing
             , correlationId = Nothing
@@ -124,7 +124,7 @@ runCommand agg sn cmd = do
       pure (Just ev)
 
 
--- | Load the aggregate's stream from kiroku, fold each event through
+-- | Load the event stream from kiroku, fold each event through
 -- 'applyEvent', and return the resulting @(state, registers,
 -- currentVersion)@. The fold is over a Streamly @Stream@; the
 -- accumulator threads the highest @streamVersion@ seen so the
@@ -137,11 +137,11 @@ hydrate
      , Error CommandError :> es
      , BoolAlg phi (RegFile rs, ci)
      )
-  => Aggregate phi rs s ci co
+  => EventStream phi rs s ci co
   -> StreamName
   -> Eff es (s, RegFile rs, StreamVersion)
-hydrate agg sn = do
-  let trans   = aggTransducer agg
+hydrate evstream sn = do
+  let trans   = esTransducer evstream
       acc0    = (initial trans, initialRegs trans, StreamVersion 0)
       stream  = hydrationStream sn hydrationPageSize
   Stream.fold (Fold.foldlM' replayStep (pure acc0)) stream
@@ -151,10 +151,10 @@ hydrate agg sn = do
       -> RecordedEvent
       -> Eff es (s, RegFile rs, StreamVersion)
     replayStep (s, regs, _v) recorded = do
-      ev <- case aggDecode agg recorded.payload of
+      ev <- case esDecode evstream recorded.payload of
         Right ev -> pure ev
         Left  e  -> throwError (DecodeError sn recorded.eventType e)
-      case applyEvent (aggTransducer agg) s regs ev of
+      case applyEvent (esTransducer evstream) s regs ev of
         Just (s', regs') -> pure (s', regs', recorded.streamVersion)
         Nothing          -> throwError (ReplayError sn recorded.eventType)
 

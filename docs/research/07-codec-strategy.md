@@ -43,7 +43,7 @@ Each field's responsibility:
 - `codecVersion :: Int`. The current schema version. Events written today carry this number in their `EventData.metadata.schemaVersion`. Must increase monotonically over time as the wire shape evolves.
 - `codecUpcasters :: [(Int, Aeson.Value -> Either String Aeson.Value)]`. The schema-evolution chain. Each entry `(n, f)` describes the migration from version `n` to version `n + 1`. Entries must be ascending and contiguous; gaps are rejected at decode time.
 
-The keiro `Aggregate phi rs s ci co` record (defined in EP-1) carries one `Codec co` value per aggregate type. Process managers (EP-3) reuse the same codec for decoding `RecordedEvent.payload` into the typed event sum.
+The keiro `EventStream phi rs s ci co` record (defined in EP-1) carries one `Codec co` value per aggregate type. Process managers (EP-3) reuse the same codec for decoding `RecordedEvent.payload` into the typed event sum.
 
 The accompanying decode helper:
 
@@ -60,7 +60,7 @@ reads the schema version off the recorded event's metadata, walks the upcaster c
 
 `UnknownVersion` fires when the recorded version pre-dates anything the codec can handle. `UpcasterError` fires when a chain step rejects its input (a malformed record). `DecodeFailed` fires when the post-migration JSON still doesn't match the current shape (a programming error). `GapInUpcasterChain (skippedFrom, skippedTo)` fires when the chain skips a version — a misconfigured codec.
 
-The spike's `spikes/codec/src/Spike/Codec.hs` implements every name in this section. EP-1's `runCommand` (after the production library lands) replaces the spike's bare `aggEncode`/`aggDecode` pair with `aggEventCodec :: Codec co`; the encoder/decoder slots disappear and `runCommand` invokes `encodeForAppend` and `decodeRecorded` instead.
+The spike's `spikes/codec/src/Spike/Codec.hs` implements every name in this section. EP-1's `runCommand` (after the production library lands) replaces the spike's bare `esEncode`/`esDecode` pair with `esEventCodec :: Codec co`; the encoder/decoder slots disappear and `runCommand` invokes `encodeForAppend` and `decodeRecorded` instead.
 
 
 ## 3. Type-tag convention
@@ -68,7 +68,7 @@ The spike's `spikes/codec/src/Spike/Codec.hs` implements every name in this sect
 `codecTypeTag :: e -> Text` produces the value written into kiroku's `EventData.eventType` field. The conventions:
 
 1. **Stable across schema versions.** The tag is the *kind* of event; the *shape* lives in the metadata's schema version. Renaming a tag breaks every projection subscribed by `event_type` for no benefit; never rename a tag — add a new constructor and an upcaster to bridge the old tag to the new one if the rename is unavoidable.
-2. **PascalCase, domain term, single string.** Examples: `"OrderPlaced"`, `"PaymentAuthorized"`, `"AccountConfirmed"`. No prefix, no namespace. Aggregate-disambiguation lives in the stream name (`order-1`'s category prefix `order` already separates aggregates from each other at the kiroku level).
+2. **PascalCase, domain term, single string.** Examples: `"OrderPlaced"`, `"PaymentAuthorized"`, `"AccountConfirmed"`. No prefix, no namespace. EventStream-disambiguation lives in the stream name (`order-1`'s category prefix `order` already separates aggregates from each other at the kiroku level).
 3. **Registered exactly once per codec.** Two codecs producing the same tag for distinct payload shapes is a silent collision — projections will receive both kinds and their decoders will mostly fail. The spike does not enforce this at the type level (the `Text` shape allows it); the production library should add a runtime registry that asserts uniqueness at startup.
 4. **Reuse across aggregates is forbidden.** If two aggregates both have an "OrderPlaced" event, namespace one of them (`PaymentOrderPlaced`, `WarehouseOrderPlaced`). Event types are flat per kiroku-store; reusing the tag forces every category subscription to do its own dispatch.
 
@@ -87,7 +87,7 @@ The metadata key is the literal string `"schemaVersion"`. Its value is a non-neg
 
 A v1-only codec (no schema evolution yet) sets `codecVersion = 1` and `codecUpcasters = []`. The `decodeRecorded` helper notices `version >= codecVersion` and skips the chain entirely.
 
-Other metadata fields are reserved for keiro's observability layer (see `docs/research/06-command-cycle-design.md` §12): `keiro.command.id`, `keiro.command.tag`, `keiro.aggregate.id`, `keiro.aggregate.type`, `keiro.attempt`, `keiro.span.trace_id`, `keiro.span.span_id`. The codec layer leaves these alone; the keiro production library sets them at `encodeForAppend` time.
+Other metadata fields are reserved for keiro's observability layer (see `docs/research/06-command-cycle-design.md` §12): `keiro.command.id`, `keiro.command.tag`, `keiro.event_stream.id`, `keiro.event_stream.type`, `keiro.attempt`, `keiro.span.trace_id`, `keiro.span.span_id`. The codec layer leaves these alone; the keiro production library sets them at `encodeForAppend` time.
 
 
 ## 5. Upcaster chain ordering
@@ -134,12 +134,12 @@ Concretely, EP-1's `runCommand` raises `CommandError.DecodeError` on an unknown 
 
 ## 7. Integration with `runCommand` (EP-1)
 
-EP-1's `runCommand` (per `docs/research/06-command-cycle-design.md` §4) takes an `Aggregate phi rs s ci co` record. The production shape carries `aggEventCodec :: Codec co`. The cycle's two codec touch-points:
+EP-1's `runCommand` (per `docs/research/06-command-cycle-design.md` §4) takes an `EventStream phi rs s ci co` record. The production shape carries `esEventCodec :: Codec co`. The cycle's two codec touch-points:
 
-- **At append time.** `encodeForAppend (aggEventCodec agg) ev` constructs the `EventData` written to kiroku. Sets `eventType = codecTypeTag (aggEventCodec agg) ev`, `payload = codecEncode (aggEventCodec agg) ev`, and `metadata.schemaVersion = codecVersion (aggEventCodec agg)`.
-- **At hydration time.** Inside the Streamly fold's `replayStep`, `decodeRecorded (aggEventCodec agg) recordedEvent` produces the typed `co` consumed by `applyEvent`. Decode failures raise `CommandError.DecodeError`; replay failures (event matches no edge under the post-decode value) raise `CommandError.ReplayError`. The two errors are distinct so the operator can attribute root cause cleanly.
+- **At append time.** `encodeForAppend (esEventCodec agg) ev` constructs the `EventData` written to kiroku. Sets `eventType = codecTypeTag (esEventCodec agg) ev`, `payload = codecEncode (esEventCodec agg) ev`, and `metadata.schemaVersion = codecVersion (esEventCodec agg)`.
+- **At hydration time.** Inside the Streamly fold's `replayStep`, `decodeRecorded (esEventCodec agg) recordedEvent` produces the typed `co` consumed by `applyEvent`. Decode failures raise `CommandError.DecodeError`; replay failures (event matches no edge under the post-decode value) raise `CommandError.ReplayError`. The two errors are distinct so the operator can attribute root cause cleanly.
 
-EP-1's spike (`spikes/command-cycle/src/Spike/Aggregate.hs`) collapses the codec into a bare `aggEncode`/`aggDecode` pair because EP-2 (this plan) had not landed when the spike was written. The production keiro library replaces that pair with the `Codec co` field; the API change is mechanical and is documented in EP-1's M2 design doc as a forward reference to this plan.
+EP-1's spike (`spikes/command-cycle/src/Spike/EventStream.hs`) collapses the codec into a bare `esEncode`/`esDecode` pair because EP-2 (this plan) had not landed when the spike was written. The production keiro library replaces that pair with the `Codec co` field; the API change is mechanical and is documented in EP-1's M2 design doc as a forward reference to this plan.
 
 EP-1's M1 spike also surfaced an aggregate-author invariant — event payloads must be direct projections of input fields, not computed terms — that the codec cannot help with. That invariant is owned by `keiki` itself (the `OutFields` shape on the edge's `OutTerm`) and is documented in EP-1 §5. The codec sees only the resulting JSON; whether the JSON encodes a recoverable inverse is keiki's concern.
 
@@ -172,7 +172,7 @@ For ergonomics, the production library should expose a generic helper:
 
 This produces a `Codec e` for any event sum whose `Generic`-derived `ToJSON`/`FromJSON` instances match the desired wire shape. The recommended default is the explicit-tag envelope (`{tag, contents}`) — Aeson's `genericToJSON` with `defaultOptions { sumEncoding = TaggedObject "tag" "contents" }` produces this shape directly.
 
-Aggregate authors can opt out of the helper by writing a `Codec` literal by hand whenever the wire shape needs to deviate (e.g. CBOR instead of JSON, a flatter envelope for backwards compatibility, a discriminated union with multiple alternative tags). The explicit form remains the canonical interface.
+EventStream authors can opt out of the helper by writing a `Codec` literal by hand whenever the wire shape needs to deviate (e.g. CBOR instead of JSON, a flatter envelope for backwards compatibility, a discriminated union with multiple alternative tags). The explicit form remains the canonical interface.
 
 EP-2 ships v1 with the generic helper as a *convenience*; v2 may add a TH-based variant once the patterns settle.
 
@@ -240,7 +240,7 @@ Forwarded to EP-6 (`docs/plans/6-upstream-roadmap-for-kiroku-and-keiki.md`) for 
 
 **keiro-side (within this plan's scope).**
 
-- *Generic codec helper.* §9's `codecFromGeneric` should ship in v1 alongside the explicit `Codec e` literal form. The implementation depends on Aeson's `genericToJSON`/`genericParseJSON` plus an envelope wrapper; the production library will land it once the `Aggregate phi rs s ci co` record's exact shape is finalised in EP-1's `Keiro.Aggregate` module.
+- *Generic codec helper.* §9's `codecFromGeneric` should ship in v1 alongside the explicit `Codec e` literal form. The implementation depends on Aeson's `genericToJSON`/`genericParseJSON` plus an envelope wrapper; the production library will land it once the `EventStream phi rs s ci co` record's exact shape is finalised in EP-1's `Keiro.EventStream` module.
 - *Tasty test-tree composer.* §10's `codecRoundtripProperty` plus a golden-test composer should ship as a `Keiro.Codec.Test` module. Out of scope for the M1 spike; production library work item.
 - *Type-tag registry.* §3 says reuse across aggregates is forbidden but does not yet enforce it. The production library should expose a `KeiroRegistry` value that asserts uniqueness at startup. Out of scope for the M1 spike; production library work item.
 
@@ -261,4 +261,4 @@ Expected last line: `[codec-spike] OK`. Every public type or function named in t
 
 keiro's codec layer is a value-level `Codec e` record carrying encode + decode + type-tag + version + an explicit chain of consecutive upcasters. Schema versions are recorded in `EventData.metadata.schemaVersion`; type tags stay stable across versions so projections subscribed by `event_type` keep working. Schema evolution happens at decode time via the upcaster chain; old wire shapes are migrated to the latest before `codecDecode` runs. Unknown event types are fatal by default. The `hindsight` library was evaluated as prior art (`spikes/codec/notes/hindsight-evaluation.md`) and the verdict is selectively borrow — keiro adopts the consecutive-upcaster pattern, the version-vector concept, and the test discipline at the value level, but rejects hindsight's type-level machinery to keep the codec compatible with kiroku's runtime `event_type` registry and keiki's domain-sum `co`.
 
-EP-1 (command cycle) consumes `Codec co` via the `Aggregate.aggEventCodec` field; the production library replaces the spike's bare encode/decode pair with the `Codec` value. EP-3 (subscriptions, projections, process managers) reuses the same codec for decoding `RecordedEvent.payload` into the typed event sum. EP-4 (snapshots) defines a separate `StateCodec (s, RegFile rs)` informed by this plan's patterns but with its own version semantics. EP-6 (upstream roadmap) consolidates the keiki-side `RegFile` serialization helper as the only upstream gap this plan introduces.
+EP-1 (command cycle) consumes `Codec co` via the `EventStream.esEventCodec` field; the production library replaces the spike's bare encode/decode pair with the `Codec` value. EP-3 (subscriptions, projections, process managers) reuses the same codec for decoding `RecordedEvent.payload` into the typed event sum. EP-4 (snapshots) defines a separate `StateCodec (s, RegFile rs)` informed by this plan's patterns but with its own version semantics. EP-6 (upstream roadmap) consolidates the keiki-side `RegFile` serialization helper as the only upstream gap this plan introduces.

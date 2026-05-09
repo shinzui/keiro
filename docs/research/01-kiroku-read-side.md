@@ -253,7 +253,7 @@ Property tests (`Test/Properties.hs`); concurrency tests (`Test/Concurrency.hs`)
 2. **No typed `StreamId` per aggregate** — `StreamName` is untyped `Text`. Keiro must define `newtype AggregateId a = AggregateId StreamName`.
 3. **No snapshot read/write API** — replay from version 0 is N/A for large streams. Keiro must add a sidecar table and load-with-fallback hydration.
 4. **No read-decide-append combinator** — the optimistic-concurrency cycle is implicit in tests; keiro needs a first-class API.
-5. **No batched/multi-stream hydration helper** — `appendMultiStream` covers atomic append; keiro must add the symmetric load+decide helper for multi-aggregate commands.
+5. **No batched/multi-stream hydration helper** — `appendMultiStream` covers atomic append; keiro must add the symmetric load+decide helper for multi-stream commands.
 6. **No subscription projection-rebuild helper** — primitives are low-level; keiro needs a "rebuild from scratch" or "catch up slow subscriber" combinator.
 7. **No serialization/encryption hooks** — no `enrichEvent` interpreter hook. Out-of-band only.
 8. **No correlation/causation helpers** — fields are stored, but no tracing-context injection or chain-walking helpers.

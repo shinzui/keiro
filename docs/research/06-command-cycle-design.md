@@ -22,12 +22,12 @@ This cycle does not exist anywhere in the dependencies today (verified in `docs/
 
 The user-visible behaviour the eventual library will deliver is, schematically:
 
-    runCommand :: Aggregate phi rs s ci co
+    runCommand :: EventStream phi rs s ci co
                -> AggregateId a
                -> ci
                -> Eff es (Either CommandError (Maybe co))
 
-where `Aggregate` is the keiro-native bundle (the `SymTransducer`, codecs, snapshot policy), `AggregateId a` is a typed wrapper around kiroku's `StreamName`, `ci` is the command alphabet, and `co` is the event alphabet. The `Maybe co` reflects that a single `step` either emits one event or none (the silent ε-edge case from keiki). `CommandError` distinguishes a domain rejection ("no edge fires") from infrastructure failure (decode error, replay error, retry exhausted).
+where `EventStream` is the keiro-native bundle (the `SymTransducer`, codecs, snapshot policy), `AggregateId a` is a typed wrapper around kiroku's `StreamName`, `ci` is the command alphabet, and `co` is the event alphabet. The `Maybe co` reflects that a single `step` either emits one event or none (the silent ε-edge case from keiki). `CommandError` distinguishes a domain rejection ("no edge fires") from infrastructure failure (decode error, replay error, retry exhausted).
 
 
 ## 2. Contract derivation
@@ -42,45 +42,45 @@ The seven concrete requirements keiro must satisfy and the keiki primitive that 
 4. **Snapshots.** Checkpoint `(s, RegFile rs)` after a successful append so future hydrations can skip events older than the snapshot. Implication: the contract must surface the register-file value rather than hide it inside an opaque state — EP-4's snapshot codec serializes both halves.
 5. **Typed event codecs.** Encode and decode `co` at the kiroku boundary. Implication: the contract carries (or is paired with) a `Codec co`. EP-2 fixes the codec interface; keiro's command cycle consumes `Codec co` only via two pure functions (encode + decode) at the kiroku boundary.
 6. **Idempotent commands.** Deduplicate on a caller-supplied `CommandId`. Implication: idempotency is independent of the transducer; it lives in the keiro wrapper around `runCommand`.
-7. **Composition.** Process managers (EP-3) and sagas (EP-5) are themselves transducers consuming events from one alphabet and emitting commands of another. Consumes `compose`, `alternative`, `feedback1` from `Keiki.Composition`. Implication: the contract must keep the underlying `SymTransducer` accessible — downstream plans need `aggregate.aggTransducer` to be readable, not buried.
+7. **Composition.** Process managers (EP-3) and sagas (EP-5) are themselves transducers consuming events from one alphabet and emitting commands of another. Consumes `compose`, `alternative`, `feedback1` from `Keiki.Composition`. Implication: the contract must keep the underlying `SymTransducer` accessible — downstream plans need the event stream's `esTransducer` to be readable, not buried.
 
 The resulting contract record:
 
-    data Aggregate phi rs s ci co = Aggregate
-      { aggTransducer       :: SymTransducer phi rs s ci co
-      , aggEventCodec       :: Codec co                          -- defined in EP-2
-      , aggStateCodec       :: StateCodec (s, RegFile rs)        -- defined in EP-4
-      , aggEventTag         :: co -> Text
-      , aggSnapshotPolicy   :: SnapshotPolicy (s, RegFile rs)    -- defined in EP-4
+    data EventStream phi rs s ci co = EventStream
+      { esTransducer       :: SymTransducer phi rs s ci co
+      , esEventCodec       :: Codec co                          -- defined in EP-2
+      , esStateCodec       :: StateCodec (s, RegFile rs)        -- defined in EP-4
+      , esEventTag         :: co -> Text
+      , esSnapshotPolicy   :: SnapshotPolicy (s, RegFile rs)    -- defined in EP-4
       }
 
-The M1 spike collapses this to the substrate slots actually exercised by the load → fold → decide → append cycle: a bare `aggEncode :: co -> Aeson.Value` and `aggDecode :: Aeson.Value -> Either String co` stand in for `Codec co`, and the snapshot fields are omitted entirely. The shape lives at `spikes/command-cycle/src/Spike/Aggregate.hs` with a comment naming the production shape this collapses from.
+The M1 spike collapses this to the substrate slots actually exercised by the load → fold → decide → append cycle: a bare `esEncode :: co -> Aeson.Value` and `esDecode :: Aeson.Value -> Either String co` stand in for `Codec co`, and the snapshot fields are omitted entirely. The shape lives at `spikes/command-cycle/src/Spike/EventStream.hs` with a comment naming the production shape this collapses from.
 
-`aggEventTag :: co -> Text` produces the `event_type` discriminator written to kiroku's indexed `event_type` column. The read side routes on it without decoding the JSON payload (cheap probe). EP-2 may move this onto the `Codec` typeclass once codecs land.
+`esEventTag :: co -> Text` produces the `event_type` discriminator written to kiroku's indexed `event_type` column. The read side routes on it without decoding the JSON payload (cheap probe). EP-2 may move this onto the `Codec` typeclass once codecs land.
 
 
-## 3. Aggregate identity
+## 3. Event-stream identity
 
 `AggregateId a` is keiro's typed wrapper around kiroku's `StreamName`:
 
     newtype AggregateId a = AggregateId { unAggregateId :: StreamName }
 
-The phantom type parameter `a` is the aggregate-identity tag: a type whose `Aggregate` instance carries the matching `SymTransducer phi rs s ci co`, codec, and policies. With this, `runCommand :: Aggregate phi rs s ci co -> AggregateId a -> ci -> ...` can refuse to type-check when a caller hands an `AggregateId Order` to a `runCommand` whose `Aggregate` is for `Counter`. The wrapper lives in keiro (not kiroku) for two reasons:
+The phantom type parameter `a` is the event-stream-identity tag: a type whose `EventStream` instance carries the matching `SymTransducer phi rs s ci co`, codec, and policies. With this, `runCommand :: EventStream phi rs s ci co -> AggregateId a -> ci -> ...` can refuse to type-check when a caller hands an `AggregateId Order` to a `runCommand` whose `EventStream` is for `Counter`. The wrapper lives in keiro (not kiroku) for two reasons:
 
 - kiroku's `StreamName` is `Text`-shaped and intentionally untyped at the API boundary; promoting it to `newtype StreamName Text` upstream would force every kiroku caller to bear a phantom they may not need.
-- keiro can pair `AggregateId a` with an `Aggregate phi rs s ci co` lookup (TypeFamily / class instance) so the whole contract is recovered from a single type-level tag.
+- keiro can pair `AggregateId a` with an `EventStream phi rs s ci co` lookup (TypeFamily / class instance) so the whole contract is recovered from a single type-level tag.
 
 The class shape:
 
-    class HasAggregate a where
-      type AggPhi a   :: Type
-      type AggRegs a  :: [Slot]
-      type AggState a :: Type
-      type AggCmd a   :: Type
-      type AggEvent a :: Type
-      aggregateOf :: Aggregate (AggPhi a) (AggRegs a) (AggState a) (AggCmd a) (AggEvent a)
+    class HasEventStream a where
+      type EsPhi a   :: Type
+      type EsRegs a  :: [Slot]
+      type EsState a :: Type
+      type EsCmd a   :: Type
+      type EsEvent a :: Type
+      eventStreamOf :: EventStream (EsPhi a) (EsRegs a) (EsState a) (EsCmd a) (EsEvent a)
 
-The class is only required when the user wants the type-level lookup. A simpler shape — passing the `Aggregate` value as an explicit argument alongside the `AggregateId` — is what the spike does and is also the recommended default for v1. The spike does not introduce `HasAggregate` precisely so the contract stays minimal; the production library may add the class as a convenience layer.
+The class is only required when the user wants the type-level lookup. A simpler shape — passing the `EventStream` value as an explicit argument alongside the `AggregateId` — is what the spike does and is also the recommended default for v1. The spike does not introduce `HasEventStream` precisely so the contract stays minimal; the production library may add the class as a convenience layer.
 
 EP-6 records the alternative — pushing `newtype StreamName a` upstream into kiroku — as an upstream-gap candidate. The current decision is to keep the typed wrapper in keiro and to leave kiroku's API untyped at the boundary; this matches the principle that kiroku owns *append/read* semantics while keiro owns *aggregate semantics*.
 
@@ -97,7 +97,7 @@ The production keiro public types and signatures are:
          , BoolAlg phi (RegFile rs, ci)
          , Show ci
          )
-      => Aggregate phi rs s ci co
+      => EventStream phi rs s ci co
       -> AggregateId a
       -> ci
       -> Eff es (Maybe co)
@@ -119,7 +119,7 @@ The production keiro public types and signatures are:
          , Show ci
          )
       => RetryConfig
-      -> Aggregate phi rs s ci co
+      -> EventStream phi rs s ci co
       -> AggregateId a
       -> ci
       -> Eff es (Maybe co)
@@ -131,11 +131,11 @@ The production keiro public types and signatures are:
          , Error CommandError :> es
          , BoolAlg phi (RegFile rs, ci)
          )
-      => Aggregate phi rs s ci co
+      => EventStream phi rs s ci co
       -> AggregateId a
       -> Eff es (Maybe co)
 
-    -- Multi-aggregate atomic command (kiroku appendMultiStream-backed)
+    -- Multi-stream atomic command (kiroku appendMultiStream-backed)
     runCommandMulti
       :: ( Store :> es
          , Error StoreError   :> es
@@ -151,7 +151,7 @@ The production keiro public types and signatures are:
          , Error CommandError :> es
          , BoolAlg phi (RegFile rs, ci)
          )
-      => Aggregate phi rs s ci co
+      => EventStream phi rs s ci co
       -> AggregateId a
       -> ci
       -> Hasql.Session.Session ()   -- user-supplied SQL action committed in the same tx
@@ -167,7 +167,7 @@ The production keiro public types and signatures are:
     data RetryError = RetryExhausted !StreamName !StoreError
       deriving stock (Show)
 
-`SomeMultiCommand` and `SomeEvent` are existentially-quantified packagings of `(AggregateId, Aggregate, ci)` and `(AggregateId, Maybe co)`; their precise shape is part of `runCommandMulti`'s implementation and is sketched in §11.
+`SomeMultiCommand` and `SomeEvent` are existentially-quantified packagings of `(AggregateId, EventStream, ci)` and `(AggregateId, Maybe co)`; their precise shape is part of `runCommandMulti`'s implementation and is sketched in §11.
 
 The spike implements `runCommand`, `runCommandRetry`, and `CommandError`/`RetryError` with the simpler `StreamName` argument (no typed `AggregateId a`) so it can demonstrate the cycle's mechanics without committing to the typed-identity surface. The production library adds the typed wrapper. Callers who want to skip the wrapper can always recover the bare-`StreamName` form by `unAggregateId`.
 
@@ -184,7 +184,7 @@ The pipeline is expressed as a Streamly `Stream` of `RecordedEvent`s consumed by
          , Error CommandError :> es
          , BoolAlg phi (RegFile rs, ci)
          )
-      => Aggregate phi rs s ci co
+      => EventStream phi rs s ci co
       -> StreamName
       -> Eff es (s, RegFile rs, StreamVersion)
     hydrate agg sn =
@@ -192,7 +192,7 @@ The pipeline is expressed as a Streamly `Stream` of `RecordedEvent`s consumed by
         (Fold.foldlM' replayStep (pure (initial t, initialRegs t, StreamVersion 0)))
         (hydrationStream sn pageSize)
       where
-        t = aggTransducer agg
+        t = esTransducer agg
 
 The `Stream` itself is built by paginating `readStreamForward`:
 
@@ -210,7 +210,7 @@ The `Stream` itself is built by paginating `readStreamForward`:
               let lastV = (V.last events).streamVersion
               in pure (Just (events, lastV))
 
-Each `replayStep` decodes the event payload via `aggDecode`, runs `applyEvent` to advance `(s, RegFile rs)`, and threads the highest `streamVersion` seen so the caller knows whether to choose `NoStream` or `ExactVersion v` on the eventual append. Decode failures raise `DecodeError`; replay failures (event matches no active edge) raise `ReplayError`.
+Each `replayStep` decodes the event payload via `esDecode`, runs `applyEvent` to advance `(s, RegFile rs)`, and threads the highest `streamVersion` seen so the caller knows whether to choose `NoStream` or `ExactVersion v` on the eventual append. Decode failures raise `DecodeError`; replay failures (event matches no active edge) raise `ReplayError`.
 
 The constant-memory shape matters because keiro's process-manager state streams (EP-3) and long-running workflow streams (EP-5) can grow to thousands of events. Holding the events in a `Vector` in memory and folding with `foldM` would scale linearly with stream length; the `Stream`/`Fold` shape uses constant memory regardless. EP-4's snapshot path replaces the initial cursor with `snapshot.version + 1` so tail replay is bounded by the snapshot policy's events-since-snapshot threshold rather than the absolute stream length.
 
@@ -224,14 +224,14 @@ This shape matches the parent MasterPlan's "Streamly substrate" Integration Poin
 
 Computed terms — `TApp1 f t`, `TApp2 f a b` — defeat the inverse: `solveOutput` returns `Nothing`, `applyEvent` returns `Nothing`, replay raises `ReplayError`. Therefore **event payload fields must be direct projections of input fields**; the state delta (counter += 1, cooldownUntil = at + duration) is carried by the edge's `update`, not duplicated into the event payload. The spike's first pass violated this and crashed on the second command of scenario 1; see EP-1's Surprises log entry. EP-2's codec design and any keiro author cookbook must call this out prominently. EP-6 may want to lift it to a compile-time error in keiki itself.
 
-Page size for `hydrationStream` defaults to 256 (matching the spike). Larger pages reduce round-trips but inflate per-page memory; smaller pages do the inverse. Production keiro should expose this as a tunable (`Aggregate.aggPageSize` field) and let aggregate authors override the default for hot streams.
+Page size for `hydrationStream` defaults to 256 (matching the spike). Larger pages reduce round-trips but inflate per-page memory; smaller pages do the inverse. Production keiro should expose this as a tunable (`EventStream.esPageSize` field) and let event-stream authors override the default for hot streams.
 
 
 ## 6. Decide phase
 
 The decide phase is pure: `step` is `keiki`'s native operation that does *not* perform IO and cannot read external state. Decisions that need a database lookup must pre-fetch the value into the command payload at the call site (see `docs/research/02-keiki-decide-loop.md` §"Effectful Story" for the rationale). This keeps the transducer deterministic and replay-safe.
 
-Three outcomes from `step (aggTransducer agg) (s, regs) cmd`:
+Three outcomes from `step (esTransducer agg) (s, regs) cmd`:
 
 - `Just (s', regs', Just ev)` — the typical case. Encode `ev`, append it to kiroku.
 - `Just (s', regs', Nothing)` — a silent ε-edge fired. The state advanced but no event is observable on the wire. v1 keiro's recommendation: emit a synthetic `StateAdvanced` event (preliminary name) so replay determinism is preserved. The spike's Counter does not exercise this path because its CooldownEnded transition emits a real domain event for replay determinism — but the public API's `Maybe co` return type leaves the silent path expressible.
@@ -314,16 +314,16 @@ Concrete shape:
 or, alternatively, a refactor that exposes the underlying `Transaction` for any append. Until the upstream lands, keiro can implement `runCommandWithSql` by routing through `appendMultiStream` with a single-element list — this opens a transaction for free — but the workaround is mildly wasteful (it acquires a `stream_id` advisory lock that is unnecessary for single-stream appends). The spike does not implement `runCommandWithSql` because the upstream gap forces the workaround; EP-3 picks it up once kiroku-store exposes the cleaner combinator.
 
 
-## 11. Multi-aggregate commands
+## 11. Multi-stream commands
 
-`runCommandMulti` accepts a list of `(SomeMultiCommand)` triples, each carrying an `AggregateId`, an `Aggregate`, and a command. Internally it hydrates each aggregate, runs `step` on each, and uses kiroku's `appendMultiStream` to atomically append the emitted events.
+`runCommandMulti` accepts a list of `(SomeMultiCommand)` triples, each carrying an `AggregateId`, an `EventStream`, and a command. Internally it hydrates each event stream, runs `step` on each, and uses kiroku's `appendMultiStream` to atomically append the emitted events.
 
 Concrete shape (existential packaging):
 
     data SomeMultiCommand where
       SomeMultiCommand
         :: ( BoolAlg phi (RegFile rs, ci), Show ci )
-        => Aggregate phi rs s ci co
+        => EventStream phi rs s ci co
         -> AggregateId a
         -> ci
         -> SomeMultiCommand
@@ -342,12 +342,12 @@ Atomicity: `appendMultiStream` runs in a `TxSessions.transaction ReadCommitted W
 
 The spike does not implement `runCommandMulti` because its Counter aggregate is single-stream. The production library will add it; the implementation strategy is:
 
-1. Hydrate each `(AggregateId, Aggregate)` independently (they can run in parallel).
+1. Hydrate each `(AggregateId, EventStream)` independently (they can run in parallel).
 2. Run `step` on each (pure, parallel-safe).
 3. Encode the emitted events into a `[(StreamName, ExpectedVersion, [EventData])]` triple list.
 4. Call `appendMultiStream`.
 
-`runCommandMulti` does not have a built-in retry layer at v1 — callers wrap it with a manually-written retry combinator if they want it. The reason: the retry failure modes for a multi-aggregate command are richer (one stream's `WrongExpectedVersion` requires re-hydrating *all* aggregates, not just the one that lost the race), and giving callers the choice avoids surprising semantics.
+`runCommandMulti` does not have a built-in retry layer at v1 — callers wrap it with a manually-written retry combinator if they want it. The reason: the retry failure modes for a multi-stream command are richer (one stream's `WrongExpectedVersion` requires re-hydrating *all* aggregates, not just the one that lost the race), and giving callers the choice avoids surprising semantics.
 
 
 ## 12. Observability
@@ -358,8 +358,8 @@ keiro's command cycle exposes structured signals for the production library to e
 
 - `keiro.command.id` — caller-supplied `CommandId` (v5 UUID); used for idempotency dedup and for tracing the originating command.
 - `keiro.command.tag` — application-level command discriminator (the `Show ci` representation, truncated).
-- `keiro.aggregate.id` — the `StreamName` of the aggregate.
-- `keiro.aggregate.type` — the `AggregateId`'s phantom-type tag, when available.
+- `keiro.event_stream.id` — the `StreamName` of the event stream.
+- `keiro.event_stream.type` — the `AggregateId`'s phantom-type tag, when available.
 - `keiro.attempt` — 1-indexed retry attempt (1 means the first try succeeded).
 - `keiro.span.trace_id` and `keiro.span.span_id` — the OpenTelemetry trace and span ids, propagated downstream so subscribers and process managers can stitch causality.
 
@@ -376,8 +376,8 @@ The spike's contention test is the v1 acceptance for the load → fold → decid
 - **Retry exhaustion.** Force `maxRetries` consecutive `WrongExpectedVersion` collisions; assert `RetryExhausted` is raised with the last `StoreError` carried.
 - **Decode errors.** Inject a stream with an event whose `eventType` is unknown to the codec; assert `DecodeError` is raised with the offending `eventType`.
 - **Replay errors.** Inject a stream with an event whose payload has the wrong shape (a field renamed in the source code without an upcaster); assert `ReplayError` is raised.
-- **Multi-stream atomicity.** A two-aggregate command where one aggregate's `ExactVersion` would fail; assert neither aggregate's stream advances.
-- **ε-edge replay determinism.** Aggregates that emit synthetic state-advance events on `tick`; assert that hydration over the resulting stream yields the same `(s, RegFile rs)` as a fresh forward run with no events skipped.
+- **Multi-stream atomicity.** A two-stream command where one stream's `ExactVersion` would fail; assert neither stream advances.
+- **ε-edge replay determinism.** Event streams that emit synthetic state-advance events on `tick`; assert that hydration over the resulting stream yields the same `(s, RegFile rs)` as a fresh forward run with no events skipped.
 
 The spike's transcript is the v1 reference output, repeated here verbatim:
 
@@ -440,6 +440,6 @@ Every public type or function named in this document is realized in the spike (`
 
 ## 16. Summary
 
-The keiro command cycle is the load → fold → decide → append loop with optimistic-concurrency retry. Its contract — `Aggregate phi rs s ci co` — is built on keiki's native `SymTransducer` rather than the legacy `Decider` facade so workflow primitives (the typed register file, ε-edges, the symbolic predicate carrier) survive into keiro unchanged. Hydration is a Streamly `Stream`/`Fold` pipeline so it composes with the rest of keiro's streaming substrate and runs in constant memory. Append is `kiroku`'s `appendToStream` with `ExactVersion`; retries on `WrongExpectedVersion` are handled by a separate combinator. Multi-aggregate commands ride on `appendMultiStream`; the transactional-step combinator awaits an upstream addition to kiroku-store. The spike at `spikes/command-cycle/` is the empirical proof of the design under real Postgres + concurrent writers.
+The keiro command cycle is the load → fold → decide → append loop with optimistic-concurrency retry. Its contract — `EventStream phi rs s ci co` — is built on keiki's native `SymTransducer` rather than the legacy `Decider` facade so workflow primitives (the typed register file, ε-edges, the symbolic predicate carrier) survive into keiro unchanged. Hydration is a Streamly `Stream`/`Fold` pipeline so it composes with the rest of keiro's streaming substrate and runs in constant memory. Append is `kiroku`'s `appendToStream` with `ExactVersion`; retries on `WrongExpectedVersion` are handled by a separate combinator. Multi-stream commands ride on `appendMultiStream`; the transactional-step combinator awaits an upstream addition to kiroku-store. The spike at `spikes/command-cycle/` is the empirical proof of the design under real Postgres + concurrent writers.
 
 EP-2 (codecs) replaces the spike's bare encode/decode pair with a typed `Codec co` and the schema-evolution machinery. EP-3 (subscriptions, projections, process managers) wraps `runCommand` for the process-manager write path. EP-4 (snapshots) replaces the hydration phase's initial cursor with a snapshot read. EP-5 (workflow roadmap) layers durable execution on top of the register file the contract surfaces. EP-6 consolidates the upstream gaps §14 records into a kiroku/keiki feature backlog. All five plans now have a stable foundation to build on.

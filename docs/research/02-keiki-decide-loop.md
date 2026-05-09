@@ -182,7 +182,7 @@ Implication for keiro: keiro must implement this integration. Pattern is:
 2. **Idempotency at the command-handler level.** Commands may be redelivered; handler must dedup (e.g., via `commandId`). `step` is pure and has no notion of redelivery or idempotency keys.
 3. **Structured error model.** A command can be rejected (`[]`), but there is no way to distinguish "user error" (invalid state) from "system error" (decode failure). Keiro should expose `Either CommandError [Event]`.
 4. **Effectful read in decide.** Pure `decide` cannot read external state. Keiro may want to permit `Eff` in decide under constraints (read-only, deterministic, memoizable).
-5. **Process manager / saga / durable workflow primitive.** Keiki's composition is syntactic; it does not model long-running multi-aggregate workflows with compensation, timeouts, or child-aggregate spawning.
+5. **Process manager / saga / durable workflow primitive.** Keiki's composition is syntactic; it does not model long-running multi-stream workflows with compensation, timeouts, or child-aggregate spawning.
 
 ### Additional gaps
 

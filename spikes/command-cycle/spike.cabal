@@ -40,10 +40,10 @@ common shared
 library
     import:             shared
     hs-source-dirs:     src
-    exposed-modules:    Spike.Aggregate
-                        Spike.Codec
+    exposed-modules:    Spike.Codec
                         Spike.Command
                         Spike.Counter
+                        Spike.EventStream
                         Spike.Retry
     build-depends:      aeson            >= 2.1   && < 2.3,
                         base             ^>= 4.21,

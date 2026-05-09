@@ -159,7 +159,7 @@ The `Stream` is built by paginating the existing `readStreamForward` in chunks (
 
 *Why.* EP-5's v1 substrate names PM state streams `pm-<pmName>-<correlationId>` (`docs/research/08-subscription-and-process-manager-design.md` §5; `docs/research/10-workflow-roadmap.md` §2). The current `Category Text` exact-match means an operator wanting to observe every PM in the deployment must register one subscription per PM name — fine for a small deployment, irritating at scale, and impossible if PMs are added dynamically without restarting the subscriber.
 
-*Priority.* **Wanted.** keiro can register one subscription per known PM at registration time, computing the names from the `Aggregate` registry. The workaround scales with the static list of PMs; it does not scale with dynamically-added PMs (which keiro v1 does not support anyway). Lifting the prefix-style category subscription upstream removes this constraint cleanly.
+*Priority.* **Wanted.** keiro can register one subscription per known PM at registration time, computing the names from the `EventStream` registry. The workaround scales with the static list of PMs; it does not scale with dynamically-added PMs (which keiro v1 does not support anyway). Lifting the prefix-style category subscription upstream removes this constraint cleanly.
 
 *Design constraint.* The new variant must continue to use kiroku's existing publisher-driven re-query mechanism on category subscriptions (per `docs/research/01-kiroku-read-side.md` §"Subscriptions Hook" and `kiroku-store/src/Kiroku/Store/Subscription/Types.hs`). Performance must be no worse than `Category` exact match: the SQL `WHERE stream_name LIKE $1 || '%'` plus an index supporting prefix lookups is the natural shape. The existing `streams.category` generated column does not help (it is computed for exact-match categories); a btree index on `streams.stream_name` is sufficient.
 
@@ -509,7 +509,7 @@ The `es` set is restricted to read-only effects (no `Store`-write capabilities, 
 
 ### 7.7 Property-test helpers (Given/When/Then) (Optional)
 
-*What is missing today.* keiki's tests are hand-written `Hspec` against `applyEvent`/`reconstitute`; there are no Given/When/Then helpers (`docs/research/02-keiki-decide-loop.md` §"Testing"). Aggregate authors writing their own tests against keiki's primitives must build the test machinery themselves.
+*What is missing today.* keiki's tests are hand-written `Hspec` against `applyEvent`/`reconstitute`; there are no Given/When/Then helpers (`docs/research/02-keiki-decide-loop.md` §"Testing"). EventStream authors writing their own tests against keiki's primitives must build the test machinery themselves.
 
 *What keiro needs.* Property-test helpers:
 
@@ -520,7 +520,7 @@ The `es` set is restricted to read-only effects (no `Store`-write capabilities, 
 
 so `given (transducer) [event1, event2] & whenC command3 & thenE [expectedEvent]` reads as a Given/When/Then sentence.
 
-*Why.* `docs/research/02-keiki-decide-loop.md` §"Testing" notes "Given-When-Then helpers — none provided; tests are hand-written `Hspec`." Aggregate authors writing keiro v1 will want them; without them every team builds its own test framework. Lifting it upstream means every keiki user gets the same vocabulary.
+*Why.* `docs/research/02-keiki-decide-loop.md` §"Testing" notes "Given-When-Then helpers — none provided; tests are hand-written `Hspec`." EventStream authors writing keiro v1 will want them; without them every team builds its own test framework. Lifting it upstream means every keiki user gets the same vocabulary.
 
 *Priority.* **Optional.** keiro can ship its own helpers at the keiro layer (a reasonable v1 production-library work item recorded in EP-2 §12 alongside the codec test composer). Lifting upstream is a uniform-experience win, not a feature gate.
 
@@ -553,7 +553,7 @@ so `given (transducer) [event1, event2] & whenC command3 & thenE [expectedEvent]
 
 *What is missing today.* kiroku's `StreamName` is `Text`-shaped and intentionally untyped at the API boundary (`docs/research/01-kiroku-read-side.md` §"Type Model"; `docs/research/01-kiroku-read-side.md` §"Gaps for Keiro" #2). keiro defines a typed wrapper at the keiro layer: `newtype AggregateId a = AggregateId { unAggregateId :: StreamName }` (`docs/research/06-command-cycle-design.md` §3).
 
-*Verdict.* Keep the typed wrapper at the keiro layer for v1. EP-1 §3 explicitly chose this shape over pushing `newtype StreamName a` upstream to kiroku, on two grounds: (a) kiroku's API is intentionally untyped at the boundary and promoting `StreamName` to a parameterised newtype upstream would force every kiroku caller to bear a phantom they may not need; (b) keiro can pair `AggregateId a` with an `Aggregate` lookup so the whole contract is recovered from a single type-level tag — a layer kiroku has no consumer for. EP-6 endorses this verdict: the typed wrapper is a keiro concept, not a kiroku concept. No kiroku-side action.
+*Verdict.* Keep the typed wrapper at the keiro layer for v1. EP-1 §3 explicitly chose this shape over pushing `newtype StreamName a` upstream to kiroku, on two grounds: (a) kiroku's API is intentionally untyped at the boundary and promoting `StreamName` to a parameterised newtype upstream would force every kiroku caller to bear a phantom they may not need; (b) keiro can pair `AggregateId a` with an `EventStream` lookup so the whole contract is recovered from a single type-level tag — a layer kiroku has no consumer for. EP-6 endorses this verdict: the typed wrapper is a keiro concept, not a kiroku concept. No kiroku-side action.
 
 *Sequencing.* No upstream work; keiro v1 ships the wrapper at its own layer. If a future kiroku use case wants typed identity, EP-6 revisits.
 

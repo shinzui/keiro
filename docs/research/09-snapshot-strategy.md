@@ -21,7 +21,7 @@ Two snapshot designs were surveyed in the prior-art document (`docs/research/05-
 
 keiro adopts the Marten shape: a single sidecar table, keyed on the stream id kiroku already assigns, holding one snapshot row per stream, with a state-codec-version field that lets the reader fall through to full replay on schema change. The snapshot codec itself is value-level (a record of functions), structurally analogous to EP-2's `Codec e` but with its own versioning semantics (versioned at the aggregate level, not per record).
 
-The user-visible behaviour the eventual library will deliver: aggregate authors annotate their `Aggregate` value with a snapshot policy (`snapshotPolicyEvery 100`, `snapshotPolicyOnTerminal isCompleted`, or `snapshotPolicyNever`); hydration paths transparently use the latest snapshot when present and fall back to full replay when not; operators can drop or truncate the `keiro_snapshots` table at any time without affecting correctness.
+The user-visible behaviour the eventual library will deliver: aggregate authors annotate their `EventStream` value with a snapshot policy (`snapshotPolicyEvery 100`, `snapshotPolicyOnTerminal isCompleted`, or `snapshotPolicyNever`); hydration paths transparently use the latest snapshot when present and fall back to full replay when not; operators can drop or truncate the `keiro_snapshots` table at any time without affecting correctness.
 
 
 ## 2. Storage layout
@@ -112,7 +112,7 @@ Field-by-field:
 
 - **`stateDecode`**: deserialize. Returns `Either String t` rather than throwing; the keiro snapshot read path translates a `Left` into "fall through to full replay" with a logged warning (§8). It does not raise an error, because a bad-on-disk snapshot must never break a working command path.
 
-- **`stateCodecVersion`**: an integer recording the wire-shape generation. Aggregate authors bump it on every backwards-incompatible change to `stateEncode`/`stateDecode`. The hydration short-circuit checks this against the on-disk row (§6); a mismatch silently falls through.
+- **`stateCodecVersion`**: an integer recording the wire-shape generation. EventStream authors bump it on every backwards-incompatible change to `stateEncode`/`stateDecode`. The hydration short-circuit checks this against the on-disk row (§6); a mismatch silently falls through.
 
 - **`regFileShapeHash`**: a stable `Text` hash of the register-file shape `rs` (the slot-list of `(Symbol, Type)` pairs). Computed at compile time, ideally via a keiki-side helper (`Keiki.RegFile.shapeHash :: forall rs. KnownRegFileShape rs => Proxy rs -> Text`). The hash is independent of the slot *values*; it is a function of the type-level shape only. Used as a secondary discriminant on read (§6).
 
@@ -184,47 +184,47 @@ The three named constructors cover the common shapes:
 
 - **`snapshotPolicyNever`**: do not write snapshots. Appropriate for aggregates whose streams are intrinsically short (typical `Counter`-shape aggregates with under ~50 events) or for prototype phases where snapshot overhead is not yet warranted. The hydration path always works without a snapshot — full replay is the baseline.
 
-The policy is carried alongside the rest of the aggregate definition. EP-1's `Aggregate phi rs s ci co` already includes an `aggSnapshotPolicy :: SnapshotPolicy (s, RegFile rs)` field (`docs/research/06-command-cycle-design.md` §4); this plan supplies the `SnapshotPolicy` type. The default for an aggregate that does not specify a policy is `snapshotPolicyEvery 100`, but this plan does not enforce a default — that is a production-library choice.
+The policy is carried alongside the rest of the aggregate definition. EP-1's `EventStream phi rs s ci co` already includes an `esSnapshotPolicy :: SnapshotPolicy (s, RegFile rs)` field (`docs/research/06-command-cycle-design.md` §4); this plan supplies the `SnapshotPolicy` type. The default for an aggregate that does not specify a policy is `snapshotPolicyEvery 100`, but this plan does not enforce a default — that is a production-library choice.
 
 
-## 5. Aggregate-level wiring
+## 5. EventStream-level wiring
 
-EP-1's `Aggregate phi rs s ci co` record (the keiro ⇄ keiki contract, recorded in `docs/research/06-command-cycle-design.md` §4) carries every aggregate-specific configuration the command cycle needs. This plan adds two of its fields:
+EP-1's `EventStream phi rs s ci co` record (the keiro ⇄ keiki contract, recorded in `docs/research/06-command-cycle-design.md` §4) carries every aggregate-specific configuration the command cycle needs. This plan adds two of its fields:
 
-    data Aggregate phi rs s ci co = Aggregate
-      { aggTransducer       :: SymTransducer phi rs s ci co
+    data EventStream phi rs s ci co = EventStream
+      { esTransducer       :: SymTransducer phi rs s ci co
       , aggCategory         :: Text
-      , aggIdToStreamName   :: AggregateId (Aggregate phi rs s ci co) -> StreamName
-      , aggEventCodec       :: Codec co                         -- defined in EP-2
-      , aggStateCodec       :: StateCodec (s, RegFile rs)       -- defined here, EP-4
-      , aggSnapshotPolicy   :: SnapshotPolicy (s, RegFile rs)   -- defined here, EP-4
+      , aggIdToStreamName   :: AggregateId (EventStream phi rs s ci co) -> StreamName
+      , esEventCodec       :: Codec co                         -- defined in EP-2
+      , esStateCodec       :: StateCodec (s, RegFile rs)       -- defined here, EP-4
+      , esSnapshotPolicy   :: SnapshotPolicy (s, RegFile rs)   -- defined here, EP-4
       , …
       }
 
-EP-1 already references both fields; this plan binds the types they have. No new wiring is required at the `Aggregate` layer beyond what EP-1 already specified.
+EP-1 already references both fields; this plan binds the types they have. No new wiring is required at the `EventStream` layer beyond what EP-1 already specified.
 
 A keiro author with no snapshot needs writes:
 
-    myAggregate = Aggregate
+    myEventStream = EventStream
       { …
-      , aggStateCodec     = derivedStateCodec 1
-      , aggSnapshotPolicy = snapshotPolicyNever
+      , esStateCodec     = derivedStateCodec 1
+      , esSnapshotPolicy = snapshotPolicyNever
       }
 
 A keiro author with periodic snapshots writes:
 
-    orderFulfillment = Aggregate
+    orderFulfillment = EventStream
       { …
-      , aggStateCodec     = derivedStateCodec 1
-      , aggSnapshotPolicy = snapshotPolicyEvery 100
+      , esStateCodec     = derivedStateCodec 1
+      , esSnapshotPolicy = snapshotPolicyEvery 100
       }
 
 A keiro author with terminal-state snapshots writes:
 
-    onboardingProcessManager = Aggregate
+    onboardingProcessManager = EventStream
       { …
-      , aggStateCodec     = derivedStateCodec 1
-      , aggSnapshotPolicy = snapshotPolicyOnTerminal $ \(s, _) -> isComplete s
+      , esStateCodec     = derivedStateCodec 1
+      , esSnapshotPolicy = snapshotPolicyOnTerminal $ \(s, _) -> isComplete s
       }
 
 
@@ -234,7 +234,7 @@ The hydration short-circuit replaces EP-1's hydration entry point. Recall EP-1's
 
     hydrate
       :: …
-      => Aggregate phi rs s ci co
+      => EventStream phi rs s ci co
       -> StreamName
       -> Eff es (s, RegFile rs, StreamVersion)
     hydrate agg sn =
@@ -242,13 +242,13 @@ The hydration short-circuit replaces EP-1's hydration entry point. Recall EP-1's
         (Fold.foldlM' replayStep (pure (initial t, initialRegs t, StreamVersion 0)))
         (hydrationStream sn pageSize)
       where
-        t = aggTransducer agg
+        t = esTransducer agg
 
 The snapshot-aware version is structurally identical — same `Stream`, same `Fold` — but parameterized by an *initial cursor* and *initial accumulator* derived from the snapshot read:
 
     hydrateWithSnapshot
       :: …
-      => Aggregate phi rs s ci co
+      => EventStream phi rs s ci co
       -> StreamName
       -> Eff es (s, RegFile rs, StreamVersion)
     hydrateWithSnapshot agg sn = do
@@ -260,7 +260,7 @@ The snapshot-aware version is structurally identical — same `Stream`, same `Fo
         (Fold.foldlM' replayStep (pure (startState, startCursor)))
         (hydrationStream sn (startCursor, pageSize))
       where
-        trans = aggTransducer agg
+        trans = esTransducer agg
 
 `readSnapshot`'s shape:
 
@@ -274,7 +274,7 @@ The snapshot-aware version is structurally identical — same `Stream`, same `Fo
 
     readSnapshot
       :: ( Store :> es, Error StoreError :> es )
-      => Aggregate phi rs s ci co
+      => EventStream phi rs s ci co
       -> StreamName
       -> Eff es (Maybe (StreamVersion, (s, RegFile rs)))
     readSnapshot agg sn = do
@@ -282,14 +282,14 @@ The snapshot-aware version is structurally identical — same `Stream`, same `Fo
       case raw of
         Nothing -> pure Nothing       -- SnapshotMiss
         Just row
-          | row.codecVersion /= stateCodecVersion (aggStateCodec agg) ->
+          | row.codecVersion /= stateCodecVersion (esStateCodec agg) ->
               do logSnapshotIncompatibleCodec sn row
                  pure Nothing
-          | row.shapeHash    /= regFileShapeHash (aggStateCodec agg) ->
+          | row.shapeHash    /= regFileShapeHash (esStateCodec agg) ->
               do logSnapshotIncompatibleShape sn row
                  pure Nothing
         Just row ->
-          case stateDecode (aggStateCodec agg) row.state of
+          case stateDecode (esStateCodec agg) row.state of
             Left  err -> do logSnapshotDecodeError sn row err
                             pure Nothing
             Right t   -> pure (Just (row.streamVersion, t))
@@ -323,13 +323,13 @@ The post-cycle hook lives in `runCommand`'s tail (writing `t = (s, RegFile rs)` 
     runCommand agg aid cmd = do
       sn          <- streamNameOf agg aid
       (t0, ver0)  <- hydrateWithSnapshot agg sn
-      case step (aggTransducer agg) t0 cmd of
+      case step (esTransducer agg) t0 cmd of
         Nothing                     -> throwError (CommandRejected sn (T.pack (show cmd)))
         Just (s', regs', mev)       -> do
-          let evs = maybe [] (pure . encodeForAppend (aggEventCodec agg)) mev
+          let evs = maybe [] (pure . encodeForAppend (esEventCodec agg)) mev
           newVer <- appendToStreamWithExpected sn ver0 evs
           let t1 = (s', regs')
-          when (runSnapshotPolicy (aggSnapshotPolicy agg) t1 newVer) $
+          when (runSnapshotPolicy (esSnapshotPolicy agg) t1 newVer) $
             forkAsync (writeSnapshot agg aid newVer t1)
           pure ()
 
@@ -339,8 +339,8 @@ The post-cycle hook lives in `runCommand`'s tail (writing `t = (s, RegFile rs)` 
 
     writeSnapshot
       :: ( Store :> es, Error StoreError :> es )
-      => Aggregate phi rs s ci co
-      -> AggregateId (Aggregate phi rs s ci co)
+      => EventStream phi rs s ci co
+      -> AggregateId (EventStream phi rs s ci co)
       -> StreamVersion
       -> (s, RegFile rs)
       -> Eff es ()
@@ -348,9 +348,9 @@ The post-cycle hook lives in `runCommand`'s tail (writing `t = (s, RegFile rs)` 
       runStorePool (writeSnapshotRow sn version state codecVersion shapeHash)
       where
         sn           = aggIdToStreamName agg aid
-        state        = stateEncode (aggStateCodec agg) t
-        codecVersion = stateCodecVersion (aggStateCodec agg)
-        shapeHash    = regFileShapeHash (aggStateCodec agg)
+        state        = stateEncode (esStateCodec agg) t
+        codecVersion = stateCodecVersion (esStateCodec agg)
+        shapeHash    = regFileShapeHash (esStateCodec agg)
 
 The SQL is a monotonic upsert:
 
@@ -479,7 +479,7 @@ Async projections (EP-3 §3) consume `Ingested es msg` from `shibuya-kiroku-adap
 
 Live projections (mentioned in EP-3 but a v1 nice-to-have) materialize a query-time view from a stream of events. They do not require snapshots; if a live projection wants accelerated cold-start, it can persist its own checkpoint, which is a different concern from aggregate snapshots and does not use the `keiro_snapshots` table.
 
-Process managers (EP-3 §5) are themselves event-sourced aggregates: a process manager has its own kiroku stream (`pm-OrderFulfillment-<id>`) and its `applyEvent` recovers a `(s, RegFile rs)` exactly as a domain aggregate's does. **Process managers therefore benefit from snapshots in exactly the same way** — they use the same `Aggregate` machinery EP-1 §4 exposes, with `aggSnapshotPolicy` controlling whether and when their state is snapshotted. EP-3 §5 cross-references this plan as the snapshot mechanism for process-manager state. A long-running process manager (one whose stream grows past ~100 events) should set `snapshotPolicyEvery 100`; a short-lived one can use `snapshotPolicyOnTerminal isComplete` or `snapshotPolicyNever`.
+Process managers (EP-3 §5) are themselves event-sourced aggregates: a process manager has its own kiroku stream (`pm-OrderFulfillment-<id>`) and its `applyEvent` recovers a `(s, RegFile rs)` exactly as a domain aggregate's does. **Process managers therefore benefit from snapshots in exactly the same way** — they use the same `EventStream` machinery EP-1 §4 exposes, with `esSnapshotPolicy` controlling whether and when their state is snapshotted. EP-3 §5 cross-references this plan as the snapshot mechanism for process-manager state. A long-running process manager (one whose stream grows past ~100 events) should set `snapshotPolicyEvery 100`; a short-lived one can use `snapshotPolicyOnTerminal isComplete` or `snapshotPolicyNever`.
 
 EP-3's outbox (§6) and inbox (§7) are pgmq-backed message-passing primitives, not state-replay primitives. They are unrelated to snapshots.
 
@@ -488,7 +488,7 @@ The takeaway for reviewers: the *only* keiro abstraction that uses `keiro_snapsh
 
 ## 14. Integration with EP-5 (workflow roadmap)
 
-EP-5 (`docs/plans/5-workflow-engine-and-durable-execution-roadmap.md`, output document `docs/research/10-workflow-roadmap.md` to be written next) describes the v1 process-manager substrate and a v2 named-step durable-execution roadmap. The v1 substrate consumes process managers, which (as §13 records) participate in snapshots through EP-1's `Aggregate` machinery. Long-lived workflow streams — the "child workflow ticked 5,000 times before the parent resolved" case — are precisely where snapshots earn their keep.
+EP-5 (`docs/plans/5-workflow-engine-and-durable-execution-roadmap.md`, output document `docs/research/10-workflow-roadmap.md` to be written next) describes the v1 process-manager substrate and a v2 named-step durable-execution roadmap. The v1 substrate consumes process managers, which (as §13 records) participate in snapshots through EP-1's `EventStream` machinery. Long-lived workflow streams — the "child workflow ticked 5,000 times before the parent resolved" case — are precisely where snapshots earn their keep.
 
 The v2 durable-execution layer (deferred, not in scope for this MasterPlan) may add a *replay-oriented* snapshot story where a workflow's deterministic-replay log is checkpointed at "named steps." This is structurally different from aggregate snapshots — it operates over a workflow's command/event journal at a granularity below `StreamVersion` — and EP-5's roadmap will treat it as a separate primitive. EP-4's `keiro_snapshots` table is the *aggregate* snapshot, not the *step* snapshot. A future v2 can add a sibling table without disturbing this one.
 
@@ -528,7 +528,7 @@ The production library will validate the snapshot path with three test classes; 
 
 **Round-trip test** (per aggregate's `StateCodec`): `forAll t. stateDecode codec (stateEncode codec t) === Right t`. This is the same shape EP-2 §10 records for `Codec e`, applied to the joint state. Aggregates that derive their codec via `derivedStateCodec` (see §3) inherit this test from a shared property; aggregates that hand-roll their codec must implement it themselves.
 
-**Hydration equivalence test**: hydrating an aggregate from its snapshot plus tail events must yield the same `(s, RegFile rs)` as full replay from version 0. The test fixture appends N events to a stream, records the joint state, writes a snapshot at some `0 < k < N`, then re-hydrates and asserts equality. This is the fundamental correctness test for the snapshot path; it must pass for every aggregate whose `aggSnapshotPolicy` is non-trivial.
+**Hydration equivalence test**: hydrating an aggregate from its snapshot plus tail events must yield the same `(s, RegFile rs)` as full replay from version 0. The test fixture appends N events to a stream, records the joint state, writes a snapshot at some `0 < k < N`, then re-hydrates and asserts equality. This is the fundamental correctness test for the snapshot path; it must pass for every aggregate whose `esSnapshotPolicy` is non-trivial.
 
 **Schema-change fall-through test**: after writing a snapshot at `stateCodecVersion = v`, bump the codec to `v+1` and re-hydrate. The reader must return `Nothing` (not a decode error, not stale state); the cycle must complete via full replay. The test asserts the reader's classification of the four `SnapshotRead` outcomes (§6) is correct.
 

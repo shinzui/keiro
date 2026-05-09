@@ -23,7 +23,7 @@ After this plan is complete, anyone with the keiro source tree can read `docs/re
 
 This plan is *design-only*: no spike. The reasoning is that snapshots are pure storage plumbing — every component (table layout, codec for state, hydration short-circuit) is well-understood and has been implemented many times in industry (`docs/research/05-workflow-prior-art.md`). A spike would not retire any unknown.
 
-The user-visible behaviour the eventual library will deliver: aggregate authors annotate their `Aggregate` (EP-1's `Aggregate phi rs s ci co` contract over keiki's native `SymTransducer`, *not* the legacy `Keiki.Decider` facade) with a snapshot policy (`every N events`); hydration paths transparently use the latest snapshot when present and fall back to full replay when not; operators can purge snapshots safely at any time.
+The user-visible behaviour the eventual library will deliver: aggregate authors annotate their `EventStream` (EP-1's `EventStream phi rs s ci co` contract over keiki's native `SymTransducer`, *not* the legacy `Keiki.Decider` facade) with a snapshot policy (`every N events`); hydration paths transparently use the latest snapshot when present and fall back to full replay when not; operators can purge snapshots safely at any time.
 
 
 ## Progress
@@ -61,7 +61,7 @@ The user-visible behaviour the eventual library will deliver: aggregate authors 
   Rationale: Including snapshot write in the command-cycle transaction would make every command pay the snapshot cost even when no snapshot policy fires. Asynchronous write keeps the hot path tight.
   Date: 2026-05-04.
 
-- Decision: Snapshot policy is a function `(s, RegFile rs) -> StreamVersion -> Bool` carried alongside the `Aggregate phi rs s ci co` contract from EP-1 (built on keiki's native `SymTransducer`, *not* the legacy `Keiki.Decider` facade).
+- Decision: Snapshot policy is a function `(s, RegFile rs) -> StreamVersion -> Bool` carried alongside the `EventStream phi rs s ci co` contract from EP-1 (built on keiki's native `SymTransducer`, *not* the legacy `Keiki.Decider` facade).
   Rationale: Common policies are "every N events" (`\_ v -> v `mod` 100 == 0`), "on terminal state" (`\(s,_) _ -> isTerminal s`), or "never" (`\_ _ -> False`). A pluggable function avoids hard-coding policy choices. The policy reads the *joint* state `(s, RegFile rs)` because the register file may carry workflow-relevant slots (timer fire-times, retry counters) that legitimately influence "should we snapshot now".
   Date: 2026-05-04.
 
@@ -153,7 +153,7 @@ What does **not** exist today:
 The following design choices from EP-1 (`docs/plans/1-command-cycle-design-and-spike.md`) are assumed in this plan and *not* re-derived here:
 
 - `runCommand` reads events via `Kiroku.Store.Read.readStreamForward sn (StreamVersion 0) maxBound`.
-- The keiro ⇄ keiki contract is EP-1's `Aggregate phi rs s ci co` record over keiki's native `SymTransducer phi rs s ci co` (operations `step`, `delta`, `omega`, `applyEvent`, `applyEvents`, `reconstitute`). The legacy `Keiki.Decider` facade is *not* used (it would lose the register file `RegFile rs` and ε-edges that snapshots must persist). The state EP-4 serializes is the *joint* `(s, RegFile rs)`, not just `s`.
+- The keiro ⇄ keiki contract is EP-1's `EventStream phi rs s ci co` record over keiki's native `SymTransducer phi rs s ci co` (operations `step`, `delta`, `omega`, `applyEvent`, `applyEvents`, `reconstitute`). The legacy `Keiki.Decider` facade is *not* used (it would lose the register file `RegFile rs` and ε-edges that snapshots must persist). The state EP-4 serializes is the *joint* `(s, RegFile rs)`, not just `s`.
 - `AggregateId a` is a typed wrapper introduced by EP-1.
 
 The following from EP-2 (`docs/plans/2-codec-and-event-schema-strategy.md`):
@@ -220,16 +220,16 @@ Write `docs/research/09-snapshot-strategy.md`. Self-contained. Structure:
         sn <- streamName aid
         snap <- readSnapshot aid
         let t0 = (initial trans, initialRegs trans)
-              where trans = aggTransducer agg
+              where trans = esTransducer agg
         let (startVersion, startState) = case snap of
               Just (v, t) -> (v, t)
               Nothing     -> (StreamVersion 0, t0)
         events <- readStreamForward sn startVersion maxBound
-        decoded <- traverse (decodeRecorded (aggEventCodec agg)) events
-        Just t1 <- pure (applyEvents (aggTransducer agg) startState decoded)
-        case step (aggTransducer agg) t1 cmd of
+        decoded <- traverse (decodeRecorded (esEventCodec agg)) events
+        Just t1 <- pure (applyEvents (esTransducer agg) startState decoded)
+        case step (esTransducer agg) t1 cmd of
           Just (s', regs', mev) -> do
-            appendToStream sn (ExactVersion <newVersion>) [encodeForAppend (aggEventCodec agg) ev | Just ev <- [mev]]
+            appendToStream sn (ExactVersion <newVersion>) [encodeForAppend (esEventCodec agg) ev | Just ev <- [mev]]
             when (snapshotPolicyFires agg (s', regs') newVersion)
                  (writeSnapshotAsync aid newVersion (s', regs'))
           Nothing -> pure ()  -- no edge fires; CommandRejected if desired
@@ -278,7 +278,7 @@ If the design conflicts with a discovery from EP-1 or EP-2 implementation (e.g. 
 Libraries (consumed at design level only — no spike):
 
 - `kiroku-store` — provides `streams` table referenced by FK; provides `readStreamForward`.
-- `keiki` — provides the native `SymTransducer phi rs s ci co` (consumed via EP-1's `Aggregate phi rs s ci co` contract; the legacy `Keiki.Decider` facade is *not* used). The serialized payload is the *joint* state `(s, RegFile rs)`, with `RegFile rs` decoded via the keiki-side register-file helper that is a Wanted gap consolidated by EP-6.
+- `keiki` — provides the native `SymTransducer phi rs s ci co` (consumed via EP-1's `EventStream phi rs s ci co` contract; the legacy `Keiki.Decider` facade is *not* used). The serialized payload is the *joint* state `(s, RegFile rs)`, with `RegFile rs` decoded via the keiki-side register-file helper that is a Wanted gap consolidated by EP-6.
 - `aeson` — wire format.
 - `hasql` — for the SQL statements that this plan's design specifies (the implementation MasterPlan will write the actual statements; this plan only fixes their shape).
 
@@ -303,6 +303,6 @@ Downstream consumers:
 
 - 2026-05-04: Replaced `Decider`/`s` references with `SymTransducer`/`(s, RegFile rs)` throughout. Snapshots now persist the joint state including the register file — required because the register file is where keiki keeps timers, retry counters, and other workflow-relevant slot values that ε-edges and `step` consume. Added a Wanted keiki-side gap for a `RegFile`-serialization helper, since keiro cannot decode the typed heterogeneous tuple without keiki's cooperation. Reason: aligning EP-4 with the EP-1 contract correction (SymTransducer, not Decider).
 
-- 2026-05-08: Closed the gap left by the 2026-05-04 revision, which claimed "Replaced Decider/s references throughout" but missed four spots. Updated: (1) Vision/Scope user-visible-behaviour paragraph (line 26 — "annotate their `Decider`" → "annotate their `Aggregate` (EP-1's `Aggregate phi rs s ci co` contract over keiki's native `SymTransducer`, not the legacy `Keiki.Decider` facade)"); (2) Decision Log "Snapshot policy" entry (line 64 — `Decider` → `Aggregate phi rs s ci co`, plus the policy now reads the joint `(s, RegFile rs)`); (3) "Inputs from EP-1" assumption list (line 156 — replaced the `Decider c e s` line with an explicit statement that the contract is `Aggregate phi rs s ci co` over `SymTransducer`); (4) "Interfaces and Dependencies" keiki entry (line 281 — replaced "provides `Decider c e s`" with "provides the native `SymTransducer phi rs s ci co`, consumed via EP-1's `Aggregate phi rs s ci co` contract"). Reason: `Keiki.Decider` is a legacy compatibility facade for the old system; keiro must never rely on it. Found and fixed during the cross-cutting verification pass recorded in the parent MasterPlan (`docs/masterplans/1-keiro-research-foundation.md` Surprises & Discoveries entry of 2026-05-08).
+- 2026-05-08: Closed the gap left by the 2026-05-04 revision, which claimed "Replaced Decider/s references throughout" but missed four spots. Updated: (1) Vision/Scope user-visible-behaviour paragraph (line 26 — "annotate their `Decider`" → "annotate their `EventStream` (EP-1's `EventStream phi rs s ci co` contract over keiki's native `SymTransducer`, not the legacy `Keiki.Decider` facade)"); (2) Decision Log "Snapshot policy" entry (line 64 — `Decider` → `EventStream phi rs s ci co`, plus the policy now reads the joint `(s, RegFile rs)`); (3) "Inputs from EP-1" assumption list (line 156 — replaced the `Decider c e s` line with an explicit statement that the contract is `EventStream phi rs s ci co` over `SymTransducer`); (4) "Interfaces and Dependencies" keiki entry (line 281 — replaced "provides `Decider c e s`" with "provides the native `SymTransducer phi rs s ci co`, consumed via EP-1's `EventStream phi rs s ci co` contract"). Reason: `Keiki.Decider` is a legacy compatibility facade for the old system; keiro must never rely on it. Found and fixed during the cross-cutting verification pass recorded in the parent MasterPlan (`docs/masterplans/1-keiro-research-foundation.md` Surprises & Discoveries entry of 2026-05-08).
 
 - 2026-05-04: Added an *Integration with EP-1's Streamly hydration pipeline* subsection to the M1 design-doc outline, making explicit that snapshot-accelerated hydration is the same Streamly `Stream → Fold` pipeline as full hydration — only the source's start `StreamVersion` and the fold's initial accumulator differ. Reason: matches the MasterPlan's new "Streamly substrate" Integration Point and the corresponding EP-1 revision; prevents reviewers from looking for a parallel snapshot-load code path.
