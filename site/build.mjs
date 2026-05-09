@@ -12,6 +12,8 @@ const researchDir = path.join(root, 'docs/research')
 const whyKeiroPath = path.join(root, 'docs/why-keiro.md')
 const outDir = path.join(root, 'site-dist')
 const assetsDir = path.join(root, 'site/assets')
+const pragmataSourceDir = process.env.PRAGMATA_PRO_DIR ?? path.join(process.env.HOME ?? '', 'Downloads/PragmataPro0.903')
+const bundlePragmata = process.env.BUNDLE_PRAGMATA_PRO === '1'
 
 const shikiTheme = 'github-light'
 const highlighter = await createHighlighter({
@@ -136,6 +138,7 @@ md.renderer.rules.code_block = (tokens, idx) => highlightCode(tokens[idx].conten
 await fs.rm(outDir, { recursive: true, force: true })
 await fs.mkdir(outDir, { recursive: true })
 await fs.cp(assetsDir, path.join(outDir, 'assets'), { recursive: true })
+const hasPragmataAssets = await copyPragmataAssets()
 await fs.cp(path.join(root, 'docs'), path.join(outDir, 'docs'), {
   recursive: true,
   filter: (source) => !source.endsWith('.DS_Store'),
@@ -223,7 +226,7 @@ await fs.writeFile(path.join(outDir, 'why-keiro.html'), whyKeiroPage(whyKeiro, p
 await fs.writeFile(path.join(outDir, 'research', 'index.html'), researchIndexPage(researchDocs, plans), 'utf8')
 await fs.writeFile(path.join(outDir, 'docs/plans/index.html'), sourceIndex(plans), 'utf8')
 await fs.writeFile(path.join(outDir, 'docs/research/index.html'), researchSourceIndex(researchDocs), 'utf8')
-await fs.writeFile(path.join(outDir, 'styles.css'), stylesheet(), 'utf8')
+await fs.writeFile(path.join(outDir, 'styles.css'), stylesheet(hasPragmataAssets), 'utf8')
 await fs.writeFile(path.join(outDir, 'app.js'), clientScript(), 'utf8')
 
 console.log(`Built ${plans.length + researchDocs.length + 3} site pages plus the source-doc index into site-dist/`)
@@ -857,7 +860,49 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;')
 }
 
-function stylesheet() {
+async function copyPragmataAssets() {
+  if (!bundlePragmata) return false
+
+  const files = [
+    ['PragmataPro_Mono_R_liga_0903.ttf', 'PragmataPro-Mono-Regular-Liga.ttf'],
+    ['PragmataPro_Mono_B_liga_0903.ttf', 'PragmataPro-Mono-Bold-Liga.ttf'],
+  ]
+  const targetDir = path.join(outDir, 'assets/pragmata')
+
+  try {
+    await fs.mkdir(targetDir, { recursive: true })
+    for (const [sourceName, targetName] of files) {
+      await fs.copyFile(path.join(pragmataSourceDir, sourceName), path.join(targetDir, targetName))
+    }
+    return true
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      console.warn(`Pragmata Pro fonts not found in ${pragmataSourceDir}; code blocks will use the system monospace fallback.`)
+      return false
+    }
+    throw error
+  }
+}
+
+function stylesheet(hasPragmataAssets) {
+  const pragmataFaces = hasPragmataAssets
+    ? `@font-face {
+  font-family: "Pragmata Pro";
+  src: url("assets/pragmata/PragmataPro-Mono-Regular-Liga.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Pragmata Pro";
+  src: url("assets/pragmata/PragmataPro-Mono-Bold-Liga.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+`
+    : ''
+
   return `@font-face {
   font-family: "Inter";
   src: url("assets/fonts/Inter-Regular.woff2") format("woff2");
@@ -886,20 +931,7 @@ function stylesheet() {
   font-style: normal;
   font-display: swap;
 }
-@font-face {
-  font-family: "Pragmata Pro";
-  src: url("assets/pragmata/PragmataPro-Mono-Regular-Liga.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Pragmata Pro";
-  src: url("assets/pragmata/PragmataPro-Mono-Bold-Liga.ttf") format("truetype");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
+${pragmataFaces}
 :root {
   color-scheme: light;
   --bg: #fbfaf7;
