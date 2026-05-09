@@ -1,3 +1,14 @@
 .claude/
 .agents/
 CLAUDE.local.md
+node_modules/
+.DS_Store
+.envrc
+dist
+dist-*
+cabal-dev
+.direnv
+cabal.project.local
+result
+result-*
+.pre-commit-config.yaml
