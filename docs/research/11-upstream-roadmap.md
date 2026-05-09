@@ -623,7 +623,7 @@ This section records items that earlier drafts of EP-6 (or a maintainer reading 
 
 ## 10. Open questions for upstream maintainers
 
-The synthesis identifies three questions where the upstream maintainer's input is needed before scheduling. EP-6 forwards them to the relevant maintainers; their answers feed back into the implementation MasterPlan's gating.
+The synthesis identifies four questions where the upstream maintainer's input is needed before scheduling. EP-6 forwards them to the relevant maintainers; their answers feed back into the implementation MasterPlan's gating.
 
 ### 10.1 keiki: do you want to take ownership of the codec layer in v1.x?
 
@@ -637,7 +637,21 @@ EP-2 keeps codecs at the keiro layer (per the published `docs/research/07-codec-
 
 §6.1 frames the question. EP-6 schedules the gap (Wanted, Block 3) only if shibuya's roadmap is generalising the supervisor anyway; otherwise keiro hosts the timer worker as a stand-alone process or a degenerate adapter.
 
-The three questions are mutually independent. Each maintainer can answer in isolation.
+### 10.4 keiki: is the SBV/z3 verification layer (and therefore `phi`) on the v2 roadmap with concrete commitment?
+
+The 2026-05-09 cost-benefit audit recorded in the parent MasterPlan's Surprises & Discoveries surfaced this as the largest unrealised future-bet in keiro v1's contract decision. The keiro contract `EventStream phi rs s ci co` carries the `phi` symbolic predicate parameter and the `BoolAlg phi (RegFile rs, ci)` constraint everywhere — every `runCommand`/`runCommandRetry`/`tick` signature, every `EventStream` instance, every test fixture pays the parameter overhead. The benefit lives entirely in the future v2 SBV/z3 verification layer (per the parent MasterPlan's 2026-05-04 contract Decision Log: *"the symbolic predicate carrier `phi` that the v2 SBV/z3 verification layer will consume"*).
+
+The keiki side has Plan #6 (`keiki/docs/plans/6-sbv-backed-boolalg-instance-for-symbolic-emptiness.md`) suggesting the verification work is real, and `Keiki.Symbolic` already exists in keiki at `src/Keiki/Symbolic.hs` exporting `discoverSym`/`Sym`/etc. So the work is underway. **The question is about commitment, not feasibility.** Specifically:
+
+1. Is the SBV/z3 verification path committed to ship in keiki v2.x with a concrete milestone, or is it exploratory and may slip indefinitely?
+2. If it slips: does keiki provide guidance on whether keiro should drop `phi` from the contract (a breaking change for any v1 consumer with `BoolAlg` constraints) or carry the unused parameter forever as inert overhead?
+3. Are there interim verification benefits (compile-time edge guards, property-test generation) that could justify `phi` even without z3?
+
+The answer feeds back to the implementation MasterPlan: a "yes, committed" answer leaves the v1 contract as-is and lets `phi` overhead be amortised against future verification value; a "no, exploratory" answer would prompt a contract revision (either dropping `phi` or marking it `Refl`-defaulted) BEFORE v1 ships, since contract changes after v1 are far more expensive than before.
+
+This question does not block v1 implementation — `phi` is plumbed correctly today and v1 works without it active. It blocks **the v1 retrospective**: knowing whether the choice was right means knowing whether the future-bet pays off.
+
+The four questions are mutually independent. Each maintainer can answer in isolation.
 
 
 ## 11. Citation snapshot

@@ -59,6 +59,25 @@ The M1 spike collapses this to the substrate slots actually exercised by the loa
 `esEventTag :: co -> Text` produces the `event_type` discriminator written to kiroku's indexed `event_type` column. The read side routes on it without decoding the JSON payload (cheap probe). EP-2 may move this onto the `Codec` typeclass once codecs land.
 
 
+### Cost-benefit ledger (2026-05-09 validation pass)
+
+The choice of `SymTransducer` over `Keiki.Decider` is real engineering trade-off, not a slam-dunk. The MasterPlan's 2026-05-09 Surprises & Discoveries entry records the audit. The five differentiators between the two contracts (features available on `SymTransducer` but **not** exposed by `Keiki.Decider.toDecider`, per `keiki/src/Keiki/Decider.hs:1-45`):
+
+| # | Feature                                              | Cost                                                                | Realised in v1?                                              | Net assessment                                                                 |
+|---|------------------------------------------------------|---------------------------------------------------------------------|--------------------------------------------------------------|--------------------------------------------------------------------------------|
+| 1 | `tick` / direct `delta` access                       | Separate API surface from `runCommand`                              | **Yes.** §7 below; timers + child-workflow completion         | **Load-bearing.** Keeps domain event log clean of infrastructure events.       |
+| 2 | `step`'s 3-way return (`Maybe (s', regs', Maybe co)`)| 3-way pattern match instead of list-shaped                          | **Yes.** §6 decide-phase outcomes                             | **Modest realised.** `Decider`'s `[]` vs `[e]` would collapse rejected/silent. |
+| 3 | ε-edges observable in `step`                         | The 3-way return                                                    | **Partially.** §6 reifies ε-edges back to synthetic events    | **Weak in v1.** Benefit may strengthen in v2 (`runWorkflow` may not reify).    |
+| 4 | `phi` symbolic predicate carrier                     | `BoolAlg phi (RegFile rs, ci)` plumbed through every API            | **No** — reserved for v2 SBV/z3 verification                  | **Future-bet.** Conditioned on keiki shipping z3; tracked in EP-6 §10.4.       |
+| 5 | Hidden-input / `solveOutput` constraint              | Event payload fields must be direct projections (`TApp1`/`TApp2` fail) | **Yes (as fragility).** EP-1 spike crashed on this initially | **Net cost — no offset.** `Decider`'s `evolve` does not impose this. EP-6 §7.4 records the upstream mitigation. |
+
+Note that **`RegFile rs` is NOT a differentiator** between `SymTransducer` and `Keiki.Decider` — the latter's state carrier is `(s, RegFile rs)` per the keiki module's `toDecider` definition. The register-file persistence work (EP-36 in keiki) would exist under either contract.
+
+The audit's verdict: **the decision holds.** Load-bearing benefit #1 (`tick`) alone justifies the choice for any keiro consumer building workflows or process managers. Modest benefit #2 sweetens it for any consumer needing rejected-vs-silent observability. Future-bet #4 is the largest exposure — if z3 verification slips, we carry `phi` overhead with no offset; EP-6 §10.4 forwards this concern to the keiki maintainer for confirmation.
+
+The audit also flags two follow-ups: (a) revisit ε-edge reification in v2 (#3 — we may be paying for ε-edges twice); (b) consider an internal `Keiro.Decider`-style ergonomic wrapper over `runCommand` for pure-CQRS users who do not need the workflow surface — captured as a separate keiro ExecPlan, NOT a contract reversal.
+
+
 ## 3. Event-stream identity
 
 `AggregateId a` is keiro's typed wrapper around kiroku's `StreamName`:
