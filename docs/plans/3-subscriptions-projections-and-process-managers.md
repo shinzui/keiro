@@ -25,7 +25,7 @@ Plus the cross-cutting **transactional outbox**: when a handler must call an ext
 
 After this plan is complete, anyone with the keiro source tree can:
 
-1. read `docs/research/08-subscription-and-process-manager-design.md`, which fixes the design of the three lifecycles, the outbox table, the high-water-mark algorithm, and the process-manager state model;
+1. read `docs/research/08-subscription-and-process-manager-design.md`, which fixes the design of the three lifecycles, the outbox table, the explicit non-use of a high-water-mark (kiroku's Strategy E supersedes it; see §4 of the design doc), and the process-manager state model;
 2. run a working spike at `spikes/subscriptions/` that demonstrates an inline projection, an async projection, a tiny process manager, and an outbox relay against a real Postgres instance.
 
 The user-visible behaviour the eventual library will deliver: an aggregate author writes a projection function `event -> Hasql.Session ()`, picks a lifecycle (`Inline` or `Async name`), and the framework persists, observes, and rebuilds it correctly. A workflow author writes a `(state, event) -> (state, [command])` step function and the framework runs it as an event-sourced process manager.

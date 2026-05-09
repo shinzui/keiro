@@ -181,7 +181,7 @@ Write `docs/research/11-upstream-roadmap.md`. Self-contained. Structure:
 - *Keiki roadmap* (same three priority sections).
 - *Cross-cutting items* — features that span both libraries (e.g., a typed `StreamId` per aggregate: keiro defines the wrapper, kiroku may eventually adopt it). For each, identify which side owns the change.
 - *Sequencing recommendation* — a small DAG showing which upstream items can be developed in parallel and which serialize. Specifically, separate the items that block keiro v1 from those that do not.
-- *Open questions* — items where the upstream maintainer's input is needed before scheduling (e.g., "should keiki's `Decider` gain a `compensate` direction or is compensation an application-level event?" from EP-5).
+- *Open questions* — items where the upstream maintainer's input is needed before scheduling (e.g., "should keiki's `SymTransducer.step` gain a `compensate` direction, or is compensation an application-level event?" from EP-5; the question is framed against the native `SymTransducer` contract, not the legacy `Keiki.Decider` facade keiro does not use).
 - *Snapshot of the kiroku/keiki source as of this writing* — reference the exact file paths and line numbers cited in the surveys, so a future reader can compare against current state and identify which gaps have been closed.
 
 For every gap, the document must answer:
