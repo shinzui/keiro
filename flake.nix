@@ -26,7 +26,7 @@
             pkgs.pnpm
             pkgs.cabal-install
             pkgs.pkg-config
-            pkgs.postgresql
+            pkgs.postgresql_18
             (haskellPackages.ghcWithPackages (ps: [
               ps.haskell-language-server
             ]))
