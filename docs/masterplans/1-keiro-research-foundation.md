@@ -57,7 +57,7 @@ The result is one foundation plan, four parallel research plans, and one synthes
 | 4 | Snapshot Strategy and Hydration Acceleration | docs/plans/4-snapshot-strategy-and-hydration-acceleration.md | EP-1 | EP-2 | Complete |
 | 5 | Workflow Engine and Durable Execution Roadmap | docs/plans/5-workflow-engine-and-durable-execution-roadmap.md | None | EP-3 | Complete |
 | 6 | Upstream Roadmap for Kiroku and Keiki | docs/plans/6-upstream-roadmap-for-kiroku-and-keiki.md | EP-1, EP-2, EP-3, EP-4, EP-5 | None | Complete |
-| 8 | Read Model Query API and Lifecycle Design | docs/plans/8-read-model-query-api-and-lifecycle-design.md | EP-1, EP-3 | EP-2, EP-4 | Not Started |
+| 8 | Read Model Query API and Lifecycle Design | docs/plans/8-read-model-query-api-and-lifecycle-design.md | EP-1, EP-3 | EP-2, EP-4 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled. Hard Deps and Soft Deps reference other rows by their `EP-N` prefix.
 

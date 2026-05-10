@@ -24,7 +24,7 @@ This plan does *not* implement production keiro code. Like EP-1 through EP-6, it
 
 ## Progress
 
-- [ ] M1: Prior-art survey and consistency-mode taxonomy. Output: working notes (`spikes/read-model/notes/prior-art.md` or equivalent) plus draft §1–§4 of the design doc.
+- [x] M1: Prior-art survey and consistency-mode taxonomy. Completed 2026-05-10. Output: `spikes/read-model/notes/prior-art.md` (Marten/Eventide/Axon/EventStoreDB/Restate read-side lens; eight synthesis recommendations); draft §1–§4 of `docs/research/12-read-model-query-api-and-lifecycle.md` (purpose, definitions, three-mode taxonomy with mode-selection decision tree and comparison table, substrate facts inherited from kiroku Strategy E + `subscriptions(subscription_name, last_seen)` + `shibuya-kiroku-adapter`'s separate-connection checkpoint advance + EP-1's transactional-step combinator + Streamly).
 - [ ] M2: Design the typed `ReadModel q r` API and schema-evolution/rebuild story. Output: draft §5–§10 of the design doc.
 - [ ] M3: Build the validation spike under `spikes/read-model/`. Output: `cabal run read-model-spike` ends with `[read-model-spike] OK`; transcript captured in `spikes/read-model/transcript.txt` (or inline in this plan's Concrete Steps).
 - [ ] M4: Publish the design document at `docs/research/12-read-model-query-api-and-lifecycle.md`; update `docs/research/00-overview.md`; cascade any new upstream gaps into the MasterPlan's Surprises & Discoveries (so EP-6's roadmap can absorb them on its next revision pass).
