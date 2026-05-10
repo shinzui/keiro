@@ -123,7 +123,7 @@ Track milestone-level progress across all child plans. Each entry names the chil
 - [x] EP-6 M1: Synthesis — consolidated kiroku/keiki feature list with priority and rationale. Completed 2026-05-06 (`docs/research/11-upstream-roadmap.md`; 13 sections; 17 prioritised entries plus 3 cross-cutting items plus 6 explicitly-not-gaps; four-block sequencing recommendation; one Blocking item — kiroku-store single-stream `runInTransaction` — gates keiro v1; three open questions forwarded to upstream maintainers).
 - [x] EP-8 M1: Prior-art survey and consistency-mode taxonomy (strong / eventual / position-wait). Completed 2026-05-10 (`spikes/read-model/notes/prior-art.md`; draft §1–§4 of `docs/research/12-read-model-query-api-and-lifecycle.md`).
 - [x] EP-8 M2: Typed `ReadModel q r` API design plus schema-evolution/rebuild protocol plus read-model-vs-snapshot-vs-projection articulation. Completed 2026-05-10 (`docs/research/12-read-model-query-api-and-lifecycle.md` §5–§10).
-- [ ] EP-8 M3: Validation spike at `spikes/read-model/`. Output: `cabal run read-model-spike` exits 0 with `[read-model-spike] OK`. Three scenarios — inline (strong), async + position-wait (eventual), position-wait timeout (failure mode).
+- [x] EP-8 M3: Validation spike at `spikes/read-model/`. Completed 2026-05-10 (`cabal run read-model-spike` exits 0 with `[read-model-spike] OK`; all three scenarios pass; transcript at `spikes/read-model/transcript.txt`).
 - [ ] EP-8 M4: Publish `docs/research/12-read-model-query-api-and-lifecycle.md`; update `docs/research/00-overview.md`; cascade any new upstream gaps to this MasterPlan's Surprises & Discoveries; mark EP-8 Complete in the registry.
 
 

@@ -1,0 +1,22 @@
+-- Spike-only cabal.project for the EP-8 read-model spike. Mirrors
+-- the shape of spikes/command-cycle/cabal.project: no workspace
+-- cabal.project at the keiro repo root yet, so the spike pins its
+-- dependencies directly.
+
+packages:
+    spike.cabal
+
+-- Use whatever ghc is on PATH (the dev shell ships 9.12.x). The
+-- command-cycle spike pins ghc-9.12.3 which doesn't match the
+-- harness's 9.12.2; this spike accepts either.
+with-compiler: ghc
+
+tests: False
+benchmarks: False
+
+-- Local sister projects, identical to spikes/command-cycle.
+optional-packages:
+    /Users/shinzui/Keikaku/bokuno/keiki/keiki.cabal
+    /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store/kiroku-store.cabal
+    /Users/shinzui/Keikaku/bokuno/ephemeral-pg-project/ephemeral-pg/ephemeral-pg.cabal
+    /Users/shinzui/Keikaku/hub/haskell/hasql-project/hasql-notifications/hasql-notifications.cabal

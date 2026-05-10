@@ -1,0 +1,47 @@
+Transcript captured 2026-05-10 from
+  PATH="/nix/store/.../postgresql-18.3/bin:$PATH" \
+    cabal run --with-compiler=ghc read-model-spike
+
+PG 18 is required because kiroku-store's embedded schema uses uuidv7().
+The user's outer profile ships PG 17.9; the spike requires either the
+kiroku-project nix dev shell or a PATH override pointing at a PG 18
+checkout. (Same constraint EP-1's spike documented as a deployment
+prerequisite — see MasterPlan Surprises & Discoveries 2026-05-05.)
+
+----- transcript -----
+
+[read-model-spike] starting ephemeral-pg, connection: host=/var/folders/fn/.../pg--... port=62710 dbname=postgres user=shinzui
+[read-model-spike] applied kiroku schema
+[read-model-spike scenario 1] inline projection (Strong)
+[read-model-spike scenario 1] OK
+[read-model-spike scenario 2] async projection + position-wait
+[read-model-spike scenario 2] OK
+[read-model-spike scenario 3] position-wait timeout
+[read-model-spike scenario 3] OK (got expected WaitTimeout)
+[read-model-spike] OK
+
+----- what each scenario validates -----
+
+Scenario 1 (Strong / inline projection):
+  - runCommandInline appends the event AND runs the projection's
+    Tx.Transaction continuation in one ACID transaction (via
+    kiroku-store's runTransactionAppending).
+  - A subsequent runQuery returns the post-write state immediately
+    (Just 1) — the spike asserts this exact value.
+
+Scenario 2 (Eventual + PositionWait):
+  - The async projection is started after the subscription cursor is
+    advanced past historical events (so the worker only sees events
+    appended in this scenario).
+  - The handler synthetically delays per-event by 50 ms to make the
+    lag observable.
+  - waitFor blocks until subscriptions.last_seen >= the appended
+    event's globalPosition, then runQuery returns the new audit row
+    (count == 1).
+
+Scenario 3 (PositionWait timeout):
+  - A subscription is registered ("counter-audit-stopped") but no
+    worker is started for it.
+  - After appending an event, runQuery with PositionWait { 300 ms }
+    returns a WaitTimeout error in Eff es's error channel rather than
+    blocking forever. The spike asserts the error type.
