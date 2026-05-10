@@ -143,29 +143,432 @@ This section captures the load-bearing facts about kiroku and shibuya that the r
 
 ## 5. The Typed `ReadModel q r` Wrapper
 
-(Drafted in M2.)
+The `Keiro.ReadModel` module exports a single record type that bundles everything keiro needs to query a read model and enforce its consistency-mode and version contracts. The shape is symmetric with EP-1's `EventStream phi rs s ci co` write-side wrapper: a value-level record of fields, no type-level machinery, no record-of-functions ergonomic loss.
+
+
+### 5.1 Module surface
+
+The module exports:
+
+    module Keiro.ReadModel
+      ( ReadModel (..)
+      , ConsistencyMode (..)
+      , WaitTimeout (..)
+      , ReadModelStaleSchema (..)
+      , runQuery
+      , runQueryWith
+      , waitFor
+      , readModelTable
+      , readModelSubscription
+      ) where
+
+The body of `Keiro.ReadModel` is the implementation of `runQuery`, `runQueryWith`, and `waitFor`; the rebuild orchestration helpers live in a sibling module `Keiro.ReadModel.Rebuild` (specified in §6) so applications that never rebuild on a hot system do not transitively import the rebuild machinery.
+
+
+### 5.2 The record
+
+    data ReadModel q r = ReadModel
+      { rmName            :: Text
+      , rmTable           :: Text
+      , rmSubscription    :: Text
+      , rmVersion         :: Int
+      , rmShapeHash       :: Text
+      , rmConsistency     :: ConsistencyMode
+      , rmQuery           :: q -> Hasql.Statement.Statement q r
+      , rmRowCodec        :: Codec r
+      }
+
+Each field is load-bearing.
+
+- `rmName :: Text` — application-globally-unique identifier. Used as the primary key of the `keiro_read_models` metadata table (§6) and in OpenTelemetry attributes (`keiro.read_model.name`).
+- `rmTable :: Text` — the Postgres table name for read-model rows. Distinct from `rmName` because rebuilds rotate through `<rmName>_v<version>` tables (§6.2). At any point in time `rmTable` is the *current* (live, post-swap) table name; the rebuild protocol owns the table-name lifecycle.
+- `rmSubscription :: Text` — the kiroku subscription name that feeds this read model. `waitFor` queries `subscriptions WHERE subscription_name = rmSubscription` to learn the projection's progress. For inline projections (where there is no subscription) the field carries a sentinel string `"<inline>"` and `waitFor` short-circuits to a no-op (the read is already consistent by the time the caller has a `runCommand` result).
+- `rmVersion :: Int` — incremented on incompatible schema changes. Compared against the persisted version on `keiro_read_models` to detect missing rebuilds (§6).
+- `rmShapeHash :: Text` — hex digest computed over the read-model row's compiled schema (column names, column types, library version). Compared against the persisted shape hash on `keiro_read_models` to detect drift even when the version was bumped manually but the schema was changed silently (§6). Mirrors EP-4's `regfile_shape_hash` (`docs/research/09-…` §2, §6) but with hard-fail rather than fall-through semantics.
+- `rmConsistency :: ConsistencyMode` — the default consistency mode for queries against this read model. Per-call overrides via `runQueryWith`.
+- `rmQuery :: q -> Hasql.Statement.Statement q r` — the application's query function. Builds a hasql `Statement` (parametric SQL plus encoder plus decoder) from a query value. Decoupling the query function from `runQuery`'s consistency-mode handling lets the application use any hasql query shape (parameterised, prepared, decoded into the target row type) without keiro inspecting the SQL.
+- `rmRowCodec :: Codec r` — EP-2's value-level codec for the row's encoded form. Used by the rebuild protocol (§6) to (de)serialise rows to JSONB during shadow-table population, and by the diagnostic `dumpRow` helper (not part of the public surface but useful in tests).
+
+
+### 5.3 `ConsistencyMode`
+
+    data ConsistencyMode
+      = Strong
+      | Eventual
+      | PositionWait { pwTimeoutMs :: !Int }
+      deriving (Eq, Show)
+
+Three constructors. `Strong` is permitted only on read models declared as fed by an inline projection (the framework checks at registration time — §6.4); declaring `Strong` on an async-fed read model is a startup error, not a runtime error. The default `pwTimeoutMs` is 5000 (5 seconds); applications override per-call via `runQueryWith`.
+
+
+### 5.4 `runQuery` and `runQueryWith`
+
+Two query functions, the second a generalisation of the first.
+
+    runQuery
+      :: (Reader Pool.Pool :> es, Error WaitTimeout :> es,
+          Error ReadModelStaleSchema :> es, IOE :> es)
+      => ReadModel q r
+      -> q
+      -> Maybe GlobalPosition  -- target position for PositionWait; ignored for Strong/Eventual
+      -> Eff es r
+
+    runQueryWith
+      :: (Reader Pool.Pool :> es, Error WaitTimeout :> es,
+          Error ReadModelStaleSchema :> es, IOE :> es)
+      => ReadModel q r
+      -> q
+      -> ConsistencyMode       -- override the rmConsistency default
+      -> Maybe GlobalPosition
+      -> Eff es r
+
+Behaviour by mode:
+
+- *Strong*: `runQuery rm q _` checks the persisted `version` and `shape_hash` against the in-memory `rmVersion`/`rmShapeHash`; on mismatch throws `ReadModelStaleSchema`. Otherwise runs `rmQuery q` against `rmTable` directly. The position parameter is ignored.
+- *Eventual*: identical to *Strong* — schema check, then query. The position parameter is ignored. (The mode differs in what the projection lifecycle is; from `runQuery`'s perspective the work is the same.)
+- *PositionWait { pwTimeoutMs }*: schema check, then `waitFor rm targetPosition` (using `pwTimeoutMs` as the timeout), then run the query. If the position parameter is `Nothing`, the call degrades to `Eventual` semantics (no wait); the application is responsible for passing the position from the most recent `runCommand` result when read-after-write is required.
+
+Why the position is `Maybe`: a read may not have a "the just-prior write" — e.g., a dashboard refresh, or a query unrelated to a recent command. `Nothing` means "I have no target; just read what's there." Equivalent to `Eventual` semantics for that call.
+
+
+### 5.5 `waitFor`
+
+    waitFor
+      :: (Reader Pool.Pool :> es, Error WaitTimeout :> es, IOE :> es)
+      => ReadModel q r
+      -> GlobalPosition
+      -> Eff es ()
+
+Implementation specified in §10. Polls `subscriptions WHERE subscription_name = rmSubscription` and returns when `last_seen >= target`. For inline-fed read models (`rmSubscription == "<inline>"`) returns immediately as a no-op.
+
+
+### 5.6 Errors
+
+Two error types in the public surface.
+
+    data WaitTimeout = WaitTimeout
+      { wtTarget   :: !GlobalPosition
+      , wtObserved :: !GlobalPosition
+      , wtModel    :: !Text
+      } deriving (Eq, Show)
+
+    data ReadModelStaleSchema = ReadModelStaleSchema
+      { rssModel             :: !Text
+      , rssCompiledVersion   :: !Int
+      , rssPersistedVersion  :: !Int
+      , rssCompiledShapeHash :: !Text
+      , rssPersistedShapeHash :: !Text
+      } deriving (Eq, Show)
+
+Both are returned in `Eff es`'s error channel via the `Error` effect (effectful's standard pattern, mirroring `StoreError` in EP-1 §4). Applications can `Error.runErrorWith` selectively to choose error handling per-call.
+
+
+### 5.7 Worked example
+
+    counterView :: ReadModel Text (Maybe Int)
+    counterView = ReadModel
+      { rmName         = "counter_view"
+      , rmTable        = "counter_view"
+      , rmSubscription = "counter-view"
+      , rmVersion      = 1
+      , rmShapeHash    = $(computeShapeHashTH ''CounterRow)  -- TH or value-level helper
+      , rmConsistency  = Eventual
+      , rmQuery        = \name ->
+          Hasql.Statement.Statement
+            "SELECT current_value FROM counter_view WHERE counter_name = $1"
+            (Encoders.param (Encoders.nonNullable Encoders.text))
+            (Decoders.rowMaybe (Decoders.column (Decoders.nonNullable Decoders.int4)))
+            True
+      , rmRowCodec     = counterRowCodec
+      }
+
+Use:
+
+    -- Issue a command that increments the counter
+    result <- runCommand counterEventStream "main" Increment
+
+    -- Read the result with read-after-write semantics
+    let pos = lastAppendedPosition result
+    value <- runQueryWith counterView "main" (PositionWait { pwTimeoutMs = 1000 }) (Just pos)
+    -- value == Just (n+1)
+
+The `runQueryWith` call blocks until the async projection catches up to `pos`, then reads. The total read latency is the projection lag (typically tens of milliseconds), bounded by the 1000 ms timeout.
 
 
 ## 6. Schema Evolution and Rebuild Protocol
 
-(Drafted in M2.)
+Read models are versioned, rebuildable artefacts. The protocol must let an operator (a) bump a read model's schema, (b) rebuild from `globalPosition = 0`, and (c) atomically swap the new version into place — *while the live projection continues serving the old version* — without serving stale or partial data at any point.
+
+
+### 6.1 The metadata table
+
+A single Postgres table records each read model's persisted version and shape hash.
+
+    CREATE TABLE keiro_read_models
+      ( name            TEXT        PRIMARY KEY
+      , version         INT         NOT NULL
+      , shape_hash      TEXT        NOT NULL
+      , last_built_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+      , status          TEXT        NOT NULL DEFAULT 'live'
+              CHECK (status IN ('live', 'rebuilding'))
+      );
+
+One row per read model. `name` is the application-globally-unique `rmName`. `version` and `shape_hash` are the *currently live* values — i.e., what the live `rmTable` was built against. `last_built_at` records the wall-clock time of the last successful rebuild (or first build). `status` flags an in-progress rebuild so concurrent operators don't stomp on each other.
+
+Owned by `Keiro.ReadModel.Rebuild`. The `keiro_read_models` table is created by a keiro initialisation migration (filed as a kiroku-side adjacent migration, separate from kiroku's own schema).
+
+
+### 6.2 The rebuild protocol
+
+Eight steps. Each is idempotent and recoverable.
+
+1. **Bump the in-memory `rmVersion`** (and `rmShapeHash` if the schema changed). Code-side change; recompile. The compiled `rmVersion` now exceeds the persisted `keiro_read_models.version`.
+
+2. **Application startup detects mismatch.** On first `runQuery` against the read model, `Keiro.ReadModel` compares compiled `(rmVersion, rmShapeHash)` to the persisted row in `keiro_read_models`. On mismatch, the read model is "stale" — `runQuery` returns `ReadModelStaleSchema` rather than serving rows whose layout has drifted.
+
+3. **Operator initiates rebuild.** A keiro CLI subcommand (or programmatic call to `Keiro.ReadModel.Rebuild.rebuild`) takes the `ReadModel` value:
+
+        rebuild
+          :: (Reader Pool.Pool :> es, IOE :> es, Log :> es)
+          => ReadModel q r
+          -> RebuildOptions
+          -> Eff es RebuildResult
+
+   `rebuild` performs steps 4–8 below.
+
+4. **Acquire the rebuild lock.** `UPDATE keiro_read_models SET status = 'rebuilding' WHERE name = $1 AND status = 'live'`. If zero rows updated, another rebuild is already in progress; abort with a clear error. The status flip is atomic.
+
+5. **Create the shadow table.** `CREATE TABLE <rmTable>_v<newVersion> (LIKE <rmTable> INCLUDING ALL)` — copies the column definitions, indexes, and constraints from the live table. Override columns the schema change altered via subsequent `ALTER TABLE`. The shadow table is the new schema; the live table is unchanged.
+
+6. **Replay events from `globalPosition = 0`.** Open a kiroku subscription named `<rmSubscription>-rebuild-<newVersion>` that reads from position 0. Run the read model's projection function against it, writing into the shadow table. Use Streamly's `Stream.fold Fold.drain` shape (consistent with EP-3 §3 async lifecycle). Track progress in `subscriptions(subscription_name, last_seen)` like any other subscription. The live projection (still consuming from `<rmSubscription>` on the unmodified live table) continues to serve queries.
+
+7. **Catch up and pause writes briefly.** When the rebuild subscription's `last_seen` reaches the global head (or within a configurable lag tolerance), pause new event appends momentarily (a kiroku-side advisory lock on the `streams` table — exact mechanism deferred to the implementation MasterPlan), let both the live and rebuild subscriptions drain to the same position, then proceed. The pause window is small (target: under 100 ms for low-traffic systems; larger systems can use a non-pause variant that accepts a brief stale-read window — see §6.5).
+
+8. **Atomic swap.** Inside one Postgres transaction:
+
+        BEGIN;
+        ALTER TABLE <rmTable> RENAME TO <rmTable>_v<oldVersion>_retired;
+        ALTER TABLE <rmTable>_v<newVersion> RENAME TO <rmTable>;
+        UPDATE keiro_read_models
+          SET version = <newVersion>,
+              shape_hash = <newShapeHash>,
+              last_built_at = now(),
+              status = 'live'
+          WHERE name = $1;
+        COMMIT;
+
+   Re-resume event appends. The retired table can be dropped after a holding period (default: 7 days) by a separate `Keiro.ReadModel.Rebuild.dropRetired` operation.
+
+
+### 6.3 Rebuild failure recovery
+
+A rebuild that crashes mid-way leaves `keiro_read_models.status = 'rebuilding'` and a partial shadow table. Recovery:
+
+- The shadow table is *named with the new version*, so a re-run of `rebuild` for the same version re-uses it; the subscription progresses from where it left off.
+- If the user wants to abandon the rebuild (e.g., the new schema was wrong), `Keiro.ReadModel.Rebuild.abandonRebuild` drops the shadow table and resets `status = 'live'`.
+- The live table is never touched until step 8, so a crashed rebuild never affects production reads.
+
+
+### 6.4 Inline-projection schema changes
+
+Inline projections do *not* have a separate worker; the projection runs in the application's command path. A schema change for an inline-fed read model still uses the same `rebuild` flow, but step 7's "pause writes" becomes "drain the inflight commands and refuse new ones for the swap window" — keiro's runtime exposes a `withReadModelSwap` helper that holds the application's command intake while the swap runs. The compiled `Strong` mode validation (§5.3) ensures inline-fed read models are flagged at registration so operators know the swap window will affect the write path.
+
+
+### 6.5 Non-pause variant: shadow-then-promote with brief stale window
+
+For systems where pausing event appends is too disruptive, an alternative protocol omits step 7's pause and accepts a small stale-read window:
+
+7'. The rebuild subscription catches up to a moving target (the global head). The catch-up loop bounds wait (default: 30 seconds). When `head - last_seen` is below threshold (default: 10 events) the rebuild is declared "caught up enough"; step 8 runs without a pause. Reads against the live table during the swap may briefly see the old version. The trade-off (continuity over strict read-your-own-writes during the swap) is documented and operator-selectable via `RebuildOptions`.
+
+The pause variant (§6.2 step 7) is the default; the non-pause variant is opt-in.
 
 
 ## 7. Multi-Stream Read Models
 
-(Drafted in M2.)
+A read model whose rows are derived from events across more than one event-stream type. The canonical example: an `OrderView` that aggregates events from `Order` streams (`OrderPlaced`, `OrderShipped`, …) and `Payment` streams (`PaymentAuthorised`, `PaymentCaptured`, …).
+
+
+### 7.1 Subscribing to a category
+
+The projection consumes a kiroku *category subscription*: events from any stream whose name matches a prefix or pattern. Two implementation paths:
+
+- **(a) Application-level multiplexing.** The projection runs N subscriptions (one per source stream type) in parallel via shibuya's runner abstractions. Each subscription's events are dispatched to a shared handler that updates the same read-model row. The `subscriptions` table holds N rows (one per subscription). `waitFor` for this read model must check *all N* `last_seen` values are ≥ the target position; the helper exposes a `waitForAll :: ReadModel q r -> [(Text, GlobalPosition)] -> Eff es ()` variant.
+- **(b) Kiroku category subscription.** A single subscription whose source matches a stream-name prefix or pattern (e.g., `order-*` or `payment-*`). One row in `subscriptions`; standard `waitFor` works. Requires a kiroku-side enhancement.
+
+Path (a) works today with existing kiroku and shibuya primitives. Path (b) is preferred for new code if kiroku ships the prefix-style category subscription.
+
+
+### 7.2 Identified upstream gap
+
+EP-5 §9 already records "kiroku-side prefix-style category subscriptions for `pm-`/`wf-` streams" as an upstream question. EP-8 §7 widens the scope: the same primitive is needed for multi-stream read models, not only for workflow streams. The cascade goes into the MasterPlan's Surprises & Discoveries with the existing EP-5 entry referenced.
+
+The implementation MasterPlan should treat path (a) as the v1 baseline (works today) and path (b) as a Wanted upgrade once the kiroku prefix-style category subscription lands.
+
+
+### 7.3 Schema evolution for multi-stream read models
+
+Identical to single-stream (§6). The `rmShapeHash` is computed over the read-model row schema regardless of how many streams feed it. The rebuild protocol replays from `globalPosition = 0`; if path (a) is used, the rebuild creates N parallel rebuild subscriptions, all of which write to the shadow table, and step 7's catch-up waits for all N.
 
 
 ## 8. Idempotency-Token Propagation
 
-(Drafted in M2.)
+The async projection lifecycle is at-least-once (EP-3 §3, this document §4). A duplicate event delivery would otherwise produce duplicate read-model writes. The mechanism that prevents this is a `source_event_id UUID NOT NULL UNIQUE` column on every read-model row, populated with the kiroku `EventData.eventId` of the source event.
+
+
+### 8.1 The constraint
+
+Every read-model table created by keiro must include:
+
+    source_event_id UUID NOT NULL UNIQUE
+
+The `Keiro.ReadModel.Rebuild` machinery emits a startup-time check that the live `rmTable` has this column with the constraint; a missing constraint is a registration error. (Inline-fed read models have no at-least-once concern but still carry the column for symmetry; the column is no-op insurance and costs only a UUID per row.)
+
+
+### 8.2 The write pattern
+
+Projection writes use:
+
+    INSERT INTO <rmTable> (..., source_event_id) VALUES (..., $eventId)
+      ON CONFLICT (source_event_id) DO NOTHING;
+
+Or, when an event *updates* an existing row keyed by something other than `source_event_id`:
+
+    INSERT INTO <rmTable> (id, ..., source_event_id) VALUES ($id, ..., $eventId)
+      ON CONFLICT (id) DO UPDATE SET
+        ... = EXCLUDED....,
+        source_event_id = EXCLUDED.source_event_id
+      WHERE <rmTable>.source_event_id IS DISTINCT FROM EXCLUDED.source_event_id;
+
+The `WHERE` clause on the `DO UPDATE` is the key idempotency check: the update fires only if the existing row's `source_event_id` is *different* from the incoming event's id. A re-delivery of the same event finds the row already up-to-date by that event and skips the update.
+
+
+### 8.3 Multi-event-per-row read models
+
+Some read models are updated by multiple events for a single row (e.g., an `OrderView` row updated by `OrderPlaced` then `OrderShipped`). The single `source_event_id` column cannot record all source events; using the *most recent* event's id loses the property "this row reflects events up to position X."
+
+Two patterns:
+
+- **(a) Last-write-wins source_event_id.** Stores only the most recent event's id. Idempotency works for the *most recent* event; older duplicate deliveries are suppressed only if their event id matches the row's current `source_event_id`. Acceptable for read models whose events are strictly ordered per row (e.g., per-aggregate views).
+- **(b) Per-event-type source_event_id columns.** Stores `placed_event_id`, `shipped_event_id`, … as separate columns. Each event handler updates only its column on its event type. Idempotency works per event type. Used when the read model can receive events out-of-order or when multiple event types update the same row.
+
+Pattern (a) is the default. Pattern (b) is documented in §8 of the design doc and is application-coded; keiro doesn't enforce it.
 
 
 ## 9. Read Model vs Snapshot vs Projection
 
-(Drafted in M2.)
+Three primitives. Easy to conflate; conflation produces design errors. This section establishes the distinction.
+
+
+### 9.1 The three primitives
+
+- **Snapshot** (EP-4, `docs/research/09-…`). The encoded joint state `(s, RegFile rs)` for an event stream, cached in the `keiro_snapshots` table. Used *internally* by `runCommand`'s hydration phase to skip ahead to a known state instead of folding from event 0. *Advisory*: a stale or missing snapshot falls through to full replay; `runCommand` correctness does not depend on the snapshot being present or fresh. *Internal*: never queried by application code. *Per-stream*: keyed on `kiroku.stream_id`; one snapshot per event stream instance.
+
+- **Projection** (EP-3, `docs/research/08-…`). The *worker* (the verb) that consumes events and writes/updates read-model rows. Three lifecycles (inline / async / live). Each projection has a name (used as the kiroku subscription name) and is wired to one or more event streams via shibuya runners (or the inline transactional-step combinator). Projections are *processes*; they have lifecycles, supervision, and OpenTelemetry attributes.
+
+- **Read model** (this document). The *queryable artefact* (the noun). A Postgres table whose rows are written by a projection and read by application code via the typed `ReadModel q r` API. Read models are *resources*; they have a schema, a version, a shape hash, a consistency-mode default, and a rebuild lifecycle.
+
+A common shorthand: a projection *maintains* a read model. The projection is the worker; the read model is the data plus its query API.
+
+
+### 9.2 Why three, not one or two
+
+Several plausible-sounding consolidations are *wrong*:
+
+- *"Snapshots are just internal read models."* Wrong. Snapshots are advisory and fall through on failure; read models hard-fail on stale schemas (§5.6 `ReadModelStaleSchema`). Treating snapshots as read models would either make `runCommand` depend on read-model freshness (rejected by EP-4 §3 advisory framing) or strip read models of the staleness guard (rejected by §5).
+- *"Read models are projections."* Wrong. A projection is a process; a read model is a table-plus-query-API. The same projection process can maintain multiple read-model tables (e.g., a projection that updates both an `orders` view and an `orders_summary` view from the same event stream). Conflating the two would force a 1:1 mapping that doesn't reflect how applications actually use the primitives.
+- *"Snapshots and read models are both 'derived state'."* Almost. Both are derived; both are persisted. But the *visibility* and *failure mode* differ: snapshots are private to keiro and fall through; read models are public and hard-fail. Different failure modes mean different APIs, which means different types.
+
+
+### 9.3 Cross-references
+
+- For snapshot mechanics, see `docs/research/09-snapshot-strategy.md`. For the advisory-fall-through framing (the contrast point with read models), see §3 and §12 of that document.
+- For projection mechanics, see `docs/research/08-subscription-and-process-manager-design.md`. §3 covers the three lifecycles; §13 explicitly records the non-use of snapshots in projection lifecycles (a separate non-overlap with this document's §9).
+- This document's §5 (typed `ReadModel q r` wrapper) and §6 (rebuild) are the read-model-specific surfaces that no other document covers.
 
 
 ## 10. Position-Wait Implementation
 
-(Drafted in M2.)
+The `waitFor` helper is small enough to fit in this document end-to-end.
+
+
+### 10.1 Signature and contract
+
+    waitFor
+      :: (Reader Pool.Pool :> es, Error WaitTimeout :> es, IOE :> es)
+      => ReadModel q r
+      -> GlobalPosition
+      -> Eff es ()
+
+After `waitFor rm target` returns successfully, `subscriptions WHERE subscription_name = rmSubscription rm` has `last_seen >= target`. A subsequent `runQuery rm q` therefore observes the read-model state up to event `target`. On timeout (per `rmConsistency`'s `pwTimeoutMs` or per-call override), the helper returns `WaitTimeout { wtTarget, wtObserved, wtModel }` in the error channel.
+
+
+### 10.2 Polling loop
+
+The implementation is a polling loop with exponential back-off, capped at a maximum interval.
+
+    waitFor rm target = do
+      let pollMin = 50  -- ms, initial poll interval
+          pollMax = 500 -- ms, max poll interval (cap)
+          timeoutMs = case rmConsistency rm of
+            PositionWait t -> t
+            _              -> 5000  -- conservative default for non-PositionWait callers
+      startedAt <- liftIO getMonotonicTimeMs
+      let loop interval = do
+            observed <- queryLastSeen (rmSubscription rm)
+            if observed >= target
+              then pure ()
+              else do
+                now <- liftIO getMonotonicTimeMs
+                if now - startedAt >= timeoutMs
+                  then throwError (WaitTimeout target observed (rmName rm))
+                  else do
+                    liftIO (threadDelay (interval * 1000))  -- threadDelay takes µs
+                    loop (min pollMax (interval * 2))
+      loop pollMin
+
+Poll cadence: 50 ms, 100 ms, 200 ms, 400 ms, 500 ms, 500 ms, … cap at 500 ms. Worst-case wakeup latency to detect projection caught-up is bounded by the max interval. The exponential ramp keeps low-latency cases fast (50 ms initial) while avoiding hot-spinning on `subscriptions` for slow projections.
+
+
+### 10.3 The `queryLastSeen` SQL
+
+A single statement, prepared:
+
+    SELECT last_seen FROM subscriptions WHERE subscription_name = $1
+
+Returns the current `last_seen` for the named subscription. If the row does not exist, the helper throws `WaitTimeout` with `wtObserved = 0`: the projection has never run (or was deleted), so no progress has been recorded.
+
+The function executes against a connection from the keiro `Pool.Pool`. The pool is shared with `runCommand` and `runQuery`; a slow `waitFor` does not exhaust a private pool.
+
+
+### 10.4 LISTEN/NOTIFY rejected for v1
+
+A more responsive implementation would use Postgres LISTEN/NOTIFY: the `shibuya-kiroku-adapter` runner could `NOTIFY` after each `last_seen` advance, and `waitFor` would `LISTEN` instead of polling. Latency would drop to near-zero.
+
+This is **deferred to v2**. Reasons:
+
+- It requires a coordinated change in `shibuya-kiroku-adapter` to issue the `NOTIFY`, in keiro to issue the `LISTEN`, and a reliable in-process notification dispatch (the existing `hasql-notifications` package is the natural target). Each piece is small but the coordination is non-trivial.
+- The polling implementation is correct, simple, and bounded. For the single-instance Postgres workloads keiro targets in v1 (per `docs/research/05-…` synthesis), 50–500 ms latency on the read path under projection lag is acceptable.
+- The MasterPlan's general posture against LISTEN/NOTIFY (Vision & Scope, deferred features list) is to defer push-based delivery to v2.
+
+The implementation MasterPlan can revisit this when v2 is in scope.
+
+
+### 10.5 Timeout selection guidance
+
+Default `pwTimeoutMs = 5000` (5 seconds). Adjust per use case:
+
+- *Interactive UI after save*: 1000–2000 ms. Beyond ~2 seconds the user perceives the save as failing; better to show optimistic UI and fall back to "syncing…" than to block longer.
+- *API request handler in a fast service*: 500–1500 ms. The whole HTTP request budget is typically 3–5 seconds; spending most of that on `waitFor` defeats the purpose.
+- *Background reconciliation jobs*: 30000+ ms (or `Eventual` mode without a wait). Tolerate larger lag for non-interactive paths.
+
+The `RebuildOptions`-style configuration system (§6.5) extends to consistency-mode tuning: applications can declare per-read-model timeout overrides centrally rather than at every call site.
+
+
+### 10.6 Inline-fed read models short-circuit
+
+For read models declared with `Strong` consistency (and therefore inline projections), `rmSubscription = "<inline>"` and `waitFor` returns immediately as a no-op:
+
+    waitFor rm _ | rmSubscription rm == "<inline>" = pure ()
+
+The check is a string comparison; no SQL roundtrip. The semantic is: "the read model is consistent at the moment of the calling command's commit; there is nothing to wait for."
+
