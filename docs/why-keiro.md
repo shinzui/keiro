@@ -461,8 +461,11 @@ the same format, on one timeline.
 ### 5.6 Observability is uniform across aggregates, PMs, and workflows
 
 Shibuya emits OpenTelemetry spans for every subscription delivery, every
-handler invocation, and (once `runInTransaction` lands per
-`docs/research/11-upstream-roadmap.md` §1) every transactional step.
+handler invocation, and — now that kiroku-store ships
+`Kiroku.Store.Transaction.runTransactionAppending` (and the matching no-retry
+sibling, the `appendToStreamTx` building block, and the bare `runTransaction`
+escape hatch; see `docs/research/11-upstream-roadmap.md` §4.1's 2026-05-10
+corrections note) — every transactional step.
 Because PMs and v2 workflows are built on the same kiroku streams + the
 same shibuya supervision, their spans, gauges, and histograms slot into
 the same dashboard. There is no parallel "workflow engine UI" to
