@@ -268,7 +268,7 @@ Downstream consumers (must be informed of any signature change):
 - EP-1 (command cycle) — keiro's `EventStream phi rs s ci co` record carries a `Codec co` and a `StateCodec (s, RegFile rs)`. The spike may inline the codec functions for brevity but must not drift from this plan's API.
 - EP-3 (subscriptions/projections) — projection handlers and process-manager handlers consume `Codec co` to decode `RecordedEvent.payload`.
 - EP-4 (snapshots) — uses an analogous `StateCodec (s, RegFile rs)` for snapshot serialization; design doc cross-links and (because `RegFile rs` is keiki-internal) records the serialization helper as a likely keiki-side request.
-- EP-6 (upstream roadmap) — records any kiroku/keiki changes proposed by this plan: no kiroku changes; one keiki request — a register-file serialization helper (`RegFile rs <-> Aeson.Value`) so `StateCodec` can be derived rather than hand-built.
+- EP-6 (upstream roadmap) — records any kiroku/keiki changes proposed by this plan: no kiroku changes; one keiki request — a register-file serialization helper (`RegFile rs <-> Aeson.Value`) so `StateCodec` can be derived rather than hand-built. **[CLOSED 2026-05-14 — shipped as the new sibling package `keiki-codec-json` v0.1.0.0 (`Keiki.Codec.JSON.regFileToJSON`/`regFileFromJSON`/`regFileToEncoding` + TH `deriveRegFileCodec`). Companion shape hash `Keiki.Shape.regFileShapeHash` ships in core keiki. Keiro-side integration tracked by EP-9 (`docs/plans/9-integrate-keiki-codec-json-into-keiro-snapshot-path.md`), queued waiting on EP-37 Hackage upload.]**
 
 
 ## Revisions

@@ -110,9 +110,9 @@ What the design fixes:
 
 Gaps forwarded to EP-6:
 
-1. **keiki: `RegFile rs <-> Aeson.Value` helper** — shared with EP-1 (`docs/research/06-command-cycle-design.md` §14) and EP-2 (`docs/research/07-codec-strategy.md` §12). Three customers, one helper.
-2. **keiki: `KnownRegFileShape rs` class with stable `shapeHash` derivation** — EP-4 is the only customer; could land alongside (1).
-3. **kiroku: optional `lookupStreamId :: StreamName -> Eff es (Maybe StreamId)` helper** — performance-only, not correctness; recorded as a candidate optimization rather than a requirement.
+1. **keiki: `RegFile rs <-> Aeson.Value` helper** — shared with EP-1 (`docs/research/06-command-cycle-design.md` §14) and EP-2 (`docs/research/07-codec-strategy.md` §12). Three customers, one helper. **[CLOSED 2026-05-14 — shipped as the new sibling package `keiki-codec-json` v0.1.0.0 (`Keiki.Codec.JSON.regFileToJSON`/`regFileFromJSON`/`regFileToEncoding` + TH `deriveRegFileCodec`). Keiro-side integration tracked by EP-9 (`docs/plans/9-integrate-keiki-codec-json-into-keiro-snapshot-path.md`), queued waiting on EP-37 Hackage upload.]**
+2. **keiki: `KnownRegFileShape rs` class with stable `shapeHash` derivation** — EP-4 is the only customer; could land alongside (1). **[CLOSED 2026-05-14 — shipped in core keiki as `Keiki.Shape.regFileShapeHash :: forall rs. KnownRegFileShape rs => Proxy rs -> Text` (SHA-256 over canonical `[(Symbol, TypeRep)]` rendering). Lands together with (1) as predicted.]**
+3. **kiroku: optional `lookupStreamId :: StreamName -> Eff es (Maybe StreamId)` helper** — performance-only, not correctness; recorded as a candidate optimization rather than a requirement. **[CLOSED 2026-05-14 — shipped as `Kiroku.Store.Read.lookupStreamId` (`kiroku-store/src/Kiroku/Store/Read.hs:163–167`).]**
 
 Compared against the original EP-4 plan: the design grew one column (`regfile_shape_hash`) beyond what the plan sketched, prompted by the keiki survey hint about register-file shape hashes — see Surprises & Discoveries entry 1. Otherwise the design landed as the plan sketched, with prose elaboration (constant-memory Streamly inheritance, monotonicity guard rationale, fire-and-forget vs. queue-backed retry comparison, EP-3 explicit non-use, EP-5 explicit relationship to v2 named-step snapshots) added to make the doc self-contained per the ExecPlan spec.
 

@@ -2,6 +2,14 @@
 
 Author: ExecPlan EP-5 (`docs/plans/5-workflow-engine-and-durable-execution-roadmap.md`). Date: 2026-05-06.
 
+> **Corrections note (2026-05-14) — status update on §9's three open questions.** The three open questions §9 forwards to EP-6 (kiroku prefix-style category subscription; keiki `compensate` direction on `SymTransducer`; shibuya supervisor hosting the timer worker) are **all still open** as of 2026-05-14. None of them blocked the second wave of upstream closures the parent MasterPlan recorded today. The 2026-05-14 closures landed:
+>
+> - On the **kiroku** side: `readStreamForwardStream` (Streamly read), `Kiroku.Store.Settings.StoreSettings { enrichEvent, decodeHook }` (interpreter hooks), `Kiroku.Store.Causation` (chain walkers), `Kiroku.Store.Read.lookupStreamId`. None of these are §9's prefix-style category subscription. Kiroku's `SubscriptionTarget` remains `AllStreams | Category CategoryName` (exact-match only); the prefix variant is still tracked as `docs/research/11-upstream-roadmap.md` §4.4.
+> - On the **keiki** side: `Keiki.Shape.regFileShapeHash` and the sibling package `keiki-codec-json` (regfile JSON codec + TH derivation). `SymTransducer` gained no `compensate` direction; v1 sagas continue to use the application-convention shape this document codifies in §2 #4. The status is unchanged from EP-5's published design.
+> - On the **shibuya-kiroku-adapter** side: nothing new (`shibuya-kiroku-adapter/CHANGELOG.md` records only the 0.1.0.0 initial release). The `HandlerInTransaction` shape that blocks exactly-once async projections (`docs/research/11-upstream-roadmap.md` §5.1) and the supervisor-generalisation question §9 raises both remain open.
+>
+> The parent MasterPlan's 2026-05-14 Surprises & Discoveries entries record the cascade. This document is preserved verbatim below.
+
 This document fixes what "workflow" means in keiro, what ships in v1, what is deferred to v2, and how the v1 substrate evolves into v2 without rewrites. It is the roadmap document the rest of the project — including the upstream roadmap (EP-6, `docs/plans/6-upstream-roadmap-for-kiroku-and-keiki.md`) — refers to when scoping the workflow surface. The reader is assumed to have read `docs/research/05-workflow-prior-art.md` (the literature survey) and `docs/research/08-subscription-and-process-manager-design.md` (EP-3's process-manager substrate). Where a key fact from those documents matters here it is repeated; the reader who has not seen them should still be able to follow this design.
 
 EP-5 is a design-only plan: there is no spike. The substance is selection, not feasibility — every primitive named here is either implementable on top of the v1 substrate that EP-1 through EP-4 already specify, or is deliberately deferred until v2.

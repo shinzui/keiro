@@ -2,6 +2,15 @@
 
 Survey author: research subagent (Explore), 2026-05-04. Source tree: `/Users/shinzui/Keikaku/bokuno/keiki`.
 
+> **Corrections note (2026-05-14) — register-file codec and shape hash shipped.** Two of the keiki-side gaps this survey alludes to (and which `docs/research/11-upstream-roadmap.md` §§7.1, 7.2 enumerated as Block-2 *Wanted, Blocking for EP-4*) have shipped upstream:
+>
+> - **Register-file `<-> Aeson.Value` helper — CLOSED.** Shipped as the new sibling package `keiki-codec-json` (v0.1.0.0) at `/Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json/`. Public surface in `keiki-codec-json/src/Keiki/Codec/JSON.hs`: `regFileToJSON :: RegFile rs -> Aeson.Value`, `regFileFromJSON :: Aeson.Value -> Either String (RegFile rs)`, `regFileToEncoding :: RegFile rs -> Aeson.Encoding`. TH derivation `deriveRegFileCodec` / `deriveRegFileCodecAs` (`keiki-codec-json/src/Keiki/Codec/JSON/TH.hs`) emits per-record `<name>ToJSON`/`<name>ToEncoding`/`<name>FromJSON` from a `Generic` derivation, reusing `Keiki.Generics.RegFieldsOf` / `gToRegFile` / `gFromRegFile`. A separate sibling test-utility package `keiki-codec-json-test` ships round-trip / sensitivity property helpers and a per-slot golden-byte detector. Implementation tracked by keiki MasterPlan 11 (EPs 36, 38, 39 Complete; EP-37 Hackage upload was *In Progress* at 2026-05-14). Living below: §"Codecs & Serialization" still says "JSON / CBOR / Protobuf codecs live in the runtime — keiki commits to a single static schema per deployment" — that statement is still accurate for *keiki core* (codecs are explicitly out-of-scope per `keiki/CHANGELOG.md`), but the JSON codec is now offered as a sibling package keiro consumes.
+> - **Register-file shape hash — CLOSED.** Shipped in **core keiki** as `Keiki.Shape` (`/Users/shinzui/Keikaku/bokuno/keiki/src/Keiki/Shape.hs`): `class CanonicalTypeName a`, `class KnownRegFileShape (rs :: [Slot])`, `regFileShapeHash :: forall rs. KnownRegFileShape rs => Proxy rs -> Text` (SHA-256 hex over canonical `[(Symbol, TypeRep)]` rendering via `renderStableTypeRep`). Hash is byte-equal across GHC versions, cabal rebuilds, and dependency-tree changes; sensitive to slot rename/add/remove/reorder/type change; insensitive to type-class instance changes. 11 `Keiki.ShapeSpec` golden assertions in the test suite. The keiki survey's one-line hint "snapshot validation uses a register-file shape hash" is now backed by a real primitive.
+>
+> **Still open at the keiki layer:** §"Gaps for Keiro" #3 (structured error model on `step`/`omega` — still open per `docs/research/11-upstream-roadmap.md` §7.3); #4 (effectful read in decide — still open per §7.6); the v2 saga compensate direction (§7.5); the compile-time inverse-recoverability check on event payloads (§7.4); Given/When/Then property-test helpers (§7.7); in-keiki upcaster framework (§7.8 — explicitly marked out-of-scope by `keiki/CHANGELOG.md` "No built-in serialization"). The pure-core absence of subscription/snapshot/projection machinery (the survey's "Additional gaps" bullets) is by design — those concerns belong to keiro and kiroku, not keiki.
+>
+> The keiro-side integration plan for the new helpers is EP-9 (`docs/plans/9-integrate-keiki-codec-json-into-keiro-snapshot-path.md`), queued waiting on EP-37's Hackage upload. The parent MasterPlan's 2026-05-14 Surprises & Discoveries entry "cross-cutting, keiki-codec-json package shipped" records the cascade. This survey is preserved verbatim below for traceability; an inline marker flags the §"Gaps for Keiro" item that names snapshot machinery as a gap.
+
 ## Overview
 
 `keiki` is a ~4,500-line pure Haskell library implementing event sourcing, workflow engines, and durable execution via a single formalism: the **symbolic-register finite-state transducer** (FST). Rather than separate systems, keiki unifies three problems into one mathematical object — the `SymTransducer` — from which it mechanically derives decision logic, replay, composition, and verification.
@@ -187,7 +196,7 @@ Implication for keiro: keiro must implement this integration. Pattern is:
 ### Additional gaps
 
 - No built-in subscription/routing engine.
-- No snapshot machinery beyond conceptual shape `(s, RegFile rs)`.
+- No snapshot machinery beyond conceptual shape `(s, RegFile rs)`. **[PARTIALLY CLOSED 2026-05-14 — keiki now ships `Keiki.Shape.regFileShapeHash` (core) and the sibling package `keiki-codec-json` with `regFileToJSON`/`regFileFromJSON`/`deriveRegFileCodec`, which together provide the encode + discriminate primitives EP-4's `keiro_snapshots` table needs. The snapshot table itself remains a keiro concern (EP-4). See 2026-05-14 corrections note above.]**
 - No versioning/upcasting machinery in code.
 - No metrics/logging hooks (pure core is silent by design).
 - No effect boundaries for read-side views (projections, CQRS read models). `Acceptor` (`Keiki/Acceptor.hs`) projects the transducer onto one alphabet but no SQL/Kafka adapter.
