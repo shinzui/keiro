@@ -1,0 +1,6 @@
+rei {
+  create {
+    default-parent intention_01kppxcpdcejfbf70jx80fnmm4
+    title-prefix "経路"
+  }
+}

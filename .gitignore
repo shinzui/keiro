@@ -16,3 +16,4 @@ result-*
 .pre-commit-config.yaml
 db/
 .mina/
+.codex/
