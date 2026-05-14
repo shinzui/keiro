@@ -53,7 +53,7 @@ for users who do need workflow features.** Concretely, a record:
       , paEventTag     :: e -> Text
       }
 
-    runPureCommand :: PureAggregate c e s -> AggregateId a -> c -> Eff es ...
+    runPureCommand :: PureAggregate c e s -> Stream a -> c -> Eff es ...
 
 Internally `runPureCommand` builds an `EventStream phi rs s ci co` (with `phi ~ NoSym`,
 `rs ~ '[]`, `ci ~ c`, `co ~ e`) on the fly from the `PureAggregate` record and dispatches
@@ -213,7 +213,7 @@ The hypothesised API:
     runPureCommand
       :: ( Store :> es, Error CommandError :> es )
       => PureAggregate c e s
-      -> AggregateId a
+      -> Stream a
       -> c
       -> Eff es (Maybe e)
 
@@ -394,3 +394,8 @@ deliberately scopes to "purely a keiro-side wrapper".
   (the constraint a Decider-style facade can side-step for pure-CQRS users).
 - EP-36 (keiki): `/Users/shinzui/Keikaku/bokuno/keiki/docs/plans/36-regfile-json-codec-and-shape-hash-for-snapshot-persistence.md`
   — contract-orthogonal; proceeds independently of this plan's outcome.
+
+
+## Revisions
+
+- 2026-05-13: **Renamed the typed event-stream-id wrapper `AggregateId a` → `Stream a`** in this plan body, cascaded from the parent MasterPlan's 2026-05-13 rename decision. **Updates this revision applied (this plan only)**: line 56 (the §"Purpose / Big Picture" sketch of the proposed `runPureCommand` signature) and line 216 (the M2 design-target full signature). The plan-internal type `PureAggregate c e s` is *not* renamed because it is a *deliberate* DDD-flavoured ergonomic facade — the entire point of this plan is to give pure-CQRS aggregate authors a Decider/Aggregate-shaped API; "Aggregate" in `PureAggregate` is the *thing being modelled*, not the framework type. Same for the `paDecide`/`paEvolve`/`paEventCodec`/`paEventTag`/`AggError` field/error names: they are local to the facade and intentionally evoke the DDD vocabulary the facade caters to. The general-purpose framework type that this facade reduces to (`EventStream phi rs s ci co`) and the framework's typed-id wrapper (`Stream a`) carry the keiro-general framing; the facade's local names carry the DDD framing it adapts to. **Streamly-collision note**: the parent MasterPlan's 2026-05-13 Decision Log entry records that an intermediate `StreamRef a` selection was discarded after team feedback in favour of the bare `Stream a`, accepting the name collision with `Streamly.Data.Stream.Stream` and resolving it at use sites with qualified imports — when the implementation MasterPlan ships EP-7's facade module, it should follow the same convention (`import qualified Streamly.Data.Stream as Stream` only if the facade module also consumes Streamly streams; the facade itself does not, so a plain unqualified `Stream` import from keiro is sufficient at the facade boundary). The parent MasterPlan's 2026-05-13 Decision Log + Revisions entries record the cross-plan cascade. EP-7 status is unchanged by this rename pass; only the type name carried in the proposed signatures is refreshed. Reason: cascade from the MasterPlan rename; the user observed that `AggregateId` is too tied to DDD and keiro is a more general framework — but the facade's local DDD-flavoured names are the facade's whole purpose and stay.

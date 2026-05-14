@@ -154,7 +154,7 @@ The following design choices from EP-1 (`docs/plans/1-command-cycle-design-and-s
 
 - `runCommand` reads events via `Kiroku.Store.Read.readStreamForward sn (StreamVersion 0) maxBound`.
 - The keiro ⇄ keiki contract is EP-1's `EventStream phi rs s ci co` record over keiki's native `SymTransducer phi rs s ci co` (operations `step`, `delta`, `omega`, `applyEvent`, `applyEvents`, `reconstitute`). The legacy `Keiki.Decider` facade is *not* used (it would lose the register file `RegFile rs` and ε-edges that snapshots must persist). The state EP-4 serializes is the *joint* `(s, RegFile rs)`, not just `s`.
-- `AggregateId a` is a typed wrapper introduced by EP-1.
+- `Stream a` is a typed wrapper introduced by EP-1 (named `AggregateId a` until 2026-05-13; renamed across the research foundation per the parent MasterPlan's 2026-05-13 Decision Log + Revisions entries).
 
 The following from EP-2 (`docs/plans/2-codec-and-event-schema-strategy.md`):
 
@@ -205,8 +205,8 @@ Write `docs/research/09-snapshot-strategy.md`. Self-contained. Structure:
         , stateDecode  :: Aeson.Value -> Either String t
         , stateVersion :: Int
         }
-      readSnapshot  :: AggregateId a -> Eff es (Maybe (StreamVersion, t))
-      writeSnapshot :: AggregateId a -> StreamVersion -> t -> Eff es ()
+      readSnapshot  :: Stream a -> Eff es (Maybe (StreamVersion, t))
+      writeSnapshot :: Stream a -> StreamVersion -> t -> Eff es ()
 
 - *Schema-change invalidation* — when an author bumps `stateVersion`, all existing snapshots are silently ignored on read; the loader falls back to full replay; operators can `TRUNCATE keiro_snapshots` to reclaim space.
 - *Failure semantics* — every snapshot write/read failure is non-fatal. A read failure logs and falls through to full replay. A write failure logs and skips this snapshot opportunity (the next command cycle may write again).
@@ -287,8 +287,8 @@ Function signatures the design must fix (`t` = `(s, RegFile rs)`):
     -- Keiro.Snapshot
     data SnapshotPolicy t
     data StateCodec t
-    readSnapshot  :: AggregateId a -> Eff es (Maybe (StreamVersion, t))
-    writeSnapshot :: AggregateId a -> StreamVersion -> t -> Eff es ()
+    readSnapshot  :: Stream a -> Eff es (Maybe (StreamVersion, t))
+    writeSnapshot :: Stream a -> StreamVersion -> t -> Eff es ()
     snapshotPolicyEvery      :: Int -> SnapshotPolicy t
     snapshotPolicyOnTerminal :: (t -> Bool) -> SnapshotPolicy t
     snapshotPolicyNever      :: SnapshotPolicy t
@@ -306,3 +306,5 @@ Downstream consumers:
 - 2026-05-08: Closed the gap left by the 2026-05-04 revision, which claimed "Replaced Decider/s references throughout" but missed four spots. Updated: (1) Vision/Scope user-visible-behaviour paragraph (line 26 — "annotate their `Decider`" → "annotate their `EventStream` (EP-1's `EventStream phi rs s ci co` contract over keiki's native `SymTransducer`, not the legacy `Keiki.Decider` facade)"); (2) Decision Log "Snapshot policy" entry (line 64 — `Decider` → `EventStream phi rs s ci co`, plus the policy now reads the joint `(s, RegFile rs)`); (3) "Inputs from EP-1" assumption list (line 156 — replaced the `Decider c e s` line with an explicit statement that the contract is `EventStream phi rs s ci co` over `SymTransducer`); (4) "Interfaces and Dependencies" keiki entry (line 281 — replaced "provides `Decider c e s`" with "provides the native `SymTransducer phi rs s ci co`, consumed via EP-1's `EventStream phi rs s ci co` contract"). Reason: `Keiki.Decider` is a legacy compatibility facade for the old system; keiro must never rely on it. Found and fixed during the cross-cutting verification pass recorded in the parent MasterPlan (`docs/masterplans/1-keiro-research-foundation.md` Surprises & Discoveries entry of 2026-05-08).
 
 - 2026-05-04: Added an *Integration with EP-1's Streamly hydration pipeline* subsection to the M1 design-doc outline, making explicit that snapshot-accelerated hydration is the same Streamly `Stream → Fold` pipeline as full hydration — only the source's start `StreamVersion` and the fold's initial accumulator differ. Reason: matches the MasterPlan's new "Streamly substrate" Integration Point and the corresponding EP-1 revision; prevents reviewers from looking for a parallel snapshot-load code path.
+
+- 2026-05-13: **Renamed the typed event-stream-id wrapper `AggregateId a` → `Stream a`** in this plan body, cascaded from the parent MasterPlan's 2026-05-13 rename decision. **Updates this revision applied (this plan only)**: line 157 ("Inputs from EP-1" assumption list), lines 208-209 (the *API* design-doc-outline subsection's `readSnapshot` / `writeSnapshot` signatures), lines 290-291 (the closing *Function signatures* summary). The published EP-4 design doc at `docs/research/09-snapshot-strategy.md` is also updated in place (it is not yet under the closed-doc convention as of 2026-05-13) — see its new 2026-05-13 Revisions entry. The parent MasterPlan's 2026-05-13 Decision Log entry records the alternative-comparison reasoning: an intermediate `StreamRef a` selection from the first 2026-05-13 pass was discarded after team feedback in favour of the bare `Stream a`, accepting the name collision with `Streamly.Data.Stream.Stream` and resolving it at use sites with qualified imports. EP-4's snapshot module is one of the keiro modules that names the typed `Stream a` newtype on its public surface (`readSnapshot :: Stream a -> Eff es (...)` and `writeSnapshot :: Stream a -> ...`); when the implementation MasterPlan ships the corresponding Haskell module, it must `import qualified Streamly.Data.Stream as Stream` if the snapshot path also consumes Streamly streams (it does — the Streamly hydration short-circuit per §"Integration with EP-1's Streamly hydration pipeline" reads from `streamReadFrom` which returns a `Streamly.Data.Stream.Stream`). EP-4 status remains Complete; only the type name is refreshed. Reason: cascade from the MasterPlan rename; the user observed that `AggregateId` is too tied to DDD and keiro is a more general framework, and team feedback after the StreamRef intermediate selection preferred the bare `Stream` name.

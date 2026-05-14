@@ -85,7 +85,7 @@ The migration belongs in keiro's SQL bundle (the production library will follow 
 
 What the layout deliberately does *not* include:
 
-- **No `aggregate_type` column.** The mapping between a `stream_name` and the aggregate it belongs to is a keiro-side concern that lives in the typed `AggregateId a` newtype (EP-1). Including it on the row would duplicate information already recoverable from the stream name's category prefix (kiroku's `streams.category` generated column). EP-6 may revisit if the production library finds operators routinely needing aggregate-level rollups.
+- **No `aggregate_type` column.** The mapping between a `stream_name` and the event stream it belongs to is a keiro-side concern that lives in the typed `Stream a` newtype (EP-1; renamed from `AggregateId a` on 2026-05-13). Including it on the row would duplicate information already recoverable from the stream name's category prefix (kiroku's `streams.category` generated column). EP-6 may revisit if the production library finds operators routinely needing aggregate-level rollups.
 
 - **No `event_id` of the last-included event.** The `stream_version` is sufficient to determine the tail-replay range. Recording the last `event_id` would be a debugging aid only and would couple snapshot writes to event-id propagation.
 
@@ -194,7 +194,7 @@ EP-1's `EventStream phi rs s ci co` record (the keiro ⇄ keiki contract, record
     data EventStream phi rs s ci co = EventStream
       { esTransducer       :: SymTransducer phi rs s ci co
       , aggCategory         :: Text
-      , aggIdToStreamName   :: AggregateId (EventStream phi rs s ci co) -> StreamName
+      , streamToStreamName :: Stream (EventStream phi rs s ci co) -> StreamName
       , esEventCodec       :: Codec co                         -- defined in EP-2
       , esStateCodec       :: StateCodec (s, RegFile rs)       -- defined here, EP-4
       , esSnapshotPolicy   :: SnapshotPolicy (s, RegFile rs)   -- defined here, EP-4
@@ -340,14 +340,14 @@ The post-cycle hook lives in `runCommand`'s tail (writing `t = (s, RegFile rs)` 
     writeSnapshot
       :: ( Store :> es, Error StoreError :> es )
       => EventStream phi rs s ci co
-      -> AggregateId (EventStream phi rs s ci co)
+      -> Stream (EventStream phi rs s ci co)
       -> StreamVersion
       -> (s, RegFile rs)
       -> Eff es ()
     writeSnapshot agg aid version t =
       runStorePool (writeSnapshotRow sn version state codecVersion shapeHash)
       where
-        sn           = aggIdToStreamName agg aid
+        sn           = streamToStreamName agg aid
         state        = stateEncode (esStateCodec agg) t
         codecVersion = stateCodecVersion (esStateCodec agg)
         shapeHash    = regFileShapeHash (esStateCodec agg)
@@ -571,3 +571,8 @@ Hydration is unchanged structurally: it remains a Streamly `Stream → Fold` pip
 The single keiki-side gap (`RegFile rs <-> Aeson.Value` plus the shape hash) is shared with EP-1 and EP-2, and is consolidated by EP-6 as a single keiki backlog item with three customers. No kiroku-side change is *required* (only an optional `lookupStreamId` optimization). Process managers (EP-3 §5) and long-lived workflow streams (EP-5) are the primary beneficiaries.
 
 The design is deliberately small: one table, one codec, one policy, one read path, one write path, one fall-through invalidation strategy. The modesty is the point — snapshots are an optimization, and an optimization that fails closed (full replay) cannot break the system.
+
+
+## Revisions
+
+- 2026-05-13: **Renamed the typed event-stream-id wrapper `AggregateId a` → `Stream a`** in this design doc, cascaded from the parent MasterPlan's 2026-05-13 rename decision. **Updates this revision applied (this doc only)**: line 88 (the §"What the layout deliberately does *not* include" rationale for omitting the `aggregate_type` column — now reads "lives in the typed `Stream a` newtype"), line 197 (the snapshot-loader record-field `aggIdToStreamName` was renamed to `streamToStreamName` because it literally translates "AggregateId-to-StreamName" / "Stream-to-StreamName" and would otherwise be inconsistent with the new type name), line 343 (the `writeSnapshot` signature's typed-id parameter), and line 350 (the `writeSnapshot` body's call to the renamed loader field). The awkward `streamToStreamName` shape is a side effect of `Stream` overloading "stream" both as the new keiro type name and as the kiroku stream-name concept; the field can be renamed in the implementation MasterPlan to something more ergonomic (e.g., `idToStreamName`, `qualifyStream`) without touching the type itself. The hypothetical column-name `aggregate_type` discussed-and-rejected on line 88 is preserved as authored — it is a column-name being discussed in the abstract, not the framework type, and renaming it would distort the original argument. The unrelated `aggCategory` field on line 196 was deliberately not renamed in the 2026-05-08 cascade and is left alone here too — it names a per-event-stream stream-name category prefix and is orthogonal to the `AggregateId` rename. **Streamly-collision note**: the parent MasterPlan's 2026-05-13 Decision Log entry records that an intermediate `StreamRef a` selection was discarded after team feedback in favour of the bare `Stream a`, accepting the name collision with `Streamly.Data.Stream.Stream` and resolving it at use sites with qualified imports — when the implementation MasterPlan ships the snapshot module, it must `import qualified Streamly.Data.Stream as Stream` because the snapshot path consumes Streamly streams (the hydration short-circuit reads from `Streamly.Data.Stream.Stream (Eff es) RecordedEvent`) *and* names the typed `Stream a` newtype on its public surface. Doc 09 is not under the closed-doc convention as of 2026-05-13 (no prior corrections-note overlay), so the rename is applied directly to the body rather than via a top-of-file overlay. The parent MasterPlan's 2026-05-13 Decision Log + Revisions entries record the cross-plan cascade. Reason: cascade from the MasterPlan rename; the user observed that `AggregateId` is too tied to DDD and keiro is a more general framework, and team feedback after the StreamRef intermediate selection preferred the bare `Stream` name.
