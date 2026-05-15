@@ -42,7 +42,7 @@ Alternatives considered:
 | 10 | Bootstrap the keiro Haskell package | docs/plans/10-bootstrap-the-keiro-haskell-package.md | None | None | Complete |
 | 11 | Define the EventStream contract and codec surface | docs/plans/11-define-the-eventstream-contract-and-codec-surface.md | EP-10 | None | Complete |
 | 12 | Implement the command cycle on kiroku and keiki | docs/plans/12-implement-the-command-cycle-on-kiroku-and-keiki.md | EP-10, EP-11 | None | Complete |
-| 13 | Add snapshots and accelerated hydration | docs/plans/13-add-snapshots-and-accelerated-hydration.md | EP-10, EP-11, EP-12 | EP-9 | Not Started |
+| 13 | Add snapshots and accelerated hydration | docs/plans/13-add-snapshots-and-accelerated-hydration.md | EP-10, EP-11, EP-12 | EP-9 | Complete |
 | 14 | Ship read models and projection lifecycles | docs/plans/14-ship-read-models-and-projection-lifecycles.md | EP-10, EP-11, EP-12 | EP-13 | Not Started |
 | 15 | Build process managers and timer workflows | docs/plans/15-build-process-managers-and-timer-workflows.md | EP-10, EP-11, EP-12 | EP-14 | Not Started |
 
@@ -93,8 +93,8 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
 - [x] EP-11: add pure unit tests for stream-name conversion, codec round trips, upcaster ordering, and EventStream construction.
 - [x] EP-12: implement hydration, `runCommand`, retry-on-conflict, idempotent event ids, and `runCommandWithSql`.
 - [x] EP-12: prove the command cycle against a real Postgres-backed kiroku store with a fixture transducer.
-- [ ] EP-13: create `keiro_snapshots`, read/write snapshot functions, and fallback-to-full-replay hydration.
-- [ ] EP-13: prove snapshot round trip and stale-snapshot fallback against real Postgres.
+- [x] EP-13: create `keiro_snapshots`, read/write snapshot functions, and fallback-to-full-replay hydration.
+- [x] EP-13: prove snapshot round trip and stale-snapshot fallback against real Postgres.
 - [ ] EP-14: implement inline, eventual, and position-wait read-model query modes plus projection idempotency helpers.
 - [ ] EP-14: prove read-after-write behavior for inline and async projections.
 - [ ] EP-15: implement process-manager state streams, deterministic emitted-command ids, durable timers, and the worker-facing API.
@@ -110,6 +110,8 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
 - EP-10 found that full `cabal test all` runs local dependency tests and keiki's symbolic tests require Z3. `flake.nix` now includes `pkgs.z3`, and `nix develop -c cabal test all` passes.
 
 - EP-11 found that a fatal unknown-event policy requires a finite known-type registry on `Codec e`; `eventType :: e -> Text` alone only classifies already-decoded values. `Keiro.Codec.Codec` now includes `eventTypes :: NonEmpty Text`, and `decodeRecorded` rejects unknown `Kiroku.Store.Types.EventType` values before payload decoding.
+
+- EP-13 found that kiroku's immutability trigger prevents direct updates to stored event payloads, so snapshot acceleration tests should not corrupt old events. The accepted test pattern uses a stricter compatible transducer that cannot full-replay the old events but can proceed from a compatible snapshot seed.
 
 
 ## Decision Log

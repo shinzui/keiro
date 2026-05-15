@@ -34,11 +34,16 @@ library
                         Keiro.Codec
                         Keiro.EventStream
                         Keiro.Prelude
+                        Keiro.Snapshot
+                        Keiro.Snapshot.Codec
+                        Keiro.Snapshot.Policy
+                        Keiro.Snapshot.Schema
                         Keiro.Stream
     hs-source-dirs:     src
     build-depends:      aeson >= 2.2,
                         aeson-casing >= 0.2,
                         base >= 4.21 && < 5,
+                        contravariant >= 1.5,
                         effectful >= 2.6,
                         effectful-core >= 2.6,
                         generic-lens >= 2.2,
@@ -67,9 +72,12 @@ test-suite keiro-test
     build-depends:      base >= 4.21 && < 5,
                         aeson >= 2.2,
                         ephemeral-pg >= 0.2,
+                        hasql >= 1.10,
+                        hasql-pool >= 1.2,
                         hasql-transaction >= 1.1,
                         hspec >= 2.11,
                         keiki,
+                        keiki-codec-json,
                         keiro,
                         kiroku-store,
                         text >= 2.1,

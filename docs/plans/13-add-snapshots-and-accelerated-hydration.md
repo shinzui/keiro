@@ -22,16 +22,31 @@ The behavior is visible in tests: a fixture stream writes enough events to trigg
 
 ## Progress
 
-- [ ] M1 — Create `Keiro.Snapshot.Schema`, `Keiro.Snapshot.Codec`, and `Keiro.Snapshot.Policy` with the `keiro_snapshots` table and state codec helpers.
-- [ ] M2 — Integrate `Keiki.Shape.regFileShapeHash` and `Keiki.Codec.JSON.regFileToJSON` / `regFileFromJSON` into the default `StateCodec` path.
-- [ ] M3 — Add snapshot read support to hydration while preserving full replay fallback.
-- [ ] M4 — Add post-commit snapshot writes with monotonic update guards.
-- [ ] M5 — Add integration tests for snapshot round trip, stale hash/version fallback, corrupt JSON fallback, and operator truncation.
+- [x] M1 — Create `Keiro.Snapshot.Schema`, `Keiro.Snapshot.Codec`, and `Keiro.Snapshot.Policy` with the `keiro_snapshots` table and state codec helpers. Started at 2026-05-15T18:27:17Z; completed at 2026-05-15T18:37:06Z.
+- [x] M2 — Integrate `Keiki.Shape.regFileShapeHash` and `Keiki.Codec.JSON.regFileToJSON` / `regFileFromJSON` into the default `StateCodec` path. Completed at 2026-05-15T18:37:06Z.
+- [x] M3 — Add snapshot read support to hydration while preserving full replay fallback. Completed at 2026-05-15T18:37:06Z.
+- [x] M4 — Add post-commit snapshot writes with monotonic update guards. Completed at 2026-05-15T18:37:06Z.
+- [x] M5 — Add integration tests for snapshot round trip, stale hash/version fallback, corrupt JSON fallback, and operator truncation. Completed at 2026-05-15T18:37:06Z.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Kiroku prevents updates to event payload rows through an immutability trigger, so the snapshot-acceleration test cannot prove tail replay by corrupting an old event. The test now proves acceleration by switching to a stricter compatible transducer that cannot full-replay the old events but can proceed from the compatible snapshot seed.
+
+Evidence:
+
+```text
+ConnectionError "SessionUsageError ... ServerError \"P0001\" \"Immutable table: events cannot be updated\" ..."
+```
+
+- `cabal test all` runs sibling dependency suites from the local `cabal.project`, including `keiki-test`, `keiki-codec-json-test`, and `kiroku-store-test`. The full run passed after the snapshot implementation.
+
+Evidence:
+
+```text
+Test suite keiro-test: PASS
+Test suite kiroku-store-test: PASS
+```
 
 
 ## Decision Log
@@ -47,7 +62,15 @@ The behavior is visible in tests: a fixture stream writes enough events to trigg
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Implemented advisory snapshots for the v1 command path. The library now owns `keiro_snapshots`, exposes schema initialization and default snapshot codecs, uses keiki's shape hash and JSON register-file codec, hydrates from compatible snapshots with full replay fallback, and writes post-commit snapshots according to `SnapshotPolicy` without replacing newer rows with older versions.
+
+Validation passed with:
+
+```bash
+cabal test all
+```
+
+The focused keiro snapshot tests cover writing snapshots, snapshot-assisted hydration, corrupt snapshot JSON fallback, shape-hash mismatch fallback, and operator truncation fallback.
 
 
 ## Context and Orientation
@@ -130,5 +153,10 @@ module Keiro.Snapshot.Codec
   ( defaultStateCodec
   )
 ```
+
+
+## Revision Notes
+
+2026-05-15: Implemented the plan end-to-end, marked all milestones complete, recorded the kiroku immutability discovery that changed the snapshot acceleration test shape, and captured the passing `cabal test all` validation evidence.
 
 Dependencies include EP-12 hydration functions, `Kiroku.Store.Read.lookupStreamId`, hasql statements or transactions for keiro-owned tables, `Keiki.Shape.regFileShapeHash`, `Keiki.Codec.JSON.RegFileToJSON`, and Aeson.

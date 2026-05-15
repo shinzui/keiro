@@ -6,6 +6,7 @@ where
 import Data.Aeson (object, withObject, (.:))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
+import Data.Functor.Contravariant ((>$<))
 import Data.IORef (atomicModifyIORef', newIORef)
 import Data.Text qualified as Text
 import Data.Vector qualified as Vector
@@ -13,11 +14,15 @@ import Data.UUID (UUID, fromString)
 import Data.Time (UTCTime (..), secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import EphemeralPg qualified as Pg
+import Hasql.Decoders qualified as D
+import Hasql.Encoders qualified as E
+import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
 import Keiki.Core
   ( Edge (..)
-  , HsPred
+  , HsPred (..)
   , InCtor (..)
+  , IndexN
   , RegFile (..)
   , SymTransducer (..)
   , Update (..)
@@ -26,8 +31,11 @@ import Keiki.Core
   , matchInCtor
   , oNil
   , pack
+  , proj
   , (*:)
+  , (.==)
   )
+import Keiki.Core qualified as Keiki
 import Keiro
 import Keiro.Prelude
 import Keiro.Stream qualified as Stream
@@ -216,6 +224,92 @@ main = hspec $ do
         Store.readStreamForward (StreamName "counter-command-rollback") (StreamVersion 0) 10
       recorded `shouldBe` Vector.empty
 
+  describe "Keiro.Snapshot" $ around withTestStore $ do
+    it "writes a snapshot after policy threshold" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
+      let target = stream "snapshot-write-threshold" :: Stream SnapshotCounterEventStream
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
+      Right snapshotVersion <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.statement (StreamName "snapshot-write-threshold") snapshotVersionForStreamStmt
+      snapshotVersion `shouldBe` Just (StreamVersion 2)
+
+    it "hydrates from snapshot and replays only the tail" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
+      let target = stream "snapshot-tail-hydration" :: Stream SnapshotCounterEventStream
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.statement
+            ( StreamName "snapshot-tail-hydration"
+            , (defaultStateCodec @SnapshotCounterRegs @CounterState 1 ^. #encode)
+                (Counting, RCons (Proxy @"lastAmount") 4 RNil)
+            )
+            corruptSnapshotStateStmt
+      result <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions guardedSnapshotCounterEventStream target (Add 4)
+      case result of
+        Right (Right commandResult) ->
+          commandResult ^. #streamVersion `shouldBe` StreamVersion 3
+        other -> expectationFailure ("expected snapshot-assisted command, got " <> show other)
+
+    it "falls back when snapshot JSON is corrupt" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
+      let target = stream "snapshot-corrupt-json" :: Stream SnapshotCounterEventStream
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.statement (StreamName "snapshot-corrupt-json", Aeson.String "bad") corruptSnapshotStateStmt
+      result <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 4)
+      case result of
+        Right (Right commandResult) ->
+          commandResult ^. #streamVersion `shouldBe` StreamVersion 3
+        other -> expectationFailure ("expected corrupt snapshot fallback, got " <> show other)
+
+    it "falls back when shape hash mismatches" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
+      let target = stream "snapshot-shape-mismatch" :: Stream SnapshotCounterEventStream
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.statement (StreamName "snapshot-shape-mismatch", "stale-shape") corruptSnapshotShapeStmt
+      result <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 4)
+      case result of
+        Right (Right commandResult) ->
+          commandResult ^. #streamVersion `shouldBe` StreamVersion 3
+        other -> expectationFailure ("expected stale shape fallback, got " <> show other)
+
+    it "falls back after operator truncation" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
+      let target = stream "snapshot-operator-truncate" :: Stream SnapshotCounterEventStream
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.sql "TRUNCATE keiro_snapshots"
+      result <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 4)
+      case result of
+        Right (Right commandResult) ->
+          commandResult ^. #streamVersion `shouldBe` StreamVersion 3
+        other -> expectationFailure ("expected truncation fallback, got " <> show other)
+
 data OrderStream
 
 data OrderEvent
@@ -285,6 +379,10 @@ emptyTransducer = SymTransducer
 
 type CounterEventStream = EventStream (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
 
+type SnapshotCounterRegs = '[ '("lastAmount", Int)]
+
+type SnapshotCounterEventStream = EventStream (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
+
 data CounterCommand
   = Add !Int
   deriving stock (Generic, Eq, Show)
@@ -296,6 +394,7 @@ data CounterEvent
 data CounterState
   = Counting
   deriving stock (Generic, Eq, Show)
+  deriving anyclass (FromJSON, ToJSON)
 
 counterEventStream :: CounterEventStream
 counterEventStream = EventStream
@@ -321,6 +420,62 @@ counterTransducer = SymTransducer
         ]
   , initial = Counting
   , initialRegs = RNil
+  , isFinal = \_ -> False
+  }
+
+snapshotCounterEventStream :: SnapshotCounterEventStream
+snapshotCounterEventStream = EventStream
+  { transducer = snapshotCounterTransducer
+  , initialState = Counting
+  , initialRegisters = RCons (Proxy @"lastAmount") 0 RNil
+  , eventCodec = counterCodec
+  , streamName = Stream.streamName
+  , snapshotPolicy = Every 2
+  , stateCodec = Just (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
+  }
+
+snapshotCounterTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
+snapshotCounterTransducer = SymTransducer
+  { edgesOut = \case
+      Counting ->
+        [ Edge
+            { guard = matchInCtor addCtor
+            , update =
+                USet
+                  (#lastAmount :: IndexN "lastAmount" SnapshotCounterRegs Int)
+                  (inpCtor addCtor #amount)
+            , output = Just (pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil))
+            , target = Counting
+            }
+        ]
+  , initial = Counting
+  , initialRegs = RCons (Proxy @"lastAmount") 0 RNil
+  , isFinal = \_ -> False
+  }
+
+guardedSnapshotCounterEventStream :: SnapshotCounterEventStream
+guardedSnapshotCounterEventStream =
+  snapshotCounterEventStream & #transducer .~ guardedSnapshotCounterTransducer
+
+guardedSnapshotCounterTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
+guardedSnapshotCounterTransducer = SymTransducer
+  { edgesOut = \case
+      Counting ->
+        [ Edge
+            { guard =
+                PAnd
+                  (matchInCtor addCtor)
+                  (inpCtor addCtor #amount .== proj (#lastAmount :: Keiki.Index SnapshotCounterRegs Int))
+            , update =
+                USet
+                  (#lastAmount :: IndexN "lastAmount" SnapshotCounterRegs Int)
+                  (inpCtor addCtor #amount)
+            , output = Just (pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil))
+            , target = Counting
+            }
+        ]
+  , initial = Counting
+  , initialRegs = RCons (Proxy @"lastAmount") 0 RNil
   , isFinal = \_ -> False
   }
 
@@ -407,3 +562,39 @@ shouldBeRight = \case
 
 fromStringLiteral :: String -> Text
 fromStringLiteral = Text.pack
+
+snapshotVersionForStreamStmt :: Statement StreamName (Maybe StreamVersion)
+snapshotVersionForStreamStmt =
+  preparable
+    "SELECT ks.stream_version \
+    \FROM keiro_snapshots ks \
+    \JOIN streams s ON s.stream_id = ks.stream_id \
+    \WHERE s.stream_name = $1"
+    ((\(StreamName name) -> name) >$< E.param (E.nonNullable E.text))
+    (D.rowMaybe (StreamVersion <$> D.column (D.nonNullable D.int8)))
+
+corruptSnapshotStateStmt :: Statement (StreamName, Value) ()
+corruptSnapshotStateStmt =
+  preparable
+    "UPDATE keiro_snapshots ks \
+    \SET state = $2 \
+    \FROM streams s \
+    \WHERE s.stream_id = ks.stream_id \
+    \  AND s.stream_name = $1"
+    ( ((\(StreamName name, _) -> name) >$< E.param (E.nonNullable E.text))
+        <> ((\(_, payload) -> payload) >$< E.param (E.nonNullable E.jsonb))
+    )
+    D.noResult
+
+corruptSnapshotShapeStmt :: Statement (StreamName, Text) ()
+corruptSnapshotShapeStmt =
+  preparable
+    "UPDATE keiro_snapshots ks \
+    \SET regfile_shape_hash = $2 \
+    \FROM streams s \
+    \WHERE s.stream_id = ks.stream_id \
+    \  AND s.stream_name = $1"
+    ( ((\(StreamName name, _) -> name) >$< E.param (E.nonNullable E.text))
+        <> ((\(_, shapeHash) -> shapeHash) >$< E.param (E.nonNullable E.text))
+    )
+    D.noResult
