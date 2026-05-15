@@ -30,7 +30,10 @@ common shared
 library
     import:             warnings, shared
     exposed-modules:    Keiro
+                        Keiro.Codec
+                        Keiro.EventStream
                         Keiro.Prelude
+                        Keiro.Stream
     hs-source-dirs:     src
     build-depends:      aeson >= 2.2,
                         aeson-casing >= 0.2,
@@ -44,6 +47,7 @@ library
                         keiki-codec-json >= 0.1,
                         kiroku-store >= 0.1,
                         lens >= 5.2,
+                        scientific >= 0.3,
                         shibuya-core >= 0.5,
                         streamly >= 0.11,
                         text >= 2.1,
@@ -57,6 +61,11 @@ test-suite keiro-test
     hs-source-dirs:     test
     main-is:            Main.hs
     build-depends:      base >= 4.21 && < 5,
+                        aeson >= 2.2,
                         hspec >= 2.11,
+                        keiki,
                         keiro,
-                        text >= 2.1
+                        kiroku-store,
+                        text >= 2.1,
+                        time >= 1.12,
+                        uuid >= 1.3

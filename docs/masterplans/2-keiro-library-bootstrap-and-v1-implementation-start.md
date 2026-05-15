@@ -40,7 +40,7 @@ Alternatives considered:
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 10 | Bootstrap the keiro Haskell package | docs/plans/10-bootstrap-the-keiro-haskell-package.md | None | None | Complete |
-| 11 | Define the EventStream contract and codec surface | docs/plans/11-define-the-eventstream-contract-and-codec-surface.md | EP-10 | None | Not Started |
+| 11 | Define the EventStream contract and codec surface | docs/plans/11-define-the-eventstream-contract-and-codec-surface.md | EP-10 | None | Complete |
 | 12 | Implement the command cycle on kiroku and keiki | docs/plans/12-implement-the-command-cycle-on-kiroku-and-keiki.md | EP-10, EP-11 | None | Not Started |
 | 13 | Add snapshots and accelerated hydration | docs/plans/13-add-snapshots-and-accelerated-hydration.md | EP-10, EP-11, EP-12 | EP-9 | Not Started |
 | 14 | Ship read models and projection lifecycles | docs/plans/14-ship-read-models-and-projection-lifecycles.md | EP-10, EP-11, EP-12 | EP-13 | Not Started |
@@ -89,8 +89,8 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
 
 - [x] EP-10: create `keiro.cabal`, `cabal.project`, source tree, test tree, and developer commands.
 - [x] EP-10: prove `cabal build all`, `cabal test all`, and existing docs build commands work from the repository root.
-- [ ] EP-11: implement `Keiro.Stream`, `Keiro.Codec`, `Keiro.EventStream`, snapshot policy placeholders, and public re-exports.
-- [ ] EP-11: add pure unit tests for stream-name conversion, codec round trips, upcaster ordering, and EventStream construction.
+- [x] EP-11: implement `Keiro.Stream`, `Keiro.Codec`, `Keiro.EventStream`, snapshot policy placeholders, and public re-exports.
+- [x] EP-11: add pure unit tests for stream-name conversion, codec round trips, upcaster ordering, and EventStream construction.
 - [ ] EP-12: implement hydration, `runCommand`, retry-on-conflict, idempotent event ids, and `runCommandWithSql`.
 - [ ] EP-12: prove the command cycle against a real Postgres-backed kiroku store with a fixture transducer.
 - [ ] EP-13: create `keiro_snapshots`, read/write snapshot functions, and fallback-to-full-replay hydration.
@@ -109,6 +109,8 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
 
 - EP-10 found that full `cabal test all` runs local dependency tests and keiki's symbolic tests require Z3. `flake.nix` now includes `pkgs.z3`, and `nix develop -c cabal test all` passes.
 
+- EP-11 found that a fatal unknown-event policy requires a finite known-type registry on `Codec e`; `eventType :: e -> Text` alone only classifies already-decoded values. `Keiro.Codec.Codec` now includes `eventTypes :: NonEmpty Text`, and `decodeRecorded` rejects unknown `Kiroku.Store.Types.EventType` values before payload decoding.
+
 
 ## Decision Log
 
@@ -122,6 +124,10 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
 
 - Decision: Use `runTransactionAppending` as the single-stream transactional command primitive and reserve `appendMultiStream` for multi-stream command extensions.
   Rationale: Kiroku now ships the exact single-stream append-plus-SQL transaction wrapper requested by the research foundation. The old singleton `appendMultiStream` workaround should not enter new implementation plans.
+  Date: 2026-05-15.
+
+- Decision: Include a value-level `eventTypes :: NonEmpty Text` registry in the EP-11 `Codec e` contract.
+  Rationale: EP-12's hydration path must reject recorded events with unknown type tags deterministically before attempting payload decoding. A small value-level registry preserves the research foundation's fatal-unknown-event policy without introducing a typeclass-based global registry.
   Date: 2026-05-15.
 
 

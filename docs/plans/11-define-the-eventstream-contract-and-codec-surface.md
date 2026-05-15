@@ -22,15 +22,17 @@ The behavior is observable through compilation and unit tests: fixture event typ
 
 ## Progress
 
-- [ ] M1 — Add `Keiro.Stream` with the typed `Stream a` wrapper and conversion to/from `Kiroku.Store.Types.StreamName`, following the jitsurei record patterns.
-- [ ] M2 — Add `Keiro.Codec` with `Codec e`, encode/decode errors, type tags, schema versions, upcaster ordering, helper constructors, strict fields, and unprefixed field names.
-- [ ] M3 — Add `Keiro.EventStream` with the `EventStream phi rs s ci co` record, `StateCodec`, and `SnapshotPolicy` placeholders using strict unprefixed fields.
-- [ ] M4 — Add public re-exports in `Keiro` and pure tests for stream conversion, codec round trips, upcaster ordering, and EventStream construction.
+- [x] M1 — Add `Keiro.Stream` with the typed `Stream a` wrapper and conversion to/from `Kiroku.Store.Types.StreamName`, following the jitsurei record patterns. Completed 2026-05-15: `src/Keiro/Stream.hs` defines `Stream a`, `stream`, `streamName`, and `mapStreamName`.
+- [x] M2 — Add `Keiro.Codec` with `Codec e`, encode/decode errors, type tags, schema versions, upcaster ordering, helper constructors, strict fields, and unprefixed field names. Completed 2026-05-15: `src/Keiro/Codec.hs` defines the value-level codec, schema-version metadata helpers, contiguous upcaster migration, and unknown-type validation.
+- [x] M3 — Add `Keiro.EventStream` with the `EventStream phi rs s ci co` record, `StateCodec`, and `SnapshotPolicy` placeholders using strict unprefixed fields. Completed 2026-05-15: `src/Keiro/EventStream.hs` wraps the real keiki `SymTransducer` and `RegFile` APIs and exposes snapshot placeholders for EP-13.
+- [x] M4 — Add public re-exports in `Keiro` and pure tests for stream conversion, codec round trips, upcaster ordering, and EventStream construction. Completed 2026-05-15: `src/Keiro.hs`, `keiro.cabal`, and `test/Main.hs` expose and validate the author-facing surface.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-05-15: A `newtype` wrapper cannot use a bang pattern on its sole field, so `Stream a` uses an unprefixed `name :: StreamName` field without `!`. This is the only deviation from the "strict fields" wording; it is a Haskell representation rule rather than a semantic choice.
+
+- 2026-05-15: `decodeRecorded` cannot reject unknown `event_type` values from only `eventType :: e -> Text`, because that function classifies typed values after decoding. The implemented `Codec e` therefore includes `eventTypes :: NonEmpty Text` as a small value-level registry. This preserves the fatal-unknown-event policy recorded in `docs/research/07-codec-strategy.md`.
 
 
 ## Decision Log
@@ -47,10 +49,24 @@ The behavior is observable through compilation and unit tests: fixture event typ
   Rationale: The implementation should be consistent with the rest of the user's Haskell code: no field prefixes, strict fields, explicit deriving strategies, and generic-lens `#label` access/update. The initial draft used prefixed field names, which would steer implementation away from the local convention.
   Date: 2026-05-15.
 
+- Decision: Add `eventTypes :: NonEmpty Text` to `Codec e`.
+  Rationale: The codec needs a finite known-type registry to reject unknown recorded `EventType` values before payload decoding. Keeping this registry on the value-level codec avoids a typeclass registry and keeps EP-12's hydration path deterministic.
+  Date: 2026-05-15.
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-05-15. Keiro now exposes `Keiro.Stream`, `Keiro.Codec`, and `Keiro.EventStream` from the public `Keiro` module. The public contract compiles against the actual `kiroku-store` and `keiki` APIs in the flake shell, and the pure test suite proves stream-name conversion, event encoding with schema metadata, current-version decode, v1-to-v2 upcasting, upcaster-gap detection, unknown event-type rejection, and construction of an `EventStream` value around a keiki `SymTransducer`.
+
+Validation succeeded with:
+
+```text
+nix develop -c cabal build all
+nix develop -c cabal test keiro-test
+nix develop -c cabal test all
+```
+
+`cabal test all` ran `keiro-test`, `keiki-test`, `keiki-codec-json-test`, and `kiroku-store-test`; all passed.
 
 
 ## Context and Orientation
@@ -68,12 +84,12 @@ Milestone 1 creates `src/Keiro/Stream.hs`. Import `Keiro.Prelude` rather than re
 
 ```haskell
 newtype Stream a = Stream
-  { name :: !StreamName
+  { name :: StreamName
   }
   deriving stock (Generic, Eq, Ord, Show)
 ```
 
-Provide a safe `stream :: Text -> Stream a`, `streamName :: Stream a -> StreamName`, and `mapStreamName` only if needed by tests. Implement field access through `streamValue ^. #name` in code that needs the wrapped `StreamName`; do not introduce prefixed accessors. Avoid smart-constructor validation unless kiroku enforces the same validation; kiroku accepts most names and only reserves `$all` for mutation APIs.
+Provide a safe `stream :: Text -> Stream a`, `streamName :: Stream a -> StreamName`, and `mapStreamName`. Implement field access through `streamValue ^. #name` in code that needs the wrapped `StreamName`; do not introduce prefixed accessors. Avoid smart-constructor validation unless kiroku enforces the same validation; kiroku accepts most names and only reserves `$all` for mutation APIs. `Stream a` is a `newtype`, so its field cannot carry a bang annotation; this is the only field-strictness exception in this plan.
 
 Milestone 2 creates `src/Keiro/Codec.hs`. Import `Keiro.Prelude`. Define `Codec e` as a strict record containing event type selection, current schema version, encoding, decoding, and an upcaster chain. Field names must be ordinary nouns or verbs such as `eventType`, `schemaVersion`, `encode`, `decode`, and `upcasters`, not `codecEventType` or similar. Include functions equivalent to `encodeForAppend :: Codec e -> e -> Either CodecError EventData` and `decodeRecorded :: Codec e -> RecordedEvent -> Either CodecError e`. Encode the schema version in `EventData.metadata` using the convention from `docs/research/07-codec-strategy.md`; preserve existing metadata if the helper accepts metadata from callers. Upcasters must be consecutive; tests should fail a gap such as version 1 to version 3 with no version 2.
 
@@ -143,13 +159,20 @@ module Keiro.Stream
   ( Stream(..)
   , stream
   , streamName
+  , mapStreamName
   )
 
 module Keiro.Codec
   ( Codec(..)
+  , Upcaster
   , CodecError(..)
   , encodeForAppend
+  , encodeForAppendWithMetadata
   , decodeRecorded
+  , decodeRaw
+  , migrateToCurrent
+  , extractSchemaVersion
+  , metadataFor
   )
 
 module Keiro.EventStream
