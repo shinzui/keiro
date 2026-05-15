@@ -25,21 +25,30 @@ Create new MasterPlans with the bundled `init-masterplan.ts` script (see Mode: c
 Child ExecPlans created by a MasterPlan live in `docs/plans/` following the standard ExecPlan naming convention. Create them with the exec-plan skill's `init-plan.ts` script, passing `--master-plan <path-to-this-masterplan>`; the script records the parent in the child's `master_plan` frontmatter field. Do not add a body reference line by hand.
 
 
+## Formatting
+
+When you write commands, transcripts, diffs, or code into a MasterPlan or any child ExecPlan, use fenced code blocks (triple backticks) and **always specify a language tag** on the opening fence — for example ` ```bash `, ` ```typescript `, ` ```haskell `, ` ```python `, ` ```diff `, or ` ```text ` for plain output and commit messages. Never emit a bare ` ``` ` fence without a language. This rule applies to every plan file you create or edit. See MASTERPLAN.md and the ExecPlan PLANS.md for the full formatting rules.
+
+
 ## Git Trailers
 
 Every commit made while working under a MasterPlan must include a `MasterPlan:` git trailer:
 
-    MasterPlan: docs/masterplans/<N>-<slug>.md
+```text
+MasterPlan: docs/masterplans/<N>-<slug>.md
+```
 
 When implementing a specific child ExecPlan, include both trailers:
 
-    Implement consumer group rebalance handling
+```text
+Implement consumer group rebalance handling
 
-    Add consumer group module with cooperative rebalance protocol.
-    Wire partition assignment into the existing consumer loop.
+Add consumer group module with cooperative rebalance protocol.
+Wire partition assignment into the existing consumer loop.
 
-    MasterPlan: docs/masterplans/1-kafka-consumer-pipeline.md
-    ExecPlan: docs/plans/3-add-consumer-group.md
+MasterPlan: docs/masterplans/1-kafka-consumer-pipeline.md
+ExecPlan: docs/plans/3-add-consumer-group.md
+```
 
 
 ## Modes of Operation
@@ -59,13 +68,17 @@ Create a new MasterPlan and all its child ExecPlans. The remaining arguments des
 
 4. Run the init script to create the MasterPlan file with frontmatter and skeleton:
 
-        bun agents/skills/master-plan/init-masterplan.ts --title "<initiative title>" [--intention <id>]
+    ```bash
+    bun agents/skills/master-plan/init-masterplan.ts --title "<initiative title>" [--intention <id>]
+    ```
 
     The script prints the created file path to stdout. Read the file back and flesh out the prose sections (Vision & Scope, Decomposition Strategy, Dependency Graph, Integration Points). Leave the living-document sections empty for now, except the Decision Log which records the initial decomposition decisions.
 
 5. Create each child ExecPlan by running the exec-plan skill's init script, passing the parent path:
 
-        bun agents/skills/exec-plan/init-plan.ts --title "<child title>" --master-plan <path-to-this-masterplan> [--intention <id>]
+    ```bash
+    bun agents/skills/exec-plan/init-plan.ts --title "<child title>" --master-plan <path-to-this-masterplan> [--intention <id>]
+    ```
 
     Then read each child file back and flesh it out per `agents/skills/exec-plan/PLANS.md`. Each child plan must:
 
@@ -181,13 +194,15 @@ If the user provides an Intention ID, store it for the duration of the session a
 
 2. **Include an `Intention:` git trailer on every commit** alongside the other trailers:
 
-        Implement consumer group rebalance handling
+    ```text
+    Implement consumer group rebalance handling
 
-        Add consumer group module with cooperative rebalance protocol.
+    Add consumer group module with cooperative rebalance protocol.
 
-        MasterPlan: docs/masterplans/1-kafka-consumer-pipeline.md
-        ExecPlan: docs/plans/3-add-consumer-group.md
-        Intention: INTENT-42
+    MasterPlan: docs/masterplans/1-kafka-consumer-pipeline.md
+    ExecPlan: docs/plans/3-add-consumer-group.md
+    Intention: INTENT-42
+    ```
 
 Ask once at the start of a session. Do not ask again on subsequent operations within the same session. If the user skips or declines, proceed without the trailer.
 # --- /seihou:master-plan ---

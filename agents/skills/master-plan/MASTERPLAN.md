@@ -57,4 +57,4 @@ When a child plan's implementation reveals that the decomposition was wrong (a p
 
 ## Writing Style and Formatting
 
-Follow the same writing style and formatting rules as ExecPlans (see `agents/skills/exec-plan/PLANS.md`). Write in plain prose. Use indented blocks (four-space indent) for commands and transcripts rather than fenced code blocks. The Exec-Plan Registry is the one exception where a table is preferred for scanability.
+Follow the same writing style and formatting rules as ExecPlans (see `agents/skills/exec-plan/PLANS.md`). Write in plain prose. Use fenced code blocks (triple backticks) with an explicit language tag — for example `bash`, `typescript`, `haskell`, `diff`, or `text` — for every command, transcript, diff, or code snippet. Bare fences without a language tag are not permitted. The Exec-Plan Registry is the one exception where a table is preferred for scanability.

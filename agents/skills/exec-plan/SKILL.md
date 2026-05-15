@@ -18,20 +18,29 @@ ExecPlans live in the `docs/plans/` directory at the repository root. Each plan 
 Create new plans with the bundled `init-plan.ts` script (see Mode: create). The script picks the next sequential number, derives the slug from the title, writes the frontmatter and skeleton, and refuses to overwrite an existing file. Do not pick numbers, write skeletons, or hand-author frontmatter by hand.
 
 
+## Formatting
+
+When you write commands, transcripts, diffs, or code into a plan, use fenced code blocks (triple backticks) and **always specify a language tag** on the opening fence — for example ` ```bash `, ` ```typescript `, ` ```haskell `, ` ```python `, ` ```diff `, or ` ```text ` for plain output and commit messages. Never emit a bare ` ``` ` fence without a language. This rule applies to every plan file you create or edit. See PLANS.md for the full formatting rules.
+
+
 ## Git Trailers
 
 Every commit made while working on an ExecPlan **must** include a git trailer linking back to the plan:
 
-    ExecPlan: docs/plans/<N>-<slug>.md
+```text
+ExecPlan: docs/plans/<N>-<slug>.md
+```
 
 Add the trailer to the end of the commit message body, separated by a blank line:
 
-    Implement health-check endpoint
+```text
+Implement health-check endpoint
 
-    Add GET /health route that returns 200 OK with uptime info.
-    Wire into the existing router module.
+Add GET /health route that returns 200 OK with uptime info.
+Wire into the existing router module.
 
-    ExecPlan: docs/plans/3-add-health-check.md
+ExecPlan: docs/plans/3-add-health-check.md
+```
 
 If a single commit spans multiple plans (rare — prefer not to), include one trailer per plan.
 
@@ -49,7 +58,9 @@ Create a new ExecPlan. The remaining arguments describe the feature or change.
 
 2. Run the init script to create the file with frontmatter and skeleton:
 
-        bun agents/skills/exec-plan/init-plan.ts --title "<short, action-oriented title>" [--intention <id>] [--master-plan <path>]
+    ```bash
+    bun agents/skills/exec-plan/init-plan.ts --title "<short, action-oriented title>" [--intention <id>] [--master-plan <path>]
+    ```
 
     The script prints the created file path to stdout (e.g., `docs/plans/4-add-template-engine.md`). Pass `--intention` only when an Intention ID is active for this session; pass `--master-plan` only when this plan is a child of an existing MasterPlan, naming the parent's file path.
 
@@ -146,16 +157,20 @@ If the user provides an Intention ID, store it for the duration of the session a
 
 2. **Include an `Intention:` git trailer on every commit:**
 
-        Intention: <IntentionId>
+    ```text
+    Intention: <IntentionId>
+    ```
 
 When both an ExecPlan and an Intention are active, commits must include both trailers:
 
-    Implement health-check endpoint
+```text
+Implement health-check endpoint
 
-    Add GET /health route that returns 200 OK with uptime info.
+Add GET /health route that returns 200 OK with uptime info.
 
-    ExecPlan: docs/plans/3-add-health-check.md
-    Intention: INTENT-42
+ExecPlan: docs/plans/3-add-health-check.md
+Intention: INTENT-42
+```
 
 Ask once at the start of a session. Do not ask again on subsequent commits within the same session. If the user skips or declines, proceed without the trailer.
 # --- /seihou:exec-plan#bfa0a336 ---

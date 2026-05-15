@@ -38,7 +38,7 @@ Write in plain prose. Prefer sentences over lists. Avoid checklists, tables, and
 
 ## Formatting Rules
 
-Each ExecPlan is written as a standard Markdown file. When you need to show commands, transcripts, diffs, or code within the plan, present them as indented blocks (four-space indent) rather than fenced code blocks to avoid formatting conflicts. Use two newlines after every heading. Use standard Markdown heading levels (#, ##, etc.) and correct syntax for ordered and unordered lists.
+Each ExecPlan is written as a standard Markdown file. When you need to show commands, transcripts, diffs, or code within the plan, use fenced code blocks (triple backticks) and **always specify a language tag** on the opening fence — for example `bash`, `sh`, `typescript`, `haskell`, `python`, `json`, `yaml`, `diff`, or `text` for plain output and commit messages. Bare fences without a language tag are not permitted. Use two newlines after every heading. Use standard Markdown heading levels (#, ##, etc.) and correct syntax for ordered and unordered lists.
 
 
 ## Content Guidelines
@@ -55,7 +55,7 @@ Be idempotent and safe. Write the steps so they can be run multiple times withou
 
 Validation is not optional. Include instructions to run tests, to start the system if applicable, and to observe it doing something useful. Describe comprehensive testing for any new features or capabilities. Include expected outputs and error messages so a novice can tell success from failure. Where possible, show how to prove that the change is effective beyond compilation (for example, through a small end-to-end scenario, a CLI invocation, or an HTTP request/response transcript). State the exact test commands appropriate to the project's toolchain and how to interpret their results.
 
-Capture evidence. When your steps produce terminal output, short diffs, or logs, include them as indented examples. Keep them concise and focused on what proves success. If you need to include a patch, prefer file-scoped diffs or small excerpts that a reader can recreate by following your instructions rather than pasting large blobs.
+Capture evidence. When your steps produce terminal output, short diffs, or logs, include them in fenced code blocks with an appropriate language tag (`text` for plain output, `diff` for patches, `log` or `console` for transcripts). Keep them concise and focused on what proves success. If you need to include a patch, prefer file-scoped diffs or small excerpts that a reader can recreate by following your instructions rather than pasting large blobs.
 
 
 ## Milestones
