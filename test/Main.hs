@@ -1,3 +1,5 @@
+{-# LANGUAGE MultilineStrings #-}
+
 module Main
   ( main
   )
@@ -6,7 +8,7 @@ where
 import Data.Aeson (object, withObject, (.:))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
-import Data.Functor.Contravariant ((>$<))
+import Contravariant.Extras (contrazip2)
 import Data.IORef (atomicModifyIORef', newIORef)
 import Data.Text qualified as Text
 import Data.Vector qualified as Vector
@@ -234,7 +236,7 @@ main = hspec $ do
         runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
       Right snapshotVersion <- Store.runStoreIO storeHandle $
         Store.runTransaction $
-          Tx.statement (StreamName "snapshot-write-threshold") snapshotVersionForStreamStmt
+          Tx.statement "snapshot-write-threshold" snapshotVersionForStreamStmt
       snapshotVersion `shouldBe` Just (StreamVersion 2)
 
     it "hydrates from snapshot and replays only the tail" $ \storeHandle -> do
@@ -247,7 +249,7 @@ main = hspec $ do
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction $
           Tx.statement
-            ( StreamName "snapshot-tail-hydration"
+            ( "snapshot-tail-hydration"
             , (defaultStateCodec @SnapshotCounterRegs @CounterState 1 ^. #encode)
                 (Counting, RCons (Proxy @"lastAmount") 4 RNil)
             )
@@ -268,7 +270,7 @@ main = hspec $ do
         runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction $
-          Tx.statement (StreamName "snapshot-corrupt-json", Aeson.String "bad") corruptSnapshotStateStmt
+          Tx.statement ("snapshot-corrupt-json", Aeson.String "bad") corruptSnapshotStateStmt
       result <- Store.runStoreIO storeHandle $
         runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 4)
       case result of
@@ -285,7 +287,7 @@ main = hspec $ do
         runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction $
-          Tx.statement (StreamName "snapshot-shape-mismatch", "stale-shape") corruptSnapshotShapeStmt
+          Tx.statement ("snapshot-shape-mismatch", "stale-shape") corruptSnapshotShapeStmt
       result <- Store.runStoreIO storeHandle $
         runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 4)
       case result of
@@ -563,38 +565,46 @@ shouldBeRight = \case
 fromStringLiteral :: String -> Text
 fromStringLiteral = Text.pack
 
-snapshotVersionForStreamStmt :: Statement StreamName (Maybe StreamVersion)
+snapshotVersionForStreamStmt :: Statement Text (Maybe StreamVersion)
 snapshotVersionForStreamStmt =
   preparable
-    "SELECT ks.stream_version \
-    \FROM keiro_snapshots ks \
-    \JOIN streams s ON s.stream_id = ks.stream_id \
-    \WHERE s.stream_name = $1"
-    ((\(StreamName name) -> name) >$< E.param (E.nonNullable E.text))
+    """
+    SELECT ks.stream_version
+    FROM keiro_snapshots ks
+    JOIN streams s ON s.stream_id = ks.stream_id
+    WHERE s.stream_name = $1
+    """
+    (E.param (E.nonNullable E.text))
     (D.rowMaybe (StreamVersion <$> D.column (D.nonNullable D.int8)))
 
-corruptSnapshotStateStmt :: Statement (StreamName, Value) ()
+corruptSnapshotStateStmt :: Statement (Text, Value) ()
 corruptSnapshotStateStmt =
   preparable
-    "UPDATE keiro_snapshots ks \
-    \SET state = $2 \
-    \FROM streams s \
-    \WHERE s.stream_id = ks.stream_id \
-    \  AND s.stream_name = $1"
-    ( ((\(StreamName name, _) -> name) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, payload) -> payload) >$< E.param (E.nonNullable E.jsonb))
+    """
+    UPDATE keiro_snapshots ks
+    SET state = $2
+    FROM streams s
+    WHERE s.stream_id = ks.stream_id
+      AND s.stream_name = $1
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.jsonb))
     )
     D.noResult
 
-corruptSnapshotShapeStmt :: Statement (StreamName, Text) ()
+corruptSnapshotShapeStmt :: Statement (Text, Text) ()
 corruptSnapshotShapeStmt =
   preparable
-    "UPDATE keiro_snapshots ks \
-    \SET regfile_shape_hash = $2 \
-    \FROM streams s \
-    \WHERE s.stream_id = ks.stream_id \
-    \  AND s.stream_name = $1"
-    ( ((\(StreamName name, _) -> name) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, shapeHash) -> shapeHash) >$< E.param (E.nonNullable E.text))
+    """
+    UPDATE keiro_snapshots ks
+    SET regfile_shape_hash = $2
+    FROM streams s
+    WHERE s.stream_id = ks.stream_id
+      AND s.stream_name = $1
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
     )
     D.noResult

@@ -9,7 +9,7 @@ module Keiro.Snapshot.Schema
   )
 where
 
-import Data.Functor.Contravariant ((>$<))
+import Contravariant.Extras (contrazip3, contrazip5)
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -68,7 +68,9 @@ lookupSnapshot ::
   Eff es (Maybe SnapshotRow)
 lookupSnapshot streamId version shapeHash =
   runTransaction $
-    Tx.statement (streamId, version, shapeHash) lookupSnapshotStmt
+    Tx.statement
+      (streamIdToInt streamId, Prelude.fromIntegral version, shapeHash)
+      lookupSnapshotStmt
 
 writeSnapshotRow ::
   (Store :> es) =>
@@ -76,9 +78,9 @@ writeSnapshotRow ::
   Eff es ()
 writeSnapshotRow snapshot =
   runTransaction $
-    Tx.statement snapshot writeSnapshotStmt
+    Tx.statement (snapshotWriteParams snapshot) writeSnapshotStmt
 
-lookupSnapshotStmt :: Statement (StreamId, Int, Text) (Maybe SnapshotRow)
+lookupSnapshotStmt :: Statement (Int64, Int64, Text) (Maybe SnapshotRow)
 lookupSnapshotStmt =
   preparable
     """
@@ -90,13 +92,14 @@ lookupSnapshotStmt =
     ORDER BY stream_version DESC
     LIMIT 1
     """
-      ( ((streamIdToInt . fst3) >$< E.param (E.nonNullable E.int8))
-        <> ((Prelude.fromIntegral . snd3) >$< E.param (E.nonNullable E.int8))
-        <> (thd3 >$< E.param (E.nonNullable E.text))
+    ( contrazip3
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.text))
     )
     (D.rowMaybe snapshotRowDecoder)
 
-writeSnapshotStmt :: Statement SnapshotWrite ()
+writeSnapshotStmt :: Statement (Int64, Int64, Value, Int64, Text) ()
 writeSnapshotStmt =
   preparable
     """
@@ -112,11 +115,12 @@ writeSnapshotStmt =
           updated_at = now()
       WHERE keiro_snapshots.stream_version <= EXCLUDED.stream_version
     """
-    ( ((streamIdToInt . (^. #streamId)) >$< E.param (E.nonNullable E.int8))
-        <> ((streamVersionToInt . (^. #streamVersion)) >$< E.param (E.nonNullable E.int8))
-        <> ((^. #state) >$< E.param (E.nonNullable E.jsonb))
-        <> ((Prelude.fromIntegral . (^. #stateCodecVersion)) >$< E.param (E.nonNullable E.int8))
-        <> ((^. #regfileShapeHash) >$< E.param (E.nonNullable E.text))
+    ( contrazip5
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.jsonb))
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.text))
     )
     D.noResult
 
@@ -137,11 +141,11 @@ streamIdToInt (StreamId value) = value
 streamVersionToInt :: StreamVersion -> Int64
 streamVersionToInt (StreamVersion value) = value
 
-fst3 :: (a, b, c) -> a
-fst3 (a, _, _) = a
-
-snd3 :: (a, b, c) -> b
-snd3 (_, b, _) = b
-
-thd3 :: (a, b, c) -> c
-thd3 (_, _, c) = c
+snapshotWriteParams :: SnapshotWrite -> (Int64, Int64, Value, Int64, Text)
+snapshotWriteParams snapshot =
+  ( streamIdToInt (snapshot ^. #streamId)
+  , streamVersionToInt (snapshot ^. #streamVersion)
+  , snapshot ^. #state
+  , Prelude.fromIntegral (snapshot ^. #stateCodecVersion)
+  , snapshot ^. #regfileShapeHash
+  )

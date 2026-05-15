@@ -43,7 +43,7 @@ library
     build-depends:      aeson >= 2.2,
                         aeson-casing >= 0.2,
                         base >= 4.21 && < 5,
-                        contravariant >= 1.5,
+                        contravariant-extras >= 0.3,
                         effectful >= 2.6,
                         effectful-core >= 2.6,
                         generic-lens >= 2.2,
@@ -71,6 +71,7 @@ test-suite keiro-test
     ghc-options:        -threaded -rtsopts -with-rtsopts=-N
     build-depends:      base >= 4.21 && < 5,
                         aeson >= 2.2,
+                        contravariant-extras >= 0.3,
                         ephemeral-pg >= 0.2,
                         hasql >= 1.10,
                         hasql-pool >= 1.2,
