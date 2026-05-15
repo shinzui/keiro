@@ -43,7 +43,7 @@ Alternatives considered:
 | 11 | Define the EventStream contract and codec surface | docs/plans/11-define-the-eventstream-contract-and-codec-surface.md | EP-10 | None | Complete |
 | 12 | Implement the command cycle on kiroku and keiki | docs/plans/12-implement-the-command-cycle-on-kiroku-and-keiki.md | EP-10, EP-11 | None | Complete |
 | 13 | Add snapshots and accelerated hydration | docs/plans/13-add-snapshots-and-accelerated-hydration.md | EP-10, EP-11, EP-12 | EP-9 | Complete |
-| 14 | Ship read models and projection lifecycles | docs/plans/14-ship-read-models-and-projection-lifecycles.md | EP-10, EP-11, EP-12 | EP-13 | Not Started |
+| 14 | Ship read models and projection lifecycles | docs/plans/14-ship-read-models-and-projection-lifecycles.md | EP-10, EP-11, EP-12 | EP-13 | Complete |
 | 15 | Build process managers and timer workflows | docs/plans/15-build-process-managers-and-timer-workflows.md | EP-10, EP-11, EP-12 | EP-14 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled. Hard Deps and Soft Deps reference other rows by their `EP-N` prefix. EP-9 is the existing queued plan at `docs/plans/9-integrate-keiki-codec-json-into-keiro-snapshot-path.md`; it is listed only as a soft dependency because the upstream primitives have now landed locally, but the plan still contains useful usage guidance for snapshot integration.
@@ -95,8 +95,8 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
 - [x] EP-12: prove the command cycle against a real Postgres-backed kiroku store with a fixture transducer.
 - [x] EP-13: create `keiro_snapshots`, read/write snapshot functions, and fallback-to-full-replay hydration.
 - [x] EP-13: prove snapshot round trip and stale-snapshot fallback against real Postgres.
-- [ ] EP-14: implement inline, eventual, and position-wait read-model query modes plus projection idempotency helpers.
-- [ ] EP-14: prove read-after-write behavior for inline and async projections.
+- [x] EP-14: implement inline, eventual, and position-wait read-model query modes plus projection idempotency helpers.
+- [x] EP-14: prove read-after-write behavior for inline and async projections.
 - [ ] EP-15: implement process-manager state streams, deterministic emitted-command ids, durable timers, and the worker-facing API.
 - [ ] EP-15: prove a fixture process manager schedules a timer and emits an idempotent command after the timer fires.
 
@@ -112,6 +112,10 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
 - EP-11 found that a fatal unknown-event policy requires a finite known-type registry on `Codec e`; `eventType :: e -> Text` alone only classifies already-decoded values. `Keiro.Codec.Codec` now includes `eventTypes :: NonEmpty Text`, and `decodeRecorded` rejects unknown `Kiroku.Store.Types.EventType` values before payload decoding.
 
 - EP-13 found that kiroku's immutability trigger prevents direct updates to stored event payloads, so snapshot acceleration tests should not corrupt old events. The accepted test pattern uses a stricter compatible transducer that cannot full-replay the old events but can proceed from a compatible snapshot seed.
+
+- EP-14 found that the inline projection API needs decoded output events in addition to `AppendResult`. `Keiro.Command.runCommandWithSqlEvents` now exposes that event-aware continuation while preserving the existing `runCommandWithSql` wrapper.
+
+- EP-14 found that the current shibuya core handler boundary still cannot combine user SQL and subscription checkpoint advancement in one transaction. The v1 API therefore exposes at-least-once async projection helpers and tests the `source_event_id` idempotency pattern directly against kiroku recorded events.
 
 
 ## Decision Log
@@ -130,6 +134,10 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
 
 - Decision: Include a value-level `eventTypes :: NonEmpty Text` registry in the EP-11 `Codec e` contract.
   Rationale: EP-12's hydration path must reject recorded events with unknown type tags deterministically before attempting payload decoding. A small value-level registry preserves the research foundation's fatal-unknown-event policy without introducing a typeclass-based global registry.
+  Date: 2026-05-15.
+
+- Decision: Keep read-model modules directly importable instead of re-exporting them from `Keiro`.
+  Rationale: `ReadModel` and metadata records use the unprefixed `version` field required by the local record style, which collides with the existing top-level `Keiro.version` binding under broad re-export. Direct public modules avoid ambiguity without weakening the read-model API.
   Date: 2026-05-15.
 
 

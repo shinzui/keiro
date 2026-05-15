@@ -34,6 +34,10 @@ library
                         Keiro.Codec
                         Keiro.EventStream
                         Keiro.Prelude
+                        Keiro.Projection
+                        Keiro.ReadModel
+                        Keiro.ReadModel.Rebuild
+                        Keiro.ReadModel.Schema
                         Keiro.Snapshot
                         Keiro.Snapshot.Codec
                         Keiro.Snapshot.Policy

@@ -8,7 +8,7 @@ where
 import Data.Aeson (object, withObject, (.:))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
-import Contravariant.Extras (contrazip2)
+import Contravariant.Extras (contrazip2, contrazip4)
 import Data.IORef (atomicModifyIORef', newIORef)
 import Data.Text qualified as Text
 import Data.Vector qualified as Vector
@@ -39,7 +39,11 @@ import Keiki.Core
   )
 import Keiki.Core qualified as Keiki
 import Keiro
+import Keiro qualified as KeiroRoot
 import Keiro.Prelude
+import Keiro.Projection
+import Keiro.ReadModel
+import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Keiro.Stream qualified as Stream
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types
@@ -59,7 +63,7 @@ main :: IO ()
 main = hspec $ do
   describe "Keiro" $ do
     it "exposes the scaffold version" $
-      version `shouldBe` ("0.1.0.0" :: Text)
+      KeiroRoot.version `shouldBe` ("0.1.0.0" :: Text)
 
   describe "Keiro.Stream" $ do
     it "wraps and unwraps kiroku stream names" $ do
@@ -311,6 +315,115 @@ main = hspec $ do
         Right (Right commandResult) ->
           commandResult ^. #streamVersion `shouldBe` StreamVersion 3
         other -> expectationFailure ("expected truncation fallback, got " <> show other)
+
+  describe "Keiro.ReadModel" $ around withTestStore $ do
+    it "queries inline projection with Strong consistency" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction initializeCounterReadModelTable
+      let target = stream "read-model-inline" :: Stream CounterEventStream
+      result <- Store.runStoreIO storeHandle $
+        runCommandWithProjections
+          defaultRunCommandOptions
+          counterEventStream
+          target
+          (Add 5)
+          [counterInlineProjection]
+      case result of
+        Right (Right commandResult) ->
+          commandResult ^. #globalPosition `shouldSatisfy` isJust
+        other -> expectationFailure ("expected inline projection command, got " <> show other)
+      queryResult <- Store.runStoreIO storeHandle $
+        runQuery counterReadModel "inline"
+      queryResult `shouldBe` Right (Right 5)
+
+    it "waits for async projection cursor with PositionWait" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction initializeCounterReadModelTable
+      let target = stream "read-model-position-wait" :: Stream CounterEventStream
+      Right (Right commandResult) <- Store.runStoreIO storeHandle $
+        runCommandWithProjections
+          defaultRunCommandOptions
+          counterEventStream
+          target
+          (Add 3)
+          [counterInlineProjection]
+      globalPosition <- case commandResult ^. #globalPosition of
+        Just position -> pure position
+        Nothing -> expectationFailure "expected command global position" *> error "unreachable"
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.statement ("counter-read-model-sub", globalPositionToInt globalPosition) upsertSubscriptionCursorStmt
+      queryResult <- Store.runStoreIO storeHandle $
+        runQueryWith
+          (PositionWait (fastWaitOptions & #target .~ Just globalPosition))
+          counterReadModel
+          "inline"
+      queryResult `shouldBe` Right (Right 3)
+
+    it "times out when PositionWait target is not reached" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction initializeCounterReadModelTable
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.statement ("counter-read-model-sub", 1) upsertSubscriptionCursorStmt
+      queryResult <- Store.runStoreIO storeHandle $
+        runQueryWith
+          (PositionWait (fastWaitOptions & #target .~ Just (GlobalPosition 5)))
+          counterReadModel
+          "timeout"
+      queryResult
+        `shouldBe` Right
+          (Left (ReadModelWaitTimeout "counter-read-model" (GlobalPosition 5) (GlobalPosition 1)))
+
+    it "rejects stale read-model schema" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction initializeCounterReadModelTable
+      Right (Right 0) <- Store.runStoreIO storeHandle $
+        runQuery counterReadModel "stale"
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.statement ("counter-read-model", 99) updateReadModelVersionStmt
+      queryResult <- Store.runStoreIO storeHandle $
+        runQuery counterReadModel "stale"
+      queryResult
+        `shouldBe` Right
+          (Left (ReadModelStaleSchema "counter-read-model" 1 99 "counter-read-model-v1" "counter-read-model-v1"))
+
+    it "ignores duplicate async event by source_event_id" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction initializeCounterReadModelTable
+      let target = stream "read-model-async-idempotent" :: Stream CounterEventStream
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions counterEventStream target (Add 7)
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "read-model-async-idempotent") (StreamVersion 0) 10
+      event <- case Vector.toList recorded of
+        [onlyEvent] -> pure onlyEvent
+        other -> expectationFailure ("expected one event, got " <> show other) *> error "unreachable"
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $ do
+          applyAsyncProjection counterAsyncProjection event
+          applyAsyncProjection counterAsyncProjection event
+      queryResult <- Store.runStoreIO storeHandle $
+        runQuery counterReadModel "async-idempotent"
+      queryResult `shouldBe` Right (Right 7)
+
+    it "tracks rebuild state transitions" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
+      Right rebuilding <- Store.runStoreIO storeHandle $
+        Rebuild.rebuild counterReadModel
+      rebuilding ^. #status `shouldBe` Rebuilding
+      Right live <- Store.runStoreIO storeHandle $
+        Rebuild.promote counterReadModel
+      live ^. #status `shouldBe` Live
+      Right abandoned <- Store.runStoreIO storeHandle $
+        Rebuild.abandonRebuild counterReadModel
+      abandoned ^. #status `shouldBe` Abandoned
 
 data OrderStream
 
@@ -608,3 +721,127 @@ corruptSnapshotShapeStmt =
         (E.param (E.nonNullable E.text))
     )
     D.noResult
+
+counterReadModel :: ReadModel Text Int
+counterReadModel = ReadModel
+  { name = "counter-read-model"
+  , tableName = "counter_read_model"
+  , subscriptionName = "counter-read-model-sub"
+  , version = 1
+  , shapeHash = "counter-read-model-v1"
+  , defaultConsistency = Strong
+  , query = \modelId -> Tx.statement modelId selectCounterReadModelStmt
+  }
+
+counterInlineProjection :: InlineProjection CounterEvent
+counterInlineProjection = InlineProjection
+  { name = "counter-inline-projection"
+  , apply = \event appendResult ->
+      case event of
+        CounterAdded amount ->
+          Tx.statement
+            ( "inline"
+            , Prelude.fromIntegral amount
+            , globalPositionToInt (appendResult ^. #globalPosition)
+            , Nothing
+            )
+            upsertCounterReadModelStmt
+  }
+
+counterAsyncProjection :: AsyncProjection
+counterAsyncProjection = AsyncProjection
+  { name = "counter-async-projection"
+  , subscriptionName = "counter-read-model-sub"
+  , applyRecorded = \recorded ->
+      case decodeRecorded counterCodec recorded of
+        Right (CounterAdded amount) ->
+          Tx.statement
+            ( "async-idempotent"
+            , Prelude.fromIntegral amount
+            , globalPositionToInt (recorded ^. #globalPosition)
+            , Just (eventIdToUuid (recorded ^. #eventId))
+            )
+            upsertCounterReadModelStmt
+        Left _ -> pure ()
+  , idempotencyKey = \recorded -> recorded ^. #eventId
+  }
+
+fastWaitOptions :: PositionWaitOptions
+fastWaitOptions = PositionWaitOptions
+  { target = Nothing
+  , timeoutMicros = 50000
+  , pollMicros = 5000
+  }
+
+initializeCounterReadModelTable :: Tx.Transaction ()
+initializeCounterReadModelTable =
+  Tx.sql
+    """
+    CREATE TABLE IF NOT EXISTS counter_read_model (
+      model_id TEXT PRIMARY KEY,
+      amount BIGINT NOT NULL,
+      last_seen BIGINT NOT NULL,
+      source_event_id UUID UNIQUE
+    )
+    """
+
+upsertCounterReadModelStmt :: Statement (Text, Int64, Int64, Maybe UUID) ()
+upsertCounterReadModelStmt =
+  preparable
+    """
+    INSERT INTO counter_read_model (model_id, amount, last_seen, source_event_id)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (source_event_id) DO NOTHING
+    """
+    ( contrazip4
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nullable E.uuid))
+    )
+    D.noResult
+
+selectCounterReadModelStmt :: Statement Text Int
+selectCounterReadModelStmt =
+  preparable
+    """
+    SELECT COALESCE((SELECT amount FROM counter_read_model WHERE model_id = $1), 0)
+    """
+    (E.param (E.nonNullable E.text))
+    (D.singleRow (Prelude.fromIntegral <$> D.column (D.nonNullable D.int8)))
+
+upsertSubscriptionCursorStmt :: Statement (Text, Int64) ()
+upsertSubscriptionCursorStmt =
+  preparable
+    """
+    INSERT INTO subscriptions (subscription_name, stream_name, last_seen)
+    VALUES ($1, '$all', $2)
+    ON CONFLICT (subscription_name) DO UPDATE
+      SET last_seen = EXCLUDED.last_seen,
+          updated_at = now()
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int8))
+    )
+    D.noResult
+
+updateReadModelVersionStmt :: Statement (Text, Int64) ()
+updateReadModelVersionStmt =
+  preparable
+    """
+    UPDATE keiro_read_models
+    SET version = $2
+    WHERE name = $1
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int8))
+    )
+    D.noResult
+
+globalPositionToInt :: GlobalPosition -> Int64
+globalPositionToInt (GlobalPosition value) = value
+
+eventIdToUuid :: EventId -> UUID
+eventIdToUuid (EventId value) = value

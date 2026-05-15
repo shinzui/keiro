@@ -22,17 +22,19 @@ The behavior is visible in tests: an inline projection row is queryable immediat
 
 ## Progress
 
-- [ ] M1 — Add `Keiro.ReadModel` with `ReadModel q r`, `ConsistencyMode`, `runQuery`, `runQueryWith`, and `waitFor`.
-- [ ] M2 — Add `keiro_read_models` metadata schema and stale-schema checks.
-- [ ] M3 — Add inline projection registration that runs through EP-12 `runCommandWithSql`.
-- [ ] M4 — Add async projection helpers with at-least-once semantics and idempotency-token guidance.
-- [ ] M5 — Add rebuild protocol skeleton in `Keiro.ReadModel.Rebuild`.
-- [ ] M6 — Add integration tests for inline, eventual, position-wait success, position-wait timeout, stale schema, and idempotent async writes.
+- [x] M1 — Add `Keiro.ReadModel` with `ReadModel q r`, `ConsistencyMode`, `runQuery`, `runQueryWith`, and `waitFor`. Completed 2026-05-15.
+- [x] M2 — Add `keiro_read_models` metadata schema and stale-schema checks. Completed 2026-05-15.
+- [x] M3 — Add inline projection registration that runs through EP-12 `runCommandWithSql`. Completed 2026-05-15.
+- [x] M4 — Add async projection helpers with at-least-once semantics and idempotency-token guidance. Completed 2026-05-15.
+- [x] M5 — Add rebuild protocol skeleton in `Keiro.ReadModel.Rebuild`. Completed 2026-05-15.
+- [x] M6 — Add integration tests for inline, eventual, position-wait success, position-wait timeout, stale schema, and idempotent async writes. Completed 2026-05-15.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-05-15: EP-14 needed a small `Keiro.Command.runCommandWithSqlEvents` helper so inline projection handlers can receive decoded output events as well as the `AppendResult`. The existing `runCommandWithSql` API remains as the append-result-only wrapper.
+
+- 2026-05-15: Shibuya's core `Adapter`/`Handler` API remains independent of kiroku subscription checkpoint transactions, so the v1 async projection API is intentionally a direct `RecordedEvent -> Tx.Transaction ()` boundary plus idempotency key guidance. The integration test drives duplicate delivery directly through kiroku events instead of claiming exactly-once shibuya handling.
 
 
 ## Decision Log
@@ -45,10 +47,18 @@ The behavior is visible in tests: an inline projection row is queryable immediat
   Rationale: Read models are user-queryable data. Serving rows whose shape no longer matches the compiled query type is worse than failing early.
   Date: 2026-05-15.
 
+- Decision: Keep `Keiro.ReadModel` as a direct public module rather than re-exporting it from the top-level `Keiro` module.
+  Rationale: `ReadModel` and `ReadModelMetadata` both have a `version` field, which collides with the existing top-level `Keiro.version` binding under broad re-export. Direct module imports preserve the public API without creating ambiguous imports for existing users.
+  Date: 2026-05-15.
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-14 shipped the v1 read side. The library now exposes `Keiro.ReadModel`, `Keiro.Projection`, and `Keiro.ReadModel.Rebuild`, plus Cabal exports for those modules. `Keiro.ReadModel.Schema.initializeReadModelSchema` creates the `keiro_read_models` metadata table, query execution registers live metadata on first use, and stale version or shape-hash metadata returns `ReadModelStaleSchema`.
+
+Inline projections run through `runCommandWithProjections`, which delegates to the same `runTransactionAppending` path as EP-12's `runCommandWithSql`, so projection SQL rolls back with the event append. Async projections are at-least-once helpers over `RecordedEvent` and `Tx.Transaction`; the test suite proves the `source_event_id UUID UNIQUE` idempotency pattern by applying the same recorded event twice and observing one read-model update.
+
+Validation passed with `cabal test all` on 2026-05-15. The focused keiro output includes the new `Keiro.ReadModel` examples for Strong inline query visibility, PositionWait success, PositionWait timeout, stale schema rejection, duplicate async delivery, and rebuild state transitions.
 
 
 ## Context and Orientation

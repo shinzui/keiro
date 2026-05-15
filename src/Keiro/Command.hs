@@ -5,6 +5,7 @@ module Keiro.Command
   , defaultRunCommandOptions
   , runCommand
   , runCommandWithSql
+  , runCommandWithSqlEvents
   )
 where
 
@@ -229,6 +230,18 @@ runCommandWithSql ::
   (AppendResult -> Tx.Transaction a) ->
   Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co), Maybe a))
 runCommandWithSql options eventStream targetStream command afterAppend =
+  runCommandWithSqlEvents options eventStream targetStream command (\_ appendResult -> afterAppend appendResult)
+
+runCommandWithSqlEvents ::
+  forall phi rs s ci co a es.
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci)) =>
+  RunCommandOptions ->
+  EventStream phi rs s ci co ->
+  Stream (EventStream phi rs s ci co) ->
+  ci ->
+  ([co] -> AppendResult -> Tx.Transaction a) ->
+  Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co), Maybe a))
+runCommandWithSqlEvents options eventStream targetStream command afterAppend =
   attempt (options ^. #retryLimit)
   where
     attempt remaining = do
@@ -250,7 +263,7 @@ runCommandWithSql options eventStream targetStream command afterAppend =
           (expectedVersion (current ^. #streamVersion))
           encoded
           ( \appendResult -> do
-              userValue <- afterAppend appendResult
+              userValue <- afterAppend events appendResult
               pure (appendResult, userValue)
           )
       case outcome of
