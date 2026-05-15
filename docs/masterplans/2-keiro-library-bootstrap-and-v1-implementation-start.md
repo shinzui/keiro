@@ -41,7 +41,7 @@ Alternatives considered:
 |---|-------|------|-----------|-----------|--------|
 | 10 | Bootstrap the keiro Haskell package | docs/plans/10-bootstrap-the-keiro-haskell-package.md | None | None | Complete |
 | 11 | Define the EventStream contract and codec surface | docs/plans/11-define-the-eventstream-contract-and-codec-surface.md | EP-10 | None | Complete |
-| 12 | Implement the command cycle on kiroku and keiki | docs/plans/12-implement-the-command-cycle-on-kiroku-and-keiki.md | EP-10, EP-11 | None | In Progress |
+| 12 | Implement the command cycle on kiroku and keiki | docs/plans/12-implement-the-command-cycle-on-kiroku-and-keiki.md | EP-10, EP-11 | None | Complete |
 | 13 | Add snapshots and accelerated hydration | docs/plans/13-add-snapshots-and-accelerated-hydration.md | EP-10, EP-11, EP-12 | EP-9 | Not Started |
 | 14 | Ship read models and projection lifecycles | docs/plans/14-ship-read-models-and-projection-lifecycles.md | EP-10, EP-11, EP-12 | EP-13 | Not Started |
 | 15 | Build process managers and timer workflows | docs/plans/15-build-process-managers-and-timer-workflows.md | EP-10, EP-11, EP-12 | EP-14 | Not Started |
@@ -91,8 +91,8 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
 - [x] EP-10: prove `cabal build all`, `cabal test all`, and existing docs build commands work from the repository root.
 - [x] EP-11: implement `Keiro.Stream`, `Keiro.Codec`, `Keiro.EventStream`, snapshot policy placeholders, and public re-exports.
 - [x] EP-11: add pure unit tests for stream-name conversion, codec round trips, upcaster ordering, and EventStream construction.
-- [ ] EP-12: implement hydration, `runCommand`, retry-on-conflict, idempotent event ids, and `runCommandWithSql`.
-- [ ] EP-12: prove the command cycle against a real Postgres-backed kiroku store with a fixture transducer.
+- [x] EP-12: implement hydration, `runCommand`, retry-on-conflict, idempotent event ids, and `runCommandWithSql`.
+- [x] EP-12: prove the command cycle against a real Postgres-backed kiroku store with a fixture transducer.
 - [ ] EP-13: create `keiro_snapshots`, read/write snapshot functions, and fallback-to-full-replay hydration.
 - [ ] EP-13: prove snapshot round trip and stale-snapshot fallback against real Postgres.
 - [ ] EP-14: implement inline, eventual, and position-wait read-model query modes plus projection idempotency helpers.

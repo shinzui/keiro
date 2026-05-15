@@ -28,6 +28,7 @@ import Kiroku.Store.Transaction (runTransactionAppending)
 import Kiroku.Store.Types
   ( AppendResult
   , EventData
+  , EventId
   , ExpectedVersion (..)
   , GlobalPosition
   , RecordedEvent
@@ -56,13 +57,17 @@ data CommandError
 data RunCommandOptions = RunCommandOptions
   { retryLimit :: !Int
   , pageSize :: !Int32
+  , eventIds :: ![EventId]
+  , beforeAppend :: !(IO ())
   }
-  deriving stock (Generic, Eq, Show)
+  deriving stock (Generic)
 
 defaultRunCommandOptions :: RunCommandOptions
 defaultRunCommandOptions = RunCommandOptions
   { retryLimit = 3
   , pageSize = 256
+  , eventIds = []
+  , beforeAppend = pure ()
   }
 
 data Hydrated rs s = Hydrated
@@ -113,7 +118,7 @@ hydrate options eventStream targetStream =
 
 runCommand ::
   forall phi rs s ci co es.
-  (HasCallStack, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci)) =>
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci)) =>
   RunCommandOptions ->
   EventStream phi rs s ci co ->
   Stream (EventStream phi rs s ci co) ->
@@ -133,7 +138,9 @@ runCommand options eventStream targetStream command =
             Right events ->
               case encodeEvents (eventStream ^. #eventCodec) events of
                 Left err -> pure (Left err)
-                Right encoded -> do
+                Right encoded0 -> do
+                  let encoded = assignEventIds (options ^. #eventIds) encoded0
+                  liftIO (options ^. #beforeAppend)
                   appended <- tryError @StoreError $
                     appendToStream
                       ((eventStream ^. #streamName) targetStream)
@@ -175,7 +182,9 @@ runCommandWithSql options eventStream targetStream command afterAppend =
             Right events ->
               case encodeEvents (eventStream ^. #eventCodec) events of
                 Left err -> pure (Left err)
-                Right encoded -> do
+                Right encoded0 -> do
+                  let encoded = assignEventIds (options ^. #eventIds) encoded0
+                  liftIO (options ^. #beforeAppend)
                   outcome <- tryError @StoreError $
                     runTransactionAppending
                       ((eventStream ^. #streamName) targetStream)
@@ -217,6 +226,12 @@ evaluateCommand eventStream current command =
 
 encodeEvents :: Codec co -> [co] -> Either CommandError [EventData]
 encodeEvents codec = Prelude.mapM (mapLeft EncodeFailed . encodeForAppend codec)
+
+assignEventIds :: [EventId] -> [EventData] -> [EventData]
+assignEventIds [] events = events
+assignEventIds _ [] = []
+assignEventIds (supplied : suppliedRest) (event : eventRest) =
+  (event & #eventId .~ Just supplied) : assignEventIds suppliedRest eventRest
 
 expectedVersion :: StreamVersion -> ExpectedVersion
 expectedVersion (StreamVersion 0) = NoStream

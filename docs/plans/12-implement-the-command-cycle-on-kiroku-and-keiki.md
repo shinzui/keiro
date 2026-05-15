@@ -24,9 +24,9 @@ The behavior is visible in an integration test: a fixture counter or order strea
 
 - [x] M1 — Implement full hydration from kiroku using `readStreamForwardStream` and `Codec.decodeRecorded`. Completed 2026-05-15.
 - [x] M2 — Implement pure command evaluation against `Keiki.Core.step` or the current keiki output API. Completed 2026-05-15.
-- [ ] M3 — Implement `runCommand`, expected-version selection, conflict retry, empty-output behavior, and idempotent event ids. In progress 2026-05-15; expected-version selection, conflict retry, and empty-output no-op are implemented, while caller-stable event ids still need an explicit command-id/input in the public API.
+- [x] M3 — Implement `runCommand`, expected-version selection, conflict retry, empty-output behavior, and idempotent event ids. Completed 2026-05-15; callers can provide stable `EventId`s in `RunCommandOptions`, and optimistic conflicts retry by rehydrating before the next append attempt.
 - [x] M4 — Implement `runCommandWithSql` on `Kiroku.Store.Transaction.runTransactionAppending` for inline projection and outbox consumers. Completed 2026-05-15; the wrapper is implemented against `runTransactionAppending` and the keiro-owned Postgres test proves a condemned transaction rolls back the event append.
-- [ ] M5 — Add real Postgres-backed integration tests covering create, update, decode failure, conflict retry, and transactional SQL rollback. In progress 2026-05-15; create, update/rehydration, decode failure, and transactional SQL rollback are covered. Forced conflict retry still needs a deterministic hook or concurrency harness.
+- [x] M5 — Add real Postgres-backed integration tests covering create, update, decode failure, conflict retry, and transactional SQL rollback. Completed 2026-05-15; `keiro-test` now covers create, update/rehydration, supplied event ids, forced optimistic conflict retry, decode failure, and transactional SQL rollback against ephemeral Postgres.
 - [x] Validation checkpoint — `cabal build all`, `cabal test keiro-test`, and `cabal test all` pass after adding the initial `Keiro.Command` API. Completed 2026-05-15.
 - [x] Validation checkpoint — `cabal test keiro-test` passes with a threaded RTS-linked keiro test executable and real ephemeral-Postgres command-cycle coverage. Completed 2026-05-15.
 
@@ -38,6 +38,8 @@ The behavior is visible in an integration test: a fixture counter or order strea
 - Exporting a `CommandResult.stream` selector collided with the existing public `Keiro.stream` smart constructor when users import `Keiro`. The field was renamed to `target` so the aggregate stream constructor remains unambiguous.
 
 - The keiro test executable must link against the threaded RTS because `Kiroku.Store.withStore` starts notifier and publisher infrastructure that calls `registerDelay`. Adding `ghc-options: -threaded -rtsopts -with-rtsopts=-N` to the `keiro-test` stanza makes the built binary report `RTS way = rts_thr`, matching `kiroku-store-test`.
+
+- A deterministic optimistic-conflict test needs a hook between hydration and append. `RunCommandOptions.beforeAppend` defaults to `pure ()`, but tests can use it to insert the winning event exactly once before the command's first append attempt.
 
 
 ## Decision Log
@@ -58,10 +60,14 @@ The behavior is visible in an integration test: a fixture counter or order strea
   Rationale: The current suite is small, and sharing one threaded `hspec` executable keeps the package bootstrap simple while still proving the event-store path with ephemeral Postgres.
   Date: 2026-05-15.
 
+- Decision: Put command-batch idempotency and conflict-test coordination in `RunCommandOptions`.
+  Rationale: `eventIds` keeps the default store-generated UUIDv7 path unchanged while letting callers make a command batch retryable with stable event ids. `beforeAppend` gives tests and advanced callers a narrow pre-append coordination hook without changing the core `runCommand` arguments.
+  Date: 2026-05-15.
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-12 delivered the first production-shaped command path: full stream hydration from kiroku, keiki replay and command evaluation, optimistic append with retries, caller-supplied idempotent event ids, and an append-plus-SQL transaction wrapper. The acceptance path is covered by real ephemeral-Postgres integration tests in `keiro-test`.
 
 
 ## Context and Orientation

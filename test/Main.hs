@@ -6,6 +6,7 @@ where
 import Data.Aeson (object, withObject, (.:))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
+import Data.IORef (atomicModifyIORef', newIORef)
 import Data.Text qualified as Text
 import Data.Vector qualified as Vector
 import Data.UUID (UUID, fromString)
@@ -134,6 +135,49 @@ main = hspec $ do
         Store.readStreamForward (StreamName "counter-command-update") (StreamVersion 0) 10
       traverse (decodeRecorded counterCodec) (Vector.toList recorded)
         `shouldBe` Right [CounterAdded 2, CounterAdded 3]
+
+    it "uses caller-supplied event ids for idempotent command batches" $ \storeHandle -> do
+      let target = stream "counter-command-event-id" :: Stream CounterEventStream
+          supplied = EventId sampleUuid2
+          options = defaultRunCommandOptions & #eventIds .~ [supplied]
+      result <- Store.runStoreIO storeHandle $
+        runCommand options counterEventStream target (Add 7)
+      case result of
+        Right (Right commandResult) ->
+          commandResult ^. #streamVersion `shouldBe` StreamVersion 1
+        other -> expectationFailure ("expected successful command, got " <> show other)
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "counter-command-event-id") (StreamVersion 0) 10
+      fmap (^. #eventId) (Vector.toList recorded) `shouldBe` [supplied]
+
+    it "retries an optimistic conflict after rehydrating the winning event" $ \storeHandle -> do
+      conflictInserted <- newIORef False
+      let target = stream "counter-command-conflict" :: Stream CounterEventStream
+          conflictStreamName = StreamName "counter-command-conflict"
+          insertConflict = do
+            shouldInsert <- atomicModifyIORef' conflictInserted $ \alreadyInserted ->
+              if alreadyInserted
+                then (True, False)
+                else (True, True)
+            when shouldInsert $ do
+              encoded <- shouldBeRight (encodeForAppend counterCodec (CounterAdded 10))
+              outcome <- Store.runStoreIO storeHandle $
+                Store.appendToStream conflictStreamName NoStream [encoded]
+              case outcome of
+                Right _ -> pure ()
+                Left err -> expectationFailure ("failed to insert conflict event: " <> show err)
+          options = defaultRunCommandOptions & #beforeAppend .~ insertConflict
+      result <- Store.runStoreIO storeHandle $
+        runCommand options counterEventStream target (Add 2)
+      case result of
+        Right (Right commandResult) -> do
+          commandResult ^. #streamVersion `shouldBe` StreamVersion 2
+          commandResult ^. #eventsAppended `shouldBe` 1
+        other -> expectationFailure ("expected retry to succeed, got " <> show other)
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward conflictStreamName (StreamVersion 0) 10
+      traverse (decodeRecorded counterCodec) (Vector.toList recorded)
+        `shouldBe` Right [CounterAdded 10, CounterAdded 2]
 
     it "surfaces decode failure during hydration" $ \storeHandle -> do
       Right _ <- Store.runStoreIO storeHandle $
@@ -347,6 +391,12 @@ recordedFrom event = RecordedEvent
 sampleUuid :: UUID
 sampleUuid =
   case fromString "018f0f18-17aa-7000-8000-000000000001" of
+    Just uuid -> uuid
+    Nothing -> error "invalid test UUID"
+
+sampleUuid2 :: UUID
+sampleUuid2 =
+  case fromString "018f0f18-17aa-7000-8000-000000000002" of
     Just uuid -> uuid
     Nothing -> error "invalid test UUID"
 
