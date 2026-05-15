@@ -1,5 +1,6 @@
 module Keiro
   ( version
+  , module Keiro.Command
   , module Keiro.Codec
   , EventStream (..)
   , SnapshotPolicy (..)
@@ -8,6 +9,7 @@ module Keiro
   )
 where
 
+import Keiro.Command
 import Keiro.Codec
 import Keiro.EventStream
 import Keiro.Prelude

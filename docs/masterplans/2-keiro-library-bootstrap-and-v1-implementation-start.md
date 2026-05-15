@@ -41,7 +41,7 @@ Alternatives considered:
 |---|-------|------|-----------|-----------|--------|
 | 10 | Bootstrap the keiro Haskell package | docs/plans/10-bootstrap-the-keiro-haskell-package.md | None | None | Complete |
 | 11 | Define the EventStream contract and codec surface | docs/plans/11-define-the-eventstream-contract-and-codec-surface.md | EP-10 | None | Complete |
-| 12 | Implement the command cycle on kiroku and keiki | docs/plans/12-implement-the-command-cycle-on-kiroku-and-keiki.md | EP-10, EP-11 | None | Not Started |
+| 12 | Implement the command cycle on kiroku and keiki | docs/plans/12-implement-the-command-cycle-on-kiroku-and-keiki.md | EP-10, EP-11 | None | In Progress |
 | 13 | Add snapshots and accelerated hydration | docs/plans/13-add-snapshots-and-accelerated-hydration.md | EP-10, EP-11, EP-12 | EP-9 | Not Started |
 | 14 | Ship read models and projection lifecycles | docs/plans/14-ship-read-models-and-projection-lifecycles.md | EP-10, EP-11, EP-12 | EP-13 | Not Started |
 | 15 | Build process managers and timer workflows | docs/plans/15-build-process-managers-and-timer-workflows.md | EP-10, EP-11, EP-12 | EP-14 | Not Started |

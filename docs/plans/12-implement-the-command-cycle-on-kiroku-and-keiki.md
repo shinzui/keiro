@@ -22,16 +22,19 @@ The behavior is visible in an integration test: a fixture counter or order strea
 
 ## Progress
 
-- [ ] M1 — Implement full hydration from kiroku using `readStreamForwardStream` and `Codec.decodeRecorded`.
-- [ ] M2 — Implement pure command evaluation against `Keiki.Core.step` or the current keiki output API.
-- [ ] M3 — Implement `runCommand`, expected-version selection, conflict retry, empty-output behavior, and idempotent event ids.
-- [ ] M4 — Implement `runCommandWithSql` on `Kiroku.Store.Transaction.runTransactionAppending` for inline projection and outbox consumers.
+- [x] M1 — Implement full hydration from kiroku using `readStreamForwardStream` and `Codec.decodeRecorded`. Completed 2026-05-15.
+- [x] M2 — Implement pure command evaluation against `Keiki.Core.step` or the current keiki output API. Completed 2026-05-15.
+- [ ] M3 — Implement `runCommand`, expected-version selection, conflict retry, empty-output behavior, and idempotent event ids. In progress 2026-05-15; expected-version selection, conflict retry, and empty-output no-op are implemented, while caller-stable event ids still need an explicit command-id/input in the public API.
+- [ ] M4 — Implement `runCommandWithSql` on `Kiroku.Store.Transaction.runTransactionAppending` for inline projection and outbox consumers. In progress 2026-05-15; the wrapper is implemented against `runTransactionAppending`, but rollback proof is still pending integration tests.
 - [ ] M5 — Add real Postgres-backed integration tests covering create, update, decode failure, conflict retry, and transactional SQL rollback.
+- [x] Validation checkpoint — `cabal build all`, `cabal test keiro-test`, and `cabal test all` pass after adding the initial `Keiro.Command` API. Completed 2026-05-15.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Kiroku generates UUIDv7s for `EventData.eventId = Nothing`, but keiro currently has no command id or idempotency key in `runCommand`. EP-12 can retry optimistic conflicts by rehydrating, but fully idempotent caller-stable event ids require either a command-id option or a deterministic event-id callback in `RunCommandOptions`.
+
+- Exporting a `CommandResult.stream` selector collided with the existing public `Keiro.stream` smart constructor when users import `Keiro`. The field was renamed to `target` so the aggregate stream constructor remains unambiguous.
 
 
 ## Decision Log
@@ -42,6 +45,10 @@ The behavior is visible in an integration test: a fixture counter or order strea
 
 - Decision: Keep snapshots out of the first hydration implementation.
   Rationale: EP-13 must prove snapshots are advisory by wrapping a correct full-replay path. EP-12 owns that baseline.
+  Date: 2026-05-15.
+
+- Decision: Start `CommandResult.globalPosition` as `Maybe GlobalPosition`.
+  Rationale: A valid command can emit no event. In that case keiro must not call `appendToStream []`, and there is no new global event-store position to report.
   Date: 2026-05-15.
 
 
