@@ -21,3 +21,11 @@ website-linkcheck:
     node site/check-links.mjs {{site}}
 
 website-verify: install website-build website-linkcheck
+
+haskell-build:
+    cabal build all
+
+haskell-test:
+    cabal test keiro-test
+
+haskell-verify: haskell-build haskell-test website-verify

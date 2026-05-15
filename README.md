@@ -5,12 +5,11 @@ a subscription engine into a single production-quality framework for **event
 sourcing and workflow orchestration** — with an upgrade path to durable
 execution.
 
-> **⚠️ Research phase**
+> **⚠️ Implementation starting**
 >
-> keiro is in design. There is no Haskell source yet. The current contents
-> of this repository are the research surveys, the MasterPlan that
-> decomposes the design effort, and the six child ExecPlans that produce
-> the design documents and validating spikes. See [Status](#status) below.
+> keiro now has a minimal Haskell library scaffold. The v1 event-sourcing
+> API is being implemented through the implementation MasterPlan. See
+> [Status](#status) below.
 
 ## The name
 
@@ -79,21 +78,25 @@ substrate.
 
 This repository currently contains:
 
+- **A minimal Haskell package scaffold** with `keiro.cabal`, `cabal.project`,
+  `src/Keiro.hs`, `src/Keiro/Prelude.hs`, and a smoke test. Run
+  `cabal build all`, `cabal test all`, or `just haskell-verify` from the
+  repository root.
 - **Five current-state surveys** covering the dependencies and prior art.
   Start at [`docs/research/00-overview.md`](docs/research/00-overview.md).
-- **One MasterPlan**,
+- **The completed research MasterPlan**,
   [`docs/masterplans/1-keiro-research-foundation.md`](docs/masterplans/1-keiro-research-foundation.md),
   decomposing the research into six child plans (command cycle, codecs,
   subscriptions/projections/process managers, snapshots, workflow roadmap,
   upstream gaps).
-- **Six child ExecPlans** under [`docs/plans/`](docs/plans/).
+- **The v1 implementation MasterPlan**,
+  [`docs/masterplans/2-keiro-library-bootstrap-and-v1-implementation-start.md`](docs/masterplans/2-keiro-library-bootstrap-and-v1-implementation-start.md),
+  with child ExecPlans EP-10 through EP-15 under [`docs/plans/`](docs/plans/).
 
-When the MasterPlan completes, three of the six child plans will have
-landed working Haskell spikes under `spikes/` validating the design; the
-six design documents (`docs/research/06-…` through `11-…`) will fix the
-contracts; and the upstream-roadmap document will hand kiroku and keiki a
-prioritized backlog to develop in parallel. After that, a separate
-implementation MasterPlan will ship the production keiro library.
+The implementation MasterPlan is now the active path for shipping the
+production keiro library. EP-10 owns the scaffold; later plans add the
+typed event-stream contract, command cycle, snapshots, read models,
+process managers, and durable timers.
 
 ## License
 
