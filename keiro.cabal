@@ -34,6 +34,7 @@ library
                         Keiro.Codec
                         Keiro.EventStream
                         Keiro.Prelude
+                        Keiro.ProcessManager
                         Keiro.Projection
                         Keiro.ReadModel
                         Keiro.ReadModel.Rebuild
@@ -43,6 +44,9 @@ library
                         Keiro.Snapshot.Policy
                         Keiro.Snapshot.Schema
                         Keiro.Stream
+                        Keiro.Timer
+                        Keiro.Timer.Schema
+                        Keiro.Timer.Types
     hs-source-dirs:     src
     build-depends:      aeson >= 2.2,
                         aeson-casing >= 0.2,

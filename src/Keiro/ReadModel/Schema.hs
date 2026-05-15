@@ -17,7 +17,7 @@ import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
-import Hasql.Transaction qualified as Tx
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Keiro.Prelude
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)

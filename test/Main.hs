@@ -19,7 +19,7 @@ import EphemeralPg qualified as Pg
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
-import Hasql.Transaction qualified as Tx
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Keiki.Core
   ( Edge (..)
   , HsPred (..)
@@ -42,9 +42,11 @@ import Keiro
 import Keiro qualified as KeiroRoot
 import Keiro.Prelude
 import Keiro.Projection
+import Keiro.ProcessManager
 import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Keiro.Stream qualified as Stream
+import Keiro.Timer
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types
   ( EventId (..)
@@ -425,6 +427,90 @@ main = hspec $ do
         Rebuild.abandonRebuild counterReadModel
       abandoned ^. #status `shouldBe` Abandoned
 
+  describe "Keiro.ProcessManager" $ around withTestStore $ do
+    it "advances manager state, emits a deterministic target command once, and schedules a timer" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeTimerSchema
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+      result <- Store.runStoreIO storeHandle $
+        runProcessManagerOnce defaultRunCommandOptions counterProcessManager sourceEvent (CounterAdded 9)
+      case result of
+        Right (Right pmResult) -> do
+          case pmResult ^. #managerResult of
+            PMStateAppended managerResult ->
+              managerResult ^. #streamVersion `shouldBe` StreamVersion 1
+            other -> expectationFailure ("expected appended manager state, got " <> show other)
+          case pmResult ^. #commandResults of
+            [PMCommandAppended commandResult] ->
+              commandResult ^. #eventsAppended `shouldBe` 1
+            other -> expectationFailure ("expected one emitted command, got " <> show other)
+          pmResult ^. #timersScheduled `shouldBe` 1
+        other -> expectationFailure ("expected process-manager success, got " <> show other)
+      Right managerEvents <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "pm-counter-order-1") (StreamVersion 0) 10
+      Right targetEvents <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "pm-target-order-1") (StreamVersion 0) 10
+      Vector.length managerEvents `shouldBe` 1
+      Vector.length targetEvents `shouldBe` 1
+      timer <- Store.runStoreIO storeHandle $
+        claimDueTimer dueTimerTime
+      case timer of
+        Right (Just row) -> do
+          row ^. #processManagerName `shouldBe` "counter-pm"
+          row ^. #correlationId `shouldBe` "order-1"
+        other -> expectationFailure ("expected scheduled timer row, got " <> show other)
+
+    it "treats duplicate input delivery as idempotent state and command dispatch" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeTimerSchema
+      let sourceEvent = recordedFromEventId (EventId sampleUuid2) (CounterAdded 4)
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runProcessManagerOnce defaultRunCommandOptions counterProcessManager sourceEvent (CounterAdded 4)
+      duplicate <- Store.runStoreIO storeHandle $
+        runProcessManagerOnce defaultRunCommandOptions counterProcessManager sourceEvent (CounterAdded 4)
+      case duplicate of
+        Right (Right pmResult) -> do
+          pmResult ^. #managerResult `shouldSatisfy` \case
+            PMStateDuplicate{} -> True
+            _ -> False
+          pmResult ^. #commandResults `shouldSatisfy` \case
+            [PMCommandDuplicate{}] -> True
+            _ -> False
+        other -> expectationFailure ("expected idempotent duplicate handling, got " <> show other)
+      Right managerEvents <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "pm-counter-order-1") (StreamVersion 0) 10
+      Right targetEvents <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "pm-target-order-1") (StreamVersion 0) 10
+      Vector.length managerEvents `shouldBe` 1
+      Vector.length targetEvents `shouldBe` 1
+
+  describe "Keiro.Timer" $ around withTestStore $ do
+    it "claims a due timer, fires a command, and marks it complete once" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeTimerSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          scheduleTimerTx counterTimerRequest
+      let firedEventId = EventId sampleUuid2
+      workerResult <- Store.runStoreIO storeHandle $
+        runTimerWorker dueTimerTime $ \_ -> do
+          fired <-
+            runCommand
+              (defaultRunCommandOptions & #eventIds .~ [firedEventId])
+              counterEventStream
+              (stream "timer-target")
+              (Add 11)
+          case fired of
+            Right _ -> pure (Just firedEventId)
+            Left err -> liftIO (expectationFailure ("expected timer command to fire, got " <> show err)) *> pure Nothing
+      case workerResult of
+        Right (Just timer) ->
+          timer ^. #status `shouldBe` Firing
+        other -> expectationFailure ("expected fired timer, got " <> show other)
+      secondWorkerResult <- Store.runStoreIO storeHandle $
+        runTimerWorker dueTimerTime (\_ -> pure (Just firedEventId))
+      secondWorkerResult `shouldBe` Right Nothing
+      Right targetEvents <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "timer-target") (StreamVersion 0) 10
+      fmap (^. #eventId) (Vector.toList targetEvents) `shouldBe` [firedEventId]
+
 data OrderStream
 
 data OrderEvent
@@ -635,6 +721,50 @@ parseCounterAdded value =
     parser = withObject "CounterAdded" $ \objectValue ->
       CounterAdded <$> objectValue .: "amount"
 
+counterProcessManager ::
+  ProcessManager
+    CounterEvent
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+counterProcessManager = ProcessManager
+  { name = "counter-pm"
+  , correlate = \_ -> "order-1"
+  , eventStream = counterEventStream
+  , streamFor = \correlationId -> stream ("pm-counter-" <> correlationId)
+  , targetEventStream = counterEventStream
+  , handle = \(CounterAdded amount) ->
+      ProcessManagerAction
+        { command = Add amount
+        , commands =
+            [ PMCommand
+                { target = stream "pm-target-order-1"
+                , command = Add amount
+                }
+            ]
+        , timers = [counterTimerRequest]
+        }
+  }
+
+counterTimerRequest :: TimerRequest
+counterTimerRequest = TimerRequest
+  { timerId = TimerId sampleUuid
+  , processManagerName = "counter-pm"
+  , correlationId = "order-1"
+  , fireAt = dueTimerTime
+  , payload = object ["kind" Aeson..= ("counter-timeout" :: Text)]
+  }
+
+dueTimerTime :: UTCTime
+dueTimerTime = UTCTime (ModifiedJulianDay 1) (secondsToDiffTime 0)
+
 withTestStore :: (Store.KirokuStore -> IO ()) -> IO ()
 withTestStore action = do
   result <- Pg.withCached $ \db ->
@@ -657,6 +787,12 @@ recordedFrom event = RecordedEvent
   , correlationId = Nothing
   , createdAt = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
   }
+
+recordedFromEventId :: EventId -> CounterEvent -> RecordedEvent
+recordedFromEventId eventId event =
+  case encodeForAppend counterCodec event of
+    Right encoded -> recordedFrom encoded & #eventId .~ eventId
+    Left err -> error ("test fixture failed to encode counter event: " <> show err)
 
 sampleUuid :: UUID
 sampleUuid =

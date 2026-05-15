@@ -44,7 +44,7 @@ Alternatives considered:
 | 12 | Implement the command cycle on kiroku and keiki | docs/plans/12-implement-the-command-cycle-on-kiroku-and-keiki.md | EP-10, EP-11 | None | Complete |
 | 13 | Add snapshots and accelerated hydration | docs/plans/13-add-snapshots-and-accelerated-hydration.md | EP-10, EP-11, EP-12 | EP-9 | Complete |
 | 14 | Ship read models and projection lifecycles | docs/plans/14-ship-read-models-and-projection-lifecycles.md | EP-10, EP-11, EP-12 | EP-13 | Complete |
-| 15 | Build process managers and timer workflows | docs/plans/15-build-process-managers-and-timer-workflows.md | EP-10, EP-11, EP-12 | EP-14 | Not Started |
+| 15 | Build process managers and timer workflows | docs/plans/15-build-process-managers-and-timer-workflows.md | EP-10, EP-11, EP-12 | EP-14 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled. Hard Deps and Soft Deps reference other rows by their `EP-N` prefix. EP-9 is the existing queued plan at `docs/plans/9-integrate-keiki-codec-json-into-keiro-snapshot-path.md`; it is listed only as a soft dependency because the upstream primitives have now landed locally, but the plan still contains useful usage guidance for snapshot integration.
 
@@ -97,8 +97,8 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
 - [x] EP-13: prove snapshot round trip and stale-snapshot fallback against real Postgres.
 - [x] EP-14: implement inline, eventual, and position-wait read-model query modes plus projection idempotency helpers.
 - [x] EP-14: prove read-after-write behavior for inline and async projections.
-- [ ] EP-15: implement process-manager state streams, deterministic emitted-command ids, durable timers, and the worker-facing API.
-- [ ] EP-15: prove a fixture process manager schedules a timer and emits an idempotent command after the timer fires.
+- [x] EP-15: implement process-manager state streams, deterministic emitted-command ids, durable timers, and the worker-facing API.
+- [x] EP-15: prove a fixture process manager schedules a timer and emits an idempotent command after the timer fires.
 
 
 ## Surprises & Discoveries
@@ -116,6 +116,8 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
 - EP-14 found that the inline projection API needs decoded output events in addition to `AppendResult`. `Keiro.Command.runCommandWithSqlEvents` now exposes that event-aware continuation while preserving the existing `runCommandWithSql` wrapper.
 
 - EP-14 found that the current shibuya core handler boundary still cannot combine user SQL and subscription checkpoint advancement in one transaction. The v1 API therefore exposes at-least-once async projection helpers and tests the `source_event_id` idempotency pattern directly against kiroku recorded events.
+
+- EP-15 found that duplicate process-manager delivery should not depend only on `StoreError.DuplicateEvent`, because a repeated caller-supplied event id can surface as a lower-level `stream_events_pkey` duplicate once stream links exist. `Keiro.ProcessManager` now checks for deterministic event ids in the manager and target streams before appending.
 
 
 ## Decision Log
@@ -140,7 +142,11 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
   Rationale: `ReadModel` and metadata records use the unprefixed `version` field required by the local record style, which collides with the existing top-level `Keiro.version` binding under broad re-export. Direct public modules avoid ambiguity without weakening the read-model API.
   Date: 2026-05-15.
 
+- Decision: Keep Hasql packages resolved from Hackage in the final `cabal.project`.
+  Rationale: Local Hasql package entries introduced duplicate-package risk. The EP-10 policy remains correct: only unreleased sibling packages stay local, while Hasql packages resolve from Hackage.
+  Date: 2026-05-15.
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-05-15. The v1 keiro library now has the package scaffold, public `EventStream` and codec contract, command cycle, snapshots, read models/projections, and process-manager plus durable timer APIs. `cabal build all` and `cabal test all` pass from the repository root. The remaining work is outside this MasterPlan: the v2 deterministic durable-execution runtime, exactly-once async projection checkpoint/user-SQL transactions once shibuya exposes that boundary, and higher-level ergonomic facades over the low-level v1 APIs.

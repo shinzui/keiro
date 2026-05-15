@@ -22,16 +22,16 @@ The behavior is visible in an integration test: an `OrderPlaced` event starts a 
 
 ## Progress
 
-- [ ] M1 — Add `Keiro.ProcessManager` pure API for event-sourced manager state and emitted commands.
-- [ ] M2 — Implement deterministic command ids for emitted commands and duplicate-safe command dispatch.
-- [ ] M3 — Add `keiro_timers` schema and `Keiro.Timer` scheduling/firing API.
-- [ ] M4 — Add worker integration using Streamly/shibuya conventions for event consumption and timer polling.
-- [ ] M5 — Add integration tests for process-manager state streams, emitted command idempotency, timer scheduling, timer firing, and restart/replay behavior.
+- [x] M1 — Add `Keiro.ProcessManager` pure API for event-sourced manager state and emitted commands. Completed 2026-05-15 with `ProcessManager`, `ProcessManagerAction`, `PMCommand`, `PMStateResult`, and `runProcessManagerOnce`.
+- [x] M2 — Implement deterministic command ids for emitted commands and duplicate-safe command dispatch. Completed 2026-05-15 with UUIDv5 ids derived from process-manager name, correlation id, source event id, and emit index; duplicate delivery is detected by scanning the target stream for the deterministic event id before appending.
+- [x] M3 — Add `keiro_timers` schema and `Keiro.Timer` scheduling/firing API. Completed 2026-05-15 with `keiro_timers`, `TimerId`, `TimerRequest`, `scheduleTimerTx`, `claimDueTimer`, `markTimerFired`, and `runTimerWorker`.
+- [x] M4 — Add worker integration using Streamly/shibuya conventions for event consumption and timer polling. Completed 2026-05-15 with `runProcessManagerWorker` over `Shibuya.Adapter.Adapter` and a timer worker that claims due rows with `FOR UPDATE SKIP LOCKED`.
+- [x] M5 — Add integration tests for process-manager state streams, emitted command idempotency, timer scheduling, timer firing, and restart/replay behavior. Completed 2026-05-15 with Postgres-backed tests in `test/Main.hs`.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Kiroku's duplicate caller-supplied event id handling can surface as a `stream_events_pkey` SQL duplicate after the original event row already exists. Instead of relying only on `StoreError.DuplicateEvent`, `Keiro.ProcessManager` checks whether the deterministic event id already exists in the relevant stream before trying to append. Evidence: the first duplicate-delivery test failed with a PostgreSQL `23505` on `stream_events_pkey`; after the pre-check, `cabal test keiro-test` and `cabal test all` pass.
 
 
 ## Decision Log
@@ -44,10 +44,34 @@ The behavior is visible in an integration test: an `OrderPlaced` event starts a 
   Rationale: Reusing EP-11 and EP-12 avoids a parallel persistence model and makes snapshots from EP-13 available to long-lived managers.
   Date: 2026-05-15.
 
+- Decision: Keep Hasql packages resolved from Hackage rather than adding local filesystem Hasql packages to `cabal.project`.
+  Rationale: Adding local Hasql packages fixed an intermediate unit-id mismatch but introduced duplicate-package risk and violated the package-bootstrap policy from EP-10. The final implementation leaves only `keiki`, `keiki-codec-json`, and `kiroku-store` as local project packages.
+  Date: 2026-05-15.
+
+- Decision: Detect process-manager duplicate delivery by scanning the manager and target streams for deterministic event ids before append.
+  Rationale: EP-12 already supports caller-supplied event ids, but kiroku may report a repeated deterministic id as a lower-level unique conflict when stream links already exist. The pre-check makes replay/restart idempotency explicit and independent of exact store error mapping.
+  Date: 2026-05-15.
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-05-15. Keiro now exposes process-manager and timer APIs for v1 workflow orchestration without implementing the v2 deterministic `Workflow es a` runtime. `Keiro.ProcessManager` stores manager state through ordinary `EventStream` command execution, emits target commands with deterministic event ids, and provides a shibuya-compatible worker entry point. `Keiro.Timer` creates and claims durable timer rows and marks fired timers complete after a worker callback returns an event id. The validation suite proves state persistence, duplicate input idempotency, timer scheduling, and timer firing against real Postgres.
+
+Validation evidence:
+
+```text
+cabal build all
+Build completed successfully.
+
+cabal test keiro-test
+28 examples, 0 failures
+
+cabal test all
+keiki-codec-json-test: PASS
+keiki-test: PASS
+keiro-test: PASS
+kiroku-store-test: PASS
+```
 
 
 ## Context and Orientation

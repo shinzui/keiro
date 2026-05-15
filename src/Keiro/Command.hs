@@ -13,7 +13,7 @@ import Data.Int (Int32)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, tryError)
 import GHC.Stack (HasCallStack)
-import Hasql.Transaction qualified as Tx
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Keiki.Core (BoolAlg, RegFile)
 import Keiki.Core qualified as Keiki
 import Keiro.Codec (Codec, CodecError, decodeRecorded, encodeForAppend)

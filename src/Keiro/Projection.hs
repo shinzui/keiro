@@ -9,7 +9,7 @@ where
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import GHC.Stack (HasCallStack)
-import Hasql.Transaction qualified as Tx
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Command (CommandError, CommandResult, RunCommandOptions, runCommandWithSqlEvents)
 import Keiro.EventStream (EventStream)
