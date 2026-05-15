@@ -78,6 +78,11 @@ data Hydrated rs s = Hydrated
   }
   deriving stock (Generic)
 
+data CommandPlan target rs s
+  = CommandNoOp !(CommandResult target)
+  | CommandAppend !(Hydrated rs s) ![EventData]
+  deriving stock (Generic)
+
 hydrate ::
   forall phi rs s ci co es.
   (HasCallStack, Store :> es, BoolAlg phi (RegFile rs, ci)) =>
@@ -105,16 +110,18 @@ hydrate options eventStream targetStream =
     applyRecorded (Right current) recorded =
       case decodeRecorded (eventStream ^. #eventCodec) recorded of
         Left err -> pure (Left (HydrationDecodeFailed err))
-        Right event ->
-          case Keiki.applyEvent (eventStream ^. #transducer) (state current) (registers current) event of
-            Nothing -> pure (Left (HydrationReplayFailed (recorded ^. #streamVersion)))
-            Just (nextState, nextRegisters) ->
-              pure $ Right Hydrated
-                { state = nextState
-                , registers = nextRegisters
-                , streamVersion = recorded ^. #streamVersion
-                , globalPosition = Just (recorded ^. #globalPosition)
-                }
+        Right event -> pure (applyEvent current recorded event)
+
+    applyEvent current recorded event =
+      case Keiki.applyEvent (eventStream ^. #transducer) (state current) (registers current) event of
+        Nothing -> Left (HydrationReplayFailed (recorded ^. #streamVersion))
+        Just (nextState, nextRegisters) ->
+          Right Hydrated
+            { state = nextState
+            , registers = nextRegisters
+            , streamVersion = recorded ^. #streamVersion
+            , globalPosition = Just (recorded ^. #globalPosition)
+            }
 
 runCommand ::
   forall phi rs s ci co es.
@@ -129,35 +136,27 @@ runCommand options eventStream targetStream command =
   where
     attempt remaining = do
       hydrated <- hydrate options eventStream targetStream
-      case hydrated of
-        Left err -> pure (Left err)
-        Right current ->
-          case evaluateCommand eventStream current command of
-            Left err -> pure (Left err)
-            Right [] -> pure (Right (noOpResult targetStream current))
-            Right events ->
-              case encodeEvents (eventStream ^. #eventCodec) events of
-                Left err -> pure (Left err)
-                Right encoded0 -> do
-                  let encoded = assignEventIds (options ^. #eventIds) encoded0
-                  liftIO (options ^. #beforeAppend)
-                  appended <- tryError @StoreError $
-                    appendToStream
-                      ((eventStream ^. #streamName) targetStream)
-                      (expectedVersion (current ^. #streamVersion))
-                      encoded
-                  handleAppendOutcome remaining (Prelude.length encoded) appended
+      either (pure . Left) (runPlan remaining) hydrated
 
-    handleAppendOutcome _ eventCount (Right appendResult) =
-      pure (Right (appendedResult targetStream appendResult eventCount))
-    handleAppendOutcome remaining _ (Left (_, storeError))
-      | isRetryableConflict storeError
-      , remaining > 0 =
-          attempt (remaining Prelude.- 1)
-      | isRetryableConflict storeError =
-          pure (Left (RetryExhausted (options ^. #retryLimit) storeError))
-      | otherwise =
-          pure (Left (StoreFailed storeError))
+    runPlan remaining current =
+      case prepareCommandPlan options eventStream targetStream current command of
+        Left err -> pure (Left err)
+        Right (CommandNoOp result) -> pure (Right result)
+        Right (CommandAppend current' encoded) ->
+          appendOnce remaining current' encoded
+
+    appendOnce remaining current encoded = do
+      liftIO (options ^. #beforeAppend)
+      appended <- tryError @StoreError $
+        appendToStream
+          ((eventStream ^. #streamName) targetStream)
+          (expectedVersion (current ^. #streamVersion))
+          encoded
+      case appended of
+        Right appendResult ->
+          pure (Right (appendedResult targetStream appendResult (Prelude.length encoded)))
+        Left (_, storeError) ->
+          retryOrFail options attempt remaining storeError
 
 runCommandWithSql ::
   forall phi rs s ci co a es.
@@ -173,44 +172,68 @@ runCommandWithSql options eventStream targetStream command afterAppend =
   where
     attempt remaining = do
       hydrated <- hydrate options eventStream targetStream
-      case hydrated of
+      either (pure . Left) (runPlan remaining) hydrated
+
+    runPlan remaining current =
+      case prepareCommandPlan options eventStream targetStream current command of
         Left err -> pure (Left err)
-        Right current ->
-          case evaluateCommand eventStream current command of
-            Left err -> pure (Left err)
-            Right [] -> pure (Right (noOpResult targetStream current, Nothing))
-            Right events ->
-              case encodeEvents (eventStream ^. #eventCodec) events of
-                Left err -> pure (Left err)
-                Right encoded0 -> do
-                  let encoded = assignEventIds (options ^. #eventIds) encoded0
-                  liftIO (options ^. #beforeAppend)
-                  outcome <- tryError @StoreError $
-                    runTransactionAppending
-                      ((eventStream ^. #streamName) targetStream)
-                      (expectedVersion (current ^. #streamVersion))
-                      encoded
-                      ( \appendResult -> do
-                          userValue <- afterAppend appendResult
-                          pure (appendResult, userValue)
-                      )
-                  handleTransactionOutcome remaining (Prelude.length encoded) outcome
+        Right (CommandNoOp result) -> pure (Right (result, Nothing))
+        Right (CommandAppend current' encoded) ->
+          appendWithSqlOnce remaining current' encoded
 
-    handleTransactionOutcome _ eventCount (Right (Right (appendResult, userValue))) =
-      pure (Right (appendedResult targetStream appendResult eventCount, Just userValue))
-    handleTransactionOutcome remaining _ (Right (Left storeError)) =
-      retryOrFail remaining storeError
-    handleTransactionOutcome remaining _ (Left (_, storeError)) =
-      retryOrFail remaining storeError
+    appendWithSqlOnce remaining current encoded = do
+      liftIO (options ^. #beforeAppend)
+      outcome <- tryError @StoreError $
+        runTransactionAppending
+          ((eventStream ^. #streamName) targetStream)
+          (expectedVersion (current ^. #streamVersion))
+          encoded
+          ( \appendResult -> do
+              userValue <- afterAppend appendResult
+              pure (appendResult, userValue)
+          )
+      case outcome of
+        Right (Right (appendResult, userValue)) ->
+          pure (Right (appendedResult targetStream appendResult (Prelude.length encoded), Just userValue))
+        Right (Left storeError) ->
+          retryOrFail options attempt remaining storeError
+        Left (_, storeError) ->
+          retryOrFail options attempt remaining storeError
 
-    retryOrFail remaining storeError
-      | isRetryableConflict storeError
-      , remaining > 0 =
-          attempt (remaining Prelude.- 1)
-      | isRetryableConflict storeError =
-          pure (Left (RetryExhausted (options ^. #retryLimit) storeError))
-      | otherwise =
-          pure (Left (StoreFailed storeError))
+prepareCommandPlan ::
+  BoolAlg phi (RegFile rs, ci) =>
+  RunCommandOptions ->
+  EventStream phi rs s ci co ->
+  Stream (EventStream phi rs s ci co) ->
+  Hydrated rs s ->
+  ci ->
+  Either CommandError (CommandPlan (EventStream phi rs s ci co) rs s)
+prepareCommandPlan options eventStream targetStream current command =
+  case evaluateCommand eventStream current command of
+    Left err -> Left err
+    Right events -> toPlan events
+  where
+    toPlan [] =
+      Right (CommandNoOp (noOpResult targetStream current))
+    toPlan events =
+      CommandAppend current
+        . assignEventIds (options ^. #eventIds)
+        <$> encodeEvents (eventStream ^. #eventCodec) events
+
+retryOrFail ::
+  RunCommandOptions ->
+  (Int -> Eff es (Either CommandError a)) ->
+  Int ->
+  StoreError ->
+  Eff es (Either CommandError a)
+retryOrFail options retry remaining storeError
+  | isRetryableConflict storeError
+  , remaining > 0 =
+      retry (remaining Prelude.- 1)
+  | isRetryableConflict storeError =
+      pure (Left (RetryExhausted (options ^. #retryLimit) storeError))
+  | otherwise =
+      pure (Left (StoreFailed storeError))
 
 evaluateCommand ::
   BoolAlg phi (RegFile rs, ci) =>
