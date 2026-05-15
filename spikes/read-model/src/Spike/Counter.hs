@@ -73,7 +73,7 @@ import Data.Time
   )
 import GHC.Generics (Generic)
 import Keiki.Builder ((.=))
-import qualified Keiki.Builder as B
+import Keiki.Builder qualified as B
 import Keiki.Core
 import Keiki.Generics.TH (deriveAggregateCtors, deriveWireCtors)
 

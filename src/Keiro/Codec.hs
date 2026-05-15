@@ -13,12 +13,12 @@ module Keiro.Codec
 where
 
 import Data.Aeson (Value (..))
-import qualified Data.Aeson.Key as Key
-import qualified Data.Aeson.KeyMap as KeyMap
-import qualified Data.List as List
-import qualified Data.List.NonEmpty as NonEmpty
-import qualified Data.Scientific as Scientific
-import qualified Prelude
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KeyMap
+import Data.List qualified as List
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.Scientific qualified as Scientific
+import Prelude qualified
 import Keiro.Prelude
 import Kiroku.Store.Types
   ( EventData (..)

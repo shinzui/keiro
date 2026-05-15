@@ -34,14 +34,14 @@ import Control.Concurrent.STM
   )
 import Control.Exception (Exception, throwIO)
 import Control.Monad (forM_, when)
-import qualified Data.Text as T
-import qualified Data.Text.IO as T
+import Data.Text qualified as T
+import Data.Text.IO qualified as T
 import Data.Text (Text)
 import Data.Time
   ( addUTCTime
   , getCurrentTime
   )
-import qualified Data.Vector as V
+import Data.Vector qualified as V
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -51,7 +51,7 @@ import Effectful.Error.Static
   , runErrorNoCallStack
   )
 
-import qualified EphemeralPg as Pg
+import EphemeralPg qualified as Pg
 
 import Kiroku.Store.Connection
   ( KirokuStore

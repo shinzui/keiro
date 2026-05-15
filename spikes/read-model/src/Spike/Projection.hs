@@ -21,21 +21,21 @@ import Control.Exception (try, SomeException)
 import Control.Monad (when)
 import Data.Functor.Contravariant ((>$<))
 import Data.Int (Int64)
-import qualified Data.Vector as V
+import Data.Vector qualified as V
 import Data.Text (Text)
 
-import qualified Hasql.Decoders as Decoders
-import qualified Hasql.Encoders as Encoders
-import qualified Hasql.Pool as Pool
-import qualified Hasql.Session as Session
-import qualified Hasql.Statement as Statement
+import Hasql.Decoders qualified as Decoders
+import Hasql.Encoders qualified as Encoders
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Session
+import Hasql.Statement qualified as Statement
 
 import Effectful (runEff)
 import Effectful.Error.Static (runErrorNoCallStack)
 
 import Kiroku.Store.Connection (KirokuStore)
 import Kiroku.Store.Effect (runStorePool)
-import qualified Kiroku.Store.Error as KErr
+import Kiroku.Store.Error qualified as KErr
 import Kiroku.Store.Read (readAllForward)
 import Kiroku.Store.Types
   ( GlobalPosition (..)

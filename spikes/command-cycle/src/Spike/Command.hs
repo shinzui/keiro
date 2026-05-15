@@ -14,8 +14,8 @@ module Spike.Command
 
 import Data.Int (Int32)
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Vector as V
+import Data.Text qualified as T
+import Data.Vector qualified as V
 
 import Effectful (Eff, (:>))
 import Effectful.Error.Static (Error, throwError)
@@ -33,8 +33,8 @@ import Kiroku.Store.Types
   , StreamVersion (..)
   )
 
-import qualified Streamly.Data.Fold as Fold
-import qualified Streamly.Data.Stream as Stream
+import Streamly.Data.Fold qualified as Fold
+import Streamly.Data.Stream qualified as Stream
 import Streamly.Data.Stream (Stream)
 
 import Keiki.Core

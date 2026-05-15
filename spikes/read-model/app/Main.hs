@@ -26,11 +26,11 @@ module Main (main) where
 import Control.Exception (Exception)
 import Data.Functor.Contravariant ((>$<))
 import Data.Int (Int32, Int64)
-import qualified Data.Text as T
-import qualified Data.Text.IO as T
+import Data.Text qualified as T
+import Data.Text.IO qualified as T
 import Data.Text (Text)
 import Data.Time (UTCTime, getCurrentTime)
-import qualified Data.UUID as UUID
+import Data.UUID qualified as UUID
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -39,16 +39,16 @@ import Effectful.Error.Static
   ( Error
   , runErrorNoCallStack
   )
-import qualified Effectful.Reader.Static as Reader
+import Effectful.Reader.Static qualified as Reader
 
-import qualified EphemeralPg as Pg
+import EphemeralPg qualified as Pg
 
-import qualified Hasql.Decoders as Decoders
-import qualified Hasql.Encoders as Encoders
-import qualified Hasql.Pool as Pool
-import qualified Hasql.Session as Session
-import qualified Hasql.Statement as Statement
-import qualified Hasql.Transaction as Tx
+import Hasql.Decoders qualified as Decoders
+import Hasql.Encoders qualified as Encoders
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Session
+import Hasql.Statement qualified as Statement
+import Hasql.Transaction qualified as Tx
 
 import Kiroku.Store.Connection
   ( KirokuStore (..)

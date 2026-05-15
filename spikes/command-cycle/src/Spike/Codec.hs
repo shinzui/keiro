@@ -6,7 +6,7 @@ module Spike.Codec
   ( counterEventStream
   ) where
 
-import qualified Data.Aeson as Aeson
+import Data.Aeson qualified as Aeson
 
 import Spike.EventStream (EventStream (..))
 import Spike.Counter

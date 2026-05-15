@@ -14,14 +14,14 @@ module Main (main) where
 
 import Control.Exception (Exception, throwIO)
 import Control.Monad (forM, replicateM, when)
-import qualified Data.Aeson as Aeson
-import qualified Data.Aeson.KeyMap as KM
+import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KM
 import Data.Aeson (Value (..))
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Text as T
-import qualified Data.Text.IO as T
+import Data.ByteString.Lazy qualified as LBS
+import Data.Text qualified as T
+import Data.Text.IO qualified as T
 import Data.Text (Text)
-import qualified Data.Vector as V
+import Data.Vector qualified as V
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
@@ -31,7 +31,7 @@ import Effectful.Error.Static
   , runErrorNoCallStack
   )
 
-import qualified EphemeralPg as Pg
+import EphemeralPg qualified as Pg
 
 import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Connection

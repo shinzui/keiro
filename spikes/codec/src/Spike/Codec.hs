@@ -35,13 +35,13 @@ module Spike.Codec
   , metadataFor
   ) where
 
-import qualified Data.Aeson as Aeson
-import qualified Data.Aeson.Key as K
-import qualified Data.Aeson.KeyMap as KM
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Key qualified as K
+import Data.Aeson.KeyMap qualified as KM
 import Data.Aeson (Value (..))
-import qualified Data.Aeson.Types as Aeson
+import Data.Aeson.Types qualified as Aeson
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 
 import Kiroku.Store.Types
   ( EventData (..)

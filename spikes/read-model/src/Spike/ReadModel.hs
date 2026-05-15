@@ -30,17 +30,17 @@ import Control.Exception (try)
 import Data.Int (Int64)
 import Data.Time.Clock.System (SystemTime (MkSystemTime), getSystemTime)
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 
 import Effectful (Eff, IOE, (:>), liftIO)
 import Effectful.Error.Static (Error, throwError)
-import qualified Effectful.Reader.Static as Reader
+import Effectful.Reader.Static qualified as Reader
 
-import qualified Hasql.Decoders as Decoders
-import qualified Hasql.Encoders as Encoders
-import qualified Hasql.Pool as Pool
-import qualified Hasql.Session as Session
-import qualified Hasql.Statement as Statement
+import Hasql.Decoders qualified as Decoders
+import Hasql.Encoders qualified as Encoders
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Session
+import Hasql.Statement qualified as Statement
 
 
 -- | The typed wrapper. Spike shape (see module header for the two
