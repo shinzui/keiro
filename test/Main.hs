@@ -4,20 +4,38 @@ module Main
 where
 
 import Data.Aeson (object, withObject, (.:))
-import qualified Data.Aeson as Aeson
+import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
-import qualified Data.Text as Text
+import Data.Text qualified as Text
+import Data.Vector qualified as Vector
 import Data.UUID (UUID, fromString)
 import Data.Time (UTCTime (..), secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
-import Keiki.Core (RegFile (..), SymTransducer (..))
+import EphemeralPg qualified as Pg
+import Hasql.Transaction qualified as Tx
+import Keiki.Core
+  ( Edge (..)
+  , HsPred
+  , InCtor (..)
+  , RegFile (..)
+  , SymTransducer (..)
+  , Update (..)
+  , WireCtor (..)
+  , inpCtor
+  , matchInCtor
+  , oNil
+  , pack
+  , (*:)
+  )
 import Keiro
 import Keiro.Prelude
-import qualified Keiro.Stream as Stream
+import Keiro.Stream qualified as Stream
+import Kiroku.Store qualified as Store
 import Kiroku.Store.Types
   ( EventId (..)
   , EventData (..)
   , EventType (..)
+  , ExpectedVersion (..)
   , GlobalPosition (..)
   , RecordedEvent (..)
   , StreamId (..)
@@ -85,6 +103,75 @@ main = hspec $ do
       contract ^. #initialState `shouldBe` Idle
       (contract ^. #streamName) typedStream `shouldBe` StreamName "order-123"
 
+  describe "Keiro.Command" $ around withTestStore $ do
+    it "creates a stream and appends the first command event" $ \storeHandle -> do
+      let target = stream "counter-command-create" :: Stream CounterEventStream
+      result <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions counterEventStream target (Add 2)
+      case result of
+        Right (Right commandResult) -> do
+          commandResult ^. #streamVersion `shouldBe` StreamVersion 1
+          commandResult ^. #eventsAppended `shouldBe` 1
+          commandResult ^. #globalPosition `shouldSatisfy` isJust
+        other -> expectationFailure ("expected successful command, got " <> show other)
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "counter-command-create") (StreamVersion 0) 10
+      Vector.length recorded `shouldBe` 1
+      traverse (decodeRecorded counterCodec) (Vector.toList recorded)
+        `shouldBe` Right [CounterAdded 2]
+
+    it "rehydrates prior events before appending a second command event" $ \storeHandle -> do
+      let target = stream "counter-command-update" :: Stream CounterEventStream
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions counterEventStream target (Add 2)
+      result <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions counterEventStream target (Add 3)
+      case result of
+        Right (Right commandResult) ->
+          commandResult ^. #streamVersion `shouldBe` StreamVersion 2
+        other -> expectationFailure ("expected successful second command, got " <> show other)
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "counter-command-update") (StreamVersion 0) 10
+      traverse (decodeRecorded counterCodec) (Vector.toList recorded)
+        `shouldBe` Right [CounterAdded 2, CounterAdded 3]
+
+    it "surfaces decode failure during hydration" $ \storeHandle -> do
+      Right _ <- Store.runStoreIO storeHandle $
+        Store.appendToStream
+          (StreamName "counter-command-decode-failure")
+          NoStream
+          [ EventData
+              { eventId = Nothing
+              , eventType = EventType "OtherEvent"
+              , payload = object []
+              , metadata = Just (metadataFor 1 Nothing)
+              , causationId = Nothing
+              , correlationId = Nothing
+              }
+          ]
+      let target = stream "counter-command-decode-failure" :: Stream CounterEventStream
+      result <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions counterEventStream target (Add 1)
+      result
+        `shouldBe` Right
+          (Left (HydrationDecodeFailed (UnknownEventType (EventType "OtherEvent") ["CounterAdded"])))
+
+    it "rolls back the append when inline SQL condemns the transaction" $ \storeHandle -> do
+      let target = stream "counter-command-rollback" :: Stream CounterEventStream
+      result <- Store.runStoreIO storeHandle $
+        runCommandWithSql
+          defaultRunCommandOptions
+          counterEventStream
+          target
+          (Add 1)
+          (\_ -> Tx.condemn >> pure ("rolled-back" :: Text))
+      case result of
+        Right (Right (_, Just "rolled-back")) -> pure ()
+        other -> expectationFailure ("expected condemned transaction result, got " <> show other)
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "counter-command-rollback") (StreamVersion 0) 10
+      recorded `shouldBe` Vector.empty
+
 data OrderStream
 
 data OrderEvent
@@ -151,6 +238,96 @@ emptyTransducer = SymTransducer
   , initialRegs = RNil
   , isFinal = \_ -> True
   }
+
+type CounterEventStream = EventStream (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
+
+data CounterCommand
+  = Add !Int
+  deriving stock (Generic, Eq, Show)
+
+data CounterEvent
+  = CounterAdded !Int
+  deriving stock (Generic, Eq, Show)
+
+data CounterState
+  = Counting
+  deriving stock (Generic, Eq, Show)
+
+counterEventStream :: CounterEventStream
+counterEventStream = EventStream
+  { transducer = counterTransducer
+  , initialState = Counting
+  , initialRegisters = RNil
+  , eventCodec = counterCodec
+  , streamName = Stream.streamName
+  , snapshotPolicy = Never
+  , stateCodec = Nothing
+  }
+
+counterTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
+counterTransducer = SymTransducer
+  { edgesOut = \case
+      Counting ->
+        [ Edge
+            { guard = matchInCtor addCtor
+            , update = UKeep
+            , output = Just (pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil))
+            , target = Counting
+            }
+        ]
+  , initial = Counting
+  , initialRegs = RNil
+  , isFinal = \_ -> False
+  }
+
+type AddFields = '[ '("amount", Int)]
+
+addCtor :: InCtor CounterCommand AddFields
+addCtor = InCtor
+  { icName = "Add"
+  , icMatch = \case
+      Add amount -> Just (RCons Proxy amount RNil)
+  , icBuild = \case
+      RCons _ amount RNil -> Add amount
+  }
+
+counterAddedCtor :: WireCtor CounterEvent (Int, ())
+counterAddedCtor = WireCtor
+  { wcName = "CounterAdded"
+  , wcMatch = \case
+      CounterAdded amount -> Just (amount, ())
+  , wcBuild = \case
+      (amount, ()) -> CounterAdded amount
+  }
+
+counterCodec :: Codec CounterEvent
+counterCodec = Codec
+  { eventTypes = "CounterAdded" :| []
+  , eventType = \case
+      CounterAdded{} -> "CounterAdded"
+  , schemaVersion = 1
+  , encode = \case
+      CounterAdded amount -> object ["amount" Aeson..= amount]
+  , decode = parseCounterAdded
+  , upcasters = []
+  }
+
+parseCounterAdded :: Value -> Either Text CounterEvent
+parseCounterAdded value =
+  case parseEither parser value of
+    Right event -> Right event
+    Left message -> Left (fromStringLiteral message)
+  where
+    parser = withObject "CounterAdded" $ \objectValue ->
+      CounterAdded <$> objectValue .: "amount"
+
+withTestStore :: (Store.KirokuStore -> IO ()) -> IO ()
+withTestStore action = do
+  result <- Pg.withCached $ \db ->
+    Store.withStore (Store.defaultConnectionSettings (Pg.connectionString db)) action
+  case result of
+    Left err -> error ("Failed to start ephemeral PostgreSQL: " <> show err)
+    Right () -> pure ()
 
 recordedFrom :: EventData -> RecordedEvent
 recordedFrom event = RecordedEvent

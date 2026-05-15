@@ -19,6 +19,7 @@ import Keiro.Codec (Codec, CodecError, decodeRecorded, encodeForAppend)
 import Keiro.EventStream (EventStream)
 import Keiro.Prelude
 import Keiro.Stream (Stream)
+import Prelude qualified
 import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError (..))
@@ -138,14 +139,14 @@ runCommand options eventStream targetStream command =
                       ((eventStream ^. #streamName) targetStream)
                       (expectedVersion (current ^. #streamVersion))
                       encoded
-                  handleAppendOutcome remaining current appended
+                  handleAppendOutcome remaining (Prelude.length encoded) appended
 
-    handleAppendOutcome _ _ (Right appendResult) =
-      pure (Right (appendedResult targetStream appendResult 1))
+    handleAppendOutcome _ eventCount (Right appendResult) =
+      pure (Right (appendedResult targetStream appendResult eventCount))
     handleAppendOutcome remaining _ (Left (_, storeError))
       | isRetryableConflict storeError
       , remaining > 0 =
-          attempt (remaining - 1)
+          attempt (remaining Prelude.- 1)
       | isRetryableConflict storeError =
           pure (Left (RetryExhausted (options ^. #retryLimit) storeError))
       | otherwise =
@@ -184,19 +185,19 @@ runCommandWithSql options eventStream targetStream command afterAppend =
                           userValue <- afterAppend appendResult
                           pure (appendResult, userValue)
                       )
-                  handleTransactionOutcome remaining outcome
+                  handleTransactionOutcome remaining (Prelude.length encoded) outcome
 
-    handleTransactionOutcome _ (Right (Right (appendResult, userValue))) =
-      pure (Right (appendedResult targetStream appendResult 1, Just userValue))
-    handleTransactionOutcome remaining (Right (Left storeError)) =
+    handleTransactionOutcome _ eventCount (Right (Right (appendResult, userValue))) =
+      pure (Right (appendedResult targetStream appendResult eventCount, Just userValue))
+    handleTransactionOutcome remaining _ (Right (Left storeError)) =
       retryOrFail remaining storeError
-    handleTransactionOutcome remaining (Left (_, storeError)) =
+    handleTransactionOutcome remaining _ (Left (_, storeError)) =
       retryOrFail remaining storeError
 
     retryOrFail remaining storeError
       | isRetryableConflict storeError
       , remaining > 0 =
-          attempt (remaining - 1)
+          attempt (remaining Prelude.- 1)
       | isRetryableConflict storeError =
           pure (Left (RetryExhausted (options ^. #retryLimit) storeError))
       | otherwise =
@@ -215,7 +216,7 @@ evaluateCommand eventStream current command =
     Just (_, _, Just event) -> Right [event]
 
 encodeEvents :: Codec co -> [co] -> Either CommandError [EventData]
-encodeEvents codec = mapM (mapLeft EncodeFailed . encodeForAppend codec)
+encodeEvents codec = Prelude.mapM (mapLeft EncodeFailed . encodeForAppend codec)
 
 expectedVersion :: StreamVersion -> ExpectedVersion
 expectedVersion (StreamVersion 0) = NoStream
