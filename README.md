@@ -69,6 +69,7 @@ just haskell-verify
 
 The package metadata lives in `keiro.cabal`. The implementation plans and design
 history live under `docs/masterplans/`, `docs/plans/`, and `docs/research/`.
+User-facing documentation starts at `docs/user/README.md`.
 
 ## Status
 
