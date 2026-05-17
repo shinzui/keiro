@@ -24,6 +24,8 @@ pieces those modules import.
   eventual, and position-wait reads.
 - [Process Managers And Timers](process-managers-and-timers.md): event-sourced
   coordination, deterministic command ids, and timer workers.
+- [Database Migrations](migrations.md): running `keiro-migrate`, disabling
+  runtime schema initialization, and owning application table migrations.
 - [Operations](operations.md): database requirements, schema initialization,
   workers, retries, idempotency, and production checklist.
 - [API Reference](api-reference.md): module-by-module public surface.

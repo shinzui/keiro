@@ -6,7 +6,8 @@ projection helpers.
 
 ## Initialize Metadata
 
-Run:
+For production, run `keiro-migrate`; see
+[Database Migrations](migrations.md). For development and tests, run:
 
 ```haskell
 initializeReadModelSchema

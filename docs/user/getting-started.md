@@ -10,11 +10,8 @@ You need:
 
 - GHC 9.12.x.
 - PostgreSQL 18 or newer. Kiroku's schema uses `uuidv7()`.
-- A Kiroku store schema initialized in the target database.
-- The Keiro side schemas you use:
-  - `initializeSnapshotSchema` for snapshots.
-  - `initializeReadModelSchema` for read-model metadata.
-  - `initializeTimerSchema` for timers.
+- Kiroku and Keiro schemas applied in the target database. For production, run
+  `keiro-migrate`; see [Database Migrations](migrations.md).
 - Application code that runs `Effectful` with Kiroku's `Store` effect and
   `Error StoreError` where command execution can fail.
 
@@ -123,7 +120,9 @@ result with `eventsAppended = 0`.
 
 ## Initialize Keiro Tables
 
-Only initialize the tables for features you use:
+For production, run `keiro-migrate` before starting the application. For local
+development and tests, you can still initialize only the tables for features you
+use:
 
 ```haskell
 initializeKeiroTables :: (Store :> es) => Eff es ()
@@ -133,9 +132,8 @@ initializeKeiroTables = do
   initializeTimerSchema
 ```
 
-Each initializer uses `CREATE TABLE IF NOT EXISTS` and is safe to run on
-startup, but production deployments should still manage schema changes through
-normal migration discipline.
+Each initializer uses `CREATE TABLE IF NOT EXISTS` and is safe for development
+startup paths. It is not a production migration ledger.
 
 ## Verify The Repository
 

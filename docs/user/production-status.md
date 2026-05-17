@@ -17,7 +17,8 @@ The current library includes:
 - read-model metadata, consistency modes, and position waits;
 - async projection helpers with idempotency expectations;
 - event-sourced process managers;
-- durable timer storage and worker helpers.
+- durable timer storage and worker helpers;
+- embedded codd migrations for Kiroku and Keiro framework tables.
 
 The repository test suite exercises these paths against an ephemeral PostgreSQL
 database.
@@ -67,8 +68,9 @@ runtime primitives directly. Higher-level ergonomic facades are future work.
 
 ### Migration ownership is split
 
-Keiro initializes its own metadata tables, but application read-model tables,
-codec evolution, and deployment sequencing remain application responsibilities.
+Keiro ships `keiro-migrate` for Kiroku and Keiro framework tables. Application
+read-model tables, codec evolution, and deployment sequencing remain
+application responsibilities.
 
 ## Recommendation
 

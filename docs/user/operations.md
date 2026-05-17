@@ -12,8 +12,12 @@ provide a compatible `uuidv7()` function yourself.
 
 ## Schema Initialization
 
-Initialize the Kiroku event-store schema first. Then initialize the Keiro feature
-schemas you use:
+Production deployments should run `keiro-migrate` before starting application
+processes. See [Database Migrations](migrations.md) for the command, required
+environment variables, and startup guidance.
+
+For development and tests, Keiro still exposes compatibility helpers for the
+feature schemas you use:
 
 ```haskell
 initializeSnapshotSchema
@@ -22,10 +26,11 @@ initializeTimerSchema
 ```
 
 Keiro's schema initializers are idempotent. They are still not a replacement for
-application migrations:
+production migrations:
 
 - user read-model tables are application-owned;
-- schema evolution should be reviewed and applied through your migration tool;
+- schema evolution should be reviewed and applied through `keiro-migrate` plus
+  your application migration tool;
 - production rollouts should coordinate code version, codec version, read-model
   version, and shape hashes.
 
@@ -112,7 +117,7 @@ At minimum, track:
 Before production:
 
 - Confirm PostgreSQL 18+.
-- Confirm Kiroku and Keiro schemas initialize in staging.
+- Confirm `keiro-migrate` runs in staging before application startup.
 - Run the Keiro test suite in CI.
 - Add codec tests for every event type and old version.
 - Use deterministic ids for externally retried writes.

@@ -6,7 +6,8 @@ too old, Keiro falls back to full replay.
 
 ## Enable The Schema
 
-Run once during application startup or migrations:
+For production, run `keiro-migrate`; see
+[Database Migrations](migrations.md). For development and tests, run:
 
 ```haskell
 initializeSnapshotSchema
