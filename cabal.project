@@ -1,10 +1,12 @@
 packages:
   .
   keiro-migrations
+  jitsurei
   /Users/shinzui/Keikaku/bokuno/keiki
   /Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json
   /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store
   /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store-migrations
+  /Users/shinzui/Keikaku/hub/haskell/mmzk-typeid-project/mmzk-typeid
 
 optional-packages:
   /Users/shinzui/Keikaku/hub/haskell/codd-project/codd/codd.cabal
