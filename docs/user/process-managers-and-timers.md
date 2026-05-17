@@ -84,6 +84,10 @@ The result includes:
 - one result per emitted target command;
 - count of timers scheduled.
 
+See [Process Managers And Timers](../guides/process-managers-and-timers.md) for
+the `jitsurei` fulfillment manager, duplicate-delivery test, and TypeID-backed
+timer fixture.
+
 ## Running As A Worker
 
 `runProcessManagerWorker` consumes a Shibuya `Adapter` source:

@@ -65,12 +65,15 @@ From the repository root:
 ```bash
 cabal build all
 cabal test all
+cabal test jitsurei-test
 just haskell-verify
 ```
 
 The package metadata lives in `keiro.cabal`. The implementation plans and design
 history live under `docs/masterplans/`, `docs/plans/`, and `docs/research/`.
-User-facing documentation starts at `docs/user/README.md`.
+User-facing documentation starts at `docs/user/README.md`. Long-form,
+guide-backed examples start at `docs/guides/README.md` and use the sibling
+`jitsurei` package as their executable source.
 
 ## Status
 

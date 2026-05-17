@@ -148,6 +148,10 @@ await fs.cp(path.join(root, 'spikes'), path.join(outDir, 'spikes'), {
   recursive: true,
   filter: (source) => !source.endsWith('.DS_Store') && !source.includes(`${path.sep}dist-newstyle${path.sep}`),
 })
+await fs.cp(path.join(root, 'jitsurei'), path.join(outDir, 'jitsurei'), {
+  recursive: true,
+  filter: (source) => !source.endsWith('.DS_Store') && !source.includes(`${path.sep}dist-newstyle${path.sep}`),
+})
 
 const planFiles = (await fs.readdir(plansDir))
   .filter((file) => file.endsWith('.md'))

@@ -34,6 +34,13 @@ pieces those modules import.
 - [Production Status](production-status.md): what is production-shaped today and
   what remains intentionally deferred.
 
+## Long-form guides
+
+For a complete, guide-backed example, start with
+[Keiro Guides](../guides/README.md). The guides use the sibling `jitsurei`
+package as their source of truth and can be verified with
+`cabal test jitsurei-test`.
+
 ## Current v1 scope
 
 The v1 library includes:
@@ -63,5 +70,6 @@ The examples assume you already have:
 - a Kiroku store interpreter running against PostgreSQL;
 - `Effectful` in the application runtime stack.
 
-The test suite in `test/Main.hs` is the best source of complete executable
-examples until a dedicated sample application exists.
+The sibling `jitsurei` package is the best source of complete executable
+examples. Its guide entry point is [Keiro Guides](../guides/README.md), and its
+tests live in `jitsurei/test/Main.hs`.

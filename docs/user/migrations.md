@@ -65,6 +65,10 @@ Keiro migrations only cover Keiro-owned framework tables. They do not create
 your application read-model tables, indexes, materialized views, or reporting
 schemas.
 
+See [Run And Operate Jitsurei](../guides/run-and-operate-jitsurei.md) for how
+the guide package separates Keiro framework initialization from the
+application-owned `jitsurei_order_summary` table.
+
 Keep application-owned migrations in your service. If your service also uses
 codd, compose the service migrations after `Keiro.Migrations.allKeiroMigrations`
 and call `Codd.applyMigrations` once with the combined list. A single codd run

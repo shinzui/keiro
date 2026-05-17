@@ -49,6 +49,10 @@ transaction as the append.
 Use `runCommandWithSqlEvents` when that continuation needs the decoded output
 events as well as the append result.
 
+See [Build The Command Side](../guides/build-the-command-side.md) for a
+guide-backed order stream that exercises `runCommand`, successful appends, and
+`CommandRejected` outcomes in `jitsurei`.
+
 ## Hydration
 
 Hydration starts from a compatible snapshot if the event stream has a

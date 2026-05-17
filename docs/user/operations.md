@@ -67,6 +67,10 @@ Use explicit idempotency whenever work may be delivered more than once:
 
 At-least-once delivery is normal for async workers in v1.
 
+See [Run And Operate Jitsurei](../guides/run-and-operate-jitsurei.md) for the
+guide-backed local verification path and the operational assumptions behind the
+example package.
+
 ## Read Models
 
 Use `ReadModel.version` and `shapeHash` to force stale readers to fail closed.

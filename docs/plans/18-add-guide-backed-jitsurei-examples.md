@@ -25,10 +25,10 @@ The user-visible outcome is a documentation set that teaches Keiro through a rea
 - [x] Create `jitsurei/jitsurei.cabal`, add `jitsurei` to `cabal.project`, and define the package's library, executable, and test-suite. Completed 2026-05-17T15:54:59Z.
 - [x] Move the existing small counter/order patterns from `test/Main.hs` into guide-quality example modules under `jitsurei/src/Jitsurei/`, adapted into one cohesive order-fulfillment domain. Completed 2026-05-17T15:54:59Z with `Jitsurei.Domain`, `Jitsurei.OrderStream`, `Jitsurei.ReadModels`, `Jitsurei.FulfillmentProcess`, `Jitsurei.Timers`, `Jitsurei.Snapshots`, and `Jitsurei.Database`.
 - [x] Add focused tests under `jitsurei/test/` that exercise the code paths the guides promise: command execution, codec evolution, inline read-model projection, snapshot hydration, process-manager dispatch, and timer firing. Completed 2026-05-17T15:54:59Z; `cabal test jitsurei-test` passed with 7 examples and 0 failures.
-- [ ] Add `docs/guides/README.md` plus long-form guide pages for the sample application's domain model, command cycle, event evolution, read models, process managers, timers, snapshots, migrations, and operations.
-- [ ] Cross-link `docs/user/README.md` and related `docs/user/*.md` pages to the new `docs/guides/` entry point without replacing the existing API-oriented docs.
-- [ ] Update `Justfile`, `README.md`, or both so local verification includes the new package and guide-backed examples.
-- [ ] Run Haskell and documentation validation commands and record the observed outputs in this plan.
+- [x] Add `docs/guides/README.md` plus long-form guide pages for the sample application's domain model, command cycle, event evolution, read models, process managers, timers, snapshots, migrations, and operations. Completed 2026-05-17T15:59:25Z.
+- [x] Cross-link `docs/user/README.md` and related `docs/user/*.md` pages to the new `docs/guides/` entry point without replacing the existing API-oriented docs. Completed 2026-05-17T15:59:25Z.
+- [x] Update `Justfile`, `README.md`, or both so local verification includes the new package and guide-backed examples. Completed 2026-05-17T15:59:25Z; `haskell-test` now runs both `keiro-test` and `jitsurei-test`, and `README.md` points to `docs/guides/README.md`.
+- [x] Run Haskell and documentation validation commands and record the observed outputs in this plan. Completed 2026-05-17T15:59:25Z.
 
 
 ## Surprises & Discoveries
@@ -63,6 +63,10 @@ Record every decision made while working on the plan.
   Rationale: Timer and process-manager examples ultimately pass UUID values to Keiro/Kiroku types, but the examples should not imply that the `uuid` package can generate UUIDv7 values. TypeID supplies a local API that supports v7 TypeIDs and exposes the underlying UUID for the existing Keiro interfaces.
   Date: 2026-05-17
 
+- Decision: Copy `jitsurei/` into `site-dist/` during website builds.
+  Rationale: The guide pages intentionally link to source files as the canonical code. The static link checker only sees generated `site-dist/` content, so copying the package source lets guide-to-source links be checked locally.
+  Date: 2026-05-17
+
 
 ## Outcomes & Retrospective
 
@@ -70,6 +74,10 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original purpose.
 
 (To be filled during and after implementation.)
+
+- Outcome: The repository now contains a `jitsurei` sibling package with a library, demo executable, and `jitsurei-test` suite. The code backs the new guide set in `docs/guides/` and covers the requested real-world examples: command execution, event evolution, read models, process-manager idempotency, timers, and snapshots.
+  Gaps: The example remains intentionally library-shaped rather than a web service. It demonstrates the Keiro runtime pieces without adding an HTTP API, deployment manifests, or async Shibuya worker wiring.
+  Date: 2026-05-17
 
 
 ## Context and Orientation
@@ -232,6 +240,25 @@ cabal build all
 cabal test keiro-test
 cabal test jitsurei-test
 just website-verify
+```
+
+Observed on 2026-05-17T15:59:25Z:
+
+```text
+$ cabal build all
+Build completed successfully.
+
+$ cabal test keiro-test
+33 examples, 0 failures
+Test suite keiro-test: PASS
+
+$ cabal test jitsurei-test
+7 examples, 0 failures
+Test suite jitsurei-test: PASS
+
+$ just website-verify
+Built 34 site pages plus the source-doc index into site-dist/
+No broken file links across 36 HTML pages
 ```
 
 The guide acceptance criteria are human-readable and source-backed. `docs/guides/README.md` must list all guide pages. Each guide must state the concrete outcome it teaches and link to one or more exact source files under `jitsurei/`. The existing `docs/user/README.md` must link to `docs/guides/README.md`, and at least the command cycle, codecs, read models, process managers/timers, snapshots, migrations, and operations user-doc pages must point to their corresponding guide page.

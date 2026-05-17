@@ -27,5 +27,6 @@ haskell-build:
 
 haskell-test:
     cabal test keiro-test
+    cabal test jitsurei-test
 
 haskell-verify: haskell-build haskell-test website-verify

@@ -72,6 +72,10 @@ orderCodec = Codec
 If Keiro finds a later upcaster but the immediate next step is missing, it
 returns `GapInUpcasterChain`.
 
+See [Evolve Events Safely](../guides/evolve-events-safely.md) for the
+`jitsurei` order codec and a tested version-1-to-version-2 `OrderPlaced`
+upcaster.
+
 ## Versioning Rules
 
 Use these rules for event evolution:

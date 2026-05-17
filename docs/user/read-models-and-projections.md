@@ -105,6 +105,10 @@ runCommandWithProjections
 If projection SQL fails or condemns the transaction, the append rolls back.
 This is the path for strongly consistent read-after-write behavior.
 
+See [Project Read Models](../guides/project-read-models.md) for the
+`jitsurei_order_summary` table, inline projection, and `ReadModel` query backed
+by `jitsurei-test`.
+
 ## Async Projections
 
 ```haskell

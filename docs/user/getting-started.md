@@ -119,6 +119,11 @@ number of events appended. A command may produce zero, one, or many events. A
 command that produces no event returns a successful result with
 `eventsAppended = 0`.
 
+For the same flow in a complete package, see
+[Build The Command Side](../guides/build-the-command-side.md). The source lives
+in `jitsurei/src/Jitsurei/OrderStream.hs` and the command tests live in
+`jitsurei/test/Main.hs`.
+
 ## Initialize Keiro Tables
 
 For production, run `keiro-migrate` before starting the application. For local

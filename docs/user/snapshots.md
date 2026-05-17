@@ -33,6 +33,10 @@ eventStream = EventStream
 If `stateCodec = Nothing`, hydration ignores snapshots even when the policy is
 not `Never`.
 
+See [Snapshots And Hydration](../guides/snapshots-and-hydration.md) for the
+`jitsurei` snapshot-enabled order stream and its PostgreSQL-backed snapshot
+test.
+
 ## SnapshotPolicy
 
 ```haskell
