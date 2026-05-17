@@ -113,7 +113,7 @@ hydrate options eventStream targetStream =
       case eventStream ^. #stateCodec of
         Nothing -> pure Nothing
         Just codec ->
-          hydrateWithSnapshot ((eventStream ^. #streamName) targetStream) codec
+          hydrateWithSnapshot ((eventStream ^. #resolveStreamName) targetStream) codec
 
     replayFrom seed =
       finishReplay
@@ -140,7 +140,7 @@ hydrate options eventStream targetStream =
     replay start cursor =
       Streamly.fold
         (Fold.foldlM' applyRecorded (pure (Right start)))
-        (readStreamForwardStream ((eventStream ^. #streamName) targetStream) cursor (options ^. #pageSize))
+        (readStreamForwardStream ((eventStream ^. #resolveStreamName) targetStream) cursor (options ^. #pageSize))
 
     applyRecorded ::
       Either CommandError (Replay rs s co) ->
@@ -189,7 +189,7 @@ hydrateFull options eventStream targetStream =
   finishReplay
     <$> Streamly.fold
       (Fold.foldlM' applyRecorded (pure (Right initialReplay)))
-      (readStreamForwardStream ((eventStream ^. #streamName) targetStream) (StreamVersion 0) (options ^. #pageSize))
+      (readStreamForwardStream ((eventStream ^. #resolveStreamName) targetStream) (StreamVersion 0) (options ^. #pageSize))
   where
     initialHydrated = Hydrated
       { state = eventStream ^. #initialState
@@ -273,7 +273,7 @@ runCommand options eventStream targetStream command =
       liftIO (options ^. #beforeAppend)
       appended <- tryError @StoreError $
         appendToStream
-          ((eventStream ^. #streamName) targetStream)
+          ((eventStream ^. #resolveStreamName) targetStream)
           (expectedVersion (current ^. #streamVersion))
           encoded
       case appended of
@@ -322,7 +322,7 @@ runCommandWithSqlEvents options eventStream targetStream command afterAppend =
       liftIO (options ^. #beforeAppend)
       outcome <- tryError @StoreError $
         runTransactionAppending
-          ((eventStream ^. #streamName) targetStream)
+          ((eventStream ^. #resolveStreamName) targetStream)
           (expectedVersion (current ^. #streamVersion))
           encoded
           ( \appendResult -> do

@@ -16,7 +16,7 @@ data EventStream phi rs s ci co = EventStream
   , initialState :: !s
   , initialRegisters :: !(RegFile rs)
   , eventCodec :: !(Codec co)
-  , streamName :: !(Stream (EventStream phi rs s ci co) -> StreamName)
+  , resolveStreamName :: !(Stream (EventStream phi rs s ci co) -> StreamName)
   , snapshotPolicy :: !(SnapshotPolicy (s, RegFile rs))
   , stateCodec :: !(Maybe (StateCodec (s, RegFile rs)))
   }
@@ -30,7 +30,7 @@ data SnapshotPolicy state
   deriving stock (Generic)
 
 data StateCodec state = StateCodec
-  { schemaVersion :: !Int
+  { stateCodecVersion :: !Int
   , shapeHash :: !Text
   , encode :: !(state -> Value)
   , decode :: !(Value -> Either Text state)

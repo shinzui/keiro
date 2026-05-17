@@ -19,7 +19,7 @@ defaultStateCodec ::
   Int ->
   StateCodec (s, RegFile rs)
 defaultStateCodec version = StateCodec
-  { schemaVersion = version
+  { stateCodecVersion = version
   , shapeHash = regFileShapeHash (Proxy @rs)
   , encode = \(state, registers) ->
       object

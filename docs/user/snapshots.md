@@ -60,7 +60,7 @@ Intervals less than or equal to zero never snapshot.
 
 ```haskell
 data StateCodec state = StateCodec
-  { schemaVersion :: Int
+  { stateCodecVersion :: Int
   , shapeHash :: Text
   , encode :: state -> Value
   , decode :: Value -> Either Text state
@@ -77,7 +77,7 @@ the snapshot and replay from the beginning.
 
 During `runCommand`, Keiro:
 
-1. looks up a snapshot by stream id, `stateCodec.schemaVersion`, and
+1. looks up a snapshot by stream id, `stateCodec.stateCodecVersion`, and
    `stateCodec.shapeHash`;
 2. decodes the snapshot state;
 3. replays events after the snapshot stream version;

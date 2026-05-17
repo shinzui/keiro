@@ -59,7 +59,7 @@ orderEventStream = EventStream
   , initialState = NotStarted
   , initialRegisters = RNil
   , eventCodec = orderCodec
-  , streamName = Stream.streamName
+  , resolveStreamName = Stream.streamName
   , snapshotPolicy = Never
   , stateCodec = Nothing
   }

@@ -90,7 +90,7 @@ orderEventStream = EventStream
   , initialState = initialOrderState
   , initialRegisters = initialOrderRegisters
   , eventCodec = orderCodec
-  , streamName = streamName
+  , resolveStreamName = streamName
   , snapshotPolicy = Never
   , stateCodec = Nothing
   }

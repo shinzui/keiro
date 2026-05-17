@@ -89,7 +89,7 @@ fulfillmentEventStream = EventStream
   , initialState = FulfillmentIdle
   , initialRegisters = RNil
   , eventCodec = fulfillmentCodec
-  , streamName = Stream.streamName
+  , resolveStreamName = Stream.streamName
   , snapshotPolicy = Never
   , stateCodec = Nothing
   }

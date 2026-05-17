@@ -55,7 +55,7 @@ The contract includes:
 - the Keiki `SymTransducer`;
 - initial state and registers;
 - an event `Codec`;
-- a typed stream-to-Kiroku-name function;
+- `resolveStreamName`, a typed stream-to-Kiroku-name function;
 - snapshot policy and optional state codec.
 
 Applications usually define one `EventStream` per aggregate type and reuse it

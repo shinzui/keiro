@@ -113,13 +113,13 @@ main = hspec $ do
             , initialState = Idle
             , initialRegisters = RNil
             , eventCodec = orderCodec
-            , streamName = \s -> Stream.streamName s
+            , resolveStreamName = \s -> Stream.streamName s
             , snapshotPolicy = Never
             , stateCodec = Nothing
             }
           typedStream = stream "order-123" :: Stream (EventStream () '[] OrderState OrderCommand OrderEvent)
       contract ^. #initialState `shouldBe` Idle
-      (contract ^. #streamName) typedStream `shouldBe` StreamName "order-123"
+      (contract ^. #resolveStreamName) typedStream `shouldBe` StreamName "order-123"
 
   describe "Keiro.Command" $ around withTestStore $ do
     it "creates a stream and appends the first command event" $ \storeHandle -> do
@@ -712,7 +712,7 @@ counterEventStream = EventStream
   , initialState = Counting
   , initialRegisters = RNil
   , eventCodec = counterCodec
-  , streamName = Stream.streamName
+  , resolveStreamName = Stream.streamName
   , snapshotPolicy = Never
   , stateCodec = Nothing
   }
@@ -762,7 +762,7 @@ snapshotCounterEventStream = EventStream
   , initialState = Counting
   , initialRegisters = RCons (Proxy @"lastAmount") 0 RNil
   , eventCodec = counterCodec
-  , streamName = Stream.streamName
+  , resolveStreamName = Stream.streamName
   , snapshotPolicy = Every 2
   , stateCodec = Just (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
   }

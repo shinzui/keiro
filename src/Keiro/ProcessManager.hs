@@ -116,7 +116,7 @@ runProcessManagerOnce options manager sourceEvent input = do
       managerStream = (manager ^. #streamFor) correlationId
       managerEventId = deterministicCommandId (manager ^. #name) correlationId (sourceEvent ^. #eventId) (-1)
       managerOptions = options & #eventIds .~ [managerEventId]
-      managerStreamName = ((manager ^. #eventStream) ^. #streamName) managerStream
+      managerStreamName = ((manager ^. #eventStream) ^. #resolveStreamName) managerStream
   managerAlreadyProcessed <- eventAlreadyIn options managerStreamName managerEventId
   if managerAlreadyProcessed
     then finish correlationId (PMStateDuplicate managerEventId) action
@@ -156,7 +156,7 @@ runProcessManagerOnce options manager sourceEvent input = do
       let commandId = deterministicCommandId (manager ^. #name) correlationId sourceEventId emitIndex
           targetOptions = options & #eventIds .~ [commandId]
           targetStream = retarget (command ^. #target)
-          targetStreamName = ((manager ^. #targetEventStream) ^. #streamName) targetStream
+          targetStreamName = ((manager ^. #targetEventStream) ^. #resolveStreamName) targetStream
       commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
       if commandAlreadyProcessed
         then pure (PMCommandDuplicate commandId)

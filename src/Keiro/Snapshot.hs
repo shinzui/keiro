@@ -34,7 +34,7 @@ hydrateWithSnapshot streamName codec = do
   case streamId of
     Nothing -> pure Nothing
     Just foundStreamId -> do
-      row <- lookupSnapshot foundStreamId (codec ^. #schemaVersion) (codec ^. #shapeHash)
+      row <- lookupSnapshot foundStreamId (codec ^. #stateCodecVersion) (codec ^. #shapeHash)
       pure $ do
         snapshot <- row
         (state, registers) <- either (const Nothing) Just ((codec ^. #decode) (snapshot ^. #state))
@@ -56,6 +56,6 @@ writeSnapshot streamId streamVersion codec state =
     { streamId = streamId
     , streamVersion = streamVersion
     , state = (codec ^. #encode) state
-    , stateCodecVersion = codec ^. #schemaVersion
+    , stateCodecVersion = codec ^. #stateCodecVersion
     , regfileShapeHash = codec ^. #shapeHash
     }
