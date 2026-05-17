@@ -1,5 +1,13 @@
 packages:
   .
+  keiro-migrations
   /Users/shinzui/Keikaku/bokuno/keiki
   /Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json
   /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store
+  /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store-migrations
+
+optional-packages:
+  /Users/shinzui/Keikaku/hub/haskell/codd-project/codd/codd.cabal
+
+allow-newer:
+  haxl:time

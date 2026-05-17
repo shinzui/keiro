@@ -42,6 +42,9 @@ data TimerRow = TimerRow
   }
   deriving stock (Generic, Eq, Show)
 
+-- | Compatibility helper for development and tests.
+--
+-- Production deployments should run @keiro-migrate@ before application startup.
 initializeTimerSchema :: (Store :> es) => Eff es ()
 initializeTimerSchema =
   runTransaction $

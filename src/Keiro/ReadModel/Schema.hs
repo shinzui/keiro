@@ -39,6 +39,9 @@ data ReadModelMetadata = ReadModelMetadata
   }
   deriving stock (Generic, Eq, Show)
 
+-- | Compatibility helper for development and tests.
+--
+-- Production deployments should run @keiro-migrate@ before application startup.
 initializeReadModelSchema :: (Store :> es) => Eff es ()
 initializeReadModelSchema =
   runTransaction $

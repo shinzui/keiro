@@ -41,6 +41,9 @@ data SnapshotWrite = SnapshotWrite
   }
   deriving stock (Generic, Eq, Show)
 
+-- | Compatibility helper for development and tests.
+--
+-- Production deployments should run @keiro-migrate@ before application startup.
 initializeSnapshotSchema :: (Store :> es) => Eff es ()
 initializeSnapshotSchema =
   runTransaction $
