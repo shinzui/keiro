@@ -54,6 +54,7 @@ import Kiroku.Store.Types
   , EventType (..)
   , ExpectedVersion (..)
   , GlobalPosition (..)
+  , CategoryName (..)
   , RecordedEvent (..)
   , StreamId (..)
   , StreamName (..)
@@ -508,9 +509,9 @@ main = hspec $ do
           pmResult ^. #timersScheduled `shouldBe` 1
         other -> expectationFailure ("expected process-manager success, got " <> show other)
       Right managerEvents <- Store.runStoreIO storeHandle $
-        Store.readStreamForward (StreamName "pm-counter-order-1") (StreamVersion 0) 10
+        Store.readStreamForward (StreamName "pm:counter-order-1") (StreamVersion 0) 10
       Right targetEvents <- Store.runStoreIO storeHandle $
-        Store.readStreamForward (StreamName "pm-target-order-1") (StreamVersion 0) 10
+        Store.readStreamForward (StreamName "counter-target-order-1") (StreamVersion 0) 10
       Vector.length managerEvents `shouldBe` 1
       Vector.length targetEvents `shouldBe` 1
       timer <- Store.runStoreIO storeHandle $
@@ -538,11 +539,56 @@ main = hspec $ do
             _ -> False
         other -> expectationFailure ("expected idempotent duplicate handling, got " <> show other)
       Right managerEvents <- Store.runStoreIO storeHandle $
-        Store.readStreamForward (StreamName "pm-counter-order-1") (StreamVersion 0) 10
+        Store.readStreamForward (StreamName "pm:counter-order-1") (StreamVersion 0) 10
       Right targetEvents <- Store.runStoreIO storeHandle $
-        Store.readStreamForward (StreamName "pm-target-order-1") (StreamVersion 0) 10
+        Store.readStreamForward (StreamName "counter-target-order-1") (StreamVersion 0) 10
       Vector.length managerEvents `shouldBe` 1
       Vector.length targetEvents `shouldBe` 1
+
+    it "keeps multiple workflow process managers isolated by configured streams and categories" $ \storeHandle -> do
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 6)
+          fulfillmentManager =
+            workflowProcessManager
+              "fulfillment-pm"
+              "pm:fulfillment"
+              "fulfillment-target-order-1"
+          billingManager =
+            workflowProcessManager
+              "billing-pm"
+              "pm:billing"
+              "billing-target-order-1"
+      fulfillmentResult <- Store.runStoreIO storeHandle $
+        runProcessManagerOnce defaultRunCommandOptions fulfillmentManager sourceEvent (CounterAdded 6)
+      billingResult <- Store.runStoreIO storeHandle $
+        runProcessManagerOnce defaultRunCommandOptions billingManager sourceEvent (CounterAdded 6)
+      assertWorkflowProcessManagerAppended fulfillmentResult
+      assertWorkflowProcessManagerAppended billingResult
+
+      Right fulfillmentManagerEvents <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "pm:fulfillment-order-1") (StreamVersion 0) 10
+      Right billingManagerEvents <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "pm:billing-order-1") (StreamVersion 0) 10
+      Right fulfillmentTargetEvents <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "fulfillment-target-order-1") (StreamVersion 0) 10
+      Right billingTargetEvents <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "billing-target-order-1") (StreamVersion 0) 10
+      Vector.length fulfillmentManagerEvents `shouldBe` 1
+      Vector.length billingManagerEvents `shouldBe` 1
+      Vector.length fulfillmentTargetEvents `shouldBe` 1
+      Vector.length billingTargetEvents `shouldBe` 1
+
+      Right fulfillmentCategoryEvents <- Store.runStoreIO storeHandle $
+        Store.readCategory (CategoryName "pm:fulfillment") (GlobalPosition 0) 10
+      Right billingCategoryEvents <- Store.runStoreIO storeHandle $
+        Store.readCategory (CategoryName "pm:billing") (GlobalPosition 0) 10
+      Right sharedPmCategoryEvents <- Store.runStoreIO storeHandle $
+        Store.readCategory (CategoryName "pm") (GlobalPosition 0) 10
+      Right sharedPmNamespaceEvents <- Store.runStoreIO storeHandle $
+        Store.readCategory (CategoryName "pm:") (GlobalPosition 0) 10
+      Vector.length fulfillmentCategoryEvents `shouldBe` 1
+      Vector.length billingCategoryEvents `shouldBe` 1
+      sharedPmCategoryEvents `shouldBe` Vector.empty
+      sharedPmNamespaceEvents `shouldBe` Vector.empty
 
   describe "Keiro.Timer" $ around withTestStore $ do
     it "claims a due timer, fires a command, and marks it complete once" $ \storeHandle -> do
@@ -870,7 +916,7 @@ counterProcessManager = ProcessManager
   { name = "counter-pm"
   , correlate = \_ -> "order-1"
   , eventStream = counterEventStream
-  , streamFor = \correlationId -> stream ("pm-counter-" <> correlationId)
+  , streamFor = \correlationId -> stream ("pm:counter-" <> correlationId)
   , targetEventStream = counterEventStream
   , handle = \case
       CounterAdded amount ->
@@ -878,7 +924,7 @@ counterProcessManager = ProcessManager
           { command = Add amount
           , commands =
               [ PMCommand
-                  { target = stream "pm-target-order-1"
+                  { target = stream "counter-target-order-1"
                   , command = Add amount
                   }
               ]
@@ -891,6 +937,64 @@ counterProcessManager = ProcessManager
           , timers = []
           }
   }
+
+workflowProcessManager ::
+  Text ->
+  Text ->
+  Text ->
+  ProcessManager
+    CounterEvent
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+workflowProcessManager managerName managerCategory targetStreamName =
+  counterProcessManager
+    { name = managerName
+    , streamFor = \correlationId -> stream (managerCategory <> "-" <> correlationId)
+    , handle = \case
+        CounterAdded amount ->
+          ProcessManagerAction
+            { command = Add amount
+            , commands =
+                [ PMCommand
+                    { target = stream targetStreamName
+                    , command = Add amount
+                    }
+                ]
+            , timers = []
+            }
+        CounterAudited amount ->
+          ProcessManagerAction
+            { command = Add amount
+            , commands = []
+            , timers = []
+            }
+    }
+
+assertWorkflowProcessManagerAppended ::
+  Either
+    Store.StoreError
+    ( Either
+        CommandError
+        (ProcessManagerResult CounterEventStream CounterEventStream)
+    ) ->
+  Expectation
+assertWorkflowProcessManagerAppended = \case
+  Right (Right pmResult) -> do
+    pmResult ^. #managerResult `shouldSatisfy` \case
+      PMStateAppended{} -> True
+      _ -> False
+    pmResult ^. #commandResults `shouldSatisfy` \case
+      [PMCommandAppended{}] -> True
+      _ -> False
+  other -> expectationFailure ("expected workflow process-manager success, got " <> show other)
 
 counterTimerRequest :: TimerRequest
 counterTimerRequest = TimerRequest

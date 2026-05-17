@@ -80,7 +80,7 @@ Plans that can proceed in parallel: after EP-10 and EP-11 complete, EP-12 is the
 
 **`keiro_read_models` table and consistency modes.** EP-14 owns `Keiro.ReadModel`, `Keiro.ReadModel.Rebuild`, `ConsistencyMode`, and the metadata table. EP-15 may rely on read models for examples but must not couple process-manager correctness to read-model freshness.
 
-**Process-manager state streams and timer table.** EP-15 owns `Keiro.ProcessManager`, `Keiro.Timer`, the `pm-<name>-<correlation>` stream naming convention, and `keiro_timers`. It consumes EP-12's command path and EP-14's subscription conventions but does not redefine them.
+**Process-manager state streams and timer table.** EP-15 owns `Keiro.ProcessManager`, `Keiro.Timer`, the `pm:<name>-<correlation>` stream naming convention, and `keiro_timers`. It consumes EP-12's command path and EP-14's subscription conventions but does not redefine them.
 
 **Streamly substrate.** Every multi-event path must use Streamly because kiroku and shibuya already expose `Streamly.Data.Stream.Stream`. EP-12 uses `readStreamForwardStream`; EP-13 reuses the same stream/fold with a later cursor when a snapshot is valid; EP-14 and EP-15 use shibuya adapters and Streamly folds for worker loops. Modules that expose keiro's typed `Stream a` and also need Streamly must import Streamly qualified.
 

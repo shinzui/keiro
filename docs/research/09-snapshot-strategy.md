@@ -20,7 +20,7 @@ This document is consumed by EP-1 (the command cycle's hydration phase short-cir
 
 ## 1. Problem statement
 
-EP-1's `runCommand` hydrates an aggregate by calling `Kiroku.Store.Read.readStreamForward sn (StreamVersion 0) maxBound`, paginating into a Streamly `Stream (Eff es) RecordedEvent`, decoding each event via the `Codec e` instance from EP-2, and folding the decoded events through `applyEvent` into the joint state `(s, RegFile rs)`. The pipeline shape is `Stream → Fold` and is constant-memory in the *number of events resident at any one time* (one page, default 256), but its total work is linear in the *cumulative stream length*. For an aggregate with thousands of events — which both EP-3's process-manager state streams (`pm-OrderFulfillment-<id>`) and EP-5's long-lived workflow streams will routinely produce — replaying the entire history on every command is wasteful, and the wastage scales with the wall-clock age of the stream.
+EP-1's `runCommand` hydrates an aggregate by calling `Kiroku.Store.Read.readStreamForward sn (StreamVersion 0) maxBound`, paginating into a Streamly `Stream (Eff es) RecordedEvent`, decoding each event via the `Codec e` instance from EP-2, and folding the decoded events through `applyEvent` into the joint state `(s, RegFile rs)`. The pipeline shape is `Stream → Fold` and is constant-memory in the *number of events resident at any one time* (one page, default 256), but its total work is linear in the *cumulative stream length*. For an aggregate with thousands of events — which both EP-3's process-manager state streams (`pm:OrderFulfillment-<id>`) and EP-5's long-lived workflow streams will routinely produce — replaying the entire history on every command is wasteful, and the wastage scales with the wall-clock age of the stream.
 
 Industry-standard remediation is the *snapshot*: a periodically-persisted serialization of the joint state at a particular `StreamVersion`. Hydration consults the snapshot first, then reads only events newer than the snapshot's version, then folds those into the snapshot's state. The cost of hydration becomes proportional to the snapshot policy's events-since-snapshot threshold rather than the absolute stream length.
 
@@ -88,7 +88,7 @@ Column-by-column rationale:
 
 - **`ON DELETE CASCADE`.** Hard deletes of `streams` rows are gated by kiroku's `kiroku.enable_hard_deletes` GUC (the `protect_deletion` and `protect_truncation` triggers in `kiroku-store/sql/schema.sql`); under normal operation operators cannot delete from `streams`. The cascade therefore fires only during the GDPR / maintenance path that operators explicitly opt into. Cascade semantics there are correct: when an operator hard-deletes a stream's row, every snapshot tied to that stream goes with it. Without `ON DELETE CASCADE`, the snapshot would be orphaned by `stream_id` until manually purged.
 
-- **`ix_keiro_snapshots_stream_name`.** Supports operator queries like "show me the snapshot for stream `pm-OrderFulfillment-7`." The primary key on `stream_id` already supports the hot path (read-by-id during hydration); this index is for human-driven inspection, not for the read path.
+- **`ix_keiro_snapshots_stream_name`.** Supports operator queries like "show me the snapshot for stream `pm:OrderFulfillment-7`." The primary key on `stream_id` already supports the hot path (read-by-id during hydration); this index is for human-driven inspection, not for the read path.
 
 - **`ix_keiro_snapshots_taken_at`.** Supports the GC query (§9) `DELETE FROM keiro_snapshots WHERE taken_at < now() - interval '30 days'`.
 
@@ -421,7 +421,7 @@ The GC query is supported by the `ix_keiro_snapshots_taken_at` index (§2). It c
 
 **Is GC ever load-bearing?** Briefly — when `state_codec_version` is bumped and operators need the old snapshots to disappear quickly to free space, the GC playbook accelerates that. But this is an operational nicety, not a correctness requirement.
 
-Operators who need to inspect snapshots before purging can use the `ix_keiro_snapshots_stream_name` index to scope by stream: `SELECT * FROM keiro_snapshots WHERE stream_name LIKE 'pm-OrderFulfillment-%' ORDER BY taken_at`. The category-prefixed stream-name convention (`pm-<pmName>-<correlationId>` for process managers, `<aggregate>-<id>` for aggregates) makes this a useful inspection vector.
+Operators who need to inspect snapshots before purging can use the `ix_keiro_snapshots_stream_name` index to scope by stream: `SELECT * FROM keiro_snapshots WHERE stream_name LIKE 'pm:OrderFulfillment-%' ORDER BY taken_at`. The category-prefixed stream-name convention (`pm:<pmName>-<correlationId>` for process managers, `<aggregate>-<id>` for aggregates) makes this a useful inspection vector.
 
 
 ## 10. Operator commands
@@ -490,7 +490,7 @@ Async projections (EP-3 §3) consume `Ingested es msg` from `shibuya-kiroku-adap
 
 Live projections (mentioned in EP-3 but a v1 nice-to-have) materialize a query-time view from a stream of events. They do not require snapshots; if a live projection wants accelerated cold-start, it can persist its own checkpoint, which is a different concern from aggregate snapshots and does not use the `keiro_snapshots` table.
 
-Process managers (EP-3 §5) are themselves event-sourced aggregates: a process manager has its own kiroku stream (`pm-OrderFulfillment-<id>`) and its `applyEvent` recovers a `(s, RegFile rs)` exactly as a domain aggregate's does. **Process managers therefore benefit from snapshots in exactly the same way** — they use the same `EventStream` machinery EP-1 §4 exposes, with `esSnapshotPolicy` controlling whether and when their state is snapshotted. EP-3 §5 cross-references this plan as the snapshot mechanism for process-manager state. A long-running process manager (one whose stream grows past ~100 events) should set `snapshotPolicyEvery 100`; a short-lived one can use `snapshotPolicyOnTerminal isComplete` or `snapshotPolicyNever`.
+Process managers (EP-3 §5) are themselves event-sourced aggregates: a process manager has its own kiroku stream (`pm:OrderFulfillment-<id>`) and its `applyEvent` recovers a `(s, RegFile rs)` exactly as a domain aggregate's does. **Process managers therefore benefit from snapshots in exactly the same way** — they use the same `EventStream` machinery EP-1 §4 exposes, with `esSnapshotPolicy` controlling whether and when their state is snapshotted. EP-3 §5 cross-references this plan as the snapshot mechanism for process-manager state. A long-running process manager (one whose stream grows past ~100 events) should set `snapshotPolicyEvery 100`; a short-lived one can use `snapshotPolicyOnTerminal isComplete` or `snapshotPolicyNever`.
 
 EP-3's outbox (§6) and inbox (§7) are pgmq-backed message-passing primitives, not state-replay primitives. They are unrelated to snapshots.
 

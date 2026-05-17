@@ -85,7 +85,7 @@ event-sourcing-and-workflow system needs:
   commands, authored by the application as ordinary edges
   (`docs/research/10-workflow-roadmap.md` §2.4).
 - A **v2 durable workflow** is a `SymTransducer` whose `co` is a sequence of
-  `StepRecorded { name, result }` events journaled into a `wf-<workflowId>`
+  `StepRecorded { name, result }` events journaled into a `wf:<workflow-name>-<workflow-id>`
   stream, so a workflow function sits on top as sugar over named-step
   journaling (`docs/research/10-workflow-roadmap.md` §4).
 
@@ -341,8 +341,8 @@ domain event log. To answer "what did the order's state look like at the
 moment the workflow charged the card", you correlate two stores.
 
 Keiro stores everything as kiroku streams in one Postgres database. A v1
-process manager's state lives in a `pm-<pmName>-<correlationId>` stream; a
-v2 workflow's journal lives in a `wf-<workflowId>` stream; aggregate
+process manager's state lives in a `pm:<pmName>-<correlationId>` stream; a
+v2 workflow's journal lives in a `wf:<workflow-name>-<workflow-id>` stream; aggregate
 events live in their own per-aggregate streams; all of them share
 kiroku's gap-free contiguous global position
 (`docs/research/00-overview.md`, "kiroku is solid";
@@ -450,7 +450,7 @@ When keiro misbehaves, the operator opens psql and runs:
 
     SELECT global_position, stream_name, type, data, metadata
       FROM kiroku.events
-     WHERE stream_name LIKE 'pm-orderfulfillment-%'
+     WHERE stream_name LIKE 'pm:orderfulfillment-%'
         OR stream_name = 'order-42'
      ORDER BY global_position;
 
@@ -744,8 +744,8 @@ deliverable, not a 2026 capability.
 
 Per `docs/research/10-workflow-roadmap.md` §9 and
 `docs/research/11-upstream-roadmap.md`, three substrate questions remain:
-- Whether kiroku exposes a prefix-style category subscription for `pm-` /
-  `wf-` streams (vs. enumerated category subscription at registration
+- Whether kiroku exposes a prefix-style category subscription for `pm:` /
+  `wf:` streams (vs. enumerated category subscription at registration
   time).
 - Whether keiki's `SymTransducer` gains a `compensate` direction (vs.
   application-authored compensation events).

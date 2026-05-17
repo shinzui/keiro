@@ -23,6 +23,13 @@ stream type.
 `input` is the decoded source message your subscription worker gives to the
 manager.
 
+`streamFor` is where you choose the manager's stream family. Kiroku categories
+come from the part of a stream name before the first `-`, so
+`pm:fulfillment-order-1` is in category `pm:fulfillment`, while
+`pm:counter-order-1` is in category `pm:counter`. Use the
+`pm:<manager-name>-<correlation-id>` convention when each
+workflow/process-manager type needs its own category subscription.
+
 ## Actions
 
 ```haskell

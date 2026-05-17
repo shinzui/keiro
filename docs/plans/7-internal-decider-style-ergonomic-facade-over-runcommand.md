@@ -11,10 +11,17 @@ created_at: 2026-05-09T14:41:34Z
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
-**Status: exploratory.** This plan exists to investigate a hedge against the v1 contract
-decision's ergonomic costs. It MAY land as a shipped feature, MAY be downgraded to a
-documentation-only cookbook entry, or MAY be rejected outright. The decision sits with
-the implementation MasterPlan, which is downstream of this exploration.
+**Status: evaluated; do not implement now.** This plan exists to investigate a
+hedge against the v1 contract decision's ergonomic costs. It MAY land as a shipped
+feature, MAY be downgraded to a documentation-only cookbook entry, or MAY be
+rejected outright. The decision sits with the implementation MasterPlan, which is
+downstream of this exploration. A 2026-05-17 working-tree check found no
+`Keiro.Decider` module, no `PureAggregate` implementation, no cookbook artifacts,
+and user documentation still describes higher-level ergonomic facades as future
+work. A follow-up feasibility check on the same date found that the proposed
+`PureAggregate` facade cannot be implemented as a thin wrapper over today's
+`runCommand` without first generalizing Keiro's command runner or adding a new
+keiki-side adapter.
 
 
 ## Purpose / Big Picture
@@ -96,7 +103,29 @@ The exit criterion is a decision recorded in this plan's Decision Log: **ship**,
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Discovery: The Decider-style facade has not shipped in the current working tree.
+  Evidence from 2026-05-17: `keiro.cabal` exposes no `Keiro.Decider` module;
+  `src/Keiro.hs` re-exports `Keiro.Command`, `Keiro.Codec`, `Keiro.EventStream`,
+  `Keiro.Snapshot`, and `Keiro.Stream`, but no facade module; `rg` finds no
+  implementation of `PureAggregate`, `runPureCommand`, or `liftDeciderToTransducer`
+  outside this plan; `docs/research/cookbook/` does not exist; and
+  `docs/user/production-status.md` says higher-level ergonomic facades are future
+  work.
+
+- Discovery: The plan's core implementability hypothesis does not hold for the
+  current code. Evidence from 2026-05-17: `src/Keiro/Command.hs` evaluates commands
+  through `Keiki.step`, replays hydration through `Keiki.applyEventStreaming`, and
+  computes post-command snapshot state through `Keiki.applyEvents`. Those functions
+  consume a concrete `SymTransducer` made of `Edge` values and `OutTerm` output
+  terms. A proposed `PureAggregate c e s` with arbitrary Haskell functions
+  `paDecide :: c -> s -> Either AggError [e]` and `paEvolve :: s -> e -> s` cannot
+  be converted into those edge/output terms. Therefore `runPureCommand` cannot be a
+  thin wrapper over `runCommand` as sketched in M3.
+
+- Discovery: The current command path is healthy after the multi-event keiki update.
+  Evidence: `cabal test keiro-test` on 2026-05-17 passed with 32 examples and 0
+  failures, including multi-event command output, snapshots, read models, process
+  managers, and timers.
 
 
 ## Decision Log
@@ -116,6 +145,19 @@ The exit criterion is a decision recorded in this plan's Decision Log: **ship**,
   is wasted work. M1–M3 are cheap (one example aggregate written twice); M4 is the
   branch point.
   Date: 2026-05-09.
+
+- Decision: Do not implement EP-7 now as a shipped facade.
+  Rationale: The attractive version of the feature is a thin authoring facade over
+  `runCommand`, but the current `runCommand` semantics require a real
+  `SymTransducer`; arbitrary `decide`/`evolve` functions cannot be translated into
+  `Edge` and `OutTerm` values. Shipping the facade now would either duplicate the
+  command runner for a second non-keiki aggregate path or force a larger abstraction
+  refactor before the low-level v1 API has settled. That is too much new public
+  surface for the current payoff. The right follow-up, if this ergonomic problem
+  becomes urgent, is either a cookbook entry for low-boilerplate `EventStream`
+  authoring or a separate plan to generalize Keiro's command runner around explicit
+  decide/replay callbacks.
+  Date: 2026-05-17.
 
 
 ## Outcomes & Retrospective
@@ -397,5 +439,21 @@ deliberately scopes to "purely a keiro-side wrapper".
 
 
 ## Revisions
+
+- 2026-05-17: Evaluated whether to implement EP-7 now and recorded the decision not
+  to. The current code cannot support the proposed `PureAggregate` facade as a thin
+  wrapper over `runCommand` because `runCommand` consumes `SymTransducer` through
+  `Keiki.step`, `Keiki.applyEventStreaming`, and `Keiki.applyEvents`; arbitrary
+  `decide`/`evolve` functions cannot be converted into Keiki `Edge`/`OutTerm`
+  structure. `cabal test keiro-test` passed with 32 examples and 0 failures during
+  the evaluation. Reason: user asked whether the facade should be implemented now.
+
+- 2026-05-17: Recorded a working-tree verification that EP-7 has not been
+  implemented. The check found no `Keiro.Decider` exposed module, no
+  `PureAggregate` / `runPureCommand` / `liftDeciderToTransducer` implementation, no
+  cookbook artifacts, and user docs still naming ergonomic facades as future work.
+  Progress remains unchanged at 0/4 because the M1-M4 exploration artifacts do not
+  exist yet. Reason: user asked whether this plan had also been implemented without
+  a status update; the answer is no, and the plan now records the evidence.
 
 - 2026-05-13: **Renamed the typed event-stream-id wrapper `AggregateId a` → `Stream a`** in this plan body, cascaded from the parent MasterPlan's 2026-05-13 rename decision. **Updates this revision applied (this plan only)**: line 56 (the §"Purpose / Big Picture" sketch of the proposed `runPureCommand` signature) and line 216 (the M2 design-target full signature). The plan-internal type `PureAggregate c e s` is *not* renamed because it is a *deliberate* DDD-flavoured ergonomic facade — the entire point of this plan is to give pure-CQRS aggregate authors a Decider/Aggregate-shaped API; "Aggregate" in `PureAggregate` is the *thing being modelled*, not the framework type. Same for the `paDecide`/`paEvolve`/`paEventCodec`/`paEventTag`/`AggError` field/error names: they are local to the facade and intentionally evoke the DDD vocabulary the facade caters to. The general-purpose framework type that this facade reduces to (`EventStream phi rs s ci co`) and the framework's typed-id wrapper (`Stream a`) carry the keiro-general framing; the facade's local names carry the DDD framing it adapts to. **Streamly-collision note**: the parent MasterPlan's 2026-05-13 Decision Log entry records that an intermediate `StreamRef a` selection was discarded after team feedback in favour of the bare `Stream a`, accepting the name collision with `Streamly.Data.Stream.Stream` and resolving it at use sites with qualified imports — when the implementation MasterPlan ships EP-7's facade module, it should follow the same convention (`import qualified Streamly.Data.Stream as Stream` only if the facade module also consumes Streamly streams; the facade itself does not, so a plain unqualified `Stream` import from keiro is sufficient at the facade boundary). The parent MasterPlan's 2026-05-13 Decision Log + Revisions entries record the cross-plan cascade. EP-7 status is unchanged by this rename pass; only the type name carried in the proposed signatures is refreshed. Reason: cascade from the MasterPlan rename; the user observed that `AggregateId` is too tied to DDD and keiro is a more general framework — but the facade's local DDD-flavoured names are the facade's whole purpose and stay.

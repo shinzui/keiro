@@ -12,11 +12,16 @@ intention: "intention_01kr96cnxhee3sf8m3da0wrcpj"
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
-**Status: queued.** Waits on `keiki-codec-json` v0.1 being published to Hackage (per
-the keiki MasterPlan at
-`/Users/shinzui/Keikaku/bokuno/keiki/docs/masterplans/11-keiki-codec-json-package-implementation-and-rollout.md`).
-Track the upstream EP-36 progress via the cross-references in §"Context and
-Orientation".
+**Status: in progress; dependency and codec implementation present, validation
+blocked by a build failure.** The queued upstream wait is no longer accurate for
+this checkout: `cabal.project` includes the local
+`/Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json` package, `keiro.cabal`
+depends on `keiki-codec-json >= 0.1`, and `src/Keiro/Snapshot/Codec.hs` implements
+`defaultStateCodec` with `Keiki.Codec.JSON.regFileToJSON` /
+`regFileFromJSON` plus `Keiki.Shape.regFileShapeHash`. The remaining work is to
+restore a green build under the current keiki API, finish the documentation
+promised by M4, close the exact M3 acceptance gap about comparing snapshot
+hydration with full replay, and run/record the M5 performance check.
 
 
 ## Purpose / Big Picture
@@ -33,20 +38,32 @@ the primitives says, in §3 and §15:
 - "Until the helper lands, every aggregate author hand-rolls the register-file
   encoder by walking the slot list themselves; this is tedious but mechanical."
 
-This ExecPlan **closes that gap**. Once `keiki-codec-json` v0.1 is on Hackage with
-`Keiki.Shape.regFileShapeHash` and `Keiki.Codec.JSON.regFileToJSON`/`regFileFromJSON`,
-keiro's snapshot path can stop describing them as upstream gaps and start using them.
+This ExecPlan **closes that gap**. In this checkout, the `keiki-codec-json` package
+is already present through the local `cabal.project` package set, and keiro's
+snapshot path already uses `Keiki.Shape.regFileShapeHash` and
+`Keiki.Codec.JSON.regFileToJSON`/`regFileFromJSON`. The plan now tracks the
+remaining proof and documentation work needed to make that integration complete.
 
-After this plan is complete:
+Current state:
 
-- keiro's cabal depends on `keiki ^>= …` (with `Keiki.Shape`) and `keiki-codec-json
-  ^>= …`.
-- keiro's `StateCodec (s, RegFile rs)` is implemented using `regFileToJSON` and
+- keiro's cabal depends on `keiki >= 0.1` and `keiki-codec-json >= 0.1`; the test
+  suite also depends on `keiki-codec-json`.
+- keiro's `StateCodec (s, RegFile rs)` is implemented in
+  `src/Keiro/Snapshot/Codec.hs` using `regFileToJSON`, `regFileFromJSON`, and
   `regFileShapeHash` instead of hand-rolled walkers.
-- An end-to-end snapshot write/read cycle against a real Postgres demonstrates the
-  joint state survives the round trip with the §10-case-style RegFile shapes from
-  `keiki/docs/plans/36-...` exercised.
-- Documentation captures **when keiro authors should reach for `regFileToJSON`
+- `test/Main.hs` exercises snapshot writes, snapshot-assisted hydration, corrupt
+  JSON fallback, shape-hash mismatch fallback, and operator truncation fallback
+  against an ephemeral PostgreSQL database. The test fixture uses a non-empty
+  register file, `SnapshotCounterRegs = '[ '("lastAmount", Int)]`.
+- Validation is currently blocked before tests run: `cabal test keiro-test` fails
+  while building `src/Keiro/Command.hs` because `evaluateCommand` pattern matches
+  on `Nothing` / `Just event` where the current type expects a list of output
+  events.
+- Remaining: restore the build, add the explicit M3 comparison that proves
+  snapshot hydration plus tail replay produces the same joint state as full replay,
+  publish the M4 usage guidance into user-facing/research docs, and record M5
+  performance numbers.
+- Documentation still needs to capture **when keiro authors should reach for `regFileToJSON`
   directly** (custom `StateCodec` implementations, ad-hoc debugging tooling,
   observability dashboards reading in-flight RegFile state) **vs** when they should
   use keiro's `StateCodec` abstraction (the typical snapshot path; the default for
@@ -59,20 +76,34 @@ the meantime), and operators get a stable, browseable JSON for incident response
 
 ## Progress
 
-- [ ] M0 — Wait for `keiki-codec-json` v0.1 on Hackage. Capture the version in this
-      plan's Surprises log when it lands.
-- [ ] M1 — Add cabal dependencies in keiro's project. Verify `cabal build all`
-      compiles after the new deps land. No keiro code changes yet.
+- [x] M0 — Upstream/local availability confirmed on 2026-05-17. `mori registry
+      show shinzui/keiki --full` locates keiki at
+      `/Users/shinzui/Keikaku/bokuno/keiki`, and local inspection shows
+      `/Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json/keiki-codec-json.cabal`
+      at version `0.1.0.0`. Hackage publication was not re-verified here; this
+      checkout consumes the local package directly through `cabal.project`.
+- [ ] M1 — Cabal dependencies are present, but build validation is not complete.
+      `cabal.project` includes
+      `/Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json`; `keiro.cabal` lists
+      `keiki-codec-json >= 0.1` for the library and `keiki-codec-json` for
+      `keiro-test`. `cabal test keiro-test` currently fails while compiling
+      `src/Keiro/Command.hs`, before the snapshot tests run.
 - [ ] M2 — Replace any hand-rolled `RegFile` walkers in keiro's snapshot codec
       sketches with calls to `regFileToJSON`/`regFileFromJSON`. Adopt
       `regFileShapeHash` for the `regfile_shape_hash` column. Update
       `docs/research/09-snapshot-strategy.md`'s §3 / §15 prose to remove the "hand-
-      rolled walker" workaround language.
+      rolled walker" workaround language. The code path is complete in
+      `src/Keiro/Snapshot/Codec.hs`; `docs/research/09-snapshot-strategy.md` still
+      preserves old prose with closure notes rather than fully rewriting the
+      historical design text, and validation is blocked by the current build
+      failure.
 - [ ] M3 — End-to-end test: a fixture aggregate with a non-trivial RegFile (modelled
       after EP-36 §10 Case A or C — small enough for a unit test) writes a snapshot,
       crashes, restarts, reads the snapshot back, replays a tail event, and produces
-      the same joint state as full replay would. Verify against a real Postgres via
-      the existing kiroku test harness.
+      the same joint state as full replay would. Partially complete: `test/Main.hs`
+      already exercises real-Postgres snapshot write/read/fallback behavior with
+      `SnapshotCounterRegs`; remaining work is an explicit full-replay equivalence
+      assertion.
 - [ ] M4 — Documentation: a `Usage Patterns` section in `docs/research/09-snapshot-
       strategy.md` (or a new `docs/research/regfile-codec-usage.md`) covering when
       to reach for `Keiki.Codec.JSON` directly vs through keiro's `StateCodec`. See
@@ -89,7 +120,30 @@ the meantime), and operators get a stable, browseable JSON for incident response
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Discovery: The plan's queued status was stale by 2026-05-17. Evidence:
+  `cabal.project` includes `/Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json`;
+  `keiro.cabal` includes `keiki-codec-json >= 0.1`; and
+  `src/Keiro/Snapshot/Codec.hs` imports `Keiki.Codec.JSON (RegFileToJSON,
+  regFileFromJSON, regFileToJSON)` plus `Keiki.Shape (KnownRegFileShape,
+  regFileShapeHash)`.
+
+- Discovery: Snapshot integration tests already exist in the main test suite.
+  Evidence: `test/Main.hs` has a `Keiro.Snapshot` group covering snapshot writes,
+  snapshot-assisted hydration, corrupt snapshot fallback, shape mismatch fallback,
+  and truncation fallback against `withTestStore`, which uses ephemeral
+  PostgreSQL.
+
+- Discovery: The current M3 evidence is close but not exact. The
+  `hydrates from snapshot and replays only the tail` test proves the snapshot seed
+  influences command execution by mutating the stored snapshot register value, but
+  it does not explicitly compare the resulting joint state with full replay from
+  version 0. Keep M3 open until that assertion exists.
+
+- Discovery: Validation is currently blocked before the snapshot tests execute.
+  Evidence: `cabal test keiro-test` on 2026-05-17 fails while compiling
+  `src/Keiro/Command.hs` with GHC errors at lines 342 and 343. The compiler reports
+  that `evaluateCommand` expects `[co]`, but the code still pattern matches the
+  transducer result as `Nothing` / `Just event`.
 
 
 ## Decision Log
@@ -103,6 +157,17 @@ implementation. Provide concise evidence.
   intent so it isn't lost in the gap between authoring keiki EP-36 and starting
   keiro v1 implementation.
   Date: 2026-05-10.
+
+- Decision: Reclassify the plan from **queued** to **in progress; dependency and
+  codec implementation present, validation blocked by a build failure** based on
+  the current working tree.
+  Rationale: The old queued state contradicts the repository: keiro already depends
+  on and imports `keiki-codec-json`, and the default snapshot codec already uses the
+  upstream JSON codec and shape hash. Keeping the plan queued would hide the real
+  remaining work. However, marking M1/M2 complete would also be inaccurate because
+  `cabal test keiro-test` currently fails to build in `src/Keiro/Command.hs` before
+  test execution.
+  Date: 2026-05-17.
 
 - Decision: Use `keiki-codec-json`'s `RegFileToJSON` directly for keiro's
   `StateCodec (s, RegFile rs)` rather than wrapping it in a keiro-side abstraction
@@ -128,7 +193,12 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- 2026-05-17: M0 is complete and M1/M2 are partially complete in the working tree.
+  The default keiro snapshot codec now serializes `(s, RegFile rs)` as a JSON
+  object with `"state"` and `"registers"` fields, using `regFileToJSON` and
+  `regFileFromJSON` for the register half and `regFileShapeHash` for compatibility
+  lookup. The current blocker is a build failure in `src/Keiro/Command.hs`, so the
+  snapshot tests and the remaining acceptance checks have not been revalidated.
 
 
 ## Context and Orientation
@@ -225,7 +295,7 @@ Use `StateCodec` (which internally calls `regFileToJSON`/`regFileShapeHash`) for
    same way. They use the same `StateCodec` slot in `EventStream`.
 
 3. **Future workflow journals (keiro v2).** The durable-execution journal stream
-   (`wf-<workflowId>`) uses `StateCodec` for its journaled state per the EP-5
+   (`wf:<workflow-name>-<workflow-id>`) uses `StateCodec` for its journaled state per the EP-5
    roadmap. Same shape.
 
 ### What NOT to use `regFileToJSON` for
@@ -261,18 +331,24 @@ not change the hash; only changing the *type* of a slot does.
 
 ## Plan of Work
 
-Single-track. Five milestones (M0–M5) executed sequentially.
+Single-track. Six milestones (M0–M5) executed sequentially. As of 2026-05-17,
+M0 is complete, M1 and M2 are partially complete in the working tree, and M3, M4,
+and M5 remain open. The immediate blocker is the `src/Keiro/Command.hs` build
+failure observed by `cabal test keiro-test`.
 
 ### M0 — Wait for upstream availability
 
 Track the keiki MasterPlan at
 `/Users/shinzui/Keikaku/bokuno/keiki/docs/masterplans/11-...` for completion of
 EP-36 (its first child plan). When EP-36 reaches M5 (cross-GHC CI gate), check
-keiki EP-37's progress for Hackage publication. When v0.1 is on Hackage **and** the
-cross-GHC gate is green for keiro's target GHC, M0 is complete.
+keiki EP-37's progress for Hackage publication. When v0.1 is available to keiro
+**and** the cross-GHC gate is green for keiro's target GHC, M0 is complete. For
+this checkout, availability is via the local `cabal.project` package set rather
+than a Hackage-only dependency.
 
 Acceptance: a Surprises log entry on this plan recording the upstream version used,
-the date keiki published it, and the GHC version validated.
+the date keiki published it if Hackage is the source, and the GHC version
+validated. This was updated on 2026-05-17 with local package evidence.
 
 ### M1 — Add cabal dependencies
 
@@ -280,8 +356,9 @@ Add `keiki-codec-json ^>= 0.1` to the cabal file(s) of any keiro library or
 test-suite that consumes the snapshot path. Bump the existing `keiki ^>= …` lower
 bound to the version that ships `Keiki.Shape`.
 
-Acceptance: `cabal build all` succeeds on a clean checkout. No code changes in
-keiro yet — this is dependency wiring only.
+Acceptance: `cabal build all` succeeds on a clean checkout. This is not yet
+validated: `cabal test keiro-test` currently fails during compilation of
+`src/Keiro/Command.hs`.
 
 ### M2 — Replace hand-rolled walkers; adopt `regFileShapeHash`
 
@@ -296,9 +373,13 @@ Update §6 of `09-snapshot-strategy.md` if the schema column type or constraints
 have changed in light of EP-36's shipped hash format (it shouldn't; `Text` works
 for any hex string).
 
-Acceptance: a grep for "hand-rolled" / "TODO: replace with keiki-codec-json" /
-similar TODO markers in the snapshot-strategy doc returns no results. The doc
-references `Keiki.Codec.JSON` and `Keiki.Shape` directly.
+Acceptance: the production snapshot codec references `Keiki.Codec.JSON` and
+`Keiki.Shape` directly and no keiro snapshot codec walker remains. The historical
+`docs/research/09-snapshot-strategy.md` text still contains closure notes around
+the old workaround language; fully rewriting that prose belongs to M4 so the
+research docs and user docs tell the same present-tense story. Full M2 acceptance
+also requires a green build after the current `src/Keiro/Command.hs` compile error
+is resolved.
 
 ### M3 — End-to-end snapshot test
 
@@ -354,32 +435,44 @@ for keiro v1.
 
 ### M0
 
-1. Periodically (weekly is fine) check
+1. Completed for this checkout on 2026-05-17. `mori registry show shinzui/keiki
+   --full` located keiki at `/Users/shinzui/Keikaku/bokuno/keiki`, and
+   `/Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json/keiki-codec-json.cabal`
+   declares version `0.1.0.0`.
+
+2. Historical instruction retained for Hackage-based release validation:
+   periodically (weekly is fine) check
    `/Users/shinzui/Keikaku/bokuno/keiki/docs/masterplans/11-keiki-codec-json-package-implementation-and-rollout.md`
    Progress section. The trigger condition is: EP-36 M5 checkbox marked, EP-37 (when
    authored) Hackage release marked complete.
 
-2. Verify on Hackage that `keiki-codec-json` is published at v0.1.x and inspect its
+3. Verify on Hackage that `keiki-codec-json` is published at v0.1.x and inspect its
    cabal `tested-with` to confirm GHC compatibility.
 
-3. Update this plan's Surprises log with the version captured.
+4. Update this plan's Surprises log with the version captured.
 
 ### M1
 
-1. Edit keiro's cabal (path TBD until keiro implementation begins) to add
-   `keiki-codec-json` as a dep.
+1. Complete in `keiro.cabal`: the library depends on `keiki-codec-json >= 0.1`
+   and `keiro-test` depends on `keiki-codec-json`.
 
-2. Run `cabal build all` on a clean checkout. Verify green.
+2. Remaining: restore a green build. The 2026-05-17 attempt with
+   `cabal test keiro-test` failed in `src/Keiro/Command.hs` before tests ran.
+
+3. Run `cabal build all` on a clean checkout. Verify green and record the result.
 
 ### M2
 
-1. Identify the files containing snapshot-related "hand-rolled walker" language.
+1. Complete in code: `src/Keiro/Snapshot/Codec.hs` implements `defaultStateCodec`
+   with `regFileToJSON`, `regFileFromJSON`, and `regFileShapeHash`.
+
+2. Identify the files containing snapshot-related "hand-rolled walker" language.
    Likely candidates: `docs/research/09-snapshot-strategy.md` §3, §15, plus any
    test fixtures.
 
-2. Replace with concrete `regFileToJSON`/`regFileFromJSON`/`regFileShapeHash` calls.
+3. Replace with concrete `regFileToJSON`/`regFileFromJSON`/`regFileShapeHash` calls.
 
-3. Update prose to remove the "upstream gap" framing.
+4. Update prose to remove the "upstream gap" framing.
 
 ### M3
 
@@ -443,10 +536,12 @@ becomes the durable place for cross-cutting issues.
 
 ### Libraries used
 
-- **`keiki ^>= …`** — the version that ships `Keiki.Shape`. Specific lower bound
-  determined at M1 once the version is known.
-- **`keiki-codec-json ^>= 0.1`** — new keiro dependency. The package's interface is
-  documented in keiki EP-36 §3 / §7.
+- **`keiki >= 0.1`** — the version family that ships `Keiki.Shape`; the current
+  cabal file uses `keiki >= 0.1`.
+- **`keiki-codec-json >= 0.1`** — keiro library dependency. The package is included
+  through the local `cabal.project` package set at
+  `/Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json`; that package's cabal file
+  declares version `0.1.0.0`.
 - **`aeson`** — already a transitive dep through `keiki-codec-json`; keiro may pull
   it in directly if needed for non-RegFile encoding.
 - **Existing keiro deps** — `hasql`, `effectful`, `streamly`, `kiroku`, etc. — no
@@ -491,3 +586,14 @@ against the upstream primitives; the shapes are unchanged.
 - Validation context (the 2026-05-09 SymTransducer-vs-Decider audit confirming
   contract-orthogonality of this work): `docs/masterplans/1-keiro-research-foundation.md`
   Surprises & Discoveries entry of 2026-05-09.
+
+
+## Revision Notes
+
+- 2026-05-17: Updated status from queued to in progress after checking the current
+  working tree. Recorded that keiro already consumes `keiki-codec-json` and
+  `Keiki.Shape` in `src/Keiro/Snapshot/Codec.hs`, marked M0 complete, marked
+  M1/M2 partial because `cabal test keiro-test` currently fails to build in
+  `src/Keiro/Command.hs`, and kept M3-M5 open where the repository still lacks the
+  exact full-replay equivalence assertion, usage guidance, and performance
+  measurements.

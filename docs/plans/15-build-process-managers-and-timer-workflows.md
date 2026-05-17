@@ -78,7 +78,7 @@ kiroku-store-test: PASS
 
 This plan depends on EP-12's command cycle and uses EP-14's subscription/idempotency conventions when worker loops consume domain events. It consumes `docs/research/08-subscription-and-process-manager-design.md` and `docs/research/10-workflow-roadmap.md`.
 
-A process manager is a small event-sourced coordinator. It observes events from one or more streams, stores its own state in a kiroku stream named with a convention such as `pm-OrderFulfillment-<correlationId>`, and emits commands to other event streams. Because delivery is at-least-once, emitted commands need deterministic ids so replaying the same input event does not append duplicate command-caused events.
+A process manager is a small event-sourced coordinator. It observes events from one or more streams, stores its own state in a kiroku stream named with a convention such as `pm:OrderFulfillment-<correlationId>`, and emits commands to other event streams. Because delivery is at-least-once, emitted commands need deterministic ids so replaying the same input event does not append duplicate command-caused events.
 
 A durable timer is a row in a keiro-owned table representing work to do after a timestamp. Timers are used for timeouts and delayed workflow steps. The timer row must commit atomically with the process-manager state that depends on it; otherwise a crash can lose the timeout.
 

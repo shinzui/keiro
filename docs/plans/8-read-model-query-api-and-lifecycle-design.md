@@ -110,7 +110,7 @@ The reader has only this plan and the current working tree. Everything needed is
 4. `docs/research/07-codec-strategy.md` — EP-2's value-level `Codec e` record. Read models that decode events from `EventData.payload` use this codec.
 5. `docs/research/08-subscription-and-process-manager-design.md` — EP-3's design. *This is the closest neighbour to this plan.* §3 covers projection lifecycles (inline / async / live); §4 covers the gap-free-read guarantee; §5 covers the transactional outbox; §6 covers process managers. Read this entire file before drafting M2.
 6. `docs/research/09-snapshot-strategy.md` — EP-4's design. The "advisory snapshot" framing (§3, §12) is *the* anchor for the read-model-vs-snapshot distinction this plan must articulate.
-7. `docs/research/10-workflow-roadmap.md` — EP-5's roadmap. Skim §3 ("v1 PMs as substrate") and §5 ("v1-to-v2 substrate continuity"). Workflow read models (queries against `wf-<workflowId>` streams) are a v2 concern; this plan should mention but not design them.
+7. `docs/research/10-workflow-roadmap.md` — EP-5's roadmap. Skim §3 ("v1 PMs as substrate") and §5 ("v1-to-v2 substrate continuity"). Workflow read models (queries against `wf:<workflow-name>-<workflow-id>` streams) are a v2 concern; this plan should mention but not design them.
 8. `docs/research/11-upstream-roadmap.md` — EP-6's synthesis. Section §5.1 (`HandlerInTransaction` shape) and §4.1 (single-stream `runInTransaction`) are the two upstream items most likely to interact with read-model design.
 
 **Key terms used in this plan.** Define each in the design doc as well.

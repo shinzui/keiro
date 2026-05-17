@@ -33,7 +33,7 @@ This is not a date commitment. It is the intended order and shape of the work.
 | Transactional outbox | Planned v1.x | Designed, but no public `Keiro.Outbox` API yet. |
 | Inbox deduplication | Planned v1.x | Designed, but no public `Keiro.Inbox` API yet. |
 | Exactly-once async projections | Planned v1.x / upstream-dependent | Blocks on transactional Shibuya/Kiroku checkpoint handling. |
-| Prefix subscriptions | Planned v1.x / upstream-dependent | Needed for `pm-` and future `wf-` stream families at scale. |
+| Prefix subscriptions | Planned v1.x / upstream-dependent | Needed for `pm:` and future `wf:` stream families at scale. |
 | Durable execution runtime | Planned v2 | Named-step `Workflow es a`, awakeables, child workflows, continue-as-new. |
 
 ## Current Baseline
@@ -184,7 +184,7 @@ Expected work:
 - Keep deterministic command ids derived from process-manager name, correlation
   id, source event id, and emit index.
 - Carry causation and correlation metadata on emitted commands.
-- Standardize the `pm-<name>-<correlation>` state-stream convention.
+- Standardize the `pm:<name>-<correlation>` state-stream convention.
 - Recommend snapshot policies for long-running process managers.
 - Document timer stuck-row recovery and retry policy.
 - Expose worker metrics for projection lag, timer backlog, outbox backlog,
@@ -201,7 +201,7 @@ subscriptions.
 | Work item | Status | Constraint | Expected outcome |
 |---|---|---|---|
 | Exactly-once async projections | Upstream-dependent | Needs transactional Shibuya/Kiroku checkpoint handling | User SQL and checkpoint advancement commit together. |
-| Prefix subscriptions | Upstream-dependent | Needs Kiroku subscription target beyond exact category | `pm-`, future `wf-`, and multi-stream families become easier to observe. |
+| Prefix subscriptions | Upstream-dependent | Needs Kiroku subscription target beyond exact category | `pm:`, future `wf:`, and multi-stream families become easier to observe. |
 | LISTEN/NOTIFY waits | Planned | Adds long-lived DB connections | `PositionWait` can wake by notification instead of polling. |
 
 ### Exactly-once async projections
@@ -230,8 +230,8 @@ needs prefix-style subscriptions for larger deployments.
 
 Expected uses:
 
-- observe every process-manager stream under `pm-`;
-- observe every future workflow stream under `wf-`;
+- observe every process-manager stream under `pm:`;
+- observe every future workflow stream under `wf:`;
 - support multi-stream read models without registering every stream family
   manually.
 
@@ -299,7 +299,7 @@ V2 durable execution means journaled functions with named steps.
 | Durable side effects | `step "name" action` journals a result by explicit step name. |
 | Replay | Recorded step results are returned without re-running side effects. |
 | Sleep | Backed by the v1 timer table. |
-| Journal storage | Kiroku streams named `wf-<workflowId>`. |
+| Journal storage | Kiroku streams named `wf:<workflow-name>-<workflow-id>`. |
 | Step lookup | `keiro_workflow_steps` indexes journaled steps for fast lookup. |
 | External completion | `keiro_awakeables` stores externally completed durable promises. |
 | Child workflows | Parent journals child handles so it can wait on or cancel them. |

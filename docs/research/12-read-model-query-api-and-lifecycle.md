@@ -400,7 +400,7 @@ Path (a) works today with existing kiroku and shibuya primitives. Path (b) is pr
 
 ### 7.2 Identified upstream gap
 
-EP-5 §9 already records "kiroku-side prefix-style category subscriptions for `pm-`/`wf-` streams" as an upstream question. EP-8 §7 widens the scope: the same primitive is needed for multi-stream read models, not only for workflow streams. The cascade goes into the MasterPlan's Surprises & Discoveries with the existing EP-5 entry referenced.
+EP-5 §9 already records "kiroku-side prefix-style category subscriptions for `pm:`/`wf:` streams" as an upstream question. EP-8 §7 widens the scope: the same primitive is needed for multi-stream read models, not only for workflow streams. The cascade goes into the MasterPlan's Surprises & Discoveries with the existing EP-5 entry referenced.
 
 The implementation MasterPlan should treat path (a) as the v1 baseline (works today) and path (b) as a Wanted upgrade once the kiroku prefix-style category subscription lands.
 

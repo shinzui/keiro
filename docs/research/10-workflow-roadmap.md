@@ -34,7 +34,7 @@ This document fixes which features land in which version and why.
 Term definitions (precise — this document is where the vocabulary is fixed):
 
 - *Workflow* — the general, vague term users reach for. In v1 it means "process manager" (§2); in v2 it means a journaled durable function whose execution is checkpointed at named steps (§4).
-- *Process manager* — an event-sourced coordinator with a `(state, event) -> (state, [command])` step function. Subscribes to one or more event categories. Maintains its state in its own kiroku stream `pm-<pmName>-<correlationId>`. Defined in EP-3.
+- *Process manager* — an event-sourced coordinator with a `(state, event) -> (state, [command])` step function. Subscribes to one or more event categories. Maintains its state in its own kiroku stream `pm:<pmName>-<correlationId>`. Defined in EP-3.
 - *Saga* — a special case of a process manager whose step function emits compensating commands when downstream commands fail. v1 has no separate saga primitive — sagas are process managers with a `(state, event) -> (state, [Compensate ... | Continue ...])` shape.
 - *Durable execution* — execution model where a function can be paused and resumed across crashes, redeployments, and idle gaps by replaying recorded checkpoints. The hallmark of Temporal, Restate, Inngest, DBOS. Deferred to v2.
 - *Named step* — a fragment of a durable function uniquely identified by a string label, not by source position. A retry replays only un-checkpointed steps. v2's chosen durability discriminator (§4).
@@ -49,7 +49,7 @@ Term definitions (precise — this document is where the vocabulary is fixed):
 
 What ships in v1, with one paragraph each. Every entry is either already designed in another EP (cross-linked by file path) or is fixed by this document.
 
-**1. Process managers.** Designed in EP-3 (`docs/research/08-subscription-and-process-manager-design.md` §5). A process manager is an event-sourced coordinator: it subscribes to a kiroku category via `Shibuya.Adapter.Kiroku.kirokuAdapter`, maintains its state in its own kiroku stream `pm-<pmName>-<correlationId>`, and on each event runs `(s, event) -> (s, [PMCommand])` to produce a new state and zero-or-more commands targeted at other aggregates. Multi-stream atomicity for emission rides on `Kiroku.Store.Append.appendMultiStream` (the PM state-advance event and every emitted command's target-stream append commit in one `TxSessions.transaction`). Idempotency on emitted commands uses deterministic v5 UUIDs over `(pmName, correlationId, ev.eventId, emitIndex)` so a crash-and-replay produces the same `commandId` and the second `appendToStream` returns `DuplicateEvent`. This is the v1 substrate for "workflow".
+**1. Process managers.** Designed in EP-3 (`docs/research/08-subscription-and-process-manager-design.md` §5). A process manager is an event-sourced coordinator: it subscribes to a kiroku category via `Shibuya.Adapter.Kiroku.kirokuAdapter`, maintains its state in its own kiroku stream `pm:<pmName>-<correlationId>`, and on each event runs `(s, event) -> (s, [PMCommand])` to produce a new state and zero-or-more commands targeted at other aggregates. Multi-stream atomicity for emission rides on `Kiroku.Store.Append.appendMultiStream` (the PM state-advance event and every emitted command's target-stream append commit in one `TxSessions.transaction`). Idempotency on emitted commands uses deterministic v5 UUIDs over `(pmName, correlationId, ev.eventId, emitIndex)` so a crash-and-replay produces the same `commandId` and the second `appendToStream` returns `DuplicateEvent`. This is the v1 substrate for "workflow".
 
 **2. Durable timers.** Specified in §3 of this document. A `keiro_timers(timer_id, fire_at, owner_stream, payload, status, ...)` table polled by a worker; on fire, the worker appends a synthetic `TimerFired { timerId, payload }` event to the owner's process-manager stream (or, for v2, to a workflow's journal stream). Timers are cancellable (the worker checks status before firing). Without this primitive, every timeout-based saga forces the application to integrate an external scheduler, contradicting the "library, not server" thesis.
 
@@ -74,7 +74,7 @@ Process managers cover saga-style coordination but cannot, by themselves, advanc
 
     CREATE TABLE keiro_timers (
       timer_id     uuid PRIMARY KEY,
-      owner_stream text NOT NULL,                 -- e.g., "pm-orderfulfillment-42"
+      owner_stream text NOT NULL,                 -- e.g., "pm:orderfulfillment-42"
       fire_at      timestamptz NOT NULL,
       payload      jsonb NOT NULL,
       status       text NOT NULL DEFAULT 'pending',  -- pending | fired | cancelled
@@ -137,7 +137,7 @@ The v2 stretch feature — full deterministic-replay durable execution — is de
     awakeable  :: Workflow es (AwakeableId, Eff es a)
     runWorkflow :: WorkflowId -> Workflow es a -> Eff es a
 
-`Workflow es a` is an `effectful`-style effect (a labelled wrapper around `Eff es a`) whose handler journals every `step`/`sleep`/`awakeable` interaction into a kiroku stream `wf-<workflowId>` as a `StepRecorded { name, result, timestamp }` event. The journal *is* the workflow's history; there is no parallel "workflow history" table.
+`Workflow es a` is an `effectful`-style effect (a labelled wrapper around `Eff es a`) whose handler journals every `step`/`sleep`/`awakeable` interaction into a kiroku stream `wf:<workflow-name>-<workflow-id>` as a `StepRecorded { name, result, timestamp }` event. The journal *is* the workflow's history; there is no parallel "workflow history" table.
 
 **Journaling and replay.** Every `step "name" action`:
 
@@ -167,7 +167,7 @@ The v1 substrate (event-sourced process managers + durable timers) and the v2 su
 - Control vertex `sP` — the PM's own state machine (e.g., `OrderFulfillment = AwaitingInventory | AwaitingPayment | Fulfilled | Cancelled`).
 - Register file `RegFile rs` — typed slots carrying timer fire-times, retry counters, correlation ids, and (in v2) child-workflow handles.
 
-A v2 durable workflow sits on top: a workflow function `Workflow es a` is sugar over a journaled execution of `step` calls keyed by named steps, where each step's result becomes a register-file-shaped slot in the workflow's accumulated state, and replay short-circuits on already-recorded slot values. The journal stream `wf-<workflowId>` is the v2 analogue of the v1 PM state stream `pm-<pmName>-<correlationId>`; the `StepRecorded` event is the v2 analogue of the v1 `PMStateAdvanced` event.
+A v2 durable workflow sits on top: a workflow function `Workflow es a` is sugar over a journaled execution of `step` calls keyed by named steps, where each step's result becomes a register-file-shaped slot in the workflow's accumulated state, and replay short-circuits on already-recorded slot values. The journal stream `wf:<workflow-name>-<workflow-id>` is the v2 analogue of the v1 PM state stream `pm:<pmName>-<correlationId>`; the `StepRecorded` event is the v2 analogue of the v1 `PMStateAdvanced` event.
 
 **Concretely.** A v1 PM that runs
 
@@ -183,9 +183,9 @@ becomes a v2 workflow that runs
       _ <- step (StepName "charge-card")       (runCommand chargeCardEventStream ... (ChargeCard ...))
       ...
 
-Both are correct expressions of "fulfil this order"; the v1 form is reactive (driven by source events), the v2 form is imperative (driven by the workflow function's control flow). The v2 form's journal carries the same information the v1 form's PM stream carries — the sequence of steps observed and their results. An operator inspecting a stuck workflow reads `wf-<id>` rather than `pm-orderfulfillment-<id>`; the on-disk data shape is the same shape (a kiroku stream of typed events, each carrying its `StepRecorded` or `PMStateAdvanced` payload).
+Both are correct expressions of "fulfil this order"; the v1 form is reactive (driven by source events), the v2 form is imperative (driven by the workflow function's control flow). The v2 form's journal carries the same information the v1 form's PM stream carries — the sequence of steps observed and their results. An operator inspecting a stuck workflow reads `wf:<workflow-name>-<workflow-id>` rather than `pm:orderfulfillment-<id>`; the on-disk data shape is the same shape (a kiroku stream of typed events, each carrying its `StepRecorded` or `PMStateAdvanced` payload).
 
-**The migration story.** A v1 deployment that wants to upgrade an individual workflow to v2 keeps the existing `pm-orderfulfillment-<id>` streams in place (they remain valid history), introduces a v2 `Workflow` function that resumes from a quiescent v1 state by reading the v1 stream into its initial step-result map, and routes new instances through `runWorkflow` rather than the v1 PM dispatcher. EP-5 does not specify the migration in detail — that is a v2 implementation concern — but the substrate continuity guarantees the migration is mechanical, not a rewrite.
+**The migration story.** A v1 deployment that wants to upgrade an individual workflow to v2 keeps the existing `pm:orderfulfillment-<id>` streams in place (they remain valid history), introduces a v2 `Workflow` function that resumes from a quiescent v1 state by reading the v1 stream into its initial step-result map, and routes new instances through `runWorkflow` rather than the v1 PM dispatcher. EP-5 does not specify the migration in detail — that is a v2 implementation concern — but the substrate continuity guarantees the migration is mechanical, not a rewrite.
 
 
 ## 6. v2 stretch feature set
@@ -198,7 +198,7 @@ Deferred until v1 is in production. Each entry one paragraph: what it is, why de
 
 **3. Child workflows.** A workflow spawned by a parent workflow, recorded in the parent's journal so the parent can wait on or cancel it. Deferred because (a) v1's process-manager-emit-command pattern composes — a PM that emits a command targeting another PM is the v1 analogue, (b) recording a child handle in the parent's journal requires the journal infrastructure §4 introduces, and (c) cancellation propagation across child boundaries is a v2 concern that touches every step's effect handler.
 
-**4. Continue-as-new.** Snapshot the workflow's state, rotate its journal stream, resume against the rotated stream. Deferred because (a) v1's snapshot machinery (EP-4) handles the bounded-history case for process managers — a long-lived PM stream stays loadable as long as its snapshot is fresh, and (b) journal rotation is a v2-specific concern that only matters once `wf-<id>` streams exist.
+**4. Continue-as-new.** Snapshot the workflow's state, rotate its journal stream, resume against the rotated stream. Deferred because (a) v1's snapshot machinery (EP-4) handles the bounded-history case for process managers — a long-lived PM stream stays loadable as long as its snapshot is fresh, and (b) journal rotation is a v2-specific concern that only matters once `wf:<workflow-name>-<workflow-id>` streams exist.
 
 **5. Versioning / patch API.** An explicit `patch :: PatchId -> Workflow Bool` primitive that records the patch decision in the journal so future replays observe the same branch. Deferred because (a) named steps already make most patches mechanical (rename a step to opt out; the new name has no journaled history so the new logic runs from scratch), and (b) patches that cross-cut multiple steps are rare and can be deferred to v2.5 if real demand emerges.
 
@@ -229,7 +229,7 @@ Tables v1 introduces (consolidated):
 
 Tables v2 adds:
 
-- `keiro_workflow_steps` — index of `(workflow_id, step_name)` for fast lookup of journaled steps without rescanning the journal stream. The journal itself stays in kiroku as the `wf-<workflowId>` stream; this table is a derived view for the workflow runtime's hot path. Owned by v2.
+- `keiro_workflow_steps` — index of `(workflow_id, step_name)` for fast lookup of journaled steps without rescanning the journal stream. The journal itself stays in kiroku as the `wf:<workflow-name>-<workflow-id>` stream; this table is a derived view for the workflow runtime's hot path. Owned by v2.
 - `keiro_awakeables` — `(awakeable_id, owner_workflow_id, status, payload)` for §4's awakeable primitive. Owned by v2.
 
 **Forward compatibility.** None of v2's additions invalidate v1's tables. v1 deployments can upgrade to v2 in place (run the v2 migration; v2 reads its own tables and ignores them when running a pure-v1 workload). The five v1 tables are stable contracts — EP-6's upstream-roadmap synthesis must record any changes that would force a non-trivial migration.
@@ -252,7 +252,7 @@ One paragraph each, citing `docs/research/05-workflow-prior-art.md` for evidence
 
 The v1 substrate this document fixes raises three questions that touch upstream libraries (kiroku, keiki, shibuya). EP-6 (`docs/plans/6-upstream-roadmap-for-kiroku-and-keiki.md`) consolidates them into the upstream backlog.
 
-**kiroku-side: process-manager state-stream naming convention.** v1 PMs name their state streams `pm-<pmName>-<correlationId>` (per `docs/research/08-subscription-and-process-manager-design.md` §5), and v2 workflows name their journal streams `wf-<workflowId>`. The question: should kiroku treat these as a *category* (so a subscription on the `pm-` category lets an operator observe every PM in the deployment) or leave them as ordinary streams named by convention? Treating `pm-` as a category requires kiroku to surface category subscription on a string-prefix predicate (currently `Category Text` uses an exact-match category derived from `stream_name` via the Eventide convention `category-id`). A prefix-or-stream-pattern subscription is a kiroku-side feature; if kiroku does not adopt it, keiro can compose category subscriptions by enumerating known PM names at registration time. EP-6 picks based on whether the operator-observability win justifies the upstream feature.
+**kiroku-side: process-manager state-stream naming convention.** v1 PMs name their state streams `pm:<pmName>-<correlationId>` (per `docs/research/08-subscription-and-process-manager-design.md` §5), and v2 workflows name their journal streams `wf:<workflow-name>-<workflow-id>`. The question: should kiroku treat these as a *category* (so a prefix subscription on `pm:` lets an operator observe every PM in the deployment) or leave them as ordinary streams named by convention? Treating `pm:` as a namespace prefix requires kiroku to surface category subscription on a string-prefix predicate (currently `Category Text` uses an exact-match category derived from `stream_name` via the Eventide convention `category-id`). A prefix-or-stream-pattern subscription is a kiroku-side feature; if kiroku does not adopt it, keiro can compose category subscriptions by enumerating known PM names at registration time. EP-6 picks based on whether the operator-observability win justifies the upstream feature.
 
 **keiki-side: should `step` carry a `compensate` direction for sagas?** v1 sagas are authored as ordinary process managers whose step function emits compensating commands on failure events. The keiki primitive `step :: SymTransducer phi rs s ci co -> (s, RegFile rs) -> ci -> Maybe (s, RegFile rs, Maybe co)` returns at most one event per command; a saga that needs to emit a compensating command on a *failure* event uses an ordinary edge in the transducer with `failure` in `ci`. Symmetrically: should the transducer expose a separate `compensate :: ci -> co -> Maybe co'` direction for the inverse? The argument for: makes saga compensation a first-class formalism rather than an application convention, supports the future SBV/z3 verification layer over compensation correctness. The argument against: sagas are a small-enough subset of process managers that the application convention works fine; adding a direction to `SymTransducer` complicates `compose`/`alternative`/`feedback1` and the verification story without obvious payoff. EP-6 picks based on whether keiki's roadmap already includes a verification milestone that wants compensation as a typed concept.
 
@@ -275,6 +275,6 @@ The verification is documentary, not empirical. Each cross-reference in this doc
 
 keiro v1 ships event-sourced process managers (EP-3), durable timers (this document §3), the transactional outbox/inbox (EP-3), inline and async projections (EP-3), snapshots (EP-4), and idempotent commands (EP-1). Together these primitives cover the saga and choreography use cases that account for ~90% of "workflow" demand without committing to a deterministic-replay runtime.
 
-keiro v2 adds named-step durable execution on a journaled `Workflow es a` effect (§4), with sleeps backed by §3's timer table and awakeables backed by a new `keiro_awakeables` table. The journal lives in kiroku as `wf-<workflowId>` streams, sharing the storage and observability substrate with v1's PM streams. The v1-to-v2 upgrade path is mechanical (§5): a process manager *is* a workflow with one explicit step; conversely, a workflow is a process manager whose step function happens to be journaled call-by-call.
+keiro v2 adds named-step durable execution on a journaled `Workflow es a` effect (§4), with sleeps backed by §3's timer table and awakeables backed by a new `keiro_awakeables` table. The journal lives in kiroku as `wf:<workflow-name>-<workflow-id>` streams, sharing the storage and observability substrate with v1's PM streams. The v1-to-v2 upgrade path is mechanical (§5): a process manager *is* a workflow with one explicit step; conversely, a workflow is a process manager whose step function happens to be journaled call-by-call.
 
-Three open questions go to EP-6 for upstream synthesis (§9): whether kiroku exposes a prefix-style category subscription for `pm-`/`wf-` streams, whether keiki's `SymTransducer` gains a `compensate` direction, and whether shibuya's supervisor hosts the timer-firing worker. None of these block v1; all of them are quality-of-life questions that EP-6 can prioritise alongside the upstream backlog from EP-1 through EP-4.
+Three open questions go to EP-6 for upstream synthesis (§9): whether kiroku exposes a prefix-style category subscription for `pm:`/`wf:` streams, whether keiki's `SymTransducer` gains a `compensate` direction, and whether shibuya's supervisor hosts the timer-firing worker. None of these block v1; all of them are quality-of-life questions that EP-6 can prioritise alongside the upstream backlog from EP-1 through EP-4.
