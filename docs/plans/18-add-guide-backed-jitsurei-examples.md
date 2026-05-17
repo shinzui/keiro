@@ -75,6 +75,10 @@ Record every decision made while working on the plan.
   Rationale: The order lifecycle is the central concept in the guide-backed example. A state diagram makes the accepted commands, emitted events, and terminal states visible before readers inspect code.
   Date: 2026-05-17
 
+- Decision: Keep the added Keiki walkthrough focused on the TH helpers and builder DSL.
+  Rationale: The command-side guide should not require readers to have read the Keiki guides first, but the useful missing material is how `deriveAggregateCtors`, `deriveWireCtors`, `B.from`, `B.onCmd`, `B.emit`, and `B.goto` fit together in the guide-backed code. A broader Keiki primer would distract from the Keiro command-cycle guide.
+  Date: 2026-05-17
+
 
 ## Outcomes & Retrospective
 
@@ -89,6 +93,10 @@ Compare the result against the original purpose.
 
 - Outcome: The guide-facing command side was revised to use Keiki's builder DSL and record payload constructors such as `PlaceOrder PlaceOrderData` and `OrderPlaced OrderPlacedData`.
   Gaps: The DSL's Template Haskell helper emits some extra projection helpers that are not needed by this small example. They are harmless, but future polish can decide whether to export them as teaching aids or suppress the unused-binding warnings locally.
+  Date: 2026-05-17
+
+- Outcome: The command-side guide now includes a focused walkthrough of using Keiki's Template Haskell helpers and builder DSL in the `jitsurei` order stream.
+  Gaps: The guide intentionally does not become a general Keiki tutorial; it explains only the authoring pieces needed to understand and extend the guide-backed aggregate.
   Date: 2026-05-17
 
 
@@ -189,11 +197,17 @@ When adding guide pages, keep code snippets short and make the source file link 
 
 ```haskell
 data OrderCommand
-  = PlaceOrder OrderId Sku Quantity
-  | ApprovePayment OrderId
-  | MarkPacked OrderId
-  | ShipOrder OrderId
-  | CancelOrder OrderId Text
+  = PlaceOrder !PlaceOrderData
+  | ApprovePayment !ApprovePaymentData
+  | MarkPacked !MarkPackedData
+  | ShipOrder !ShipOrderData
+  | CancelOrder !CancelOrderData
+
+data PlaceOrderData = PlaceOrderData
+  { orderId :: !OrderId
+  , sku :: !Sku
+  , quantity :: !Quantity
+  }
 ```
 
 Then it should immediately point to the full implementation at `jitsurei/src/Jitsurei/Domain.hs` and the behavior tests at `jitsurei/test/Main.hs`.
@@ -282,6 +296,18 @@ Test suite jitsurei-test: PASS
 
 $ cabal build all
 Build completed successfully.
+
+$ just website-verify
+Built 34 site pages plus the source-doc index into site-dist/
+No broken file links across 36 HTML pages
+```
+
+Observed after adding the self-contained TH and DSL walkthrough on 2026-05-17:
+
+```text
+$ cabal test jitsurei-test
+7 examples, 0 failures
+Test suite jitsurei-test: PASS
 
 $ just website-verify
 Built 34 site pages plus the source-doc index into site-dist/

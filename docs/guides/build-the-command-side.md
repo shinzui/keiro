@@ -22,10 +22,78 @@ type OrderEventStream =
   EventStream (HsPred OrderRegs OrderCommand) OrderRegs OrderState OrderCommand OrderEvent
 ```
 
-The transducer is authored with the Keiki builder DSL, not the lower-level
-`Edge` record syntax. Template Haskell derives command constructor projections
-and event wire constructors from the record payload types, then the builder
-reads like the state transition it represents:
+The transducer is authored with Keiki's Template Haskell helpers and builder
+DSL. The full module enables `TemplateHaskell`, `QualifiedDo`,
+`BlockArguments`, and `OverloadedRecordDot`, then imports the two authoring
+surfaces:
+
+```haskell
+import Keiki.Generics.TH (deriveAggregateCtors, deriveWireCtors)
+import Keiki.Builder qualified as B
+```
+
+The domain types use one record payload per command and event constructor. That
+shape is important: the TH helpers inspect constructors such as
+`PlaceOrder PlaceOrderData` and `OrderPlaced OrderPlacedData`, then derive
+field-aware helpers from the record names.
+
+```haskell
+data OrderCommand
+  = PlaceOrder !PlaceOrderData
+  | ApprovePayment !ApprovePaymentData
+
+data PlaceOrderData = PlaceOrderData
+  { orderId :: !OrderId
+  , sku :: !Sku
+  , quantity :: !Quantity
+  }
+```
+
+Derive command-side helpers with `deriveAggregateCtors`. The first argument is
+the command sum type, the second is the register-file type, and each pair maps a
+real constructor name to the short suffix used in generated names:
+
+```haskell
+type OrderRegs = '[]
+
+$( deriveAggregateCtors
+    ''OrderCommand
+    ''OrderRegs
+    [ ("PlaceOrder", "PlaceOrder")
+    , ("ApprovePayment", "ApprovePayment")
+    , ("MarkPacked", "MarkPacked")
+    , ("ShipOrder", "ShipOrder")
+    , ("CancelOrder", "CancelOrder")
+    ]
+ )
+```
+
+For `PlaceOrder`, this gives the builder `inCtorPlaceOrder`, an input
+constructor matcher. Inside `B.onCmd inCtorPlaceOrder`, the lambda argument is a
+typed projection of `PlaceOrderData`, so `d.orderId`, `d.sku`, and `d.quantity`
+can be used directly.
+
+Derive event-side helpers with `deriveWireCtors`:
+
+```haskell
+$( deriveWireCtors
+    ''OrderEvent
+    [ ("OrderPlaced", "OrderPlaced")
+    , ("PaymentApproved", "PaymentApproved")
+    , ("OrderPacked", "OrderPacked")
+    , ("OrderShipped", "OrderShipped")
+    , ("OrderCancelled", "OrderCancelled")
+    ]
+ )
+```
+
+For `OrderPlaced`, this gives `wireOrderPlaced` and
+`OrderPlacedTermFields`. The wire value names the event constructor to emit; the
+term-fields record says how to fill that event from the current command
+projection.
+
+With the helpers generated, each transition is written in the builder DSL
+instead of the lower-level `Edge` record syntax:
 
 ```haskell
 B.from NotStarted do
@@ -39,9 +107,20 @@ B.from NotStarted do
 ```
 
 That says `PlaceOrder` is accepted from `NotStarted`, emits `OrderPlaced`, and
-lands in `Placed`. `ShipOrder` is only accepted from `Packed`; if a caller tries
-to ship an unpaid order, there is no matching edge, so Keiro returns
-`CommandRejected`.
+lands in `Placed`. The builder has four moving parts:
+
+- `B.buildTransducer NotStarted RNil isTerminal do` declares the initial state,
+  the initial register file, and the terminal-state predicate.
+- `B.from Placed do` groups all transitions whose source state is `Placed`.
+- `B.onCmd inCtorApprovePayment $ \d -> B.do` adds a command-triggered edge and
+  exposes the command payload as `d`.
+- `B.emit wirePaymentApproved PaymentApprovedTermFields{...}` emits an event,
+  and `B.goto Paid` declares the target state. Each `B.onCmd` body must call
+  exactly one `B.goto`.
+
+`ShipOrder` is only accepted from `Packed`; if a caller tries to ship an unpaid
+order, there is no matching `B.onCmd` edge from the current state, so Keiro
+returns `CommandRejected`.
 
 ```mermaid
 stateDiagram-v2
