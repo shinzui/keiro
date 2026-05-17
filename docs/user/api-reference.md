@@ -69,7 +69,8 @@ Types and functions:
 - `runCommandWithSql`
 - `runCommandWithSqlEvents`
 
-Use it for the canonical load, replay, decide, append command cycle.
+Use it for the canonical load, streaming replay, decide, append command cycle.
+Commands may append zero, one, or many produced events as one store batch.
 
 ## `Keiro.Snapshot`
 

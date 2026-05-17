@@ -102,6 +102,8 @@ runProcessManagerOnce ::
   , Error StoreError :> es
   , BoolAlg phi (RegFile rs, ci)
   , BoolAlg targetPhi (RegFile targetRs, targetCi)
+  , Eq co
+  , Eq targetCo
   ) =>
   RunCommandOptions ->
   ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo ->
@@ -182,6 +184,8 @@ runProcessManagerWorker ::
   , Error StoreError :> es
   , BoolAlg phi (RegFile rs, ci)
   , BoolAlg targetPhi (RegFile targetRs, targetCi)
+  , Eq co
+  , Eq targetCo
   ) =>
   RunCommandOptions ->
   ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo ->

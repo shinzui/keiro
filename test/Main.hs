@@ -5,7 +5,7 @@ module Main
   )
 where
 
-import Data.Aeson (object, withObject, (.:))
+import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Contravariant.Extras (contrazip2, contrazip4)
@@ -214,7 +214,7 @@ main = hspec $ do
         runCommand defaultRunCommandOptions counterEventStream target (Add 1)
       result
         `shouldBe` Right
-          (Left (HydrationDecodeFailed (UnknownEventType (EventType "OtherEvent") ["CounterAdded"])))
+          (Left (HydrationDecodeFailed (UnknownEventType (EventType "OtherEvent") ["CounterAdded", "CounterAudited"])))
 
     it "rolls back the append when inline SQL condemns the transaction" $ \storeHandle -> do
       let target = stream "counter-command-rollback" :: Stream CounterEventStream
@@ -231,6 +231,53 @@ main = hspec $ do
       Right recorded <- Store.runStoreIO storeHandle $
         Store.readStreamForward (StreamName "counter-command-rollback") (StreamVersion 0) 10
       recorded `shouldBe` Vector.empty
+
+    it "appends all events emitted by one accepted command" $ \storeHandle -> do
+      let target = stream "counter-command-multi-create" :: Stream CounterEventStream
+      result <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions multiCounterEventStream target (Add 5)
+      case result of
+        Right (Right commandResult) -> do
+          commandResult ^. #streamVersion `shouldBe` StreamVersion 2
+          commandResult ^. #eventsAppended `shouldBe` 2
+          commandResult ^. #globalPosition `shouldSatisfy` isJust
+        other -> expectationFailure ("expected successful multi-event command, got " <> show other)
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "counter-command-multi-create") (StreamVersion 0) 10
+      traverse (decodeRecorded counterCodec) (Vector.toList recorded)
+        `shouldBe` Right [CounterAdded 5, CounterAudited 5]
+
+    it "replays a prior multi-event command before appending the next batch" $ \storeHandle -> do
+      let target = stream "counter-command-multi-replay" :: Stream CounterEventStream
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions multiCounterEventStream target (Add 2)
+      result <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions multiCounterEventStream target (Add 3)
+      case result of
+        Right (Right commandResult) -> do
+          commandResult ^. #streamVersion `shouldBe` StreamVersion 4
+          commandResult ^. #eventsAppended `shouldBe` 2
+        other -> expectationFailure ("expected successful second multi-event command, got " <> show other)
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "counter-command-multi-replay") (StreamVersion 0) 10
+      traverse (decodeRecorded counterCodec) (Vector.toList recorded)
+        `shouldBe` Right [CounterAdded 2, CounterAudited 2, CounterAdded 3, CounterAudited 3]
+
+    it "passes the complete multi-event batch to inline SQL in append order" $ \storeHandle -> do
+      let target = stream "counter-command-multi-sql-events" :: Stream CounterEventStream
+      result <- Store.runStoreIO storeHandle $
+        runCommandWithSqlEvents
+          defaultRunCommandOptions
+          multiCounterEventStream
+          target
+          (Add 8)
+          (\events _ -> pure events)
+      case result of
+        Right (Right (commandResult, Just observed)) -> do
+          commandResult ^. #streamVersion `shouldBe` StreamVersion 2
+          commandResult ^. #eventsAppended `shouldBe` 2
+          observed `shouldBe` [CounterAdded 8, CounterAudited 8]
+        other -> expectationFailure ("expected successful SQL multi-event command, got " <> show other)
 
   describe "Keiro.Snapshot" $ around withTestStore $ do
     it "writes a snapshot after policy threshold" $ \storeHandle -> do
@@ -317,6 +364,21 @@ main = hspec $ do
         Right (Right commandResult) ->
           commandResult ^. #streamVersion `shouldBe` StreamVersion 3
         other -> expectationFailure ("expected truncation fallback, got " <> show other)
+
+    it "writes snapshots after applying a complete multi-event command batch" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
+      let target = stream "snapshot-multi-event-batch" :: Stream SnapshotCounterEventStream
+      result <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions multiSnapshotCounterEventStream target (Add 9)
+      case result of
+        Right (Right commandResult) -> do
+          commandResult ^. #streamVersion `shouldBe` StreamVersion 2
+          commandResult ^. #eventsAppended `shouldBe` 2
+        other -> expectationFailure ("expected multi-event snapshot command, got " <> show other)
+      Right snapshotVersion <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.statement "snapshot-multi-event-batch" snapshotVersionForStreamStmt
+      snapshotVersion `shouldBe` Just (StreamVersion 2)
 
   describe "Keiro.ReadModel" $ around withTestStore $ do
     it "queries inline projection with Strong consistency" $ \storeHandle -> do
@@ -590,6 +652,7 @@ data CounterCommand
 
 data CounterEvent
   = CounterAdded !Int
+  | CounterAudited !Int
   deriving stock (Generic, Eq, Show)
 
 data CounterState
@@ -615,7 +678,30 @@ counterTransducer = SymTransducer
         [ Edge
             { guard = matchInCtor addCtor
             , update = UKeep
-            , output = Just (pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil))
+            , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
+            , target = Counting
+            }
+        ]
+  , initial = Counting
+  , initialRegs = RNil
+  , isFinal = \_ -> False
+  }
+
+multiCounterEventStream :: CounterEventStream
+multiCounterEventStream =
+  counterEventStream & #transducer .~ multiCounterTransducer
+
+multiCounterTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
+multiCounterTransducer = SymTransducer
+  { edgesOut = \case
+      Counting ->
+        [ Edge
+            { guard = matchInCtor addCtor
+            , update = UKeep
+            , output =
+                [ pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)
+                , pack addCtor counterAuditedCtor (inpCtor addCtor #amount *: oNil)
+                ]
             , target = Counting
             }
         ]
@@ -645,7 +731,35 @@ snapshotCounterTransducer = SymTransducer
                 USet
                   (#lastAmount :: IndexN "lastAmount" SnapshotCounterRegs Int)
                   (inpCtor addCtor #amount)
-            , output = Just (pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil))
+            , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
+            , target = Counting
+            }
+        ]
+  , initial = Counting
+  , initialRegs = RCons (Proxy @"lastAmount") 0 RNil
+  , isFinal = \_ -> False
+  }
+
+multiSnapshotCounterEventStream :: SnapshotCounterEventStream
+multiSnapshotCounterEventStream =
+  snapshotCounterEventStream
+    & #transducer .~ multiSnapshotCounterTransducer
+    & #snapshotPolicy .~ Every 1
+
+multiSnapshotCounterTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
+multiSnapshotCounterTransducer = SymTransducer
+  { edgesOut = \case
+      Counting ->
+        [ Edge
+            { guard = matchInCtor addCtor
+            , update =
+                USet
+                  (#lastAmount :: IndexN "lastAmount" SnapshotCounterRegs Int)
+                  (inpCtor addCtor #amount)
+            , output =
+                [ pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)
+                , pack addCtor counterAuditedCtor (inpCtor addCtor #amount *: oNil)
+                ]
             , target = Counting
             }
         ]
@@ -671,7 +785,7 @@ guardedSnapshotCounterTransducer = SymTransducer
                 USet
                   (#lastAmount :: IndexN "lastAmount" SnapshotCounterRegs Int)
                   (inpCtor addCtor #amount)
-            , output = Just (pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil))
+            , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
             , target = Counting
             }
         ]
@@ -696,30 +810,48 @@ counterAddedCtor = WireCtor
   { wcName = "CounterAdded"
   , wcMatch = \case
       CounterAdded amount -> Just (amount, ())
+      CounterAudited{} -> Nothing
   , wcBuild = \case
       (amount, ()) -> CounterAdded amount
   }
 
+counterAuditedCtor :: WireCtor CounterEvent (Int, ())
+counterAuditedCtor = WireCtor
+  { wcName = "CounterAudited"
+  , wcMatch = \case
+      CounterAudited amount -> Just (amount, ())
+      CounterAdded{} -> Nothing
+  , wcBuild = \case
+      (amount, ()) -> CounterAudited amount
+  }
+
 counterCodec :: Codec CounterEvent
 counterCodec = Codec
-  { eventTypes = "CounterAdded" :| []
+  { eventTypes = "CounterAdded" :| ["CounterAudited"]
   , eventType = \case
       CounterAdded{} -> "CounterAdded"
+      CounterAudited{} -> "CounterAudited"
   , schemaVersion = 1
   , encode = \case
       CounterAdded amount -> object ["amount" Aeson..= amount]
-  , decode = parseCounterAdded
+      CounterAudited amount -> object ["amount" Aeson..= amount, "audited" Aeson..= True]
+  , decode = parseCounterEvent
   , upcasters = []
   }
 
-parseCounterAdded :: Value -> Either Text CounterEvent
-parseCounterAdded value =
+parseCounterEvent :: Value -> Either Text CounterEvent
+parseCounterEvent value =
   case parseEither parser value of
     Right event -> Right event
     Left message -> Left (fromStringLiteral message)
   where
-    parser = withObject "CounterAdded" $ \objectValue ->
-      CounterAdded <$> objectValue .: "amount"
+    parser = withObject "CounterEvent" $ \objectValue -> do
+      amount <- objectValue .: "amount"
+      audited <- objectValue .:? "audited"
+      pure $
+        if audited == Just True
+          then CounterAudited amount
+          else CounterAdded amount
 
 counterProcessManager ::
   ProcessManager
@@ -740,17 +872,24 @@ counterProcessManager = ProcessManager
   , eventStream = counterEventStream
   , streamFor = \correlationId -> stream ("pm-counter-" <> correlationId)
   , targetEventStream = counterEventStream
-  , handle = \(CounterAdded amount) ->
-      ProcessManagerAction
-        { command = Add amount
-        , commands =
-            [ PMCommand
-                { target = stream "pm-target-order-1"
-                , command = Add amount
-                }
-            ]
-        , timers = [counterTimerRequest]
-        }
+  , handle = \case
+      CounterAdded amount ->
+        ProcessManagerAction
+          { command = Add amount
+          , commands =
+              [ PMCommand
+                  { target = stream "pm-target-order-1"
+                  , command = Add amount
+                  }
+              ]
+          , timers = [counterTimerRequest]
+          }
+      CounterAudited amount ->
+        ProcessManagerAction
+          { command = Add amount
+          , commands = []
+          , timers = []
+          }
   }
 
 counterTimerRequest :: TimerRequest
@@ -882,6 +1021,7 @@ counterInlineProjection = InlineProjection
             , Nothing
             )
             upsertCounterReadModelStmt
+        CounterAudited{} -> pure ()
   }
 
 counterAsyncProjection :: AsyncProjection
@@ -898,6 +1038,7 @@ counterAsyncProjection = AsyncProjection
             , Just (eventIdToUuid (recorded ^. #eventId))
             )
             upsertCounterReadModelStmt
+        Right CounterAudited{} -> pure ()
         Left _ -> pure ()
   , idempotencyKey = \recorded -> recorded ^. #eventId
   }

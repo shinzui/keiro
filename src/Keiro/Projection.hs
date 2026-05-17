@@ -36,7 +36,7 @@ data AsyncProjection = AsyncProjection
 
 runCommandWithProjections ::
   forall phi rs s ci co es.
-  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci)) =>
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
   RunCommandOptions ->
   EventStream phi rs s ci co ->
   Stream (EventStream phi rs s ci co) ->

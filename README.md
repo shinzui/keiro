@@ -36,7 +36,8 @@ The current v1 library provides:
   `Keiro.Codec`;
 - the author-facing `EventStream` contract in `Keiro.EventStream`;
 - `runCommand` and `runCommandWithSql` in `Keiro.Command` for the canonical
-  load, fold, decide, append cycle with optimistic concurrency;
+  load, streaming replay, decide, append-event-batch cycle with optimistic
+  concurrency;
 - advisory snapshots in `Keiro.Snapshot`;
 - read models, inline projections, async projection helpers, and rebuild
   metadata in `Keiro.ReadModel` and `Keiro.Projection`;

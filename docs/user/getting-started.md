@@ -102,8 +102,8 @@ When snapshots are enabled, set `snapshotPolicy` and `stateCodec`; see
 ## Run A Command
 
 `runCommand` loads the stream, decodes and replays prior events through Keiki,
-decides the command, encodes new events, and appends them with optimistic
-concurrency.
+decides the command, encodes the produced event list, and appends that list with
+optimistic concurrency.
 
 ```haskell
 submitOrder orderId command =
@@ -115,8 +115,9 @@ submitOrder orderId command =
 ```
 
 The result carries the final stream version, optional global position, and the
-number of events appended. A command that produces no event returns a successful
-result with `eventsAppended = 0`.
+number of events appended. A command may produce zero, one, or many events. A
+command that produces no event returns a successful result with
+`eventsAppended = 0`.
 
 ## Initialize Keiro Tables
 

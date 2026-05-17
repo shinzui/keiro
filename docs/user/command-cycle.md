@@ -33,7 +33,7 @@ data RunCommandOptions = RunCommandOptions
 
 ```haskell
 runCommand
-  :: (IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci))
+  :: (IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co)
   => RunCommandOptions
   -> EventStream phi rs s ci co
   -> Stream (EventStream phi rs s ci co)
@@ -59,10 +59,12 @@ Every recorded event is:
 1. checked against the codec's `eventTypes`;
 2. upcast to the current schema version if needed;
 3. decoded to the domain event type;
-4. replayed through `Keiki.applyEvent`.
+4. replayed through Keiki's streaming replay path.
 
 The command fails if any step fails. Keiro intentionally does not skip bad
-events.
+events. Streaming replay matters for multi-event Keiki edges: if one command
+emitted several stored events, replay carries the in-flight expected tail until
+the whole emitted list has been observed.
 
 ## Decision
 
@@ -71,11 +73,12 @@ Keiro calls `Keiki.step` with the hydrated `(state, registers)` and the command.
 Outcomes:
 
 - `Nothing`: command rejected, returned as `CommandRejected`.
-- `Just (_, _, Nothing)`: command accepted as a no-op.
-- `Just (_, _, Just event)`: command accepted and one event will be appended.
+- `Just (_, _, events)`: command accepted, where `events` is the list of
+  domain events to append. An empty list is an accepted no-op.
 
-The v1 command API appends at most one event per command because it follows the
-current Keiki transducer output shape.
+Keiro appends the produced event list as one optimistic-concurrency batch, in
+the order Keiki returned it. `CommandResult.eventsAppended` is the number of
+encoded events appended from that command.
 
 ## Append And Retry
 
@@ -122,7 +125,8 @@ runCommandWithSql
 If the continuation condemns the transaction, the event append is rolled back
 too. This is the recommended path for strongly consistent inline projections.
 
-`runCommandWithSqlEvents` additionally passes produced domain events:
+`runCommandWithSqlEvents` additionally passes the whole produced domain-event
+list in append order:
 
 ```haskell
 runCommandWithSqlEvents
