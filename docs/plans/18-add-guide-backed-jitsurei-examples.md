@@ -29,6 +29,8 @@ The user-visible outcome is a documentation set that teaches Keiro through a rea
 - [x] Cross-link `docs/user/README.md` and related `docs/user/*.md` pages to the new `docs/guides/` entry point without replacing the existing API-oriented docs. Completed 2026-05-17T15:59:25Z.
 - [x] Update `Justfile`, `README.md`, or both so local verification includes the new package and guide-backed examples. Completed 2026-05-17T15:59:25Z; `haskell-test` now runs both `keiro-test` and `jitsurei-test`, and `README.md` points to `docs/guides/README.md`.
 - [x] Run Haskell and documentation validation commands and record the observed outputs in this plan. Completed 2026-05-17T15:59:25Z.
+- [x] Refactor `Jitsurei.FulfillmentProcess` so the process-manager backing stream uses Keiki's Template Haskell helpers and builder DSL, matching the guide-facing style already used by `Jitsurei.OrderStream`. Completed 2026-05-17T20:34:11Z; `fulfillmentTransducer` now uses `deriveAggregateCtors`, `deriveWireCtors`, and `B.buildTransducer`.
+- [x] Replace handwritten Mermaid with generated Mermaid diagrams for the order stream and fulfillment process-manager stream, plus a documented `--write` / `--check` workflow that enforces the invariant that transducer diagrams are always generated from code. Completed 2026-05-17T20:34:11Z; `jitsurei-diagrams --write` generated both guide blocks and `--check` passed.
 
 
 ## Surprises & Discoveries
@@ -40,6 +42,18 @@ implementation. Provide concise evidence.
 
 - Observation: Keiro examples that need v7-shaped identifiers should not generate them through the `uuid` package.
   Evidence: The user clarified during implementation that the `uuid` package does not support UUIDv7 yet. `jitsurei` now depends on local `mmzk-typeid` and obtains timer/event UUID fixtures through `Data.TypeID.V7.parseText` and `getUUID`.
+  Date: 2026-05-17
+
+- Observation: The guide-facing DSL revision was incomplete because `Jitsurei.FulfillmentProcess` still hand-authors `Edge`, `InCtor`, `WireCtor`, `matchInCtor`, `pack`, and tuple-shaped output terms.
+  Evidence: `jitsurei/src/Jitsurei/OrderStream.hs` imports `Keiki.Generics.TH` and `Keiki.Builder qualified as B`, but `jitsurei/src/Jitsurei/FulfillmentProcess.hs` still imports the lower-level constructors from `Keiki.Core` and defines `fulfillmentTransducer` by constructing `SymTransducer { edgesOut = ... }` directly.
+  Date: 2026-05-17
+
+- Observation: The guides do not yet describe or enforce the canonical diagram-generation path.
+  Evidence: `docs/guides/build-the-command-side.md` contains a Mermaid `stateDiagram-v2` block written directly in Markdown, `docs/guides/process-managers-and-timers.md` has no process-manager stream diagram, and there is no jitsurei command that calls `Keiki.Render.Mermaid.toMermaid` to regenerate or check the guide diagrams.
+  Date: 2026-05-17
+
+- Observation: Keiki's `deriveAggregateCtors` and `deriveWireCtors` intentionally reject multi-argument constructors.
+  Evidence: The dependency source in `/Users/shinzui/Keikaku/bokuno/keiki/src/Keiki/Generics/TH.hs` documents that zero-argument constructors and one-argument record-payload constructors are supported, while record-syntax and multi-argument constructors are rejected. `FulfillmentCommand` and `FulfillmentEvent` therefore now use `ObserveFulfillmentEventData` and `FulfillmentObservedData` record payloads.
   Date: 2026-05-17
 
 
@@ -75,8 +89,24 @@ Record every decision made while working on the plan.
   Rationale: The order lifecycle is the central concept in the guide-backed example. A state diagram makes the accepted commands, emitted events, and terminal states visible before readers inspect code.
   Date: 2026-05-17
 
+- Decision: Treat Mermaid diagrams in guide pages as generated artifacts derived from Keiki transducers.
+  Rationale: Keiki already exposes `Keiki.Render.Mermaid.toMermaid`, which renders a `SymTransducer` to a `stateDiagram-v2` block. Transducer diagrams must never be handwritten; they should come from the same code that runs in tests so the repository does not develop a diagram-vs-code drift path.
+  Date: 2026-05-17
+
 - Decision: Keep the added Keiki walkthrough focused on the TH helpers and builder DSL.
   Rationale: The command-side guide should not require readers to have read the Keiki guides first, but the useful missing material is how `deriveAggregateCtors`, `deriveWireCtors`, `B.from`, `B.onCmd`, `B.emit`, and `B.goto` fit together in the guide-backed code. A broader Keiki primer would distract from the Keiro command-cycle guide.
+  Date: 2026-05-17
+
+- Decision: Treat the process-manager stream as guide-facing code that must also use the Keiki builder DSL.
+  Rationale: The fulfillment process manager is one of the promised runnable examples. Leaving its backing stream on low-level `Edge` constructors teaches a different authoring style from the order aggregate and weakens the guide's claim that application code should start from the DSL.
+  Date: 2026-05-17
+
+- Decision: Add an explicit diagram regeneration command instead of relying on manual copy-paste from tests or GHCi.
+  Rationale: A novice following the guide needs one repeatable command to update diagrams after transducer changes and one command suitable for CI or `just website-verify` to fail when the committed guide blocks are stale. Manual Mermaid editing is not an accepted maintenance workflow.
+  Date: 2026-05-17
+
+- Decision: Change fulfillment command and event constructors to single record-payload constructors.
+  Rationale: This matches the established `Jitsurei.OrderStream` style and is required by Keiki's TH helper API. It keeps the process-manager example on the guide-facing DSL path instead of preserving a lower-level multi-argument constructor shape.
   Date: 2026-05-17
 
 
@@ -92,11 +122,15 @@ Compare the result against the original purpose.
   Date: 2026-05-17
 
 - Outcome: The guide-facing command side was revised to use Keiki's builder DSL and record payload constructors such as `PlaceOrder PlaceOrderData` and `OrderPlaced OrderPlacedData`.
-  Gaps: The DSL's Template Haskell helper emits some extra projection helpers that are not needed by this small example. They are harmless, but future polish can decide whether to export them as teaching aids or suppress the unused-binding warnings locally.
+  Gaps: This revision did not update the fulfillment process manager's own event stream; `Jitsurei.FulfillmentProcess` still uses low-level `Edge`, `InCtor`, and `WireCtor` construction. The DSL's Template Haskell helper also emits some extra projection helpers that are not needed by this small example. They are harmless, but future polish can decide whether to export them as teaching aids or suppress the unused-binding warnings locally.
   Date: 2026-05-17
 
 - Outcome: The command-side guide now includes a focused walkthrough of using Keiki's Template Haskell helpers and builder DSL in the `jitsurei` order stream.
-  Gaps: The guide intentionally does not become a general Keiki tutorial; it explains only the authoring pieces needed to understand and extend the guide-backed aggregate.
+  Gaps: The guide intentionally does not become a general Keiki tutorial; it explains only the authoring pieces needed to understand and extend the guide-backed aggregate. Its Mermaid diagram is still handwritten, and the process-manager guide still lacks a generated diagram and regeneration instructions.
+  Date: 2026-05-17
+
+- Outcome: The process-manager backing stream now uses the same Keiki builder DSL style as the order stream, and the guide diagrams are generated from live transducer values.
+  Gaps: The TH helpers still emit unused `is*` and `inp*` helpers in these small modules, producing warnings during builds. They remain harmless and are already noted as future polish rather than a behavioral gap.
   Date: 2026-05-17
 
 
@@ -121,9 +155,9 @@ Milestone 2 implements the domain example. Create modules under `jitsurei/src/Ji
 
 Milestone 3 adds guide-backed persistence examples. Create `Jitsurei.Database` with schema initialization helpers for the example's own read-model tables and functions that call Keiro's `initializeSnapshotSchema`, `initializeReadModelSchema`, and `initializeTimerSchema` for local/test setup. Create `Jitsurei.ReadModels` with an inline projection that maintains an `order_summary` table and a `ReadModel` query returning status, quantity, and last event position. Add tests using `EphemeralPg` and `Kiroku.Store.runStoreIO` to prove a command can append an event and update the read model inside the same transaction through `runCommandWithProjections` or `runCommandWithSqlEvents`. This milestone is accepted when `cabal test jitsurei-test --test-options '--match "/read model/"'` or an equivalent Hspec match passes and shows the queried summary changes after commands.
 
-Milestone 4 adds process-manager, timer, snapshot, and codec-evolution examples. Create `Jitsurei.FulfillmentProcess` to react to `PaymentApproved` and emit a packing command with deterministic command ids through `runProcessManagerOnce`. Create `Jitsurei.Timers` to schedule a payment-timeout timer when an order is placed, then mark it fired through `runTimerWorker`. Create `Jitsurei.Snapshots` or extend `Jitsurei.OrderStream` with a `StateCodec` and `Every 2` or similar snapshot policy. Add a version-1-to-version-2 event upcaster in `Jitsurei.OrderStream` that mirrors the guide's story of evolving an event payload. Tests must prove duplicate process-manager dispatch is idempotent, a due timer can be claimed and marked fired, snapshot rows are written, and old JSON payloads decode into current events. This milestone is accepted when all `jitsurei-test` specs pass against an ephemeral PostgreSQL database.
+Milestone 4 adds process-manager, timer, snapshot, and codec-evolution examples. Create `Jitsurei.FulfillmentProcess` to react to `PaymentApproved` and emit a packing command with deterministic command ids through `runProcessManagerOnce`. The process manager itself is a Keiro coordinator, but its backing fulfillment event stream is still an ordinary Keiki transducer; author that transducer with `deriveAggregateCtors`, `deriveWireCtors`, and `Keiki.Builder` in the same style as `Jitsurei.OrderStream`, rather than hand-writing `Edge`, `InCtor`, `WireCtor`, `matchInCtor`, and `pack`. Create `Jitsurei.Timers` to schedule a payment-timeout timer when an order is placed, then mark it fired through `runTimerWorker`. Create `Jitsurei.Snapshots` or extend `Jitsurei.OrderStream` with a `StateCodec` and `Every 2` or similar snapshot policy. Add a version-1-to-version-2 event upcaster in `Jitsurei.OrderStream` that mirrors the guide's story of evolving an event payload. Tests must prove duplicate process-manager dispatch is idempotent, a due timer can be claimed and marked fired, snapshot rows are written, and old JSON payloads decode into current events. This milestone is accepted when all `jitsurei-test` specs pass against an ephemeral PostgreSQL database and both guide-facing transducers, `orderTransducer` and `fulfillmentTransducer`, use the builder DSL.
 
-Milestone 5 writes the guide set and links it into existing docs. Create `docs/guides/README.md` as the table of contents and add the following pages: `docs/guides/order-fulfillment-overview.md`, `docs/guides/build-the-command-side.md`, `docs/guides/evolve-events-safely.md`, `docs/guides/project-read-models.md`, `docs/guides/process-managers-and-timers.md`, `docs/guides/snapshots-and-hydration.md`, and `docs/guides/run-and-operate-jitsurei.md`. Each guide should explain concepts in prose, show short excerpts only where helpful, and link to the full source path in `jitsurei/src/` or `jitsurei/test/`. Update `docs/user/README.md` to add a "Long-form guides" section pointing at `../guides/README.md`; add one-sentence "See the guide-backed example" links in relevant `docs/user/*.md` files. This milestone is accepted when a reader can start at `docs/guides/README.md`, navigate to each guide, and find a working source file for every substantial code claim.
+Milestone 5 writes the guide set and links it into existing docs. Create `docs/guides/README.md` as the table of contents and add the following pages: `docs/guides/order-fulfillment-overview.md`, `docs/guides/build-the-command-side.md`, `docs/guides/evolve-events-safely.md`, `docs/guides/project-read-models.md`, `docs/guides/process-managers-and-timers.md`, `docs/guides/snapshots-and-hydration.md`, and `docs/guides/run-and-operate-jitsurei.md`. Each guide should explain concepts in prose, show short excerpts only where helpful, and link to the full source path in `jitsurei/src/` or `jitsurei/test/`. Mermaid diagrams in guide pages are generated documentation, never hand-authored prose. Add a `Jitsurei.Diagrams` module and a `jitsurei-diagrams` executable that renders `orderTransducer` and `fulfillmentTransducer` with `Keiki.Render.Mermaid.toMermaid`, rewrites marked Mermaid blocks in `docs/guides/build-the-command-side.md` and `docs/guides/process-managers-and-timers.md` with `--write`, and exits non-zero with a useful diff summary with `--check` when committed guide blocks are stale. The process-manager guide must show the generated fulfillment stream diagram and include a short "Regenerate diagrams" paragraph naming the exact command. Update `docs/user/README.md` to add a "Long-form guides" section pointing at `../guides/README.md`; add one-sentence "See the guide-backed example" links in relevant `docs/user/*.md` files. This milestone is accepted when a reader can start at `docs/guides/README.md`, navigate to each guide, find a working source file for every substantial code claim, and run the documented diagram command to prove the diagrams match the code.
 
 Milestone 6 updates verification and records evidence. Update `Justfile` so Haskell verification covers the new package explicitly if `cabal build all` and `cabal test all` are not already sufficient. Update `README.md` development instructions to mention `cabal test jitsurei-test` as the guide-backed example validation command. Run `cabal build all`, `cabal test keiro-test`, `cabal test jitsurei-test`, and the existing website/documentation verification path if available. This milestone is accepted when the commands pass, or when any failure is documented in this plan with a clear reason and a concrete follow-up.
 
@@ -212,10 +246,52 @@ data PlaceOrderData = PlaceOrderData
 
 Then it should immediately point to the full implementation at `jitsurei/src/Jitsurei/Domain.hs` and the behavior tests at `jitsurei/test/Main.hs`.
 
+When revising `Jitsurei.FulfillmentProcess`, keep the process-manager behavior the same but change the backing stream authoring style. Replace the manual low-level constructor definitions with Template Haskell-generated constructors:
+
+```haskell
+$( deriveAggregateCtors
+    ''FulfillmentCommand
+    '[]
+    [("ObserveFulfillmentEvent", "ObserveFulfillmentEvent")]
+ )
+
+$( deriveWireCtors
+    ''FulfillmentEvent
+    [("FulfillmentObserved", "FulfillmentObserved")]
+ )
+```
+
+Then express `fulfillmentTransducer` with `B.buildTransducer`, `B.from`, `B.onCmd`, `B.emit`, and `B.goto`. The resulting transition should still accept `ObserveFulfillmentEvent orderId status`, emit `FulfillmentObserved orderId status`, and remain in `FulfillmentIdle`. After this edit, `Jitsurei.FulfillmentProcess` should import `Keiki.Generics.TH` and `Keiki.Builder qualified as B`, and should no longer need to import low-level `Edge`, `InCtor`, `WireCtor`, `Update`, `matchInCtor`, `inpCtor`, `pack`, `oNil`, or `(*:)` from `Keiki.Core`.
+
+Add generated diagram support before treating the guide pages as complete. Create `jitsurei/src/Jitsurei/Diagrams.hs` with values such as:
+
+```haskell
+orderStreamMermaid :: Text
+orderStreamMermaid = toMermaid orderTransducer
+
+fulfillmentStreamMermaid :: Text
+fulfillmentStreamMermaid = toMermaid fulfillmentTransducer
+```
+
+Expose `fulfillmentTransducer` from `Jitsurei.FulfillmentProcess` if the diagram module needs to import it. Add an executable stanza named `jitsurei-diagrams` whose main module supports these commands from the repository root:
+
+```bash
+cabal run jitsurei:exe:jitsurei-diagrams -- --write
+cabal run jitsurei:exe:jitsurei-diagrams -- --check
+```
+
+The `--write` command should update only fenced Mermaid blocks between stable markers, for example `<!-- jitsurei-diagram: order-stream begin -->` and `<!-- jitsurei-diagram: order-stream end -->`. The `--check` command should render the current transducers, compare them with the marked guide blocks, print which diagram names are stale, and exit non-zero without modifying files. The guides should tell contributors that diagrams are generated from `Keiki.Render.Mermaid.toMermaid` and that hand-editing the marked blocks is prohibited because code is the source of truth.
+
 Run the documentation site verification after guide links are in place:
 
 ```bash
 just website-verify
+```
+
+After adding generated diagrams, include the diagram check in local validation:
+
+```bash
+cabal run jitsurei:exe:jitsurei-diagrams -- --check
 ```
 
 If `pnpm install --frozen-lockfile` or another website step needs network access and fails for environmental reasons, record the failure text in this plan and still run the local link checker if `site-dist/` can be built.
@@ -223,7 +299,7 @@ If `pnpm install --frozen-lockfile` or another website step needs network access
 
 ## Validation and Acceptance
 
-The implementation is accepted only when the sample package and the guides verify each other. `cabal test jitsurei-test` must execute at least one test for each guide-backed behavior: placing an order appends `OrderPlaced`; approving payment and packing/shipping follows valid state transitions; invalid commands are rejected as domain outcomes; a version-1 stored JSON event is upcast and decoded as the current event type; the inline read model query returns the status written by the projection; a process manager emits a deterministic packing command and treats duplicate source events idempotently; a timer can be scheduled, claimed, and marked fired; and snapshot policy writes a row that later command hydration can use.
+The implementation is accepted only when the sample package and the guides verify each other. `cabal test jitsurei-test` must execute at least one test for each guide-backed behavior: placing an order appends `OrderPlaced`; approving payment and packing/shipping follows valid state transitions; invalid commands are rejected as domain outcomes; a version-1 stored JSON event is upcast and decoded as the current event type; the inline read model query returns the status written by the projection; a process manager emits a deterministic packing command and treats duplicate source events idempotently; a timer can be scheduled, claimed, and marked fired; and snapshot policy writes a row that later command hydration can use. The source-level acceptance check must also show that `jitsurei/src/Jitsurei/FulfillmentProcess.hs` uses `Keiki.Builder` and the TH-generated constructors instead of low-level `Keiki.Core` edge construction. The documentation acceptance check must show that `cabal run jitsurei:exe:jitsurei-diagrams -- --check` passes, proving the order and fulfillment Mermaid blocks in the guides are generated from the current transducers. A plan implementer must not satisfy this by manually editing Mermaid syntax; only generated output from code is acceptable.
 
 The expected successful Haskell transcript should be close to:
 
@@ -265,6 +341,7 @@ The repository-wide validation must include:
 cabal build all
 cabal test keiro-test
 cabal test jitsurei-test
+cabal run jitsurei:exe:jitsurei-diagrams -- --check
 just website-verify
 ```
 
@@ -314,7 +391,29 @@ Built 34 site pages plus the source-doc index into site-dist/
 No broken file links across 36 HTML pages
 ```
 
-The guide acceptance criteria are human-readable and source-backed. `docs/guides/README.md` must list all guide pages. Each guide must state the concrete outcome it teaches and link to one or more exact source files under `jitsurei/`. The existing `docs/user/README.md` must link to `docs/guides/README.md`, and at least the command cycle, codecs, read models, process managers/timers, snapshots, migrations, and operations user-doc pages must point to their corresponding guide page.
+Observed after the process-manager DSL and generated-diagram revision on 2026-05-17T20:34:11Z:
+
+```text
+$ cabal test jitsurei-test
+7 examples, 0 failures
+Test suite jitsurei-test: PASS
+
+$ cabal build all
+Build completed successfully.
+
+$ cabal test keiro-test
+33 examples, 0 failures
+Test suite keiro-test: PASS
+
+$ cabal run jitsurei:exe:jitsurei-diagrams -- --check
+All generated jitsurei diagrams are up to date.
+
+$ just website-verify
+Built 38 site pages plus the source-doc index into site-dist/
+No broken file links across 40 HTML pages
+```
+
+The guide acceptance criteria are human-readable and source-backed. `docs/guides/README.md` must list all guide pages. Each guide must state the concrete outcome it teaches and link to one or more exact source files under `jitsurei/`. The existing `docs/user/README.md` must link to `docs/guides/README.md`, and at least the command cycle, codecs, read models, process managers/timers, snapshots, migrations, and operations user-doc pages must point to their corresponding guide page. The command-side and process-manager guides must also describe the canonical diagram workflow: use `cabal run jitsurei:exe:jitsurei-diagrams -- --write` after changing transducers, and use `--check` during validation.
 
 Do not consider the work complete if the guides contain large copied code blocks that can drift from `jitsurei`. Short excerpts are acceptable, but the executable source files and tests are the source of truth.
 
@@ -323,14 +422,14 @@ Do not consider the work complete if the guides contain large copied code blocks
 
 Adding `jitsurei` and `docs/guides/` is additive. Re-running `cabal build all`, `cabal test jitsurei-test`, and `just website-verify` is safe. The tests should use `EphemeralPg` like `test/Main.hs` so they create isolated PostgreSQL instances and do not mutate a developer's persistent database.
 
-If the first package skeleton does not compile, keep the package listed in `cabal.project` and fix one module at a time rather than removing it from the workspace. If a guide page points to a module that later gets renamed, update the guide link in the same commit as the source move. If website verification fails because the site generator does not yet include `docs/guides/`, update `site/build.mjs` or the relevant site input list so the new docs are rendered and link-checked. If the failure is an environment issue such as a missing package download, record the exact command and error in Progress or Surprises & Discoveries.
+If the first package skeleton does not compile, keep the package listed in `cabal.project` and fix one module at a time rather than removing it from the workspace. If a guide page points to a module that later gets renamed, update the guide link in the same commit as the source move. If a generated diagram check fails, run `cabal run jitsurei:exe:jitsurei-diagrams -- --write`, review the Markdown diff, and rerun `--check`; never hand-edit the marked Mermaid block as the fix. If a diagram needs to change, change the transducer or the renderer, then regenerate. If website verification fails because the site generator does not yet include `docs/guides/`, update `site/build.mjs` or the relevant site input list so the new docs are rendered and link-checked. If the failure is an environment issue such as a missing package download, record the exact command and error in Progress or Surprises & Discoveries.
 
 The work should not require destructive database or Git operations. Do not delete or rewrite existing `docs/user/` pages; only add cross-links and small references to the new guides. Do not traverse `/nix/store` while looking for dependency code.
 
 
 ## Interfaces and Dependencies
 
-The `jitsurei` package depends on Keiro's public modules rather than internal helpers. The core imports should be `Keiro`, `Keiro.Command`, `Keiro.Codec`, `Keiro.EventStream`, `Keiro.Projection`, `Keiro.ReadModel`, `Keiro.Snapshot`, `Keiro.Stream`, `Keiro.ProcessManager`, and `Keiro.Timer` as needed. It should import `Keiki.Core` for `SymTransducer`, `RegFile`, and the symbolic transition constructors in the same style as `test/Main.hs`. It should import `Kiroku.Store` and `Kiroku.Store.Types` for test execution and event-store assertions, and `Hasql.Transaction`, `Hasql.Statement`, `Hasql.Encoders`, and `Hasql.Decoders` for read-model SQL.
+The `jitsurei` package depends on Keiro's public modules rather than internal helpers. The core imports should be `Keiro`, `Keiro.Command`, `Keiro.Codec`, `Keiro.EventStream`, `Keiro.Projection`, `Keiro.ReadModel`, `Keiro.Snapshot`, `Keiro.Stream`, `Keiro.ProcessManager`, and `Keiro.Timer` as needed. Guide-facing transducers should import `Keiki.Core` only for shared types such as `HsPred`, `RegFile`, and `SymTransducer`; they should import `Keiki.Generics.TH` for `deriveAggregateCtors` and `deriveWireCtors`, and `Keiki.Builder qualified as B` for transition authoring. They should not teach users to hand-write symbolic transition constructors in the style of the older `test/Main.hs` examples. Diagram generation should import `Keiki.Render.Mermaid.toMermaid` from the local `keiki` dependency and render committed guide blocks from live transducer values. Test code should import `Kiroku.Store` and `Kiroku.Store.Types` for execution and event-store assertions, and `Hasql.Transaction`, `Hasql.Statement`, `Hasql.Encoders`, and `Hasql.Decoders` for read-model SQL.
 
 At the end of the work, these guide-facing modules and interfaces should exist:
 
@@ -368,11 +467,12 @@ orderSummaryInlineProjection :: InlineProjection OrderEvent
 ```haskell
 module Jitsurei.FulfillmentProcess where
 
+fulfillmentTransducer :: SymTransducer (HsPred '[] FulfillmentCommand) '[] FulfillmentState FulfillmentCommand FulfillmentEvent
 fulfillmentProcessManager :: ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo
 runFulfillmentOnce :: ... -> Eff es ...
 ```
 
-The concrete process-manager type may be verbose. Prefer a type alias with a plain name and keep exported functions easy for guide readers to follow.
+The concrete process-manager type may be verbose. Prefer a type alias with a plain name and keep exported functions easy for guide readers to follow. The module should expose a `fulfillmentTransducer` or keep it local, but in either case its implementation should use `B.buildTransducer` and generated `inCtorObserveFulfillmentEvent` / `wireFulfillmentObserved` helpers so the process-manager guide remains consistent with the command-side guide.
 
 ```haskell
 module Jitsurei.Timers where
@@ -388,4 +488,21 @@ initializeJitsureiTables :: (Store :> es) => Eff es ()
 initializeOrderSummaryTable :: Tx.Transaction ()
 ```
 
+```haskell
+module Jitsurei.Diagrams where
+
+orderStreamMermaid :: Text
+fulfillmentStreamMermaid :: Text
+```
+
+The `jitsurei-diagrams` executable should consume `Jitsurei.Diagrams`, rewrite only the marked guide blocks, and have no dependency on a database.
+
 The test support can live in `jitsurei/test/Main.hs` or `jitsurei/test/Jitsurei/TestStore.hs`; it may reuse the `EphemeralPg` pattern from the root `test/Main.hs`. All examples should use the package APIs as a user would, not hidden test-only shortcuts, except for ordinary test setup and assertions.
+
+
+## Revision Notes
+
+- 2026-05-17: Updated the plan to reflect that the previous Keiki DSL revision covered `Jitsurei.OrderStream` but not `Jitsurei.FulfillmentProcess`. Added explicit remaining progress, discovery, decision, implementation, validation, and interface guidance so the process-manager backing stream is migrated to the same DSL style before the plan is considered complete.
+- 2026-05-17: Updated the plan again to require generated Mermaid diagrams for both the order stream and fulfillment process-manager stream. Added `Jitsurei.Diagrams`, a `jitsurei-diagrams --write/--check` workflow, guide instructions, and validation requirements so diagrams stay synchronized with the transducer source.
+- 2026-05-17: Strengthened the diagram requirement: transducer Mermaid diagrams must never be handwritten. The only accepted maintenance path is to change code or renderer behavior, regenerate with `jitsurei-diagrams --write`, and verify with `--check`.
+- 2026-05-17: Implemented the remaining process-manager DSL and generated-diagram work. Marked both remaining progress items complete, recorded the record-payload constructor decision, and added validation evidence from `jitsurei-test`, `cabal build all`, `keiro-test`, `jitsurei-diagrams --check`, and `just website-verify`.

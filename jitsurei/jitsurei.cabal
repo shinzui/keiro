@@ -33,6 +33,7 @@ library
     import:             warnings, shared
     exposed-modules:    Jitsurei
                         Jitsurei.Database
+                        Jitsurei.Diagrams
                         Jitsurei.Domain
                         Jitsurei.FulfillmentProcess
                         Jitsurei.OrderStream
@@ -62,6 +63,15 @@ library
 executable jitsurei-demo
     import:             warnings, shared
     main-is:            Main.hs
+    hs-source-dirs:     app
+    ghc-options:        -threaded -rtsopts -with-rtsopts=-N
+    build-depends:      base >= 4.21 && < 5,
+                        jitsurei,
+                        text >= 2.1
+
+executable jitsurei-diagrams
+    import:             warnings, shared
+    main-is:            DiagramsMain.hs
     hs-source-dirs:     app
     ghc-options:        -threaded -rtsopts -with-rtsopts=-N
     build-depends:      base >= 4.21 && < 5,

@@ -11,9 +11,26 @@ It has its own stream family, `fulfillment-<order-id>`, and its own small event
 stream:
 
 ```haskell
-data FulfillmentCommand = ObserveFulfillmentEvent OrderId Text
-data FulfillmentEvent = FulfillmentObserved OrderId Text
+data FulfillmentCommand = ObserveFulfillmentEvent ObserveFulfillmentEventData
+data FulfillmentEvent = FulfillmentObserved FulfillmentObservedData
 ```
+
+The fulfillment stream diagram is generated from `fulfillmentTransducer`
+through `Keiki.Render.Mermaid.toMermaid`. Do not hand-edit it; after changing
+the transducer, run:
+
+```bash
+cabal run jitsurei:exe:jitsurei-diagrams -- --write
+cabal run jitsurei:exe:jitsurei-diagrams -- --check
+```
+
+<!-- jitsurei-diagram: fulfillment-stream begin -->
+```mermaid
+stateDiagram-v2
+    [*] --> FulfillmentIdle
+    FulfillmentIdle --> FulfillmentIdle : ObserveFulfillmentEvent / FulfillmentObserved
+```
+<!-- jitsurei-diagram: fulfillment-stream end -->
 
 The process manager's `handle` function is pure. It always advances the manager
 state stream with an observation event. For `PaymentApproved`, it also returns a

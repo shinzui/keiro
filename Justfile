@@ -28,5 +28,6 @@ haskell-build:
 haskell-test:
     cabal test keiro-test
     cabal test jitsurei-test
+    cabal run jitsurei:exe:jitsurei-diagrams -- --check
 
 haskell-verify: haskell-build haskell-test website-verify

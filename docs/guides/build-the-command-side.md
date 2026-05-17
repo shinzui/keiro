@@ -122,17 +122,28 @@ lands in `Placed`. The builder has four moving parts:
 order, there is no matching `B.onCmd` edge from the current state, so Keiro
 returns `CommandRejected`.
 
+The state diagram below is generated from `orderTransducer` through
+`Keiki.Render.Mermaid.toMermaid`. Do not hand-edit it; after changing the
+transducer, run:
+
+```bash
+cabal run jitsurei:exe:jitsurei-diagrams -- --write
+cabal run jitsurei:exe:jitsurei-diagrams -- --check
+```
+
+<!-- jitsurei-diagram: order-stream begin -->
 ```mermaid
 stateDiagram-v2
-  [*] --> NotStarted
-  NotStarted --> Placed: PlaceOrder / OrderPlaced
-  Placed --> Paid: ApprovePayment / PaymentApproved
-  Placed --> Cancelled: CancelOrder / OrderCancelled
-  Paid --> Packed: MarkPacked / OrderPacked
-  Packed --> Shipped: ShipOrder / OrderShipped
-  Shipped --> [*]
-  Cancelled --> [*]
+    [*] --> NotStarted
+    NotStarted --> Placed : PlaceOrder / OrderPlaced
+    Placed --> Paid : ApprovePayment / PaymentApproved
+    Placed --> Cancelled : CancelOrder / OrderCancelled
+    Paid --> Packed : MarkPacked / OrderPacked
+    Packed --> Shipped : ShipOrder / OrderShipped
+    Shipped --> [*]
+    Cancelled --> [*]
 ```
+<!-- jitsurei-diagram: order-stream end -->
 
 That rejection behavior is tested in
 [`../../jitsurei/test/Main.hs`](../../jitsurei/test/Main.hs) under

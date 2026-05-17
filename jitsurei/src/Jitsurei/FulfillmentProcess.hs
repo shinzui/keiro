@@ -1,9 +1,12 @@
 module Jitsurei.FulfillmentProcess
   ( FulfillmentCommand (..)
+  , ObserveFulfillmentEventData (..)
   , FulfillmentEvent (..)
+  , FulfillmentObservedData (..)
   , FulfillmentState (..)
   , FulfillmentEventStream
   , FulfillmentProcessManager
+  , fulfillmentTransducer
   , fulfillmentEventStream
   , fulfillmentProcessManager
   , fulfillmentStream
@@ -15,26 +18,14 @@ import Data.Aeson (Value, object, withObject, (.:))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
-import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import GHC.Generics (Generic)
-import Keiki.Core
-  ( Edge (..)
-  , HsPred
-  , InCtor (..)
-  , RegFile (..)
-  , SymTransducer (..)
-  , Update (..)
-  , WireCtor (..)
-  , inpCtor
-  , matchInCtor
-  , oNil
-  , pack
-  , (*:)
-  )
+import Keiki.Builder qualified as B
+import Keiki.Core (HsPred, RegFile (..), SymTransducer)
+import Keiki.Generics.TH (deriveAggregateCtors, deriveWireCtors)
 import Keiro.Codec (Codec (..))
 import Keiro.Command (CommandError, RunCommandOptions)
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
@@ -54,24 +45,38 @@ import Jitsurei.Domain
 import Jitsurei.OrderStream
 
 data FulfillmentCommand
-  = ObserveFulfillmentEvent !OrderId !Text
+  = ObserveFulfillmentEvent !ObserveFulfillmentEventData
+  deriving stock (Generic, Eq, Show)
+
+data ObserveFulfillmentEventData = ObserveFulfillmentEventData
+  { orderId :: !OrderId
+  , status :: !Text
+  }
   deriving stock (Generic, Eq, Show)
 
 data FulfillmentEvent
-  = FulfillmentObserved !OrderId !Text
+  = FulfillmentObserved !FulfillmentObservedData
+  deriving stock (Generic, Eq, Show)
+
+data FulfillmentObservedData = FulfillmentObservedData
+  { orderId :: !OrderId
+  , status :: !Text
+  }
   deriving stock (Generic, Eq, Show)
 
 data FulfillmentState
   = FulfillmentIdle
-  deriving stock (Generic, Eq, Show)
+  deriving stock (Generic, Eq, Show, Enum, Bounded)
 
-type FulfillmentEventStream = EventStream (HsPred '[] FulfillmentCommand) '[] FulfillmentState FulfillmentCommand FulfillmentEvent
+type FulfillmentRegs = '[]
+
+type FulfillmentEventStream = EventStream (HsPred FulfillmentRegs FulfillmentCommand) FulfillmentRegs FulfillmentState FulfillmentCommand FulfillmentEvent
 
 type FulfillmentProcessManager =
   ProcessManager
     OrderEvent
-    (HsPred '[] FulfillmentCommand)
-    '[]
+    (HsPred FulfillmentRegs FulfillmentCommand)
+    FulfillmentRegs
     FulfillmentState
     FulfillmentCommand
     FulfillmentEvent
@@ -81,7 +86,16 @@ type FulfillmentProcessManager =
     OrderCommand
     OrderEvent
 
-type ObserveFields = '[ '("orderId", OrderId), '("status", Text)]
+$( deriveAggregateCtors
+    ''FulfillmentCommand
+    ''FulfillmentRegs
+    [("ObserveFulfillmentEvent", "ObserveFulfillmentEvent")]
+ )
+
+$( deriveWireCtors
+    ''FulfillmentEvent
+    [("FulfillmentObserved", "FulfillmentObserved")]
+ )
 
 fulfillmentEventStream :: FulfillmentEventStream
 fulfillmentEventStream = EventStream
@@ -108,7 +122,11 @@ fulfillmentProcessManager = ProcessManager
       let orderId = eventOrderId event
           status = fulfillmentStatus event
        in ProcessManagerAction
-            { command = ObserveFulfillmentEvent orderId status
+            { command =
+                ObserveFulfillmentEvent ObserveFulfillmentEventData
+                  { orderId = orderId
+                  , status = status
+                  }
             , commands =
                 case event of
                   PaymentApproved{} ->
@@ -143,45 +161,15 @@ fulfillmentStatus = \case
   OrderCancelled{} -> "cancelled"
 
 fulfillmentTransducer :: SymTransducer (HsPred '[] FulfillmentCommand) '[] FulfillmentState FulfillmentCommand FulfillmentEvent
-fulfillmentTransducer = SymTransducer
-  { edgesOut = \case
-      FulfillmentIdle ->
-        [ Edge
-            { guard = matchInCtor observeCtor
-            , update = UKeep
-            , output =
-                [ pack
-                    observeCtor
-                    fulfillmentObservedCtor
-                    ( inpCtor observeCtor #orderId
-                        *: inpCtor observeCtor #status
-                        *: oNil
-                    )
-                ]
-            , target = FulfillmentIdle
-            }
-        ]
-  , initial = FulfillmentIdle
-  , initialRegs = RNil
-  , isFinal = \_ -> False
-  }
-
-observeCtor :: InCtor FulfillmentCommand ObserveFields
-observeCtor = InCtor
-  { icName = "ObserveFulfillmentEvent"
-  , icMatch = \case
-      ObserveFulfillmentEvent orderId status -> Just (RCons (Proxy @"orderId") orderId (RCons (Proxy @"status") status RNil))
-  , icBuild = \case
-      RCons _ orderId (RCons _ status RNil) -> ObserveFulfillmentEvent orderId status
-  }
-
-fulfillmentObservedCtor :: WireCtor FulfillmentEvent (OrderId, (Text, ()))
-fulfillmentObservedCtor = WireCtor
-  { wcName = "FulfillmentObserved"
-  , wcMatch = \case
-      FulfillmentObserved orderId status -> Just (orderId, (status, ()))
-  , wcBuild = \(orderId, (status, ())) -> FulfillmentObserved orderId status
-  }
+fulfillmentTransducer =
+  B.buildTransducer FulfillmentIdle RNil (const False) do
+    B.from FulfillmentIdle do
+      B.onCmd inCtorObserveFulfillmentEvent $ \d -> B.do
+        B.emit wireFulfillmentObserved FulfillmentObservedTermFields
+          { orderId = d.orderId
+          , status = d.status
+          }
+        B.goto FulfillmentIdle
 
 fulfillmentCodec :: Codec FulfillmentEvent
 fulfillmentCodec = Codec
@@ -190,11 +178,11 @@ fulfillmentCodec = Codec
       FulfillmentObserved{} -> "FulfillmentObserved"
   , schemaVersion = 1
   , encode = \case
-      FulfillmentObserved orderId status ->
+      FulfillmentObserved payload ->
         object
           [ "kind" Aeson..= ("FulfillmentObserved" :: Text)
-          , "orderId" Aeson..= orderIdText orderId
-          , "status" Aeson..= status
+          , "orderId" Aeson..= orderIdText payload.orderId
+          , "status" Aeson..= payload.status
           ]
   , decode = parseFulfillmentEvent
   , upcasters = []
@@ -211,6 +199,8 @@ parseFulfillmentEvent value =
       case kind :: Text of
         "FulfillmentObserved" ->
           FulfillmentObserved
-            <$> (OrderId <$> objectValue .: "orderId")
-            <*> objectValue .: "status"
+            <$> ( FulfillmentObservedData
+                    <$> (OrderId <$> objectValue .: "orderId")
+                    <*> objectValue .: "status"
+                )
         _ -> fail "unknown fulfillment event kind"
