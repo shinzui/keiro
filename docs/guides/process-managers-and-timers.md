@@ -22,7 +22,7 @@ target command:
 ```haskell
 PMCommand
   { target = orderCommandStream orderId
-  , command = MarkPacked orderId
+  , command = MarkPacked MarkPackedData{orderId = orderId}
   }
 ```
 

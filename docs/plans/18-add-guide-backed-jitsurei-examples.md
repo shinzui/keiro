@@ -67,6 +67,14 @@ Record every decision made while working on the plan.
   Rationale: The guide pages intentionally link to source files as the canonical code. The static link checker only sees generated `site-dist/` content, so copying the package source lets guide-to-source links be checked locally.
   Date: 2026-05-17
 
+- Decision: Refactor `jitsurei` to use Keiki's builder DSL and record payloads for commands and events.
+  Rationale: The original implementation used lower-level `Edge` constructors because that matched Keiro's integration tests, but `jitsurei` is guide-facing and should model realistic authoring style. Record payloads make examples extensible and readable, and the builder DSL is the Keiki authoring surface that application code should learn first.
+  Date: 2026-05-17
+
+- Decision: Add a Mermaid state diagram to the command-side guide.
+  Rationale: The order lifecycle is the central concept in the guide-backed example. A state diagram makes the accepted commands, emitted events, and terminal states visible before readers inspect code.
+  Date: 2026-05-17
+
 
 ## Outcomes & Retrospective
 
@@ -77,6 +85,10 @@ Compare the result against the original purpose.
 
 - Outcome: The repository now contains a `jitsurei` sibling package with a library, demo executable, and `jitsurei-test` suite. The code backs the new guide set in `docs/guides/` and covers the requested real-world examples: command execution, event evolution, read models, process-manager idempotency, timers, and snapshots.
   Gaps: The example remains intentionally library-shaped rather than a web service. It demonstrates the Keiro runtime pieces without adding an HTTP API, deployment manifests, or async Shibuya worker wiring.
+  Date: 2026-05-17
+
+- Outcome: The guide-facing command side was revised to use Keiki's builder DSL and record payload constructors such as `PlaceOrder PlaceOrderData` and `OrderPlaced OrderPlacedData`.
+  Gaps: The DSL's Template Haskell helper emits some extra projection helpers that are not needed by this small example. They are harmless, but future polish can decide whether to export them as teaching aids or suppress the unused-binding warnings locally.
   Date: 2026-05-17
 
 
@@ -255,6 +267,21 @@ Test suite keiro-test: PASS
 $ cabal test jitsurei-test
 7 examples, 0 failures
 Test suite jitsurei-test: PASS
+
+$ just website-verify
+Built 34 site pages plus the source-doc index into site-dist/
+No broken file links across 36 HTML pages
+```
+
+Observed after the DSL and record-payload revision on 2026-05-17T17:58:56Z:
+
+```text
+$ cabal test jitsurei-test
+7 examples, 0 failures
+Test suite jitsurei-test: PASS
+
+$ cabal build all
+Build completed successfully.
 
 $ just website-verify
 Built 34 site pages plus the source-doc index into site-dist/

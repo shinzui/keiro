@@ -114,7 +114,7 @@ fulfillmentProcessManager = ProcessManager
                   PaymentApproved{} ->
                     [ PMCommand
                         { target = orderCommandStream orderId
-                        , command = MarkPacked orderId
+                        , command = MarkPacked (MarkPackedData orderId)
                         }
                     ]
                   _ -> []

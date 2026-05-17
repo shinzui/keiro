@@ -14,20 +14,29 @@ acceptance and rejection without hiding the Keiro APIs behind a web framework.
 
 The domain types live in
 [`../../jitsurei/src/Jitsurei/Domain.hs`](../../jitsurei/src/Jitsurei/Domain.hs).
-The core command type is:
+The core command type uses record payloads. That keeps examples close to
+production code, where commands and events accumulate fields over time and
+where labels make JSON codecs, logs, and tests easier to read.
 
 ```haskell
 data OrderCommand
-  = PlaceOrder OrderId Sku Quantity
-  | ApprovePayment OrderId PaymentRef
-  | MarkPacked OrderId
-  | ShipOrder OrderId Carrier TrackingId
-  | CancelOrder OrderId Text
+  = PlaceOrder PlaceOrderData
+  | ApprovePayment ApprovePaymentData
+  | MarkPacked MarkPackedData
+  | ShipOrder ShipOrderData
+  | CancelOrder CancelOrderData
+
+data PlaceOrderData = PlaceOrderData
+  { orderId :: OrderId
+  , sku :: Sku
+  , quantity :: Quantity
+  }
 ```
 
 The matching events are `OrderPlaced`, `PaymentApproved`, `OrderPacked`,
-`OrderShipped`, and `OrderCancelled`. `OrderState` is the replayed aggregate
-state: `NotStarted`, `Placed`, `Paid`, `Packed`, `Shipped`, or `Cancelled`.
+`OrderShipped`, and `OrderCancelled`, and they also carry record payloads such
+as `OrderPlacedData`. `OrderState` is the replayed aggregate state:
+`NotStarted`, `Placed`, `Paid`, `Packed`, `Shipped`, or `Cancelled`.
 
 The guide code is split by responsibility:
 

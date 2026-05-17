@@ -43,7 +43,14 @@ main = hspec $ do
             , "qty" Aeson..= (3 :: Int)
             ]
         )
-        `shouldBe` Right (OrderPlaced sampleOrderId (Sku "UNKNOWN") (Quantity 3))
+        `shouldBe` Right
+          ( OrderPlaced
+              OrderPlacedData
+                { orderId = sampleOrderId
+                , sku = Sku "UNKNOWN"
+                , quantity = Quantity 3
+                }
+          )
 
   describe "Jitsurei command cycle" $ around withTestStore $ do
     it "places and pays for an order in stream order" $ \store -> do
@@ -58,8 +65,15 @@ main = hspec $ do
         Store.readStreamForward (StreamName "order-order-100") (StreamVersion 0) 10
       traverse (decodeRecorded orderCodec) (Vector.toList recorded)
         `shouldBe` Right
-          [ OrderPlaced sampleOrderId sampleSku sampleQuantity
-          , PaymentApproved sampleOrderId samplePaymentRef
+          [ OrderPlaced OrderPlacedData
+              { orderId = sampleOrderId
+              , sku = sampleSku
+              , quantity = sampleQuantity
+              }
+          , PaymentApproved PaymentApprovedData
+              { orderId = sampleOrderId
+              , paymentRef = samplePaymentRef
+              }
           ]
 
     it "rejects shipping an unpaid order as a domain outcome" $ \store -> do
@@ -68,7 +82,13 @@ main = hspec $ do
           defaultRunCommandOptions
           orderEventStream
           (orderStream (OrderId "order-unpaid"))
-          (ShipOrder (OrderId "order-unpaid") (Carrier "UPS") (TrackingId "TRACK-1"))
+          ( ShipOrder
+              ShipOrderData
+                { orderId = OrderId "order-unpaid"
+                , carrier = Carrier "UPS"
+                , trackingId = TrackingId "TRACK-1"
+                }
+          )
       result `shouldBe` Right (Left CommandRejected)
 
   describe "Jitsurei read model" $ around withTestStore $ do
@@ -96,9 +116,22 @@ main = hspec $ do
       Right () <- Store.runStoreIO store initializeSnapshotSchema
       let target = orderStream (OrderId "snapshot-100")
       Right (Right _) <- Store.runStoreIO store $
-        runCommand defaultRunCommandOptions snapshotOrderEventStream target (PlaceOrder (OrderId "snapshot-100") sampleSku sampleQuantity)
+        runCommand defaultRunCommandOptions snapshotOrderEventStream target
+          ( PlaceOrder
+              PlaceOrderData
+                { orderId = OrderId "snapshot-100"
+                , sku = sampleSku
+                , quantity = sampleQuantity
+                }
+          )
       Right (Right _) <- Store.runStoreIO store $
-        runCommand defaultRunCommandOptions snapshotOrderEventStream target (ApprovePayment (OrderId "snapshot-100") samplePaymentRef)
+        runCommand defaultRunCommandOptions snapshotOrderEventStream target
+          ( ApprovePayment
+              ApprovePaymentData
+                { orderId = OrderId "snapshot-100"
+                , paymentRef = samplePaymentRef
+                }
+          )
       Right snapshotVersion <- Store.runStoreIO store $
         Store.runTransaction $
           Tx.statement "order-snapshot-100" snapshotVersionForStreamStmt
@@ -115,7 +148,8 @@ main = hspec $ do
         Store.readStreamForward (StreamName "order-order-100") (StreamVersion 0) 10
       let paymentRecorded = Vector.toList recorded !! 1
       first <- Store.runStoreIO store $
-        runFulfillmentOnce defaultRunCommandOptions paymentRecorded (PaymentApproved sampleOrderId samplePaymentRef)
+        runFulfillmentOnce defaultRunCommandOptions paymentRecorded
+          (PaymentApproved PaymentApprovedData{orderId = sampleOrderId, paymentRef = samplePaymentRef})
       first `shouldSatisfy` \case
         Right (Right result) ->
           case result ^. #commandResults of
@@ -123,7 +157,8 @@ main = hspec $ do
             _ -> False
         _ -> False
       second <- Store.runStoreIO store $
-        runFulfillmentOnce defaultRunCommandOptions paymentRecorded (PaymentApproved sampleOrderId samplePaymentRef)
+        runFulfillmentOnce defaultRunCommandOptions paymentRecorded
+          (PaymentApproved PaymentApprovedData{orderId = sampleOrderId, paymentRef = samplePaymentRef})
       second `shouldSatisfy` \case
         Right (Right result) ->
           case (result ^. #managerResult, result ^. #commandResults) of
@@ -154,10 +189,17 @@ samplePaymentRef :: PaymentRef
 samplePaymentRef = PaymentRef "pay_123"
 
 samplePlaceOrder :: OrderCommand
-samplePlaceOrder = PlaceOrder sampleOrderId sampleSku sampleQuantity
+samplePlaceOrder = PlaceOrder PlaceOrderData
+  { orderId = sampleOrderId
+  , sku = sampleSku
+  , quantity = sampleQuantity
+  }
 
 sampleApprovePayment :: OrderCommand
-sampleApprovePayment = ApprovePayment sampleOrderId samplePaymentRef
+sampleApprovePayment = ApprovePayment ApprovePaymentData
+  { orderId = sampleOrderId
+  , paymentRef = samplePaymentRef
+  }
 
 dueTime :: UTCTime
 dueTime = UTCTime (ModifiedJulianDay 1) (secondsToDiffTime 0)

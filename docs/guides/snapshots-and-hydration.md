@@ -21,7 +21,7 @@ snapshot-enabled stream changes only those fields:
 snapshotOrderEventStream =
   orderEventStream
     { snapshotPolicy = Every 2
-    , stateCodec = Just (defaultStateCodec @'[] @OrderState 1)
+    , stateCodec = Just (defaultStateCodec @OrderRegs @OrderState 1)
     }
 ```
 

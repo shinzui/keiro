@@ -55,23 +55,23 @@ orderSummaryInlineProjection = InlineProjection
 applyOrderEvent :: OrderEvent -> AppendResult -> Tx.Transaction ()
 applyOrderEvent event appendResult =
   case event of
-    OrderPlaced orderId sku quantity ->
+    OrderPlaced payload ->
       Tx.statement
-        ( orderIdText orderId
-        , skuText sku
-        , Prelude.fromIntegral (quantityInt quantity)
+        ( orderIdText payload.orderId
+        , skuText payload.sku
+        , Prelude.fromIntegral (quantityInt payload.quantity)
         , "placed"
         , globalPositionToInt (appendResult ^. #globalPosition)
         )
         upsertOrderSummaryStmt
-    PaymentApproved orderId _ ->
-      updateStatus orderId "paid" appendResult
-    OrderPacked orderId ->
-      updateStatus orderId "packed" appendResult
-    OrderShipped orderId _ _ ->
-      updateStatus orderId "shipped" appendResult
-    OrderCancelled orderId _ ->
-      updateStatus orderId "cancelled" appendResult
+    PaymentApproved payload ->
+      updateStatus payload.orderId "paid" appendResult
+    OrderPacked payload ->
+      updateStatus payload.orderId "packed" appendResult
+    OrderShipped payload ->
+      updateStatus payload.orderId "shipped" appendResult
+    OrderCancelled payload ->
+      updateStatus payload.orderId "cancelled" appendResult
 
 updateStatus :: OrderId -> Text -> AppendResult -> Tx.Transaction ()
 updateStatus orderId status appendResult =

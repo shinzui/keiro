@@ -21,9 +21,13 @@ common shared
     default-language:   GHC2024
     default-extensions: DeriveAnyClass
                         DuplicateRecordFields
+                        BlockArguments
                         OverloadedLabels
+                        OverloadedRecordDot
                         OverloadedStrings
                         PackageImports
+                        QualifiedDo
+                        TemplateHaskell
 
 library
     import:             warnings, shared

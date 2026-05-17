@@ -39,10 +39,15 @@ The guide test proves the old payload still works:
 decodeRaw orderCodec 1 (object ["orderId" .= "order-100", "qty" .= 3])
 ```
 
-The expected decoded event is:
+The expected decoded event is a current record-payload event:
 
 ```haskell
-OrderPlaced (OrderId "order-100") (Sku "UNKNOWN") (Quantity 3)
+OrderPlaced
+  OrderPlacedData
+    { orderId = OrderId "order-100"
+    , sku = Sku "UNKNOWN"
+    , quantity = Quantity 3
+    }
 ```
 
 Use this pattern for production event evolution:

@@ -19,14 +19,41 @@ event codec, and the stream-name function.
 
 ```haskell
 type OrderEventStream =
-  EventStream (HsPred '[] OrderCommand) '[] OrderState OrderCommand OrderEvent
+  EventStream (HsPred OrderRegs OrderCommand) OrderRegs OrderState OrderCommand OrderEvent
 ```
 
-The transducer is the pure state machine. It says which commands are valid in
-which state and which events those commands emit. For example, `PlaceOrder` is
-only accepted from `NotStarted` and emits `OrderPlaced`, targeting the `Placed`
-state. `ShipOrder` is only accepted from `Packed`; if a caller tries to ship an
-unpaid order, there is no matching edge, so Keiro returns `CommandRejected`.
+The transducer is authored with the Keiki builder DSL, not the lower-level
+`Edge` record syntax. Template Haskell derives command constructor projections
+and event wire constructors from the record payload types, then the builder
+reads like the state transition it represents:
+
+```haskell
+B.from NotStarted do
+  B.onCmd inCtorPlaceOrder $ \d -> B.do
+    B.emit wireOrderPlaced OrderPlacedTermFields
+      { orderId = d.orderId
+      , sku = d.sku
+      , quantity = d.quantity
+      }
+    B.goto Placed
+```
+
+That says `PlaceOrder` is accepted from `NotStarted`, emits `OrderPlaced`, and
+lands in `Placed`. `ShipOrder` is only accepted from `Packed`; if a caller tries
+to ship an unpaid order, there is no matching edge, so Keiro returns
+`CommandRejected`.
+
+```mermaid
+stateDiagram-v2
+  [*] --> NotStarted
+  NotStarted --> Placed: PlaceOrder / OrderPlaced
+  Placed --> Paid: ApprovePayment / PaymentApproved
+  Placed --> Cancelled: CancelOrder / OrderCancelled
+  Paid --> Packed: MarkPacked / OrderPacked
+  Packed --> Shipped: ShipOrder / OrderShipped
+  Shipped --> [*]
+  Cancelled --> [*]
+```
 
 That rejection behavior is tested in
 [`../../jitsurei/test/Main.hs`](../../jitsurei/test/Main.hs) under
@@ -39,7 +66,13 @@ runCommand
   defaultRunCommandOptions
   orderEventStream
   (orderStream (OrderId "order-100"))
-  (PlaceOrder (OrderId "order-100") (Sku "SKU-RED-MUG") (Quantity 3))
+  ( PlaceOrder
+      PlaceOrderData
+        { orderId = OrderId "order-100"
+        , sku = Sku "SKU-RED-MUG"
+        , quantity = Quantity 3
+        }
+  )
 ```
 
 At runtime Keiro loads the stream, decodes stored events, replays them through

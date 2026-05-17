@@ -5,6 +5,16 @@ module Jitsurei.Domain
   , PaymentRef (..)
   , Carrier (..)
   , TrackingId (..)
+  , PlaceOrderData (..)
+  , ApprovePaymentData (..)
+  , MarkPackedData (..)
+  , ShipOrderData (..)
+  , CancelOrderData (..)
+  , OrderPlacedData (..)
+  , PaymentApprovedData (..)
+  , OrderPackedData (..)
+  , OrderShippedData (..)
+  , OrderCancelledData (..)
   , OrderCommand (..)
   , OrderEvent (..)
   , OrderState (..)
@@ -49,19 +59,81 @@ newtype TrackingId = TrackingId Text
   deriving newtype (FromJSON, ToJSON)
 
 data OrderCommand
-  = PlaceOrder !OrderId !Sku !Quantity
-  | ApprovePayment !OrderId !PaymentRef
-  | MarkPacked !OrderId
-  | ShipOrder !OrderId !Carrier !TrackingId
-  | CancelOrder !OrderId !Text
+  = PlaceOrder !PlaceOrderData
+  | ApprovePayment !ApprovePaymentData
+  | MarkPacked !MarkPackedData
+  | ShipOrder !ShipOrderData
+  | CancelOrder !CancelOrderData
   deriving stock (Generic, Eq, Show)
 
 data OrderEvent
-  = OrderPlaced !OrderId !Sku !Quantity
-  | PaymentApproved !OrderId !PaymentRef
-  | OrderPacked !OrderId
-  | OrderShipped !OrderId !Carrier !TrackingId
-  | OrderCancelled !OrderId !Text
+  = OrderPlaced !OrderPlacedData
+  | PaymentApproved !PaymentApprovedData
+  | OrderPacked !OrderPackedData
+  | OrderShipped !OrderShippedData
+  | OrderCancelled !OrderCancelledData
+  deriving stock (Generic, Eq, Show)
+
+data PlaceOrderData = PlaceOrderData
+  { orderId :: !OrderId
+  , sku :: !Sku
+  , quantity :: !Quantity
+  }
+  deriving stock (Generic, Eq, Show)
+
+data ApprovePaymentData = ApprovePaymentData
+  { orderId :: !OrderId
+  , paymentRef :: !PaymentRef
+  }
+  deriving stock (Generic, Eq, Show)
+
+newtype MarkPackedData = MarkPackedData
+  { orderId :: OrderId
+  }
+  deriving stock (Generic, Eq, Show)
+
+data ShipOrderData = ShipOrderData
+  { orderId :: !OrderId
+  , carrier :: !Carrier
+  , trackingId :: !TrackingId
+  }
+  deriving stock (Generic, Eq, Show)
+
+data CancelOrderData = CancelOrderData
+  { orderId :: !OrderId
+  , reason :: !Text
+  }
+  deriving stock (Generic, Eq, Show)
+
+data OrderPlacedData = OrderPlacedData
+  { orderId :: !OrderId
+  , sku :: !Sku
+  , quantity :: !Quantity
+  }
+  deriving stock (Generic, Eq, Show)
+
+data PaymentApprovedData = PaymentApprovedData
+  { orderId :: !OrderId
+  , paymentRef :: !PaymentRef
+  }
+  deriving stock (Generic, Eq, Show)
+
+newtype OrderPackedData = OrderPackedData
+  { orderId :: OrderId
+  }
+  deriving stock (Generic, Eq, Show)
+
+data OrderShippedData = OrderShippedData
+  { orderId :: !OrderId
+  , carrier :: !Carrier
+  , trackingId :: !TrackingId
+  }
+  deriving stock (Generic, Eq, Show)
+
+data OrderCancelledData = OrderCancelledData
+  { orderId :: !OrderId
+  , reason :: !Text
+  }
   deriving stock (Generic, Eq, Show)
 
 data OrderState
@@ -71,7 +143,7 @@ data OrderState
   | Packed
   | Shipped
   | Cancelled
-  deriving stock (Generic, Eq, Show)
+  deriving stock (Generic, Eq, Show, Enum, Bounded)
   deriving anyclass (FromJSON, ToJSON)
 
 orderIdText :: OrderId -> Text
@@ -94,19 +166,19 @@ trackingIdText (TrackingId value) = value
 
 commandOrderId :: OrderCommand -> OrderId
 commandOrderId = \case
-  PlaceOrder orderId _ _ -> orderId
-  ApprovePayment orderId _ -> orderId
-  MarkPacked orderId -> orderId
-  ShipOrder orderId _ _ -> orderId
-  CancelOrder orderId _ -> orderId
+  PlaceOrder payload -> payload.orderId
+  ApprovePayment payload -> payload.orderId
+  MarkPacked payload -> payload.orderId
+  ShipOrder payload -> payload.orderId
+  CancelOrder payload -> payload.orderId
 
 eventOrderId :: OrderEvent -> OrderId
 eventOrderId = \case
-  OrderPlaced orderId _ _ -> orderId
-  PaymentApproved orderId _ -> orderId
-  OrderPacked orderId -> orderId
-  OrderShipped orderId _ _ -> orderId
-  OrderCancelled orderId _ -> orderId
+  OrderPlaced payload -> payload.orderId
+  PaymentApproved payload -> payload.orderId
+  OrderPacked payload -> payload.orderId
+  OrderShipped payload -> payload.orderId
+  OrderCancelled payload -> payload.orderId
 
 stateText :: OrderState -> Text
 stateText = \case
