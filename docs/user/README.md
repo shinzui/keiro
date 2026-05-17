@@ -28,6 +28,8 @@ pieces those modules import.
   runtime schema initialization, and owning application table migrations.
 - [Operations](operations.md): database requirements, schema initialization,
   workers, retries, idempotency, and production checklist.
+- [Roadmap](roadmap.md): capability matrix, v1.x workflow substrate, read-side
+  maturity work, adoption milestones, and the v2 durable-execution direction.
 - [API Reference](api-reference.md): module-by-module public surface.
 - [Production Status](production-status.md): what is production-shaped today and
   what remains intentionally deferred.
