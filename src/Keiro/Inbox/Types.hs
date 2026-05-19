@@ -13,12 +13,7 @@ module Keiro.Inbox.Types
   , InboxResult (..)
   , InboxError (..)
   , InboxRow (..)
-  , InboxEnqueueOutcome (..)
-  , InboxAckOutcome (..)
-  , InboxClaimOptions (..)
-  , defaultInboxClaimOptions
   , KafkaDeliveryRef (..)
-  , BackoffSchedule (..)
   , inboxStatusText
   , parseInboxStatus
   , dedupeKeyFor
@@ -26,13 +21,10 @@ module Keiro.Inbox.Types
 where
 
 import Data.Text qualified as Text
-import Data.Time.Clock (NominalDiffTime)
 import Data.UUID qualified as UUID
 import Keiro.Integration.Event (IntegrationEvent)
-import Keiro.Outbox.Types (BackoffSchedule (..))
 import Keiro.Prelude
 import Kiroku.Store.Types (EventId (..), GlobalPosition (..))
-import Shibuya.Core.Ack (DeadLetterReason)
 
 {- | Which identity is used as the inbox primary key for an
 'IntegrationEvent'.
@@ -62,31 +54,18 @@ data InboxDedupePolicy
 
 {- | Lifecycle state of an inbox row.
 
-* 'InboxPending' — written, awaiting handler. Set by the worker-side
-  'Keiro.Inbox.enqueueInbox' path; the EP-21 inline
-  'Keiro.Inbox.runInboxTransaction' path skips this state and writes
-  directly to 'InboxProcessing'.
-* 'InboxProcessing' — transient: either the EP-21 inline handler is
-  running, or a worker has claimed the row from the queue with
-  'FOR UPDATE SKIP LOCKED'. After the visibility timeout
-  ('InboxClaimOptions.visibilityTimeout') a row stuck here is treated
-  as orphaned and is returned to 'InboxPending' by the next claim
-  cycle.
+* 'InboxProcessing' — transient state set when the handler starts. In
+  the v1 single-transaction wrapper this state never escapes a
+  transaction; it is reserved for future async paths.
 * 'InboxCompleted' — handler ran to completion; terminal.
-* 'InboxFailed' — handler signaled a transient failure. The worker
-  bumps @attempt_count@, sets @next_attempt_at@ from the backoff
-  schedule, and re-claims when the delay elapses.
-* 'InboxDead' — terminal failure after exhausting
-  'InboxClaimOptions.maxAttempts', or an explicit
-  'Shibuya.Core.Ack.AckDeadLetter' decision. Operator action is required
-  to resurrect or drop the row.
+* 'InboxFailed' — handler signaled a permanent failure; terminal. The
+  caller is responsible for operator action (dead-letter, manual
+  retry).
 -}
 data InboxStatus
-  = InboxPending
-  | InboxProcessing
+  = InboxProcessing
   | InboxCompleted
   | InboxFailed
-  | InboxDead
   deriving stock (Generic, Eq, Show)
 
 {- | The classified outcome of 'Keiro.Inbox.runInboxTransaction'.
@@ -138,92 +117,20 @@ data InboxRow = InboxRow
   , completedAt :: !(Maybe UTCTime)
   , failedAt :: !(Maybe UTCTime)
   , lastError :: !(Maybe Text)
-  , attemptCount :: !Int
-  , nextAttemptAt :: !UTCTime
-  , claimedAt :: !(Maybe UTCTime)
   }
   deriving stock (Generic, Eq, Show)
-
-{- | Result of 'Keiro.Inbox.enqueueInbox'.
-
-* 'EnqueuedNew' — a fresh 'InboxPending' row was inserted.
-* 'EnqueueDuplicateOf' — a row with the same @(source, dedupe_key)@
-  already exists; the caller can inspect its status to decide whether
-  to no-op (a duplicate Kafka delivery), surface a duplicate to a
-  saga, or trigger an alert.
--}
-data InboxEnqueueOutcome
-  = EnqueuedNew
-  | EnqueueDuplicateOf !InboxRow
-  deriving stock (Generic, Eq, Show)
-
-{- | Outcome of one ack decision applied to an inbox row by the
-'Keiro.Inbox.Adapter' worker.
-
-* 'InboxAcked' — handler returned 'Shibuya.Core.Ack.AckOk'; the row
-  is now 'InboxCompleted'.
-* 'InboxRetrying' — handler returned 'Shibuya.Core.Ack.AckRetry'; the
-  row is now 'InboxFailed' with @next_attempt_at@ as carried.
-* 'InboxDeadLettered' — handler returned 'AckDeadLetter' or the row
-  exceeded 'maxAttempts'; status is 'InboxDead' (terminal).
-* 'InboxClaimReleased' — handler returned 'AckHalt'; the row was
-  returned to 'InboxPending' without bumping @attempt_count@ so the
-  next worker can re-claim it.
--}
-data InboxAckOutcome
-  = InboxAcked
-  | InboxRetrying !UTCTime
-  | InboxDeadLettered !DeadLetterReason
-  | InboxClaimReleased
-  deriving stock (Generic, Eq, Show)
-
-{- | Knobs that govern one claim cycle of the inbox worker.
-
-* @batchSize@ — maximum number of rows claimed per poll. Larger
-  batches amortize the poll cost but enlarge the rollback window if
-  the worker crashes.
-* @visibilityTimeout@ — duration after which a row stuck in
-  'InboxProcessing' is treated as orphaned and is returned to
-  'InboxPending'. Must exceed the slowest handler's P99 latency to
-  avoid premature re-claim; too high causes long stalls. Default 60s.
-* @maxAttempts@ — number of failure transitions ('AckRetry') before
-  the row is moved to 'InboxDead'. Default 10.
-* @backoff@ — schedule used to compute @next_attempt_at@ on each
-  failure.
--}
-data InboxClaimOptions = InboxClaimOptions
-  { batchSize :: !Int
-  , visibilityTimeout :: !NominalDiffTime
-  , maxAttempts :: !Int
-  , backoff :: !BackoffSchedule
-  }
-  deriving stock (Generic, Eq, Show)
-
--- | Sensible defaults: batch of 32, 60s visibility, ten attempts, two-second constant backoff.
-defaultInboxClaimOptions :: InboxClaimOptions
-defaultInboxClaimOptions =
-  InboxClaimOptions
-    { batchSize = 32
-    , visibilityTimeout = 60
-    , maxAttempts = 10
-    , backoff = ConstantBackoff 2
-    }
 
 inboxStatusText :: InboxStatus -> Text
 inboxStatusText = \case
-  InboxPending -> "pending"
   InboxProcessing -> "processing"
   InboxCompleted -> "completed"
   InboxFailed -> "failed"
-  InboxDead -> "dead"
 
 parseInboxStatus :: Text -> InboxStatus
 parseInboxStatus = \case
-  "pending" -> InboxPending
   "processing" -> InboxProcessing
   "completed" -> InboxCompleted
   "failed" -> InboxFailed
-  "dead" -> InboxDead
   _ -> InboxFailed
 
 {- | Compute the inbox dedupe key for an integration event under the

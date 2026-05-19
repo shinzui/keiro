@@ -10,23 +10,16 @@ This module owns the SQL surface that the inbox wrapper
 module Keiro.Inbox.Schema
   ( initializeInboxSchema
   , tryInsertProcessingTx
-  , enqueuePendingTx
-  , claimInboxBatchTx
   , markCompletedTx
   , markFailedTx
-  , markInboxFailedTx
-  , markInboxDeadTx
-  , releaseInboxClaimTx
   , lookupInbox
   , listInbox
-  , listInboxByStatus
   , garbageCollectCompleted
   )
 where
 
 import Data.ByteString (ByteString)
 import Data.Functor.Contravariant ((>$<))
-import Data.Text qualified as Text
 import Data.Time.Clock (NominalDiffTime, addUTCTime)
 import Data.UUID (UUID)
 import Effectful (Eff, (:>))
@@ -42,8 +35,6 @@ import Keiro.Integration.Event
   , contentTypeText
   , parseContentType
   )
-import Data.Int (Int32)
-import Keiro.Outbox.Types (nextDelay)
 import Keiro.Prelude
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
@@ -88,9 +79,6 @@ initializeInboxSchema =
         completed_at TIMESTAMPTZ,
         failed_at TIMESTAMPTZ,
         last_error TEXT,
-        attempt_count INTEGER NOT NULL DEFAULT 0,
-        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        claimed_at TIMESTAMPTZ,
         PRIMARY KEY (source, dedupe_key)
       );
 
@@ -100,10 +88,6 @@ initializeInboxSchema =
       CREATE INDEX IF NOT EXISTS keiro_inbox_completed_idx
         ON keiro_inbox (completed_at)
         WHERE status = 'completed';
-
-      CREATE INDEX IF NOT EXISTS keiro_inbox_claimable_idx
-        ON keiro_inbox (next_attempt_at, source, dedupe_key)
-        WHERE status IN ('pending', 'failed', 'processing');
       """
 
 {- | Attempt to insert a new processing row.
@@ -145,118 +129,6 @@ markFailedTx :: Text -> Text -> Text -> UTCTime -> Tx.Transaction ()
 markFailedTx src dedupe errMsg now =
   Tx.statement (src, dedupe, errMsg, now) markFailedStmt
 
-{- | Insert a fresh @pending@ inbox row.
-
-Used by the two-stage drain path: an upstream producer (Kafka write
-side, saga, HTTP shim) records the durable receipt without invoking
-the handler. The handler runs later under
-'Keiro.Inbox.Adapter.inboxAdapter'.
-
-Returns 'EnqueuedNew' on a fresh insert and 'EnqueueDuplicateOf' when
-@(source, dedupe_key)@ already exists. Idempotent under retry.
--}
-enqueuePendingTx ::
-  Text ->
-  Text ->
-  IntegrationEvent ->
-  Maybe KafkaDeliveryRef ->
-  UTCTime ->
-  Tx.Transaction InboxEnqueueOutcome
-enqueuePendingTx src dedupe event kafka now = do
-  inserted <-
-    Tx.statement (toEncodedInsert src dedupe event kafka now) enqueuePendingStmt
-  if inserted
-    then pure EnqueuedNew
-    else do
-      existing <- Tx.statement (src, dedupe) selectByKeyStmt
-      case existing of
-        Just row -> pure (EnqueueDuplicateOf row)
-        Nothing ->
-          -- Race: the row was deleted between the failed insert and
-          -- the lookup. Treat as new — the caller's transaction will
-          -- commit; the next call sees the up-to-date state.
-          pure EnqueuedNew
-
-{- | Claim up to @batchSize@ rows ready for handler invocation.
-
-A row is claimable when @next_attempt_at <= now@ and its status is one
-of:
-
-* @pending@ — never attempted.
-* @failed@ — attempted previously and rescheduled by
-  'markInboxFailedTx'.
-* @processing@ with @claimed_at < now - visibilityTimeout@ — orphaned
-  by a crashed worker; reclaim it.
-
-Selection uses @FOR UPDATE SKIP LOCKED@ so concurrent workers do not
-contend on the same row. The claimed rows are atomically transitioned
-to @processing@ with @claimed_at = now@.
--}
-claimInboxBatchTx ::
-  InboxClaimOptions ->
-  UTCTime ->
-  Tx.Transaction [InboxRow]
-claimInboxBatchTx opts now =
-  Tx.statement
-    ( fromIntegral (opts ^. #batchSize)
-    , now
-    , addUTCTime (negate (opts ^. #visibilityTimeout)) now
-    )
-    claimStmt
-
-{- | Record a failure on an in-flight claimed row.
-
-Bumps @attempt_count@ and writes @next_attempt_at = now + nextDelay
-backoff (attempt_count + 1)@. If the bumped count reaches
-@maxAttempts@, the row is parked in 'InboxDead' and returns
-'InboxDead'; otherwise it returns 'InboxFailed' (re-claimable after
-the delay).
-
-The "row is dead at maxAttempts" predicate uses @>=@ on the
-post-increment count, mirroring 'Keiro.Outbox.Schema.markOutboxFailedTx'.
--}
-markInboxFailedTx ::
-  Text ->
-  Text ->
-  Text ->
-  Int ->
-  BackoffSchedule ->
-  UTCTime ->
-  Tx.Transaction InboxStatus
-markInboxFailedTx src dedupe errMsg maxAttempts schedule now = do
-  currentAttempt <- Tx.statement (src, dedupe) readAttemptCountStmt
-  let bumped = fromMaybe 0 currentAttempt + 1
-      shouldDie = bumped >= maxAttempts
-      nextStatus = if shouldDie then InboxDead else InboxFailed
-      nextAttempt = addUTCTime (nextDelay schedule bumped) now
-  Tx.statement
-    ( src
-    , dedupe
-    , inboxStatusText nextStatus
-    , errMsg
-    , nextAttempt
-    , now
-    , fromIntegral bumped
-    )
-    markInboxFailedStmt
-  pure nextStatus
-
--- | Move a row directly to the terminal @dead@ status.
-markInboxDeadTx :: Text -> Text -> Text -> UTCTime -> Tx.Transaction ()
-markInboxDeadTx src dedupe errMsg now =
-  Tx.statement (src, dedupe, errMsg, now) markInboxDeadStmt
-
-{- | Release a claim without bumping @attempt_count@.
-
-Used for 'Shibuya.Core.Ack.AckHalt': the worker decided to stop, but
-the row itself is fine. Status flips @processing@ → @pending@, and
-@next_attempt_at@ becomes @now@ so the next claim cycle can re-pick
-the row.
--}
-releaseInboxClaimTx :: Text -> Text -> UTCTime -> Tx.Transaction ()
-releaseInboxClaimTx src dedupe now =
-  Tx.statement (src, dedupe, now) releaseInboxClaimStmt
-
 -- | Read one inbox row.
 lookupInbox :: (Store :> es) => Text -> Text -> Eff es (Maybe InboxRow)
 lookupInbox src dedupe =
@@ -268,12 +140,6 @@ listInbox :: (Store :> es) => Text -> Eff es [InboxRow]
 listInbox src =
   runTransaction $
     Tx.statement src listBySourceStmt
-
--- | List inbox rows matching a status (test/inspection helper).
-listInboxByStatus :: (Store :> es) => InboxStatus -> Eff es [InboxRow]
-listInboxByStatus status =
-  runTransaction $
-    Tx.statement (inboxStatusText status) listByStatusStmt
 
 {- | Delete completed inbox rows older than @keepFor@ from @now@.
 
@@ -497,153 +363,6 @@ listBySourceStmt =
     (E.param (E.nonNullable E.text))
     (D.rowList inboxRowDecoder)
 
-listByStatusStmt :: Statement Text [InboxRow]
-listByStatusStmt =
-  preparable
-    (selectAllSql <> " WHERE status = $1 ORDER BY received_at, dedupe_key")
-    (E.param (E.nonNullable E.text))
-    (D.rowList inboxRowDecoder)
-
-enqueuePendingStmt :: Statement EncodedInsert Bool
-enqueuePendingStmt =
-  preparable
-    (Text.unwords
-      [ "INSERT INTO keiro_inbox"
-      , "  ( source"
-      , "  , dedupe_key"
-      , "  , message_id"
-      , "  , source_event_id"
-      , "  , source_global_position"
-      , "  , destination"
-      , "  , event_type"
-      , "  , schema_version"
-      , "  , content_type"
-      , "  , schema_registry"
-      , "  , schema_subject"
-      , "  , schema_version_ref"
-      , "  , schema_id"
-      , "  , schema_fingerprint"
-      , "  , causation_id"
-      , "  , correlation_id"
-      , "  , traceparent"
-      , "  , tracestate"
-      , "  , kafka_topic"
-      , "  , kafka_partition"
-      , "  , kafka_offset"
-      , "  , payload_bytes"
-      , "  , attributes"
-      , "  , occurred_at"
-      , "  , received_at"
-      , "  , status"
-      , "  , next_attempt_at"
-      , "  )"
-      , "VALUES"
-      , "  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, 'pending', $25)"
-      , "ON CONFLICT (source, dedupe_key) DO NOTHING"
-      , "RETURNING TRUE"
-      ])
-    encodedInsertEncoder
-    (fmap (fromMaybe False) (D.rowMaybe (D.column (D.nonNullable D.bool))))
-
-claimStmt :: Statement (Int64, UTCTime, UTCTime) [InboxRow]
-claimStmt =
-  preparable
-    (Text.unwords
-      [ "WITH ready AS ("
-      , "  SELECT source, dedupe_key FROM keiro_inbox"
-      , "  WHERE next_attempt_at <= $2"
-      , "    AND ( status = 'pending'"
-      , "       OR status = 'failed'"
-      , "       OR (status = 'processing' AND claimed_at IS NOT NULL AND claimed_at < $3) )"
-      , "  ORDER BY next_attempt_at, source, dedupe_key"
-      , "  LIMIT $1"
-      , "  FOR UPDATE SKIP LOCKED"
-      , ")"
-      , "UPDATE keiro_inbox kt"
-      , "SET status = 'processing', claimed_at = $2"
-      , "FROM ready"
-      , "WHERE kt.source = ready.source AND kt.dedupe_key = ready.dedupe_key"
-      , "RETURNING kt.source, kt.dedupe_key, kt.message_id, kt.source_event_id,"
-      , "  kt.source_global_position, kt.destination, kt.event_type, kt.schema_version,"
-      , "  kt.content_type, kt.schema_registry, kt.schema_subject, kt.schema_version_ref,"
-      , "  kt.schema_id, kt.schema_fingerprint, kt.causation_id, kt.correlation_id,"
-      , "  kt.traceparent, kt.tracestate, kt.kafka_topic, kt.kafka_partition,"
-      , "  kt.kafka_offset, kt.payload_bytes, kt.attributes, kt.occurred_at, kt.status,"
-      , "  kt.received_at, kt.completed_at, kt.failed_at, kt.last_error,"
-      , "  kt.attempt_count, kt.next_attempt_at, kt.claimed_at"
-      ])
-    ( ((\(lim, _, _) -> lim) >$< E.param (E.nonNullable E.int8))
-        <> ((\(_, n, _) -> n) >$< E.param (E.nonNullable E.timestamptz))
-        <> ((\(_, _, c) -> c) >$< E.param (E.nonNullable E.timestamptz))
-    )
-    (D.rowList inboxRowDecoder)
-
-readAttemptCountStmt :: Statement (Text, Text) (Maybe Int)
-readAttemptCountStmt =
-  preparable
-    "SELECT attempt_count FROM keiro_inbox WHERE source = $1 AND dedupe_key = $2"
-    ( (fst >$< E.param (E.nonNullable E.text))
-        <> (snd >$< E.param (E.nonNullable E.text))
-    )
-    (D.rowMaybe (fromIntegral <$> D.column (D.nonNullable D.int4)))
-
-markInboxFailedStmt :: Statement (Text, Text, Text, Text, UTCTime, UTCTime, Int32) ()
-markInboxFailedStmt =
-  preparable
-    """
-    UPDATE keiro_inbox
-    SET status = $3,
-        last_error = $4,
-        next_attempt_at = $5,
-        failed_at = $6,
-        claimed_at = NULL,
-        attempt_count = $7
-    WHERE source = $1 AND dedupe_key = $2
-    """
-    ( ((\(s, _, _, _, _, _, _) -> s) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, d, _, _, _, _, _) -> d) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, _, st, _, _, _, _) -> st) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, _, _, e, _, _, _) -> e) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, _, _, _, n, _, _) -> n) >$< E.param (E.nonNullable E.timestamptz))
-        <> ((\(_, _, _, _, _, f, _) -> f) >$< E.param (E.nonNullable E.timestamptz))
-        <> ((\(_, _, _, _, _, _, a) -> a) >$< E.param (E.nonNullable E.int4))
-    )
-    D.noResult
-
-markInboxDeadStmt :: Statement (Text, Text, Text, UTCTime) ()
-markInboxDeadStmt =
-  preparable
-    """
-    UPDATE keiro_inbox
-    SET status = 'dead',
-        last_error = $3,
-        failed_at = $4,
-        claimed_at = NULL
-    WHERE source = $1 AND dedupe_key = $2
-    """
-    ( ((\(s, _, _, _) -> s) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, d, _, _) -> d) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, _, e, _) -> e) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, _, _, t) -> t) >$< E.param (E.nonNullable E.timestamptz))
-    )
-    D.noResult
-
-releaseInboxClaimStmt :: Statement (Text, Text, UTCTime) ()
-releaseInboxClaimStmt =
-  preparable
-    """
-    UPDATE keiro_inbox
-    SET status = 'pending',
-        claimed_at = NULL,
-        next_attempt_at = $3
-    WHERE source = $1 AND dedupe_key = $2 AND status = 'processing'
-    """
-    ( ((\(s, _, _) -> s) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, d, _) -> d) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, _, t) -> t) >$< E.param (E.nonNullable E.timestamptz))
-    )
-    D.noResult
-
 gcStmt :: Statement UTCTime Int64
 gcStmt =
   preparable
@@ -665,7 +384,7 @@ selectAllSql =
   \schema_subject, schema_version_ref, schema_id, schema_fingerprint, causation_id, \
   \correlation_id, traceparent, tracestate, kafka_topic, kafka_partition, \
   \kafka_offset, payload_bytes, attributes, occurred_at, status, received_at, \
-  \completed_at, failed_at, last_error, attempt_count, next_attempt_at, claimed_at \
+  \completed_at, failed_at, last_error \
   \FROM keiro_inbox"
 
 inboxRowDecoder :: D.Row InboxRow
@@ -701,9 +420,6 @@ data RawInbox = RawInbox
   , completedAt :: !(Maybe UTCTime)
   , failedAt :: !(Maybe UTCTime)
   , lastError :: !(Maybe Text)
-  , attemptCount :: !Int
-  , nextAttemptAt :: !UTCTime
-  , claimedAt :: !(Maybe UTCTime)
   }
   deriving stock (Generic)
 
@@ -739,9 +455,6 @@ rawDecoder =
     <*> D.column (D.nullable D.timestamptz)
     <*> D.column (D.nullable D.timestamptz)
     <*> D.column (D.nullable D.text)
-    <*> (fromIntegral <$> D.column (D.nonNullable D.int4))
-    <*> D.column (D.nonNullable D.timestamptz)
-    <*> D.column (D.nullable D.timestamptz)
 
 assembleInboxRow :: RawInbox -> InboxRow
 assembleInboxRow raw =
@@ -804,9 +517,6 @@ assembleInboxRow raw =
         , completedAt = raw ^. #completedAt
         , failedAt = raw ^. #failedAt
         , lastError = raw ^. #lastError
-        , attemptCount = raw ^. #attemptCount
-        , nextAttemptAt = raw ^. #nextAttemptAt
-        , claimedAt = raw ^. #claimedAt
         }
 
 -- | Sentinel used when an inbox row was written without an @occurred_at@.
