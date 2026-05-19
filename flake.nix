@@ -21,6 +21,7 @@
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = [
             pkgs.zlib
+            pkgs.rdkafka
             pkgs.just
             pkgs.nodejs_22
             pkgs.pnpm
