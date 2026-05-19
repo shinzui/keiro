@@ -13,11 +13,13 @@ module Keiro.Migrations
   , keiroMigrations
   , allKeiroMigrations
   , runKeiroMigrations
+  , runKeiroMigrationsNoCheck
   , runAllKeiroMigrations
+  , runAllKeiroMigrationsNoCheck
   )
 where
 
-import Codd (ApplyResult, CoddSettings, VerifySchemas, applyMigrations)
+import Codd (ApplyResult, CoddSettings, VerifySchemas, applyMigrations, applyMigrationsNoCheck)
 import Codd.Logging (runCoddLogger)
 import Codd.Parsing (AddedSqlMigration, EnvVars, PureStream (..), parseAddedSqlMigration)
 import Data.ByteString (ByteString)
@@ -59,12 +61,32 @@ runKeiroMigrations settings connectTimeout verifySchemas =
     migrations <- keiroFrameworkMigrations
     applyMigrations settings (Just migrations) connectTimeout verifySchemas
 
+-- | Run only Keiro-owned embedded migrations without schema verification.
+--
+-- This is useful for local development databases that do not keep a checked-in
+-- codd expected-schema representation.
+runKeiroMigrationsNoCheck :: CoddSettings -> DiffTime -> IO ()
+runKeiroMigrationsNoCheck settings connectTimeout =
+  runCoddLogger $ do
+    migrations <- keiroFrameworkMigrations
+    applyMigrationsNoCheck settings (Just migrations) connectTimeout (\_ -> pure ())
+
 -- | Run Kiroku and Keiro embedded migrations through codd in one ledger.
 runAllKeiroMigrations :: CoddSettings -> DiffTime -> VerifySchemas -> IO ApplyResult
 runAllKeiroMigrations settings connectTimeout verifySchemas =
   runCoddLogger $ do
     migrations <- allKeiroMigrations
     applyMigrations settings (Just migrations) connectTimeout verifySchemas
+
+-- | Run Kiroku and Keiro embedded migrations without schema verification.
+--
+-- This preserves codd's migration ledger and locking behavior while skipping
+-- expected-schema comparison for local development databases.
+runAllKeiroMigrationsNoCheck :: CoddSettings -> DiffTime -> IO ()
+runAllKeiroMigrationsNoCheck settings connectTimeout =
+  runCoddLogger $ do
+    migrations <- allKeiroMigrations
+    applyMigrationsNoCheck settings (Just migrations) connectTimeout (\_ -> pure ())
 
 embeddedMigrationFiles :: [(FilePath, ByteString)]
 embeddedMigrationFiles = $(embedDir "sql-migrations")
