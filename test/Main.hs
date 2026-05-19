@@ -80,6 +80,20 @@ import Keiro.Outbox
   , publishClaimedOutbox
   )
 import Keiro.Outbox.Kafka qualified as OutboxKafka
+import Keiro.Inbox
+  ( InboxDedupePolicy (..)
+  , InboxError (..)
+  , InboxResult (..)
+  , InboxStatus (..)
+  , KafkaDeliveryRef (..)
+  , garbageCollectCompleted
+  , initializeInboxSchema
+  , listInbox
+  , lookupInbox
+  , runInboxTransaction
+  )
+import Keiro.Inbox.Kafka qualified as InboxKafka
+import Data.Time (NominalDiffTime)
 import Keiro.Prelude
 import Keiro.Projection
 import Keiro.ProcessManager
@@ -874,6 +888,159 @@ main = hspec $ do
       length ids `shouldBe` 4
       length (uniqueIds ids) `shouldBe` 4
 
+  describe "Keiro.Inbox" $ around withTestStore $ do
+    it "runs the handler once and records the row as completed" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+      let event = sampleIntegrationEnvelope
+            & #messageId .~ "inbox-msg-1"
+            & #source .~ "ordering"
+          handler ev =
+            Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+      Right result1 <- Store.runStoreIO storeHandle $
+        runInboxTransaction PreferIntegrationMessageId event Nothing handler
+      case result1 of
+        Right (InboxProcessed ()) -> pure ()
+        other -> expectationFailure ("expected InboxProcessed, got " <> show other)
+      Right rowCount1 <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+      rowCount1 `shouldBe` 1
+      Right (Just inboxRow) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-msg-1")
+      inboxRow ^. #status `shouldBe` InboxCompleted
+      inboxRow ^. #completedAt `shouldSatisfy` isJust
+
+    it "treats a redelivery with the same messageId as a duplicate" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+      let event = sampleIntegrationEnvelope
+            & #messageId .~ "inbox-msg-dup"
+            & #source .~ "ordering"
+          handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+      Right (Right (InboxProcessed ())) <- Store.runStoreIO storeHandle $
+        runInboxTransaction PreferIntegrationMessageId event Nothing handler
+      Right result2 <- Store.runStoreIO storeHandle $
+        runInboxTransaction PreferIntegrationMessageId event Nothing handler
+      result2 `shouldBe` Right InboxDuplicate
+      Right rowCount <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+      rowCount `shouldBe` 1
+
+    it "deduplicates via PreferSourceEventIdentity even when messageId differs" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+      let shared = sampleIntegrationEnvelope & #source .~ "ordering"
+          first = shared & #messageId .~ "republish-1"
+          second = shared & #messageId .~ "republish-2"
+          handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+      Right (Right (InboxProcessed ())) <- Store.runStoreIO storeHandle $
+        runInboxTransaction PreferSourceEventIdentity first Nothing handler
+      Right result2 <- Store.runStoreIO storeHandle $
+        runInboxTransaction PreferSourceEventIdentity second Nothing handler
+      result2 `shouldBe` Right InboxDuplicate
+
+    it "uses KafkaDeliveryIdentity when supplied" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+      let event = sampleIntegrationEnvelope & #source .~ "ordering"
+          kafka = KafkaDeliveryRef "billing.orders.v1" 0 17
+          handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+      Right (Right (InboxProcessed ())) <- Store.runStoreIO storeHandle $
+        runInboxTransaction KafkaDeliveryIdentity event (Just kafka) handler
+      Right (Right InboxDuplicate) <- Store.runStoreIO storeHandle $
+        runInboxTransaction KafkaDeliveryIdentity event (Just kafka) handler
+      Right (Just row) <- Store.runStoreIO storeHandle $
+        lookupInbox "ordering" "billing.orders.v1:0:17"
+      row ^. #status `shouldBe` InboxCompleted
+
+    it "reports DedupePolicyUnsatisfied when the envelope lacks the required field" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event = sampleIntegrationEnvelope
+            & #source .~ "ordering"
+            & #sourceEventId .~ Nothing
+            & #sourceGlobalPosition .~ Nothing
+      Right result <- Store.runStoreIO storeHandle $
+        runInboxTransaction PreferSourceEventIdentity event Nothing (\_ -> pure ())
+      result `shouldBe` Left (DedupePolicyUnsatisfied PreferSourceEventIdentity)
+
+    it "leaves no inbox row when the handler condemns the transaction" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event = sampleIntegrationEnvelope
+            & #messageId .~ "inbox-msg-rollback"
+            & #source .~ "ordering"
+          handler _ = do
+            Tx.condemn
+            pure ()
+      _ <- Store.runStoreIO storeHandle $
+        runInboxTransaction PreferIntegrationMessageId event Nothing handler
+      Right row <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-msg-rollback")
+      row `shouldBe` Nothing
+
+    it "garbage-collects completed rows older than the retention window" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event = sampleIntegrationEnvelope
+            & #messageId .~ "inbox-msg-gc"
+            & #source .~ "ordering"
+          handler _ = pure ()
+      Right (Right (InboxProcessed ())) <- Store.runStoreIO storeHandle $
+        runInboxTransaction PreferIntegrationMessageId event Nothing handler
+      -- Backdate the row so it falls outside the retention window.
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.sql
+            "UPDATE keiro_inbox SET completed_at = now() - interval '40 days' WHERE message_id = 'inbox-msg-gc'"
+      now <- getCurrentTime
+      Right deleted <- Store.runStoreIO storeHandle (garbageCollectCompleted (nominalDays 30) now)
+      deleted `shouldBe` 1
+      Right rows <- Store.runStoreIO storeHandle (listInbox "ordering")
+      rows `shouldBe` []
+
+  describe "Keiro.Inbox.Kafka" $ do
+    it "reconstructs an integration event from headers and payload" $ do
+      let envelope = sampleIntegrationEnvelope
+          headers = integrationHeaders envelope
+          record = InboxKafka.KafkaInboundRecord
+            { topic = "billing.orders.v1"
+            , partition = 2
+            , offset = 113
+            , key = Just "order-123"
+            , payload = envelope ^. #payloadBytes
+            , headers
+            , receivedAt = envelope ^. #occurredAt
+            }
+      case InboxKafka.integrationEventFromKafka record of
+        Right (rebuilt, kafkaRef) -> do
+          rebuilt ^. #messageId `shouldBe` envelope ^. #messageId
+          rebuilt ^. #source `shouldBe` envelope ^. #source
+          rebuilt ^. #destination `shouldBe` envelope ^. #destination
+          rebuilt ^. #eventType `shouldBe` envelope ^. #eventType
+          rebuilt ^. #schemaVersion `shouldBe` envelope ^. #schemaVersion
+          rebuilt ^. #sourceEventId `shouldBe` envelope ^. #sourceEventId
+          rebuilt ^. #sourceGlobalPosition `shouldBe` envelope ^. #sourceGlobalPosition
+          rebuilt ^. #payloadBytes `shouldBe` envelope ^. #payloadBytes
+          kafkaRef ^. #topic `shouldBe` "billing.orders.v1"
+          kafkaRef ^. #partition `shouldBe` 2
+          kafkaRef ^. #offset `shouldBe` 113
+        Left err -> expectationFailure ("expected Right, got Left " <> show err)
+
+    it "reports MissingHeader for an essential header" $ do
+      let envelope = sampleIntegrationEnvelope
+          headers = filter ((/= "keiro-message-id") . Prelude.fst) (integrationHeaders envelope)
+          record = InboxKafka.KafkaInboundRecord
+            { topic = "billing.orders.v1"
+            , partition = 0
+            , offset = 0
+            , key = Nothing
+            , payload = envelope ^. #payloadBytes
+            , headers
+            , receivedAt = envelope ^. #occurredAt
+            }
+      InboxKafka.integrationEventFromKafka record
+        `shouldBe` Left (InboxKafka.MissingHeader "keiro-message-id")
+
   describe "Keiro.Integration.Event" $ do
     it "round-trips a JSON envelope through encode and decode" $ do
       let envelope = sampleIntegrationEnvelope
@@ -939,6 +1106,23 @@ main = hspec $ do
       let envelope = sampleIntegrationEnvelope
           encoded = encodeJsonIntegrationEvent envelope (OrderSubmittedPayload "order-123" 5)
       integrationPayload encoded `shouldBe` (encoded ^. #payloadBytes)
+
+nominalDays :: Int -> NominalDiffTime
+nominalDays n = fromIntegral n * 86400
+
+inboxTestCounterInsertStmt :: Statement Text ()
+inboxTestCounterInsertStmt =
+  preparable
+    "INSERT INTO inbox_test_counter (message_id) VALUES ($1)"
+    (E.param (E.nonNullable E.text))
+    D.noResult
+
+inboxTestCounterCountStmt :: Statement () Int
+inboxTestCounterCountStmt =
+  preparable
+    "SELECT COUNT(*)::bigint FROM inbox_test_counter"
+    E.noParams
+    (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
 
 sampleProducer :: IntegrationProducer ()
 sampleProducer = IntegrationProducer

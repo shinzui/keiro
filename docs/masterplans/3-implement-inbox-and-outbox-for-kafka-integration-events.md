@@ -47,7 +47,7 @@ Alternatives considered:
 |---|-------|------|-----------|-----------|--------|
 | 19 | Define the integration event contract | docs/plans/19-define-the-integration-event-contract.md | None | EP-12, EP-14, EP-16 | Complete |
 | 20 | Implement the durable outbox | docs/plans/20-implement-the-durable-outbox.md | EP-19 | EP-12, EP-16 | Complete |
-| 21 | Implement the idempotent inbox | docs/plans/21-implement-the-idempotent-inbox.md | EP-19 | EP-14, EP-16 | Not Started |
+| 21 | Implement the idempotent inbox | docs/plans/21-implement-the-idempotent-inbox.md | EP-19 | EP-14, EP-16 | Complete |
 | 22 | Validate Kafka bounded context integration | docs/plans/22-validate-kafka-bounded-context-integration.md | EP-19, EP-20, EP-21 | EP-16 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -88,8 +88,8 @@ EP-16 is a soft dependency for every schema-touching child plan because it creat
 - [x] EP-19: document identity, topic, key, causation, correlation, schema-version, and trace-header conventions. (2026-05-18)
 - [x] EP-20: add `keiro_outbox` schema, codd migration, and storage API tests. (2026-05-18)
 - [x] EP-20: add outbox claim/publish/mark-result worker functions and Kafka producer conversion tests. (2026-05-18)
-- [ ] EP-21: add `keiro_inbox` schema, codd migration, and deduplication API tests.
-- [ ] EP-21: add Kafka consumer handling that records inbox receipt and dispatches exactly once per message id.
+- [x] EP-21: add `keiro_inbox` schema, codd migration, and deduplication API tests. (2026-05-18)
+- [x] EP-21: add Kafka consumer handling that records inbox receipt and dispatches exactly once per message id. (2026-05-18) — provided by `Keiro.Inbox.Kafka.integrationEventFromKafka` + `runInboxTransaction`; the broker bridge to `shibuya-kafka-adapter` is wired up in EP-22.
 - [ ] EP-22: build the two-bounded-context Kafka validation scenario.
 - [ ] EP-22: document the canonical deployment topology and operational guarantees.
 

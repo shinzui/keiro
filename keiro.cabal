@@ -33,6 +33,10 @@ library
                         Keiro.Command
                         Keiro.Codec
                         Keiro.EventStream
+                        Keiro.Inbox
+                        Keiro.Inbox.Kafka
+                        Keiro.Inbox.Schema
+                        Keiro.Inbox.Types
                         Keiro.Integration.Event
                         Keiro.Outbox
                         Keiro.Outbox.Kafka

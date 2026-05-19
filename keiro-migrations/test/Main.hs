@@ -47,6 +47,7 @@ main =
 expectedTables :: [Text]
 expectedTables =
   [ "events"
+  , "keiro_inbox"
   , "keiro_outbox"
   , "keiro_read_models"
   , "keiro_snapshots"

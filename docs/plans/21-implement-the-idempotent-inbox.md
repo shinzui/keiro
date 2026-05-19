@@ -23,17 +23,19 @@ The behavior is visible in tests without Kafka: processing the same integration 
 
 ## Progress
 
-- [ ] Add `keiro_inbox` codd migration and runtime development initializer.
-- [ ] Implement `Keiro.Inbox.Schema` storage functions for begin/complete/fail/lookup/GC.
-- [ ] Implement `Keiro.Inbox` transactional handler wrapper using EP-19 `IntegrationEvent`.
-- [ ] Add Kafka consumer decoding helper for `shibuya-kafka-adapter` `Ingested (Maybe ByteString)`.
-- [ ] Add duplicate, failure, and retention tests.
-- [ ] Update docs and migration tests.
+- [x] Add `keiro_inbox` codd migration and runtime development initializer. (2026-05-18)
+- [x] Implement `Keiro.Inbox.Schema` storage functions for begin/complete/fail/lookup/GC. (2026-05-18)
+- [x] Implement `Keiro.Inbox` transactional handler wrapper using EP-19 `IntegrationEvent`. (2026-05-18) — `runInboxTransaction` + `runInboxTransactionWithKey`, single Postgres transaction shared with the handler.
+- [x] Add Kafka consumer decoding helper for `shibuya-kafka-adapter` `Ingested (Maybe ByteString)`. (2026-05-18) — `Keiro.Inbox.Kafka.integrationEventFromKafka` takes a transport-neutral `KafkaInboundRecord` so keiro itself stays free of `hw-kafka-client` / `shibuya-kafka-adapter`. EP-22 bridges to those broker types inside its own dependency scope.
+- [x] Add duplicate, failure, and retention tests. (2026-05-18) — seven inbox tests + two `Keiro.Inbox.Kafka` decode tests in `test/Main.hs`.
+- [x] Update docs and migration tests. (2026-05-18) — `docs/user/inbox.md` added and linked from the guide index; `keiro_inbox` added to `expectedTables` in `keiro-migrations/test/Main.hs`.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The TH-driven `embedDir` in `Keiro.Migrations` caches the migration manifest at compile time. Adding a new SQL migration without re-running cabal's library compile silently keeps the old manifest. Resolved by deleting the keiro-migrations build output and forcing a recompile after the new SQL file was in place. (2026-05-18)
+- `INSERT … ON CONFLICT DO NOTHING RETURNING TRUE` returns zero rows on conflict, not `FALSE`, so the hasql decoder needs `fromMaybe False . rowMaybe` rather than a single-row decoder. (2026-05-18)
+- Inbox row reconstruction does not need to preserve the partition `key` separately, since the `kafka_topic/partition/offset` columns already carry per-delivery routing. The reconstructed `IntegrationEvent.key` field is set to `Nothing` for rows fetched from the inbox; receivers that need the original key can re-read it from the payload or store it on a domain-specific projection.
 
 
 ## Decision Log
@@ -49,7 +51,28 @@ The behavior is visible in tests without Kafka: processing the same integration 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+- The inbox is implemented as four modules mirroring the outbox layout:
+  `Keiro.Inbox.Types`, `Keiro.Inbox.Schema`, `Keiro.Inbox`, and
+  `Keiro.Inbox.Kafka`.
+- `runInboxTransaction` runs in a single Postgres transaction with the
+  caller-supplied handler. On `Tx.condemn` or any exception, the inbox
+  row insert and the handler's writes roll back together; the next
+  delivery sees no row and tries fresh.
+- Four dedupe policies are exposed: `PreferIntegrationMessageId`
+  (default; matches the outbox-minted UUIDv7), `PreferSourceEventIdentity`
+  (falls back to global position), `KafkaDeliveryIdentity`
+  (topic:partition:offset), and `CustomDedupeKey` for caller-derived
+  keys.
+- `garbageCollectCompleted` deletes completed rows older than a
+  caller-supplied retention window. Failed rows are not collected; they
+  remain for operator review.
+- `Keiro.Inbox.Kafka.integrationEventFromKafka` reconstructs the EP-19
+  envelope from `[(Text, Text)]` headers plus payload bytes. EP-22's
+  integration tests bridge the broker library's header type to this
+  shape inside their own dependency scope.
+- Nine new tests in `test/Main.hs` (seven inbox + two
+  `Keiro.Inbox.Kafka`) cover the duplicate, alternate-policy, custom
+  Kafka identity, missing-field, rollback, and retention scenarios.
 
 
 ## Context and Orientation

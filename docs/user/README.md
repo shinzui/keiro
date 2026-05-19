@@ -29,6 +29,9 @@ pieces those modules import.
 - [Durable Outbox](outbox.md): how outgoing integration events become
   durable rows, ordering and dead-letter policies, and the
   publish-pipeline contract.
+- [Idempotent Inbox](inbox.md): how the receiving bounded context
+  deduplicates Kafka redeliveries, dedupe policies, and the
+  transactional handler wrapper.
 - [Database Migrations](migrations.md): running `keiro-migrate`, disabling
   runtime schema initialization, and owning application table migrations.
 - [Operations](operations.md): database requirements, schema initialization,
