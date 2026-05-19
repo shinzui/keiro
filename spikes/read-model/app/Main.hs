@@ -23,8 +23,8 @@
 -- non-zero.
 module Main (main) where
 
+import Contravariant.Extras (contrazip4)
 import Control.Exception (Exception)
-import Data.Functor.Contravariant ((>$<))
 import Data.Int (Int32, Int64)
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
@@ -165,18 +165,22 @@ execSql pool sql = do
 createReadModelTables :: Pool.Pool -> IO ()
 createReadModelTables pool = do
   execSql pool
-    "CREATE TABLE IF NOT EXISTS counter_view (\
-    \  counter_name TEXT PRIMARY KEY,\
-    \  current_value INT NOT NULL,\
-    \  source_event_id UUID NOT NULL\
-    \)"
+    """
+    CREATE TABLE IF NOT EXISTS counter_view (
+      counter_name TEXT PRIMARY KEY,
+      current_value INT NOT NULL,
+      source_event_id UUID NOT NULL
+    )
+    """
   execSql pool
-    "CREATE TABLE IF NOT EXISTS counter_audit_view (\
-    \  source_event_id UUID PRIMARY KEY,\
-    \  counter_name TEXT NOT NULL,\
-    \  event_type TEXT NOT NULL,\
-    \  event_at TIMESTAMPTZ NOT NULL\
-    \)"
+    """
+    CREATE TABLE IF NOT EXISTS counter_audit_view (
+      source_event_id UUID PRIMARY KEY,
+      counter_name TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      event_at TIMESTAMPTZ NOT NULL
+    )
+    """
 
 
 -- * Inline projection write ---------------------------------------------
@@ -186,11 +190,13 @@ counterViewWrite counterName _ = Tx.statement counterName upsertStmt
   where
     upsertStmt :: Statement.Statement Text ()
     upsertStmt = Statement.preparable
-      "INSERT INTO counter_view (counter_name, current_value, source_event_id)\
-      \ VALUES ($1, 1, gen_random_uuid())\
-      \ ON CONFLICT (counter_name) DO UPDATE\
-      \   SET current_value = counter_view.current_value + 1,\
-      \       source_event_id = EXCLUDED.source_event_id"
+      """
+      INSERT INTO counter_view (counter_name, current_value, source_event_id)
+      VALUES ($1, 1, gen_random_uuid())
+      ON CONFLICT (counter_name) DO UPDATE
+        SET current_value = counter_view.current_value + 1,
+            source_event_id = EXCLUDED.source_event_id
+      """
       (Encoders.param (Encoders.nonNullable Encoders.text))
       Decoders.noResult
 
@@ -211,18 +217,21 @@ counterAuditHandler counterName pool recorded = do
   where
     insertStmt :: Statement.Statement (UUID.UUID, Text, Text, UTCTime) ()
     insertStmt = Statement.preparable
-      "INSERT INTO counter_audit_view (source_event_id, counter_name, event_type, event_at)\
-      \ VALUES ($1, $2, $3, $4)\
-      \ ON CONFLICT (source_event_id) DO NOTHING"
+      """
+      INSERT INTO counter_audit_view (source_event_id, counter_name, event_type, event_at)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (source_event_id) DO NOTHING
+      """
       enc
       Decoders.noResult
 
     enc :: Encoders.Params (UUID.UUID, Text, Text, UTCTime)
     enc =
-       ((\(a,_,_,_) -> a) >$< Encoders.param (Encoders.nonNullable Encoders.uuid))
-       <> ((\(_,b,_,_) -> b) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-       <> ((\(_,_,c,_) -> c) >$< Encoders.param (Encoders.nonNullable Encoders.text))
-       <> ((\(_,_,_,d) -> d) >$< Encoders.param (Encoders.nonNullable Encoders.timestamptz))
+      contrazip4
+        (Encoders.param (Encoders.nonNullable Encoders.uuid))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.timestamptz))
 
 
 -- * Helper: query latest globalPosition ---------------------------------

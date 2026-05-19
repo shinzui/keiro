@@ -14,12 +14,12 @@ module Spike.Projection
   , ensureSubscription
   ) where
 
+import Contravariant.Extras (contrazip2)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Async, async, cancel)
 import Control.Concurrent.STM (TVar, atomically, newTVarIO, readTVarIO, writeTVar)
 import Control.Exception (try, SomeException)
 import Control.Monad (when)
-import Data.Functor.Contravariant ((>$<))
 import Data.Int (Int64)
 import Data.Vector qualified as V
 import Data.Text (Text)
@@ -175,8 +175,9 @@ advanceLastSeen pool name pos = do
   where
     nameTextEnc :: Encoders.Params (Text, Int64)
     nameTextEnc =
-      (fst >$< Encoders.param (Encoders.nonNullable Encoders.text))
-       <> (snd >$< Encoders.param (Encoders.nonNullable Encoders.int8))
+      contrazip2
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Encoders.param (Encoders.nonNullable Encoders.int8))
 
     stmt :: Statement.Statement (Text, Int64) ()
     stmt = Statement.preparable

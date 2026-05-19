@@ -106,20 +106,27 @@ This section must always reflect the actual current state of the work.
             before), and updated the cabal stanza with `OverloadedLabels` +
             `DeriveGeneric` + the `generic-lens` and `lens` build-deps.
       - [x] `cabal build message-db-vs-kiroku` succeeds.
-- [ ] **Milestone 5: Refactor `spikes/read-model/`.**
-      - [ ] `Spike/Projection.hs`: replace `advanceLastSeen`'s local `nameTextEnc`
-            (a 2-tuple `fst`/`snd` encoder) with `contrazip2`. Replace inline
-            single-line SQL literals with multiline literals where the SQL is more
-            than ~60 columns wide.
-      - [ ] `Spike/ReadModel.hs`: replace the `queryLastSeen.selectStmt` SQL literal
-            with a multiline literal (single-parameter, encoder already minimal).
-      - [ ] `spikes/read-model/app/Main.hs`: replace `counterAuditHandler.enc`'s
-            4-tuple projection encoder with `contrazip4`. Convert the backslash-
-            continued SQL literals in `counterView.rmQuery`, `counterAuditView.rmQuery`,
-            `createReadModelTables`, `counterViewWrite.upsertStmt`,
-            `counterAuditHandler.insertStmt`, and `latestPosition.stmt` to multiline.
-      - [ ] `cabal build spike` succeeds (the spike has no test suite — confirm a
-            clean build is enough).
+- [x] **Milestone 5: Refactor `spikes/read-model/`.** *(Done 2026-05-19.)*
+      - [x] `Spike/Projection.hs`: replace `advanceLastSeen`'s local `nameTextEnc`
+            (a 2-tuple `fst`/`snd` encoder) with `contrazip2`. Inline
+            single-line SQL literals left as one-liners per the plan.
+      - [x] `Spike/ReadModel.hs`: `queryLastSeen.selectStmt` is already a
+            one-liner; no edit needed (matches plan's expectation).
+      - [x] `spikes/read-model/app/Main.hs`: replaced `counterAuditHandler.enc`'s
+            4-tuple projection encoder with `contrazip4`. Converted the
+            backslash-continued SQL literals in `createReadModelTables`,
+            `counterViewWrite.upsertStmt`, and `counterAuditHandler.insertStmt`
+            to multiline. `counterView.rmQuery`, `counterAuditView.rmQuery`,
+            and `latestPosition.stmt` are already single-line one-liners — no
+            change needed.
+      - [x] Cabal: added `contravariant-extras >= 0.3` to both the library
+            and executable stanzas in `spike.cabal`.
+      - [~] `cabal build spike` cannot succeed end-to-end because
+            `spikes/read-model/src/Spike/Command.hs` has pre-existing
+            `GHC-83865` errors (see Surprises). Substitute acceptance:
+            `Spike.Projection` compiles cleanly post-refactor, evidenced by
+            `[5 of 7] Compiling Spike.Projection` succeeding before the
+            build halts on `Spike.Command`.
 - [ ] **Milestone 6: Clean up `test/Main.hs` SQL literal style.** Convert any
       remaining backslash-continued multi-line SQL (search for `\\\\\n` patterns,
       e.g. the `INSERT INTO billing_received_orders` and `INSERT INTO billing_event_log`
