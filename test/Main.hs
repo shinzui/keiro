@@ -85,15 +85,23 @@ import Keiro.Outbox
 import Keiro.Outbox.Kafka qualified as OutboxKafka
 import Keiro.Inbox
   ( InboxDedupePolicy (..)
+  , InboxEnqueueOutcome (..)
   , InboxError (..)
   , InboxResult (..)
   , InboxStatus (..)
   , KafkaDeliveryRef (..)
+  , defaultInboxClaimOptions
+  , enqueueInbox
   , garbageCollectCompleted
   , initializeInboxSchema
   , listInbox
   , lookupInbox
   , runInboxTransaction
+  )
+import Keiro.Inbox.Schema
+  ( claimInboxBatchTx
+  , markInboxFailedTx
+  , releaseInboxClaimTx
   )
 import Keiro.Inbox.Kafka qualified as InboxKafka
 import Data.Time (NominalDiffTime)
@@ -1001,6 +1009,120 @@ main = hspec $ do
       deleted `shouldBe` 1
       Right rows <- Store.runStoreIO storeHandle (listInbox "ordering")
       rows `shouldBe` []
+
+  describe "Keiro.Inbox (worker storage)" $ around withTestStore $ do
+    it "enqueueInbox writes a pending row" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event = sampleIntegrationEnvelope
+            & #messageId .~ "enqueue-msg-1"
+            & #source .~ "ordering"
+      Right (Right outcome) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event Nothing
+      outcome `shouldBe` EnqueuedNew
+      Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "enqueue-msg-1")
+      row ^. #status `shouldBe` InboxPending
+      row ^. #attemptCount `shouldBe` 0
+      row ^. #claimedAt `shouldBe` Nothing
+
+    it "enqueueInbox is idempotent under the same dedupe key" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event = sampleIntegrationEnvelope
+            & #messageId .~ "enqueue-msg-dup"
+            & #source .~ "ordering"
+      Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event Nothing
+      Right (Right outcome2) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event Nothing
+      case outcome2 of
+        EnqueueDuplicateOf row -> row ^. #status `shouldBe` InboxPending
+        EnqueuedNew -> expectationFailure "expected EnqueueDuplicateOf"
+
+    it "claimInboxBatchTx claims pending rows under FOR UPDATE SKIP LOCKED" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event1 = sampleIntegrationEnvelope & #messageId .~ "claim-1" & #source .~ "ordering"
+          event2 = sampleIntegrationEnvelope & #messageId .~ "claim-2" & #source .~ "ordering"
+      Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event1 Nothing
+      Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event2 Nothing
+      now <- getCurrentTime
+      Right claimed <- Store.runStoreIO storeHandle $
+        Store.runTransaction (claimInboxBatchTx defaultInboxClaimOptions now)
+      length claimed `shouldBe` 2
+      for_ claimed $ \row -> do
+        row ^. #status `shouldBe` InboxProcessing
+        row ^. #claimedAt `shouldSatisfy` isJust
+      -- A second pass before visibility timeout returns nothing.
+      Right secondClaim <- Store.runStoreIO storeHandle $
+        Store.runTransaction (claimInboxBatchTx defaultInboxClaimOptions now)
+      secondClaim `shouldBe` []
+
+    it "claimInboxBatchTx returns orphaned processing rows after visibilityTimeout" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event = sampleIntegrationEnvelope & #messageId .~ "claim-orphan" & #source .~ "ordering"
+      Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event Nothing
+      now <- getCurrentTime
+      -- First worker claims and "crashes" mid-handler.
+      Right firstClaim <- Store.runStoreIO storeHandle $
+        Store.runTransaction (claimInboxBatchTx defaultInboxClaimOptions now)
+      length firstClaim `shouldBe` 1
+      -- Back-date the claim so it falls outside the visibility window.
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.sql
+            "UPDATE keiro_inbox SET claimed_at = now() - interval '5 minutes' WHERE dedupe_key = 'claim-orphan'"
+      laterNow <- getCurrentTime
+      Right reclaimed <- Store.runStoreIO storeHandle $
+        Store.runTransaction (claimInboxBatchTx defaultInboxClaimOptions laterNow)
+      length reclaimed `shouldBe` 1
+
+    it "markInboxFailedTx bumps attempts and transitions to dead at maxAttempts" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event = sampleIntegrationEnvelope & #messageId .~ "fail-msg" & #source .~ "ordering"
+          opts = defaultInboxClaimOptions
+            & #maxAttempts .~ 2
+            & #backoff .~ ConstantBackoff 0
+      Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event Nothing
+      now <- getCurrentTime
+      Right _ <- Store.runStoreIO storeHandle $
+        Store.runTransaction (claimInboxBatchTx opts now)
+      Right firstStatus <- Store.runStoreIO storeHandle $
+        Store.runTransaction
+          (markInboxFailedTx "ordering" "fail-msg" "boom" (opts ^. #maxAttempts) (opts ^. #backoff) now)
+      firstStatus `shouldBe` InboxFailed
+      Right (Just row1) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "fail-msg")
+      row1 ^. #attemptCount `shouldBe` 1
+      -- Second failure crosses maxAttempts and parks the row in dead.
+      Right _ <- Store.runStoreIO storeHandle $
+        Store.runTransaction (claimInboxBatchTx opts now)
+      Right secondStatus <- Store.runStoreIO storeHandle $
+        Store.runTransaction
+          (markInboxFailedTx "ordering" "fail-msg" "boom" (opts ^. #maxAttempts) (opts ^. #backoff) now)
+      secondStatus `shouldBe` InboxDead
+      Right (Just row2) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "fail-msg")
+      row2 ^. #status `shouldBe` InboxDead
+      row2 ^. #attemptCount `shouldBe` 2
+
+    it "releaseInboxClaimTx returns the row to pending without bumping attempts" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event = sampleIntegrationEnvelope & #messageId .~ "release-msg" & #source .~ "ordering"
+      Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event Nothing
+      now <- getCurrentTime
+      Right _ <- Store.runStoreIO storeHandle $
+        Store.runTransaction (claimInboxBatchTx defaultInboxClaimOptions now)
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (releaseInboxClaimTx "ordering" "release-msg" now)
+      Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "release-msg")
+      row ^. #status `shouldBe` InboxPending
+      row ^. #attemptCount `shouldBe` 0
+      row ^. #claimedAt `shouldBe` Nothing
+      -- And the row is immediately claimable again.
+      Right reclaimed <- Store.runStoreIO storeHandle $
+        Store.runTransaction (claimInboxBatchTx defaultInboxClaimOptions now)
+      length reclaimed `shouldBe` 1
 
   describe "Keiro.Inbox.Kafka" $ do
     it "reconstructs an integration event from headers and payload" $ do

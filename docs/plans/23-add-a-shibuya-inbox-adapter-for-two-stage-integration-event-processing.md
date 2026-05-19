@@ -63,19 +63,19 @@ Kafka contract (EP-19) or the existing inline dedup semantics (EP-21).
 
 ## Progress
 
-- [ ] Milestone 1: schema and storage primitives.
-  - [ ] Extend `keiro_inbox` with `pending`/`dead` status values, `attempt_count`, `next_attempt_at`, `claimed_at` columns, and a partial claim index. New codd migration in `keiro-migrations/sql-migrations/`.
-  - [ ] Update `keiro-migrations/src/Keiro/Migrations.hs` migration list so `runAllKeiroMigrations` picks up the new file.
-  - [ ] Update `keiro-migrations/test/Main.hs` to assert the new columns exist after `runAllKeiroMigrations`.
-  - [ ] Mirror the schema in `Keiro.Inbox.Schema.initializeInboxSchema` (the runtime fallback used by tests and dev tooling).
-  - [ ] Add `Keiro.Inbox.Types.InboxStatus` constructors `InboxPending`, `InboxDead`; update `inboxStatusText` / `parseInboxStatus`; bump `InboxRow` to carry `attemptCount`, `nextAttemptAt`, `claimedAt`.
-- [ ] Milestone 2: enqueue + claim + ack APIs.
-  - [ ] `Keiro.Inbox.Schema.enqueuePendingTx :: ... -> Tx.Transaction InboxEnqueueOutcome` (insert with status `pending`; returns `EnqueuedNew | EnqueueDuplicateOf InboxRow`).
-  - [ ] `Keiro.Inbox.enqueueInbox` and `enqueueInboxTx` public wrappers.
-  - [ ] `Keiro.Inbox.Schema.claimInboxBatchTx :: InboxClaimOptions -> UTCTime -> Tx.Transaction [InboxRow]` (`FOR UPDATE SKIP LOCKED`, status `pending` or visibility-timed-out `processing`, `next_attempt_at <= now`).
-  - [ ] `markInboxFailedTx` extended to bump `attempt_count`, set `next_attempt_at` from a `BackoffSchedule`, and transition to `dead` past `maxAttempts` (mirrors `Keiro.Outbox.Schema.markOutboxFailedTx`).
-  - [ ] `releaseInboxClaimTx` (status `processing` → `pending`, no attempt bump) for `AckHalt` cases.
-  - [ ] `reclaimStaleProcessing :: NominalDiffTime -> UTCTime -> Eff es Int` sweep used by the adapter when polling.
+- [x] Milestone 1: schema and storage primitives. (2026-05-19)
+  - [x] Extend `keiro_inbox` with `pending`/`dead` status values, `attempt_count`, `next_attempt_at`, `claimed_at` columns, and a partial claim index. New codd migration in `keiro-migrations/sql-migrations/`.
+  - [x] `runAllKeiroMigrations` picks up the new file automatically via `embedDir` once the TH module is recompiled (no list edit required).
+  - [x] Update `keiro-migrations/test/Main.hs` to assert the new columns exist after `runAllKeiroMigrations`.
+  - [x] Mirror the schema in `Keiro.Inbox.Schema.initializeInboxSchema` (the runtime fallback used by tests and dev tooling).
+  - [x] Add `Keiro.Inbox.Types.InboxStatus` constructors `InboxPending`, `InboxDead`; update `inboxStatusText` / `parseInboxStatus`; bump `InboxRow` to carry `attemptCount`, `nextAttemptAt`, `claimedAt`.
+- [x] Milestone 2: enqueue + claim + ack APIs. (2026-05-19)
+  - [x] `Keiro.Inbox.Schema.enqueuePendingTx :: ... -> Tx.Transaction InboxEnqueueOutcome` (insert with status `pending`; returns `EnqueuedNew | EnqueueDuplicateOf InboxRow`).
+  - [x] `Keiro.Inbox.enqueueInbox` and `enqueueInboxTx` public wrappers.
+  - [x] `Keiro.Inbox.Schema.claimInboxBatchTx :: InboxClaimOptions -> UTCTime -> Tx.Transaction [InboxRow]` (`FOR UPDATE SKIP LOCKED`, status `pending`, `failed`, or visibility-timed-out `processing`, `next_attempt_at <= now`).
+  - [x] `markInboxFailedTx` (new) bumps `attempt_count`, sets `next_attempt_at` from a `BackoffSchedule`, and transitions to `dead` past `maxAttempts`. (The pre-existing `markFailedTx` used by EP-21 stayed put.)
+  - [x] `releaseInboxClaimTx` (status `processing` → `pending`, no attempt bump) for `AckHalt` cases.
+  - [x] Reclaim sweep is fused into `claimInboxBatchTx` via the `claimed_at < $reclaimCutoff` predicate; no separate `reclaimStaleProcessing` needed.
 - [ ] Milestone 3: Shibuya adapter and transactional handler wrapper.
   - [ ] New module `Keiro.Inbox.Adapter` exposing `InboxAdapterConfig`, `inboxAdapter`, `mkTransactionalInboxHandler`, `InboxAckOutcome`.
   - [ ] `inboxAdapter :: (IOE :> es, Store :> es) => InboxAdapterConfig -> Eff es (Adapter es IntegrationEvent)`.
@@ -94,7 +94,15 @@ Kafka contract (EP-19) or the existing inline dedup semantics (EP-21).
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-05-19: codd's `embedDir`-based migration loader does not invalidate
+  the Template Haskell splice when a new SQL file is added under
+  `sql-migrations/`. Cabal sees no `.hs` file changed and skips
+  recompiling `Keiro.Migrations`, so `runAllKeiroMigrations` reports
+  "N found" pending migrations instead of "N+1". Workaround: delete
+  `dist-newstyle/build/.../keiro-migrations/build/Keiro/Migrations.*`
+  (or `touch` the module after adding the SQL file) to force the
+  splice to re-run. Worth surfacing in onboarding docs for the
+  migrations package.
 
 
 ## Decision Log

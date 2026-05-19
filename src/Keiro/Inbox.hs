@@ -20,11 +20,16 @@ module Keiro.Inbox
   , initializeInboxSchema
   , lookupInbox
   , listInbox
+  , listInboxByStatus
   , garbageCollectCompleted
 
-    -- * Transactional handler wrapper
+    -- * Transactional handler wrapper (EP-21 inline path)
   , runInboxTransaction
   , runInboxTransactionWithKey
+
+    -- * Two-stage drain (EP-23 worker path)
+  , enqueueInbox
+  , enqueueInboxTx
   )
 where
 
@@ -97,3 +102,50 @@ runInboxTransactionWithKey src dedupe event kafka handler = do
         InboxPending -> pure InboxInProgress
         InboxFailed -> pure (InboxPreviouslyFailed (row ^. #lastError))
         InboxDead -> pure (InboxPreviouslyFailed (row ^. #lastError))
+
+{- | Enqueue an integration event as a 'pending' inbox row.
+
+This is the two-stage drain entry point: the caller writes the durable
+receipt now, and a worker (typically
+'Keiro.Inbox.Adapter.inboxAdapter') runs the handler later. Returns
+'EnqueuedNew' on a fresh insert and 'EnqueueDuplicateOf' when
+@(source, dedupe_key)@ already exists, so duplicate Kafka redeliveries
+become observable to the caller.
+
+This action runs its own transaction. Use 'enqueueInboxTx' when the
+caller needs to compose the enqueue with other writes (a saga that
+emits a private event and an integration receipt in one transaction).
+-}
+enqueueInbox ::
+  (IOE :> es, Store :> es) =>
+  InboxDedupePolicy ->
+  IntegrationEvent ->
+  Maybe KafkaDeliveryRef ->
+  Eff es (Either InboxError InboxEnqueueOutcome)
+enqueueInbox policy event kafka = do
+  now <- liftIO getCurrentTime
+  case dedupeKeyFor policy event kafka of
+    Left err -> pure (Left err)
+    Right dedupe ->
+      Right <$> runTransaction (enqueuePendingTx (event ^. #source) dedupe event kafka now)
+
+{- | 'enqueueInbox' as a 'Tx.Transaction' fragment so the caller can
+weave it into a larger transaction.
+
+The caller must supply the dedupe-key resolution outcome. Failure to
+satisfy the policy stays in 'Either' so the enclosing transaction
+decides whether to condemn or carry on. The caller also supplies the
+"now" timestamp; pick one timestamp for the whole transaction so all
+co-written rows share it.
+-}
+enqueueInboxTx ::
+  InboxDedupePolicy ->
+  IntegrationEvent ->
+  Maybe KafkaDeliveryRef ->
+  UTCTime ->
+  Tx.Transaction (Either InboxError InboxEnqueueOutcome)
+enqueueInboxTx policy event kafka now =
+  case dedupeKeyFor policy event kafka of
+    Left err -> pure (Left err)
+    Right dedupe ->
+      Right <$> enqueuePendingTx (event ^. #source) dedupe event kafka now
