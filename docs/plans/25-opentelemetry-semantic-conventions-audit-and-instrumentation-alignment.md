@@ -146,16 +146,20 @@ This section must always reflect the actual current state of the work.
       `traceContextFromHeaders` extracts a non-empty `TraceContext` from a
       sample W3C `traceparent` header pair (and returns `Nothing` when the
       header is absent).
-- [ ] **Milestone 4: Instrument `Keiro.Outbox` and `Keiro.Outbox.Kafka`.** Wrap
-      the per-row body of `publishClaimedOutbox` in
-      `Keiro.Telemetry.withProducerSpan`, with attributes from
-      `outboxRowToKafkaRecord` and from the `IntegrationEvent` envelope. On
-      `PublishFailed`, set `error.type` and span status `Error`. The application
-      passes its tracer through a new `OutboxPublishOptions` field; existing
-      callers can use `defaultOutboxPublishOptions` which sets the field to
-      `Nothing` (noop). Add an in-memory-exporter test that publishes a row
-      through a `IO` stub publisher and asserts the captured span carries the
-      expected attribute keys/values.
+- [x] **Milestone 4: Instrument `Keiro.Outbox` and `Keiro.Outbox.Kafka`
+      (2026-05-19).** `OutboxPublishOptions` gains `tracer :: !(Maybe
+      Tracer)` (defaults to `Nothing` via `defaultPublishOptions`).
+      `publishClaimedOutbox` now wraps each row's publish call in
+      `withProducerSpan` with attributes from `outboxRowToKafkaRecord` and
+      the envelope; on `PublishFailed` the helper sets
+      `error.type = "publish_failed"` and span status `Error errMsg`.
+      `Eq` and `Show` were dropped from `OutboxPublishOptions` because
+      `Tracer` carries neither — no callers required either instance.
+      New in-memory-exporter test `publishClaimedOutbox emits a Producer
+      span with messaging semconv attributes` exercises the happy and
+      failure paths against a real ephemeral Postgres store and asserts
+      span name, kind, attributes, and status. Suite: 72 examples / 0
+      failures.
 - [ ] **Milestone 5: Instrument `Keiro.Inbox` and `Keiro.Inbox.Kafka`.** Wrap
       the receive path in `Keiro.Telemetry.withConsumerSpan`, extracting any
       upstream `traceparent` from the Kafka headers via the W3C propagator

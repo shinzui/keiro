@@ -117,7 +117,18 @@ import Kiroku.Store.Types
   , StreamName (..)
   , StreamVersion (..)
   )
+import OpenTelemetry.Attributes (Attribute (..), Attributes, PrimitiveAttribute (..), lookupAttribute)
 import OpenTelemetry.Attributes.Key (AttributeKey, unkey)
+import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
+import OpenTelemetry.Trace
+  ( SpanStatus (..)
+  , createTracerProvider
+  , emptyTracerProviderOptions
+  , makeTracer
+  , shutdownTracerProvider
+  , tracerOptions
+  )
+import OpenTelemetry.Trace.Core (ImmutableSpan (..))
 import Test.Hspec
 
 main :: IO ()
@@ -892,6 +903,56 @@ main = hspec $ do
       length ids `shouldBe` 4
       length (uniqueIds ids) `shouldBe` 4
 
+    it "publishClaimedOutbox emits a Producer span with messaging semconv attributes" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
+      (processor, spansRef) <- inMemoryListExporter
+      provider <- createTracerProvider [processor] emptyTracerProviderOptions
+      let tracer = makeTracer provider "keiro-test" tracerOptions
+          okId = OutboxId outboxUuid1
+          failId = OutboxId outboxUuid2
+          okEvent = sampleIntegrationEnvelope
+          failEvent = sampleIntegrationEnvelope
+            & #messageId .~ "msg-fail-otel-1"
+            & #key .~ Just "order-otel-fail"
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx okId okEvent)
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx failId failEvent)
+      let publish row
+            | row ^. #outboxId == okId = pure PublishSucceeded
+            | otherwise = pure (PublishFailed "broker unreachable")
+          opts = defaultPublishOptions & #tracer ?~ tracer
+      Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts)
+      _ <- shutdownTracerProvider provider
+      spans <- readIORef spansRef
+      length spans `shouldBe` 2
+      let findSpan needle = case [sp | sp <- spans, textAttr (spanAttributes sp) "messaging.message.id" == Just needle] of
+            (sp : _) -> sp
+            [] -> error ("no span captured for message.id=" <> Text.unpack needle)
+          okSpan = findSpan (okEvent ^. #messageId)
+          failSpan = findSpan (failEvent ^. #messageId)
+      -- Successful publish: producer-kind, all messaging attrs, Unset/Ok
+      -- status (the helper does not explicitly set Ok; default is Unset).
+      spanName okSpan `shouldBe` ("send " <> (okEvent ^. #destination))
+      show (spanKind okSpan) `shouldBe` "Producer"
+      textAttr (spanAttributes okSpan) "messaging.system" `shouldBe` Just "kafka"
+      textAttr (spanAttributes okSpan) "messaging.operation.type" `shouldBe` Just "publish"
+      textAttr (spanAttributes okSpan) "messaging.operation.name" `shouldBe` Just "send"
+      textAttr (spanAttributes okSpan) "messaging.destination.name"
+        `shouldBe` Just (okEvent ^. #destination)
+      textAttr (spanAttributes okSpan) "messaging.kafka.message.key"
+        `shouldBe` (okEvent ^. #key)
+      case spanStatus okSpan of
+        Unset -> pure ()
+        Ok -> pure ()
+        other -> expectationFailure ("expected Unset/Ok, got " <> show other)
+      -- Failed publish: same attrs, plus error.type and Error status with
+      -- the publisher's error message.
+      textAttr (spanAttributes failSpan) "error.type" `shouldBe` Just "publish_failed"
+      case spanStatus failSpan of
+        Error msg -> msg `shouldBe` "broker unreachable"
+        other -> expectationFailure ("expected Error \"broker unreachable\", got " <> show other)
+
   describe "Keiro.Inbox" $ around withTestStore $ do
     it "runs the handler once and records the row as completed" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle initializeInboxSchema
@@ -1298,6 +1359,11 @@ attrKeyText = unkey
 
 attrKeyTextInt64 :: AttributeKey Int64 -> Text
 attrKeyTextInt64 = unkey
+
+textAttr :: Attributes -> Text -> Maybe Text
+textAttr attrs name = case lookupAttribute attrs name of
+  Just (AttributeValue (TextAttribute t)) -> Just t
+  _ -> Nothing
 
 -- ---------------------------------------------------------------------------
 -- Cross-context integration fixtures

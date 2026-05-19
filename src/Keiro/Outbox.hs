@@ -54,15 +54,20 @@ import Data.TypeID qualified as TypeID
 import Data.UUID.V7 qualified as V7
 import Effectful (Eff, IOE, (:>))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
+import OpenTelemetry.Attributes.Key (unkey)
+import OpenTelemetry.SemanticConventions (error_type)
+import OpenTelemetry.Trace.Core (addAttribute, setStatus, SpanStatus (..))
 import Keiro.Integration.Event
   ( IntegrationContentType
   , IntegrationEvent (..)
   , SchemaReference
   , TraceContext
   )
+import Keiro.Outbox.Kafka (outboxRowToKafkaRecord)
 import Keiro.Outbox.Schema
 import Keiro.Outbox.Types
 import Keiro.Prelude
+import Keiro.Telemetry (withProducerSpan)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId, GlobalPosition, RecordedEvent)
@@ -242,7 +247,19 @@ publishClaimedOutbox publish options = do
       Eff es OutboxPublishSummary
     drainBatch [] acc = pure acc
     drainBatch (row : rest) acc = do
-      outcome <- publish row
+      outcome <-
+        withProducerSpan
+          (options ^. #tracer)
+          (row ^. #event)
+          (outboxRowToKafkaRecord row)
+          $ \mSpan -> do
+            out <- publish row
+            case (mSpan, out) of
+              (Just sp, PublishFailed errMsg) -> do
+                addAttribute sp (unkey error_type) ("publish_failed" :: Text)
+                setStatus sp (Error errMsg)
+              _ -> pure ()
+            pure out
       now <- liftIO getCurrentTime
       case outcome of
         PublishSucceeded -> do

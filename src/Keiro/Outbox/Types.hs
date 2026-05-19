@@ -25,6 +25,7 @@ where
 import Data.UUID (UUID)
 import Data.UUID qualified as UUID
 import Data.Time.Clock (NominalDiffTime)
+import OpenTelemetry.Trace.Core (Tracer)
 import Keiro.Integration.Event (IntegrationEvent)
 import Keiro.Prelude
 
@@ -139,14 +140,23 @@ data OutboxRow = OutboxRow
   }
   deriving stock (Generic, Eq, Show)
 
--- | Knobs that govern one invocation of 'Keiro.Outbox.publishClaimedOutbox'.
+{- | Knobs that govern one invocation of 'Keiro.Outbox.publishClaimedOutbox'.
+
+The optional 'tracer' field opts the publisher into OpenTelemetry
+instrumentation: when present, the publisher opens a @Producer@-kind
+span around each row's publish attempt, attributing the row's
+'IntegrationEvent.destination' (topic), 'IntegrationEvent.messageId',
+and Kafka key per the messaging semantic conventions. When 'tracer' is
+'Nothing' (the default) the publisher emits no spans.
+-}
 data OutboxPublishOptions = OutboxPublishOptions
   { batchSize :: !Int
   , maxAttempts :: !Int
   , backoff :: !BackoffSchedule
   , orderingPolicy :: !OrderingPolicy
+  , tracer :: !(Maybe Tracer)
   }
-  deriving stock (Generic, Eq, Show)
+  deriving stock (Generic)
 
 {- | Aggregate result of one publisher pass.
 
@@ -172,6 +182,7 @@ defaultPublishOptions =
     , maxAttempts = 10
     , backoff = ConstantBackoff 2
     , orderingPolicy = PerKeyHeadOfLine
+    , tracer = Nothing
     }
 
 -- | Wire representation of 'OutboxStatus' used in the @status@ column.
