@@ -76,11 +76,11 @@ Kafka contract (EP-19) or the existing inline dedup semantics (EP-21).
   - [x] `markInboxFailedTx` (new) bumps `attempt_count`, sets `next_attempt_at` from a `BackoffSchedule`, and transitions to `dead` past `maxAttempts`. (The pre-existing `markFailedTx` used by EP-21 stayed put.)
   - [x] `releaseInboxClaimTx` (status `processing` → `pending`, no attempt bump) for `AckHalt` cases.
   - [x] Reclaim sweep is fused into `claimInboxBatchTx` via the `claimed_at < $reclaimCutoff` predicate; no separate `reclaimStaleProcessing` needed.
-- [ ] Milestone 3: Shibuya adapter and transactional handler wrapper.
-  - [ ] New module `Keiro.Inbox.Adapter` exposing `InboxAdapterConfig`, `inboxAdapter`, `mkTransactionalInboxHandler`, `InboxAckOutcome`.
-  - [ ] `inboxAdapter :: (IOE :> es, Store :> es) => InboxAdapterConfig -> Eff es (Adapter es IntegrationEvent)`.
-  - [ ] `AckHandle es` per-row implementation that maps `AckDecision` → `markCompletedTx` / retry / `markDeadTx` / release-and-halt.
-  - [ ] `mkTransactionalInboxHandler :: (IntegrationEvent -> Tx.Transaction a) -> Handler es IntegrationEvent` runs the user's `Tx.Transaction` and `markCompletedTx` in one transaction; restores the EP-21 atomicity guarantee under the Shibuya surface.
+- [x] Milestone 3: Shibuya adapter and transactional handler wrapper. (2026-05-19)
+  - [x] New module `Keiro.Inbox.Adapter` exposing `InboxAdapterConfig`, `inboxAdapter`, `mkTransactionalInboxHandler`, `InboxAckOutcome`.
+  - [x] `inboxAdapter :: (IOE :> es, Store :> es) => InboxAdapterConfig -> Eff es (Adapter es IntegrationEvent)`.
+  - [x] `AckHandle es` per-row implementation that maps `AckDecision` → `markCompletedTx` / retry / `markDeadTx` / release-and-halt.
+  - [x] `mkTransactionalInboxHandler :: (IntegrationEvent -> Tx.Transaction (Either Text a)) -> Handler es IntegrationEvent` runs the user's `Tx.Transaction` and `markCompletedTx` in one transaction; restores the EP-21 atomicity guarantee under the Shibuya surface. Refinement: takes `Either Text a` rather than raw `a` so that user-signaled rollback is observable to the wrapper (see Decision Log 2026-05-19).
 - [ ] Milestone 4: tests.
   - [ ] Storage tests: enqueue idempotency, claim batch correctness, per-source ordering option, visibility-timeout reclaim, dead-letter terminal state, retry backoff.
   - [ ] Adapter tests: end-to-end stream → handler → ack → state transitions using `ephemeral-pg` and a synthetic stream of `IntegrationEvent`s.
@@ -174,6 +174,30 @@ Kafka contract (EP-19) or the existing inline dedup semantics (EP-21).
   Rationale: Matches the EP-19 precedent for `Keiro.Integration.Event`
   and the `Keiro.Inbox.Kafka` precedent: optional integration modules
   are imported directly by callers that opt in.
+  Date: 2026-05-19.
+
+- Decision: `mkTransactionalInboxHandler` takes a handler returning
+  `Tx.Transaction (Either Text a)` instead of the original plan's
+  `Tx.Transaction a`. `Right a` triggers `markCompletedTx` + `AckOk`;
+  `Left reason` triggers `Tx.condemn` + `AckRetry`.
+  Rationale: `runTransaction` returns the body's value even when the
+  body called `Tx.condemn`, so the wrapper cannot distinguish "user
+  committed" from "user condemned" via the return value alone. If it
+  cannot, the framework's ack-side `markCompletedTx` would still flip
+  a condemned row to `completed` — exactly the bug the wrapper exists
+  to prevent. The `Either` contract makes the user's success/failure
+  signal explicit and the wrapper makes the right ack-side choice.
+  Synchronous exceptions are still treated as `AckRetry`.
+  Date: 2026-05-19.
+
+- Decision: `BackoffSchedule` is re-exported from
+  `Keiro.Inbox.Types` alongside the new `InboxClaimOptions`.
+  Rationale: Callers configuring the adapter naturally write
+  `defaultInboxClaimOptions & #backoff .~ ConstantBackoff 5`; forcing
+  them to import `Keiro.Outbox.Types` for the constructor leaks the
+  outbox/inbox sibling relationship across the public API. The type
+  itself still lives in `Keiro.Outbox.Types` to avoid a circular
+  dependency on inbox-only data.
   Date: 2026-05-19.
 
 

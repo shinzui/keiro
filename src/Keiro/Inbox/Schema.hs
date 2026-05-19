@@ -43,7 +43,7 @@ import Keiro.Integration.Event
   , parseContentType
   )
 import Data.Int (Int32)
-import Keiro.Outbox.Types (BackoffSchedule, nextDelay)
+import Keiro.Outbox.Types (nextDelay)
 import Keiro.Prelude
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)

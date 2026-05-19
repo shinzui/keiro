@@ -18,6 +18,7 @@ module Keiro.Inbox.Types
   , InboxClaimOptions (..)
   , defaultInboxClaimOptions
   , KafkaDeliveryRef (..)
+  , BackoffSchedule (..)
   , inboxStatusText
   , parseInboxStatus
   , dedupeKeyFor
