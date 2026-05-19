@@ -133,10 +133,11 @@ This section must always reflect the actual current state of the work.
       `appendBillingEventLogStmt` and the rest of the file's SQL literals
       are already single-line one-liners. `cabal test keiro-test` →
       65 examples, 0 failures.
-- [ ] **Final sweep:** run `rg '\\\(\\\\\\(' --type haskell` from the repository root
-      and confirm no hits remain inside the `src/`, `jitsurei/src/`,
-      `spikes/read-model/src/`, `spikes/read-model/app/`, `benchmarks/`, and `test/`
-      trees. Append a short transcript to the Outcomes section.
+- [x] **Final sweep:** *(Done 2026-05-19.)* `rg '\(\\\(' --type haskell …`
+      returns one hit, which is a `(\(StreamName name) -> …)` constructor
+      pattern in `test/Main.hs` — not a tuple-projection encoder. The
+      `fst >$<` / `snd >$<` regex returns zero hits. Transcript in
+      Outcomes & Retrospective.
 
 
 ## Surprises & Discoveries
@@ -217,7 +218,80 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-05-19).** All six milestones plus the final sweep are done.
+The original purpose holds: every multi-parameter encoder of arity 2–7 in the
+refactored files is now a `contrazip<N>` call over positional `E.param`
+fragments, the one ≥8-field record encoder in the benchmark moved to the
+`view #field` form, and every multi-line SQL literal that previously used
+backslash continuations or `Text.unwords` is now a `"""..."""` literal.
+`MultilineStrings` lives in each shared cabal stanza, so the per-file
+`{-# LANGUAGE MultilineStrings #-}` pragmas are gone.
+
+**Test transcript** (`cabal test keiro-test`):
+
+```text
+Finished in 20.6417 seconds
+65 examples, 0 failures
+Test suite keiro-test: PASS
+```
+
+`cabal test keiro-migrations-test`:
+
+```text
+applies Kiroku and Keiro migrations to a fresh database and is repeatable [✔]
+Test suite keiro-migrations-test: PASS
+```
+
+`cabal test jitsurei-test`:
+
+```text
+7 examples, 0 failures
+Test suite jitsurei-test: PASS
+```
+
+`cabal build all` (root) succeeds. `cabal build` from
+`benchmarks/message-db-vs-kiroku/` succeeds. The spike's `Spike.Projection`
+compiles cleanly; the rest of the spike remains blocked by the pre-existing
+`Spike/Command.hs` GHC-83865 errors documented in Surprises.
+
+**Anti-pattern sweep transcripts:**
+
+```text
+$ rg '\(\\\(' --type haskell src/ jitsurei/ keiro-migrations/ benchmarks/ spikes/ test/
+test/Main.hs:      Stream.streamName (mapStreamName (\(StreamName name) -> StreamName (name <> "-archived")) orderStream)
+```
+
+```text
+$ rg 'fst >\$<|snd >\$<' --type haskell src/ jitsurei/ keiro-migrations/ benchmarks/ spikes/ test/
+(no output)
+```
+
+The one remaining `(\(` hit is a `StreamName` constructor pattern in a
+helper expression, not a tuple-projection encoder — i.e. exactly the kind of
+match the encoder anti-pattern guide does *not* call out. Acceptance met.
+
+**Lessons learned.**
+
+1. **MultilineStrings `<>` seams need an explicit separator.** When two
+   `"""..."""` literals are concatenated directly via `<>`, the runtime
+   result has no whitespace at the seam (the algorithm strips the trailing
+   blank line of one and the leading blank line of the other). For
+   `claimSql` this produced `RETURNINGkt.outbox_id…` and broke every claim
+   test until I inserted a blank line inside the multiline before the
+   closing `"""`. Recorded in Surprises so the next person who writes a
+   stitched-multiline SQL doesn't burn an hour on the same bug.
+
+2. **The encoder anti-pattern is a *positional* tuple lambda specifically.**
+   The grep `\(\\\(` flags any `((\(` sequence, which incidentally also
+   catches constructor patterns like `(\(StreamName name) -> …)`. Those are
+   not the anti-pattern — they are legitimate destructuring on a named
+   constructor with one field. The guide rule and the `fst >$<` / `snd >$<`
+   sweep together pin down the actual concern.
+
+3. **Pre-existing breakage is its own task.** The spike's `Spike/Command.hs`
+   keiki-API drift was not in scope here; documenting it explicitly in
+   Surprises and adjusting the acceptance criterion (rather than trying to
+   fix it inline) kept this refactor focused.
 
 
 ## Context and Orientation
