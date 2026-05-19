@@ -23,17 +23,19 @@ The goal is not just a demo. This plan proves that EP-19's envelope, EP-20's out
 
 ## Progress
 
-- [ ] Build a two-context fixture with isolated databases and no shared Kiroku streams.
-- [ ] Add a Kafka or Redpanda test harness reusing shibuya-kafka-adapter patterns.
-- [ ] Exercise the Ordering Kafka integration producer subscription from private event to public topic.
-- [ ] Exercise inbox consume in Billing and prove duplicate delivery is harmless.
-- [ ] Exercise per-key head-of-line ordering and the dead-letter unblock path.
-- [ ] Document the topology, guarantees, and operational runbook.
+- [x] Build a two-context fixture with isolated databases and no shared Kiroku streams. (2026-05-18) — `withTwoContexts` in `test/Main.hs` starts two ephemeral Postgres instances and two `KirokuStore` handles. Outbox lives in the Ordering store; inbox lives in the Billing store; no shared schema.
+- [~] Add a Kafka or Redpanda test harness reusing shibuya-kafka-adapter patterns. (2026-05-18, deferred) — A real broker harness requires librdkafka as a system dep, which is not in `flake.nix`. The cross-context test instead uses an in-process Kafka simulator (an MVar acting as a topic) that exercises the EP-19 envelope, EP-20 outbox, and EP-21 inbox composition. The broker-bridge surface (`Kafka.Effectful.Producer.produceMessageSync` for publish, `shibuya-kafka-adapter` for consume) is documented in `docs/guides/integration-events-with-kafka.md` as the next deployment step.
+- [x] Exercise the Ordering Kafka integration producer subscription from private event to public topic. (2026-05-18) — `Keiro.Outbox.enqueueIntegrationEventTx` + `publishClaimedOutbox` drain into the in-process topic; one test asserts the published count and the consumer-side row count match.
+- [x] Exercise inbox consume in Billing and prove duplicate delivery is harmless. (2026-05-18) — A redelivery test re-applies the same Kafka record with a different offset and asserts the Billing handler runs once.
+- [x] Exercise per-key head-of-line ordering and the dead-letter unblock path. (2026-05-18) — Two tests: an ordering test asserts events for the same key arrive in submission order; a dead-letter test asserts a stuck row transitions to `dead` after `maxAttempts` failures and unblocks its successor.
+- [x] Document the topology, guarantees, and operational runbook. (2026-05-18) — `docs/guides/integration-events-with-kafka.md` covers the topology, guarantees, ordering policy trade-offs, retention guidance, and broker-test follow-up.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-05-18: librdkafka (and therefore `hw-kafka-client` / `kafka-effectful`) is not in the current `flake.nix`. Including the real Kafka producer in `keiro` would break nix builds for the whole library. Chose to deliver the cross-context validation with an in-process Kafka simulator so the keiro library stays Kafka-deps-free, with the broker bridge documented as the next step in the integration-events guide.
+- 2026-05-18: `publishClaimedOutbox` claims at most one row per `(source, message_key)` per pass under `PerKeyHeadOfLine`, so the same-key ordering test calls the worker twice to drain both events. This is the intended behavior (a stuck predecessor must reach a terminal status before its successor is claimable), not a quirk of the test.
+- 2026-05-18: `EphemeralPg.withCached` invocations nest cleanly to give two separate Postgres databases inside one test, which keeps the cross-context fixture self-contained without needing a process-compose recipe.
 
 
 ## Decision Log
@@ -49,7 +51,24 @@ The goal is not just a demo. This plan proves that EP-19's envelope, EP-20's out
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+- Cross-context validation is exercised by three new tests under the
+  "Keiro cross-context Kafka integration" describe block in
+  `test/Main.hs`: end-to-end happy path with duplicate redelivery,
+  per-key submission-order preservation, and head-of-line + dead-letter
+  unblock.
+- `withTwoContexts` fixture stands up two isolated ephemeral Postgres
+  databases with their own `KirokuStore`. No keiro tables or kiroku
+  streams are shared. The only shared state is the in-process Kafka
+  topic MVar.
+- The broker-level test against Redpanda is intentionally deferred to
+  keep keiro itself free of `hw-kafka-client` / librdkafka. The
+  integration-events guide describes the wiring an integrator
+  performs to bridge `Kafka.Effectful.Producer.produceMessageSync`
+  and `shibuya-kafka-adapter` into the same in-process surface that
+  the test exercises today.
+- `docs/guides/integration-events-with-kafka.md` is now the canonical
+  operational reference for the canonical Kafka topology and the
+  guarantees that compose from EP-19, EP-20, and EP-21.
 
 
 ## Context and Orientation

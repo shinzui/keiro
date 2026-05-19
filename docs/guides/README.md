@@ -21,6 +21,9 @@ are adopting:
   snapshots for the order stream.
 - [Run And Operate Jitsurei](run-and-operate-jitsurei.md) collects build,
   migration, and production-readiness commands.
+- [Integration Events With Kafka](integration-events-with-kafka.md) describes
+  the canonical two-context Kafka topology, the operational guarantees,
+  and when to deviate from the default ordering and retention policies.
 
 The full source is under [`../../jitsurei/`](../../jitsurei/). The executable
 tests are in [`../../jitsurei/test/Main.hs`](../../jitsurei/test/Main.hs).

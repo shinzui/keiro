@@ -8,9 +8,12 @@ where
 import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
-import Contravariant.Extras (contrazip2, contrazip4)
+import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.IORef (atomicModifyIORef', newIORef, readIORef, writeIORef)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as TE
+import Effectful (Eff, IOE, (:>))
+import Kiroku.Store.Effect (Store)
 import Data.Vector qualified as Vector
 import Data.UUID (UUID, fromString)
 import Data.Time (UTCTime (..), secondsToDiffTime)
@@ -94,6 +97,7 @@ import Keiro.Inbox
   )
 import Keiro.Inbox.Kafka qualified as InboxKafka
 import Data.Time (NominalDiffTime)
+import Control.Concurrent.MVar (MVar, modifyMVar, newMVar, readMVar)
 import Keiro.Prelude
 import Keiro.Projection
 import Keiro.ProcessManager
@@ -1041,6 +1045,136 @@ main = hspec $ do
       InboxKafka.integrationEventFromKafka record
         `shouldBe` Left (InboxKafka.MissingHeader "keiro-message-id")
 
+  describe "Keiro cross-context Kafka integration" $ around withTwoContexts $ do
+    it "publishes an Ordering integration event and runs the Billing handler exactly once across duplicate deliveries" $ \(ordering, billing) -> do
+      Right () <- Store.runStoreIO ordering initializeOutboxSchema
+      Right () <- Store.runStoreIO billing initializeInboxSchema
+      Right () <- Store.runStoreIO billing $
+        Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS billing_received_orders (order_id TEXT PRIMARY KEY, quantity BIGINT NOT NULL)")
+      topic <- newKafkaTopic
+      -- Ordering side: enqueue an outbox row representing a published event.
+      let orderingEvent = orderSubmittedEnvelope "order-aaa" 7 "msg-aaa"
+          oid = OutboxId outboxUuid1
+      Right () <- Store.runStoreIO ordering $
+        Store.runTransaction (enqueueIntegrationEventTx oid orderingEvent)
+      -- Run the publisher worker: push records to the in-process topic.
+      Right pubSummary1 <- Store.runStoreIO ordering $
+        publishClaimedOutbox (kafkaTopicPublish topic) defaultPublishOptions
+      pubSummary1 ^. #published `shouldBe` 1
+      -- Billing side: consume from the topic.
+      records1 <- drainKafkaTopic topic
+      record1 <- case records1 of
+        [r] -> pure r
+        other -> expectationFailure ("expected 1 record, got " <> show (length other)) *> error "unreachable"
+      Right consumed1 <- Store.runStoreIO billing $
+        consumeAndApply record1 billingReactionHandler
+      consumed1 `shouldBe` ConsumeApplied (InboxProcessed ())
+      Right rowCount1 <- Store.runStoreIO billing $
+        Store.runTransaction (Tx.statement () billingReceivedOrdersCountStmt)
+      rowCount1 `shouldBe` 1
+
+      -- Simulate Kafka redelivery: pretend the same Kafka record was
+      -- delivered again at a different offset. The producer also retries
+      -- (the outbox flips back to pending and the worker republishes).
+      let redelivered = redeliverWithDifferentOffset record1
+      Right consumed2 <- Store.runStoreIO billing $
+        consumeAndApply redelivered billingReactionHandler
+      consumed2 `shouldBe` ConsumeApplied InboxDuplicate
+      Right rowCount2 <- Store.runStoreIO billing $
+        Store.runTransaction (Tx.statement () billingReceivedOrdersCountStmt)
+      rowCount2 `shouldBe` 1
+
+    it "preserves per-partition ordering for two events sharing a Kafka key" $ \(ordering, billing) -> do
+      Right () <- Store.runStoreIO ordering initializeOutboxSchema
+      Right () <- Store.runStoreIO billing initializeInboxSchema
+      Right () <- Store.runStoreIO billing $
+        Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS billing_received_orders (order_id TEXT PRIMARY KEY, quantity BIGINT NOT NULL)")
+      Right () <- Store.runStoreIO billing $
+        Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS billing_event_log (seq BIGSERIAL PRIMARY KEY, source TEXT NOT NULL, event_type TEXT NOT NULL, order_id TEXT NOT NULL)")
+      topic <- newKafkaTopic
+      -- Two events for the same order key.
+      let submittedEnv = orderSubmittedEnvelope "order-bbb" 4 "msg-bbb-1"
+          cancelledEnv = orderCancelledEnvelope "order-bbb" "msg-bbb-2"
+          submittedId = OutboxId outboxUuid1
+          cancelledId = OutboxId outboxUuid2
+      Right () <- Store.runStoreIO ordering $
+        Store.runTransaction (enqueueIntegrationEventTx submittedId submittedEnv)
+      Right () <- Store.runStoreIO ordering $
+        Store.runTransaction (enqueueIntegrationEventTx cancelledId cancelledEnv)
+      -- Per-key head-of-line means the worker drains at most one row per
+      -- @(source, message_key)@ per pass. Call it twice so the
+      -- successor (cancelled) clears after the predecessor (submitted)
+      -- reaches the terminal @sent@ status.
+      let drainOnce =
+            publishClaimedOutbox
+              (kafkaTopicPublish topic)
+              (defaultPublishOptions & #backoff .~ ConstantBackoff 0)
+      Right s1 <- Store.runStoreIO ordering drainOnce
+      Right s2 <- Store.runStoreIO ordering drainOnce
+      (s1 ^. #published) + (s2 ^. #published) `shouldBe` 2
+      records <- drainKafkaTopic topic
+      length records `shouldBe` 2
+      -- Apply both records to billing in delivery order.
+      for_ records $ \record -> do
+        Right consumed <- Store.runStoreIO billing $
+          consumeAndApply record (loggingReactionHandler "billing")
+        case consumed of
+          ConsumeApplied (InboxProcessed ()) -> pure ()
+          other -> expectationFailure ("expected processed, got " <> show other)
+      Right events <- Store.runStoreIO billing $
+        Store.runTransaction (Tx.statement () billingEventLogStmt)
+      events `shouldBe` [("OrderSubmitted", "order-bbb"), ("OrderCancelled", "order-bbb")]
+
+    it "head-of-line blocks a same-key successor when the first send fails repeatedly until the first row reaches dead status" $ \(ordering, billing) -> do
+      Right () <- Store.runStoreIO ordering initializeOutboxSchema
+      Right () <- Store.runStoreIO billing initializeInboxSchema
+      Right () <- Store.runStoreIO billing $
+        Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS billing_received_orders (order_id TEXT PRIMARY KEY, quantity BIGINT NOT NULL)")
+      topic <- newKafkaTopic
+      let submittedEnv = orderSubmittedEnvelope "order-ccc" 1 "msg-ccc-1"
+          cancelledEnv = orderCancelledEnvelope "order-ccc" "msg-ccc-2"
+          firstId = OutboxId outboxUuid1
+          secondId = OutboxId outboxUuid2
+      Right () <- Store.runStoreIO ordering $
+        Store.runTransaction (enqueueIntegrationEventTx firstId submittedEnv)
+      Right () <- Store.runStoreIO ordering $
+        Store.runTransaction (enqueueIntegrationEventTx secondId cancelledEnv)
+      -- Failing publish for the first row, success for any other.
+      let publish row
+            | row ^. #outboxId == firstId =
+                pure (PublishFailed "simulated broker reject")
+            | otherwise = do
+                kafkaTopicAccept topic row
+                pure PublishSucceeded
+          deadOpts =
+            defaultPublishOptions
+              & #batchSize .~ 10
+              & #backoff .~ ConstantBackoff 0
+              & #maxAttempts .~ 2
+      -- First pass: the first row attempts once and fails, the second is
+      -- blocked behind it.
+      Right pass1 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts)
+      pass1 ^. #retried `shouldBe` 1
+      pass1 ^. #published `shouldBe` 0
+      -- Second pass crosses maxAttempts and dead-letters the first row.
+      Right pass2 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts)
+      pass2 ^. #dead `shouldBe` 1
+      Right (Just firstRow) <- Store.runStoreIO ordering (lookupOutbox firstId)
+      firstRow ^. #status `shouldBe` OutboxDead
+      -- With the first row dead, the second becomes claimable and publishes.
+      Right pass3 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts)
+      pass3 ^. #published `shouldBe` 1
+      Right (Just secondRow) <- Store.runStoreIO ordering (lookupOutbox secondId)
+      secondRow ^. #status `shouldBe` OutboxSent
+      -- Billing only sees the second event.
+      records <- drainKafkaTopic topic
+      record <- case records of
+        [r] -> pure r
+        other -> expectationFailure ("expected 1 record, got " <> show (length other)) *> error "unreachable"
+      Right consumed <- Store.runStoreIO billing $
+        consumeAndApply record billingReactionHandler
+      consumed `shouldBe` ConsumeApplied (InboxProcessed ())
+
   describe "Keiro.Integration.Event" $ do
     it "round-trips a JSON envelope through encode and decode" $ do
       let envelope = sampleIntegrationEnvelope
@@ -1109,6 +1243,172 @@ main = hspec $ do
 
 nominalDays :: Int -> NominalDiffTime
 nominalDays n = fromIntegral n * 86400
+
+-- ---------------------------------------------------------------------------
+-- Cross-context integration fixtures
+-- ---------------------------------------------------------------------------
+
+withTwoContexts ::
+  ((Store.KirokuStore, Store.KirokuStore) -> IO ()) ->
+  IO ()
+withTwoContexts action = do
+  result <- Pg.withCached $ \dbA ->
+    Pg.withCached $ \dbB ->
+      Store.withStore (Store.defaultConnectionSettings (Pg.connectionString dbA)) $ \ordering ->
+        Store.withStore (Store.defaultConnectionSettings (Pg.connectionString dbB)) $ \billing ->
+          action (ordering, billing)
+  case result of
+    Left err -> error ("Failed to start ordering ephemeral PostgreSQL: " <> show err)
+    Right (Left err) -> error ("Failed to start billing ephemeral PostgreSQL: " <> show err)
+    Right (Right ()) -> pure ()
+
+-- | Tiny in-process \"Kafka topic\": an MVar of consumed records plus an
+-- incrementing offset. The publisher pushes records here; the consumer
+-- drains the MVar. There is no real broker — the goal of the fixture is
+-- to validate that the keiro envelope and outbox/inbox semantics
+-- compose correctly across two isolated PostgreSQL contexts.
+newtype KafkaTopic = KafkaTopic (MVar (Int64, [InboxKafka.KafkaInboundRecord]))
+
+newKafkaTopic :: IO KafkaTopic
+newKafkaTopic = KafkaTopic <$> newMVar (0, [])
+
+kafkaTopicAccept :: (MonadIO m) => KafkaTopic -> OutboxRow -> m ()
+kafkaTopicAccept (KafkaTopic ref) row = liftIO $ do
+  let record = OutboxKafka.outboxRowToKafkaRecord row
+      headersText =
+        [ (TE.decodeUtf8 name, TE.decodeUtf8 value)
+        | (name, value) <- record ^. #headers
+        ]
+  now <- getCurrentTime
+  modifyMVar ref $ \(nextOffset, acc) ->
+    let inbound =
+          InboxKafka.KafkaInboundRecord
+            { topic = record ^. #topic
+            , partition = 0
+            , offset = nextOffset
+            , key = fmap TE.decodeUtf8 (record ^. #key)
+            , payload = record ^. #payload
+            , headers = headersText
+            , receivedAt = now
+            }
+     in pure ((nextOffset + 1, inbound : acc), ())
+
+kafkaTopicPublish ::
+  forall es.
+  (IOE :> es) =>
+  KafkaTopic ->
+  OutboxRow ->
+  Eff es PublishOutcome
+kafkaTopicPublish topic row = do
+  kafkaTopicAccept topic row
+  pure PublishSucceeded
+
+drainKafkaTopic :: KafkaTopic -> IO [InboxKafka.KafkaInboundRecord]
+drainKafkaTopic (KafkaTopic ref) = do
+  (_, acc) <- readMVar ref
+  pure (reverse acc)
+
+redeliverWithDifferentOffset ::
+  InboxKafka.KafkaInboundRecord ->
+  InboxKafka.KafkaInboundRecord
+redeliverWithDifferentOffset record = record & #offset .~ (record ^. #offset) + 1000
+
+data ConsumeResult a
+  = ConsumeDecodeFailed !InboxKafka.KafkaDecodeError
+  | ConsumePolicyUnsatisfied !InboxError
+  | ConsumeApplied !(InboxResult a)
+  deriving stock (Eq, Show)
+
+-- | A worker-shaped consumer: decode the Kafka record into an
+-- IntegrationEvent and run it through the inbox.
+consumeAndApply ::
+  forall es.
+  (IOE :> es, Store :> es) =>
+  InboxKafka.KafkaInboundRecord ->
+  (IntegrationEvent -> Tx.Transaction ()) ->
+  Eff es (ConsumeResult ())
+consumeAndApply record handler =
+  case InboxKafka.integrationEventFromKafka record of
+    Left err -> pure (ConsumeDecodeFailed err)
+    Right (event, kafkaRef) -> do
+      result <-
+        runInboxTransaction PreferIntegrationMessageId event (Just kafkaRef) handler
+      case result of
+        Left err -> pure (ConsumePolicyUnsatisfied err)
+        Right applied -> pure (ConsumeApplied applied)
+
+billingReactionHandler :: IntegrationEvent -> Tx.Transaction ()
+billingReactionHandler event = case decodeJsonIntegrationEvent event of
+  Left _ -> Tx.condemn
+  Right (OrderSubmittedPayload orderId quantity) ->
+    Tx.statement (orderId, fromIntegral quantity :: Int64) insertReceivedOrderStmt
+
+loggingReactionHandler :: Text -> IntegrationEvent -> Tx.Transaction ()
+loggingReactionHandler _ event = do
+  -- The cross-context test only needs the (eventType, key) pair, not
+  -- the decoded payload.
+  let key = fromMaybe "" (event ^. #key)
+  Tx.statement (event ^. #source, event ^. #eventType, key) appendBillingEventLogStmt
+
+insertReceivedOrderStmt :: Statement (Text, Int64) ()
+insertReceivedOrderStmt =
+  preparable
+    "INSERT INTO billing_received_orders (order_id, quantity) VALUES ($1, $2) \
+    \ON CONFLICT (order_id) DO NOTHING"
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int8))
+    )
+    D.noResult
+
+billingReceivedOrdersCountStmt :: Statement () Int
+billingReceivedOrdersCountStmt =
+  preparable
+    "SELECT COUNT(*)::bigint FROM billing_received_orders"
+    E.noParams
+    (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
+
+appendBillingEventLogStmt :: Statement (Text, Text, Text) ()
+appendBillingEventLogStmt =
+  preparable
+    "INSERT INTO billing_event_log (source, event_type, order_id) VALUES ($1, $2, $3)"
+    ( contrazip3
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    D.noResult
+
+billingEventLogStmt :: Statement () [(Text, Text)]
+billingEventLogStmt =
+  preparable
+    "SELECT event_type, order_id FROM billing_event_log ORDER BY seq"
+    E.noParams
+    (D.rowList
+        ( (,)
+            <$> D.column (D.nonNullable D.text)
+            <*> D.column (D.nonNullable D.text)
+        )
+    )
+
+orderSubmittedEnvelope :: Text -> Int -> Text -> IntegrationEvent
+orderSubmittedEnvelope orderId quantity messageId =
+  encodeJsonIntegrationEvent
+    ( sampleIntegrationEnvelope
+        & #messageId .~ messageId
+        & #eventType .~ "OrderSubmitted"
+        & #key .~ Just orderId
+    )
+    (OrderSubmittedPayload orderId quantity)
+
+orderCancelledEnvelope :: Text -> Text -> IntegrationEvent
+orderCancelledEnvelope orderId messageId =
+  sampleIntegrationEnvelope
+    & #messageId .~ messageId
+    & #eventType .~ "OrderCancelled"
+    & #key .~ Just orderId
+    & #payloadBytes .~ ("{\"orderId\":\"" <> TE.encodeUtf8 orderId <> "\"}")
+    & #contentType .~ ApplicationJson
 
 inboxTestCounterInsertStmt :: Statement Text ()
 inboxTestCounterInsertStmt =

@@ -48,7 +48,7 @@ Alternatives considered:
 | 19 | Define the integration event contract | docs/plans/19-define-the-integration-event-contract.md | None | EP-12, EP-14, EP-16 | Complete |
 | 20 | Implement the durable outbox | docs/plans/20-implement-the-durable-outbox.md | EP-19 | EP-12, EP-16 | Complete |
 | 21 | Implement the idempotent inbox | docs/plans/21-implement-the-idempotent-inbox.md | EP-19 | EP-14, EP-16 | Complete |
-| 22 | Validate Kafka bounded context integration | docs/plans/22-validate-kafka-bounded-context-integration.md | EP-19, EP-20, EP-21 | EP-16 | Not Started |
+| 22 | Validate Kafka bounded context integration | docs/plans/22-validate-kafka-bounded-context-integration.md | EP-19, EP-20, EP-21 | EP-16 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -90,8 +90,8 @@ EP-16 is a soft dependency for every schema-touching child plan because it creat
 - [x] EP-20: add outbox claim/publish/mark-result worker functions and Kafka producer conversion tests. (2026-05-18)
 - [x] EP-21: add `keiro_inbox` schema, codd migration, and deduplication API tests. (2026-05-18)
 - [x] EP-21: add Kafka consumer handling that records inbox receipt and dispatches exactly once per message id. (2026-05-18) — provided by `Keiro.Inbox.Kafka.integrationEventFromKafka` + `runInboxTransaction`; the broker bridge to `shibuya-kafka-adapter` is wired up in EP-22.
-- [ ] EP-22: build the two-bounded-context Kafka validation scenario.
-- [ ] EP-22: document the canonical deployment topology and operational guarantees.
+- [x] EP-22: build the two-bounded-context Kafka validation scenario. (2026-05-18) — three cross-context tests in `test/Main.hs` exercise end-to-end happy path with duplicate redelivery, per-key ordering preservation, and head-of-line + dead-letter unblock between two isolated ephemeral PostgreSQL databases. Broker-level validation against Redpanda is deferred because librdkafka is not in `flake.nix`; the integration-events guide documents the bridge.
+- [x] EP-22: document the canonical deployment topology and operational guarantees. (2026-05-18) — `docs/guides/integration-events-with-kafka.md`.
 
 
 ## Surprises & Discoveries
@@ -155,7 +155,38 @@ EP-16 is a soft dependency for every schema-touching child plan because it creat
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All four child ExecPlans are complete. The library now contains:
+
+- The `Keiro.Integration.Event` byte-oriented public envelope, JSON
+  convenience encode/decode helpers, and canonical wire-header mapping
+  (EP-19).
+- `Keiro.Outbox` with codd-migrated `keiro_outbox` storage,
+  `IntegrationProducer` mapping, a transport-neutral
+  `publishClaimedOutbox` worker with `PerKeyHeadOfLine` ordering and
+  auto-dead-letter, and a Kafka-deps-free `KafkaProducerRecord`
+  conversion in `Keiro.Outbox.Kafka` (EP-20).
+- `Keiro.Inbox` with codd-migrated `keiro_inbox` storage, a
+  single-transaction `runInboxTransaction` wrapper, four dedupe
+  policies, and a pure `Keiro.Inbox.Kafka.integrationEventFromKafka`
+  decoder (EP-21).
+- A cross-context fixture in `test/Main.hs` exercising the
+  envelope+outbox+inbox composition across two isolated ephemeral
+  Postgres databases joined by an in-process Kafka simulator, plus the
+  `docs/guides/integration-events-with-kafka.md` topology guide
+  (EP-22).
+
+Twenty-four new tests across the four plans cover the storage,
+worker, decoder, ordering, dead-letter, and cross-context scenarios.
+`cabal test keiro-migrations-test` proves both new tables are created
+by `runAllKeiroMigrations`.
+
+The broker-level test against Redpanda is intentionally deferred: the
+keiro library stays free of `hw-kafka-client` / librdkafka system
+dependencies, and the integration-events guide describes the bridge
+an integrator wires for production. The in-process simulator
+validates everything in the keiro surface; the Kafka adapter
+libraries (`kafka-effectful`, `shibuya-kafka-adapter`) have their own
+broker-backed tests upstream.
 
 
 ## Revisions
