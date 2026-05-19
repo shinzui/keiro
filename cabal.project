@@ -2,10 +2,13 @@ packages:
   .
   keiro-migrations
   jitsurei
+  benchmarks/message-db-vs-kiroku
   /Users/shinzui/Keikaku/bokuno/keiki
   /Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json
   /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store
   /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store-migrations
+  /Users/shinzui/Keikaku/work/libraries/haskell/message-db-hs-master/message-db-hs
+  /Users/shinzui/Keikaku/hub/haskell/hasql-migration
   /Users/shinzui/Keikaku/hub/haskell/mmzk-typeid-project/mmzk-typeid
 
 optional-packages:
