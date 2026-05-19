@@ -97,13 +97,15 @@ This section must always reflect the actual current state of the work.
             predicate text itself stays a `Text` so the policy-driven swap still
             works).
       - [x] `cabal test keiro-test` passes (65 examples, 0 failures).
-- [ ] **Milestone 4: Refactor `benchmarks/message-db-vs-kiroku/app/Main.hs`.**
-      - [ ] `rawKirokuProductionParamsEncoder` is 8 fields over the existing
+- [x] **Milestone 4: Refactor `benchmarks/message-db-vs-kiroku/app/Main.hs`.**
+      *(Done 2026-05-19.)*
+      - [x] `rawKirokuProductionParamsEncoder` is 8 fields over the existing
             `RawKirokuProductionParams` record. Replace the 8 `(\params -> params.field)
-            >$< …` lines with `view #field >$< …` per the guide §5 (the record already
-            derives `Generic`, so add `OverloadedLabels` to that cabal stanza if it is
-            not already there, and depend on `generic-lens`).
-      - [ ] `cabal build message-db-vs-kiroku` succeeds.
+            >$< …` lines with `view #field >$< …` per the guide §5. Added
+            `deriving stock (Generic)` to the record (it did not derive it
+            before), and updated the cabal stanza with `OverloadedLabels` +
+            `DeriveGeneric` + the `generic-lens` and `lens` build-deps.
+      - [x] `cabal build message-db-vs-kiroku` succeeds.
 - [ ] **Milestone 5: Refactor `spikes/read-model/`.**
       - [ ] `Spike/Projection.hs`: replace `advanceLastSeen`'s local `nameTextEnc`
             (a 2-tuple `fst`/`snd` encoder) with `contrazip2`. Replace inline

@@ -2,10 +2,12 @@ module Main (main) where
 
 import Control.Concurrent.Async (mapConcurrently_)
 import Control.Exception (bracket)
+import Control.Lens (view)
 import Control.Monad (forM, void, when)
 import Data.Aeson qualified as Aeson
 import Data.Foldable (traverse_)
 import Data.Functor.Contravariant ((>$<))
+import Data.Generics.Labels ()
 import Data.Int (Int64)
 import Data.List (groupBy, sort, sortOn)
 import Data.Text (Text)
@@ -16,6 +18,7 @@ import Data.UUID.V4 qualified as UUID
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 import EphemeralPg qualified as Pg
+import GHC.Generics (Generic)
 import Hasql.Connection qualified as Connection
 import Hasql.Connection.Settings qualified as Conn
 import Hasql.Decoders qualified as D
@@ -499,6 +502,7 @@ data RawKirokuProductionParams = RawKirokuProductionParams
     , createdAts :: !(Vector UTCTime)
     , streamName :: !Text
     }
+    deriving stock (Generic)
 
 runRawKirokuProductionWrites :: Connection.Connection -> Int -> (Int -> Text) -> IO ()
 runRawKirokuProductionWrites conn n streamFor =
@@ -526,14 +530,14 @@ runRawKirokuProductionWrites conn n streamFor =
 
 rawKirokuProductionParamsEncoder :: E.Params RawKirokuProductionParams
 rawKirokuProductionParamsEncoder =
-    ((\params -> params.eventIds) >$< E.param (E.nonNullable (E.foldableArray (E.nonNullable E.uuid))))
-        <> ((\params -> params.eventTypes) >$< E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
-        <> ((\params -> params.causationIds) >$< E.param (E.nonNullable (E.foldableArray (E.nullable E.uuid))))
-        <> ((\params -> params.correlationIds) >$< E.param (E.nonNullable (E.foldableArray (E.nullable E.uuid))))
-        <> ((\params -> params.payloads) >$< E.param (E.nonNullable (E.foldableArray (E.nonNullable E.jsonb))))
-        <> ((\params -> params.metadatas) >$< E.param (E.nonNullable (E.foldableArray (E.nullable E.jsonb))))
-        <> ((\params -> params.createdAts) >$< E.param (E.nonNullable (E.foldableArray (E.nonNullable E.timestamptz))))
-        <> ((\params -> params.streamName) >$< E.param (E.nonNullable E.text))
+    (view #eventIds       >$< E.param (E.nonNullable (E.foldableArray (E.nonNullable E.uuid))))
+        <> (view #eventTypes     >$< E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
+        <> (view #causationIds   >$< E.param (E.nonNullable (E.foldableArray (E.nullable E.uuid))))
+        <> (view #correlationIds >$< E.param (E.nonNullable (E.foldableArray (E.nullable E.uuid))))
+        <> (view #payloads       >$< E.param (E.nonNullable (E.foldableArray (E.nonNullable E.jsonb))))
+        <> (view #metadatas      >$< E.param (E.nonNullable (E.foldableArray (E.nullable E.jsonb))))
+        <> (view #createdAts     >$< E.param (E.nonNullable (E.foldableArray (E.nonNullable E.timestamptz))))
+        <> (view #streamName     >$< E.param (E.nonNullable E.text))
 
 rawKirokuProductionAppendAnyVersionStmt :: Statement RawKirokuProductionParams (Maybe Int64)
 rawKirokuProductionAppendAnyVersionStmt =

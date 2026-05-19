@@ -9,8 +9,10 @@ executable message-db-vs-kiroku
   default-language: GHC2024
   default-extensions:
     BlockArguments
+    DeriveGeneric
     DuplicateRecordFields
     MultilineStrings
+    OverloadedLabels
     OverloadedRecordDot
     OverloadedStrings
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
@@ -20,8 +22,10 @@ executable message-db-vs-kiroku
     , base >= 4.21 && < 5
     , bytestring >= 0.12
     , ephemeral-pg >= 0.2
+    , generic-lens >= 2.2
     , hasql >= 1.10
     , kiroku-store >= 0.1
+    , lens >= 5.2
     , message-db-hs
     , text >= 2.1
     , time >= 1.12
