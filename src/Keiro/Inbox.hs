@@ -94,4 +94,6 @@ runInboxTransactionWithKey src dedupe event kafka handler = do
       Left row -> case row ^. #status of
         InboxCompleted -> pure InboxDuplicate
         InboxProcessing -> pure InboxInProgress
+        InboxPending -> pure InboxInProgress
         InboxFailed -> pure (InboxPreviouslyFailed (row ^. #lastError))
+        InboxDead -> pure (InboxPreviouslyFailed (row ^. #lastError))

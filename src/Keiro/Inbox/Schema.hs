@@ -79,6 +79,9 @@ initializeInboxSchema =
         completed_at TIMESTAMPTZ,
         failed_at TIMESTAMPTZ,
         last_error TEXT,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        claimed_at TIMESTAMPTZ,
         PRIMARY KEY (source, dedupe_key)
       );
 
@@ -88,6 +91,10 @@ initializeInboxSchema =
       CREATE INDEX IF NOT EXISTS keiro_inbox_completed_idx
         ON keiro_inbox (completed_at)
         WHERE status = 'completed';
+
+      CREATE INDEX IF NOT EXISTS keiro_inbox_claimable_idx
+        ON keiro_inbox (next_attempt_at, source, dedupe_key)
+        WHERE status IN ('pending', 'failed', 'processing');
       """
 
 {- | Attempt to insert a new processing row.
@@ -384,7 +391,7 @@ selectAllSql =
   \schema_subject, schema_version_ref, schema_id, schema_fingerprint, causation_id, \
   \correlation_id, traceparent, tracestate, kafka_topic, kafka_partition, \
   \kafka_offset, payload_bytes, attributes, occurred_at, status, received_at, \
-  \completed_at, failed_at, last_error \
+  \completed_at, failed_at, last_error, attempt_count, next_attempt_at, claimed_at \
   \FROM keiro_inbox"
 
 inboxRowDecoder :: D.Row InboxRow
@@ -420,6 +427,9 @@ data RawInbox = RawInbox
   , completedAt :: !(Maybe UTCTime)
   , failedAt :: !(Maybe UTCTime)
   , lastError :: !(Maybe Text)
+  , attemptCount :: !Int
+  , nextAttemptAt :: !UTCTime
+  , claimedAt :: !(Maybe UTCTime)
   }
   deriving stock (Generic)
 
@@ -455,6 +465,9 @@ rawDecoder =
     <*> D.column (D.nullable D.timestamptz)
     <*> D.column (D.nullable D.timestamptz)
     <*> D.column (D.nullable D.text)
+    <*> (fromIntegral <$> D.column (D.nonNullable D.int4))
+    <*> D.column (D.nonNullable D.timestamptz)
+    <*> D.column (D.nullable D.timestamptz)
 
 assembleInboxRow :: RawInbox -> InboxRow
 assembleInboxRow raw =
@@ -517,6 +530,9 @@ assembleInboxRow raw =
         , completedAt = raw ^. #completedAt
         , failedAt = raw ^. #failedAt
         , lastError = raw ^. #lastError
+        , attemptCount = raw ^. #attemptCount
+        , nextAttemptAt = raw ^. #nextAttemptAt
+        , claimedAt = raw ^. #claimedAt
         }
 
 -- | Sentinel used when an inbox row was written without an @occurred_at@.
