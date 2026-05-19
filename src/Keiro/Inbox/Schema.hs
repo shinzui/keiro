@@ -17,6 +17,7 @@ module Keiro.Inbox.Schema
   )
 where
 
+import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.ByteString (ByteString)
 import Data.Functor.Contravariant ((>$<))
 import Data.Time.Clock (NominalDiffTime, addUTCTime)
@@ -323,9 +324,10 @@ markCompletedStmt =
         last_error = NULL
     WHERE source = $1 AND dedupe_key = $2
     """
-    ( ((\(s, _, _) -> s) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, d, _) -> d) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, _, t) -> t) >$< E.param (E.nonNullable E.timestamptz))
+    ( contrazip3
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.timestamptz))
     )
     D.noResult
 
@@ -339,10 +341,11 @@ markFailedStmt =
         last_error = $3
     WHERE source = $1 AND dedupe_key = $2
     """
-    ( ((\(s, _, _, _) -> s) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, d, _, _) -> d) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, _, e, _) -> e) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, _, _, t) -> t) >$< E.param (E.nonNullable E.timestamptz))
+    ( contrazip4
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.timestamptz))
     )
     D.noResult
 
@@ -350,8 +353,9 @@ selectByKeyStmt :: Statement (Text, Text) (Maybe InboxRow)
 selectByKeyStmt =
   preparable
     (selectAllSql <> " WHERE source = $1 AND dedupe_key = $2")
-    ( (fst >$< E.param (E.nonNullable E.text))
-        <> (snd >$< E.param (E.nonNullable E.text))
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
     )
     (D.rowMaybe inboxRowDecoder)
 
@@ -378,13 +382,15 @@ gcStmt =
 
 selectAllSql :: Text
 selectAllSql =
-  "SELECT source, dedupe_key, message_id, source_event_id, source_global_position, \
-  \destination, event_type, schema_version, content_type, schema_registry, \
-  \schema_subject, schema_version_ref, schema_id, schema_fingerprint, causation_id, \
-  \correlation_id, traceparent, tracestate, kafka_topic, kafka_partition, \
-  \kafka_offset, payload_bytes, attributes, occurred_at, status, received_at, \
-  \completed_at, failed_at, last_error \
-  \FROM keiro_inbox"
+  """
+  SELECT source, dedupe_key, message_id, source_event_id, source_global_position,
+         destination, event_type, schema_version, content_type, schema_registry,
+         schema_subject, schema_version_ref, schema_id, schema_fingerprint,
+         causation_id, correlation_id, traceparent, tracestate, kafka_topic,
+         kafka_partition, kafka_offset, payload_bytes, attributes, occurred_at,
+         status, received_at, completed_at, failed_at, last_error
+  FROM keiro_inbox
+  """
 
 inboxRowDecoder :: D.Row InboxRow
 inboxRowDecoder = fmap assembleInboxRow rawDecoder

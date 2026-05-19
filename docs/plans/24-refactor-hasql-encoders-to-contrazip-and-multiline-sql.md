@@ -78,13 +78,14 @@ This section must always reflect the actual current state of the work.
 - [x] **Milestone 1 cleanup:** Remove the now-redundant per-file
       `{-# LANGUAGE MultilineStrings #-}` pragmas from every `.hs` that already had
       one (full list in §Plan of Work / Milestone 1). *(Done 2026-05-19.)*
-- [ ] **Milestone 2: Refactor `src/Keiro/Inbox/Schema.hs`.**
-      - [ ] Replace `markCompletedStmt`'s 3-tuple projection encoder with `contrazip3`.
-      - [ ] Replace `markFailedStmt`'s 4-tuple projection encoder with `contrazip4`.
-      - [ ] Replace `selectByKeyStmt`'s `fst`/`snd` projection encoder with `contrazip2`.
-      - [ ] Convert `selectAllSql` from backslash-continued literal to a `"""..."""`
+- [x] **Milestone 2: Refactor `src/Keiro/Inbox/Schema.hs`.** *(Done 2026-05-19.)*
+      - [x] Replace `markCompletedStmt`'s 3-tuple projection encoder with `contrazip3`.
+      - [x] Replace `markFailedStmt`'s 4-tuple projection encoder with `contrazip4`.
+      - [x] Replace `selectByKeyStmt`'s `fst`/`snd` projection encoder with `contrazip2`.
+      - [x] Convert `selectAllSql` from backslash-continued literal to a `"""..."""`
             multiline literal.
-      - [ ] `cabal test keiro-test` passes.
+      - [x] `cabal test keiro-test --test-options='--match Keiro.Inbox'` → 9 examples,
+            0 failures.
 - [ ] **Milestone 3: Refactor `src/Keiro/Outbox/Schema.hs`.**
       - [ ] Replace `claimStmt`'s 2-tuple projection with `contrazip2`.
       - [ ] Replace `markSentStmt`'s 2-tuple projection with `contrazip2`.
