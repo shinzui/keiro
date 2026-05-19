@@ -2,9 +2,11 @@
 
 Author: ExecPlan EP-2 (`docs/plans/2-codec-and-event-schema-strategy.md`). Date: 2026-05-05.
 
-This document fixes the codec layer that sits between keiro's typed domain events (`co` from `SymTransducer phi rs s ci co`) and kiroku's storage (`Aeson.Value` payloads tagged by a free-form `event_type :: Text`). It is consumed by EP-1's `runCommand`, EP-3's subscription handlers, and EP-4's snapshot serialization. The accompanying spike at `spikes/codec/` is the empirical proof that the chosen shape supports schema evolution under real `kiroku-store` reads/writes.
+This document fixes the codec layer that sits between keiro's typed domain events (`co` from `SymTransducer phi rs s ci co`) and kiroku's storage (`Aeson.Value` payloads tagged by a free-form `event_type :: Text`). It is consumed by EP-1's `runCommand`, EP-3's subscription handlers, and EP-4's snapshot serialization. The original accompanying spike at `spikes/codec/` was the empirical proof that the chosen shape supports schema evolution under real `kiroku-store` reads/writes.
 
-The reader is assumed to have read `docs/research/06-command-cycle-design.md` (EP-1's design) and either skimmed or read `spikes/codec/notes/hindsight-evaluation.md` (the prior-art evaluation). Where a key fact from those documents matters here it is repeated; the reader who has not seen them should still be able to follow this design.
+> **Retirement note (2026-05-19).** The spike at `spikes/codec/` has been removed. Its design has been absorbed into the live keiro library — the `Codec` record with the upcaster chain now lives at `src/Keiro/Codec.hs`, and round-trip + upcaster behaviour is exercised by the `Keiro.Codec` group in `test/Main.hs`. The prior-art evaluation that backs the EP-2 "selectively borrow" verdict has been preserved at `docs/research/notes/ep-2-codec-hindsight-evaluation.md`. Body references to `spikes/codec/src/...` modules below point at code that no longer exists; the named types and functions all live in `Keiro.Codec` now.
+
+The reader is assumed to have read `docs/research/06-command-cycle-design.md` (EP-1's design) and either skimmed or read `docs/research/notes/ep-2-codec-hindsight-evaluation.md` (the prior-art evaluation). Where a key fact from those documents matters here it is repeated; the reader who has not seen them should still be able to follow this design.
 
 
 ## 1. Problem statement
@@ -204,7 +206,7 @@ The spike does not implement (1)/(2)/(3) as separate test cases — it inlines a
 - A `parseMap` produces a `Map Int (Value -> Parser CurrentPayloadType)` covering every supported version.
 - A test-generation toolkit (`Test.Hindsight.Generate`) walks the `Versions` family to derive roundtrip and golden tests for every declared version.
 
-The full evaluation lives at `spikes/codec/notes/hindsight-evaluation.md`. The EP-2 verdict, recorded in this plan's Decision Log on 2026-05-05, is **selectively borrow**.
+The full evaluation lives at `docs/research/notes/ep-2-codec-hindsight-evaluation.md` (moved there 2026-05-19 when the codec spike was retired; previously `spikes/codec/notes/hindsight-evaluation.md`). The EP-2 verdict, recorded in this plan's Decision Log on 2026-05-05, is **selectively borrow**.
 
 What keiro adopts from hindsight (translated to value level):
 
@@ -247,18 +249,11 @@ Forwarded to EP-6 (`docs/plans/6-upstream-roadmap-for-kiroku-and-keiki.md`) for 
 
 ## 13. How to verify
 
-The spike at `spikes/codec/` is the empirical proof. Run it the same way as the EP-1 spike:
-
-    cd /Users/shinzui/Keikaku/bokuno/keiro/spikes/codec
-    nix develop /Users/shinzui/Keikaku/bokuno/keiki --command bash -c \
-      'export PATH=/nix/store/nh8iirirvq79f54pgz71ylqmmwi1gpc9-postgresql-18.3/bin:$PATH; \
-       cabal build all && cabal run spike'
-
-Expected last line: `[codec-spike] OK`. Every public type or function named in this document is realized in the spike's `Spike.Codec` and `Spike.Order` modules. A reviewer who reads this document and the spike's source should be able to answer "how does keiro handle a 5-year-old event whose payload shape no longer matches?" by walking through `decodeRecorded` once.
+The original empirical proof was the spike at `spikes/codec/` (retired 2026-05-19). Today's proof is the live keiro library: every public type and function named in this document is realized in `src/Keiro/Codec.hs` and exercised by the `Keiro.Codec` group at `test/Main.hs:134`. Run `cabal test keiro-test --test-options='--match Keiro.Codec'` from the repo root; a reviewer who reads this document and the `Keiro.Codec` module should be able to answer "how does keiro handle a 5-year-old event whose payload shape no longer matches?" by walking through `decodeRecorded` once.
 
 
 ## 14. Summary
 
-keiro's codec layer is a value-level `Codec e` record carrying encode + decode + type-tag + version + an explicit chain of consecutive upcasters. Schema versions are recorded in `EventData.metadata.schemaVersion`; type tags stay stable across versions so projections subscribed by `event_type` keep working. Schema evolution happens at decode time via the upcaster chain; old wire shapes are migrated to the latest before `codecDecode` runs. Unknown event types are fatal by default. The `hindsight` library was evaluated as prior art (`spikes/codec/notes/hindsight-evaluation.md`) and the verdict is selectively borrow — keiro adopts the consecutive-upcaster pattern, the version-vector concept, and the test discipline at the value level, but rejects hindsight's type-level machinery to keep the codec compatible with kiroku's runtime `event_type` registry and keiki's domain-sum `co`.
+keiro's codec layer is a value-level `Codec e` record carrying encode + decode + type-tag + version + an explicit chain of consecutive upcasters. Schema versions are recorded in `EventData.metadata.schemaVersion`; type tags stay stable across versions so projections subscribed by `event_type` keep working. Schema evolution happens at decode time via the upcaster chain; old wire shapes are migrated to the latest before `codecDecode` runs. Unknown event types are fatal by default. The `hindsight` library was evaluated as prior art (`docs/research/notes/ep-2-codec-hindsight-evaluation.md`) and the verdict is selectively borrow — keiro adopts the consecutive-upcaster pattern, the version-vector concept, and the test discipline at the value level, but rejects hindsight's type-level machinery to keep the codec compatible with kiroku's runtime `event_type` registry and keiki's domain-sum `co`.
 
 EP-1 (command cycle) consumes `Codec co` via the `EventStream.esEventCodec` field; the production library replaces the spike's bare encode/decode pair with the `Codec` value. EP-3 (subscriptions, projections, process managers) reuses the same codec for decoding `RecordedEvent.payload` into the typed event sum. EP-4 (snapshots) defines a separate `StateCodec (s, RegFile rs)` informed by this plan's patterns but with its own version semantics. EP-6 (upstream roadmap) consolidates the keiki-side `RegFile` serialization helper as the only upstream gap this plan introduces.

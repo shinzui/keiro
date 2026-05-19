@@ -1,6 +1,0 @@
-dist-newstyle/
-.pg/
-*.hi
-*.o
-*.dyn_o
-*.dyn_hi
