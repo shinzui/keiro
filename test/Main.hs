@@ -128,7 +128,7 @@ import OpenTelemetry.Trace
   , shutdownTracerProvider
   , tracerOptions
   )
-import OpenTelemetry.Trace.Core (ImmutableSpan (..))
+import OpenTelemetry.Trace.Core (ImmutableSpan (..), SpanContext (..), getSpanContext)
 import Test.Hspec
 
 main :: IO ()
@@ -1105,6 +1105,64 @@ main = hspec $ do
             }
       InboxKafka.integrationEventFromKafka record
         `shouldBe` Left (InboxKafka.MissingHeader "keiro-message-id")
+
+    it "withConsumerSpan parents the consumer span under an upstream producer span via W3C headers" $ do
+      (processor, spansRef) <- inMemoryListExporter
+      provider <- createTracerProvider [processor] emptyTracerProviderOptions
+      let tracer = makeTracer provider "keiro-test" tracerOptions
+          -- Clear the baked-in TraceContext on the sample so the only
+          -- `traceparent` on the wire comes from the active producer
+          -- span (via `injectTraceContext`).
+          envelope = sampleIntegrationEnvelope & #traceContext .~ Nothing
+          producerRecord = OutboxKafka.integrationEventToKafkaRecord envelope
+      producerHeadersText <-
+        Telemetry.withProducerSpan (Just tracer) envelope producerRecord $ \_ -> do
+          let baseHeaders =
+                [(TE.decodeUtf8 n, TE.decodeUtf8 v) | (n, v) <- producerRecord ^. #headers]
+          Telemetry.injectTraceContext baseHeaders
+      -- Build the inbound record the consumer would receive and open the
+      -- consumer span around a no-op body.
+      now <- getCurrentTime
+      let inbound =
+            InboxKafka.KafkaInboundRecord
+              { topic = envelope ^. #destination
+              , partition = 7
+              , offset = 42
+              , key = envelope ^. #key
+              , payload = envelope ^. #payloadBytes
+              , headers = producerHeadersText
+              , receivedAt = now
+              }
+      Telemetry.withConsumerSpan (Just tracer) (Just "billing-cg") inbound (Just envelope) $ \_ ->
+        pure ()
+      _ <- shutdownTracerProvider provider
+      spans <- readIORef spansRef
+      length spans `shouldBe` 2
+      let findByName needle = case [s | s <- spans, spanName s == needle] of
+            (s : _) -> s
+            [] -> error ("no span captured with name=" <> Text.unpack needle)
+          producerSp = findByName ("send " <> envelope ^. #destination)
+          consumerSp = findByName ("process " <> envelope ^. #destination)
+      -- Same trace id end-to-end (cross-process parenting).
+      traceId (spanContext producerSp) `shouldBe` traceId (spanContext consumerSp)
+      -- Consumer's parent is the producer span.
+      case spanParent consumerSp of
+        Nothing -> expectationFailure "consumer span has no parent"
+        Just parent -> do
+          parentCtx <- getSpanContext parent
+          spanId parentCtx `shouldBe` spanId (spanContext producerSp)
+      -- Consumer span carries the expected attributes.
+      show (spanKind consumerSp) `shouldBe` "Consumer"
+      textAttr (spanAttributes consumerSp) "messaging.system" `shouldBe` Just "kafka"
+      textAttr (spanAttributes consumerSp) "messaging.operation.type" `shouldBe` Just "process"
+      textAttr (spanAttributes consumerSp) "messaging.destination.name"
+        `shouldBe` Just (envelope ^. #destination)
+      textAttr (spanAttributes consumerSp) "messaging.destination.partition.id"
+        `shouldBe` Just "7"
+      textAttr (spanAttributes consumerSp) "messaging.consumer.group.name"
+        `shouldBe` Just "billing-cg"
+      textAttr (spanAttributes consumerSp) "messaging.message.id"
+        `shouldBe` Just (envelope ^. #messageId)
 
   describe "Keiro cross-context Kafka integration" $ around withTwoContexts $ do
     it "publishes an Ordering integration event and runs the Billing handler exactly once across duplicate deliveries" $ \(ordering, billing) -> do

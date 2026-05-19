@@ -160,15 +160,31 @@ This section must always reflect the actual current state of the work.
       failure paths against a real ephemeral Postgres store and asserts
       span name, kind, attributes, and status. Suite: 72 examples / 0
       failures.
-- [ ] **Milestone 5: Instrument `Keiro.Inbox` and `Keiro.Inbox.Kafka`.** Wrap
-      the receive path in `Keiro.Telemetry.withConsumerSpan`, extracting any
-      upstream `traceparent` from the Kafka headers via the W3C propagator
-      *before* opening the span so the consumer span is a child of the producer
-      span. Set `messaging.kafka.offset`, `messaging.kafka.consumer.group`
-      (from the new `groupId` field on the inbox config), and
-      `messaging.destination.partition.id`. In-memory-exporter test asserts the
-      producer→consumer parent/child relationship is preserved through Kafka
-      headers.
+- [x] **Milestone 5: Instrument the consumer-side span (2026-05-19).**
+      `Keiro.Telemetry.withConsumerSpan` now extracts the upstream
+      `traceparent` / `tracestate` from the inbound record's headers via
+      the W3C propagator (`decodeSpanContext`), wraps the parent
+      `SpanContext` as a `FrozenSpan` via `wrapSpanContext`, and installs
+      it on the thread-local OpenTelemetry context (via
+      `attachContext` / `detachContext` inside a `bracket_`) before
+      opening the `Consumer`-kind span. The new helper
+      `withRemoteParent` is the bracketed-attach utility. Consumer-side
+      attributes (`messaging.kafka.offset`,
+      `messaging.consumer.group.name`, `messaging.destination.partition.id`)
+      were already wired by Milestone 3; the W3C parent extraction is the
+      M5 addition. New in-memory-exporter test under
+      `describe "Keiro.Inbox.Kafka"` asserts that the consumer span's
+      `traceId` matches the upstream producer span's and that the
+      producer span is recorded as the consumer's `spanParent`. Suite:
+      73 examples / 0 failures.
+
+      Note: the keiro inbox runner (`runInboxTransaction*` in
+      `src/Keiro/Inbox.hs`) is *not* internally wrapped, because it takes
+      an already-decoded `IntegrationEvent`. The hookup is a
+      "wrap-your-handler-call" pattern: applications call
+      `withConsumerSpan tracer cg inbound (Just event) $ \_ ->
+      runInboxTransaction ...`. See Decision Log on 2026-05-19 for the
+      rationale.
 - [ ] **Milestone 6: Instrument `Keiro.Command`.** Open one `Internal` span
       per `runCommand` / `runCommandWithSql` / `runCommandWithSqlEvents`
       invocation, named after the resolved stream name, with attributes
@@ -346,6 +362,24 @@ Record every decision made while working on the plan.
   `describe` blocks colocated. Splitting one module out would introduce a
   different layout for new code; matching the existing pattern keeps the
   test bookkeeping uniform. The suite now reports 71 examples / 0 failures.
+  Date: 2026-05-19
+
+- Decision: The inbox runner (`runInboxTransaction` /
+  `runInboxTransactionWithKey` in `src/Keiro/Inbox.hs`) is *not*
+  internally wrapped in `withConsumerSpan`. Instead, applications wrap
+  the call site themselves: `withConsumerSpan tracer cg inbound (Just
+  event) $ \_ -> runInboxTransaction ...`.
+  Rationale: the inbox runner already takes a *decoded*
+  'IntegrationEvent' — by the time the runner sees the message, the
+  caller (typically the Kafka consumer loop) has already invoked
+  `integrationEventFromKafka` against the raw `KafkaInboundRecord`. The
+  `KafkaInboundRecord` is where the headers (and thus the W3C parent
+  context) live, and is *not* passed through `runInboxTransaction`.
+  Pushing the span into the runner would require either changing the
+  runner's signature to take the raw record (a breaking change for
+  applications that integrate with non-Kafka transports) or duplicating
+  the decode inside the runner. The wrap-at-call-site pattern keeps the
+  runner transport-agnostic.
   Date: 2026-05-19
 
 

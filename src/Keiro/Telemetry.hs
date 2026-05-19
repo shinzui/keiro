@@ -61,12 +61,17 @@ module Keiro.Telemetry
   )
 where
 
+import "base" Control.Exception (bracket_)
 import "bytestring" Data.ByteString qualified as ByteString
 import "base" GHC.Stack (HasCallStack)
+import "hs-opentelemetry-api" OpenTelemetry.Context (insertSpan, lookupSpan)
 import "hs-opentelemetry-api" OpenTelemetry.Attributes.Attribute (ToAttribute)
 import "hs-opentelemetry-api" OpenTelemetry.Attributes.Key (AttributeKey (..))
-import "hs-opentelemetry-api" OpenTelemetry.Context (lookupSpan)
-import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal (getContext)
+import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal
+  ( attachContext
+  , detachContext
+  , getContext
+  )
 import "hs-opentelemetry-api" OpenTelemetry.Trace.Core
   ( Span
   , SpanArguments (..)
@@ -75,10 +80,11 @@ import "hs-opentelemetry-api" OpenTelemetry.Trace.Core
   , addAttribute
   , defaultSpanArguments
   , inSpan'
+  , wrapSpanContext
   )
 import "text" Data.Text qualified as Text
 import "text" Data.Text.Encoding qualified as TE
-import "unliftio-core" Control.Monad.IO.Unlift (MonadUnliftIO)
+import "unliftio-core" Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 
 import Keiro.Inbox.Kafka (KafkaInboundRecord)
 import Keiro.Integration.Event
@@ -91,7 +97,8 @@ import Keiro.Outbox.Kafka (KafkaProducerRecord)
 import Keiro.Prelude
 
 import "hs-opentelemetry-propagator-w3c" OpenTelemetry.Propagator.W3CTraceContext
-  ( encodeSpanContext
+  ( decodeSpanContext
+  , encodeSpanContext
   )
 
 -- ---------------------------------------------------------------------------
@@ -206,12 +213,42 @@ withConsumerSpan
   -> m a
 withConsumerSpan Nothing _ _ _ body = body Nothing
 withConsumerSpan (Just tracer) consumerGroup record mEvent body =
-  inSpan' tracer name args $ \sp -> do
-    setConsumerAttributes sp consumerGroup record mEvent
-    body (Just sp)
+  withRemoteParent (record ^. #headers) $
+    inSpan' tracer name args $ \sp -> do
+      setConsumerAttributes sp consumerGroup record mEvent
+      body (Just sp)
   where
     name = "process " <> (record ^. #topic)
     args = defaultSpanArguments {kind = Consumer}
+
+{- | Run @body@ with the OpenTelemetry context temporarily augmented by a
+parent span extracted from the supplied header list via the W3C
+TraceContext propagator.
+
+When no @traceparent@ header is present (or it cannot be parsed) the
+body runs unwrapped, so the helper is safe to call unconditionally.
+
+This is the bridge that makes a 'Consumer'-kind span open in this
+process a *child* of the 'Producer'-kind span that emitted the message
+in the upstream process, joining the two traces by trace id.
+-}
+withRemoteParent
+  :: (MonadUnliftIO m) => [(Text, Text)] -> m a -> m a
+withRemoteParent hs body =
+  case parentSpanContext hs of
+    Nothing -> body
+    Just spanCtx -> withRunInIO $ \runInIO -> do
+      ctx <- getContext
+      let newCtx = insertSpan (wrapSpanContext spanCtx) ctx
+      bracket_
+        (attachContext newCtx)
+        detachContext
+        (runInIO body)
+  where
+    parentSpanContext hsList =
+      let tp = fmap TE.encodeUtf8 (Prelude.lookup headerTraceParent hsList)
+          ts = fmap TE.encodeUtf8 (Prelude.lookup headerTraceState hsList)
+       in decodeSpanContext tp ts
 
 {- | Open an @Internal@ span around a command run, named after the resolved
 stream identifier. Attributes capture the stream name and (when the
