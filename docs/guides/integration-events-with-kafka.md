@@ -110,6 +110,140 @@ retry, producer republish), the inbox sees the existing
 `(source, dedupe_key)` row and returns `InboxDuplicate` — the handler
 runs at most once.
 
+## Two ways to consume integration events
+
+Keiro ships two consumer-side paths. They use the same `keiro_inbox`
+table and the same dedupe semantics; they differ in *when* the handler
+runs relative to the Kafka delivery.
+
+### Inline: `runInboxTransaction`
+
+The EP-21 path. One transaction covers the inbox-row insert, the
+caller's handler, and the `completed` marker. If the handler condemns
+or throws, the row never appears and the next delivery starts fresh.
+
+```haskell
+import Keiro.Inbox
+  ( InboxDedupePolicy (..)
+  , runInboxTransaction
+  )
+import Keiro.Inbox.Kafka (integrationEventFromKafka)
+
+consume record = case integrationEventFromKafka record of
+  Left err -> handleDecodeError err
+  Right (event, kafkaRef) ->
+    runInboxTransaction PreferIntegrationMessageId event (Just kafkaRef) $ \ev ->
+      billingReactionHandler ev
+```
+
+Pick this when:
+
+- The handler is a single `Hasql.Transaction.Transaction` (no HTTP
+  calls, no other databases, no S3, …).
+- You want the strongest atomicity: handler writes and the inbox
+  receipt commit together. There is no observable "row exists but
+  handler did not run" state.
+- Throughput is fine with the handler on the Kafka consumer's
+  critical path. A slow handler stalls the partition.
+
+### Drained: `Keiro.Inbox.Adapter`
+
+The EP-23 path. The Kafka consumer's handler only writes the
+`pending` inbox row (a durable receipt) and acks the Kafka offset
+immediately. A separate worker — built from `inboxAdapter` — polls
+`keiro_inbox` under `FOR UPDATE SKIP LOCKED`, hands each row to a
+user-supplied `Handler es IntegrationEvent`, and translates the
+returned `AckDecision` into inbox state transitions.
+
+```haskell
+import Keiro.Inbox (enqueueInbox)
+import Keiro.Inbox.Adapter
+  ( defaultInboxAdapterConfig
+  , inboxAdapter
+  , mkTransactionalInboxHandler
+  )
+import Shibuya.App (mkProcessor, runApp, SupervisionStrategy (..), ProcessorId (..))
+
+-- Write side: a shibuya-kafka-adapter handler that calls enqueueInbox.
+kafkaWriteSideHandler ingested = do
+  let record = decodeKafkaIngested ingested
+  case integrationEventFromKafka record of
+    Left _ -> pure (AckDeadLetter (InvalidPayload "decode failed"))
+    Right (event, kafkaRef) -> do
+      _ <- enqueueInbox PreferIntegrationMessageId event (Just kafkaRef)
+      pure AckOk
+
+-- Work side: the inbox adapter drains pending rows.
+workerMain = do
+  kafka <- kafkaAdapter kafkaConfig
+  inbox <- inboxAdapter (defaultInboxAdapterConfig "billing-inbox")
+  let workHandler =
+        mkTransactionalInboxHandler $ \event -> do
+          billingReactionHandler event
+          pure (Right ())
+  runApp IgnoreFailures 100
+    [ (ProcessorId "kafka-receive", mkProcessor kafka kafkaWriteSideHandler)
+    , (ProcessorId "inbox-work", mkProcessor inbox workHandler)
+    ]
+```
+
+Pick this when:
+
+- Handler latency would block Kafka — slow downstream calls, large
+  transactions, anything that bunches.
+- Multiple producers write into the same inbox (a saga that emits
+  receipts alongside Kafka deliveries; an HTTP shim; a backfill
+  importer).
+- You want shared Shibuya supervision, metrics, and shutdown
+  coordination across the receive and work stages.
+- You're comfortable with at-least-once handler invocation. The work
+  side acks separately from the receive side, so handler crash + ack
+  failure replays the handler on the next claim cycle; idempotency
+  remains the handler author's job.
+
+`mkTransactionalInboxHandler` restores the EP-21 atomic
+`(handler + completed)` semantics under the drained path *when the
+handler is a single Postgres transaction*. The handler returns
+`Either Text a`: `Right a` commits and acks; `Left reason` rolls back
+via `Tx.condemn` and re-claims on the next cycle. Hasql's transaction
+runner does not surface `condemn` status to callers, so the wrapper
+needs this explicit signal — a stray `Tx.condemn` in user code without
+returning `Left` would let the framework's ack-side `markCompletedTx`
+flip a rolled-back row to `completed`. Use `Either` to be safe.
+
+### Same-process topology
+
+A single executable can run both adapters under one
+`Shibuya.App.runApp`:
+
+```text
+                   ┌─────────────────────────────────┐
+                   │           Shibuya.App           │
+                   │                                 │
+┌─────────┐   Kafka│  ┌───────────────────────────┐  │
+│ Kafka   ├────────┼─►│ shibuya-kafka-adapter     │  │
+│ broker  │        │  │ handler: enqueueInbox     │  │
+└─────────┘        │  └───────────────────────────┘  │
+                   │              │                  │
+                   │              ▼                  │
+                   │     keiro_inbox (pending)       │
+                   │              │                  │
+                   │              ▼                  │
+                   │  ┌───────────────────────────┐  │
+                   │  │ Keiro.Inbox.Adapter       │  │
+                   │  │ handler: user logic       │  │
+                   │  └───────────────────────────┘  │
+                   │              │                  │
+                   │              ▼                  │
+                   │     keiro_inbox (completed)     │
+                   └─────────────────────────────────┘
+```
+
+Both processors share the same `Store` / `Tracing` / `IOE` effect
+stack and the same drain timeout from `stopAppGracefully`. Operators
+inspect lag with `SELECT status, count(*) FROM keiro_inbox GROUP BY
+status`.
+
 ## Guarantees, in plain language
 
 The end-to-end story is **at-least-once transport with idempotent

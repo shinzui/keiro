@@ -86,10 +86,10 @@ Kafka contract (EP-19) or the existing inline dedup semantics (EP-21).
   - [x] Adapter tests (7): drain order, AckOk → completed, AckRetry → failed + attempt bump, AckDeadLetter → dead, AckHalt → release-and-shutdown, `mkTransactionalInboxHandler` rollback on `Left`, `mkTransactionalInboxHandler` commit on `Right`.
   - [x] Transactional handler test: the `Left` case asserts both the user's side-table row absence and `keiro_inbox.status /= 'completed'` with `attempt_count == 1` (per Decision Log refinement on `Either` semantics).
   - [x] Same-process coexistence test in `test/Main.hs`: the dual-adapter test publishes three orders, drives the Kafka simulator → `enqueueInbox` write side, then drives the `inboxAdapter` work side, asserts three billing rows + three completed inbox rows, then redelivers one Kafka record and asserts no new billing row appeared. Adapters are composed sequentially in one process rather than via `Shibuya.App.runApp` (see Decision Log 2026-05-19).
-- [ ] Milestone 5: docs.
-  - [ ] Update `docs/guides/integration-events-with-kafka.md` with the two consume patterns (inline `runInboxTransaction` vs. drained `inboxAdapter`) and when to pick each.
-  - [ ] Add a short "same-process topology" section showing one `Shibuya.App.runApp` supervising both adapters.
-  - [ ] Update `docs/masterplans/3-implement-inbox-and-outbox-for-kafka-integration-events.md` Progress and Outcomes sections to record this follow-up.
+- [x] Milestone 5: docs. (2026-05-19)
+  - [x] Update `docs/guides/integration-events-with-kafka.md` with the two consume patterns (inline `runInboxTransaction` vs. drained `inboxAdapter`) and when to pick each.
+  - [x] Add a "Same-process topology" section showing the dual-adapter `Shibuya.App.runApp` composition with an ASCII diagram.
+  - [x] Update `docs/masterplans/3-implement-inbox-and-outbox-for-kafka-integration-events.md` Registry, Progress, Surprises & Discoveries, Decision Log, and Revisions to record this follow-up.
 
 
 ## Surprises & Discoveries
@@ -219,7 +219,105 @@ Kafka contract (EP-19) or the existing inline dedup semantics (EP-21).
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+### What landed (2026-05-19)
+
+* `Keiro.Inbox.Adapter` ships a Shibuya `Adapter es IntegrationEvent`
+  built on top of `keiro_inbox`. It polls via
+  `claimInboxBatchTx` under `FOR UPDATE SKIP LOCKED`, hands each row
+  to a user-supplied `Handler`, and maps the returned `AckDecision`
+  to the right inbox-state transition: `AckOk → markCompletedTx`,
+  `AckRetry → markInboxFailedTx` (auto-dead-letter at
+  `maxAttempts`), `AckDeadLetter → markInboxDeadTx`, and
+  `AckHalt → releaseInboxClaimTx + shutdown signal`. The visibility-
+  timeout reclaim sweep is fused into the claim query, so orphaned
+  `processing` rows (worker crashed after claim) are picked up by
+  the next poll with no separate background worker.
+
+* `enqueueInbox` / `enqueueInboxTx` give external producers a way to
+  write `pending` inbox rows — the Kafka write side, a saga, an HTTP
+  shim, anything. Both report `EnqueueDuplicateOf` on
+  `(source, dedupe_key)` collision so the caller can decide whether
+  to no-op or alert.
+
+* `mkTransactionalInboxHandler` restores the EP-21 atomic
+  `(handler + mark-completed)` semantics for Postgres-only handlers
+  under the Shibuya surface. Its signature evolved from the plan's
+  draft (see Decision Log 2026-05-19 — `Tx.Transaction (Either Text a)`
+  instead of `Tx.Transaction a`) so user-signaled rollback is
+  observable to the wrapper. Without that signal Hasql's runner would
+  hide condemn status and the framework's ack-side `markCompletedTx`
+  would flip a rolled-back row to `completed`.
+
+* Schema additions are forward-only (`ALTER TABLE ... ADD COLUMN IF
+  NOT EXISTS`) and gated by a partial claim index, so production
+  deployments running the EP-21 schema upgrade in place without back-
+  fill or downtime. `initializeInboxSchema` mirrors the combined
+  shape for dev/test consumers that bypass codd.
+
+* All 79 keiro tests pass plus both keiro-migrations tests. The new
+  surface adds 6 worker-storage cases, 7 adapter cases, and 1 dual-
+  adapter coexistence case (14 new tests, plan target).
+
+### What changed from the original design
+
+1. **Transactional handler shape.** `Tx.Transaction (Either Text a)`
+   instead of `Tx.Transaction a` (Decision Log 2026-05-19). Reason:
+   Hasql does not surface `Tx.condemn` to the caller.
+
+2. **Reclaim sweep is fused, not separate.** The plan listed
+   `reclaimStaleProcessing :: NominalDiffTime -> UTCTime -> Eff es Int`
+   as a separate function. In implementation the predicate
+   (`status = 'processing' AND claimed_at < reclaim_cutoff`) collapses
+   into the main claim query's `WHERE` clause, so a fresh worker poll
+   reclaims orphaned rows in the same statement. No second helper
+   needed.
+
+3. **`BackoffSchedule` re-export.** Moved into the public
+   `Keiro.Inbox.Types` export list (Decision Log 2026-05-19) so
+   callers configuring the adapter do not need to import
+   `Keiro.Outbox.Types` for a constructor.
+
+4. **Coexistence test runs sequentially, not under `Shibuya.App.runApp`.**
+   `runApp` requires `Tracing :> es`, which the test harness's
+   `Kiroku.Store.Effect.runStoreIO` does not provide. Adding a
+   custom `Store + Tracing + IOE` runner was not part of EP-23's
+   scope. The sequential composition exercises the right data-flow
+   contract (Kafka simulator → `enqueueInbox` → `inboxAdapter` →
+   handler → completed + dedupe on redelivery). A future integration
+   plan can ship the supervised composition as a downstream concern
+   (Decision Log 2026-05-19).
+
+### Operational notes for callers
+
+* Pick `runInboxTransaction` when your handler is a single
+  `Tx.Transaction`. Use the adapter when handler latency would block
+  Kafka, when multiple writers (Kafka + sagas + HTTP) share one
+  inbox, or when you want one Shibuya supervisor for both stages.
+
+* `defaultInboxClaimOptions` ships `batchSize = 32`,
+  `visibilityTimeout = 60s`, `maxAttempts = 10`,
+  `backoff = ConstantBackoff 2s`. Override `visibilityTimeout` based
+  on your handler's P99 latency: too low causes premature reclaim
+  (handler runs twice); too high stalls a partition on a crashed
+  worker.
+
+* Operators inspect lag with `SELECT status, count(*) FROM
+  keiro_inbox GROUP BY status;`. `dead` rows surface poison messages;
+  resurrect with `UPDATE keiro_inbox SET status = 'pending',
+  attempt_count = 0, next_attempt_at = now() WHERE …` once root cause
+  is fixed.
+
+### Follow-ups
+
+* A future plan should expose a `Store + Tracing + IOE` test runner
+  in `kiroku-store` (or in keiro) so coexistence scenarios can run
+  under `Shibuya.App.runApp`. That unblocks supervised-composition
+  assertions for any future Shibuya-adjacent feature.
+
+* Document the codd `embedDir` recompile surprise in
+  `keiro-migrations/README.md` so the next contributor adding a
+  migration is not surprised by the silent "no new migration found"
+  failure.
 
 
 ## Context and Orientation
