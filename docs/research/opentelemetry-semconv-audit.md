@@ -18,6 +18,18 @@ The source of truth for the Haskell binding is
 (29,049 lines, `v1.40` of the upstream spec). Spec citations in this document
 point at the `-- $<anchor>` Haddock chunks inside that file.
 
+**Version note (2026-05-19):** keiro links against the Hackage
+`hs-opentelemetry-semantic-conventions 0.1.0.0` release (see ExecPlan 25
+Decision Log entry of the same date for why). That older release only
+exports 9 of the 22+ typed `AttributeKey`s this document cites. For each
+key absent from the Hackage release, `Keiro.Telemetry` vendors a local
+`AttributeKey` whose `Text` payload is exactly the dotted-name string from
+the spec (e.g. `messaging_operation_type = AttributeKey
+"messaging.operation.type"`). The wire-level attribute name is what
+dashboards key on, and it matches the spec verbatim. The citations below
+remain pinned to the canonical v1.40 module; consult the Decision Log
+entry for the upstream version skew background.
+
 Citation legend (anchor → line):
 
 | Haddock anchor                              | Line  | Coverage                                                                 |

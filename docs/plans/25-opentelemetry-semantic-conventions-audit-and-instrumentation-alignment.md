@@ -119,12 +119,18 @@ This section must always reflect the actual current state of the work.
       deferred to a follow-up pass behind the M6 command span; see
       "Follow-ups out of scope" in the audit and the corresponding Decision
       Log entry.
-- [ ] **Milestone 2: Add the tracing dependencies.** Add
-      `hs-opentelemetry-api`, `hs-opentelemetry-semantic-conventions`, and
-      `unliftio-core` as `keiro` library `build-depends` in `keiro.cabal`. Add
-      `hs-opentelemetry-sdk`, `hs-opentelemetry-exporter-in-memory`, and
-      `hs-opentelemetry-propagator-w3c` as `keiro-test` test-suite dependencies.
-      Verify `cabal build all` succeeds from the repo root.
+- [x] **Milestone 2: Add the tracing dependencies (2026-05-19).** Added
+      `hs-opentelemetry-api >= 0.3 && < 0.4`,
+      `hs-opentelemetry-semantic-conventions >= 0.1 && < 1`, and
+      `unliftio-core >= 0.2` as `keiro` library `build-depends` in
+      `keiro.cabal`. Added `hs-opentelemetry-sdk >= 0.1 && < 0.2`,
+      `hs-opentelemetry-exporter-in-memory >= 0.0.1 && < 0.1`, and
+      `hs-opentelemetry-propagator-w3c >= 0.1 && < 0.2` (plus
+      `hs-opentelemetry-api` and `unliftio-core`) to the `keiro-test` stanza.
+      `cabal build all` exits 0 (verified 2026-05-19). Bounds diverge from
+      the plan's original draft because the on-disk v1.40 packages don't
+      resolve as a coherent set — see Surprises & Discoveries and the
+      corresponding Decision Log entries for the full rationale.
 - [ ] **Milestone 3: Introduce `Keiro.Telemetry`.** New module at
       `src/Keiro/Telemetry.hs` exposing the small helper surface described in
       §Interfaces and Dependencies. Module compiles on its own; unit tests in
@@ -179,7 +185,42 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **Discovery (2026-05-19): The on-disk `hs-opentelemetry` packages do not
+  resolve as a coherent set.** `hs-opentelemetry-api` is at 1.40-era 0.4.0.0
+  on disk, but the local `hs-opentelemetry-sdk` / `hs-opentelemetry-exporter-in-memory`
+  / `hs-opentelemetry-propagator-w3c` all pin `hs-opentelemetry-api ==0.3.*`,
+  and the local `shibuya-core 0.5.0.0` does the same — and breaks at compile
+  time against the 0.4 API surface (`Ctx.detachContext` signature change in
+  `src/Shibuya/Telemetry/Effect.hs:285`). Conclusion: the local on-disk tree
+  is mid-upgrade. **Action taken:** dropped every `hs-opentelemetry-*`
+  `packages:` entry from `cabal.project` so the resolver picks the Hackage
+  0.3-series release (`hs-opentelemetry-api 0.3.1.0`,
+  `hs-opentelemetry-semantic-conventions 0.1.0.0`,
+  `hs-opentelemetry-sdk 0.1.0.1`,
+  `hs-opentelemetry-exporter-in-memory 0.0.1.5`,
+  `hs-opentelemetry-propagator-w3c 0.1.0.0`). Bounds in
+  `keiro.cabal` adjusted accordingly. Build is green: `cabal build all`
+  exits 0 (verified 2026-05-19).
+- **Discovery (2026-05-19): Hackage `hs-opentelemetry-semantic-conventions
+  0.1.0.0` only carries 9 of the 22+ typed `AttributeKey`s the audit
+  cites.** Verified by `grep` against the unpacked Hackage source: present
+  are `otel_statusCode`, `otel_statusDescription`, `error_type`,
+  `messaging_system`, `messaging_destination_name`, `messaging_message_id`,
+  `messaging_batch_messageCount`, `messaging_kafka_message_key`,
+  `messaging_kafka_message_tombstone`; absent are
+  `messaging_operation_type`, `messaging_operation_name`,
+  `messaging_destination_partition_id`, `messaging_kafka_offset`,
+  `messaging_consumer_group_name`, `messaging_client_id`, and every
+  `db_*` key. The on-disk v1.40 module has all of them, but as noted
+  above we cannot link against it. **Action taken:** the audit citations
+  remain pinned to the on-disk v1.40 module (which is the canonical
+  upstream spec). `Keiro.Telemetry` (M3) will *vendor* the missing typed
+  bindings as locally-defined `AttributeKey`s pointing at the same
+  dotted-name strings, so the wire-level attribute keys match the spec
+  exactly. When `hs-opentelemetry` ships a Hackage release that pairs the
+  post-0.3 API with the v1.40 semantic-conventions, the vendored bindings
+  can be replaced with `import OpenTelemetry.SemanticConventions
+  (messaging_operation_type, …)`.
 
 
 ## Decision Log
@@ -237,6 +278,35 @@ Record every decision made while working on the plan.
   cosmetic until profiling demands them. Keeping the patch small reduces the
   surface area of the first OpenTelemetry adoption in keiro and isolates
   any rough edges to the higher-value sites.
+  Date: 2026-05-19
+
+- Decision: Use Hackage releases of every `hs-opentelemetry-*` package
+  instead of the on-disk v1.40 sources under
+  `/Users/shinzui/Keikaku/hub/haskell/hs-opentelemetry-project`.
+  Rationale: see Surprises & Discoveries entry. Local sources are mid-upgrade
+  and pulling them in transitively breaks `shibuya-core 0.5.0.0`. The
+  Hackage 0.3-series surface is what every keiro-facing dependency
+  (`shibuya-core`, `message-db-hs`, `kiroku-otel`) already compiles against.
+  **Bound revisions (vs. plan's original):**
+  `hs-opentelemetry-api >= 0.3 && < 0.4` (was `^>= 0.2`),
+  `hs-opentelemetry-semantic-conventions >= 0.1 && < 1` (was `^>= 0.1`),
+  `hs-opentelemetry-exporter-in-memory >= 0.0.1 && < 0.1` (was `^>= 0.1`),
+  `hs-opentelemetry-sdk >= 0.1 && < 0.2` (was `^>= 0.1`),
+  `hs-opentelemetry-propagator-w3c >= 0.1 && < 0.2` (was `^>= 0.1`).
+  Date: 2026-05-19
+
+- Decision: Where the Hackage v0.1.0.0 `hs-opentelemetry-semantic-conventions`
+  release omits a typed `AttributeKey` named by the spec (and present in
+  the on-disk v1.40 module), `Keiro.Telemetry` vendors a local
+  `AttributeKey` whose `Text` payload is the dotted-name string from the
+  spec.
+  Rationale: the wire-level attribute key is what dashboards key on; the
+  Haskell binding's typed shape is convenience. Vendoring keeps the
+  per-span attribute set spec-conformant today and avoids waiting for an
+  upstream release. Replacement with the upstream symbol is a single-import
+  swap once a compatible release lands. The vendored keys are listed in
+  `src/Keiro/Telemetry.hs` with a `-- TODO: replace with upstream import
+  once available` comment.
   Date: 2026-05-19
 
 
