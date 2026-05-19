@@ -10,10 +10,14 @@ module Keiro.Command
 where
 
 import Data.Int (Int32)
+import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, tryError)
 import GHC.Stack (HasCallStack)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
+import OpenTelemetry.Attributes.Key (unkey)
+import OpenTelemetry.SemanticConventions (error_type)
+import OpenTelemetry.Trace.Core (Span, Tracer, addAttribute, setStatus, SpanStatus (..))
 import Keiki.Core (BoolAlg, RegFile)
 import Keiki.Core qualified as Keiki
 import Keiro.Codec (Codec, CodecError, decodeRecorded, encodeForAppend)
@@ -22,6 +26,7 @@ import Keiro.Prelude
 import Keiro.Snapshot (hydrateWithSnapshot, writeSnapshot)
 import Keiro.Snapshot.Policy (shouldSnapshot)
 import Keiro.Stream (Stream)
+import Keiro.Telemetry (keiro_events_appended, db_system_name, withCommandSpan)
 import Prelude qualified
 import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Effect (Store)
@@ -35,6 +40,7 @@ import Kiroku.Store.Types
   , ExpectedVersion (..)
   , GlobalPosition
   , RecordedEvent
+  , StreamName (..)
   , StreamVersion (..)
   )
 import Streamly.Data.Fold qualified as Fold
@@ -62,6 +68,13 @@ data RunCommandOptions = RunCommandOptions
   , pageSize :: !Int32
   , eventIds :: ![EventId]
   , beforeAppend :: !(IO ())
+  , tracer :: !(Maybe Tracer)
+  -- ^ Optional OpenTelemetry tracer. When 'Just', the command runner
+  -- opens an 'Internal'-kind span around each invocation, named after
+  -- the resolved stream identifier and decorated with the messaging /
+  -- error semantic-conventions attributes audited in
+  -- 'docs/research/opentelemetry-semconv-audit.md'. When 'Nothing',
+  -- the runner emits no spans.
   }
   deriving stock (Generic)
 
@@ -71,6 +84,7 @@ defaultRunCommandOptions = RunCommandOptions
   , pageSize = 256
   , eventIds = []
   , beforeAppend = pure ()
+  , tracer = Nothing
   }
 
 data Hydrated rs s = Hydrated
@@ -256,7 +270,10 @@ runCommand ::
   ci ->
   Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co)))
 runCommand options eventStream targetStream command =
-  attempt (options ^. #retryLimit)
+  withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> do
+    result <- attempt (options ^. #retryLimit)
+    recordCommandOutcome mSpan (^. #eventsAppended) result
+    pure result
   where
     attempt remaining = do
       hydrated <- hydrate options eventStream targetStream
@@ -305,7 +322,10 @@ runCommandWithSqlEvents ::
   ([co] -> AppendResult -> Tx.Transaction a) ->
   Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co), Maybe a))
 runCommandWithSqlEvents options eventStream targetStream command afterAppend =
-  attempt (options ^. #retryLimit)
+  withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> do
+    result <- attempt (options ^. #retryLimit)
+    recordCommandOutcome mSpan (\(r, _) -> r ^. #eventsAppended) result
+    pure result
   where
     attempt remaining = do
       hydrated <- hydrate options eventStream targetStream
@@ -357,6 +377,53 @@ prepareCommandPlan options eventStream targetStream current command =
       CommandAppend current events
         . assignEventIds (options ^. #eventIds)
         <$> encodeEvents (eventStream ^. #eventCodec) events
+
+{- | Render the stream that the command targets as plain 'Text', for use
+as a span name.
+-}
+resolvedStreamName
+  :: EventStream phi rs s ci co
+  -> Stream (EventStream phi rs s ci co)
+  -> Text
+resolvedStreamName eventStream targetStream =
+  case (eventStream ^. #resolveStreamName) targetStream of
+    StreamName n -> n
+
+{- | Attach the command-span outcome attributes after the runner returns.
+
+On success: 'db.system.name' and 'keiro.events.appended'.
+On failure: 'error.type' (low-cardinality classifier) and span status
+'Error' (carrying the rendered 'CommandError' as the description).
+
+Pure no-op when no span is active ('Nothing' tracer, etc).
+-}
+recordCommandOutcome
+  :: (IOE :> es)
+  => Maybe Span
+  -> (a -> Int)
+  -> Either CommandError a
+  -> Eff es ()
+recordCommandOutcome Nothing _ _ = pure ()
+recordCommandOutcome (Just sp) eventsOf result = do
+  addAttribute sp (unkey db_system_name) ("postgresql" :: Text)
+  case result of
+    Right v ->
+      addAttribute sp (unkey keiro_events_appended) (Prelude.fromIntegral (eventsOf v) :: Int64)
+    Left err -> do
+      addAttribute sp (unkey error_type) (commandErrorClass err)
+      setStatus sp (Error (Text.pack (show err)))
+
+{- | Low-cardinality classifier for a 'CommandError'. Used as the
+@error.type@ attribute value on the command span.
+-}
+commandErrorClass :: CommandError -> Text
+commandErrorClass = \case
+  HydrationDecodeFailed{} -> "hydration_decode_failed"
+  HydrationReplayFailed{} -> "hydration_replay_failed"
+  CommandRejected -> "command_rejected"
+  EncodeFailed{} -> "encode_failed"
+  StoreFailed{} -> "store_failed"
+  RetryExhausted{} -> "retry_exhausted"
 
 writeSnapshotIfNeeded ::
   forall phi rs s ci co es.

@@ -349,6 +349,34 @@ main = hspec $ do
           observed `shouldBe` [CounterAdded 8, CounterAudited 8]
         other -> expectationFailure ("expected successful SQL multi-event command, got " <> show other)
 
+    it "runCommand emits a Command span with the stream name, db.system.name, and keiro.events.appended" $ \storeHandle -> do
+      (processor, spansRef) <- inMemoryListExporter
+      provider <- createTracerProvider [processor] emptyTracerProviderOptions
+      let tracer = makeTracer provider "keiro-test" tracerOptions
+          target = stream "counter-command-otel" :: Stream CounterEventStream
+          options = defaultRunCommandOptions & #tracer ?~ tracer
+      Right (Right commandResult) <- Store.runStoreIO storeHandle $
+        runCommand options counterEventStream target (Add 9)
+      commandResult ^. #streamVersion `shouldBe` StreamVersion 1
+      _ <- shutdownTracerProvider provider
+      spans <- readIORef spansRef
+      length spans `shouldBe` 1
+      let sp = case spans of
+            (s : _) -> s
+            [] -> error "no command span captured"
+      spanName sp `shouldBe` "counter-command-otel"
+      show (spanKind sp) `shouldBe` "Internal"
+      textAttr (spanAttributes sp) "keiro.stream.name" `shouldBe` Just "counter-command-otel"
+      textAttr (spanAttributes sp) "db.system.name" `shouldBe` Just "postgresql"
+      -- keiro.events.appended is an Int64 attribute, not Text.
+      case lookupAttribute (spanAttributes sp) "keiro.events.appended" of
+        Just (AttributeValue (IntAttribute n)) -> n `shouldBe` 1
+        other -> expectationFailure ("expected IntAttribute 1, got " <> show other)
+      case spanStatus sp of
+        Unset -> pure ()
+        Ok -> pure ()
+        other -> expectationFailure ("expected Unset/Ok, got " <> show other)
+
   describe "Keiro.Snapshot" $ around withTestStore $ do
     it "writes a snapshot after policy threshold" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema

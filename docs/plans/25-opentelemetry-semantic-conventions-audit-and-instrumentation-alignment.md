@@ -185,12 +185,29 @@ This section must always reflect the actual current state of the work.
       `withConsumerSpan tracer cg inbound (Just event) $ \_ ->
       runInboxTransaction ...`. See Decision Log on 2026-05-19 for the
       rationale.
-- [ ] **Milestone 6: Instrument `Keiro.Command`.** Open one `Internal` span
-      per `runCommand` / `runCommandWithSql` / `runCommandWithSqlEvents`
-      invocation, named after the resolved stream name, with attributes
-      describing the stream identity, retry attempt, and (on the database
-      sub-span) the appended event count. The span surface is unconditional —
-      a noop tracer makes it free — so callers do not need to opt in.
+- [x] **Milestone 6: Instrument `Keiro.Command` (2026-05-19).**
+      `RunCommandOptions` gains `tracer :: !(Maybe Tracer)` (defaults to
+      `Nothing`). All three runners (`runCommand`, `runCommandWithSql`,
+      `runCommandWithSqlEvents`) now wrap their body in
+      `Keiro.Telemetry.withCommandSpan`. On a successful command the span
+      attaches `db.system.name = "postgresql"` and
+      `keiro.events.appended = <count>`. On a failure the span attaches
+      `error.type = <classifier>` (one of `hydration_decode_failed`,
+      `hydration_replay_failed`, `command_rejected`, `encode_failed`,
+      `store_failed`, `retry_exhausted`) and sets status `Error` with the
+      rendered `CommandError`. Two new helpers — `resolvedStreamName` and
+      `recordCommandOutcome` — share the boilerplate. New in-memory
+      exporter test under `Keiro.Command` asserts span name, kind, and
+      attributes for a counter-command run. Suite: 74 examples / 0
+      failures. Hydration / snapshot child spans remain out of scope per
+      the M1 Decision Log entry; the command span already attributes
+      their wall-clock time.
+
+      Note: the plan draft said "the span surface is unconditional — a
+      noop tracer makes it free — so callers do not need to opt in".
+      Final shape uses an opt-in `Maybe Tracer` on `RunCommandOptions`,
+      consistent with the `OutboxPublishOptions.tracer` pattern from M4.
+      Callers that don't configure a tracer see no behavior change.
 - [ ] **Milestone 7: Wire up the W3C propagator in `Keiro.Integration.Event`.**
       Add `traceContextFromCurrentSpan` / `traceContextFromHeaders` helpers in
       `Keiro.Telemetry` that bridge between the `TraceContext` record and the
