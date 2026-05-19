@@ -17,9 +17,9 @@ module Keiro.Outbox.Schema
   )
 where
 
+import Contravariant.Extras (contrazip2, contrazip5)
 import Data.ByteString (ByteString)
 import Data.Functor.Contravariant ((>$<))
-import Data.Text qualified as Text
 import Data.Time.Clock (NominalDiffTime, addUTCTime)
 import Data.UUID (UUID)
 import Effectful (Eff, (:>))
@@ -316,8 +316,9 @@ claimStmt :: OrderingPolicy -> Statement (Int64, UTCTime) [OutboxRow]
 claimStmt policy =
   preparable
     (claimSql (policyPredicate policy))
-    ( ((\(lim, _) -> lim) >$< E.param (E.nonNullable E.int8))
-        <> ((\(_, now) -> now) >$< E.param (E.nonNullable E.timestamptz))
+    ( contrazip2
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.timestamptz))
     )
     (D.rowList claimResultDecoder)
 
@@ -330,47 +331,61 @@ policyPredicate = \case
 
 perKeyPredicate :: Text
 perKeyPredicate =
-  "( r.message_key IS NULL OR NOT EXISTS ( \
-  \    SELECT 1 FROM keiro_outbox earlier \
-  \    WHERE earlier.source = r.source \
-  \      AND earlier.message_key = r.message_key \
-  \      AND earlier.created_at < r.created_at \
-  \      AND earlier.status NOT IN ('sent', 'dead') ) )"
+  """
+  ( r.message_key IS NULL OR NOT EXISTS (
+      SELECT 1 FROM keiro_outbox earlier
+      WHERE earlier.source = r.source
+        AND earlier.message_key = r.message_key
+        AND earlier.created_at < r.created_at
+        AND earlier.status NOT IN ('sent', 'dead') ) )
+  """
 
 perSourcePredicate :: Text
 perSourcePredicate =
-  "NOT EXISTS ( SELECT 1 FROM keiro_outbox earlier \
-  \  WHERE earlier.source = r.source \
-  \    AND earlier.created_at < r.created_at \
-  \    AND earlier.status NOT IN ('sent', 'dead') )"
+  """
+  NOT EXISTS ( SELECT 1 FROM keiro_outbox earlier
+    WHERE earlier.source = r.source
+      AND earlier.created_at < r.created_at
+      AND earlier.status NOT IN ('sent', 'dead') )
+  """
 
 claimSql :: Text -> Text
 claimSql predicate =
-  Text.unwords
-    [ "WITH ready AS ("
-    , "SELECT r.outbox_id FROM keiro_outbox r"
-    , "WHERE r.status IN ('pending', 'failed')"
-    , "  AND r.next_attempt_at <= $2"
-    , "  AND (", predicate, ")"
-    , "ORDER BY r.created_at"
-    , "LIMIT $1"
-    , "FOR UPDATE SKIP LOCKED"
-    , ")"
-    , "UPDATE keiro_outbox kt"
-    , "SET status = 'publishing', attempt_count = kt.attempt_count + 1, updated_at = $2"
-    , "WHERE kt.outbox_id IN (SELECT outbox_id FROM ready)"
-    , "RETURNING " <> rowColumns
-    ]
+  """
+  WITH ready AS (
+    SELECT r.outbox_id FROM keiro_outbox r
+    WHERE r.status IN ('pending', 'failed')
+      AND r.next_attempt_at <= $2
+      AND (
+  """
+    <> predicate
+    <> """
+
+  )
+    ORDER BY r.created_at
+    LIMIT $1
+    FOR UPDATE SKIP LOCKED
+  )
+  UPDATE keiro_outbox kt
+  SET status = 'publishing', attempt_count = kt.attempt_count + 1, updated_at = $2
+  WHERE kt.outbox_id IN (SELECT outbox_id FROM ready)
+  RETURNING
+
+  """
+    <> rowColumns
 
 rowColumns :: Text
 rowColumns =
-  "kt.outbox_id, kt.message_id, kt.source, kt.destination, kt.message_key, kt.event_type, \
-  \kt.schema_version, kt.content_type, kt.schema_registry, kt.schema_subject, \
-  \kt.schema_version_ref, kt.schema_id, kt.schema_fingerprint, kt.source_event_id, \
-  \kt.source_global_position, kt.causation_id, kt.correlation_id, kt.traceparent, \
-  \kt.tracestate, kt.payload_bytes, kt.attributes, kt.occurred_at, kt.status, \
-  \kt.attempt_count, kt.next_attempt_at, kt.last_error, kt.published_at, kt.created_at, \
-  \kt.updated_at"
+  """
+  kt.outbox_id, kt.message_id, kt.source, kt.destination, kt.message_key,
+  kt.event_type, kt.schema_version, kt.content_type, kt.schema_registry,
+  kt.schema_subject, kt.schema_version_ref, kt.schema_id, kt.schema_fingerprint,
+  kt.source_event_id, kt.source_global_position, kt.causation_id,
+  kt.correlation_id, kt.traceparent, kt.tracestate, kt.payload_bytes,
+  kt.attributes, kt.occurred_at, kt.status, kt.attempt_count,
+  kt.next_attempt_at, kt.last_error, kt.published_at, kt.created_at,
+  kt.updated_at
+  """
 
 claimResultDecoder :: D.Row OutboxRow
 claimResultDecoder = outboxRowDecoder
@@ -393,8 +408,9 @@ markSentStmt =
         updated_at = $2
     WHERE outbox_id = $1
     """
-    ( ((\(u, _) -> u) >$< E.param (E.nonNullable E.uuid))
-        <> ((\(_, t) -> t) >$< E.param (E.nonNullable E.timestamptz))
+    ( contrazip2
+        (E.param (E.nonNullable E.uuid))
+        (E.param (E.nonNullable E.timestamptz))
     )
     D.noResult
 
@@ -409,11 +425,12 @@ markFailedStmt =
         updated_at = $5
     WHERE outbox_id = $1
     """
-    ( ((\(u, _, _, _, _) -> u) >$< E.param (E.nonNullable E.uuid))
-        <> ((\(_, s, _, _, _) -> s) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, _, e, _, _) -> e) >$< E.param (E.nonNullable E.text))
-        <> ((\(_, _, _, n, _) -> n) >$< E.param (E.nonNullable E.timestamptz))
-        <> ((\(_, _, _, _, t) -> t) >$< E.param (E.nonNullable E.timestamptz))
+    ( contrazip5
+        (E.param (E.nonNullable E.uuid))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.timestamptz))
+        (E.param (E.nonNullable E.timestamptz))
     )
     D.noResult
 
@@ -433,12 +450,16 @@ listOutboxStmt =
 
 selectAllSql :: Text
 selectAllSql =
-  "SELECT outbox_id, message_id, source, destination, message_key, event_type, \
-  \schema_version, content_type, schema_registry, schema_subject, schema_version_ref, \
-  \schema_id, schema_fingerprint, source_event_id, source_global_position, causation_id, \
-  \correlation_id, traceparent, tracestate, payload_bytes, attributes, occurred_at, \
-  \status, attempt_count, next_attempt_at, last_error, published_at, created_at, updated_at \
-  \FROM keiro_outbox"
+  """
+  SELECT outbox_id, message_id, source, destination, message_key, event_type,
+         schema_version, content_type, schema_registry, schema_subject,
+         schema_version_ref, schema_id, schema_fingerprint, source_event_id,
+         source_global_position, causation_id, correlation_id, traceparent,
+         tracestate, payload_bytes, attributes, occurred_at, status,
+         attempt_count, next_attempt_at, last_error, published_at, created_at,
+         updated_at
+  FROM keiro_outbox
+  """
 
 outboxRowDecoder :: D.Row OutboxRow
 outboxRowDecoder = fmap assembleRow rawRowDecoder

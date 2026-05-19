@@ -86,17 +86,17 @@ This section must always reflect the actual current state of the work.
             multiline literal.
       - [x] `cabal test keiro-test --test-options='--match Keiro.Inbox'` → 9 examples,
             0 failures.
-- [ ] **Milestone 3: Refactor `src/Keiro/Outbox/Schema.hs`.**
-      - [ ] Replace `claimStmt`'s 2-tuple projection with `contrazip2`.
-      - [ ] Replace `markSentStmt`'s 2-tuple projection with `contrazip2`.
-      - [ ] Replace `markFailedStmt`'s 5-tuple projection with `contrazip5`.
-      - [ ] Convert `selectAllSql`, `rowColumns`, `perKeyPredicate`,
+- [x] **Milestone 3: Refactor `src/Keiro/Outbox/Schema.hs`.** *(Done 2026-05-19.)*
+      - [x] Replace `claimStmt`'s 2-tuple projection with `contrazip2`.
+      - [x] Replace `markSentStmt`'s 2-tuple projection with `contrazip2`.
+      - [x] Replace `markFailedStmt`'s 5-tuple projection with `contrazip5`.
+      - [x] Convert `selectAllSql`, `rowColumns`, `perKeyPredicate`,
             `perSourcePredicate` to multiline literals.
-      - [ ] Convert `claimSql` from `Text.unwords [..]` to a single `"""..."""`
+      - [x] Convert `claimSql` from `Text.unwords [..]` to a single `"""..."""`
             template with the predicate substituted via a small wrapper helper (the
             predicate text itself stays a `Text` so the policy-driven swap still
             works).
-      - [ ] `cabal test keiro-test` passes.
+      - [x] `cabal test keiro-test` passes (65 examples, 0 failures).
 - [ ] **Milestone 4: Refactor `benchmarks/message-db-vs-kiroku/app/Main.hs`.**
       - [ ] `rawKirokuProductionParamsEncoder` is 8 fields over the existing
             `RawKirokuProductionParams` record. Replace the 8 `(\params -> params.field)
@@ -134,6 +134,21 @@ This section must always reflect the actual current state of the work.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
+
+- **`claimSql` multiline join needs an explicit separator.** Discovered
+  2026-05-19 in Milestone 3. The first version of the new `claimSql`
+  template ended its middle multiline literal with `  RETURNING` and then
+  `<> rowColumns`. After `MultilineStrings` stripped the trailing blank
+  line, the runtime string ended with `RETURNING` (no whitespace) and the
+  concatenation produced `RETURNINGkt.outbox_id, ...` — invalid SQL.
+  Symptom: every `claimOutboxBatch` test failed with a hasql parameter
+  error. Fix: include an explicit blank line inside the multiline before
+  the closing `"""`, so the stripped result keeps a trailing `\n` before
+  the column list. Same treatment was applied at the predicate join. The
+  takeaway, worth remembering for future multiline SQL: when two multiline
+  literals concatenate directly via `<>`, insert an explicit blank line on
+  one side or use `<> "\n" <>` — the natural-looking layout has no
+  separator at the seam.
 
 - **Spike (EP-8) does not build on master.** Discovered 2026-05-19, before any
   refactor edits, that `cabal build all` for `spikes/read-model` fails with
