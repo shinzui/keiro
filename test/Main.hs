@@ -1351,8 +1351,10 @@ loggingReactionHandler _ event = do
 insertReceivedOrderStmt :: Statement (Text, Int64) ()
 insertReceivedOrderStmt =
   preparable
-    "INSERT INTO billing_received_orders (order_id, quantity) VALUES ($1, $2) \
-    \ON CONFLICT (order_id) DO NOTHING"
+    """
+    INSERT INTO billing_received_orders (order_id, quantity) VALUES ($1, $2)
+    ON CONFLICT (order_id) DO NOTHING
+    """
     ( contrazip2
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.int8))

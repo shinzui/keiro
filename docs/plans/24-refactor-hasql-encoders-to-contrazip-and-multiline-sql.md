@@ -127,12 +127,12 @@ This section must always reflect the actual current state of the work.
             `Spike.Projection` compiles cleanly post-refactor, evidenced by
             `[5 of 7] Compiling Spike.Projection` succeeding before the
             build halts on `Spike.Command`.
-- [ ] **Milestone 6: Clean up `test/Main.hs` SQL literal style.** Convert any
-      remaining backslash-continued multi-line SQL (search for `\\\\\n` patterns,
-      e.g. the `INSERT INTO billing_received_orders` and `INSERT INTO billing_event_log`
-      statements at lines 1356 and 1374) to multiline literals. Encoders in this file
-      already use `contrazip<N>`; no encoder change is expected. `cabal test
-      keiro-test` passes.
+- [x] **Milestone 6: Clean up `test/Main.hs` SQL literal style.** *(Done 2026-05-19.)*
+      Converted the single remaining backslash-continued literal —
+      `insertReceivedOrderStmt`'s SQL — to a multiline literal. The
+      `appendBillingEventLogStmt` and the rest of the file's SQL literals
+      are already single-line one-liners. `cabal test keiro-test` →
+      65 examples, 0 failures.
 - [ ] **Final sweep:** run `rg '\\\(\\\\\\(' --type haskell` from the repository root
       and confirm no hits remain inside the `src/`, `jitsurei/src/`,
       `spikes/read-model/src/`, `spikes/read-model/app/`, `benchmarks/`, and `test/`
