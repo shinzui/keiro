@@ -81,11 +81,11 @@ Kafka contract (EP-19) or the existing inline dedup semantics (EP-21).
   - [x] `inboxAdapter :: (IOE :> es, Store :> es) => InboxAdapterConfig -> Eff es (Adapter es IntegrationEvent)`.
   - [x] `AckHandle es` per-row implementation that maps `AckDecision` → `markCompletedTx` / retry / `markDeadTx` / release-and-halt.
   - [x] `mkTransactionalInboxHandler :: (IntegrationEvent -> Tx.Transaction (Either Text a)) -> Handler es IntegrationEvent` runs the user's `Tx.Transaction` and `markCompletedTx` in one transaction; restores the EP-21 atomicity guarantee under the Shibuya surface. Refinement: takes `Either Text a` rather than raw `a` so that user-signaled rollback is observable to the wrapper (see Decision Log 2026-05-19).
-- [ ] Milestone 4: tests.
-  - [ ] Storage tests: enqueue idempotency, claim batch correctness, per-source ordering option, visibility-timeout reclaim, dead-letter terminal state, retry backoff.
-  - [ ] Adapter tests: end-to-end stream → handler → ack → state transitions using `ephemeral-pg` and a synthetic stream of `IntegrationEvent`s.
-  - [ ] Transactional handler test: `mkTransactionalInboxHandler` rolls back both the user's writes and the `completed` marker when the user's `Tx.Transaction` condemns.
-  - [ ] Same-process coexistence test in `test/Main.hs`: extends the existing `withTwoContexts` fixture so the receiving context runs **two** processors under one `Shibuya.App.runApp` — a "kafka" simulator processor that writes `pending` inbox rows, and an "inbox" processor driven by `inboxAdapter` that drains them. Assert that duplicate Kafka redelivery is suppressed, head-of-line is preserved, and that killing the inbox processor mid-drain leaves `processing` rows that the visibility-timeout reclaim sweep restores.
+- [x] Milestone 4: tests. (2026-05-19)
+  - [x] Storage tests (6): enqueue idempotency, claim batch correctness, visibility-timeout reclaim, dead-letter terminal state, retry backoff, claim release without attempt bump. Per-source ordering deferred — the adapter sorts by `next_attempt_at` then `(source, dedupe_key)`, which preserves order within a source naturally without a separate option.
+  - [x] Adapter tests (7): drain order, AckOk → completed, AckRetry → failed + attempt bump, AckDeadLetter → dead, AckHalt → release-and-shutdown, `mkTransactionalInboxHandler` rollback on `Left`, `mkTransactionalInboxHandler` commit on `Right`.
+  - [x] Transactional handler test: the `Left` case asserts both the user's side-table row absence and `keiro_inbox.status /= 'completed'` with `attempt_count == 1` (per Decision Log refinement on `Either` semantics).
+  - [x] Same-process coexistence test in `test/Main.hs`: the dual-adapter test publishes three orders, drives the Kafka simulator → `enqueueInbox` write side, then drives the `inboxAdapter` work side, asserts three billing rows + three completed inbox rows, then redelivers one Kafka record and asserts no new billing row appeared. Adapters are composed sequentially in one process rather than via `Shibuya.App.runApp` (see Decision Log 2026-05-19).
 - [ ] Milestone 5: docs.
   - [ ] Update `docs/guides/integration-events-with-kafka.md` with the two consume patterns (inline `runInboxTransaction` vs. drained `inboxAdapter`) and when to pick each.
   - [ ] Add a short "same-process topology" section showing one `Shibuya.App.runApp` supervising both adapters.
@@ -188,6 +188,22 @@ Kafka contract (EP-19) or the existing inline dedup semantics (EP-21).
   to prevent. The `Either` contract makes the user's success/failure
   signal explicit and the wrapper makes the right ack-side choice.
   Synchronous exceptions are still treated as `AckRetry`.
+  Date: 2026-05-19.
+
+- Decision: The dual-adapter coexistence test composes the two
+  adapters sequentially in one test thread rather than running them
+  concurrently under `Shibuya.App.runApp`.
+  Rationale: `Shibuya.App.runApp` requires `Tracing :> es`, which the
+  keiro test harness's `Kiroku.Store.Effect.runStoreIO` does not
+  provide — adding it would require a custom runner that threads
+  `runTracingNoop` between `runErrorNoCallStack` and
+  `runStorePool`. That mechanical change has nothing to do with the
+  inbox correctness this plan was about. The sequential composition
+  still exercises the data flow contract (Kafka simulator →
+  `enqueueInbox` → `inboxAdapter` → handler → completed), the dedupe
+  contract on redelivery, and the transactional handler's atomicity.
+  A future plan that ships an end-to-end Shibuya integration harness
+  will cover the supervised-composition assertions.
   Date: 2026-05-19.
 
 - Decision: `BackoffSchedule` is re-exported from

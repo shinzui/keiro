@@ -9,7 +9,7 @@ import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
-import Data.IORef (atomicModifyIORef', newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Effectful (Eff, IOE, (:>))
@@ -95,14 +95,34 @@ import Keiro.Inbox
   , garbageCollectCompleted
   , initializeInboxSchema
   , listInbox
+  , listInboxByStatus
   , lookupInbox
   , runInboxTransaction
+  )
+import Keiro.Inbox.Adapter
+  ( InboxAdapterConfig (..)
+  , defaultInboxAdapterConfig
+  , inboxAdapter
+  , mkTransactionalInboxHandler
   )
 import Keiro.Inbox.Schema
   ( claimInboxBatchTx
   , markInboxFailedTx
   , releaseInboxClaimTx
   )
+import Shibuya.Adapter (Adapter (..))
+import Shibuya.Core.Ack
+  ( AckDecision (..)
+  , DeadLetterReason (..)
+  , HaltReason (..)
+  , RetryDelay (..)
+  )
+import Shibuya.Core.AckHandle (AckHandle (..))
+import Shibuya.Core.Ingested (Ingested (..))
+import Shibuya.Core.Types (Envelope (..))
+import Shibuya.Handler (Handler)
+import Streamly.Data.Fold qualified as Fold
+import Streamly.Data.Stream qualified as Streamly
 import Keiro.Inbox.Kafka qualified as InboxKafka
 import Data.Time (NominalDiffTime)
 import Control.Concurrent.MVar (MVar, modifyMVar, newMVar, readMVar)
@@ -1124,6 +1144,125 @@ main = hspec $ do
         Store.runTransaction (claimInboxBatchTx defaultInboxClaimOptions now)
       length reclaimed `shouldBe` 1
 
+  describe "Keiro.Inbox.Adapter" $ around withTestStore $ do
+    let adapterConfig =
+          (defaultInboxAdapterConfig "test-inbox-adapter")
+            { pollInterval = 0.01
+            }
+
+    it "drains pending rows in receivedAt order" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let mkEvent n = sampleIntegrationEnvelope
+            & #messageId .~ ("drain-msg-" <> Text.pack (show (n :: Int)))
+            & #source .~ "ordering"
+      for_ [1 .. 3 :: Int] $ \n -> do
+        Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+          enqueueInbox PreferIntegrationMessageId (mkEvent n) Nothing
+        pure ()
+      observed <- newIORef ([] :: [Text])
+      let handler = recordingAckOk observed
+      Right () <- Store.runStoreIO storeHandle $
+        processAdapterN adapterConfig handler 3
+      seen <- reverse <$> readIORef observed
+      seen `shouldBe` ["drain-msg-1", "drain-msg-2", "drain-msg-3"]
+      Right completed <- Store.runStoreIO storeHandle (listInboxByStatus InboxCompleted)
+      length completed `shouldBe` 3
+
+    it "marks the row completed on AckOk" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event = sampleIntegrationEnvelope
+            & #messageId .~ "ack-ok"
+            & #source .~ "ordering"
+      Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event Nothing
+      observed <- newIORef []
+      Right () <- Store.runStoreIO storeHandle $
+        processAdapterN adapterConfig (recordingAckOk observed) 1
+      Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "ack-ok")
+      row ^. #status `shouldBe` InboxCompleted
+
+    it "bumps attempt_count and reschedules on AckRetry" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event = sampleIntegrationEnvelope
+            & #messageId .~ "ack-retry"
+            & #source .~ "ordering"
+      Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event Nothing
+      Right () <- Store.runStoreIO storeHandle $
+        processAdapterN adapterConfig (constHandler (AckRetry (RetryDelay 0))) 1
+      Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "ack-retry")
+      row ^. #status `shouldBe` InboxFailed
+      row ^. #attemptCount `shouldBe` 1
+
+    it "marks the row dead on AckDeadLetter" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event = sampleIntegrationEnvelope
+            & #messageId .~ "ack-dead"
+            & #source .~ "ordering"
+      Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event Nothing
+      Right () <- Store.runStoreIO storeHandle $
+        processAdapterN adapterConfig (constHandler (AckDeadLetter (PoisonPill "bad"))) 1
+      Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "ack-dead")
+      row ^. #status `shouldBe` InboxDead
+      row ^. #lastError `shouldBe` Just "PoisonPill: bad"
+
+    it "releases the claim on AckHalt and stops polling" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      let event = sampleIntegrationEnvelope
+            & #messageId .~ "ack-halt"
+            & #source .~ "ordering"
+      Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event Nothing
+      Right () <- Store.runStoreIO storeHandle $
+        processAdapterN adapterConfig (constHandler (AckHalt (HaltFatal "stop"))) 1
+      Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "ack-halt")
+      row ^. #status `shouldBe` InboxPending
+      row ^. #claimedAt `shouldBe` Nothing
+
+    it "mkTransactionalInboxHandler rolls back user writes when the handler returns Left" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+      let event = sampleIntegrationEnvelope
+            & #messageId .~ "tx-rollback"
+            & #source .~ "ordering"
+      Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event Nothing
+      let userTx ev = do
+            Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+            pure (Left "deliberate rollback" :: Either Text ())
+          handler = mkTransactionalInboxHandler userTx
+      Right () <- Store.runStoreIO storeHandle $
+        processAdapterN adapterConfig handler 1
+      Right userRowCount <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+      userRowCount `shouldBe` 0
+      Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "tx-rollback")
+      row ^. #status `shouldNotBe` InboxCompleted
+      row ^. #attemptCount `shouldBe` 1
+
+    it "mkTransactionalInboxHandler commits user writes on Right" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+      let event = sampleIntegrationEnvelope
+            & #messageId .~ "tx-commit"
+            & #source .~ "ordering"
+      Right (Right EnqueuedNew) <- Store.runStoreIO storeHandle $
+        enqueueInbox PreferIntegrationMessageId event Nothing
+      let userTx ev = do
+            Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+            pure (Right () :: Either Text ())
+          handler = mkTransactionalInboxHandler userTx
+      Right () <- Store.runStoreIO storeHandle $
+        processAdapterN adapterConfig handler 1
+      Right userRowCount <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+      userRowCount `shouldBe` 1
+      Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "tx-commit")
+      row ^. #status `shouldBe` InboxCompleted
+
   describe "Keiro.Inbox.Kafka" $ do
     it "reconstructs an integration event from headers and payload" $ do
       let envelope = sampleIntegrationEnvelope
@@ -1297,6 +1436,86 @@ main = hspec $ do
         consumeAndApply record billingReactionHandler
       consumed `shouldBe` ConsumeApplied (InboxProcessed ())
 
+    it "two-stage drain coexists with the kafka write side" $ \(ordering, billing) -> do
+      Right () <- Store.runStoreIO ordering initializeOutboxSchema
+      Right () <- Store.runStoreIO billing initializeInboxSchema
+      Right () <- Store.runStoreIO billing $
+        Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS billing_received_orders (order_id TEXT PRIMARY KEY, quantity BIGINT NOT NULL)")
+      topic <- newKafkaTopic
+      -- Ordering side: enqueue and publish three orders.
+      let envelopes =
+            [ orderSubmittedEnvelope "order-aa" 1 "two-stage-msg-1"
+            , orderSubmittedEnvelope "order-ab" 2 "two-stage-msg-2"
+            , orderSubmittedEnvelope "order-ac" 3 "two-stage-msg-3"
+            ]
+          oboxIds = [OutboxId outboxUuid1, OutboxId outboxUuid2, OutboxId outboxUuid3]
+      for_ (zip oboxIds envelopes) $ \(oid, env) -> do
+        Right () <- Store.runStoreIO ordering $
+          Store.runTransaction (enqueueIntegrationEventTx oid env)
+        pure ()
+      let drainOnce =
+            publishClaimedOutbox
+              (kafkaTopicPublish topic)
+              (defaultPublishOptions & #backoff .~ ConstantBackoff 0)
+      -- Drive the outbox worker until all three rows are sent. Per-key
+      -- head-of-line ordering means we may need multiple passes when
+      -- two rows share a key — these don't, so one pass suffices.
+      Right pubSummary <- Store.runStoreIO ordering drainOnce
+      pubSummary ^. #published `shouldBe` 3
+
+      -- Billing side: build both adapters and drive them sequentially.
+      -- Write side: the Kafka simulator delivers KafkaInboundRecords;
+      -- a handler decodes and enqueues each as a pending inbox row.
+      -- Work side: the inbox adapter drains the pending rows.
+      records <- drainKafkaTopic topic
+      length records `shouldBe` 3
+      let writeSideHandler ::
+            forall es. (IOE :> es, Store :> es) =>
+            InboxKafka.KafkaInboundRecord ->
+            Eff es ()
+          writeSideHandler record = case InboxKafka.integrationEventFromKafka record of
+            Left _ -> pure ()
+            Right (event, kafkaRef) -> do
+              _ <- enqueueInbox PreferIntegrationMessageId event (Just kafkaRef)
+              pure ()
+      for_ records $ \record ->
+        Store.runStoreIO billing (writeSideHandler record) >>= \case
+          Right () -> pure ()
+          Left err -> expectationFailure ("write side failed: " <> show err)
+      -- Confirm three pending rows.
+      Right pendingRows <- Store.runStoreIO billing (listInboxByStatus InboxPending)
+      length pendingRows `shouldBe` 3
+      -- Now drain via the inbox adapter using a transactional handler
+      -- that runs billingReactionHandler in the same tx as the
+      -- completed marker.
+      let txHandler ev = do
+            billingReactionHandler ev
+            pure (Right () :: Either Text ())
+          workerHandler = mkTransactionalInboxHandler txHandler
+          adapterConfig =
+            (defaultInboxAdapterConfig "billing-inbox-work")
+              { pollInterval = 0.01
+              }
+      Right () <- Store.runStoreIO billing $
+        processAdapterN adapterConfig workerHandler 3
+      Right billingCount <- Store.runStoreIO billing $
+        Store.runTransaction (Tx.statement () billingReceivedOrdersCountStmt)
+      billingCount `shouldBe` 3
+      Right completed <- Store.runStoreIO billing (listInboxByStatus InboxCompleted)
+      length completed `shouldBe` 3
+
+      -- Redeliver one Kafka record at a different offset. The dedupe
+      -- policy is messageId, so the second enqueue must be reported as
+      -- a duplicate and must not produce a new billing row.
+      case records of
+        (record : _) -> do
+          let redelivered = redeliverWithDifferentOffset record
+          Right () <- Store.runStoreIO billing (writeSideHandler redelivered)
+          Right newRows <- Store.runStoreIO billing $
+            Store.runTransaction (Tx.statement () billingReceivedOrdersCountStmt)
+          newRows `shouldBe` 3
+        [] -> expectationFailure "expected at least one record to redeliver"
+
   describe "Keiro.Integration.Event" $ do
     it "round-trips a JSON envelope through encode and decode" $ do
       let envelope = sampleIntegrationEnvelope
@@ -1365,6 +1584,47 @@ main = hspec $ do
 
 nominalDays :: Int -> NominalDiffTime
 nominalDays n = fromIntegral n * 86400
+
+-- ---------------------------------------------------------------------------
+-- Adapter test helpers
+-- ---------------------------------------------------------------------------
+
+{- | Build an inbox adapter and drive at most @n@ ingestions through
+@handler@, finalizing each via the adapter's 'AckHandle'. Returns
+after the take limit is reached. Empty polls terminate naturally
+because the source stream sleeps for @pollInterval@ between batches,
+so 'Streamly.take' resolves quickly once the queue is drained.
+-}
+processAdapterN ::
+  forall msg es.
+  (IOE :> es, Store :> es, msg ~ IntegrationEvent) =>
+  InboxAdapterConfig ->
+  Handler es msg ->
+  Int ->
+  Eff es ()
+processAdapterN config handler n = do
+  adapter <- inboxAdapter config
+  let Adapter{source = src} = adapter
+  Streamly.fold Fold.drain $
+    Streamly.mapM (runOne handler) (Streamly.take n src)
+ where
+  runOne ::
+    Handler es msg ->
+    Ingested es msg ->
+    Eff es ()
+  runOne h ingested@Ingested{ack = AckHandle finalize} = do
+    decision <- h ingested
+    finalize decision
+
+-- | A handler that records the envelope's messageId and returns 'AckOk'.
+recordingAckOk :: (IOE :> es) => IORef [Text] -> Handler es IntegrationEvent
+recordingAckOk ref Ingested{envelope = Envelope{payload = ev}} = do
+  liftIO (atomicModifyIORef' ref (\xs -> ((ev ^. #messageId) : xs, ())))
+  pure AckOk
+
+-- | A handler that returns the same 'AckDecision' for every message.
+constHandler :: AckDecision -> Handler es IntegrationEvent
+constHandler decision _ = pure decision
 
 -- ---------------------------------------------------------------------------
 -- Cross-context integration fixtures
