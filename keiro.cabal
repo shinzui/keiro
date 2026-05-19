@@ -33,6 +33,7 @@ library
                         Keiro.Command
                         Keiro.Codec
                         Keiro.EventStream
+                        Keiro.Integration.Event
                         Keiro.Prelude
                         Keiro.ProcessManager
                         Keiro.Projection
@@ -51,6 +52,7 @@ library
     build-depends:      aeson >= 2.2,
                         aeson-casing >= 0.2,
                         base >= 4.21 && < 5,
+                        bytestring >= 0.11,
                         contravariant-extras >= 0.3,
                         effectful >= 2.6,
                         effectful-core >= 2.6,

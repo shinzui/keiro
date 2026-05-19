@@ -40,6 +40,25 @@ import Keiki.Core
 import Keiki.Core qualified as Keiki
 import Keiro
 import Keiro qualified as KeiroRoot
+import Keiro.Integration.Event
+  ( IntegrationContentType (..)
+  , IntegrationEvent (..)
+  , SchemaReference (..)
+  , TraceContext (..)
+  , decodeJsonIntegrationEvent
+  , encodeJsonIntegrationEvent
+  , headerContentType
+  , headerMessageId
+  , headerSchemaSubject
+  , headerSchemaVersion
+  , headerSourceEventId
+  , headerSourceGlobalPosition
+  , headerTraceParent
+  , integrationHeaders
+  , integrationPayload
+  , parseContentType
+  )
+import Keiro.Integration.Event qualified as IntegrationEvent
 import Keiro.Prelude
 import Keiro.Projection
 import Keiro.ProcessManager
@@ -618,6 +637,133 @@ main = hspec $ do
       Right targetEvents <- Store.runStoreIO storeHandle $
         Store.readStreamForward (StreamName "timer-target") (StreamVersion 0) 10
       fmap (^. #eventId) (Vector.toList targetEvents) `shouldBe` [firedEventId]
+
+  describe "Keiro.Integration.Event" $ do
+    it "round-trips a JSON envelope through encode and decode" $ do
+      let envelope = sampleIntegrationEnvelope
+          payload = OrderSubmittedPayload "order-123" 5
+          encoded = encodeJsonIntegrationEvent envelope payload
+      decodeJsonIntegrationEvent encoded `shouldBe` Right payload
+
+    it "preserves identity and routing through encode" $ do
+      let envelope = sampleIntegrationEnvelope
+          encoded = encodeJsonIntegrationEvent envelope (OrderSubmittedPayload "order-123" 5)
+      encoded ^. #messageId `shouldBe` envelope ^. #messageId
+      encoded ^. #source `shouldBe` "ordering"
+      encoded ^. #destination `shouldBe` "billing.orders.v1"
+      encoded ^. #key `shouldBe` Just "order-123"
+      encoded ^. #eventType `shouldBe` "OrderSubmitted"
+      encoded ^. #schemaVersion `shouldBe` 1
+      encoded ^. #contentType `shouldBe` ApplicationJson
+
+    it "emits the canonical wire headers" $ do
+      let envelope = sampleIntegrationEnvelope
+          headers = integrationHeaders envelope
+      Prelude.lookup headerMessageId headers `shouldBe` Just (envelope ^. #messageId)
+      Prelude.lookup headerSchemaVersion headers `shouldBe` Just "1"
+      Prelude.lookup headerContentType headers `shouldBe` Just "application/json"
+      Prelude.lookup headerSchemaSubject headers `shouldBe` Just "billing.orders.v1.OrderSubmitted"
+      Prelude.lookup headerSourceEventId headers `shouldBe` Just "018f0f18-17aa-7000-8000-000000000003"
+      Prelude.lookup headerSourceGlobalPosition headers `shouldBe` Just "42"
+      Prelude.lookup headerTraceParent headers
+        `shouldBe` Just "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+
+    it "preserves a different content type without claiming JSON" $ do
+      let envelope = sampleIntegrationEnvelope
+            & #contentType .~ OtherContentType "application/vnd.apache.avro.binary"
+            & #payloadBytes .~ "\x00\x01\x02"
+          headers = integrationHeaders envelope
+      Prelude.lookup headerContentType headers
+        `shouldBe` Just "application/vnd.apache.avro.binary"
+      decodeJsonIntegrationEvent envelope
+        `shouldBe` (Left (IntegrationEvent.UnsupportedContentType "application/vnd.apache.avro.binary")
+                     :: Either IntegrationEvent.IntegrationEventError OrderSubmittedPayload)
+
+    it "reports malformed JSON payloads as decode errors instead of throwing" $ do
+      let envelope = sampleIntegrationEnvelope
+            & #payloadBytes .~ "{not-json"
+      case decodeJsonIntegrationEvent envelope :: Either IntegrationEvent.IntegrationEventError OrderSubmittedPayload of
+        Left (IntegrationEvent.MalformedPayload _) -> pure ()
+        other -> expectationFailure ("expected MalformedPayload, got " <> show other)
+
+    it "reports a JSON value that does not satisfy the target type as DecodeFailed" $ do
+      let envelope = sampleIntegrationEnvelope
+            & #payloadBytes .~ "{\"orderId\":\"order-123\"}"
+      case decodeJsonIntegrationEvent envelope :: Either IntegrationEvent.IntegrationEventError OrderSubmittedPayload of
+        Left (IntegrationEvent.DecodeFailed _) -> pure ()
+        other -> expectationFailure ("expected DecodeFailed, got " <> show other)
+
+    it "parses content-type headers back to the canonical type" $ do
+      parseContentType "application/json" `shouldBe` ApplicationJson
+      parseContentType "Application/JSON" `shouldBe` ApplicationJson
+      parseContentType "application/vnd.apache.avro.binary"
+        `shouldBe` OtherContentType "application/vnd.apache.avro.binary"
+
+    it "preserves the payload bytes through integrationPayload" $ do
+      let envelope = sampleIntegrationEnvelope
+          encoded = encodeJsonIntegrationEvent envelope (OrderSubmittedPayload "order-123" 5)
+      integrationPayload encoded `shouldBe` (encoded ^. #payloadBytes)
+
+data OrderSubmittedPayload = OrderSubmittedPayload
+  { orderId :: !Text
+  , quantity :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+instance ToJSON OrderSubmittedPayload where
+  toJSON = genericToJSON (aesonPrefix camelCase)
+  toEncoding = genericToEncoding (aesonPrefix camelCase)
+
+instance FromJSON OrderSubmittedPayload where
+  parseJSON = genericParseJSON (aesonPrefix camelCase)
+
+sampleIntegrationEnvelope :: IntegrationEvent
+sampleIntegrationEnvelope =
+  IntegrationEvent
+    { messageId = "018f0f18-17aa-7000-8000-0000000000aa"
+    , source = "ordering"
+    , destination = "billing.orders.v1"
+    , key = Just "order-123"
+    , eventType = "OrderSubmitted"
+    , schemaVersion = 1
+    , contentType = ApplicationJson
+    , schemaReference = Just SchemaReference
+        { registry = Just "https://schemas.example/registry"
+        , subject = Just "billing.orders.v1.OrderSubmitted"
+        , version = Just 1
+        , schemaId = Just 42
+        , fingerprint = Just "sha256:abc123"
+        }
+    , sourceEventId = Just (EventId integrationSourceEventUuid)
+    , sourceGlobalPosition = Just (GlobalPosition 42)
+    , payloadBytes = "{\"orderId\":\"order-123\",\"quantity\":5}"
+    , occurredAt = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
+    , causationId = Just (EventId integrationCausationUuid)
+    , correlationId = Just (EventId integrationCorrelationUuid)
+    , traceContext = Just TraceContext
+        { traceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+        , tracestate = Just "rojo=00f067aa0ba902b7"
+        }
+    , attributes = Nothing
+    }
+
+integrationSourceEventUuid :: UUID
+integrationSourceEventUuid =
+  case fromString "018f0f18-17aa-7000-8000-000000000003" of
+    Just uuid -> uuid
+    Nothing -> error "invalid integration source event UUID"
+
+integrationCausationUuid :: UUID
+integrationCausationUuid =
+  case fromString "018f0f18-17aa-7000-8000-000000000004" of
+    Just uuid -> uuid
+    Nothing -> error "invalid integration causation UUID"
+
+integrationCorrelationUuid :: UUID
+integrationCorrelationUuid =
+  case fromString "018f0f18-17aa-7000-8000-000000000005" of
+    Just uuid -> uuid
+    Nothing -> error "invalid integration correlation UUID"
 
 data OrderStream
 
