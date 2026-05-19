@@ -46,7 +46,7 @@ Alternatives considered:
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 19 | Define the integration event contract | docs/plans/19-define-the-integration-event-contract.md | None | EP-12, EP-14, EP-16 | Complete |
-| 20 | Implement the durable outbox | docs/plans/20-implement-the-durable-outbox.md | EP-19 | EP-12, EP-16 | Not Started |
+| 20 | Implement the durable outbox | docs/plans/20-implement-the-durable-outbox.md | EP-19 | EP-12, EP-16 | Complete |
 | 21 | Implement the idempotent inbox | docs/plans/21-implement-the-idempotent-inbox.md | EP-19 | EP-14, EP-16 | Not Started |
 | 22 | Validate Kafka bounded context integration | docs/plans/22-validate-kafka-bounded-context-integration.md | EP-19, EP-20, EP-21 | EP-16 | Not Started |
 
@@ -86,8 +86,8 @@ EP-16 is a soft dependency for every schema-touching child plan because it creat
 
 - [x] EP-19: define `Keiro.Integration.Event` and pure envelope encode/decode tests. (2026-05-18)
 - [x] EP-19: document identity, topic, key, causation, correlation, schema-version, and trace-header conventions. (2026-05-18)
-- [ ] EP-20: add `keiro_outbox` schema, codd migration, and storage API tests.
-- [ ] EP-20: add outbox claim/publish/mark-result worker functions and Kafka producer conversion tests.
+- [x] EP-20: add `keiro_outbox` schema, codd migration, and storage API tests. (2026-05-18)
+- [x] EP-20: add outbox claim/publish/mark-result worker functions and Kafka producer conversion tests. (2026-05-18)
 - [ ] EP-21: add `keiro_inbox` schema, codd migration, and deduplication API tests.
 - [ ] EP-21: add Kafka consumer handling that records inbox receipt and dispatches exactly once per message id.
 - [ ] EP-22: build the two-bounded-context Kafka validation scenario.
@@ -98,6 +98,8 @@ EP-16 is a soft dependency for every schema-touching child plan because it creat
 
 - 2026-05-17: `mori show --full` reports this repository as `shinzui/keiro`, a Haskell framework depending on `shinzui/kiroku`, `shinzui/keiki`, `shinzui/shibuya`, `hasql/hasql`, and `effectful/effectful`. Kafka-specific dependencies are registered separately as `shinzui/kafka-effectful` and `shinzui/shibuya-kafka-adapter`, so this MasterPlan must explicitly add them where used.
 - 2026-05-17: `mori registry show shinzui/shibuya-kafka-adapter --full` reports a Kafka adapter with polling, offset commit semantics, partition awareness, and graceful shutdown. Its source converts Kafka records to Shibuya `Envelope` values whose `messageId` is derived from topic, partition, and offset. EP-21 can use that id directly for Kafka delivery deduplication unless EP-19 chooses an application-level message id header as a stronger cross-topic identity.
+- 2026-05-18: `mmzk-typeid` (already wired into `cabal.project` as a local package) re-exports a `Data.UUID.V7` generator and a TypeID layer on top of it. EP-20 uses both: UUIDv7 for `outboxId` and TypeID (prefix `"msg"` by default) for the public `messageId`. This avoids a separate UUIDv7 dependency.
+- 2026-05-18: Adding `hw-kafka-client` / `kafka-effectful` to the keiro library pulls in librdkafka as a system dep, which is not in the current `flake.nix`. EP-20 keeps the library free of that dependency by defining its own neutral `KafkaProducerRecord` in `Keiro.Outbox.Kafka`. EP-22 bridges to `Kafka.Producer.Types.ProducerRecord` inside its own dependency scope.
 - 2026-05-17: `mori registry show shinzui/kafka-effectful --full` reports producer support including synchronous publish and transactions. This MasterPlan does not rely on Kafka transactions for Postgres atomicity; the durable outbox is still required because Postgres and Kafka do not share a transaction manager.
 - 2026-05-17: `/Users/shinzui/Keikaku/business-application-applications/docs/ebook-principles/service-architecture-blueprint.md` §9 and `/Users/shinzui/Keikaku/business-application-applications/docs/ebook-principles/00-ideal-platform-architecture.md` specify the cross-bounded-context Kafka design more sharply than the initial draft of this MasterPlan: a producer subscription maps private domain events to stable public integration events after the local event is durable. Kafka integration events must not mirror private domain event ADTs mechanically, must include source event identity or source global position, and must be versioned independently from private events.
 - 2026-05-17: `docs/why-keiro.md` §5.4 and `docs/research/08-subscription-and-process-manager-design.md` §6-§7 still define the first-class `keiro_outbox`/`keiro_inbox` table pair. The updated decomposition therefore keeps table-backed outbox/inbox primitives while making the Kafka producer-subscription pattern the canonical cross-bounded-context validation path.

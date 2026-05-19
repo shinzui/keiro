@@ -9,7 +9,7 @@ import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Contravariant.Extras (contrazip2, contrazip4)
-import Data.IORef (atomicModifyIORef', newIORef)
+import Data.IORef (atomicModifyIORef', newIORef, readIORef, writeIORef)
 import Data.Text qualified as Text
 import Data.Vector qualified as Vector
 import Data.UUID (UUID, fromString)
@@ -59,6 +59,27 @@ import Keiro.Integration.Event
   , parseContentType
   )
 import Keiro.Integration.Event qualified as IntegrationEvent
+import Keiro.Outbox
+  ( IntegrationEventDraft (..)
+  , IntegrationProducer (..)
+  , OutboxStatus (..)
+  , PublishOutcome (..)
+  , OrderingPolicy (..)
+  , BackoffSchedule (..)
+  , OutboxId (..)
+  , OutboxRow (..)
+  , claimOutboxBatch
+  , defaultPublishOptions
+  , draftToEvent
+  , enqueueIntegrationEventTx
+  , freshOutboxId
+  , initializeOutboxSchema
+  , lookupOutbox
+  , markOutboxSent
+  , mintIntegrationEvent
+  , publishClaimedOutbox
+  )
+import Keiro.Outbox.Kafka qualified as OutboxKafka
 import Keiro.Prelude
 import Keiro.Projection
 import Keiro.ProcessManager
@@ -638,6 +659,221 @@ main = hspec $ do
         Store.readStreamForward (StreamName "timer-target") (StreamVersion 0) 10
       fmap (^. #eventId) (Vector.toList targetEvents) `shouldBe` [firedEventId]
 
+  describe "Keiro.Outbox.Kafka" $ do
+    it "converts an outbox row to a Kafka producer record" $ do
+      let envelope = sampleIntegrationEnvelope
+          row = sampleOutboxRow envelope
+          record = OutboxKafka.outboxRowToKafkaRecord row
+      record ^. #topic `shouldBe` envelope ^. #destination
+      record ^. #key `shouldBe` Just "order-123"
+      record ^. #payload `shouldBe` envelope ^. #payloadBytes
+      -- Headers include identity fields and content type.
+      let headers = record ^. #headers
+          messageIdHeader = Prelude.lookup "keiro-message-id" headers
+      messageIdHeader `shouldBe` Just "018f0f18-17aa-7000-8000-0000000000aa"
+
+    it "drops the partition key when the envelope has no key" $ do
+      let envelope = sampleIntegrationEnvelope & #key .~ Nothing
+          record = OutboxKafka.integrationEventToKafkaRecord envelope
+      record ^. #key `shouldBe` Nothing
+
+  describe "Keiro.Outbox" $ around withTestStore $ do
+    it "enqueues and looks up an outbox row" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
+      let envelope = sampleIntegrationEnvelope
+          oid = OutboxId outboxUuid1
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx oid envelope)
+      lookedUp <- Store.runStoreIO storeHandle (lookupOutbox oid)
+      case lookedUp of
+        Right (Just row) -> do
+          row ^. #outboxId `shouldBe` oid
+          row ^. #status `shouldBe` OutboxPending
+          row ^. #attemptCount `shouldBe` 0
+          row ^. #event . #messageId `shouldBe` envelope ^. #messageId
+          row ^. #event . #destination `shouldBe` envelope ^. #destination
+          row ^. #event . #payloadBytes `shouldBe` envelope ^. #payloadBytes
+        other -> expectationFailure ("expected enqueued row, got " <> show other)
+
+    it "claims a pending row, transitions it to publishing, and increments attempt count" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
+      let oid = OutboxId outboxUuid1
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
+      now <- getCurrentTime
+      Right rows <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
+      case rows of
+        [row] -> do
+          row ^. #outboxId `shouldBe` oid
+          row ^. #status `shouldBe` OutboxPublishing
+          row ^. #attemptCount `shouldBe` 1
+        other -> expectationFailure ("expected one claimed row, got " <> show other)
+
+    it "marks a claimed row as sent with published_at set" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
+      let oid = OutboxId outboxUuid1
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
+      now <- getCurrentTime
+      Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
+      Right () <- Store.runStoreIO storeHandle (markOutboxSent oid now)
+      Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+      row ^. #status `shouldBe` OutboxSent
+      row ^. #publishedAt `shouldSatisfy` isJust
+      row ^. #lastError `shouldBe` Nothing
+
+    it "publishClaimedOutbox marks success and records failures with last_error" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
+      let okId = OutboxId outboxUuid1
+          failId = OutboxId outboxUuid2
+          okEvent = sampleIntegrationEnvelope
+          failEvent = sampleIntegrationEnvelope
+            & #messageId .~ "msg-fail-1"
+            & #key .~ Just "order-789"
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx okId okEvent)
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx failId failEvent)
+      let publish row
+            | row ^. #outboxId == okId = pure PublishSucceeded
+            | otherwise = pure (PublishFailed "broker unreachable")
+      Right summary <-
+        Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions)
+      summary ^. #claimed `shouldBe` 2
+      summary ^. #published `shouldBe` 1
+      summary ^. #retried `shouldBe` 1
+      summary ^. #dead `shouldBe` 0
+      Right (Just okRow) <- Store.runStoreIO storeHandle (lookupOutbox okId)
+      okRow ^. #status `shouldBe` OutboxSent
+      Right (Just failRow) <- Store.runStoreIO storeHandle (lookupOutbox failId)
+      failRow ^. #status `shouldBe` OutboxFailed
+      failRow ^. #lastError `shouldBe` Just "broker unreachable"
+
+    it "auto-dead-letters a row after maxAttempts consecutive failures" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
+      let oid = OutboxId outboxUuid1
+          event = sampleIntegrationEnvelope & #key .~ Nothing
+          opts =
+            defaultPublishOptions
+              & #batchSize .~ 10
+              & #maxAttempts .~ 3
+              & #backoff .~ ConstantBackoff 0
+              & #orderingPolicy .~ BestEffort
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx oid event)
+      let publish _ = pure (PublishFailed "broker exploded")
+      -- First two failures retain Failed status.
+      Right s1 <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts)
+      s1 ^. #retried `shouldBe` 1
+      s1 ^. #dead `shouldBe` 0
+      Right s2 <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts)
+      s2 ^. #retried `shouldBe` 1
+      s2 ^. #dead `shouldBe` 0
+      -- Third failure crosses the threshold.
+      Right s3 <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts)
+      s3 ^. #dead `shouldBe` 1
+      Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+      row ^. #status `shouldBe` OutboxDead
+      -- A dead row is not claimable.
+      now <- getCurrentTime
+      Right reclaimed <- Store.runStoreIO storeHandle (claimOutboxBatch BestEffort 10 now)
+      reclaimed `shouldBe` []
+
+    it "enforces per-key head-of-line blocking and unblocks once the predecessor reaches a terminal state" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
+      let a1Id = OutboxId outboxUuid1
+          a2Id = OutboxId outboxUuid2
+          b1Id = OutboxId outboxUuid3
+          a1 = sampleIntegrationEnvelope & #messageId .~ "a1" & #key .~ Just "k1"
+          a2 = sampleIntegrationEnvelope & #messageId .~ "a2" & #key .~ Just "k1"
+          b1 = sampleIntegrationEnvelope & #messageId .~ "b1" & #key .~ Just "k2"
+      -- Insert in created_at order (a1 first, then a2, then b1).
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx a1Id a1)
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx a2Id a2)
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx b1Id b1)
+      claimed <- newIORef []
+      let publish row = do
+            liftIO (atomicModifyIORef' claimed (\xs -> ((row ^. #outboxId) : xs, ())))
+            if row ^. #outboxId == a1Id
+              then pure (PublishFailed "broker hiccup")
+              else pure PublishSucceeded
+      -- First pass: a1 fails, b1 publishes, a2 is blocked behind a1.
+      let firstPassOpts =
+            defaultPublishOptions
+              & #batchSize .~ 10
+              & #backoff .~ ConstantBackoff 0
+      Right summary1 <-
+        Store.runStoreIO storeHandle (publishClaimedOutbox publish firstPassOpts)
+      summary1 ^. #claimed `shouldBe` 2
+      claimedIds <- readIORef claimed
+      claimedIds `shouldSatisfy` (a2Id `notElem`)
+      claimedIds `shouldSatisfy` (a1Id `elem`)
+      claimedIds `shouldSatisfy` (b1Id `elem`)
+      Right (Just a1Row) <- Store.runStoreIO storeHandle (lookupOutbox a1Id)
+      a1Row ^. #status `shouldBe` OutboxFailed
+      Right (Just b1Row) <- Store.runStoreIO storeHandle (lookupOutbox b1Id)
+      b1Row ^. #status `shouldBe` OutboxSent
+      Right (Just a2Row) <- Store.runStoreIO storeHandle (lookupOutbox a2Id)
+      a2Row ^. #status `shouldBe` OutboxPending
+      -- Drive a1 to terminal sent state so a2 can move. One pass claims a1
+      -- (now that next_attempt_at has passed). A second pass claims a2,
+      -- which becomes head-of-line once a1 reaches `sent`.
+      writeIORef claimed []
+      let publishOk row = do
+            liftIO (atomicModifyIORef' claimed (\xs -> ((row ^. #outboxId) : xs, ())))
+            pure PublishSucceeded
+          retryOpts =
+            defaultPublishOptions
+              & #batchSize .~ 10
+              & #backoff .~ ConstantBackoff 0
+      Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publishOk retryOpts)
+      Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publishOk retryOpts)
+      claimedIds2 <- readIORef claimed
+      claimedIds2 `shouldSatisfy` (a1Id `elem`)
+      claimedIds2 `shouldSatisfy` (a2Id `elem`)
+      Right (Just a2Row') <- Store.runStoreIO storeHandle (lookupOutbox a2Id)
+      a2Row' ^. #status `shouldBe` OutboxSent
+
+    it "allows null-keyed rows to publish independently" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
+      let n1 = OutboxId outboxUuid1
+          n2 = OutboxId outboxUuid2
+          e = sampleIntegrationEnvelope & #key .~ Nothing
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx n1 (e & #messageId .~ "n1"))
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx n2 (e & #messageId .~ "n2"))
+      let publish row
+            | row ^. #outboxId == n1 = pure (PublishFailed "transient")
+            | otherwise = pure PublishSucceeded
+      Right summary <- Store.runStoreIO storeHandle $
+        publishClaimedOutbox publish (defaultPublishOptions & #backoff .~ ConstantBackoff 0)
+      summary ^. #claimed `shouldBe` 2
+      summary ^. #published `shouldBe` 1
+      summary ^. #retried `shouldBe` 1
+
+    it "mints message ids with the configured TypeID prefix" $ \storeHandle -> do
+      Right minted <-
+        Store.runStoreIO storeHandle (mintIntegrationEvent sampleProducer sampleDraft)
+      minted ^. #source `shouldBe` "ordering"
+      minted ^. #destination `shouldBe` "billing.orders.v1"
+      Text.isPrefixOf "msg_" (minted ^. #messageId) `shouldBe` True
+
+    it "draftToEvent stamps source and messageId without minting" $ \_storeHandle -> do
+      let event = draftToEvent "ordering" "msg-fixed-1" sampleDraft
+      event ^. #messageId `shouldBe` "msg-fixed-1"
+      event ^. #source `shouldBe` "ordering"
+      event ^. #destination `shouldBe` "billing.orders.v1"
+
+    it "freshOutboxId returns distinct UUIDv7 ids" $ \storeHandle -> do
+      Right ids <-
+        Store.runStoreIO storeHandle (traverse (\_ -> freshOutboxId) [1 .. 4 :: Int])
+      length ids `shouldBe` 4
+      length (uniqueIds ids) `shouldBe` 4
+
   describe "Keiro.Integration.Event" $ do
     it "round-trips a JSON envelope through encode and decode" $ do
       let envelope = sampleIntegrationEnvelope
@@ -703,6 +939,59 @@ main = hspec $ do
       let envelope = sampleIntegrationEnvelope
           encoded = encodeJsonIntegrationEvent envelope (OrderSubmittedPayload "order-123" 5)
       integrationPayload encoded `shouldBe` (encoded ^. #payloadBytes)
+
+sampleProducer :: IntegrationProducer ()
+sampleProducer = IntegrationProducer
+  { name = "ordering-integration-producer"
+  , source = "ordering"
+  , messageIdPrefix = "msg"
+  , mapEvent = \_recorded () -> Just sampleDraft
+  }
+
+sampleDraft :: IntegrationEventDraft
+sampleDraft = IntegrationEventDraft
+  { destination = "billing.orders.v1"
+  , key = Just "order-123"
+  , eventType = "OrderSubmitted"
+  , schemaVersion = 1
+  , contentType = ApplicationJson
+  , schemaReference = Nothing
+  , sourceEventId = Nothing
+  , sourceGlobalPosition = Nothing
+  , payloadBytes = "{\"orderId\":\"order-123\",\"quantity\":5}"
+  , occurredAt = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
+  , causationId = Nothing
+  , correlationId = Nothing
+  , traceContext = Nothing
+  , attributes = Nothing
+  }
+
+sampleOutboxRow :: IntegrationEvent -> OutboxRow
+sampleOutboxRow event = OutboxRow
+  { outboxId = OutboxId outboxUuid1
+  , event
+  , status = OutboxPending
+  , attemptCount = 0
+  , nextAttemptAt = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
+  , lastError = Nothing
+  , publishedAt = Nothing
+  , createdAt = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
+  , updatedAt = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
+  }
+
+outboxUuid1, outboxUuid2, outboxUuid3 :: UUID
+outboxUuid1 = case fromString "018f0f18-0000-7000-8000-000000000a01" of
+  Just uuid -> uuid
+  Nothing -> error "invalid outbox uuid 1"
+outboxUuid2 = case fromString "018f0f18-0000-7000-8000-000000000a02" of
+  Just uuid -> uuid
+  Nothing -> error "invalid outbox uuid 2"
+outboxUuid3 = case fromString "018f0f18-0000-7000-8000-000000000a03" of
+  Just uuid -> uuid
+  Nothing -> error "invalid outbox uuid 3"
+
+uniqueIds :: Eq a => [a] -> [a]
+uniqueIds = foldr (\x xs -> if x `elem` xs then xs else x : xs) []
 
 data OrderSubmittedPayload = OrderSubmittedPayload
   { orderId :: !Text

@@ -34,6 +34,10 @@ library
                         Keiro.Codec
                         Keiro.EventStream
                         Keiro.Integration.Event
+                        Keiro.Outbox
+                        Keiro.Outbox.Kafka
+                        Keiro.Outbox.Schema
+                        Keiro.Outbox.Types
                         Keiro.Prelude
                         Keiro.ProcessManager
                         Keiro.Projection
@@ -64,6 +68,7 @@ library
                         keiki-codec-json >= 0.1,
                         kiroku-store >= 0.1,
                         lens >= 5.2,
+                        mmzk-typeid >= 0.7,
                         scientific >= 0.3,
                         shibuya-core >= 0.5,
                         streamly >= 0.11,

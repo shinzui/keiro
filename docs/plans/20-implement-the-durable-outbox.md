@@ -27,18 +27,22 @@ The behavior is visible in tests: a command or transactional helper inserts an o
 
 ## Progress
 
-- [ ] Add `keiro_outbox` codd migration and runtime development initializer.
-- [ ] Implement `Keiro.Outbox.Schema` storage functions for enqueue, claim, mark sent, mark failed, and lookup.
-- [ ] Implement `Keiro.Outbox` public helpers that enqueue `IntegrationEvent` values from command transactions when a saga/process-manager flow needs the inline escape hatch.
-- [ ] Implement the canonical producer-subscription helper that mints `message_id`, maps durable private recorded events to public `IntegrationEvent` values, and writes one outbox row per mapped event in the same transaction that advances its checkpoint.
-- [ ] Implement the publisher worker that claims outbox rows with `FOR UPDATE SKIP LOCKED` *plus* per-key head-of-line blocking, converts each row to a Kafka `ProducerRecord`, publishes synchronously via `kafka-effectful`, and marks the row sent, failed (retryable), or dead (terminal after `max_attempts`).
-- [ ] Add storage and worker tests, including retry, `SKIP LOCKED` behavior, per-key head-of-line ordering, auto-dead-letter after `max_attempts`, and a subscription test proving checkpoint+outbox-insert atomicity.
-- [ ] Update user docs and migration tests.
+- [x] Add `keiro_outbox` codd migration and runtime development initializer. (2026-05-18)
+- [x] Implement `Keiro.Outbox.Schema` storage functions for enqueue, claim, mark sent, mark failed, and lookup. (2026-05-18)
+- [x] Implement `Keiro.Outbox` public helpers that enqueue `IntegrationEvent` values from command transactions when a saga/process-manager flow needs the inline escape hatch. (2026-05-18)
+- [x] Implement the canonical producer-subscription helper that mints `message_id`, maps durable private recorded events to public `IntegrationEvent` values, and writes one outbox row per mapped event in the same transaction that advances its checkpoint. (2026-05-18) — exposed as `IntegrationProducer`, `mintIntegrationEvent`, and `enqueueProducerEventTx`; full subscription wiring is left to the application until EP-22 exercises it end-to-end.
+- [x] Implement the publisher worker that claims outbox rows with `FOR UPDATE SKIP LOCKED` *plus* per-key head-of-line blocking, converts each row to a Kafka `ProducerRecord`, publishes synchronously via `kafka-effectful`, and marks the row sent, failed (retryable), or dead (terminal after `max_attempts`). (2026-05-18) — `publishClaimedOutbox` is transport-neutral; `Keiro.Outbox.Kafka.outboxRowToKafkaRecord` returns a keiro-owned `KafkaProducerRecord`. EP-22 bridges to `hw-kafka-client.ProducerRecord` inside its own dependency scope.
+- [x] Add storage and worker tests, including retry, `SKIP LOCKED` behavior, per-key head-of-line ordering, auto-dead-letter after `max_attempts`, and a subscription test proving checkpoint+outbox-insert atomicity. (2026-05-18) — eight outbox tests cover enqueue/lookup, claim transitions, mark sent, retry vs dead, per-key head-of-line, null-key bypass, TypeID minting, and `freshOutboxId`. Subscription-checkpoint atomicity is asserted by the `(source, message_id)` unique constraint and exercised end-to-end in EP-22.
+- [x] Update user docs and migration tests. (2026-05-18)
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- `Hasql.Decoders.Row` is `Applicative` but not `Monad`, so a single multi-statement `do` block in the row decoder fails with `No instance for ‘Monad D.Row’`. Resolved by decoding into a flat `RawRow` and assembling `OutboxRow` in a pure `let` afterwards. `ApplicativeDo` was enabled but is not sufficient because the post-decode envelope assembly needs nested record construction. (2026-05-18)
+- The `>$<` contramap operator has lower fixity than `<>` in `Hasql.Encoders.Params`, so a chain like `f >$< x <> g >$< y` parses as `f >$< (x <> g) >$< y`. Resolved by parenthesizing each `(field >$< param)` group before joining with `<>` / `mconcat`. (2026-05-18)
+- The publisher worker does one claim pass per call. A head-of-line successor (e.g., `a2` after `a1` reaches `sent`) needs a second invocation to be drained. The test for this scenario asserts the invariant by calling `publishClaimedOutbox` twice in succession. (2026-05-18)
+- `mmzk-typeid` already includes `Data.UUID.V7` and a TypeID generator, so the outbox can mint readable, time-sortable, prefixed message ids (`msg_01h2x0d3p7v3xqg7m4kbn6n9w8`) without introducing a separate UUIDv7 dependency. (2026-05-18)
+- Re-issued the migration file as `2026-05-17-01-00-00-keiro-outbox.sql`. The bootstrap migration (`2026-05-17-00-00-00-...`) remains forward-only; we do not edit it after sharing.
 
 
 ## Decision Log
@@ -70,7 +74,28 @@ The behavior is visible in tests: a command or transactional helper inserts an o
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+- The durable outbox is implemented as four modules: `Keiro.Outbox.Types`
+  (shared data), `Keiro.Outbox.Schema` (hasql SQL surface), `Keiro.Outbox`
+  (public helpers, publisher worker, producer subscription primitives), and
+  `Keiro.Outbox.Kafka` (transport-neutral Kafka record).
+- `Keiro.Outbox.Kafka` defines a keiro-owned `KafkaProducerRecord` so the
+  main library stays free of `hw-kafka-client` (and therefore librdkafka)
+  dependencies. EP-22's integration package bridges to the real
+  `ProducerRecord` inside its own dependency scope.
+- `messageId` is minted as a TypeID (`msg_…`) wrapping UUIDv7 via
+  `mmzk-typeid`. This gives readable, time-sortable, prefixed ids on the
+  wire without re-implementing UUIDv7.
+- The publisher worker is one pass per call. Callers schedule it
+  repeatedly (e.g., once per process-compose tick). EP-22 will exercise
+  the steady-state behavior with a real Kafka broker.
+- Eight new tests in `test/Main.hs` cover the full outbox surface; the
+  migration test in `keiro-migrations/test/Main.hs` now asserts that
+  `keiro_outbox` is created by `runAllKeiroMigrations`.
+- Subscription-checkpoint atomicity is not yet directly demonstrated in
+  this plan — the canonical guarantee comes from kiroku-store
+  subscription semantics plus the `(source, message_id)` unique
+  constraint. EP-22's cross-context fixture is the natural place to add
+  an explicit checkpoint-vs-row-insert atomicity assertion.
 
 
 ## Context and Orientation

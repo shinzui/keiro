@@ -26,6 +26,9 @@ pieces those modules import.
   coordination, deterministic command ids, and timer workers.
 - [Integration Events](integration-events.md): the public envelope used to
   publish across bounded contexts over Kafka.
+- [Durable Outbox](outbox.md): how outgoing integration events become
+  durable rows, ordering and dead-letter policies, and the
+  publish-pipeline contract.
 - [Database Migrations](migrations.md): running `keiro-migrate`, disabling
   runtime schema initialization, and owning application table migrations.
 - [Operations](operations.md): database requirements, schema initialization,
