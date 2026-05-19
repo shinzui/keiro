@@ -1,33 +1,100 @@
 set shell := ["zsh", "-cu"]
 
 site := "site-dist"
+pg_host := env_var_or_default("PGHOST", "db")
+pg_data := env_var_or_default("PGDATA", "db/db")
+pg_log := env_var_or_default("PGLOG", "db/postgres.log")
+pg_user := env_var_or_default("PGUSER", `whoami`)
+pg_database := env_var_or_default("PGDATABASE", "keiro")
+jitsurei_database := env_var_or_default("JITSUREI_DATABASE", "jitsurei")
 
+[group('meta')]
 default:
     just --list
 
+[group('meta')]
+verify: process-compose-check jitsurei haskell-verify
+    cabal test keiro-migrations-test
+
+[group('website')]
 install:
     pnpm install --frozen-lockfile
 
+[group('website')]
 website-build:
     BUNDLE_PRAGMATA_PRO=1 pnpm run build
 
+[group('website')]
 website-dev:
     BUNDLE_PRAGMATA_PRO=1 pnpm run dev
 
+[group('website')]
 website-preview:
     BUNDLE_PRAGMATA_PRO=1 pnpm run preview
 
+[group('website')]
 website-linkcheck:
     node site/check-links.mjs {{site}}
 
+[group('website')]
 website-verify: install website-build website-linkcheck
 
+[group('haskell')]
 haskell-build:
     cabal build all
 
+[group('haskell')]
 haskell-test:
     cabal test keiro-test
     cabal test jitsurei-test
     cabal run jitsurei:exe:jitsurei-diagrams -- --check
 
+[group('haskell')]
 haskell-verify: haskell-build haskell-test website-verify
+
+[group('benchmark')]
+compare-message-db-kiroku iterations="1000" samples="3" workers="8" isolate="1":
+    COMPARE_ITERATIONS="{{iterations}}" COMPARE_SAMPLES="{{samples}}" COMPARE_WORKERS="{{workers}}" COMPARE_ISOLATE="{{isolate}}" cabal run message-db-vs-kiroku:exe:message-db-vs-kiroku
+
+[group('database')]
+postgres-init:
+    mkdir -p "{{pg_host}}" .dev
+    if [ ! -d "{{pg_data}}" ]; then PGDATA="{{pg_data}}" initdb --auth=trust --no-locale --encoding=UTF8; fi
+
+[group('database')]
+postgres-start: postgres-init
+    pg_ctl status -D "{{pg_data}}" >/dev/null || pg_ctl start -w -D "{{pg_data}}" -l "{{pg_log}}" -o "--unix_socket_directories='{{pg_host}}'" -o "-c listen_addresses=''"
+
+[group('database')]
+postgres-stop:
+    pg_ctl stop -D "{{pg_data}}"
+
+[group('database')]
+process-compose:
+    PGHOST="{{pg_host}}" PGDATA="{{pg_data}}" PGLOG="{{pg_log}}" PGUSER="{{pg_user}}" PGDATABASE="{{pg_database}}" JITSUREI_DATABASE="{{jitsurei_database}}" process-compose up -f process-compose.yaml
+
+[group('database')]
+process-compose-check:
+    PGHOST="{{pg_host}}" PGDATA="{{pg_data}}" PGLOG="{{pg_log}}" PGUSER="{{pg_user}}" PGDATABASE="{{pg_database}}" JITSUREI_DATABASE="{{jitsurei_database}}" process-compose -f process-compose.yaml --dry-run
+
+[group('database')]
+create-database db=pg_database:
+    PGHOST="{{pg_host}}" createdb "{{db}}" 2>/dev/null || PGHOST="{{pg_host}}" psql -d "{{db}}" -Atqc 'SELECT 1' >/dev/null
+
+[group('database')]
+db-create db=pg_database: postgres-start
+    just create-database "{{db}}"
+
+[group('jitsurei')]
+jitsurei-db-create:
+    just db-create "{{jitsurei_database}}"
+
+[group('jitsurei')]
+jitsurei-migrate: jitsurei-db-create
+    mkdir -p .dev/codd-expected-schema
+    KEIRO_MIGRATE_NO_CHECK=1 CODD_CONNECTION="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" CODD_MIGRATION_DIRS=unused-for-embedded-migrations CODD_EXPECTED_SCHEMA_DIR=.dev/codd-expected-schema CODD_SCHEMAS=public cabal run keiro-migrate
+    PGHOST="{{pg_host}}" psql -d "{{jitsurei_database}}" -v ON_ERROR_STOP=1 -c 'CREATE TABLE IF NOT EXISTS jitsurei_order_summary (order_id TEXT PRIMARY KEY, sku TEXT NOT NULL, quantity BIGINT NOT NULL, status TEXT NOT NULL, last_seen BIGINT NOT NULL)'
+
+[group('jitsurei')]
+jitsurei: jitsurei-migrate
+    PGHOST="{{pg_host}}" PGDATABASE="{{jitsurei_database}}" PG_CONNECTION_STRING="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" cabal run jitsurei-demo

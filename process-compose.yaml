@@ -15,6 +15,20 @@ processes:
     depends_on:
       postgres:
         condition: process_healthy
+  create_jitsurei_database:
+    command: "just create-database jitsurei"
+    availability:
+      restart: "no"
+    depends_on:
+      postgres:
+        condition: process_healthy
+  run_jitsurei_e2e:
+    command: "just jitsurei"
+    availability:
+      restart: "no"
+    depends_on:
+      postgres:
+        condition: process_healthy
 
   postgres:
     command: pg_ctl start -w -l $PGLOG -o "--unix_socket_directories='$PGHOST'" -o "-c listen_addresses=''"

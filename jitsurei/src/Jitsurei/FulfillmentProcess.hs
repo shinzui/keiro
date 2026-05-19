@@ -7,6 +7,7 @@ module Jitsurei.FulfillmentProcess
   , FulfillmentEventStream
   , FulfillmentProcessManager
   , fulfillmentTransducer
+  , fulfillmentCodec
   , fulfillmentEventStream
   , fulfillmentProcessManager
   , fulfillmentStream
