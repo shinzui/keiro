@@ -102,6 +102,7 @@ import Keiro.ProcessManager
 import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Keiro.Stream qualified as Stream
+import Keiro.Telemetry qualified as Telemetry
 import Keiro.Timer
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types
@@ -116,6 +117,7 @@ import Kiroku.Store.Types
   , StreamName (..)
   , StreamVersion (..)
   )
+import OpenTelemetry.Attributes.Key (AttributeKey, unkey)
 import Test.Hspec
 
 main :: IO ()
@@ -1239,8 +1241,63 @@ main = hspec $ do
           encoded = encodeJsonIntegrationEvent envelope (OrderSubmittedPayload "order-123" 5)
       integrationPayload encoded `shouldBe` (encoded ^. #payloadBytes)
 
+  describe "Keiro.Telemetry" $ do
+    it "is a pass-through under a noop (Nothing) tracer" $ do
+      counter <- newIORef (0 :: Int)
+      let envelope = sampleIntegrationEnvelope
+          record = OutboxKafka.integrationEventToKafkaRecord envelope
+      result <-
+        Telemetry.withProducerSpan Nothing envelope record $ \mSpan -> do
+          atomicModifyIORef' counter (\n -> (n + 1, ()))
+          pure (mSpan, "ok" :: Text)
+      callsAfter <- readIORef counter
+      callsAfter `shouldBe` (1 :: Int)
+      snd result `shouldBe` "ok"
+      fst result `shouldSatisfy` isNothing
+
+    it "vendors AttributeKeys whose textual payload matches the spec name" $ do
+      attrKeyText Telemetry.messaging_operation_type `shouldBe` "messaging.operation.type"
+      attrKeyText Telemetry.messaging_operation_name `shouldBe` "messaging.operation.name"
+      attrKeyText Telemetry.messaging_destination_partition_id `shouldBe` "messaging.destination.partition.id"
+      attrKeyText Telemetry.messaging_consumer_group_name `shouldBe` "messaging.consumer.group.name"
+      attrKeyText Telemetry.messaging_client_id `shouldBe` "messaging.client.id"
+      attrKeyTextInt64 Telemetry.messaging_kafka_offset `shouldBe` "messaging.kafka.offset"
+      attrKeyText Telemetry.db_system_name `shouldBe` "db.system.name"
+      attrKeyText Telemetry.db_namespace `shouldBe` "db.namespace"
+      attrKeyText Telemetry.db_collection_name `shouldBe` "db.collection.name"
+      attrKeyText Telemetry.db_operation_name `shouldBe` "db.operation.name"
+      attrKeyText Telemetry.keiro_stream_name `shouldBe` "keiro.stream.name"
+      attrKeyTextInt64 Telemetry.keiro_retry_attempt `shouldBe` "keiro.retry.attempt"
+      attrKeyTextInt64 Telemetry.keiro_events_appended `shouldBe` "keiro.events.appended"
+
+    it "extracts a TraceContext from a W3C traceparent header pair" $ do
+      let traceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+          tracestate = "vendor1=value1"
+          hs = [(headerTraceParent, traceparent), ("tracestate", tracestate)]
+      Telemetry.traceContextFromHeaders hs
+        `shouldBe` Just (TraceContext traceparent (Just tracestate))
+
+    it "returns Nothing when the traceparent header is missing" $ do
+      Telemetry.traceContextFromHeaders [("content-type", "application/json")]
+        `shouldBe` Nothing
+
+    it "injectTraceContext is a no-op when no span is active on the thread" $ do
+      let baseline = [("content-type", "application/json")]
+      injected <- Telemetry.injectTraceContext baseline
+      injected `shouldBe` baseline
+
+    it "traceContextFromCurrentSpan returns Nothing outside any span" $ do
+      tc <- Telemetry.traceContextFromCurrentSpan
+      tc `shouldBe` Nothing
+
 nominalDays :: Int -> NominalDiffTime
 nominalDays n = fromIntegral n * 86400
+
+attrKeyText :: AttributeKey Text -> Text
+attrKeyText = unkey
+
+attrKeyTextInt64 :: AttributeKey Int64 -> Text
+attrKeyTextInt64 = unkey
 
 -- ---------------------------------------------------------------------------
 -- Cross-context integration fixtures

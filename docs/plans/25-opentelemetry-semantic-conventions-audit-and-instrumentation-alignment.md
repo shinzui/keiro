@@ -131,13 +131,21 @@ This section must always reflect the actual current state of the work.
       the plan's original draft because the on-disk v1.40 packages don't
       resolve as a coherent set — see Surprises & Discoveries and the
       corresponding Decision Log entries for the full rationale.
-- [ ] **Milestone 3: Introduce `Keiro.Telemetry`.** New module at
-      `src/Keiro/Telemetry.hs` exposing the small helper surface described in
-      §Interfaces and Dependencies. Module compiles on its own; unit tests in
-      `test/Keiro/TelemetrySpec.hs` exercise (a) the noop tracer path produces
-      no spans, (b) attribute-key textual round-trip matches spec names, (c) a
-      W3C `traceparent` extracted by the propagator from a sample header set
-      yields a non-empty span context.
+- [x] **Milestone 3: Introduce `Keiro.Telemetry` (2026-05-19).** New module
+      at `src/Keiro/Telemetry.hs` exposes `withProducerSpan`,
+      `withConsumerSpan`, `withCommandSpan`, `traceContextFromCurrentSpan`,
+      `traceContextFromHeaders`, and `injectTraceContext`, plus 13 vendored
+      `AttributeKey` bindings for keys absent from Hackage's
+      `hs-opentelemetry-semantic-conventions 0.1.0.0`. Tests added in
+      `test/Main.hs` under `describe "Keiro.Telemetry"`. All 6 examples
+      green (verified 2026-05-19); full suite is 71 examples / 0 failures,
+      no regression. The tests cover the three properties the plan
+      prescribed: (a) the noop-tracer (`Nothing`) path calls the body
+      exactly once and returns its value; (b) every vendored
+      `AttributeKey`'s textual payload matches the spec dotted-name; (c)
+      `traceContextFromHeaders` extracts a non-empty `TraceContext` from a
+      sample W3C `traceparent` header pair (and returns `Nothing` when the
+      header is absent).
 - [ ] **Milestone 4: Instrument `Keiro.Outbox` and `Keiro.Outbox.Kafka`.** Wrap
       the per-row body of `publishClaimedOutbox` in
       `Keiro.Telemetry.withProducerSpan`, with attributes from
@@ -307,6 +315,33 @@ Record every decision made while working on the plan.
   swap once a compatible release lands. The vendored keys are listed in
   `src/Keiro/Telemetry.hs` with a `-- TODO: replace with upstream import
   once available` comment.
+  Date: 2026-05-19
+
+- Decision: `Keiro.Telemetry`'s span helpers take an explicit `Maybe Tracer`
+  parameter instead of a `MonadTracer` typeclass constraint (as the plan
+  draft originally proposed).
+  Rationale: keiro internals run inside `Eff es` with `IOE :> es` from
+  `effectful`. Demanding `MonadTracer` on those signatures would force the
+  library to introduce a `Reader Tracer` effect throughout the publisher /
+  consumer / command surfaces — invasive for what is a thin auxiliary
+  surface, and inconsistent with the "tracer lives on
+  `OutboxPublishOptions`" pattern the plan already calls for in Milestone
+  4. Passing `Maybe Tracer` keeps the helpers stand-alone: under `Nothing`
+  they degrade to a one-branch pass-through; under `Just t` they invoke
+  `OpenTelemetry.Trace.Core.inSpan'`, which itself takes the `Tracer`
+  explicitly. The plan's Interfaces and Dependencies section is now
+  out-of-date on this point; the audit document and milestone bodies
+  reflect the final shape.
+  Date: 2026-05-19
+
+- Decision: `Keiro.Telemetry`'s tests live inside the existing
+  `test/Main.hs` under a new `describe "Keiro.Telemetry"` block, not as a
+  separate `test/Keiro/TelemetrySpec.hs` file (as the plan originally
+  proposed).
+  Rationale: the project's test layout is a single `Main.hs` with all
+  `describe` blocks colocated. Splitting one module out would introduce a
+  different layout for new code; matching the existing pattern keeps the
+  test bookkeeping uniform. The suite now reports 71 examples / 0 failures.
   Date: 2026-05-19
 
 
