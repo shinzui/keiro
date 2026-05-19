@@ -1,5 +1,3 @@
-{-# LANGUAGE MultilineStrings #-}
-
 module Keiro.ReadModel
   ( ReadModel (..)
   , ConsistencyMode (..)

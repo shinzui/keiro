@@ -24,6 +24,7 @@ common shared
                         DerivingStrategies
                         DuplicateRecordFields
                         GADTs
+                        MultilineStrings
                         OverloadedLabels
                         OverloadedRecordDot
                         OverloadedStrings

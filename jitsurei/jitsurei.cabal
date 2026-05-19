@@ -22,6 +22,7 @@ common shared
     default-extensions: DeriveAnyClass
                         DuplicateRecordFields
                         BlockArguments
+                        MultilineStrings
                         OverloadedLabels
                         OverloadedRecordDot
                         OverloadedStrings

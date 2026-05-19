@@ -1,5 +1,3 @@
-{-# LANGUAGE MultilineStrings #-}
-
 module Jitsurei.ReadModels
   ( OrderSummaryQuery (..)
   , OrderSummary (..)

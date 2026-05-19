@@ -1,5 +1,3 @@
-{-# LANGUAGE MultilineStrings #-}
-
 module Keiro.Timer.Schema
   ( TimerStatus (..)
   , TimerRow (..)

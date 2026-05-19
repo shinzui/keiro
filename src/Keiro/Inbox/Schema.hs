@@ -1,5 +1,4 @@
 {-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE MultilineStrings #-}
 
 {- | Hasql-level storage for the idempotent integration-event inbox.
 

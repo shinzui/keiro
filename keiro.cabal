@@ -23,6 +23,7 @@ common shared
     default-language:   GHC2024
     default-extensions: DeriveAnyClass
                         DuplicateRecordFields
+                        MultilineStrings
                         OverloadedLabels
                         OverloadedStrings
                         PackageImports

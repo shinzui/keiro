@@ -13,6 +13,7 @@ common common
   default-extensions:
     DeriveAnyClass
     DuplicateRecordFields
+    MultilineStrings
     OverloadedLabels
     OverloadedStrings
 
