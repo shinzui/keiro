@@ -9,6 +9,7 @@ module Keiro.Command
   )
 where
 
+import Data.Functor (($>))
 import Data.Int (Int32)
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
@@ -32,14 +33,20 @@ import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError (..))
 import Kiroku.Store.Read (readStreamForwardStream)
-import Kiroku.Store.Transaction (runTransactionAppending)
+import Kiroku.Store.Transaction
+  ( PreparedEvent
+  , appendConflictToStoreError
+  , appendToStreamTx
+  , prepareEventsIO
+  , runTransaction
+  )
 import Kiroku.Store.Types
   ( AppendResult
   , EventData
-  , EventId
+  , EventId (..)
   , ExpectedVersion (..)
-  , GlobalPosition
-  , RecordedEvent
+  , GlobalPosition (..)
+  , RecordedEvent (..)
   , StreamName (..)
   , StreamVersion (..)
   )
@@ -319,6 +326,8 @@ runCommandWithSql ::
   Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co), Maybe a))
 runCommandWithSql options eventStream targetStream command afterAppend =
   runCommandWithSqlEvents options eventStream targetStream command (\_ appendResult -> afterAppend appendResult)
+  -- The ignored first argument now carries @[(co, RecordedEvent)]@; the
+  -- @\_@ still type-checks unchanged.
 
 runCommandWithSqlEvents ::
   forall phi rs s ci co a es.
@@ -327,7 +336,7 @@ runCommandWithSqlEvents ::
   EventStream phi rs s ci co ->
   Stream (EventStream phi rs s ci co) ->
   ci ->
-  ([co] -> AppendResult -> Tx.Transaction a) ->
+  ([(co, RecordedEvent)] -> AppendResult -> Tx.Transaction a) ->
   Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co), Maybe a))
 runCommandWithSqlEvents options eventStream targetStream command afterAppend =
   withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> do
@@ -348,15 +357,20 @@ runCommandWithSqlEvents options eventStream targetStream command afterAppend =
 
     appendWithSqlOnce remaining current events encoded = do
       liftIO (options ^. #beforeAppend)
-      outcome <- tryError @StoreError $
-        runTransactionAppending
-          ((eventStream ^. #resolveStreamName) targetStream)
-          (expectedVersion (current ^. #streamVersion))
-          encoded
-          ( \appendResult -> do
-              userValue <- afterAppend events appendResult
-              pure (appendResult, userValue)
-          )
+      prepared <- prepareEventsIO encoded
+      now <- liftIO getCurrentTime
+      let streamName = (eventStream ^. #resolveStreamName) targetStream
+          expected = expectedVersion (current ^. #streamVersion)
+          body = do
+            appended <- appendToStreamTx streamName expected prepared now
+            case appended of
+              Left conflict ->
+                Tx.condemn $> Left (appendConflictToStoreError conflict)
+              Right appendResult -> do
+                let recordeds = reconstructRecorded appendResult now prepared
+                userValue <- afterAppend (Prelude.zip events recordeds) appendResult
+                pure (Right (appendResult, userValue))
+      outcome <- tryError @StoreError (runTransaction body)
       case outcome of
         Right (Right (appendResult, userValue)) -> do
           writeSnapshotIfNeeded eventStream current events appendResult
@@ -515,6 +529,45 @@ appendedResult targetStream appendResult count = CommandResult
   , globalPosition = Just (appendResult ^. #globalPosition)
   , eventsAppended = count
   }
+
+{- | Rebuild the per-event 'RecordedEvent' values for a just-appended batch.
+
+The store assigns each event in a batch a contiguous stream version and
+global position: event @i@ (1-based) gets @last - count + i@ for both
+counters, where @last@ is the position the 'AppendResult' reports for the
+final event and @count@ is the batch size. (The kiroku append SQL numbers
+events with @WITH ORDINALITY@ and inserts @initial + idx@; see EP-27's
+Surprises & Discoveries.) We therefore reconstruct each 'RecordedEvent'
+exactly, rather than reading the batch back. The @createdAt@ is the same
+timestamp 'prepareEventsIO'/'appendToStreamTx' used for the insert.
+
+This is a source append (events are written to their own stream), so
+@streamVersion == originalVersion@ and @originalStreamId@ is the appended
+stream's id, per the 'RecordedEvent' contract.
+-}
+reconstructRecorded :: AppendResult -> UTCTime -> [PreparedEvent] -> [RecordedEvent]
+reconstructRecorded appendResult now prepared =
+  Prelude.zipWith mk [0 ..] prepared
+  where
+    count = Prelude.length prepared
+    StreamVersion lastSv = appendResult ^. #streamVersion
+    GlobalPosition lastGp = appendResult ^. #globalPosition
+    firstSv = lastSv Prelude.- Prelude.fromIntegral count Prelude.+ 1
+    firstGp = lastGp Prelude.- Prelude.fromIntegral count Prelude.+ 1
+    mk :: Int64 -> PreparedEvent -> RecordedEvent
+    mk i prepared' = RecordedEvent
+      { eventId = EventId (prepared' ^. #peEventId)
+      , eventType = prepared' ^. #peEventType
+      , streamVersion = StreamVersion (firstSv Prelude.+ i)
+      , globalPosition = GlobalPosition (firstGp Prelude.+ i)
+      , originalStreamId = appendResult ^. #streamId
+      , originalVersion = StreamVersion (firstSv Prelude.+ i)
+      , payload = prepared' ^. #pePayload
+      , metadata = prepared' ^. #peMetadata
+      , causationId = prepared' ^. #peCausationId
+      , correlationId = prepared' ^. #peCorrelationId
+      , createdAt = now
+      }
 
 isRetryableConflict :: StoreError -> Bool
 isRetryableConflict = \case

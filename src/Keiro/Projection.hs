@@ -17,12 +17,12 @@ import Keiro.Prelude
 import Keiro.Stream (Stream)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Types (AppendResult, EventId, RecordedEvent)
+import Kiroku.Store.Types (EventId, RecordedEvent)
 import Prelude qualified
 
 data InlineProjection co = InlineProjection
   { name :: !Text
-  , apply :: !(co -> AppendResult -> Tx.Transaction ())
+  , apply :: !(co -> RecordedEvent -> Tx.Transaction ())
   }
   deriving stock (Generic)
 
@@ -50,8 +50,14 @@ runCommandWithProjections options eventStream targetStream command projections =
       eventStream
       targetStream
       command
-      ( \events appendResult ->
-          traverse_ (\projection -> traverse_ (\event -> (projection ^. #apply) event appendResult) events) projections
+      ( \pairs _appendResult ->
+          traverse_
+            ( \projection ->
+                traverse_
+                  (\(event, recorded) -> (projection ^. #apply) event recorded)
+                  pairs
+            )
+            projections
       )
   pure (fmap Prelude.fst result)
 

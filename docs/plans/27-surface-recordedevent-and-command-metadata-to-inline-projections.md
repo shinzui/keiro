@@ -97,16 +97,18 @@ This section must always reflect the actual current state of the work.
       metadata (read back via `readStreamForward`). Test "command metadata is merged into stored
       event metadata" passes; asserts `{ "actor": "agent-7", "schemaVersion": 1 }` (schema
       version 1, not 2 — see Surprises & Discoveries).
-- [ ] M2: Add `reconstructRecorded` helper in `src/Keiro/Command.hs`.
-- [ ] M2: Refactor `runCommandWithSqlEvents`' append step to prepare events + capture time
-      itself (via `prepareEventsIO` + `appendToStreamTx` + `runTransaction`) so it can build
-      `RecordedEvent`s.
-- [ ] M2: Change the `runCommandWithSqlEvents` callback type to
+- [x] M2 (2026-05-22): Add `reconstructRecorded` helper in `src/Keiro/Command.hs`.
+- [x] M2 (2026-05-22): Refactor `runCommandWithSqlEvents`' append step to prepare events +
+      capture time itself (via `prepareEventsIO` + `appendToStreamTx` + `runTransaction`) so it
+      can build `RecordedEvent`s.
+- [x] M2 (2026-05-22): Change the `runCommandWithSqlEvents` callback type to
       `[(co, RecordedEvent)] -> AppendResult -> Tx.Transaction a`; update `runCommandWithSql`.
 - [ ] M2: Add a keiro test proving reconstructed `RecordedEvent`s match `readStreamForward`
       output for a multi-event batch (id, versions, positions, metadata, payload, createdAt).
-- [ ] M3: Change `InlineProjection.apply` to `co -> RecordedEvent -> Tx.Transaction ()`;
-      update `runCommandWithProjections` to feed `(co, recorded)` pairs.
+      (Deferred to M4: the test suite only compiles once fixtures are updated.)
+- [x] M3 (2026-05-22): Change `InlineProjection.apply` to `co -> RecordedEvent -> Tx.Transaction ()`;
+      update `runCommandWithProjections` to feed `(co, recorded)` pairs. `cabal build keiro`
+      succeeds clean (M2+M3 committed together — see Decision Log).
 - [ ] M4: Update `jitsurei/src/Jitsurei/ReadModels.hs` to the new `apply` shape.
 - [ ] M4: Update the keiro test fixtures (`counterInlineProjection`, the multi-event SQL
       test) to the new shapes.
@@ -205,6 +207,18 @@ Record every decision made while working on the plan.
   `RunCommandOptions.metadata` field covers the stated use case (caller-supplied ambient
   context). The enrich-hook route remains available as a future enhancement and is noted
   under Interfaces and Dependencies.
+  Date: 2026-05-22
+
+- Decision: Commit Milestones 2 and 3 together (one commit), not separately.
+  Rationale: M2 changes the `runCommandWithSqlEvents` callback shape to
+  `[(co, RecordedEvent)] -> AppendResult -> ...`; its only in-library consumer,
+  `Keiro.Projection.runCommandWithProjections`, is updated in M3. A standalone M2 commit would
+  leave the `keiro` library non-compiling (Projection.hs still feeds the old `[co]` callback),
+  violating the "every commit builds" rule. The two are a single atomic breaking change to the
+  callback contract and its sole internal consumer, so they share one commit. The plan's
+  milestone *structure* (separate Progress items + validations) is preserved; only the commit
+  boundary merges. Test fixtures and jitsurei remain intentionally broken until M4, as the plan
+  already anticipates.
   Date: 2026-05-22
 
 - Decision: No keiro database migration is required.
