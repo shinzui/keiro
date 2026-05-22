@@ -16,7 +16,7 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Keiro.Projection (InlineProjection (..))
 import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..))
 import Keiro.Prelude
-import Kiroku.Store.Types (AppendResult, GlobalPosition (..))
+import Kiroku.Store.Types (GlobalPosition (..), RecordedEvent)
 import Prelude qualified
 import Jitsurei.Domain
 
@@ -50,8 +50,8 @@ orderSummaryInlineProjection = InlineProjection
   , apply = applyOrderEvent
   }
 
-applyOrderEvent :: OrderEvent -> AppendResult -> Tx.Transaction ()
-applyOrderEvent event appendResult =
+applyOrderEvent :: OrderEvent -> RecordedEvent -> Tx.Transaction ()
+applyOrderEvent event recorded =
   case event of
     OrderPlaced payload ->
       Tx.statement
@@ -59,24 +59,24 @@ applyOrderEvent event appendResult =
         , skuText payload.sku
         , Prelude.fromIntegral (quantityInt payload.quantity)
         , "placed"
-        , globalPositionToInt (appendResult ^. #globalPosition)
+        , globalPositionToInt (recorded ^. #globalPosition)
         )
         upsertOrderSummaryStmt
     PaymentApproved payload ->
-      updateStatus payload.orderId "paid" appendResult
+      updateStatus payload.orderId "paid" recorded
     OrderPacked payload ->
-      updateStatus payload.orderId "packed" appendResult
+      updateStatus payload.orderId "packed" recorded
     OrderShipped payload ->
-      updateStatus payload.orderId "shipped" appendResult
+      updateStatus payload.orderId "shipped" recorded
     OrderCancelled payload ->
-      updateStatus payload.orderId "cancelled" appendResult
+      updateStatus payload.orderId "cancelled" recorded
 
-updateStatus :: OrderId -> Text -> AppendResult -> Tx.Transaction ()
-updateStatus orderId status appendResult =
+updateStatus :: OrderId -> Text -> RecordedEvent -> Tx.Transaction ()
+updateStatus orderId status recorded =
   Tx.statement
     ( orderIdText orderId
     , status
-    , globalPositionToInt (appendResult ^. #globalPosition)
+    , globalPositionToInt (recorded ^. #globalPosition)
     )
     updateOrderSummaryStatusStmt
 

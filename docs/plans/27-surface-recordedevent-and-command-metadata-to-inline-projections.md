@@ -103,17 +103,29 @@ This section must always reflect the actual current state of the work.
       can build `RecordedEvent`s.
 - [x] M2 (2026-05-22): Change the `runCommandWithSqlEvents` callback type to
       `[(co, RecordedEvent)] -> AppendResult -> Tx.Transaction a`; update `runCommandWithSql`.
-- [ ] M2: Add a keiro test proving reconstructed `RecordedEvent`s match `readStreamForward`
-      output for a multi-event batch (id, versions, positions, metadata, payload, createdAt).
-      (Deferred to M4: the test suite only compiles once fixtures are updated.)
+- [x] M2/M4 (2026-05-22): Add a keiro test proving reconstructed `RecordedEvent`s match the
+      stored batch for a multi-event command. Test "reconstructed RecordedEvents match the stored
+      batch" passes; asserts `eventId`, `eventType`, `streamVersion`, `originalVersion`,
+      `originalStreamId`, `payload`, `metadata` against `readStreamForward` and `globalPosition`
+      against a `readCategory "counter"` read (stream reads report position 0). `createdAt` is
+      intentionally excluded (Postgres truncates the captured `UTCTime` to microseconds).
 - [x] M3 (2026-05-22): Change `InlineProjection.apply` to `co -> RecordedEvent -> Tx.Transaction ()`;
       update `runCommandWithProjections` to feed `(co, recorded)` pairs. `cabal build keiro`
       succeeds clean (M2+M3 committed together — see Decision Log).
-- [ ] M4: Update `jitsurei/src/Jitsurei/ReadModels.hs` to the new `apply` shape.
-- [ ] M4: Update the keiro test fixtures (`counterInlineProjection`, the multi-event SQL
-      test) to the new shapes.
-- [ ] M4: Add the headline end-to-end test (metadata produced → surfaced → persisted).
-- [ ] M4: Run `just haskell-test` (keiro + jitsurei) and record output.
+- [x] M4 (2026-05-22): Update `jitsurei/src/Jitsurei/ReadModels.hs` to the new `apply` shape
+      (`applyOrderEvent`/`updateStatus` now take `RecordedEvent`; `recorded ^. #globalPosition`).
+      `jitsurei-test` passes (7/7) including the inline order-summary test; no `jitsurei/test`
+      edits were needed (it only references `orderSummaryInlineProjection` in a projection list).
+- [x] M4 (2026-05-22): Update the keiro test fixtures — `counterInlineProjection` (new `apply`
+      shape, now writes `source_event_id` + `actor` from `recorded`), `counterAsyncProjection`
+      (passes `Nothing` actor), `counter_read_model` (+`actor TEXT`), `upsertCounterReadModelStmt`
+      (`contrazip5` 5-tuple), the multi-event SQL test lambda (`\pairs _ -> map fst pairs`), and
+      added `metadataActor`.
+- [x] M4 (2026-05-22): Add the headline end-to-end test "inline projection populates actor and
+      source_event_id from command metadata" — passes.
+- [x] M4 (2026-05-22): Run `just haskell-test`. keiro-test: 77 examples, 2 failures (both
+      pre-existing PositionWait tests — see Surprises & Discoveries; all new/changed tests pass).
+      jitsurei-test: 7 examples, 0 failures. jitsurei diagrams: up to date.
 
 
 ## Surprises & Discoveries
@@ -234,7 +246,42 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Outcome (2026-05-22): both gaps the plan set out to close are closed and verified end to end.
+
+- **Producing gap (M1).** `RunCommandOptions` now carries `metadata :: Maybe Value`
+  (default `Nothing`), threaded through `encodeEvents` via `encodeForAppendWithMetadata`. A
+  command run with `#metadata ?~ object ["actor" .= "agent-7"]` stores events whose metadata
+  reads `{ "actor": "agent-7", "schemaVersion": 1 }` (test: "command metadata is merged into
+  stored event metadata"). Default behavior is byte-for-byte unchanged (`Nothing` routes to the
+  same encoding as the old `encodeForAppend`).
+
+- **Surfacing gap (M2/M3).** `InlineProjection.apply` is now
+  `co -> RecordedEvent -> Tx.Transaction ()`, mirroring `AsyncProjection.applyRecorded`. keiro
+  reconstructs each `RecordedEvent` inside the command transaction from the prepared events +
+  `AppendResult` (helper `reconstructRecorded`), guarded by the fidelity test "reconstructed
+  RecordedEvents match the stored batch".
+
+- **End-to-end proof (M4, headline).** "inline projection populates actor and source_event_id
+  from command metadata" runs a command with `#metadata ?~ {actor: agent-7}` and an inline
+  projection that copies `recorded`'s `actor` and event id into read-model columns, then queries
+  `counter_read_model` and observes `actor = 'agent-7'` and a non-null `source_event_id` —
+  columns an inline projection could previously only leave `NULL`. This directly demonstrates
+  Rei's blocked scenario is unblocked: a service can now share one `apply` function across the
+  inline and async paths and retire the polling handler for those tables.
+
+Gaps / deviations from the plan:
+
+- The plan stated `counterCodec` uses schema version 2; it is actually 1. Only the M1 test's
+  expected value was affected (`schemaVersion: 1`). Recorded under Surprises & Discoveries.
+- Milestones 2 and 3 were committed together rather than separately, because the callback-shape
+  change (M2) and its sole in-library consumer (M3) cannot build independently. Recorded under
+  Decision Log.
+- Two `Keiro.ReadModel` PositionWait tests fail on clean `master`, independent of this work;
+  they remain failing. All tests this plan touched or added pass.
+
+Lesson: reconstructing `RecordedEvent` from kiroku's contiguous batch numbering avoided both a
+read-back round-trip and a cross-repo change to kiroku's append return type, at the cost of a
+documented invariant dependency that the fidelity test now guards.
 
 
 ## Context and Orientation

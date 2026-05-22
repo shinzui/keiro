@@ -5,8 +5,9 @@ where
 
 import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
-import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
+import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Data.IORef (atomicModifyIORef', newIORef, readIORef, writeIORef)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
@@ -341,7 +342,7 @@ main = hspec $ do
           multiCounterEventStream
           target
           (Add 8)
-          (\events _ -> pure events)
+          (\pairs _ -> pure (Prelude.map Prelude.fst pairs))
       case result of
         Right (Right (commandResult, Just observed)) -> do
           commandResult ^. #streamVersion `shouldBe` StreamVersion 2
@@ -362,6 +363,34 @@ main = hspec $ do
           event ^. #metadata
             `shouldBe` Just (object ["actor" Aeson..= ("agent-7" :: Text), "schemaVersion" Aeson..= (1 :: Int)])
         other -> expectationFailure ("expected a single recorded event, got " <> show other)
+
+    it "reconstructed RecordedEvents match the stored batch" $ \storeHandle -> do
+      let target = stream "counter-reconstruct-fidelity" :: Stream CounterEventStream
+          opts = defaultRunCommandOptions
+            & #metadata ?~ object ["actor" Aeson..= ("agent-7" :: Text)]
+      Right (Right (_, Just pairs)) <- Store.runStoreIO storeHandle $
+        runCommandWithSqlEvents opts multiCounterEventStream target (Add 8) (\ps _ -> pure ps)
+      let reconstructed = Prelude.map Prelude.snd pairs
+      -- Read the stored events back from their source stream.
+      Right storedVec <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "counter-reconstruct-fidelity") (StreamVersion 0) 10
+      let stored = Vector.toList storedVec
+      -- readStreamForward reports globalPosition 0 for stream reads, so take
+      -- the true global positions from a category read (the DB is fresh per
+      -- test, so category "counter" holds exactly this batch).
+      Right catVec <- Store.runStoreIO storeHandle $
+        Store.readCategory (CategoryName "counter") (GlobalPosition 0) 10
+      let catList = Vector.toList catVec
+      Prelude.length reconstructed `shouldBe` 2
+      Prelude.length stored `shouldBe` 2
+      fmap (^. #eventId) reconstructed `shouldBe` fmap (^. #eventId) stored
+      fmap (^. #eventType) reconstructed `shouldBe` fmap (^. #eventType) stored
+      fmap (^. #streamVersion) reconstructed `shouldBe` fmap (^. #streamVersion) stored
+      fmap (^. #originalVersion) reconstructed `shouldBe` fmap (^. #originalVersion) stored
+      fmap (^. #originalStreamId) reconstructed `shouldBe` fmap (^. #originalStreamId) stored
+      fmap (^. #payload) reconstructed `shouldBe` fmap (^. #payload) stored
+      fmap (^. #metadata) reconstructed `shouldBe` fmap (^. #metadata) stored
+      fmap (^. #globalPosition) reconstructed `shouldBe` fmap (^. #globalPosition) catList
 
     it "runCommand emits a Command span with the stream name, db.system.name, and keiro.events.appended" $ \storeHandle -> do
       (processor, spansRef) <- inMemoryListExporter
@@ -512,6 +541,21 @@ main = hspec $ do
       queryResult <- Store.runStoreIO storeHandle $
         runQuery counterReadModel "inline"
       queryResult `shouldBe` Right (Right 5)
+
+    it "inline projection populates actor and source_event_id from command metadata" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction initializeCounterReadModelTable
+      let target = stream "read-model-inline-metadata" :: Stream CounterEventStream
+          opts = defaultRunCommandOptions
+            & #metadata ?~ object ["actor" Aeson..= ("agent-7" :: Text)]
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommandWithProjections opts counterEventStream target (Add 5) [counterInlineProjection]
+      Right row <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.statement "inline" selectCounterMetaStmt)
+      -- selectCounterMetaStmt returns (amount, actor, source_event_id).
+      row `shouldSatisfy` \(amount, actor, srcId) ->
+        amount == 5 && actor == Just "agent-7" && isJust srcId
 
     it "waits for async projection cursor with PositionWait" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
@@ -2257,14 +2301,15 @@ counterReadModel = ReadModel
 counterInlineProjection :: InlineProjection CounterEvent
 counterInlineProjection = InlineProjection
   { name = "counter-inline-projection"
-  , apply = \event appendResult ->
+  , apply = \event recorded ->
       case event of
         CounterAdded amount ->
           Tx.statement
             ( "inline"
             , Prelude.fromIntegral amount
-            , globalPositionToInt (appendResult ^. #globalPosition)
-            , Nothing
+            , globalPositionToInt (recorded ^. #globalPosition)
+            , Just (eventIdToUuid (recorded ^. #eventId))
+            , metadataActor recorded
             )
             upsertCounterReadModelStmt
         CounterAudited{} -> pure ()
@@ -2282,6 +2327,7 @@ counterAsyncProjection = AsyncProjection
             , Prelude.fromIntegral amount
             , globalPositionToInt (recorded ^. #globalPosition)
             , Just (eventIdToUuid (recorded ^. #eventId))
+            , Nothing
             )
             upsertCounterReadModelStmt
         Right CounterAudited{} -> pure ()
@@ -2304,25 +2350,44 @@ initializeCounterReadModelTable =
       model_id TEXT PRIMARY KEY,
       amount BIGINT NOT NULL,
       last_seen BIGINT NOT NULL,
-      source_event_id UUID UNIQUE
+      source_event_id UUID UNIQUE,
+      actor TEXT
     )
     """
 
-upsertCounterReadModelStmt :: Statement (Text, Int64, Int64, Maybe UUID) ()
+upsertCounterReadModelStmt :: Statement (Text, Int64, Int64, Maybe UUID, Maybe Text) ()
 upsertCounterReadModelStmt =
   preparable
     """
-    INSERT INTO counter_read_model (model_id, amount, last_seen, source_event_id)
-    VALUES ($1, $2, $3, $4)
+    INSERT INTO counter_read_model (model_id, amount, last_seen, source_event_id, actor)
+    VALUES ($1, $2, $3, $4, $5)
     ON CONFLICT (source_event_id) DO NOTHING
     """
-    ( contrazip4
+    ( contrazip5
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.int8))
         (E.param (E.nonNullable E.int8))
         (E.param (E.nullable E.uuid))
+        (E.param (E.nullable E.text))
     )
     D.noResult
+
+selectCounterMetaStmt :: Statement Text (Int64, Maybe Text, Maybe UUID)
+selectCounterMetaStmt =
+  preparable
+    """
+    SELECT amount, actor, source_event_id
+    FROM counter_read_model
+    WHERE model_id = $1
+    """
+    (E.param (E.nonNullable E.text))
+    ( D.singleRow
+        ( (,,)
+            <$> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nullable D.text)
+            <*> D.column (D.nullable D.uuid)
+        )
+    )
 
 selectCounterReadModelStmt :: Statement Text Int
 selectCounterReadModelStmt =
@@ -2368,3 +2433,9 @@ globalPositionToInt (GlobalPosition value) = value
 
 eventIdToUuid :: EventId -> UUID
 eventIdToUuid (EventId value) = value
+
+metadataActor :: RecordedEvent -> Maybe Text
+metadataActor recorded = do
+  Aeson.Object o <- recorded ^. #metadata
+  Aeson.String s <- KeyMap.lookup "actor" o
+  pure s
