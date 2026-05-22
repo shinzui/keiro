@@ -17,6 +17,8 @@ are adopting:
   read model and query path.
 - [Process Managers And Timers](process-managers-and-timers.md) shows
   replay-safe fulfillment coordination and a due timer worker.
+- [Routers And Effectful Fan-Out](routers-and-effectful-fan-out.md) routes one
+  event to a read-model-resolved set of target streams, idempotently.
 - [Snapshots And Hydration](snapshots-and-hydration.md) enables advisory
   snapshots for the order stream.
 - [Run And Operate Jitsurei](run-and-operate-jitsurei.md) collects build,

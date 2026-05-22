@@ -212,6 +212,10 @@ What shipped:
 - `jitsurei` worked example (`Jitsurei.AgentQualRouter` + 1 spec): the
   research-note-13 area→chapters routing, end-to-end, with overlap de-duplication
   and idempotent replay.
+- User-facing guide
+  [`docs/guides/routers-and-effectful-fan-out.md`](../guides/routers-and-effectful-fan-out.md)
+  (linked from `docs/guides/README.md`), teaching the `Router` through the
+  `jitsurei` example alongside the existing process-manager guide.
 
 Observable proof (the Purpose's headline): the `keiro-test` "Router" specs and
 the `jitsurei` "agent-qualification router" spec feed one source event whose
