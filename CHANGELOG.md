@@ -6,8 +6,45 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## 0.1.0.0 — 2026-05-22
 
+The initial release of `keiro`, an event-sourcing framework and workflow engine
+that composes the kiroku event store, the keiki aggregate core, and the shibuya
+worker substrate.
+
 ### New Features
 
+- **Command side** (`Keiro.Command`, `Keiro.EventStream`, `Keiro.Stream`): the
+  single-stream write path. `runCommand` hydrates a stream (snapshot + replay),
+  runs the keiki transducer one step, and appends the emitted event(s) under
+  optimistic concurrency with bounded retry. `RunCommandOptions` controls
+  `retryLimit`, `pageSize`, forced `eventIds` (for deterministic, idempotent
+  appends), `beforeAppend`, `tracer`, and `metadata` (ambient JSON merged into
+  every event's metadata). Multi-event command output is supported, and
+  `runCommandWithSql` / `runCommandWithSqlEvents` run a caller-supplied `hasql`
+  action in the same transaction as the append. `EventStream` bundles a
+  transducer with its initial state/registers, event codec, stream-name
+  resolver, and snapshot policy; `Stream` is the typed stream-name newtype.
+- **Event evolution** (`Keiro.Codec`): typed event codecs with event-type tags
+  and a `schemaVersion` metadata marker, plus ordered `upcasters` that migrate
+  older payloads forward on read.
+- **Snapshots & hydration** (`Keiro.Snapshot`, `…Policy`, `…Codec`, `…Schema`):
+  advisory snapshots. A `SnapshotPolicy` (`Never`, `Every n`, `OnTerminal`,
+  `Custom`) decides when to persist; hydration seeds from the latest snapshot and
+  replays only the tail. `defaultStateCodec` derives a JSON state codec.
+- **Read models & projections** (`Keiro.ReadModel`, `…Rebuild`, `…Schema`,
+  `Keiro.Projection`): inline projections updated in the append transaction
+  (`runCommandWithProjections`; they receive the `RecordedEvent`, so they can
+  read event metadata such as actor / source-event id) and async projections.
+  `runQuery` supports consistency modes `Strong`, `Eventual`, and `PositionWait`
+  (cursor wait). Read models are registered with schema-version / shape-hash
+  guarding and have a rebuild lifecycle (`rebuild` → `promote` /
+  `abandonRebuild`).
+- **Process managers & timers** (`Keiro.ProcessManager`, `Keiro.Timer`): stateful
+  event→command fan-out. A process manager keeps its own state stream and a
+  correlation id, advances on each input, and dispatches commands to a target
+  aggregate with crash-safe, exactly-once-per-target idempotency (deterministic
+  command ids plus a duplicate pre-check). Database-backed timers
+  (`scheduleTimerTx`, `runTimerWorker`) can be scheduled transactionally from a
+  process manager.
 - `Keiro.Router`: a new stateless, effectful fan-out primitive — the Enterprise
   Integration Patterns *content-based Router* / dynamic *Recipient List* paired
   with the existing `Keiro.ProcessManager`. Where a process manager computes its
@@ -32,3 +69,34 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 - `Keiro.ProcessManager`: now exports `eventAlreadyIn`, the idempotency
   pre-check, so routers (and other callers) can reuse it. Its behavior is
   unchanged.
+- **Transactional outbox** (`Keiro.Outbox`, `…Kafka`, `…Schema`, `…Types`): a
+  durable integration-event outbox. Enqueue events in the same transaction as the
+  domain write, then `claimOutboxBatch` / `publishClaimedOutbox` with per-key
+  (head-of-line) ordering, backoff scheduling, and dead-lettering after a
+  max-attempt count; ships a Kafka producer adapter.
+- **Idempotent inbox** (`Keiro.Inbox`, `…Kafka`, `…Adapter`, `…Schema`,
+  `…Types`): dedupes inbound integration events, with claim/retry/release/dead
+  transitions, GC of completed rows (`garbageCollectCompleted`), transaction
+  wrappers (`runInboxTransaction` / `…WithKey`), a Shibuya adapter, and a Kafka
+  consumer adapter.
+- **Integration events** (`Keiro.Integration.Event`): a canonical cross-context
+  event envelope (message id, source / destination, schema reference, content
+  type, W3C trace context, source-event id / global position) with JSON
+  encode/decode and Kafka header helpers.
+- **OpenTelemetry instrumentation** (`Keiro.Telemetry`): spans following the
+  messaging / database semantic conventions — an Internal-kind span around
+  `runCommand`, a Producer span around outbox publishing, and Consumer spans
+  parented via W3C trace headers. Opt-in through `RunCommandOptions.tracer`;
+  span helpers (`withCommandSpan`, `withProducerSpan`, `withConsumerSpan`) and
+  trace-context propagation are exported for adapters.
+
+### Other Changes
+
+- **Schema migrations**: the `keiro-migrations` package embeds the framework DDL
+  as codd SQL migrations and ships a `keiro-migrate` executable that runs the
+  kiroku and keiro migrations together.
+- **Documentation**: the `jitsurei` worked-examples package and the long-form
+  guides under `docs/guides/` (command side, event evolution, read models,
+  process managers & timers, snapshots, integration events with Kafka, routers,
+  and a combined incident-response example pairing a router with a process
+  manager).
