@@ -26,10 +26,26 @@ The primitive is `Keiro.Router`
 | State | has its own `pm:…` state stream, `correlate`, self-command | stateless — no state stream, no self-command |
 | Use it when | targets follow purely from the event | targets must be queried from a read model |
 
-A `Router` is a stateless, content-based router in the Enterprise Integration
-Patterns sense: examine a message, compute its recipients, forward. Its only new
-capability over the process manager is that recipient resolution runs in
-`Eff es`.
+## In Enterprise Integration Patterns terms
+
+Keiro's two fan-out primitives are named after the patterns they implement
+(Hohpe & Woolf, *Enterprise Integration Patterns*):
+
+- A `Router` is a *Message Router* — here specifically a **content-based
+  Router** (it inspects the message to decide where it goes) that forwards to a
+  dynamic **Recipient List** (a *set* of destinations computed per message). It
+  is stateless: examine a message, compute its recipients, forward to each. The
+  one thing keiro adds to the textbook pattern is that the recipient set is
+  computed *effectfully* — by querying a read model — so it can route on data
+  that is not in the message.
+- A `ProcessManager` is the EIP **Process Manager**: a stateful coordinator with
+  its own state stream, a correlation id, and timers.
+
+So the choice between them is the EIP choice between a routing element and a
+coordinator: reach for the `Router` when you only need "compute the recipients
+and forward, now," and the `ProcessManager` when you need to *remember* where a
+multi-step process is. The router's only new capability over the process manager
+is that recipient resolution runs in `Eff es`.
 
 ## The shape
 
@@ -188,3 +204,12 @@ Run it with:
 ```bash
 cabal test jitsurei-test
 ```
+
+## Pairing a router with a process manager
+
+Real workflows usually need both a router and a process manager reacting to the
+same event — one to fan out to a looked-up recipient set, the other to run a
+stateful, time-bound process. For a worked example that uses both together (an
+on-call incident that is *paged* by a router and *escalated* by a process
+manager with a timer), see [Coordinating Incident Response: Routers And Process
+Managers Together](coordinating-incident-response-with-routers-and-process-managers.md).

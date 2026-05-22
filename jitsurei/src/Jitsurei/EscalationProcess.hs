@@ -29,6 +29,7 @@ module Jitsurei.EscalationProcess
   , EscalationEventStream
   , escalationEventStream
   , escalationStream
+  , escalationTransducer
   , escalationCodec
     -- * The process manager
   , EscalationInput (..)

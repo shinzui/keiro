@@ -9,8 +9,11 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text.IO
 import Jitsurei.Diagrams
-  ( fulfillmentStreamMermaid
+  ( escalationStreamMermaid
+  , fulfillmentStreamMermaid
+  , incidentStreamMermaid
   , orderStreamMermaid
+  , pageStreamMermaid
   )
 import System.Environment (getArgs)
 import System.Exit (die, exitFailure)
@@ -55,7 +58,25 @@ diagrams =
       , path = "docs/guides/process-managers-and-timers.md"
       , body = fulfillmentStreamMermaid
       }
+  , Diagram
+      { name = "incident-stream"
+      , path = incidentGuide
+      , body = incidentStreamMermaid
+      }
+  , Diagram
+      { name = "page-stream"
+      , path = incidentGuide
+      , body = pageStreamMermaid
+      }
+  , Diagram
+      { name = "escalation-stream"
+      , path = incidentGuide
+      , body = escalationStreamMermaid
+      }
   ]
+  where
+    incidentGuide =
+      "docs/guides/coordinating-incident-response-with-routers-and-process-managers.md"
 
 applyDiagrams :: Mode -> [Diagram] -> IO [String]
 applyDiagrams mode =

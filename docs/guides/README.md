@@ -19,6 +19,10 @@ are adopting:
   replay-safe fulfillment coordination and a due timer worker.
 - [Routers And Effectful Fan-Out](routers-and-effectful-fan-out.md) routes one
   event to a read-model-resolved set of target streams, idempotently.
+- [Coordinating Incident Response: Routers And Process Managers
+  Together](coordinating-incident-response-with-routers-and-process-managers.md)
+  pairs a router (page the on-call roster) with a process manager (escalation
+  saga + timer) reacting to the same event, and explains when to reach for each.
 - [Snapshots And Hydration](snapshots-and-hydration.md) enables advisory
   snapshots for the order stream.
 - [Run And Operate Jitsurei](run-and-operate-jitsurei.md) collects build,

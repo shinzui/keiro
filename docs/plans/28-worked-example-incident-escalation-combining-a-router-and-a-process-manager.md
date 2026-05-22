@@ -69,7 +69,7 @@ This section must always reflect the actual current state of the work.
 - [x] M1: `jitsurei-test` specs — incident command cycle, page command cycle, and the router fanning `IncidentRaised` to one page per rostered responder with idempotent replay. (done 2026-05-22; jitsurei-test 11/11.)
 - [x] M2: Add `Jitsurei.EscalationProcess` (escalation saga aggregate + `escalationProcessManager` + escalation `TimerRequest`/worker). Register and re-export. (done 2026-05-22)
 - [x] M2: `jitsurei-test` specs — PM advances the saga and schedules the escalation timer on `IncidentRaised`; PM dispatches `AcknowledgeIncident` on `PageAcknowledged` (idempotent); the escalation timer worker drives `EscalateIncident` when unacknowledged and is a benign no-op when already acknowledged. (done 2026-05-22; jitsurei-test 15/15.)
-- [ ] M3: Add the new guide and generated diagrams (incident + page + escalation transducers), register them in `Jitsurei.Diagrams` / `jitsurei/app/DiagramsMain.hs`, run `--write`/`--check`. Revise `docs/guides/routers-and-effectful-fan-out.md` for EIP grounding and cross-link from `docs/guides/README.md`.
+- [x] M3: Add the new guide and generated diagrams (incident + page + escalation transducers), register them in `Jitsurei.Diagrams` / `jitsurei/app/DiagramsMain.hs`, run `--write`/`--check`. Revise `docs/guides/routers-and-effectful-fan-out.md` for EIP grounding and cross-link from `docs/guides/README.md`. (done 2026-05-22; `jitsurei-diagrams --check` clean.)
 
 
 ## Surprises & Discoveries
@@ -130,7 +130,49 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (all milestones complete, 2026-05-22).** `jitsurei` now has a second
+worked example that uses the `Router` and the `ProcessManager` *together*,
+closing the "when each, and how they pair" gap the existing single-primitive
+examples left open.
+
+What shipped:
+
+- `Jitsurei.Incident` — incident aggregate with the ack/escalate race resolved
+  by its own guards.
+- `Jitsurei.OncallRoster` — the `service_oncall` read model.
+- `Jitsurei.Paging` — page aggregate + `pagingRouter` (the stateless recipient
+  list).
+- `Jitsurei.EscalationProcess` — escalation saga aggregate +
+  `escalationProcessManager` + the escalation timer and worker (the stateful
+  coordinator).
+- `jitsurei-test`: 7 new specs (incident + page command cycles, router fan-out
+  with idempotent replay and a data-dependence check, saga + timer scheduling,
+  ack dispatch with idempotent replay, timer escalation, timer benign no-op).
+  Suite is 15/15.
+- A new guide,
+  [`docs/guides/coordinating-incident-response-with-routers-and-process-managers.md`](../guides/coordinating-incident-response-with-routers-and-process-managers.md),
+  with EIP framing (content-based Router / Recipient List vs. Process Manager), a
+  "when each" rule, generated state diagrams for all three transducers, and the
+  full combined flow. The existing
+  [`docs/guides/routers-and-effectful-fan-out.md`](../guides/routers-and-effectful-fan-out.md)
+  gained an "In Enterprise Integration Patterns terms" section and a pairing
+  pointer; both are indexed in `docs/guides/README.md`.
+
+Compared to the purpose: the headline scenario holds end-to-end in tests — one
+`IncidentRaised` is paged by the router (exactly the rostered responders,
+idempotently) and coordinated by the process manager (ack window with a timer),
+with the escalation timer driving `EscalateIncident` safely thanks to the
+incident aggregate's guard.
+
+Verification at completion: `cabal build all` clean; `cabal test jitsurei-test`
+→ 15 examples, 0 failures; `cabal run jitsurei:exe:jitsurei-diagrams -- --check`
+→ all diagrams current.
+
+Lessons (also in Surprises & Discoveries): records declared with
+`DuplicateRecordFields` (e.g. `TimerRow`) need generic-lens, not
+`OverloadedRecordDot`; a qualified-only `import Prelude` silently drops the
+implicit Prelude; and pushing race resolution down to the target aggregate's
+guards keeps both the timer worker and the process manager simple.
 
 
 ## Context and Orientation
