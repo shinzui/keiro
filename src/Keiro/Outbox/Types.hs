@@ -11,6 +11,7 @@ module Keiro.Outbox.Types
   , OutboxStatus (..)
   , OrderingPolicy (..)
   , BackoffSchedule (..)
+  , ExponentialBackoffOptions (..)
   , OutboxMessage (..)
   , OutboxRow (..)
   , OutboxPublishOptions (..)
