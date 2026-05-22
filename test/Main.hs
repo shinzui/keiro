@@ -745,6 +745,65 @@ main = hspec $ do
       sharedPmCategoryEvents `shouldBe` Vector.empty
       sharedPmNamespaceEvents `shouldBe` Vector.empty
 
+  describe "Keiro.Router" $ around withTestStore $ do
+    it "resolves targets effectfully and fans out one command per target" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction initializeRouterTargetsTable
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $ do
+          Tx.statement ("g1", "router-target-a") insertRouterTargetStmt
+          Tx.statement ("g1", "router-target-b") insertRouterTargetStmt
+          Tx.statement ("g1", "router-target-c") insertRouterTargetStmt
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+      Right (RouterResult rs1) <- Store.runStoreIO storeHandle $
+        runRouterOnce defaultRunCommandOptions demoRouter sourceEvent (RouteGroup "g1")
+      length rs1 `shouldBe` 3
+      rs1 `shouldSatisfy` all isAppended
+      -- Data-dependence is load-bearing: an unseeded group resolves to no
+      -- targets, so the count tracks the read model, not a fixed list.
+      Right (RouterResult rsEmpty) <- Store.runStoreIO storeHandle $
+        runRouterOnce defaultRunCommandOptions demoRouter sourceEvent (RouteGroup "no-such-group")
+      length rsEmpty `shouldBe` 0
+      -- Each resolved target stream received exactly one command.
+      Right targetA <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "router-target-a") (StreamVersion 0) 10
+      Right targetB <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "router-target-b") (StreamVersion 0) 10
+      Right targetC <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "router-target-c") (StreamVersion 0) 10
+      Vector.length targetA `shouldBe` 1
+      Vector.length targetB `shouldBe` 1
+      Vector.length targetC `shouldBe` 1
+
+    it "reports every dispatch as a duplicate on replay, writing no new events" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction initializeRouterTargetsTable
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $ do
+          Tx.statement ("g1", "router-target-a") insertRouterTargetStmt
+          Tx.statement ("g1", "router-target-b") insertRouterTargetStmt
+          Tx.statement ("g1", "router-target-c") insertRouterTargetStmt
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+      Right (RouterResult rs1) <- Store.runStoreIO storeHandle $
+        runRouterOnce defaultRunCommandOptions demoRouter sourceEvent (RouteGroup "g1")
+      rs1 `shouldSatisfy` all isAppended
+      Right (RouterResult rs2) <- Store.runStoreIO storeHandle $
+        runRouterOnce defaultRunCommandOptions demoRouter sourceEvent (RouteGroup "g1")
+      length rs2 `shouldBe` 3
+      rs2 `shouldSatisfy` all isDuplicate
+      -- Replay added nothing: each target stream still holds exactly one event.
+      Right targetA <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "router-target-a") (StreamVersion 0) 10
+      Right targetB <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "router-target-b") (StreamVersion 0) 10
+      Right targetC <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "router-target-c") (StreamVersion 0) 10
+      Vector.length targetA `shouldBe` 1
+      Vector.length targetB `shouldBe` 1
+      Vector.length targetC `shouldBe` 1
+
   describe "Keiro.Timer" $ around withTestStore $ do
     it "claims a due timer, fires a command, and marks it complete once" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle initializeTimerSchema
@@ -2439,3 +2498,91 @@ metadataActor recorded = do
   Aeson.Object o <- recorded ^. #metadata
   Aeson.String s <- KeyMap.lookup "actor" o
   pure s
+
+-- Router test fixtures: an effectful, data-dependent fan-out whose target set
+-- is stored in a read-model table (router_targets) rather than computed purely.
+
+newtype RouteGroup = RouteGroup Text
+  deriving stock (Generic, Eq, Show)
+
+-- | Maps a routing group to the list of target counter stream identifiers seeded
+-- for it. The query is genuinely effectful: 'demoRouter' calls it via 'runQuery'.
+routerTargetsReadModel :: ReadModel Text [Text]
+routerTargetsReadModel = ReadModel
+  { name = "router-targets-read-model"
+  , tableName = "router_targets"
+  , subscriptionName = "router-targets-sub"
+  , version = 1
+  , shapeHash = "router-targets-v1"
+  , defaultConsistency = Strong
+  , query = \groupId -> Tx.statement groupId selectRouterTargetsStmt
+  }
+
+demoRouter ::
+  (IOE :> es, Store :> es) =>
+  Router
+    RouteGroup
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+    es
+demoRouter = Router
+  { name = "demo-router"
+  , key = \(RouteGroup g) -> g
+  , resolve = \(RouteGroup g) -> do
+      result <- runQuery routerTargetsReadModel g
+      pure $ case result of
+        Right targetIds ->
+          [ PMCommand { target = stream targetId, command = Add 1 }
+          | targetId <- targetIds
+          ]
+        Left _ -> []
+  , targetEventStream = counterEventStream
+  }
+
+isAppended :: PMCommandResult target -> Bool
+isAppended = \case
+  PMCommandAppended{} -> True
+  _ -> False
+
+isDuplicate :: PMCommandResult target -> Bool
+isDuplicate = \case
+  PMCommandDuplicate{} -> True
+  _ -> False
+
+initializeRouterTargetsTable :: Tx.Transaction ()
+initializeRouterTargetsTable =
+  Tx.sql
+    """
+    CREATE TABLE IF NOT EXISTS router_targets (
+      group_id TEXT NOT NULL,
+      target_id TEXT NOT NULL
+    )
+    """
+
+insertRouterTargetStmt :: Statement (Text, Text) ()
+insertRouterTargetStmt =
+  preparable
+    """
+    INSERT INTO router_targets (group_id, target_id)
+    VALUES ($1, $2)
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    D.noResult
+
+selectRouterTargetsStmt :: Statement Text [Text]
+selectRouterTargetsStmt =
+  preparable
+    """
+    SELECT target_id
+    FROM router_targets
+    WHERE group_id = $1
+    ORDER BY target_id
+    """
+    (E.param (E.nonNullable E.text))
+    (D.rowList (D.column (D.nonNullable D.text)))

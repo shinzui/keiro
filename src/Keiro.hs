@@ -5,6 +5,7 @@ module Keiro
   , EventStream (..)
   , SnapshotPolicy (..)
   , StateCodec (..)
+  , module Keiro.Router
   , module Keiro.Snapshot
   , module Keiro.Stream
   )
@@ -14,6 +15,7 @@ import Keiro.Command
 import Keiro.Codec
 import Keiro.EventStream
 import Keiro.Prelude
+import Keiro.Router
 import Keiro.Snapshot
 import Keiro.Stream
 

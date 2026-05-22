@@ -6,6 +6,7 @@ module Keiro.ProcessManager
   , PMCommandResult (..)
   , PMStateResult (..)
   , deterministicCommandId
+  , eventAlreadyIn
   , runProcessManagerOnce
   , runProcessManagerWorker
   )

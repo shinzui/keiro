@@ -49,6 +49,7 @@ library
                         Keiro.ReadModel
                         Keiro.ReadModel.Rebuild
                         Keiro.ReadModel.Schema
+                        Keiro.Router
                         Keiro.Snapshot
                         Keiro.Snapshot.Codec
                         Keiro.Snapshot.Policy

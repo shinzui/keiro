@@ -65,8 +65,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Add `src/Keiro/Router.hs` with the `Router` type, `RouterResult`, and `runRouterOnce`; export `eventAlreadyIn` from `Keiro.ProcessManager`; add `Keiro.Router` to `keiro.cabal` exposed-modules and re-export it from `src/Keiro.hs`; package builds with `cabal build all`.
-- [ ] M1: Add a `keiro-test` spec proving effectful, data-dependent fan-out and idempotent replay (one source event → N targets resolved by a read-model query; replay → all duplicates, no new events).
+- [x] M1: Add `src/Keiro/Router.hs` with the `Router` type, `RouterResult`, and `runRouterOnce`; export `eventAlreadyIn` from `Keiro.ProcessManager`; add `Keiro.Router` to `keiro.cabal` exposed-modules and re-export it from `src/Keiro.hs`; package builds with `cabal build all`. (done 2026-05-22; `cabal build keiro` clean.)
+- [x] M1: Add a `keiro-test` spec proving effectful, data-dependent fan-out and idempotent replay (one source event → N targets resolved by a read-model query; replay → all duplicates, no new events). (done 2026-05-22; two specs green; both negative controls verified — see Surprises & Discoveries.)
 - [ ] M2: Add `runRouterWorker` (Shibuya `Adapter`-driven loop) with the documented ack policy; add a worker-level spec.
 - [ ] M3: Add a worked `agent-qual-router` example to the `jitsurei` package (an area→chapters read model, a small chapter-like target aggregate, and a `Router`), plus a `jitsurei-test` spec demonstrating the research-note-13 design end-to-end.
 
@@ -76,7 +76,54 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- M1 negative control (a) — the read-model query is load-bearing. Temporarily
+  stubbing `demoRouter`'s `resolve` to return a fixed 3-element list
+  (independent of `routerTargetsReadModel`) made the "resolves targets
+  effectfully" spec fail at the unseeded-group assertion:
+
+  ```text
+  test/Main.hs:767:22:
+  1) Keiro.Router resolves targets effectfully and fans out one command per target
+       expected: 0
+        but got: 3
+  ```
+
+  i.e. routing an unseeded group `"no-such-group"` returned 3 targets instead of
+  0, proving the count tracks the read model rather than a constant. Reverted.
+
+- M1 negative control (b) — `deterministicCommandId` is load-bearing for
+  idempotency. Temporarily replacing the per-target id with a fresh
+  `EventId <$> liftIO UUID.V4.nextRandom` in `runRouterOnce` made the replay spec
+  fail: the second dispatch of the same source event produced new appends
+  (`StreamVersion 2`, all `PMCommandAppended`) instead of duplicates:
+
+  ```text
+  test/Main.hs:795:11:
+  1) Keiro.Router reports every dispatch as a duplicate on replay, writing no new events
+       predicate failed on: [PMCommandAppended (CommandResult {target = Stream {name = StreamName "router-target-a"}, streamVersion = StreamVersion 2, ...}), ...]
+  ```
+
+  Reverted; with the deterministic id restored, replay yields three
+  `PMCommandDuplicate` and the target streams stay at one event each.
+
+- Pre-existing, unrelated test failures in `Keiro.ReadModel`. Two specs —
+  "waits for async projection cursor with PositionWait" (`test/Main.hs:575`) and
+  "times out when PositionWait target is not reached" (`test/Main.hs:589`) —
+  fail with a `Pattern match failure in 'do' block` on the `Right () <-`
+  binding of `upsertSubscriptionCursorStmt`. Verified these are **pre-existing on
+  pristine `master`**: with all my changes stashed (`git stash -u`) and the
+  ephemeral-pg cache cleared, the `Keiro.ReadModel`-only run still reports the
+  same 2 failures. They are the only two specs that use
+  `upsertSubscriptionCursorStmt` and fail deterministically (likely a
+  `subscriptions`-table schema drift in a kiroku-store update); fixing them is
+  out of scope for this plan. My Router additions add 2 passing examples and
+  introduce 0 new failures (full suite: 79 examples, the same 2 failures).
+
+- The `keiro-test` suite runs with hspec **randomized ordering** ("Randomized
+  with seed …" in output) over a *cached* ephemeral Postgres (`Pg.withCached`),
+  so cross-spec state can persist within a run. The Router specs are robust to
+  this because each seeds its own `router_targets` rows and asserts on
+  per-target stream names it owns.
 
 
 ## Decision Log
@@ -103,7 +150,13 @@ Record every decision made while working on the plan.
   Rationale: The primitive is the reusable unit; wiring each consumer needs its own read models and codecs and belongs in follow-on work. Research note 13 records the full target design.
   Date: 2026-05-20
 
-- Decision: Name the primitive `Router`, after the Enterprise Integration Patterns (Hohpe & Woolf) routing patterns, pairing it with the existing `ProcessManager`.
+- Decision: Make data-dependence load-bearing *inside* the committed M1 spec (not only via the temporary negative control) by also routing an unseeded group and asserting it resolves to zero targets.
+  Rationale: A fixed-list `resolve` would pass a "3 seeded → 3 dispatched" assertion by coincidence; adding "unseeded group → 0 dispatched" makes the read-model query observably load-bearing in CI, while the temporary stub (Surprises & Discoveries) confirms the assertion actually fails when `resolve` ignores the read model.
+  Date: 2026-05-22
+
+- Decision: Treat the two failing `Keiro.ReadModel` PositionWait specs as out of scope and do not fix them under this plan.
+  Rationale: They reproduce on pristine `master` with a cleared ephemeral-pg cache and no Router code present (verified via `git stash -u`), so they are not regressions from this work. They concern `upsertSubscriptionCursorStmt` / the `subscriptions` table, unrelated to the Router primitive. Fixing them would mix an unrelated bug fix into this plan's commits.
+  Date: 2026-05-22
   Rationale: keiro's stateful fan-out primitive already takes its name from the EIP *Process Manager* — a stateful coordinator with `correlate` and its own state stream (`src/Keiro/ProcessManager.hs:40-55`). The new primitive is *stateless*: no state stream, no `correlate`, no self-command. Its sole job is to inspect an event and dispatch to a runtime-resolved set of target streams — which is the EIP *content-based Router* / dynamic *Recipient List*: examine a message, compute its recipients, forward. Naming it `Router` keeps the pair `(ProcessManager, Router)` reading as the two EIP patterns they are — the stateful coordinator vs. the stateless routing element — and names the *concern* (routing / target resolution, research note 13 §1) rather than the mechanism (the effectful `resolve` field). The network-router analogy holds: a stateless element whose only job is to pick a message's next hop(s).
   Date: 2026-05-21
 
