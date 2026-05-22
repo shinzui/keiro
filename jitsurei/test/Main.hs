@@ -10,7 +10,7 @@ import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.UUID (UUID, fromString)
 import Data.Vector qualified as Vector
-import Data.Time (UTCTime (..), secondsToDiffTime)
+import Data.Time (UTCTime (..), addUTCTime, secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -331,6 +331,99 @@ main = hspec $ do
         Store.readStreamForward (StreamName "page-inc-1-alice") (StreamVersion 0) 10
       Vector.length paAgain `shouldBe` 1
 
+  describe "Jitsurei escalation process manager" $ around withTestStore $ do
+    it "advances the saga and schedules an escalation timer on IncidentRaised" $ \store -> do
+      Right () <- Store.runStoreIO store initializeTimerSchema
+      let incidentId = IncidentId "inc-1"
+          raised = IncidentRaisedData
+            { incidentId = incidentId
+            , service = Service "checkout"
+            , severity = Sev1
+            , raisedAt = incidentRaisedAt
+            }
+      result <- Store.runStoreIO store $
+        runEscalationOnce defaultRunCommandOptions incidentRaisedSource (IncidentReported raised)
+      case result of
+        Right (Right pmResult) -> do
+          pmResult ^. #managerResult `shouldSatisfy` \case
+            PMStateAppended{} -> True
+            _ -> False
+          pmResult ^. #timersScheduled `shouldBe` 1
+        other -> expectationFailure ("expected process-manager success, got " <> show other)
+      -- The Sev1 escalation window is 5 minutes; a timer due at +10m is claimable.
+      claimed <- Store.runStoreIO store $ claimDueTimer (addUTCTime 600 incidentRaisedAt)
+      claimed `shouldSatisfy` \case
+        Right (Just _) -> True
+        _ -> False
+
+    it "dispatches AcknowledgeIncident on PageAcknowledged, idempotently" $ \store -> do
+      Right () <- Store.runStoreIO store initializeTimerSchema
+      let incidentId = IncidentId "inc-2"
+      Right (Right _) <- Store.runStoreIO store $
+        runCommand defaultRunCommandOptions incidentEventStream (incidentStream incidentId)
+          (RaiseIncident (sampleRaiseCmd incidentId Sev2))
+      -- The saga must observe the incident before an acknowledgement, exactly as
+      -- the live flow does (IncidentRaised reaches the PM before any PageAcknowledged).
+      Right (Right _) <- Store.runStoreIO store $
+        runEscalationOnce defaultRunCommandOptions incidentRaisedSource (IncidentReported (sampleRaised incidentId Sev2))
+      let acked = PageAcknowledgedData {incidentId = incidentId, responderId = ResponderId "alice"}
+      firstResult <- Store.runStoreIO store $
+        runEscalationOnce defaultRunCommandOptions pageAckSource (ResponderAcked acked)
+      firstResult `shouldSatisfy` \case
+        Right (Right pmResult) ->
+          case pmResult ^. #commandResults of
+            [PMCommandAppended{}] -> True
+            _ -> False
+        _ -> False
+      Right recorded <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "incident-inc-2") (StreamVersion 0) 10
+      fmap last (traverse (decodeRecorded incidentCodec) (Vector.toList recorded))
+        `shouldBe` Right (IncidentAcknowledged (IncidentAcknowledgedData incidentId))
+      secondResult <- Store.runStoreIO store $
+        runEscalationOnce defaultRunCommandOptions pageAckSource (ResponderAcked acked)
+      secondResult `shouldSatisfy` \case
+        Right (Right pmResult) ->
+          case (pmResult ^. #managerResult, pmResult ^. #commandResults) of
+            (PMStateDuplicate{}, [PMCommandDuplicate{}]) -> True
+            _ -> False
+        _ -> False
+
+    it "escalates an unacknowledged incident when the timer fires" $ \store -> do
+      Right () <- Store.runStoreIO store initializeTimerSchema
+      let incidentId = IncidentId "inc-3"
+      Right (Right _) <- Store.runStoreIO store $
+        runCommand defaultRunCommandOptions incidentEventStream (incidentStream incidentId)
+          (RaiseIncident (sampleRaiseCmd incidentId Sev1))
+      Right (Right _) <- Store.runStoreIO store $
+        runEscalationOnce defaultRunCommandOptions incidentRaisedSource (IncidentReported (sampleRaised incidentId Sev1))
+      _ <- Store.runStoreIO store $
+        runEscalationTimerWorker defaultRunCommandOptions (addUTCTime 600 incidentRaisedAt)
+      Right recorded <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "incident-inc-3") (StreamVersion 0) 10
+      fmap last (traverse (decodeRecorded incidentCodec) (Vector.toList recorded))
+        `shouldBe` Right (IncidentEscalated (IncidentEscalatedData incidentId))
+
+    it "is a benign no-op when the incident was already acknowledged" $ \store -> do
+      Right () <- Store.runStoreIO store initializeTimerSchema
+      let incidentId = IncidentId "inc-4"
+          target = incidentStream incidentId
+      Right (Right _) <- Store.runStoreIO store $
+        runCommand defaultRunCommandOptions incidentEventStream target (RaiseIncident (sampleRaiseCmd incidentId Sev1))
+      Right (Right _) <- Store.runStoreIO store $
+        runCommand defaultRunCommandOptions incidentEventStream target
+          (AcknowledgeIncident (AcknowledgeIncidentData incidentId))
+      Right (Right _) <- Store.runStoreIO store $
+        runEscalationOnce defaultRunCommandOptions incidentRaisedSource (IncidentReported (sampleRaised incidentId Sev1))
+      fired <- Store.runStoreIO store $
+        runEscalationTimerWorker defaultRunCommandOptions (addUTCTime 600 incidentRaisedAt)
+      fired `shouldSatisfy` \case
+        Right (Just _) -> True
+        _ -> False
+      Right recorded <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "incident-inc-4") (StreamVersion 0) 10
+      let events = either (const []) id (traverse (decodeRecorded incidentCodec) (Vector.toList recorded))
+      any isIncidentEscalated events `shouldBe` False
+
 sampleOrderId :: OrderId
 sampleOrderId = OrderId "order-100"
 
@@ -393,6 +486,24 @@ txnSourceUuid =
 incidentRaisedAt :: UTCTime
 incidentRaisedAt = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
 
+-- The command and event payloads share fields but are distinct types; build each
+-- from the same inputs.
+sampleRaiseCmd :: IncidentId -> Severity -> RaiseIncidentData
+sampleRaiseCmd incidentId severity = RaiseIncidentData
+  { incidentId = incidentId
+  , service = Service "checkout"
+  , severity = severity
+  , raisedAt = incidentRaisedAt
+  }
+
+sampleRaised :: IncidentId -> Severity -> IncidentRaisedData
+sampleRaised incidentId severity = IncidentRaisedData
+  { incidentId = incidentId
+  , service = Service "checkout"
+  , severity = severity
+  , raisedAt = incidentRaisedAt
+  }
+
 -- A minimal source event standing in for a recorded IncidentRaised; only its id
 -- is load-bearing (it seeds the paging router's deterministic command ids).
 incidentRaisedSource :: RecordedEvent
@@ -415,6 +526,21 @@ incidentSourceUuid =
   case fromString "018f0f18-17aa-7000-8000-0000000000d1" of
     Just value -> value
     Nothing -> error "invalid incident source UUID"
+
+-- A second source-event fixture, standing in for a recorded PageAcknowledged.
+pageAckSource :: RecordedEvent
+pageAckSource = incidentRaisedSource {eventId = EventId pageAckSourceUuid}
+
+pageAckSourceUuid :: UUID
+pageAckSourceUuid =
+  case fromString "018f0f18-17aa-7000-8000-0000000000d2" of
+    Just value -> value
+    Nothing -> error "invalid page-ack source UUID"
+
+isIncidentEscalated :: IncidentEvent -> Bool
+isIncidentEscalated = \case
+  IncidentEscalated{} -> True
+  _ -> False
 
 isAppended :: PMCommandResult target -> Bool
 isAppended = \case

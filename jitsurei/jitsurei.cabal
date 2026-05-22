@@ -37,6 +37,7 @@ library
                         Jitsurei.Database
                         Jitsurei.Diagrams
                         Jitsurei.Domain
+                        Jitsurei.EscalationProcess
                         Jitsurei.FulfillmentProcess
                         Jitsurei.Incident
                         Jitsurei.OncallRoster

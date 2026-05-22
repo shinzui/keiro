@@ -3,6 +3,7 @@ module Jitsurei
   , module Jitsurei.Database
   , module Jitsurei.Diagrams
   , module Jitsurei.Domain
+  , module Jitsurei.EscalationProcess
   , module Jitsurei.FulfillmentProcess
   , module Jitsurei.Incident
   , module Jitsurei.OncallRoster
@@ -18,6 +19,7 @@ import Jitsurei.AgentQualRouter
 import Jitsurei.Database
 import Jitsurei.Diagrams
 import Jitsurei.Domain
+import Jitsurei.EscalationProcess
 import Jitsurei.FulfillmentProcess
 import Jitsurei.Incident
 import Jitsurei.OncallRoster

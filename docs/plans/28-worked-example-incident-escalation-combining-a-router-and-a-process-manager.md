@@ -67,8 +67,8 @@ This section must always reflect the actual current state of the work.
 
 - [x] M1: Add `Jitsurei.Incident` (incident aggregate), `Jitsurei.OncallRoster` (the `service_oncall` read model + schema), and `Jitsurei.Paging` (page aggregate + `pagingRouter`). Register the modules in `jitsurei.cabal` and re-export from `Jitsurei`. `cabal build all` clean. (done 2026-05-22)
 - [x] M1: `jitsurei-test` specs — incident command cycle, page command cycle, and the router fanning `IncidentRaised` to one page per rostered responder with idempotent replay. (done 2026-05-22; jitsurei-test 11/11.)
-- [ ] M2: Add `Jitsurei.EscalationProcess` (escalation saga aggregate + `escalationProcessManager` + escalation `TimerRequest`/worker). Register and re-export.
-- [ ] M2: `jitsurei-test` specs — PM advances the saga and schedules the escalation timer on `IncidentRaised`; PM dispatches `AcknowledgeIncident` on `PageAcknowledged` (idempotent); the escalation timer worker drives `EscalateIncident` when unacknowledged and is a benign no-op when already acknowledged.
+- [x] M2: Add `Jitsurei.EscalationProcess` (escalation saga aggregate + `escalationProcessManager` + escalation `TimerRequest`/worker). Register and re-export. (done 2026-05-22)
+- [x] M2: `jitsurei-test` specs — PM advances the saga and schedules the escalation timer on `IncidentRaised`; PM dispatches `AcknowledgeIncident` on `PageAcknowledged` (idempotent); the escalation timer worker drives `EscalateIncident` when unacknowledged and is a benign no-op when already acknowledged. (done 2026-05-22; jitsurei-test 15/15.)
 - [ ] M3: Add the new guide and generated diagrams (incident + page + escalation transducers), register them in `Jitsurei.Diagrams` / `jitsurei/app/DiagramsMain.hs`, run `--write`/`--check`. Revise `docs/guides/routers-and-effectful-fan-out.md` for EIP grounding and cross-link from `docs/guides/README.md`.
 
 
@@ -77,7 +77,27 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- `TimerRow` (defined in `Keiro.Timer.Schema` with `DuplicateRecordFields`) has no
+  auto-derived `HasField` instances, so `OverloadedRecordDot` (`timer.correlationId`)
+  fails to compile (`No instance for HasField "correlationId" TimerRow`). The
+  keiro tests access it via generic-lens (`timer ^. #correlationId`), which works
+  off the `Generic` instance. `Jitsurei.EscalationProcess` therefore imports
+  `Control.Lens ((^.))` + `Data.Generics.Labels ()` for `incidentIdFromTimer`.
+  (Aggregate payload records authored in this plan are *not* declared with
+  `DuplicateRecordFields` at their definition site in the same way, so record-dot
+  on `d.incidentId` etc. inside the Builder DSL is fine.)
+
+- A module that writes `import Prelude qualified` (to reach `Prelude.fromIntegral`)
+  thereby suppresses the *implicit* unqualified Prelude, dropping `Eq`/`Ord`/`Show`/`Int`
+  from scope (GHC counts a qualified import as "explicitly imported"). Fixed in
+  `Jitsurei.OncallRoster` by importing `Prelude` normally and using `fromIntegral`
+  unqualified.
+
+- The escalation saga is a real state machine: `NoteAcknowledged` is legal only
+  from `Awaiting`, so the M2 ack spec must run `IncidentReported` through the PM
+  *before* `ResponderAcked` (otherwise the manager command is `CommandRejected`).
+  This mirrors the live ordering (a `PageAcknowledged` can only follow the
+  `IncidentRaised` that paged the responder) and is now explicit in the spec.
 
 
 ## Decision Log
