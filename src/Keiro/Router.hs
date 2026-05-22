@@ -2,10 +2,12 @@ module Keiro.Router
   ( Router (..)
   , RouterResult (..)
   , runRouterOnce
+  , runRouterWorker
   )
 where
 
 import Data.Coerce (coerce)
+import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import GHC.Stack (HasCallStack)
@@ -19,6 +21,13 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError (..))
 import Kiroku.Store.Types (RecordedEvent)
 import Prelude (zip)
+import Shibuya.Adapter (Adapter (..))
+import Shibuya.Core.Ack (AckDecision (..), HaltReason (..))
+import Shibuya.Core.AckHandle (AckHandle (..))
+import Shibuya.Core.Ingested (Ingested (..))
+import Shibuya.Core.Types (Envelope (..))
+import Streamly.Data.Fold qualified as Fold
+import Streamly.Data.Stream qualified as Streamly
 
 {- | A stateless, content-based router (in the Enterprise Integration Patterns
 sense): for each incoming event it resolves a data-dependent set of target
@@ -116,3 +125,62 @@ runRouterOnce options router sourceEvent input = do
 
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
+
+{- | Run a 'Router' as a live subscription over a Shibuya 'Adapter'.
+
+Mirrors 'Keiro.ProcessManager.runProcessManagerWorker': it drains the adapter's
+message stream, decoding each message to a @(RecordedEvent, input)@ pair and
+dispatching it through 'runRouterOnce'.
+
+Ack policy (see this plan's Decision Log):
+
+  * a message that fails to decode finalizes 'AckHalt' (@HaltFatal@);
+  * otherwise, after dispatch, if every 'PMCommandResult' is
+    'PMCommandAppended' or 'PMCommandDuplicate' the message finalizes 'AckOk';
+  * if any dispatch is 'PMCommandFailed' the message finalizes
+    @AckHalt (HaltFatal …)@ so the source event is retried — idempotent replay
+    (deterministic command ids) makes retry safe.
+
+Benign domain rejections (a target aggregate refusing a "check" command because
+no edge matches) must be modeled as /total/ transitions in the keiki transducer
+(an ε-complement self-loop) so they never surface as 'PMCommandFailed' and
+therefore never wedge the worker.
+
+Unlike 'runProcessManagerWorker' — which computes an 'AckDecision' per message
+and discards it — this worker invokes the ingested message's
+'Shibuya.Core.AckHandle.AckHandle' @finalize@ with the decision, fulfilling the
+"called exactly once" ack contract so the decision actually reaches the adapter.
+-}
+runRouterWorker ::
+  forall msg input targetPhi targetRs targetState targetCi targetCo es.
+  ( HasCallStack
+  , IOE :> es
+  , Store :> es
+  , Error StoreError :> es
+  , BoolAlg targetPhi (RegFile targetRs, targetCi)
+  , Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  Router input targetPhi targetRs targetState targetCi targetCo es ->
+  Adapter es msg ->
+  (msg -> Maybe (RecordedEvent, input)) ->
+  Eff es ()
+runRouterWorker options router Adapter{source = adapterSource} decodeMessage =
+  Streamly.fold Fold.drain $
+    Streamly.mapM handleIngested adapterSource
+  where
+    handleIngested :: Ingested es msg -> Eff es AckDecision
+    handleIngested Ingested{envelope = Envelope{payload = message}, ack = AckHandle finalizeAck} = do
+      decision <- case decodeMessage message of
+        Nothing -> pure (AckHalt (HaltFatal "router worker could not decode message"))
+        Just (recorded, input) -> do
+          RouterResult results <- runRouterOnce options router recorded input
+          pure (ackDecisionFor results)
+      finalizeAck decision
+      pure decision
+
+    ackDecisionFor :: [PMCommandResult target] -> AckDecision
+    ackDecisionFor results =
+      case [err | PMCommandFailed err <- results] of
+        (err : _) -> AckHalt (HaltFatal (Text.pack (show err)))
+        [] -> AckOk

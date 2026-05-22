@@ -67,7 +67,7 @@ This section must always reflect the actual current state of the work.
 
 - [x] M1: Add `src/Keiro/Router.hs` with the `Router` type, `RouterResult`, and `runRouterOnce`; export `eventAlreadyIn` from `Keiro.ProcessManager`; add `Keiro.Router` to `keiro.cabal` exposed-modules and re-export it from `src/Keiro.hs`; package builds with `cabal build all`. (done 2026-05-22; `cabal build keiro` clean.)
 - [x] M1: Add a `keiro-test` spec proving effectful, data-dependent fan-out and idempotent replay (one source event → N targets resolved by a read-model query; replay → all duplicates, no new events). (done 2026-05-22; two specs green; both negative controls verified — see Surprises & Discoveries.)
-- [ ] M2: Add `runRouterWorker` (Shibuya `Adapter`-driven loop) with the documented ack policy; add a worker-level spec.
+- [x] M2: Add `runRouterWorker` (Shibuya `Adapter`-driven loop) with the documented ack policy; add a worker-level spec. (done 2026-05-22; two worker specs green — happy-path drain finalizes `[AckOk, AckOk]` and dispatches per resolved target; a rejecting target finalizes `AckHalt (HaltFatal …)`.)
 - [ ] M3: Add a worked `agent-qual-router` example to the `jitsurei` package (an area→chapters read model, a small chapter-like target aggregate, and a `Router`), plus a `jitsurei-test` spec demonstrating the research-note-13 design end-to-end.
 
 
@@ -152,6 +152,18 @@ Record every decision made while working on the plan.
 
 - Decision: Make data-dependence load-bearing *inside* the committed M1 spec (not only via the temporary negative control) by also routing an unseeded group and asserting it resolves to zero targets.
   Rationale: A fixed-list `resolve` would pass a "3 seeded → 3 dispatched" assertion by coincidence; adding "unseeded group → 0 dispatched" makes the read-model query observably load-bearing in CI, while the temporary stub (Surprises & Discoveries) confirms the assertion actually fails when `resolve` ignores the read model.
+  Date: 2026-05-22
+
+- Decision: `runRouterWorker` invokes the ingested message's `AckHandle.finalize` with its computed `AckDecision`; `runProcessManagerWorker` does not.
+  Rationale: `runProcessManagerWorker` (`src/Keiro/ProcessManager.hs:195-207`) computes an `AckDecision` per message and then discards it (`Fold.drain . mapM`), so its documented ack policy is effectively dead — nothing acts on `AckOk` vs `AckHalt`. Shibuya's `AckHandle.finalize :: AckDecision -> Eff es ()` is the mechanical seam that delivers the decision to the adapter ("must be called exactly once"). Calling it is both *more correct* (the ack policy actually reaches the adapter) and what makes the policy observable — the M2 worker spec asserts on the finalized decisions (`[AckOk, AckOk]` vs `[AckHalt …]`) recorded by an in-memory adapter. The worker still drains the whole stream and returns `Eff es ()`, matching the planned signature.
+  Date: 2026-05-22
+
+- Decision: Drive the worker's `AckHalt` test with a target aggregate that has *no outgoing edges* (`rejectingEventStream`), rather than the guarded snapshot counter.
+  Rationale: A no-edge transducer rejects every command (`CommandRejected → PMCommandFailed`) without a `stateCodec`, so the failing-dispatch test needs no `keiro_snapshots` table setup. The guarded snapshot counter would have pulled in snapshot-schema provisioning irrelevant to the worker's ack policy.
+  Date: 2026-05-22
+
+- Decision: The `keiro-test` suite gained direct `shibuya-core` and `streamly-core` dependencies (and `Data.Monoid (mempty)` / `Data.IORef` imports) to construct an in-memory `Adapter`.
+  Rationale: Exercising `runRouterWorker` requires building a Shibuya `Adapter` (a `Streamly.Data.Stream` of `Ingested` envelopes with an `AckHandle`); those modules live in `shibuya-core` and `streamly-core`, which the test-suite did not previously depend on directly. `Streamly.Data.Stream`/`Fold` are in `streamly-core` (not `streamly`), mirroring the library's own dependency split.
   Date: 2026-05-22
 
 - Decision: Treat the two failing `Keiro.ReadModel` PositionWait specs as out of scope and do not fix them under this plan.

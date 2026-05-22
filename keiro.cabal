@@ -115,6 +115,8 @@ test-suite keiro-test
                         keiki-codec-json,
                         keiro,
                         kiroku-store,
+                        shibuya-core >= 0.5,
+                        streamly-core >= 0.3,
                         text >= 2.1,
                         time >= 1.12,
                         unliftio-core >= 0.2,

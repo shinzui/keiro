@@ -8,7 +8,8 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
-import Data.IORef (atomicModifyIORef', newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
+import Data.Monoid (mempty)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Effectful (Eff, IOE, (:>))
@@ -105,6 +106,12 @@ import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Keiro.Stream qualified as Stream
 import Keiro.Telemetry qualified as Telemetry
 import Keiro.Timer
+import Shibuya.Adapter (Adapter (..))
+import Shibuya.Core.Ack (AckDecision (..), HaltReason (..))
+import Shibuya.Core.AckHandle (AckHandle (..))
+import Shibuya.Core.Ingested (Ingested (..))
+import Shibuya.Core.Types (Envelope (..))
+import Streamly.Data.Stream qualified as Streamly
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types
   ( EventId (..)
@@ -803,6 +810,49 @@ main = hspec $ do
       Vector.length targetA `shouldBe` 1
       Vector.length targetB `shouldBe` 1
       Vector.length targetC `shouldBe` 1
+
+    it "drains an adapter, dispatching one command per resolved target for every message" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction initializeRouterTargetsTable
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $ do
+          Tx.statement ("g1", "worker-a") insertRouterTargetStmt
+          Tx.statement ("g1", "worker-b") insertRouterTargetStmt
+          Tx.statement ("g2", "worker-c") insertRouterTargetStmt
+      decisionsRef <- newIORef []
+      let sourceEvent1 = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          sourceEvent2 = recordedFromEventId (EventId sampleUuid2) (CounterAdded 1)
+          messages =
+            [ (sourceEvent1, RouteGroup "g1")
+            , (sourceEvent2, RouteGroup "g2")
+            ]
+          adapter = inMemoryAdapter decisionsRef messages
+      Right () <- Store.runStoreIO storeHandle $
+        runRouterWorker defaultRunCommandOptions demoRouter adapter Just
+      decisions <- readIORef decisionsRef
+      decisions `shouldBe` [AckOk, AckOk]
+      Right wa <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "worker-a") (StreamVersion 0) 10
+      Right wb <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "worker-b") (StreamVersion 0) 10
+      Right wc <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "worker-c") (StreamVersion 0) 10
+      Vector.length wa `shouldBe` 1
+      Vector.length wb `shouldBe` 1
+      Vector.length wc `shouldBe` 1
+
+    it "finalizes AckHalt rather than AckOk when a dispatched command fails" $ \storeHandle -> do
+      decisionsRef <- newIORef []
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          messages = [(sourceEvent, RouteGroup "g1")]
+          adapter = inMemoryAdapter decisionsRef messages
+      Right () <- Store.runStoreIO storeHandle $
+        runRouterWorker defaultRunCommandOptions failingRouter adapter Just
+      decisions <- readIORef decisionsRef
+      decisions `shouldSatisfy` \case
+        [AckHalt (HaltFatal _)] -> True
+        _ -> False
 
   describe "Keiro.Timer" $ around withTestStore $ do
     it "claims a due timer, fires a command, and marks it complete once" $ \storeHandle -> do
@@ -2586,3 +2636,70 @@ selectRouterTargetsStmt =
     """
     (E.param (E.nonNullable E.text))
     (D.rowList (D.column (D.nonNullable D.text)))
+
+-- Router worker fixtures: an in-memory Shibuya adapter that records every
+-- finalized AckDecision, plus a router whose dispatch always fails.
+
+inMemoryAdapter ::
+  (IOE :> es) =>
+  IORef [AckDecision] ->
+  [msg] ->
+  Adapter es msg
+inMemoryAdapter decisionsRef messages =
+  Adapter
+    { adapterName = "router-test-adapter"
+    , source = Streamly.fromList (fmap ingest messages)
+    , shutdown = pure ()
+    }
+  where
+    ingest message =
+      Ingested
+        { envelope = routerTestEnvelope message
+        , ack = AckHandle (\decision -> liftIO (modifyIORef' decisionsRef (<> [decision])))
+        , lease = Nothing
+        }
+
+routerTestEnvelope :: msg -> Envelope msg
+routerTestEnvelope message =
+  Envelope
+    { messageId = "router-test-message"
+    , cursor = Nothing
+    , partition = Nothing
+    , enqueuedAt = Nothing
+    , traceContext = Nothing
+    , attempt = Nothing
+    , attributes = mempty
+    , payload = message
+    }
+
+-- | A target aggregate with no outgoing edges: every command is rejected
+-- (CommandRejected), so a dispatch through it surfaces as PMCommandFailed,
+-- driving the worker's AckHalt branch.
+rejectingEventStream :: CounterEventStream
+rejectingEventStream =
+  counterEventStream & #transducer .~ rejectingTransducer
+
+rejectingTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
+rejectingTransducer = SymTransducer
+  { edgesOut = \case
+      Counting -> []
+  , initial = Counting
+  , initialRegs = RNil
+  , isFinal = \_ -> False
+  }
+
+failingRouter ::
+  Router
+    RouteGroup
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+    es
+failingRouter = Router
+  { name = "failing-router"
+  , key = \(RouteGroup g) -> g
+  , resolve = \_ -> pure [PMCommand { target = stream "failing-target", command = Add 1 }]
+  , targetEventStream = rejectingEventStream
+  }
