@@ -65,8 +65,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Add `Jitsurei.Incident` (incident aggregate), `Jitsurei.OncallRoster` (the `service_oncall` read model + schema), and `Jitsurei.Paging` (page aggregate + `pagingRouter`). Register the modules in `jitsurei.cabal` and re-export from `Jitsurei`. `cabal build all` clean.
-- [ ] M1: `jitsurei-test` specs — incident command cycle, page command cycle, and the router fanning `IncidentRaised` to one page per rostered responder with idempotent replay.
+- [x] M1: Add `Jitsurei.Incident` (incident aggregate), `Jitsurei.OncallRoster` (the `service_oncall` read model + schema), and `Jitsurei.Paging` (page aggregate + `pagingRouter`). Register the modules in `jitsurei.cabal` and re-export from `Jitsurei`. `cabal build all` clean. (done 2026-05-22)
+- [x] M1: `jitsurei-test` specs — incident command cycle, page command cycle, and the router fanning `IncidentRaised` to one page per rostered responder with idempotent replay. (done 2026-05-22; jitsurei-test 11/11.)
 - [ ] M2: Add `Jitsurei.EscalationProcess` (escalation saga aggregate + `escalationProcessManager` + escalation `TimerRequest`/worker). Register and re-export.
 - [ ] M2: `jitsurei-test` specs — PM advances the saga and schedules the escalation timer on `IncidentRaised`; PM dispatches `AcknowledgeIncident` on `PageAcknowledged` (idempotent); the escalation timer worker drives `EscalateIncident` when unacknowledged and is a benign no-op when already acknowledged.
 - [ ] M3: Add the new guide and generated diagrams (incident + page + escalation transducers), register them in `Jitsurei.Diagrams` / `jitsurei/app/DiagramsMain.hs`, run `--write`/`--check`. Revise `docs/guides/routers-and-effectful-fan-out.md` for EIP grounding and cross-link from `docs/guides/README.md`.

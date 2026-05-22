@@ -38,7 +38,10 @@ library
                         Jitsurei.Diagrams
                         Jitsurei.Domain
                         Jitsurei.FulfillmentProcess
+                        Jitsurei.Incident
+                        Jitsurei.OncallRoster
                         Jitsurei.OrderStream
+                        Jitsurei.Paging
                         Jitsurei.ReadModels
                         Jitsurei.Snapshots
                         Jitsurei.Timers

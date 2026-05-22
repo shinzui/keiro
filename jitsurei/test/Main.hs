@@ -236,6 +236,101 @@ main = hspec $ do
       Vector.length c2' `shouldBe` 1
       Vector.length c3' `shouldBe` 1
 
+  describe "Jitsurei incident aggregate" $ around withTestStore $ do
+    it "raises, acknowledges, and rejects a post-acknowledgement escalation" $ \store -> do
+      let incidentId = IncidentId "inc-1"
+          target = incidentStream incidentId
+      Right (Right _) <- Store.runStoreIO store $
+        runCommand defaultRunCommandOptions incidentEventStream target $
+          RaiseIncident RaiseIncidentData
+            { incidentId = incidentId
+            , service = Service "checkout"
+            , severity = Sev1
+            , raisedAt = incidentRaisedAt
+            }
+      Right (Right _) <- Store.runStoreIO store $
+        runCommand defaultRunCommandOptions incidentEventStream target
+          (AcknowledgeIncident (AcknowledgeIncidentData incidentId))
+      -- The aggregate's guards resolve the ack/escalate race: once acknowledged,
+      -- EscalateIncident has no edge and is a benign domain rejection.
+      escalateResult <- Store.runStoreIO store $
+        runCommand defaultRunCommandOptions incidentEventStream target
+          (EscalateIncident (EscalateIncidentData incidentId))
+      escalateResult `shouldBe` Right (Left CommandRejected)
+      Right recorded <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "incident-inc-1") (StreamVersion 0) 10
+      traverse (decodeRecorded incidentCodec) (Vector.toList recorded)
+        `shouldBe` Right
+          [ IncidentRaised IncidentRaisedData
+              { incidentId = incidentId
+              , service = Service "checkout"
+              , severity = Sev1
+              , raisedAt = incidentRaisedAt
+              }
+          , IncidentAcknowledged (IncidentAcknowledgedData incidentId)
+          ]
+
+  describe "Jitsurei paging" $ around withTestStore $ do
+    it "sends then acknowledges a page" $ \store -> do
+      let incidentId = IncidentId "inc-1"
+          responderId = ResponderId "alice"
+          target = pageStream incidentId responderId
+      Right (Right _) <- Store.runStoreIO store $
+        runCommand defaultRunCommandOptions pageEventStream target
+          (SendPage (SendPageData incidentId responderId))
+      Right (Right _) <- Store.runStoreIO store $
+        runCommand defaultRunCommandOptions pageEventStream target
+          (AcknowledgePage (AcknowledgePageData incidentId responderId))
+      Right recorded <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "page-inc-1-alice") (StreamVersion 0) 10
+      traverse (decodeRecorded pageCodec) (Vector.toList recorded)
+        `shouldBe` Right
+          [ PageSent (PageSentData incidentId responderId)
+          , PageAcknowledged (PageAcknowledgedData incidentId responderId)
+          ]
+
+    it "fans IncidentRaised out to one page per rostered responder, idempotently" $ \store -> do
+      Right () <- Store.runStoreIO store initializeReadModelSchema
+      Right () <- Store.runStoreIO store $
+        Store.runTransaction initializeOncallRosterTable
+      Right () <- Store.runStoreIO store $
+        Store.runTransaction $ do
+          Tx.statement ("checkout", "alice", 1) insertOncallStmt
+          Tx.statement ("checkout", "bob", 1) insertOncallStmt
+          Tx.statement ("checkout", "carol", 2) insertOncallStmt
+      let raised = IncidentRaisedData
+            { incidentId = IncidentId "inc-1"
+            , service = Service "checkout"
+            , severity = Sev1
+            , raisedAt = incidentRaisedAt
+            }
+      Right (RouterResult rs1) <- Store.runStoreIO store $
+        runRouterOnce defaultRunCommandOptions pagingRouter incidentRaisedSource raised
+      length rs1 `shouldBe` 3
+      rs1 `shouldSatisfy` all isAppended
+      Right pa <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "page-inc-1-alice") (StreamVersion 0) 10
+      Right pb <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "page-inc-1-bob") (StreamVersion 0) 10
+      Right pc <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "page-inc-1-carol") (StreamVersion 0) 10
+      Vector.length pa `shouldBe` 1
+      Vector.length pb `shouldBe` 1
+      Vector.length pc `shouldBe` 1
+      -- Data-dependence: an unrostered service resolves to no pages.
+      Right (RouterResult rsNone) <- Store.runStoreIO store $
+        runRouterOnce defaultRunCommandOptions pagingRouter incidentRaisedSource
+          (raised {service = Service "unstaffed"})
+      length rsNone `shouldBe` 0
+      -- Replay the same source event: every dispatch is a duplicate, no new pages.
+      Right (RouterResult rs2) <- Store.runStoreIO store $
+        runRouterOnce defaultRunCommandOptions pagingRouter incidentRaisedSource raised
+      length rs2 `shouldBe` 3
+      rs2 `shouldSatisfy` all isDuplicate
+      Right paAgain <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "page-inc-1-alice") (StreamVersion 0) 10
+      Vector.length paAgain `shouldBe` 1
+
 sampleOrderId :: OrderId
 sampleOrderId = OrderId "order-100"
 
@@ -294,6 +389,32 @@ txnSourceUuid =
   case fromString "018f0f18-17aa-7000-8000-0000000000c1" of
     Just value -> value
     Nothing -> error "invalid transaction source UUID"
+
+incidentRaisedAt :: UTCTime
+incidentRaisedAt = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
+
+-- A minimal source event standing in for a recorded IncidentRaised; only its id
+-- is load-bearing (it seeds the paging router's deterministic command ids).
+incidentRaisedSource :: RecordedEvent
+incidentRaisedSource = RecordedEvent
+  { eventId = EventId incidentSourceUuid
+  , eventType = EventType "IncidentRaised"
+  , streamVersion = StreamVersion 1
+  , globalPosition = GlobalPosition 1
+  , originalStreamId = StreamId 1
+  , originalVersion = StreamVersion 1
+  , payload = Aeson.Null
+  , metadata = Nothing
+  , causationId = Nothing
+  , correlationId = Nothing
+  , createdAt = incidentRaisedAt
+  }
+
+incidentSourceUuid :: UUID
+incidentSourceUuid =
+  case fromString "018f0f18-17aa-7000-8000-0000000000d1" of
+    Just value -> value
+    Nothing -> error "invalid incident source UUID"
 
 isAppended :: PMCommandResult target -> Bool
 isAppended = \case
