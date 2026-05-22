@@ -12,12 +12,21 @@ The current library includes:
 - the `EventStream` aggregate contract;
 - command execution with hydration, replay, decision, optimistic append, and
   retry;
+- multi-event command output (one command appends zero, one, or many events in
+  one optimistic batch);
 - same-transaction SQL continuations for inline projections;
 - advisory snapshots;
 - read-model metadata, consistency modes, and position waits;
 - async projection helpers with idempotency expectations;
 - event-sourced process managers;
+- stateless, effectful fan-out routers;
 - durable timer storage and worker helpers;
+- a transactional outbox with per-key ordering, backoff, and dead-lettering,
+  plus a Kafka producer adapter;
+- an idempotent inbox with claim/retry/release/dead transitions and GC, plus
+  Shibuya and Kafka consumer adapters;
+- the cross-context integration-event envelope;
+- OpenTelemetry command/producer/consumer spans (spans only; no metrics yet);
 - embedded codd migrations for Kiroku and Keiro framework tables.
 
 The repository test suite exercises these paths against an ephemeral PostgreSQL

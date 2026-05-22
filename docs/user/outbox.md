@@ -177,9 +177,11 @@ Two supporting indexes:
   partial `WHERE status NOT IN ('sent', 'dead') AND message_key IS NOT NULL`
   — backs the per-key head-of-line predicate.
 
-The `(source, message_id)` unique constraint means a retried saga
-attempt with the same `outboxId` is idempotent at the row level —
-re-inserting is a no-op.
+The enqueue `ON CONFLICT` target is `(source, message_id)`, so a retried
+attempt that reuses the same `messageId` is idempotent at the row level —
+re-inserting is a no-op. (The canonical producer path mints a fresh
+`messageId` per attempt, so reuse the message id explicitly when you want
+this de-duplication.)
 
 ## A worked example
 
@@ -201,7 +203,13 @@ ordersIntegrationProducer = IntegrationProducer
           , eventType = "OrderSubmitted"
           , schemaVersion = 1
           , contentType = ApplicationJson
-          , schemaReference = Just (subjectReference "billing.orders.v1.OrderSubmitted")
+          , schemaReference = Just SchemaReference
+              { registry = Nothing
+              , subject = Just "billing.orders.v1.OrderSubmitted"
+              , version = Nothing
+              , schemaId = Nothing
+              , fingerprint = Nothing
+              }
           , sourceEventId = Just (recorded ^. #eventId)
           , sourceGlobalPosition = Just (recorded ^. #globalPosition)
           , payloadBytes = Lazy.toStrict (Aeson.encode (orderSubmittedJson orderId quantity))

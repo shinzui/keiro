@@ -174,7 +174,7 @@ OpenTelemetry attributes for you. It also normalizes
 `traceparent` and `tracestate` headers** — the keiro-specific headers
 that `integrationEventFromKafka` needs
 (`keiro-message-id`, `keiro-source-event-id`, `keiro-event-type`,
-`keiro-content-type`, schema-reference headers, etc.) are dropped at
+`content-type`, schema-reference headers, etc.) are dropped at
 the adapter boundary.
 
 So `shibuya-kafka-adapter`'s `Handler es (Maybe ByteString)` cannot

@@ -19,15 +19,25 @@ data RunCommandOptions = RunCommandOptions
   , pageSize :: Int32
   , eventIds :: [EventId]
   , beforeAppend :: IO ()
+  , tracer :: Maybe Tracer
+  , metadata :: Maybe Value
   }
 ```
+
+`tracer`, when `Just`, opens an OpenTelemetry `Internal`-kind span around each
+command invocation (see `Keiro.Telemetry`); when `Nothing`, no spans are emitted.
+`metadata`, when `Just`, is JSON merged into every event's metadata for the
+invocation (ambient context such as actor type, agent id, or session id); the
+codec always adds the `schemaVersion` key, and these keys are merged on top.
 
 `defaultRunCommandOptions` uses:
 
 - `retryLimit = 3`;
 - `pageSize = 256`;
 - no caller-supplied event ids;
-- no `beforeAppend` hook.
+- no `beforeAppend` hook;
+- no `tracer` (no spans emitted);
+- no `metadata`.
 
 ## Running A Command
 

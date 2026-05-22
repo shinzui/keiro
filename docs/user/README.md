@@ -3,7 +3,8 @@
 Keiro is a Haskell library for building Postgres-backed event-sourced
 applications. It gives application code a typed event-stream contract, command
 execution with optimistic concurrency, optional snapshots, read-model helpers,
-process managers, and durable timers.
+process managers, routers, durable timers, a transactional outbox and idempotent
+inbox for cross-context integration events, and OpenTelemetry tracing.
 
 Keiro is not a server. Your application owns its process model, database
 connection settings, deployment, and domain modules. Keiro supplies the runtime
@@ -63,11 +64,18 @@ The v1 library includes:
 - read models, inline projections, async projection helpers, and rebuild
   metadata through `Keiro.ReadModel` and `Keiro.Projection`;
 - event-sourced process managers through `Keiro.ProcessManager`;
-- durable timer storage and worker helpers through `Keiro.Timer`.
+- stateless, effectful fan-out (routers) through `Keiro.Router`;
+- durable timer storage and worker helpers through `Keiro.Timer`;
+- the cross-context integration-event envelope through
+  `Keiro.Integration.Event`;
+- a transactional outbox through `Keiro.Outbox` and an idempotent inbox through
+  `Keiro.Inbox`, each with a Kafka adapter;
+- OpenTelemetry command/producer/consumer spans through `Keiro.Telemetry`.
 
 The top-level `Keiro` module re-exports the core stream, codec, event-stream,
-command, and snapshot APIs. Import read-model, projection, process-manager, and
-timer modules directly.
+command, router, and snapshot APIs. Import read-model, projection,
+process-manager, timer, outbox, inbox, integration-event, and telemetry modules
+directly.
 
 ## What this guide assumes
 

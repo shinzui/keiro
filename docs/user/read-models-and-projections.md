@@ -87,9 +87,13 @@ Inline projections run inside the command append transaction.
 ```haskell
 data InlineProjection co = InlineProjection
   { name :: Text
-  , apply :: co -> AppendResult -> Tx.Transaction ()
+  , apply :: co -> RecordedEvent -> Tx.Transaction ()
   }
 ```
+
+`apply` receives the decoded event together with its per-event `RecordedEvent`,
+so a projection can read event metadata (actor, source event id, stream version,
+global position) when writing the read-model row.
 
 Use `runCommandWithProjections`:
 

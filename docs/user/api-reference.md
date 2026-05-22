@@ -12,11 +12,15 @@ Top-level convenience module. Re-exports:
 - `EventStream`;
 - `SnapshotPolicy`;
 - `StateCodec`;
+- `Keiro.Router`;
 - `Keiro.Snapshot`;
 - `Keiro.Stream`.
 
-Read-model, projection, process-manager, and timer APIs are exposed as direct
-modules and are not re-exported from `Keiro`.
+It also exports `version` (the library version string).
+
+Read-model, projection, process-manager, timer, outbox, inbox, integration-event,
+and telemetry APIs are exposed as direct modules and are not re-exported from
+`Keiro`.
 
 ## `Keiro.Stream`
 
@@ -160,10 +164,26 @@ Types and functions:
 - `PMCommandResult (..)`
 - `PMStateResult (..)`
 - `deterministicCommandId`
+- `eventAlreadyIn`
 - `runProcessManagerOnce`
 - `runProcessManagerWorker`
 
-Use it for event-sourced coordination across streams.
+Use it for event-sourced coordination across streams. `eventAlreadyIn` is the
+idempotency pre-check, exported so routers and other callers can reuse it.
+
+## `Keiro.Router`
+
+Types and functions:
+
+- `Router (..)`
+- `RouterResult (..)`
+- `runRouterOnce`
+- `runRouterWorker`
+
+Use it for stateless, effectful fan-out (content-based router / recipient list).
+Unlike a process manager, a router resolves its targets *effectfully* (for
+example from a read-model `runQuery`) rather than purely from manager state, and
+keeps no state stream. Re-exported from `Keiro`.
 
 ## `Keiro.Timer`
 
@@ -180,6 +200,53 @@ Types and functions:
 - `runTimerWorker`
 
 Use it for durable timer storage and polling workers.
+
+## `Keiro.Integration.Event`
+
+The canonical cross-context integration-event envelope. Exports the envelope
+type, `IntegrationContentType (..)`, `SchemaReference (..)`, `TraceContext (..)`,
+`IntegrationEventError (..)`, `encodeJsonIntegrationEvent`,
+`decodeJsonIntegrationEvent`, `integrationPayload`, `integrationHeaders`, the
+`header*` Kafka-header name constants, `contentTypeText`, and `parseContentType`.
+
+Use it to construct and serialize events published across bounded contexts.
+
+## `Keiro.Outbox`
+
+Transactional outbox. Re-exports `Keiro.Outbox.Types` and exports
+`initializeOutboxSchema`, `enqueueOutboxTx`, `claimOutboxBatch`, `markOutboxSent`,
+`lookupOutbox`, `listOutbox`, `freshOutboxId`, `enqueueIntegrationEventTx`,
+`IntegrationProducer (..)`, `IntegrationEventDraft (..)`, `mintIntegrationEvent`,
+`draftToEvent`, `enqueueProducerEventTx`, `PublishOutcome (..)`, and
+`publishClaimedOutbox`. `Keiro.Outbox.Kafka` adds the Kafka producer adapter.
+
+Use it to commit side-effect intents in the write transaction and publish them
+asynchronously with per-key ordering, backoff, and dead-lettering.
+
+## `Keiro.Inbox`
+
+Idempotent inbox. Re-exports `Keiro.Inbox.Types` and exports
+`initializeInboxSchema`, `lookupInbox`, `listInbox`, `garbageCollectCompleted`,
+`runInboxTransaction`, and `runInboxTransactionWithKey`. `Keiro.Inbox.Kafka` adds
+the Kafka consumer adapter.
+
+Use it to deduplicate inbound integration events by `(source, dedupe_key)`.
+
+## `Keiro.Telemetry`
+
+OpenTelemetry instrumentation. Exports the span helpers `withCommandSpan`,
+`withProducerSpan`, and `withConsumerSpan`, W3C trace-context propagation
+(`traceContextFromCurrentSpan`, `traceContextFromHeaders`, `injectTraceContext`),
+and the semantic-convention attribute-name constants. Spans only; no metrics yet.
+
+## `Keiro.Migrations` (package `keiro-migrations`)
+
+Embedded codd migrations and the `keiro-migrate` executable. Exports
+`keiroFrameworkMigrations`, `keiroMigrations`, `allKeiroMigrations`,
+`runKeiroMigrations`, `runKeiroMigrationsNoCheck`, `runAllKeiroMigrations`, and
+`runAllKeiroMigrationsNoCheck`.
+
+Use it to apply the Kiroku and Keiro framework tables.
 
 ## `Keiro.Prelude`
 

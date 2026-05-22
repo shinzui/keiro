@@ -3,6 +3,12 @@
 Process managers coordinate work across streams. Timers provide durable
 time-based wakeups for those managers.
 
+A process manager computes its targets *purely* from its own state via `handle`.
+When target resolution must run *effectfully* — for example by querying a read
+model — use the stateless `Keiro.Router` instead; it reuses the same `PMCommand`
+dispatch and exactly-once-per-target idempotency. See
+[Routers And Effectful Fan-out](../guides/routers-and-effectful-fan-out.md).
+
 ## Process Manager Shape
 
 ```haskell

@@ -36,7 +36,7 @@ history.
 The guide test proves the old payload still works:
 
 ```haskell
-decodeRaw orderCodec 1 (object ["orderId" .= "order-100", "qty" .= 3])
+decodeRaw orderCodec 1 (object ["orderId" .= ("order-100" :: Text), "qty" .= (3 :: Int)])
 ```
 
 The expected decoded event is a current record-payload event:

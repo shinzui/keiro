@@ -4,20 +4,21 @@ Keiro uses PostgreSQL tables from two layers:
 
 - Kiroku owns the event-store tables: `streams`, `events`, `stream_events`, and
   `subscriptions`.
-- Keiro owns framework metadata tables: `keiro_snapshots`,
-  `keiro_read_models`, and `keiro_timers`.
+- Keiro owns framework metadata tables: `keiro_snapshots`, `keiro_read_models`,
+  `keiro_timers`, `keiro_outbox`, and `keiro_inbox`.
 
 Production deployments should create and evolve these tables with the
 `keiro-migrate` executable from the `keiro-migrations` package. The executable
 uses codd and applies Kiroku's embedded migrations first, then Keiro's embedded
-migrations, in one ordered migration ledger.
+migrations (the bootstrap, outbox, and inbox migrations), in one ordered
+migration ledger.
 
 ## Why Run Migrations Explicitly
 
 Keiro still exposes development helpers such as `initializeSnapshotSchema`,
-`initializeReadModelSchema`, and `initializeTimerSchema`. They use
-`CREATE TABLE IF NOT EXISTS` and are convenient in tests or small local
-programs.
+`initializeReadModelSchema`, `initializeTimerSchema`, `initializeOutboxSchema`,
+and `initializeInboxSchema`. They use `CREATE TABLE IF NOT EXISTS` and are
+convenient in tests or small local programs.
 
 Those helpers are not a production migration system. They do not record which
 schema changes have run, they do not provide a reviewed forward history, and

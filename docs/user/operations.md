@@ -23,6 +23,8 @@ feature schemas you use:
 initializeSnapshotSchema
 initializeReadModelSchema
 initializeTimerSchema
+initializeOutboxSchema
+initializeInboxSchema
 ```
 
 Keiro's schema initializers are idempotent. They are still not a replacement for
@@ -40,9 +42,12 @@ Typical deployments have:
 
 - web/API processes that call `runCommand`;
 - projection workers for async read models;
-- process-manager workers consuming subscription streams;
+- process-manager and router workers consuming subscription streams;
 - timer workers polling due timers;
-- operational jobs for rebuilds and repairs.
+- outbox publisher workers that drain `keiro_outbox` (`claimOutboxBatch` /
+  `publishClaimedOutbox`) to the configured destination;
+- operational jobs for rebuilds, repairs, and inbox GC
+  (`garbageCollectCompleted` pruning completed `keiro_inbox` rows).
 
 Keiro does not supervise these OS processes. Use your normal process manager,
 container orchestrator, or service framework.
@@ -61,9 +66,12 @@ external ids before calling `runCommand` and pass them through command data or
 Use explicit idempotency whenever work may be delivered more than once:
 
 - supply event ids for externally retried command submissions;
-- use process-manager deterministic command ids;
+- use process-manager (and router) deterministic command ids;
 - make async projections idempotent by source event id;
-- make timer ids deterministic when scheduled from process-manager state.
+- make timer ids deterministic when scheduled from process-manager state;
+- deduplicate inbound integration events through the inbox
+  (`runInboxTransaction` keys on `(source, dedupe_key)`);
+- keep external outbox-delivery handlers idempotent (delivery is at-least-once).
 
 At-least-once delivery is normal for async workers in v1.
 
@@ -114,7 +122,15 @@ At minimum, track:
 - read-model wait timeouts;
 - process-manager duplicate handling;
 - due timer backlog and stuck `Firing` timers;
+- outbox backlog, attempt counts, and dead-lettered rows;
+- inbox duplicate counts and retained-row growth;
 - PostgreSQL connection pool saturation.
+
+Keiro emits OpenTelemetry **spans** through `Keiro.Telemetry`: an `Internal`
+span around `runCommand` (opt-in via `RunCommandOptions.tracer`), a `Producer`
+span around outbox publishing, and `Consumer` spans parented via W3C trace
+headers. There is no built-in metric instrumentation yet, so the counts above
+are currently derived from your own queries and logs.
 
 ## Production Checklist
 
@@ -126,7 +142,9 @@ Before production:
 - Add codec tests for every event type and old version.
 - Use deterministic ids for externally retried writes.
 - Make every async projection idempotent.
+- Make outbox-delivery and inbox handlers idempotent.
 - Decide read-model rebuild and rollback procedures.
 - Decide timer stuck-row repair procedure.
+- Decide outbox dead-letter handling and inbox retention/GC cadence.
 - Load test command paths that touch long streams.
 - Document which APIs are considered stable for your application.

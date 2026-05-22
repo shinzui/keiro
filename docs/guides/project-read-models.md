@@ -32,8 +32,8 @@ orderSummaryInlineProjection :: InlineProjection OrderEvent
 
 `OrderPlaced` inserts or replaces the summary row. Later events update the
 status to `paid`, `packed`, `shipped`, or `cancelled`. The projection receives
-the Kiroku `AppendResult`, so it can store the global position that produced the
-row.
+the decoded event and the Kiroku `RecordedEvent`, so it can store the global
+position (`recorded.globalPosition`) that produced the row.
 
 Run the command and projection together with:
 
