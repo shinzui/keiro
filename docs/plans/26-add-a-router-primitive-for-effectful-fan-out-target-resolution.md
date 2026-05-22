@@ -170,8 +170,12 @@ Record every decision made while working on the plan.
   Rationale: They reproduce on pristine `master` with a cleared ephemeral-pg cache and no Router code present (verified via `git stash -u`), so they are not regressions from this work. They concern `upsertSubscriptionCursorStmt` / the `subscriptions` table, unrelated to the Router primitive. Fixing them would mix an unrelated bug fix into this plan's commits.
   Date: 2026-05-22
 
-- Decision (M3): Hand-write the chapter target aggregate's keiki transducer (counter-style, via `Keiki.Core` `Edge`/`InCtor`/`WireCtor`/`pack`) rather than the `jitsurei` Builder DSL + Template Haskell (`Keiki.Builder` / `Keiki.Generics.TH`) used by `OrderStream`/`FulfillmentProcess`.
+- Decision (M3): Hand-write the chapter target aggregate's keiki transducer (counter-style, via `Keiki.Core` `Edge`/`InCtor`/`WireCtor`/`pack`) rather than the `jitsurei` Builder DSL + Template Haskell (`Keiki.Builder` / `Keiki.Generics.TH`) used by `OrderStream`/`FulfillmentProcess`. **(Superseded 2026-05-22 — see next entry.)**
   Rationale: The worked example demonstrates the `Router` + read-model lookup end-to-end; the chapter aggregate is incidental and only needs one command → one event. A hand-written, self-contained transducer is lower-risk (no TH-derivation conventions to match) and reads clearly. Logged as a deliberate divergence from the package's house style.
+  Date: 2026-05-22
+
+- Decision (M3, supersedes the above): Author the chapter aggregate with the keiki Builder DSL (`B.buildTransducer` + `deriveAggregateCtors`/`deriveWireCtors`), matching the `jitsurei` house style (`OrderStream`, `FulfillmentProcess`).
+  Rationale: At the maintainer's request, consistency with the package's idiomatic aggregate authoring outweighs the self-containment argument. The command/event constructors now wrap record payloads (`RecordTransactionData`/`TransactionRecordedData`) — the shape the TH derivation requires — and `ChapterState` derives `Enum`/`Bounded` (required by `buildTransducer`). Behavior and the spec are unchanged (`jitsurei-test` 8/8).
   Date: 2026-05-22
 
 - Decision (M3): Model "route to every chapter whose service areas overlap the transaction's areas" as a per-area read-model query (`WHERE area_id = $1`) folded with `Data.List.nub`, rather than the production SQL array-overlap (`$1 && location_service_qualification_area_ids` / `= ANY`).

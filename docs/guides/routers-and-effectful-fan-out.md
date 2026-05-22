@@ -105,7 +105,7 @@ agentQualRouter = Router
       pure
         [ PMCommand
             { target = chapterStream target.member target.chapter
-            , command = RecordTransaction transaction.txnId
+            , command = RecordTransaction (RecordTransactionData {txnId = transaction.txnId})
             }
         | target <- targets
         ]

@@ -30,7 +30,9 @@ module Jitsurei.AgentQualRouter
   , ChapterTarget (..)
     -- * The chapter target aggregate
   , ChapterCommand (..)
+  , RecordTransactionData (..)
   , ChapterEvent (..)
+  , TransactionRecordedData (..)
   , ChapterState (..)
   , ChapterRegs
   , ChapterEventStream
@@ -54,7 +56,6 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.List (nub)
 import Data.List.NonEmpty (NonEmpty (..))
-import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
@@ -63,20 +64,9 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
-import Keiki.Core
-  ( Edge (..)
-  , HsPred
-  , InCtor (..)
-  , RegFile (..)
-  , SymTransducer (..)
-  , Update (..)
-  , WireCtor (..)
-  , inpCtor
-  , matchInCtor
-  , oNil
-  , pack
-  , (*:)
-  )
+import Keiki.Builder qualified as B
+import Keiki.Core (HsPred, RegFile (..), SymTransducer)
+import Keiki.Generics.TH (deriveAggregateCtors, deriveWireCtors)
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.ProcessManager (PMCommand (..))
@@ -127,21 +117,42 @@ data ChapterTarget = ChapterTarget
   deriving stock (Generic, Eq, Ord, Show)
 
 data ChapterCommand
-  = RecordTransaction !TxnId
+  = RecordTransaction !RecordTransactionData
+  deriving stock (Generic, Eq, Show)
+
+data RecordTransactionData = RecordTransactionData
+  { txnId :: !TxnId
+  }
   deriving stock (Generic, Eq, Show)
 
 data ChapterEvent
-  = TransactionRecorded !TxnId
+  = TransactionRecorded !TransactionRecordedData
+  deriving stock (Generic, Eq, Show)
+
+data TransactionRecordedData = TransactionRecordedData
+  { txnId :: !TxnId
+  }
   deriving stock (Generic, Eq, Show)
 
 data ChapterState
   = ChapterOpen
-  deriving stock (Generic, Eq, Show)
+  deriving stock (Generic, Eq, Show, Enum, Bounded)
 
 type ChapterRegs = '[]
 
 type ChapterEventStream =
   EventStream (HsPred ChapterRegs ChapterCommand) ChapterRegs ChapterState ChapterCommand ChapterEvent
+
+$( deriveAggregateCtors
+    ''ChapterCommand
+    ''ChapterRegs
+    [("RecordTransaction", "RecordTransaction")]
+ )
+
+$( deriveWireCtors
+    ''ChapterEvent
+    [("TransactionRecorded", "TransactionRecorded")]
+ )
 
 chapterEventStream :: ChapterEventStream
 chapterEventStream = EventStream
@@ -161,45 +172,14 @@ chapterStream member chapter =
 
 chapterTransducer ::
   SymTransducer (HsPred ChapterRegs ChapterCommand) ChapterRegs ChapterState ChapterCommand ChapterEvent
-chapterTransducer = SymTransducer
-  { edgesOut = \case
-      ChapterOpen ->
-        [ Edge
-            { guard = matchInCtor recordTransactionCtor
-            , update = UKeep
-            , output =
-                [ pack
-                    recordTransactionCtor
-                    transactionRecordedCtor
-                    (inpCtor recordTransactionCtor #txnId *: oNil)
-                ]
-            , target = ChapterOpen
-            }
-        ]
-  , initial = ChapterOpen
-  , initialRegs = RNil
-  , isFinal = \_ -> False
-  }
-
-type RecordTransactionFields = '[ '("txnId", Text)]
-
-recordTransactionCtor :: InCtor ChapterCommand RecordTransactionFields
-recordTransactionCtor = InCtor
-  { icName = "RecordTransaction"
-  , icMatch = \case
-      RecordTransaction txn -> Just (RCons Proxy (txnIdText txn) RNil)
-  , icBuild = \case
-      RCons _ txn RNil -> RecordTransaction (TxnId txn)
-  }
-
-transactionRecordedCtor :: WireCtor ChapterEvent (Text, ())
-transactionRecordedCtor = WireCtor
-  { wcName = "TransactionRecorded"
-  , wcMatch = \case
-      TransactionRecorded txn -> Just (txnIdText txn, ())
-  , wcBuild = \case
-      (txn, ()) -> TransactionRecorded (TxnId txn)
-  }
+chapterTransducer =
+  B.buildTransducer ChapterOpen RNil (const False) do
+    B.from ChapterOpen do
+      B.onCmd inCtorRecordTransaction $ \d -> B.do
+        B.emit wireTransactionRecorded TransactionRecordedTermFields
+          { txnId = d.txnId
+          }
+        B.goto ChapterOpen
 
 chapterCodec :: Codec ChapterEvent
 chapterCodec = Codec
@@ -208,7 +188,11 @@ chapterCodec = Codec
       TransactionRecorded{} -> "TransactionRecorded"
   , schemaVersion = 1
   , encode = \case
-      TransactionRecorded txn -> object ["txnId" Aeson..= txnIdText txn]
+      TransactionRecorded payload ->
+        object
+          [ "kind" Aeson..= ("TransactionRecorded" :: Text)
+          , "txnId" Aeson..= txnIdText payload.txnId
+          ]
   , decode = parseChapterEvent
   , upcasters = []
   }
@@ -219,8 +203,13 @@ parseChapterEvent value =
     Right event -> Right event
     Left message -> Left (Text.pack message)
   where
-    parser = withObject "ChapterEvent" $ \objectValue ->
-      TransactionRecorded . TxnId <$> objectValue .: "txnId"
+    parser = withObject "ChapterEvent" $ \objectValue -> do
+      kind <- objectValue .: "kind"
+      case kind :: Text of
+        "TransactionRecorded" ->
+          TransactionRecorded . TransactionRecordedData . TxnId
+            <$> objectValue .: "txnId"
+        _ -> fail "unknown chapter event kind"
 
 -- | Maps a geographic area to the @(member, chapter)@ pairs whose service areas
 -- include it. The router queries this per area in 'agentQualRouter'.
@@ -257,7 +246,7 @@ agentQualRouter = Router
       pure
         [ PMCommand
             { target = chapterStream target.member target.chapter
-            , command = RecordTransaction transaction.txnId
+            , command = RecordTransaction (RecordTransactionData {txnId = transaction.txnId})
             }
         | target <- targets
         ]
