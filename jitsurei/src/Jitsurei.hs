@@ -1,5 +1,6 @@
 module Jitsurei
-  ( module Jitsurei.Database
+  ( module Jitsurei.AgentQualRouter
+  , module Jitsurei.Database
   , module Jitsurei.Diagrams
   , module Jitsurei.Domain
   , module Jitsurei.FulfillmentProcess
@@ -10,6 +11,7 @@ module Jitsurei
   )
 where
 
+import Jitsurei.AgentQualRouter
 import Jitsurei.Database
 import Jitsurei.Diagrams
 import Jitsurei.Domain

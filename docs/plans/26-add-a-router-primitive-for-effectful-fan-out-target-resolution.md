@@ -68,7 +68,7 @@ This section must always reflect the actual current state of the work.
 - [x] M1: Add `src/Keiro/Router.hs` with the `Router` type, `RouterResult`, and `runRouterOnce`; export `eventAlreadyIn` from `Keiro.ProcessManager`; add `Keiro.Router` to `keiro.cabal` exposed-modules and re-export it from `src/Keiro.hs`; package builds with `cabal build all`. (done 2026-05-22; `cabal build keiro` clean.)
 - [x] M1: Add a `keiro-test` spec proving effectful, data-dependent fan-out and idempotent replay (one source event → N targets resolved by a read-model query; replay → all duplicates, no new events). (done 2026-05-22; two specs green; both negative controls verified — see Surprises & Discoveries.)
 - [x] M2: Add `runRouterWorker` (Shibuya `Adapter`-driven loop) with the documented ack policy; add a worker-level spec. (done 2026-05-22; two worker specs green — happy-path drain finalizes `[AckOk, AckOk]` and dispatches per resolved target; a rejecting target finalizes `AckHalt (HaltFatal …)`.)
-- [ ] M3: Add a worked `agent-qual-router` example to the `jitsurei` package (an area→chapters read model, a small chapter-like target aggregate, and a `Router`), plus a `jitsurei-test` spec demonstrating the research-note-13 design end-to-end.
+- [x] M3: Add a worked `agent-qual-router` example to the `jitsurei` package (an area→chapters read model, a small chapter-like target aggregate, and a `Router`), plus a `jitsurei-test` spec demonstrating the research-note-13 design end-to-end. (done 2026-05-22; `jitsurei/src/Jitsurei/AgentQualRouter.hs` + spec; `cabal test jitsurei-test` → 8 examples, 0 failures.)
 
 
 ## Surprises & Discoveries
@@ -169,6 +169,18 @@ Record every decision made while working on the plan.
 - Decision: Treat the two failing `Keiro.ReadModel` PositionWait specs as out of scope and do not fix them under this plan.
   Rationale: They reproduce on pristine `master` with a cleared ephemeral-pg cache and no Router code present (verified via `git stash -u`), so they are not regressions from this work. They concern `upsertSubscriptionCursorStmt` / the `subscriptions` table, unrelated to the Router primitive. Fixing them would mix an unrelated bug fix into this plan's commits.
   Date: 2026-05-22
+
+- Decision (M3): Hand-write the chapter target aggregate's keiki transducer (counter-style, via `Keiki.Core` `Edge`/`InCtor`/`WireCtor`/`pack`) rather than the `jitsurei` Builder DSL + Template Haskell (`Keiki.Builder` / `Keiki.Generics.TH`) used by `OrderStream`/`FulfillmentProcess`.
+  Rationale: The worked example demonstrates the `Router` + read-model lookup end-to-end; the chapter aggregate is incidental and only needs one command → one event. A hand-written, self-contained transducer is lower-risk (no TH-derivation conventions to match) and reads clearly. Logged as a deliberate divergence from the package's house style.
+  Date: 2026-05-22
+
+- Decision (M3): Model "route to every chapter whose service areas overlap the transaction's areas" as a per-area read-model query (`WHERE area_id = $1`) folded with `Data.List.nub`, rather than the production SQL array-overlap (`$1 && location_service_qualification_area_ids` / `= ANY`).
+  Rationale: It reproduces the routing semantics that matter — overlapping areas that map to a shared chapter collapse to a single target (the M3 spec seeds `area-north` and `area-south` both onto `(m2,c2)` and asserts three, not four, dispatches) — without pulling in hasql array encoding. The production `&&` query is one SQL detail of the same concept (research note 13 §3).
+  Date: 2026-05-22
+
+- Decision (M3): Omit the "tally register" the plan sketched for the chapter aggregate; the aggregate carries no registers and emits one `TransactionRecorded` per `RecordTransaction`.
+  Rationale: The observable the spec asserts is the event count per chapter stream (exactly one per dispatch, unchanged on replay); a register's value is never asserted, so it would add keiki register-arithmetic without strengthening the demonstration.
+  Date: 2026-05-22
   Rationale: keiro's stateful fan-out primitive already takes its name from the EIP *Process Manager* — a stateful coordinator with `correlate` and its own state stream (`src/Keiro/ProcessManager.hs:40-55`). The new primitive is *stateless*: no state stream, no `correlate`, no self-command. Its sole job is to inspect an event and dispatch to a runtime-resolved set of target streams — which is the EIP *content-based Router* / dynamic *Recipient List*: examine a message, compute its recipients, forward. Naming it `Router` keeps the pair `(ProcessManager, Router)` reading as the two EIP patterns they are — the stateful coordinator vs. the stateless routing element — and names the *concern* (routing / target resolution, research note 13 §1) rather than the mechanism (the effectful `resolve` field). The network-router analogy holds: a stateless element whose only job is to pick a message's next hop(s).
   Date: 2026-05-21
 
@@ -178,7 +190,53 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (all three milestones complete, 2026-05-22).** keiro now has a
+`Router` primitive for *effectful* fan-out target resolution, closing the gap
+named in Purpose: `ProcessManager`'s `handle` is pure, so target sets had to be
+computable from the event alone; `Router.resolve :: input -> Eff es [PMCommand
+targetCi]` adds the seam to *look up* targets (typically via
+`Keiro.ReadModel.runQuery`) before dispatching. Dispatch reuses
+`ProcessManager`'s idempotency primitives verbatim (`deterministicCommandId`,
+`eventAlreadyIn`, per-target `runCommand`), so one-event-in → N-commands-out is
+crash-safe and exactly-once-per-target by construction.
+
+What shipped:
+
+- `Keiro.Router` (`src/Keiro/Router.hs`): `Router`, `RouterResult`,
+  `runRouterOnce`, `runRouterWorker`; re-exported from `Keiro` and exposed in
+  `keiro.cabal`. `eventAlreadyIn` is now exported from `Keiro.ProcessManager`.
+- `keiro-test` (4 specs): effectful data-dependent fan-out, idempotent replay,
+  worker drain with `[AckOk, AckOk]`, and worker `AckHalt` on a failing dispatch.
+  Both negative controls (read-model query and `deterministicCommandId` each
+  load-bearing) were exercised and recorded in Surprises & Discoveries.
+- `jitsurei` worked example (`Jitsurei.AgentQualRouter` + 1 spec): the
+  research-note-13 area→chapters routing, end-to-end, with overlap de-duplication
+  and idempotent replay.
+
+Observable proof (the Purpose's headline): the `keiro-test` "Router" specs and
+the `jitsurei` "agent-qualification router" spec feed one source event whose
+target set lives in a read-model table, observe exactly one command per resolved
+target stream, replay the same source event, and observe every dispatch reported
+as a duplicate with no new events written.
+
+Verification at completion: `cabal build all` clean; `cabal test keiro-test` →
+81 examples, 2 failures (both pre-existing `Keiro.ReadModel` PositionWait specs,
+proven unrelated — see Surprises & Discoveries); `cabal test jitsurei-test` → 8
+examples, 0 failures.
+
+Gaps / follow-on work (as scoped): the three production consumers (transaction
+router, retire coordinator, correction saga) are named but not wired — each needs
+its own read models and codecs. The two pre-existing PositionWait failures in
+`Keiro.ReadModel` remain (out of scope; they concern `upsertSubscriptionCursorStmt`
+/ the `subscriptions` table and reproduce on pristine `master`).
+
+Lessons: (1) `runProcessManagerWorker` computes an `AckDecision` per message and
+discards it — its ack policy is effectively dead. `runRouterWorker` instead calls
+the ingested message's `AckHandle.finalize`, which both honors the Shibuya
+"called exactly once" contract and made the policy testable. The same fix is
+likely worth back-porting to `runProcessManagerWorker`. (2) The `keiro-test`
+suite runs hspec with randomized ordering over a *per-test fresh* database from a
+cached ephemeral-pg cluster; tests must own their seed data (the Router specs do).
 
 
 ## Context and Orientation

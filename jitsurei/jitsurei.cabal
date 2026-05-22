@@ -33,6 +33,7 @@ common shared
 library
     import:             warnings, shared
     exposed-modules:    Jitsurei
+                        Jitsurei.AgentQualRouter
                         Jitsurei.Database
                         Jitsurei.Diagrams
                         Jitsurei.Domain

@@ -8,6 +8,7 @@ import Data.Aeson (object)
 import Data.Aeson qualified as Aeson
 import Data.Maybe (isJust)
 import Data.Text (Text)
+import Data.UUID (UUID, fromString)
 import Data.Vector qualified as Vector
 import Data.Time (UTCTime (..), secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
@@ -22,7 +23,12 @@ import Keiro.ReadModel
 import Keiro.Timer
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types
-  ( StreamName (..)
+  ( EventId (..)
+  , EventType (..)
+  , GlobalPosition (..)
+  , RecordedEvent (..)
+  , StreamId (..)
+  , StreamName (..)
   , StreamVersion (..)
   )
 import EphemeralPg qualified as Pg
@@ -174,6 +180,62 @@ main = hspec $ do
         runPaymentTimeoutWorker dueTime
       claimed `shouldSatisfy` isJust
 
+  describe "Jitsurei agent-qualification router" $ around withTestStore $ do
+    it "routes a transaction to every chapter resolved from its areas, idempotently" $ \store -> do
+      Right () <- Store.runStoreIO store initializeReadModelSchema
+      Right () <- Store.runStoreIO store $
+        Store.runTransaction initializeAreaChaptersTable
+      Right () <- Store.runStoreIO store $
+        Store.runTransaction $ do
+          -- area-north and area-south overlap on (m2, c2).
+          Tx.statement ("area-north", "m1", "c1") insertAreaChapterStmt
+          Tx.statement ("area-north", "m2", "c2") insertAreaChapterStmt
+          Tx.statement ("area-south", "m2", "c2") insertAreaChapterStmt
+          Tx.statement ("area-south", "m3", "c3") insertAreaChapterStmt
+      let transaction =
+            Transaction
+              { txnId = TxnId "txn-1"
+              , areas = [AreaId "area-north", AreaId "area-south"]
+              }
+      -- First pass: three distinct chapters resolved (m2/c2 de-duplicated
+      -- across the two overlapping areas), one command appended to each.
+      Right (RouterResult rs1) <- Store.runStoreIO store $
+        runRouterOnce defaultRunCommandOptions agentQualRouter sourceTransactionEvent transaction
+      length rs1 `shouldBe` 3
+      rs1 `shouldSatisfy` all isAppended
+      Right c1 <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "chapter-m1-c1") (StreamVersion 0) 10
+      Right c2 <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "chapter-m2-c2") (StreamVersion 0) 10
+      Right c3 <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "chapter-m3-c3") (StreamVersion 0) 10
+      Vector.length c1 `shouldBe` 1
+      Vector.length c2 `shouldBe` 1
+      Vector.length c3 `shouldBe` 1
+      -- Data-dependence: a transaction whose areas are unseeded resolves to no
+      -- chapters, so the count tracks the read model rather than a fixed list.
+      Right (RouterResult rsEmpty) <- Store.runStoreIO store $
+        runRouterOnce
+          defaultRunCommandOptions
+          agentQualRouter
+          sourceTransactionEvent
+          (Transaction {txnId = TxnId "txn-1", areas = [AreaId "area-empty"]})
+      length rsEmpty `shouldBe` 0
+      -- Replay: the same source event re-dispatches as duplicates, no new events.
+      Right (RouterResult rs2) <- Store.runStoreIO store $
+        runRouterOnce defaultRunCommandOptions agentQualRouter sourceTransactionEvent transaction
+      length rs2 `shouldBe` 3
+      rs2 `shouldSatisfy` all isDuplicate
+      Right c1' <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "chapter-m1-c1") (StreamVersion 0) 10
+      Right c2' <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "chapter-m2-c2") (StreamVersion 0) 10
+      Right c3' <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "chapter-m3-c3") (StreamVersion 0) 10
+      Vector.length c1' `shouldBe` 1
+      Vector.length c2' `shouldBe` 1
+      Vector.length c3' `shouldBe` 1
+
 sampleOrderId :: OrderId
 sampleOrderId = OrderId "order-100"
 
@@ -209,6 +271,39 @@ withTestStore action = do
   case result of
     Left err -> error ("Failed to start ephemeral PostgreSQL: " <> show err)
     Right () -> pure ()
+
+-- A minimal source event whose only load-bearing field is its id, which seeds
+-- the router's deterministic command ids. Its payload is irrelevant to routing.
+sourceTransactionEvent :: RecordedEvent
+sourceTransactionEvent = RecordedEvent
+  { eventId = EventId txnSourceUuid
+  , eventType = EventType "TransactionSubmitted"
+  , streamVersion = StreamVersion 1
+  , globalPosition = GlobalPosition 1
+  , originalStreamId = StreamId 1
+  , originalVersion = StreamVersion 1
+  , payload = Aeson.Null
+  , metadata = Nothing
+  , causationId = Nothing
+  , correlationId = Nothing
+  , createdAt = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
+  }
+
+txnSourceUuid :: UUID
+txnSourceUuid =
+  case fromString "018f0f18-17aa-7000-8000-0000000000c1" of
+    Just value -> value
+    Nothing -> error "invalid transaction source UUID"
+
+isAppended :: PMCommandResult target -> Bool
+isAppended = \case
+  PMCommandAppended{} -> True
+  _ -> False
+
+isDuplicate :: PMCommandResult target -> Bool
+isDuplicate = \case
+  PMCommandDuplicate{} -> True
+  _ -> False
 
 snapshotVersionForStreamStmt :: Statement Text (Maybe StreamVersion)
 snapshotVersionForStreamStmt =
