@@ -349,6 +349,20 @@ main = hspec $ do
           observed `shouldBe` [CounterAdded 8, CounterAudited 8]
         other -> expectationFailure ("expected successful SQL multi-event command, got " <> show other)
 
+    it "command metadata is merged into stored event metadata" $ \storeHandle -> do
+      let target = stream "counter-command-metadata" :: Stream CounterEventStream
+          opts = defaultRunCommandOptions
+            & #metadata ?~ object ["actor" Aeson..= ("agent-7" :: Text)]
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand opts counterEventStream target (Add 4)
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "counter-command-metadata") (StreamVersion 0) 10
+      case Vector.toList recorded of
+        [event] ->
+          event ^. #metadata
+            `shouldBe` Just (object ["actor" Aeson..= ("agent-7" :: Text), "schemaVersion" Aeson..= (1 :: Int)])
+        other -> expectationFailure ("expected a single recorded event, got " <> show other)
+
     it "runCommand emits a Command span with the stream name, db.system.name, and keiro.events.appended" $ \storeHandle -> do
       (processor, spansRef) <- inMemoryListExporter
       provider <- createTracerProvider [processor] emptyTracerProviderOptions

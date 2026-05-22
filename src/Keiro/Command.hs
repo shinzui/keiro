@@ -20,7 +20,7 @@ import OpenTelemetry.SemanticConventions (error_type)
 import OpenTelemetry.Trace.Core (Span, Tracer, addAttribute, setStatus, SpanStatus (..))
 import Keiki.Core (BoolAlg, RegFile)
 import Keiki.Core qualified as Keiki
-import Keiro.Codec (Codec, CodecError, decodeRecorded, encodeForAppend)
+import Keiro.Codec (Codec, CodecError, decodeRecorded, encodeForAppendWithMetadata)
 import Keiro.EventStream (EventStream)
 import Keiro.Prelude
 import Keiro.Snapshot (hydrateWithSnapshot, writeSnapshot)
@@ -75,6 +75,13 @@ data RunCommandOptions = RunCommandOptions
   -- error semantic-conventions attributes audited in
   -- 'docs/research/opentelemetry-semconv-audit.md'. When 'Nothing',
   -- the runner emits no spans.
+  , metadata :: !(Maybe Value)
+  -- ^ Optional JSON merged into every event's metadata for this command
+  --   invocation. Carries ambient context such as actor type, agent id,
+  --   and session id. The codec always adds a @schemaVersion@ key; the
+  --   keys here are merged on top (see 'Keiro.Codec.metadataFor'). When
+  --   'Nothing', events carry only the schema-version marker, exactly as
+  --   before this field existed.
   }
   deriving stock (Generic)
 
@@ -85,6 +92,7 @@ defaultRunCommandOptions = RunCommandOptions
   , eventIds = []
   , beforeAppend = pure ()
   , tracer = Nothing
+  , metadata = Nothing
   }
 
 data Hydrated rs s = Hydrated
@@ -376,7 +384,7 @@ prepareCommandPlan options eventStream targetStream current command =
     toPlan events =
       CommandAppend current events
         . assignEventIds (options ^. #eventIds)
-        <$> encodeEvents (eventStream ^. #eventCodec) events
+        <$> encodeEvents (eventStream ^. #eventCodec) (options ^. #metadata) events
 
 {- | Render the stream that the command targets as plain 'Text', for use
 as a span name.
@@ -471,8 +479,9 @@ evaluateCommand eventStream current command =
     Nothing -> Left CommandRejected
     Just (_, _, events) -> Right events
 
-encodeEvents :: Codec co -> [co] -> Either CommandError [EventData]
-encodeEvents codec = Prelude.mapM (mapLeft EncodeFailed . encodeForAppend codec)
+encodeEvents :: Codec co -> Maybe Value -> [co] -> Either CommandError [EventData]
+encodeEvents codec md =
+  Prelude.mapM (mapLeft EncodeFailed . encodeForAppendWithMetadata codec md)
 
 assignEventIds :: [EventId] -> [EventData] -> [EventData]
 assignEventIds [] events = events
