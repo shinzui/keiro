@@ -2513,7 +2513,7 @@ upsertSubscriptionCursorStmt =
     """
     INSERT INTO subscriptions (subscription_name, stream_name, last_seen)
     VALUES ($1, '$all', $2)
-    ON CONFLICT (subscription_name) DO UPDATE
+    ON CONFLICT (subscription_name, consumer_group_member) DO UPDATE
       SET last_seen = EXCLUDED.last_seen,
           updated_at = now()
     """
