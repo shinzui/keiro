@@ -33,10 +33,12 @@ main =
               coddSettings = testCoddSettings connStr
 
           _ <- runAllKeiroMigrations coddSettings (secondsToDiffTime 5) LaxCheck
-          assertTablesExist connStr expectedTables
+          assertTablesExist connStr "kiroku" expectedTables
+          assertTablesAbsent connStr "public" expectedTables
 
           _ <- runAllKeiroMigrations coddSettings (secondsToDiffTime 5) LaxCheck
-          assertTablesExist connStr expectedTables
+          assertTablesExist connStr "kiroku" expectedTables
+          assertTablesAbsent connStr "public" expectedTables
 
         case result of
           Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
@@ -61,7 +63,7 @@ testCoddSettings connStr =
     { migsConnString = parseConnString connStr
     , sqlMigrations = []
     , onDiskReps = Right (DbRep Null Map.empty Map.empty)
-    , namespacesToCheck = IncludeSchemas [SqlSchema "public"]
+    , namespacesToCheck = IncludeSchemas [SqlSchema "kiroku"]
     , extraRolesToCheck = []
     , retryPolicy = singleTryPolicy
     , txnIsolationLvl = DbDefault
@@ -74,10 +76,10 @@ parseConnString connStr =
     Left err -> error ("Could not parse ephemeral PostgreSQL connection string for codd: " <> err)
     Right parsed -> parsed
 
-assertTablesExist :: Text -> [Text] -> IO ()
-assertTablesExist connStr tables = do
+assertTablesExist :: Text -> Text -> [Text] -> IO ()
+assertTablesExist connStr schema tables = do
   pool <- Pool.acquire poolConfig
-  result <- Pool.use pool (Session.statement () publicTablesStmt)
+  result <- Pool.use pool (Session.statement schema schemaTablesStmt)
   Pool.release pool
   case result of
     Left err -> expectationFailure ("table verification query failed: " <> show err)
@@ -91,15 +93,32 @@ assertTablesExist connStr tables = do
       , Pool.Config.size 1
       ]
 
-publicTablesStmt :: Statement () [Text]
-publicTablesStmt =
+assertTablesAbsent :: Text -> Text -> [Text] -> IO ()
+assertTablesAbsent connStr schema tables = do
+  pool <- Pool.acquire poolConfig
+  result <- Pool.use pool (Session.statement schema schemaTablesStmt)
+  Pool.release pool
+  case result of
+    Left err -> expectationFailure ("table verification query failed: " <> show err)
+    Right actualTables -> do
+      let present = filter (`elem` actualTables) tables
+      present `shouldBe` []
+ where
+  poolConfig =
+    Pool.Config.settings
+      [ Pool.Config.staticConnectionSettings (Conn.connectionString connStr)
+      , Pool.Config.size 1
+      ]
+
+schemaTablesStmt :: Statement Text [Text]
+schemaTablesStmt =
   preparable
     """
     SELECT table_name::text
     FROM information_schema.tables
-    WHERE table_schema = 'public'
+    WHERE table_schema = $1
       AND table_type = 'BASE TABLE'
     ORDER BY table_name
     """
-    E.noParams
+    (E.param (E.nonNullable E.text))
     (D.rowList (D.column (D.nonNullable D.text)))

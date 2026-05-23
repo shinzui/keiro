@@ -2,10 +2,11 @@
 
 Keiro uses PostgreSQL tables from two layers:
 
-- Kiroku owns the event-store tables: `streams`, `events`, `stream_events`, and
-  `subscriptions`.
-- Keiro owns framework metadata tables: `keiro_snapshots`, `keiro_read_models`,
-  `keiro_timers`, `keiro_outbox`, and `keiro_inbox`.
+- Kiroku owns the event-store tables in the `kiroku` PostgreSQL schema:
+  `streams`, `events`, `stream_events`, and `subscriptions`.
+- Keiro owns framework metadata tables in the same `kiroku` schema:
+  `keiro_snapshots`, `keiro_read_models`, `keiro_timers`, `keiro_outbox`, and
+  `keiro_inbox`.
 
 Production deployments should create and evolve these tables with the
 `keiro-migrate` executable from the `keiro-migrations` package. The executable
@@ -33,17 +34,20 @@ From the Keiro repository or a workspace that includes `keiro-migrations`, run:
 CODD_CONNECTION='host=/tmp port=5432 dbname=keiro user=keiro_admin' \
 CODD_MIGRATION_DIRS=unused-for-embedded-migrations \
 CODD_EXPECTED_SCHEMA_DIR=keiro-migrations/expected-schema \
-CODD_SCHEMAS=public \
+CODD_SCHEMAS=kiroku \
 cabal run keiro-migrate
 ```
 
 `CODD_CONNECTION` is the PostgreSQL connection string for the target database.
-`CODD_SCHEMAS=public` tells codd to check the public schema. codd currently
+`CODD_SCHEMAS=kiroku` tells codd to check the schema used by Kiroku and Keiro
+framework tables. codd currently
 requires `CODD_MIGRATION_DIRS` and `CODD_EXPECTED_SCHEMA_DIR` in its settings
 environment even though Keiro passes embedded migrations directly from Haskell.
 
 After a successful run, the database has Kiroku's event-store tables, Keiro's
-framework tables, and codd's internal migration ledger.
+framework tables, and codd's internal migration ledger. Application-owned
+tables remain outside this schema unless your service migrations place them
+there deliberately.
 
 ## Start The Application Afterward
 
