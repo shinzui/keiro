@@ -1,5 +1,6 @@
 packages:
   .
+  keiro-core
   keiro-migrations
   jitsurei
   benchmarks/message-db-vs-kiroku

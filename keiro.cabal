@@ -33,18 +33,14 @@ library
     import:             warnings, shared
     exposed-modules:    Keiro
                         Keiro.Command
-                        Keiro.Codec
-                        Keiro.EventStream
                         Keiro.Inbox
                         Keiro.Inbox.Kafka
                         Keiro.Inbox.Schema
                         Keiro.Inbox.Types
-                        Keiro.Integration.Event
                         Keiro.Outbox
                         Keiro.Outbox.Kafka
                         Keiro.Outbox.Schema
                         Keiro.Outbox.Types
-                        Keiro.Prelude
                         Keiro.ProcessManager
                         Keiro.Projection
                         Keiro.ReadModel
@@ -53,13 +49,17 @@ library
                         Keiro.Router
                         Keiro.Snapshot
                         Keiro.Snapshot.Codec
-                        Keiro.Snapshot.Policy
                         Keiro.Snapshot.Schema
-                        Keiro.Stream
                         Keiro.Telemetry
                         Keiro.Timer
                         Keiro.Timer.Schema
                         Keiro.Timer.Types
+    reexported-modules: keiro-core:Keiro.Codec,
+                        keiro-core:Keiro.EventStream,
+                        keiro-core:Keiro.Integration.Event,
+                        keiro-core:Keiro.Prelude,
+                        keiro-core:Keiro.Snapshot.Policy,
+                        keiro-core:Keiro.Stream
     hs-source-dirs:     src
     build-depends:      aeson >= 2.2,
                         aeson-casing >= 0.2,
@@ -77,6 +77,7 @@ library
                         hs-opentelemetry-semantic-conventions >= 0.1 && < 1,
                         keiki >= 0.1,
                         keiki-codec-json >= 0.1,
+                        keiro-core,
                         kiroku-store >= 0.1,
                         lens >= 5.2,
                         mmzk-typeid >= 0.7,

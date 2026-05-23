@@ -15,6 +15,12 @@ in  Schema.Project::{
     , repos = [ Schema.Repo::{ name = "keiro" } ]
     , packages =
       [ Schema.Package::{
+        , name = "keiro-core"
+        , type = Schema.PackageType.Library
+        , language = Schema.Language.Haskell
+        , description = Some "Core contracts for Keiro packages"
+        }
+      , Schema.Package::{
         , name = "keiro"
         , type = Schema.PackageType.Library
         , language = Schema.Language.Haskell
