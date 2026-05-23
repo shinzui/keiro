@@ -52,7 +52,7 @@ import Data.Time (UTCTime)
 import GHC.Generics (Generic)
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, RegFile (..), SymTransducer)
-import Keiki.Generics.TH (deriveAggregateCtors, deriveWireCtors)
+import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.Stream (Stream, stream)
@@ -162,23 +162,10 @@ type IncidentRegs = '[]
 type IncidentEventStream =
   EventStream (HsPred IncidentRegs IncidentCommand) IncidentRegs IncidentState IncidentCommand IncidentEvent
 
-$( deriveAggregateCtors
+$( deriveAggregate
     ''IncidentCommand
     ''IncidentRegs
-    [ ("RaiseIncident", "RaiseIncident")
-    , ("AcknowledgeIncident", "AcknowledgeIncident")
-    , ("EscalateIncident", "EscalateIncident")
-    , ("ResolveIncident", "ResolveIncident")
-    ]
- )
-
-$( deriveWireCtors
     ''IncidentEvent
-    [ ("IncidentRaised", "IncidentRaised")
-    , ("IncidentAcknowledged", "IncidentAcknowledged")
-    , ("IncidentEscalated", "IncidentEscalated")
-    , ("IncidentResolved", "IncidentResolved")
-    ]
  )
 
 incidentEventStream :: IncidentEventStream

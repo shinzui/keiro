@@ -26,7 +26,7 @@ import Effectful.Error.Static (Error)
 import GHC.Generics (Generic)
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, RegFile (..), SymTransducer)
-import Keiki.Generics.TH (deriveAggregateCtors, deriveWireCtors)
+import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.Command (CommandError, RunCommandOptions)
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
@@ -87,15 +87,10 @@ type FulfillmentProcessManager =
     OrderCommand
     OrderEvent
 
-$( deriveAggregateCtors
+$( deriveAggregate
     ''FulfillmentCommand
     ''FulfillmentRegs
-    [("ObserveFulfillmentEvent", "ObserveFulfillmentEvent")]
- )
-
-$( deriveWireCtors
     ''FulfillmentEvent
-    [("FulfillmentObserved", "FulfillmentObserved")]
  )
 
 fulfillmentEventStream :: FulfillmentEventStream

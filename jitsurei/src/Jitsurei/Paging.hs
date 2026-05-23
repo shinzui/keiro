@@ -38,7 +38,7 @@ import Effectful (IOE, (:>))
 import GHC.Generics (Generic)
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, RegFile (..), SymTransducer)
-import Keiki.Generics.TH (deriveAggregateCtors, deriveWireCtors)
+import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.ProcessManager (PMCommand (..))
@@ -95,19 +95,10 @@ type PageRegs = '[]
 type PageEventStream =
   EventStream (HsPred PageRegs PageCommand) PageRegs PageState PageCommand PageEvent
 
-$( deriveAggregateCtors
+$( deriveAggregate
     ''PageCommand
     ''PageRegs
-    [ ("SendPage", "SendPage")
-    , ("AcknowledgePage", "AcknowledgePage")
-    ]
- )
-
-$( deriveWireCtors
     ''PageEvent
-    [ ("PageSent", "PageSent")
-    , ("PageAcknowledged", "PageAcknowledged")
-    ]
  )
 
 pageEventStream :: PageEventStream

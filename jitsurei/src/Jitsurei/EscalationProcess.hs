@@ -62,7 +62,7 @@ import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack)
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, RegFile (..), SymTransducer)
-import Keiki.Generics.TH (deriveAggregateCtors, deriveWireCtors)
+import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.Command (CommandError, RunCommandOptions, runCommand)
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
@@ -137,19 +137,10 @@ type EscalationRegs = '[]
 type EscalationEventStream =
   EventStream (HsPred EscalationRegs EscalationCommand) EscalationRegs EscalationState EscalationCommand EscalationEvent
 
-$( deriveAggregateCtors
+$( deriveAggregate
     ''EscalationCommand
     ''EscalationRegs
-    [ ("NoteRaised", "NoteRaised")
-    , ("NoteAcknowledged", "NoteAcknowledged")
-    ]
- )
-
-$( deriveWireCtors
     ''EscalationEvent
-    [ ("RaiseNoted", "RaiseNoted")
-    , ("AcknowledgeNoted", "AcknowledgeNoted")
-    ]
  )
 
 escalationEventStream :: EscalationEventStream

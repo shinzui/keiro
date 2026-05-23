@@ -19,7 +19,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Keiki.Core (HsPred, RegFile (..), SymTransducer)
-import Keiki.Generics.TH (deriveAggregateCtors, deriveWireCtors)
+import Keiki.Generics.TH (deriveAggregate)
 import Keiki.Builder qualified as B
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
@@ -32,25 +32,10 @@ type OrderRegs = '[]
 
 type OrderEventStream = EventStream (HsPred OrderRegs OrderCommand) OrderRegs OrderState OrderCommand OrderEvent
 
-$( deriveAggregateCtors
+$( deriveAggregate
     ''OrderCommand
     ''OrderRegs
-    [ ("PlaceOrder", "PlaceOrder")
-    , ("ApprovePayment", "ApprovePayment")
-    , ("MarkPacked", "MarkPacked")
-    , ("ShipOrder", "ShipOrder")
-    , ("CancelOrder", "CancelOrder")
-    ]
- )
-
-$( deriveWireCtors
     ''OrderEvent
-    [ ("OrderPlaced", "OrderPlaced")
-    , ("PaymentApproved", "PaymentApproved")
-    , ("OrderPacked", "OrderPacked")
-    , ("OrderShipped", "OrderShipped")
-    , ("OrderCancelled", "OrderCancelled")
-    ]
  )
 
 orderEventStream :: OrderEventStream

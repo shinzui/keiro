@@ -66,7 +66,7 @@ import Hasql.Statement (Statement, preparable)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, RegFile (..), SymTransducer)
-import Keiki.Generics.TH (deriveAggregateCtors, deriveWireCtors)
+import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.ProcessManager (PMCommand (..))
@@ -143,15 +143,10 @@ type ChapterRegs = '[]
 type ChapterEventStream =
   EventStream (HsPred ChapterRegs ChapterCommand) ChapterRegs ChapterState ChapterCommand ChapterEvent
 
-$( deriveAggregateCtors
+$( deriveAggregate
     ''ChapterCommand
     ''ChapterRegs
-    [("RecordTransaction", "RecordTransaction")]
- )
-
-$( deriveWireCtors
     ''ChapterEvent
-    [("TransactionRecorded", "TransactionRecorded")]
  )
 
 chapterEventStream :: ChapterEventStream
