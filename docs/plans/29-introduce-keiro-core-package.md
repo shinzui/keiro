@@ -28,7 +28,7 @@ This section must always reflect the actual current state of the work.
 
 - [x] M1: Add a compilable `keiro-core` package containing the stable core modules and register it in `cabal.project` and `mori.dhall`. `mori show --full` listed both packages and `cabal build keiro-core` compiled all six moved modules. (done 2026-05-23)
 - [x] M2: Update the existing `keiro` package so it depends on `keiro-core`, re-exports the moved modules, and still provides the same top-level `Keiro` facade. `cabal build keiro` succeeded and `cabal test keiro-test` passed with 81 examples. (done 2026-05-23)
-- [ ] M3: Update sibling packages and documentation references where necessary, then validate `cabal build all`, `cabal test keiro-test`, `cabal test jitsurei-test`, and `cabal test keiro-migrations-test`.
+- [x] M3: Update sibling packages and documentation references where necessary, then validate `cabal build all`, `cabal test keiro-test`, `cabal test jitsurei-test`, and `cabal test keiro-migrations-test`. README documents the `keiro-core` / `keiro` relationship; no sibling package dependency edits were needed. `cabal build all`, `keiro-test` (81 examples), `jitsurei-test` (15 examples), and `keiro-migrations-test` (1 example) all passed. (done 2026-05-23)
 
 
 ## Surprises & Discoveries
@@ -42,6 +42,19 @@ implementation. Provide concise evidence.
 keiro.cabal:58:25: error:
 unexpected 'k'
 expecting space, comma, white space or end of input
+```
+
+- `keiro` runtime modules compiled against the moved modules without package-qualified imports. GHC accepted imports such as `import Keiro.Prelude` from the direct `keiro-core` dependency while `keiro.cabal` re-exported the same module names.
+
+- `keiro-migrations-test` prints a large codd schema-diff diagnostic containing `Error: DB and expected schemas do not match` during its repeatability path, then reports success. This validation run ended with:
+
+```text
+Successfully applied all migrations to postgres
+  applies Kiroku and Keiro migrations to a fresh database and is repeatable [✔]
+
+Finished in 0.6173 seconds
+1 example, 0 failures
+Test suite keiro-migrations-test: PASS
 ```
 
 
@@ -67,7 +80,9 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (all milestones complete, 2026-05-23).** `keiro-core` now exists as a sibling Cabal package and is registered in both `cabal.project` and `mori.dhall`. The six stable contract modules moved into `keiro-core/src/`, while the full `keiro` runtime package depends on `keiro-core` and re-exports those module names so existing `keiro` users keep the same import surface.
+
+The package split was validated with `mori show --full`, `cabal build keiro-core`, `cabal build keiro`, `cabal build all`, `cabal test keiro-test`, `cabal test jitsurei-test`, and `cabal test keiro-migrations-test`. No sibling package needed a new direct `keiro-core` dependency because `keiro` re-exports the moved modules.
 
 
 ## Context and Orientation

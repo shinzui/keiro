@@ -44,13 +44,21 @@ The current v1 library provides:
 - event-sourced process managers in `Keiro.ProcessManager`;
 - durable timer storage and workers in `Keiro.Timer`.
 
+The stable contracts used by future Keiro packages live in the sibling
+`keiro-core` package. The full `keiro` package depends on `keiro-core` and
+re-exports those core modules, so existing imports such as `Keiro.Codec`,
+`Keiro.EventStream`, `Keiro.Stream`, and `Keiro.Integration.Event` continue to
+work for applications that depend on `keiro`.
+
 The top-level `Keiro` module re-exports the core stream, codec, event-stream,
 command, and snapshot APIs. Read-model, projection, process-manager, and timer
 modules are exposed directly so applications can import them explicitly.
 
 ## Runtime stack
 
-keiro is not a server. It is a library that composes these dependencies:
+keiro is not a server. The `keiro-core` package contains reusable contracts and
+pure helpers; the `keiro` package adds the runtime that composes these
+dependencies:
 
 - **kiroku** for the PostgreSQL-backed append-only event store;
 - **keiki** for the pure `SymTransducer` state-machine core;
