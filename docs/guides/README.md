@@ -9,6 +9,9 @@ are adopting:
 
 - [Order Fulfillment Overview](order-fulfillment-overview.md) explains the
   example domain and where each source file lives.
+- [Choosing A Primitive](choosing-a-primitive.md) is the routing map: given a
+  shape ("make these cooperate"), it points you to the right primitive
+  (`EventStream`, Keiki composition, projection, process manager, or router).
 - [Build The Command Side](build-the-command-side.md) walks through commands,
   events, the Keiki transducer, the Keiro `EventStream`, and `runCommand`.
 - [Evolve Events Safely](evolve-events-safely.md) shows the event codec and the

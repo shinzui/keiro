@@ -16,6 +16,9 @@ pieces those modules import.
   and the first command path.
 - [Core Concepts](core-concepts.md): streams, codecs, event streams, commands,
   projections, process managers, and timers.
+- [Choosing A Primitive](../guides/choosing-a-primitive.md): the routing map for
+  deciding between an `EventStream`, Keiki composition, a projection, a process
+  manager, or a router.
 - [Command Cycle](command-cycle.md): how `runCommand` works and how to handle
   errors, retries, idempotency, and inline SQL.
 - [Codecs And Event Evolution](codecs-and-event-evolution.md): event type tags,
