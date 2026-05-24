@@ -58,11 +58,15 @@ data Router input targetPhi targetRs targetState targetCi targetCo es = Router
   , resolve :: !(input -> Eff es [PMCommand targetCi])
     -- THE seam: effectfully compute the data-dependent target set
   , targetEventStream :: !(EventStream targetPhi targetRs targetState targetCi targetCo)
+  , targetProjections :: ![InlineProjection targetCo]
   }
 ```
 
 `resolve` is where the read-model query happens. Everything else mirrors the
-target half of a process manager.
+target half of a process manager. `targetProjections` are inline projections for
+the target aggregate's events; pass `[]` for append-only dispatch, or pass the
+same projections your command path uses when the router must keep target read
+models current in the dispatch transaction.
 
 ## The read model
 
@@ -126,6 +130,7 @@ agentQualRouter = Router
         | target <- targets
         ]
   , targetEventStream = chapterEventStream
+  , targetProjections = []
   }
 ```
 

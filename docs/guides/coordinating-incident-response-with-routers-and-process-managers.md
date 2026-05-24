@@ -127,11 +127,15 @@ pagingRouter = Router
         | responder <- responders
         ]
   , targetEventStream = pageEventStream
+  , targetProjections = []
   }
 ```
 
 This is the recipient list: examine the message, look up the recipients, forward
-to each. No memory, no timers — so it is a router, not a process manager.
+to each. `targetProjections = []` keeps this router append-only; use a non-empty
+list when the page aggregate has inline read models that must be updated in the
+same transaction as a router-dispatched command. No memory, no timers — so it is
+a router, not a process manager.
 
 ## Reaction 2 — the process manager runs the clock
 
@@ -169,6 +173,12 @@ handle = \case
       , timers = []
       }
 ```
+
+The full `ProcessManager` record also has `targetEventStream` and
+`targetProjections`. The projections belong to the target aggregate, not to the
+process manager's private saga stream. Existing process managers that do not
+need read-model writes on target dispatch should set `targetProjections = []`;
+non-empty lists run in the same transaction as each dispatched target command.
 
 On `IncidentReported` it advances its state and **arms an escalation timer**
 whose deadline comes from the severity (`escalationDeadline`). On

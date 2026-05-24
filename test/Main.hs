@@ -2213,6 +2213,7 @@ counterProcessManager = ProcessManager
   , eventStream = counterEventStream
   , streamFor = \correlationId -> stream ("pm:counter-" <> correlationId)
   , targetEventStream = counterEventStream
+  , targetProjections = []
   , handle = \case
       CounterAdded amount ->
         ProcessManagerAction
@@ -2590,6 +2591,7 @@ demoRouter = Router
           ]
         Left _ -> []
   , targetEventStream = counterEventStream
+  , targetProjections = []
   }
 
 isAppended :: PMCommandResult target -> Bool
@@ -2702,4 +2704,5 @@ failingRouter = Router
   , key = \(RouteGroup g) -> g
   , resolve = \_ -> pure [PMCommand { target = stream "failing-target", command = Add 1 }]
   , targetEventStream = rejectingEventStream
+  , targetProjections = []
   }

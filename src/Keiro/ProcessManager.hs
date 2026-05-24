@@ -20,9 +20,10 @@ import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
-import Keiro.Command (CommandError (..), CommandResult, RunCommandOptions, runCommand, runCommandWithSql)
+import Keiro.Command (CommandError (..), CommandResult, RunCommandOptions, runCommandWithSql)
 import Keiro.EventStream (EventStream)
 import Keiro.Prelude
+import Keiro.Projection (InlineProjection, runCommandWithProjections)
 import Keiro.Stream (Stream)
 import Keiro.Timer (TimerRequest, scheduleTimerTx)
 import Kiroku.Store.Effect (Store)
@@ -44,6 +45,9 @@ data ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi
   , eventStream :: !(EventStream phi rs s ci co)
   , streamFor :: !(Text -> Stream (EventStream phi rs s ci co))
   , targetEventStream :: !(EventStream targetPhi targetRs targetState targetCi targetCo)
+  , targetProjections :: ![InlineProjection targetCo]
+  -- ^ Inline projections for the target aggregate, run in the same transaction
+  --   as each dispatched command's append. Pass @[]@ for append-only dispatch.
   , handle :: !(input -> ProcessManagerAction ci targetCi)
   }
   deriving stock (Generic)
@@ -163,11 +167,12 @@ runProcessManagerOnce options manager sourceEvent input = do
         then pure (PMCommandDuplicate commandId)
         else do
           outcome <-
-            runCommand
+            runCommandWithProjections
               targetOptions
               (manager ^. #targetEventStream)
               targetStream
               (command ^. #command)
+              (manager ^. #targetProjections)
           pure $ case outcome of
             Right result -> PMCommandAppended result
             Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == commandId -> PMCommandDuplicate commandId

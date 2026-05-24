@@ -245,6 +245,7 @@ escalationProcessManager = ProcessManager
   , eventStream = escalationEventStream
   , streamFor = escalationStream . IncidentId
   , targetEventStream = incidentEventStream
+  , targetProjections = []
   , handle = \case
       IncidentReported raised ->
         ProcessManagerAction

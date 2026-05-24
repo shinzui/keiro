@@ -111,7 +111,9 @@ Types and functions:
 - `applyAsyncProjection`
 
 Use inline projections for same-transaction read-model writes. Use async
-projection helpers for at-least-once subscription handlers.
+projection helpers for at-least-once subscription handlers. `Router` and
+`ProcessManager` can also run target inline projections during reactor
+dispatch by carrying them in `targetProjections`.
 
 ## `Keiro.ReadModel`
 
@@ -170,6 +172,9 @@ Types and functions:
 
 Use it for event-sourced coordination across streams. `eventAlreadyIn` is the
 idempotency pre-check, exported so routers and other callers can reuse it.
+`ProcessManager.targetProjections` is a list of inline projections for target
+events only; `[]` preserves append-only dispatch, while a non-empty list gives
+read-your-own-writes for target read models updated by process-manager dispatch.
 
 ## `Keiro.Router`
 
@@ -183,7 +188,11 @@ Types and functions:
 Use it for stateless, effectful fan-out (content-based router / recipient list).
 Unlike a process manager, a router resolves its targets *effectfully* (for
 example from a read-model `runQuery`) rather than purely from manager state, and
-keeps no state stream. Re-exported from `Keiro`.
+keeps no state stream. `Router.targetProjections` has the same target-only
+meaning as the process-manager field: use `[]` for the migration/default path,
+or pass the target aggregate's inline projections when router-dispatched writes
+must update target read models in the append transaction. Re-exported from
+`Keiro`.
 
 ## `Keiro.Timer`
 

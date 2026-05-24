@@ -12,10 +12,11 @@ import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
-import Keiro.Command (CommandError (..), RunCommandOptions, runCommand)
+import Keiro.Command (CommandError (..), RunCommandOptions)
 import Keiro.EventStream (EventStream)
 import Keiro.Prelude
 import Keiro.ProcessManager (PMCommand (..), PMCommandResult (..), deterministicCommandId, eventAlreadyIn)
+import Keiro.Projection (InlineProjection, runCommandWithProjections)
 import Keiro.Stream (Stream)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError (..))
@@ -44,6 +45,9 @@ deterministic identifier derived from @(name, key input, source event id, emit
 index)@ (see 'deterministicCommandId'), pre-checked with 'eventAlreadyIn', and
 the store's @DuplicateEvent@ rejection is treated as a benign duplicate. Replay
 of the same source event therefore writes no new events.
+
+Each dispatch also runs 'targetProjections' for the target aggregate in the same
+append transaction. Pass @[]@ to preserve append-only dispatch.
 -}
 data Router input targetPhi targetRs targetState targetCi targetCo es = Router
   { name :: !Text
@@ -55,6 +59,9 @@ data Router input targetPhi targetRs targetState targetCi targetCo es = Router
   --   @runQuery readModel q@.
   , targetEventStream :: !(EventStream targetPhi targetRs targetState targetCi targetCo)
   -- ^ The aggregate every resolved command is dispatched to.
+  , targetProjections :: ![InlineProjection targetCo]
+  -- ^ Inline projections for the target aggregate, run in the same transaction
+  --   as each dispatched command's append. Pass @[]@ for append-only dispatch.
   }
   deriving stock (Generic)
 
@@ -77,7 +84,8 @@ process manager provides.
 The dispatch logic per target is identical to
 'Keiro.ProcessManager.runProcessManagerOnce''s @dispatchCommand@: derive a
 deterministic command id, skip if 'eventAlreadyIn' the target stream, otherwise
-'runCommand' and fold a @DuplicateEvent@ rejection into 'PMCommandDuplicate'.
+'Keiro.Projection.runCommandWithProjections' and fold a @DuplicateEvent@
+rejection into 'PMCommandDuplicate'.
 
 Returns 'RouterResult' directly (no outer @Either CommandError@) because — unlike
 the process manager — there is no manager-state append that can fail before
@@ -116,7 +124,13 @@ runRouterOnce options router sourceEvent input = do
       if commandAlreadyProcessed
         then pure (PMCommandDuplicate commandId)
         else do
-          outcome <- runCommand targetOptions targetEventStream targetStream (command ^. #command)
+          outcome <-
+            runCommandWithProjections
+              targetOptions
+              targetEventStream
+              targetStream
+              (command ^. #command)
+              (router ^. #targetProjections)
           pure $ case outcome of
             Right result -> PMCommandAppended result
             Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == commandId -> PMCommandDuplicate commandId

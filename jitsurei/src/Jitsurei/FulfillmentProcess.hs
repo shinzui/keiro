@@ -44,6 +44,7 @@ import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Types (RecordedEvent)
 import Jitsurei.Domain
 import Jitsurei.OrderStream
+import Jitsurei.ReadModels (orderSummaryInlineProjection)
 
 data FulfillmentCommand
   = ObserveFulfillmentEvent !ObserveFulfillmentEventData
@@ -114,6 +115,7 @@ fulfillmentProcessManager = ProcessManager
   , eventStream = fulfillmentEventStream
   , streamFor = fulfillmentStream . OrderId
   , targetEventStream = orderEventStream
+  , targetProjections = [orderSummaryInlineProjection]
   , handle = \event ->
       let orderId = eventOrderId event
           status = fulfillmentStatus event

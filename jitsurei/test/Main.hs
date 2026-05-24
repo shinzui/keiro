@@ -170,6 +170,62 @@ main = hspec $ do
             _ -> False
         _ -> False
 
+    it "updates the target inline read model when fulfillment dispatches packing" $ \store -> do
+      Right () <- Store.runStoreIO store initializeJitsureiTables
+      let target = orderStream sampleOrderId
+      Right (Right _) <- Store.runStoreIO store $
+        runCommandWithProjections
+          defaultRunCommandOptions
+          orderEventStream
+          target
+          samplePlaceOrder
+          [orderSummaryInlineProjection]
+      Right (Right _) <- Store.runStoreIO store $
+        runCommandWithProjections
+          defaultRunCommandOptions
+          orderEventStream
+          target
+          sampleApprovePayment
+          [orderSummaryInlineProjection]
+      Right paidSummary <- Store.runStoreIO store $
+        runQuery orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
+      case paidSummary of
+        Right (Just summary) -> summary ^. #status `shouldBe` "paid"
+        other -> expectationFailure ("expected paid order summary, got " <> show other)
+
+      Right recorded <- Store.runStoreIO store $
+        Store.readStreamForward (StreamName "order-order-100") (StreamVersion 0) 10
+      let paymentRecorded = Vector.toList recorded !! 1
+      first <- Store.runStoreIO store $
+        runFulfillmentOnce defaultRunCommandOptions paymentRecorded
+          (PaymentApproved PaymentApprovedData{orderId = sampleOrderId, paymentRef = samplePaymentRef})
+      first `shouldSatisfy` \case
+        Right (Right result) ->
+          case result ^. #commandResults of
+            [PMCommandAppended{}] -> True
+            _ -> False
+        _ -> False
+      Right packedSummary <- Store.runStoreIO store $
+        runQuery orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
+      case packedSummary of
+        Right (Just summary) -> summary ^. #status `shouldBe` "packed"
+        other -> expectationFailure ("expected packed order summary, got " <> show other)
+
+      second <- Store.runStoreIO store $
+        runFulfillmentOnce defaultRunCommandOptions paymentRecorded
+          (PaymentApproved PaymentApprovedData{orderId = sampleOrderId, paymentRef = samplePaymentRef})
+      second `shouldSatisfy` \case
+        Right (Right result) ->
+          case (result ^. #managerResult, result ^. #commandResults) of
+            (PMStateDuplicate{}, [PMCommandDuplicate{}]) -> True
+            _ -> False
+        _ -> False
+      Right replayedSummary <- Store.runStoreIO store $
+        runQuery orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
+      case replayedSummary of
+        Right (Just summary) -> summary ^. #status `shouldBe` "packed"
+        other -> expectationFailure ("expected packed order summary after replay, got " <> show other)
+
   describe "Jitsurei timers" $ around withTestStore $ do
     it "claims a due timer and marks it fired" $ \store -> do
       Right () <- Store.runStoreIO store initializeTimerSchema
