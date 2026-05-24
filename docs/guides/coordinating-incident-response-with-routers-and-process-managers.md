@@ -179,6 +179,11 @@ The full `ProcessManager` record also has `targetEventStream` and
 process manager's private saga stream. Existing process managers that do not
 need read-model writes on target dispatch should set `targetProjections = []`;
 non-empty lists run in the same transaction as each dispatched target command.
+Use a non-empty list when the next process-manager decision, guard, or immediate
+user read needs read-your-own-writes for the target aggregate. Keep the list
+empty when dispatch is only advancing another aggregate and async projection
+freshness is enough. Because these projection writes share the command append
+transaction, keep them small, deterministic, and local to the target read model.
 
 On `IncidentReported` it advances its state and **arms an escalation timer**
 whose deadline comes from the severity (`escalationDeadline`). On

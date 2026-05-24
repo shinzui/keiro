@@ -68,6 +68,14 @@ the target aggregate's events; pass `[]` for append-only dispatch, or pass the
 same projections your command path uses when the router must keep target read
 models current in the dispatch transaction.
 
+Use `targetProjections` only when the router, or an immediate reader after the
+router runs, depends on the target aggregate's read model reflecting the
+dispatched command right away. Keep `targetProjections = []` for ordinary fan-out
+where eventual consistency is acceptable. Do not move expensive reporting,
+analytics, integration publishing, or broad denormalization work into this
+field; inline projections run inside the append transaction, so slow or failing
+projection SQL slows or fails the dispatch itself.
+
 ## The read model
 
 The router needs a queryable mapping from area to chapters. In `jitsurei` that is

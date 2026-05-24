@@ -113,7 +113,12 @@ Types and functions:
 Use inline projections for same-transaction read-model writes. Use async
 projection helpers for at-least-once subscription handlers. `Router` and
 `ProcessManager` can also run target inline projections during reactor
-dispatch by carrying them in `targetProjections`.
+dispatch by carrying them in `targetProjections`. Use that field when a reactor
+or immediate reader needs read-your-own-writes for the target aggregate after
+dispatch. Keep it empty for ordinary fan-out, analytics, reporting tables,
+integration publishing, or any projection work that can be eventually
+consistent; inline projection SQL runs inside the append transaction and can
+slow or fail the dispatch.
 
 ## `Keiro.ReadModel`
 
@@ -175,6 +180,9 @@ idempotency pre-check, exported so routers and other callers can reuse it.
 `ProcessManager.targetProjections` is a list of inline projections for target
 events only; `[]` preserves append-only dispatch, while a non-empty list gives
 read-your-own-writes for target read models updated by process-manager dispatch.
+The projections should be small, deterministic writes for the target aggregate's
+own read model, not a replacement for async projections or process-manager state
+projection.
 
 ## `Keiro.Router`
 

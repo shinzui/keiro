@@ -87,7 +87,9 @@ This section must always reflect the actual current state of the work.
       `ProcessManager{…}` gains the field) and the motivating Rei adoption. Update public
       examples in `docs/guides/routers-and-effectful-fan-out.md`,
       `docs/guides/coordinating-incident-response-with-routers-and-process-managers.md`,
-      and `docs/user/api-reference.md`. Completed 2026-05-24.
+      and `docs/user/api-reference.md`. Completed 2026-05-24, then tightened with
+      guidance that non-empty `targetProjections` are for immediate target read-model
+      freshness, not for heavy reporting or async projection replacement.
 
 
 ## Surprises & Discoveries
@@ -216,6 +218,16 @@ Record every decision made while working on the plan.
   the ProcessManager case that has the same production risk as Router dispatch.
   Date: 2026-05-24
 
+- Decision: Document `targetProjections` as an opt-in read-your-own-writes tool, not a
+  default place for all projection work.
+  Rationale: reactor inline projections run inside the target command append transaction.
+  That is exactly right when a router or process manager immediately depends on the target
+  read model being current, but it is the wrong default for expensive reporting,
+  analytics, integration publishing, broad denormalization, or eventually-consistent read
+  models that belong in async projections. The docs should guide users toward
+  `targetProjections = []` unless they need immediate target read-model freshness.
+  Date: 2026-05-24
+
 
 ## Outcomes & Retrospective
 
@@ -236,6 +248,11 @@ intended, and the jitsurei fulfillment process manager demonstrates a non-empty 
 projection list with an order-summary regression spec. `cabal build all` succeeds. The
 database-backed test suites are blocked by an unrelated ephemeral schema initialization
 problem (`stream_events` missing) before they can validate the new behavior end-to-end.
+
+2026-05-24: Added public usage guidance so consumers do not treat
+`targetProjections` as a catch-all projection hook. The guides and API reference now say
+to use non-empty lists only for immediate target read-model freshness and to keep heavier
+or eventually-consistent work in async projections.
 
 
 ## Context and Orientation
@@ -620,3 +637,9 @@ API reference, and replaces the vague M3 worked-example search with the existing
 Associated this ExecPlan with intention `intention_01ksdk8pcxeb5936reata58z9a` in the
 frontmatter so future implementation commits can include the matching `Intention:`
 trailer.
+
+## Revision Note — 2026-05-24
+
+Added usage guidance after implementation review. The public docs now explain when
+`targetProjections` is appropriate, when `[]` is the better default, and why expensive or
+eventually-consistent projection work should remain async.
