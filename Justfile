@@ -96,5 +96,28 @@ jitsurei-migrate: jitsurei-db-create
     PGHOST="{{pg_host}}" psql -d "{{jitsurei_database}}" -v ON_ERROR_STOP=1 -c 'CREATE TABLE IF NOT EXISTS jitsurei_order_summary (order_id TEXT PRIMARY KEY, sku TEXT NOT NULL, quantity BIGINT NOT NULL, status TEXT NOT NULL, last_seen BIGINT NOT NULL)'
 
 [group('jitsurei')]
-jitsurei: jitsurei-migrate
+jitsurei-fulfillment: jitsurei-migrate
     PGHOST="{{pg_host}}" PGDATABASE="{{jitsurei_database}}" PG_CONNECTION_STRING="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" cabal run jitsurei-demo
+
+[group('jitsurei')]
+jitsurei-paging: jitsurei-migrate
+    PGHOST="{{pg_host}}" PGDATABASE="{{jitsurei_database}}" PG_CONNECTION_STRING="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" cabal run jitsurei-demo -- paging
+
+[group('jitsurei')]
+jitsurei-snapshots: jitsurei-migrate
+    PGHOST="{{pg_host}}" PGDATABASE="{{jitsurei_database}}" PG_CONNECTION_STRING="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" cabal run jitsurei-demo -- snapshots
+
+[group('jitsurei')]
+jitsurei-escalation: jitsurei-migrate
+    PGHOST="{{pg_host}}" PGDATABASE="{{jitsurei_database}}" PG_CONNECTION_STRING="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" cabal run jitsurei-demo -- escalation
+
+[group('jitsurei')]
+jitsurei-agent-qual: jitsurei-migrate
+    PGHOST="{{pg_host}}" PGDATABASE="{{jitsurei_database}}" PG_CONNECTION_STRING="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" cabal run jitsurei-demo -- agent-qual
+
+[group('jitsurei')]
+jitsurei-all: jitsurei-migrate
+    PGHOST="{{pg_host}}" PGDATABASE="{{jitsurei_database}}" PG_CONNECTION_STRING="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" cabal run jitsurei-demo -- all
+
+[group('jitsurei')]
+jitsurei: jitsurei-all
