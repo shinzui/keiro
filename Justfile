@@ -52,10 +52,6 @@ haskell-test:
 [group('haskell')]
 haskell-verify: haskell-build haskell-test website-verify
 
-[group('benchmark')]
-compare-message-db-kiroku iterations="1000" samples="3" workers="8" isolate="1":
-    COMPARE_ITERATIONS="{{iterations}}" COMPARE_SAMPLES="{{samples}}" COMPARE_WORKERS="{{workers}}" COMPARE_ISOLATE="{{isolate}}" cabal run message-db-vs-kiroku:exe:message-db-vs-kiroku
-
 [group('database')]
 postgres-init:
     mkdir -p "{{pg_host}}" .dev

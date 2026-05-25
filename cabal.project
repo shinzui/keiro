@@ -3,17 +3,35 @@ packages:
   keiro-core
   keiro-migrations
   jitsurei
-  benchmarks/message-db-vs-kiroku
-  /Users/shinzui/Keikaku/bokuno/keiki
-  /Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json
-  /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store
-  /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store-migrations
-  /Users/shinzui/Keikaku/work/libraries/haskell/message-db-hs-master/message-db-hs
-  /Users/shinzui/Keikaku/hub/haskell/hasql-migration
-  /Users/shinzui/Keikaku/hub/haskell/mmzk-typeid-project/mmzk-typeid
 
-optional-packages:
-  /Users/shinzui/Keikaku/hub/haskell/codd-project/codd/codd.cabal
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/keiki.git
+  tag: 869253ab49e2380bcc4556d6d6332913ff0ef52c
+
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/keiki.git
+  tag: 869253ab49e2380bcc4556d6d6332913ff0ef52c
+  subdir: keiki-codec-json
+
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/kiroku.git
+  tag: 97408c2047b634693879d1e9ebfffaeb261d476d
+  subdir: kiroku-store
+
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/kiroku.git
+  tag: 97408c2047b634693879d1e9ebfffaeb261d476d
+  subdir: kiroku-store-migrations
+
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/codd-project.git
+  tag: d176b3088f23ef2218c7a1f31835e8ee0c0601aa
+  subdir: codd
 
 allow-newer:
   haxl:time
