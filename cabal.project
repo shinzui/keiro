@@ -1,5 +1,5 @@
 packages:
-  .
+  keiro
   keiro-core
   keiro-migrations
   jitsurei
