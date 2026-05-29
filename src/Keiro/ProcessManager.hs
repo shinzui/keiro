@@ -45,9 +45,9 @@ data ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi
   , eventStream :: !(EventStream phi rs s ci co)
   , streamFor :: !(Text -> Stream (EventStream phi rs s ci co))
   , targetEventStream :: !(EventStream targetPhi targetRs targetState targetCi targetCo)
-  , targetProjections :: ![InlineProjection targetCo]
+  , targetProjections :: !(Stream targetCi -> [InlineProjection targetCo])
   -- ^ Inline projections for the target aggregate, run in the same transaction
-  --   as each dispatched command's append. Pass @[]@ for append-only dispatch.
+  --   as each dispatched command's append. Return @[]@ for append-only dispatch.
   , handle :: !(input -> ProcessManagerAction ci targetCi)
   }
   deriving stock (Generic)
@@ -172,7 +172,7 @@ runProcessManagerOnce options manager sourceEvent input = do
               (manager ^. #targetEventStream)
               targetStream
               (command ^. #command)
-              (manager ^. #targetProjections)
+              ((manager ^. #targetProjections) (command ^. #target))
           pure $ case outcome of
             Right result -> PMCommandAppended result
             Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == commandId -> PMCommandDuplicate commandId

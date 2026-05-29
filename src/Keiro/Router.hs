@@ -47,7 +47,9 @@ the store's @DuplicateEvent@ rejection is treated as a benign duplicate. Replay
 of the same source event therefore writes no new events.
 
 Each dispatch also runs 'targetProjections' for the target aggregate in the same
-append transaction. Pass @[]@ to preserve append-only dispatch.
+append transaction. The function receives the concrete target stream so callers can
+build projections closed over stream-local keys. Return @[]@ to preserve
+append-only dispatch.
 -}
 data Router input targetPhi targetRs targetState targetCi targetCo es = Router
   { name :: !Text
@@ -59,9 +61,9 @@ data Router input targetPhi targetRs targetState targetCi targetCo es = Router
   --   @runQuery readModel q@.
   , targetEventStream :: !(EventStream targetPhi targetRs targetState targetCi targetCo)
   -- ^ The aggregate every resolved command is dispatched to.
-  , targetProjections :: ![InlineProjection targetCo]
+  , targetProjections :: !(Stream targetCi -> [InlineProjection targetCo])
   -- ^ Inline projections for the target aggregate, run in the same transaction
-  --   as each dispatched command's append. Pass @[]@ for append-only dispatch.
+  --   as each dispatched command's append. Return @[]@ for append-only dispatch.
   }
   deriving stock (Generic)
 
@@ -130,7 +132,7 @@ runRouterOnce options router sourceEvent input = do
               targetEventStream
               targetStream
               (command ^. #command)
-              (router ^. #targetProjections)
+              ((router ^. #targetProjections) (command ^. #target))
           pure $ case outcome of
             Right result -> PMCommandAppended result
             Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == commandId -> PMCommandDuplicate commandId

@@ -246,7 +246,7 @@ agentQualRouter = Router
         | target <- targets
         ]
   , targetEventStream = chapterEventStream
-  , targetProjections = []
+  , targetProjections = const []
   }
 
 initializeAreaChaptersTable :: Tx.Transaction ()

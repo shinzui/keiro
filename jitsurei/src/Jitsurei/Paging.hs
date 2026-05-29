@@ -202,5 +202,5 @@ pagingRouter = Router
         | responder <- responders
         ]
   , targetEventStream = pageEventStream
-  , targetProjections = []
+  , targetProjections = const []
   }
