@@ -18,15 +18,7 @@ import Data.Vector qualified as Vector
 import Data.UUID (UUID, fromString)
 import Data.Time (UTCTime (..), secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
-import EphemeralPg qualified as Pg
-import Codd (CoddSettings (..), VerifySchemas (LaxCheck))
-import Codd.Parsing (connStringParser)
-import Codd.Representations.Types (DbRep (..))
-import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
-import Data.Attoparsec.Text (endOfInput, parseOnly)
-import Data.Map qualified as Map
-import Data.Text (Text)
-import Keiro.Migrations (runAllKeiroMigrations)
+import Keiro.Test.Postgres (withFreshStore, withFreshStores2, withMigratedSuite)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
@@ -148,7 +140,7 @@ import OpenTelemetry.Trace.Core (ImmutableSpan (..), SpanContext (..), getSpanCo
 import Test.Hspec
 
 main :: IO ()
-main = hspec $ do
+main = withMigratedSuite $ \fixture -> hspec $ do
   describe "Keiro" $ do
     it "exposes the scaffold version" $
       KeiroRoot.version `shouldBe` ("0.1.0.0" :: Text)
@@ -206,7 +198,7 @@ main = hspec $ do
       contract ^. #initialState `shouldBe` Idle
       (contract ^. #resolveStreamName) typedStream `shouldBe` StreamName "order-123"
 
-  describe "Keiro.Command" $ around withTestStore $ do
+  describe "Keiro.Command" $ around (withFreshStore fixture) $ do
     it "creates a stream and appends the first command event" $ \storeHandle -> do
       let target = stream "counter-command-create" :: Stream CounterEventStream
       result <- Store.runStoreIO storeHandle $
@@ -435,7 +427,7 @@ main = hspec $ do
         Ok -> pure ()
         other -> expectationFailure ("expected Unset/Ok, got " <> show other)
 
-  describe "Keiro.Snapshot" $ around withTestStore $ do
+  describe "Keiro.Snapshot" $ around (withFreshStore fixture) $ do
     it "writes a snapshot after policy threshold" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
       let target = stream "snapshot-write-threshold" :: Stream SnapshotCounterEventStream
@@ -536,7 +528,7 @@ main = hspec $ do
           Tx.statement "snapshot-multi-event-batch" snapshotVersionForStreamStmt
       snapshotVersion `shouldBe` Just (StreamVersion 2)
 
-  describe "Keiro.ReadModel" $ around withTestStore $ do
+  describe "Keiro.ReadModel" $ around (withFreshStore fixture) $ do
     it "queries inline projection with Strong consistency" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
       Right () <- Store.runStoreIO storeHandle $
@@ -660,7 +652,7 @@ main = hspec $ do
         Rebuild.abandonRebuild counterReadModel
       abandoned ^. #status `shouldBe` Abandoned
 
-  describe "Keiro.ProcessManager" $ around withTestStore $ do
+  describe "Keiro.ProcessManager" $ around (withFreshStore fixture) $ do
     it "advances manager state, emits a deterministic target command once, and schedules a timer" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle initializeTimerSchema
       let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
@@ -760,7 +752,7 @@ main = hspec $ do
       sharedPmCategoryEvents `shouldBe` Vector.empty
       sharedPmNamespaceEvents `shouldBe` Vector.empty
 
-  describe "Keiro.Router" $ around withTestStore $ do
+  describe "Keiro.Router" $ around (withFreshStore fixture) $ do
     it "resolves targets effectfully and fans out one command per target" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
       Right () <- Store.runStoreIO storeHandle $
@@ -862,7 +854,7 @@ main = hspec $ do
         [AckHalt (HaltFatal _)] -> True
         _ -> False
 
-  describe "Keiro.Timer" $ around withTestStore $ do
+  describe "Keiro.Timer" $ around (withFreshStore fixture) $ do
     it "claims a due timer, fires a command, and marks it complete once" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle initializeTimerSchema
       Right () <- Store.runStoreIO storeHandle $
@@ -909,7 +901,7 @@ main = hspec $ do
           record = OutboxKafka.integrationEventToKafkaRecord envelope
       record ^. #key `shouldBe` Nothing
 
-  describe "Keiro.Outbox" $ around withTestStore $ do
+  describe "Keiro.Outbox" $ around (withFreshStore fixture) $ do
     it "enqueues and looks up an outbox row" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
       let envelope = sampleIntegrationEnvelope
@@ -1156,7 +1148,7 @@ main = hspec $ do
         Error msg -> msg `shouldBe` "broker unreachable"
         other -> expectationFailure ("expected Error \"broker unreachable\", got " <> show other)
 
-  describe "Keiro.Inbox" $ around withTestStore $ do
+  describe "Keiro.Inbox" $ around (withFreshStore fixture) $ do
     it "runs the handler once and records the row as completed" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle initializeInboxSchema
       Right () <- Store.runStoreIO storeHandle $
@@ -1367,7 +1359,7 @@ main = hspec $ do
       textAttr (spanAttributes consumerSp) "messaging.message.id"
         `shouldBe` Just (envelope ^. #messageId)
 
-  describe "Keiro cross-context Kafka integration" $ around withTwoContexts $ do
+  describe "Keiro cross-context Kafka integration" $ around (withFreshStores2 fixture) $ do
     it "publishes an Ordering integration event and runs the Billing handler exactly once across duplicate deliveries" $ \(ordering, billing) -> do
       Right () <- Store.runStoreIO ordering initializeOutboxSchema
       Right () <- Store.runStoreIO billing initializeInboxSchema
@@ -1625,26 +1617,6 @@ textAttr :: Attributes -> Text -> Maybe Text
 textAttr attrs name = case lookupAttribute attrs name of
   Just (AttributeValue (TextAttribute t)) -> Just t
   _ -> Nothing
-
--- ---------------------------------------------------------------------------
--- Cross-context integration fixtures
--- ---------------------------------------------------------------------------
-
-withTwoContexts ::
-  ((Store.KirokuStore, Store.KirokuStore) -> IO ()) ->
-  IO ()
-withTwoContexts action = do
-  result <- Pg.withCached $ \dbA ->
-    Pg.withCached $ \dbB -> do
-      migrateEphemeral (Pg.connectionString dbA)
-      migrateEphemeral (Pg.connectionString dbB)
-      Store.withStore (Store.defaultConnectionSettings (Pg.connectionString dbA)) $ \ordering ->
-        Store.withStore (Store.defaultConnectionSettings (Pg.connectionString dbB)) $ \billing ->
-          action (ordering, billing)
-  case result of
-    Left err -> error ("Failed to start ordering ephemeral PostgreSQL: " <> show err)
-    Right (Left err) -> error ("Failed to start billing ephemeral PostgreSQL: " <> show err)
-    Right (Right ()) -> pure ()
 
 -- | Tiny in-process \"Kafka topic\": an MVar of consumed records plus an
 -- incrementing offset. The publisher pushes records here; the consumer
@@ -2313,49 +2285,6 @@ counterTimerRequest = TimerRequest
 
 dueTimerTime :: UTCTime
 dueTimerTime = UTCTime (ModifiedJulianDay 1) (secondsToDiffTime 0)
-
-withTestStore :: (Store.KirokuStore -> IO ()) -> IO ()
-withTestStore action = do
-  result <- Pg.withCached $ \db -> do
-    migrateEphemeral (Pg.connectionString db)
-    Store.withStore (Store.defaultConnectionSettings (Pg.connectionString db)) action
-  case result of
-    Left err -> error ("Failed to start ephemeral PostgreSQL: " <> show err)
-    Right () -> pure ()
-
--- | Apply the Kiroku event-store schema and the Keiro framework schema to a
--- freshly started ephemeral PostgreSQL database. 'EphemeralPg.withCached'
--- restores a clean @initdb@ cluster with no schema, and
--- 'Kiroku.Store.Connection.withStore' deliberately does not create any tables,
--- so every store-backed test must run the migrations itself before opening a
--- store. This mirrors @keiro-migrations-test@.
-migrateEphemeral :: Text -> IO ()
-migrateEphemeral connStr =
-  () <$ runAllKeiroMigrations (testCoddSettings connStr) (secondsToDiffTime 5) LaxCheck
-
--- | Codd settings for an ephemeral test database. The Kiroku and Keiro
--- migrations both target the @kiroku@ schema, which matches the default
--- search path configured by 'Store.defaultConnectionSettings'. 'LaxCheck' is
--- used because ephemeral test databases keep no checked-in expected-schema
--- representation.
-testCoddSettings :: Text -> CoddSettings
-testCoddSettings connStr =
-  CoddSettings
-    { migsConnString = parseConnString connStr
-    , sqlMigrations = []
-    , onDiskReps = Right (DbRep Aeson.Null Map.empty Map.empty)
-    , namespacesToCheck = IncludeSchemas [SqlSchema "kiroku"]
-    , extraRolesToCheck = []
-    , retryPolicy = singleTryPolicy
-    , txnIsolationLvl = DbDefault
-    , schemaAlgoOpts = SchemaAlgo False False False
-    }
-
-parseConnString :: Text -> ConnectionString
-parseConnString connStr =
-  case parseOnly (connStringParser <* endOfInput) connStr of
-    Left err -> error ("Could not parse ephemeral PostgreSQL connection string for codd: " <> err)
-    Right parsed -> parsed
 
 recordedFrom :: EventData -> RecordedEvent
 recordedFrom event = RecordedEvent

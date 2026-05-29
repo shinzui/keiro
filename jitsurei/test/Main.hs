@@ -31,19 +31,12 @@ import Kiroku.Store.Types
   , StreamName (..)
   , StreamVersion (..)
   )
-import EphemeralPg qualified as Pg
-import Codd (CoddSettings (..), VerifySchemas (LaxCheck))
-import Codd.Parsing (connStringParser)
-import Codd.Representations.Types (DbRep (..))
-import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
-import Data.Attoparsec.Text (endOfInput, parseOnly)
-import Data.Map qualified as Map
-import Keiro.Migrations (runAllKeiroMigrations)
+import Keiro.Test.Postgres (withFreshStore, withMigratedSuite)
 import Test.Hspec
 import Jitsurei
 
 main :: IO ()
-main = hspec $ do
+main = withMigratedSuite $ \fixture -> hspec $ do
   describe "Jitsurei codec evolution" $ do
     it "upcasts a v1 OrderPlaced payload into the current event shape" $
       decodeRaw
@@ -63,7 +56,7 @@ main = hspec $ do
                 }
           )
 
-  describe "Jitsurei command cycle" $ around withTestStore $ do
+  describe "Jitsurei command cycle" $ around (withFreshStore fixture) $ do
     it "places and pays for an order in stream order" $ \store -> do
       let target = orderStream sampleOrderId
       Right (Right placed) <- Store.runStoreIO store $
@@ -102,7 +95,7 @@ main = hspec $ do
           )
       result `shouldBe` Right (Left CommandRejected)
 
-  describe "Jitsurei read model" $ around withTestStore $ do
+  describe "Jitsurei read model" $ around (withFreshStore fixture) $ do
     it "updates and queries the inline order summary in the append transaction" $ \store -> do
       Right () <- Store.runStoreIO store initializeJitsureiTables
       Right (Right _) <- Store.runStoreIO store $
@@ -122,7 +115,7 @@ main = hspec $ do
           summary ^. #status `shouldBe` "placed"
         other -> expectationFailure ("expected live order summary, got " <> show other)
 
-  describe "Jitsurei snapshots" $ around withTestStore $ do
+  describe "Jitsurei snapshots" $ around (withFreshStore fixture) $ do
     it "writes a snapshot after the configured threshold" $ \store -> do
       Right () <- Store.runStoreIO store initializeSnapshotSchema
       let target = orderStream (OrderId "snapshot-100")
@@ -148,7 +141,7 @@ main = hspec $ do
           Tx.statement "order-snapshot-100" snapshotVersionForStreamStmt
       snapshotVersion `shouldBe` Just (StreamVersion 2)
 
-  describe "Jitsurei process manager" $ around withTestStore $ do
+  describe "Jitsurei process manager" $ around (withFreshStore fixture) $ do
     it "dispatches a packing command once for a payment event" $ \store -> do
       -- Dispatching the fulfillment process manager now runs the target's
       -- inline order-summary projection (see commit "run target inline
@@ -238,7 +231,7 @@ main = hspec $ do
         Right (Just summary) -> summary ^. #status `shouldBe` "packed"
         other -> expectationFailure ("expected packed order summary after replay, got " <> show other)
 
-  describe "Jitsurei timers" $ around withTestStore $ do
+  describe "Jitsurei timers" $ around (withFreshStore fixture) $ do
     it "claims a due timer and marks it fired" $ \store -> do
       Right () <- Store.runStoreIO store initializeTimerSchema
       Right () <- Store.runStoreIO store $
@@ -248,7 +241,7 @@ main = hspec $ do
         runPaymentTimeoutWorker dueTime
       claimed `shouldSatisfy` isJust
 
-  describe "Jitsurei agent-qualification router" $ around withTestStore $ do
+  describe "Jitsurei agent-qualification router" $ around (withFreshStore fixture) $ do
     it "routes a transaction to every chapter resolved from its areas, idempotently" $ \store -> do
       Right () <- Store.runStoreIO store initializeReadModelSchema
       Right () <- Store.runStoreIO store $
@@ -304,7 +297,7 @@ main = hspec $ do
       Vector.length c2' `shouldBe` 1
       Vector.length c3' `shouldBe` 1
 
-  describe "Jitsurei incident aggregate" $ around withTestStore $ do
+  describe "Jitsurei incident aggregate" $ around (withFreshStore fixture) $ do
     it "raises, acknowledges, and rejects a post-acknowledgement escalation" $ \store -> do
       let incidentId = IncidentId "inc-1"
           target = incidentStream incidentId
@@ -338,7 +331,7 @@ main = hspec $ do
           , IncidentAcknowledged (IncidentAcknowledgedData incidentId)
           ]
 
-  describe "Jitsurei paging" $ around withTestStore $ do
+  describe "Jitsurei paging" $ around (withFreshStore fixture) $ do
     it "sends then acknowledges a page" $ \store -> do
       let incidentId = IncidentId "inc-1"
           responderId = ResponderId "alice"
@@ -399,7 +392,7 @@ main = hspec $ do
         Store.readStreamForward (StreamName "page-inc-1-alice") (StreamVersion 0) 10
       Vector.length paAgain `shouldBe` 1
 
-  describe "Jitsurei escalation process manager" $ around withTestStore $ do
+  describe "Jitsurei escalation process manager" $ around (withFreshStore fixture) $ do
     it "advances the saga and schedules an escalation timer on IncidentRaised" $ \store -> do
       Right () <- Store.runStoreIO store initializeTimerSchema
       let incidentId = IncidentId "inc-1"
@@ -520,43 +513,6 @@ sampleApprovePayment = ApprovePayment ApprovePaymentData
 dueTime :: UTCTime
 dueTime = UTCTime (ModifiedJulianDay 1) (secondsToDiffTime 0)
 
-withTestStore :: (Store.KirokuStore -> IO ()) -> IO ()
-withTestStore action = do
-  result <- Pg.withCached $ \db -> do
-    migrateEphemeral (Pg.connectionString db)
-    Store.withStore (Store.defaultConnectionSettings (Pg.connectionString db)) action
-  case result of
-    Left err -> error ("Failed to start ephemeral PostgreSQL: " <> show err)
-    Right () -> pure ()
-
--- | Apply the Kiroku event-store schema and the Keiro framework schema to a
--- freshly started ephemeral PostgreSQL database. 'EphemeralPg.withCached'
--- restores a clean @initdb@ cluster with no schema, and
--- 'Kiroku.Store.Connection.withStore' does not create any tables, so every
--- store-backed test must run the migrations itself before opening a store.
--- This mirrors @keiro-migrations-test@ and the @keiro-test@ suite.
-migrateEphemeral :: Text -> IO ()
-migrateEphemeral connStr =
-  () <$ runAllKeiroMigrations (testCoddSettings connStr) (secondsToDiffTime 5) LaxCheck
-
-testCoddSettings :: Text -> CoddSettings
-testCoddSettings connStr =
-  CoddSettings
-    { migsConnString = parseConnString connStr
-    , sqlMigrations = []
-    , onDiskReps = Right (DbRep Aeson.Null Map.empty Map.empty)
-    , namespacesToCheck = IncludeSchemas [SqlSchema "kiroku"]
-    , extraRolesToCheck = []
-    , retryPolicy = singleTryPolicy
-    , txnIsolationLvl = DbDefault
-    , schemaAlgoOpts = SchemaAlgo False False False
-    }
-
-parseConnString :: Text -> ConnectionString
-parseConnString connStr =
-  case parseOnly (connStringParser <* endOfInput) connStr of
-    Left err -> error ("Could not parse ephemeral PostgreSQL connection string for codd: " <> err)
-    Right parsed -> parsed
 
 -- A minimal source event whose only load-bearing field is its id, which seeds
 -- the router's deterministic command ids. Its payload is irrelevant to routing.

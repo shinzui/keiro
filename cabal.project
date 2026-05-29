@@ -2,6 +2,7 @@ packages:
   keiro
   keiro-core
   keiro-migrations
+  keiro-test-support
   jitsurei
 
 source-repository-package

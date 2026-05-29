@@ -26,6 +26,12 @@ in  Schema.Project::{
         , language = Schema.Language.Haskell
         , description = Some "Event sourcing framework and workflow engine"
         }
+      , Schema.Package::{
+        , name = "keiro-test-support"
+        , type = Schema.PackageType.Library
+        , language = Schema.Language.Haskell
+        , description = Some "Shared PostgreSQL test fixtures for Keiro test suites"
+        }
       ]
     , dependencies =
       [ "shinzui/kiroku"
