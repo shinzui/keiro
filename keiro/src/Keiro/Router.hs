@@ -1,6 +1,23 @@
+{- | Stateless, content-based routing of events to commands.
+
+A 'Router' is the stateless sibling of
+'Keiro.ProcessManager.ProcessManager': for each incoming event it resolves
+a data-dependent set of target streams /effectfully/ (typically via a
+read-model query) and dispatches one command to each. Dispatch is
+exactly-once-per-target by construction — every command is appended under a
+deterministic id and store-level duplicate rejections are folded into a
+benign 'PMCommandDuplicate' — so replaying a source event writes nothing
+new.
+
+Use 'runRouterOnce' to dispatch a single event, or 'runRouterWorker' to run
+the router as a live subscription draining a Shibuya adapter.
+-}
 module Keiro.Router
-  ( Router (..)
+  ( -- * Definition
+    Router (..)
   , RouterResult (..)
+
+    -- * Running
   , runRouterOnce
   , runRouterWorker
   )

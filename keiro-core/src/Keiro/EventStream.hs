@@ -1,3 +1,22 @@
+{- | The complete description of one persistent event stream.
+
+An 'EventStream' marries a pure keiki 'SymTransducer' (the decision logic
+of a symbolic-register state machine) with everything keiro needs to run
+it against a durable event store: where its initial state and registers
+come from, how its emitted events are serialized ('Codec'), which physical
+stream name to read and write, when to snapshot, and how to serialize that
+snapshot. Command handling ("Keiro.Command") hydrates the machine from
+stored events (optionally fast-forwarding from a snapshot), steps it with a
+command, encodes the resulting events, and appends them.
+
+The type parameters thread through from the underlying transducer:
+
+* @phi@ — the guard/predicate alphabet the transducer branches on.
+* @rs@ — the register set ('RegFile' @rs@ holds the live values).
+* @s@ — the control state.
+* @ci@ — the command input the machine consumes.
+* @co@ — the event output the machine emits (what 'eventCodec' serializes).
+-}
 module Keiro.EventStream
   ( EventStream (..)
   , SnapshotPolicy (..)
@@ -11,6 +30,21 @@ import Keiro.Prelude
 import Keiro.Stream (Stream)
 import Kiroku.Store.Types (StreamName, StreamVersion)
 
+{- | A self-contained, persistable event stream definition.
+
+* 'transducer' — the pure keiki state machine that turns a command into
+  emitted events.
+* 'initialState' \/ 'initialRegisters' — the machine's starting control
+  state and register file, used when hydrating an empty stream.
+* 'eventCodec' — serializes and migrates the emitted events (@co@) to and
+  from stored payloads.
+* 'resolveStreamName' — maps a typed 'Stream' handle to the physical
+  'StreamName' read and appended to in the store.
+* 'snapshotPolicy' — decides, per append, whether to persist a snapshot of
+  the @(state, registers)@ pair.
+* 'stateCodec' — how to serialize that snapshot; 'Nothing' disables
+  snapshotting regardless of 'snapshotPolicy'.
+-}
 data EventStream phi rs s ci co = EventStream
   { transducer :: !(SymTransducer phi rs s ci co)
   , initialState :: !s
@@ -22,6 +56,17 @@ data EventStream phi rs s ci co = EventStream
   }
   deriving stock (Generic)
 
+{- | When to persist a snapshot of a stream's folded state.
+
+* 'Never' — never snapshot; always rehydrate from the full event log.
+* 'Every' @n@ — snapshot whenever the stream version is a multiple of @n@
+  (a non-positive interval disables snapshotting).
+* 'OnTerminal' — snapshot only when the machine has reached a final state.
+* 'Custom' — an arbitrary predicate over the folded @state@ and the
+  current 'StreamVersion'.
+
+See 'Keiro.Snapshot.Policy.shouldSnapshot' for the evaluation rules.
+-}
 data SnapshotPolicy state
   = Never
   | Every !Int
@@ -29,6 +74,20 @@ data SnapshotPolicy state
   | Custom !(state -> StreamVersion -> Bool)
   deriving stock (Generic)
 
+{- | How to serialize and deserialize a stream's snapshot state.
+
+'stateCodecVersion' and 'shapeHash' together gate snapshot reuse: a stored
+snapshot is only loaded when both match the current codec, so a change to
+the snapshot encoding or to the shape of the folded state invalidates older
+snapshots and forces a clean rehydration from events.
+
+* 'stateCodecVersion' — bumped when the snapshot encoding changes
+  incompatibly.
+* 'shapeHash' — a digest of the folded-state shape; protects against
+  silently loading a snapshot whose structure no longer matches.
+* 'encode' \/ 'decode' — the JSON serialization of the @(state,
+  registers)@ pair.
+-}
 data StateCodec state = StateCodec
   { stateCodecVersion :: !Int
   , shapeHash :: !Text

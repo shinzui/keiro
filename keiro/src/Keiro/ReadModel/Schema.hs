@@ -1,8 +1,26 @@
+{- | The @keiro_read_models@ registry: schema identity and lifecycle status.
+
+Every read model registers a row recording its 'version', 'shapeHash', and
+'ReadModelStatus'. The registry is what lets 'Keiro.ReadModel.runQuery'
+refuse to serve a model whose code-side schema has drifted from the table on
+disk, or one that is mid-rebuild. The status transitions ('markRebuilding',
+'markLive', 'markAbandoned') drive the rebuild workflow in
+"Keiro.ReadModel.Rebuild".
+
+All operations run as single-statement 'Hasql.Transaction.Transaction's
+against the @keiro_read_models@ table; an unrecognized stored status decodes
+to 'Paused' defensively rather than failing the read.
+-}
 module Keiro.ReadModel.Schema
-  ( ReadModelMetadata (..)
+  ( -- * Metadata
+    ReadModelMetadata (..)
   , ReadModelStatus (..)
+
+    -- * Registration and lookup
   , registerReadModel
   , lookupReadModel
+
+    -- * Status transitions
   , markRebuilding
   , markLive
   , markAbandoned
@@ -20,6 +38,14 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Prelude qualified
 
+{- | Lifecycle status of a registered read model.
+
+* 'Live' — current and queryable.
+* 'Rebuilding' — being repopulated from the event log; not yet queryable.
+* 'Paused' — temporarily not served (also the fallback for an unrecognized
+  stored value).
+* 'Abandoned' — a rebuild that was given up on.
+-}
 data ReadModelStatus
   = Live
   | Rebuilding
@@ -27,6 +53,10 @@ data ReadModelStatus
   | Abandoned
   deriving stock (Generic, Eq, Show)
 
+{- | One row of the @keiro_read_models@ registry: a model's name, schema
+identity ('version' and 'shapeHash'), the time it was last (re)built, and
+its current 'status'.
+-}
 data ReadModelMetadata = ReadModelMetadata
   { name :: !Text
   , version :: !Int
@@ -36,6 +66,11 @@ data ReadModelMetadata = ReadModelMetadata
   }
   deriving stock (Generic, Eq, Show)
 
+{- | Register a read model, inserting a 'Live' row if none exists. Idempotent:
+an existing registration is returned unchanged (the @version@ and
+@shapeHash@ are /not/ overwritten), so a query can compare them and detect
+schema drift.
+-}
 registerReadModel :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 registerReadModel name version shapeHash =
   runTransaction $
@@ -43,11 +78,16 @@ registerReadModel name version shapeHash =
       (name, Prelude.fromIntegral version, shapeHash)
       registerReadModelStmt
 
+-- | Look up a read model's registry row by name, if it exists.
 lookupReadModel :: (Store :> es) => Text -> Eff es (Maybe ReadModelMetadata)
 lookupReadModel name =
   runTransaction $
     Tx.statement name lookupReadModelStmt
 
+{- | Upsert the registry row to 'Rebuilding' at the given schema identity.
+Marks the model as being repopulated so queries stop serving it until
+'markLive'.
+-}
 markRebuilding :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 markRebuilding name version shapeHash =
   runTransaction $
@@ -55,6 +95,9 @@ markRebuilding name version shapeHash =
       (name, Prelude.fromIntegral version, shapeHash, statusToText Rebuilding)
       transitionReadModelStmt
 
+{- | Upsert the registry row to 'Live' at the given schema identity, stamping
+@last_built_at@. Makes the model queryable again after a rebuild.
+-}
 markLive :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 markLive name version shapeHash =
   runTransaction $
@@ -62,6 +105,8 @@ markLive name version shapeHash =
       (name, Prelude.fromIntegral version, shapeHash, statusToText Live)
       transitionReadModelStmt
 
+-- | Upsert the registry row to 'Abandoned' at the given schema identity,
+-- recording that a rebuild was given up on.
 markAbandoned :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 markAbandoned name version shapeHash =
   runTransaction $

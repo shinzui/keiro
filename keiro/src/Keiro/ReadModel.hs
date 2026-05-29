@@ -1,11 +1,42 @@
+{- | Querying the read side, with explicit consistency.
+
+A 'ReadModel' is a named, versioned SQL projection table plus the query that
+reads it. Querying it does more than run SQL: 'runQuery' first verifies the
+table's registered schema is current and 'Live' (rejecting a stale or
+mid-rebuild model), then honours the requested 'ConsistencyMode' before
+running the query in a transaction.
+
+The consistency modes trade freshness against latency:
+
+* 'Strong' / 'Eventual' — query immediately; the names document the caller's
+  expectation but neither blocks. (Read-your-writes is the projection
+  worker's responsibility under 'Eventual'.)
+* 'PositionWait' — block until the model's subscription has caught up to a
+  target 'GlobalPosition' (typically the position returned by the command
+  the caller just ran), giving read-your-writes against an asynchronous
+  projection. 'waitFor' implements the polling loop and times out with
+  'ReadModelWaitTimeout'.
+
+Schema lifecycle (registration, status transitions) lives in
+"Keiro.ReadModel.Schema", which is re-exported here.
+-}
 module Keiro.ReadModel
-  ( ReadModel (..)
+  ( -- * Definition
+    ReadModel (..)
+
+    -- * Consistency
   , ConsistencyMode (..)
   , PositionWaitOptions (..)
-  , ReadModelError (..)
+
+    -- * Querying
   , runQuery
   , runQueryWith
   , waitFor
+
+    -- * Errors
+  , ReadModelError (..)
+
+    -- * Schema lifecycle
   , module Keiro.ReadModel.Schema
   )
 where
@@ -24,6 +55,18 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (GlobalPosition (..))
 import Prelude qualified
 
+{- | A queryable read-side projection over a query input @q@ and result @r@.
+
+* 'name' — logical identity, also the key in the @keiro_read_models@
+  registry.
+* 'tableName' — the underlying projection table.
+* 'subscriptionName' — the cursor that tracks how far the projection worker
+  has consumed the event log; consulted by 'PositionWait'.
+* 'version' \/ 'shapeHash' — schema identity; a query fails with
+  'ReadModelStaleSchema' if the registered values diverge, forcing a rebuild.
+* 'defaultConsistency' — the 'ConsistencyMode' used by 'runQuery'.
+* 'query' — the SQL read, as a 'Hasql.Transaction.Transaction'.
+-}
 data ReadModel q r = ReadModel
   { name :: !Text
   , tableName :: !Text
@@ -35,12 +78,24 @@ data ReadModel q r = ReadModel
   }
   deriving stock (Generic)
 
+{- | How fresh a read must be before the query runs.
+
+'Strong' and 'Eventual' both query without blocking; 'PositionWait' blocks
+until the projection has caught up to a target log position (or times out).
+-}
 data ConsistencyMode
   = Strong
   | Eventual
   | PositionWait !PositionWaitOptions
   deriving stock (Generic, Eq, Show)
 
+{- | Parameters for a 'PositionWait' query.
+
+* 'target' — the 'GlobalPosition' the projection must reach; 'Nothing'
+  skips waiting entirely.
+* 'timeoutMicros' — give up after this long with 'ReadModelWaitTimeout'.
+* 'pollMicros' — delay between subscription-position checks.
+-}
 data PositionWaitOptions = PositionWaitOptions
   { target :: !(Maybe GlobalPosition)
   , timeoutMicros :: !Int
@@ -48,12 +103,23 @@ data PositionWaitOptions = PositionWaitOptions
   }
   deriving stock (Generic, Eq, Show)
 
+-- | Why a read-model query could not run.
 data ReadModelError
-  = ReadModelStaleSchema !Text !Int !Int !Text !Text
-  | ReadModelWaitTimeout !Text !GlobalPosition !GlobalPosition
-  | ReadModelNotLive !Text !ReadModelStatus
+  = -- | The registered schema (version or shape hash) differs from the
+    -- model's current definition: name, expected vs. found version, then
+    -- expected vs. found shape hash. The model must be rebuilt.
+    ReadModelStaleSchema !Text !Int !Int !Text !Text
+  | -- | A 'PositionWait' query timed out: model name, target position, and
+    -- the last observed subscription position.
+    ReadModelWaitTimeout !Text !GlobalPosition !GlobalPosition
+  | -- | The model is registered but not 'Live' (e.g. rebuilding or
+    -- abandoned): name and current status.
+    ReadModelNotLive !Text !ReadModelStatus
   deriving stock (Generic, Eq, Show)
 
+{- | Query a read model using its 'defaultConsistency'. Validates schema and
+liveness first, waits if the mode requires it, then runs the query.
+-}
 runQuery ::
   (IOE :> es, Store :> es) =>
   ReadModel q r ->
@@ -62,6 +128,10 @@ runQuery ::
 runQuery readModel =
   runQueryWith (readModel ^. #defaultConsistency) readModel
 
+{- | Query a read model with an explicit 'ConsistencyMode', overriding its
+default. Validates the model's schema and liveness, honours the wait mode,
+then runs the query in a transaction.
+-}
 runQueryWith ::
   (IOE :> es, Store :> es) =>
   ConsistencyMode ->
@@ -78,6 +148,10 @@ runQueryWith consistency readModel input = do
         Left err -> pure (Left err)
         Right () -> Right <$> runTransaction ((readModel ^. #query) input)
 
+{- | Block until the model's subscription has advanced to @targetPosition@,
+polling at 'pollMicros' intervals. Returns @Right ()@ once caught up, or
+'ReadModelWaitTimeout' if 'timeoutMicros' elapses first.
+-}
 waitFor ::
   (IOE :> es, Store :> es) =>
   PositionWaitOptions ->

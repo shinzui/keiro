@@ -1,3 +1,16 @@
+{- | The curated prelude shared across the Keiro packages.
+
+Re-exports a deliberately small slice of @base@, @aeson@, @text@, @time@,
+and the full @lens@ surface so modules can open with a single
+@import Keiro.Prelude@ and get a consistent, explicit set of names. The
+implicit @base@ @Prelude@ is expected to be disabled
+(@NoImplicitPrelude@); only the names listed here are in scope, which
+keeps event-sourcing code uniform and avoids accidental partial functions.
+
+The @generic-lens@ @Data.Generics.Labels@ orphan instances are imported
+for their effect only, enabling the @^. #field@ overloaded-label optics
+used throughout the codebase.
+-}
 module Keiro.Prelude
   ( module X
   , module Control.Lens

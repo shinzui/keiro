@@ -1,11 +1,31 @@
+{- | Durable timers for process managers.
+
+A process manager schedules a timer ('scheduleTimerTx', in its own append
+transaction) to be woken at a future time — a saga timeout, a retry delay, a
+deadline. The 'runTimerWorker' loop claims one due timer at a time with
+@FOR UPDATE SKIP LOCKED@ (so multiple workers can run safely), hands it to a
+caller-supplied @fire@ action that typically dispatches a command back into
+the manager, and marks it fired once the resulting event id is known. A
+timer left @Firing@ by a crash becomes claimable again, giving
+at-least-once firing.
+
+The wire types live in "Keiro.Timer.Types" and the SQL storage in
+"Keiro.Timer.Schema"; both are re-exported here so most callers need only
+import @Keiro.Timer@.
+-}
 module Keiro.Timer
-  ( TimerId (..)
+  ( -- * Timer types
+    TimerId (..)
   , TimerRequest (..)
   , TimerRow (..)
   , TimerStatus (..)
+
+    -- * Storage
   , scheduleTimerTx
   , claimDueTimer
   , markTimerFired
+
+    -- * Worker
   , runTimerWorker
   )
 where
@@ -17,6 +37,14 @@ import Keiro.Timer.Types
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Types (EventId)
 
+{- | Claim and fire at most one timer due at @now@.
+
+Atomically claims the earliest due timer (marking it @Firing@), runs @fire@
+on it, and — if @fire@ returns the id of the event it produced — marks the
+timer @Fired@. Returns the claimed 'TimerRow', or 'Nothing' when nothing is
+due. A worker drives this on a schedule (e.g. once per tick); a @fire@ that
+returns 'Nothing' leaves the timer @Firing@ to be retried on a later claim.
+-}
 runTimerWorker ::
   (Store :> es) =>
   UTCTime ->

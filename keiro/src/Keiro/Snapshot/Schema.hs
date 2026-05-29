@@ -1,6 +1,22 @@
+{- | The @keiro_snapshots@ table: persistence for aggregate snapshots.
+
+One row per stream holds the latest snapshot of its folded state as JSONB,
+tagged with the 'stateCodecVersion' and 'regfileShapeHash' that produced it.
+'lookupSnapshot' fetches the newest row matching a given version and shape
+hash (so incompatible snapshots are simply not found); 'writeSnapshotRow'
+upserts, keeping only the highest stream version per stream so a late or
+out-of-order write cannot regress the snapshot.
+
+This module is the storage layer beneath "Keiro.Snapshot"; callers normally
+go through 'Keiro.Snapshot.hydrateWithSnapshot' and
+'Keiro.Snapshot.writeSnapshot' rather than these statements directly.
+-}
 module Keiro.Snapshot.Schema
-  ( SnapshotRow (..)
+  ( -- * Rows
+    SnapshotRow (..)
   , SnapshotWrite (..)
+
+    -- * Storage
   , lookupSnapshot
   , writeSnapshotRow
   )
@@ -18,6 +34,11 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (StreamId (..), StreamVersion (..))
 import Prelude qualified
 
+{- | A snapshot row as read back from @keiro_snapshots@: the stored 'state'
+JSON, the 'streamVersion' it captures, the 'stateCodecVersion' and
+'regfileShapeHash' that gate compatibility, and the create/update
+timestamps.
+-}
 data SnapshotRow = SnapshotRow
   { streamId :: !StreamId
   , streamVersion :: !StreamVersion
@@ -29,6 +50,8 @@ data SnapshotRow = SnapshotRow
   }
   deriving stock (Generic, Eq, Show)
 
+-- | The fields needed to write a snapshot — 'SnapshotRow' minus the
+-- database-managed timestamps.
 data SnapshotWrite = SnapshotWrite
   { streamId :: !StreamId
   , streamVersion :: !StreamVersion
@@ -38,6 +61,10 @@ data SnapshotWrite = SnapshotWrite
   }
   deriving stock (Generic, Eq, Show)
 
+{- | Fetch the latest snapshot for a stream that matches the given codec
+version and register-file shape hash. Returns 'Nothing' when no compatible
+snapshot exists, so an incompatible one is treated as absent.
+-}
 lookupSnapshot ::
   (Store :> es) =>
   StreamId ->
@@ -50,6 +77,10 @@ lookupSnapshot streamId version shapeHash =
       (streamIdToInt streamId, Prelude.fromIntegral version, shapeHash)
       lookupSnapshotStmt
 
+{- | Upsert a snapshot row for its stream. The write only takes effect when
+its 'streamVersion' is at least the stored one, so concurrent or replayed
+writes never regress the snapshot to an older version.
+-}
 writeSnapshotRow ::
   (Store :> es) =>
   SnapshotWrite ->

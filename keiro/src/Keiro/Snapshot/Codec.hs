@@ -1,3 +1,16 @@
+{- | The default JSON encoding for aggregate snapshots.
+
+'defaultStateCodec' builds a 'StateCodec' for the @(state, registers)@ pair
+of a keiki machine, serializing it as a JSON object @{ "state": …,
+"registers": … }@. The state half uses its 'ToJSON' \/ 'FromJSON'
+instances; the register half uses keiki's register-file JSON encoding. The
+codec's 'shapeHash' is derived from the register-file /shape/, so any change
+to the register layout changes the hash and transparently invalidates older
+snapshots (see "Keiro.Snapshot").
+
+Pass your own version number to bump it explicitly when the state encoding
+changes in a way the shape hash does not capture.
+-}
 module Keiro.Snapshot.Codec
   ( defaultStateCodec
   )
@@ -13,6 +26,10 @@ import Keiki.Shape (KnownRegFileShape, regFileShapeHash)
 import Keiro.EventStream (StateCodec (..))
 import Keiro.Prelude
 
+{- | A 'StateCodec' that serializes a @(state, registers)@ pair to a JSON
+object, tagging it with the supplied codec version and a shape hash derived
+from the register-file layout.
+-}
 defaultStateCodec ::
   forall rs s.
   (FromJSON s, KnownRegFileShape rs, RegFileToJSON rs, ToJSON s) =>

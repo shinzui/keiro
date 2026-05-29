@@ -1,6 +1,21 @@
+{- | The @keiro_timers@ table: storage and claim logic for durable timers.
+
+Holds one row per scheduled timer with its 'TimerStatus' lifecycle.
+'scheduleTimerTx' inserts (or re-arms a still-@Scheduled@ timer with the same
+id) inside the caller's transaction; 'claimDueTimer' atomically picks the
+single earliest due timer with @FOR UPDATE SKIP LOCKED@ and moves it to
+@Firing@, so competing workers never claim the same timer; 'markTimerFired'
+records completion and the produced event id.
+
+Callers normally use the re-exports from "Keiro.Timer" rather than this
+module directly.
+-}
 module Keiro.Timer.Schema
-  ( TimerStatus (..)
+  ( -- * Rows and status
+    TimerStatus (..)
   , TimerRow (..)
+
+    -- * Storage
   , scheduleTimerTx
   , claimDueTimer
   , markTimerFired
@@ -20,6 +35,15 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
 
+{- | A timer's lifecycle state.
+
+* 'Scheduled' — waiting for its 'fireAt'; claimable.
+* 'Firing' — claimed by a worker and being processed (re-claimable if the
+  worker crashes before completing).
+* 'Fired' — successfully fired; terminal.
+* 'Cancelled' — withdrawn before firing; also the decode fallback for an
+  unrecognized stored value.
+-}
 data TimerStatus
   = Scheduled
   | Firing
@@ -27,6 +51,10 @@ data TimerStatus
   | Cancelled
   deriving stock (Generic, Eq, Show)
 
+{- | A timer row as stored: the original 'TimerRequest' fields plus the live
+'status', the 'attempts' count (incremented on each claim), and the
+'firedEventId' recorded once it fires.
+-}
 data TimerRow = TimerRow
   { timerId :: !TimerId
   , processManagerName :: !Text
@@ -39,6 +67,11 @@ data TimerRow = TimerRow
   }
   deriving stock (Generic, Eq, Show)
 
+{- | Schedule a timer inside the caller's transaction (typically a process
+manager's append). Upserts on 'timerId': a conflicting row is re-armed only
+while it is still @Scheduled@, so a timer that has already fired or been
+cancelled is not resurrected.
+-}
 scheduleTimerTx :: TimerRequest -> Tx.Transaction ()
 scheduleTimerTx request =
   Tx.statement
@@ -51,11 +84,18 @@ scheduleTimerTx request =
     )
     scheduleTimerStmt
 
+{- | Atomically claim the single earliest timer due at @now@, moving it to
+@Firing@ and bumping its attempt count. Uses @FOR UPDATE SKIP LOCKED@ so
+concurrent workers each get a distinct timer. Returns 'Nothing' when none is
+due.
+-}
 claimDueTimer :: (Store :> es) => UTCTime -> Eff es (Maybe TimerRow)
 claimDueTimer now =
   runTransaction $
     Tx.statement now claimDueTimerStmt
 
+-- | Mark a claimed timer @Fired@, recording the id of the event its firing
+-- produced.
 markTimerFired :: (Store :> es) => TimerId -> EventId -> Eff es ()
 markTimerFired timerId eventId =
   runTransaction $

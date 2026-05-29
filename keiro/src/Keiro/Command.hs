@@ -1,8 +1,41 @@
+{- | The command side of the framework: hydrate an aggregate, decide, append.
+
+Running a command against an 'EventStream' follows one pipeline:
+
+1. /Hydrate/ — replay the stream's stored events (optionally fast-forwarding
+   from a snapshot) through the keiki transducer to recover the current
+   @(state, registers)@ and stream version.
+2. /Decide/ — step the transducer with the command. A rejected transition
+   yields 'CommandRejected'; a transition that emits no events yields a
+   no-op 'CommandResult'.
+3. /Append/ — encode the emitted events with the stream's 'Codec' and append
+   them at the expected version. An optimistic-concurrency conflict is
+   retried up to 'retryLimit' times by rehydrating and replaying; exhausting
+   the budget yields 'RetryExhausted'.
+
+Three runners expose this pipeline at increasing levels of integration:
+
+* 'runCommand' — append only.
+* 'runCommandWithSql' — run an extra @afterAppend@ action in the /same/
+  transaction as the append (e.g. update an inline read model).
+* 'runCommandWithSqlEvents' — same, but the callback also receives the
+  emitted events paired with their 'RecordedEvent's. This is the primitive
+  the projection, process-manager, and router layers build on.
+
+Snapshots are written transparently after a successful append when the
+stream's 'Keiro.EventStream.SnapshotPolicy' fires. Every runner accepts a
+tracer for optional OpenTelemetry spans.
+-}
 module Keiro.Command
-  ( CommandResult (..)
+  ( -- * Results and errors
+    CommandResult (..)
   , CommandError (..)
+
+    -- * Options
   , RunCommandOptions (..)
   , defaultRunCommandOptions
+
+    -- * Running commands
   , runCommand
   , runCommandWithSql
   , runCommandWithSqlEvents
@@ -53,6 +86,12 @@ import Kiroku.Store.Types
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
 
+{- | The outcome of a successfully handled command.
+
+Reports the target 'Stream', the stream version after the append, the
+global log position (when the store assigned one), and how many events were
+appended — @0@ for a no-op command that decided to emit nothing.
+-}
 data CommandResult target = CommandResult
   { target :: !(Stream target)
   , streamVersion :: !StreamVersion
@@ -61,15 +100,35 @@ data CommandResult target = CommandResult
   }
   deriving stock (Generic, Eq, Show)
 
+-- | Why a command did not complete.
 data CommandError
-  = HydrationDecodeFailed !CodecError
-  | HydrationReplayFailed !StreamVersion
-  | CommandRejected
-  | EncodeFailed !CodecError
-  | StoreFailed !StoreError
-  | RetryExhausted !Int !StoreError
+  = -- | A stored event could not be decoded while rehydrating the aggregate.
+    HydrationDecodeFailed !CodecError
+  | -- | Replay of the stored events through the transducer stalled at this
+    -- version (the machine rejected an event that was already committed).
+    HydrationReplayFailed !StreamVersion
+  | -- | The transducer rejected the command in the hydrated state.
+    CommandRejected
+  | -- | An emitted event could not be encoded for append.
+    EncodeFailed !CodecError
+  | -- | The underlying store rejected the append.
+    StoreFailed !StoreError
+  | -- | Optimistic-concurrency retries were exhausted (carries the attempt
+    -- count and the last store error).
+    RetryExhausted !Int !StoreError
   deriving stock (Generic, Eq, Show)
 
+{- | Knobs controlling a single command invocation.
+
+* 'retryLimit' — how many times to rehydrate-and-replay after an
+  optimistic-concurrency conflict before giving up with 'RetryExhausted'.
+* 'pageSize' — batch size when reading the stream during hydration.
+* 'eventIds' — caller-supplied ids assigned to the emitted events in order;
+  the basis for deterministic, idempotent appends (see 'Keiro.Router' and
+  'Keiro.ProcessManager').
+* 'beforeAppend' — a hook run immediately before each append attempt,
+  primarily a test seam for injecting concurrent writes.
+-}
 data RunCommandOptions = RunCommandOptions
   { retryLimit :: !Int
   , pageSize :: !Int32
@@ -92,6 +151,9 @@ data RunCommandOptions = RunCommandOptions
   }
   deriving stock (Generic)
 
+{- | Sensible defaults: 3 retries, 256-event read pages, no caller-assigned
+event ids, a no-op pre-append hook, no tracer, and no extra metadata.
+-}
 defaultRunCommandOptions :: RunCommandOptions
 defaultRunCommandOptions = RunCommandOptions
   { retryLimit = 3
@@ -276,6 +338,10 @@ hydrateFull options eventStream targetStream =
             Keiki.InFlight{} ->
               (replayHydrated current) { registers = nextRegisters }
 
+{- | Hydrate the target stream, decide the command, and append any emitted
+events. Retries optimistic-concurrency conflicts up to 'retryLimit'. This
+is the plain runner with no in-transaction side effects.
+-}
 runCommand ::
   forall phi rs s ci co es.
   (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
@@ -315,6 +381,11 @@ runCommand options eventStream targetStream command =
         Left (_, storeError) ->
           retryOrFail options attempt remaining storeError
 
+{- | Like 'runCommand', but run @afterAppend@ inside the /same/ transaction
+as the append, so a read-model write commits atomically with the events.
+The callback's result is returned as @Just@ on append (and 'Nothing' for a
+no-op command that appended nothing).
+-}
 runCommandWithSql ::
   forall phi rs s ci co a es.
   (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
@@ -329,6 +400,11 @@ runCommandWithSql options eventStream targetStream command afterAppend =
   -- The ignored first argument now carries @[(co, RecordedEvent)]@; the
   -- @\_@ still type-checks unchanged.
 
+{- | The most general runner: like 'runCommandWithSql', but the
+in-transaction callback also receives every emitted event paired with the
+'RecordedEvent' the store persisted for it, in append order. Inline
+projections, process managers, and routers are all built on this.
+-}
 runCommandWithSqlEvents ::
   forall phi rs s ci co a es.
   (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
