@@ -32,6 +32,13 @@ import Kiroku.Store.Types
   , StreamVersion (..)
   )
 import EphemeralPg qualified as Pg
+import Codd (CoddSettings (..), VerifySchemas (LaxCheck))
+import Codd.Parsing (connStringParser)
+import Codd.Representations.Types (DbRep (..))
+import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
+import Data.Attoparsec.Text (endOfInput, parseOnly)
+import Data.Map qualified as Map
+import Keiro.Migrations (runAllKeiroMigrations)
 import Test.Hspec
 import Jitsurei
 
@@ -143,6 +150,11 @@ main = hspec $ do
 
   describe "Jitsurei process manager" $ around withTestStore $ do
     it "dispatches a packing command once for a payment event" $ \store -> do
+      -- Dispatching the fulfillment process manager now runs the target's
+      -- inline order-summary projection (see commit "run target inline
+      -- projections on dispatch"), which writes to jitsurei_order_summary.
+      -- That application table must exist before dispatch.
+      Right () <- Store.runStoreIO store initializeJitsureiTables
       let target = orderStream sampleOrderId
       Right (Right _) <- Store.runStoreIO store $
         runCommand defaultRunCommandOptions orderEventStream target samplePlaceOrder
@@ -510,11 +522,41 @@ dueTime = UTCTime (ModifiedJulianDay 1) (secondsToDiffTime 0)
 
 withTestStore :: (Store.KirokuStore -> IO ()) -> IO ()
 withTestStore action = do
-  result <- Pg.withCached $ \db ->
+  result <- Pg.withCached $ \db -> do
+    migrateEphemeral (Pg.connectionString db)
     Store.withStore (Store.defaultConnectionSettings (Pg.connectionString db)) action
   case result of
     Left err -> error ("Failed to start ephemeral PostgreSQL: " <> show err)
     Right () -> pure ()
+
+-- | Apply the Kiroku event-store schema and the Keiro framework schema to a
+-- freshly started ephemeral PostgreSQL database. 'EphemeralPg.withCached'
+-- restores a clean @initdb@ cluster with no schema, and
+-- 'Kiroku.Store.Connection.withStore' does not create any tables, so every
+-- store-backed test must run the migrations itself before opening a store.
+-- This mirrors @keiro-migrations-test@ and the @keiro-test@ suite.
+migrateEphemeral :: Text -> IO ()
+migrateEphemeral connStr =
+  () <$ runAllKeiroMigrations (testCoddSettings connStr) (secondsToDiffTime 5) LaxCheck
+
+testCoddSettings :: Text -> CoddSettings
+testCoddSettings connStr =
+  CoddSettings
+    { migsConnString = parseConnString connStr
+    , sqlMigrations = []
+    , onDiskReps = Right (DbRep Aeson.Null Map.empty Map.empty)
+    , namespacesToCheck = IncludeSchemas [SqlSchema "kiroku"]
+    , extraRolesToCheck = []
+    , retryPolicy = singleTryPolicy
+    , txnIsolationLvl = DbDefault
+    , schemaAlgoOpts = SchemaAlgo False False False
+    }
+
+parseConnString :: Text -> ConnectionString
+parseConnString connStr =
+  case parseOnly (connStringParser <* endOfInput) connStr of
+    Left err -> error ("Could not parse ephemeral PostgreSQL connection string for codd: " <> err)
+    Right parsed -> parsed
 
 -- A minimal source event whose only load-bearing field is its id, which seeds
 -- the router's deterministic command ids. Its payload is irrelevant to routing.

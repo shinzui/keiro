@@ -99,7 +99,10 @@ test-suite keiro-test
     ghc-options:        -threaded -rtsopts -with-rtsopts=-N
     build-depends:      base >= 4.21 && < 5,
                         aeson >= 2.2,
+                        attoparsec >= 0.14,
                         bytestring >= 0.11,
+                        codd,
+                        containers >= 0.6,
                         contravariant-extras >= 0.3,
                         effectful >= 2.6,
                         effectful-core >= 2.6,
@@ -116,6 +119,7 @@ test-suite keiro-test
                         keiki,
                         keiki-codec-json,
                         keiro,
+                        keiro-migrations,
                         kiroku-store,
                         shibuya-core >= 0.5,
                         streamly-core >= 0.3,

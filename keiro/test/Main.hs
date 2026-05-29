@@ -19,6 +19,14 @@ import Data.UUID (UUID, fromString)
 import Data.Time (UTCTime (..), secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import EphemeralPg qualified as Pg
+import Codd (CoddSettings (..), VerifySchemas (LaxCheck))
+import Codd.Parsing (connStringParser)
+import Codd.Representations.Types (DbRep (..))
+import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
+import Data.Attoparsec.Text (endOfInput, parseOnly)
+import Data.Map qualified as Map
+import Data.Text (Text)
+import Keiro.Migrations (runAllKeiroMigrations)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
@@ -1627,7 +1635,9 @@ withTwoContexts ::
   IO ()
 withTwoContexts action = do
   result <- Pg.withCached $ \dbA ->
-    Pg.withCached $ \dbB ->
+    Pg.withCached $ \dbB -> do
+      migrateEphemeral (Pg.connectionString dbA)
+      migrateEphemeral (Pg.connectionString dbB)
       Store.withStore (Store.defaultConnectionSettings (Pg.connectionString dbA)) $ \ordering ->
         Store.withStore (Store.defaultConnectionSettings (Pg.connectionString dbB)) $ \billing ->
           action (ordering, billing)
@@ -2306,11 +2316,46 @@ dueTimerTime = UTCTime (ModifiedJulianDay 1) (secondsToDiffTime 0)
 
 withTestStore :: (Store.KirokuStore -> IO ()) -> IO ()
 withTestStore action = do
-  result <- Pg.withCached $ \db ->
+  result <- Pg.withCached $ \db -> do
+    migrateEphemeral (Pg.connectionString db)
     Store.withStore (Store.defaultConnectionSettings (Pg.connectionString db)) action
   case result of
     Left err -> error ("Failed to start ephemeral PostgreSQL: " <> show err)
     Right () -> pure ()
+
+-- | Apply the Kiroku event-store schema and the Keiro framework schema to a
+-- freshly started ephemeral PostgreSQL database. 'EphemeralPg.withCached'
+-- restores a clean @initdb@ cluster with no schema, and
+-- 'Kiroku.Store.Connection.withStore' deliberately does not create any tables,
+-- so every store-backed test must run the migrations itself before opening a
+-- store. This mirrors @keiro-migrations-test@.
+migrateEphemeral :: Text -> IO ()
+migrateEphemeral connStr =
+  () <$ runAllKeiroMigrations (testCoddSettings connStr) (secondsToDiffTime 5) LaxCheck
+
+-- | Codd settings for an ephemeral test database. The Kiroku and Keiro
+-- migrations both target the @kiroku@ schema, which matches the default
+-- search path configured by 'Store.defaultConnectionSettings'. 'LaxCheck' is
+-- used because ephemeral test databases keep no checked-in expected-schema
+-- representation.
+testCoddSettings :: Text -> CoddSettings
+testCoddSettings connStr =
+  CoddSettings
+    { migsConnString = parseConnString connStr
+    , sqlMigrations = []
+    , onDiskReps = Right (DbRep Aeson.Null Map.empty Map.empty)
+    , namespacesToCheck = IncludeSchemas [SqlSchema "kiroku"]
+    , extraRolesToCheck = []
+    , retryPolicy = singleTryPolicy
+    , txnIsolationLvl = DbDefault
+    , schemaAlgoOpts = SchemaAlgo False False False
+    }
+
+parseConnString :: Text -> ConnectionString
+parseConnString connStr =
+  case parseOnly (connStringParser <* endOfInput) connStr of
+    Left err -> error ("Could not parse ephemeral PostgreSQL connection string for codd: " <> err)
+    Right parsed -> parsed
 
 recordedFrom :: EventData -> RecordedEvent
 recordedFrom event = RecordedEvent
