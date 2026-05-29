@@ -76,7 +76,6 @@ import Keiro.Outbox
   , draftToEvent
   , enqueueIntegrationEventTx
   , freshOutboxId
-  , initializeOutboxSchema
   , lookupOutbox
   , markOutboxSent
   , mintIntegrationEvent
@@ -90,7 +89,6 @@ import Keiro.Inbox
   , InboxStatus (..)
   , KafkaDeliveryRef (..)
   , garbageCollectCompleted
-  , initializeInboxSchema
   , listInbox
   , lookupInbox
   , runInboxTransaction
@@ -429,7 +427,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
   describe "Keiro.Snapshot" $ around (withFreshStore fixture) $ do
     it "writes a snapshot after policy threshold" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
       let target = stream "snapshot-write-threshold" :: Stream SnapshotCounterEventStream
       Right (Right _) <- Store.runStoreIO storeHandle $
         runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
@@ -441,7 +438,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       snapshotVersion `shouldBe` Just (StreamVersion 2)
 
     it "hydrates from snapshot and replays only the tail" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
       let target = stream "snapshot-tail-hydration" :: Stream SnapshotCounterEventStream
       Right (Right _) <- Store.runStoreIO storeHandle $
         runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
@@ -463,7 +459,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         other -> expectationFailure ("expected snapshot-assisted command, got " <> show other)
 
     it "falls back when snapshot JSON is corrupt" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
       let target = stream "snapshot-corrupt-json" :: Stream SnapshotCounterEventStream
       Right (Right _) <- Store.runStoreIO storeHandle $
         runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
@@ -480,7 +475,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         other -> expectationFailure ("expected corrupt snapshot fallback, got " <> show other)
 
     it "falls back when shape hash mismatches" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
       let target = stream "snapshot-shape-mismatch" :: Stream SnapshotCounterEventStream
       Right (Right _) <- Store.runStoreIO storeHandle $
         runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
@@ -497,7 +491,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         other -> expectationFailure ("expected stale shape fallback, got " <> show other)
 
     it "falls back after operator truncation" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
       let target = stream "snapshot-operator-truncate" :: Stream SnapshotCounterEventStream
       Right (Right _) <- Store.runStoreIO storeHandle $
         runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
@@ -514,7 +507,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         other -> expectationFailure ("expected truncation fallback, got " <> show other)
 
     it "writes snapshots after applying a complete multi-event command batch" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeSnapshotSchema
       let target = stream "snapshot-multi-event-batch" :: Stream SnapshotCounterEventStream
       result <- Store.runStoreIO storeHandle $
         runCommand defaultRunCommandOptions multiSnapshotCounterEventStream target (Add 9)
@@ -530,7 +522,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
   describe "Keiro.ReadModel" $ around (withFreshStore fixture) $ do
     it "queries inline projection with Strong consistency" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction initializeCounterReadModelTable
       let target = stream "read-model-inline" :: Stream CounterEventStream
@@ -550,7 +541,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       queryResult `shouldBe` Right (Right 5)
 
     it "inline projection populates actor and source_event_id from command metadata" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction initializeCounterReadModelTable
       let target = stream "read-model-inline-metadata" :: Stream CounterEventStream
@@ -565,7 +555,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         amount == 5 && actor == Just "agent-7" && isJust srcId
 
     it "waits for async projection cursor with PositionWait" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction initializeCounterReadModelTable
       let target = stream "read-model-position-wait" :: Stream CounterEventStream
@@ -590,7 +579,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       queryResult `shouldBe` Right (Right 3)
 
     it "times out when PositionWait target is not reached" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction initializeCounterReadModelTable
       Right () <- Store.runStoreIO storeHandle $
@@ -606,7 +594,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           (Left (ReadModelWaitTimeout "counter-read-model" (GlobalPosition 5) (GlobalPosition 1)))
 
     it "rejects stale read-model schema" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction initializeCounterReadModelTable
       Right (Right 0) <- Store.runStoreIO storeHandle $
@@ -621,7 +608,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           (Left (ReadModelStaleSchema "counter-read-model" 1 99 "counter-read-model-v1" "counter-read-model-v1"))
 
     it "ignores duplicate async event by source_event_id" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction initializeCounterReadModelTable
       let target = stream "read-model-async-idempotent" :: Stream CounterEventStream
@@ -641,7 +627,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       queryResult `shouldBe` Right (Right 7)
 
     it "tracks rebuild state transitions" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
       Right rebuilding <- Store.runStoreIO storeHandle $
         Rebuild.rebuild counterReadModel
       rebuilding ^. #status `shouldBe` Rebuilding
@@ -654,7 +639,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
   describe "Keiro.ProcessManager" $ around (withFreshStore fixture) $ do
     it "advances manager state, emits a deterministic target command once, and schedules a timer" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeTimerSchema
       let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
       result <- Store.runStoreIO storeHandle $
         runProcessManagerOnce defaultRunCommandOptions counterProcessManager sourceEvent (CounterAdded 9)
@@ -685,7 +669,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         other -> expectationFailure ("expected scheduled timer row, got " <> show other)
 
     it "treats duplicate input delivery as idempotent state and command dispatch" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeTimerSchema
       let sourceEvent = recordedFromEventId (EventId sampleUuid2) (CounterAdded 4)
       Right (Right _) <- Store.runStoreIO storeHandle $
         runProcessManagerOnce defaultRunCommandOptions counterProcessManager sourceEvent (CounterAdded 4)
@@ -754,7 +737,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
   describe "Keiro.Router" $ around (withFreshStore fixture) $ do
     it "resolves targets effectfully and fans out one command per target" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction initializeRouterTargetsTable
       Right () <- Store.runStoreIO storeHandle $
@@ -784,7 +766,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Vector.length targetC `shouldBe` 1
 
     it "reports every dispatch as a duplicate on replay, writing no new events" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction initializeRouterTargetsTable
       Right () <- Store.runStoreIO storeHandle $
@@ -812,7 +793,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Vector.length targetC `shouldBe` 1
 
     it "drains an adapter, dispatching one command per resolved target for every message" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeReadModelSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction initializeRouterTargetsTable
       Right () <- Store.runStoreIO storeHandle $
@@ -856,7 +836,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
   describe "Keiro.Timer" $ around (withFreshStore fixture) $ do
     it "claims a due timer, fires a command, and marks it complete once" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeTimerSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction $
           scheduleTimerTx counterTimerRequest
@@ -903,7 +882,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
   describe "Keiro.Outbox" $ around (withFreshStore fixture) $ do
     it "enqueues and looks up an outbox row" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
       let envelope = sampleIntegrationEnvelope
           oid = OutboxId outboxUuid1
       Right () <- Store.runStoreIO storeHandle $
@@ -920,7 +898,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         other -> expectationFailure ("expected enqueued row, got " <> show other)
 
     it "claims a pending row, transitions it to publishing, and increments attempt count" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
       let oid = OutboxId outboxUuid1
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
@@ -934,7 +911,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         other -> expectationFailure ("expected one claimed row, got " <> show other)
 
     it "marks a claimed row as sent with published_at set" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
       let oid = OutboxId outboxUuid1
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
@@ -947,7 +923,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       row ^. #lastError `shouldBe` Nothing
 
     it "publishClaimedOutbox marks success and records failures with last_error" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
       let okId = OutboxId outboxUuid1
           failId = OutboxId outboxUuid2
           okEvent = sampleIntegrationEnvelope
@@ -974,7 +949,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       failRow ^. #lastError `shouldBe` Just "broker unreachable"
 
     it "auto-dead-letters a row after maxAttempts consecutive failures" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
       let oid = OutboxId outboxUuid1
           event = sampleIntegrationEnvelope & #key .~ Nothing
           opts =
@@ -1004,7 +978,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       reclaimed `shouldBe` []
 
     it "enforces per-key head-of-line blocking and unblocks once the predecessor reaches a terminal state" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
       let a1Id = OutboxId outboxUuid1
           a2Id = OutboxId outboxUuid2
           b1Id = OutboxId outboxUuid3
@@ -1062,7 +1035,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       a2Row' ^. #status `shouldBe` OutboxSent
 
     it "allows null-keyed rows to publish independently" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
       let n1 = OutboxId outboxUuid1
           n2 = OutboxId outboxUuid2
           e = sampleIntegrationEnvelope & #key .~ Nothing
@@ -1099,7 +1071,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       length (uniqueIds ids) `shouldBe` 4
 
     it "publishClaimedOutbox emits a Producer span with messaging semconv attributes" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeOutboxSchema
       (processor, spansRef) <- inMemoryListExporter
       provider <- createTracerProvider [processor] emptyTracerProviderOptions
       let tracer = makeTracer provider "keiro-test" tracerOptions
@@ -1150,7 +1121,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
   describe "Keiro.Inbox" $ around (withFreshStore fixture) $ do
     it "runs the handler once and records the row as completed" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
       let event = sampleIntegrationEnvelope
@@ -1171,7 +1141,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       inboxRow ^. #completedAt `shouldSatisfy` isJust
 
     it "treats a redelivery with the same messageId as a duplicate" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
       let event = sampleIntegrationEnvelope
@@ -1188,7 +1157,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       rowCount `shouldBe` 1
 
     it "deduplicates via PreferSourceEventIdentity even when messageId differs" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
       let shared = sampleIntegrationEnvelope & #source .~ "ordering"
@@ -1202,7 +1170,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       result2 `shouldBe` Right InboxDuplicate
 
     it "uses KafkaDeliveryIdentity when supplied" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
       let event = sampleIntegrationEnvelope & #source .~ "ordering"
@@ -1217,7 +1184,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       row ^. #status `shouldBe` InboxCompleted
 
     it "reports DedupePolicyUnsatisfied when the envelope lacks the required field" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
       let event = sampleIntegrationEnvelope
             & #source .~ "ordering"
             & #sourceEventId .~ Nothing
@@ -1227,7 +1193,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       result `shouldBe` Left (DedupePolicyUnsatisfied PreferSourceEventIdentity)
 
     it "leaves no inbox row when the handler condemns the transaction" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
       let event = sampleIntegrationEnvelope
             & #messageId .~ "inbox-msg-rollback"
             & #source .~ "ordering"
@@ -1240,7 +1205,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       row `shouldBe` Nothing
 
     it "garbage-collects completed rows older than the retention window" $ \storeHandle -> do
-      Right () <- Store.runStoreIO storeHandle initializeInboxSchema
       let event = sampleIntegrationEnvelope
             & #messageId .~ "inbox-msg-gc"
             & #source .~ "ordering"
@@ -1361,8 +1325,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
   describe "Keiro cross-context Kafka integration" $ around (withFreshStores2 fixture) $ do
     it "publishes an Ordering integration event and runs the Billing handler exactly once across duplicate deliveries" $ \(ordering, billing) -> do
-      Right () <- Store.runStoreIO ordering initializeOutboxSchema
-      Right () <- Store.runStoreIO billing initializeInboxSchema
       Right () <- Store.runStoreIO billing $
         Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS billing_received_orders (order_id TEXT PRIMARY KEY, quantity BIGINT NOT NULL)")
       topic <- newKafkaTopic
@@ -1399,8 +1361,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       rowCount2 `shouldBe` 1
 
     it "preserves per-partition ordering for two events sharing a Kafka key" $ \(ordering, billing) -> do
-      Right () <- Store.runStoreIO ordering initializeOutboxSchema
-      Right () <- Store.runStoreIO billing initializeInboxSchema
       Right () <- Store.runStoreIO billing $
         Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS billing_received_orders (order_id TEXT PRIMARY KEY, quantity BIGINT NOT NULL)")
       Right () <- Store.runStoreIO billing $
@@ -1440,8 +1400,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       events `shouldBe` [("OrderSubmitted", "order-bbb"), ("OrderCancelled", "order-bbb")]
 
     it "head-of-line blocks a same-key successor when the first send fails repeatedly until the first row reaches dead status" $ \(ordering, billing) -> do
-      Right () <- Store.runStoreIO ordering initializeOutboxSchema
-      Right () <- Store.runStoreIO billing initializeInboxSchema
       Right () <- Store.runStoreIO billing $
         Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS billing_received_orders (order_id TEXT PRIMARY KEY, quantity BIGINT NOT NULL)")
       topic <- newKafkaTopic

@@ -117,7 +117,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
   describe "Jitsurei snapshots" $ around (withFreshStore fixture) $ do
     it "writes a snapshot after the configured threshold" $ \store -> do
-      Right () <- Store.runStoreIO store initializeSnapshotSchema
       let target = orderStream (OrderId "snapshot-100")
       Right (Right _) <- Store.runStoreIO store $
         runCommand defaultRunCommandOptions snapshotOrderEventStream target
@@ -233,7 +232,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
   describe "Jitsurei timers" $ around (withFreshStore fixture) $ do
     it "claims a due timer and marks it fired" $ \store -> do
-      Right () <- Store.runStoreIO store initializeTimerSchema
       Right () <- Store.runStoreIO store $
         Store.runTransaction $
           scheduleTimerTx (paymentTimeoutRequest sampleOrderId dueTime)
@@ -243,7 +241,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
   describe "Jitsurei agent-qualification router" $ around (withFreshStore fixture) $ do
     it "routes a transaction to every chapter resolved from its areas, idempotently" $ \store -> do
-      Right () <- Store.runStoreIO store initializeReadModelSchema
       Right () <- Store.runStoreIO store $
         Store.runTransaction initializeAreaChaptersTable
       Right () <- Store.runStoreIO store $
@@ -351,7 +348,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           ]
 
     it "fans IncidentRaised out to one page per rostered responder, idempotently" $ \store -> do
-      Right () <- Store.runStoreIO store initializeReadModelSchema
       Right () <- Store.runStoreIO store $
         Store.runTransaction initializeOncallRosterTable
       Right () <- Store.runStoreIO store $
@@ -394,7 +390,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
   describe "Jitsurei escalation process manager" $ around (withFreshStore fixture) $ do
     it "advances the saga and schedules an escalation timer on IncidentRaised" $ \store -> do
-      Right () <- Store.runStoreIO store initializeTimerSchema
       let incidentId = IncidentId "inc-1"
           raised = IncidentRaisedData
             { incidentId = incidentId
@@ -418,7 +413,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         _ -> False
 
     it "dispatches AcknowledgeIncident on PageAcknowledged, idempotently" $ \store -> do
-      Right () <- Store.runStoreIO store initializeTimerSchema
       let incidentId = IncidentId "inc-2"
       Right (Right _) <- Store.runStoreIO store $
         runCommand defaultRunCommandOptions incidentEventStream (incidentStream incidentId)
@@ -450,7 +444,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         _ -> False
 
     it "escalates an unacknowledged incident when the timer fires" $ \store -> do
-      Right () <- Store.runStoreIO store initializeTimerSchema
       let incidentId = IncidentId "inc-3"
       Right (Right _) <- Store.runStoreIO store $
         runCommand defaultRunCommandOptions incidentEventStream (incidentStream incidentId)
@@ -465,7 +458,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         `shouldBe` Right (IncidentEscalated (IncidentEscalatedData incidentId))
 
     it "is a benign no-op when the incident was already acknowledged" $ \store -> do
-      Right () <- Store.runStoreIO store initializeTimerSchema
       let incidentId = IncidentId "inc-4"
           target = incidentStream incidentId
       Right (Right _) <- Store.runStoreIO store $

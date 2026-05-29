@@ -6,14 +6,9 @@ too old, Keiro falls back to full replay.
 
 ## Enable The Schema
 
-For production, run `keiro-migrate`; see
-[Database Migrations](migrations.md). For development and tests, run:
-
-```haskell
-initializeSnapshotSchema
-```
-
-This creates `keiro_snapshots`.
+The `keiro_snapshots` table is created by `keiro-migrate`; see
+[Database Migrations](migrations.md). Tests get it from the migrated template
+database (the `keiro-test-support` `withMigratedSuite` fixture).
 
 ## Configure An EventStream
 

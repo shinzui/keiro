@@ -6,15 +6,10 @@ projection helpers.
 
 ## Initialize Metadata
 
-For production, run `keiro-migrate`; see
-[Database Migrations](migrations.md). For development and tests, run:
-
-```haskell
-initializeReadModelSchema
-```
-
-This creates `keiro_read_models`, which stores each model's version, shape hash,
-status, and build timestamp.
+The `keiro_read_models` table — which stores each model's version, shape hash,
+status, and build timestamp — is created by `keiro-migrate`; see
+[Database Migrations](migrations.md). Tests get it from the migrated template
+database (the `keiro-test-support` `withMigratedSuite` fixture).
 
 ## Define A ReadModel
 

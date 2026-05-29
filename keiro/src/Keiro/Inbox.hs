@@ -17,7 +17,6 @@ module Keiro.Inbox
     module Keiro.Inbox.Types
 
     -- * Storage primitives
-  , initializeInboxSchema
   , lookupInbox
   , listInbox
   , garbageCollectCompleted

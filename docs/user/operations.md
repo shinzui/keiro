@@ -16,19 +16,13 @@ Production deployments should run `keiro-migrate` before starting application
 processes. See [Database Migrations](migrations.md) for the command, required
 environment variables, and startup guidance.
 
-For development and tests, Keiro still exposes compatibility helpers for the
-feature schemas you use:
+There is no in-application schema initializer for the framework tables: the
+codd migrations in `keiro-migrations` are the single source of schema truth.
+Tests apply the same migrations to a template database (see the
+`keiro-test-support` `withMigratedSuite` fixture) rather than creating tables
+inline.
 
-```haskell
-initializeSnapshotSchema
-initializeReadModelSchema
-initializeTimerSchema
-initializeOutboxSchema
-initializeInboxSchema
-```
-
-Keiro's schema initializers are idempotent. They are still not a replacement for
-production migrations:
+Keep in mind:
 
 - user read-model tables are application-owned;
 - schema evolution should be reviewed and applied through `keiro-migrate` plus

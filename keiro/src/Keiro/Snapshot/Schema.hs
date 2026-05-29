@@ -1,7 +1,6 @@
 module Keiro.Snapshot.Schema
   ( SnapshotRow (..)
   , SnapshotWrite (..)
-  , initializeSnapshotSchema
   , lookupSnapshot
   , writeSnapshotRow
   )
@@ -38,28 +37,6 @@ data SnapshotWrite = SnapshotWrite
   , regfileShapeHash :: !Text
   }
   deriving stock (Generic, Eq, Show)
-
--- | Compatibility helper for development and tests.
---
--- Production deployments should run @keiro-migrate@ before application startup.
-initializeSnapshotSchema :: (Store :> es) => Eff es ()
-initializeSnapshotSchema =
-  runTransaction $
-    Tx.sql
-      """
-      CREATE TABLE IF NOT EXISTS keiro_snapshots (
-        stream_id BIGINT PRIMARY KEY,
-        stream_version BIGINT NOT NULL,
-        state JSONB NOT NULL,
-        state_codec_version BIGINT NOT NULL,
-        regfile_shape_hash TEXT NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-
-      CREATE INDEX IF NOT EXISTS keiro_snapshots_compat_idx
-        ON keiro_snapshots (stream_id, state_codec_version, regfile_shape_hash, stream_version DESC);
-      """
 
 lookupSnapshot ::
   (Store :> es) =>

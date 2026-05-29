@@ -1,7 +1,6 @@
 module Keiro.ReadModel.Schema
   ( ReadModelMetadata (..)
   , ReadModelStatus (..)
-  , initializeReadModelSchema
   , registerReadModel
   , lookupReadModel
   , markRebuilding
@@ -36,24 +35,6 @@ data ReadModelMetadata = ReadModelMetadata
   , status :: !ReadModelStatus
   }
   deriving stock (Generic, Eq, Show)
-
--- | Compatibility helper for development and tests.
---
--- Production deployments should run @keiro-migrate@ before application startup.
-initializeReadModelSchema :: (Store :> es) => Eff es ()
-initializeReadModelSchema =
-  runTransaction $
-    Tx.sql
-      """
-      CREATE TABLE IF NOT EXISTS keiro_read_models (
-        name TEXT PRIMARY KEY,
-        version BIGINT NOT NULL,
-        shape_hash TEXT NOT NULL,
-        last_built_at TIMESTAMPTZ,
-        status TEXT NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-      """
 
 registerReadModel :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 registerReadModel name version shapeHash =

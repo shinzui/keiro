@@ -113,13 +113,9 @@ also halts with the rendered command error.
 
 ## Timer Schema
 
-Run:
-
-```haskell
-initializeTimerSchema
-```
-
-This creates `keiro_timers` and a due-timer index.
+The `keiro_timers` table and its due-timer index are created by `keiro-migrate`;
+see [Database Migrations](migrations.md). Tests get them from the migrated
+template database (the `keiro-test-support` `withMigratedSuite` fixture).
 
 ## Scheduling Timers
 

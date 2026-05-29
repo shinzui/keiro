@@ -14,17 +14,24 @@ uses codd and applies Kiroku's embedded migrations first, then Keiro's embedded
 migrations (the bootstrap, outbox, and inbox migrations), in one ordered
 migration ledger.
 
-## Why Run Migrations Explicitly
+## Migrations Are The Only Source Of Schema
 
-Keiro still exposes development helpers such as `initializeSnapshotSchema`,
-`initializeReadModelSchema`, `initializeTimerSchema`, `initializeOutboxSchema`,
-and `initializeInboxSchema`. They use `CREATE TABLE IF NOT EXISTS` and are
-convenient in tests or small local programs.
+The codd migrations in `keiro-migrations` are the single definition of Keiro's
+framework tables. The library no longer ships `initialize*Schema` helpers that
+embedded `CREATE TABLE` statements in Haskell — keeping a second copy of the DDL
+in sync with the migrations was a source of drift, so it was removed.
 
-Those helpers are not a production migration system. They do not record which
-schema changes have run, they do not provide a reviewed forward history, and
-they do not verify database shape. Production services should run
-`keiro-migrate` before starting application processes.
+Because there is only one definition, the schema applied in tests is exactly the
+schema applied in production:
+
+- Production: run `keiro-migrate` before starting application processes.
+- Tests: apply the same migrations to a template database once per suite and
+  clone it per example. The `keiro-test-support` `withMigratedSuite` fixture
+  does this with `runAllKeiroMigrations`.
+
+codd records which migrations have run, provides a reviewed forward history, and
+verifies database shape — guarantees an in-application `CREATE TABLE IF NOT
+EXISTS` cannot give you.
 
 ## Run The Migration
 

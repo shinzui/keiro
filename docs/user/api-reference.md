@@ -95,11 +95,11 @@ Types and functions:
 
 - `SnapshotRow (..)`
 - `SnapshotWrite (..)`
-- `initializeSnapshotSchema`
 - `lookupSnapshot`
 - `writeSnapshotRow`
 
-Use it for schema initialization or operational tooling.
+Use it for operational tooling. The `keiro_snapshots` table is created by
+`keiro-migrate`; see [Database Migrations](migrations.md).
 
 ## `Keiro.Projection`
 
@@ -141,7 +141,6 @@ Types and functions:
 
 - `ReadModelMetadata (..)`
 - `ReadModelStatus (..)`
-- `initializeReadModelSchema`
 - `registerReadModel`
 - `lookupReadModel`
 - `markRebuilding`
@@ -210,7 +209,6 @@ Types and functions:
 - `TimerRequest (..)`
 - `TimerRow (..)`
 - `TimerStatus (..)`
-- `initializeTimerSchema`
 - `scheduleTimerTx`
 - `claimDueTimer`
 - `markTimerFired`
@@ -231,7 +229,7 @@ Use it to construct and serialize events published across bounded contexts.
 ## `Keiro.Outbox`
 
 Transactional outbox. Re-exports `Keiro.Outbox.Types` and exports
-`initializeOutboxSchema`, `enqueueOutboxTx`, `claimOutboxBatch`, `markOutboxSent`,
+`enqueueOutboxTx`, `claimOutboxBatch`, `markOutboxSent`,
 `lookupOutbox`, `listOutbox`, `freshOutboxId`, `enqueueIntegrationEventTx`,
 `IntegrationProducer (..)`, `IntegrationEventDraft (..)`, `mintIntegrationEvent`,
 `draftToEvent`, `enqueueProducerEventTx`, `PublishOutcome (..)`, and
@@ -243,7 +241,7 @@ asynchronously with per-key ordering, backoff, and dead-lettering.
 ## `Keiro.Inbox`
 
 Idempotent inbox. Re-exports `Keiro.Inbox.Types` and exports
-`initializeInboxSchema`, `lookupInbox`, `listInbox`, `garbageCollectCompleted`,
+`lookupInbox`, `listInbox`, `garbageCollectCompleted`,
 `runInboxTransaction`, and `runInboxTransactionWithKey`. `Keiro.Inbox.Kafka` adds
 the Kafka consumer adapter.
 

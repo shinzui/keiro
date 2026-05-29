@@ -1,7 +1,6 @@
 module Keiro.Timer.Schema
   ( TimerStatus (..)
   , TimerRow (..)
-  , initializeTimerSchema
   , scheduleTimerTx
   , claimDueTimer
   , markTimerFired
@@ -39,31 +38,6 @@ data TimerRow = TimerRow
   , firedEventId :: !(Maybe EventId)
   }
   deriving stock (Generic, Eq, Show)
-
--- | Compatibility helper for development and tests.
---
--- Production deployments should run @keiro-migrate@ before application startup.
-initializeTimerSchema :: (Store :> es) => Eff es ()
-initializeTimerSchema =
-  runTransaction $
-    Tx.sql
-      """
-      CREATE TABLE IF NOT EXISTS keiro_timers (
-        timer_id UUID PRIMARY KEY,
-        process_manager_name TEXT NOT NULL,
-        correlation_id TEXT NOT NULL,
-        fire_at TIMESTAMPTZ NOT NULL,
-        payload JSONB NOT NULL,
-        status TEXT NOT NULL DEFAULT 'scheduled',
-        attempts BIGINT NOT NULL DEFAULT 0,
-        fired_event_id UUID,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-
-      CREATE INDEX IF NOT EXISTS keiro_timers_due_idx
-        ON keiro_timers (status, fire_at, process_manager_name);
-      """
 
 scheduleTimerTx :: TimerRequest -> Tx.Transaction ()
 scheduleTimerTx request =

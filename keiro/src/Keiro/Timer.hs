@@ -3,7 +3,6 @@ module Keiro.Timer
   , TimerRequest (..)
   , TimerRow (..)
   , TimerStatus (..)
-  , initializeTimerSchema
   , scheduleTimerTx
   , claimDueTimer
   , markTimerFired

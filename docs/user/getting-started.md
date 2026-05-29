@@ -126,20 +126,11 @@ in `jitsurei/src/Jitsurei/OrderStream.hs` and the command tests live in
 
 ## Initialize Keiro Tables
 
-For production, run `keiro-migrate` before starting the application. For local
-development and tests, you can still initialize only the tables for features you
-use:
-
-```haskell
-initializeKeiroTables :: (Store :> es) => Eff es ()
-initializeKeiroTables = do
-  initializeSnapshotSchema
-  initializeReadModelSchema
-  initializeTimerSchema
-```
-
-Each initializer uses `CREATE TABLE IF NOT EXISTS` and is safe for development
-startup paths. It is not a production migration ledger.
+Run `keiro-migrate` before starting the application; see
+[Database Migrations](migrations.md). The codd migrations in `keiro-migrations`
+are the single source of Keiro's framework schema — there are no in-application
+`CREATE TABLE` helpers to call. Test suites apply the same migrations to a
+template database via the `keiro-test-support` `withMigratedSuite` fixture.
 
 ## Verify The Repository
 

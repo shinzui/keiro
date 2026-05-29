@@ -25,7 +25,6 @@ module Keiro.Outbox
     module Keiro.Outbox.Types
 
     -- * Storage primitives (transport-neutral)
-  , initializeOutboxSchema
   , enqueueOutboxTx
   , claimOutboxBatch
   , markOutboxSent
