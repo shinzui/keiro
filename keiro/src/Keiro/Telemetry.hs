@@ -61,7 +61,7 @@ module Keiro.Telemetry
   )
 where
 
-import "base" Control.Exception (bracket_)
+import "base" Control.Exception (bracket)
 import "bytestring" Data.ByteString qualified as ByteString
 import "base" GHC.Stack (HasCallStack)
 import "hs-opentelemetry-api" OpenTelemetry.Context (insertSpan, lookupSpan)
@@ -240,10 +240,10 @@ withRemoteParent hs body =
     Just spanCtx -> withRunInIO $ \runInIO -> do
       ctx <- getContext
       let newCtx = insertSpan (wrapSpanContext spanCtx) ctx
-      bracket_
+      bracket
         (attachContext newCtx)
         detachContext
-        (runInIO body)
+        (const (runInIO body))
   where
     parentSpanContext hsList =
       let tp = fmap TE.encodeUtf8 (Prelude.lookup headerTraceParent hsList)
