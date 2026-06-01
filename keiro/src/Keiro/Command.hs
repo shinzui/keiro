@@ -50,7 +50,7 @@ import Effectful.Error.Static (Error, tryError)
 import GHC.Stack (HasCallStack)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import OpenTelemetry.Attributes.Key (unkey)
-import OpenTelemetry.SemanticConventions (error_type)
+import OpenTelemetry.SemanticConventions (db_system_name, error_type)
 import OpenTelemetry.Trace.Core (Span, Tracer, addAttribute, setStatus, SpanStatus (..))
 import Keiki.Core (BoolAlg, RegFile)
 import Keiki.Core qualified as Keiki
@@ -60,7 +60,7 @@ import Keiro.Prelude
 import Keiro.Snapshot (hydrateWithSnapshot, writeSnapshot)
 import Keiro.Snapshot.Policy (shouldSnapshot)
 import Keiro.Stream (Stream)
-import Keiro.Telemetry (keiro_events_appended, db_system_name, withCommandSpan)
+import Keiro.Telemetry (keiro_events_appended, withCommandSpan)
 import Prelude qualified
 import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Effect (Store)

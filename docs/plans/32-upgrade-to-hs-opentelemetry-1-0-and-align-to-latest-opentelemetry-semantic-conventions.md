@@ -88,14 +88,20 @@ This section must always reflect the actual current state of the work.
   1.0 / 1.40 generation. (2026-06-01)
 - [x] M1 — `cabal build keiro` succeeds from the `keiro` repo with no external bound override;
   install plan resolves `hs-opentelemetry-api-1.0.0.0` / `hs-opentelemetry-semantic-conventions-1.40.0.0`. (2026-06-01)
-- [ ] M2 — De-vendor the ten framework `AttributeKey`s in `keiro/src/Keiro/Telemetry.hs`:
-  import them from `OpenTelemetry.SemanticConventions`; keep only the three `keiro_*` keys.
-- [ ] M2 — Replace the four string-literal attribute names in the attribute setters with
-  typed conventions bindings.
-- [ ] M2 — Rewrite the module Haddock "Why vendor some AttributeKeys" block to describe the
-  post-upgrade state (no vendoring).
-- [ ] M2 — Update `keiro/src/Keiro/Command.hs:63` to import `db_system_name` from
-  `OpenTelemetry.SemanticConventions` instead of `Keiro.Telemetry`.
+- [x] M2 — De-vendor the ten framework `AttributeKey`s in `keiro/src/Keiro/Telemetry.hs`:
+  import (and re-export) them from `OpenTelemetry.SemanticConventions`; keep only the three
+  `keiro_*` keys defined locally. (2026-06-01)
+- [x] M2 — Replace the four string-literal attribute names in the attribute setters with
+  typed conventions bindings; removed the now-unused `addText` helper and its `ToAttribute`
+  import. (2026-06-01)
+- [x] M2 — Rewrite the module Haddock "Why vendor some AttributeKeys" block to describe the
+  post-upgrade state (no vendoring). (2026-06-01)
+- [x] M2 — Update `keiro/src/Keiro/Command.hs:63` to import `db_system_name` from
+  `OpenTelemetry.SemanticConventions` instead of `Keiro.Telemetry`. (2026-06-01)
+- [x] M2 — **(unplanned, required)** Migrate `keiro/test/Main.hs` to the 1.0 span-reflection
+  API: the hot span fields (name/attributes/status) moved behind `spanHot :: IORef SpanHot`,
+  and `shutdownTracerProvider` gained a `Maybe Int` timeout arg. Added a `CapturedSpan`
+  frozen-snapshot helper. (2026-06-01)
 - [ ] M3 — Update the version note in `docs/research/opentelemetry-semconv-audit.md` to
   reflect that keiro now links the 1.40 release directly (no vendoring).
 - [ ] M4 — Full validation: `cabal build all` and the keiro telemetry test block pass; a
@@ -131,7 +137,33 @@ implementation. Provide concise evidence.
   `Keiro/Telemetry.hs:69` — keep resolving without adding `hs-opentelemetry-api-types` as a
   direct dependency. (If a future GHC tightens `PackageImports` against re-exported modules,
   the fallback is to add `hs-opentelemetry-api-types` to `build-depends` and re-tag the
-  import string; see Decision Log.)
+  import string; see Decision Log.) Confirmed: the library + test built against 1.0 without
+  ever adding `hs-opentelemetry-api-types` to `build-depends`; the re-export path holds.
+
+- **The 1.0 span model is "cold record + hot IORef", which the test suite did not yet speak.**
+  The plan asserted the telemetry tests "still pass" unchanged, but `keiro/test/Main.hs` was
+  written against the **0.x** flat `ImmutableSpan` accessors `spanName` / `spanAttributes` /
+  `spanStatus`. In 1.0 those mutable fields moved into `SpanHot` behind
+  `ImmutableSpan.spanHot :: IORef SpanHot`
+  (`hs-opentelemetry/api/src/OpenTelemetry/Internal/Trace/Types.hs:419-454`); only the cold
+  fields (`spanContext`, `spanKind`, `spanParent`, `spanTracer`, `spanStart`) remain direct
+  accessors. So the test did not compile against 1.0 standalone — it only ever built under the
+  old `< 0.4` pin. Evidence (pre-fix build):
+
+  ```text
+  test/Main.hs:415:7: error: Variable not in scope: spanName :: ImmutableSpan -> a3
+  test/Main.hs:417:17: Variable not in scope: spanAttributes
+  test/Main.hs:423:12: Variable not in scope: spanStatus :: ImmutableSpan -> SpanStatus
+  ```
+
+  Two API deltas had to be absorbed in the test: (1) read the hot fields by `readIORef
+  (spanHot sp)` then project `hotName` / `hotAttributes` / `hotStatus` — done via a small
+  `CapturedSpan` frozen-snapshot record + `captureSpan :: ImmutableSpan -> IO CapturedSpan`,
+  with the three telemetry assertion blocks switched to `cs*` accessors; (2)
+  `shutdownTracerProvider` is now `TracerProvider -> Maybe Int -> m ShutdownResult` (timeout
+  in microseconds), so the three call sites pass `Nothing`. After the migration all 81
+  examples pass, including the producer/consumer/command attribute assertions that prove the
+  wire names are unchanged.
 
 
 ## Decision Log
@@ -186,6 +218,27 @@ Record every decision made while working on the plan.
   Rationale: Keeping the change additive and behavior-preserving makes it independently
   verifiable against the existing telemetry test block, and avoids conflating a library bump
   with a coverage expansion.
+  Date: 2026-06-01
+
+- Decision (M2): Migrate the telemetry tests to the 1.0 span model via a local `CapturedSpan`
+  frozen-snapshot record rather than reaching into `spanHot` inline at each assertion, and
+  fold the `spanHot` read into the existing `readIORef spansRef` drain
+  (`spans <- traverse captureSpan =<< readIORef spansRef`).
+  Rationale: The 1.0 `inMemoryListExporter` yields `IORef [ImmutableSpan]` whose hot fields
+  live behind an `IORef SpanHot`; the existing tests filter spans by name / by `message.id`
+  attribute *before* asserting, so the hot fields must be available during the filter, not
+  just the assertion. Snapshotting every drained span once keeps the three test blocks reading
+  like the original (pure `cs*` field accesses) and avoids threading `IO` through the list
+  comprehensions. The `Keiro.Telemetry` "re-exports AttributeKeys whose textual payload
+  matches the spec name" test (renamed from "vendors …") is retained: it now validates the
+  re-exported upstream keys' dotted names, which is exactly the provenance guarantee this plan
+  establishes.
+  Date: 2026-06-01
+
+- Decision (M2): `db_system_name` is both re-exported from `Keiro.Telemetry` (so the module
+  stays the one-stop telemetry surface) **and** imported directly from
+  `OpenTelemetry.SemanticConventions` in `Keiro.Command`, matching the existing `error_type`
+  import on the same line. This is the recommended end state in Step 2.3/2.6.
   Date: 2026-06-01
 
 

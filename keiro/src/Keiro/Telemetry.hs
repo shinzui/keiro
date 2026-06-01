@@ -10,24 +10,19 @@ When no tracer is supplied, every helper degrades to a thin pass-through
 (it calls the body and returns its value), so applications that do not
 yet wire OpenTelemetry are unaffected.
 
-# Why vendor some 'AttributeKey's
+# Attribute keys
 
-The currently published @hs-opentelemetry-semantic-conventions@ release on
-Hackage is @0.1.0.0@, generated from spec @v1.24@. It does not export
-every typed 'AttributeKey' the keiro audit cites
-(@docs/research/opentelemetry-semconv-audit.md@). The on-disk
-@v1.40@ release in @hs-opentelemetry-project@ does, but that tree pins
-@hs-opentelemetry-api@ at @0.4.0.0@, which is API-incompatible with
-@shibuya-core 0.5.0.0@'s usage of @Ctx.detachContext@. See ExecPlan 25
-Decision Log entries on 2026-05-19 for the full rationale.
+keiro links @hs-opentelemetry-semantic-conventions@ @1.40.0.0@ (generated
+from spec @v1.40@) directly. Every messaging.* / db.* typed 'AttributeKey'
+the keiro audit cites (@docs/research/opentelemetry-semconv-audit.md@) is
+imported from @OpenTelemetry.SemanticConventions@ and re-exported from this
+module, so 'Keiro.Telemetry' remains the one-stop telemetry surface for the
+library while every convention name is anchored to the spec-generated module
+rather than a hand-typed string.
 
-The pragmatic fix is to vendor the missing typed bindings here, with
-their canonical dotted-name strings. Wire-level attribute names match the
-spec exactly; the only difference vs. the upstream release is that the
-binding lives in this module instead of being imported from
-@OpenTelemetry.SemanticConventions@. Once an upstream release pairs the
-post-0.3 API with the v1.40 conventions, the vendored bindings here can
-be replaced with imports.
+Only the @keiro.*@ keys ('keiro_stream_name', 'keiro_retry_attempt',
+'keiro_events_appended') are defined locally: they are bespoke to keiro and
+have no upstream equivalent.
 -}
 module Keiro.Telemetry
   ( -- * Span helpers
@@ -41,10 +36,9 @@ module Keiro.Telemetry
   , traceContextFromHeaders
   , injectTraceContext
 
-    -- * Vendored 'AttributeKey's (absent from
-    -- 'hs-opentelemetry-semantic-conventions-0.1.0.0')
+    -- * Re-exported semantic-convention 'AttributeKey's
     --
-    -- $vendored_keys
+    -- $semconv_keys
   , messaging_operation_type
   , messaging_operation_name
   , messaging_destination_partition_id
@@ -55,6 +49,8 @@ module Keiro.Telemetry
   , db_namespace
   , db_collection_name
   , db_operation_name
+
+    -- * Bespoke keiro 'AttributeKey's
   , keiro_stream_name
   , keiro_retry_attempt
   , keiro_events_appended
@@ -65,7 +61,6 @@ import "base" Control.Exception (bracket)
 import "bytestring" Data.ByteString qualified as ByteString
 import "base" GHC.Stack (HasCallStack)
 import "hs-opentelemetry-api" OpenTelemetry.Context (insertSpan, lookupSpan)
-import "hs-opentelemetry-api" OpenTelemetry.Attributes.Attribute (ToAttribute)
 import "hs-opentelemetry-api" OpenTelemetry.Attributes.Key (AttributeKey (..))
 import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal
   ( attachContext
@@ -81,6 +76,22 @@ import "hs-opentelemetry-api" OpenTelemetry.Trace.Core
   , defaultSpanArguments
   , inSpan'
   , wrapSpanContext
+  )
+import "hs-opentelemetry-semantic-conventions" OpenTelemetry.SemanticConventions
+  ( messaging_system
+  , messaging_operation_type
+  , messaging_operation_name
+  , messaging_destination_name
+  , messaging_destination_partition_id
+  , messaging_consumer_group_name
+  , messaging_client_id
+  , messaging_message_id
+  , messaging_kafka_message_key
+  , messaging_kafka_offset
+  , db_system_name
+  , db_namespace
+  , db_collection_name
+  , db_operation_name
   )
 import "text" Data.Text qualified as Text
 import "text" Data.Text.Encoding qualified as TE
@@ -102,49 +113,18 @@ import "hs-opentelemetry-propagator-w3c" OpenTelemetry.Propagator.W3CTraceContex
   )
 
 -- ---------------------------------------------------------------------------
--- Vendored AttributeKeys
+-- Bespoke keiro AttributeKeys
 -- ---------------------------------------------------------------------------
 
--- $vendored_keys
--- These 'AttributeKey's are absent from
--- 'hs-opentelemetry-semantic-conventions-0.1.0.0' (the Hackage release we
--- link against). Each binding carries the canonical dotted-name string
--- from spec @v1.40@. When an upstream release exposes them they can be
--- swapped for an @import OpenTelemetry.SemanticConventions@ line without
--- any wire-format change.
+-- $semconv_keys
+-- The messaging.* / db.* 'AttributeKey's re-exported here are imported
+-- directly from 'OpenTelemetry.SemanticConventions'
+-- (@hs-opentelemetry-semantic-conventions@ @1.40.0.0@). They are surfaced
+-- from this module so 'Keiro.Telemetry' stays the single telemetry import
+-- for the library; their definitions live upstream.
 --
--- The @keiro_*@ keys are bespoke to keiro and have no upstream
--- equivalent; they remain even after the upstream binding catches up.
-
-messaging_operation_type :: AttributeKey Text
-messaging_operation_type = AttributeKey "messaging.operation.type"
-
-messaging_operation_name :: AttributeKey Text
-messaging_operation_name = AttributeKey "messaging.operation.name"
-
-messaging_destination_partition_id :: AttributeKey Text
-messaging_destination_partition_id = AttributeKey "messaging.destination.partition.id"
-
-messaging_consumer_group_name :: AttributeKey Text
-messaging_consumer_group_name = AttributeKey "messaging.consumer.group.name"
-
-messaging_client_id :: AttributeKey Text
-messaging_client_id = AttributeKey "messaging.client.id"
-
-messaging_kafka_offset :: AttributeKey Int64
-messaging_kafka_offset = AttributeKey "messaging.kafka.offset"
-
-db_system_name :: AttributeKey Text
-db_system_name = AttributeKey "db.system.name"
-
-db_namespace :: AttributeKey Text
-db_namespace = AttributeKey "db.namespace"
-
-db_collection_name :: AttributeKey Text
-db_collection_name = AttributeKey "db.collection.name"
-
-db_operation_name :: AttributeKey Text
-db_operation_name = AttributeKey "db.operation.name"
+-- The @keiro_*@ keys below are bespoke to keiro and have no upstream
+-- equivalent, so they are defined locally.
 
 keiro_stream_name :: AttributeKey Text
 keiro_stream_name = AttributeKey "keiro.stream.name"
@@ -340,14 +320,14 @@ injectTraceContext hs = do
 setProducerAttributes
   :: (MonadIO m) => Span -> IntegrationEvent -> KafkaProducerRecord -> m ()
 setProducerAttributes sp event _record = do
-  addText sp "messaging.system" ("kafka" :: Text)
+  addAttribute sp (unkey messaging_system) ("kafka" :: Text)
   addAttribute sp (unkey messaging_operation_type) ("publish" :: Text)
   addAttribute sp (unkey messaging_operation_name) ("send" :: Text)
-  addText sp "messaging.destination.name" (event ^. #destination)
-  addText sp "messaging.message.id" (event ^. #messageId)
+  addAttribute sp (unkey messaging_destination_name) (event ^. #destination)
+  addAttribute sp (unkey messaging_message_id) (event ^. #messageId)
   case event ^. #key of
     Nothing -> pure ()
-    Just k -> addText sp "messaging.kafka.message.key" k
+    Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
 
 setConsumerAttributes
   :: (MonadIO m)
@@ -357,24 +337,21 @@ setConsumerAttributes
   -> Maybe IntegrationEvent
   -> m ()
 setConsumerAttributes sp consumerGroup record mEvent = do
-  addText sp "messaging.system" ("kafka" :: Text)
+  addAttribute sp (unkey messaging_system) ("kafka" :: Text)
   addAttribute sp (unkey messaging_operation_type) ("process" :: Text)
   addAttribute sp (unkey messaging_operation_name) ("process" :: Text)
-  addText sp "messaging.destination.name" (record ^. #topic)
+  addAttribute sp (unkey messaging_destination_name) (record ^. #topic)
   addAttribute sp (unkey messaging_destination_partition_id) (showText (record ^. #partition))
   addAttribute sp (unkey messaging_kafka_offset) (record ^. #offset)
   case record ^. #key of
     Nothing -> pure ()
-    Just k -> addText sp "messaging.kafka.message.key" k
+    Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
   case consumerGroup of
     Nothing -> pure ()
     Just g -> addAttribute sp (unkey messaging_consumer_group_name) g
   case mEvent of
     Nothing -> pure ()
-    Just event -> addText sp "messaging.message.id" (event ^. #messageId)
-
-addText :: (MonadIO m, ToAttribute a) => Span -> Text -> a -> m ()
-addText = addAttribute
+    Just event -> addAttribute sp (unkey messaging_message_id) (event ^. #messageId)
 
 showText :: (Show a) => a -> Text
 showText = Text.pack . show

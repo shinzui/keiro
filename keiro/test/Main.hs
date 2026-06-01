@@ -134,7 +134,14 @@ import OpenTelemetry.Trace
   , shutdownTracerProvider
   , tracerOptions
   )
-import OpenTelemetry.Trace.Core (ImmutableSpan (..), SpanContext (..), getSpanContext)
+import OpenTelemetry.Trace.Core
+  ( ImmutableSpan (..)
+  , Span
+  , SpanContext (..)
+  , SpanHot (..)
+  , SpanKind
+  , getSpanContext
+  )
 import Test.Hspec
 
 main :: IO ()
@@ -406,21 +413,21 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right (Right commandResult) <- Store.runStoreIO storeHandle $
         runCommand options counterEventStream target (Add 9)
       commandResult ^. #streamVersion `shouldBe` StreamVersion 1
-      _ <- shutdownTracerProvider provider
-      spans <- readIORef spansRef
+      _ <- shutdownTracerProvider provider Nothing
+      spans <- traverse captureSpan =<< readIORef spansRef
       length spans `shouldBe` 1
       let sp = case spans of
             (s : _) -> s
             [] -> error "no command span captured"
-      spanName sp `shouldBe` "counter-command-otel"
-      show (spanKind sp) `shouldBe` "Internal"
-      textAttr (spanAttributes sp) "keiro.stream.name" `shouldBe` Just "counter-command-otel"
-      textAttr (spanAttributes sp) "db.system.name" `shouldBe` Just "postgresql"
+      csName sp `shouldBe` "counter-command-otel"
+      show (csKind sp) `shouldBe` "Internal"
+      textAttr (csAttributes sp) "keiro.stream.name" `shouldBe` Just "counter-command-otel"
+      textAttr (csAttributes sp) "db.system.name" `shouldBe` Just "postgresql"
       -- keiro.events.appended is an Int64 attribute, not Text.
-      case lookupAttribute (spanAttributes sp) "keiro.events.appended" of
+      case lookupAttribute (csAttributes sp) "keiro.events.appended" of
         Just (AttributeValue (IntAttribute n)) -> n `shouldBe` 1
         other -> expectationFailure ("expected IntAttribute 1, got " <> show other)
-      case spanStatus sp of
+      case csStatus sp of
         Unset -> pure ()
         Ok -> pure ()
         other -> expectationFailure ("expected Unset/Ok, got " <> show other)
@@ -1089,33 +1096,33 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             | otherwise = pure (PublishFailed "broker unreachable")
           opts = defaultPublishOptions & #tracer ?~ tracer
       Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts)
-      _ <- shutdownTracerProvider provider
-      spans <- readIORef spansRef
+      _ <- shutdownTracerProvider provider Nothing
+      spans <- traverse captureSpan =<< readIORef spansRef
       length spans `shouldBe` 2
-      let findSpan needle = case [sp | sp <- spans, textAttr (spanAttributes sp) "messaging.message.id" == Just needle] of
+      let findSpan needle = case [sp | sp <- spans, textAttr (csAttributes sp) "messaging.message.id" == Just needle] of
             (sp : _) -> sp
             [] -> error ("no span captured for message.id=" <> Text.unpack needle)
           okSpan = findSpan (okEvent ^. #messageId)
           failSpan = findSpan (failEvent ^. #messageId)
       -- Successful publish: producer-kind, all messaging attrs, Unset/Ok
       -- status (the helper does not explicitly set Ok; default is Unset).
-      spanName okSpan `shouldBe` ("send " <> (okEvent ^. #destination))
-      show (spanKind okSpan) `shouldBe` "Producer"
-      textAttr (spanAttributes okSpan) "messaging.system" `shouldBe` Just "kafka"
-      textAttr (spanAttributes okSpan) "messaging.operation.type" `shouldBe` Just "publish"
-      textAttr (spanAttributes okSpan) "messaging.operation.name" `shouldBe` Just "send"
-      textAttr (spanAttributes okSpan) "messaging.destination.name"
+      csName okSpan `shouldBe` ("send " <> (okEvent ^. #destination))
+      show (csKind okSpan) `shouldBe` "Producer"
+      textAttr (csAttributes okSpan) "messaging.system" `shouldBe` Just "kafka"
+      textAttr (csAttributes okSpan) "messaging.operation.type" `shouldBe` Just "publish"
+      textAttr (csAttributes okSpan) "messaging.operation.name" `shouldBe` Just "send"
+      textAttr (csAttributes okSpan) "messaging.destination.name"
         `shouldBe` Just (okEvent ^. #destination)
-      textAttr (spanAttributes okSpan) "messaging.kafka.message.key"
+      textAttr (csAttributes okSpan) "messaging.kafka.message.key"
         `shouldBe` (okEvent ^. #key)
-      case spanStatus okSpan of
+      case csStatus okSpan of
         Unset -> pure ()
         Ok -> pure ()
         other -> expectationFailure ("expected Unset/Ok, got " <> show other)
       -- Failed publish: same attrs, plus error.type and Error status with
       -- the publisher's error message.
-      textAttr (spanAttributes failSpan) "error.type" `shouldBe` Just "publish_failed"
-      case spanStatus failSpan of
+      textAttr (csAttributes failSpan) "error.type" `shouldBe` Just "publish_failed"
+      case csStatus failSpan of
         Error msg -> msg `shouldBe` "broker unreachable"
         other -> expectationFailure ("expected Error \"broker unreachable\", got " <> show other)
 
@@ -1294,33 +1301,33 @@ main = withMigratedSuite $ \fixture -> hspec $ do
               }
       Telemetry.withConsumerSpan (Just tracer) (Just "billing-cg") inbound (Just envelope) $ \_ ->
         pure ()
-      _ <- shutdownTracerProvider provider
-      spans <- readIORef spansRef
+      _ <- shutdownTracerProvider provider Nothing
+      spans <- traverse captureSpan =<< readIORef spansRef
       length spans `shouldBe` 2
-      let findByName needle = case [s | s <- spans, spanName s == needle] of
+      let findByName needle = case [s | s <- spans, csName s == needle] of
             (s : _) -> s
             [] -> error ("no span captured with name=" <> Text.unpack needle)
           producerSp = findByName ("send " <> envelope ^. #destination)
           consumerSp = findByName ("process " <> envelope ^. #destination)
       -- Same trace id end-to-end (cross-process parenting).
-      traceId (spanContext producerSp) `shouldBe` traceId (spanContext consumerSp)
+      traceId (csContext producerSp) `shouldBe` traceId (csContext consumerSp)
       -- Consumer's parent is the producer span.
-      case spanParent consumerSp of
+      case csParent consumerSp of
         Nothing -> expectationFailure "consumer span has no parent"
         Just parent -> do
           parentCtx <- getSpanContext parent
-          spanId parentCtx `shouldBe` spanId (spanContext producerSp)
+          spanId parentCtx `shouldBe` spanId (csContext producerSp)
       -- Consumer span carries the expected attributes.
-      show (spanKind consumerSp) `shouldBe` "Consumer"
-      textAttr (spanAttributes consumerSp) "messaging.system" `shouldBe` Just "kafka"
-      textAttr (spanAttributes consumerSp) "messaging.operation.type" `shouldBe` Just "process"
-      textAttr (spanAttributes consumerSp) "messaging.destination.name"
+      show (csKind consumerSp) `shouldBe` "Consumer"
+      textAttr (csAttributes consumerSp) "messaging.system" `shouldBe` Just "kafka"
+      textAttr (csAttributes consumerSp) "messaging.operation.type" `shouldBe` Just "process"
+      textAttr (csAttributes consumerSp) "messaging.destination.name"
         `shouldBe` Just (envelope ^. #destination)
-      textAttr (spanAttributes consumerSp) "messaging.destination.partition.id"
+      textAttr (csAttributes consumerSp) "messaging.destination.partition.id"
         `shouldBe` Just "7"
-      textAttr (spanAttributes consumerSp) "messaging.consumer.group.name"
+      textAttr (csAttributes consumerSp) "messaging.consumer.group.name"
         `shouldBe` Just "billing-cg"
-      textAttr (spanAttributes consumerSp) "messaging.message.id"
+      textAttr (csAttributes consumerSp) "messaging.message.id"
         `shouldBe` Just (envelope ^. #messageId)
 
   describe "Keiro cross-context Kafka integration" $ around (withFreshStores2 fixture) $ do
@@ -1527,7 +1534,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       snd result `shouldBe` "ok"
       fst result `shouldSatisfy` isNothing
 
-    it "vendors AttributeKeys whose textual payload matches the spec name" $ do
+    it "re-exports AttributeKeys whose textual payload matches the spec name" $ do
       attrKeyText Telemetry.messaging_operation_type `shouldBe` "messaging.operation.type"
       attrKeyText Telemetry.messaging_operation_name `shouldBe` "messaging.operation.name"
       attrKeyText Telemetry.messaging_destination_partition_id `shouldBe` "messaging.destination.partition.id"
@@ -1575,6 +1582,33 @@ textAttr :: Attributes -> Text -> Maybe Text
 textAttr attrs name = case lookupAttribute attrs name of
   Just (AttributeValue (TextAttribute t)) -> Just t
   _ -> Nothing
+
+-- | A frozen snapshot of an 'ImmutableSpan'. In hs-opentelemetry 1.0 the
+-- mutable span fields (name, attributes, status) live behind the
+-- @spanHot :: IORef SpanHot@ field rather than directly on 'ImmutableSpan',
+-- so the tests read that reference once after the span ends and assert on
+-- this flat record.
+data CapturedSpan = CapturedSpan
+  { csName :: Text
+  , csKind :: SpanKind
+  , csAttributes :: Attributes
+  , csStatus :: SpanStatus
+  , csContext :: SpanContext
+  , csParent :: Maybe Span
+  }
+
+captureSpan :: ImmutableSpan -> IO CapturedSpan
+captureSpan sp = do
+  hot <- readIORef (spanHot sp)
+  pure
+    CapturedSpan
+      { csName = hotName hot
+      , csKind = spanKind sp
+      , csAttributes = hotAttributes hot
+      , csStatus = hotStatus hot
+      , csContext = spanContext sp
+      , csParent = spanParent sp
+      }
 
 -- | Tiny in-process \"Kafka topic\": an MVar of consumed records plus an
 -- incrementing offset. The publisher pushes records here; the consumer
