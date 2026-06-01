@@ -104,8 +104,10 @@ This section must always reflect the actual current state of the work.
   frozen-snapshot helper. (2026-06-01)
 - [x] M3 — Update the version note in `docs/research/opentelemetry-semconv-audit.md` to
   reflect that keiro now links the 1.40 release directly (no vendoring). (2026-06-01)
-- [ ] M4 — Full validation: `cabal build all` and the keiro telemetry test block pass; a
-  grep proves the framework keys are imported, not vendored.
+- [x] M4 — Full validation: `cabal build all` and `cabal test keiro-test` (81 examples, 0
+  failures) pass; Step 4.3 grep prints nothing (no framework key defined locally); Step 4.4
+  grep prints all 14 framework keys present in the 1.40 module; only the three `keiro_*` keys
+  remain locally defined. (2026-06-01)
 
 (Initial state: nothing in this plan implemented yet. The source already compiles against
 the 1.0 API in the superproject; the bounds and de-vendoring are the remaining work.)
@@ -247,7 +249,37 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Completed 2026-06-01.** keiro now builds, tests, and ships against hs-opentelemetry 1.0 /
+semantic-conventions 1.40 from the `keiro` repository alone, with every emitted span attribute
+name sourced from the typed, spec-generated `OpenTelemetry.SemanticConventions` module.
+
+- **M1 (bounds + provenance).** The 1.0 / 1.40 generation turned out to be on Hackage
+  (`hs-opentelemetry-api 1.0.0.0`, `…-semantic-conventions 1.40.0.0`, sdk / propagator-w3c /
+  exporter-in-memory 1.0.0.0), so the conditional `cabal.project` source pin was **not**
+  needed — only the `keiro.cabal` library + test-suite bounds bump. `cabal build keiro`
+  resolves `hs-opentelemetry-api-1.0.0.0` / `hs-opentelemetry-semantic-conventions-1.40.0.0`.
+- **M2 (de-vendor + typed-ify).** Removed all ten vendored framework `AttributeKey`s from
+  `Keiro.Telemetry`, importing and re-exporting them from `OpenTelemetry.SemanticConventions`;
+  replaced the four remaining string-literal attribute names in the producer/consumer setters
+  with typed bindings; removed the now-dead `addText` helper; repointed `Keiro.Command`'s
+  `db_system_name` to the conventions module. Only `keiro_stream_name` / `keiro_retry_attempt`
+  / `keiro_events_appended` remain locally defined.
+- **M3 (audit note).** Rewrote the audit's stale "0.1.0.0 + vendoring" version note to record
+  the direct 1.40 dependency.
+
+**Gap vs. plan — the one surprise.** The plan asserted the telemetry tests would pass
+unchanged, but `keiro/test/Main.hs` spoke the **0.x** flat-accessor span API
+(`spanName`/`spanAttributes`/`spanStatus`) that 1.0 moved behind `spanHot :: IORef SpanHot`,
+and `shutdownTracerProvider` gained a `Maybe Int` timeout. The test only ever compiled under
+the old `< 0.4` pin. This required an unplanned but mechanical test migration: a `CapturedSpan`
+frozen-snapshot helper (`captureSpan :: ImmutableSpan -> IO CapturedSpan`) folded into the
+existing exporter drain, and `Nothing` passed to the three `shutdownTracerProvider` calls. No
+production wire behavior changed — the 81-example suite, including the producer/consumer/command
+attribute assertions, passes, proving dashboards see identical `messaging.*` / `db.*` names.
+
+**Lesson.** A "dependency-provenance only" bump can still carry a real source migration in the
+*test* tree when the upgraded library restructures the types tests reflect on. Verifying the
+standalone build (not just the superproject build) surfaced it immediately.
 
 
 ## Context and Orientation
@@ -736,6 +768,34 @@ grep -nE "^(messaging_|db_)[a-z_]+ :: AttributeKey" keiro/src/Keiro/Telemetry.hs
 
 Update this section with the actual transcripts (resolved otel version, test summary line) as
 each milestone completes.
+
+**Actual results (2026-06-01):**
+
+```text
+# M1 — provenance: 1.0/1.40 found on Hackage, no cabal.project pin added
+$ cabal info hs-opentelemetry-api | grep -A1 "Versions available"
+    Versions available: 0.0.2.0, ..., 0.3.1.0, 1.0.0.0 (and 7 others)
+# install plan resolves:
+hs-opentelemetry-api-1.0.0.0
+hs-opentelemetry-api-types-1.0.0.0
+hs-opentelemetry-semantic-conventions-1.40.0.0
+hs-opentelemetry-sdk-1.0.0.0
+hs-opentelemetry-propagator-w3c-1.0.0.0
+hs-opentelemetry-exporter-in-memory-1.0.0.0
+
+# M2/M4 — test suite (after the 1.0 span-model test migration)
+$ cabal test keiro-test
+81 examples, 0 failures
+Test suite keiro-test: PASS
+
+# M4 — Step 4.3 (de-vendoring proof): empty
+$ grep -nE "^(messaging_|db_)[a-z_]+ :: AttributeKey" keiro/src/Keiro/Telemetry.hs
+(no output)
+
+# M4 — Step 4.4 (keys resolve from 1.40): all 14 present
+$ grep -cE "^(messaging_system|...|db_operation_name) ::" .../SemanticConventions.hs
+14
+```
 
 
 ## Validation and Acceptance
