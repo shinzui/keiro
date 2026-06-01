@@ -102,8 +102,8 @@ This section must always reflect the actual current state of the work.
   API: the hot span fields (name/attributes/status) moved behind `spanHot :: IORef SpanHot`,
   and `shutdownTracerProvider` gained a `Maybe Int` timeout arg. Added a `CapturedSpan`
   frozen-snapshot helper. (2026-06-01)
-- [ ] M3 — Update the version note in `docs/research/opentelemetry-semconv-audit.md` to
-  reflect that keiro now links the 1.40 release directly (no vendoring).
+- [x] M3 — Update the version note in `docs/research/opentelemetry-semconv-audit.md` to
+  reflect that keiro now links the 1.40 release directly (no vendoring). (2026-06-01)
 - [ ] M4 — Full validation: `cabal build all` and the keiro telemetry test block pass; a
   grep proves the framework keys are imported, not vendored.
 
