@@ -1,11 +1,11 @@
-{- | The command side of the framework: hydrate an aggregate, decide, append.
+{- | The command side of the framework: hydrate an aggregate, transduce, append.
 
 Running a command against an 'EventStream' follows one pipeline:
 
 1. /Hydrate/ — replay the stream's stored events (optionally fast-forwarding
    from a snapshot) through the keiki transducer to recover the current
    @(state, registers)@ and stream version.
-2. /Decide/ — step the transducer with the command. A rejected transition
+2. /Transduce/ — step the transducer with the command. A rejected transition
    yields 'CommandRejected'; a transition that emits no events yields a
    no-op 'CommandResult'.
 3. /Append/ — encode the emitted events with the stream's 'Codec' and append
@@ -338,7 +338,7 @@ hydrateFull options eventStream targetStream =
             Keiki.InFlight{} ->
               (replayHydrated current) { registers = nextRegisters }
 
-{- | Hydrate the target stream, decide the command, and append any emitted
+{- | Hydrate the target stream, transduce the command, and append any emitted
 events. Retries optimistic-concurrency conflicts up to 'retryLimit'. This
 is the plain runner with no in-transaction side effects.
 -}
