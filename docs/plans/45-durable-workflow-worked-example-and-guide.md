@@ -83,11 +83,11 @@ This section must always reflect the actual current state of the work.
   workflow, the `WorkflowRegistry`, deterministic ids, and the demo-driver helpers) and add
   it to `jitsurei/jitsurei.cabal` `exposed-modules` and to the `Jitsurei` umbrella module.
 - [x] Milestone 1: confirm `cabal build jitsurei:lib:jitsurei` is green.
-- [ ] Milestone 2: add the `workflow` subcommand to `jitsurei/app/Main.hs` (dispatcher, the
+- [x] Milestone 2: add the `workflow` subcommand to `jitsurei/app/Main.hs` (dispatcher, the
   `all` path, and the usage string) and implement `runDurableWorkflowDemo`.
-- [ ] Milestone 2: run `cabal run jitsurei:exe:jitsurei-demo -- workflow` against the
-  ephemeral PostgreSQL and capture the real transcript; reconcile it with the expected
-  transcript in this plan.
+- [x] Milestone 2: run `cabal run jitsurei:exe:jitsurei-demo -- workflow` against the
+  repo-local PostgreSQL and capture the real transcript; reconcile it with the expected
+  transcript in this plan (see Validation and Surprises).
 - [ ] Milestone 3: write `docs/guides/durable-workflows.md` and add it to the
   `docs/guides/README.md` index.
 - [ ] Milestone 3: write `docs/user/durable-workflows.md` and link it from
@@ -103,7 +103,35 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-03 (M2): **A parent and its child workflow must use distinct `WorkflowId`s.** The
+  first draft reused the order id text for both (parent `wf:order-fulfillment-<order>`, child
+  `wf:ship-order-<order>` — same id, different name). The demo then "completed" without the
+  parent ever journaling a `WorkflowCompleted`: `findUnfinishedWorkflowIds`
+  (`keiro/src/Keiro/Workflow/Schema.hs`) groups by `workflow_id` *alone* (the `NOT EXISTS`
+  subquery matches `c.workflow_id = s.workflow_id`, ignoring `workflow_name`), so the child's
+  `__workflow_completed__` row masked the parent's incompleteness and the parent dropped out of
+  resume discovery prematurely. Fix: `shipChildId orderId = WorkflowId (orderIdText orderId <>
+  "-ship")`, distinct from `workflowIdFor orderId`. With distinct ids the resume worker drives
+  the parent to completion in a final pass (transcript pass 4: `completed = 1, stillSuspended =
+  0`) and the parent journal correctly ends with `WorkflowCompleted` at version 7. This matches
+  the keiro test suite, which always uses distinct parent/child ids (parent `p1`, child
+  `ship-1`). Recorded to the MasterPlan Surprises as a cross-cutting contract for EP-43 users.
+- 2026-06-03 (M2): **The awakeable journal step is `awk:<uuid>`, not `awk:<label>`.**
+  `awakeableNamed (StepName "payment-webhook")` derives a deterministic `AwakeableId` from the
+  label and journals its completion under `awakeableStepPrefix <> awakeableIdText aid` — i.e.
+  `awk:<uuid>`. The external `signalAwakeable (paymentWebhookAwakeableId orderId) …` targets the
+  *same* deterministic id (computed via `deterministicAwakeableId`), which is the
+  idempotent-arming contract working as designed. The guide and transcript cite `awk:<uuid>`.
+- 2026-06-03 (M2): **Demo environment — workflow tables and the `kiroku` schema.** The kiroku
+  `Store` connects with `search_path = kiroku` (`Store.defaultConnectionSettings`), so the
+  `keiro_workflow_steps` / `keiro_awakeables` / `keiro_workflow_children` tables must live in
+  the `kiroku` schema. The `keiro-migrations` files issue unqualified `CREATE TABLE`, so they
+  land in `kiroku` only when applied in the same codd batch as the schema-creating kiroku
+  migration (a fresh database, as in `cabal test` and `just jitsurei-migrate` against a clean
+  db). On a pre-existing dev database where only the three new migrations are pending, they
+  land in `public` and the demo cannot see them; recreate the `jitsurei` database (or
+  `ALTER TABLE … SET SCHEMA kiroku`) so the demo's Store finds them. This is a migration/dev-DB
+  property, not an EP-45 code concern.
 
 
 ## Decision Log
@@ -749,55 +777,58 @@ block from the real run during Milestone 5. The *structure* — suspend, fire sl
 again, signal, complete, journal dump, restart proof — is the acceptance:
 
 ```text
-[jitsurei] connecting to host=db dbname=jitsurei
-[jitsurei:workflow] running durable order-fulfillment workflow for workflow-20260603...
+[jitsurei] connecting to host=/…/db dbname=jitsurei user=…
+[jitsurei:workflow] running durable order-fulfillment workflow for workflow-20260603…
 [jitsurei:workflow] first run: invoking the workflow
-  step reserve-inventory ran (reservation RES-workflow-20260603...)
-  scheduled durable sleep cooling-off (2s)
-[jitsurei:workflow] outcome: Suspended
+  step reserve-inventory ran (reservation RES-workflow-20260603…)
+[jitsurei:workflow] first run outcome: Suspended (armed the cooling-off sleep)
 [jitsurei:workflow] firing the cooling-off sleep timer
   timer worker fired sleep:cooling-off -> journal
-[jitsurei:workflow] resume pass 1
-  replayed reserve-inventory (from journal)
-  replayed sleep:cooling-off (from journal)
-  parked on awakeable payment-webhook
-[jitsurei:workflow] outcome: Suspended
+[jitsurei:workflow] resume pass 1: ResumeSummary {discovered = 1, resumed = 1, completed = 0, stillSuspended = 1, unknownName = 0}
+  (replayed reserve-inventory + sleep:cooling-off, parked on the payment-webhook awakeable)
 [jitsurei:workflow] signalling the payment-webhook awakeable (simulated webhook)
   signalAwakeable payment-webhook -> True
-[jitsurei:workflow] resume pass 2
-  replayed reserve-inventory (from journal)
-  replayed sleep:cooling-off (from journal)
-  read payment-webhook payload (from journal): PaymentConfirmation {paymentRef = "pay_demo", amountCents = 4200}
-  step charge ran (charge CHG-workflow-20260603...)
-  spawned child ship-order-workflow-20260603...
-  parked on child ship-order
-[jitsurei:workflow] resume pass 3 (drives the child to completion, then the parent)
-  child step create-shipment ran (tracking TRK-workflow-20260603...)
-  child ship-order Completed
-  parent read child result (from journal): TRK-workflow-20260603...
-[jitsurei:workflow] outcome: Completed "TRK-workflow-20260603..."
-[jitsurei:workflow] order-fulfillment journal (wf:order-fulfillment-workflow-20260603...)
-  StreamVersion 1 GlobalPosition ... StepRecorded {stepName = "reserve-inventory", ...}
-  StreamVersion 2 GlobalPosition ... StepRecorded {stepName = "sleep:cooling-off", ...}
-  StreamVersion 3 GlobalPosition ... StepRecorded {stepName = "awk:payment-webhook", ...}
-  StreamVersion 4 GlobalPosition ... StepRecorded {stepName = "charge", ...}
-  StreamVersion 5 GlobalPosition ... StepRecorded {stepName = "child:ship-order", ...}
-  StreamVersion 6 GlobalPosition ... WorkflowCompleted {...}
-[jitsurei:workflow] ship-order child journal (wf:ship-order-workflow-20260603...)
-  StreamVersion 1 GlobalPosition ... StepRecorded {stepName = "create-shipment", ...}
-  StreamVersion 2 GlobalPosition ... WorkflowCompleted {...}
+  step charge ran (charge CHG-workflow-20260603… for pay_demo)
+[jitsurei:workflow] resume pass 2: ResumeSummary {discovered = 1, resumed = 1, completed = 0, stillSuspended = 1, unknownName = 0}
+  child step create-shipment ran (tracking TRK-workflow-20260603…-ship)
+[jitsurei:workflow] resume pass 3: ResumeSummary {discovered = 2, resumed = 2, completed = 1, stillSuspended = 1, unknownName = 0}
+[jitsurei:workflow] resume pass 4: ResumeSummary {discovered = 1, resumed = 1, completed = 1, stillSuspended = 0, unknownName = 0}
+[jitsurei:workflow] final outcome: Completed "TRK-workflow-20260603…-ship"
+[jitsurei:workflow] order-fulfillment journal (wf:order-fulfillment-workflow-20260603…)
+  StreamVersion 1 GlobalPosition 0 StepRecorded {stepName = "reserve-inventory", result = String "RES-workflow-20260603…", recordedAt = …}
+  StreamVersion 2 GlobalPosition 0 StepRecorded {stepName = "sleep:cooling-off", result = Null, recordedAt = …}
+  StreamVersion 3 GlobalPosition 0 StepRecorded {stepName = "awk:<uuid>", result = Object (fromList [("amountCents",Number 4200.0),("paymentRef",String "pay_demo")]), recordedAt = …}
+  StreamVersion 4 GlobalPosition 0 StepRecorded {stepName = "charge", result = String "CHG-workflow-20260603…", recordedAt = …}
+  StreamVersion 5 GlobalPosition 0 StepRecorded {stepName = "child:workflow-20260603…-ship", result = Array [], recordedAt = …}
+  StreamVersion 6 GlobalPosition 0 StepRecorded {stepName = "child:workflow-20260603…-ship:result", result = String "TRK-workflow-20260603…-ship", recordedAt = …}
+  StreamVersion 7 GlobalPosition 0 WorkflowCompleted {recordedAt = …}
+[jitsurei:workflow] ship-order child journal (wf:ship-order-workflow-20260603…-ship)
+  StreamVersion 1 GlobalPosition 0 StepRecorded {stepName = "create-shipment", result = String "TRK-workflow-20260603…-ship", recordedAt = …}
+  StreamVersion 2 GlobalPosition 0 WorkflowCompleted {recordedAt = …}
 [jitsurei:workflow] --- simulated restart: re-opening the store ---
-[jitsurei:workflow] restart resume pass
-  restart: resume worker found no unfinished work for order-fulfillment-workflow-20260603...
+[jitsurei] connecting to host=/…/db dbname=jitsurei user=…
+  restart: resume worker discovery found no unfinished work for order-fulfillment-workflow-20260603…
 [jitsurei:workflow] durability proven: the completed workflow was NOT re-executed from scratch
 ```
 
-The load-bearing assertions a reader verifies by eye: the workflow returns `Suspended` twice
-before completing; each resume line says *replayed … (from journal)* for prior steps and
-*ran* only for the new step (proving no double side effects); the journal contains exactly one
-`StepRecorded` per checkpoint plus one terminal `WorkflowCompleted`; and the simulated-restart
-pass finds *no unfinished work*, proving the completed state lives in the journal, not in the
-process.
+The load-bearing assertions a reader verifies by eye: the workflow returns `Suspended` (the
+first run and the `stillSuspended = 1` resume passes) before completing; each step's `… ran`
+line prints only the first time that step runs and never on a later pass (proving no double
+side effects — the replayed steps print nothing); the journal contains exactly one
+`StepRecorded` per checkpoint (note the child contributes *two*: the `child:<id>` spawn record
+and the `child:<id>:result` completion the parent awaits) plus one terminal `WorkflowCompleted`
+at version 7; the resume worker itself drives the parent to completion in pass 4
+(`completed = 1, stillSuspended = 0`); and the simulated-restart discovery finds *no unfinished
+work*, proving the completed state lives in the journal, not in the process.
+
+**Transcript reconciliation (recorded per the Decision Log):** the as-authored sketch differed
+from the real run in three honest ways, now folded into the block above. (1) The awakeable
+journals under `awk:<uuid>` (the deterministic awakeable id), not `awk:payment-webhook` — the
+reserved `awk:` prefix is followed by the awakeable's UUID, per `Keiro.Workflow.Awakeable`. (2)
+A child contributes two journal entries (`child:<id>` spawn + `child:<id>:result`), not one. (3)
+Resumes do not print "replayed … (from journal)" lines, because a replayed step does not run —
+the absence of a step's `… ran` line on a later pass *is* the replay evidence. The parent and
+child use *distinct* workflow ids (the child id carries a `-ship` suffix); see Surprises.
 
 **Check 2 — the guide and user page are copy-pasteable and reference only shipped functions.**
 Every `haskell` fence in `docs/guides/durable-workflows.md` and `docs/user/durable-workflows.md`

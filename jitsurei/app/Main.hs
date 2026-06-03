@@ -21,6 +21,18 @@ import Keiro
 import Keiro.ProcessManager (runProcessManagerWorker)
 import Keiro.Projection (runCommandWithProjections)
 import Keiro.ReadModel (runQuery)
+import Keiro.Workflow (
+    WorkflowId (..),
+    WorkflowJournalEvent (StepRecorded),
+    WorkflowName,
+    findUnfinishedWorkflowIds,
+    runWorkflow,
+    workflowJournalCodec,
+    workflowStreamName,
+ )
+import Keiro.Workflow.Awakeable (signalAwakeable)
+import Keiro.Workflow.Resume (defaultWorkflowResumeOptions, resumeWorkflowsOnce)
+import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types (
     EventId (..),
@@ -49,13 +61,15 @@ main = do
         ["escalation"] -> runEscalationDemo
         ["paging"] -> runPagingDemo
         ["agent-qual"] -> runAgentQualDemo
+        ["workflow"] -> runDurableWorkflowDemo
         ["all"] -> do
             runFulfillmentDemo
             runSnapshotsDemo
             runPagingDemo
             runEscalationDemo
             runAgentQualDemo
-        _ -> fail "usage: jitsurei-demo [fulfillment|snapshots|paging|escalation|agent-qual|all]"
+            runDurableWorkflowDemo
+        _ -> fail "usage: jitsurei-demo [fulfillment|snapshots|paging|escalation|agent-qual|workflow|all]"
 
 runFulfillmentDemo :: IO ()
 runFulfillmentDemo = withJitsureiStore $ \store -> do
@@ -371,6 +385,148 @@ runAgentQualDemo = withJitsureiStore $ \store -> do
             printDecoded chapterCodec events
         )
         [(MemberId "m1", ChapterId "c1"), (MemberId "m2", ChapterId "c2"), (MemberId "m3", ChapterId "c3")]
+
+-- | A durable order-fulfillment workflow demo. It runs the workflow to its
+-- first suspension, fires the cooling-off sleep timer, resumes it past the
+-- sleep, signals the payment-webhook awakeable, drives the resume worker until
+-- the parent and its ship-order child both complete, dumps both journals, and
+-- finally re-opens the store and re-runs discovery to prove the completed
+-- workflow lives in the journal — not in the process.
+runDurableWorkflowDemo :: IO ()
+runDurableWorkflowDemo = do
+    orderId <- freshOrderId "workflow"
+    let wfId = workflowIdFor orderId
+        childWfId = shipChildId orderId
+        idText = unWorkflowId wfId
+        childIdText = unWorkflowId childWfId
+        parentStream = workflowStreamNameText orderFulfillmentWorkflowName wfId
+        childStream = workflowStreamNameText shipOrderWorkflowName childWfId
+
+    withJitsureiStore $ \store -> do
+        putStrLn ("[jitsurei:workflow] running durable order-fulfillment workflow for " <> Text.unpack idText)
+        requireEither =<< Store.runStoreIO store initializeJitsureiTables
+
+        -- 1) First run: reserve inventory runs, the cooling-off sleep arms, the
+        --    run suspends.
+        putStrLn "[jitsurei:workflow] first run: invoking the workflow"
+        outcome1 <-
+            requireEither
+                =<< Store.runStoreIO store (runWorkflow orderFulfillmentWorkflowName wfId (orderFulfillmentWorkflow orderId))
+        putStrLn ("[jitsurei:workflow] first run outcome: " <> show outcome1 <> " (armed the cooling-off sleep)")
+
+        -- 2) Fire the durable sleep timer (advance the clock well past the delay).
+        putStrLn "[jitsurei:workflow] firing the cooling-off sleep timer"
+        fireSleepTimerUntilJournaled store parentStream
+
+        -- 3) Resume pass 1: replays reserve-inventory + sleep:cooling-off, arms
+        --    the payment-webhook awakeable, and parks again.
+        summary1 <-
+            requireEither
+                =<< Store.runStoreIO store (resumeWorkflowsOnce defaultWorkflowResumeOptions jitsureiWorkflowRegistry)
+        putStrLn ("[jitsurei:workflow] resume pass 1: " <> show summary1)
+        putStrLn "  (replayed reserve-inventory + sleep:cooling-off, parked on the payment-webhook awakeable)"
+
+        -- 4) Signal the awakeable (simulate the payment webhook callback).
+        putStrLn "[jitsurei:workflow] signalling the payment-webhook awakeable (simulated webhook)"
+        signalled <-
+            requireEither
+                =<< Store.runStoreIO
+                    store
+                    (signalAwakeable (paymentWebhookAwakeableId orderId) (PaymentConfirmation "pay_demo" 4200))
+        putStrLn ("  signalAwakeable payment-webhook -> " <> show signalled)
+
+        -- 5) Drive the resume worker until both the parent and its child finish.
+        driveResumeUntilDone store [idText, childIdText] 2
+
+        -- 6) Read the final outcome by replaying the now-complete journal.
+        finalOutcome <-
+            requireEither
+                =<< Store.runStoreIO store (runWorkflow orderFulfillmentWorkflowName wfId (orderFulfillmentWorkflow orderId))
+        putStrLn ("[jitsurei:workflow] final outcome: " <> show finalOutcome)
+
+        -- 7) Dump both journals.
+        parentJournal <- readEvents store parentStream
+        putStrLn ("[jitsurei:workflow] order-fulfillment journal (" <> Text.unpack parentStream <> ")")
+        printDecoded workflowJournalCodec parentJournal
+        childJournal <- readEvents store childStream
+        putStrLn ("[jitsurei:workflow] ship-order child journal (" <> Text.unpack childStream <> ")")
+        printDecoded workflowJournalCodec childJournal
+
+    -- 8) Simulated restart: a fresh store connection (a new "process") re-runs
+    --    the resume worker's discovery and finds nothing to do for our workflow,
+    --    proving the completed state lives in the journal, not in the process.
+    putStrLn "[jitsurei:workflow] --- simulated restart: re-opening the store ---"
+    withJitsureiStore $ \store -> do
+        remaining <- ourUnfinishedWorkflows store [idText, childIdText]
+        if null remaining
+            then do
+                putStrLn ("  restart: resume worker discovery found no unfinished work for order-fulfillment-" <> Text.unpack idText)
+                putStrLn "[jitsurei:workflow] durability proven: the completed workflow was NOT re-executed from scratch"
+            else
+                putStrLn ("  restart: UNEXPECTED — workflow still unfinished: " <> show remaining)
+
+-- | The journal stream name for a workflow instance, as the 'Text' 'readEvents'
+-- expects (unwrapping the 'StreamName' 'workflowStreamName' returns).
+workflowStreamNameText :: WorkflowName -> WorkflowId -> Text
+workflowStreamNameText name wid =
+    let StreamName s = workflowStreamName name wid in s
+
+-- | Unfinished workflows (per 'findUnfinishedWorkflowIds') whose id is one of
+-- ours this run — the parent and the ship-order child carry distinct ids.
+ourUnfinishedWorkflows :: Store.KirokuStore -> [Text] -> IO [(Text, Text)]
+ourUnfinishedWorkflows store ourIds = do
+    pairs <- requireEither =<< Store.runStoreIO store findUnfinishedWorkflowIds
+    pure [pair | pair@(wid, _) <- pairs, wid `elem` ourIds]
+
+-- | Fire workflow-sleep timers (with a clock well past the delay) until the
+-- @sleep:cooling-off@ completion appears in the journal, bounded so a stray
+-- non-sleep timer cannot hang the demo.
+fireSleepTimerUntilJournaled :: Store.KirokuStore -> Text -> IO ()
+fireSleepTimerUntilJournaled store parentStream = do
+    fireTime <- addUTCTime 3600 <$> getCurrentTime
+    let loop :: Int -> IO ()
+        loop n
+            | n > 10 = putStrLn "  WARNING: sleep:cooling-off was not journaled after 10 timer passes"
+            | otherwise = do
+                done <- journalHasStep store parentStream "sleep:cooling-off"
+                if done
+                    then putStrLn "  timer worker fired sleep:cooling-off -> journal"
+                    else do
+                        _ <-
+                            requireEither
+                                =<< Store.runStoreIO store (runWorkflowTimerWorker Nothing fireTime (\_ -> pure Nothing))
+                        loop (n + 1)
+    loop 0
+
+-- | Run the resume worker until no workflow of ours remains unfinished, bounded
+-- so a non-converging journal cannot hang the demo. Prints each pass's summary.
+driveResumeUntilDone :: Store.KirokuStore -> [Text] -> Int -> IO ()
+driveResumeUntilDone store ourIds = go
+  where
+    go :: Int -> IO ()
+    go passNo
+        | passNo > 7 = putStrLn "  reached the resume-pass bound (7) without completing"
+        | otherwise = do
+            remaining <- ourUnfinishedWorkflows store ourIds
+            if null remaining
+                then pure ()
+                else do
+                    summary <-
+                        requireEither
+                            =<< Store.runStoreIO store (resumeWorkflowsOnce defaultWorkflowResumeOptions jitsureiWorkflowRegistry)
+                    putStrLn ("[jitsurei:workflow] resume pass " <> show passNo <> ": " <> show summary)
+                    go (passNo + 1)
+
+-- | Whether a workflow journal already records a 'StepRecorded' for @target@.
+journalHasStep :: Store.KirokuStore -> Text -> Text -> IO Bool
+journalHasStep store journalStream target = do
+    events <- readEvents store journalStream
+    let decoded = [event | Right event <- decodeRecorded workflowJournalCodec <$> events]
+    pure (any matchesTarget decoded)
+  where
+    matchesTarget = \case
+        StepRecorded name _ _ -> name == target
+        _ -> False
 
 withJitsureiStore :: (Store.KirokuStore -> IO ()) -> IO ()
 withJitsureiStore action = do

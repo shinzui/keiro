@@ -31,6 +31,7 @@ module Jitsurei.DurableWorkflow
   , coolingOffDelay
   , workflowIdFor
   , orderIdFromWf
+  , shipChildId
   )
 where
 
@@ -83,18 +84,30 @@ coolingOffDelay = 2
 -- Identity round-trip
 -- ---------------------------------------------------------------------------
 
-{- | Derive a 'WorkflowId' from an 'OrderId'. The order id text /is/ the
-workflow instance id, so the journal stream is @wf:order-fulfillment-\<order\>@
-and the resume worker can reconstruct the original 'OrderId' from the id alone
-(see 'orderIdFromWf'). The @ship-order@ child reuses the same id text under a
-different workflow /name/, so the two journals never collide.
+{- | Derive the parent's 'WorkflowId' from an 'OrderId'. The order id text /is/
+the parent workflow instance id, so the journal stream is
+@wf:order-fulfillment-\<order\>@ and the resume worker can reconstruct the
+original 'OrderId' from the id alone (see 'orderIdFromWf').
 -}
 workflowIdFor :: OrderId -> WorkflowId
 workflowIdFor = WorkflowId . orderIdText
 
+{- | The @ship-order@ child's 'WorkflowId'. It must be /distinct/ from the
+parent's id ('workflowIdFor'): the @keiro_workflow_steps@ index is keyed by
+@(workflow_id, step_name)@ and the unfinished-workflow discovery query groups by
+@workflow_id@ alone, so a parent and child sharing an id would let the child's
+terminal marker mask the parent's incompleteness. Suffixing the order id keeps
+the child's journal (@wf:ship-order-\<order\>-ship@) independent.
+-}
+shipChildId :: OrderId -> WorkflowId
+shipChildId orderId = WorkflowId (orderIdText orderId <> "-ship")
+
 -- | The inverse of 'workflowIdFor': recover the 'OrderId' a workflow instance
 -- belongs to from its 'WorkflowId'. Total and obvious, so the
 -- 'jitsureiWorkflowRegistry' can rebuild a workflow body from its id alone.
+-- (The @ship-order@ child reconstructs an order id carrying the @-ship@ suffix,
+-- which only flavours its display tracking number — the child's correctness
+-- does not depend on the exact order id.)
 orderIdFromWf :: WorkflowId -> OrderId
 orderIdFromWf = OrderId . unWorkflowId
 
@@ -151,7 +164,7 @@ orderFulfillmentWorkflow orderId = do
   (_awkId, awaitPayment) <- awakeableNamed (StepName "payment-webhook")
   payment <- awaitPayment
   _charge <- step (StepName "charge") (chargeCard orderId payment)
-  childHandle <- spawnChild shipOrderWorkflowName (workflowIdFor orderId) (shipOrderWorkflow orderId)
+  childHandle <- spawnChild shipOrderWorkflowName (shipChildId orderId) (shipOrderWorkflow orderId)
   awaitChild childHandle
 
 {- | The @ship-order@ child workflow: a one-step workflow that produces a

@@ -625,6 +625,21 @@ and the milestone.
     `countActiveChildren` seam exists but no `keiro.workflow.children.active` instrument was
     added — EP-44's scope was the six named instruments only.
 
+- 2026-06-03 (EP-45 implementation): **a parent workflow and its child must use distinct
+  `WorkflowId`s** — a cross-cutting contract for every EP-43 (child-workflow) user, surfaced
+  while building the worked example. `findUnfinishedWorkflowIds`
+  (`keiro/src/Keiro/Workflow/Schema.hs`) discovers unfinished workflows by grouping on
+  `workflow_id` *alone* — its `NOT EXISTS` terminal-marker subquery matches `c.workflow_id =
+  s.workflow_id` and ignores `workflow_name`. So if a parent and child share an id (differing
+  only by name), the child's `__workflow_completed__` row masks the parent's incompleteness and
+  the parent silently drops out of resume discovery before it finishes. The keiro test suite
+  already uses distinct ids (parent `p1`, child `ship-1`); EP-45 codified it as
+  `shipChildId orderId = WorkflowId (orderIdText orderId <> "-ship")`, distinct from
+  `workflowIdFor orderId`. With distinct ids the resume worker drives the parent to its own
+  `WorkflowCompleted`. EP-45's guide documents this as an operational rule. No code change to
+  EP-38/EP-43 is required — the constraint is on the *caller's* id allocation — but it is the
+  single most important gotcha for anyone composing parent/child workflows.
+
 ## Decision Log
 
 - Decision: Implement Phase 5 (v2 durable execution) as eight child ExecPlans in five
