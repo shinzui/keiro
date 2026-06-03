@@ -108,7 +108,7 @@ runFulfillmentDemo = withJitsureiStore $ \store -> do
     putStrLn "[jitsurei:fulfillment] order stream after payment"
     printDecoded orderCodec orderEventsBefore
 
-    summary <- requireEither =<< Store.runStoreIO store (runQuery orderSummaryReadModel (OrderSummaryQuery orderId))
+    summary <- requireEither =<< Store.runStoreIO store (runQuery Nothing orderSummaryReadModel (OrderSummaryQuery orderId))
     putStrLn "[jitsurei:fulfillment] jitsurei_order_summary row"
     print summary
 
@@ -211,7 +211,7 @@ runPagingDemo = withJitsureiStore $ \store -> do
                 Tx.statement (serviceText service, "bob", 1) insertOncallStmt
                 Tx.statement (serviceText service, "carol", 2) insertOncallStmt
             )
-    roster <- requireEither =<< Store.runStoreIO store (runQuery serviceOncallReadModel service)
+    roster <- requireEither =<< Store.runStoreIO store (runQuery Nothing serviceOncallReadModel service)
     putStrLn "[jitsurei:paging] resolved roster read-model rows"
     print roster
 
@@ -351,8 +351,8 @@ runAgentQualDemo = withJitsureiStore $ \store -> do
                 Tx.statement (areaIdText south, "m2", "c2") insertAreaChapterStmt
                 Tx.statement (areaIdText south, "m3", "c3") insertAreaChapterStmt
             )
-    northTargets <- requireEither =<< Store.runStoreIO store (runQuery areaChaptersReadModel north)
-    southTargets <- requireEither =<< Store.runStoreIO store (runQuery areaChaptersReadModel south)
+    northTargets <- requireEither =<< Store.runStoreIO store (runQuery Nothing areaChaptersReadModel north)
+    southTargets <- requireEither =<< Store.runStoreIO store (runQuery Nothing areaChaptersReadModel south)
     putStrLn "[jitsurei:agent-qual] area read-model rows"
     print (northTargets, southTargets)
 

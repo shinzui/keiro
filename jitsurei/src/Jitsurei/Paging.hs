@@ -192,7 +192,7 @@ pagingRouter = Router
   { name = "jitsurei-paging"
   , key = \raised -> incidentIdText raised.incidentId
   , resolve = \raised -> do
-      result <- runQuery serviceOncallReadModel raised.service
+      result <- runQuery Nothing serviceOncallReadModel raised.service
       let responders = either (const []) id result
       pure
         [ PMCommand

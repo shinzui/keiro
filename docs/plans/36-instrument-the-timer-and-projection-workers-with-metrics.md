@@ -91,12 +91,12 @@ This section must always reflect the actual current state of the work.
 - [x] M1.3 Thread `Maybe KeiroMetrics` into `runTimerWorker`/`runTimerWorkerWith` as the leading argument and record `keiro.timer.backlog`, `keiro.timer.fire.lag`, and `keiro.timer.attempts` each pass. (2026-06-03)
 - [x] M1.4 Update the existing `runTimerWorker`/`runTimerWorkerWith` call sites in `keiro/test/Main.hs` to pass `Nothing`. (2026-06-03)
 - [x] M1.5 Add the M1 timer-metrics test asserting the three timer instruments under the in-memory metric exporter; run `cabal test keiro-test`. (2026-06-03)
-- [ ] M2.1 Add a head-position read helper and a projection-lag recording helper; thread `Maybe KeiroMetrics` into the async projection drain path and record `keiro.projection.lag`.
-- [ ] M2.2 Thread `Maybe KeiroMetrics` into `waitFor`/`runQueryWith` and increment `keiro.projection.wait.timeouts` on a `ReadModelWaitTimeout`.
-- [ ] M2.3 Add the M2 projection tests (lag gauge behind-the-log; wait-timeout counter); run `cabal test keiro-test` and paste the transcript.
+- [x] M2.1 Added `storeHeadPosition`/`positionGap` and `recordProjectionLag` to `Keiro.Projection`; exported `readSubscriptionPosition` from `Keiro.ReadModel`; records `keiro.projection.lag`. (2026-06-03)
+- [x] M2.2 Threaded `Maybe KeiroMetrics` through `runQuery`/`runQueryWith`/`waitIfNeeded`/`waitFor`; increments `keiro.projection.wait.timeouts` on the `ReadModelWaitTimeout` branch. (2026-06-03)
+- [x] M2.3 Added the M2 projection tests (lag gauge behind-the-log; wait-timeout counter); `cabal test keiro-test` passes (92 examples, 0 failures). (2026-06-03)
 - [x] M3.1 EP-34 has landed: stuck = `status = 'firing'` per `StuckTimerFilter`; added `countStuckTimers` to `Keiro.Timer.Schema` mirroring `findStuckTimers`. (2026-06-03)
 - [x] M3.2 Record `keiro.timer.stuck` in the timer worker (via `anyStuckTimer`, before the claim) and add the M3 stuck-gauge test; `cabal test keiro-test` passes. (2026-06-03)
-- [ ] M4 Add the minimal `docs/user/operations.md` note (one short paragraph) deferring the full metrics catalogue to EP-37; update Decision Log and Outcomes & Retrospective.
+- [x] M4 Extended the `docs/user/operations.md` Observability paragraph to name the six timer/projection instruments, deferring the full catalogue to EP-37. (2026-06-03)
 
 
 ## Surprises & Discoveries
@@ -164,6 +164,27 @@ implementation. Provide concise evidence.
   real EP-33/EP-35 ones (`inMemoryMetricExporter`, `flattenScalarPoints`,
   `flattenHistogramPoints`), not the provisional `withInMemoryMeter`/`metricPoints`
   the Concrete Steps sketched.
+- 2026-06-03 (M2 name clash): EP-33's gauge helper is itself named
+  `recordProjectionLag`, so the public `Keiro.Projection.recordProjectionLag`
+  (the `AsyncProjection -> Eff es ()` entry point this plan adds) would shadow it.
+  Resolved by importing `Keiro.Telemetry` **qualified** in `Keiro.Projection`
+  (`import Keiro.Telemetry qualified as Telemetry`) and calling
+  `Telemetry.recordProjectionLag` inside the public function. The Concrete Steps
+  sketch had assumed EP-33 would name its helper `recordProjectionLagValue`; it
+  did not.
+- 2026-06-03 (M2 arithmetic): `Keiro.Prelude` does not re-export the numeric
+  operators (`(-)` etc.); the codebase convention is to qualify them as
+  `Prelude.-` (see `Keiro.ReadModel`'s `Prelude.* `). `positionGap` uses
+  `headP Prelude.- checkP`.
+- 2026-06-03 (call-site fan-out): adding the leading `Maybe KeiroMetrics` to
+  `runTimerWorker`/`runQuery`/`runQueryWith` and the `IOE` constraint to the timer
+  worker rippled into the **jitsurei** demo package, which is a separate cabal
+  package not exercised by `keiro-test`. Updated every caller to pass `Nothing`
+  (`jitsurei/app/Main.hs`, `jitsurei/test/Main.hs`, `Jitsurei/Paging.hs`,
+  `Jitsurei/AgentQualRouter.hs`, `Jitsurei/EscalationProcess.hs`,
+  `Jitsurei/Timers.hs`) and added `IOE :> es` to `Jitsurei.Timers.runPaymentTimeoutWorker`.
+  `cabal build jitsurei jitsurei-test` is green. Wiring the demo's metrics into a
+  handle/stdout exporter is left to EP-37, which owns the demo and docs.
 
 
 ## Decision Log
@@ -244,7 +265,31 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+All four milestones shipped. The timer worker (`runTimerWorker` /
+`runTimerWorkerWith`) and the read side now emit the six instruments promised in
+Purpose — `keiro.timer.backlog`, `keiro.timer.fire.lag`, `keiro.timer.attempts`,
+`keiro.timer.stuck`, `keiro.projection.lag`, `keiro.projection.wait.timeouts` —
+through the opt-in `Maybe KeiroMetrics` handle, degrading to a no-op on
+`Nothing`. `cabal test keiro-test` passes (92 examples, 0 failures), with four new
+metric examples (timer backlog/fire-lag/attempts, timer stuck, projection lag,
+position-wait timeout). `cabal build jitsurei jitsurei-test` is green after
+threading `Nothing` through the demo's callers.
+
+Deviations from the original draft, all reconciled in Decision Log / Surprises:
+- M3 shipped together with M1 rather than deferred, because EP-34 was already
+  Complete. The stuck gauge counts `status = 'firing'` rows (EP-34's
+  `anyStuckTimer`) read before the claim, so it reflects rows stranded by prior
+  passes; `dead` is treated as a separate terminal state, not stuck.
+- `keiro.timer.fire.lag` is recorded in **milliseconds** to match EP-33's
+  declared unit, not seconds as Purpose/M1 text assumed. EP-37 (catalogue owner)
+  should correct the "(in seconds)" phrasing.
+- The wait-timeout helper is `recordProjectionWaitTimeouts` (plural); the public
+  projection-lag entry point is `Keiro.Projection.recordProjectionLag`, with the
+  same-named EP-33 helper imported qualified to avoid the clash.
+
+Gaps / handoffs to EP-37: the demo does not yet wire a real meter (handle/stdout
+exporter) into the timer worker or projection path; the full metric catalogue
+(units, kinds, semconv alignment) and the corrected fire.lag unit live with EP-37.
 
 
 ## Context and Orientation

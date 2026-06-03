@@ -25,9 +25,11 @@ module Keiro.Projection
     -- * Asynchronous projections
   , AsyncProjection (..)
   , applyAsyncProjection
+  , recordProjectionLag
   )
 where
 
+import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import GHC.Stack (HasCallStack)
@@ -36,10 +38,14 @@ import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Command (CommandError, CommandResult, RunCommandOptions, runCommandWithSqlEvents)
 import Keiro.EventStream (EventStream)
 import Keiro.Prelude
+import Keiro.ReadModel (readSubscriptionPosition)
 import Keiro.Stream (Stream)
+import Keiro.Telemetry (KeiroMetrics)
+import Keiro.Telemetry qualified as Telemetry
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Types (EventId, RecordedEvent)
+import Kiroku.Store.Read (readAllBackward)
+import Kiroku.Store.Types (EventId, GlobalPosition (..), RecordedEvent)
 import Prelude qualified
 
 {- | A read-model update applied synchronously with the command that emits
@@ -107,3 +113,39 @@ runCommandWithProjections options eventStream targetStream command projections =
 applyAsyncProjection :: AsyncProjection -> RecordedEvent -> Tx.Transaction ()
 applyAsyncProjection projection recorded =
   (projection ^. #applyRecorded) recorded
+
+{- | Record 'keiro.projection.lag' for one async projection: how many events its
+subscription is behind the global log head, computed as the store head global
+position minus the subscription's checkpoint position (clamped at 0). A no-op
+when no metrics handle is supplied. Call once per drain pass, after applying the
+batch, so the gauge reflects the backlog the worker has left to catch up on.
+
+There is no in-library polling drain loop today (the application drives
+'applyAsyncProjection' per event), so this is the entry point an application
+calls to surface lag for a subscription.
+-}
+recordProjectionLag ::
+  (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
+  AsyncProjection ->
+  Eff es ()
+recordProjectionLag metrics projection = do
+  headPos <- storeHeadPosition
+  checkpoint <-
+    fromMaybe (GlobalPosition 0)
+      <$> readSubscriptionPosition (projection ^. #subscriptionName)
+  Telemetry.recordProjectionLag metrics (positionGap headPos checkpoint)
+
+-- | The global position of the most recent event in the @$all@ log, or
+-- @GlobalPosition 0@ when the log is empty. 'readAllBackward' treats
+-- @GlobalPosition 0@ as "after everything", so a limit of 1 returns the head.
+storeHeadPosition :: (Store :> es) => Eff es GlobalPosition
+storeHeadPosition = do
+  recent <- readAllBackward (GlobalPosition 0) 1
+  pure $ case Vector.toList recent of
+    (event : _) -> event ^. #globalPosition
+    [] -> GlobalPosition 0
+
+-- | The non-negative gap between the log head and a checkpoint, in events.
+positionGap :: GlobalPosition -> GlobalPosition -> Int64
+positionGap (GlobalPosition headP) (GlobalPosition checkP) = max 0 (headP Prelude.- checkP)

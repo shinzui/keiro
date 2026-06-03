@@ -126,8 +126,12 @@ span around outbox publishing, and `Consumer` spans parented via W3C trace
 headers. Keiro also emits OpenTelemetry **metrics** for the outbox and inbox
 workers (backlog gauges plus published/retried/dead-lettered/processed/duplicate
 counters) through the opt-in `KeiroMetrics` handle built by
-`Keiro.Telemetry.newKeiroMetrics`; the full instrument catalogue is documented
-separately with the rest of the metrics surface.
+`Keiro.Telemetry.newKeiroMetrics`. The timer worker and the async-projection
+path emit metrics through the same handle when one is supplied: `keiro.timer.backlog`,
+`keiro.timer.fire.lag`, `keiro.timer.attempts`, and `keiro.timer.stuck` from the
+timer worker, and `keiro.projection.lag` and `keiro.projection.wait.timeouts`
+from the read side. The full instrument catalogue (names, units, kinds) is
+documented separately with the rest of the metrics surface.
 
 ## Production Checklist
 

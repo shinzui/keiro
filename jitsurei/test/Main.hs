@@ -106,7 +106,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           samplePlaceOrder
           [orderSummaryInlineProjection]
       Right summaryResult <- Store.runStoreIO store $
-        runQuery orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
+        runQuery Nothing orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
       case summaryResult of
         Right (Just summary) -> do
           summary ^. #orderId `shouldBe` sampleOrderId
@@ -192,7 +192,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           sampleApprovePayment
           [orderSummaryInlineProjection]
       Right paidSummary <- Store.runStoreIO store $
-        runQuery orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
+        runQuery Nothing orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
       case paidSummary of
         Right (Just summary) -> summary ^. #status `shouldBe` "paid"
         other -> expectationFailure ("expected paid order summary, got " <> show other)
@@ -210,7 +210,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             _ -> False
         _ -> False
       Right packedSummary <- Store.runStoreIO store $
-        runQuery orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
+        runQuery Nothing orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
       case packedSummary of
         Right (Just summary) -> summary ^. #status `shouldBe` "packed"
         other -> expectationFailure ("expected packed order summary, got " <> show other)
@@ -225,7 +225,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             _ -> False
         _ -> False
       Right replayedSummary <- Store.runStoreIO store $
-        runQuery orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
+        runQuery Nothing orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
       case replayedSummary of
         Right (Just summary) -> summary ^. #status `shouldBe` "packed"
         other -> expectationFailure ("expected packed order summary after replay, got " <> show other)

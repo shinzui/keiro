@@ -12,7 +12,7 @@ import Data.Text (Text)
 import Data.Time (UTCTime)
 import Data.UUID (UUID)
 import Data.TypeID.V7 qualified as TypeID
-import Effectful (Eff, (:>))
+import Effectful (Eff, IOE, (:>))
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow, runTimerWorker)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Types (EventId (..))
@@ -31,9 +31,9 @@ paymentTimeoutRequest orderId fireAt = TimerRequest
         ]
   }
 
-runPaymentTimeoutWorker :: (Store :> es) => UTCTime -> Eff es (Maybe TimerRow)
+runPaymentTimeoutWorker :: (IOE :> es, Store :> es) => UTCTime -> Eff es (Maybe TimerRow)
 runPaymentTimeoutWorker now =
-  runTimerWorker now (\_ -> pure (Just (EventId paymentTimeoutEventId)))
+  runTimerWorker Nothing now (\_ -> pure (Just (EventId paymentTimeoutEventId)))
 
 paymentTimeoutTimerId :: UUID
 paymentTimeoutTimerId = uuidFromTypeId "timer_01h455vb4pex5vsknk084sn02q"

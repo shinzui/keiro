@@ -613,7 +613,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           commandResult ^. #globalPosition `shouldSatisfy` isJust
         other -> expectationFailure ("expected inline projection command, got " <> show other)
       queryResult <- Store.runStoreIO storeHandle $
-        runQuery counterReadModel "inline"
+        runQuery Nothing counterReadModel "inline"
       queryResult `shouldBe` Right (Right 5)
 
     it "inline projection populates actor and source_event_id from command metadata" $ \storeHandle -> do
@@ -649,6 +649,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Tx.statement ("counter-read-model-sub", globalPositionToInt globalPosition) upsertSubscriptionCursorStmt
       queryResult <- Store.runStoreIO storeHandle $
         runQueryWith
+          Nothing
           (PositionWait (fastWaitOptions & #target .~ Just globalPosition))
           counterReadModel
           "inline"
@@ -662,6 +663,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Tx.statement ("counter-read-model-sub", 1) upsertSubscriptionCursorStmt
       queryResult <- Store.runStoreIO storeHandle $
         runQueryWith
+          Nothing
           (PositionWait (fastWaitOptions & #target .~ Just (GlobalPosition 5)))
           counterReadModel
           "timeout"
@@ -673,12 +675,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction initializeCounterReadModelTable
       Right (Right 0) <- Store.runStoreIO storeHandle $
-        runQuery counterReadModel "stale"
+        runQuery Nothing counterReadModel "stale"
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction $
           Tx.statement ("counter-read-model", 99) updateReadModelVersionStmt
       queryResult <- Store.runStoreIO storeHandle $
-        runQuery counterReadModel "stale"
+        runQuery Nothing counterReadModel "stale"
       queryResult
         `shouldBe` Right
           (Left (ReadModelStaleSchema "counter-read-model" 1 99 "counter-read-model-v1" "counter-read-model-v1"))
@@ -699,7 +701,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           applyAsyncProjection counterAsyncProjection event
           applyAsyncProjection counterAsyncProjection event
       queryResult <- Store.runStoreIO storeHandle $
-        runQuery counterReadModel "async-idempotent"
+        runQuery Nothing counterReadModel "async-idempotent"
       queryResult `shouldBe` Right (Right 7)
 
     it "tracks rebuild state transitions" $ \storeHandle -> do
@@ -712,6 +714,60 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right abandoned <- Store.runStoreIO storeHandle $
         Rebuild.abandonRebuild counterReadModel
       abandoned ^. #status `shouldBe` Abandoned
+
+    it "records projection lag behind the log head" $ \storeHandle -> do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      keiroMetrics <- Telemetry.newKeiroMetrics meter
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction initializeCounterReadModelTable
+      let target = stream "read-model-lag" :: Stream CounterEventStream
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions counterEventStream target (Add 1)
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runCommand defaultRunCommandOptions counterEventStream target (Add 1)
+      -- The subscription cursor is never advanced, so the read model is behind
+      -- the head by every appended event: the lag gauge records that gap.
+      Right () <- Store.runStoreIO storeHandle $
+        recordProjectionLag (Just keiroMetrics) counterAsyncProjection
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef metricsRef
+      let scalars = flattenScalarPoints exported
+      case lookup "keiro.projection.lag" scalars of
+        Just (IntNumber n) -> n `shouldSatisfy` (>= 1)
+        other -> expectationFailure ("expected an integer projection lag, got " <> show other)
+
+    it "counts a position-wait timeout in the timeout counter" $ \storeHandle -> do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      keiroMetrics <- Telemetry.newKeiroMetrics meter
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction initializeCounterReadModelTable
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.statement ("counter-read-model-sub", 1) upsertSubscriptionCursorStmt
+      queryResult <- Store.runStoreIO storeHandle $
+        runQueryWith
+          (Just keiroMetrics)
+          (PositionWait (fastWaitOptions & #target .~ Just (GlobalPosition 5)))
+          counterReadModel
+          "timeout"
+      queryResult
+        `shouldBe` Right
+          (Left (ReadModelWaitTimeout "counter-read-model" (GlobalPosition 5) (GlobalPosition 1)))
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef metricsRef
+      let scalars = flattenScalarPoints exported
+      -- The single give-up bumped the counter exactly once.
+      lookup "keiro.projection.wait.timeouts" scalars `shouldBe` Just (IntNumber 1)
 
   describe "Keiro.ProcessManager" $ around (withFreshStore fixture) $ do
     it "advances manager state, emits a deterministic target command once, and schedules a timer" $ \storeHandle -> do
@@ -2851,7 +2907,7 @@ demoRouter = Router
   { name = "demo-router"
   , key = \(RouteGroup g) -> g
   , resolve = \(RouteGroup g) -> do
-      result <- runQuery routerTargetsReadModel g
+      result <- runQuery Nothing routerTargetsReadModel g
       pure $ case result of
         Right targetIds ->
           [ PMCommand { target = stream targetId, command = Add 1 }

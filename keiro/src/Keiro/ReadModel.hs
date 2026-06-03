@@ -32,6 +32,7 @@ module Keiro.ReadModel
   , runQuery
   , runQueryWith
   , waitFor
+  , readSubscriptionPosition
 
     -- * Errors
   , ReadModelError (..)
@@ -50,6 +51,7 @@ import Hasql.Statement (Statement, preparable)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Keiro.Prelude
 import Keiro.ReadModel.Schema
+import Keiro.Telemetry (KeiroMetrics, recordProjectionWaitTimeouts)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (GlobalPosition (..))
@@ -122,11 +124,12 @@ liveness first, waits if the mode requires it, then runs the query.
 -}
 runQuery ::
   (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
   ReadModel q r ->
   q ->
   Eff es (Either ReadModelError r)
-runQuery readModel =
-  runQueryWith (readModel ^. #defaultConsistency) readModel
+runQuery metrics readModel =
+  runQueryWith metrics (readModel ^. #defaultConsistency) readModel
 
 {- | Query a read model with an explicit 'ConsistencyMode', overriding its
 default. Validates the model's schema and liveness, honours the wait mode,
@@ -134,16 +137,17 @@ then runs the query in a transaction.
 -}
 runQueryWith ::
   (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
   ConsistencyMode ->
   ReadModel q r ->
   q ->
   Eff es (Either ReadModelError r)
-runQueryWith consistency readModel input = do
+runQueryWith metrics consistency readModel input = do
   schemaCheck <- ensureReadModel readModel
   case schemaCheck of
     Left err -> pure (Left err)
     Right () -> do
-      waitResult <- waitIfNeeded consistency readModel
+      waitResult <- waitIfNeeded metrics consistency readModel
       case waitResult of
         Left err -> pure (Left err)
         Right () -> Right <$> runTransaction ((readModel ^. #query) input)
@@ -154,11 +158,12 @@ polling at 'pollMicros' intervals. Returns @Right ()@ once caught up, or
 -}
 waitFor ::
   (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
   PositionWaitOptions ->
   ReadModel q r ->
   GlobalPosition ->
   Eff es (Either ReadModelError ())
-waitFor options readModel targetPosition = do
+waitFor metrics options readModel targetPosition = do
   started <- liftIO getCurrentTime
   poll started (GlobalPosition 0)
   where
@@ -173,7 +178,10 @@ waitFor options readModel targetPosition = do
                 Prelude.floor
                   (diffUTCTime now started Prelude.* 1000000)
           if elapsedMicros >= options ^. #timeoutMicros
-            then
+            then do
+              -- A genuine give-up: bump keiro.projection.wait.timeouts (no-op
+              -- under a 'Nothing' handle) before surfacing the timeout.
+              recordProjectionWaitTimeouts metrics 1
               pure
                 (Left (ReadModelWaitTimeout (readModel ^. #name) targetPosition observed'))
             else do
@@ -215,15 +223,16 @@ validateMetadata readModel metadata
 
 waitIfNeeded ::
   (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
   ConsistencyMode ->
   ReadModel q r ->
   Eff es (Either ReadModelError ())
-waitIfNeeded Strong _ = pure (Right ())
-waitIfNeeded Eventual _ = pure (Right ())
-waitIfNeeded (PositionWait options) readModel =
+waitIfNeeded _ Strong _ = pure (Right ())
+waitIfNeeded _ Eventual _ = pure (Right ())
+waitIfNeeded metrics (PositionWait options) readModel =
   case options ^. #target of
     Nothing -> pure (Right ())
-    Just targetPosition -> waitFor options readModel targetPosition
+    Just targetPosition -> waitFor metrics options readModel targetPosition
 
 readSubscriptionPosition ::
   (Store :> es) =>

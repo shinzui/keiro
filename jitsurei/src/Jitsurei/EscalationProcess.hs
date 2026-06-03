@@ -320,7 +320,7 @@ runEscalationTimerWorker ::
   UTCTime ->
   Eff es (Maybe TimerRow)
 runEscalationTimerWorker options now =
-  runTimerWorker now $ \timer ->
+  runTimerWorker Nothing now $ \timer ->
     case incidentIdFromTimer timer of
       Nothing -> pure Nothing
       Just incidentId -> do

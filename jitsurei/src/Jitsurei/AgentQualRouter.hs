@@ -236,7 +236,7 @@ agentQualRouter = Router
   { name = "agent-qual-router"
   , key = \transaction -> txnIdText transaction.txnId
   , resolve = \transaction -> do
-      resolved <- traverse (runQuery areaChaptersReadModel) transaction.areas
+      resolved <- traverse (runQuery Nothing areaChaptersReadModel) transaction.areas
       let targets = nub (concat [chapters | Right chapters <- resolved])
       pure
         [ PMCommand
