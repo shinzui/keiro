@@ -19,7 +19,7 @@ exact released surface and `docs/user/production-status.md` for adoption posture
 | Phase 2 | Complete v1 workflow substrate | Complete: outbox, inbox, OpenTelemetry tracing and metrics, process-manager snapshot guidance, and the timer stuck-row recovery API and runbook. |
 | Phase 3 | Read-side maturity | Async projections, subscriptions, and position waits get stronger consistency and scaling options. |
 | Phase 4 | Adoption and ergonomics | The worked-examples app and guides exist; remaining work is full Haddocks, a public stability policy, and higher-level facades. |
-| Phase 5 | v2 durable execution | Named-step workflow execution, awakeables, child workflows, and continue-as-new layer on top of the v1 substrate. |
+| Phase 5 | v2 durable execution | Complete: a named-step `Workflow es a` runtime with durable sleep, awakeables, child workflows, a crash-recovery resume worker, journal snapshots, and `keiro.workflow.*` observability ships on top of the v1 substrate. Continue-as-new journal rotation and the versioning/patch API remain deferred. |
 
 ## Capability Matrix
 
@@ -41,7 +41,7 @@ exact released surface and `docs/user/production-status.md` for adoption posture
 | Worker metrics | Available now | `Keiro.Telemetry` exposes opt-in OpenTelemetry metrics for outbox, inbox, timer, and async-projection workers (backlog, lag, duplicate, dead-letter, and stuck-timer instruments). |
 | Exactly-once async projections | Planned v1.x / upstream-dependent | Blocks on transactional Shibuya/Kiroku checkpoint handling. |
 | Prefix subscriptions | Planned v1.x / upstream-dependent | Needed for `pm:` and future `wf:` stream families at scale. |
-| Durable execution runtime | Planned v2 | Named-step `Workflow es a`, awakeables, child workflows, continue-as-new. |
+| Durable execution runtime | Available now | `Keiro.Workflow`: named-step `Workflow es a`, durable `sleep`, awakeables, child workflows, a crash-recovery resume worker, and journal snapshots (`keiro_workflow_steps` + `keiro_awakeables`). Continue-as-new journal rotation for unbounded histories remains deferred. |
 
 ## Current Baseline
 
@@ -315,8 +315,8 @@ second framework model.
 
 ## Phase 5: v2 Durable Execution
 
-Goal: add a durable-execution runtime without replacing the v1 event-sourcing
-and process-manager substrate.
+Shipped: a durable-execution runtime (`Keiro.Workflow`) that layers on top of —
+and does not replace — the v1 event-sourcing and process-manager substrate.
 
 V1 workflow means:
 
@@ -330,40 +330,49 @@ V1 workflow means:
 
 V2 durable execution means journaled functions with named steps.
 
-| Feature | Planned v2 shape |
+| Feature | Shipped v2 shape |
 |---|---|
 | Authoring model | `Workflow es a` |
 | Durable side effects | `step "name" action` journals a result by explicit step name. |
 | Replay | Recorded step results are returned without re-running side effects. |
-| Sleep | Backed by the v1 timer table. |
+| Sleep | `sleepNamed`/`sleep`, backed by the v1 timer table. |
 | Journal storage | Kiroku streams named `wf:<workflow-name>-<workflow-id>`. |
 | Step lookup | `keiro_workflow_steps` indexes journaled steps for fast lookup. |
-| External completion | `keiro_awakeables` stores externally completed durable promises. |
-| Child workflows | Parent journals child handles so it can wait on or cancel them. |
-| Continue-as-new | Long workflow histories rotate without losing state. |
+| External completion | `keiro_awakeables` stores externally completed durable promises (`awakeable`/`signalAwakeable`/`cancelAwakeable`). |
+| Child workflows | Parent journals child handles so it can `spawnChild`/`awaitChild`/`cancelChild`. |
+| Resume worker | `resumeWorkflowsOnce` discovers and re-invokes unfinished workflows from a registry. |
+| Snapshots | `runWorkflowWith` + `snapshotPolicy` compact long journals via `workflowStateCodec`. |
+| Observability | `keiro.workflow.*` metrics and a `workflow <name>` span. |
+| Continue-as-new | **Still deferred** — long-history rotation without losing state (§6). |
 
 The key design decision is named steps, not positional history. Step identity is
 explicit and stable across source-code reordering, avoiding Temporal-style
 runtime nondeterminism caused by ordinary code movement.
 
-User impact: teams can write imperative long-running workflows with durable
+User impact: teams can now write imperative long-running workflows with durable
 checkpoints, sleeps, external completion handles, and child workflows, without
-adopting a separate workflow server.
+adopting a separate workflow server. See the
+[Durable Workflows guide](../guides/durable-workflows.md) and the
+[user reference](durable-workflows.md).
 
 ## Durable Execution Boundaries
 
-The v2 runtime is intentionally deferred because it adds a large operational and
-compatibility surface.
+The v2 runtime now ships; the items below record what was required to treat it as
+production-shaped and which pieces remain genuinely deferred.
 
-Required before v2 can be treated as production-shaped:
+Delivered (EP-38…EP-44 under MasterPlan 5):
 
-- step-result codecs and schema evolution;
+- step-result codecs and schema evolution (per-step `ToJSON`/`FromJSON`);
+- unfinished-workflow discovery and a crash-recovery resume worker;
+- stuck awakeable repair (`cancelAwakeable`);
+- child-workflow cancellation semantics (`cancelChild`);
+- observability for journal replay versus live execution
+  (`keiro.workflow.steps.replayed` vs `keiro.workflow.steps.executed`).
+
+Still deferred (cleanly additive, see §6 of the workflow roadmap):
+
 - versioning or patch APIs for changed workflow logic;
-- unfinished-workflow discovery and resume workers;
-- stuck awakeable repair;
-- long-history compaction or continue-as-new;
-- child-workflow cancellation semantics;
-- observability for journal replay versus live execution.
+- long-history compaction / continue-as-new journal rotation.
 
 Why v1 is still the right foundation:
 

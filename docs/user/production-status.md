@@ -31,6 +31,9 @@ The current library includes:
 - OpenTelemetry command/producer/consumer spans and opt-in worker metrics
   (outbox/inbox/timer/projection backlog, lag, duplicate, dead-letter, and
   stuck-timer instruments);
+- named-step durable workflows (`Keiro.Workflow`): `step`/`sleep`/`awakeable` plus
+  child workflows, a journal per workflow (`wf:<name>-<id>`), a crash-recovery
+  resume worker, journal snapshots, and `keiro.workflow.*` observability;
 - embedded codd migrations for Kiroku and Keiro framework tables.
 
 The repository test suite exercises these paths against an ephemeral PostgreSQL
@@ -53,7 +56,11 @@ Keiro is not yet a good fit when:
 
 - you need a stable public API for third-party consumers;
 - you need exactly-once async projections without user-side idempotency;
-- you need Temporal-style deterministic durable execution;
+- you need positional-history durable execution (Temporal-style step identity
+  derived from call order) — Keiro's runtime uses **named** steps that are stable
+  across source reordering, by design;
+- you need continue-as-new journal rotation for unbounded-length workflow
+  histories (still deferred);
 - you need built-in schema migration tooling for user read models;
 - you need a complete sample application and extensive Haddocks before adoption;
 - your deployment cannot run PostgreSQL 18+.
@@ -68,11 +75,16 @@ idempotent.
 
 Inline projections can be transactional with the command append.
 
-### Durable execution is deferred
+### Durable execution is named-step
 
-V1 process managers and timers cover saga-style coordination and time-based
-wakeups. The v2 deterministic durable-execution runtime is intentionally
-deferred.
+The v2 durable-execution runtime is available (`Keiro.Workflow`): named-step
+`Workflow es a` functions with durable sleep, awakeables, child workflows, a
+crash-recovery resume worker, and journal snapshots. Step identity is by **name**,
+not call-order position, so it is stable across source reordering. V1 process
+managers and timers remain the saga-style / time-based coordination layer; reach
+for a workflow when the process reads as one long-running function with in-line
+waits. The deferred pieces are continue-as-new journal rotation and the
+versioning/patch API. See the [Durable Workflows guide](../guides/durable-workflows.md).
 
 ### APIs are low-level
 

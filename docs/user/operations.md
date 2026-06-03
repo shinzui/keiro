@@ -131,6 +131,41 @@ Observability) before and after a run to confirm the job is draining the backlog
 than churning. `Dead` is a distinct terminal state and is not counted by that gauge; track
 it with a separate query (`status = 'dead'`) if you want a dead-letter count.
 
+## Durable Workflows
+
+Durable workflows (`Keiro.Workflow`) journal each named step to `wf:<name>-<id>`
+and resume by re-invocation. Three operational tasks:
+
+- **Resume worker.** Run `resumeWorkflowsOnce <resumeOptions> <registry>` on a
+  polling loop — the same claim-process-commit-poll shape as the timer and outbox
+  workers (`runWorkflowResumeWorker` wraps the loop). Each pass discovers
+  workflows whose journal lacks a terminal marker (via the `keiro_workflow_steps`
+  index, unioned with running children) and re-invokes them through the
+  application's `WorkflowRegistry`, so suspended workflows resume after their waits
+  resolve and after a process restart. The registry must hold a `WorkflowDef` for
+  every workflow *name* still in flight; a discovered workflow whose name is absent
+  is surfaced as `unknownName` in the `ResumeSummary`, never silently dropped. A
+  parent and its child must use **distinct** workflow ids — discovery groups by
+  `workflow_id`, so a shared id lets a completed child mask an unfinished parent.
+- **Awakeable repair.** A workflow parked on an awakeable that will never be
+  signalled is repaired with `cancelAwakeable awkId`, which flips the
+  `keiro_awakeables` row (`awakeable_id`, `owner_workflow_id`, `status`, `payload`)
+  to `cancelled`; the next resume observes the cancellation and `awaitChild`/the
+  awakeable `await` throws so the workflow author's compensation runs. Repair a
+  parent stuck on a never-finishing child by driving or cancelling the child
+  (`cancelChild`). The `keiro.workflow.awakeables.pending` gauge counts pending
+  rows.
+- **Journal snapshots.** For workflows with long journals, run them with
+  `runWorkflowWith` and a `snapshotPolicy` (set via the generic-lens label,
+  `opts & #snapshotPolicy .~ Every n`) so a resume hydrates from a snapshot plus
+  the journal tail instead of replaying every step. The workflow snapshot uses
+  `workflowStateCodec` with the fixed shape hash `keiro.workflow.stepmap.v1`
+  (distinct from the `regFileShapeHash` used by aggregate snapshots — intentional,
+  because step names are dynamic).
+
+See the [Durable Workflows guide](../guides/durable-workflows.md) and the
+[user reference](durable-workflows.md).
+
 ## Observability
 
 At minimum, track:

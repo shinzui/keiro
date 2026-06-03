@@ -92,7 +92,7 @@ This section must always reflect the actual current state of the work.
   `docs/guides/README.md` index (and a routing row in `docs/guides/choosing-a-primitive.md`).
 - [x] Milestone 3: write `docs/user/durable-workflows.md` and link it from
   `docs/user/README.md`.
-- [ ] Milestone 4: flip the `docs/user/roadmap.md` capability-matrix row and reframe Phase 5;
+- [x] Milestone 4: flip the `docs/user/roadmap.md` capability-matrix row and reframe Phase 5;
   revise `docs/user/production-status.md`; add the `docs/user/operations.md` note.
 - [ ] Milestone 5: full-repo green — `cabal build all`, `cabal test keiro`,
   `cabal test jitsurei-test`, and the demo command — recorded in Validation and Acceptance.
