@@ -87,36 +87,85 @@ Term definitions used throughout (define-on-first-use, per the plan spec):
 
 ## Progress
 
-- [ ] M1 — `keiro_workflow_children` table: migration SQL + `Keiro.Workflow.Child.Schema`
+- [x] M1 (2026-06-03) — `keiro_workflow_children` table: migration SQL + `Keiro.Workflow.Child.Schema`
   with the hasql statements (`registerChildTx`, `lookupChild`, `lookupChildrenOfParent`,
-  `markChildResultTx`, `markChildCancelledTx`, `childStatus`, `countActiveChildren`).
+  `markChildResultTx`, `markChildCancelledTx`, `childStatus`, `countActiveChildren`, plus
+  `findRunningChildIds` for the resume worker's zero-step-child discovery).
   Migration applies under the test harness; a unit test inserts a child link, marks it
   completed, marks another cancelled, and reads them back.
-- [ ] M2 — `Keiro.Workflow.Child`: `ChildId`/`ChildHandle`, `spawnChild`, `awaitChild`,
-  `cancelChild`, the `WorkflowChildCancelled` exception, and the `childResultStepName`
-  helper. Compiles; the spawn-step name and result-step name derivations are stable.
-- [ ] M3 — EP-38 handler extensions consumed here: `runWorkflowWith` (parent-link
-  completion hook) and the `WorkflowCancelled` short-circuit. Add the `WorkflowCancelled`
-  (and `WorkflowFailed`) constructors to EP-38's `WorkflowJournalEvent` codec; teach the
-  handler to abort a run whose journal carries `WorkflowCancelled`. Cross-plan contract
-  recorded in Surprises & Discoveries.
-- [ ] M4 — End-to-end spawn → drive child → propagate result → resume parent proof against
-  ephemeral Postgres, driven by the EP-42 resume worker (registry has both) or a manual
-  `runWorkflow` loop. Parent ends `Completed`; parent journal has `child:<id>:result`; child
-  journal has its steps + `WorkflowCompleted`. Test green.
-- [ ] M5 — Crash-survival + cancellation proofs: re-invoking the parent does not re-spawn
-  the child; cancelling a child appends `WorkflowCancelled`, the child stops, and
-  `awaitChild` throws `WorkflowChildCancelled`. Tests green.
-- [ ] M6 — Cabal wiring (append `Keiro.Workflow.Child` + `.Schema`), Haddock contract recap,
-  full suite green via `cabal test keiro`.
+- [x] M2 (2026-06-03) — `Keiro.Workflow.Child`: `ChildHandle`, `spawnChild`, `awaitChild`,
+  `cancelChild`, the `WorkflowChildCancelled` exception, and the `childSpawnStepName`/
+  `childResultStepName` helpers. Compiles; the step-name derivations are stable.
+- [x] M3 (2026-06-03) — EP-38 additive extensions: `WorkflowCancelled`/`WorkflowFailed`
+  constructors on the `WorkflowJournalEvent` codec, a `Cancelled` arm on `WorkflowOutcome`,
+  and a `WorkflowCancelled` short-circuit in `runWorkflowWith`. Child-result propagation is
+  done by a dedicated `runChildWorkflow` driver (NOT an `onComplete` field on
+  `WorkflowRunOptions`) — see Surprises & Discoveries for why the options-hook design was
+  abandoned.
+- [x] M4 (2026-06-03) — End-to-end spawn → drive child → propagate result → resume parent proof
+  against ephemeral Postgres, driven manually via `runChildWorkflow`. Parent ends `Completed`;
+  parent journal has `child:<id>:result`; child journal has its steps + `WorkflowCompleted`.
+  Plus a worker-driven variant proving `resumeWorkflowsOnce` drives the parent and a zero-step
+  child to completion. Tests green.
+- [x] M5 (2026-06-03) — Crash-survival + cancellation proofs: re-invoking the parent does not
+  re-spawn the child; cancelling a child appends `WorkflowCancelled`, the child drives to
+  `Cancelled` running none of its steps, and `awaitChild` throws `WorkflowChildCancelled`.
+  Tests green.
+- [x] M6 (2026-06-03) — Cabal wiring (appended `Keiro.Workflow.Child` + `.Schema`), Haddock
+  contract recap, full suite green via `cabal test keiro` (130 examples, 0 failures) and
+  `cabal build all` (incl. jitsurei) clean.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-06-03 (implementation): **The planned `runWorkflowWith`-options completion hook was
+  abandoned for a dedicated `runChildWorkflow` driver.** The plan proposed a new
+  `RunWorkflowOptions es { onComplete :: Value -> Eff es () }` record. By implementation time
+  EP-41 had already shipped a *monomorphic* `WorkflowRunOptions { snapshotPolicy, pageSize }`
+  as the canonical per-run options home. The first attempt folded `onComplete` into it,
+  parametrizing the record as `WorkflowRunOptions es` and adding `ToJSON a` to
+  `runWorkflowWith`. That compiled but **broke every existing `defaultWorkflowRunOptions &
+  #snapshotPolicy .~ …` call site** (the shipped EP-41 snapshot tests): with `es` now in the
+  type, generic-lens's type-changing `#snapshotPolicy` setter left `es`/`state` ambiguous at
+  those `let`-bound options. Rather than annotate every shipped site, the hook was moved out
+  of the options record entirely: `Keiro.Workflow.Child.runChildWorkflow opts childNm childWid
+  action = runWorkflowWith opts … >>= \case Completed r -> childCompletionHook … (toJSON r) >>
+  pure (Completed r); other -> pure other`. Net result — **`WorkflowRunOptions` and
+  `runWorkflowWith` are completely unchanged from EP-41**, no `ToJSON a` on the core run
+  entry, and the EP-41 surface and tests are untouched. EP-44 should add its `metrics`/`tracer`
+  to `WorkflowRunOptions` the same monomorphic way; it does **not** need an `es` parameter.
+- 2026-06-03 (implementation): **`appendJournalEntry` carries `(IOE :> es, Store :> es)`**
+  (the shipped EP-38 signature), so `cancelChild` and `childCompletionHook`/`runChildWorkflow`
+  carry `IOE`, not the plan's `(Store :> es)`. `awaitChild` and `spawnChild` need only
+  `(Workflow :> es, Store :> es)` (their cancellation throw uses `Effectful.Exception.throwIO`,
+  which needs no `IOE`, mirroring EP-40's `awaitCancellable`). `spawnChild` dropped the planned
+  `(ToJSON a, FromJSON a)` constraints — its body never uses them (the phantom `a` is threaded
+  through the `childDef` argument and the returned `ChildHandle a`), and `-Wredundant-constraints`
+  flagged them. `registerChildTx` takes the five identity/routing `Text` fields directly (not a
+  `ChildRow`), mirroring EP-40's plain-args `registerAwakeableTx`, so the spawn site needs no
+  clock read / `IOE` to construct a row whose timestamps are DB defaults.
+- 2026-06-03 (implementation): **`findUnfinishedWorkflowIds` now treats
+  `__workflow_cancelled__` as terminal** (`step_name IN ('__workflow_completed__',
+  '__workflow_cancelled__')`), so a cancelled child drops out of resume discovery instead of
+  being re-invoked forever (each re-invocation would short-circuit to `Cancelled`, a busy
+  spin). This is a small, additive semantic refinement to EP-38/EP-42's discovery query.
+- 2026-06-03 (implementation): **Zero-step children need a second discovery source.** A
+  freshly spawned child has a `keiro_workflow_children` row but **no** `keiro_workflow_steps`
+  rows (the spawn writes only to the *parent* journal), so `findUnfinishedWorkflowIds` cannot
+  find it. EP-43 adds `Keiro.Workflow.Child.Schema.findRunningChildIds` and the resume worker
+  unions it (deduped via `nub`) with `findUnfinishedWorkflowIds`. The worker also gained the
+  child-aware driving: it `lookupChild`s each discovered workflow and runs a child through
+  `runChildWorkflow` (propagating) rather than bare `runWorkflowWith`. `WorkflowDef` gained a
+  `ToJSON a` constraint on its existential so the worker can call `runChildWorkflow`; this is
+  additive and broke no existing registry (all workflow result types are `ToJSON`).
+- 2026-06-03 (implementation): **The `Cancelled` arm forced one update to EP-42's worker.**
+  `bumpForOutcome` gained a `Cancelled -> acc{resumed = resumed + 1}` case (a workflow
+  cancelled between discovery and re-invocation short-circuits to `Cancelled`). The
+  `WorkflowOutcome` `Cancelled` arm is additive and EP-39/EP-40 pattern-match only the arms
+  they produce, so nothing else needed changing.
 
-Cross-plan contracts proposed by this plan (to be confirmed by the MasterPlan / EP-38
-during implementation — recorded here at planning time so they are not lost):
+Cross-plan contracts proposed by this plan (resolved during implementation; recorded
+originally at planning time so they are not lost):
 
 - **`WorkflowCancelled` and `WorkflowFailed` constructors on EP-38's
   `WorkflowJournalEvent` codec.** EP-38's `Keiro.Workflow.Types` already reserves room in
@@ -163,6 +212,21 @@ during implementation — recorded here at planning time so they are not lost):
 
 
 ## Decision Log
+
+- Decision: Propagate a finished child's result through a dedicated
+  `Keiro.Workflow.Child.runChildWorkflow` driver, **not** through an `onComplete` hook field
+  on `WorkflowRunOptions`. The resume worker selects `runChildWorkflow` for any discovered
+  workflow that is some parent's child (via `lookupChild`).
+  Rationale: EP-41 had already shipped a monomorphic `WorkflowRunOptions` as the canonical
+  options home. Adding an `Eff es`-valued `onComplete` field forces the record to carry an
+  `es` parameter, which breaks every existing `defaultWorkflowRunOptions & #snapshotPolicy .~
+  …` site (generic-lens type-changing-setter ambiguity) and adds a `ToJSON a` constraint to
+  the core `runWorkflowWith`. A standalone `runChildWorkflow` wrapper keeps `WorkflowRunOptions`
+  and `runWorkflowWith` byte-for-byte as EP-41 shipped them, confines the `ToJSON a` need to
+  the child driver and `WorkflowDef`, and reads as cleanly at the call site
+  (`runChildWorkflow opts childNm childWid action`). See Surprises & Discoveries for the failed
+  first attempt.
+  Date: 2026-06-03.
 
 - Decision: Add a dedicated `keiro_workflow_children(parent_id, parent_name, child_id,
   child_name, await_step, status, result jsonb, …)` table rather than reusing
@@ -269,7 +333,49 @@ during implementation — recorded here at planning time so they are not lost):
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Shipped 2026-06-03 across two commits (M1–M3 core + surface; M4–M6 tests + the
+`runChildWorkflow` design). Full suite green: `cabal test keiro` → **130 examples, 0
+failures**; `cabal build all` (incl. jitsurei) clean. The seven new `Keiro.Workflow.Child`
+examples cover every Validation bullet.
+
+What a user can now do that they could not before: spawn a child workflow from a parent,
+`awaitChild` its result (suspending durably), and `cancelChild` it — with the parent↔child
+link surviving a crash (re-invoking the parent never re-spawns the child), driven either
+manually via `runChildWorkflow` or by the EP-42 resume worker.
+
+What went to plan: the `keiro_workflow_children` table and schema module, the `child:<id>` /
+`child:<id>:result` reserved step names, the `awaitStep`-reuse for the wait, the
+`WorkflowCancelled` codec addition and the cancel short-circuit, and the
+`WorkflowChildCancelled` exception all landed as designed.
+
+What changed from the plan (all recorded in Surprises & Discoveries): (1) child-result
+propagation is a `runChildWorkflow` driver rather than a `WorkflowRunOptions.onComplete` hook,
+because the options record is monomorphic and parametrizing it broke shipped EP-41 sites; (2)
+`registerChildTx` takes plain args (EP-40 style); (3) `cancelChild`/`childCompletionHook`
+carry `IOE` (shipped `appendJournalEntry` requires it); (4) the resume worker gained
+`findRunningChildIds` union-discovery + child-aware driving and `WorkflowDef` gained `ToJSON
+a`; (5) `findUnfinishedWorkflowIds` now treats `__workflow_cancelled__` as terminal.
+
+Follow-ups for later waves: EP-44 hangs `keiro.workflow.children.active` off
+`countActiveChildren` and adds its instruments to `WorkflowRunOptions` the same monomorphic
+way (no `es` parameter); EP-45 documents the operator path (a parent stuck awaiting a child is
+repaired by driving or cancelling the child) and that a cancelled child reports `Cancelled`.
+
+Validation transcript (abbreviated, `cabal test keiro`):
+
+```text
+Keiro.Workflow.Child
+  derives the child spawn and result step names [✔]
+  round-trips WorkflowCancelled and WorkflowFailed through the journal codec [✔]
+  schema: registers, completes, cancels, and counts child links [✔]
+  spawns a child, drives it, propagates its result, and resumes the parent to Completed [✔]
+  does not re-spawn the child when the parent is re-invoked [✔]
+  cancels a child: the child stops and the parent's awaitChild throws [✔]
+  drives a parent and its child to completion through the resume worker [✔]
+
+Finished in 17.3367 seconds
+130 examples, 0 failures
+```
 
 
 ## Context and Orientation

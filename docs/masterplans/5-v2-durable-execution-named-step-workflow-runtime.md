@@ -163,7 +163,7 @@ metrics instrumentation in dedicated plans in MasterPlan 4.
 | 40 | Awakeables and external completion | docs/plans/40-awakeables-and-external-completion.md | EP-38 | None | Complete |
 | 41 | Workflow journal snapshots and step-result compaction | docs/plans/41-workflow-journal-snapshots-and-step-result-compaction.md | EP-38 | None | Complete |
 | 42 | Workflow resume and crash-recovery worker | docs/plans/42-workflow-resume-and-crash-recovery-worker.md | EP-38 | EP-39, EP-40 | Complete |
-| 43 | Child workflows: spawn, wait, and cancel | docs/plans/43-child-workflows-spawn-wait-and-cancel.md | EP-38 | EP-40, EP-42 | In Progress |
+| 43 | Child workflows: spawn, wait, and cancel | docs/plans/43-child-workflows-spawn-wait-and-cancel.md | EP-38 | EP-40, EP-42 | Complete |
 | 44 | Workflow observability: spans and metrics | docs/plans/44-workflow-observability-spans-and-metrics.md | EP-38 | EP-39, EP-40, EP-42, EP-43 | Not Started |
 | 45 | Durable workflow worked example and guide | docs/plans/45-durable-workflow-worked-example-and-guide.md | EP-38 | EP-39, EP-40, EP-41, EP-42, EP-43, EP-44 | Not Started |
 
@@ -386,8 +386,8 @@ and the milestone.
 - [x] EP-41 (2026-06-03): prove snapshot + tail-replay hydration loads a long journal without replaying every step (1 tail event vs 7), correctness equality (`Never` ≡ `Every 2`), and advisory fallback on a corrupt/mismatched snapshot.
 - [x] EP-42 (2026-06-03): implement the resume worker (`Keiro.Workflow.Resume`: `resumeWorkflowsOnce` + `runWorkflowResumeWorker(With)`, `WorkflowRegistry`/`WorkflowDef`, `ResumeSummary`) — discover journals lacking `WorkflowCompleted` via `findUnfinishedWorkflowIds`, re-invoke through EP-41's `runWorkflowWith`, short-circuit journaled steps. No new table/migration, no `wf:` prefix subscription.
 - [x] EP-42 (2026-06-03): prove a crashed mid-run workflow (counter proves step 1 not re-run) and an awaitStep-suspended workflow both resume to `Completed`; plus unknown-name visibility and completed-workflow no-op.
-- [ ] EP-43: add child-workflow spawn/wait/cancel recorded in the parent journal.
-- [ ] EP-43: prove a parent spawns a child, waits for its result, and can cancel it; the relationship survives a crash.
+- [x] EP-43 (2026-06-03): add child-workflow spawn/wait/cancel recorded in the parent journal (`Keiro.Workflow.Child` + `.Schema`, `keiro_workflow_children` table); EP-38 gains `WorkflowCancelled`/`WorkflowFailed` codec, a `Cancelled` outcome arm, and a cancel short-circuit; child-result propagation via a `runChildWorkflow` driver (not a `WorkflowRunOptions` hook).
+- [x] EP-43 (2026-06-03): prove a parent spawns a child, waits for its result, and can cancel it; the relationship survives a crash — plus a resume-worker-driven variant (union `findRunningChildIds` discovery, child-aware `runChildWorkflow`).
 - [ ] EP-44: extend `KeiroMetrics` with `keiro.workflow.*` instruments and add workflow spans; record them in the semconv audit.
 - [ ] EP-44: assert workflow instruments under the in-memory metric exporter.
 - [ ] EP-45: add the jitsurei durable-workflow demo and the `docs/guides/` guide.
@@ -568,6 +568,37 @@ and the milestone.
     subscription is imported or needed, as the MasterPlan's discovery decision required.
   - **The umbrella `Keiro` module does not re-export workers**, so `Keiro.Workflow.Resume`
     is imported directly (like `Keiro.Timer`/`Keiro.Outbox`), not added to `Keiro.hs`.
+
+- 2026-06-03 (EP-43 implementation): **child workflows shipped, but the planned
+  `runWorkflowWith`-completion-hook contract was replaced by a `runChildWorkflow` driver.**
+  The single most important cross-plan correction for the remaining waves:
+  - **`WorkflowRunOptions` stays monomorphic; there is no `onComplete` field and
+    `runWorkflowWith`'s signature is unchanged from EP-41.** The planned options-hook
+    (Integration Points "`runWorkflowWith` with a child-completion hook") would have forced
+    `WorkflowRunOptions es`, which broke every shipped `defaultWorkflowRunOptions &
+    #snapshotPolicy .~ …` site via generic-lens type-changing-setter ambiguity. Instead,
+    `Keiro.Workflow.Child.runChildWorkflow :: (IOE, Store, ToJSON a) => WorkflowRunOptions ->
+    WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)` wraps
+    `runWorkflowWith` and calls `childCompletionHook` on `Completed`. **EP-44 must add its
+    `metrics`/`tracer` to `WorkflowRunOptions` the same monomorphic way — do NOT parametrize
+    the record over `es`.**
+  - **EP-38 additive changes that landed (all within `schemaVersion = 1`):**
+    `WorkflowCancelled`/`WorkflowFailed` journal constructors + codec; a `Cancelled` arm on
+    `WorkflowOutcome`; reserved `cancelledStepName`/`failedStepName`; and a pre-run
+    `WorkflowCancelled` short-circuit in `runWorkflowWith` (returns `Cancelled`, runs no
+    step). `findUnfinishedWorkflowIds` now treats `__workflow_cancelled__` as terminal too.
+  - **EP-42 worker changes that landed:** `WorkflowDef`'s existential gained a `ToJSON a`
+    constraint (so the worker can call `runChildWorkflow`); `resumeWorkflowsOnce` unions
+    `findRunningChildIds` (EP-43, for zero-step children) into discovery and runs any
+    discovered *child* through `runChildWorkflow`; `bumpForOutcome` gained a `Cancelled` case.
+    `WorkflowResumeOptions` stayed monomorphic.
+  - **Storage:** EP-43 owns the dedicated `keiro_workflow_children` table (migration
+    `2026-06-03-02-00-00-keiro-workflow-children.sql`) — the third and final v2 migration, as
+    forecast. `Keiro.Workflow.Child.Schema.countActiveChildren` is EP-44's seam for a
+    `keiro.workflow.children.active` gauge.
+  - **For EP-45:** a parent stuck awaiting a child is repaired by driving or cancelling the
+    child; a cancelled child reports the `Cancelled` outcome and `awaitChild` throws
+    `WorkflowChildCancelled`.
 
 ## Decision Log
 
