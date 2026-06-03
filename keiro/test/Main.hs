@@ -97,6 +97,7 @@ import Keiro.Inbox
 import Keiro.Inbox.Kafka qualified as InboxKafka
 import Data.Time (NominalDiffTime)
 import Control.Concurrent (threadDelay)
+import Control.Exception (Exception, SomeException, throwIO, try)
 import Control.Concurrent.MVar (MVar, modifyMVar, newMVar, readMVar)
 import Keiro.Prelude
 import Keiro.Projection
@@ -125,6 +126,13 @@ import Keiro.Workflow
 import Keiro.Workflow.Snapshot
   ( loadWorkflowSnapshot
   , workflowStateCodec
+  )
+import Keiro.Workflow.Resume
+  ( ResumeSummary (..)
+  , WorkflowDef (..)
+  , defaultWorkflowResumeOptions
+  , emptyResumeSummary
+  , resumeWorkflowsOnce
   )
 import Keiro.Workflow.Awakeable
   ( WorkflowAwakeableCancelled (..)
@@ -2234,6 +2242,134 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       resumed <- Store.runStoreIO storeHandle $ runWorkflowWith opts name wid (countingSixSteps counter)
       resumed `shouldBe` Right (Completed [1, 2, 3, 4, 5, 6])
 
+  describe "Keiro.Workflow.Resume" $ around (withFreshStore fixture) $ do
+    -- M2: crash mid-run, then a resume pass drives the workflow to Completed
+    -- without re-running the already-journaled step.
+    it "resumes a crashed mid-run workflow, running only the un-journaled tail" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "crash-demo"
+          wid = WorkflowId "cd-1"
+      -- Simulate a crash after step 1's append has committed.
+      crashed <-
+        try
+          ( Store.runStoreIO storeHandle $
+              runWorkflow name wid (crashAfterStep1 counter)
+          ) ::
+          IO (Either SomeException (Either Store.StoreError (WorkflowOutcome (Int, Int, Int))))
+      case crashed of
+        Left _ -> pure () -- the SimulatedCrash unwound the run, as intended
+        Right other -> expectationFailure ("expected a simulated crash, got " <> show other)
+      readIORef counter >>= \c -> c `shouldBe` 1
+      -- Resume with a registry mapping the name to the FULL definition.
+      let registry = Map.singleton name (WorkflowDef (\_wid -> threeStep counter))
+      Right summary <-
+        Store.runStoreIO storeHandle $ resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+      summary
+        `shouldBe` ResumeSummary
+          { discovered = 1
+          , resumed = 1
+          , completed = 1
+          , stillSuspended = 0
+          , unknownName = 0
+          }
+      -- Step 1 short-circuited; steps 2 and 3 ran exactly once.
+      readIORef counter >>= \c -> c `shouldBe` 3
+      -- The journal now holds s1, s2, s3, WorkflowCompleted.
+      Right recorded <-
+        Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:crash-demo-cd-1") (StreamVersion 0) 10
+      traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded)
+        `shouldSatisfy` \case
+          Right [StepRecorded "s1" _ _, StepRecorded "s2" _ _, StepRecorded "s3" _ _, WorkflowCompleted _] -> True
+          _ -> False
+      -- A second pass discovers nothing — the workflow is finished.
+      Right summary2 <-
+        Store.runStoreIO storeHandle $ resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+      summary2 `shouldBe` emptyResumeSummary
+
+    -- M3: a workflow suspended on an awaited step is driven to Completed once
+    -- that step is journaled (here simulated; an EP-39/EP-40 wake source would
+    -- journal the same StepRecorded end to end).
+    it "resumes a suspended workflow once its awaited step is journaled" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "await-demo"
+          wid = WorkflowId "ad-1"
+      suspended <-
+        Store.runStoreIO storeHandle $ runWorkflow name wid (awaitingThenStep counter)
+      suspended `shouldBe` Right Suspended
+      -- Simulate the wake source resolving the await.
+      Right () <- Store.runStoreIO storeHandle $ do
+        now <- liftIO getCurrentTime
+        appendJournalEntry name wid (StepRecorded "awk:approval" (toJSON ("ok" :: Text)) now)
+      let registry = Map.singleton name (WorkflowDef (\_wid -> awaitingThenStep counter))
+      Right summary <-
+        Store.runStoreIO storeHandle $ resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+      summary
+        `shouldBe` ResumeSummary
+          { discovered = 1
+          , resumed = 1
+          , completed = 1
+          , stillSuspended = 0
+          , unknownName = 0
+          }
+      readIORef counter >>= \c -> c `shouldBe` 1
+      Right recorded <-
+        Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:await-demo-ad-1") (StreamVersion 0) 10
+      traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded)
+        `shouldSatisfy` \case
+          Right [StepRecorded "awk:approval" _ _, StepRecorded "use" _ _, WorkflowCompleted _] -> True
+          _ -> False
+
+    -- M4: a discovered workflow whose name is absent from the registry is
+    -- skipped and counted, never silently dropped or fatal.
+    it "skips and counts a workflow whose name is absent from the registry" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "orphan"
+          wid = WorkflowId "or-1"
+      crashed <-
+        try
+          ( Store.runStoreIO storeHandle $
+              runWorkflow name wid (crashAfterStep1 counter)
+          ) ::
+          IO (Either SomeException (Either Store.StoreError (WorkflowOutcome (Int, Int, Int))))
+      case crashed of
+        Left _ -> pure ()
+        Right other -> expectationFailure ("expected a simulated crash, got " <> show other)
+      -- Empty registry: the orphan is surfaced via unknownName, not completed.
+      Right summary <-
+        Store.runStoreIO storeHandle $ resumeWorkflowsOnce defaultWorkflowResumeOptions Map.empty
+      summary
+        `shouldBe` ResumeSummary
+          { discovered = 1
+          , resumed = 0
+          , completed = 0
+          , stillSuspended = 0
+          , unknownName = 1
+          }
+      -- The journal is unchanged: still one step, no completion.
+      Right recorded <-
+        Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:orphan-or-1") (StreamVersion 0) 10
+      Vector.length recorded `shouldBe` 1
+
+    -- M4: resume on an already-completed workflow is a genuine no-op.
+    it "discovers nothing for an already-completed workflow and is stable" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "done-demo"
+          wid = WorkflowId "dd-1"
+      done <- Store.runStoreIO storeHandle $ runWorkflow name wid (threeStep counter)
+      done `shouldBe` Right (Completed (1, 2, 3))
+      readIORef counter >>= \c -> c `shouldBe` 3
+      let registry = Map.singleton name (WorkflowDef (\_wid -> threeStep counter))
+      Right summary1 <-
+        Store.runStoreIO storeHandle $ resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+      summary1 `shouldBe` emptyResumeSummary
+      Right summary2 <-
+        Store.runStoreIO storeHandle $ resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+      summary2 `shouldBe` emptyResumeSummary
+      readIORef counter >>= \c -> c `shouldBe` 3
+
   describe "Keiro.Workflow.Snapshot codec" $ do
     -- Pure (no-DB) round-trip of the workflow state codec.
     it "round-trips a non-trivial accumulated step map and carries the sentinel shape hash" $ do
@@ -2516,6 +2652,39 @@ countingSixSteps counter =
   mapM
     (\i -> step (StepName ("s" <> Text.pack (show i))) (liftIO (incrementAndRead counter) >> pure i))
     [1 .. 6]
+
+-- | A distinguished exception used to simulate a process crash mid-workflow
+-- (after a step has committed its journal append but before completion).
+data SimulatedCrash = SimulatedCrash
+  deriving stock (Show)
+
+instance Exception SimulatedCrash
+
+-- | A three-step workflow; each step bumps a shared counter so a resume can
+-- prove steps short-circuit (the counter only advances for steps that run).
+threeStep :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es (Int, Int, Int)
+threeStep counter = do
+  a <- step (StepName "s1") (liftIO (incrementAndRead counter))
+  b <- step (StepName "s2") (liftIO (incrementAndRead counter))
+  c <- step (StepName "s3") (liftIO (incrementAndRead counter))
+  pure (a, b, c)
+
+-- | Runs step @"s1"@ (which commits its own journal append) then crashes, so
+-- the journal is left with one StepRecorded and no WorkflowCompleted.
+crashAfterStep1 :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es (Int, Int, Int)
+crashAfterStep1 counter = do
+  _ <- step (StepName "s1") (liftIO (incrementAndRead counter))
+  _ <- liftIO (throwIO SimulatedCrash)
+  pure (0, 0, 0)
+
+-- | Awaits an external step, then runs a step that bumps the counter. Used to
+-- prove the resume worker drives a suspended workflow to completion once its
+-- awaited step is journaled.
+awaitingThenStep :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es Text
+awaitingThenStep counter = do
+  decision <- awaitStep (StepName "awk:approval") (pure ())
+  _ <- step (StepName "use") (liftIO (incrementAndRead counter) >> pure (decision <> "!"))
+  pure (decision <> "-done")
 
 -- | A two-step workflow whose steps each bump a shared counter.
 demoWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es (Int, Int)

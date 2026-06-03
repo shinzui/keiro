@@ -162,7 +162,7 @@ metrics instrumentation in dedicated plans in MasterPlan 4.
 | 39 | Durable sleep on the timer table | docs/plans/39-durable-sleep-on-the-timer-table.md | EP-38 | None | Complete |
 | 40 | Awakeables and external completion | docs/plans/40-awakeables-and-external-completion.md | EP-38 | None | Complete |
 | 41 | Workflow journal snapshots and step-result compaction | docs/plans/41-workflow-journal-snapshots-and-step-result-compaction.md | EP-38 | None | Complete |
-| 42 | Workflow resume and crash-recovery worker | docs/plans/42-workflow-resume-and-crash-recovery-worker.md | EP-38 | EP-39, EP-40 | Not Started |
+| 42 | Workflow resume and crash-recovery worker | docs/plans/42-workflow-resume-and-crash-recovery-worker.md | EP-38 | EP-39, EP-40 | Complete |
 | 43 | Child workflows: spawn, wait, and cancel | docs/plans/43-child-workflows-spawn-wait-and-cancel.md | EP-38 | EP-40, EP-42 | Not Started |
 | 44 | Workflow observability: spans and metrics | docs/plans/44-workflow-observability-spans-and-metrics.md | EP-38 | EP-39, EP-40, EP-42, EP-43 | Not Started |
 | 45 | Durable workflow worked example and guide | docs/plans/45-durable-workflow-worked-example-and-guide.md | EP-38 | EP-39, EP-40, EP-41, EP-42, EP-43, EP-44 | Not Started |
@@ -384,8 +384,8 @@ and the milestone.
 - [x] EP-40 (2026-06-03): prove a workflow suspends on an awakeable (pending row, no completion) and resumes with the signalled payload; plus idempotent double-signal, crash-safe journal re-append, and cancellation throwing.
 - [x] EP-41 (2026-06-03): build the workflow `StateCodec` (`workflowStateCodec`, sentinel shape hash `keiro.workflow.stepmap.v1`) and add `snapshotPolicy` to `WorkflowRunOptions`; snapshot the accumulated step-result map at the `step` miss path and the completion site.
 - [x] EP-41 (2026-06-03): prove snapshot + tail-replay hydration loads a long journal without replaying every step (1 tail event vs 7), correctness equality (`Never` ≡ `Every 2`), and advisory fallback on a corrupt/mismatched snapshot.
-- [ ] EP-42: implement the resume worker (discover journals lacking `WorkflowCompleted`, re-invoke, short-circuit journaled steps).
-- [ ] EP-42: prove a crashed mid-run workflow, and a sleep/awakeable-suspended workflow, both resume after restart.
+- [x] EP-42 (2026-06-03): implement the resume worker (`Keiro.Workflow.Resume`: `resumeWorkflowsOnce` + `runWorkflowResumeWorker(With)`, `WorkflowRegistry`/`WorkflowDef`, `ResumeSummary`) — discover journals lacking `WorkflowCompleted` via `findUnfinishedWorkflowIds`, re-invoke through EP-41's `runWorkflowWith`, short-circuit journaled steps. No new table/migration, no `wf:` prefix subscription.
+- [x] EP-42 (2026-06-03): prove a crashed mid-run workflow (counter proves step 1 not re-run) and an awaitStep-suspended workflow both resume to `Completed`; plus unknown-name visibility and completed-workflow no-op.
 - [ ] EP-43: add child-workflow spawn/wait/cancel recorded in the parent journal.
 - [ ] EP-43: prove a parent spawns a child, waits for its result, and can cancel it; the relationship survives a crash.
 - [ ] EP-44: extend `KeiroMetrics` with `keiro.workflow.*` instruments and add workflow spans; record them in the semconv audit.
@@ -545,6 +545,29 @@ and the milestone.
     `"keiro.workflow.stepmap.v1"` (a fixed sentinel — the step-result map's *shape* never
     varies; per-step result-type evolution stays each step's own `ToJSON`/`FromJSON` concern).
     EP-45's snapshot guidance must cite this sentinel.
+
+- 2026-06-03 (EP-42 implementation): **the resume worker shipped against the EP-38/EP-41
+  surface with no core changes; one planned feature was demoted.** Notes for the remaining
+  waves:
+  - **`WorkflowRegistry es = Map WorkflowName (WorkflowDef es)`** with
+    **`data WorkflowDef es = forall a. WorkflowDef { runDef :: WorkflowId -> Eff (Workflow :
+    es) a }`**, **`WorkflowResumeOptions`** (carries EP-41's `WorkflowRunOptions` as
+    `runOptions`, plus `pollInterval` and a *reserved* `useAdvisoryLock`), and
+    **`ResumeSummary`** (`discovered`/`resumed`/`completed`/`stillSuspended`/`unknownName`)
+    now exist in `Keiro.Workflow.Resume`. EP-43 registers spawned children here for parent
+    resumption; EP-44 reads `ResumeSummary` for `keiro.workflow.resumed` and can thread a
+    `Maybe KeiroMetrics` into `WorkflowResumeOptions`/`resumeWorkflowsOnce`.
+  - **The `useAdvisoryLock` multi-worker optimization is reserved/unwired.** The kiroku
+    `Store` is connection-pooled and a re-invocation spans several transactions, so a
+    `pg_try_advisory_xact_lock` (transaction-scoped) cannot be held across a whole
+    `runWorkflowWith` run and a session lock has no pool affinity. Concurrency is already safe
+    by construction (EP-38 deterministic step ids + short-circuit), so the flag is kept for
+    forward compatibility but does nothing. EP-44/EP-45 must **not** document the lock as
+    functional.
+  - **Discovery uses `findUnfinishedWorkflowIds` only** — confirmed no `wf:` prefix
+    subscription is imported or needed, as the MasterPlan's discovery decision required.
+  - **The umbrella `Keiro` module does not re-export workers**, so `Keiro.Workflow.Resume`
+    is imported directly (like `Keiro.Timer`/`Keiro.Outbox`), not added to `Keiro.hs`.
 
 ## Decision Log
 

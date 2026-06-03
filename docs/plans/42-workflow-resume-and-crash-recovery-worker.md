@@ -77,22 +77,25 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1 — `Keiro.Workflow.Resume`: the `WorkflowDef`/`WorkflowRegistry` types, the
-  `WorkflowResumeOptions` record (carrying a `WorkflowRunOptions` and a poll interval), the
-  `ResumeSummary` record, and `resumeWorkflowsOnce` (one discover-and-reinvoke pass).
-  Compiles; module added to `keiro.cabal` `exposed-modules`.
-- [ ] M2 — Crash-mid-run proof: a DB-backed test in `keiro/test/Main.hs` drives a 3-step
-  workflow to journal step 1 then abandons it; `resumeWorkflowsOnce` with a registry of the
-  full 3-step definition drives it to `Completed`; steps 2-3 ran once, step 1 did not re-run
-  (shared `IORef` counter), and a second pass is a no-op.
-- [ ] M3 — Suspension-driven proof: a workflow suspended on an awaited step (simulated with a
-  manual `appendJournalEntry (StepRecorded "awk:..")` per EP-38's M3 test, or driven by a
-  real EP-39/EP-40 wake source if landed) reaches `Completed` after the resume pass.
-- [ ] M4 — Unknown-name and idempotency proofs: a registry missing a workflow's name skips +
-  logs that workflow and counts it `unknownName`; running `resumeWorkflowsOnce` twice on an
-  already-completed workflow returns a summary with zero discovered.
-- [ ] M5 — `runWorkflowResumeWorker` loop driver + cabal wiring; full `cabal test keiro` and
-  `cabal build all` green; contract recap for EP-43/EP-44 written.
+- [x] M1 (2026-06-03) — `Keiro.Workflow.Resume`: `WorkflowDef`/`WorkflowRegistry` (existential
+  over the result type), `WorkflowResumeOptions` (carrying EP-41's `WorkflowRunOptions`, a poll
+  interval, and a *reserved* `useAdvisoryLock`), `ResumeSummary`/`emptyResumeSummary`, and
+  `resumeWorkflowsOnce`. Added to `keiro.cabal` exposed-modules; `cabal build keiro` green.
+- [x] M2 (2026-06-03) — Crash-mid-run proof: a 3-step workflow journals step 1 then throws
+  `SimulatedCrash` (caught by the test); `resumeWorkflowsOnce` with the full 3-step definition
+  drives it to `Completed`; counter reads 3 (step 1 short-circuited, steps 2-3 ran once); the
+  journal holds s1/s2/s3/WorkflowCompleted; a second pass returns `emptyResumeSummary`.
+- [x] M3 (2026-06-03) — Suspension-driven proof: a workflow suspends on `awaitStep "awk:approval"`,
+  a manual `appendJournalEntry (StepRecorded "awk:approval" ...)` resolves it, and one resume
+  pass reaches `Completed` (`use` step ran once). EP-39/EP-40 wake sources journal the *same*
+  `StepRecorded`, so this becomes an end-to-end test verbatim once they drive it.
+- [x] M4 (2026-06-03) — Unknown-name + idempotency proofs: an empty registry skips an orphan
+  workflow, logs it, and counts `unknownName = 1` with the journal unchanged; resume on an
+  already-completed workflow returns `emptyResumeSummary` and is stable across two passes
+  (counter unchanged).
+- [x] M5 (2026-06-03) — `runWorkflowResumeWorker`/`runWorkflowResumeWorkerWith` loop drivers and
+  the Haddock contract recap (for EP-43/EP-44) shipped in `Keiro.Workflow.Resume`. Full
+  `cabal test keiro` green (123 examples, 0 failures); `cabal build all` (incl. jitsurei) green.
 
 
 ## Surprises & Discoveries
@@ -100,7 +103,31 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-03 (M1): **The `useAdvisoryLock` advisory-lock path is not implementable as the plan
+  described it, and is shipped reserved (a no-op).** The plan proposed wrapping each
+  re-invocation in a transaction holding `pg_try_advisory_xact_lock(hashtext(id))`. But a
+  re-invocation (`runWorkflowWith`) spans *several* transactions — one `runTransactionAppending`
+  per step append — and the kiroku `Store` is backed by a `Hasql.Pool`
+  (`kiroku-store/src/Kiroku/Store/Connection.hs`), so: (a) a *transaction-scoped*
+  `pg_try_advisory_xact_lock` releases when its own probe transaction commits, long before the
+  run's later transactions, giving zero mutual exclusion across the run; and (b) a
+  *session-scoped* `pg_advisory_lock` has no connection affinity through the pool, so a lock
+  taken on one pooled connection is invisible to the next transaction's connection. Holding a
+  lock across the whole run is therefore not achievable with the pooled Store. Resolution: keep
+  the `useAdvisoryLock` field (default `False`) for forward compatibility but leave it
+  **unwired** with a Haddock note, because concurrency is already safe by construction —
+  EP-38's deterministic step ids + pre-load short-circuit mean two workers racing the same
+  workflow converge to the same journal with each side effect at most once (the
+  idempotency-first decision below). EP-44/EP-45 should not document the lock as functional.
+- 2026-06-03 (M2): **`StoreError` is `Kiroku.Store.StoreError`** — the test annotates the
+  `try` result as `Either SomeException (Either Store.StoreError (WorkflowOutcome ...))`. A
+  `SimulatedCrash` thrown inside the body propagates as an ordinary IO exception through
+  `Store.runStoreIO` (it is not a `StoreError`), so `try @SomeException` catches it while the
+  step-1 append — committed in its own prior transaction — survives, exactly the crash-mid-run
+  state the resume worker must recover.
+- 2026-06-03 (M5): the **umbrella `Keiro` module does not re-export workers** (Timer, Outbox,
+  etc. are imported directly), so `Keiro.Workflow.Resume` is intentionally *not* added to
+  `Keiro.hs` — matching the established convention rather than the plan's conditional.
 
 
 ## Decision Log
@@ -142,6 +169,16 @@ Record every decision made while working on the plan.
   EP-38's deterministic-id journaling already makes the whole runtime race-tolerant.
   Date: 2026-06-03.
 
+- Decision (revised 2026-06-03 during M1): The `useAdvisoryLock` option is **reserved and
+  unwired**, not the transaction-scoped lock the original decision described.
+  Rationale: implementation revealed the pooled `Store` plus the multi-transaction shape of a
+  re-invocation makes a lock-held-across-the-run impossible (see Surprises & Discoveries
+  2026-06-03 M1). Since the idempotency-first decision already guarantees correctness under
+  concurrent workers, the lock was only ever an optimization; rather than ship a misleading
+  no-op-with-overhead, the flag is kept for forward compatibility (default `False`) and has no
+  effect. If a future change pins a connection per workflow run, the flag can be wired then.
+  Date: 2026-06-03.
+
 - Decision: Re-invoke through EP-41's `runWorkflowWith :: WorkflowRunOptions -> ...` (carried
   inside `WorkflowResumeOptions`) so resumed workflows honor the same snapshot/telemetry
   options as their first run; fall back to `runWorkflow` only if EP-41 has not landed at
@@ -158,7 +195,35 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Completed 2026-06-03.** All five milestones landed; `cabal test keiro` is green (123
+examples, 0 failures, incl. 4 new resume tests) and `cabal build all` (incl. jitsurei) is
+green. The purpose — make durable execution durable across crashes via a background worker
+that discovers and re-invokes unfinished workflows — is met:
+
+- `keiro/src/Keiro/Workflow/Resume.hs` owns `WorkflowDef`/`WorkflowRegistry`,
+  `WorkflowResumeOptions`/`defaultWorkflowResumeOptions`, `ResumeSummary`/`emptyResumeSummary`,
+  the single-pass `resumeWorkflowsOnce`, and the `runWorkflowResumeWorker(With)` poll-loop
+  drivers. No new table, no migration; discovery is EP-38's `findUnfinishedWorkflowIds` index
+  query only — **no kiroku `wf:` prefix subscription** anywhere (zero upstream dependency).
+- Re-invocation goes through EP-41's `runWorkflowWith` carrying `runOptions`, so resumed runs
+  honour the same snapshot/telemetry options as their first run.
+
+**Observable validations (all green):** crash-mid-run recovery (counter proves step 1 did not
+re-run; journal ends in `WorkflowCompleted`; second pass discovers 0); suspension-driven
+recovery (suspended → journaled await → `Completed`, `use` step ran once); unknown-name
+visibility (`unknownName = 1`, journal unchanged); idempotency/no-op on a completed workflow
+(stable across two passes).
+
+**Cross-plan contracts delivered:** `WorkflowRegistry`/`WorkflowDef` (consumed by EP-43's
+parent resumption) and `ResumeSummary` (consumed by EP-44's `keiro.workflow.resumed`). EP-44
+may thread a `Maybe KeiroMetrics` into `WorkflowResumeOptions`/`resumeWorkflowsOnce` following
+the no-op-under-`Nothing` idiom.
+
+**Gaps / deferred:** the `useAdvisoryLock` multi-worker optimization is reserved/unwired — the
+pooled `Store` cannot hold a lock across a re-invocation's several transactions, and
+idempotency already makes concurrent re-invocation correct (see Surprises & Decision Log). The
+suspension test simulates the wake source via `appendJournalEntry`; it upgrades to an
+end-to-end EP-39/EP-40 test with no assertion changes once those drive it.
 
 
 ## Context and Orientation
