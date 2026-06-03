@@ -97,11 +97,21 @@ import Data.Text qualified as Text
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Dispatch (..), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (EffectHandler, interpret, localSeqUnlift, send)
-import Effectful.Exception (catch, throwIO)
+import Effectful.Exception (bracket_, catch, throwIO)
 import Keiro.Codec (decodeRecorded, encodeForAppendWithMetadata)
 import Keiro.EventStream (SnapshotPolicy (..))
 import Keiro.Prelude
 import Keiro.Snapshot.Policy (shouldSnapshot)
+import Keiro.Telemetry
+  ( KeiroMetrics
+  , Tracer
+  , recordWorkflowActive
+  , recordWorkflowJournalLength
+  , recordWorkflowStepExecuted
+  , recordWorkflowStepReplayed
+  , withWorkflowSpan
+  )
+import System.IO.Unsafe (unsafePerformIO)
 import Keiro.Workflow.Snapshot (loadWorkflowSnapshot, writeWorkflowSnapshot)
 import Keiro.Workflow.Schema
   ( WorkflowStepRow (..)
@@ -190,16 +200,26 @@ data WorkflowRunOptions = WorkflowRunOptions
   -- (EP-38 behaviour: every run/resume does a full version-0 replay).
   , pageSize :: !Int32
   -- ^ Page size for the journal pre-load read.
+  , metrics :: !(Maybe KeiroMetrics)
+  -- ^ EP-44: when 'Just', the runtime records the @keiro.workflow.*@ instruments
+  --   (steps executed/replayed, active count, journal length). 'Nothing' is the
+  --   no-op default, so a run with 'defaultWorkflowRunOptions' records nothing.
+  , tracer :: !(Maybe Tracer)
+  -- ^ EP-44: when 'Just', the runtime opens a @workflow \<name\>@ 'Internal' span
+  --   around the run. 'Nothing' runs the body unwrapped.
   }
   deriving stock (Generic)
 
--- | Sensible defaults: no snapshotting and a journal pre-load page size of
--- 100. A default-options run replays and behaves exactly as EP-38 did.
+-- | Sensible defaults: no snapshotting, a journal pre-load page size of 100,
+-- and no telemetry (metrics/tracer 'Nothing'). A default-options run replays
+-- and behaves exactly as EP-38 did.
 defaultWorkflowRunOptions :: WorkflowRunOptions
 defaultWorkflowRunOptions =
   WorkflowRunOptions
     { snapshotPolicy = Never
     , pageSize = 100
+    , metrics = Nothing
+    , tracer = Nothing
     }
 
 -- ---------------------------------------------------------------------------
@@ -233,6 +253,18 @@ instance Exception WorkflowSuspend
 -- ---------------------------------------------------------------------------
 -- Running
 -- ---------------------------------------------------------------------------
+
+{- | Process-wide count of workflow runs currently in flight, backing the
+@keiro.workflow.active@ gauge (EP-44). 'runWorkflowWith' brackets each run with
+@+1@/@-1@ and samples the gauge on both edges, so the exported last-value
+reflects the true live count whether a run is mid-flight or finished. A
+process-global 'IORef' is the lightest faithful implementation (the gauge is a
+last-value-wins level, not a per-run delta), mirroring how the other keiro
+backlog/level gauges are recorded with a value the runtime already holds.
+-}
+{-# NOINLINE activeCountRef #-}
+activeCountRef :: IORef Int64
+activeCountRef = unsafePerformIO (newIORef 0)
 
 {- | Run a workflow computation, journaling each 'step' and replaying any
 already-journaled steps. Returns 'Completed' when the computation finishes
@@ -277,34 +309,55 @@ runWorkflowWith options name wid action = do
     then pure Cancelled
     else runActive
   where
+    -- EP-44 telemetry handles, pulled from the run options once. Both default
+    -- to 'Nothing' (see 'defaultWorkflowRunOptions'), so a default-options run
+    -- records nothing and opens no span — the no-op idiom holds end to end.
+    mMetrics = options ^. #metrics
+    mTracer = options ^. #tracer
     runActive :: Eff es (WorkflowOutcome a)
-    runActive = do
-      initial <- loadJournal options name wid
-      journalRef <- liftIO (newIORef initial)
-      ordinalRef <- liftIO (newIORef Map.empty)
-      let runHandler = interpret (handler journalRef ordinalRef) action
-      outcome <- (Completed <$> runHandler) `catch` \WorkflowSuspend -> pure Suspended
-      case outcome of
-        Completed result -> do
-          now <- liftIO getCurrentTime
-          finalMap <- liftIO (readIORef journalRef)
-          -- Idempotent: only appends (and so only snapshots) when the completion
-          -- marker is not already journaled. On a replay of an already-completed
-          -- workflow this is 'Nothing' and no terminal snapshot is taken (one was
-          -- already taken on the original completing run, if the policy fired).
-          mAppend <- appendCompletion name wid now
-          for_ mAppend $ \appendResult ->
-            when
-              ( shouldSnapshot
-                  (options ^. #snapshotPolicy)
-                  True
-                  finalMap
-                  (appendResult ^. #streamVersion)
-              )
-              (writeWorkflowSnapshot (appendResult ^. #streamId) (appendResult ^. #streamVersion) finalMap)
-          pure (Completed result)
-        Suspended -> pure Suspended
-        Cancelled -> pure Cancelled
+    runActive =
+      -- EP-44: maintain the process-wide live-run count and sample the
+      -- @keiro.workflow.active@ gauge on both entry and exit, and open the
+      -- whole-run @workflow \<name\>@ span (step 'Nothing'). The body is
+      -- unchanged from EP-41 except for the journal-length recording below.
+      bracket_
+        (liftIO (atomicModifyIORef' activeCountRef (\n -> (n + 1, ()))) >> sampleActive)
+        (liftIO (atomicModifyIORef' activeCountRef (\n -> (n - 1, ()))) >> sampleActive)
+        (withWorkflowSpan mTracer name wid Nothing (\_sp -> interpreted))
+      where
+        sampleActive = liftIO (readIORef activeCountRef) >>= recordWorkflowActive mMetrics
+        interpreted = do
+          initial <- loadJournal options name wid
+          journalRef <- liftIO (newIORef initial)
+          ordinalRef <- liftIO (newIORef Map.empty)
+          let runHandler = interpret (handler journalRef ordinalRef) action
+          outcome <- (Completed <$> runHandler) `catch` \WorkflowSuspend -> pure Suspended
+          case outcome of
+            Completed result -> do
+              now <- liftIO getCurrentTime
+              finalMap <- liftIO (readIORef journalRef)
+              -- Idempotent: only appends (and so only snapshots) when the completion
+              -- marker is not already journaled. On a replay of an already-completed
+              -- workflow this is 'Nothing' and no terminal snapshot is taken (one was
+              -- already taken on the original completing run, if the policy fired).
+              mAppend <- appendCompletion name wid now
+              for_ mAppend $ \appendResult ->
+                when
+                  ( shouldSnapshot
+                      (options ^. #snapshotPolicy)
+                      True
+                      finalMap
+                      (appendResult ^. #streamVersion)
+                  )
+                  (writeWorkflowSnapshot (appendResult ^. #streamId) (appendResult ^. #streamVersion) finalMap)
+              -- EP-44: record one @keiro.workflow.journal.length@ observation per
+              -- completing run (the 'Completed' path only, never 'Suspended'),
+              -- including a replay that completes again. Length is the recorded
+              -- step map plus the WorkflowCompleted marker.
+              recordWorkflowJournalLength mMetrics (fromIntegral (Map.size finalMap + 1))
+              pure (Completed result)
+            Suspended -> pure Suspended
+            Cancelled -> pure Cancelled
     handler ::
       IORef (Map Text Aeson.Value) ->
       IORef (Map Text Int) ->
@@ -313,11 +366,17 @@ runWorkflowWith options name wid action = do
       Step (StepName key) act -> do
         journal <- liftIO (readIORef journalRef)
         case Map.lookup key journal of
-          Just stored -> decodeStored key stored
+          Just stored -> do
+            -- Hit: the step is already journaled, so its recorded result is
+            -- returned without re-running @act@ — a replay.
+            recordWorkflowStepReplayed mMetrics 1
+            decodeStored key stored
           Nothing -> do
             a <- localSeqUnlift env (\unlift -> unlift act)
             let encoded = Aeson.toJSON a
             appendResult <- recordStep name wid (StepName key) encoded
+            -- Miss: @act@ ran and was journaled — a fresh execution.
+            recordWorkflowStepExecuted mMetrics 1
             newMap <-
               liftIO
                 ( atomicModifyIORef' journalRef $ \m ->
@@ -337,7 +396,13 @@ runWorkflowWith options name wid action = do
       Await (StepName key) arm -> do
         journal <- liftIO (readIORef journalRef)
         case Map.lookup key journal of
-          Just stored -> decodeStored key stored
+          Just stored -> do
+            -- An awaitStep hit means the wake source already resolved this step;
+            -- the recorded result is returned without arming — a replay. An
+            -- awaitStep miss arms and suspends: no user @action@ ran, so it is
+            -- not a step execution and records nothing here.
+            recordWorkflowStepReplayed mMetrics 1
+            decodeStored key stored
           Nothing -> do
             localSeqUnlift env (\unlift -> unlift arm)
             throwIO WorkflowSuspend
