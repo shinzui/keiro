@@ -119,6 +119,16 @@ import Keiro.Workflow
   , step
   , workflowJournalCodec
   )
+import Keiro.Workflow.Awakeable
+  ( WorkflowAwakeableCancelled (..)
+  , awakeableIdText
+  , awakeableIdToUuid
+  , awakeableNamed
+  , cancelAwakeable
+  , deterministicAwakeableId
+  , signalAwakeable
+  )
+import Keiro.Workflow.Awakeable.Schema qualified as Awk
 import Keiro.Workflow.Sleep
   ( parseSleepPayload
   , runWorkflowTimerWorker
@@ -2183,6 +2193,146 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         afterSecond <- readIORef counter
         afterSecond `shouldBe` 2
 
+  describe "Keiro.Workflow.Awakeable" $ do
+    -- Pure (no-DB) check of the deterministic id derivation.
+    it "derives a deterministic AwakeableId, stable across calls and label-sensitive" $ do
+      let aid1 = deterministicAwakeableId (WorkflowName "w") (WorkflowId "1") "approval"
+          aid2 = deterministicAwakeableId (WorkflowName "w") (WorkflowId "1") "approval"
+          aidOther = deterministicAwakeableId (WorkflowName "w") (WorkflowId "1") "other"
+      aid1 `shouldBe` aid2
+      (aid1 == aidOther) `shouldBe` False
+
+    around (withFreshStore fixture) $ do
+      it "schema: registers, completes once (idempotent), cancels, and counts pending rows" $ \storeHandle -> do
+        let aidA = awakeableIdToUuid (deterministicAwakeableId (WorkflowName "sch") (WorkflowId "1") "a")
+            aidB = awakeableIdToUuid (deterministicAwakeableId (WorkflowName "sch") (WorkflowId "1") "b")
+        now <- getCurrentTime
+        Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ do
+          Awk.registerAwakeableTx aidA "sch" "1"
+          Awk.registerAwakeableTx aidB "sch" "1"
+        Right pendingCount <- Store.runStoreIO storeHandle Awk.countPendingAwakeables
+        pendingCount `shouldBe` 2
+        Right (Just rowA) <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable aidA
+        rowA ^. #status `shouldBe` Awk.Pending
+        rowA ^. #payload `shouldBe` Nothing
+        -- Complete A once; the status-guarded UPDATE makes a re-complete a no-op.
+        Right firstComplete <- Store.runStoreIO storeHandle $ Store.runTransaction $
+          Awk.completeAwakeableTx aidA (toJSON ("done" :: Text)) now
+        firstComplete `shouldBe` True
+        Right secondComplete <- Store.runStoreIO storeHandle $ Store.runTransaction $
+          Awk.completeAwakeableTx aidA (toJSON ("again" :: Text)) now
+        secondComplete `shouldBe` False
+        Right (Just rowA') <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable aidA
+        rowA' ^. #status `shouldBe` Awk.Completed
+        rowA' ^. #payload `shouldBe` Just (toJSON ("done" :: Text))
+        -- Cancel the still-pending B; both rows are now resolved.
+        Right cancelled <- Store.runStoreIO storeHandle $ Store.runTransaction $
+          Awk.cancelAwakeableTx aidB
+        cancelled `shouldBe` True
+        Right pendingAfter <- Store.runStoreIO storeHandle Awk.countPendingAwakeables
+        pendingAfter `shouldBe` 0
+
+      it "suspends on an unsignalled awakeable, recording a pending row and no completion" $ \storeHandle -> do
+        let name = WorkflowName "approval"
+            wid = WorkflowId "wf1"
+            aid = deterministicAwakeableId name wid "approval"
+        outcome1 <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+        outcome1 `shouldBe` Right Suspended
+        Right (Just row) <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable (awakeableIdToUuid aid)
+        row ^. #status `shouldBe` Awk.Pending
+        row ^. #payload `shouldBe` Nothing
+        Right pendingNow <- Store.runStoreIO storeHandle Awk.countPendingAwakeables
+        pendingNow `shouldBe` 1
+        Right recorded <- Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:approval-wf1") (StreamVersion 0) 100
+        traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded)
+          `shouldSatisfy` \case
+            Right [] -> True
+            _ -> False
+
+      it "resumes with the signalled payload after signalAwakeable" $ \storeHandle -> do
+        let name = WorkflowName "approval"
+            wid = WorkflowId "wf1"
+            aid = deterministicAwakeableId name wid "approval"
+            awkStep = "awk:" <> awakeableIdText aid
+        Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+        Right signalled <- Store.runStoreIO storeHandle $ signalAwakeable aid ("ok" :: Text)
+        signalled `shouldBe` True
+        Right (Just row) <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable (awakeableIdToUuid aid)
+        row ^. #status `shouldBe` Awk.Completed
+        row ^. #payload `shouldBe` Just (toJSON ("ok" :: Text))
+        Right afterSignal <- Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:approval-wf1") (StreamVersion 0) 100
+        traverse (decodeRecorded workflowJournalCodec) (Vector.toList afterSignal)
+          `shouldSatisfy` \case
+            Right [StepRecorded s r _] -> s == awkStep && r == toJSON ("ok" :: Text)
+            _ -> False
+        outcome2 <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+        outcome2 `shouldBe` Right (Completed "ok!")
+        Right afterResume <- Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:approval-wf1") (StreamVersion 0) 100
+        traverse (decodeRecorded workflowJournalCodec) (Vector.toList afterResume)
+          `shouldSatisfy` \case
+            Right [StepRecorded s1 _ _, StepRecorded "use" _ _, WorkflowCompleted _] -> s1 == awkStep
+            _ -> False
+
+      it "is idempotent: a second signal returns False and does not change the value" $ \storeHandle -> do
+        let name = WorkflowName "idem"
+            wid = WorkflowId "wf-i"
+            aid = deterministicAwakeableId name wid "approval"
+            awkStep = "awk:" <> awakeableIdText aid
+        Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+        Right True <- Store.runStoreIO storeHandle $ signalAwakeable aid ("ok" :: Text)
+        Right again <- Store.runStoreIO storeHandle $ signalAwakeable aid ("later" :: Text)
+        again `shouldBe` False
+        Right (Just row) <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable (awakeableIdToUuid aid)
+        row ^. #payload `shouldBe` Just (toJSON ("ok" :: Text))
+        Right recorded <- Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:idem-wf-i") (StreamVersion 0) 100
+        Right decoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded))
+        [r | StepRecorded s r _ <- decoded, s == awkStep] `shouldBe` [toJSON ("ok" :: Text)]
+
+      it "throws WorkflowAwakeableCancelled after cancelAwakeable" $ \storeHandle -> do
+        let name = WorkflowName "cancelwf"
+            wid = WorkflowId "wf2"
+            aid = deterministicAwakeableId name wid "approval"
+        Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+        Right cancelled <- Store.runStoreIO storeHandle $ cancelAwakeable aid
+        cancelled `shouldBe` True
+        Right (Just row) <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable (awakeableIdToUuid aid)
+        row ^. #status `shouldBe` Awk.Cancelled
+        Store.runStoreIO storeHandle (runWorkflow name wid approvalFlow)
+          `shouldThrow` (== WorkflowAwakeableCancelled aid)
+        Right recorded <- Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:cancelwf-wf2") (StreamVersion 0) 100
+        Right decoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded))
+        any (\case WorkflowCompleted{} -> True; _ -> False) decoded `shouldBe` False
+
+      it "re-appends a missing journal entry when re-signalled (crash-safe)" $ \storeHandle -> do
+        let name = WorkflowName "crash"
+            wid = WorkflowId "wf3"
+            aid = deterministicAwakeableId name wid "approval"
+            awkStep = "awk:" <> awakeableIdText aid
+        Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+        -- Simulate "row completed but the journal append did not happen" by
+        -- completing the row directly, bypassing signalAwakeable's journal write.
+        now <- getCurrentTime
+        Right completedRow <- Store.runStoreIO storeHandle $ Store.runTransaction $
+          Awk.completeAwakeableTx (awakeableIdToUuid aid) (toJSON ("ok" :: Text)) now
+        completedRow `shouldBe` True
+        Right beforeRepair <- Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:crash-wf3") (StreamVersion 0) 100
+        Right beforeDecoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList beforeRepair))
+        [() | StepRecorded s _ _ <- beforeDecoded, s == awkStep] `shouldBe` []
+        -- A re-signal with the same payload returns False (already completed) but
+        -- repairs the missing journal entry from the stored payload.
+        Right repaired <- Store.runStoreIO storeHandle $ signalAwakeable aid ("ok" :: Text)
+        repaired `shouldBe` False
+        Right afterRepair <- Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:crash-wf3") (StreamVersion 0) 100
+        Right afterDecoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList afterRepair))
+        [r | StepRecorded s r _ <- afterDecoded, s == awkStep] `shouldBe` [toJSON ("ok" :: Text)]
+
 -- | Increment a shared counter and return its new value (the step's side
 -- effect, so replay can be proven by watching the counter).
 incrementAndRead :: IORef Int -> IO Int
@@ -2199,6 +2349,14 @@ demoWorkflow counter = do
 -- exercise the suspend path and external completion.
 neverArmingWorkflow :: (Workflow :> es) => Eff es Int
 neverArmingWorkflow = awaitStep (StepName "awk:test") (pure ())
+
+-- | The awakeable validation workflow: allocate a durable promise, suspend on
+-- it, and (once signalled) append "!" to the payload through a recorded step.
+approvalFlow :: (Workflow :> es, Store :> es) => Eff es Text
+approvalFlow = do
+  (_, await) <- awakeableNamed (StepName "approval")
+  v <- await
+  step (StepName "use") (pure (v <> "!"))
 
 -- | A two-step workflow with a durable sleep between the steps. The sleep's
 -- name and delay are parameters so one helper drives both the zero-delta and
