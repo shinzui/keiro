@@ -95,6 +95,7 @@ import Keiro.Inbox
   )
 import Keiro.Inbox.Kafka qualified as InboxKafka
 import Data.Time (NominalDiffTime)
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newMVar, readMVar)
 import Keiro.Prelude
 import Keiro.Projection
@@ -117,6 +118,15 @@ import Keiro.Workflow
   , runWorkflow
   , step
   , workflowJournalCodec
+  )
+import Keiro.Workflow.Sleep
+  ( parseSleepPayload
+  , runWorkflowTimerWorker
+  , sleepNamed
+  , sleepStepName
+  , sleepTimerId
+  , sleepTimerPayload
+  , workflowSleepFireAction
   )
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), HaltReason (..))
@@ -2057,6 +2067,122 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right unfinished <- Store.runStoreIO storeHandle findUnfinishedWorkflowIds
       unfinished `shouldBe` [("p-1", "pending")]
 
+  describe "Keiro.Workflow.Sleep" $ do
+    -- Pure (no-DB) checks of the id/payload/step-name helpers.
+    it "derives a deterministic, distinct timer id" $ do
+      let name = WorkflowName "wf"
+          wid = WorkflowId "w-1"
+      sleepTimerId name wid "sleep:cool" `shouldBe` sleepTimerId name wid "sleep:cool"
+      (sleepTimerId name wid "sleep:cool" == sleepTimerId name wid "sleep:other")
+        `shouldBe` False
+
+    it "round-trips and recognises its timer payload" $ do
+      parseSleepPayload (sleepTimerPayload "sleep:cool") `shouldBe` Just "sleep:cool"
+      parseSleepPayload (object ["kind" Aeson..= ("counter-timeout" :: Text)])
+        `shouldBe` Nothing
+
+    it "prefixes the journal step name with the reserved sleep prefix" $
+      sleepStepName (StepName "cool") `shouldBe` "sleep:cool"
+
+    around (withFreshStore fixture) $ do
+      it "arms a timer and suspends, then a fired timer resumes the workflow" $ \storeHandle -> do
+        counter <- newIORef (0 :: Int)
+        let name = WorkflowName "sleepdemo"
+            wid = WorkflowId "sd-1"
+            journalStream = StreamName "wf:sleepdemo-sd-1"
+            TimerId timerUuid = sleepTimerId name wid "sleep:cool"
+        -- First run: 'a' runs, the sleep arms a timer, and the run suspends.
+        outcome1 <- Store.runStoreIO storeHandle $
+          runWorkflow name wid (sleepDemoNamed counter (StepName "cool") 0)
+        outcome1 `shouldBe` Right Suspended
+        afterFirst <- readIORef counter
+        afterFirst `shouldBe` 1
+        -- The journal holds only 'a' (no completion, no sleep:cool yet).
+        Right recorded1 <- Store.runStoreIO storeHandle $
+          Store.readStreamForward journalStream (StreamVersion 0) 100
+        traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded1)
+          `shouldSatisfy` \case
+            Right [StepRecorded "a" _ _] -> True
+            _ -> False
+        -- The durable wait is a single Scheduled timer row carrying the
+        -- workflow-sleep payload.
+        Right timerRow <- Store.runStoreIO storeHandle $
+          Store.runTransaction $ Tx.statement timerUuid sleepTimerStatusStmt
+        timerRow `shouldSatisfy` \case
+          Just (status, payload) ->
+            status == "scheduled" && parseSleepPayload payload == Just "sleep:cool"
+          Nothing -> False
+        -- Fire the timer through the routing worker (no PM fallback needed).
+        fireTime <- getCurrentTime
+        fireResult <- Store.runStoreIO storeHandle $
+          runWorkflowTimerWorker Nothing fireTime (\_ -> pure Nothing)
+        case fireResult of
+          Right (Just timer) -> timer ^. #status `shouldBe` Firing
+          other -> expectationFailure ("expected a fired sleep timer, got " <> show other)
+        -- The row is now Fired and the journal gained sleep:cool.
+        Right afterFire <- Store.runStoreIO storeHandle $
+          Store.runTransaction $ Tx.statement timerUuid sleepTimerStatusStmt
+        fmap fst afterFire `shouldBe` Just "fired"
+        Right recorded2 <- Store.runStoreIO storeHandle $
+          Store.readStreamForward journalStream (StreamVersion 0) 100
+        traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded2)
+          `shouldSatisfy` \case
+            Right [StepRecorded "a" _ _, StepRecorded "sleep:cool" _ _] -> True
+            _ -> False
+        -- Second run completes: 'a' and the sleep short-circuit, only 'b' runs.
+        outcome2 <- Store.runStoreIO storeHandle $
+          runWorkflow name wid (sleepDemoNamed counter (StepName "cool") 0)
+        outcome2 `shouldBe` Right (Completed (1, 2))
+        afterSecond <- readIORef counter
+        afterSecond `shouldBe` 2
+        Right recorded3 <- Store.runStoreIO storeHandle $
+          Store.readStreamForward journalStream (StreamVersion 0) 100
+        traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded3)
+          `shouldSatisfy` \case
+            Right [StepRecorded "a" _ _, StepRecorded "sleep:cool" _ _, StepRecorded "b" _ _, WorkflowCompleted _] -> True
+            _ -> False
+
+      it "respects a positive delay: not due before fire_at, fires after" $ \storeHandle -> do
+        counter <- newIORef (0 :: Int)
+        let name = WorkflowName "sleepwait"
+            wid = WorkflowId "rt-1"
+            journalStream = StreamName "wf:sleepwait-rt-1"
+        clockBeforeFire <- getCurrentTime
+        outcome1 <- Store.runStoreIO storeHandle $
+          runWorkflow name wid (sleepDemoNamed counter (StepName "wait") 1)
+        outcome1 `shouldBe` Right Suspended
+        afterFirst <- readIORef counter
+        afterFirst `shouldBe` 1
+        -- A worker whose clock is before fire_at claims nothing.
+        notDue <- Store.runStoreIO storeHandle $
+          runTimerWorker Nothing clockBeforeFire workflowSleepFireAction
+        notDue `shouldBe` Right Nothing
+        Right recordedMid <- Store.runStoreIO storeHandle $
+          Store.readStreamForward journalStream (StreamVersion 0) 100
+        traverse (decodeRecorded workflowJournalCodec) (Vector.toList recordedMid)
+          `shouldSatisfy` \case
+            Right [StepRecorded "a" _ _] -> True
+            _ -> False
+        -- Wait out the one-second delay, then the worker fires it.
+        threadDelay 1_200_000
+        afterDelay <- getCurrentTime
+        fired <- Store.runStoreIO storeHandle $
+          runTimerWorker Nothing afterDelay workflowSleepFireAction
+        fired `shouldSatisfy` \case
+          Right (Just _) -> True
+          _ -> False
+        Right recordedWoken <- Store.runStoreIO storeHandle $
+          Store.readStreamForward journalStream (StreamVersion 0) 100
+        traverse (decodeRecorded workflowJournalCodec) (Vector.toList recordedWoken)
+          `shouldSatisfy` \case
+            Right [StepRecorded "a" _ _, StepRecorded "sleep:wait" _ _] -> True
+            _ -> False
+        outcome2 <- Store.runStoreIO storeHandle $
+          runWorkflow name wid (sleepDemoNamed counter (StepName "wait") 1)
+        outcome2 `shouldBe` Right (Completed (1, 2))
+        afterSecond <- readIORef counter
+        afterSecond `shouldBe` 2
+
 -- | Increment a shared counter and return its new value (the step's side
 -- effect, so replay can be proven by watching the counter).
 incrementAndRead :: IORef Int -> IO Int
@@ -2073,6 +2199,18 @@ demoWorkflow counter = do
 -- exercise the suspend path and external completion.
 neverArmingWorkflow :: (Workflow :> es) => Eff es Int
 neverArmingWorkflow = awaitStep (StepName "awk:test") (pure ())
+
+-- | A two-step workflow with a durable sleep between the steps. The sleep's
+-- name and delay are parameters so one helper drives both the zero-delta and
+-- the real-time tests.
+sleepDemoNamed ::
+  (Workflow :> es, Store :> es, IOE :> es) =>
+  IORef Int -> StepName -> NominalDiffTime -> Eff es (Int, Int)
+sleepDemoNamed counter sName delta = do
+  a <- step (StepName "a") (liftIO (incrementAndRead counter))
+  sleepNamed sName delta
+  b <- step (StepName "b") (liftIO (incrementAndRead counter))
+  pure (a, b)
 
 -- | A workflow that records one step, then suspends on an await — so it has a
 -- step row but no completion marker (the unfinished-discovery case).
@@ -2846,6 +2984,18 @@ timerStatusAndErrorStmt =
     """
     (E.param (E.nonNullable E.uuid))
     (D.rowMaybe ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nullable D.text)))
+
+-- | Read a timer's status and JSON payload by id (for the workflow-sleep tests).
+sleepTimerStatusStmt :: Statement UUID (Maybe (Text, Value))
+sleepTimerStatusStmt =
+  preparable
+    """
+    SELECT status, payload
+    FROM keiro_timers
+    WHERE timer_id = $1
+    """
+    (E.param (E.nonNullable E.uuid))
+    (D.rowMaybe ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.jsonb)))
 
 recordedFrom :: EventData -> RecordedEvent
 recordedFrom event = RecordedEvent
