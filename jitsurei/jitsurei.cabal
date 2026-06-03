@@ -37,6 +37,7 @@ library
                         Jitsurei.Database
                         Jitsurei.Diagrams
                         Jitsurei.Domain
+                        Jitsurei.DurableWorkflow
                         Jitsurei.EscalationProcess
                         Jitsurei.FulfillmentProcess
                         Jitsurei.Incident
@@ -49,6 +50,7 @@ library
     hs-source-dirs:     src
     build-depends:      aeson >= 2.2,
                         base >= 4.21 && < 5,
+                        containers >= 0.6,
                         contravariant-extras >= 0.3,
                         effectful >= 2.6,
                         effectful-core >= 2.6,

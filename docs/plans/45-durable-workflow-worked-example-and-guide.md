@@ -79,10 +79,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: write `jitsurei/src/Jitsurei/DurableWorkflow.hs` (the workflow, its child
+- [x] Milestone 1: write `jitsurei/src/Jitsurei/DurableWorkflow.hs` (the workflow, its child
   workflow, the `WorkflowRegistry`, deterministic ids, and the demo-driver helpers) and add
   it to `jitsurei/jitsurei.cabal` `exposed-modules` and to the `Jitsurei` umbrella module.
-- [ ] Milestone 1: confirm `cabal build jitsurei:lib:jitsurei` is green.
+- [x] Milestone 1: confirm `cabal build jitsurei:lib:jitsurei` is green.
 - [ ] Milestone 2: add the `workflow` subcommand to `jitsurei/app/Main.hs` (dispatcher, the
   `all` path, and the usage string) and implement `runDurableWorkflowDemo`.
 - [ ] Milestone 2: run `cabal run jitsurei:exe:jitsurei-demo -- workflow` against the
