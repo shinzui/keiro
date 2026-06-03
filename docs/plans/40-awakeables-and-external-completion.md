@@ -78,23 +78,25 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1 — `keiro_awakeables` table: migration SQL + `Keiro.Workflow.Awakeable.Schema` with
+- [x] M1 (2026-06-03) — `keiro_awakeables` table: migration SQL + `Keiro.Workflow.Awakeable.Schema` with
   the hasql statements and the `registerAwakeableTx` / `lookupAwakeable` /
   `completeAwakeableTx` / `cancelAwakeableTx` / `countPendingAwakeables` helpers. Migration
-  applies under the test harness; a unit test inserts a pending row, completes it, and reads
-  it back.
-- [ ] M2 — `Keiro.Workflow.Awakeable`: `AwakeableId` (deterministic v5 UUID newtype),
+  applies under the test harness; the schema round-trip test inserts pending rows, completes
+  one idempotently, cancels another, and asserts the pending count drops to 0.
+- [x] M2 (2026-06-03) — `Keiro.Workflow.Awakeable`: `AwakeableId` (deterministic v5 UUID newtype),
   `awakeableNamed`, `awakeable` (ordinal convenience), `signalAwakeable`, `cancelAwakeable`,
-  and the `WorkflowAwakeableCancelled` exception. Compiles; `awakeableNamed` derives a
-  stable id across two calls with the same workflow + label.
-- [ ] M3 — End-to-end suspend → signal → resume proof against ephemeral Postgres: first run
+  and the `WorkflowAwakeableCancelled` exception. Compiles; `deterministicAwakeableId` is
+  stable across two calls and label-sensitive (proven by a pure test).
+- [x] M3 (2026-06-03) — End-to-end suspend → signal → resume proof against ephemeral Postgres: first run
   `Suspended` + pending row + no journal completion; `signalAwakeable` flips the row and
-  appends the `StepRecorded "awk:…"`; second run `Completed`. Test green.
-- [ ] M4 — Idempotency + cancellation proofs: a second `signalAwakeable` returns `False` and
+  appends the `StepRecorded "awk:…"`; second run `Completed "ok!"`. Test green.
+- [x] M4 (2026-06-03) — Idempotency + cancellation + crash-safe proofs: a second `signalAwakeable` returns `False` and
   does not change the recorded value; `cancelAwakeable` flips a pending row to `cancelled`
-  and a subsequent run throws `WorkflowAwakeableCancelled`. Tests green.
-- [ ] M5 — Cabal wiring (append the two new modules to `keiro/keiro.cabal`), Haddock contract
-  recap, and the full suite green via `cabal test keiro`.
+  and a subsequent run throws `WorkflowAwakeableCancelled`; a re-signal of a row completed
+  out-of-band re-appends the missing journal entry. Tests green.
+- [x] M5 (2026-06-03) — Cabal wiring (both new modules appended to `keiro/keiro.cabal`), contract-recap
+  Haddock on `Keiro.Workflow.Awakeable`, full suite green via `cabal test keiro` (112
+  examples, 0 failures) and `cabal build all` green.
 
 
 ## Surprises & Discoveries
@@ -102,10 +104,44 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-03 (implementation): **EP-38 already shipped every contract this plan proposed, so
+  no EP-38 changes were needed.** `currentWorkflow` and `freshOrdinal` are on the `Workflow`
+  effect (folded in during EP-38, per the MasterPlan's 2026-06-03 parallel-drafting Surprises
+  entry), so `awakeableNamed`/`awakeable` consume them directly with the clean shape (1)
+  signature. The cross-plan contracts below were therefore all adopted by EP-38 before this
+  plan landed; none required a fallback.
+- 2026-06-03 (implementation): **`signalAwakeable` carries `(IOE :> es, Store :> es)`, not
+  `(Store :> es)` as this plan's "Context and Orientation" recap assumed.** The *shipped*
+  `appendJournalEntry`/`appendJournalEntryReturningId` (EP-38) require `(IOE :> es, Store :>
+  es)` — they pre-check `stepExists` and call `getCurrentTime`-style IO — so any external
+  completion path that journals must also have `IOE`. This is free for real callers (a webhook
+  handler, the resume worker) which all run with `IOE`. The plan's M2 signature block listed
+  `signalAwakeable :: (Store :> es, ToJSON r) => …`; the real signature adds `IOE`. Recorded so
+  EP-42/EP-44 thread `IOE` when they call `signalAwakeable`.
+- 2026-06-03 (implementation): **The crash-safe re-append (M4) is the final shape, not the
+  "simple form".** `signalAwakeable` decides what to journal as: the value just written when it
+  performed the `pending → completed` transition, else the row's stored `payload` when the row
+  is already `Completed` (re-append for a crash between the row update and the journal append),
+  else nothing (`pending`-race or `cancelled`). The returned `Bool` is strictly "did *this*
+  call perform the transition", so a `False` return can still have repaired the journal — its
+  Haddock says so. `appendJournalEntry`'s own idempotence (deterministic id + `stepExists`
+  pre-check) makes the re-append a no-op once the entry is present.
+- 2026-06-03 (implementation): **Constructor-name clashes need care for any consumer importing
+  both modules.** `AwakeableStatus` has `Pending`/`Completed`/`Cancelled`, which clash with
+  `WorkflowOutcome (Completed, …)` and `TimerStatus (Cancelled, …)`. `Keiro.Workflow.Awakeable`
+  avoids the clash by importing `Keiro.Workflow` *explicitly* (it never brings in the
+  `WorkflowOutcome` constructors), so `Completed`/`Cancelled` resolve unambiguously to the
+  schema's. Downstream test/consumer code (and EP-42/EP-43) should import
+  `Keiro.Workflow.Awakeable.Schema` **qualified** when it also imports the workflow/timer
+  surfaces. The test suite imports it as `Awk`.
+- 2026-06-03 (implementation): **The codd `LaxCheck` schema-diff line is expected noise.** The
+  test harness applies `allKeiroMigrations` with `VerifySchemas = LaxCheck` against an empty
+  on-disk expected schema, so codd logs a large "DB and expected schemas do not match …" diff
+  after applying `2026-06-03-01-00-00-keiro-awakeables.sql`. `LaxCheck` only logs; it does not
+  fail the run — the suite is green (112 examples, 0 failures). Same behavior EP-38/EP-39 saw.
 
-Cross-plan contracts proposed by this plan (to be confirmed by the MasterPlan / EP-38 during
-implementation — recorded here at planning time so they are not lost):
+Cross-plan contracts proposed by this plan (all **adopted by EP-38 before this plan landed** —
+no fallback was needed):
 
 - **Shared `freshOrdinal :: (Workflow :> es) => Text -> Eff es Int` on EP-38.** Both this
   plan's `awakeable` ordinal convenience and EP-39's `sleep` (which has the identical need to
@@ -211,12 +247,55 @@ Record every decision made while working on the plan.
   Date: 2026-06-03.
 
 
+- Decision: `signalAwakeable`'s final type is `(IOE :> es, Store :> es, ToJSON r) =>
+  AwakeableId -> r -> Eff es Bool`, and its journal decision is the crash-safe form: journal
+  the just-written value on a successful transition, the stored payload on an
+  already-`completed` row, nothing otherwise. The `Bool` return reports only the transition.
+  Rationale: the shipped EP-38 `appendJournalEntry` requires `IOE` (see Surprises), and the
+  M2 transaction-boundary note requires the re-append-from-stored-payload behavior so a crash
+  between the row update and the journal append self-heals on a later signal. Implemented the
+  refined version directly rather than shipping the simple form first.
+  Date: 2026-06-03.
+
+- Decision: Used shape (1) — the `currentWorkflow` reader accessor on the `Workflow` effect —
+  for `awakeableNamed`, with no EP-38 change required (EP-38 had already shipped
+  `currentWorkflow` and `freshOrdinal`). `awakeable`'s ordinal label is `ord:<n>` derived from
+  `freshOrdinal awakeableStepPrefix`.
+  Rationale: keeps `awakeableNamed :: StepName -> Eff es (AwakeableId, Eff es a)` clean, as the
+  plan preferred; the fallback (explicit pass-through) was unnecessary.
+  Date: 2026-06-03.
+
+
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-03): complete and green.** All five milestones landed; the full keiro
+suite is green (112 examples, 0 failures) and `cabal build all` (including jitsurei) links.
+The plan's purpose — human-in-the-loop / third-party-callback workflows without a polling loop
+— is delivered: a workflow author writes `(aid, await) <- awakeableNamed (StepName "…")` then
+`v <- await`, and the runtime makes the suspend (first `runWorkflow` → `Suspended` + a
+`pending` row) and the external resume (`signalAwakeable aid payload` → row `completed` + a
+`StepRecorded "awk:<uuid>"` → next `runWorkflow` → `Completed`) durable. Idempotent double
+signals, crash-safe journal repair, and cancellation (`WorkflowAwakeableCancelled`) are all
+proven.
+
+**What went smoothly:** EP-38 had already absorbed every cross-plan contract this plan
+proposed (`currentWorkflow`, `freshOrdinal`, the idempotent `appendJournalEntry`, the `awk:`
+prefix), so the plan reduced to "supply the wake source": a `keiro_awakeables` table + schema
+helpers, the allocation/await wrapper, and the external-completion path. No EP-38 edits were
+needed.
+
+**Deviations from the plan-as-written** (all in Surprises & Discoveries / Decision Log):
+`signalAwakeable` gained an `IOE` constraint (the shipped `appendJournalEntry` needs it); the
+crash-safe re-append was implemented as the final form from the start; and the ordinal label
+is `ord:<n>`.
+
+**Seams left for downstream plans:** `countPendingAwakeables` (EP-44 gauge);
+`WorkflowAwakeableCancelled` for EP-42 to record as a failure and EP-43 to reuse the
+await/signal mechanism; `lookupAwakeable` for EP-42 to classify an awakeable-blocked workflow.
+No gaps or follow-ups outstanding.
 
 
 ## Context and Orientation

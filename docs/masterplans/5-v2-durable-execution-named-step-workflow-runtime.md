@@ -160,7 +160,7 @@ metrics instrumentation in dedicated plans in MasterPlan 4.
 |---|-------|------|-----------|-----------|--------|
 | 38 | Workflow journal and named-step replay core | docs/plans/38-workflow-journal-and-named-step-replay-core.md | None | None | Complete |
 | 39 | Durable sleep on the timer table | docs/plans/39-durable-sleep-on-the-timer-table.md | EP-38 | None | Complete |
-| 40 | Awakeables and external completion | docs/plans/40-awakeables-and-external-completion.md | EP-38 | None | In Progress |
+| 40 | Awakeables and external completion | docs/plans/40-awakeables-and-external-completion.md | EP-38 | None | Complete |
 | 41 | Workflow journal snapshots and step-result compaction | docs/plans/41-workflow-journal-snapshots-and-step-result-compaction.md | EP-38 | None | Not Started |
 | 42 | Workflow resume and crash-recovery worker | docs/plans/42-workflow-resume-and-crash-recovery-worker.md | EP-38 | EP-39, EP-40 | Not Started |
 | 43 | Child workflows: spawn, wait, and cancel | docs/plans/43-child-workflows-spawn-wait-and-cancel.md | EP-38 | EP-40, EP-42 | Not Started |
@@ -380,8 +380,8 @@ and the milestone.
 - [x] EP-38 (2026-06-03): prove a two-step workflow journals each step once and replays without re-running side effects; prove an unresolved `awaitStep` yields `Suspended` and an external completion lets the next run finish.
 - [x] EP-39 (2026-06-03): add `sleep`/`sleepNamed` backed by `keiro_timers`; a fired timer appends a `sleep:<id>` completion to the journal (`Keiro.Workflow.Sleep`, no migration / no schema change).
 - [x] EP-39 (2026-06-03): prove a workflow sleeps, the process restarts (modelled as a second `runWorkflow`), and the workflow wakes after the delay without re-running prior steps — plus a real-time variant proving the delay actually elapses.
-- [ ] EP-40: add the `keiro_awakeables` table + migration, `awakeable`, and `signalAwakeable`.
-- [ ] EP-40: prove a workflow suspends on an awakeable and resumes with the signalled payload.
+- [x] EP-40 (2026-06-03): add the `keiro_awakeables` table + migration, `awakeable`/`awakeableNamed`, `signalAwakeable`, `cancelAwakeable`, and `WorkflowAwakeableCancelled` (`Keiro.Workflow.Awakeable` + `.Schema`).
+- [x] EP-40 (2026-06-03): prove a workflow suspends on an awakeable (pending row, no completion) and resumes with the signalled payload; plus idempotent double-signal, crash-safe journal re-append, and cancellation throwing.
 - [ ] EP-41: build the workflow `StateCodec` and snapshot policy; snapshot the accumulated step-result state on the journal stream.
 - [ ] EP-41: prove snapshot + tail-replay hydration loads a long journal without replaying every step.
 - [ ] EP-42: implement the resume worker (discover journals lacking `WorkflowCompleted`, re-invoke, short-circuit journaled steps).
@@ -503,6 +503,28 @@ and the milestone.
   (2) EP-44 can hang a `keiro.timer.*` workflow-sleep dimension off `parseSleepPayload`, and the
   stable EP-39 surface it/EP-45 consume is `runWorkflowTimerWorker` + `workflowSleepFireAction`
   + `sleepNamed`/`sleep` from `Keiro.Workflow.Sleep`.
+
+- 2026-06-03 (EP-40 implementation): **awakeables shipped against an EP-38 that already owned
+  every contract, so no core changes were needed.** Cross-cutting notes for the remaining waves:
+  - **`signalAwakeable` carries `(IOE :> es, Store :> es, ToJSON r)`**, not `Store` alone: the
+    shipped `appendJournalEntry` requires `IOE`. EP-42 (resume worker) and EP-44 (which may
+    instrument the signal call site) must thread `IOE` when they call it. The other external
+    surfaces are `cancelAwakeable :: (Store :> es) => AwakeableId -> Eff es Bool` and
+    `lookupAwakeable`/`countPendingAwakeables` (the latter is EP-44's `keiro.workflow.awakeables.pending`
+    gauge seam, in `Keiro.Workflow.Awakeable.Schema`).
+  - **`signalAwakeable` is idempotent *and* crash-safe.** It journals the just-written value on
+    a `pending → completed` transition, or re-appends the *stored* payload when the row is
+    already `completed` (healing a crash between the row update and the journal append). The
+    `Bool` return is strictly "did this call perform the transition", so `False` does not imply
+    "nothing happened". EP-42's resume worker can rely on this self-healing rather than ordering
+    the two writes in one transaction.
+  - **Constructor clashes.** `AwakeableStatus`'s `Pending`/`Completed`/`Cancelled` collide with
+    `WorkflowOutcome`'s `Completed` and `TimerStatus`'s `Cancelled`. EP-43 (which reuses the
+    await/signal mechanism and imports the workflow surface) should import
+    `Keiro.Workflow.Awakeable.Schema` **qualified**.
+  - **Awakeable storage** is the dedicated `keiro_awakeables` table (migration
+    `2026-06-03-01-00-00-keiro-awakeables.sql`) with `pending`/`completed`/`cancelled` and a
+    partial pending index; the codd `LaxCheck` schema-diff log line on apply is expected noise.
 
 ## Decision Log
 
