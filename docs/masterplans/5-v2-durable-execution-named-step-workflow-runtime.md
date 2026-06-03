@@ -159,7 +159,7 @@ metrics instrumentation in dedicated plans in MasterPlan 4.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 38 | Workflow journal and named-step replay core | docs/plans/38-workflow-journal-and-named-step-replay-core.md | None | None | Complete |
-| 39 | Durable sleep on the timer table | docs/plans/39-durable-sleep-on-the-timer-table.md | EP-38 | None | Not Started |
+| 39 | Durable sleep on the timer table | docs/plans/39-durable-sleep-on-the-timer-table.md | EP-38 | None | Complete |
 | 40 | Awakeables and external completion | docs/plans/40-awakeables-and-external-completion.md | EP-38 | None | Not Started |
 | 41 | Workflow journal snapshots and step-result compaction | docs/plans/41-workflow-journal-snapshots-and-step-result-compaction.md | EP-38 | None | Not Started |
 | 42 | Workflow resume and crash-recovery worker | docs/plans/42-workflow-resume-and-crash-recovery-worker.md | EP-38 | EP-39, EP-40 | Not Started |
@@ -378,8 +378,8 @@ and the milestone.
 - [x] EP-38 (2026-06-03): define the `Keiro.Workflow` effect, `step`, `awaitStep`, `runWorkflow` (returning `WorkflowOutcome`), the `StepRecorded`/`WorkflowCompleted` journal events + codec, and the `wf:<name>-<id>` naming.
 - [x] EP-38 (2026-06-03): implement journal pre-load, named-step short-circuit replay, and the suspend/resume primitive; add the `keiro_workflow_steps` table + migration.
 - [x] EP-38 (2026-06-03): prove a two-step workflow journals each step once and replays without re-running side effects; prove an unresolved `awaitStep` yields `Suspended` and an external completion lets the next run finish.
-- [ ] EP-39: add `sleep` backed by `keiro_timers`; a fired timer appends a `sleep:<id>` completion to the journal.
-- [ ] EP-39: prove a workflow sleeps, the process restarts, and the workflow wakes after the delay without re-running prior steps.
+- [x] EP-39 (2026-06-03): add `sleep`/`sleepNamed` backed by `keiro_timers`; a fired timer appends a `sleep:<id>` completion to the journal (`Keiro.Workflow.Sleep`, no migration / no schema change).
+- [x] EP-39 (2026-06-03): prove a workflow sleeps, the process restarts (modelled as a second `runWorkflow`), and the workflow wakes after the delay without re-running prior steps — plus a real-time variant proving the delay actually elapses.
 - [ ] EP-40: add the `keiro_awakeables` table + migration, `awakeable`, and `signalAwakeable`.
 - [ ] EP-40: prove a workflow suspends on an awakeable and resumes with the signalled payload.
 - [ ] EP-41: build the workflow `StateCodec` and snapshot policy; snapshot the accumulated step-result state on the journal stream.
@@ -489,6 +489,20 @@ and the milestone.
   - **Storage:** three new migrations total — `keiro_workflow_steps` (EP-38),
     `keiro_awakeables` (EP-40), `keiro_workflow_children` (EP-43). EP-39 and EP-41 add none.
 
+
+- 2026-06-03 (EP-39 implementation): **`sleep` shipped intact and the fire action uses the
+  exported journal helper — both fallbacks in EP-39's plan went unused.** EP-38 had already
+  folded in `currentWorkflow`, `freshOrdinal`, and `appendJournalEntryReturningId` (recorded in
+  the prior Surprises entry), so EP-39 did not have to drop the ordinal `sleep` convenience nor
+  recompute the journal-event id. Net: the `keiro_timers` reuse landed with **no migration and
+  no `keiro_timers` schema change** — routing is purely the caller-supplied fire action plus the
+  `{"kind":"keiro.workflow.sleep","step":"sleep:<suffix>"}` payload discriminator
+  (`parseSleepPayload`). Two small cross-cutting notes for the remaining waves: (1) any module
+  importing both `aeson` and `Keiro.Prelude` must write `Aeson..=` because `Keiro.Prelude`
+  re-exports lens's `.=` — EP-40/EP-43 build JSON payloads and should qualify from the start;
+  (2) EP-44 can hang a `keiro.timer.*` workflow-sleep dimension off `parseSleepPayload`, and the
+  stable EP-39 surface it/EP-45 consume is `runWorkflowTimerWorker` + `workflowSleepFireAction`
+  + `sleepNamed`/`sleep` from `Keiro.Workflow.Sleep`.
 
 ## Decision Log
 
