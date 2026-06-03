@@ -2381,6 +2381,96 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       summary2 `shouldBe` emptyResumeSummary
       readIORef counter >>= \c -> c `shouldBe` 3
 
+  describe "Keiro.Workflow observability" $ around (withFreshStore fixture) $ do
+    -- The headline operability signal: executed (real work) vs replayed
+    -- (recorded history), recorded by the runtime through an SDK meter and read
+    -- back from the in-memory exporter — plus the active gauge and the
+    -- journal-length histogram.
+    it "records workflow instruments through an SDK meter" $ \storeHandle -> do
+      (exporter, ref) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      metrics <- Telemetry.newKeiroMetrics meter
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "obs"
+          wid = WorkflowId "obs-1"
+          opts = defaultWorkflowRunOptions & #metrics .~ Just metrics
+      -- First run: both steps miss → two executions.
+      first <- Store.runStoreIO storeHandle $ runWorkflowWith opts name wid (demoWorkflow counter)
+      first `shouldBe` Right (Completed (1, 2))
+      -- Second run, same id: both steps hit → two replays.
+      second <- Store.runStoreIO storeHandle $ runWorkflowWith opts name wid (demoWorkflow counter)
+      second `shouldBe` Right (Completed (1, 2))
+      -- The side effects ran exactly twice across both runs (the replay run
+      -- short-circuited every step).
+      readIORef counter >>= \c -> c `shouldBe` 2
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef ref
+      let scalars = flattenScalarPoints exported
+          hists = flattenHistogramPoints exported
+      lookup "keiro.workflow.steps.executed" scalars `shouldBe` Just (IntNumber 2)
+      lookup "keiro.workflow.steps.replayed" scalars `shouldBe` Just (IntNumber 2)
+      -- One journal-length observation per completed run (two completions).
+      [c | (n, c, _) <- hists, n == "keiro.workflow.journal.length"] `shouldBe` [2]
+      -- Both runs finished, so the live-run count returned to zero.
+      lookup "keiro.workflow.active" scalars `shouldBe` Just (IntNumber 0)
+
+    -- The resume worker increments keiro.workflow.resumed per re-invocation and
+    -- samples keiro.workflow.awakeables.pending each pass.
+    it "records a resume and the pending-awakeable count when the worker re-invokes" $ \storeHandle -> do
+      (exporter, ref) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      metrics <- Telemetry.newKeiroMetrics meter
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "obs-resume"
+          wid = WorkflowId "obs-r-1"
+      -- Suspend a workflow so it has a step row but no completion: the resume
+      -- worker will re-invoke it (and stay Suspended, which still counts as a
+      -- re-invocation).
+      suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (stepThenAwaitWorkflow counter)
+      suspended `shouldBe` Right Suspended
+      -- Register one pending awakeable (independent of the suspended workflow's
+      -- own await) so the pending gauge has something to count.
+      let aid = awakeableIdToUuid (deterministicAwakeableId (WorkflowName "ext") (WorkflowId "1") "cb")
+      Right () <-
+        Store.runStoreIO storeHandle $ Store.runTransaction $ Awk.registerAwakeableTx aid "ext" "1"
+      -- One resume pass with metrics threaded through the run options.
+      let registry = Map.singleton name (WorkflowDef (\_wid -> stepThenAwaitWorkflow counter))
+          resumeOpts =
+            defaultWorkflowResumeOptions
+              & #runOptions .~ (defaultWorkflowRunOptions & #metrics .~ Just metrics)
+      Right _summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce resumeOpts registry
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef ref
+      let scalars = flattenScalarPoints exported
+      lookup "keiro.workflow.resumed" scalars `shouldBe` Just (IntNumber 1)
+      lookup "keiro.workflow.awakeables.pending" scalars `shouldBe` Just (IntNumber 1)
+
+    -- The no-op idiom end to end: defaultWorkflowRunOptions carries metrics =
+    -- Nothing, so a run on a dedicated provider exports no points at all.
+    it "records nothing through a Nothing handle" $ \storeHandle -> do
+      (exporter, ref) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      counter <- newIORef (0 :: Int)
+      result <-
+        Store.runStoreIO storeHandle $
+          runWorkflow (WorkflowName "obs-noop") (WorkflowId "obs-n-1") (demoWorkflow counter)
+      result `shouldBe` Right (Completed (1, 2))
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef ref
+      flattenScalarPoints exported `shouldBe` []
+      flattenHistogramPoints exported `shouldBe` []
+
   describe "Keiro.Workflow.Snapshot codec" $ do
     -- Pure (no-DB) round-trip of the workflow state codec.
     it "round-trips a non-trivial accumulated step map and carries the sentinel shape hash" $ do
