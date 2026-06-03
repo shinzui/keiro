@@ -74,6 +74,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Keiro.Prelude
+import Keiro.Telemetry (recordWorkflowAwakeablesPending, recordWorkflowResumed)
 import Keiro.Workflow
   ( Workflow
   , WorkflowId (..)
@@ -84,6 +85,7 @@ import Keiro.Workflow
   , findUnfinishedWorkflowIds
   , runWorkflowWith
   )
+import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Child.Schema (findRunningChildIds, lookupChild)
 import Kiroku.Store.Effect (Store)
@@ -201,6 +203,12 @@ resumeWorkflowsOnce ::
   WorkflowRegistry es ->
   Eff es ResumeSummary
 resumeWorkflowsOnce opts registry = do
+  -- EP-44: sample the @keiro.workflow.awakeables.pending@ gauge once per pass,
+  -- on the same Store the discovery query uses. The metrics handle rides on the
+  -- run options (EP-44 threads telemetry through 'WorkflowRunOptions'), so it is
+  -- already forwarded into 'runWorkflowWith' for every re-invocation.
+  pending <- countPendingAwakeables
+  recordWorkflowAwakeablesPending mMetrics (fromIntegral pending)
   -- Discovery unions two sources: workflows with steps but no terminal marker
   -- ('findUnfinishedWorkflowIds') and freshly-spawned children that have no
   -- step rows yet ('findRunningChildIds', EP-43) — so a zero-step child is
@@ -211,6 +219,7 @@ resumeWorkflowsOnce opts registry = do
       seed = emptyResumeSummary{discovered = length pairs}
   foldM advance seed pairs
   where
+    mMetrics = runOptions opts ^. #metrics
     advance :: ResumeSummary -> (Text, Text) -> Eff es ResumeSummary
     advance acc (widText, wnameText) =
       case Map.lookup (WorkflowName wnameText) registry of
@@ -235,6 +244,10 @@ resumeWorkflowsOnce opts registry = do
           outcome <- case mChild of
             Just _ -> runChildWorkflow (runOptions opts) name wid (runDef wid)
             Nothing -> runWorkflowWith (runOptions opts) name wid (runDef wid)
+          -- EP-44: one @keiro.workflow.resumed@ increment per re-invocation of a
+          -- registered workflow (the unknown-name branch above is not a
+          -- re-invocation, so it does not count).
+          recordWorkflowResumed mMetrics 1
           pure (bumpForOutcome outcome acc)
 
 -- | Fold one re-invocation's outcome into the running summary. The existential
