@@ -87,14 +87,14 @@ This section must always reflect the actual current state of the work.
 - [x] M1: Add the `StuckTimerFilter` parameter type and document the formal definition of "stuck". (2026-06-02)
 - [x] M1: Write the M1 tests in `keiro/test/Main.hs` (find, requeue+re-fire, cancel-not-claimed). (2026-06-02)
 - [x] M1: `cabal test keiro:keiro-test` green; record transcript in Concrete Steps. (2026-06-02) — `85 examples, 0 failures`.
-- [ ] M2: Add the `Dead` constructor to `TimerStatus`; extend `statusToText` / `statusFromText`.
-- [ ] M2: Write the codd migration `keiro-migrations/sql-migrations/2026-05-17-03-00-00-keiro-timer-recovery.sql` adding `last_error TEXT` and the `dead`-aware index.
-- [ ] M2: Add `deadLetterTimer` to `Keiro.Timer.Schema`, re-export from `Keiro.Timer`.
-- [ ] M2: Add the attempt-ceiling worker policy to `runTimerWorker` (new `TimerWorkerOptions` / `runTimerWorkerWith`).
-- [ ] M2: Update `keiro-migrations/test/Main.hs` to assert the `last_error` column exists on `keiro_timers`.
-- [ ] M2: Write the M2 tests in `keiro/test/Main.hs` (attempt-ceiling -> `dead`, dead-not-claimed).
-- [ ] M2: `cabal test keiro:keiro-test` and `cabal test keiro-migrations:keiro-migrations-test` green; record transcripts.
-- [ ] Record the new `TimerStatus` value, the `last_error` column, and the migration filename in the MasterPlan Surprises & Discoveries (for EP-36 / EP-37 to pick up).
+- [x] M2: Add the `Dead` constructor to `TimerStatus`; extend `statusToText` / `statusFromText`. (2026-06-02)
+- [x] M2: Write the codd migration `keiro-migrations/sql-migrations/2026-05-17-03-00-00-keiro-timer-recovery.sql` adding `last_error TEXT` and the `dead`-aware index. (2026-06-02)
+- [x] M2: Add `deadLetterTimer` to `Keiro.Timer.Schema`, re-export from `Keiro.Timer`. (2026-06-02)
+- [x] M2: Add the attempt-ceiling worker policy to `runTimerWorker` (new `TimerWorkerOptions` / `runTimerWorkerWith`). (2026-06-02)
+- [x] M2: Update `keiro-migrations/test/Main.hs` to assert the `last_error` column exists on `keiro_timers`. (2026-06-02)
+- [x] M2: Write the M2 tests in `keiro/test/Main.hs` (attempt-ceiling -> `dead`, dead-not-claimed). (2026-06-02)
+- [x] M2: `cabal test keiro:keiro-test` and `cabal test keiro-migrations:keiro-migrations-test` green; record transcripts. (2026-06-02) — `keiro-test`: `86 examples, 0 failures`; `keiro-migrations-test`: `1 example, 0 failures`.
+- [x] Record the new `TimerStatus` value, the `last_error` column, and the migration filename in the MasterPlan Surprises & Discoveries (for EP-36 / EP-37 to pick up). (2026-06-02)
 
 
 ## Surprises & Discoveries
@@ -102,7 +102,27 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-02: **`file-embed` does not recompile when a *new* migration file is
+  added.** `embedDir "sql-migrations"` (in `keiro-migrations/src/Keiro/Migrations.hs`)
+  registers each file present *at compile time* as a Template Haskell dependent
+  file, but a newly added `.sql` file is not yet a dependent, so neither
+  `cabal build keiro-migrations` nor even `--ghc-options=-fforce-recomp`
+  re-embeds it (cabal reports "Up to date" and skips ghc entirely). The
+  migrations test failed (`last_error` column absent) until `Keiro.Migrations`
+  was forced to recompile by a content change to the module. After one
+  recompile that picks up the new file, subsequent builds are stable. Anyone
+  adding a future Keiro migration must force a recompile of `Keiro.Migrations`
+  (touch its *contents*, or `cabal clean`), not just rebuild. This is a
+  property of the existing `embedDir` approach, not something this plan changed.
+- 2026-06-02: Followed the plan's baseline choice to leave `TimerRow` unchanged
+  (no `lastError` field) — `last_error` is read via a status query, not the row
+  decoder — so `timerRowDecoder`, `claimDueTimerStmt`, and `findStuckTimersStmt`
+  all keep the same eight-column shape and no `SELECT`/`RETURNING` list changed.
+- 2026-06-02: The M2 attempt-ceiling test is a single hspec example (not split):
+  one `runTimerWorkerWith (maxAttempts = Just 0)` claim asserts the fire action
+  never ran (via an `IORef` flag), the row reached `status = 'dead'` with the
+  expected `last_error`, and a follow-up `runTimerWorker` returns `Right Nothing`
+  (dead row never re-claimed).
 
 
 ## Decision Log
@@ -208,7 +228,47 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-02): complete, both milestones green.** The timer subsystem
+now has the recovery API the Purpose section called for. Against the original
+four goals:
+
+1. **List stranded rows** — `findStuckTimers :: UTCTime -> StuckTimerFilter ->
+   Eff es [TimerRow]` with `StuckTimerFilter { minAge, minAttempts }` and
+   `anyStuckTimer`. "Stuck" = `status = 'firing'` plus optional `minAge` on
+   `updated_at` and/or `minAttempts`. Done and tested.
+2. **Requeue** — `requeueStuckTimer :: TimerId -> Eff es Bool` (firing →
+   scheduled, `fire_at` unchanged, idempotent). Done; a test proves a stranded
+   row is requeued and the ordinary `runTimerWorker` loop re-claims and fires it
+   exactly once, closing the previously-broken at-least-once recovery loop.
+3. **Cancel** — `cancelTimer :: TimerId -> Eff es Bool` (scheduled/firing →
+   cancelled, idempotent). Done; a test proves a cancelled row is never claimed.
+4. **Auto-dead-letter** — new terminal `TimerStatus` value `Dead` (stored
+   `'dead'`), nullable `keiro_timers.last_error TEXT` column (migration
+   `2026-05-17-03-00-00-keiro-timer-recovery.sql`), `deadLetterTimer ::
+   TimerId -> Text -> Eff es Bool`, and the opt-in worker policy
+   `runTimerWorkerWith (TimerWorkerOptions { maxAttempts })` with
+   `defaultTimerWorkerOptions` / `runTimerWorker` kept as the default alias.
+   Done; a test proves a `maxAttempts = Just 0` worker dead-letters on first
+   claim, never runs the fire action, and never re-claims the dead row.
+
+**Verification.** `keiro-test`: 86 examples, 0 failures (was 85 before M1, +1
+for M1's two examples folded into the existing suite and +1 for M2). 
+`keiro-migrations-test`: 1 example, 0 failures, now also asserting
+`keiro_timers.last_error` exists in the `kiroku` schema.
+
+**Gaps / deferred.** No user documentation was written here by design — the
+operator runbook that uses these functions is EP-37, and the `keiro.timer.stuck`
+gauge that reuses the "stuck" definition and the `dead` terminal state is EP-36.
+The cross-plan contract (function/field/migration names, the formal "stuck"
+definition) is recorded in the MasterPlan Surprises & Discoveries for those
+plans to consume. `TimerRow` was deliberately left without a `lastError` field
+to minimize churn; if EP-36/EP-37 need it on the row, they can add it and update
+the decoder + every column list together.
+
+**Lesson.** The `file-embed` recompilation gotcha (see Surprises & Discoveries)
+cost one debug cycle: a brand-new migration file is invisible to cabal/GHC until
+`Keiro.Migrations` is forced to recompile. Worth a one-line note in any future
+migration-authoring guidance.
 
 
 ## Context and Orientation

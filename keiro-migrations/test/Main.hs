@@ -4,6 +4,7 @@ module Main
 where
 
 import Codd (CoddSettings (..), VerifySchemas (LaxCheck))
+import Contravariant.Extras (contrazip3)
 import Codd.Parsing (connStringParser)
 import Codd.Representations.Types (DbRep (..))
 import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
@@ -39,6 +40,7 @@ main =
           _ <- runAllKeiroMigrations coddSettings (secondsToDiffTime 5) LaxCheck
           assertTablesExist connStr "kiroku" expectedTables
           assertTablesAbsent connStr "public" expectedTables
+          assertColumnExists connStr "kiroku" "keiro_timers" "last_error"
 
         case result of
           Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
@@ -109,6 +111,37 @@ assertTablesAbsent connStr schema tables = do
       [ Pool.Config.staticConnectionSettings (Conn.connectionString connStr)
       , Pool.Config.size 1
       ]
+
+assertColumnExists :: Text -> Text -> Text -> Text -> IO ()
+assertColumnExists connStr schema table column = do
+  pool <- Pool.acquire poolConfig
+  result <- Pool.use pool (Session.statement (schema, table, column) columnExistsStmt)
+  Pool.release pool
+  case result of
+    Left err -> expectationFailure ("column verification query failed: " <> show err)
+    Right present -> present `shouldBe` True
+ where
+  poolConfig =
+    Pool.Config.settings
+      [ Pool.Config.staticConnectionSettings (Conn.connectionString connStr)
+      , Pool.Config.size 1
+      ]
+
+columnExistsStmt :: Statement (Text, Text, Text) Bool
+columnExistsStmt =
+  preparable
+    """
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
+    )
+    """
+    ( contrazip3
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+    )
+    (D.singleRow (D.column (D.nonNullable D.bool)))
 
 schemaTablesStmt :: Statement Text [Text]
 schemaTablesStmt =

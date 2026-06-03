@@ -54,6 +54,7 @@ test-suite keiro-migrations-test
     , base        >=4.18 && <5
     , codd
     , containers
+    , contravariant-extras
     , ephemeral-pg >=0.2
     , generic-lens >=2.2
     , hasql      >=1.10

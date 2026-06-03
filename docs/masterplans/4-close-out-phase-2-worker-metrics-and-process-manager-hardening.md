@@ -134,7 +134,7 @@ point below.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 33 | Add an OpenTelemetry metrics surface to Keiro.Telemetry | docs/plans/33-add-an-opentelemetry-metrics-surface-to-keiro-telemetry.md | None | EP-25 | Complete |
-| 34 | Add timer stuck-row recovery and cancellation API | docs/plans/34-add-timer-stuck-row-recovery-and-cancellation-api.md | None | None | In Progress |
+| 34 | Add timer stuck-row recovery and cancellation API | docs/plans/34-add-timer-stuck-row-recovery-and-cancellation-api.md | None | None | Complete |
 | 35 | Instrument the outbox and inbox workers with metrics | docs/plans/35-instrument-the-outbox-and-inbox-workers-with-metrics.md | EP-33 | None | Not Started |
 | 36 | Instrument the timer and projection workers with metrics | docs/plans/36-instrument-the-timer-and-projection-workers-with-metrics.md | EP-33 | EP-34 | Not Started |
 | 37 | Process-manager hardening guidance and snapshot worked example | docs/plans/37-process-manager-hardening-guidance-and-snapshot-worked-example.md | EP-34 | EP-35, EP-36 | Not Started |
@@ -258,8 +258,8 @@ plan and the milestone.
 - [x] EP-33: define the `Keiro.Telemetry` meter handle, no-op default, and instrument constructors. (2026-06-03)
 - [x] EP-33: write the metrics section of the conventions audit (names, units, kinds, semconv alignment). (2026-06-03)
 - [x] EP-33: add the in-memory-metric-exporter test harness and assert instruments record under it. (2026-06-03)
-- [ ] EP-34: add `findStuckTimers`, requeue-to-`Scheduled`, and cancel functions in `Keiro.Timer`/`Timer.Schema`.
-- [ ] EP-34: add the attempt-ceiling auto-dead-letter path (or document its deliberate omission) with tests.
+- [x] EP-34: add `findStuckTimers`, requeue-to-`Scheduled`, and cancel functions in `Keiro.Timer`/`Timer.Schema`. (2026-06-02)
+- [x] EP-34: add the attempt-ceiling auto-dead-letter path (or document its deliberate omission) with tests. (2026-06-02)
 - [ ] EP-35: thread the meter handle into the outbox publisher and record backlog / published / retried / deadlettered.
 - [ ] EP-35: thread the meter handle into the inbox and record processed / duplicates / failed / backlog.
 - [ ] EP-35: assert outbox/inbox instruments under the in-memory metric exporter.
@@ -371,6 +371,47 @@ plan and the milestone.
     instrument constructors as `meterCreateCounterInt64 meter name (Just unit)
     (Just desc) defaultAdvisoryParameters` — unit and description are both
     `Maybe Text`.
+
+- 2026-06-02 (EP-34 shipped): The timer recovery API landed exactly as the
+  2026-06-03 "drafting EP-34" entry specified. EP-36 and EP-37 must consume this
+  shipped shape from `keiro/src/Keiro/Timer/Schema.hs` (re-exported by
+  `Keiro.Timer`):
+  - `data StuckTimerFilter = StuckTimerFilter { minAge :: Maybe NominalDiffTime,
+    minAttempts :: Maybe Int }` and `anyStuckTimer = StuckTimerFilter Nothing
+    Nothing`. `findStuckTimers :: UTCTime -> StuckTimerFilter -> Eff es
+    [TimerRow]` selects `status = 'firing'` rows; the `minAge` bound is computed
+    in Haskell as a cutoff `now - minAge` compared to `updated_at`.
+  - `requeueStuckTimer :: TimerId -> Eff es Bool` (firing → scheduled, `fire_at`
+    unchanged, idempotent); `cancelTimer :: TimerId -> Eff es Bool`
+    (scheduled/firing → cancelled); `deadLetterTimer :: TimerId -> Text -> Eff es
+    Bool` (scheduled/firing → dead, sets `last_error`). All three return `True`
+    iff a row changed.
+  - **New terminal `TimerStatus` value `Dead`** (stored `'dead'`); **new column
+    `keiro_timers.last_error TEXT`** (nullable); **new migration**
+    `keiro-migrations/sql-migrations/2026-05-17-03-00-00-keiro-timer-recovery.sql`
+    (adds the column and narrows `keiro_timers_due_idx` to
+    `WHERE status IN ('scheduled', 'firing')`). `TimerRow` was left **unchanged**
+    (no `lastError` field); `last_error` is read via a status query.
+  - **New worker entry point** `runTimerWorkerWith :: TimerWorkerOptions ->
+    UTCTime -> (TimerRow -> Eff es (Maybe EventId)) -> Eff es (Maybe TimerRow)`
+    with `newtype TimerWorkerOptions = TimerWorkerOptions { maxAttempts :: Maybe
+    Int }` and `defaultTimerWorkerOptions`; `runTimerWorker = runTimerWorkerWith
+    defaultTimerWorkerOptions` (signature unchanged, so no existing call site
+    changed). With `maxAttempts = Just n`, a claimed timer whose post-claim
+    `attempts > n` is dead-lettered (reason `"timer exceeded attempt ceiling of
+    n"`) instead of fired.
+  - For EP-36: the `keiro.timer.stuck` gauge counts
+    `status = 'firing' AND updated_at <= $cutoff`; treat `dead` as a distinct
+    terminal state (not stuck, not backlog) and optionally surface a dead-letter
+    count via `WHERE status = 'dead'`. For EP-37's runbook: `findStuckTimers`
+    (list) → `requeueStuckTimer` (retry) / `cancelTimer` (withdraw) /
+    `deadLetterTimer` or the `maxAttempts` worker option (abandon).
+  - **Build gotcha for future migration authors:** `embedDir "sql-migrations"`
+    (Template Haskell, `keiro-migrations/src/Keiro/Migrations.hs`) does **not**
+    recompile when a *new* `.sql` file is added — cabal reports "Up to date" and
+    skips ghc even with `-fforce-recomp`. Force a content recompile of
+    `Keiro.Migrations` (or `cabal clean`) after adding a migration, then builds
+    are stable.
 
 ## Decision Log
 

@@ -26,6 +26,7 @@ module Keiro.Timer.Schema
   , findStuckTimers
   , requeueStuckTimer
   , cancelTimer
+  , deadLetterTimer
   )
 where
 
@@ -51,12 +52,15 @@ import Kiroku.Store.Types (EventId (..))
 * 'Fired' — successfully fired; terminal.
 * 'Cancelled' — withdrawn before firing; also the decode fallback for an
   unrecognized stored value.
+* 'Dead' — abandoned after exceeding the attempt ceiling; terminal; carries an
+  optional @last_error@ describing why it was given up on.
 -}
 data TimerStatus
   = Scheduled
   | Firing
   | Fired
   | Cancelled
+  | Dead
   deriving stock (Generic, Eq, Show)
 
 {- | A timer row as stored: the original 'TimerRequest' fields plus the live
@@ -156,6 +160,16 @@ cancelTimer :: (Store :> es) => TimerId -> Eff es Bool
 cancelTimer timerId =
   runTransaction $
     Tx.statement (timerIdToUuid timerId) cancelTimerStmt
+
+{- | Move a timer from @Scheduled@ or @Firing@ to the terminal @Dead@ state,
+recording @reason@ in @last_error@ so an operator can see why it was abandoned
+(@SELECT * FROM keiro_timers WHERE status = 'dead'@). Terminal rows are left
+untouched. Idempotent. Returns 'True' when a row changed.
+-}
+deadLetterTimer :: (Store :> es) => TimerId -> Text -> Eff es Bool
+deadLetterTimer timerId reason =
+  runTransaction $
+    Tx.statement (timerIdToUuid timerId, reason) deadLetterTimerStmt
 
 scheduleTimerStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text) ()
 scheduleTimerStmt =
@@ -269,6 +283,23 @@ cancelTimerStmt =
     (E.param (E.nonNullable E.uuid))
     ((> 0) <$> D.rowsAffected)
 
+deadLetterTimerStmt :: Statement (UUID, Text) Bool
+deadLetterTimerStmt =
+  preparable
+    """
+    UPDATE keiro_timers
+    SET status = 'dead',
+        last_error = $2,
+        updated_at = now()
+    WHERE timer_id = $1
+      AND status IN ('scheduled', 'firing')
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.uuid))
+        (E.param (E.nonNullable E.text))
+    )
+    ((> 0) <$> D.rowsAffected)
+
 timerRowDecoder :: D.Row TimerRow
 timerRowDecoder =
   TimerRow
@@ -287,6 +318,7 @@ statusToText = \case
   Firing -> "firing"
   Fired -> "fired"
   Cancelled -> "cancelled"
+  Dead -> "dead"
 
 statusFromText :: Text -> TimerStatus
 statusFromText = \case
@@ -294,6 +326,7 @@ statusFromText = \case
   "firing" -> Firing
   "fired" -> Fired
   "cancelled" -> Cancelled
+  "dead" -> Dead
   _ -> Cancelled
 
 timerIdToUuid :: TimerId -> UUID

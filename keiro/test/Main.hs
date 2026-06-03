@@ -999,6 +999,35 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         cancelTimer (counterTimerRequest ^. #timerId)
       cancelledAgain `shouldBe` Right False
 
+    it "dead-letters a timer that exceeds the attempt ceiling and never reclaims it" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          scheduleTimerTx counterTimerRequest
+      firedRef <- newIORef False
+      let firedEventId = EventId sampleUuid2
+      -- maxAttempts = Just 0: the first claim sets attempts = 1 > 0, so the
+      -- worker dead-letters instead of firing.
+      result <- Store.runStoreIO storeHandle $
+        runTimerWorkerWith (defaultTimerWorkerOptions & #maxAttempts .~ Just 0) dueTimerTime $ \_ -> do
+          liftIO (writeIORef firedRef True)
+          pure (Just firedEventId)
+      case result of
+        Right (Just timer) ->
+          timer ^. #status `shouldBe` Firing
+        other -> expectationFailure ("expected a claimed timer, got " <> show other)
+      -- The fire action never ran.
+      didFire <- readIORef firedRef
+      didFire `shouldBe` False
+      -- The row landed in 'dead' with the expected reason in last_error.
+      Right statusRow <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.statement sampleUuid timerStatusAndErrorStmt
+      statusRow `shouldBe` Just ("dead", Just "timer exceeded attempt ceiling of 0")
+      -- A dead row is never re-claimed.
+      secondWorkerResult <- Store.runStoreIO storeHandle $
+        runTimerWorker dueTimerTime (\_ -> pure (Just firedEventId))
+      secondWorkerResult `shouldBe` Right Nothing
+
   describe "Keiro.Outbox.Kafka" $ do
     it "converts an outbox row to a Kafka producer record" $ do
       let envelope = sampleIntegrationEnvelope
@@ -2407,6 +2436,17 @@ counterTimerRequest = TimerRequest
 
 dueTimerTime :: UTCTime
 dueTimerTime = UTCTime (ModifiedJulianDay 1) (secondsToDiffTime 0)
+
+timerStatusAndErrorStmt :: Statement UUID (Maybe (Text, Maybe Text))
+timerStatusAndErrorStmt =
+  preparable
+    """
+    SELECT status, last_error
+    FROM keiro_timers
+    WHERE timer_id = $1
+    """
+    (E.param (E.nonNullable E.uuid))
+    (D.rowMaybe ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nullable D.text)))
 
 recordedFrom :: EventData -> RecordedEvent
 recordedFrom event = RecordedEvent
