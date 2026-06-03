@@ -30,6 +30,7 @@ module Keiro.Telemetry
   , withProducerSpan
   , withConsumerSpan
   , withCommandSpan
+  , withWorkflowSpan
 
     -- * W3C TraceContext bridge
   , traceContextFromCurrentSpan
@@ -54,6 +55,9 @@ module Keiro.Telemetry
   , keiro_stream_name
   , keiro_retry_attempt
   , keiro_events_appended
+  , keiro_workflow_name
+  , keiro_workflow_id
+  , keiro_workflow_step
 
     -- * Metrics surface
     --
@@ -75,6 +79,12 @@ module Keiro.Telemetry
   , keiroTimerStuckName
   , keiroProjectionLagName
   , keiroProjectionWaitTimeoutsName
+  , keiroWorkflowStepsExecutedName
+  , keiroWorkflowStepsReplayedName
+  , keiroWorkflowResumedName
+  , keiroWorkflowJournalLengthName
+  , keiroWorkflowAwakeablesPendingName
+  , keiroWorkflowActiveName
   , KeiroMetrics (..)
   , newKeiroMetrics
   , recordOutboxBacklog
@@ -91,6 +101,12 @@ module Keiro.Telemetry
   , recordTimerStuck
   , recordProjectionLag
   , recordProjectionWaitTimeouts
+  , recordWorkflowStepExecuted
+  , recordWorkflowStepReplayed
+  , recordWorkflowResumed
+  , recordWorkflowActive
+  , recordWorkflowJournalLength
+  , recordWorkflowAwakeablesPending
   )
 where
 
@@ -158,6 +174,7 @@ import Keiro.Integration.Event
   )
 import Keiro.Outbox.Kafka (KafkaProducerRecord)
 import Keiro.Prelude
+import Keiro.Workflow.Types (StepName (..), WorkflowId (..), WorkflowName (..))
 
 import "hs-opentelemetry-propagator-w3c" OpenTelemetry.Propagator.W3CTraceContext
   ( decodeSpanContext
@@ -186,6 +203,15 @@ keiro_retry_attempt = AttributeKey "keiro.retry.attempt"
 
 keiro_events_appended :: AttributeKey Int64
 keiro_events_appended = AttributeKey "keiro.events.appended"
+
+keiro_workflow_name :: AttributeKey Text
+keiro_workflow_name = AttributeKey "keiro.workflow.name"
+
+keiro_workflow_id :: AttributeKey Text
+keiro_workflow_id = AttributeKey "keiro.workflow.id"
+
+keiro_workflow_step :: AttributeKey Text
+keiro_workflow_step = AttributeKey "keiro.workflow.step"
 
 -- ---------------------------------------------------------------------------
 -- Span helpers
@@ -306,6 +332,33 @@ withCommandSpan (Just tracer) streamName retryAttempt body =
       Just n -> addAttribute sp (unkey keiro_retry_attempt) n
     body (Just sp)
   where
+    args = defaultSpanArguments {kind = Internal}
+
+{- | Open an @Internal@ span around a workflow run (or a single step/resume when
+a 'StepName' is supplied), named @"workflow " <> name@. Attributes carry the
+bespoke @keiro.workflow.name@, @keiro.workflow.id@, and — when present —
+@keiro.workflow.step@ keys. Like 'withCommandSpan', a 'Nothing' tracer makes the
+helper a pass-through, so it is safe to call unconditionally.
+-}
+withWorkflowSpan
+  :: (MonadUnliftIO m, HasCallStack)
+  => Maybe Tracer
+  -> WorkflowName
+  -> WorkflowId
+  -> Maybe StepName
+  -> (Maybe Span -> m a)
+  -> m a
+withWorkflowSpan Nothing _ _ _ body = body Nothing
+withWorkflowSpan (Just tracer) name wid mStep body =
+  inSpan' tracer spanName args $ \sp -> do
+    addAttribute sp (unkey keiro_workflow_name) (unWorkflowName name)
+    addAttribute sp (unkey keiro_workflow_id) (unWorkflowId wid)
+    case mStep of
+      Nothing -> pure ()
+      Just s -> addAttribute sp (unkey keiro_workflow_step) (unStepName s)
+    body (Just sp)
+  where
+    spanName = "workflow " <> unWorkflowName name
     args = defaultSpanArguments {kind = Internal}
 
 -- ---------------------------------------------------------------------------
@@ -463,6 +516,18 @@ keiroProjectionLagName :: Text
 keiroProjectionLagName = "keiro.projection.lag"
 keiroProjectionWaitTimeoutsName :: Text
 keiroProjectionWaitTimeoutsName = "keiro.projection.wait.timeouts"
+keiroWorkflowStepsExecutedName :: Text
+keiroWorkflowStepsExecutedName = "keiro.workflow.steps.executed"
+keiroWorkflowStepsReplayedName :: Text
+keiroWorkflowStepsReplayedName = "keiro.workflow.steps.replayed"
+keiroWorkflowResumedName :: Text
+keiroWorkflowResumedName = "keiro.workflow.resumed"
+keiroWorkflowJournalLengthName :: Text
+keiroWorkflowJournalLengthName = "keiro.workflow.journal.length"
+keiroWorkflowAwakeablesPendingName :: Text
+keiroWorkflowAwakeablesPendingName = "keiro.workflow.awakeables.pending"
+keiroWorkflowActiveName :: Text
+keiroWorkflowActiveName = "keiro.workflow.active"
 
 {- | All metric instruments the keiro library records, built once from a
 'Meter' by 'newKeiroMetrics'. Workers accept a @'Maybe' 'KeiroMetrics'@ and
@@ -490,6 +555,12 @@ data KeiroMetrics = KeiroMetrics
   , timerStuck :: Gauge Int64
   , projectionLag :: Gauge Int64
   , projectionWaitTimeouts :: Counter Int64
+  , workflowStepsExecuted :: Counter Int64
+  , workflowStepsReplayed :: Counter Int64
+  , workflowResumed :: Counter Int64
+  , workflowActive :: Gauge Int64
+  , workflowJournalLength :: Histogram
+  , workflowAwakeablesPending :: Gauge Int64
   }
 
 {- | Construct every keiro metric instrument from a 'Meter'. Call this once at
@@ -515,6 +586,12 @@ newKeiroMetrics meter = liftIO $ do
   timerStuck' <- gaugeI64 keiroTimerStuckName "{timer}" "Timers stuck in the Firing state past threshold."
   projectionLag' <- gaugeI64 keiroProjectionLagName "{event}" "Events between the log head and a projection's checkpoint."
   projectionWaitTimeouts' <- counterI64 keiroProjectionWaitTimeoutsName "{timeout}" "Position-wait calls that timed out before the projection caught up."
+  workflowStepsExecuted' <- counterI64 keiroWorkflowStepsExecutedName "{step}" "Workflow steps that ran their action (a journal miss)."
+  workflowStepsReplayed' <- counterI64 keiroWorkflowStepsReplayedName "{step}" "Workflow steps short-circuited to a recorded result (a journal hit)."
+  workflowResumed' <- counterI64 keiroWorkflowResumedName "{workflow}" "Workflow re-invocations performed by the resume worker."
+  workflowActive' <- gaugeI64 keiroWorkflowActiveName "{workflow}" "Workflow runs currently in progress in this process."
+  workflowJournalLength' <- histogram keiroWorkflowJournalLengthName "{event}" "Journal event count of a workflow at completion."
+  workflowAwakeablesPending' <- gaugeI64 keiroWorkflowAwakeablesPendingName "{awakeable}" "Awakeables awaiting an external signal."
   pure
     KeiroMetrics
       { outboxBacklog = outboxBacklog'
@@ -531,6 +608,12 @@ newKeiroMetrics meter = liftIO $ do
       , timerStuck = timerStuck'
       , projectionLag = projectionLag'
       , projectionWaitTimeouts = projectionWaitTimeouts'
+      , workflowStepsExecuted = workflowStepsExecuted'
+      , workflowStepsReplayed = workflowStepsReplayed'
+      , workflowResumed = workflowResumed'
+      , workflowActive = workflowActive'
+      , workflowJournalLength = workflowJournalLength'
+      , workflowAwakeablesPending = workflowAwakeablesPending'
       }
   where
     counterI64 :: Text -> Text -> Text -> IO (Counter Int64)
@@ -589,3 +672,15 @@ recordProjectionLag :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordProjectionLag = recordGaugeI64 projectionLag
 recordProjectionWaitTimeouts :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordProjectionWaitTimeouts = recordCounter projectionWaitTimeouts
+recordWorkflowStepExecuted :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordWorkflowStepExecuted = recordCounter workflowStepsExecuted
+recordWorkflowStepReplayed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordWorkflowStepReplayed = recordCounter workflowStepsReplayed
+recordWorkflowResumed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordWorkflowResumed = recordCounter workflowResumed
+recordWorkflowActive :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordWorkflowActive = recordGaugeI64 workflowActive
+recordWorkflowJournalLength :: (MonadIO m) => Maybe KeiroMetrics -> Double -> m ()
+recordWorkflowJournalLength = recordHistogram workflowJournalLength
+recordWorkflowAwakeablesPending :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordWorkflowAwakeablesPending = recordGaugeI64 workflowAwakeablesPending
