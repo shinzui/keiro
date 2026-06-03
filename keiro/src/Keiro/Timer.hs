@@ -25,6 +25,13 @@ module Keiro.Timer
   , claimDueTimer
   , markTimerFired
 
+    -- * Recovery
+  , StuckTimerFilter (..)
+  , anyStuckTimer
+  , findStuckTimers
+  , requeueStuckTimer
+  , cancelTimer
+
     -- * Worker
   , runTimerWorker
   )

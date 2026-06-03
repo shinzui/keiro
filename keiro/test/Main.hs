@@ -938,6 +938,67 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Store.readStreamForward (StreamName "timer-target") (StreamVersion 0) 10
       fmap (^. #eventId) (Vector.toList targetEvents) `shouldBe` [firedEventId]
 
+    it "finds a firing timer with findStuckTimers and requeues it for re-firing" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          scheduleTimerTx counterTimerRequest
+      -- Strand it in Firing by claiming without firing.
+      claimed <- Store.runStoreIO storeHandle $ claimDueTimer dueTimerTime
+      case claimed of
+        Right (Just timer) -> timer ^. #status `shouldBe` Firing
+        other -> expectationFailure ("expected a claimed timer, got " <> show other)
+      -- It surfaces as stuck under the permissive filter.
+      Right stuck <- Store.runStoreIO storeHandle $
+        findStuckTimers dueTimerTime anyStuckTimer
+      fmap (^. #timerId) stuck `shouldBe` [counterTimerRequest ^. #timerId]
+      -- A bound it does not meet (only one attempt) excludes it.
+      Right unmatched <- Store.runStoreIO storeHandle $
+        findStuckTimers dueTimerTime (StuckTimerFilter Nothing (Just 5))
+      unmatched `shouldBe` []
+      -- Requeue is idempotent: True the first time, False once it is scheduled.
+      requeued <- Store.runStoreIO storeHandle $
+        requeueStuckTimer (counterTimerRequest ^. #timerId)
+      requeued `shouldBe` Right True
+      requeuedAgain <- Store.runStoreIO storeHandle $
+        requeueStuckTimer (counterTimerRequest ^. #timerId)
+      requeuedAgain `shouldBe` Right False
+      -- The ordinary loop re-claims and fires it exactly once.
+      let firedEventId = EventId sampleUuid2
+      workerResult <- Store.runStoreIO storeHandle $
+        runTimerWorker dueTimerTime $ \_ -> do
+          fired <-
+            runCommand
+              (defaultRunCommandOptions & #eventIds .~ [firedEventId])
+              counterEventStream
+              (stream "timer-target")
+              (Add 7)
+          case fired of
+            Right _ -> pure (Just firedEventId)
+            Left err -> liftIO (expectationFailure ("expected timer command to fire, got " <> show err)) *> pure Nothing
+      case workerResult of
+        Right (Just timer) ->
+          timer ^. #status `shouldBe` Firing
+        other -> expectationFailure ("expected re-fired timer, got " <> show other)
+      secondWorkerResult <- Store.runStoreIO storeHandle $
+        runTimerWorker dueTimerTime (\_ -> pure (Just firedEventId))
+      secondWorkerResult `shouldBe` Right Nothing
+      Right targetEvents <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "timer-target") (StreamVersion 0) 10
+      fmap (^. #eventId) (Vector.toList targetEvents) `shouldBe` [firedEventId]
+
+    it "does not claim a cancelled timer" $ \storeHandle -> do
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          scheduleTimerTx counterTimerRequest
+      cancelled <- Store.runStoreIO storeHandle $
+        cancelTimer (counterTimerRequest ^. #timerId)
+      cancelled `shouldBe` Right True
+      claimed <- Store.runStoreIO storeHandle $ claimDueTimer dueTimerTime
+      claimed `shouldBe` Right Nothing
+      cancelledAgain <- Store.runStoreIO storeHandle $
+        cancelTimer (counterTimerRequest ^. #timerId)
+      cancelledAgain `shouldBe` Right False
+
   describe "Keiro.Outbox.Kafka" $ do
     it "converts an outbox row to a Kafka producer record" $ do
       let envelope = sampleIntegrationEnvelope

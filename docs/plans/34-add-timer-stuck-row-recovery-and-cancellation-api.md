@@ -81,12 +81,12 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Add `findStuckTimers` (query `firing` rows by age and/or attempt threshold) to `Keiro.Timer.Schema`, re-export from `Keiro.Timer`.
-- [ ] M1: Add `requeueStuckTimer` (move `firing` -> `scheduled`, idempotent) to `Keiro.Timer.Schema`, re-export from `Keiro.Timer`.
-- [ ] M1: Add `cancelTimer` (move `scheduled`/`firing` -> `cancelled`, idempotent) to `Keiro.Timer.Schema`, re-export from `Keiro.Timer`.
-- [ ] M1: Add the `StuckTimerFilter` parameter type and document the formal definition of "stuck".
-- [ ] M1: Write the M1 tests in `keiro/test/Main.hs` (find, requeue+re-fire, cancel-not-claimed).
-- [ ] M1: `cabal test keiro:keiro-test` green; record transcript in Concrete Steps.
+- [x] M1: Add `findStuckTimers` (query `firing` rows by age and/or attempt threshold) to `Keiro.Timer.Schema`, re-export from `Keiro.Timer`. (2026-06-02)
+- [x] M1: Add `requeueStuckTimer` (move `firing` -> `scheduled`, idempotent) to `Keiro.Timer.Schema`, re-export from `Keiro.Timer`. (2026-06-02)
+- [x] M1: Add `cancelTimer` (move `scheduled`/`firing` -> `cancelled`, idempotent) to `Keiro.Timer.Schema`, re-export from `Keiro.Timer`. (2026-06-02)
+- [x] M1: Add the `StuckTimerFilter` parameter type and document the formal definition of "stuck". (2026-06-02)
+- [x] M1: Write the M1 tests in `keiro/test/Main.hs` (find, requeue+re-fire, cancel-not-claimed). (2026-06-02)
+- [x] M1: `cabal test keiro:keiro-test` green; record transcript in Concrete Steps. (2026-06-02) — `85 examples, 0 failures`.
 - [ ] M2: Add the `Dead` constructor to `TimerStatus`; extend `statusToText` / `statusFromText`.
 - [ ] M2: Write the codd migration `keiro-migrations/sql-migrations/2026-05-17-03-00-00-keiro-timer-recovery.sql` adding `last_error TEXT` and the `dead`-aware index.
 - [ ] M2: Add `deadLetterTimer` to `Keiro.Timer.Schema`, re-export from `Keiro.Timer`.
