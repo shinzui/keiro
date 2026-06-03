@@ -87,7 +87,6 @@ import Data.Aeson qualified as Aeson
 import Data.IORef
   ( IORef
   , atomicModifyIORef'
-  , modifyIORef'
   , newIORef
   , readIORef
   )
@@ -100,7 +99,10 @@ import Effectful (Dispatch (..), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (EffectHandler, interpret, localSeqUnlift, send)
 import Effectful.Exception (catch, throwIO)
 import Keiro.Codec (decodeRecorded, encodeForAppendWithMetadata)
+import Keiro.EventStream (SnapshotPolicy (..))
 import Keiro.Prelude
+import Keiro.Snapshot.Policy (shouldSnapshot)
+import Keiro.Workflow.Snapshot (loadWorkflowSnapshot, writeWorkflowSnapshot)
 import Keiro.Workflow.Schema
   ( WorkflowStepRow (..)
   , findUnfinishedWorkflowIds
@@ -112,7 +114,7 @@ import Keiro.Workflow.Types
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Read (readStreamForwardStream)
 import Kiroku.Store.Transaction (runTransactionAppending)
-import Kiroku.Store.Types (EventData, EventId (..), ExpectedVersion (..), StreamVersion (..))
+import Kiroku.Store.Types (AppendResult (..), EventData, EventId (..), ExpectedVersion (..), StreamVersion (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
 
@@ -176,19 +178,29 @@ freshOrdinal namespace = send (FreshOrdinal namespace)
 -- Per-run options
 -- ---------------------------------------------------------------------------
 
-{- | Options for a single workflow run. Minimal here; this is the canonical
-home for per-run options across the v2 initiative — EP-41 adds a snapshot
-policy field, EP-44 adds metrics/tracer fields, all additive.
+{- | Options for a single workflow run. This is the canonical home for
+per-run options across the v2 initiative — EP-41 adds the snapshot policy,
+EP-44 adds metrics/tracer fields, all additive. Extend it additively; never
+break the field set EP-38/EP-41 established.
 -}
-newtype WorkflowRunOptions = WorkflowRunOptions
-  { pageSize :: Int32
+data WorkflowRunOptions = WorkflowRunOptions
+  { snapshotPolicy :: !(SnapshotPolicy WorkflowState)
+  -- ^ When to persist a snapshot of the accumulated step-result map after a
+  -- step append (and at completion, for 'OnTerminal'). Default 'Never'
+  -- (EP-38 behaviour: every run/resume does a full version-0 replay).
+  , pageSize :: !Int32
   -- ^ Page size for the journal pre-load read.
   }
-  deriving stock (Generic, Eq, Show)
+  deriving stock (Generic)
 
--- | Sensible defaults: a journal pre-load page size of 100.
+-- | Sensible defaults: no snapshotting and a journal pre-load page size of
+-- 100. A default-options run replays and behaves exactly as EP-38 did.
 defaultWorkflowRunOptions :: WorkflowRunOptions
-defaultWorkflowRunOptions = WorkflowRunOptions{pageSize = 100}
+defaultWorkflowRunOptions =
+  WorkflowRunOptions
+    { snapshotPolicy = Never
+    , pageSize = 100
+    }
 
 -- ---------------------------------------------------------------------------
 -- Errors and the suspension sentinel
@@ -258,8 +270,21 @@ runWorkflowWith options name wid action = do
   case outcome of
     Completed result -> do
       now <- liftIO getCurrentTime
-      -- Idempotent: appendJournalEntry skips if the completion marker exists.
-      appendJournalEntry name wid (WorkflowCompleted now)
+      finalMap <- liftIO (readIORef journalRef)
+      -- Idempotent: only appends (and so only snapshots) when the completion
+      -- marker is not already journaled. On a replay of an already-completed
+      -- workflow this is 'Nothing' and no terminal snapshot is taken (one was
+      -- already taken on the original completing run, if the policy fired).
+      mAppend <- appendCompletion name wid now
+      for_ mAppend $ \appendResult ->
+        when
+          ( shouldSnapshot
+              (options ^. #snapshotPolicy)
+              True
+              finalMap
+              (appendResult ^. #streamVersion)
+          )
+          (writeWorkflowSnapshot (appendResult ^. #streamId) (appendResult ^. #streamVersion) finalMap)
       pure (Completed result)
     Suspended -> pure Suspended
   where
@@ -275,8 +300,22 @@ runWorkflowWith options name wid action = do
           Nothing -> do
             a <- localSeqUnlift env (\unlift -> unlift act)
             let encoded = Aeson.toJSON a
-            recordStep name wid (StepName key) encoded
-            liftIO (modifyIORef' journalRef (Map.insert key encoded))
+            appendResult <- recordStep name wid (StepName key) encoded
+            newMap <-
+              liftIO
+                ( atomicModifyIORef' journalRef $ \m ->
+                    let m' = Map.insert key encoded m in (m', m')
+                )
+            -- Evaluate the snapshot policy on the post-append map and version;
+            -- a step is never the terminal marker, hence @False@.
+            when
+              ( shouldSnapshot
+                  (options ^. #snapshotPolicy)
+                  False
+                  newMap
+                  (appendResult ^. #streamVersion)
+              )
+              (writeWorkflowSnapshot (appendResult ^. #streamId) (appendResult ^. #streamVersion) newMap)
             pure a
       Await (StepName key) arm -> do
         journal <- liftIO (readIORef journalRef)
@@ -298,8 +337,14 @@ decodeStored key stored = case Aeson.fromJSON stored of
   Aeson.Error message -> throwIO (WorkflowStepDecodeError key (Text.pack message))
 
 {- | Pre-load a workflow's journal stream into a @step name -> result@ map.
-Reads the stream forward (the source of truth) and folds the 'StepRecorded'
-entries; 'WorkflowCompleted' contributes nothing to the map.
+
+If a compatible snapshot exists ('loadWorkflowSnapshot'), seed the map from it
+and read only the journal events /after/ the snapshot's version ("tail
+replay"); the resulting map is byte-for-byte the one a full version-0 replay
+would produce, because every 'StepRecorded' at or before the snapshot version
+is already captured in the seed. A missing, mismatched, or undecodable
+snapshot collapses to 'Nothing', and the read falls back to a full replay from
+version 0. 'WorkflowCompleted' contributes nothing to the map.
 -}
 loadJournal ::
   (Store :> es) =>
@@ -307,14 +352,15 @@ loadJournal ::
   WorkflowName ->
   WorkflowId ->
   Eff es (Map Text Aeson.Value)
-loadJournal options name wid =
-  Streamly.fold (Fold.foldlM' accumulate (pure Map.empty)) events
+loadJournal options name wid = do
+  let journalName = workflowStreamName name wid
+  mSeed <- loadWorkflowSnapshot journalName
+  let (seedMap, fromVersion) = case mSeed of
+        Just (m, v) -> (m, v)
+        Nothing -> (Map.empty, StreamVersion 0)
+      events = readStreamForwardStream journalName fromVersion (options ^. #pageSize)
+  Streamly.fold (Fold.foldlM' accumulate (pure seedMap)) events
   where
-    events =
-      readStreamForwardStream
-        (workflowStreamName name wid)
-        (StreamVersion 0)
-        (options ^. #pageSize)
     accumulate journal recorded =
       case decodeRecorded workflowJournalCodec recorded of
         Right (StepRecorded key value _) -> pure (Map.insert key value journal)
@@ -329,10 +375,10 @@ loadJournal options name wid =
 one transaction. Used on the @step@ miss path, where the caller already knows
 the step is not journaled (so no existence pre-check is needed).
 -}
-recordStep :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> StepName -> Aeson.Value -> Eff es ()
+recordStep :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> StepName -> Aeson.Value -> Eff es AppendResult
 recordStep name wid (StepName key) value = do
   now <- liftIO getCurrentTime
-  void (appendJournalTx name wid (StepRecorded key value now))
+  snd <$> appendJournalTx name wid (StepRecorded key value now)
 
 {- | Append a journal event to a workflow's journal stream (and keep its
 index row consistent), idempotently. If the entry already exists this is a
@@ -354,11 +400,28 @@ appendJournalEntryReturningId name wid event = do
   exists <- stepExists wid key
   if exists
     then pure (deterministicJournalId name wid key)
-    else appendJournalTx name wid event
+    else fst <$> appendJournalTx name wid event
+
+{- | Append a journal entry only if it is not already journaled, returning the
+'AppendResult' of the fresh append (or 'Nothing' if it already existed). Used
+on the completion path so a terminal ('OnTerminal') snapshot can be taken from
+the completing run's 'AppendResult', while a replay of an already-completed
+workflow is a no-op.
+-}
+appendCompletion :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> UTCTime -> Eff es (Maybe AppendResult)
+appendCompletion name wid now = do
+  let event = WorkflowCompleted now
+      key = journalKey event
+  exists <- stepExists wid key
+  if exists
+    then pure Nothing
+    else Just . snd <$> appendJournalTx name wid event
 
 -- | The core append: encode the event, append it under a deterministic id,
--- and upsert the index row, all in one transaction. Returns the event id.
-appendJournalTx :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> WorkflowJournalEvent -> Eff es EventId
+-- and upsert the index row, all in one transaction. Returns the deterministic
+-- event id paired with the store's 'AppendResult' (carrying the stream id and
+-- the post-append stream version the snapshot path needs).
+appendJournalTx :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> WorkflowJournalEvent -> Eff es (EventId, AppendResult)
 appendJournalTx name wid event = do
   let key = journalKey event
       entryId = deterministicJournalId name wid key
@@ -372,9 +435,9 @@ appendJournalTx name wid event = do
       (workflowStreamName name wid)
       AnyVersion
       [entry]
-      (\_ -> recordStepTx row)
+      (\appendResult -> appendResult <$ recordStepTx row)
   case outcome of
-    Right () -> pure entryId
+    Right appendResult -> pure (entryId, appendResult)
     Left err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
 
 -- | The reserved step-name key a journal event indexes under.

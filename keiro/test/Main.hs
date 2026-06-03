@@ -9,6 +9,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
+import Data.Map.Strict qualified as Map
 import Data.Monoid (mempty)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
@@ -114,10 +115,16 @@ import Keiro.Workflow
   , WorkflowOutcome (..)
   , appendJournalEntry
   , awaitStep
+  , defaultWorkflowRunOptions
   , findUnfinishedWorkflowIds
   , runWorkflow
+  , runWorkflowWith
   , step
   , workflowJournalCodec
+  )
+import Keiro.Workflow.Snapshot
+  ( loadWorkflowSnapshot
+  , workflowStateCodec
   )
 import Keiro.Workflow.Awakeable
   ( WorkflowAwakeableCancelled (..)
@@ -2077,6 +2084,169 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right unfinished <- Store.runStoreIO storeHandle findUnfinishedWorkflowIds
       unfinished `shouldBe` [("p-1", "pending")]
 
+  describe "Keiro.Workflow snapshots" $ around (withFreshStore fixture) $ do
+    -- Validation (a): a snapshot row appears at the expected version and
+    -- decodes to the full accumulated step map.
+    it "writes a snapshot of the accumulated step map after Every 2 fires" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "snap"
+          wid = WorkflowId "w1"
+      result <-
+        Store.runStoreIO storeHandle $
+          runWorkflowWith
+            (defaultWorkflowRunOptions & #snapshotPolicy .~ Every 2)
+            name
+            wid
+            (countingSixSteps counter)
+      result `shouldBe` Right (Completed [1, 2, 3, 4, 5, 6])
+      -- Every 2 fired at versions 2, 4, 6; the upsert keeps the highest (6).
+      Right snapVersion <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Tx.statement "wf:snap-w1" snapshotVersionForStreamStmt
+      snapVersion `shouldBe` Just (StreamVersion 6)
+      -- and the row decodes to the six-entry accumulated map.
+      Right mSeed <- Store.runStoreIO storeHandle $ loadWorkflowSnapshot (StreamName "wf:snap-w1")
+      case mSeed of
+        Just (m, v) -> do
+          v `shouldBe` StreamVersion 6
+          Map.keys m `shouldBe` ["s1", "s2", "s3", "s4", "s5", "s6"]
+        Nothing -> expectationFailure "expected a workflow snapshot row"
+
+    -- The OnTerminal completion-site wiring: only the final WorkflowCompleted
+    -- append (version 7) triggers the snapshot.
+    it "writes a terminal snapshot under OnTerminal at the completion version" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "term"
+          wid = WorkflowId "tm1"
+      result <-
+        Store.runStoreIO storeHandle $
+          runWorkflowWith
+            (defaultWorkflowRunOptions & #snapshotPolicy .~ OnTerminal)
+            name
+            wid
+            (countingSixSteps counter)
+      result `shouldBe` Right (Completed [1, 2, 3, 4, 5, 6])
+      Right snapVersion <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Tx.statement "wf:term-tm1" snapshotVersionForStreamStmt
+      snapVersion `shouldBe` Just (StreamVersion 7)
+
+    -- Validation (b): re-hydration reads only the tail after the snapshot
+    -- version, and the journaled steps short-circuit (the counter stays put).
+    it "reads only the tail after the snapshot version on re-hydration" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "tail"
+          wid = WorkflowId "t1"
+          opts = defaultWorkflowRunOptions & #snapshotPolicy .~ Every 2
+      first <- Store.runStoreIO storeHandle $ runWorkflowWith opts name wid (countingSixSteps counter)
+      first `shouldBe` Right (Completed [1, 2, 3, 4, 5, 6])
+      afterFirst <- readIORef counter
+      afterFirst `shouldBe` 6
+      -- A full version-0 replay would read every journal event...
+      Right full <-
+        Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:tail-t1") (StreamVersion 0) 100
+      Vector.length full `shouldBe` 7 -- six StepRecorded + one WorkflowCompleted
+      -- ...whereas the runtime seeds from the snapshot and reads only the tail.
+      Right (Just (seedMap, StreamVersion sv)) <-
+        Store.runStoreIO storeHandle $ loadWorkflowSnapshot (StreamName "wf:tail-t1")
+      Map.size seedMap `shouldBe` 6
+      Right tailEvents <-
+        Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:tail-t1") (StreamVersion sv) 100
+      Vector.length tailEvents `shouldSatisfy` (< Vector.length full)
+      Vector.length tailEvents `shouldBe` 1 -- only the WorkflowCompleted at v7
+      -- Re-hydration completes from the seed without re-running any step.
+      second <- Store.runStoreIO storeHandle $ runWorkflowWith opts name wid (countingSixSteps counter)
+      second `shouldBe` Right (Completed [1, 2, 3, 4, 5, 6])
+      afterSecond <- readIORef counter
+      afterSecond `shouldBe` 6
+
+    -- Validation (c): a Never run and an Every 2 run produce identical results
+    -- and identical journals, and the snapshot seed equals a full replay.
+    it "produces identical results and journals under Never and Every 2" $ \storeHandle -> do
+      counterN <- newIORef (0 :: Int)
+      counterE <- newIORef (0 :: Int)
+      neverRes <-
+        Store.runStoreIO storeHandle $
+          runWorkflowWith
+            (defaultWorkflowRunOptions & #snapshotPolicy .~ Never)
+            (WorkflowName "corr-never")
+            (WorkflowId "c1")
+            (countingSixSteps counterN)
+      everyRes <-
+        Store.runStoreIO storeHandle $
+          runWorkflowWith
+            (defaultWorkflowRunOptions & #snapshotPolicy .~ Every 2)
+            (WorkflowName "corr-every")
+            (WorkflowId "c1")
+            (countingSixSteps counterE)
+      neverRes `shouldBe` Right (Completed [1, 2, 3, 4, 5, 6])
+      everyRes `shouldBe` Right (Completed [1, 2, 3, 4, 5, 6])
+      Right neverEvents <-
+        Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:corr-never-c1") (StreamVersion 0) 100
+      Right everyEvents <-
+        Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:corr-every-c1") (StreamVersion 0) 100
+      let stepResults evs =
+            [ (k, v)
+            | Right (StepRecorded k v _) <- decodeRecorded workflowJournalCodec <$> Vector.toList evs
+            ]
+      stepResults neverEvents `shouldBe` stepResults everyEvents
+      -- The snapshot seed equals the map a full version-0 replay would fold.
+      Right (Just (seedMap, _)) <-
+        Store.runStoreIO storeHandle $ loadWorkflowSnapshot (StreamName "wf:corr-every-c1")
+      seedMap `shouldBe` Map.fromList (stepResults everyEvents)
+
+    -- Validation (d): an advisory snapshot whose discriminant no longer matches
+    -- is ignored and the workflow hydrates via full replay.
+    it "hydrates via full replay when the snapshot discriminant mismatches" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "dmiss"
+          wid = WorkflowId "d1"
+          opts = defaultWorkflowRunOptions & #snapshotPolicy .~ Every 2
+      _ <- Store.runStoreIO storeHandle $ runWorkflowWith opts name wid (countingSixSteps counter)
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Tx.statement ("wf:dmiss-d1", "stale-shape") corruptSnapshotShapeStmt
+      Right mSeed <- Store.runStoreIO storeHandle $ loadWorkflowSnapshot (StreamName "wf:dmiss-d1")
+      mSeed `shouldBe` Nothing
+      resumed <- Store.runStoreIO storeHandle $ runWorkflowWith opts name wid (countingSixSteps counter)
+      resumed `shouldBe` Right (Completed [1, 2, 3, 4, 5, 6])
+
+    -- Validation (d), second arm: corrupt snapshot JSON is treated as a miss.
+    it "hydrates via full replay when the snapshot JSON is corrupt" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "cjson"
+          wid = WorkflowId "d2"
+          opts = defaultWorkflowRunOptions & #snapshotPolicy .~ Every 2
+      _ <- Store.runStoreIO storeHandle $ runWorkflowWith opts name wid (countingSixSteps counter)
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Tx.statement ("wf:cjson-d2", Aeson.String "bad") corruptSnapshotStateStmt
+      Right mSeed <- Store.runStoreIO storeHandle $ loadWorkflowSnapshot (StreamName "wf:cjson-d2")
+      mSeed `shouldBe` Nothing
+      resumed <- Store.runStoreIO storeHandle $ runWorkflowWith opts name wid (countingSixSteps counter)
+      resumed `shouldBe` Right (Completed [1, 2, 3, 4, 5, 6])
+
+  describe "Keiro.Workflow.Snapshot codec" $ do
+    -- Pure (no-DB) round-trip of the workflow state codec.
+    it "round-trips a non-trivial accumulated step map and carries the sentinel shape hash" $ do
+      let m =
+            Map.fromList
+              [ ("first", toJSON (1 :: Int))
+              , ("second", toJSON ["a", "b" :: Text])
+              , ("sleep:42", Aeson.Null)
+              ]
+      (workflowStateCodec ^. #decode) ((workflowStateCodec ^. #encode) m) `shouldBe` Right m
+      (workflowStateCodec ^. #shapeHash) `shouldBe` "keiro.workflow.stepmap.v1"
+      (workflowStateCodec ^. #stateCodecVersion) `shouldBe` 1
+
   describe "Keiro.Workflow.Sleep" $ do
     -- Pure (no-DB) checks of the id/payload/step-name helpers.
     it "derives a deterministic, distinct timer id" $ do
@@ -2337,6 +2507,15 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 -- effect, so replay can be proven by watching the counter).
 incrementAndRead :: IORef Int -> IO Int
 incrementAndRead ref = atomicModifyIORef' ref (\n -> (n + 1, n + 1))
+
+-- | Six numbered steps, each returning its index after bumping a shared
+-- counter. The counter lets a re-hydration prove the steps short-circuit
+-- (it stays at 6 when every step is replayed from the journal/snapshot).
+countingSixSteps :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es [Int]
+countingSixSteps counter =
+  mapM
+    (\i -> step (StepName ("s" <> Text.pack (show i))) (liftIO (incrementAndRead counter) >> pure i))
+    [1 .. 6]
 
 -- | A two-step workflow whose steps each bump a shared counter.
 demoWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es (Int, Int)

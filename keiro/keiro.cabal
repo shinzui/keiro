@@ -59,6 +59,7 @@ library
                         Keiro.Workflow.Awakeable.Schema
                         Keiro.Workflow.Schema
                         Keiro.Workflow.Sleep
+                        Keiro.Workflow.Snapshot
                         Keiro.Workflow.Types
     reexported-modules: keiro-core:Keiro.Codec,
                         keiro-core:Keiro.EventStream,

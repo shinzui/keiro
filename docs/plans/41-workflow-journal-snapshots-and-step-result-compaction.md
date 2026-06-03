@@ -76,23 +76,25 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1 — Add `workflowStateCodec :: StateCodec (Map Text Value)` (a new module
-  `keiro/src/Keiro/Workflow/Snapshot.hs`), wire it into `keiro/keiro.cabal`, and unit-test
-  that it round-trips a non-trivial accumulated map. `cabal build keiro` green.
-- [ ] M2 — Add `WorkflowRunOptions` and `defaultWorkflowRunOptions` to `Keiro.Workflow`,
-  introduce `runWorkflowWith`, and redefine `runWorkflow = runWorkflowWith
-  defaultWorkflowRunOptions`. Existing EP-38 workflow tests still green (behaviour with the
-  default `Never` policy is unchanged).
-- [ ] M3 — Wire the snapshot WRITE: after each `step` append, evaluate the policy on the
-  accumulated map and the post-append journal version; when it fires, `writeSnapshot` the
-  map under `workflowStateCodec`. Validation (a): a 6-step workflow under `Every 2` leaves a
-  `keiro_snapshots` row at the expected version, decodable to the accumulated map.
-- [ ] M4 — Wire the snapshot READ: on run entry, `lookupSnapshot` for the journal stream;
-  decode with `workflowStateCodec` to seed the map and read journal events only *after* the
-  snapshot's version. Validation (b): tail-replay reads fewer events than the full count.
-- [ ] M5 — Correctness + advisory fallback tests. Validation (c): snapshot-seeded final
-  state equals full-replay final state. Validation (d): a mismatched/corrupt snapshot
-  discriminant still hydrates correctly via full replay. Full `cabal test keiro` green.
+- [x] M1 (2026-06-03) — Added `workflowStateCodec :: StateCodec WorkflowState` (new module
+  `keiro/src/Keiro/Workflow/Snapshot.hs`) plus `loadWorkflowSnapshot`/`writeWorkflowSnapshot`,
+  wired into `keiro/keiro.cabal`, and a pure round-trip unit test. `cabal build keiro` green.
+- [x] M2 (2026-06-03) — Added the `snapshotPolicy :: SnapshotPolicy WorkflowState` field to
+  EP-38's existing `WorkflowRunOptions` (default `Never`); `runWorkflowWith`/`runWorkflow`
+  alias already existed from EP-38. All existing EP-38 workflow tests still green.
+- [x] M3 (2026-06-03) — Wired the snapshot WRITE at the `step` miss path (terminal `False`)
+  and the completion site (terminal `True`), reading the `AppendResult`'s `streamId`/version.
+  Validation (a): a 6-step workflow under `Every 2` leaves a `keiro_snapshots` row at version
+  6, decodable to the six-entry accumulated map. Plus an `OnTerminal` test asserting the
+  completion-site write at version 7.
+- [x] M4 (2026-06-03) — Wired the snapshot READ in `loadJournal`: seed from
+  `loadWorkflowSnapshot` and read journal events only *after* the snapshot version.
+  Validation (b): tail read is 1 event vs 7 for a full replay, and journaled steps
+  short-circuit on re-hydration (counter unchanged).
+- [x] M5 (2026-06-03) — Correctness + advisory fallback tests. Validation (c): `Never` and
+  `Every 2` produce identical results and journals, and the snapshot seed equals a full
+  replay. Validation (d): a mismatched shape hash and corrupt JSON both collapse to a full
+  replay. Full `cabal test keiro` green (119 examples, 0 failures).
 
 
 ## Surprises & Discoveries
@@ -101,7 +103,32 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-03 (M2): **EP-38 already shipped `WorkflowRunOptions`, `defaultWorkflowRunOptions`,
+  and `runWorkflowWith`** (a `newtype` with only `pageSize`), so M2 collapsed to *adding the
+  `snapshotPolicy` field* and converting the `newtype` to a `data`. The conversion **dropped
+  the `Eq`/`Show` deriving** because `SnapshotPolicy`'s `Custom` arm holds a function; nothing
+  depended on those instances. No `runWorkflowWith` introduction or `runWorkflow`-alias work
+  was needed — that contract had already landed under EP-38.
+- 2026-06-03 (M3): **`runTransactionAppending` already threads an `AppendResult` to its
+  continuation**, so capturing `streamId`/`streamVersion` for the snapshot write needed no
+  extra `lookupStreamId` round-trip. `appendJournalTx` now returns `(EventId, AppendResult)`;
+  `appendJournalEntryReturningId` takes `fst`, the `step` miss path takes the `AppendResult`
+  off `recordStep`, and a new `appendCompletion :: ... -> Eff es (Maybe AppendResult)` powers
+  the `OnTerminal` write (returns `Nothing` on a replay where the completion marker already
+  exists, so a terminal snapshot is taken exactly once on the completing run).
+- 2026-06-03 (M3/test): **The `snapshotPolicy` field name collides with keiki's `EventStream`
+  record field of the same name.** A bare record update `defaultWorkflowRunOptions {
+  snapshotPolicy = ... }` is ambiguous (`GHC-99339`) when both records are in scope (the test
+  imports both via the `Keiro` umbrella). Fix: use the generic-lens label —
+  `defaultWorkflowRunOptions & #snapshotPolicy .~ Every 2` — which resolves on the concrete
+  `WorkflowRunOptions` type. Recorded for EP-42/EP-44, which also construct
+  `WorkflowRunOptions` in test/worker code and will hit the same ambiguity.
+- 2026-06-03 (M4): **Tail-replay proof is exact, not just "fewer".** A 6-step workflow under
+  `Every 2` snapshots at version 6 (the `Every` upsert keeps the highest multiple ≤ 6); the
+  terminal `WorkflowCompleted` is version 7 and does *not* re-fire `Every 2`. So a re-hydration
+  reads exactly 1 tail event (the v7 completion, which folds to nothing) versus 7 for a full
+  replay, and the seeded map already holds all six steps. The behavioural counter check
+  (steps short-circuit, side-effect counter stays at 6) corroborates the read-count proof.
 
 
 ## Decision Log
@@ -192,7 +219,38 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Completed 2026-06-03.** All five milestones landed and the full suite is green (119
+examples, 0 failures, including 7 new snapshot examples). The plan's purpose — remove the
+full-stream replay cost for long-lived workflows via advisory snapshots — is met:
+
+- `keiro/src/Keiro/Workflow/Snapshot.hs` owns `workflowStateCodec` (sentinel shape hash
+  `"keiro.workflow.stepmap.v1"`, codec version 1) plus `loadWorkflowSnapshot` /
+  `writeWorkflowSnapshot`, reusing EP-4's `keiro_snapshots` table, `writeSnapshot`, and
+  `lookupSnapshot` with no schema change and no new migration.
+- `WorkflowRunOptions` carries `snapshotPolicy` (default `Never`, so EP-38 behaviour is
+  byte-identical); `runWorkflowWith` evaluates the policy at the `step` miss path and at the
+  completion site and writes through `workflowStateCodec`. `loadJournal` seeds from the latest
+  compatible snapshot and tail-replays.
+- All four observable validations hold: (a) the `Every 2` snapshot row lands at version 6 and
+  decodes to the six-entry map; (b) re-hydration reads 1 tail event vs 7 and steps
+  short-circuit; (c) `Never` and `Every 2` are result- and journal-identical and the seed
+  equals a full replay; (d) a stale shape hash and corrupt JSON both fall back to full replay
+  and still complete correctly.
+
+**Cross-plan contracts delivered (for the MasterPlan / downstream waves):**
+
+- `WorkflowRunOptions.snapshotPolicy` is the canonical per-run snapshot knob; EP-44 adds
+  `metrics`/`tracer` to the *same* record and EP-42's resume worker passes its own options so
+  resumed runs keep snapshotting.
+- The workflow snapshot discriminant is `stateCodecVersion = 1` + shape hash
+  `"keiro.workflow.stepmap.v1"`; EP-45's snapshot guidance should cite this sentinel.
+- `appendJournalTx` now returns `(EventId, AppendResult)` and a new `appendCompletion` returns
+  `Maybe AppendResult`; these are internal to `Keiro.Workflow` but note the change for EP-42.
+
+**Gaps / deferred:** none for this plan's scope. The instrumented-read proof is realized by
+re-reading the journal with the same `readStreamForward` the runtime uses (keyed off the exact
+seed version `loadWorkflowSnapshot` returns) rather than by an in-runtime event counter, which
+would have required exposing a test-only hook.
 
 
 ## Context and Orientation

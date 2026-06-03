@@ -161,7 +161,7 @@ metrics instrumentation in dedicated plans in MasterPlan 4.
 | 38 | Workflow journal and named-step replay core | docs/plans/38-workflow-journal-and-named-step-replay-core.md | None | None | Complete |
 | 39 | Durable sleep on the timer table | docs/plans/39-durable-sleep-on-the-timer-table.md | EP-38 | None | Complete |
 | 40 | Awakeables and external completion | docs/plans/40-awakeables-and-external-completion.md | EP-38 | None | Complete |
-| 41 | Workflow journal snapshots and step-result compaction | docs/plans/41-workflow-journal-snapshots-and-step-result-compaction.md | EP-38 | None | Not Started |
+| 41 | Workflow journal snapshots and step-result compaction | docs/plans/41-workflow-journal-snapshots-and-step-result-compaction.md | EP-38 | None | Complete |
 | 42 | Workflow resume and crash-recovery worker | docs/plans/42-workflow-resume-and-crash-recovery-worker.md | EP-38 | EP-39, EP-40 | Not Started |
 | 43 | Child workflows: spawn, wait, and cancel | docs/plans/43-child-workflows-spawn-wait-and-cancel.md | EP-38 | EP-40, EP-42 | Not Started |
 | 44 | Workflow observability: spans and metrics | docs/plans/44-workflow-observability-spans-and-metrics.md | EP-38 | EP-39, EP-40, EP-42, EP-43 | Not Started |
@@ -382,8 +382,8 @@ and the milestone.
 - [x] EP-39 (2026-06-03): prove a workflow sleeps, the process restarts (modelled as a second `runWorkflow`), and the workflow wakes after the delay without re-running prior steps — plus a real-time variant proving the delay actually elapses.
 - [x] EP-40 (2026-06-03): add the `keiro_awakeables` table + migration, `awakeable`/`awakeableNamed`, `signalAwakeable`, `cancelAwakeable`, and `WorkflowAwakeableCancelled` (`Keiro.Workflow.Awakeable` + `.Schema`).
 - [x] EP-40 (2026-06-03): prove a workflow suspends on an awakeable (pending row, no completion) and resumes with the signalled payload; plus idempotent double-signal, crash-safe journal re-append, and cancellation throwing.
-- [ ] EP-41: build the workflow `StateCodec` and snapshot policy; snapshot the accumulated step-result state on the journal stream.
-- [ ] EP-41: prove snapshot + tail-replay hydration loads a long journal without replaying every step.
+- [x] EP-41 (2026-06-03): build the workflow `StateCodec` (`workflowStateCodec`, sentinel shape hash `keiro.workflow.stepmap.v1`) and add `snapshotPolicy` to `WorkflowRunOptions`; snapshot the accumulated step-result map at the `step` miss path and the completion site.
+- [x] EP-41 (2026-06-03): prove snapshot + tail-replay hydration loads a long journal without replaying every step (1 tail event vs 7), correctness equality (`Never` ≡ `Every 2`), and advisory fallback on a corrupt/mismatched snapshot.
 - [ ] EP-42: implement the resume worker (discover journals lacking `WorkflowCompleted`, re-invoke, short-circuit journaled steps).
 - [ ] EP-42: prove a crashed mid-run workflow, and a sleep/awakeable-suspended workflow, both resume after restart.
 - [ ] EP-43: add child-workflow spawn/wait/cancel recorded in the parent journal.
@@ -525,6 +525,26 @@ and the milestone.
   - **Awakeable storage** is the dedicated `keiro_awakeables` table (migration
     `2026-06-03-01-00-00-keiro-awakeables.sql`) with `pending`/`completed`/`cancelled` and a
     partial pending index; the codd `LaxCheck` schema-diff log line on apply is expected noise.
+
+- 2026-06-03 (EP-41 implementation): **snapshots shipped reusing EP-4's table wholesale with
+  no migration and no core refactor.** Cross-cutting notes for the remaining waves:
+  - **`snapshotPolicy` is now a field on `WorkflowRunOptions`** (default `Never`), the canonical
+    per-run options home. EP-44 must add its `metrics`/`tracer` fields to *this same record*,
+    and EP-42's resume worker passes its own `WorkflowRunOptions` so a resumed run keeps
+    snapshotting. The record converted from `newtype` to `data` and **lost its `Eq`/`Show`
+    deriving** (the `SnapshotPolicy Custom` arm holds a function); nothing depended on them.
+  - **Field-name clash:** `WorkflowRunOptions.snapshotPolicy` collides with keiki's
+    `EventStream` field of the same name. A bare record update is ambiguous (`GHC-99339`) when
+    both are imported; use the generic-lens label `opts & #snapshotPolicy .~ p`. EP-42/EP-44
+    will hit this in their test/worker code.
+  - **`appendJournalTx` now returns `(EventId, AppendResult)`** and a new internal
+    `appendCompletion :: ... -> Eff es (Maybe AppendResult)` powers the `OnTerminal` write. The
+    public helpers (`appendJournalEntry`, `appendJournalEntryReturningId`) are unchanged in
+    signature. EP-42's resume worker, which re-invokes through `runWorkflowWith`, is unaffected.
+  - **Workflow snapshot discriminant:** `stateCodecVersion = 1` + shape hash
+    `"keiro.workflow.stepmap.v1"` (a fixed sentinel — the step-result map's *shape* never
+    varies; per-step result-type evolution stays each step's own `ToJSON`/`FromJSON` concern).
+    EP-45's snapshot guidance must cite this sentinel.
 
 ## Decision Log
 
