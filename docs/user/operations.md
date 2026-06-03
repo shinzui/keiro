@@ -123,8 +123,11 @@ At minimum, track:
 Keiro emits OpenTelemetry **spans** through `Keiro.Telemetry`: an `Internal`
 span around `runCommand` (opt-in via `RunCommandOptions.tracer`), a `Producer`
 span around outbox publishing, and `Consumer` spans parented via W3C trace
-headers. There is no built-in metric instrumentation yet, so the counts above
-are currently derived from your own queries and logs.
+headers. Keiro also emits OpenTelemetry **metrics** for the outbox and inbox
+workers (backlog gauges plus published/retried/dead-lettered/processed/duplicate
+counters) through the opt-in `KeiroMetrics` handle built by
+`Keiro.Telemetry.newKeiroMetrics`; the full instrument catalogue is documented
+separately with the rest of the metrics surface.
 
 ## Production Checklist
 

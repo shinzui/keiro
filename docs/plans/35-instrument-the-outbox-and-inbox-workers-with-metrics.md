@@ -75,18 +75,18 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Confirm EP-33 is merged and read the exact `KeiroMetrics` / `newKeiroMetrics` / recording-helper contract it shipped (it may differ in spelling from the names this plan assumes; reconcile here and in the Decision Log).
-- [ ] M1a: Add a `metrics :: !(Maybe KeiroMetrics)` field to `OutboxPublishOptions` in `keiro/src/Keiro/Outbox/Types.hs`, defaulting to `Nothing` in `defaultPublishOptions`, and export anything needed.
-- [ ] M1a: Add a backlog-count query `countOutboxBacklog` to `keiro/src/Keiro/Outbox/Schema.hs` and export it from `Keiro.Outbox`.
-- [ ] M1b: In `publishClaimedOutbox` (`keiro/src/Keiro/Outbox.hs`), record the backlog gauge once per pass and increment the published / retried / deadlettered counters from the per-row outcomes (or from the final `OutboxPublishSummary`).
-- [ ] M1c: Add the outbox metrics test in `keiro/test/Main.hs`: wire an SDK MeterProvider + in-memory metric exporter (reuse EP-33's harness), run a publish pass with a stub publisher that succeeds some rows and dead-letters others, force-flush, and assert the four outbox instruments.
-- [ ] M2a: Add a `metrics :: Maybe KeiroMetrics` parameter to `runInboxTransaction` / `runInboxTransactionWithKey` in `keiro/src/Keiro/Inbox.hs` and record processed / duplicates / failed from the `InboxResult`.
-- [ ] M2a: Add a backlog-count query `countInboxBacklog` to `keiro/src/Keiro/Inbox/Schema.hs`, export it from `Keiro.Inbox`, and record the `keiro.inbox.backlog` gauge.
-- [ ] M2b: Add the inbox metrics test in `keiro/test/Main.hs`: deliver the same `(source, message_id)` twice, force-flush, and assert `keiro.inbox.processed` = 1 and `keiro.inbox.duplicates` = 1.
-- [ ] Update every existing `runInboxTransaction` / `runInboxTransactionWithKey` call site (in `keiro/test/Main.hs`) to pass `Nothing` for the new metrics argument so the suite still compiles.
-- [ ] Add the minimal one-line `operations.md` pointer and leave the full catalogue to EP-37.
-- [ ] Run `cabal test keiro-test` from the repo root; confirm all tests pass; paste the transcript into Concrete Steps / Validation.
-- [ ] Write the Outcomes & Retrospective entry and reconcile any surface differences with EP-33.
+- [x] Confirm EP-33 is merged and read the exact `KeiroMetrics` / `newKeiroMetrics` / recording-helper contract it shipped (reconciled in the Decision Log: helper is `recordInboxDuplicates` plural, all helpers take `Int64`, harness extractor is `flattenScalarPoints`). (2026-06-03)
+- [x] M1a: ~~Add a `metrics` field to `OutboxPublishOptions`~~ — **blocked by a real import cycle** (`Telemetry → Outbox.Kafka → Outbox.Types`). Used the plan's documented fallback: pass `Maybe KeiroMetrics` as a trailing argument to `publishClaimedOutbox` in `Keiro.Outbox` instead. (2026-06-03)
+- [x] M1a: Add a backlog-count query `countOutboxBacklog` to `keiro/src/Keiro/Outbox/Schema.hs` and export it from `Keiro.Outbox`. (2026-06-03)
+- [x] M1b: In `publishClaimedOutbox` (`keiro/src/Keiro/Outbox.hs`), record the backlog gauge once per pass (after the claim) and the published / retried / deadlettered counters from the final `OutboxPublishSummary`. (2026-06-03)
+- [x] M1c: Add the outbox metrics test in `keiro/test/Main.hs`: wire an SDK MeterProvider + in-memory metric exporter (reuse EP-33's harness), run two publish passes that exercise published=1 / retried=1 / deadlettered=1, force-flush, and assert all four outbox instruments. (2026-06-03)
+- [x] M2a: Add a leading `Maybe KeiroMetrics` parameter to `runInboxTransaction` / `runInboxTransactionWithKey` in `keiro/src/Keiro/Inbox.hs` and record processed / duplicates / failed from the `InboxResult`. (2026-06-03)
+- [x] M2a: Add a backlog-count query `countInboxBacklog` to `keiro/src/Keiro/Inbox/Schema.hs`, export it from `Keiro.Inbox`, and record the `keiro.inbox.backlog` gauge. (2026-06-03)
+- [x] M2b: Add the inbox metrics test in `keiro/test/Main.hs`: deliver the same `(source, message_id)` twice, force-flush, and assert `keiro.inbox.processed` = 1 and `keiro.inbox.duplicates` = 1. (2026-06-03)
+- [x] Update every existing `runInboxTransaction` call site (11 in `keiro/test/Main.hs`) to pass `Nothing` for the new metrics argument; likewise every `publishClaimedOutbox` call site (the cycle forced a trailing-arg change those didn't anticipate). (2026-06-03)
+- [x] Add the minimal one-line `operations.md` pointer and leave the full catalogue to EP-37. (2026-06-03)
+- [x] Run `cabal test keiro-test` from the repo root; all 88 examples pass; transcript in Concrete Steps / Validation. (2026-06-03)
+- [x] Write the Outcomes & Retrospective entry and reconcile surface differences with EP-33. (2026-06-03)
 
 
 ## Surprises & Discoveries
@@ -119,6 +119,40 @@ implementation. Provide concise evidence.
   `meterProviderForceFlush` calls `collectResourceMetrics` then
   `metricExporterExport` (`OpenTelemetry.MeterProvider`).
 
+- 2026-06-03 (implementing): **The outbox import cycle is real**, confirming the
+  MasterPlan's 2026-06-03 "drafting EP-35" warning. `Keiro.Telemetry` imports
+  `Keiro.Outbox.Kafka`, which imports `Keiro.Outbox.Types`. Putting a
+  `metrics :: Maybe KeiroMetrics` field on `OutboxPublishOptions` (in
+  `Keiro.Outbox.Types`) would close the loop `Outbox.Types → Telemetry →
+  Outbox.Kafka → Outbox.Types`. EP-33 left `KeiroMetrics` in `Keiro.Telemetry`
+  (it did not relocate the type to a leaf module), so the options-record approach
+  this plan's first Decision Log entry preferred is not available without an EP-33
+  change. Used the plan's documented fallback instead: `publishClaimedOutbox`
+  takes `Maybe KeiroMetrics` as a trailing argument (in `Keiro.Outbox`, which
+  already imports `Keiro.Telemetry`). The inbox has no such cycle
+  (`Keiro.Telemetry` imports `Keiro.Inbox.Kafka`, not `Keiro.Inbox`), so the
+  inbox handle is a normal added parameter as planned.
+- 2026-06-03 (implementing): EP-33's shipped recording helpers differ slightly in
+  spelling from this plan's assumed intent names: the duplicate counter helper is
+  `recordInboxDuplicates` (plural). All `record*` helpers take `Int64`, so the
+  `Int` backlog counts go through `fromIntegral`. The helpers used here are
+  `recordOutboxBacklog` / `recordOutboxPublished` / `recordOutboxRetried` /
+  `recordOutboxDeadlettered` and `recordInboxProcessed` / `recordInboxDuplicates`
+  / `recordInboxFailed` / `recordInboxBacklog`.
+- 2026-06-03 (implementing): EP-33's in-memory metric harness exposes the
+  extractor `flattenScalarPoints :: [ResourceMetricsExport] -> [(Text,
+  NumberValue)]` (and `flattenHistogramPoints`). The tests reuse it with `lookup`
+  rather than the inline traversal the plan sketched, and obtain the meter via
+  `getMeter provider Telemetry.keiroInstrumentationLibrary`.
+- 2026-06-03 (implementing): A **synchronous gauge recorded with value `0` does
+  emit a data point** under the SDK in-memory exporter —
+  `lookup "keiro.outbox.backlog" scalars == Just (IntNumber 0)` after a pass that
+  leaves no backlog. This resolves the plan's open question about zero-delta
+  series: a recorded zero gauge is observable as `Just 0`, not `Nothing`. (A
+  counter that is only ever `add 0` was avoided in the test by exercising
+  `retried` with a real non-zero value across two passes, so the `retried`
+  assertion is unambiguously `Just (IntNumber 1)`.)
+
 (Add further discoveries here during implementation.)
 
 
@@ -136,6 +170,22 @@ Record every decision made while working on the plan.
   convention, and means existing callers that build options from
   `defaultPublishOptions` get the no-op default for free with zero code changes.
   This is the "Worker option records" integration point the MasterPlan calls for.
+  Date: 2026-06-03.
+
+- Decision (SUPERSEDES the entry above): Thread the outbox metrics handle as a
+  trailing `Maybe KeiroMetrics` argument to `publishClaimedOutbox`, **not** as a
+  field on `OutboxPublishOptions`.
+  Rationale: The `OutboxPublishOptions` field would create a real GHC import cycle
+  — `Keiro.Outbox.Types` (where the record lives) → `Keiro.Telemetry` (for
+  `KeiroMetrics`) → `Keiro.Outbox.Kafka` → `Keiro.Outbox.Types`. EP-33 kept
+  `KeiroMetrics` in `Keiro.Telemetry` rather than relocating it to a leaf module,
+  so the field approach is unavailable without an EP-33 change. This plan and the
+  MasterPlan both pre-authorized this exact fallback for a real cycle. The cost is
+  that every `publishClaimedOutbox` call site gains a trailing `Nothing` (the
+  original plan expected zero outbox call-site churn); the benefit is that the
+  outbox and inbox now share one "handle passed explicitly as an argument,
+  defaulting to no-op" call shape, which is the consistency the MasterPlan's
+  "Worker option records / entry points" integration point ultimately wanted.
   Date: 2026-06-03.
 
 - Decision: Thread the inbox metrics handle as a new explicit parameter to
@@ -203,7 +253,39 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-03): complete.** Both milestones landed and the full
+`keiro-test` suite passes at **88 examples, 0 failures**, including the two new
+metrics examples. Against the original purpose — "an application that wires a
+meter sees eight numbers describing outbox/inbox health" — all eight instruments
+(`keiro.outbox.backlog`, `.published`, `.retried`, `.deadlettered`,
+`keiro.inbox.processed`, `.duplicates`, `.failed`, `.backlog`) are now recorded
+by the workers and observable under the in-memory metric exporter. The no-op
+default holds: every pre-existing example still passes, with the outbox passing a
+trailing `Nothing` and the inbox a leading `Nothing`.
+
+**What changed vs. the plan.** The single substantive deviation is the outbox
+threading mechanism: the planned `OutboxPublishOptions.metrics` field was
+impossible because of a real `Telemetry → Outbox.Kafka → Outbox.Types` import
+cycle, so the handle is a trailing argument to `publishClaimedOutbox` (the plan's
+own pre-authorized fallback). This forced ~14 `publishClaimedOutbox` call sites
+to gain a `Nothing` that the plan had not anticipated, but produced a more
+consistent call shape across the two workers. The inbox went exactly as planned.
+
+**Gaps / deferred.** The optional `keiro.outbox.attempts` histogram was not
+recorded here (EP-33 ships the instrument on `KeiroMetrics` as `timerAttempts`
+for the timer worker, but there is no outbox per-attempt histogram helper, and
+it is explicitly optional in the MasterPlan). The full operator-facing metrics
+catalogue is intentionally deferred to EP-37; `operations.md` carries only a
+one-line pointer. The backlog gauges are recorded synchronously once per
+worker pass/delivery (the MasterPlan baseline), so they are accurate to within
+one poll interval, not continuously.
+
+**Lessons.** (1) Verify the import graph before choosing a threading mechanism —
+the cycle warning in the MasterPlan was correct and the fallback was the right
+call. (2) A zero-valued synchronous gauge *is* exported as `Just 0`, so backlog
+assertions need no special-casing; counters that only ever add 0 are the
+ambiguous case, so the outbox test drives `retried` to a real non-zero value
+across two passes instead of asserting a zero counter.
 
 
 ## Context and Orientation
@@ -884,7 +966,28 @@ Run everything from the repository root `/Users/shinzui/Keikaku/bokuno/keiro`.
    Every call should now pass a `Maybe KeiroMetrics` first argument (`Nothing`
    for the non-metrics tests, `Just keiroMetrics` for the new metrics test).
 
-Update this section with the real transcript once the suite runs.
+Real transcript (2026-06-03, `cabal test keiro-test`):
+
+```text
+Keiro.Outbox
+  ...
+  publishClaimedOutbox emits a Producer span with messaging semconv attributes [✔]
+  publishClaimedOutbox records outbox metrics under the in-memory exporter [✔]
+Keiro.Inbox
+  runs the handler once and records the row as completed [✔]
+  treats a redelivery with the same messageId as a duplicate [✔]
+  records inbox metrics: one processed and one duplicate under the in-memory exporter [✔]
+  ...
+
+Finished in 8.7856 seconds
+88 examples, 0 failures
+Test suite keiro-test: PASS
+```
+
+Note: `grep -rn "runInboxTransaction" keiro/` confirms all 11 inbox call sites pass
+a leading `Maybe KeiroMetrics` (`Nothing` for the non-metrics tests, `Just
+keiroMetrics` for the new one), and all `publishClaimedOutbox` call sites pass a
+trailing `Maybe KeiroMetrics`.
 
 
 ## Validation and Acceptance

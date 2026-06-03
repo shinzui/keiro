@@ -20,6 +20,7 @@ module Keiro.Inbox
   , lookupInbox
   , listInbox
   , garbageCollectCompleted
+  , countInboxBacklog
 
     -- * Transactional handler wrapper
   , runInboxTransaction
@@ -33,6 +34,13 @@ import Keiro.Inbox.Schema
 import Keiro.Inbox.Types
 import Keiro.Integration.Event (IntegrationEvent)
 import Keiro.Prelude
+import Keiro.Telemetry
+  ( KeiroMetrics
+  , recordInboxBacklog
+  , recordInboxDuplicates
+  , recordInboxFailed
+  , recordInboxProcessed
+  )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 
@@ -55,16 +63,17 @@ delivery sees no row and can retry.
 runInboxTransaction ::
   forall a es.
   (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
   InboxDedupePolicy ->
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   (IntegrationEvent -> Tx.Transaction a) ->
   Eff es (Either InboxError (InboxResult a))
-runInboxTransaction policy event kafka handler =
+runInboxTransaction mMetrics policy event kafka handler =
   case dedupeKeyFor policy event kafka of
     Left err -> pure (Left err)
     Right dedupe ->
-      Right <$> runInboxTransactionWithKey (event ^. #source) dedupe event kafka handler
+      Right <$> runInboxTransactionWithKey mMetrics (event ^. #source) dedupe event kafka handler
 
 {- | Lower-level variant that takes the dedupe key directly.
 
@@ -75,22 +84,33 @@ derives the key from the payload itself.
 runInboxTransactionWithKey ::
   forall a es.
   (IOE :> es, Store :> es) =>
+  Maybe KeiroMetrics ->
   Text ->
   Text ->
   IntegrationEvent ->
   Maybe KafkaDeliveryRef ->
   (IntegrationEvent -> Tx.Transaction a) ->
   Eff es (InboxResult a)
-runInboxTransactionWithKey src dedupe event kafka handler = do
+runInboxTransactionWithKey mMetrics src dedupe event kafka handler = do
   now <- liftIO getCurrentTime
-  runTransaction $ do
+  result <- runTransaction $ do
     inserted <- tryInsertProcessingTx src dedupe event kafka now
     case inserted of
       Right () -> do
-        result <- handler event
+        handled <- handler event
         markCompletedTx src dedupe now
-        pure (InboxProcessed result)
+        pure (InboxProcessed handled)
       Left row -> case row ^. #status of
         InboxCompleted -> pure InboxDuplicate
         InboxProcessing -> pure InboxInProgress
         InboxFailed -> pure (InboxPreviouslyFailed (row ^. #lastError))
+  -- Record the classification counter and the backlog gauge outside the
+  -- handler transaction (each a no-op under a 'Nothing' handle).
+  case result of
+    InboxProcessed _ -> recordInboxProcessed mMetrics 1
+    InboxDuplicate -> recordInboxDuplicates mMetrics 1
+    InboxPreviouslyFailed _ -> recordInboxFailed mMetrics 1
+    InboxInProgress -> pure ()
+  backlog <- countInboxBacklog
+  recordInboxBacklog mMetrics (fromIntegral backlog)
+  pure result

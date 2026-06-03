@@ -13,6 +13,7 @@ module Keiro.Inbox.Schema
   , lookupInbox
   , listInbox
   , garbageCollectCompleted
+  , countInboxBacklog
   )
 where
 
@@ -89,6 +90,15 @@ listInbox :: (Store :> es) => Text -> Eff es [InboxRow]
 listInbox src =
   runTransaction $
     Tx.statement src listBySourceStmt
+
+{- | Count inbox rows in a non-terminal state (backlog gauge source).
+
+Backlog = rows still @processing@ (in flight) or @failed@ (awaiting a
+retry decision). Completed rows are terminal and excluded.
+-}
+countInboxBacklog :: (Store :> es) => Eff es Int
+countInboxBacklog =
+  runTransaction (Tx.statement () countInboxBacklogStmt)
 
 {- | Delete completed inbox rows older than @keepFor@ from @now@.
 
@@ -314,6 +324,13 @@ listBySourceStmt =
     (selectAllSql <> " WHERE source = $1 ORDER BY received_at, dedupe_key")
     (E.param (E.nonNullable E.text))
     (D.rowList inboxRowDecoder)
+
+countInboxBacklogStmt :: Statement () Int
+countInboxBacklogStmt =
+  preparable
+    "SELECT COUNT(*)::bigint FROM keiro_inbox WHERE status IN ('processing', 'failed')"
+    E.noParams
+    (fmap fromIntegral (D.singleRow (D.column (D.nonNullable D.int8))))
 
 gcStmt :: Statement UTCTime Int64
 gcStmt =

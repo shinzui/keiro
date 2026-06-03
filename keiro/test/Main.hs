@@ -1103,7 +1103,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             | row ^. #outboxId == okId = pure PublishSucceeded
             | otherwise = pure (PublishFailed "broker unreachable")
       Right summary <-
-        Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions)
+        Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
       summary ^. #claimed `shouldBe` 2
       summary ^. #published `shouldBe` 1
       summary ^. #retried `shouldBe` 1
@@ -1127,14 +1127,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Store.runTransaction (enqueueIntegrationEventTx oid event)
       let publish _ = pure (PublishFailed "broker exploded")
       -- First two failures retain Failed status.
-      Right s1 <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts)
+      Right s1 <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
       s1 ^. #retried `shouldBe` 1
       s1 ^. #dead `shouldBe` 0
-      Right s2 <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts)
+      Right s2 <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
       s2 ^. #retried `shouldBe` 1
       s2 ^. #dead `shouldBe` 0
       -- Third failure crosses the threshold.
-      Right s3 <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts)
+      Right s3 <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
       s3 ^. #dead `shouldBe` 1
       Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
       row ^. #status `shouldBe` OutboxDead
@@ -1169,7 +1169,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
               & #batchSize .~ 10
               & #backoff .~ ConstantBackoff 0
       Right summary1 <-
-        Store.runStoreIO storeHandle (publishClaimedOutbox publish firstPassOpts)
+        Store.runStoreIO storeHandle (publishClaimedOutbox publish firstPassOpts Nothing)
       summary1 ^. #claimed `shouldBe` 2
       claimedIds <- readIORef claimed
       claimedIds `shouldSatisfy` (a2Id `notElem`)
@@ -1192,8 +1192,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             defaultPublishOptions
               & #batchSize .~ 10
               & #backoff .~ ConstantBackoff 0
-      Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publishOk retryOpts)
-      Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publishOk retryOpts)
+      Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publishOk retryOpts Nothing)
+      Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publishOk retryOpts Nothing)
       claimedIds2 <- readIORef claimed
       claimedIds2 `shouldSatisfy` (a1Id `elem`)
       claimedIds2 `shouldSatisfy` (a2Id `elem`)
@@ -1212,7 +1212,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             | row ^. #outboxId == n1 = pure (PublishFailed "transient")
             | otherwise = pure PublishSucceeded
       Right summary <- Store.runStoreIO storeHandle $
-        publishClaimedOutbox publish (defaultPublishOptions & #backoff .~ ConstantBackoff 0)
+        publishClaimedOutbox publish (defaultPublishOptions & #backoff .~ ConstantBackoff 0) Nothing
       summary ^. #claimed `shouldBe` 2
       summary ^. #published `shouldBe` 1
       summary ^. #retried `shouldBe` 1
@@ -1254,7 +1254,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             | row ^. #outboxId == okId = pure PublishSucceeded
             | otherwise = pure (PublishFailed "broker unreachable")
           opts = defaultPublishOptions & #tracer ?~ tracer
-      Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts)
+      Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
       _ <- shutdownTracerProvider provider Nothing
       spans <- traverse captureSpan =<< readIORef spansRef
       length spans `shouldBe` 2
@@ -1285,6 +1285,53 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Error msg -> msg `shouldBe` "broker unreachable"
         other -> expectationFailure ("expected Error \"broker unreachable\", got " <> show other)
 
+    it "publishClaimedOutbox records outbox metrics under the in-memory exporter" $ \storeHandle -> do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      keiroMetrics <- Telemetry.newKeiroMetrics meter
+      let okId = OutboxId outboxUuid1
+          failId = OutboxId outboxUuid2
+          okEvent = sampleIntegrationEnvelope & #messageId .~ "metrics-ok" & #key .~ Nothing
+          failEvent = sampleIntegrationEnvelope & #messageId .~ "metrics-fail" & #key .~ Nothing
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx okId okEvent)
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (enqueueIntegrationEventTx failId failEvent)
+      let publish row
+            | row ^. #outboxId == okId = pure PublishSucceeded
+            | otherwise = pure (PublishFailed "broker down")
+          retryPassOpts =
+            defaultPublishOptions
+              & #batchSize .~ 10
+              & #maxAttempts .~ 5
+              & #backoff .~ ConstantBackoff 0
+              & #orderingPolicy .~ BestEffort
+          deadPassOpts = retryPassOpts & #maxAttempts .~ 1
+      -- Pass 1 (maxAttempts = 5): ok publishes, the fail row retries.
+      Right summary1 <-
+        Store.runStoreIO storeHandle (publishClaimedOutbox publish retryPassOpts (Just keiroMetrics))
+      summary1 ^. #published `shouldBe` 1
+      summary1 ^. #retried `shouldBe` 1
+      -- Pass 2 (maxAttempts = 1): the failed row crosses the ceiling and dies.
+      Right summary2 <-
+        Store.runStoreIO storeHandle (publishClaimedOutbox publish deadPassOpts (Just keiroMetrics))
+      summary2 ^. #dead `shouldBe` 1
+      -- Flush so the in-memory exporter receives the aggregates.
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef metricsRef
+      let scalars = flattenScalarPoints exported
+      -- Counters are cumulative across both passes.
+      lookup "keiro.outbox.published" scalars `shouldBe` Just (IntNumber 1)
+      lookup "keiro.outbox.retried" scalars `shouldBe` Just (IntNumber 1)
+      lookup "keiro.outbox.deadlettered" scalars `shouldBe` Just (IntNumber 1)
+      -- After both passes the surviving rows are 'sent'/'dead', so nothing is
+      -- left in ('pending','failed'): the backlog gauge's last value is 0.
+      lookup "keiro.outbox.backlog" scalars `shouldBe` Just (IntNumber 0)
+
   describe "Keiro.Inbox" $ around (withFreshStore fixture) $ do
     it "runs the handler once and records the row as completed" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle $
@@ -1295,7 +1342,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           handler ev =
             Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
       Right result1 <- Store.runStoreIO storeHandle $
-        runInboxTransaction PreferIntegrationMessageId event Nothing handler
+        runInboxTransaction Nothing PreferIntegrationMessageId event Nothing handler
       case result1 of
         Right (InboxProcessed ()) -> pure ()
         other -> expectationFailure ("expected InboxProcessed, got " <> show other)
@@ -1314,10 +1361,39 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             & #source .~ "ordering"
           handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
       Right (Right (InboxProcessed ())) <- Store.runStoreIO storeHandle $
-        runInboxTransaction PreferIntegrationMessageId event Nothing handler
+        runInboxTransaction Nothing PreferIntegrationMessageId event Nothing handler
       Right result2 <- Store.runStoreIO storeHandle $
-        runInboxTransaction PreferIntegrationMessageId event Nothing handler
+        runInboxTransaction Nothing PreferIntegrationMessageId event Nothing handler
       result2 `shouldBe` Right InboxDuplicate
+      Right rowCount <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+      rowCount `shouldBe` 1
+
+    it "records inbox metrics: one processed and one duplicate under the in-memory exporter" $ \storeHandle -> do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      keiroMetrics <- Telemetry.newKeiroMetrics meter
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+      let event = sampleIntegrationEnvelope & #messageId .~ "inbox-metrics-dup" & #source .~ "ordering"
+          handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+      -- First delivery runs the handler: processed.
+      Right (Right (InboxProcessed ())) <- Store.runStoreIO storeHandle $
+        runInboxTransaction (Just keiroMetrics) PreferIntegrationMessageId event Nothing handler
+      -- Second delivery of the same (source, message_id): duplicate.
+      Right result2 <- Store.runStoreIO storeHandle $
+        runInboxTransaction (Just keiroMetrics) PreferIntegrationMessageId event Nothing handler
+      result2 `shouldBe` Right InboxDuplicate
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef metricsRef
+      let scalars = flattenScalarPoints exported
+      lookup "keiro.inbox.processed" scalars `shouldBe` Just (IntNumber 1)
+      lookup "keiro.inbox.duplicates" scalars `shouldBe` Just (IntNumber 1)
+      -- The handler ran exactly once (the duplicate path does not re-run it).
       Right rowCount <- Store.runStoreIO storeHandle $
         Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
       rowCount `shouldBe` 1
@@ -1330,9 +1406,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           second = shared & #messageId .~ "republish-2"
           handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
       Right (Right (InboxProcessed ())) <- Store.runStoreIO storeHandle $
-        runInboxTransaction PreferSourceEventIdentity first Nothing handler
+        runInboxTransaction Nothing PreferSourceEventIdentity first Nothing handler
       Right result2 <- Store.runStoreIO storeHandle $
-        runInboxTransaction PreferSourceEventIdentity second Nothing handler
+        runInboxTransaction Nothing PreferSourceEventIdentity second Nothing handler
       result2 `shouldBe` Right InboxDuplicate
 
     it "uses KafkaDeliveryIdentity when supplied" $ \storeHandle -> do
@@ -1342,9 +1418,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           kafka = KafkaDeliveryRef "billing.orders.v1" 0 17
           handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
       Right (Right (InboxProcessed ())) <- Store.runStoreIO storeHandle $
-        runInboxTransaction KafkaDeliveryIdentity event (Just kafka) handler
+        runInboxTransaction Nothing KafkaDeliveryIdentity event (Just kafka) handler
       Right (Right InboxDuplicate) <- Store.runStoreIO storeHandle $
-        runInboxTransaction KafkaDeliveryIdentity event (Just kafka) handler
+        runInboxTransaction Nothing KafkaDeliveryIdentity event (Just kafka) handler
       Right (Just row) <- Store.runStoreIO storeHandle $
         lookupInbox "ordering" "billing.orders.v1:0:17"
       row ^. #status `shouldBe` InboxCompleted
@@ -1355,7 +1431,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             & #sourceEventId .~ Nothing
             & #sourceGlobalPosition .~ Nothing
       Right result <- Store.runStoreIO storeHandle $
-        runInboxTransaction PreferSourceEventIdentity event Nothing (\_ -> pure ())
+        runInboxTransaction Nothing PreferSourceEventIdentity event Nothing (\_ -> pure ())
       result `shouldBe` Left (DedupePolicyUnsatisfied PreferSourceEventIdentity)
 
     it "leaves no inbox row when the handler condemns the transaction" $ \storeHandle -> do
@@ -1366,7 +1442,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Tx.condemn
             pure ()
       _ <- Store.runStoreIO storeHandle $
-        runInboxTransaction PreferIntegrationMessageId event Nothing handler
+        runInboxTransaction Nothing PreferIntegrationMessageId event Nothing handler
       Right row <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-msg-rollback")
       row `shouldBe` Nothing
 
@@ -1376,7 +1452,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             & #source .~ "ordering"
           handler _ = pure ()
       Right (Right (InboxProcessed ())) <- Store.runStoreIO storeHandle $
-        runInboxTransaction PreferIntegrationMessageId event Nothing handler
+        runInboxTransaction Nothing PreferIntegrationMessageId event Nothing handler
       -- Backdate the row so it falls outside the retention window.
       Right () <- Store.runStoreIO storeHandle $
         Store.runTransaction $
@@ -1501,7 +1577,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Store.runTransaction (enqueueIntegrationEventTx oid orderingEvent)
       -- Run the publisher worker: push records to the in-process topic.
       Right pubSummary1 <- Store.runStoreIO ordering $
-        publishClaimedOutbox (kafkaTopicPublish topic) defaultPublishOptions
+        publishClaimedOutbox (kafkaTopicPublish topic) defaultPublishOptions Nothing
       pubSummary1 ^. #published `shouldBe` 1
       -- Billing side: consume from the topic.
       records1 <- drainKafkaTopic topic
@@ -1549,6 +1625,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             publishClaimedOutbox
               (kafkaTopicPublish topic)
               (defaultPublishOptions & #backoff .~ ConstantBackoff 0)
+              Nothing
       Right s1 <- Store.runStoreIO ordering drainOnce
       Right s2 <- Store.runStoreIO ordering drainOnce
       (s1 ^. #published) + (s2 ^. #published) `shouldBe` 2
@@ -1591,16 +1668,16 @@ main = withMigratedSuite $ \fixture -> hspec $ do
               & #maxAttempts .~ 2
       -- First pass: the first row attempts once and fails, the second is
       -- blocked behind it.
-      Right pass1 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts)
+      Right pass1 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts Nothing)
       pass1 ^. #retried `shouldBe` 1
       pass1 ^. #published `shouldBe` 0
       -- Second pass crosses maxAttempts and dead-letters the first row.
-      Right pass2 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts)
+      Right pass2 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts Nothing)
       pass2 ^. #dead `shouldBe` 1
       Right (Just firstRow) <- Store.runStoreIO ordering (lookupOutbox firstId)
       firstRow ^. #status `shouldBe` OutboxDead
       -- With the first row dead, the second becomes claimable and publishes.
-      Right pass3 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts)
+      Right pass3 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts Nothing)
       pass3 ^. #published `shouldBe` 1
       Right (Just secondRow) <- Store.runStoreIO ordering (lookupOutbox secondId)
       secondRow ^. #status `shouldBe` OutboxSent
@@ -1839,7 +1916,7 @@ consumeAndApply record handler =
     Left err -> pure (ConsumeDecodeFailed err)
     Right (event, kafkaRef) -> do
       result <-
-        runInboxTransaction PreferIntegrationMessageId event (Just kafkaRef) handler
+        runInboxTransaction Nothing PreferIntegrationMessageId event (Just kafkaRef) handler
       case result of
         Left err -> pure (ConsumePolicyUnsatisfied err)
         Right applied -> pure (ConsumeApplied applied)

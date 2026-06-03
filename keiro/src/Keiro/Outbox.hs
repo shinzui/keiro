@@ -30,6 +30,7 @@ module Keiro.Outbox
   , markOutboxSent
   , lookupOutbox
   , listOutbox
+  , countOutboxBacklog
 
     -- * Inline escape hatch
   , freshOutboxId
@@ -66,7 +67,14 @@ import Keiro.Outbox.Kafka (outboxRowToKafkaRecord)
 import Keiro.Outbox.Schema
 import Keiro.Outbox.Types
 import Keiro.Prelude
-import Keiro.Telemetry (withProducerSpan)
+import Keiro.Telemetry
+  ( KeiroMetrics
+  , recordOutboxBacklog
+  , recordOutboxDeadlettered
+  , recordOutboxPublished
+  , recordOutboxRetried
+  , withProducerSpan
+  )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId, GlobalPosition, RecordedEvent)
@@ -234,11 +242,24 @@ publishClaimedOutbox ::
   (IOE :> es, Store :> es) =>
   (OutboxRow -> Eff es PublishOutcome) ->
   OutboxPublishOptions ->
+  Maybe KeiroMetrics ->
   Eff es OutboxPublishSummary
-publishClaimedOutbox publish options = do
+publishClaimedOutbox publish options mMetrics = do
   now <- liftIO getCurrentTime
   rows <- claimOutboxBatch (options ^. #orderingPolicy) (options ^. #batchSize) now
-  drainBatch rows OutboxPublishSummary {claimed = 0, published = 0, retried = 0, dead = 0, haltedOn = Nothing}
+  -- Backlog gauge, recorded once per pass after the claim has moved this
+  -- batch to 'publishing': it counts rows still awaiting a publisher. This is
+  -- the synchronous-gauge baseline; a 'Nothing' handle makes it a no-op.
+  backlog <- countOutboxBacklog
+  recordOutboxBacklog mMetrics (fromIntegral backlog)
+  summary <-
+    drainBatch rows OutboxPublishSummary {claimed = 0, published = 0, retried = 0, dead = 0, haltedOn = Nothing}
+  -- Counters from the aggregated pass summary (each a no-op under 'Nothing';
+  -- a zero delta is harmless).
+  recordOutboxPublished mMetrics (fromIntegral (summary ^. #published))
+  recordOutboxRetried mMetrics (fromIntegral (summary ^. #retried))
+  recordOutboxDeadlettered mMetrics (fromIntegral (summary ^. #dead))
+  pure summary
   where
     drainBatch ::
       [OutboxRow] ->

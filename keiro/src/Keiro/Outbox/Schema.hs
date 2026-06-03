@@ -13,6 +13,7 @@ module Keiro.Outbox.Schema
   , markOutboxFailedTx
   , lookupOutbox
   , listOutbox
+  , countOutboxBacklog
   )
 where
 
@@ -63,6 +64,17 @@ listOutbox :: (Store :> es) => Text -> Eff es [OutboxRow]
 listOutbox source =
   runTransaction $
     Tx.statement source listOutboxStmt
+
+{- | Count outbox rows awaiting publish (backlog gauge source).
+
+Backlog = rows in a claimable, non-terminal state. Mirrors the claim
+query's @status IN ('pending','failed')@ predicate so the gauge measures
+exactly the rows a publisher still has to drain (rows held mid-pass in
+@publishing@, and the terminal @sent@/@dead@ rows, are excluded).
+-}
+countOutboxBacklog :: (Store :> es) => Eff es Int
+countOutboxBacklog =
+  runTransaction (Tx.statement () countBacklogStmt)
 
 {- | Claim up to @limit@ rows ready for publish.
 
@@ -338,6 +350,13 @@ rowColumns =
 
 claimResultDecoder :: D.Row OutboxRow
 claimResultDecoder = outboxRowDecoder
+
+countBacklogStmt :: Statement () Int
+countBacklogStmt =
+  preparable
+    "SELECT COUNT(*)::bigint FROM keiro_outbox WHERE status IN ('pending', 'failed')"
+    E.noParams
+    (fmap fromIntegral (D.singleRow (D.column (D.nonNullable D.int8))))
 
 readAttemptCountStmt :: Statement UUID (Maybe Int)
 readAttemptCountStmt =

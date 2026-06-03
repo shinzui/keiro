@@ -135,7 +135,7 @@ point below.
 |---|-------|------|-----------|-----------|--------|
 | 33 | Add an OpenTelemetry metrics surface to Keiro.Telemetry | docs/plans/33-add-an-opentelemetry-metrics-surface-to-keiro-telemetry.md | None | EP-25 | Complete |
 | 34 | Add timer stuck-row recovery and cancellation API | docs/plans/34-add-timer-stuck-row-recovery-and-cancellation-api.md | None | None | Complete |
-| 35 | Instrument the outbox and inbox workers with metrics | docs/plans/35-instrument-the-outbox-and-inbox-workers-with-metrics.md | EP-33 | None | Not Started |
+| 35 | Instrument the outbox and inbox workers with metrics | docs/plans/35-instrument-the-outbox-and-inbox-workers-with-metrics.md | EP-33 | None | Complete |
 | 36 | Instrument the timer and projection workers with metrics | docs/plans/36-instrument-the-timer-and-projection-workers-with-metrics.md | EP-33 | EP-34 | Not Started |
 | 37 | Process-manager hardening guidance and snapshot worked example | docs/plans/37-process-manager-hardening-guidance-and-snapshot-worked-example.md | EP-34 | EP-35, EP-36 | Not Started |
 
@@ -260,9 +260,9 @@ plan and the milestone.
 - [x] EP-33: add the in-memory-metric-exporter test harness and assert instruments record under it. (2026-06-03)
 - [x] EP-34: add `findStuckTimers`, requeue-to-`Scheduled`, and cancel functions in `Keiro.Timer`/`Timer.Schema`. (2026-06-02)
 - [x] EP-34: add the attempt-ceiling auto-dead-letter path (or document its deliberate omission) with tests. (2026-06-02)
-- [ ] EP-35: thread the meter handle into the outbox publisher and record backlog / published / retried / deadlettered.
-- [ ] EP-35: thread the meter handle into the inbox and record processed / duplicates / failed / backlog.
-- [ ] EP-35: assert outbox/inbox instruments under the in-memory metric exporter.
+- [x] EP-35: thread the meter handle into the outbox publisher and record backlog / published / retried / deadlettered. (2026-06-03)
+- [x] EP-35: thread the meter handle into the inbox and record processed / duplicates / failed / backlog. (2026-06-03)
+- [x] EP-35: assert outbox/inbox instruments under the in-memory metric exporter. (2026-06-03)
 - [ ] EP-36: thread the meter handle into the timer worker and record backlog / fire.lag / attempts (+ stuck after EP-34).
 - [ ] EP-36: record projection lag and position-wait timeouts on the async projection path.
 - [ ] EP-36: assert timer/projection instruments under the in-memory metric exporter.
@@ -412,6 +412,36 @@ plan and the milestone.
     skips ghc even with `-fforce-recomp`. Force a content recompile of
     `Keiro.Migrations` (or `cabal clean`) after adding a migration, then builds
     are stable.
+
+- 2026-06-03 (EP-35 shipped): The outbox **import cycle** the 2026-06-03 drafting
+  note warned about is real and was resolved without an EP-33 change. EP-33 left
+  `KeiroMetrics` in `Keiro.Telemetry`, and `Keiro.Telemetry → Keiro.Outbox.Kafka
+  → Keiro.Outbox.Types`, so a `metrics` field on `OutboxPublishOptions` (which
+  lives in `Keiro.Outbox.Types`) would close the loop. EP-35 used the
+  pre-authorized fallback: `publishClaimedOutbox` now takes a **trailing `Maybe
+  KeiroMetrics` argument** (it is defined in `Keiro.Outbox`, which already imports
+  `Keiro.Telemetry`). The inbox has no cycle (`Keiro.Telemetry` imports
+  `Keiro.Inbox.Kafka`, not `Keiro.Inbox`), so `runInboxTransaction` /
+  `runInboxTransactionWithKey` gained a **leading `Maybe KeiroMetrics`
+  parameter** as planned. **Guidance for EP-36:** the timer worker
+  (`runTimerWorker` / `runTimerWorkerWith` in `Keiro.Timer`) and the projection
+  path should likewise pass `Maybe KeiroMetrics` as an explicit argument rather
+  than placing it on any option record that lives in a module `Keiro.Telemetry`
+  transitively imports — check the specific module's import graph first. The
+  consistent convention across all workers is now "handle passed explicitly as a
+  function argument, defaulting to no-op (`Nothing`)".
+- 2026-06-03 (EP-35 shipped): EP-35 added two read-only backlog queries reused by
+  EP-36/EP-37 if helpful: `countOutboxBacklog :: (Store :> es) => Eff es Int`
+  (`status IN ('pending','failed')`) in `Keiro.Outbox.Schema` (re-exported from
+  `Keiro.Outbox`) and `countInboxBacklog` (`status IN ('processing','failed')`)
+  in `Keiro.Inbox.Schema` (re-exported from `Keiro.Inbox`). Both record their
+  gauge synchronously once per worker pass/delivery, per the MasterPlan's
+  synchronous-backlog decision. A synchronous gauge recorded with value `0` *is*
+  exported (observable as `Just 0`), so EP-36's timer/projection backlog and lag
+  gauges can assert exact zeroes without special-casing. EP-33's helper for the
+  inbox duplicate counter is spelled `recordInboxDuplicates` (plural) and every
+  `record*` helper takes `Int64`.
+
 
 ## Decision Log
 
