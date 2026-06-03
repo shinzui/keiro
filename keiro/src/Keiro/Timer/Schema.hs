@@ -20,6 +20,10 @@ module Keiro.Timer.Schema
   , claimDueTimer
   , markTimerFired
 
+    -- * Read-only counts
+  , countDueTimers
+  , countStuckTimers
+
     -- * Recovery
   , StuckTimerFilter (..)
   , anyStuckTimer
@@ -128,6 +132,26 @@ markTimerFired :: (Store :> es) => TimerId -> EventId -> Eff es ()
 markTimerFired timerId eventId =
   runTransaction $
     Tx.statement (timerIdToUuid timerId, eventIdToUuid eventId) markTimerFiredStmt
+
+{- | Count timers that are @scheduled@ and already due at @now@ — the timer
+backlog. Read-only; mirrors 'claimDueTimer''s WHERE clause but counts rather
+than locking, so it never claims or mutates a row.
+-}
+countDueTimers :: (Store :> es) => UTCTime -> Eff es Int
+countDueTimers now =
+  runTransaction $
+    Tx.statement now countDueTimersStmt
+
+{- | Count timers stranded in @Firing@ that match the given 'StuckTimerFilter' —
+the same "stuck" predicate 'findStuckTimers' lists, evaluated against @now@.
+Read-only. 'anyStuckTimer' counts every @firing@ row.
+-}
+countStuckTimers :: (Store :> es) => UTCTime -> StuckTimerFilter -> Eff es Int
+countStuckTimers now stuckFilter =
+  runTransaction $
+    Tx.statement (cutoff, fmap fromIntegral (stuckFilter ^. #minAttempts)) countStuckTimersStmt
+ where
+  cutoff = fmap (\age -> addUTCTime (negate age) now) (stuckFilter ^. #minAge)
 
 {- | List timers stranded in @Firing@ that match the given 'StuckTimerFilter'.
 The @minAge@ bound is evaluated against @now@: a row qualifies when its
@@ -238,6 +262,34 @@ markTimerFiredStmt =
         (E.param (E.nonNullable E.uuid))
     )
     D.noResult
+
+countDueTimersStmt :: Statement UTCTime Int
+countDueTimersStmt =
+  preparable
+    """
+    SELECT count(*)
+    FROM keiro_timers
+    WHERE status = 'scheduled'
+      AND fire_at <= $1
+    """
+    (E.param (E.nonNullable E.timestamptz))
+    (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
+
+countStuckTimersStmt :: Statement (Maybe UTCTime, Maybe Int64) Int
+countStuckTimersStmt =
+  preparable
+    """
+    SELECT count(*)
+    FROM keiro_timers
+    WHERE status = 'firing'
+      AND ($1::timestamptz IS NULL OR updated_at <= $1)
+      AND ($2::bigint IS NULL OR attempts >= $2)
+    """
+    ( contrazip2
+        (E.param (E.nullable E.timestamptz))
+        (E.param (E.nullable E.int8))
+    )
+    (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
 
 findStuckTimersStmt :: Statement (Maybe UTCTime, Maybe Int64) [TimerRow]
 findStuckTimersStmt =

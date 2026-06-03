@@ -86,16 +86,16 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1.1 Confirm EP-33 has landed: `Keiro.Telemetry` exports `KeiroMetrics`, `newKeiroMetrics`, and the timer recording helpers; record the exact exported names in the Decision Log.
-- [ ] M1.2 Add the read-only backlog count query `countDueTimers` to `keiro/src/Keiro/Timer/Schema.hs` and re-export it from `keiro/src/Keiro/Timer.hs`.
-- [ ] M1.3 Thread `Maybe KeiroMetrics` into `runTimerWorker` as a trailing argument and record `keiro.timer.backlog`, `keiro.timer.fire.lag`, and `keiro.timer.attempts` each pass.
-- [ ] M1.4 Update the single existing `runTimerWorker` call site in `keiro/test/Main.hs` to pass `Nothing` (or fix all call sites if more exist).
-- [ ] M1.5 Add the M1 timer-metrics test asserting the three timer instruments under the in-memory metric exporter; run `cabal test keiro-test` and paste the transcript.
+- [x] M1.1 Confirm EP-33 has landed: `Keiro.Telemetry` exports `KeiroMetrics`, `newKeiroMetrics`, and the timer recording helpers; record the exact exported names in the Decision Log. (2026-06-03)
+- [x] M1.2 Add the read-only backlog count query `countDueTimers` to `keiro/src/Keiro/Timer/Schema.hs` and re-export it from `keiro/src/Keiro/Timer.hs`. (2026-06-03)
+- [x] M1.3 Thread `Maybe KeiroMetrics` into `runTimerWorker`/`runTimerWorkerWith` as the leading argument and record `keiro.timer.backlog`, `keiro.timer.fire.lag`, and `keiro.timer.attempts` each pass. (2026-06-03)
+- [x] M1.4 Update the existing `runTimerWorker`/`runTimerWorkerWith` call sites in `keiro/test/Main.hs` to pass `Nothing`. (2026-06-03)
+- [x] M1.5 Add the M1 timer-metrics test asserting the three timer instruments under the in-memory metric exporter; run `cabal test keiro-test`. (2026-06-03)
 - [ ] M2.1 Add a head-position read helper and a projection-lag recording helper; thread `Maybe KeiroMetrics` into the async projection drain path and record `keiro.projection.lag`.
 - [ ] M2.2 Thread `Maybe KeiroMetrics` into `waitFor`/`runQueryWith` and increment `keiro.projection.wait.timeouts` on a `ReadModelWaitTimeout`.
 - [ ] M2.3 Add the M2 projection tests (lag gauge behind-the-log; wait-timeout counter); run `cabal test keiro-test` and paste the transcript.
-- [ ] M3.1 Once EP-34 has landed: read its stuck-row definition and any new `TimerStatus` constructor from the MasterPlan Surprises & Discoveries; add `countStuckTimers` to `Keiro.Timer.Schema`.
-- [ ] M3.2 Record `keiro.timer.stuck` in `runTimerWorker` and add the M3 stuck-gauge test; run `cabal test keiro-test` and paste the transcript.
+- [x] M3.1 EP-34 has landed: stuck = `status = 'firing'` per `StuckTimerFilter`; added `countStuckTimers` to `Keiro.Timer.Schema` mirroring `findStuckTimers`. (2026-06-03)
+- [x] M3.2 Record `keiro.timer.stuck` in the timer worker (via `anyStuckTimer`, before the claim) and add the M3 stuck-gauge test; `cabal test keiro-test` passes. (2026-06-03)
 - [ ] M4 Add the minimal `docs/user/operations.md` note (one short paragraph) deferring the full metrics catalogue to EP-37; update Decision Log and Outcomes & Retrospective.
 
 
@@ -131,7 +131,39 @@ implementation. Provide concise evidence.
   GlobalPosition` and `createdAt :: UTCTime`, confirmed in
   `kiroku-store/src/Kiroku/Store/Types.hs`.)
 
-(No implementation surprises yet.)
+- 2026-06-03 (M1.1 reconciliation): EP-33 shipped the helper names this plan
+  assumed, with two deltas the implementation reconciled:
+  - The position-wait counter helper is `recordProjectionWaitTimeouts` (plural),
+    not the singular `recordProjectionWaitTimeout` the M2.2 sketch used.
+  - `keiro.timer.fire.lag` was declared by EP-33 in **milliseconds** (unit
+    `"ms"`), not seconds as this plan's Purpose/M1 text assumed. `diffUTCTime`
+    yields seconds, so the worker records `realToFrac (now - fireAt) * 1000`.
+    The Purpose bullet's "(in seconds)" is therefore stale; EP-37 (which owns the
+    consolidated metric catalogue) must document fire.lag as milliseconds.
+  - Confirmed EP-33 exports (verbatim): `recordTimerBacklog :: Maybe KeiroMetrics
+    -> Int64 -> m ()` (gauge), `recordTimerStuck :: ... -> Int64 -> m ()` (gauge),
+    `recordTimerFireLag :: ... -> Double -> m ()` (histogram), `recordTimerAttempts
+    :: ... -> Double -> m ()` (histogram), `recordProjectionLag :: ... -> Int64 ->
+    m ()` (gauge), `recordProjectionWaitTimeouts :: ... -> Int64 -> m ()` (counter).
+    All take `Maybe KeiroMetrics` and no-op on `Nothing`.
+- 2026-06-03 (EP-34 reshaped the worker): EP-34 made `runTimerWorkerWith ::
+  TimerWorkerOptions -> ...` the real implementation and `runTimerWorker` a thin
+  alias. The meter is threaded into **both** as the leading `Maybe KeiroMetrics`
+  argument (`runTimerWorker = runTimerWorkerWith metrics defaultTimerWorkerOptions`),
+  and the recording happens once inside `runTimerWorkerWith`. The constraint
+  gained `IOE :> es` (the EP-33 helpers are `MonadIO`), matching how EP-35
+  instrumented the outbox/inbox; every existing call site already runs under
+  `Store.runStoreIO`, which provides `IOE`.
+- 2026-06-03 (M3 done early): EP-34 is Complete, so M3 shipped together with M1
+  rather than deferred. `keiro.timer.stuck` is recorded from `countStuckTimers now
+  anyStuckTimer` evaluated **before** the claim — at that point every `firing` row
+  is one a prior pass stranded (the row this pass is about to claim is still
+  `scheduled`), giving a clean "rows needing recovery" count. Per the MasterPlan's
+  EP-34 discovery, `dead` rows are a distinct terminal state and are not counted
+  as stuck (the predicate is `status = 'firing'`). The test harness names are the
+  real EP-33/EP-35 ones (`inMemoryMetricExporter`, `flattenScalarPoints`,
+  `flattenHistogramPoints`), not the provisional `withInMemoryMeter`/`metricPoints`
+  the Concrete Steps sketched.
 
 
 ## Decision Log

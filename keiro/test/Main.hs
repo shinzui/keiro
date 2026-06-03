@@ -917,7 +917,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           scheduleTimerTx counterTimerRequest
       let firedEventId = EventId sampleUuid2
       workerResult <- Store.runStoreIO storeHandle $
-        runTimerWorker dueTimerTime $ \_ -> do
+        runTimerWorker Nothing dueTimerTime $ \_ -> do
           fired <-
             runCommand
               (defaultRunCommandOptions & #eventIds .~ [firedEventId])
@@ -932,11 +932,41 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           timer ^. #status `shouldBe` Firing
         other -> expectationFailure ("expected fired timer, got " <> show other)
       secondWorkerResult <- Store.runStoreIO storeHandle $
-        runTimerWorker dueTimerTime (\_ -> pure (Just firedEventId))
+        runTimerWorker Nothing dueTimerTime (\_ -> pure (Just firedEventId))
       secondWorkerResult `shouldBe` Right Nothing
       Right targetEvents <- Store.runStoreIO storeHandle $
         Store.readStreamForward (StreamName "timer-target") (StreamVersion 0) 10
       fmap (^. #eventId) (Vector.toList targetEvents) `shouldBe` [firedEventId]
+
+    it "records timer backlog, fire lag, attempts, and stuck count" $ \storeHandle -> do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      keiroMetrics <- Telemetry.newKeiroMetrics meter
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          scheduleTimerTx counterTimerRequest
+      let firedEventId = EventId sampleUuid2
+      workerResult <- Store.runStoreIO storeHandle $
+        runTimerWorker (Just keiroMetrics) dueTimerTime (\_ -> pure (Just firedEventId))
+      case workerResult of
+        Right (Just _) -> pure ()
+        other -> expectationFailure ("expected a fired timer, got " <> show other)
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef metricsRef
+      let scalars = flattenScalarPoints exported
+          hists = flattenHistogramPoints exported
+      -- One scheduled+due row at the start of the pass: backlog gauge holds 1.
+      lookup "keiro.timer.backlog" scalars `shouldBe` Just (IntNumber 1)
+      -- Nothing was stranded in 'firing' before this pass: stuck gauge holds 0.
+      lookup "keiro.timer.stuck" scalars `shouldBe` Just (IntNumber 0)
+      -- The claimed timer was due exactly at 'now' and is on its first attempt:
+      -- one fire.lag observation of 0 ms and one attempts observation of 1.
+      [(c, s) | (n, c, s) <- hists, n == "keiro.timer.fire.lag"] `shouldBe` [(1, 0.0)]
+      [(c, s) | (n, c, s) <- hists, n == "keiro.timer.attempts"] `shouldBe` [(1, 1.0)]
 
     it "finds a firing timer with findStuckTimers and requeues it for re-firing" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle $
@@ -965,7 +995,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       -- The ordinary loop re-claims and fires it exactly once.
       let firedEventId = EventId sampleUuid2
       workerResult <- Store.runStoreIO storeHandle $
-        runTimerWorker dueTimerTime $ \_ -> do
+        runTimerWorker Nothing dueTimerTime $ \_ -> do
           fired <-
             runCommand
               (defaultRunCommandOptions & #eventIds .~ [firedEventId])
@@ -980,7 +1010,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           timer ^. #status `shouldBe` Firing
         other -> expectationFailure ("expected re-fired timer, got " <> show other)
       secondWorkerResult <- Store.runStoreIO storeHandle $
-        runTimerWorker dueTimerTime (\_ -> pure (Just firedEventId))
+        runTimerWorker Nothing dueTimerTime (\_ -> pure (Just firedEventId))
       secondWorkerResult `shouldBe` Right Nothing
       Right targetEvents <- Store.runStoreIO storeHandle $
         Store.readStreamForward (StreamName "timer-target") (StreamVersion 0) 10
@@ -1008,7 +1038,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       -- maxAttempts = Just 0: the first claim sets attempts = 1 > 0, so the
       -- worker dead-letters instead of firing.
       result <- Store.runStoreIO storeHandle $
-        runTimerWorkerWith (defaultTimerWorkerOptions & #maxAttempts .~ Just 0) dueTimerTime $ \_ -> do
+        runTimerWorkerWith Nothing (defaultTimerWorkerOptions & #maxAttempts .~ Just 0) dueTimerTime $ \_ -> do
           liftIO (writeIORef firedRef True)
           pure (Just firedEventId)
       case result of
@@ -1025,8 +1055,33 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       statusRow `shouldBe` Just ("dead", Just "timer exceeded attempt ceiling of 0")
       -- A dead row is never re-claimed.
       secondWorkerResult <- Store.runStoreIO storeHandle $
-        runTimerWorker dueTimerTime (\_ -> pure (Just firedEventId))
+        runTimerWorker Nothing dueTimerTime (\_ -> pure (Just firedEventId))
       secondWorkerResult `shouldBe` Right Nothing
+
+    it "records a row stranded in Firing in the stuck gauge" $ \storeHandle -> do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      keiroMetrics <- Telemetry.newKeiroMetrics meter
+      Right () <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          scheduleTimerTx counterTimerRequest
+      -- Strand it in Firing by claiming without firing (a crashed worker).
+      Right (Just _) <- Store.runStoreIO storeHandle $ claimDueTimer dueTimerTime
+      -- A later pass finds nothing scheduled and due, but sees the stranded row.
+      workerResult <- Store.runStoreIO storeHandle $
+        runTimerWorker (Just keiroMetrics) dueTimerTime (\_ -> pure Nothing)
+      workerResult `shouldBe` Right Nothing
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef metricsRef
+      let scalars = flattenScalarPoints exported
+      -- The one firing row is counted as stuck.
+      lookup "keiro.timer.stuck" scalars `shouldBe` Just (IntNumber 1)
+      -- It is not 'scheduled', so it does not show up as backlog.
+      lookup "keiro.timer.backlog" scalars `shouldBe` Just (IntNumber 0)
 
   describe "Keiro.Outbox.Kafka" $ do
     it "converts an outbox row to a Kafka producer record" $ do
