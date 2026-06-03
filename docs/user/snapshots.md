@@ -51,6 +51,38 @@ Use:
 
 Intervals less than or equal to zero never snapshot.
 
+## Long-Running Process Managers
+
+A process manager has its own state event stream (`ProcessManager.eventStream`). That
+stream is an ordinary `EventStream`, so it snapshots exactly like any other: set
+`snapshotPolicy` and `stateCodec` on the manager's `eventStream` and `runProcessManagerOnce`
+writes and reuses snapshots through the same command path as `runCommand`. No extra wiring
+is required.
+
+Choose a policy by how the manager's state stream grows and ends:
+
+- `Every n` — the default choice for a manager that reacts many times over its lifetime
+  (a long-running saga). Pick `n` so a snapshot covers most of the history a reaction
+  would otherwise replay; a few tens to a few hundreds is typical.
+- `OnTerminal` — for a manager that is read again after it finishes (for example to
+  answer "what did this workflow decide?") but rarely advances after closure.
+- `Custom` — when snapshot cadence should depend on the folded state (for example,
+  snapshot only once the manager has entered an active phase) or on the stream version.
+- `Never` — for short-lived managers whose state stream stays small; replaying a handful
+  of events is cheaper than maintaining snapshots.
+
+Snapshots remain advisory for managers exactly as for aggregates: a missing, corrupt, or
+shape-incompatible snapshot falls back to full replay of the manager state stream, and a
+stored manager-event decode failure still fails the reaction. When you change the
+manager's register-file or state shape, the `shapeHash` changes automatically (with
+`defaultStateCodec`) and older snapshots are ignored safely; bump `stateCodecVersion`
+yourself for an encoding change the shape hash does not capture.
+
+The keiro test suite proves this end to end in
+`keiro/test/Main.hs` under `describe "Keiro.ProcessManager snapshots"`: a manager with
+`snapshotPolicy = Every 2` writes a snapshot of its `pm:` state stream at version 2, and a
+later reaction hydrates from that snapshot and lands on top of it.
+
 ## StateCodec
 
 ```haskell

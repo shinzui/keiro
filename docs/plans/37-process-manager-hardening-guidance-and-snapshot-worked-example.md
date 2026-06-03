@@ -85,11 +85,11 @@ This section must always reflect the actual current state of the work.
 - [x] M1: Added the first process-manager state-stream snapshot test in `keiro/test/Main.hs` (new `pmSnapshotCounterEventStream`, `pmSnapshotProcessManager`, `sampleUuid3`, and a `describe "Keiro.ProcessManager snapshots"` block proving snapshot-write + tail-replay). (2026-06-03)
 - [x] M1: `cabal test keiro:keiro-test` passes — 94 examples (up from 92), 0 failures; both new examples present. Transcript in Validation and Acceptance. (2026-06-03)
 - [~] M1 (optional): jitsurei snapshot-enabled PM example deferred — the keiro test already proves the capability and M2's guide already points authors at `snapshotOrderEventStream` as the in-repo pattern. Recorded in Decision Log.
-- [ ] M2: Extend `docs/user/snapshots.md`, `docs/user/process-managers-and-timers.md`, and `docs/guides/process-managers-and-timers.md` with snapshot-policy guidance for long-running process managers.
-- [ ] M3: Replace the open "decide an operational policy" text in the Timers section of `docs/user/operations.md` with the EP-34-backed recovery runbook, and resolve the matching production-checklist line.
-- [ ] M4: Add the metrics catalogue (all fourteen instruments) to the Observability section of `docs/user/operations.md`, noting reconciliation against EP-33's audit doc.
-- [ ] M5: Flip the roadmap rows in `docs/user/roadmap.md` (Capability Matrix, Phase 2 table, At-A-Glance) and update `docs/user/production-status.md`.
-- [ ] Final: re-run `cabal test keiro:keiro-test`, re-verify every documented name against the shipped surface, and write the Outcomes & Retrospective entry.
+- [x] M2: Extended `docs/user/snapshots.md` (new "Long-Running Process Managers"), `docs/user/process-managers-and-timers.md` (new "Snapshotting Manager State"), and `docs/guides/process-managers-and-timers.md` (new "Snapshotting A Long-Running Manager") with snapshot-policy guidance. Also fixed the now-stale `runTimerWorker` snippet there to pass the EP-36 `Maybe KeiroMetrics` argument. (2026-06-03)
+- [x] M3: Replaced the Timers section body in `docs/user/operations.md` with the EP-34-backed stuck-row recovery runbook (`findStuckTimers`/`requeueStuckTimer`/`cancelTimer`/`deadLetterTimer` + `maxAttempts`), rephrased the production-checklist line, and pointed the PM-and-timers "Timer Semantics" section at the runbook. (2026-06-03)
+- [x] M4: Added the fourteen-instrument metrics catalogue to the Observability section of `docs/user/operations.md`, with the shipped kinds/units (Gauge backlogs/lag, Histogram fire.lag in `ms`, Histogram attempts) reconciled against EP-33's audit doc. (2026-06-03)
+- [x] M5: Flipped the roadmap rows in `docs/user/roadmap.md` (Capability Matrix Worker-metrics + Durable-timers, Phase 2 table, At-A-Glance, Phase 2 prose subsections, Current Baseline OTel line) and updated `docs/user/production-status.md` (process-manager, timer, and OpenTelemetry bullets). (2026-06-03)
+- [x] Final: re-ran `cabal test keiro:keiro-test` (94 examples, 0 failures), re-verified every documented function/metric name against the shipped surface (all resolve; no stale `requeueTimer` or "spans only; no metrics yet" in user docs), and wrote the Outcomes & Retrospective entry. (2026-06-03)
 
 
 ## Surprises & Discoveries
@@ -217,7 +217,33 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- 2026-06-03 (complete): All six milestones landed and the suite is green (94 examples,
+  0 failures — up two from the EP-36 baseline of 92). The three purpose statements hold:
+  1. There is now a passing automated test (`describe "Keiro.ProcessManager snapshots"`)
+     proving a PM state stream snapshots at `Every 2` and that a later reaction hydrates
+     from the snapshot. As the authoring Surprises predicted, this needed *no* new library
+     machinery — only setting `snapshotPolicy`/`stateCodec` on the manager's `eventStream`
+     (reusing `snapshotCounterEventStream`) and feeding two distinct source events that
+     correlate to one id. The optional jitsurei example was deliberately deferred (see
+     Decision Log) since the keiro test already proves the capability and the guide points
+     at the existing `snapshotOrderEventStream`.
+  2. The user docs now answer both operational questions: `operations.md` has an executable
+     stuck-row recovery runbook on EP-34's real functions, and a fourteen-instrument
+     metrics catalogue.
+  3. `roadmap.md` and `production-status.md` describe worker metrics and PM/timer hardening
+     as shipped (Capability Matrix, Phase 2 table, At-A-Glance, prose).
+- Reconciliation payoff (the reason EP-37 is last): the M0 pass caught five drift points
+  between the plan's draft and the shipped surface — `requeueTimer`→`requeueStuckTimer`;
+  backlog/lag instruments shipped as **Gauge** (not UpDownCounter); `keiro.timer.attempts`
+  is a **Histogram** (not Counter); `keiro.timer.fire.lag` is in **`ms`** (not seconds);
+  and `keiro.timer.stuck` counts `Firing`-only (the terminal `Dead` is distinct, not
+  stuck). The catalogue and runbook were written against the audit/shipped source, not the
+  draft. A bonus honest-docs fix that the plan did not anticipate: the `runTimerWorker`
+  example in `process-managers-and-timers.md` was stale after EP-36 added the leading
+  `Maybe KeiroMetrics` argument, so it was corrected to `runTimerWorker Nothing now …`.
+- Gaps/lessons: none blocking. The plan's cited line numbers had drifted (EP-35/EP-36 had
+  already edited `operations.md`'s Observability paragraph), so the "match on quoted text,
+  not line number" recovery guidance was essential and worked. EP-37 closes MasterPlan 4.
 
 
 ## Context and Orientation

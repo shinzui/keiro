@@ -16,7 +16,7 @@ exact released surface and `docs/user/production-status.md` for adoption posture
 |---|---|---|
 | Current baseline | Event-sourcing v1 core (0.1.0.0) | The full v1 substrate — commands (multi-event), codecs, snapshots, read models, process managers, routers, timers, outbox, inbox, integration events, OpenTelemetry tracing, and migrations — is released for controlled internal use, with a worked-examples app and long-form guides. |
 | Phase 1 | Stabilize existing core | Complete: multi-event command output landed, the repository test suite exercises the core paths, and migrations/snapshots have production guidance. |
-| Phase 2 | Complete v1 workflow substrate | Outbox and inbox shipped. Remaining: process-manager hardening guidance and worker metrics (tracing spans are already in). |
+| Phase 2 | Complete v1 workflow substrate | Complete: outbox, inbox, OpenTelemetry tracing and metrics, process-manager snapshot guidance, and the timer stuck-row recovery API and runbook. |
 | Phase 3 | Read-side maturity | Async projections, subscriptions, and position waits get stronger consistency and scaling options. |
 | Phase 4 | Adoption and ergonomics | The worked-examples app and guides exist; remaining work is full Haddocks, a public stability policy, and higher-level facades. |
 | Phase 5 | v2 durable execution | Named-step workflow execution, awakeables, child workflows, and continue-as-new layer on top of the v1 substrate. |
@@ -32,13 +32,13 @@ exact released surface and `docs/user/production-status.md` for adoption posture
 | Read models and projections | Available now | Inline is transactional and receives `RecordedEvent` metadata; async is at-least-once today. |
 | Process managers | Available now | V1 workflow substrate for sagas and choreography. |
 | Routers (effectful fan-out) | Available now | `Keiro.Router`: stateless content-based router / recipient list; targets resolved effectfully from read models. |
-| Durable timers | Available now | Polling worker and timer table exist; operational hardening guidance remains. |
+| Durable timers | Available now | Polling worker, timer table, and a stuck-row recovery API (find/requeue/cancel/dead-letter) with an operations runbook. |
 | codd migrations | Available now | `keiro-migrate` applies Kiroku and Keiro framework tables, including `keiro_outbox` and `keiro_inbox`. |
 | Transactional outbox | Available now | `Keiro.Outbox` + `keiro_outbox`: per-key ordering, backoff, dead-lettering, and a Kafka producer adapter. |
 | Inbox deduplication | Available now | `Keiro.Inbox` + `keiro_inbox`: claim/retry/release/dead transitions, GC, and Shibuya + Kafka adapters. |
 | Integration events | Available now | `Keiro.Integration.Event`: canonical cross-context envelope with W3C trace context and Kafka header helpers. |
 | OpenTelemetry tracing | Available now | `Keiro.Telemetry`: Internal (command), Producer (outbox), and Consumer spans; opt-in via `RunCommandOptions.tracer`. |
-| Worker metrics | Planned v1.x | Projection lag, timer/outbox backlog, duplicate, and dead-letter metrics are not yet exposed (only spans are). |
+| Worker metrics | Available now | `Keiro.Telemetry` exposes opt-in OpenTelemetry metrics for outbox, inbox, timer, and async-projection workers (backlog, lag, duplicate, dead-letter, and stuck-timer instruments). |
 | Exactly-once async projections | Planned v1.x / upstream-dependent | Blocks on transactional Shibuya/Kiroku checkpoint handling. |
 | Prefix subscriptions | Planned v1.x / upstream-dependent | Needed for `pm:` and future `wf:` stream families at scale. |
 | Durable execution runtime | Planned v2 | Named-step `Workflow es a`, awakeables, child workflows, continue-as-new. |
@@ -68,7 +68,8 @@ Implemented today:
 - an idempotent inbox (`Keiro.Inbox`) with claim/retry/release/dead
   transitions, GC, and Shibuya + Kafka adapters;
 - the cross-context integration-event envelope (`Keiro.Integration.Event`);
-- OpenTelemetry command/producer/consumer spans (`Keiro.Telemetry`);
+- OpenTelemetry command/producer/consumer spans and opt-in worker metrics
+  (`Keiro.Telemetry`);
 - embedded codd migrations for Kiroku and Keiro framework tables;
 - the `jitsurei` worked-examples package and long-form guides under
   `docs/guides/`.
@@ -146,16 +147,16 @@ snapshots without hand-written register-file walkers.
 
 Goal: finish the v1 workflow features that sit between "process managers and
 timers exist" and "teams can run real saga/choreography workflows comfortably."
-The outbox and inbox shipped in `0.1.0.0`; the remaining work is hardening
-guidance and worker metrics.
+The outbox and inbox shipped in `0.1.0.0`; the process-manager hardening
+guidance and worker metrics have since shipped, completing this phase.
 
 | Work item | Status | API or table | Outcome |
 |---|---|---|---|
 | Transactional outbox | Available now | `Keiro.Outbox`, `keiro_outbox` | Side-effect intents are committed atomically with event/projection writes and delivered asynchronously. |
 | Inbox deduplication | Available now | `Keiro.Inbox`, `keiro_inbox` | External messages are handled idempotently by `(source, message_id)`. |
 | OpenTelemetry tracing | Available now | `Keiro.Telemetry` | Command, producer, and consumer spans are emitted, with W3C trace-context propagation. |
-| Process-manager hardening | Partially complete | `Keiro.ProcessManager`, `Keiro.Timer` docs | Deterministic command ids, correlation/causation metadata, and the `pm:` convention exist; snapshot, timer-recovery, and retry guidance remain. |
-| Worker metrics | Planned | Metrics | Operators can see projection lag, timer backlog, outbox backlog, duplicates, and dead letters. |
+| Process-manager hardening | Complete | `Keiro.ProcessManager`, `Keiro.Timer` | Deterministic command ids, correlation/causation metadata, the `pm:` convention, snapshot-policy guidance with a tested PM-snapshot example, and a timer stuck-row recovery API plus runbook. |
+| Worker metrics | Complete | `Keiro.Telemetry` metrics | Operators can see projection lag, timer/outbox/inbox backlog, fire lag, duplicates, dead letters, and stuck timers on a metrics exporter. |
 
 ### Transactional outbox (Available now)
 
@@ -195,10 +196,10 @@ As shipped:
 User impact: pgmq, webhook, Kafka, and external-message consumers get a standard
 duplicate-detection path.
 
-### Process-manager workflow hardening
+### Process-manager workflow hardening (Complete)
 
-Process managers (and routers) are the v1 workflow substrate. Some hardening is
-in place; the rest is operational polish around state, timers, and recovery.
+Process managers (and routers) are the v1 workflow substrate. The hardening work
+is now complete: the operational polish around state, timers, and recovery shipped.
 
 Already in place:
 
@@ -206,22 +207,27 @@ Already in place:
   source event id, and emit index.
 - Causation and correlation metadata carried on emitted commands.
 - The `pm:<name>-<correlation>` state-stream convention.
-
-Remaining:
-
-- Recommend snapshot policies for long-running process managers.
-- Document timer stuck-row recovery and retry policy.
-- Expose worker metrics (see below).
+- Snapshot-policy guidance for long-running managers, backed by a tested
+  PM-state-stream snapshot example (`docs/user/snapshots.md`,
+  `describe "Keiro.ProcessManager snapshots"` in `keiro/test/Main.hs`).
+- A timer stuck-row recovery API (`findStuckTimers`, `requeueStuckTimer`,
+  `cancelTimer`, `deadLetterTimer`, and a `maxAttempts` worker option) with the
+  recovery runbook in `docs/user/operations.md`.
+- Worker metrics (see below).
 
 User impact: v1 covers sagas and choreography workflows without a separate
 durable-execution runtime.
 
-### Worker metrics
+### Worker metrics (Complete)
 
-Tracing spans are emitted today through `Keiro.Telemetry`. The remaining
-observability work is metrics: projection lag, timer backlog, outbox backlog,
-duplicate counts, and dead-letter counts, so operators can alert on workers
-rather than only trace individual runs.
+Tracing spans were already emitted through `Keiro.Telemetry`; worker metrics have
+now shipped alongside them. The instrument set is opt-in via an SDK `Meter`
+(`newKeiroMetrics`) and no-op by default, covering the four worker families:
+outbox, inbox, timer, and async-projection backlog/lag gauges plus
+published/retried/dead-lettered/processed/duplicate/failed/wait-timeout counters
+and timer fire-lag and attempt histograms — so operators can alert on workers
+rather than only trace individual runs. See the metric catalogue in
+`docs/user/operations.md`.
 
 ## Phase 3: Read-side And Subscription Maturity
 

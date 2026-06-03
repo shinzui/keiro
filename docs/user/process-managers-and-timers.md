@@ -111,6 +111,25 @@ runProcessManagerWorker
 If decoding fails, the worker returns `AckHalt`. If manager execution fails, it
 also halts with the rendered command error.
 
+## Snapshotting Manager State
+
+A long-running process manager accumulates events on its own `pm:<name>-<correlation>`
+state stream. To keep hydration fast, give the manager's `eventStream` a snapshot policy
+and a state codec — the same two fields you set on any aggregate `EventStream`:
+
+```haskell
+managerEventStream =
+  baseManagerEventStream
+    { snapshotPolicy = Every 100
+    , stateCodec = Just (defaultStateCodec @ManagerRegs @ManagerState 1)
+    }
+```
+
+`runProcessManagerOnce` advances manager state through the ordinary command path, so it
+writes and reuses these snapshots with no extra wiring. See
+[Snapshots → Long-Running Process Managers](snapshots.md) for choosing the policy and the
+codec-versioning caveats.
+
 ## Timer Schema
 
 The `keiro_timers` table and its due-timer index are created by `keiro-migrate`;
@@ -139,13 +158,18 @@ Timer ids should be deterministic for replay-safe behavior.
 ## Firing Timers
 
 `runTimerWorker` claims one due timer, calls your firing function, and marks the
-timer fired if your function returns an event id:
+timer fired if your function returns an event id. Its first argument is an opt-in
+`Maybe KeiroMetrics` handle (pass `Nothing` to record no metrics):
 
 ```haskell
-runTimerWorker now $ \timer -> do
+runTimerWorker Nothing now $ \timer -> do
   -- append or submit the timer command here
   pure (Just firedEventId)
 ```
+
+To cap retries, use `runTimerWorkerWith (TimerWorkerOptions { maxAttempts = Just n })`:
+a claimed timer whose post-claim `attempts` exceeds `n` is dead-lettered to the terminal
+`Dead` state instead of fired.
 
 The low-level pieces are also available:
 
@@ -158,6 +182,7 @@ The low-level pieces are also available:
 `claimDueTimer` uses `FOR UPDATE SKIP LOCKED`, so multiple workers can poll
 without claiming the same row concurrently.
 
-If the firing function returns `Nothing`, the row remains in `Firing`. Production
-systems should decide how to recover stuck firing timers, for example through an
-operator repair job or a future retry policy.
+If the firing function returns `Nothing`, the row remains in `Firing`. Recover such rows
+with the supported timer recovery API (`findStuckTimers`, `requeueStuckTimer`,
+`cancelTimer`, `deadLetterTimer`); see the [stuck-row recovery runbook](operations.md) in
+Operations.

@@ -18,15 +18,19 @@ The current library includes:
 - advisory snapshots;
 - read-model metadata, consistency modes, and position waits;
 - async projection helpers with idempotency expectations;
-- event-sourced process managers;
+- event-sourced process managers, with snapshot-policy guidance and a tested
+  PM-state-stream snapshot example;
 - stateless, effectful fan-out routers;
-- durable timer storage and worker helpers;
+- durable timer storage and worker helpers, plus a stuck-row recovery API
+  (find/requeue/cancel/dead-letter);
 - a transactional outbox with per-key ordering, backoff, and dead-lettering,
   plus a Kafka producer adapter;
 - an idempotent inbox with claim/retry/release/dead transitions and GC, plus
   Shibuya and Kafka consumer adapters;
 - the cross-context integration-event envelope;
-- OpenTelemetry command/producer/consumer spans (spans only; no metrics yet);
+- OpenTelemetry command/producer/consumer spans and opt-in worker metrics
+  (outbox/inbox/timer/projection backlog, lag, duplicate, dead-letter, and
+  stuck-timer instruments);
 - embedded codd migrations for Kiroku and Keiro framework tables.
 
 The repository test suite exercises these paths against an ephemeral PostgreSQL

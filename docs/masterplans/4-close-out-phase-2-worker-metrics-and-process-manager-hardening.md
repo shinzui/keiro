@@ -137,7 +137,7 @@ point below.
 | 34 | Add timer stuck-row recovery and cancellation API | docs/plans/34-add-timer-stuck-row-recovery-and-cancellation-api.md | None | None | Complete |
 | 35 | Instrument the outbox and inbox workers with metrics | docs/plans/35-instrument-the-outbox-and-inbox-workers-with-metrics.md | EP-33 | None | Complete |
 | 36 | Instrument the timer and projection workers with metrics | docs/plans/36-instrument-the-timer-and-projection-workers-with-metrics.md | EP-33 | EP-34 | Complete |
-| 37 | Process-manager hardening guidance and snapshot worked example | docs/plans/37-process-manager-hardening-guidance-and-snapshot-worked-example.md | EP-34 | EP-35, EP-36 | In Progress |
+| 37 | Process-manager hardening guidance and snapshot worked example | docs/plans/37-process-manager-hardening-guidance-and-snapshot-worked-example.md | EP-34 | EP-35, EP-36 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -266,9 +266,9 @@ plan and the milestone.
 - [x] EP-36: thread the meter handle into the timer worker and record backlog / fire.lag / attempts (+ stuck after EP-34). (2026-06-03)
 - [x] EP-36: record projection lag and position-wait timeouts on the async projection path. (2026-06-03)
 - [x] EP-36: assert timer/projection instruments under the in-memory metric exporter. (2026-06-03)
-- [ ] EP-37: add the first PM-stream snapshot test and the snapshot-policy guidance.
-- [ ] EP-37: write the timer stuck-row recovery runbook using EP-34's functions.
-- [ ] EP-37: document the metric catalogue, update the production checklist, and flip the Phase 2 roadmap rows.
+- [x] EP-37: add the first PM-stream snapshot test and the snapshot-policy guidance. (2026-06-03)
+- [x] EP-37: write the timer stuck-row recovery runbook using EP-34's functions. (2026-06-03)
+- [x] EP-37: document the metric catalogue, update the production checklist, and flip the Phase 2 roadmap rows. (2026-06-03)
 
 
 ## Surprises & Discoveries
@@ -480,6 +480,27 @@ plan and the milestone.
     `metricPoints` names in the EP-36 draft were never real.
 
 
+- 2026-06-03 (EP-37 shipped): The final plan landed; MasterPlan 4 is complete. EP-37's M0
+  reconciliation pass — its reason for being the last plan — caught five drifts between the
+  parallel-authored drafts and the shipped surface, all now fixed in the user docs:
+  - The requeue function shipped as **`requeueStuckTimer`** (EP-37's draft and EP-37's own
+    early note used `requeueTimer`); the runbook uses the real name.
+  - Backlog and lag instruments shipped as **`Gauge`** (Int64), not `UpDownCounter`. The
+    Decision Log below left both open ("a `Gauge` … or an `UpDownCounter`"); EP-35/EP-36
+    chose `Gauge`. The metrics catalogue documents `Gauge`.
+  - **`keiro.timer.attempts` is a `Histogram`** (`{attempt}`), not a Counter; the draft
+    catalogue had it as a Counter.
+  - **`keiro.timer.fire.lag` unit is `ms`** (milliseconds), confirming the EP-36-shipped
+    note over EP-36's own stale "(in seconds)" Purpose text.
+  - **`keiro.timer.stuck` counts `Firing`-only** rows past the threshold; the terminal
+    `Dead` state is distinct and not counted as stuck.
+  - Honest-docs bonus not in the plan: the `runTimerWorker` example in
+    `docs/user/process-managers-and-timers.md` was stale after EP-36 added the leading
+    `Maybe KeiroMetrics` argument, and was corrected to `runTimerWorker Nothing now …`.
+  - The optional jitsurei PM-snapshot example was deferred (the keiro test already proves
+    the capability; the guide points authors at the existing `snapshotOrderEventStream`).
+
+
 ## Decision Log
 
 - Decision: Decompose the remaining Phase 2 work into five child ExecPlans —
@@ -554,6 +575,32 @@ plan and the milestone.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+- 2026-06-03 (complete): All five child plans shipped across the three planned waves, and
+  Phase 2 of the roadmap is closed. The two Vision & Scope deliverables both hold:
+  - **Worker metrics.** `Keiro.Telemetry` now exposes an opt-in `KeiroMetrics` handle
+    (no-op by default) and all fourteen instruments are recorded by the outbox, inbox,
+    timer, and async-projection workers — `keiro.outbox.{backlog,published,retried,
+    deadlettered}`, `keiro.inbox.{processed,duplicates,failed,backlog}`,
+    `keiro.timer.{backlog,fire.lag,attempts,stuck}`, and
+    `keiro.projection.{lag,wait.timeouts}` — documented in the operations metrics catalogue
+    and the conventions audit.
+  - **Process-manager hardening.** The timer recovery API (`findStuckTimers`,
+    `requeueStuckTimer`, `cancelTimer`, `deadLetterTimer`, the `Dead` terminal state, and
+    the `maxAttempts` worker option) ships with a written runbook, and the first
+    PM-state-stream snapshot test plus snapshot-policy guidance now exist.
+- The decomposition held up. The foundation-first metrics split (EP-33 before EP-35/EP-36)
+  and landing EP-34 before EP-36 on the shared `Keiro.Timer.Schema` file both avoided
+  conflicts, with the mutation/read-only function split keeping the two timer plans from
+  stepping on each other. The one real integration risk — the `Keiro.Telemetry` import
+  cycle — was anticipated in the drafting Surprises and resolved by EP-35 with the
+  pre-authorized "pass `Maybe KeiroMetrics` as an explicit worker argument" convention,
+  which every later worker followed.
+- Lessons: authoring EP-35/36/37 in parallel against still-skeleton EP-33/34 worked only
+  because each carried an explicit early reconciliation step and EP-37 owned the final
+  pass. That pass earned its keep — it caught five name/kind/unit drifts (see Surprises)
+  that would otherwise have shipped as wrong docs. The cost was that EP-37's cited line
+  numbers had drifted (EP-35/36 already edited `operations.md`), making "match on quoted
+  text, not line number" the load-bearing recovery rule. Net: the substrate Phase 3 and
+  Phase 5 build on is now observable and operationally documented.
 </content>
 </invoke>

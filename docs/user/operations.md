@@ -98,11 +98,38 @@ corruption does not.
 
 ## Timers
 
-Timer workers claim one due timer at a time. Multiple workers can run
-concurrently because claims use row locking with `SKIP LOCKED`.
+Timer workers claim one due timer at a time. Multiple workers can run concurrently
+because claims use row locking with `SKIP LOCKED` (`claimDueTimer`). A worker that
+crashes after claiming but before firing leaves a row in `Firing`; that row is
+re-claimable in principle but will not advance on its own.
 
-Decide an operational policy for timers left in `Firing`. The current v1 API
-does not expose automatic retry or cancellation helpers for stuck rows.
+### Stuck-row recovery runbook
+
+Keiro exposes a supported recovery API in `Keiro.Timer` / `Keiro.Timer.Schema` (see
+`docs/plans/34-add-timer-stuck-row-recovery-and-cancellation-api.md` for the authoritative
+signatures). Run this as a periodic operational job:
+
+1. **List stuck rows.** Call `findStuckTimers now stuckFilter` with a `StuckTimerFilter`
+   (`minAge` and/or `minAttempts`; `anyStuckTimer` matches every `Firing` row) to get the
+   timers parked in `Firing` longer than expected.
+2. **Decide per row.** A timer that should still fire: requeue it. A timer that is no
+   longer wanted (the workflow moved on or was cancelled): cancel it.
+3. **Requeue.** Call `requeueStuckTimer` to move the row back to `Scheduled` so a worker
+   re-claims it on the next poll. `fire_at` is unchanged and the call is idempotent;
+   because timer ids are deterministic and firing is idempotent, requeuing a timer that
+   actually did fire is safe.
+4. **Cancel.** Call `cancelTimer` to move the row to `Cancelled` (terminal). Use this for
+   timers whose workflow has already advanced past the deadline.
+5. **Dead-letter after the ceiling.** Call `deadLetterTimer timerId reason` to move a row
+   to the terminal `Dead` state with an explanatory `last_error`. To automate this, run
+   the worker with `runTimerWorkerWith (TimerWorkerOptions { maxAttempts = Just n })`: a
+   claimed timer whose post-claim `attempts` exceeds `n` is dead-lettered instead of fired.
+   Dead rows should page an operator.
+
+Monitor the `keiro.timer.stuck` gauge (rows still in `Firing` past the threshold; see
+Observability) before and after a run to confirm the job is draining the backlog rather
+than churning. `Dead` is a distinct terminal state and is not counted by that gauge; track
+it with a separate query (`status = 'dead'`) if you want a dead-letter count.
 
 ## Observability
 
@@ -120,18 +147,68 @@ At minimum, track:
 - inbox duplicate counts and retained-row growth;
 - PostgreSQL connection pool saturation.
 
-Keiro emits OpenTelemetry **spans** through `Keiro.Telemetry`: an `Internal`
-span around `runCommand` (opt-in via `RunCommandOptions.tracer`), a `Producer`
-span around outbox publishing, and `Consumer` spans parented via W3C trace
-headers. Keiro also emits OpenTelemetry **metrics** for the outbox and inbox
-workers (backlog gauges plus published/retried/dead-lettered/processed/duplicate
-counters) through the opt-in `KeiroMetrics` handle built by
-`Keiro.Telemetry.newKeiroMetrics`. The timer worker and the async-projection
-path emit metrics through the same handle when one is supplied: `keiro.timer.backlog`,
-`keiro.timer.fire.lag`, `keiro.timer.attempts`, and `keiro.timer.stuck` from the
-timer worker, and `keiro.projection.lag` and `keiro.projection.wait.timeouts`
-from the read side. The full instrument catalogue (names, units, kinds) is
-documented separately with the rest of the metrics surface.
+Keiro emits OpenTelemetry **spans** through `Keiro.Telemetry`: an `Internal` span around
+`runCommand` (opt-in via `RunCommandOptions.tracer`), a `Producer` span around outbox
+publishing, and `Consumer` spans parented via W3C trace headers.
+
+Keiro also emits OpenTelemetry **metrics** through `Keiro.Telemetry`. Metrics are opt-in
+and no-op by default: build the instrument set once from an SDK `Meter`
+(`Keiro.Telemetry.newKeiroMetrics`) and thread the resulting `KeiroMetrics` handle into the
+workers; with no meter configured (`Nothing`) the instruments do nothing. The instrument
+names below are the canonical `keiro.*` names; they are defined and reconciled in
+[`opentelemetry-semconv-audit.md`](../research/opentelemetry-semconv-audit.md).
+
+### Metric catalogue
+
+Outbox publisher (`Keiro.Outbox`):
+
+- `keiro.outbox.backlog` — Gauge, `{event}` — claimable rows waiting in `keiro_outbox`,
+  recorded each poll pass. Alert when it grows without draining.
+- `keiro.outbox.published` — Counter, `{event}` — successfully published rows. Watch for
+  the rate dropping to zero while backlog rises.
+- `keiro.outbox.retried` — Counter, `{event}` — publish attempts that failed and will be
+  retried. A sustained rise signals a failing destination.
+- `keiro.outbox.deadlettered` — Counter, `{event}` — rows that exhausted their attempts.
+  Any increase should page.
+
+Inbox (`Keiro.Inbox`):
+
+- `keiro.inbox.processed` — Counter, `{message}` — messages handled to completion.
+- `keiro.inbox.duplicates` — Counter, `{message}` — duplicate deliveries short-circuited by
+  `(source, dedupe_key)`. A high ratio is expected under at-least-once delivery; a sudden
+  spike can indicate an upstream redelivery storm.
+- `keiro.inbox.failed` — Counter, `{message}` — handler failures (retried or dead). Alert
+  on a rising rate.
+- `keiro.inbox.backlog` — Gauge, `{message}` — unprocessed/retained inbox rows, recorded
+  each poll pass. Alert on unbounded growth (also a GC-cadence signal).
+
+Timer worker (`Keiro.Timer`):
+
+- `keiro.timer.backlog` — Gauge, `{timer}` — due `Scheduled` timers not yet claimed,
+  recorded each poll pass. Alert when due timers are not being drained.
+- `keiro.timer.fire.lag` — Histogram, `ms` — delay in milliseconds between a timer's
+  scheduled time and when it actually fired. Alert on a high p99.
+- `keiro.timer.attempts` — Histogram, `{attempt}` — number of attempts a timer took to
+  fire; a rising distribution indicates repeated re-claims of stuck rows.
+- `keiro.timer.stuck` — Gauge, `{timer}` — rows parked in `Firing` past the threshold (the
+  recovery runbook's target), recorded each poll pass. Any non-zero value should be
+  investigated. (The terminal `Dead` state is distinct and not counted here.)
+
+Async projection path (`Keiro.Projection` / `Keiro.ReadModel`):
+
+- `keiro.projection.lag` — Gauge, `{event}` — events between the stream head and a
+  subscription's checkpoint, recorded each drain pass. Alert when lag climbs steadily.
+- `keiro.projection.wait.timeouts` — Counter, `{timeout}` — position-wait calls that timed
+  out before the projection caught up. A rising rate means read-after-write waits are not
+  being satisfied in time.
+
+These names are owned by the metrics foundation plan
+(`docs/plans/33-add-an-opentelemetry-metrics-surface-to-keiro-telemetry.md`) and recorded
+by the outbox/inbox plan (`docs/plans/35-instrument-the-outbox-and-inbox-workers-with-metrics.md`)
+and the timer/projection plan
+(`docs/plans/36-instrument-the-timer-and-projection-workers-with-metrics.md`). If a shipped
+instrument name, kind, or unit differs from the list above, update this catalogue and
+[`opentelemetry-semconv-audit.md`](../research/opentelemetry-semconv-audit.md) together.
 
 ## Production Checklist
 
@@ -145,7 +222,7 @@ Before production:
 - Make every async projection idempotent.
 - Make outbox-delivery and inbox handlers idempotent.
 - Decide read-model rebuild and rollback procedures.
-- Decide timer stuck-row repair procedure.
+- Run the timer stuck-row recovery job (`findStuckTimers` → `requeueStuckTimer` / `cancelTimer` / `deadLetterTimer`); see Timers.
 - Decide outbox dead-letter handling and inbox retention/GC cadence.
 - Load test command paths that touch long streams.
 - Document which APIs are considered stable for your application.

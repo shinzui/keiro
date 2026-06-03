@@ -68,3 +68,16 @@ Local tests schedule the timer with `scheduleTimerTx`, call
 `runPaymentTimeoutWorker`, and assert that a due row was claimed. Production
 workers usually loop around `runTimerWorker`, append or submit a command from
 the timer payload, and return the event id that represents successful firing.
+
+## Snapshotting A Long-Running Manager
+
+`fulfillmentEventStream` uses `snapshotPolicy = Never` because the fulfillment manager's
+state stream stays tiny. A manager that reacts many times over a long life should instead
+give its `eventStream` a snapshot policy and state codec, exactly as
+[`OrderStream.hs`](../../jitsurei/src/Jitsurei/OrderStream.hs) does for
+`snapshotOrderEventStream`. Because `runProcessManagerOnce` advances manager state through
+the same command path as `runCommand`, snapshots of the manager state stream need no extra
+code — only the `snapshotPolicy` and `stateCodec` fields. The keiro test suite's
+`describe "Keiro.ProcessManager snapshots"` block proves a `pm:` state stream snapshots at
+its threshold and that a later reaction replays only the tail. See
+[Snapshots And Hydration](snapshots-and-hydration.md) for the codec and shape-hash rules.
