@@ -54,6 +54,43 @@ module Keiro.Telemetry
   , keiro_stream_name
   , keiro_retry_attempt
   , keiro_events_appended
+
+    -- * Metrics surface
+    --
+    -- $metrics
+  , Meter
+  , InstrumentationLibrary (..)
+  , keiroInstrumentationLibrary
+  , keiroOutboxBacklogName
+  , keiroOutboxPublishedName
+  , keiroOutboxRetriedName
+  , keiroOutboxDeadletteredName
+  , keiroInboxProcessedName
+  , keiroInboxDuplicatesName
+  , keiroInboxFailedName
+  , keiroInboxBacklogName
+  , keiroTimerBacklogName
+  , keiroTimerFireLagName
+  , keiroTimerAttemptsName
+  , keiroTimerStuckName
+  , keiroProjectionLagName
+  , keiroProjectionWaitTimeoutsName
+  , KeiroMetrics (..)
+  , newKeiroMetrics
+  , recordOutboxBacklog
+  , recordOutboxPublished
+  , recordOutboxRetried
+  , recordOutboxDeadlettered
+  , recordInboxProcessed
+  , recordInboxDuplicates
+  , recordInboxFailed
+  , recordInboxBacklog
+  , recordTimerBacklog
+  , recordTimerFireLag
+  , recordTimerAttempts
+  , recordTimerStuck
+  , recordProjectionLag
+  , recordProjectionWaitTimeouts
   )
 where
 
@@ -68,7 +105,8 @@ import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal
   , getContext
   )
 import "hs-opentelemetry-api" OpenTelemetry.Trace.Core
-  ( Span
+  ( InstrumentationLibrary (..)
+  , Span
   , SpanArguments (..)
   , SpanKind (..)
   , Tracer
@@ -77,6 +115,20 @@ import "hs-opentelemetry-api" OpenTelemetry.Trace.Core
   , inSpan'
   , wrapSpanContext
   )
+import "hs-opentelemetry-api" OpenTelemetry.Metric.Core
+  ( Counter
+  , Gauge
+  , Histogram
+  , Meter
+  , counterAdd
+  , defaultAdvisoryParameters
+  , gaugeRecord
+  , histogramRecord
+  , meterCreateCounterInt64
+  , meterCreateGaugeInt64
+  , meterCreateHistogram
+  )
+import "hs-opentelemetry-api" OpenTelemetry.Attributes (emptyAttributes)
 import "hs-opentelemetry-semantic-conventions" OpenTelemetry.SemanticConventions
   ( messaging_system
   , messaging_operation_type
@@ -355,3 +407,185 @@ setConsumerAttributes sp consumerGroup record mEvent = do
 
 showText :: (Show a) => a -> Text
 showText = Text.pack . show
+
+-- ---------------------------------------------------------------------------
+-- Metrics surface
+-- ---------------------------------------------------------------------------
+
+-- $metrics
+-- Alongside the span helpers above, 'Keiro.Telemetry' exposes the library's
+-- metrics surface: a 'KeiroMetrics' record holding every instrument keiro
+-- records (built once from a 'Meter' by 'newKeiroMetrics'), and one
+-- @record*@ helper per instrument that takes a @'Maybe' 'KeiroMetrics'@ and
+-- no-ops on 'Nothing'. This mirrors the @'Maybe' 'Tracer'@ opt-in the span
+-- helpers use: an application that never configures a 'MeterProvider' pays
+-- only one 'Maybe' branch per recording site. The per-instrument name, unit,
+-- kind, and description are catalogued in
+-- @docs/research/opentelemetry-semconv-audit.md@.
+
+-- | The instrumentation scope keiro tags all its metric instruments with.
+-- Mirrors the @"keiro"@ scope name the span helpers use on the application's
+-- 'Tracer'.
+keiroInstrumentationLibrary :: InstrumentationLibrary
+keiroInstrumentationLibrary =
+  InstrumentationLibrary
+    { libraryName = "keiro"
+    , libraryVersion = ""
+    , librarySchemaUrl = ""
+    , libraryAttributes = emptyAttributes
+    }
+
+keiroOutboxBacklogName :: Text
+keiroOutboxBacklogName = "keiro.outbox.backlog"
+keiroOutboxPublishedName :: Text
+keiroOutboxPublishedName = "keiro.outbox.published"
+keiroOutboxRetriedName :: Text
+keiroOutboxRetriedName = "keiro.outbox.retried"
+keiroOutboxDeadletteredName :: Text
+keiroOutboxDeadletteredName = "keiro.outbox.deadlettered"
+keiroInboxProcessedName :: Text
+keiroInboxProcessedName = "keiro.inbox.processed"
+keiroInboxDuplicatesName :: Text
+keiroInboxDuplicatesName = "keiro.inbox.duplicates"
+keiroInboxFailedName :: Text
+keiroInboxFailedName = "keiro.inbox.failed"
+keiroInboxBacklogName :: Text
+keiroInboxBacklogName = "keiro.inbox.backlog"
+keiroTimerBacklogName :: Text
+keiroTimerBacklogName = "keiro.timer.backlog"
+keiroTimerFireLagName :: Text
+keiroTimerFireLagName = "keiro.timer.fire.lag"
+keiroTimerAttemptsName :: Text
+keiroTimerAttemptsName = "keiro.timer.attempts"
+keiroTimerStuckName :: Text
+keiroTimerStuckName = "keiro.timer.stuck"
+keiroProjectionLagName :: Text
+keiroProjectionLagName = "keiro.projection.lag"
+keiroProjectionWaitTimeoutsName :: Text
+keiroProjectionWaitTimeoutsName = "keiro.projection.wait.timeouts"
+
+{- | All metric instruments the keiro library records, built once from a
+'Meter' by 'newKeiroMetrics'. Workers accept a @'Maybe' 'KeiroMetrics'@ and
+treat 'Nothing' as "record nothing"; the per-instrument recording helpers in
+this module take @'Maybe' 'KeiroMetrics'@ so call sites stay one-liners.
+
+Instrument kinds follow the keiro metrics policy: backlog and lag are
+synchronous gauges recorded by each worker per poll pass; tallies are
+monotonic counters; distributions are histograms. See
+@docs/research/opentelemetry-semconv-audit.md@ for the per-instrument
+name / unit / kind / description catalogue.
+-}
+data KeiroMetrics = KeiroMetrics
+  { outboxBacklog :: Gauge Int64
+  , outboxPublished :: Counter Int64
+  , outboxRetried :: Counter Int64
+  , outboxDeadlettered :: Counter Int64
+  , inboxProcessed :: Counter Int64
+  , inboxDuplicates :: Counter Int64
+  , inboxFailed :: Counter Int64
+  , inboxBacklog :: Gauge Int64
+  , timerBacklog :: Gauge Int64
+  , timerFireLag :: Histogram
+  , timerAttempts :: Histogram
+  , timerStuck :: Gauge Int64
+  , projectionLag :: Gauge Int64
+  , projectionWaitTimeouts :: Counter Int64
+  }
+
+{- | Construct every keiro metric instrument from a 'Meter'. Call this once at
+application start after building an SDK 'OpenTelemetry.Metric.Core.MeterProvider'
+and obtaining a 'Meter' (e.g. @getMeter mp keiroInstrumentationLibrary@), then
+thread the resulting 'KeiroMetrics' into workers as @'Just' metrics@. Under a
+no-op meter every instrument is itself a no-op, so this is safe to call
+unconditionally.
+-}
+newKeiroMetrics :: (MonadIO m) => Meter -> m KeiroMetrics
+newKeiroMetrics meter = liftIO $ do
+  outboxBacklog' <- gaugeI64 keiroOutboxBacklogName "{event}" "Outbox rows awaiting publish."
+  outboxPublished' <- counterI64 keiroOutboxPublishedName "{event}" "Outbox events successfully published."
+  outboxRetried' <- counterI64 keiroOutboxRetriedName "{event}" "Outbox publish attempts that failed and will retry."
+  outboxDeadlettered' <- counterI64 keiroOutboxDeadletteredName "{event}" "Outbox events parked after exhausting retries."
+  inboxProcessed' <- counterI64 keiroInboxProcessedName "{message}" "Inbox messages processed successfully."
+  inboxDuplicates' <- counterI64 keiroInboxDuplicatesName "{message}" "Inbox messages skipped as duplicates."
+  inboxFailed' <- counterI64 keiroInboxFailedName "{message}" "Inbox messages whose handler failed."
+  inboxBacklog' <- gaugeI64 keiroInboxBacklogName "{message}" "Inbox messages awaiting processing."
+  timerBacklog' <- gaugeI64 keiroTimerBacklogName "{timer}" "Due timers awaiting firing."
+  timerFireLag' <- histogram keiroTimerFireLagName "ms" "Delay between a timer's scheduled time and when it fired."
+  timerAttempts' <- histogram keiroTimerAttemptsName "{attempt}" "Number of attempts a timer took to fire."
+  timerStuck' <- gaugeI64 keiroTimerStuckName "{timer}" "Timers stuck in the Firing state past threshold."
+  projectionLag' <- gaugeI64 keiroProjectionLagName "{event}" "Events between the log head and a projection's checkpoint."
+  projectionWaitTimeouts' <- counterI64 keiroProjectionWaitTimeoutsName "{timeout}" "Position-wait calls that timed out before the projection caught up."
+  pure
+    KeiroMetrics
+      { outboxBacklog = outboxBacklog'
+      , outboxPublished = outboxPublished'
+      , outboxRetried = outboxRetried'
+      , outboxDeadlettered = outboxDeadlettered'
+      , inboxProcessed = inboxProcessed'
+      , inboxDuplicates = inboxDuplicates'
+      , inboxFailed = inboxFailed'
+      , inboxBacklog = inboxBacklog'
+      , timerBacklog = timerBacklog'
+      , timerFireLag = timerFireLag'
+      , timerAttempts = timerAttempts'
+      , timerStuck = timerStuck'
+      , projectionLag = projectionLag'
+      , projectionWaitTimeouts = projectionWaitTimeouts'
+      }
+  where
+    counterI64 :: Text -> Text -> Text -> IO (Counter Int64)
+    counterI64 name unit desc =
+      meterCreateCounterInt64 meter name (Just unit) (Just desc) defaultAdvisoryParameters
+    gaugeI64 :: Text -> Text -> Text -> IO (Gauge Int64)
+    gaugeI64 name unit desc =
+      meterCreateGaugeInt64 meter name (Just unit) (Just desc) defaultAdvisoryParameters
+    histogram :: Text -> Text -> Text -> IO Histogram
+    histogram name unit desc =
+      meterCreateHistogram meter name (Just unit) (Just desc) defaultAdvisoryParameters
+
+-- Internal: record an Int64 on the counter selected by @sel@, or do nothing.
+recordCounter
+  :: (MonadIO m) => (KeiroMetrics -> Counter Int64) -> Maybe KeiroMetrics -> Int64 -> m ()
+recordCounter _ Nothing _ = pure ()
+recordCounter sel (Just ms) n = liftIO (counterAdd (sel ms) n emptyAttributes)
+
+-- Internal: record an Int64 on the gauge selected by @sel@, or do nothing.
+recordGaugeI64
+  :: (MonadIO m) => (KeiroMetrics -> Gauge Int64) -> Maybe KeiroMetrics -> Int64 -> m ()
+recordGaugeI64 _ Nothing _ = pure ()
+recordGaugeI64 sel (Just ms) n = liftIO (gaugeRecord (sel ms) n emptyAttributes)
+
+-- Internal: record a Double on the histogram selected by @sel@, or do nothing.
+recordHistogram
+  :: (MonadIO m) => (KeiroMetrics -> Histogram) -> Maybe KeiroMetrics -> Double -> m ()
+recordHistogram _ Nothing _ = pure ()
+recordHistogram sel (Just ms) v = liftIO (histogramRecord (sel ms) v emptyAttributes)
+
+recordOutboxBacklog :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordOutboxBacklog = recordGaugeI64 outboxBacklog
+recordOutboxPublished :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordOutboxPublished = recordCounter outboxPublished
+recordOutboxRetried :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordOutboxRetried = recordCounter outboxRetried
+recordOutboxDeadlettered :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordOutboxDeadlettered = recordCounter outboxDeadlettered
+recordInboxProcessed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordInboxProcessed = recordCounter inboxProcessed
+recordInboxDuplicates :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordInboxDuplicates = recordCounter inboxDuplicates
+recordInboxFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordInboxFailed = recordCounter inboxFailed
+recordInboxBacklog :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordInboxBacklog = recordGaugeI64 inboxBacklog
+recordTimerBacklog :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordTimerBacklog = recordGaugeI64 timerBacklog
+recordTimerFireLag :: (MonadIO m) => Maybe KeiroMetrics -> Double -> m ()
+recordTimerFireLag = recordHistogram timerFireLag
+recordTimerAttempts :: (MonadIO m) => Maybe KeiroMetrics -> Double -> m ()
+recordTimerAttempts = recordHistogram timerAttempts
+recordTimerStuck :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordTimerStuck = recordGaugeI64 timerStuck
+recordProjectionLag :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordProjectionLag = recordGaugeI64 projectionLag
+recordProjectionWaitTimeouts :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordProjectionWaitTimeouts = recordCounter projectionWaitTimeouts

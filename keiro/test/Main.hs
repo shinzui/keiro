@@ -142,6 +142,27 @@ import OpenTelemetry.Trace.Core
   , SpanKind
   , getSpanContext
   )
+import Data.Word (Word64)
+import OpenTelemetry.Metric.Core
+  ( forceFlushMeterProvider
+  , getMeter
+  )
+import OpenTelemetry.MeterProvider
+  ( SdkMeterProviderOptions (..)
+  , createMeterProvider
+  , defaultSdkMeterProviderOptions
+  )
+import OpenTelemetry.Exporter.InMemory.Metric (inMemoryMetricExporter)
+import OpenTelemetry.Exporter.Metric
+  ( GaugeDataPoint (..)
+  , HistogramDataPoint (..)
+  , MetricExport (..)
+  , NumberValue (..)
+  , ResourceMetricsExport (..)
+  , ScopeMetricsExport (..)
+  , SumDataPoint (..)
+  )
+import OpenTelemetry.Resource (emptyMaterializedResources)
 import Test.Hspec
 
 main :: IO ()
@@ -149,6 +170,54 @@ main = withMigratedSuite $ \fixture -> hspec $ do
   describe "Keiro" $ do
     it "exposes the scaffold version" $
       KeiroRoot.version `shouldBe` ("0.1.0.0" :: Text)
+
+  describe "Keiro.Telemetry metrics" $ do
+    it "records instrument names and values through an SDK meter" $ do
+      (exporter, ref) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      metrics <- Telemetry.newKeiroMetrics meter
+      let h = Just metrics
+      -- A counter (monotonic sum), a gauge (last value wins), a histogram.
+      Telemetry.recordOutboxPublished h 3
+      Telemetry.recordOutboxPublished h 2
+      Telemetry.recordOutboxBacklog h 7
+      Telemetry.recordInboxDuplicates h 1
+      Telemetry.recordTimerFireLag h 12.5
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef ref
+      let scalars = flattenScalarPoints exported
+          hists = flattenHistogramPoints exported
+      -- The counter accumulated 3 + 2 = 5.
+      lookup "keiro.outbox.published" scalars `shouldBe` Just (IntNumber 5)
+      -- The gauge holds its last recorded value.
+      lookup "keiro.outbox.backlog" scalars `shouldBe` Just (IntNumber 7)
+      -- The duplicate counter holds 1.
+      lookup "keiro.inbox.duplicates" scalars `shouldBe` Just (IntNumber 1)
+      -- The histogram saw one observation summing to 12.5.
+      let lag = [ (c, s) | (n, c, s) <- hists, n == "keiro.timer.fire.lag" ]
+      lag `shouldBe` [(1, 12.5)]
+      -- Instruments we never recorded export no points.
+      lookup "keiro.timer.stuck" scalars `shouldBe` Nothing
+
+    it "records nothing through a Nothing handle" $ do
+      (exporter, ref) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      -- A Nothing handle is the no-op path: helpers must short-circuit.
+      let h = Nothing
+      Telemetry.recordOutboxPublished h 99
+      Telemetry.recordOutboxBacklog h 99
+      Telemetry.recordTimerFireLag h 99.0
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef ref
+      flattenScalarPoints exported `shouldBe` []
+      flattenHistogramPoints exported `shouldBe` []
 
   describe "Keiro.Stream" $ do
     it "wraps and unwraps kiroku stream names" $ do
@@ -2672,3 +2741,30 @@ failingRouter = Router
   , targetEventStream = rejectingEventStream
   , targetProjections = const []
   }
+
+-- Flatten exported counter/gauge points to (instrument name, value).
+flattenScalarPoints :: [ResourceMetricsExport] -> [(Text, NumberValue)]
+flattenScalarPoints rmes =
+  [ (name, val)
+  | rme <- rmes
+  , scope <- Vector.toList (resourceMetricsScopes rme)
+  , export <- Vector.toList (scopeMetricsExports scope)
+  , (name, val) <- pointsOf export
+  ]
+  where
+    pointsOf (MetricExportSum n _ _ _ _ _ _ pts) =
+      [ (n, sumDataPointValue p) | p <- Vector.toList pts ]
+    pointsOf (MetricExportGauge n _ _ _ _ pts) =
+      [ (n, gaugeDataPointValue p) | p <- Vector.toList pts ]
+    pointsOf _ = []
+
+-- Flatten exported histogram points to (instrument name, count, sum).
+flattenHistogramPoints :: [ResourceMetricsExport] -> [(Text, Word64, Double)]
+flattenHistogramPoints rmes =
+  [ (n, histogramDataPointCount p, histogramDataPointSum p)
+  | rme <- rmes
+  , scope <- Vector.toList (resourceMetricsScopes rme)
+  , export <- Vector.toList (scopeMetricsExports scope)
+  , MetricExportHistogram n _ _ _ _ pts <- [export]
+  , p <- Vector.toList pts
+  ]

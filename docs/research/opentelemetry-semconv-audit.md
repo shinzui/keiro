@@ -454,6 +454,137 @@ This table is the at-a-glance summary the Milestone 9 sweep will reconcile.
 | Timer fire          | `timer.fire <timer-id>`        | Internal | n/a (bespoke)                                | Gap (follow-up)         |
 
 
+## Metrics
+
+This section catalogues the fourteen metric instruments keiro records. They are
+defined in `keiro/src/Keiro/Telemetry.hs` by
+`docs/plans/33-add-an-opentelemetry-metrics-surface-to-keiro-telemetry.md`
+(EP-33) as the `KeiroMetrics` record built by `newKeiroMetrics`, and recorded
+through the `record*` helpers at the worker call sites added by EP-35 (outbox +
+inbox) and EP-36 (timer + projection). The names, units, kinds, and description
+strings below match `newKeiroMetrics` character-for-character; EP-35/EP-36/EP-37
+reference them verbatim.
+
+The instrument **kind** policy: backlog and lag are synchronous gauges recorded
+by each worker on every poll pass using the count/age it already computes with
+its `Store` effect (an observable gauge's callback would need its own database
+access, which the library does not own — see the MasterPlan Decision Log); tally
+instruments are monotonic counters recorded inline; distributions are histograms.
+
+Unit strings follow UCUM-style annotations: `{event}`, `{message}`, `{timer}`,
+`{attempt}`, `{timeout}` for dimensionless counts, and `ms` for the fire-lag
+duration.
+
+The OpenTelemetry messaging-metric semantic conventions are client
+send/consume/duration oriented, not queue-depth oriented, so only the
+published/processed counters have a (loose) spec analogue; the backlog gauges,
+the timer instruments, and the projection instruments have **no** messaging-metric
+equivalent and live in the bespoke `keiro.*` namespace, exactly as the bespoke
+`keiro_*` attribute keys do for spans. The spec anchors cited below are in the
+generated module
+`hs-opentelemetry/semantic-conventions/src/OpenTelemetry/SemanticConventions.hs`.
+
+### Outbox
+
+- **`keiro.outbox.backlog`** — unit `{event}`, **Gauge** (`Int64`). Recorded by
+  the outbox publisher each poll pass (`recordOutboxBacklog`) with the count of
+  `keiro_outbox` rows awaiting publish. Description: "Outbox rows awaiting
+  publish." Semconv alignment: none (queue depth; no messaging-metric
+  equivalent).
+- **`keiro.outbox.published`** — unit `{event}`, **Counter** (`Int64`). Recorded
+  on publish success (`recordOutboxPublished`). Description: "Outbox events
+  successfully published." Semconv alignment:
+  `$metric_messaging_client_sent_messages` (line 3407,
+  `messaging.client.sent.messages`) is the closest spec metric — a counter of
+  messages a producer sent. keiro uses its bespoke `keiro.outbox.published` name
+  because it is event-sourcing-specific and tracks retried/deadlettered
+  separately, which the spec metric does not (loose alignment).
+- **`keiro.outbox.retried`** — unit `{event}`, **Counter** (`Int64`). Recorded on
+  a transient publish failure that will retry (`recordOutboxRetried`).
+  Description: "Outbox publish attempts that failed and will retry." Semconv
+  alignment: none.
+- **`keiro.outbox.deadlettered`** — unit `{event}`, **Counter** (`Int64`).
+  Recorded when an event exhausts its retry budget
+  (`recordOutboxDeadlettered`). Description: "Outbox events parked after
+  exhausting retries." Semconv alignment: none.
+
+### Inbox
+
+- **`keiro.inbox.processed`** — unit `{message}`, **Counter** (`Int64`). Recorded
+  on handler success (`recordInboxProcessed`). Description: "Inbox messages
+  processed successfully." Semconv alignment:
+  `$metric_messaging_client_consumed_messages` (line 3410,
+  `messaging.client.consumed.messages`) is the closest spec metric — a counter
+  of messages a consumer consumed. Same note as `keiro.outbox.published`: the
+  bespoke name carries the extra duplicates/failed breakdown the spec metric
+  lacks (loose alignment).
+- **`keiro.inbox.duplicates`** — unit `{message}`, **Counter** (`Int64`).
+  Recorded when an inbound message is skipped as a duplicate
+  (`recordInboxDuplicates`). Description: "Inbox messages skipped as
+  duplicates." Semconv alignment: none.
+- **`keiro.inbox.failed`** — unit `{message}`, **Counter** (`Int64`). Recorded
+  when a message handler fails (`recordInboxFailed`). Description: "Inbox
+  messages whose handler failed." Semconv alignment: none.
+- **`keiro.inbox.backlog`** — unit `{message}`, **Gauge** (`Int64`). Recorded by
+  the inbox runner each poll pass (`recordInboxBacklog`). Description: "Inbox
+  messages awaiting processing." Semconv alignment: none (queue depth).
+
+### Timer
+
+- **`keiro.timer.backlog`** — unit `{timer}`, **Gauge** (`Int64`). Recorded by
+  the timer worker each poll pass (`recordTimerBacklog`) with the count of due
+  timers awaiting firing. Description: "Due timers awaiting firing." Semconv
+  alignment: none.
+- **`keiro.timer.fire.lag`** — unit `ms`, **Histogram** (`Double`). Recorded on
+  fire (`recordTimerFireLag`) with the delay between a timer's scheduled time
+  and when it fired. Description: "Delay between a timer's scheduled time and
+  when it fired." Semconv alignment: `$metric_messaging_process_duration`
+  (line 3404, `messaging.process.duration`) is not a direct match (keiro's
+  histogram is timer-specific, not consumer-processing time) but is the spec's
+  precedent for a messaging histogram.
+- **`keiro.timer.attempts`** — unit `{attempt}`, **Histogram** (`Double`).
+  Recorded on fire (`recordTimerAttempts`) with the number of attempts a timer
+  took to fire. Description: "Number of attempts a timer took to fire." Semconv
+  alignment: none.
+- **`keiro.timer.stuck`** — unit `{timer}`, **Gauge** (`Int64`). Recorded by the
+  timer worker each poll pass (`recordTimerStuck`), counting rows stuck in the
+  `Firing` state past the threshold defined by EP-34's `findStuckTimers`.
+  Description: "Timers stuck in the Firing state past threshold." Semconv
+  alignment: none. (Wired after EP-34 lands; see
+  `docs/plans/34-add-timer-stuck-row-recovery-and-cancellation-api.md`.)
+
+### Projection
+
+- **`keiro.projection.lag`** — unit `{event}`, **Gauge** (`Int64`). Recorded by
+  the async projection drain each pass (`recordProjectionLag`) with the number
+  of events between the log head and the projection's checkpoint. Description:
+  "Events between the log head and a projection's checkpoint." Semconv
+  alignment: none.
+- **`keiro.projection.wait.timeouts`** — unit `{timeout}`, **Counter** (`Int64`).
+  Recorded on the position-wait path when a read gives up before the projection
+  catches up (`recordProjectionWaitTimeouts`). Description: "Position-wait calls
+  that timed out before the projection caught up." Semconv alignment: none.
+
+### Metrics compliance table
+
+| Instrument                       | Unit       | Kind      | Recording site (EP-35/EP-36)              | Semconv alignment                                   |
+| -------------------------------- | ---------- | --------- | ----------------------------------------- | --------------------------------------------------- |
+| keiro.outbox.backlog             | {event}    | Gauge     | outbox publisher, per poll pass           | none (queue-depth; no messaging-metric equivalent)  |
+| keiro.outbox.published           | {event}    | Counter   | outbox publisher, on publish success      | $metric_messaging_client_sent_messages 3407 (loose) |
+| keiro.outbox.retried             | {event}    | Counter   | outbox publisher, on transient failure    | none                                                |
+| keiro.outbox.deadlettered        | {event}    | Counter   | outbox publisher, on retry exhaustion     | none                                                |
+| keiro.inbox.processed            | {message}  | Counter   | inbox runner, on handler success          | $metric_messaging_client_consumed_messages 3410     |
+| keiro.inbox.duplicates           | {message}  | Counter   | inbox runner, on duplicate skip           | none                                                |
+| keiro.inbox.failed               | {message}  | Counter   | inbox runner, on handler failure          | none                                                |
+| keiro.inbox.backlog              | {message}  | Gauge     | inbox runner, per poll pass               | none (queue-depth)                                  |
+| keiro.timer.backlog              | {timer}    | Gauge     | timer worker, per poll pass               | none                                                |
+| keiro.timer.fire.lag             | ms         | Histogram | timer worker, on fire                     | $metric_messaging_process_duration 3404 (precedent) |
+| keiro.timer.attempts             | {attempt}  | Histogram | timer worker, on fire                     | none                                                |
+| keiro.timer.stuck                | {timer}    | Gauge     | timer worker, per poll pass (after EP-34) | none                                                |
+| keiro.projection.lag             | {event}    | Gauge     | async projection drain, per pass          | none                                                |
+| keiro.projection.wait.timeouts   | {timeout}  | Counter   | position-wait path, on timeout            | none                                                |
+
+
 ## Verifying the citations
 
 Every Haskell `AttributeKey` referenced by this document is exported from
@@ -481,5 +612,6 @@ pass:
   every command-span run will gain per-statement database children
   automatically, closing the `db.collection.name` and `db.query.text`
   gaps on this audit without `keiro` code changes.
-- **Metrics audit** — separate from this plan.
+- **Metrics audit** — see the `## Metrics` section above (added by
+  `docs/plans/33-add-an-opentelemetry-metrics-surface-to-keiro-telemetry.md`).
 - **Log / exception audit** — separate from this plan.
