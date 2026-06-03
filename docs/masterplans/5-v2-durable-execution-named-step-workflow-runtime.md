@@ -160,7 +160,7 @@ metrics instrumentation in dedicated plans in MasterPlan 4.
 |---|-------|------|-----------|-----------|--------|
 | 38 | Workflow journal and named-step replay core | docs/plans/38-workflow-journal-and-named-step-replay-core.md | None | None | Complete |
 | 39 | Durable sleep on the timer table | docs/plans/39-durable-sleep-on-the-timer-table.md | EP-38 | None | Complete |
-| 40 | Awakeables and external completion | docs/plans/40-awakeables-and-external-completion.md | EP-38 | None | Not Started |
+| 40 | Awakeables and external completion | docs/plans/40-awakeables-and-external-completion.md | EP-38 | None | In Progress |
 | 41 | Workflow journal snapshots and step-result compaction | docs/plans/41-workflow-journal-snapshots-and-step-result-compaction.md | EP-38 | None | Not Started |
 | 42 | Workflow resume and crash-recovery worker | docs/plans/42-workflow-resume-and-crash-recovery-worker.md | EP-38 | EP-39, EP-40 | Not Started |
 | 43 | Child workflows: spawn, wait, and cancel | docs/plans/43-child-workflows-spawn-wait-and-cancel.md | EP-38 | EP-40, EP-42 | Not Started |

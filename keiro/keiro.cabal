@@ -55,6 +55,7 @@ library
                         Keiro.Timer.Schema
                         Keiro.Timer.Types
                         Keiro.Workflow
+                        Keiro.Workflow.Awakeable.Schema
                         Keiro.Workflow.Schema
                         Keiro.Workflow.Sleep
                         Keiro.Workflow.Types
