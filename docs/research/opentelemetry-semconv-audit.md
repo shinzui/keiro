@@ -436,6 +436,27 @@ the read-model's metadata identity.
 **Action:** Out of scope for M4–M7; tracked under [[milestone-9-followups]].
 
 
+## Workflow run
+
+**File:** `src/Keiro/Workflow.hs` — `runWorkflowWith` (the handler body); the
+per-step span uses the same helper with a `Just stepName`.
+
+**Span name:** `workflow <workflow-name>`.
+
+**Span kind:** `Internal`. The workflow runs entirely in-process; no network
+boundary is crossed by the runtime itself.
+
+**Attributes (keiro-specific; spec defines no "workflow" span):**
+
+- `keiro.workflow.name` — bespoke key; value: the `WorkflowName`.
+- `keiro.workflow.id` — bespoke key; value: the `WorkflowId`.
+- `keiro.workflow.step` — bespoke key; value: the `StepName`, set only when the
+  span wraps a single step or a resume (omitted on the whole-run span).
+
+**Gap as of 2026-06-03:** opened by EP-44 via
+`Keiro.Telemetry.withWorkflowSpan`, threaded through `WorkflowRunOptions.tracer`.
+
+
 ## Compliance table
 
 This table is the at-a-glance summary the Milestone 9 sweep will reconcile.
@@ -452,17 +473,20 @@ This table is the at-a-glance summary the Milestone 9 sweep will reconcile.
 | Read-model rebuild  | `rebuild <read-model>`         | Internal | `$span_db_client` 19833                      | Gap (follow-up)         |
 | Projection apply    | `apply <projection>`           | Internal | n/a (bespoke)                                | Gap (follow-up)         |
 | Timer fire          | `timer.fire <timer-id>`        | Internal | n/a (bespoke)                                | Gap (follow-up)         |
+| Workflow run        | `workflow <name>`              | Internal | n/a (bespoke)                                | Gap → EP-44             |
 
 
 ## Metrics
 
-This section catalogues the fourteen metric instruments keiro records. They are
+This section catalogues the twenty metric instruments keiro records. They are
 defined in `keiro/src/Keiro/Telemetry.hs` by
 `docs/plans/33-add-an-opentelemetry-metrics-surface-to-keiro-telemetry.md`
 (EP-33) as the `KeiroMetrics` record built by `newKeiroMetrics`, and recorded
 through the `record*` helpers at the worker call sites added by EP-35 (outbox +
-inbox) and EP-36 (timer + projection). The names, units, kinds, and description
-strings below match `newKeiroMetrics` character-for-character; EP-35/EP-36/EP-37
+inbox) and EP-36 (timer + projection). The six `keiro.workflow.*` instruments
+were added by EP-44 (workflow observability) and are recorded by the v2 workflow
+runtime and resume worker. The names, units, kinds, and description strings
+below match `newKeiroMetrics` character-for-character; EP-35/EP-36/EP-37/EP-44
 reference them verbatim.
 
 The instrument **kind** policy: backlog and lag are synchronous gauges recorded
@@ -565,6 +589,46 @@ generated module
   catches up (`recordProjectionWaitTimeouts`). Description: "Position-wait calls
   that timed out before the projection caught up." Semconv alignment: none.
 
+### Workflow
+
+Added by `docs/plans/44-workflow-observability-spans-and-metrics.md` (EP-44).
+The step counters are recorded inside the EP-38 workflow handler; the active
+gauge and journal-length histogram are recorded by `runWorkflowWith`; the
+resumed counter and pending-awakeables gauge are recorded by the EP-42 resume
+worker (`resumeWorkflowsOnce`). All ride on the `Maybe KeiroMetrics` threaded
+through `WorkflowRunOptions`, so they no-op under the default (no-metrics)
+options.
+
+- **`keiro.workflow.steps.executed`** — unit `{step}`, **Counter** (`Int64`).
+  Recorded by the workflow handler on a step *miss* (the action ran and was
+  journaled) (`recordWorkflowStepExecuted`). Description: "Workflow steps that
+  ran their action (a journal miss)." Semconv alignment: none
+  (durable-execution-specific).
+- **`keiro.workflow.steps.replayed`** — unit `{step}`, **Counter** (`Int64`).
+  Recorded by the workflow handler on a step *hit* (the recorded result was
+  returned without running the action; also on an `awaitStep` hit)
+  (`recordWorkflowStepReplayed`). Description: "Workflow steps short-circuited to
+  a recorded result (a journal hit)." Semconv alignment: none.
+- **`keiro.workflow.resumed`** — unit `{workflow}`, **Counter** (`Int64`).
+  Recorded by the resume worker once per re-invocation of a discovered
+  unfinished workflow (`recordWorkflowResumed`). Description: "Workflow
+  re-invocations performed by the resume worker." Semconv alignment: none.
+- **`keiro.workflow.active`** — unit `{workflow}`, **Gauge** (`Int64`). Recorded
+  by the workflow handler on run entry and exit with the process-wide live-run
+  count (`recordWorkflowActive`). Description: "Workflow runs currently in
+  progress in this process." Semconv alignment: none (level gauge, like the
+  backlog gauges).
+- **`keiro.workflow.journal.length`** — unit `{event}`, **Histogram**
+  (`Double`). Recorded by the workflow handler once per completion with the
+  journal event count (`recordWorkflowJournalLength`). Description: "Journal
+  event count of a workflow at completion." Semconv alignment: none
+  (distribution, like `keiro.timer.fire.lag`).
+- **`keiro.workflow.awakeables.pending`** — unit `{awakeable}`, **Gauge**
+  (`Int64`). Recorded by the resume worker each poll pass from
+  `countPendingAwakeables` (`recordWorkflowAwakeablesPending`). Description:
+  "Awakeables awaiting an external signal." Semconv alignment: none (queue
+  depth).
+
 ### Metrics compliance table
 
 | Instrument                       | Unit       | Kind      | Recording site (EP-35/EP-36)              | Semconv alignment                                   |
@@ -583,6 +647,12 @@ generated module
 | keiro.timer.stuck                | {timer}    | Gauge     | timer worker, per poll pass (after EP-34) | none                                                |
 | keiro.projection.lag             | {event}    | Gauge     | async projection drain, per pass          | none                                                |
 | keiro.projection.wait.timeouts   | {timeout}  | Counter   | position-wait path, on timeout            | none                                                |
+| keiro.workflow.steps.executed    | {step}     | Counter   | workflow handler, on step miss            | none                                                |
+| keiro.workflow.steps.replayed    | {step}     | Counter   | workflow handler, on step hit             | none                                                |
+| keiro.workflow.resumed           | {workflow} | Counter   | resume worker, per re-invocation          | none                                                |
+| keiro.workflow.active            | {workflow} | Gauge     | workflow handler, on run entry/exit       | none (level)                                        |
+| keiro.workflow.journal.length    | {event}    | Histogram | workflow handler, on completion           | none (distribution)                                 |
+| keiro.workflow.awakeables.pending| {awakeable}| Gauge     | resume worker, per poll pass              | none (queue depth)                                  |
 
 
 ## Verifying the citations
