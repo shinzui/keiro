@@ -33,6 +33,7 @@ note](#a-note-on-transducer-composition-and-alternative) below.
 | A queryable view derived from one stream, updated in the command's transaction | inline `Projection` + `ReadModel` | [Project Read Models](project-read-models.md) |
 | A queryable view derived from many streams (e.g. an `OrderView` over `Order` and `Payment`) | async `Projection` over a Kiroku **category subscription** | [Project Read Models](project-read-models.md), [Read Models And Projections](../user/read-models-and-projections.md) |
 | Long-running cross-stream coordination with its own state, timers, or compensation | `ProcessManager` | [Process Managers And Timers](process-managers-and-timers.md) |
+| A single long-running function with in-line waits (a durable sleep, an external callback, child work) | a durable `Workflow` | [Durable Workflows](durable-workflows.md) |
 | Stateless fan-out of one event to a target set that needs a read-model lookup, applied idempotently | `Router` | [Routers And Effectful Fan-Out](routers-and-effectful-fan-out.md) |
 | Both a fan-out and a saga reacting to the same event | a `Router` and a `ProcessManager` together | [Coordinating Incident Response](coordinating-incident-response-with-routers-and-process-managers.md) |
 

@@ -88,9 +88,9 @@ This section must always reflect the actual current state of the work.
 - [x] Milestone 2: run `cabal run jitsurei:exe:jitsurei-demo -- workflow` against the
   repo-local PostgreSQL and capture the real transcript; reconcile it with the expected
   transcript in this plan (see Validation and Surprises).
-- [ ] Milestone 3: write `docs/guides/durable-workflows.md` and add it to the
-  `docs/guides/README.md` index.
-- [ ] Milestone 3: write `docs/user/durable-workflows.md` and link it from
+- [x] Milestone 3: write `docs/guides/durable-workflows.md` and add it to the
+  `docs/guides/README.md` index (and a routing row in `docs/guides/choosing-a-primitive.md`).
+- [x] Milestone 3: write `docs/user/durable-workflows.md` and link it from
   `docs/user/README.md`.
 - [ ] Milestone 4: flip the `docs/user/roadmap.md` capability-matrix row and reframe Phase 5;
   revise `docs/user/production-status.md`; add the `docs/user/operations.md` note.

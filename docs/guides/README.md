@@ -20,6 +20,9 @@ are adopting:
   read model and query path.
 - [Process Managers And Timers](process-managers-and-timers.md) shows
   replay-safe fulfillment coordination and a due timer worker.
+- [Durable Workflows](durable-workflows.md) walks a named-step durable workflow
+  end to end — steps, a durable sleep, an awakeable, a child workflow, the resume
+  worker, and the kill-and-restart durability proof.
 - [Routers And Effectful Fan-Out](routers-and-effectful-fan-out.md) routes one
   event to a read-model-resolved set of target streams, idempotently.
 - [Coordinating Incident Response: Routers And Process Managers

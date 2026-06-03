@@ -28,6 +28,8 @@ pieces those modules import.
   eventual, and position-wait reads.
 - [Process Managers And Timers](process-managers-and-timers.md): event-sourced
   coordination, deterministic command ids, and timer workers.
+- [Durable Workflows](durable-workflows.md): named-step workflows, durable sleep,
+  awakeables, child workflows, the resume worker, and journal snapshots.
 - [Integration Events](integration-events.md): the public envelope used to
   publish across bounded contexts over Kafka.
 - [Durable Outbox](outbox.md): how outgoing integration events become
