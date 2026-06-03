@@ -164,7 +164,7 @@ metrics instrumentation in dedicated plans in MasterPlan 4.
 | 41 | Workflow journal snapshots and step-result compaction | docs/plans/41-workflow-journal-snapshots-and-step-result-compaction.md | EP-38 | None | Complete |
 | 42 | Workflow resume and crash-recovery worker | docs/plans/42-workflow-resume-and-crash-recovery-worker.md | EP-38 | EP-39, EP-40 | Complete |
 | 43 | Child workflows: spawn, wait, and cancel | docs/plans/43-child-workflows-spawn-wait-and-cancel.md | EP-38 | EP-40, EP-42 | Complete |
-| 44 | Workflow observability: spans and metrics | docs/plans/44-workflow-observability-spans-and-metrics.md | EP-38 | EP-39, EP-40, EP-42, EP-43 | In Progress |
+| 44 | Workflow observability: spans and metrics | docs/plans/44-workflow-observability-spans-and-metrics.md | EP-38 | EP-39, EP-40, EP-42, EP-43 | Complete |
 | 45 | Durable workflow worked example and guide | docs/plans/45-durable-workflow-worked-example-and-guide.md | EP-38 | EP-39, EP-40, EP-41, EP-42, EP-43, EP-44 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -388,8 +388,8 @@ and the milestone.
 - [x] EP-42 (2026-06-03): prove a crashed mid-run workflow (counter proves step 1 not re-run) and an awaitStep-suspended workflow both resume to `Completed`; plus unknown-name visibility and completed-workflow no-op.
 - [x] EP-43 (2026-06-03): add child-workflow spawn/wait/cancel recorded in the parent journal (`Keiro.Workflow.Child` + `.Schema`, `keiro_workflow_children` table); EP-38 gains `WorkflowCancelled`/`WorkflowFailed` codec, a `Cancelled` outcome arm, and a cancel short-circuit; child-result propagation via a `runChildWorkflow` driver (not a `WorkflowRunOptions` hook).
 - [x] EP-43 (2026-06-03): prove a parent spawns a child, waits for its result, and can cancel it; the relationship survives a crash — plus a resume-worker-driven variant (union `findRunningChildIds` discovery, child-aware `runChildWorkflow`).
-- [ ] EP-44: extend `KeiroMetrics` with `keiro.workflow.*` instruments and add workflow spans; record them in the semconv audit.
-- [ ] EP-44: assert workflow instruments under the in-memory metric exporter.
+- [x] EP-44 (2026-06-03): extend `KeiroMetrics` with the six `keiro.workflow.*` instruments + `withWorkflowSpan` and the three bespoke attribute keys; thread `metrics`/`tracer` through `WorkflowRunOptions` and wire the four handler sites (executed/replayed/active/journal.length); instrument the resume worker (`resumed` per re-invocation, `awakeables.pending` per pass) reading the handle from `WorkflowResumeOptions.runOptions`; record everything in the semconv audit (now twenty instruments).
+- [x] EP-44 (2026-06-03): assert all six workflow instruments under the in-memory metric exporter (executed=2/replayed=2/journal.length count=2/active=0; resumed=1/awakeables.pending=1) plus a `Nothing`-handle no-op test. `cabal test keiro` = 133 examples, 0 failures.
 - [ ] EP-45: add the jitsurei durable-workflow demo and the `docs/guides/` guide.
 - [ ] EP-45: write the operations guidance (resume, awakeable repair, snapshots) and flip the Phase 5 roadmap rows.
 
@@ -599,6 +599,31 @@ and the milestone.
   - **For EP-45:** a parent stuck awaiting a child is repaired by driving or cancelling the
     child; a cancelled child reports the `Cancelled` outcome and `awaitChild` throws
     `WorkflowChildCancelled`.
+
+- 2026-06-03 (EP-44 implementation): **observability shipped exactly to plan against an
+  all-soft-deps-present tree, with two clarifying decisions and one notable structural win.**
+  Notes for EP-45 (the last wave):
+  - **The six instruments and the span are final and catalogued.** Names/units/kinds are in
+    `docs/research/opentelemetry-semconv-audit.md` (`### Workflow` + the metrics/span compliance
+    rows; the metrics lead now reads "twenty instruments"): `keiro.workflow.steps.executed`
+    `{step}` Counter, `keiro.workflow.steps.replayed` `{step}` Counter, `keiro.workflow.resumed`
+    `{workflow}` Counter, `keiro.workflow.active` `{workflow}` Gauge, `keiro.workflow.journal.length`
+    `{event}` Histogram, `keiro.workflow.awakeables.pending` `{awakeable}` Gauge; span
+    `workflow <name>` `Internal` with bespoke keys `keiro.workflow.{name,id,step}`. EP-45's guide
+    should cite these verbatim.
+  - **Telemetry is threaded purely through `WorkflowRunOptions` (`metrics`/`tracer`, both default
+    `Nothing`)** — no new positional arguments anywhere. The resume worker reads its handle from
+    `WorkflowResumeOptions.runOptions ^. #metrics`, so a resumed (and child-driven) run records
+    its own steps/active/journal-length and opens its span automatically. **EP-45 examples must
+    set these with the generic-lens label** (`opts & #metrics .~ Just m`), never a bare record
+    update — same `GHC-99339` clash EP-41 flagged for `snapshotPolicy`.
+  - **`keiro.workflow.active` is a process-global `IORef Int64` gauge** sampled `+1`/`-1` on run
+    entry/exit (steady-state 0). Cycle-safety held: the only edges are `Keiro.Workflow →
+    Keiro.Telemetry` and `Keiro.Telemetry → Keiro.Workflow.Types` (leaf), confirmed by the GHC
+    build order.
+  - **Not in scope (so EP-45 should not claim it):** a child-count instrument. EP-43's
+    `countActiveChildren` seam exists but no `keiro.workflow.children.active` instrument was
+    added — EP-44's scope was the six named instruments only.
 
 ## Decision Log
 

@@ -74,24 +74,29 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1 — Extend `KeiroMetrics` in `keiro/src/Keiro/Telemetry.hs` with the six
+- [x] M1 — Extend `KeiroMetrics` in `keiro/src/Keiro/Telemetry.hs` with the six
   `keiro.workflow.*` instruments, their name constants, their `newKeiroMetrics`
   constructor lines, and their `record*` helpers; add the `withWorkflowSpan` helper and
   the three bespoke `keiro.workflow.*` attribute keys. `cabal build keiro` green.
-- [ ] M2 — Thread `Maybe KeiroMetrics` and `Maybe Tracer` through `WorkflowRunOptions`
+  (Commit `b406387`.)
+- [x] M2 — Thread `Maybe KeiroMetrics` and `Maybe Tracer` through `WorkflowRunOptions`
   (EP-41's record) into the EP-38 handler: record `steps.executed` on a step miss,
-  `steps.replayed` on a step hit, `active` on entry/exit, `journal.length` at completion,
+  `steps.replayed` on a step hit (and an `awaitStep` hit), `active` on entry/exit via a
+  process-global live-count `IORef` bracketed `+1`/`-1`, `journal.length` at completion,
   and open `withWorkflowSpan` around the run. `cabal build keiro` green; existing EP-38/41
-  workflow tests still pass.
-- [ ] M3 — Wire `resumed` (EP-42's resume worker, on each re-invocation) and
-  `awakeables.pending` (sampled via EP-40's `countPendingAwakeables`). `cabal build keiro`
-  green.
-- [ ] M4 — Update `docs/research/opentelemetry-semconv-audit.md` with a workflow metrics
+  workflow tests still pass. (Commit `55c46b9`.)
+- [x] M3 — Wire `resumed` (EP-42's resume worker, on each re-invocation) and
+  `awakeables.pending` (sampled via EP-40's `countPendingAwakeables`). The metrics handle
+  rides on `WorkflowResumeOptions.runOptions` (EP-44's telemetry lives on
+  `WorkflowRunOptions`), so no new worker argument was needed. `cabal build keiro` green.
+  (Commit `734db24`.)
+- [x] M4 — Update `docs/research/opentelemetry-semconv-audit.md` with a workflow metrics
   subsection (name/unit/kind/recording-site for all six instruments), the workflow span
-  row, and the three bespoke attribute keys.
-- [ ] M5 — Add the in-memory-exporter validation tests in `keiro/test/Main.hs` (positive
-  assertions for all six instruments + a `Nothing`-handle no-op test). `cabal test keiro`
-  green; capture the transcript.
+  row, and the three bespoke attribute keys. (Commit `ea0350b`.)
+- [x] M5 — Add the in-memory-exporter validation tests in `keiro/test/Main.hs` (positive
+  assertions for executed/replayed/active/journal.length + resumed/awakeables.pending + a
+  `Nothing`-handle no-op test). `cabal test keiro` green (133 examples, 0 failures).
+  (Commit `511ee42`.)
 
 
 ## Surprises & Discoveries
@@ -100,7 +105,39 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-03 (implementation): **the entire surface landed exactly as planned — every
+  soft dependency (EP-39/EP-40/EP-42/EP-43) was already present, so no provisional path
+  was taken.** The cycle-safety prediction held: GHC compiled `Keiro.Workflow.Types`
+  before `Keiro.Telemetry` (`[Keiro.Workflow.Types] … [22 of 33] Keiro.Telemetry`) and
+  `Keiro.Workflow` after `Keiro.Telemetry`, confirming the only edges are
+  `Keiro.Workflow → Keiro.Telemetry` and `Keiro.Telemetry → Keiro.Workflow.Types` (a leaf).
+- 2026-06-03 (implementation): **M3 needed no new resume-worker argument.** The plan
+  offered two paths (add a `Maybe KeiroMetrics` argument like `runTimerWorker`, or reuse an
+  existing one). Because EP-44's own design decision puts telemetry on `WorkflowRunOptions`
+  and EP-42's `WorkflowResumeOptions` already carries `runOptions :: WorkflowRunOptions`,
+  the metrics handle was read straight from `runOptions opts ^. #metrics`. This is strictly
+  better than a separate argument: the same handle is *already forwarded* into every
+  `runWorkflowWith`/`runChildWorkflow` re-invocation, so a resumed run records its own
+  steps/active/journal-length and opens its span with zero extra wiring. `recordWorkflowResumed`
+  is incremented once per re-invocation in `resumeWorkflowsOnce`'s registry-hit branch (the
+  `unknownName` branch does not count); `recordWorkflowAwakeablesPending` is sampled once per
+  pass next to the discovery query.
+- 2026-06-03 (implementation): **the `metrics`/`tracer` fields use a bare-record-update–safe
+  generic-lens label at every set site.** EP-41 flagged that `WorkflowRunOptions.snapshotPolicy`
+  collides with keiki's `EventStream.snapshotPolicy` under a bare record update (`GHC-99339`);
+  the same risk applies to any field. The tests therefore set the handles with
+  `defaultWorkflowRunOptions & #metrics .~ Just metrics` (and
+  `defaultWorkflowResumeOptions & #runOptions .~ (… & #metrics .~ …)`), never a bare
+  `r { metrics = … }`. EP-45 examples should follow the label form.
+- 2026-06-03 (implementation): **`keiro.workflow.active` is backed by a process-global
+  `{-# NOINLINE #-} activeCountRef :: IORef Int64`** in `Keiro.Workflow`, bracketed `+1`/`-1`
+  around each run with the gauge sampled on *both* edges (so the exported last-value is the
+  true live count, 0 in steady state). The bracket is unconditional (only the *recording* is
+  gated by `Nothing`), so the counter stays balanced even on a crash/exception path — proven
+  indirectly by the existing `crashAfterStep1` test (the suite stays green and the new
+  observability test reads `active == 0`). One test-hygiene consequence: the gauge is shared
+  process-wide, so its steady-state assertion only holds because hspec runs sequentially and
+  every run balances its own `+1`/`-1`.
 
 
 ## Decision Log
@@ -180,6 +217,29 @@ Record every decision made while working on the plan.
   in the resume worker.
   Date: 2026-06-03.
 
+- Decision (implementation): the resume worker reads its metrics handle from
+  `WorkflowResumeOptions.runOptions ^. #metrics` rather than taking a new `Maybe KeiroMetrics`
+  argument.
+  Rationale: EP-44 already decided telemetry lives on `WorkflowRunOptions`, and EP-42's
+  `WorkflowResumeOptions` carries a `runOptions :: WorkflowRunOptions` it forwards verbatim
+  into every `runWorkflowWith`/`runChildWorkflow` re-invocation. Reading from there keeps a
+  single canonical telemetry home, avoids widening the worker's signature, and means resumed
+  runs automatically record their steps/active/journal-length and open their span. The
+  plan's "add an argument like `runTimerWorker`" alternative was unnecessary because the
+  handle was already in scope.
+  Date: 2026-06-03.
+
+- Decision (implementation): `keiro.workflow.journal.length` is recorded on *every*
+  completing run — including a replay that re-completes an already-finished workflow — not
+  only on a fresh `WorkflowCompleted` append.
+  Rationale: the histogram's operator question is "how long are journals at completion",
+  one observation per completion event the runtime witnesses. The M5 test runs the same
+  two-step workflow twice (fresh + replay) and asserts the histogram count is `[2]`, which
+  fixes this semantics. Length is computed as `Map.size finalMap + 1` (recorded step map
+  plus the `WorkflowCompleted` marker), the cheapest value already in hand at the completion
+  site.
+  Date: 2026-06-03.
+
 
 ## Outcomes & Retrospective
 
@@ -187,7 +247,40 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- **Outcome (2026-06-03): complete, exactly to plan, no gaps.** The v2 workflow runtime is
+  now operable: an operator who wires an OpenTelemetry SDK `MeterProvider`/`Tracer` into
+  `WorkflowRunOptions` (and the resume worker's `WorkflowResumeOptions.runOptions`) gets all
+  six `keiro.workflow.*` instruments and a per-run `workflow <name>` `Internal` span. All
+  five milestones landed in five commits (`b406387`, `55c46b9`, `734db24`, `ea0350b`,
+  `511ee42`); `cabal test keiro` is green at **133 examples, 0 failures**, with the three new
+  observability assertions among them.
+- **Against the original purpose:** every operator question in Purpose / Big Picture is now
+  answerable — live workflows (`active`), real work vs. replay (`steps.executed` vs.
+  `steps.replayed`), resume activity (`resumed`), journal growth (`journal.length`), and
+  stuck awakeables (`awakeables.pending`). The no-op idiom holds end to end: a run with
+  `defaultWorkflowRunOptions` exports zero points (proven by the `Nothing`-handle test).
+- **Gaps / deferred:** none for this plan. Child-workflow-specific instruments
+  (`keiro.workflow.children.active`, seam `Keiro.Workflow.Child.Schema.countActiveChildren`)
+  were *not* added — they were never in this plan's six-instrument scope; EP-43's surprise
+  entry flagged the seam for a future plan, and EP-45 can decide whether to surface it.
+- **Lesson:** putting cross-cutting run options on one record (`WorkflowRunOptions`, EP-41's
+  decision) paid off — EP-44 added two fields and the resume worker, child driver, and tests
+  all inherited the handles for free, with no signature churn. The only friction is the
+  bare-record-update ambiguity EP-41 warned about, sidestepped by always using the
+  generic-lens label at set sites.
+
+Green transcript (relevant group) from `cabal test keiro`:
+
+```text
+Keiro.Workflow observability
+  records workflow instruments through an SDK meter [✔]
+  records a resume and the pending-awakeable count when the worker re-invokes [✔]
+  records nothing through a Nothing handle [✔]
+...
+Finished in 15.8904 seconds
+133 examples, 0 failures
+Test suite keiro-test: PASS
+```
 
 
 ## Context and Orientation
@@ -814,6 +907,22 @@ observable through the in-memory exporter, not merely compiled:
 
 Paste the green `cabal test keiro` transcript (the `Keiro.Workflow observability` group) into
 this section in the final revision as evidence.
+
+**Evidence (2026-06-03):** all acceptance bullets verified — `steps.executed` = 2,
+`steps.replayed` = 2, `journal.length` histogram count = 2, `active` = 0 after both runs,
+`resumed` = 1 and `awakeables.pending` = 1 after one resume pass, and the `Nothing`-handle
+run exported no points (`flattenScalarPoints == []`, `flattenHistogramPoints == []`).
+
+```text
+Keiro.Workflow observability
+  records workflow instruments through an SDK meter [✔]
+  records a resume and the pending-awakeable count when the worker re-invokes [✔]
+  records nothing through a Nothing handle [✔]
+
+Finished in 15.8904 seconds
+133 examples, 0 failures
+Test suite keiro-test: PASS
+```
 
 
 ## Idempotence and Recovery
