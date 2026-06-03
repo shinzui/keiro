@@ -88,5 +88,8 @@ runAllKeiroMigrationsNoCheck settings connectTimeout =
     migrations <- allKeiroMigrations
     applyMigrationsNoCheck settings (Just migrations) connectTimeout (\_ -> pure ())
 
+-- Embedded migrations (touch this comment to force a TH recompile when adding
+-- a new .sql file; embedDir is not tracked per-file by GHC's recompilation
+-- checker). Current set includes 2026-06-03-00-00-00-keiro-workflow-steps.sql.
 embeddedMigrationFiles :: [(FilePath, ByteString)]
 embeddedMigrationFiles = $(embedDir "sql-migrations")

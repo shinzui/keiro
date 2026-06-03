@@ -104,6 +104,20 @@ import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Keiro.Stream qualified as Stream
 import Keiro.Telemetry qualified as Telemetry
 import Keiro.Timer
+import Keiro.Workflow
+  ( StepName (..)
+  , Workflow
+  , WorkflowId (..)
+  , WorkflowJournalEvent (StepRecorded, WorkflowCompleted)
+  , WorkflowName (..)
+  , WorkflowOutcome (..)
+  , appendJournalEntry
+  , awaitStep
+  , findUnfinishedWorkflowIds
+  , runWorkflow
+  , step
+  , workflowJournalCodec
+  )
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), HaltReason (..))
 import Shibuya.Core.AckHandle (AckHandle (..))
@@ -1958,6 +1972,114 @@ main = withMigratedSuite $ \fixture -> hspec $ do
     it "traceContextFromCurrentSpan returns Nothing outside any span" $ do
       tc <- Telemetry.traceContextFromCurrentSpan
       tc `shouldBe` Nothing
+
+  describe "Keiro.Workflow" $ around (withFreshStore fixture) $ do
+    it "journals each step once, returns Completed, and runs each side effect once" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "demo"
+          wid = WorkflowId "demo-1"
+      result <- Store.runStoreIO storeHandle $ runWorkflow name wid (demoWorkflow counter)
+      result `shouldBe` Right (Completed (1, 2))
+      sideEffects <- readIORef counter
+      sideEffects `shouldBe` 2
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "wf:demo-demo-1") (StreamVersion 0) 10
+      Vector.length recorded `shouldBe` 3
+      traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded)
+        `shouldSatisfy` \case
+          Right [StepRecorded "first" _ _, StepRecorded "second" _ _, WorkflowCompleted _] -> True
+          _ -> False
+
+    it "replays recorded steps without re-running their side effects" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "replay"
+          wid = WorkflowId "r-1"
+      first <- Store.runStoreIO storeHandle $ runWorkflow name wid (demoWorkflow counter)
+      first `shouldBe` Right (Completed (1, 2))
+      afterFirst <- readIORef counter
+      afterFirst `shouldBe` 2
+      -- A second run with the same id is exactly the crash-restart scenario.
+      second <- Store.runStoreIO storeHandle $ runWorkflow name wid (demoWorkflow counter)
+      second `shouldBe` Right (Completed (1, 2))
+      afterSecond <- readIORef counter
+      afterSecond `shouldBe` 2
+      -- The deterministic ids and pre-load gating leave the journal at 3 events.
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "wf:replay-r-1") (StreamVersion 0) 10
+      Vector.length recorded `shouldBe` 3
+
+    it "reuses the recorded result for a repeated step name in one run" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "samename"
+          wid = WorkflowId "s-1"
+          duplicateStepWorkflow = do
+            a <- step (StepName "dup") (liftIO (incrementAndRead counter))
+            b <- step (StepName "dup") (liftIO (incrementAndRead counter))
+            pure (a, b)
+      result <- Store.runStoreIO storeHandle $ runWorkflow name wid duplicateStepWorkflow
+      result `shouldBe` Right (Completed (1, 1))
+      sideEffects <- readIORef counter
+      sideEffects `shouldBe` 1
+
+    it "suspends on an unresolved awaitStep, journaling no completion" $ \storeHandle -> do
+      let name = WorkflowName "awaiter"
+          wid = WorkflowId "a-1"
+      result <- Store.runStoreIO storeHandle $ runWorkflow name wid neverArmingWorkflow
+      result `shouldBe` Right Suspended
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "wf:awaiter-a-1") (StreamVersion 0) 10
+      Vector.length recorded `shouldBe` 0
+
+    it "resumes and completes once an awaited step is externally completed" $ \storeHandle -> do
+      let name = WorkflowName "awaiter2"
+          wid = WorkflowId "a-2"
+      suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid neverArmingWorkflow
+      suspended `shouldBe` Right Suspended
+      -- Simulate a wake source recording the awaited step's resolution.
+      Right () <- Store.runStoreIO storeHandle $ do
+        now <- liftIO getCurrentTime
+        appendJournalEntry name wid (StepRecorded "awk:test" (toJSON (42 :: Int)) now)
+      resumed <- Store.runStoreIO storeHandle $ runWorkflow name wid neverArmingWorkflow
+      resumed `shouldBe` Right (Completed 42)
+      Right recorded <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "wf:awaiter2-a-2") (StreamVersion 0) 10
+      traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded)
+        `shouldSatisfy` \case
+          Right [StepRecorded "awk:test" _ _, WorkflowCompleted _] -> True
+          _ -> False
+
+    it "discovers unfinished workflows via the step index" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      Right (Completed _) <- Store.runStoreIO storeHandle $
+        runWorkflow (WorkflowName "done") (WorkflowId "d-1") (demoWorkflow counter)
+      Right Suspended <- Store.runStoreIO storeHandle $
+        runWorkflow (WorkflowName "pending") (WorkflowId "p-1") (stepThenAwaitWorkflow counter)
+      Right unfinished <- Store.runStoreIO storeHandle findUnfinishedWorkflowIds
+      unfinished `shouldBe` [("p-1", "pending")]
+
+-- | Increment a shared counter and return its new value (the step's side
+-- effect, so replay can be proven by watching the counter).
+incrementAndRead :: IORef Int -> IO Int
+incrementAndRead ref = atomicModifyIORef' ref (\n -> (n + 1, n + 1))
+
+-- | A two-step workflow whose steps each bump a shared counter.
+demoWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es (Int, Int)
+demoWorkflow counter = do
+  a <- step (StepName "first") (liftIO (incrementAndRead counter))
+  b <- step (StepName "second") (liftIO (incrementAndRead counter))
+  pure (a, b)
+
+-- | A workflow that immediately awaits a step nothing ever arms — used to
+-- exercise the suspend path and external completion.
+neverArmingWorkflow :: (Workflow :> es) => Eff es Int
+neverArmingWorkflow = awaitStep (StepName "awk:test") (pure ())
+
+-- | A workflow that records one step, then suspends on an await — so it has a
+-- step row but no completion marker (the unfinished-discovery case).
+stepThenAwaitWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es Int
+stepThenAwaitWorkflow counter = do
+  _ <- step (StepName "s1") (liftIO (incrementAndRead counter))
+  awaitStep (StepName "awk:wait") (pure ())
 
 nominalDays :: Int -> NominalDiffTime
 nominalDays n = fromIntegral n * 86400

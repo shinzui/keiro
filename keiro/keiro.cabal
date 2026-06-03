@@ -54,6 +54,9 @@ library
                         Keiro.Timer
                         Keiro.Timer.Schema
                         Keiro.Timer.Types
+                        Keiro.Workflow
+                        Keiro.Workflow.Schema
+                        Keiro.Workflow.Types
     reexported-modules: keiro-core:Keiro.Codec,
                         keiro-core:Keiro.EventStream,
                         keiro-core:Keiro.Integration.Event,
@@ -65,6 +68,7 @@ library
                         aeson-casing >= 0.2,
                         base >= 4.21 && < 5,
                         bytestring >= 0.11,
+                        containers >= 0.6,
                         contravariant-extras >= 0.3,
                         effectful >= 2.6,
                         effectful-core >= 2.6,
@@ -100,6 +104,7 @@ test-suite keiro-test
     build-depends:      base >= 4.21 && < 5,
                         aeson >= 2.2,
                         bytestring >= 0.11,
+                        containers >= 0.6,
                         contravariant-extras >= 0.3,
                         effectful >= 2.6,
                         effectful-core >= 2.6,
