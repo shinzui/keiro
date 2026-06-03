@@ -136,7 +136,7 @@ point below.
 | 33 | Add an OpenTelemetry metrics surface to Keiro.Telemetry | docs/plans/33-add-an-opentelemetry-metrics-surface-to-keiro-telemetry.md | None | EP-25 | Complete |
 | 34 | Add timer stuck-row recovery and cancellation API | docs/plans/34-add-timer-stuck-row-recovery-and-cancellation-api.md | None | None | Complete |
 | 35 | Instrument the outbox and inbox workers with metrics | docs/plans/35-instrument-the-outbox-and-inbox-workers-with-metrics.md | EP-33 | None | Complete |
-| 36 | Instrument the timer and projection workers with metrics | docs/plans/36-instrument-the-timer-and-projection-workers-with-metrics.md | EP-33 | EP-34 | In Progress |
+| 36 | Instrument the timer and projection workers with metrics | docs/plans/36-instrument-the-timer-and-projection-workers-with-metrics.md | EP-33 | EP-34 | Complete |
 | 37 | Process-manager hardening guidance and snapshot worked example | docs/plans/37-process-manager-hardening-guidance-and-snapshot-worked-example.md | EP-34 | EP-35, EP-36 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -263,9 +263,9 @@ plan and the milestone.
 - [x] EP-35: thread the meter handle into the outbox publisher and record backlog / published / retried / deadlettered. (2026-06-03)
 - [x] EP-35: thread the meter handle into the inbox and record processed / duplicates / failed / backlog. (2026-06-03)
 - [x] EP-35: assert outbox/inbox instruments under the in-memory metric exporter. (2026-06-03)
-- [ ] EP-36: thread the meter handle into the timer worker and record backlog / fire.lag / attempts (+ stuck after EP-34).
-- [ ] EP-36: record projection lag and position-wait timeouts on the async projection path.
-- [ ] EP-36: assert timer/projection instruments under the in-memory metric exporter.
+- [x] EP-36: thread the meter handle into the timer worker and record backlog / fire.lag / attempts (+ stuck after EP-34). (2026-06-03)
+- [x] EP-36: record projection lag and position-wait timeouts on the async projection path. (2026-06-03)
+- [x] EP-36: assert timer/projection instruments under the in-memory metric exporter. (2026-06-03)
 - [ ] EP-37: add the first PM-stream snapshot test and the snapshot-policy guidance.
 - [ ] EP-37: write the timer stuck-row recovery runbook using EP-34's functions.
 - [ ] EP-37: document the metric catalogue, update the production checklist, and flip the Phase 2 roadmap rows.
@@ -441,6 +441,43 @@ plan and the milestone.
   gauges can assert exact zeroes without special-casing. EP-33's helper for the
   inbox duplicate counter is spelled `recordInboxDuplicates` (plural) and every
   `record*` helper takes `Int64`.
+
+
+- 2026-06-03 (EP-36 shipped): All six timer/projection instruments landed and
+  `cabal test keiro-test` passes (92 examples, 0 failures). EP-37 must consume
+  these shipped facts:
+  - **Worker threading convention held.** The meter is a leading `Maybe
+    KeiroMetrics` argument on `runTimerWorker` / `runTimerWorkerWith` (in
+    `Keiro.Timer`) and a leading argument on `runQuery` / `runQueryWith` (in
+    `Keiro.ReadModel`); the timer worker gained an `IOE :> es` constraint (the
+    EP-33 helpers are `MonadIO`). `Nothing` is the no-op default. This rippled
+    into the **jitsurei** demo (a separate cabal package): every `runQuery` /
+    `runTimerWorker` caller now passes `Nothing`, and
+    `Jitsurei.Timers.runPaymentTimeoutWorker` gained `IOE :> es`. The demo does
+    **not** yet wire a real meter — EP-37 owns demonstrating the handle/stdout
+    exporter against these workers.
+  - **`keiro.timer.fire.lag` is recorded in MILLISECONDS**, matching EP-33's
+    declared unit `"ms"` — not seconds. EP-36's own Purpose text said "(in
+    seconds)"; that phrasing is stale. EP-37's metric catalogue must document
+    fire.lag as milliseconds.
+  - **New read-only count queries** (no mutation, honoring the shared-file split
+    with EP-34): `countDueTimers :: UTCTime -> Eff es Int` and `countStuckTimers
+    :: UTCTime -> StuckTimerFilter -> Eff es Int` in `Keiro.Timer.Schema`,
+    re-exported from `Keiro.Timer`. The stuck gauge uses `countStuckTimers now
+    anyStuckTimer` (i.e. all `status = 'firing'` rows), recorded before the claim;
+    `dead` is a distinct terminal state and is not counted as stuck.
+  - **New projection entry point** `Keiro.Projection.recordProjectionLag :: (IOE
+    :> es, Store :> es) => Maybe KeiroMetrics -> AsyncProjection -> Eff es ()`
+    (head-minus-checkpoint, clamped at 0). `Keiro.ReadModel.readSubscriptionPosition`
+    is now exported. Note: EP-33's gauge helper is *also* named `recordProjectionLag`,
+    so `Keiro.Projection` imports `Keiro.Telemetry` qualified to disambiguate.
+  - **Test-harness accessor names** for EP-37 to reuse: the in-memory metric
+    harness is `inMemoryMetricExporter` + `createMeterProvider` +
+    `getMeter ... Telemetry.keiroInstrumentationLibrary` + `newKeiroMetrics` +
+    `forceFlushMeterProvider`, with `flattenScalarPoints :: [...] -> [(Text,
+    NumberValue)]` (gauges/counters) and `flattenHistogramPoints :: [...] ->
+    [(Text, Word64, Double)]` (count, sum). The provisional `withInMemoryMeter` /
+    `metricPoints` names in the EP-36 draft were never real.
 
 
 ## Decision Log
