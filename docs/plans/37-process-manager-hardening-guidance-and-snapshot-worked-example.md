@@ -81,10 +81,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0: Reconcile sibling-plan surface — read the *implemented* state of EP-34, EP-35, EP-36 and confirm (or correct) the timer-recovery function names and the fourteen metric names this plan documents.
-- [ ] M1: Add the first process-manager state-stream snapshot test in `keiro/test/Main.hs` (new `pmSnapshotCounterEventStream`, `pmSnapshotProcessManager`, and a `describe "Keiro.ProcessManager snapshots"` block proving snapshot-write + tail-replay).
-- [ ] M1: Run `cabal test keiro:keiro-test` and confirm the new test passes; paste the transcript into Validation and Acceptance.
-- [ ] M1 (optional): add a snapshot-enabled jitsurei process-manager example (`fulfillmentProcessManagerSnapshot` or equivalent) mirroring `snapshotOrderEventStream`.
+- [x] M0: Reconcile sibling-plan surface — confirmed against shipped source. Deltas recorded in Surprises: `requeueTimer`→`requeueStuckTimer`; backlogs/lag are Gauge not UpDownCounter; `timer.attempts` is a Histogram; `fire.lag` unit is `ms`; `timer.stuck` counts `Firing` only (not `Dead`); OTel `{unit}` annotation spellings. (2026-06-03)
+- [x] M1: Added the first process-manager state-stream snapshot test in `keiro/test/Main.hs` (new `pmSnapshotCounterEventStream`, `pmSnapshotProcessManager`, `sampleUuid3`, and a `describe "Keiro.ProcessManager snapshots"` block proving snapshot-write + tail-replay). (2026-06-03)
+- [x] M1: `cabal test keiro:keiro-test` passes — 94 examples (up from 92), 0 failures; both new examples present. Transcript in Validation and Acceptance. (2026-06-03)
+- [~] M1 (optional): jitsurei snapshot-enabled PM example deferred — the keiro test already proves the capability and M2's guide already points authors at `snapshotOrderEventStream` as the in-repo pattern. Recorded in Decision Log.
 - [ ] M2: Extend `docs/user/snapshots.md`, `docs/user/process-managers-and-timers.md`, and `docs/guides/process-managers-and-timers.md` with snapshot-policy guidance for long-running process managers.
 - [ ] M3: Replace the open "decide an operational policy" text in the Timers section of `docs/user/operations.md` with the EP-34-backed recovery runbook, and resolve the matching production-checklist line.
 - [ ] M4: Add the metrics catalogue (all fourteen instruments) to the Observability section of `docs/user/operations.md`, noting reconciliation against EP-33's audit doc.
@@ -118,6 +118,31 @@ implementation. Provide concise evidence.
   snapshot would carry no interesting state. To make tail-replay observable, the new
   fixture reuses the `SnapshotCounterRegs = '[ '("lastAmount", Int)]` register the
   snapshot tests already define, so the snapshot demonstrably carries the last amount.
+
+- 2026-06-03 (M0 reconciliation, against the shipped surface): Confirmed all fourteen
+  metric names and the timer-recovery functions against `keiro/src/Keiro/Timer/Schema.hs`,
+  `keiro/src/Keiro/Timer.hs`, `keiro/src/Keiro/Telemetry.hs`, and
+  `docs/research/opentelemetry-semconv-audit.md`. **Deltas from this plan's draft that the
+  M3/M4 text must adopt:**
+  - **Recovery function rename:** the requeue function shipped as `requeueStuckTimer`, not
+    the draft's `requeueTimer`. The M3 runbook and the M3 cross-link in
+    `process-managers-and-timers.md` use `requeueStuckTimer`. `cancelTimer`,
+    `deadLetterTimer`, and `findStuckTimers` are spelled as drafted. The shipped surface
+    also offers `StuckTimerFilter(..)`, `anyStuckTimer`, `countStuckTimers`,
+    `countDueTimers`, and the `runTimerWorkerWith` / `TimerWorkerOptions { maxAttempts }`
+    auto-dead-letter path — the runbook mentions the latter as the attempt-ceiling option.
+  - **New terminal `TimerStatus` value `Dead`** exists (stored `'dead'`), as the MasterPlan
+    anticipated.
+  - **Metric kinds/units differ from the draft catalogue.** The audit is authoritative;
+    M4 is rewritten to match it: all backlogs and lag instruments are **Gauge** (Int64),
+    not UpDownCounter; `keiro.timer.attempts` is a **Histogram** (`{attempt}`), not a
+    Counter; `keiro.timer.fire.lag` is a Histogram in **`ms`** (milliseconds), not seconds.
+    Units use the OTel annotation forms `{event}`, `{message}`, `{timer}`, `{attempt}`,
+    `{timeout}`, and `ms` — not the draft's prose "rows / messages / timers".
+  - **`keiro.timer.stuck` counts `Firing`-state rows past the threshold only.** `Dead` is a
+    distinct terminal state and is *not* counted as stuck (per EP-36's shipped behavior).
+    The draft's "Firing/Dead" wording in M4 and the "Dead-lettered timers are surfaced by
+    `keiro.timer.stuck`" sentence in M3 are corrected.
 
 
 ## Decision Log
@@ -162,6 +187,17 @@ Record every decision made while working on the plan.
   consolidated narrative to EP-37 and asks the earlier plans to keep their doc edits
   minimal. EP-37 is last precisely so it can write honest, copy-pasteable docs against
   the shipped surface.
+  Date: 2026-06-03.
+
+- Decision: Defer the optional jitsurei snapshot-enabled process-manager example.
+  Rationale: The plan marks it optional precisely because the new keiro test already
+  proves the PM state-stream snapshot capability end to end. M2's guide edit
+  (`docs/guides/process-managers-and-timers.md`) already points authors at the existing,
+  compiling `snapshotOrderEventStream` in `jitsurei/src/Jitsurei/OrderStream.hs` as the
+  in-repo pattern, so a second jitsurei fixture (which would require adding
+  `deriving anyclass (FromJSON, ToJSON)` to `FulfillmentState`) adds maintenance surface
+  without new demonstrative value. Can be added later if a worked PM-snapshot example in
+  jitsurei is wanted.
   Date: 2026-06-03.
 
 - Decision: Document the timer-recovery function names and the fourteen metric names as
@@ -1084,19 +1120,22 @@ cabal test keiro:keiro-test 2>&1 | tail -n 40
 ```
 
 The new examples appear under the `Keiro.ProcessManager snapshots` heading and the suite
-reports zero failures. Expected (abbreviated) transcript:
+reports zero failures. Actual transcript (2026-06-03), full suite:
 
 ```text
-  Keiro.ProcessManager snapshots
-    writes a snapshot of the manager state stream after the policy threshold [✔]
-    hydrates the manager from its snapshot and replays only the tail [✔]
+Keiro.ProcessManager snapshots
+  writes a snapshot of the manager state stream after the policy threshold [✔]
+  hydrates the manager from its snapshot and replays only the tail [✔]
 
-Finished in 12.3456 seconds
-NNN examples, 0 failures
+Finished in 10.1697 seconds
+94 examples, 0 failures
+Test suite keiro-test: PASS
 ```
 
-(The exact example count `NNN` and timing vary; what matters is that the two new lines are
-present, both marked passing, and `0 failures` is reported.)
+The suite went from 92 examples (the EP-36 baseline) to 94, the two new lines being the
+added examples. Running just the new block
+(`--test-options='--match "Keiro.ProcessManager snapshots"'`) reports `2 examples, 0
+failures`.
 
 To run just the new block while iterating, hspec supports a match filter:
 

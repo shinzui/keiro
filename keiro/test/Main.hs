@@ -867,6 +867,49 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       sharedPmCategoryEvents `shouldBe` Vector.empty
       sharedPmNamespaceEvents `shouldBe` Vector.empty
 
+  describe "Keiro.ProcessManager snapshots" $ around (withFreshStore fixture) $ do
+    it "writes a snapshot of the manager state stream after the policy threshold" $ \storeHandle -> do
+      -- Two distinct source events, both correlating to "order-1", drive the one
+      -- manager instance to manager-stream version 2, which Every 2 snapshots.
+      let sourceA = recordedFromEventId (EventId sampleUuid)  (CounterAdded 2)
+          sourceB = recordedFromEventId (EventId sampleUuid2) (CounterAdded 3)
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runProcessManagerOnce defaultRunCommandOptions pmSnapshotProcessManager sourceA (CounterAdded 2)
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runProcessManagerOnce defaultRunCommandOptions pmSnapshotProcessManager sourceB (CounterAdded 3)
+      Right managerEvents <- Store.runStoreIO storeHandle $
+        Store.readStreamForward (StreamName "pm:counter-snap-order-1") (StreamVersion 0) 10
+      Vector.length managerEvents `shouldBe` 2
+      Right snapshotVersion <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.statement "pm:counter-snap-order-1" snapshotVersionForStreamStmt
+      snapshotVersion `shouldBe` Just (StreamVersion 2)
+
+    it "hydrates the manager from its snapshot and replays only the tail" $ \storeHandle -> do
+      -- After the threshold snapshot exists, a third reaction should land on top of
+      -- the snapshot at version 3 rather than replaying from version 0.
+      let sourceA = recordedFromEventId (EventId sampleUuid)  (CounterAdded 2)
+          sourceB = recordedFromEventId (EventId sampleUuid2) (CounterAdded 3)
+          sourceC = recordedFromEventId (EventId sampleUuid3) (CounterAdded 4)
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runProcessManagerOnce defaultRunCommandOptions pmSnapshotProcessManager sourceA (CounterAdded 2)
+      Right (Right _) <- Store.runStoreIO storeHandle $
+        runProcessManagerOnce defaultRunCommandOptions pmSnapshotProcessManager sourceB (CounterAdded 3)
+      -- Confirm the snapshot is present before the tail-replay reaction.
+      Right snapshotVersion <- Store.runStoreIO storeHandle $
+        Store.runTransaction $
+          Tx.statement "pm:counter-snap-order-1" snapshotVersionForStreamStmt
+      snapshotVersion `shouldBe` Just (StreamVersion 2)
+      result <- Store.runStoreIO storeHandle $
+        runProcessManagerOnce defaultRunCommandOptions pmSnapshotProcessManager sourceC (CounterAdded 4)
+      case result of
+        Right (Right pmResult) ->
+          case pmResult ^. #managerResult of
+            PMStateAppended managerResult ->
+              managerResult ^. #streamVersion `shouldBe` StreamVersion 3
+            other -> expectationFailure ("expected appended manager state, got " <> show other)
+        other -> expectationFailure ("expected snapshot-assisted PM reaction, got " <> show other)
+
   describe "Keiro.Router" $ around (withFreshStore fixture) $ do
     it "resolves targets effectfully and fans out one command per target" $ \storeHandle -> do
       Right () <- Store.runStoreIO storeHandle $
@@ -2555,6 +2598,52 @@ counterProcessManager = ProcessManager
           }
   }
 
+-- A process manager whose OWN state stream snapshots under Every 2.
+-- This is the first PM fixture to exercise a state-stream snapshot: the only
+-- difference from counterProcessManager is that its eventStream carries a
+-- snapshotPolicy + stateCodec (it reuses snapshotCounterEventStream), so
+-- runProcessManagerOnce's manager-state append (which goes through
+-- runCommandWithSql) writes and reuses snapshots. The manager registers are
+-- SnapshotCounterRegs because the eventStream is a SnapshotCounterEventStream;
+-- the target side stays '[]/counterEventStream exactly as counterProcessManager.
+pmSnapshotCounterEventStream :: SnapshotCounterEventStream
+pmSnapshotCounterEventStream = snapshotCounterEventStream
+
+pmSnapshotProcessManager ::
+  ProcessManager
+    CounterEvent
+    (HsPred SnapshotCounterRegs CounterCommand)
+    SnapshotCounterRegs
+    CounterState
+    CounterCommand
+    CounterEvent
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+pmSnapshotProcessManager = ProcessManager
+  { name = "counter-snap-pm"
+  , correlate = \_ -> "order-1"
+  , eventStream = pmSnapshotCounterEventStream
+  , streamFor = \correlationId -> stream ("pm:counter-snap-" <> correlationId)
+  , targetEventStream = counterEventStream
+  , targetProjections = const []
+  , handle = \case
+      CounterAdded amount ->
+        ProcessManagerAction
+          { command = Add amount
+          , commands = []          -- keep the test focused on the manager state stream
+          , timers = []
+          }
+      CounterAudited amount ->
+        ProcessManagerAction
+          { command = Add amount
+          , commands = []
+          , timers = []
+          }
+  }
+
 workflowProcessManager ::
   Text ->
   Text ->
@@ -2666,6 +2755,12 @@ sampleUuid =
 sampleUuid2 :: UUID
 sampleUuid2 =
   case fromString "018f0f18-17aa-7000-8000-000000000002" of
+    Just uuid -> uuid
+    Nothing -> error "invalid test UUID"
+
+sampleUuid3 :: UUID
+sampleUuid3 =
+  case fromString "018f0f18-17aa-7000-8000-000000000003" of
     Just uuid -> uuid
     Nothing -> error "invalid test UUID"
 

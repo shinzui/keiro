@@ -137,7 +137,7 @@ point below.
 | 34 | Add timer stuck-row recovery and cancellation API | docs/plans/34-add-timer-stuck-row-recovery-and-cancellation-api.md | None | None | Complete |
 | 35 | Instrument the outbox and inbox workers with metrics | docs/plans/35-instrument-the-outbox-and-inbox-workers-with-metrics.md | EP-33 | None | Complete |
 | 36 | Instrument the timer and projection workers with metrics | docs/plans/36-instrument-the-timer-and-projection-workers-with-metrics.md | EP-33 | EP-34 | Complete |
-| 37 | Process-manager hardening guidance and snapshot worked example | docs/plans/37-process-manager-hardening-guidance-and-snapshot-worked-example.md | EP-34 | EP-35, EP-36 | Not Started |
+| 37 | Process-manager hardening guidance and snapshot worked example | docs/plans/37-process-manager-hardening-guidance-and-snapshot-worked-example.md | EP-34 | EP-35, EP-36 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
