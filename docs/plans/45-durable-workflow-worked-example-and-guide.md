@@ -94,8 +94,10 @@ This section must always reflect the actual current state of the work.
   `docs/user/README.md`.
 - [x] Milestone 4: flip the `docs/user/roadmap.md` capability-matrix row and reframe Phase 5;
   revise `docs/user/production-status.md`; add the `docs/user/operations.md` note.
-- [ ] Milestone 5: full-repo green — `cabal build all`, `cabal test keiro`,
-  `cabal test jitsurei-test`, and the demo command — recorded in Validation and Acceptance.
+- [x] Milestone 5: full-repo green — `cabal build all` (links every package),
+  `cabal test keiro` (133 examples, 0 failures), `cabal test jitsurei-test` (16 examples, 0
+  failures), `jitsurei-demo -- workflow`, and `jitsurei-demo -- all` (the workflow demo runs in
+  the `all` path) — recorded in Validation and Acceptance.
 
 
 ## Surprises & Discoveries
@@ -190,7 +192,39 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-03): delivered against the original purpose.** A reader can now run
+`cabal run jitsurei:exe:jitsurei-demo -- workflow` and watch a durable order-fulfillment
+workflow drive itself from start to finish — reserve inventory, a durable cooling-off sleep, a
+payment-webhook awakeable resolved by an external signal, a charge step, and a `ship-order`
+child workflow — across a simulated process restart, then read both journals. The runtime
+itself (the resume worker) drives the parent to its terminal `WorkflowCompleted`, and the
+restart proves no side effect re-runs. Two documentation pages
+(`docs/guides/durable-workflows.md`, `docs/user/durable-workflows.md`) explain the four
+primitives with copy-pasteable code drawn from the real `Jitsurei.DurableWorkflow` module, and
+the roadmap / production-status / operations docs now declare the named-step durable-execution
+runtime *Available*.
+
+**What landed:** `Jitsurei.DurableWorkflow` (the parent + child workflows, the deterministic
+payment-webhook awakeable id, the order-id↔workflow-id round-trip, and `jitsureiWorkflowRegistry`);
+the `workflow` demo subcommand (dispatcher + `all` path + usage); the guide and user-reference
+pages wired into their indexes plus a `choosing-a-primitive` routing row; and the roadmap,
+production-status, and operations edits.
+
+**Gaps / lessons:**
+- The single most important cross-plan lesson — **a parent and child workflow must use distinct
+  `WorkflowId`s** — surfaced only by building the worked example, because `findUnfinishedWorkflowIds`
+  groups by `workflow_id` alone. Recorded in this plan's Surprises and promoted to the MasterPlan
+  Surprises as a contract for all EP-43 users. No EP-38/EP-43 code change was needed; the fix is
+  the caller's id allocation.
+- The as-authored transcript was idealized in three ways (awakeable journals under `awk:<uuid>`
+  not `awk:<label>`; a child contributes two journal entries; replays print nothing). The
+  Validation block now matches the real run.
+- The demo needs the three v2 tables in the `kiroku` schema (the Store's search path). On a fresh
+  database all migrations apply in one codd batch and land correctly; an incremental apply to a
+  pre-existing dev database may land them in `public` and needs a one-time `SET SCHEMA`. This is a
+  migration/dev-environment property, not an EP-45 code concern.
+- No `keiro` library code and no migrations were added by this plan, exactly as scoped — it
+  consumes the EP-38…EP-44 surface only.
 
 
 ## Context and Orientation
@@ -868,6 +902,17 @@ cabal test jitsurei-test
 Expected: `cabal build all` links every package including `jitsurei`; `cabal test keiro` and
 `cabal test jitsurei-test` both report all specs passing. A build or test failure is a
 non-acceptance and must be fixed before the milestone is checked off.
+
+**Result (2026-06-03):** all four checks pass. `cabal build all` links every package with no
+warnings in the new sources. `cabal test keiro` = **133 examples, 0 failures**;
+`cabal test jitsurei-test` = **16 examples, 0 failures**. `jitsurei-demo -- workflow` prints the
+transcript reproduced under Check 1 (the parent journal ends with `WorkflowCompleted` at version
+7, driven to completion by resume pass 4, and the simulated restart finds no unfinished work).
+`jitsurei-demo -- all` runs every demo in sequence, including the new `workflow` demo, which
+still proves durability. The repo-local PostgreSQL was started with `just postgres-start` and
+the framework tables created/migrated with `just jitsurei-migrate` (codd applied the three v2
+migrations); the three workflow tables must reside in the `kiroku` schema the Store uses (see
+Surprises).
 
 
 ## Idempotence and Recovery

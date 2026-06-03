@@ -165,7 +165,7 @@ metrics instrumentation in dedicated plans in MasterPlan 4.
 | 42 | Workflow resume and crash-recovery worker | docs/plans/42-workflow-resume-and-crash-recovery-worker.md | EP-38 | EP-39, EP-40 | Complete |
 | 43 | Child workflows: spawn, wait, and cancel | docs/plans/43-child-workflows-spawn-wait-and-cancel.md | EP-38 | EP-40, EP-42 | Complete |
 | 44 | Workflow observability: spans and metrics | docs/plans/44-workflow-observability-spans-and-metrics.md | EP-38 | EP-39, EP-40, EP-42, EP-43 | Complete |
-| 45 | Durable workflow worked example and guide | docs/plans/45-durable-workflow-worked-example-and-guide.md | EP-38 | EP-39, EP-40, EP-41, EP-42, EP-43, EP-44 | In Progress |
+| 45 | Durable workflow worked example and guide | docs/plans/45-durable-workflow-worked-example-and-guide.md | EP-38 | EP-39, EP-40, EP-41, EP-42, EP-43, EP-44 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-38, EP-40).
@@ -390,8 +390,8 @@ and the milestone.
 - [x] EP-43 (2026-06-03): prove a parent spawns a child, waits for its result, and can cancel it; the relationship survives a crash — plus a resume-worker-driven variant (union `findRunningChildIds` discovery, child-aware `runChildWorkflow`).
 - [x] EP-44 (2026-06-03): extend `KeiroMetrics` with the six `keiro.workflow.*` instruments + `withWorkflowSpan` and the three bespoke attribute keys; thread `metrics`/`tracer` through `WorkflowRunOptions` and wire the four handler sites (executed/replayed/active/journal.length); instrument the resume worker (`resumed` per re-invocation, `awakeables.pending` per pass) reading the handle from `WorkflowResumeOptions.runOptions`; record everything in the semconv audit (now twenty instruments).
 - [x] EP-44 (2026-06-03): assert all six workflow instruments under the in-memory metric exporter (executed=2/replayed=2/journal.length count=2/active=0; resumed=1/awakeables.pending=1) plus a `Nothing`-handle no-op test. `cabal test keiro` = 133 examples, 0 failures.
-- [ ] EP-45: add the jitsurei durable-workflow demo and the `docs/guides/` guide.
-- [ ] EP-45: write the operations guidance (resume, awakeable repair, snapshots) and flip the Phase 5 roadmap rows.
+- [x] EP-45 (2026-06-03): add the jitsurei durable-workflow demo (`Jitsurei.DurableWorkflow` + the `workflow` subcommand: reserve → cooling-off sleep → payment-webhook awakeable → charge → ship-order child, driven to completion by the resume worker across a simulated restart) and the `docs/guides/durable-workflows.md` guide + `docs/user/durable-workflows.md` reference, wired into the indexes.
+- [x] EP-45 (2026-06-03): write the operations guidance (resume worker, awakeable repair via `cancelAwakeable`, journal snapshots) in `docs/user/operations.md` and flip the Phase 5 roadmap rows (capability matrix `Available now`, Phase 5 reframed as shipped, production-status named-step boundary). Full repo green: `cabal build all`, `cabal test keiro` (133/0), `cabal test jitsurei-test` (16/0), demo `workflow` + `all`.
 
 
 ## Surprises & Discoveries
@@ -705,4 +705,39 @@ and the milestone.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+**Complete (2026-06-03): all eight child plans (EP-38…EP-45) shipped across the five waves.**
+The v2 durable-execution runtime is delivered and the project's user-facing docs declare it
+*Available*. A user can now write a multi-step workflow as a plain `Workflow es a` do-block, run
+it with `runWorkflow`, kill the process partway through, restart, and watch the resume worker
+drive it from the first un-journaled step to completion — proven by the `jitsurei` demo
+(`cabal run jitsurei:exe:jitsurei-demo -- workflow`) and the keiro crash-resume test. The four
+fixed §4 signatures (`step`, `sleep`, `awakeable`, `runWorkflow`) plus `signalAwakeable`, the
+`keiro_workflow_steps` / `keiro_awakeables` / `keiro_workflow_children` tables and their
+migrations, the resume worker, journal snapshots, child workflows, and `keiro.workflow.*`
+spans/metrics all landed; the four explicitly-deferred §6 features (continue-as-new, the
+versioning/patch API, multi-region, LISTEN/NOTIFY) remain cleanly additive future work.
+
+**What held up well:** the central integration contract — EP-38 owning the `awaitStep` /
+`WorkflowOutcome` suspension shape and the idempotent `appendJournalEntry`, with `sleep`,
+`awakeable`, and child-wait as the same `StepRecorded` event under reserved prefixes — meant the
+three Wave-2 plans layered on with essentially no core churn (EP-39/EP-40/EP-41 each reported "no
+core changes needed"). The "handle passed explicitly, defaulting to `Nothing`" telemetry idiom
+from MasterPlan 4 carried over verbatim, and `WorkflowRunOptions` proved to be the right single
+home for per-run options (snapshot policy, then metrics/tracer) once it was decided up front.
+
+**What shifted from the plan:** (1) the planned `runWorkflowWith`-completion-hook for child
+propagation was replaced by a dedicated `runChildWorkflow` driver, because parametrizing
+`WorkflowRunOptions` over `es` broke every generic-lens `#snapshotPolicy` setter site (EP-43).
+(2) The `useAdvisoryLock` multi-worker optimization was reserved but left unwired — a pooled,
+multi-transaction run cannot hold a transaction-scoped advisory lock, and concurrency is already
+safe by construction (EP-42). (3) The dynamic step-result map (`Map Text Value`) could not reuse
+keiki's static `regFileShapeHash`, so snapshots use a fixed sentinel shape hash
+`keiro.workflow.stepmap.v1` (EP-38/EP-41). (4) **A parent and child workflow must use distinct
+`WorkflowId`s** — discovered while building the worked example, because `findUnfinishedWorkflowIds`
+groups by `workflow_id` alone; documented as an operational contract (EP-45). None of these
+changed the user-facing §4 surface.
+
+**Verification:** `cabal test keiro` = 133 examples, 0 failures (covering journal/replay, sleep,
+awakeables, snapshots, resume, child workflows, and the six `keiro.workflow.*` instruments under
+an in-memory exporter); `cabal test jitsurei-test` = 16 examples, 0 failures; `cabal build all`
+green; the worked-example demo proves durability end to end.
