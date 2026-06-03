@@ -183,23 +183,34 @@ per-run options across the v2 initiative — EP-41 adds the snapshot policy,
 EP-44 adds metrics/tracer fields, all additive. Extend it additively; never
 break the field set EP-38/EP-41 established.
 -}
-data WorkflowRunOptions = WorkflowRunOptions
+data WorkflowRunOptions es = WorkflowRunOptions
   { snapshotPolicy :: !(SnapshotPolicy WorkflowState)
   -- ^ When to persist a snapshot of the accumulated step-result map after a
   -- step append (and at completion, for 'OnTerminal'). Default 'Never'
   -- (EP-38 behaviour: every run/resume does a full version-0 replay).
   , pageSize :: !Int32
   -- ^ Page size for the journal pre-load read.
+  , onComplete :: !(Aeson.Value -> Eff es ())
+  -- ^ A hook (EP-43) fired with the run's encoded final result once it
+  -- reaches 'Completed' (after the 'WorkflowCompleted' marker is journaled).
+  -- Default is a no-op. EP-43's child-completion hook
+  -- ('Keiro.Workflow.Child.childCompletionHook') uses it to propagate a
+  -- finished child's result into its parent's journal. It fires on every
+  -- 'Completed' (including a replay-completion), so it must be idempotent —
+  -- which makes a crash between a child completing and its parent being
+  -- notified self-heal on the next drive.
   }
   deriving stock (Generic)
 
--- | Sensible defaults: no snapshotting and a journal pre-load page size of
--- 100. A default-options run replays and behaves exactly as EP-38 did.
-defaultWorkflowRunOptions :: WorkflowRunOptions
+-- | Sensible defaults: no snapshotting, a journal pre-load page size of 100,
+-- and a no-op completion hook. A default-options run replays and behaves
+-- exactly as EP-38 did.
+defaultWorkflowRunOptions :: WorkflowRunOptions es
 defaultWorkflowRunOptions =
   WorkflowRunOptions
     { snapshotPolicy = Never
     , pageSize = 100
+    , onComplete = const (pure ())
     }
 
 -- ---------------------------------------------------------------------------
@@ -242,7 +253,7 @@ an unresolved 'awaitStep'.
 Equivalent to @'runWorkflowWith' 'defaultWorkflowRunOptions'@.
 -}
 runWorkflow ::
-  (IOE :> es, Store :> es) =>
+  (IOE :> es, Store :> es, Aeson.ToJSON a) =>
   WorkflowName ->
   WorkflowId ->
   Eff (Workflow : es) a ->
@@ -252,42 +263,67 @@ runWorkflow = runWorkflowWith defaultWorkflowRunOptions
 {- | 'runWorkflow' with explicit 'WorkflowRunOptions'. This is the single
 canonical run entry point; EP-42's resume worker re-invokes through it so
 resumed runs honor the same options.
+
+If the workflow's journal already carries a 'WorkflowCancelled' marker (a child
+cancelled by its parent, EP-43), the run short-circuits immediately and returns
+'Cancelled' without executing any step.
+
+On 'Completed', after the terminal marker is journaled, the
+'WorkflowRunOptions' 'onComplete' hook is fired with the encoded final result
+(hence the 'Aeson.ToJSON' constraint) — the seam EP-43 uses to propagate a
+child's result to its parent.
 -}
 runWorkflowWith ::
   forall a es.
-  (IOE :> es, Store :> es) =>
-  WorkflowRunOptions ->
+  (IOE :> es, Store :> es, Aeson.ToJSON a) =>
+  WorkflowRunOptions es ->
   WorkflowName ->
   WorkflowId ->
   Eff (Workflow : es) a ->
   Eff es (WorkflowOutcome a)
 runWorkflowWith options name wid action = do
-  initial <- loadJournal options name wid
-  journalRef <- liftIO (newIORef initial)
-  ordinalRef <- liftIO (newIORef Map.empty)
-  let runHandler = interpret (handler journalRef ordinalRef) action
-  outcome <- (Completed <$> runHandler) `catch` \WorkflowSuspend -> pure Suspended
-  case outcome of
-    Completed result -> do
-      now <- liftIO getCurrentTime
-      finalMap <- liftIO (readIORef journalRef)
-      -- Idempotent: only appends (and so only snapshots) when the completion
-      -- marker is not already journaled. On a replay of an already-completed
-      -- workflow this is 'Nothing' and no terminal snapshot is taken (one was
-      -- already taken on the original completing run, if the policy fired).
-      mAppend <- appendCompletion name wid now
-      for_ mAppend $ \appendResult ->
-        when
-          ( shouldSnapshot
-              (options ^. #snapshotPolicy)
-              True
-              finalMap
-              (appendResult ^. #streamVersion)
-          )
-          (writeWorkflowSnapshot (appendResult ^. #streamId) (appendResult ^. #streamVersion) finalMap)
-      pure (Completed result)
-    Suspended -> pure Suspended
+  -- Cancellation short-circuit (EP-43): a workflow whose journal carries a
+  -- WorkflowCancelled marker makes no further progress. The index row for that
+  -- marker is keyed under 'cancelledStepName', so a single existence check is
+  -- enough and we never run the user action.
+  cancelled <- stepExists wid cancelledStepName
+  if cancelled
+    then pure Cancelled
+    else runActive
   where
+    runActive :: Eff es (WorkflowOutcome a)
+    runActive = do
+      initial <- loadJournal options name wid
+      journalRef <- liftIO (newIORef initial)
+      ordinalRef <- liftIO (newIORef Map.empty)
+      let runHandler = interpret (handler journalRef ordinalRef) action
+      outcome <- (Completed <$> runHandler) `catch` \WorkflowSuspend -> pure Suspended
+      case outcome of
+        Completed result -> do
+          now <- liftIO getCurrentTime
+          finalMap <- liftIO (readIORef journalRef)
+          -- Idempotent: only appends (and so only snapshots) when the completion
+          -- marker is not already journaled. On a replay of an already-completed
+          -- workflow this is 'Nothing' and no terminal snapshot is taken (one was
+          -- already taken on the original completing run, if the policy fired).
+          mAppend <- appendCompletion name wid now
+          for_ mAppend $ \appendResult ->
+            when
+              ( shouldSnapshot
+                  (options ^. #snapshotPolicy)
+                  True
+                  finalMap
+                  (appendResult ^. #streamVersion)
+              )
+              (writeWorkflowSnapshot (appendResult ^. #streamId) (appendResult ^. #streamVersion) finalMap)
+          -- Fire the completion hook (EP-43 child-result propagation). Fired on
+          -- every Completed (including a replay-completion) so it must be
+          -- idempotent; that idempotence is what makes a crash between a child
+          -- completing and its parent being notified self-heal on the next run.
+          (options ^. #onComplete) (Aeson.toJSON result)
+          pure (Completed result)
+        Suspended -> pure Suspended
+        Cancelled -> pure Cancelled
     handler ::
       IORef (Map Text Aeson.Value) ->
       IORef (Map Text Int) ->
@@ -348,7 +384,7 @@ version 0. 'WorkflowCompleted' contributes nothing to the map.
 -}
 loadJournal ::
   (Store :> es) =>
-  WorkflowRunOptions ->
+  WorkflowRunOptions es ->
   WorkflowName ->
   WorkflowId ->
   Eff es (Map Text Aeson.Value)
@@ -365,6 +401,8 @@ loadJournal options name wid = do
       case decodeRecorded workflowJournalCodec recorded of
         Right (StepRecorded key value _) -> pure (Map.insert key value journal)
         Right (WorkflowCompleted _) -> pure journal
+        Right (WorkflowCancelled _) -> pure journal
+        Right (WorkflowFailed _ _) -> pure journal
         Left err -> throwIO (WorkflowJournalDecodeError (Text.pack (show err)))
 
 -- ---------------------------------------------------------------------------
@@ -445,6 +483,8 @@ journalKey :: WorkflowJournalEvent -> Text
 journalKey = \case
   StepRecorded{stepName = key} -> key
   WorkflowCompleted{} -> completedStepName
+  WorkflowCancelled{} -> cancelledStepName
+  WorkflowFailed{} -> failedStepName
 
 -- | The index row corresponding to a journal event.
 journalRow :: WorkflowName -> WorkflowId -> WorkflowJournalEvent -> WorkflowStepRow
@@ -463,6 +503,22 @@ journalRow name wid = \case
       , workflowName = unWorkflowName name
       , stepName = completedStepName
       , result = Aeson.Null
+      , recordedAt = t
+      }
+  WorkflowCancelled t ->
+    WorkflowStepRow
+      { workflowId = unWorkflowId wid
+      , workflowName = unWorkflowName name
+      , stepName = cancelledStepName
+      , result = Aeson.Null
+      , recordedAt = t
+      }
+  WorkflowFailed r t ->
+    WorkflowStepRow
+      { workflowId = unWorkflowId wid
+      , workflowName = unWorkflowName name
+      , stepName = failedStepName
+      , result = Aeson.toJSON r
       , recordedAt = t
       }
 

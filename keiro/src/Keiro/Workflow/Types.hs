@@ -37,6 +37,8 @@ module Keiro.Workflow.Types
 
     -- * Reserved step names
   , completedStepName
+  , cancelledStepName
+  , failedStepName
   , sleepStepPrefix
   , awakeableStepPrefix
   , childStepPrefix
@@ -95,16 +97,23 @@ workflowStreamName (WorkflowName name) (WorkflowId wid) =
   replay loop stays uniform because there is no separate event type.
 * 'WorkflowCompleted' — the terminal marker appended once the whole
   computation has returned.
+* 'WorkflowCancelled' — a terminal marker (EP-43) written to a /child/
+  workflow's journal by @cancelChild@; a run whose journal carries it
+  short-circuits without executing further steps and reports
+  'Keiro.Workflow.Types.Cancelled'.
+* 'WorkflowFailed' — a terminal failure marker (carries a 'reason'),
+  available for a worker to record a permanently-failed run.
 
-Sibling plans (EP-42 resume, EP-43 child workflows) will add
-@WorkflowFailed@ and @WorkflowCancelled@ constructors here. Those are
-purely additive within @schemaVersion = 1@: add the constructor, add its
-tag to 'workflowJournalCodec''s 'eventTypes', and extend 'encode'\/'decode'.
-The codec is deliberately the single place to extend.
+These last two are purely additive within @schemaVersion = 1@ (a new wire
+tag added to 'workflowJournalCodec''s 'eventTypes'; old journals never carry
+it, so no upcaster is needed). The codec is deliberately the single place to
+extend.
 -}
 data WorkflowJournalEvent
   = StepRecorded {stepName :: !Text, result :: !Aeson.Value, recordedAt :: !UTCTime}
   | WorkflowCompleted {recordedAt :: !UTCTime}
+  | WorkflowCancelled {recordedAt :: !UTCTime}
+  | WorkflowFailed {reason :: !Text, recordedAt :: !UTCTime}
   deriving stock (Eq, Show, Generic)
 
 {- | The 'Codec' that serializes 'WorkflowJournalEvent' to and from the
@@ -116,10 +125,12 @@ payload alone.
 workflowJournalCodec :: Codec WorkflowJournalEvent
 workflowJournalCodec =
   Codec
-    { eventTypes = "StepRecorded" :| ["WorkflowCompleted"]
+    { eventTypes = "StepRecorded" :| ["WorkflowCompleted", "WorkflowCancelled", "WorkflowFailed"]
     , eventType = \case
         StepRecorded{} -> "StepRecorded"
         WorkflowCompleted{} -> "WorkflowCompleted"
+        WorkflowCancelled{} -> "WorkflowCancelled"
+        WorkflowFailed{} -> "WorkflowFailed"
     , schemaVersion = 1
     , encode = encodeJournalEvent
     , decode = decodeJournalEvent
@@ -140,6 +151,17 @@ encodeJournalEvent = \case
       [ "kind" Aeson..= ("WorkflowCompleted" :: Text)
       , "recordedAt" Aeson..= t
       ]
+  WorkflowCancelled t ->
+    Aeson.object
+      [ "kind" Aeson..= ("WorkflowCancelled" :: Text)
+      , "recordedAt" Aeson..= t
+      ]
+  WorkflowFailed r t ->
+    Aeson.object
+      [ "kind" Aeson..= ("WorkflowFailed" :: Text)
+      , "reason" Aeson..= r
+      , "recordedAt" Aeson..= t
+      ]
 
 decodeJournalEvent :: Aeson.Value -> Either Text WorkflowJournalEvent
 decodeJournalEvent value = first Text.pack (parseEither parser value)
@@ -151,6 +173,10 @@ decodeJournalEvent value = first Text.pack (parseEither parser value)
           StepRecorded <$> o Aeson..: "stepName" <*> o Aeson..: "result" <*> o Aeson..: "recordedAt"
         "WorkflowCompleted" ->
           WorkflowCompleted <$> o Aeson..: "recordedAt"
+        "WorkflowCancelled" ->
+          WorkflowCancelled <$> o Aeson..: "recordedAt"
+        "WorkflowFailed" ->
+          WorkflowFailed <$> o Aeson..: "reason" <*> o Aeson..: "recordedAt"
         other ->
           fail ("unknown workflow journal event kind: " <> Text.unpack other)
 
@@ -171,12 +197,15 @@ type WorkflowState = Map Text Aeson.Value
   wake source was armed and the run will be resumed later (by EP-42's
   resume worker) once the awaited result is journaled.
 
-Sibling plan EP-43 (child workflows) will add a @Cancelled@ arm; the type
-is kept open for that additive extension.
+* 'Cancelled' — the run's journal carried a 'WorkflowCancelled' marker (a
+  child cancelled by its parent, EP-43), so the handler short-circuited and
+  executed nothing further. Distinct from 'Suspended' (which will resume) and
+  'Completed' (which finished its work).
 -}
 data WorkflowOutcome a
   = Completed a
   | Suspended
+  | Cancelled
   deriving stock (Eq, Show, Functor)
 
 {- | The reserved step name written (as a 'WorkflowCompleted' journal event
@@ -187,6 +216,20 @@ literal here must match the literal in that SQL.
 -}
 completedStepName :: Text
 completedStepName = "__workflow_completed__"
+
+{- | The reserved step name written (as a 'WorkflowCancelled' journal event and
+an index row) when a workflow is cancelled. The replay handler short-circuits a
+run that has a row with this step name, and
+'Keiro.Workflow.Schema.findUnfinishedWorkflowIds' treats it (like
+'completedStepName') as a terminal marker, so a cancelled workflow drops out of
+resume discovery. The literal must match the literal in that SQL. -}
+cancelledStepName :: Text
+cancelledStepName = "__workflow_cancelled__"
+
+{- | The reserved step name written (as a 'WorkflowFailed' journal event and an
+index row) when a workflow is recorded as permanently failed. -}
+failedStepName :: Text
+failedStepName = "__workflow_failed__"
 
 {- | Reserved step-name prefix EP-39 uses to journal a durable @sleep@'s
 completion. Integration contract: EP-39 must use exactly this string. -}

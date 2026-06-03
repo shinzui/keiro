@@ -67,6 +67,8 @@ where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (foldM, forever)
+import Data.Aeson qualified as Aeson
+import Data.List (nub)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
@@ -82,6 +84,8 @@ import Keiro.Workflow
   , findUnfinishedWorkflowIds
   , runWorkflowWith
   )
+import Keiro.Workflow.Child (childCompletionHook)
+import Keiro.Workflow.Child.Schema (findRunningChildIds, lookupChild)
 import Kiroku.Store.Effect (Store)
 import System.IO (hPutStrLn, stderr)
 
@@ -95,7 +99,7 @@ The result type @a@ is existential: the worker discards it (it cares only
 whether a re-invocation reached 'Completed' or 'Suspended'), so one registry
 can hold workflows of different return types.
 -}
-data WorkflowDef es = forall a. WorkflowDef
+data WorkflowDef es = forall a. (Aeson.ToJSON a) => WorkflowDef
   { runDef :: WorkflowId -> Eff (Workflow : es) a
   }
 
@@ -114,10 +118,13 @@ type WorkflowRegistry es = Map WorkflowName (WorkflowDef es)
 'runOptions' threads EP-41's snapshot/telemetry options into 'runWorkflowWith',
 and 'pollInterval' is the loop driver's gap between passes.
 -}
-data WorkflowResumeOptions = WorkflowResumeOptions
-  { runOptions :: !WorkflowRunOptions
+data WorkflowResumeOptions es = WorkflowResumeOptions
+  { runOptions :: !(WorkflowRunOptions es)
   -- ^ Threaded into 'runWorkflowWith' so a resumed run honours the same
-  --   snapshot (EP-41) and telemetry (EP-44) options as its first run.
+  --   snapshot (EP-41) and telemetry (EP-44) options as its first run. For a
+  --   workflow that is some parent's child, the worker overrides this record's
+  --   'Keiro.Workflow.onComplete' with 'childCompletionHook' so the child's
+  --   result is propagated to its parent (EP-43).
   , pollInterval :: !Int
   -- ^ Microseconds the loop driver sleeps between passes.
   , useAdvisoryLock :: !Bool
@@ -137,7 +144,7 @@ data WorkflowResumeOptions = WorkflowResumeOptions
   deriving stock (Generic)
 
 -- | Defaults: EP-41's 'defaultWorkflowRunOptions', a 1-second poll, no lock.
-defaultWorkflowResumeOptions :: WorkflowResumeOptions
+defaultWorkflowResumeOptions :: WorkflowResumeOptions es
 defaultWorkflowResumeOptions =
   WorkflowResumeOptions
     { runOptions = defaultWorkflowRunOptions
@@ -192,12 +199,18 @@ same journal (EP-38 deterministic ids + step short-circuit).
 resumeWorkflowsOnce ::
   forall es.
   (IOE :> es, Store :> es) =>
-  WorkflowResumeOptions ->
+  WorkflowResumeOptions es ->
   WorkflowRegistry es ->
   Eff es ResumeSummary
 resumeWorkflowsOnce opts registry = do
-  pairs <- findUnfinishedWorkflowIds
-  let seed = emptyResumeSummary{discovered = length pairs}
+  -- Discovery unions two sources: workflows with steps but no terminal marker
+  -- ('findUnfinishedWorkflowIds') and freshly-spawned children that have no
+  -- step rows yet ('findRunningChildIds', EP-43) — so a zero-step child is
+  -- still driven. The dedup collapses a child that appears in both.
+  unfinished <- findUnfinishedWorkflowIds
+  runningChildren <- findRunningChildIds
+  let pairs = nub (unfinished <> runningChildren)
+      seed = emptyResumeSummary{discovered = length pairs}
   foldM advance seed pairs
   where
     advance :: ResumeSummary -> (Text, Text) -> Eff es ResumeSummary
@@ -216,7 +229,15 @@ resumeWorkflowsOnce opts registry = do
           pure acc{unknownName = unknownName acc + 1}
         Just (WorkflowDef runDef) -> do
           let wid = WorkflowId widText
-          outcome <- runWorkflowWith (runOptions opts) (WorkflowName wnameText) wid (runDef wid)
+              name = WorkflowName wnameText
+          -- A workflow that is some parent's child must complete through
+          -- 'childCompletionHook' (so its result propagates to the parent),
+          -- not the default no-op hook (EP-43).
+          mChild <- lookupChild widText wnameText
+          let effectiveOpts = case mChild of
+                Just _ -> runOptions opts & #onComplete .~ childCompletionHook name wid
+                Nothing -> runOptions opts
+          outcome <- runWorkflowWith effectiveOpts name wid (runDef wid)
           pure (bumpForOutcome outcome acc)
 
 -- | Fold one re-invocation's outcome into the running summary. The existential
@@ -225,6 +246,11 @@ bumpForOutcome :: WorkflowOutcome a -> ResumeSummary -> ResumeSummary
 bumpForOutcome outcome acc = case outcome of
   Completed _ -> acc{resumed = resumed acc + 1, completed = completed acc + 1}
   Suspended -> acc{resumed = resumed acc + 1, stillSuspended = stillSuspended acc + 1}
+  -- A workflow cancelled between discovery and re-invocation short-circuits to
+  -- 'Cancelled' (EP-43); count it as re-invoked but neither completed nor
+  -- suspended. (A cancelled workflow also drops out of discovery, so this is a
+  -- rare race, not the steady state.)
+  Cancelled -> acc{resumed = resumed acc + 1}
 
 {- | Poll-and-resume loop: run 'resumeWorkflowsOnce' on the configured
 'pollInterval' forever. Mirrors how an application schedules
@@ -233,7 +259,7 @@ single-pass 'resumeWorkflowsOnce' remains the testable unit.
 -}
 runWorkflowResumeWorkerWith ::
   (IOE :> es, Store :> es) =>
-  WorkflowResumeOptions ->
+  WorkflowResumeOptions es ->
   WorkflowRegistry es ->
   Eff es ()
 runWorkflowResumeWorkerWith opts registry = forever $ do

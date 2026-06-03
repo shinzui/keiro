@@ -86,9 +86,11 @@ stepExists (WorkflowId wid) key =
   runTransaction (Tx.statement (wid, key) stepExistsStmt)
 
 {- | Return the @(workflow_id, workflow_name)@ of every workflow that has at
-least one step row but no terminal completion marker row — i.e. workflows
-that are unfinished. EP-42's resume worker consumes this to discover what to
-re-invoke.
+least one step row but no terminal marker row — i.e. workflows that are
+unfinished. A terminal marker is a @__workflow_completed__@ row or (EP-43) a
+@__workflow_cancelled__@ row, so a cancelled workflow is treated as finished
+and drops out of resume discovery. EP-42's resume worker consumes this to
+discover what to re-invoke.
 -}
 findUnfinishedWorkflowIds :: (Store :> es) => Eff es [(Text, Text)]
 findUnfinishedWorkflowIds =
@@ -138,8 +140,8 @@ stepExistsStmt =
     )
     (D.singleRow (D.column (D.nonNullable D.bool)))
 
--- The literal '__workflow_completed__' must match
--- 'Keiro.Workflow.Types.completedStepName'.
+-- The literals '__workflow_completed__' / '__workflow_cancelled__' must match
+-- 'Keiro.Workflow.Types.completedStepName' / '.cancelledStepName'.
 findUnfinishedWorkflowIdsStmt :: Statement () [(Text, Text)]
 findUnfinishedWorkflowIdsStmt =
   preparable
@@ -149,7 +151,7 @@ findUnfinishedWorkflowIdsStmt =
     WHERE NOT EXISTS (
       SELECT 1 FROM keiro_workflow_steps c
       WHERE c.workflow_id = s.workflow_id
-        AND c.step_name = '__workflow_completed__'
+        AND c.step_name IN ('__workflow_completed__', '__workflow_cancelled__')
     )
     """
     E.noParams

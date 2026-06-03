@@ -57,6 +57,8 @@ library
                         Keiro.Workflow
                         Keiro.Workflow.Awakeable
                         Keiro.Workflow.Awakeable.Schema
+                        Keiro.Workflow.Child
+                        Keiro.Workflow.Child.Schema
                         Keiro.Workflow.Resume
                         Keiro.Workflow.Schema
                         Keiro.Workflow.Sleep
