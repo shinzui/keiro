@@ -183,34 +183,23 @@ per-run options across the v2 initiative — EP-41 adds the snapshot policy,
 EP-44 adds metrics/tracer fields, all additive. Extend it additively; never
 break the field set EP-38/EP-41 established.
 -}
-data WorkflowRunOptions es = WorkflowRunOptions
+data WorkflowRunOptions = WorkflowRunOptions
   { snapshotPolicy :: !(SnapshotPolicy WorkflowState)
   -- ^ When to persist a snapshot of the accumulated step-result map after a
   -- step append (and at completion, for 'OnTerminal'). Default 'Never'
   -- (EP-38 behaviour: every run/resume does a full version-0 replay).
   , pageSize :: !Int32
   -- ^ Page size for the journal pre-load read.
-  , onComplete :: !(Aeson.Value -> Eff es ())
-  -- ^ A hook (EP-43) fired with the run's encoded final result once it
-  -- reaches 'Completed' (after the 'WorkflowCompleted' marker is journaled).
-  -- Default is a no-op. EP-43's child-completion hook
-  -- ('Keiro.Workflow.Child.childCompletionHook') uses it to propagate a
-  -- finished child's result into its parent's journal. It fires on every
-  -- 'Completed' (including a replay-completion), so it must be idempotent —
-  -- which makes a crash between a child completing and its parent being
-  -- notified self-heal on the next drive.
   }
   deriving stock (Generic)
 
--- | Sensible defaults: no snapshotting, a journal pre-load page size of 100,
--- and a no-op completion hook. A default-options run replays and behaves
--- exactly as EP-38 did.
-defaultWorkflowRunOptions :: WorkflowRunOptions es
+-- | Sensible defaults: no snapshotting and a journal pre-load page size of
+-- 100. A default-options run replays and behaves exactly as EP-38 did.
+defaultWorkflowRunOptions :: WorkflowRunOptions
 defaultWorkflowRunOptions =
   WorkflowRunOptions
     { snapshotPolicy = Never
     , pageSize = 100
-    , onComplete = const (pure ())
     }
 
 -- ---------------------------------------------------------------------------
@@ -253,7 +242,7 @@ an unresolved 'awaitStep'.
 Equivalent to @'runWorkflowWith' 'defaultWorkflowRunOptions'@.
 -}
 runWorkflow ::
-  (IOE :> es, Store :> es, Aeson.ToJSON a) =>
+  (IOE :> es, Store :> es) =>
   WorkflowName ->
   WorkflowId ->
   Eff (Workflow : es) a ->
@@ -266,17 +255,14 @@ resumed runs honor the same options.
 
 If the workflow's journal already carries a 'WorkflowCancelled' marker (a child
 cancelled by its parent, EP-43), the run short-circuits immediately and returns
-'Cancelled' without executing any step.
-
-On 'Completed', after the terminal marker is journaled, the
-'WorkflowRunOptions' 'onComplete' hook is fired with the encoded final result
-(hence the 'Aeson.ToJSON' constraint) — the seam EP-43 uses to propagate a
-child's result to its parent.
+'Cancelled' without executing any step. To /propagate/ a finished child's
+result to its parent, drive the child through
+'Keiro.Workflow.Child.runChildWorkflow' rather than this function directly.
 -}
 runWorkflowWith ::
   forall a es.
-  (IOE :> es, Store :> es, Aeson.ToJSON a) =>
-  WorkflowRunOptions es ->
+  (IOE :> es, Store :> es) =>
+  WorkflowRunOptions ->
   WorkflowName ->
   WorkflowId ->
   Eff (Workflow : es) a ->
@@ -316,11 +302,6 @@ runWorkflowWith options name wid action = do
                   (appendResult ^. #streamVersion)
               )
               (writeWorkflowSnapshot (appendResult ^. #streamId) (appendResult ^. #streamVersion) finalMap)
-          -- Fire the completion hook (EP-43 child-result propagation). Fired on
-          -- every Completed (including a replay-completion) so it must be
-          -- idempotent; that idempotence is what makes a crash between a child
-          -- completing and its parent being notified self-heal on the next run.
-          (options ^. #onComplete) (Aeson.toJSON result)
           pure (Completed result)
         Suspended -> pure Suspended
         Cancelled -> pure Cancelled
@@ -384,7 +365,7 @@ version 0. 'WorkflowCompleted' contributes nothing to the map.
 -}
 loadJournal ::
   (Store :> es) =>
-  WorkflowRunOptions es ->
+  WorkflowRunOptions ->
   WorkflowName ->
   WorkflowId ->
   Eff es (Map Text Aeson.Value)

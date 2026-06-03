@@ -84,7 +84,7 @@ import Keiro.Workflow
   , findUnfinishedWorkflowIds
   , runWorkflowWith
   )
-import Keiro.Workflow.Child (childCompletionHook)
+import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Child.Schema (findRunningChildIds, lookupChild)
 import Kiroku.Store.Effect (Store)
 import System.IO (hPutStrLn, stderr)
@@ -118,13 +118,11 @@ type WorkflowRegistry es = Map WorkflowName (WorkflowDef es)
 'runOptions' threads EP-41's snapshot/telemetry options into 'runWorkflowWith',
 and 'pollInterval' is the loop driver's gap between passes.
 -}
-data WorkflowResumeOptions es = WorkflowResumeOptions
-  { runOptions :: !(WorkflowRunOptions es)
-  -- ^ Threaded into 'runWorkflowWith' so a resumed run honours the same
-  --   snapshot (EP-41) and telemetry (EP-44) options as its first run. For a
-  --   workflow that is some parent's child, the worker overrides this record's
-  --   'Keiro.Workflow.onComplete' with 'childCompletionHook' so the child's
-  --   result is propagated to its parent (EP-43).
+data WorkflowResumeOptions = WorkflowResumeOptions
+  { runOptions :: !WorkflowRunOptions
+  -- ^ Threaded into 'runWorkflowWith' (or 'runChildWorkflow' for a child) so a
+  --   resumed run honours the same snapshot (EP-41) and telemetry (EP-44)
+  --   options as its first run.
   , pollInterval :: !Int
   -- ^ Microseconds the loop driver sleeps between passes.
   , useAdvisoryLock :: !Bool
@@ -144,7 +142,7 @@ data WorkflowResumeOptions es = WorkflowResumeOptions
   deriving stock (Generic)
 
 -- | Defaults: EP-41's 'defaultWorkflowRunOptions', a 1-second poll, no lock.
-defaultWorkflowResumeOptions :: WorkflowResumeOptions es
+defaultWorkflowResumeOptions :: WorkflowResumeOptions
 defaultWorkflowResumeOptions =
   WorkflowResumeOptions
     { runOptions = defaultWorkflowRunOptions
@@ -199,7 +197,7 @@ same journal (EP-38 deterministic ids + step short-circuit).
 resumeWorkflowsOnce ::
   forall es.
   (IOE :> es, Store :> es) =>
-  WorkflowResumeOptions es ->
+  WorkflowResumeOptions ->
   WorkflowRegistry es ->
   Eff es ResumeSummary
 resumeWorkflowsOnce opts registry = do
@@ -230,14 +228,13 @@ resumeWorkflowsOnce opts registry = do
         Just (WorkflowDef runDef) -> do
           let wid = WorkflowId widText
               name = WorkflowName wnameText
-          -- A workflow that is some parent's child must complete through
-          -- 'childCompletionHook' (so its result propagates to the parent),
-          -- not the default no-op hook (EP-43).
+          -- A workflow that is some parent's child is driven through
+          -- 'runChildWorkflow' so its result propagates to the parent on
+          -- completion (EP-43); any other workflow uses bare 'runWorkflowWith'.
           mChild <- lookupChild widText wnameText
-          let effectiveOpts = case mChild of
-                Just _ -> runOptions opts & #onComplete .~ childCompletionHook name wid
-                Nothing -> runOptions opts
-          outcome <- runWorkflowWith effectiveOpts name wid (runDef wid)
+          outcome <- case mChild of
+            Just _ -> runChildWorkflow (runOptions opts) name wid (runDef wid)
+            Nothing -> runWorkflowWith (runOptions opts) name wid (runDef wid)
           pure (bumpForOutcome outcome acc)
 
 -- | Fold one re-invocation's outcome into the running summary. The existential
@@ -259,7 +256,7 @@ single-pass 'resumeWorkflowsOnce' remains the testable unit.
 -}
 runWorkflowResumeWorkerWith ::
   (IOE :> es, Store :> es) =>
-  WorkflowResumeOptions es ->
+  WorkflowResumeOptions ->
   WorkflowRegistry es ->
   Eff es ()
 runWorkflowResumeWorkerWith opts registry = forever $ do

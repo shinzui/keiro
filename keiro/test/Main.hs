@@ -111,7 +111,7 @@ import Keiro.Workflow
   ( StepName (..)
   , Workflow
   , WorkflowId (..)
-  , WorkflowJournalEvent (StepRecorded, WorkflowCompleted)
+  , WorkflowJournalEvent (StepRecorded, WorkflowCancelled, WorkflowCompleted, WorkflowFailed)
   , WorkflowName (..)
   , WorkflowOutcome (..)
   , appendJournalEntry
@@ -123,6 +123,17 @@ import Keiro.Workflow
   , step
   , workflowJournalCodec
   )
+import Keiro.Workflow.Child
+  ( ChildHandle (..)
+  , WorkflowChildCancelled (..)
+  , awaitChild
+  , cancelChild
+  , childResultStepName
+  , childSpawnStepName
+  , runChildWorkflow
+  , spawnChild
+  )
+import Keiro.Workflow.Child.Schema qualified as Child
 import Keiro.Workflow.Snapshot
   ( loadWorkflowSnapshot
   , workflowStateCodec
@@ -2639,6 +2650,194 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Right afterDecoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList afterRepair))
         [r | StepRecorded s r _ <- afterDecoded, s == awkStep] `shouldBe` [toJSON ("ok" :: Text)]
 
+  describe "Keiro.Workflow.Child" $ do
+    -- M2: the reserved spawn/result step-name derivations are stable.
+    it "derives the child spawn and result step names" $ do
+      childSpawnStepName (WorkflowId "c1") `shouldBe` "child:c1"
+      childResultStepName (WorkflowId "c1") `shouldBe` "child:c1:result"
+
+    -- M3(a): the new terminal journal constructors round-trip through the codec.
+    it "round-trips WorkflowCancelled and WorkflowFailed through the journal codec" $ do
+      let t = UTCTime (ModifiedJulianDay 0) 0
+          rt ev = (workflowJournalCodec ^. #decode) ((workflowJournalCodec ^. #encode) ev)
+      rt (WorkflowCancelled t) `shouldBe` Right (WorkflowCancelled t)
+      rt (WorkflowFailed "boom" t) `shouldBe` Right (WorkflowFailed "boom" t)
+
+    around (withFreshStore fixture) $ do
+      -- M1: the keiro_workflow_children table and its schema helpers.
+      it "schema: registers, completes, cancels, and counts child links" $ \storeHandle -> do
+        Right () <-
+          Store.runStoreIO storeHandle $
+            Store.runTransaction $
+              Child.registerChildTx "c-1" "ship" "p-1" "parent" "child:c-1:result"
+        Right (Just row) <- Store.runStoreIO storeHandle $ Child.lookupChild "c-1" "ship"
+        row ^. #status `shouldBe` Child.Running
+        row ^. #parentId `shouldBe` "p-1"
+        row ^. #parentName `shouldBe` "parent"
+        row ^. #awaitStep `shouldBe` "child:c-1:result"
+        now <- getCurrentTime
+        Right firstComplete <-
+          Store.runStoreIO storeHandle $
+            Store.runTransaction $
+              Child.markChildResultTx "c-1" "ship" (toJSON ("packed+labelled" :: Text)) now
+        firstComplete `shouldBe` True
+        Right secondComplete <-
+          Store.runStoreIO storeHandle $
+            Store.runTransaction $
+              Child.markChildResultTx "c-1" "ship" (toJSON ("again" :: Text)) now
+        secondComplete `shouldBe` False
+        Right () <-
+          Store.runStoreIO storeHandle $
+            Store.runTransaction $
+              Child.registerChildTx "c-2" "ship" "p-1" "parent" "child:c-2:result"
+        Right cancelled <-
+          Store.runStoreIO storeHandle $
+            Store.runTransaction $
+              Child.markChildCancelledTx "c-2" "ship"
+        cancelled `shouldBe` True
+        Right kids <- Store.runStoreIO storeHandle $ Child.lookupChildrenOfParent "p-1" "parent"
+        map (^. #childId) kids `shouldBe` ["c-1", "c-2"]
+        Right active <- Store.runStoreIO storeHandle Child.countActiveChildren
+        active `shouldBe` (0 :: Int)
+        Right st <- Store.runStoreIO storeHandle $ Child.childStatus "c-1" "ship"
+        st `shouldBe` Just Child.ChildCompleted
+
+      -- M4: spawn -> drive the child (with the completion hook) -> resume parent.
+      it "spawns a child, drives it, propagates its result, and resumes the parent to Completed" $ \storeHandle -> do
+        let childWid = WorkflowId "ship-1"
+        suspended <-
+          Store.runStoreIO storeHandle $
+            runWorkflow (WorkflowName "parent") (WorkflowId "p1") (parentWorkflow childWid)
+        suspended `shouldBe` Right Suspended
+        Right parentJournal1 <-
+          Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "wf:parent-p1") (StreamVersion 0) 10
+        Right decoded1 <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList parentJournal1))
+        decoded1 `shouldSatisfy` \case
+          [StepRecorded "child:ship-1" _ _] -> True
+          _ -> False
+        Right (Just childRow) <- Store.runStoreIO storeHandle $ Child.lookupChild "ship-1" "ship"
+        childRow ^. #status `shouldBe` Child.Running
+        childRow ^. #parentId `shouldBe` "p1"
+        childRow ^. #parentName `shouldBe` "parent"
+        childRow ^. #awaitStep `shouldBe` "child:ship-1:result"
+        -- 2) drive the child through runChildWorkflow (propagates on completion).
+        childOutcome <-
+          Store.runStoreIO storeHandle $
+            runChildWorkflow defaultWorkflowRunOptions (WorkflowName "ship") childWid shipWorkflow
+        childOutcome `shouldBe` Right (Completed "packed+labelled")
+        Right childJournal <-
+          Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "wf:ship-ship-1") (StreamVersion 0) 10
+        traverse (decodeRecorded workflowJournalCodec) (Vector.toList childJournal)
+          `shouldSatisfy` \case
+            Right [StepRecorded "pack" _ _, StepRecorded "label" _ _, WorkflowCompleted _] -> True
+            _ -> False
+        Right parentJournal2 <-
+          Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "wf:parent-p1") (StreamVersion 0) 10
+        Right decoded2 <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList parentJournal2))
+        [r | StepRecorded "child:ship-1:result" r _ <- decoded2] `shouldBe` [toJSON ("packed+labelled" :: Text)]
+        Right (Just childRow2) <- Store.runStoreIO storeHandle $ Child.lookupChild "ship-1" "ship"
+        childRow2 ^. #status `shouldBe` Child.ChildCompleted
+        -- 3) resume the parent: it replays past awaitChild and completes.
+        resumed <-
+          Store.runStoreIO storeHandle $
+            runWorkflow (WorkflowName "parent") (WorkflowId "p1") (parentWorkflow childWid)
+        resumed `shouldBe` Right (Completed "done:packed+labelled")
+        Right parentJournal3 <-
+          Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "wf:parent-p1") (StreamVersion 0) 10
+        Right decoded3 <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList parentJournal3))
+        any (\case StepRecorded "notify" _ _ -> True; _ -> False) decoded3 `shouldBe` True
+        any (\case WorkflowCompleted{} -> True; _ -> False) decoded3 `shouldBe` True
+
+      -- M5: re-invoking the parent does not re-spawn the child (crash survival).
+      it "does not re-spawn the child when the parent is re-invoked" $ \storeHandle -> do
+        let childWid = WorkflowId "ship-2"
+        s1 <-
+          Store.runStoreIO storeHandle $
+            runWorkflow (WorkflowName "parent") (WorkflowId "p2") (parentWorkflow childWid)
+        s1 `shouldBe` Right Suspended
+        Right (Just beforeRow) <- Store.runStoreIO storeHandle $ Child.lookupChild "ship-2" "ship"
+        let createdAt0 = beforeRow ^. #createdAt
+        s2 <-
+          Store.runStoreIO storeHandle $
+            runWorkflow (WorkflowName "parent") (WorkflowId "p2") (parentWorkflow childWid)
+        s2 `shouldBe` Right Suspended
+        Right parentJournal <-
+          Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "wf:parent-p2") (StreamVersion 0) 10
+        Right decoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList parentJournal))
+        length [() | StepRecorded "child:ship-2" _ _ <- decoded] `shouldBe` 1
+        Right kids <- Store.runStoreIO storeHandle $ Child.lookupChildrenOfParent "p2" "parent"
+        length kids `shouldBe` 1
+        map (^. #createdAt) kids `shouldBe` [createdAt0]
+
+      -- M5: cancelling a child stops it and makes the parent's awaitChild throw.
+      it "cancels a child: the child stops and the parent's awaitChild throws" $ \storeHandle -> do
+        let childWid = WorkflowId "cancel-child"
+            h = ChildHandle (WorkflowName "ship") childWid
+        s1 <-
+          Store.runStoreIO storeHandle $
+            runWorkflow (WorkflowName "parent") (WorkflowId "p3") (parentWorkflow childWid)
+        s1 `shouldBe` Right Suspended
+        Right cancelled <- Store.runStoreIO storeHandle $ cancelChild h
+        cancelled `shouldBe` True
+        Right childJournal <-
+          Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "wf:ship-cancel-child") (StreamVersion 0) 10
+        Right childDecoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList childJournal))
+        any (\case WorkflowCancelled{} -> True; _ -> False) childDecoded `shouldBe` True
+        Right st <- Store.runStoreIO storeHandle $ Child.childStatus "cancel-child" "ship"
+        st `shouldBe` Just Child.ChildCancelled
+        Right parentJournal <-
+          Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "wf:parent-p3") (StreamVersion 0) 10
+        Right parentDecoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList parentJournal))
+        [r | StepRecorded "child:cancel-child:result" r _ <- parentDecoded]
+          `shouldBe` [object ["cancelled" Aeson..= True]]
+        -- driving the child returns Cancelled and runs none of its steps.
+        childOutcome <-
+          Store.runStoreIO storeHandle $
+            runWorkflow (WorkflowName "ship") childWid shipWorkflow
+        childOutcome `shouldBe` Right Keiro.Workflow.Cancelled
+        Right childJournal2 <-
+          Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "wf:ship-cancel-child") (StreamVersion 0) 10
+        Right childDecoded2 <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList childJournal2))
+        any (\case StepRecorded "pack" _ _ -> True; _ -> False) childDecoded2 `shouldBe` False
+        -- re-invoking the parent throws WorkflowChildCancelled.
+        Store.runStoreIO
+          storeHandle
+          (runWorkflow (WorkflowName "parent") (WorkflowId "p3") (parentWorkflow childWid))
+          `shouldThrow` (== WorkflowChildCancelled (WorkflowName "ship") childWid)
+
+      -- EP-42 worker-driven variant: the resume worker drives both parent and
+      -- child from a registry, selecting childCompletionHook for the child and
+      -- union-discovering the zero-step child.
+      it "drives a parent and its child to completion through the resume worker" $ \storeHandle -> do
+        let childWid = WorkflowId "ship-3"
+            registry =
+              Map.fromList
+                [ (WorkflowName "parent", WorkflowDef (\_ -> parentWorkflow childWid))
+                , (WorkflowName "ship", WorkflowDef (\_ -> shipWorkflow))
+                ]
+        Right Suspended <-
+          Store.runStoreIO storeHandle $
+            runWorkflow (WorkflowName "parent") (WorkflowId "p4") (parentWorkflow childWid)
+        let drive = Store.runStoreIO storeHandle (resumeWorkflowsOnce defaultWorkflowResumeOptions registry)
+        Right _ <- drive
+        Right _ <- drive
+        Right _ <- drive
+        Right parentJournal <-
+          Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "wf:parent-p4") (StreamVersion 0) 10
+        Right parentDecoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList parentJournal))
+        any (\case WorkflowCompleted{} -> True; _ -> False) parentDecoded `shouldBe` True
+        Right (Just childRow) <- Store.runStoreIO storeHandle $ Child.lookupChild "ship-3" "ship"
+        childRow ^. #status `shouldBe` Child.ChildCompleted
+
 -- | Increment a shared counter and return its new value (the step's side
 -- effect, so replay can be proven by watching the counter).
 incrementAndRead :: IORef Int -> IO Int
@@ -2724,6 +2923,23 @@ stepThenAwaitWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es Int
 stepThenAwaitWorkflow counter = do
   _ <- step (StepName "s1") (liftIO (incrementAndRead counter))
   awaitStep (StepName "awk:wait") (pure ())
+
+-- | A two-step child workflow used in the child-workflow tests.
+shipWorkflow :: (Workflow :> es) => Eff es Text
+shipWorkflow = do
+  a <- step (StepName "pack") (pure ("packed" :: Text))
+  b <- step (StepName "label") (pure (a <> "+labelled"))
+  pure b
+
+-- | A parent that spawns a @"ship"@ child (id supplied), awaits its result, and
+-- then records a @notify@ step. Parametrised by child id so each test isolates
+-- its own child journal.
+parentWorkflow :: (Workflow :> es, Store :> es) => WorkflowId -> Eff es Text
+parentWorkflow childWid = do
+  h <- spawnChild (WorkflowName "ship") childWid shipWorkflow
+  result <- awaitChild h
+  _ <- step (StepName "notify") (pure ("done:" <> result))
+  pure ("done:" <> result)
 
 nominalDays :: Int -> NominalDiffTime
 nominalDays n = fromIntegral n * 86400

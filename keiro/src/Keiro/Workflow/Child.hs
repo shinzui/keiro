@@ -36,10 +36,11 @@ parent = do
   'WorkflowChildCancelled' if the child was cancelled meanwhile; on the hit path
   it decodes the child's result, which 'childCompletionHook' propagated into the
   parent journal when the child finished.
-* __'childCompletionHook'__ is the 'Keiro.Workflow.WorkflowRunOptions'
-  'Keiro.Workflow.onComplete' hook the resume worker selects for any workflow
-  that is some parent's child: it flips the child row to @completed@ and appends
-  the @child:\<childId\>:result@ 'StepRecorded' to the parent's journal.
+* __'runChildWorkflow'__ is what the resume worker selects (instead of bare
+  'Keiro.Workflow.runWorkflowWith') for any workflow that is some parent's child:
+  on 'Completed' it runs 'childCompletionHook', which flips the child row to
+  @completed@ and appends the @child:\<childId\>:result@ 'StepRecorded' to the
+  parent's journal.
 * __'cancelChild'__ flips the child row to @cancelled@ and writes a
   'Keiro.Workflow.WorkflowCancelled' marker to the /child/ journal (so the
   child's next resume short-circuits and stops) plus a @{"cancelled": true}@
@@ -61,7 +62,8 @@ module Keiro.Workflow.Child
     -- * External control
   , cancelChild
 
-    -- * Completion propagation (selected by the resume worker for a child)
+    -- * Driving a child to completion (used by the resume worker)
+  , runChildWorkflow
   , childCompletionHook
 
     -- * Errors
@@ -80,10 +82,13 @@ import Keiro.Workflow
   , WorkflowId (..)
   , WorkflowJournalEvent (..)
   , WorkflowName (..)
+  , WorkflowOutcome (..)
+  , WorkflowRunOptions
   , appendJournalEntry
   , awaitStep
   , childStepPrefix
   , currentWorkflow
+  , runWorkflowWith
   , step
   )
 import Keiro.Workflow.Child.Schema
@@ -247,21 +252,41 @@ cancelChild (ChildHandle childNm childWid) = do
 -- Completion propagation
 -- ---------------------------------------------------------------------------
 
-{- | The 'Keiro.Workflow.onComplete' hook the resume worker selects for a
-workflow that is some parent's child. Fired with the child's encoded final
-result once the child reaches 'Completed': it flips the child row to
-@completed@ (storing the result) and appends the @child:\<childId\>:result@
-'StepRecorded' to the /parent/ journal, which is exactly the wake source the
-parent's 'awaitChild' resolves on. Idempotent and crash-safe — it always looks
-the parent link up and (re-)appends, treating a duplicate append as success, so
-a crash between the child completing and the parent being notified self-heals on
-the next drive.
+{- | Drive a child workflow to completion, propagating its result to the parent.
+This is 'runWorkflowWith' followed by 'childCompletionHook' on 'Completed': the
+resume worker selects this (instead of bare 'runWorkflowWith') for any workflow
+that is some parent's child, so a finished child wakes its waiting parent. A
+'Suspended' or 'Cancelled' child propagates nothing (it has no result yet).
+-}
+runChildWorkflow ::
+  (IOE :> es, Store :> es, ToJSON a) =>
+  WorkflowRunOptions ->
+  WorkflowName ->
+  WorkflowId ->
+  Eff (Workflow : es) a ->
+  Eff es (WorkflowOutcome a)
+runChildWorkflow opts childNm childWid action = do
+  outcome <- runWorkflowWith opts childNm childWid action
+  case outcome of
+    Completed result -> do
+      childCompletionHook childNm childWid (toJSON result)
+      pure (Completed result)
+    other -> pure other
+
+{- | Propagate a finished child's result to its parent: flip the child row to
+@completed@ (storing the result) and append the @child:\<childId\>:result@
+'StepRecorded' to the /parent/ journal — exactly the wake source the parent's
+'awaitChild' resolves on. Idempotent and crash-safe: it always looks the parent
+link up and (re-)appends, treating a duplicate append as success, so a crash
+between the child completing and the parent being notified self-heals on the
+next drive. Normally invoked via 'runChildWorkflow'.
 -}
 childCompletionHook ::
   (IOE :> es, Store :> es) =>
   WorkflowName ->
   WorkflowId ->
-  (Aeson.Value -> Eff es ())
+  Aeson.Value ->
+  Eff es ()
 childCompletionHook childNm childWid resultValue = do
   now <- liftIO getCurrentTime
   _ <-
