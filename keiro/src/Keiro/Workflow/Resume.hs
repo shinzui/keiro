@@ -58,10 +58,14 @@ module Keiro.Workflow.Resume
   , ResumeSummary (..)
   , emptyResumeSummary
 
-    -- * Running
+    -- * Running (fixed-poll baseline)
   , resumeWorkflowsOnce
   , runWorkflowResumeWorker
   , runWorkflowResumeWorkerWith
+
+    -- * Running (push-aware, EP-50)
+  , runPollLoopWith
+  , runWorkflowResumeWorkerPush
   )
 where
 
@@ -73,8 +77,10 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
+import Effectful.Error.Static (Error)
 import Keiro.Prelude
 import Keiro.Telemetry (recordWorkflowAwakeablesPending, recordWorkflowResumed)
+import Keiro.Wake (WakeSignal (..), wakeSignalFromStore)
 import Keiro.Workflow
   ( Workflow
   , WorkflowId (..)
@@ -88,7 +94,9 @@ import Keiro.Workflow
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Child.Schema (findRunningChildIds, lookupChild)
-import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Connection (KirokuStore)
+import Kiroku.Store.Effect (Store, runStoreIO)
+import Kiroku.Store.Error (StoreError)
 import System.IO (hPutStrLn, stderr)
 
 -- ---------------------------------------------------------------------------
@@ -287,3 +295,60 @@ runWorkflowResumeWorker ::
   WorkflowRegistry es ->
   Eff es ()
 runWorkflowResumeWorker = runWorkflowResumeWorkerWith defaultWorkflowResumeOptions
+
+-- ---------------------------------------------------------------------------
+-- Push-aware loop (EP-50)
+-- ---------------------------------------------------------------------------
+
+{- | Generic push-aware poll loop: run one pass, then block on the 'WakeSignal'
+with the given fallback timeout (microseconds), forever. The pass is the durable
+unit; the wake only shortens the gap between passes. Both wake reasons (a
+notification or the fallback elapsing) mean "run another pass", so the returned
+'Keiro.Wake.WakeReason' is ignored for control flow. A missed @NOTIFY@ costs at
+most one fallback interval of latency, never lost work — correctness rests on the
+pass (e.g. 'resumeWorkflowsOnce'), which is idempotent, not on a notification
+arriving. The same pattern applies mechanically to 'Keiro.Timer.runTimerWorker'
+and 'Keiro.Outbox.publishClaimedOutbox' (documented, not implemented here; the
+resume worker carries the acceptance via parent/child cascades).
+-}
+runPollLoopWith ::
+  -- | the wake signal to block on between passes
+  WakeSignal ->
+  -- | fallback timeout in microseconds (the maximum gap when no notification arrives)
+  Int ->
+  -- | one pass, already wrapped to run in 'IO'
+  IO () ->
+  IO ()
+runPollLoopWith wake fallbackMicros pass =
+  forever (pass >> void (waitForWake wake fallbackMicros))
+
+{- | The workflow resume worker, push-aware (EP-50). Runs 'resumeWorkflowsOnce'
+on each pass; between passes it waits on the store's notifier (sub-second wake on
+any append) and falls back to 'pollInterval' so a dropped notification still
+drains the backlog.
+
+This is the push-aware sibling of 'runWorkflowResumeWorker' /
+'runWorkflowResumeWorkerWith', which remain unchanged as the durable fixed-poll
+baseline. The 'pollInterval' field is __repurposed__ as the /fallback/ timeout:
+its meaning shifts from "fixed gap between passes" to "maximum gap when no
+notification arrives" — strictly better for latency, identical in the
+no-notification worst case.
+
+It opens __no__ new database connection (the 'WakeSignal' rides kiroku's existing
+single per-store listener; see "Keiro.Wake"). It takes the 'KirokuStore' handle
+directly to reach that notifier, and runs each pass through
+'Kiroku.Store.Effect.runStoreIO', which pins the registry's effect row to the
+concrete @'[Store, Error StoreError, IOE]@ that @runStoreIO@ eliminates. A caller
+needing a richer effect row can use 'runPollLoopWith' directly with their own
+@runStoreIO@-equivalent pass.
+-}
+runWorkflowResumeWorkerPush ::
+  KirokuStore ->
+  WorkflowResumeOptions ->
+  WorkflowRegistry '[Store, Error StoreError, IOE] ->
+  IO ()
+runWorkflowResumeWorkerPush store opts registry = do
+  wake <- wakeSignalFromStore store
+  runPollLoopWith wake (pollInterval opts) onePass
+ where
+  onePass = void (runStoreIO store (resumeWorkflowsOnce opts registry))

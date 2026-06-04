@@ -87,11 +87,12 @@ This section must always reflect the actual current state of the work.
   `wakeSignalFromStore`, `neverWake`) backed by kiroku's `Notifier.tickChan` (dup'd once,
   zero new connections), added `stm` to the keiro lib deps and `Keiro.Wake` to exposed-modules.
   `cabal build keiro` green (2026-06-03).
-- [ ] M2 (keiro-side): add push-aware worker entry points
-  `runWorkflowResumeWorkerPush` (and the generic `runPollLoopWith` driver) that
-  wait on a `WakeSignal` instead of `threadDelay`, with the existing
-  `pollInterval` repurposed as the fallback timeout. The fixed-poll
-  `runWorkflowResumeWorker` stays unchanged as the durable baseline.
+- [x] M2 (keiro-side): added `runPollLoopWith :: WakeSignal -> Int -> IO () -> IO ()` and
+  `runWorkflowResumeWorkerPush :: KirokuStore -> WorkflowResumeOptions -> WorkflowRegistry
+  '[Store, Error StoreError, IOE] -> IO ()` to `Keiro.Workflow.Resume`, repurposing `pollInterval`
+  as the fallback timeout. The fixed-poll `runWorkflowResumeWorker`/`runWorkflowResumeWorkerWith`
+  are byte-for-byte unchanged. `cabal build keiro` green (2026-06-03). (Registry row corrected to
+  `'[Store, Error StoreError, IOE]` per `runStoreIO` — see Decision Log.)
 - [ ] M3 (keiro-side): integration test — measure sub-second resume latency under
   push (parent/child cascade) and assert it is well under the fallback timeout.
 - [ ] M4 (keiro-side): fallback-correctness test — disable the wake signal and
