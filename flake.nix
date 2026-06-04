@@ -1,57 +1,41 @@
 {
   description = "A Haskell library that turns Postgres into a unified event-sourcing, process-manager, and durable-execution engine — all expressed as one type-checked state machine.";
 
-  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
-  inputs.flake-utils.url = "github:numtide/flake-utils";
+  inputs = {
+    # The shared base flake. Provides the GHC 9.12.4 / cabal / HLS toolchain via
+    # `mkDevShell`, and the single pinned nixpkgs the whole fleet follows.
+    haskell-nix-dev.url = "github:shinzui/haskell-nix-dev";
+    nixpkgs.follows = "haskell-nix-dev/nixpkgs";
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = import nixpkgs { inherit system; };
-        haskellPackages = pkgs.haskell.packages."ghc912";
-      in
-      {
-        packages = {
-          default = haskellPackages.keiro;
-        };
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
 
-        checks = {
-        };
+    treefmt-nix.follows = "haskell-nix-dev/treefmt-nix";
 
-        devShells.default = pkgs.mkShell {
-          nativeBuildInputs = [
-            pkgs.zlib
-            pkgs.rdkafka
-            pkgs.just
-            pkgs.nodejs_22
-            pkgs.pnpm
-            pkgs.cabal-install
-            pkgs.pkg-config
-            pkgs.postgresql_18
-            pkgs.z3
-            (haskellPackages.ghcWithPackages (ps: [
-              ps.haskell-language-server
-            ]))
-          ]
-          ++ pkgs.lib.optional true pkgs.process-compose;
+    pre-commit-hooks.url = "github:cachix/git-hooks.nix";
+    pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
+  };
 
-          shellHook = ''
-            export LANG=en_US.UTF-8
+  nixConfig = {
+    extra-substituters = [ ];
+    extra-trusted-public-keys = [ ];
+  };
 
-            export PGHOST="$PWD/db"
-            export PGDATA="$PGHOST/db"
-            export PGLOG=$PGHOST/postgres.log
-            export PGDATABASE=keiro
-            export PG_CONNECTION_STRING=postgresql://$(jq -rn --arg x $PGHOST '$x|@uri')/$PGDATABASE
+  # Thin flake-parts dev shell. The dev toolchain comes from the haskell-nix-dev
+  # base flake (GHC 9.12.4 / cabal / HLS via mkDevShell); project wiring lives in
+  # the imported ./nix modules. This flake is dev-shell-only — it does not build
+  # the keiro packages (consumers build them from source via the shared
+  # registry), so there is no flake.module.nix.
+  outputs = inputs@{ flake-parts, nixpkgs, ... }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = nixpkgs.lib.systems.flakeExposed;
 
-            mkdir -p $PGHOST
-            mkdir -p .dev
-
-            if [ ! -d $PGDATA ]; then
-              initdb --auth=trust --no-locale --encoding=UTF8
-            fi
-          '';
-        };
-      }
-    );
+      imports =
+        [
+          ./nix/haskell.nix
+          ./nix/treefmt.nix
+          ./nix/pre-commit.nix
+        ]
+        ++ nixpkgs.lib.optional (builtins.pathExists ./flake.module.nix) ./flake.module.nix;
+    };
 }
