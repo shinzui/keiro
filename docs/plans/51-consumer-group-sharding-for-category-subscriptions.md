@@ -55,30 +55,40 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1 (keiro-side, schema): add the `2026-06-03-03-00-00-keiro-subscription-shards.sql`
-      migration creating `keiro_subscription_shards`, with the `SET search_path TO kiroku, pg_catalog;`
-      header (plan 46 convention) and the `embedDir` touch-comment bump in `Keiro/Migrations.hs`.
-- [ ] Milestone 1: prove the migration applies (table + indexes exist in `kiroku` schema).
-- [ ] Milestone 2 (keiro-side, lease API): add `Keiro.Subscription.Shard.Schema` (the SQL
-      statements `claimShardsTx` / `renewLeaseTx` / `releaseShardsTx` / `expireStaleLeasesTx` /
-      `listShardOwnership`) and `Keiro.Subscription.Shard` (the `ShardLease`, `WorkerId`,
-      `ShardAssignment` types, `claimShards`, `renewLease`, `relinquish`).
-- [ ] Milestone 2: unit-test the claim/renew/expire SQL against a real Postgres (disjointness
-      and lease-expiry behaviour at the SQL level, no workers yet).
-- [ ] Milestone 3 (keiro-side, rebalance loop): add `Keiro.Subscription.Shard.Worker`
-      (`ShardedWorkerOptions`, `runShardedSubscriptionGroup`) that on each tick claims a fair
-      share of buckets, renews held leases, expires stale ones, and (re)spawns one kiroku
-      consumer-group member adapter per owned bucket.
-- [ ] Milestone 3: prove a single process with `N=4` buckets drains a seeded category.
-- [ ] Milestone 4 (upstream surface): forward the kiroku/shibuya asks to
-      `docs/research/11-upstream-roadmap.md` (§4.11 dynamic-membership consumer group; §6.2
-      shard-aware supervised worker), and record here precisely which seam each closes.
-- [ ] Milestone 5 (failover acceptance): multi-process disjoint-drain + kill-a-worker
+- [x] Milestone 1 (keiro-side, schema): add the `keiro_subscription_shards` migration with the
+      `SET search_path TO kiroku, pg_catalog;` header (plan 46 convention) and the `embedDir`
+      touch-comment bump in `Keiro/Migrations.hs`. (2026-06-03; shipped as
+      `2026-06-05-01-00-00-keiro-subscription-shards.sql` — timestamped after EP-48's
+      `2026-06-05-00-00-00` generation migration, which landed after this plan was written.)
+- [x] Milestone 1: prove the migration applies (table + indexes exist in `kiroku` schema).
+      (2026-06-03; applies clean in the suite migration list; the M2 unit test reads/writes it.)
+- [x] Milestone 2 (keiro-side, lease API): add `Keiro.Subscription.Shard.Schema` (the SQL
+      statements `ensureShardRows` / `claimShardsTx` / `renewLeaseTx` / `releaseShardsTx` /
+      `listShardOwnership`) and `Keiro.Subscription.Shard` (the `ShardLease`, `WorkerId` types,
+      `acquireOwnedBuckets`, `renewOwnedBuckets`, `relinquish`, `ensureShards`,
+      `ownershipSnapshot`, `fairShareTarget`). (2026-06-03; expiry is folded into the claim
+      predicate `lease_expires_at < now`, so no separate `expireStaleLeasesTx`.)
+- [x] Milestone 2: unit-test the claim/renew/expire SQL against a real Postgres (disjointness
+      and lease-expiry behaviour at the SQL level, no workers yet). (2026-06-03; 6 examples.)
+- [x] Milestone 3 (keiro-side, rebalance loop): add `Keiro.Subscription.Shard.Worker`
+      (`ShardedWorkerOptions`, `reconcileShardsOnce`, `runShardedSubscriptionGroup`) that on each
+      pass claims a fair share of buckets (one per pass), renews held leases, sheds excess, and
+      (re)spawns one kiroku consumer-group reader per owned bucket. (2026-06-03.)
+- [x] Milestone 3: prove a single process with `N=4` buckets drains a seeded category.
+      (2026-06-03; one worker drains 40 events across 8 streams exactly once, `maxW == 1`.)
+- [x] Milestone 4 (upstream surface): forward the kiroku/shibuya asks to
+      `docs/research/11-upstream-roadmap.md` — **§4.12** (dynamic-membership / owned-bucket-set
+      consumer group) and **§6.2** (shard-aware supervised non-adapter worker). (2026-06-03;
+      §4.11 was already taken by EP-50's store-wake combinator, so EP-51 used the next number §4.12.)
+- [x] Milestone 5 (failover acceptance): multi-process disjoint-drain + kill-a-worker
       failover test; assert counts sum to total, no key processed twice, killed worker's
-      buckets re-drained after lease expiry.
-- [ ] Milestone 6 (optional, soft-dep on EP-50): if EP-50's LISTEN/NOTIFY channel has landed,
-      signal rebalance over it instead of pure polling; otherwise leave the poll path as the
-      shipped default and record the seam.
+      buckets re-drained after lease expiry. (2026-06-03; 3 workers, `N=6`, converge → drain
+      disjointly → kill one → re-home + drain new events; stable across repeated runs.)
+- [x] Milestone 6 (optional, soft-dep on EP-50): EP-50 has landed, but its `Keiro.Wake` channel
+      wakes on event *appends* (`kiroku.events`), not shard ownership *changes*. The polled loop
+      is the shipped default; the seam (the single inter-pass `threadDelay`, swappable for a
+      bounded wait on a dedicated `keiro_shard_rebalance` NOTIFY) is documented on
+      `runShardedSubscriptionGroup`. Latency-only; correctness does not depend on it. (2026-06-03.)
 
 
 ## Surprises & Discoveries
@@ -86,7 +96,47 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-03: **The naive `liveWorkers` estimate makes a cold-start monopolist, which
+  the plan's claim-up-to-fair-share design cannot recover from.** The plan estimates
+  `liveWorkers` as "distinct non-expired owners + self" and claims up to
+  `ceil(N/liveWorkers)`. But a worker that owns *nothing* is invisible in that count, so
+  the first worker to run (seeing `liveWorkers = 1`, target `= N`) grabs every bucket, and
+  then on every later pass still sees only itself (`liveWorkers = 1`) — it never sheds, and
+  the idle peers starve forever. The first failover-acceptance run timed out at the
+  `waitShardsBalanced` gate (15 s) for exactly this reason. **Fix: claim one bucket per
+  pass.** Concurrently-starting workers then each grab one bucket on pass 1, become visible
+  in the lease table, and climb to an even share together (with the shed step cleaning up any
+  residual imbalance); `acquireOwnedBuckets` now caps the claim to 1 and documents why.
+  Ownership spreads over up to `N` reconcile intervals — a deliberate trade of spin-up
+  latency for coordinator-free fairness. After the fix the acceptance test converges and
+  drains in ~4 s and is stable across repeated runs.
+- 2026-06-03: **No separate `expireStaleLeasesTx` is needed — expiry *is* the claim
+  predicate.** A claim takes any row where `owner_worker_id IS NULL OR lease_expires_at < now`,
+  so an expired lease is reclaimed by the ordinary claim path. Failover therefore needs no
+  sweeper: a dead worker simply stops renewing, and the next survivor's claim pass picks up its
+  buckets once the lease lapses (proven by the M5 kill-a-worker test).
+- 2026-06-03: **The worker is `IO`-shaped, not `Eff es`, and its handler is a plain
+  `RecordedEvent -> IO ()`** — the same call the EP-50 push worker
+  (`runWorkflowResumeWorkerPush`) made, for the same reason: it manages long-lived
+  `Control.Concurrent` reader threads and the `KirokuStore` handle directly. The plan sketched
+  `reconcileShardsOnce`/`runShardedSubscriptionGroup` with `Eff es` + `Handler es RecordedEvent`
+  signatures; the as-shipped surface is `IO` with `runStoreIO` per lease pass and one
+  `forkIO`-managed `subscriptionStream` drain per owned bucket. A sharded subscription is
+  at-least-once across a rebalance handoff, so the handler must be idempotent (keyed on
+  `eventId`) — exactly the existing async-projection contract; the acceptance test's sink is
+  `INSERT ... ON CONFLICT (event_id) DO NOTHING`.
+- 2026-06-03: **`WorkerId` lives in `Keiro.Subscription.Shard.Schema`** (re-exported from
+  `Keiro.Subscription.Shard`), not in `Shard.hs` as the plan listed, so the lower SQL module can
+  name it in its statement signatures without an import cycle.
+- 2026-06-03: **kiroku subscriptions do not hold a pooled connection for their lifetime** —
+  the worker loop acquires a connection per query (`Pool.use` per read-batch / checkpoint
+  save) and releases it, and the ack-coupled bridge blocks the handler reply while holding
+  *no* connection. So `N` concurrent bucket readers do not each pin a connection; the default
+  pool of 10 comfortably hosts the 3-worker / 6-bucket acceptance test (no deadlock, no
+  starvation). This is the sharding analogue of EP-50's "push adds zero connections" finding.
+- 2026-06-03: **Upstream numbering: §4.11 was already taken by EP-50.** The plan named §4.11 for
+  the dynamic-membership consumer-group ask, but EP-50 had already claimed §4.11 (the store-wake
+  combinator). EP-51's asks therefore landed at **§4.12** (kiroku) and **§6.2** (shibuya).
 
 
 ## Decision Log
@@ -168,9 +218,40 @@ Record every decision made while working on the plan.
   feature. The two upstream items that would make it *nicer* — a kiroku consumer-group variant
   that takes a dynamic owned-bucket *set* in one subscription (vs one adapter per bucket), and
   a shibuya supervised non-adapter worker entry point to host the rebalance loop with free
-  spans — are forwarded but not depended on. This matches the MasterPlan's requirement that
-  each Wave-2 plan "state precisely which part of the contract is keiro-side and which requires
-  an upstream change, and forward the upstream part".
+  spans — are forwarded (as §4.12 and §6.2) but not depended on. This matches the MasterPlan's
+  requirement that each Wave-2 plan "state precisely which part of the contract is keiro-side
+  and which requires an upstream change, and forward the upstream part".
+  Date: 2026-06-03.
+
+- Decision: A worker **claims at most one bucket per reconcile pass**, rather than its whole
+  fair share at once.
+  Rationale: claiming the full fair share lets the first worker to run (which sees
+  `liveWorkers = 1`, hence target `= N`) monopolise every bucket before its peers' first pass;
+  because a worker owning nothing is invisible in the lease table, the monopolist then never
+  detects the idle peers and never sheds, and they starve. Claiming one bucket per pass means
+  concurrently-starting workers each take one, become visible after pass 1, and converge to an
+  even split together. The cost is that ownership spreads over up to `N` reconcile intervals
+  on a cold start — acceptable for a throughput feature, and the shed step still corrects any
+  residual imbalance from staggered joins. (Discovered via the first M5 timeout; see
+  Surprises.) A bulk-claim variant is forwarded implicitly by the §4.12 owned-bucket-set ask.
+  Date: 2026-06-03.
+
+- Decision: The worker is **`IO`-shaped** (`runShardedSubscriptionGroup :: KirokuStore -> … -> IO ()`)
+  with a plain **`RecordedEvent -> IO ()` handler**, not `Eff es` + a shibuya `Handler`.
+  Rationale: it manages long-lived `Control.Concurrent` reader threads and the `KirokuStore`
+  handle directly (one `forkIO` `subscriptionStream` drain per owned bucket, `runStoreIO` per
+  lease pass), exactly like EP-50's `runWorkflowResumeWorkerPush`. The plan's `Eff es`/`Handler`
+  sketch was adapted to this shape; the lease layer (`Keiro.Subscription.Shard`) stays effectful
+  and is the testable unit. Recorded so a future contributor does not "restore" the `Eff` shape
+  and reintroduce the thread-management awkwardness.
+  Date: 2026-06-03.
+
+- Decision: The migration is timestamped **`2026-06-05-01-00-00`**, not the plan's
+  `2026-06-03-03-00-00`.
+  Rationale: EP-48 (continue-as-new) landed its `2026-06-05-00-00-00-keiro-workflow-generation.sql`
+  migration after this plan was written, so the plan's proposed timestamp would have sorted
+  *before* it. Migrations must be timestamped after the latest existing one, so EP-51 uses
+  `2026-06-05-01-00-00`.
   Date: 2026-06-03.
 
 
@@ -179,7 +260,42 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Complete (2026-06-03).** EP-51 delivers exactly the operability layer the Purpose named: a
+user can start the same worker binary `N` times against one `SubscriptionName` and the workers
+cooperatively partition a category — every event handled by exactly one worker, none twice,
+none skipped — with automatic failover when a worker dies, and no external coordinator (only
+Postgres). The acceptance test demonstrates all three Purpose facts off a sink table: three
+workers drain a category disjointly (`maxW == 1`, counts sum to total, ≥ 2 workers
+participated), then a killed worker's buckets are re-homed via lease expiry and the new events
+drain (`count == total1 + total2`), with no duplicate `eventId` (PK + idempotent sink).
+
+What shipped, against the plan:
+
+- **Storage** (`keiro_subscription_shards`) and **lease API**
+  (`Keiro.Subscription.Shard{,.Schema}`) shipped as designed: a renewable
+  `lease_expires_at` per `(subscription_name, bucket)`, claimed with `FOR UPDATE SKIP LOCKED`,
+  never a held lock — the resume worker's documented reason.
+- **Rebalance worker** (`Keiro.Subscription.Shard.Worker`) shipped, with two adaptations from
+  the plan sketch (both in the Decision Log): the worker is `IO`-shaped with a
+  `RecordedEvent -> IO ()` handler (matching EP-50), and claims **one bucket per pass** so a
+  worker pool converges to a fair split without a monopolist — the single most important
+  implementation insight (see Surprises).
+- **Upstream** asks forwarded as §4.12 (owned-bucket-set consumer group) and §6.2 (shard-aware
+  supervised worker); neither blocks the feature, confirming the MasterPlan's revised "Wave-2
+  is not upstream-blocked" finding.
+- **Milestone 6** left as the polled default; the EP-50 wake channel signals appends, not
+  ownership changes, so the rebalance-NOTIFY swap is documented as a one-`threadDelay` seam, not
+  wired (latency-only, correctness-independent).
+
+Gaps / follow-ups: (1) cold-start spread takes up to `N` reconcile intervals (the one-per-pass
+trade); the §4.12 owned-bucket-set variant would also enable faster bulk claims. (2) A
+voluntarily-joining worker only picks up buckets freed by expiry, not by proactive stealing
+from an over-provisioned peer — fine for the failover acceptance, a possible future
+rebalance-on-join refinement. (3) The `keiro_shard_rebalance` push signal (M6) is a clean
+latency win left for whenever interactive rebalance latency matters.
+
+Acceptance: `cabal build all` clean; `cabal test keiro` 150/0 (+8: 6 lease, 1 single-worker
+drain, 1 disjoint-drain + failover); failover test stable across repeated runs.
 
 
 ## Context and Orientation

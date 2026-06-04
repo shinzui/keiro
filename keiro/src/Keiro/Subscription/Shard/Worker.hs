@@ -202,6 +202,18 @@ startReader store lease opts handler bucket = do
 is killed) a @finally@ stops every reader this worker holds, so a crashed
 worker's buckets stop being read immediately; its leases then expire and a
 surviving worker re-claims them.
+
+The fixed @renewInterval@ between passes (the 'threadDelay' in 'loop') is the
+__rebalance-signal seam__ (EP-51 Milestone 6). The shipped default is a pure poll:
+correctness — disjointness and failover — rests entirely on the lease table and
+does not depend on any notification. The EP-50 'Keiro.Wake' channel wakes on event
+/appends/ (@kiroku.events@), which is a different event than a shard ownership
+/change/; signalling a prompt rebalance on a worker join or a voluntary relinquish
+would ride a dedicated @keiro_shard_rebalance@ @NOTIFY@ fired on claim/release, and
+the swap is local to this one 'threadDelay' (replace it with a bounded wait on that
+channel, exactly as 'Keiro.Workflow.Resume.runPollLoopWith' does for appends). Left
+as the poll default here because it is a latency optimisation, not a correctness
+requirement.
 -}
 runShardedSubscriptionGroup ::
   KirokuStore ->

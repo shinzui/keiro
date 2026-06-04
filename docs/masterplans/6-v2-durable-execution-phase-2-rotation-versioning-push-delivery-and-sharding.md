@@ -116,7 +116,7 @@ including multi-region — rejected as out of scope per §6.6.
 | 48 | Continue-as-new journal rotation for durable workflows | docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md | None | None | Complete |
 | 49 | Workflow versioning and patch API | docs/plans/49-workflow-versioning-and-patch-api.md | None | EP-48 | Complete |
 | 50 | LISTEN/NOTIFY push delivery for subscriptions and workflow resume | docs/plans/50-listen-notify-push-delivery-for-subscriptions-and-workflow-resume.md | None | None | Complete |
-| 51 | Consumer-group sharding for category subscriptions | docs/plans/51-consumer-group-sharding-for-category-subscriptions.md | None | EP-50 | In Progress |
+| 51 | Consumer-group sharding for category subscriptions | docs/plans/51-consumer-group-sharding-for-category-subscriptions.md | None | EP-50 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-48, EP-50).
@@ -215,8 +215,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-49: prove an in-flight workflow observes a stable patch branch across replays. (2026-06-03; old/new branch + once-only journaling)
 - [x] EP-50: add the LISTEN/NOTIFY push channel with poll fallback; scope the upstream surface. (2026-06-03; `Keiro.Wake` + push worker, upstream §4.11 forwarded)
 - [x] EP-50: prove sub-second wakeup latency for a process manager / resume worker. (2026-06-03; gated workflow resumes <1s under a 10s fallback)
-- [ ] EP-51: add the sharded-ownership table and the cooperative claim/leadership protocol.
-- [ ] EP-51: prove a high-volume category drains across N cooperating workers without duplication.
+- [x] EP-51: add the sharded-ownership table and the cooperative claim/leadership protocol. (2026-06-03; `keiro_subscription_shards` lease table + `Keiro.Subscription.Shard{,.Schema,.Worker}`, one-bucket-per-pass claim for coordinator-free convergence)
+- [x] EP-51: prove a high-volume category drains across N cooperating workers without duplication. (2026-06-03; 3 workers / 6 buckets drain disjointly `maxW==1`, killed worker re-homed via lease expiry, no duplicate eventId)
 
 
 ## Surprises & Discoveries
@@ -323,6 +323,43 @@ interactions between child plans. Provide concise evidence.
     Decision Log. **Only EP-51 (sharding) remains in Wave 2.**
 
 
+- 2026-06-03 (EP-51 shipped): **Consumer-group sharding (EP-51) is complete, closing Wave 2 and
+  the whole of MasterPlan 6.** The planning-phase prediction held: kiroku already ships the
+  partition mechanism (hashed buckets + per-member checkpoints), so EP-51 added only the
+  keiro-side cooperative-ownership layer — a `keiro_subscription_shards` lease table
+  (`2026-06-05-01-00-00-keiro-subscription-shards.sql`, timestamped after EP-48's generation
+  migration), `Keiro.Subscription.Shard{,.Schema}` (claim with `FOR UPDATE SKIP LOCKED` + a
+  renewable `lease_expires_at`, never a held lock), and `Keiro.Subscription.Shard.Worker` (the
+  rebalance loop + one kiroku reader per owned bucket). **No new `WorkflowJournalEvent` codec
+  edit** (sharding is a subscription concern, not a workflow-journal one), so EP-48's
+  `WorkflowContinuedAsNew` remains the *only* additive codec constructor of MasterPlan 6.
+  - **The key implementation insight — claim one bucket per pass.** The plan's
+    claim-up-to-fair-share design plus a "live workers = distinct owners + self" estimate
+    produces a cold-start monopolist: the first worker grabs every bucket (it sees one live
+    worker), and idle peers that own nothing are invisible in the lease table, so the
+    monopolist never sheds and they starve (the first acceptance run timed out at the balance
+    gate). Claiming one bucket per pass makes concurrently-starting workers each grab one,
+    become visible, and converge to an even split. A cross-cutting lesson for any future
+    Postgres-table-leased ownership: *a member must hold something to be counted, so bootstrap
+    visibility incrementally.*
+  - **Two shape adaptations from the plan sketch** (both in EP-51's Decision Log): the worker is
+    `IO`-shaped with a `RecordedEvent -> IO ()` handler (matching EP-50's
+    `runWorkflowResumeWorkerPush`, for the same thread-management reason), and `WorkerId` lives
+    in the `.Schema` module (re-exported) to avoid an import cycle.
+  - **Connections:** kiroku subscriptions acquire a pooled connection *per query* and release it
+    (the ack bridge blocks holding none), so `N` bucket readers do not pin `N` connections — the
+    sharding analogue of EP-50's "push adds zero connections"; the default pool of 10 hosts the
+    3-worker/6-bucket test without starvation.
+  - **Upstream:** forwarded §4.12 (owned-bucket-set consumer group) and §6.2 (shard-aware
+    supervised worker) to `docs/research/11-upstream-roadmap.md` — §4.11 was already taken by
+    EP-50, so EP-51 used the next kiroku number. Neither blocks the feature.
+  - **M6 (EP-50 soft-dep):** left as the polled default — EP-50's wake channel signals event
+    *appends*, not ownership *changes*, so the rebalance-NOTIFY swap is a documented one-line
+    seam, not wired (latency-only).
+  - Acceptance: `cabal build all` clean; `cabal test keiro` 150/0 (+8 over EP-50's 142). Both
+    waves of MasterPlan 6 are now complete.
+
+
 ## Decision Log
 
 - Decision: Scope phase 2 to exactly the four cleanly-additive, demand-driven §6
@@ -353,4 +390,52 @@ interactions between child plans. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+**Complete (2026-06-03).** All four child plans shipped; both waves are done and the four
+"v2 adds it when a customer hits the wall" §6 features are now available on the shipped v2
+runtime, exactly as the Vision scoped them:
+
+- **EP-48 continue-as-new** — `continueAsNew`/`restoreSeed` rotate an unbounded workflow onto a
+  fresh journal generation (a `generation` column joined to plan 47's
+  `(workflow_id, workflow_name)` key; generation 0 keeps the legacy stream name, zero data
+  migration). The only additive `WorkflowJournalEvent` constructor of the MasterPlan.
+- **EP-49 versioning / patch** — `patch :: PatchId -> Eff es Bool` gives a stable, journaled
+  branch decision (a `StepRecorded` under a reserved `patch:<patchId>` prefix), needing no codec
+  change, confirming the planning-phase prediction.
+- **EP-50 LISTEN/NOTIFY push** — `Keiro.Wake` + `runWorkflowResumeWorkerPush` give sub-second
+  wakeups over kiroku's existing per-store notifier with a durable poll fallback and *zero* new
+  connections.
+- **EP-51 consumer-group sharding** — `Keiro.Subscription.Shard` + `runShardedSubscriptionGroup`
+  let a pool of identical workers lease kiroku consumer-group buckets and drain a category
+  disjointly with coordinator-free failover.
+
+**The decomposition held.** One plan per feature in two waves was the right shape: each shipped
+with its own acceptance (bounded journal across rotations; stable patch branch across replays;
+sub-second wakeup; disjoint drain + failover) and its own storage/upstream surface, with no
+cross-plan codec contention — EP-48's `WorkflowContinuedAsNew` is the *only* additive codec
+edit across all four. The soft deps paid off as predicted (EP-49 rode EP-48's replay/index
+plumbing; EP-51 documented an EP-50 wake seam) without ever becoming hard blockers.
+
+**The biggest surprise was favourable and recurred:** the Wave-2 upstream surface was far
+smaller than the cautious Decomposition framing assumed — kiroku already ships *both*
+substrates (the per-store NOTIFY listener for EP-50, the hashed-bucket consumer group for
+EP-51), so both Wave-2 features turned out almost entirely keiro-side, each forwarding only a
+small Optional ergonomics ask (§4.11, §4.12, §6.2). Net: no plan in this MasterPlan was ever
+upstream-blocked.
+
+**Lessons.** (1) Reuse beat reinvention at every step — generation rides the existing replay
+fold, patch rides `StepRecorded`, push rides the existing notifier, sharding rides the existing
+partition predicate. (2) The one genuinely hard implementation problem was EP-51's
+coordinator-free convergence, solved by claiming one bucket per pass so idle workers become
+visible incrementally — a transferable pattern for any Postgres-table-leased ownership. (3) The
+recurring `embedDir` recompile gotcha bit twice more (EP-48, EP-51); the touch-comment
+convention remains the fix.
+
+Gaps left deliberately: continue-as-new × patch decision-persistence interaction (neither EP's
+acceptance combines them, flagged for a future plan); EP-51 cold-start spread over `N` intervals
+and rebalance-on-join-by-stealing (failover-by-expiry suffices); the M6 `keiro_shard_rebalance`
+push signal (latency-only). The out-of-scope §6 items (multi-region, scripted projections,
+schema registry, field-level encryption) remain rejected or demand-driven, unchanged.
+
+Acceptance at completion: `cabal build all` clean; `cabal test keiro` 150/0; `cabal test
+jitsurei-test` green. `docs/user/roadmap.md` and `docs/user/production-status.md` mark all four
+features available.

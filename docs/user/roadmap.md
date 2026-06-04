@@ -19,7 +19,7 @@ exact released surface and `docs/user/production-status.md` for adoption posture
 | Phase 2 | Complete v1 workflow substrate | Complete: outbox, inbox, OpenTelemetry tracing and metrics, process-manager snapshot guidance, and the timer stuck-row recovery API and runbook. |
 | Phase 3 | Read-side maturity | Async projections, subscriptions, and position waits get stronger consistency and scaling options. |
 | Phase 4 | Adoption and ergonomics | The worked-examples app and guides exist; remaining work is full Haddocks, a public stability policy, and higher-level facades. |
-| Phase 5 | v2 durable execution | Complete: a named-step `Workflow es a` runtime with durable sleep, awakeables, child workflows, a crash-recovery resume worker, journal snapshots, and `keiro.workflow.*` observability ships on top of the v1 substrate. Phase-2 additions (MasterPlan 6) add continue-as-new journal rotation (`continueAsNew`/`restoreSeed`) and the versioning/patch API (`patch`). |
+| Phase 5 | v2 durable execution | Complete: a named-step `Workflow es a` runtime with durable sleep, awakeables, child workflows, a crash-recovery resume worker, journal snapshots, and `keiro.workflow.*` observability ships on top of the v1 substrate. Phase-2 additions (MasterPlan 6) add continue-as-new journal rotation (`continueAsNew`/`restoreSeed`), the versioning/patch API (`patch`), LISTEN/NOTIFY push delivery (`Keiro.Wake`), and consumer-group sharding for category subscriptions (`Keiro.Subscription.Shard`). |
 
 ## Capability Matrix
 
@@ -370,18 +370,23 @@ Delivered (EP-38…EP-44 under MasterPlan 5):
 - observability for journal replay versus live execution
   (`keiro.workflow.steps.replayed` vs `keiro.workflow.steps.executed`).
 
-Delivered in phase 2 (EP-48…EP-49 under MasterPlan 6):
+Delivered in phase 2 (EP-48…EP-51 under MasterPlan 6):
 
 - continue-as-new journal rotation for unbounded histories
   (`continueAsNew`/`restoreSeed`);
-- the versioning / patch API for cross-cutting workflow-logic changes (`patch`).
+- the versioning / patch API for cross-cutting workflow-logic changes (`patch`);
+- LISTEN/NOTIFY push delivery for the resume worker and subscription loops
+  (`Keiro.Wake`, push-aware `runWorkflowResumeWorkerPush`) — sub-second wakeups
+  with a durable poll fallback, adding no new connections (§6.11);
+- consumer-group sharding for category subscriptions
+  (`Keiro.Subscription.Shard`, `runShardedSubscriptionGroup`) — a pool of
+  identical workers leases kiroku consumer-group buckets, draining a category
+  disjointly with automatic, coordinator-free failover (§6.8–§6.9).
 
-Still deferred (cleanly additive, see §6 of the workflow roadmap):
+Still deferred (rejected or demand-driven, see §6 of the workflow roadmap):
 
-- LISTEN/NOTIFY push delivery and consumer-group sharding (the remaining
-  MasterPlan 6 subscription-substrate items);
 - multi-region / global ordering, server-side scripted projections, the schema
-  registry, and field-level encryption (rejected or demand-driven, §6.6–§6.12).
+  registry, and field-level encryption (§6.6, §6.7, §6.10, §6.12).
 
 Why v1 is still the right foundation:
 
@@ -396,8 +401,6 @@ These are intentionally outside the current v1 and v2 commitments.
 
 | Possibility | Why later |
 |---|---|
-| Consumer-group sharding | Needed only for very high-volume category subscriptions. |
-| Cluster-aware leadership | Current Postgres/advisory-lock conventions are enough for v1. |
 | Schema registry | Most useful for multi-team or polyglot event consumers. |
 | Field-level encryption | Requires application-specific key-management choices. |
 | Multi-region operation | Requires a global-ordering story outside the current single-Postgres design. |

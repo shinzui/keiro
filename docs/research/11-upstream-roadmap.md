@@ -339,6 +339,28 @@ EP-4's snapshot write uses an inline `SELECT stream_id FROM streams WHERE stream
 
 *Provenance.* `docs/plans/50-listen-notify-push-delivery-for-subscriptions-and-workflow-resume.md` (EP-50, MasterPlan 6); `docs/research/10-workflow-roadmap.md` §6.11.
 
+### 4.12 Dynamic-membership (owned-bucket-set) consumer group (Optional; Provenance: EP-51)
+
+*Already-shipped substrate.* kiroku already ships the entire bucket-partition mechanism EP-51 builds on. `Kiroku.Store.Subscription.Types.ConsumerGroup { member :: Int32, size :: Int32 }` selects, in SQL, only the events whose originating stream hashes to one bucket via `(((hashtextextended(s.stream_id::text, 0) % size) + size) % size) = member` (`readCategoryForwardConsumerGroupStmt`, `kiroku-store/src/Kiroku/Store/SQL.hs`), and per-member checkpoints are already keyed `(subscription_name, consumer_group_member)` (`getCheckpointMemberStmt` / `saveCheckpointMemberStmt`). EP-51 therefore builds only the keiro-side cooperative-ownership/lease layer; it reuses the partition predicate and per-member checkpoints unchanged. Nothing upstream blocks the feature.
+
+*What is missing today.* A consumer-group subscription pins exactly **one** member index: `consumerGroup = Just (ConsumerGroup m n)`. A keiro sharded worker that owns several buckets must therefore open **one `kirokuAdapter` (one subscription, one bridge) per owned bucket** — so a worker owning `k` of `n` buckets holds `k` subscriptions instead of one (`Keiro.Subscription.Shard.Worker.startReader` opens one `subscriptionStream` per owned bucket).
+
+*What keiro needs (ergonomics only).* A kiroku consumer-group variant taking an *owned-bucket set* rather than a single member, for example:
+
+    data ConsumerGroupSet = ConsumerGroupSet { ownedMembers :: Set Int32, size :: Int32 }
+
+whose partition predicate is `member_of(stream_id) = ANY($owned)` over the same hash, so one subscription serves all of a worker's buckets. The set would be updatable as ownership changes (re-home a bucket without tearing down a whole subscription), or — minimally — a one-shot set fixed at subscribe time that the worker re-opens on a rebalance.
+
+*Why.* Halves the subscription/bridge count a sharded worker holds (one per worker instead of one per owned bucket), reducing connection-pool pressure and per-bucket bridge overhead at high bucket counts.
+
+*Design constraint.* Must preserve the existing per-member checkpoints so a bucket re-homed to another worker resumes at its own saved position — the predicate change is `= ANY(...)` over the *same* `hashtextextended` bucketing; the checkpoint key (`subscription_name`, member) is unchanged, and a multi-member reader checkpoints each member independently. No new hashing scheme (EP-51 defines "bucket = kiroku member index" precisely to keep one source of truth).
+
+*Priority.* **Optional.** EP-51 ships fully today using one `kirokuAdapter` per owned bucket. This is a throughput/footprint nicety, not a feature gate.
+
+*Suggested sequencing.* Block 4.
+
+*Provenance.* `docs/plans/51-consumer-group-sharding-for-category-subscriptions.md` (EP-51, MasterPlan 6), Milestone 3; `docs/research/10-workflow-roadmap.md` §6.8.
+
 
 ## 5. shibuya-kiroku-adapter roadmap
 
@@ -392,6 +414,22 @@ Option (b) — the workaround at the keiro layer — is straightforward: a 50-li
 *Suggested sequencing.* Block 3. Schedule when shibuya's roadmap revisits the supervisor's surface area.
 
 *Provenance.* EP-5 §3 ("Open question forwarded to EP-6"); EP-5 §9 ("shibuya-side: should the durable-timer worker reuse shibuya's supervisor?"); MasterPlan Surprises & Discoveries entry of 2026-05-06 (EP-5).
+
+### 6.2 Shard-aware supervised non-adapter worker entry point (Wanted; Provenance: EP-51)
+
+*What is missing today.* EP-51's rebalance loop (`Keiro.Subscription.Shard.Worker.runShardedSubscriptionGroup`) is a polling loop, not adapter-shaped — exactly like the durable-timer and outbox workers §6.1 already names. It runs in `IO`, mints a `WorkerId`, ensures the lease rows, and every `renewInterval` reconciles ownership and (re)spawns one kiroku reader per owned bucket (each reader a `forkIO`-managed `subscriptionStream` drain). None of this is supervised by shibuya, so the loop and its per-bucket reader threads surface no OpenTelemetry spans or shibuya metrics, and have no restart policy.
+
+*What keiro needs.* The §6.1 generalisation (a shibuya supervised entry point for a plain `Eff es ()` worker with restart policy + spans), extended so the *children* it spawns — the per-bucket readers — are themselves supervised and observable. A sharded worker is a supervisor-of-readers: the rebalance loop is one supervised worker, and each owned bucket's reader is a dynamically-started/stopped supervised child whose lifecycle the loop drives. Free spans would make "worker X owns buckets {…}", "bucket b re-homed from X to Y", and per-reader fire latency observable uniformly.
+
+*Why.* Same operator-experience argument as §6.1 (free OpenTelemetry spans and shibuya-metrics gauges instead of a stand-alone process monitored separately), plus the sharding-specific signals — ownership churn and per-bucket throughput — that a sharded deployment most wants to watch.
+
+*Design constraint.* The supervised shape must allow *dynamic* children (readers start and stop as ownership changes mid-run), not just a fixed child set fixed at startup; restart of a reader child must not disturb the lease loop, and restart of the lease loop must tear down and re-derive its reader children. Composes with §4.12 (with an owned-bucket-set subscription, a sharded worker has exactly one reader child, simplifying the supervision tree).
+
+*Priority.* **Wanted.** EP-51 ships today with a keiro-hosted `IO` poll loop and `forkIO` readers (`finally`-cleaned on crash). The upstream lift is an operability improvement, not a feature gate; it ties to and extends §6.1.
+
+*Suggested sequencing.* Block 3, alongside §6.1 — schedule when shibuya's roadmap revisits the supervisor's surface area.
+
+*Provenance.* `docs/plans/51-consumer-group-sharding-for-category-subscriptions.md` (EP-51, MasterPlan 6), Milestone 3; ties to §6.1; `docs/research/10-workflow-roadmap.md` §6.9.
 
 
 ## 7. keiki roadmap

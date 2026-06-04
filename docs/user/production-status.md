@@ -33,7 +33,15 @@ The current library includes:
   stuck-timer instruments);
 - named-step durable workflows (`Keiro.Workflow`): `step`/`sleep`/`awakeable` plus
   child workflows, a journal per workflow (`wf:<name>-<id>`), a crash-recovery
-  resume worker, journal snapshots, and `keiro.workflow.*` observability;
+  resume worker, journal snapshots, `continueAsNew` journal rotation, the `patch`
+  versioning API, and `keiro.workflow.*` observability;
+- LISTEN/NOTIFY push delivery (`Keiro.Wake`, `runWorkflowResumeWorkerPush`):
+  sub-second wakeups for the resume worker and subscription loops over kiroku's
+  existing per-store notifier, with a durable poll fallback and no new connections;
+- consumer-group sharding for category subscriptions (`Keiro.Subscription.Shard`,
+  `runShardedSubscriptionGroup`): a pool of identical workers leases kiroku
+  consumer-group buckets to drain a high-volume category disjointly, with
+  automatic, coordinator-free failover when a worker dies;
 - embedded codd migrations for Kiroku and Keiro framework tables.
 
 The repository test suite exercises these paths against an ephemeral PostgreSQL
