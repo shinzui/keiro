@@ -101,8 +101,11 @@ This section must always reflect the actual current state of the work.
   resume worker rediscovers the rotated workflow on its current generation (`findUnfinishedWorkflowIds`
   reports it after rotation, `[]` once finished). `cabal test keiro` green — **136 examples, 0
   failures** (2026-06-03).
-- [ ] Milestone 7 (full green): `cabal build all`, `cabal test keiro`, `cabal test jitsurei-test`;
-  reconcile the MasterPlan Integration Points note (the chosen generation scheme).
+- [x] Milestone 7 (full green): `cabal build all` clean (no errors/warnings), `cabal test keiro`
+  **136 examples, 0 failures**, `cabal test jitsurei-test` **16 examples, 0 failures**. Reconciled
+  the MasterPlan 6 Surprises with the chosen generation scheme, the `WorkflowContinuedAsNew`
+  first-additive-codec-edit note, the `ContinuedAsNew` outcome, and the plan-47-not-landed fold-in
+  (2026-06-03).
 
 
 ## Surprises & Discoveries
@@ -251,7 +254,42 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-03): delivered as specified.** A durable workflow can now run an
+*unbounded* number of steps by calling `continueAsNew seed` to rotate onto a fresh
+journal generation, with its accumulated state carried forward via `restoreSeed`. The
+original purpose — bounded per-generation journals plus a correct final result — is
+demonstrated by the acceptance test: a 300-step rolling-total workflow rotating every 50
+steps holds at most K=52 events on each of its 6 physical generation streams
+(`wf:roller-r-1`, `wf:roller-r-1#1`…`#5`), the total events split across generations
+(312 = 300 + 2/generation, never 300 on one stream), and the workflow still returns 300
+with each side effect run exactly once. Crash-recovery-across-rotation works: the resume
+worker rediscovers a rotated workflow on its *current* generation (the older generation's
+`WorkflowContinuedAsNew` marker does not mask it) and drives it to completion.
+
+**What shipped.** A `generation` column on `keiro_workflow_steps` joined to the
+`(workflow_id, workflow_name)` key; a `wf:<name>-<id>#<gen>` physical stream with
+generation 0 keeping the legacy name (zero data migration); the additive
+`WorkflowContinuedAsNew { generation, recordedAt }` journal event and `ContinuedAsNew`
+outcome; the `continueAsNew`/`restoreSeed` authoring surface; a crash-safe, idempotent
+`rotateGeneration` (seed-step-on-next-generation-first ordering + advisory snapshot +
+terminal marker); and a `MAX(generation)`-scoped `findUnfinishedWorkflowIds`.
+
+**Gaps / notes for later plans.** (1) Plan 47 had not landed, so EP-48 folded its
+`workflow_name` re-key in; if plan 47 lands later it must no-op against the now-wider
+`(workflow_id, workflow_name, generation, step_name)` key. (2) EP-49 (patch API) appends
+any further `WorkflowJournalEvent` constructor *after* `WorkflowContinuedAsNew`, per the
+MasterPlan Integration Points convention (though EP-49 is expected to need no codec change
+at all). (3) `restoreSeed` required an `Aeson.ToJSON s` constraint beyond the
+Plan-of-Work's `FromJSON`-only signature, because it is implemented via `step` (which
+journals on a miss); see the Decision Log. (4) The advisory rotation snapshot is written
+unconditionally (ignoring `snapshotPolicy`) because rotation is exactly when a fresh
+snapshot earns its keep; correctness does not depend on it (the journaled seed step alone
+carries state forward).
+
+**Lessons.** The `embedDir` recompile gotcha recurred (a new `.sql` needed a touched
+comment in `Keiro.Migrations` to be picked up). The codd `LaxCheck` schema-diff "Error:"
+log line is non-fatal noise in the migration/template-DB fixtures — the real signal is the
+hspec example count.
 
 
 ## Context and Orientation

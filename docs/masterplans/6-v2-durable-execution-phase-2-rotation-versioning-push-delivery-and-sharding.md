@@ -113,7 +113,7 @@ including multi-region — rejected as out of scope per §6.6.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 48 | Continue-as-new journal rotation for durable workflows | docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md | None | None | In Progress |
+| 48 | Continue-as-new journal rotation for durable workflows | docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md | None | None | Complete |
 | 49 | Workflow versioning and patch API | docs/plans/49-workflow-versioning-and-patch-api.md | None | EP-48 | Not Started |
 | 50 | LISTEN/NOTIFY push delivery for subscriptions and workflow resume | docs/plans/50-listen-notify-push-delivery-for-subscriptions-and-workflow-resume.md | None | None | Not Started |
 | 51 | Consumer-group sharding for category subscriptions | docs/plans/51-consumer-group-sharding-for-category-subscriptions.md | None | EP-50 | Not Started |
@@ -209,8 +209,8 @@ compilation; touch the module or `cabal clean`).
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-48: design + implement the generation/rotation journal scheme and `continueAsNew`.
-- [ ] EP-48: prove a long-running workflow rotates and stays bounded across N rotations.
+- [x] EP-48: design + implement the generation/rotation journal scheme and `continueAsNew`. (2026-06-03)
+- [x] EP-48: prove a long-running workflow rotates and stays bounded across N rotations. (2026-06-03; 300 steps, 6 generations ≤ 52 events each)
 - [ ] EP-49: add the `patch :: PatchId -> Workflow Bool` primitive and its journaled decision record.
 - [ ] EP-49: prove an in-flight workflow observes a stable patch branch across replays.
 - [ ] EP-50: add the LISTEN/NOTIFY push channel with poll fallback; scope the upstream surface.
@@ -250,6 +250,36 @@ interactions between child plans. Provide concise evidence.
   non-blocking upstream ergonomics ask to `docs/research/11-upstream-roadmap.md`. Net:
   neither Wave-2 plan is upstream-blocked, contrary to the cautious framing in
   Decomposition Strategy.
+
+
+- 2026-06-03 (EP-48 shipped): **Continue-as-new (EP-48) is complete; the generation
+  scheme and the first additive codec edit of MasterPlan 6 are now fixed.** The shipped
+  scheme is the one the Integration Points predicted: an integer `generation` column on
+  `keiro_workflow_steps` joined to the `(workflow_id, workflow_name)` key, plus a physical
+  journal stream `wf:<name>-<id>#<gen>` where **generation 0 keeps the legacy
+  `wf:<name>-<id>` name** (zero data migration; never-rotating workflows are byte-for-byte
+  unchanged — proven by the existing 134-example keiro suite staying green). The migration
+  `2026-06-05-00-00-00-keiro-workflow-generation.sql` re-keys to
+  `(workflow_id, workflow_name, generation, step_name)`.
+  - **EP-48 owns the only additive `WorkflowJournalEvent` edit so far:** the terminal
+    `WorkflowContinuedAsNew { generation, recordedAt }` constructor (additive within
+    `schemaVersion = 1`, no upcaster), appended to `eventTypes`/`eventType`/`encode`/`decode`.
+    Per the Integration Points convention, **EP-49 (the patch API) appends its constructor
+    after this one** — though the planning-phase Surprises note already records that EP-49
+    intends to need *no* codec change (it journals patch decisions as `StepRecorded` under a
+    reserved `patch:<patchId>` prefix), so no contention is expected. EP-48 also added the
+    `ContinuedAsNew` `WorkflowOutcome` constructor.
+  - **Plan 47 had NOT landed.** The as-shipped key was `(workflow_id, step_name)` and
+    `stepExists`/`loadStepIndex` took no `WorkflowName`. EP-48 therefore folded plan 47's
+    name-awareness into its own edits (the migration re-keys with `workflow_name`; the Schema
+    functions gained a `WorkflowName` parameter), exactly as EP-48's "reconcile the as-shipped
+    surface" step anticipated. If plan 47 lands later it must no-op against this wider key.
+  - **`embedDir` recompile gotcha confirmed once more:** the new `.sql` did not retrigger
+    `Keiro.Migrations` compilation until its `embeddedMigrationFiles` comment was touched.
+  - Acceptance: a 300-step workflow rotating every 50 steps holds ≤ 52 events per generation
+    across 6 generations and still returns 300; the resume worker rediscovers the rotated
+    workflow on its current generation. `cabal build all` clean; `cabal test keiro` 136/0;
+    `cabal test jitsurei-test` 16/0.
 
 
 ## Decision Log
