@@ -83,8 +83,11 @@ This section must always reflect the actual current state of the work.
   `appendCompletion`/`appendJournalEntryReturningId`/`deterministicJournalId`. `cabal build keiro`
   green; full `cabal test keiro` green — **134 examples, 0 failures**, proving generation 0 is
   behavior-preserving (2026-06-03).
-- [ ] Milestone 4 (`continueAsNew` primitive): add the `ContinueAsNew` effect operation and its
-  handler arm in `Keiro.Workflow`; export `continueAsNew`; `cabal build keiro` green.
+- [x] Milestone 4 (`continueAsNew` primitive): added the `ContinueAsNew` effect op + handler arm
+  (throws the `WorkflowRotate` sentinel), the `ContinuedAsNew` outcome, the top-level
+  `rotateGeneration` (seed-step-on-next-gen-first ordering + advisory snapshot + terminal marker),
+  the exported `continueAsNew`/`restoreSeed`, `continueSeedStepName`, and the `bumpForOutcome`
+  arm in Resume. `cabal build keiro` green (2026-06-03).
 - [ ] Milestone 5 (resume + discovery point at current generation): make
   `findUnfinishedWorkflowIds` and the resume re-invocation generation-aware; `cabal build keiro` green.
 - [ ] Milestone 6 (acceptance test): add the bounded-journal rotation test to
@@ -200,6 +203,37 @@ Record every decision made while working on the plan.
   reuses it. The `s` the author passes is the seed for the next generation; the runtime
   encodes it with the workflow's own `Aeson` instances into the snapshot map under a
   reserved key, and the *next*-generation body restores it via a reserved seed step.
+  Date: 2026-06-03.
+
+
+- Decision (M4): `restoreSeed` is typed
+  `(Workflow :> es, Aeson.ToJSON s, Aeson.FromJSON s) => s -> Eff es s`, adding the
+  `Aeson.ToJSON s` constraint the Plan-of-Work signature omitted.
+  Rationale: `restoreSeed def = step (StepName continueSeedStepName) (pure def)` and
+  `step` itself requires `(Aeson.ToJSON a, Aeson.FromJSON a)` (it journals the result on
+  a miss and decodes it on a hit). On the very first generation `restoreSeed` misses and
+  must journal `toJSON def`, so `ToJSON s` is genuinely needed. The carried seed already
+  has `ToJSON` (it is what the author passes to `continueAsNew`), so the extra constraint
+  is free in practice. Date: 2026-06-03.
+
+- Decision (M4): `rotateGeneration` writes the next generation's seed snapshot
+  __unconditionally__ on rotation, ignoring the run's `snapshotPolicy`.
+  Rationale: the seed step alone carries state forward correctly (the next run's
+  `loadJournal` reads it and `restoreSeed` hits it); the snapshot is a pure
+  optimization that lets the next generation hydrate in O(1) instead of re-reading the
+  one seed event. Rotation is exactly the moment a fresh snapshot earns its keep
+  (a new, otherwise-empty generation), and a snapshot is advisory — a miss only costs a
+  single event read — so writing it always, rather than gating on a policy meant for the
+  hot step path, is both safe and the point of the feature. Date: 2026-06-03.
+
+- Decision (M4): the rotation appends the seed step on generation @g+1@ __before__ the
+  terminal marker on generation @g@, each guarded by a `stepExists` check.
+  Rationale: this is the crash-safe ordering the plan's Idempotence section prescribes.
+  Once the seed step commits, `MAX(generation)` — and so `currentGeneration` — is
+  @g+1@, so any re-run resolves to @g+1@, hydrates from the seed, and never re-enters
+  generation @g@. A crash between the two appends therefore still converges to "continue
+  from the seed", never re-running generation @g@'s work; the marker on @g@ is an audit
+  record whose absence is harmless because discovery scopes to `MAX(generation)`.
   Date: 2026-06-03.
 
 

@@ -41,6 +41,7 @@ module Keiro.Workflow.Types
   , cancelledStepName
   , failedStepName
   , continuedAsNewStepName
+  , continueSeedStepName
   , sleepStepPrefix
   , awakeableStepPrefix
   , childStepPrefix
@@ -241,6 +242,13 @@ data WorkflowOutcome a
   = Completed a
   | Suspended
   | Cancelled
+  | ContinuedAsNew
+  -- ^ EP-48: the run rotated onto a fresh journal generation via
+  --   @continueAsNew@; a subsequent run/resume of the same logical id
+  --   continues from the carried seed. Distinct from 'Suspended' (a wake
+  --   source is pending) and 'Completed' (the workflow is done): a rotated
+  --   workflow is still unfinished, so the resume worker re-invokes it and it
+  --   proceeds on the new generation.
   deriving stock (Eq, Show, Functor)
 
 {- | The reserved step name written (as a 'WorkflowCompleted' journal event
@@ -278,6 +286,16 @@ terminal-marker check to the current (MAX) generation and does not treat
 'continuedAsNewStepName' as terminal for the logical workflow. -}
 continuedAsNewStepName :: Text
 continuedAsNewStepName = "__workflow_continued_as_new__"
+
+{- | The reserved step name under which @continueAsNew@ (EP-48) carries the
+author's seed value into the next generation. On rotation the runtime appends a
+single @StepRecorded continueSeedStepName seedJson@ to the next generation's
+journal (and snapshots it); the next run's body reads it back via @restoreSeed@
+— an ordinary journaled @step@ — so the carried state is restored without
+re-running anything. The leading/trailing @__@ marks it reserved, like the
+other @__workflow_*__@ names. -}
+continueSeedStepName :: Text
+continueSeedStepName = "__workflow_seed__"
 
 {- | Reserved step-name prefix EP-39 uses to journal a durable @sleep@'s
 completion. Integration contract: EP-39 must use exactly this string. -}

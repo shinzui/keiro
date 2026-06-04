@@ -58,6 +58,8 @@ module Keiro.Workflow
   , awaitStep
   , currentWorkflow
   , freshOrdinal
+  , continueAsNew
+  , restoreSeed
 
     -- * Running a workflow
   , runWorkflow
@@ -148,6 +150,10 @@ data Workflow :: Effect where
   CurrentWorkflow :: Workflow m (WorkflowName, WorkflowId)
   -- | A per-run, per-namespace counter for deterministic ordinal step names.
   FreshOrdinal :: Text -> Workflow m Int
+  -- | EP-48: snapshot the carried seed, rotate onto a fresh journal generation,
+  --   and unwind this run; the next run/resume continues from the seed. Never
+  --   returns to the caller within this run (result type is fully polymorphic).
+  ContinueAsNew :: (Aeson.ToJSON s) => s -> Workflow m a
 
 type instance DispatchOf Workflow = Dynamic
 
@@ -185,6 +191,33 @@ are the stable primitives.
 -}
 freshOrdinal :: (Workflow :> es) => Text -> Eff es Int
 freshOrdinal namespace = send (FreshOrdinal namespace)
+
+{- | Continue this workflow /as new/ (EP-48): snapshot the carried @seed@ onto a
+fresh journal generation, journal a terminal rotation marker on the current
+generation, and unwind this run. The next run or resume of the same logical
+@('WorkflowName', 'WorkflowId')@ starts against the fresh generation, hydrated
+from the seed, with an empty (bounded) journal.
+
+This is how a workflow that runs an /unbounded/ number of steps — a poller, a
+per-day rolling process — keeps its per-generation journal bounded so replay
+and hydration stay fast forever. The result type is fully polymorphic (@a@)
+because control never returns to the caller within /this/ run: the rotated
+continuation runs in the next run/resume. Read the carried seed back at the top
+of the workflow body with 'restoreSeed'.
+-}
+continueAsNew :: (Workflow :> es, Aeson.ToJSON s) => s -> Eff es a
+continueAsNew seed = send (ContinueAsNew seed)
+
+{- | Restore the seed carried by the previous generation's 'continueAsNew', or
+return @def@ on the first generation (EP-48). Implemented as an ordinary
+journaled @step@ under the reserved 'continueSeedStepName': on a generation that
+was rotated into, the seed step was journaled (and snapshotted) by the rotation,
+so this @step@ hits it and returns the carried value without re-running; on the
+very first generation it misses and records @def@. Call it once at the top of a
+workflow body that uses 'continueAsNew'.
+-}
+restoreSeed :: (Workflow :> es, Aeson.ToJSON s, Aeson.FromJSON s) => s -> Eff es s
+restoreSeed def = step (StepName continueSeedStepName) (pure def)
 
 -- ---------------------------------------------------------------------------
 -- Per-run options
@@ -251,6 +284,15 @@ data WorkflowSuspend = WorkflowSuspend
   deriving stock (Show)
 
 instance Exception WorkflowSuspend
+
+{- | Internal sentinel thrown by the 'ContinueAsNew' handler to unwind a
+rotating run up to 'runWorkflowWith' (EP-48), carrying the JSON-encoded seed for
+the next generation. Mirrors 'WorkflowSuspend': a non-returning unwind the run
+entry point catches and turns into an outcome ('ContinuedAsNew'). -}
+newtype WorkflowRotate = WorkflowRotate Aeson.Value
+  deriving stock (Show)
+
+instance Exception WorkflowRotate
 
 -- ---------------------------------------------------------------------------
 -- Running
@@ -338,7 +380,10 @@ runWorkflowWith options name wid action = do
           journalRef <- liftIO (newIORef initial)
           ordinalRef <- liftIO (newIORef Map.empty)
           let runHandler = interpret (handler gen journalRef ordinalRef) action
-          outcome <- (Completed <$> runHandler) `catch` \WorkflowSuspend -> pure Suspended
+          outcome <-
+            (Completed <$> runHandler)
+              `catch` (\WorkflowSuspend -> pure Suspended)
+              `catch` (\(WorkflowRotate seedJson) -> rotateGeneration name wid gen seedJson)
           case outcome of
             Completed result -> do
               now <- liftIO getCurrentTime
@@ -365,6 +410,10 @@ runWorkflowWith options name wid action = do
               pure (Completed result)
             Suspended -> pure Suspended
             Cancelled -> pure Cancelled
+            -- EP-48: the run unwound via 'WorkflowRotate'; 'rotateGeneration'
+            -- already journaled the seed step on the next generation and the
+            -- rotation marker on this one, so there is nothing more to do here.
+            ContinuedAsNew -> pure ContinuedAsNew
     handler ::
       Int ->
       IORef (Map Text Aeson.Value) ->
@@ -419,6 +468,10 @@ runWorkflowWith options name wid action = do
         liftIO . atomicModifyIORef' ordinalRef $ \counters ->
           let n = Map.findWithDefault 0 namespace counters
            in (Map.insert namespace (n + 1) counters, n)
+      -- EP-48: encode the carried seed and throw the rotation sentinel, which
+      -- 'runWorkflowWith' catches and turns into 'rotateGeneration'. Never
+      -- returns to the caller within this run (result type is polymorphic).
+      ContinueAsNew seed -> throwIO (WorkflowRotate (Aeson.toJSON seed))
 
 -- | Decode a stored journal result into the type the caller expects.
 decodeStored :: (Aeson.FromJSON a) => Text -> Aeson.Value -> Eff es a
@@ -516,6 +569,54 @@ appendCompletion name wid gen now = do
   if exists
     then pure Nothing
     else Just . snd <$> appendJournalTx name wid gen event
+
+{- | Perform a continue-as-new rotation (EP-48): close generation @gen@ and open
+generation @gen + 1@, seeded with @seedJson@. Returns 'ContinuedAsNew'.
+
+The two appends are ordered for crash-safety. We append the next generation's
+seed step __first__ (a single @StepRecorded continueSeedStepName seedJson@),
+which advances @MAX(generation)@ — and therefore 'currentGeneration' — to
+@gen + 1@. After that commits, any re-run resolves the current generation to
+@gen + 1@, hydrates from the seed, and never re-enters generation @gen@; so even
+a crash between the two appends converges to "continue from the seed", never
+re-running generation @gen@'s work. We then append the terminal
+'WorkflowContinuedAsNew' marker on generation @gen@. Both appends are guarded by
+an existence check and use deterministic, generation-namespaced ids, so the
+whole rotation is idempotent.
+
+The seed step alone carries the state forward (the next run's 'loadJournal'
+reads it and 'restoreSeed' hits it); we additionally snapshot the one-entry seed
+map at the seed step's version so the next generation hydrates in O(1) rather
+than re-reading even that one event. The snapshot is advisory (a miss only costs
+a single event read), so it is written unconditionally on rotation regardless of
+the run's 'snapshotPolicy' — rotation is exactly when a fresh snapshot earns its
+keep.
+-}
+rotateGeneration ::
+  forall a es.
+  (IOE :> es, Store :> es) =>
+  WorkflowName ->
+  WorkflowId ->
+  Int ->
+  Aeson.Value ->
+  Eff es (WorkflowOutcome a)
+rotateGeneration name wid gen seedJson = do
+  let nextGen = gen + 1
+  now <- liftIO getCurrentTime
+  -- 1. Seed step on the NEXT generation first (advances the current generation).
+  seedExists <- stepExists name wid nextGen continueSeedStepName
+  unless seedExists $ do
+    (_, appendResult) <-
+      appendJournalTx name wid nextGen (StepRecorded continueSeedStepName seedJson now)
+    writeWorkflowSnapshot
+      (appendResult ^. #streamId)
+      (appendResult ^. #streamVersion)
+      (Map.singleton continueSeedStepName seedJson)
+  -- 2. Terminal rotation marker on the CURRENT generation (audit + closes it).
+  markerExists <- stepExists name wid gen continuedAsNewStepName
+  unless markerExists $
+    void (appendJournalTx name wid gen (WorkflowContinuedAsNew nextGen now))
+  pure ContinuedAsNew
 
 -- | The core append: encode the event, append it under a deterministic id,
 -- and upsert the index row, all in one transaction. Returns the deterministic

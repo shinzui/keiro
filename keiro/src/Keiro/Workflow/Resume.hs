@@ -261,6 +261,11 @@ bumpForOutcome outcome acc = case outcome of
   -- suspended. (A cancelled workflow also drops out of discovery, so this is a
   -- rare race, not the steady state.)
   Cancelled -> acc{resumed = resumed acc + 1}
+  -- A workflow that rotated via continueAsNew (EP-48) returns 'ContinuedAsNew':
+  -- it is re-invoked but neither completed nor suspended this pass. Its new
+  -- generation has no terminal marker, so 'findUnfinishedWorkflowIds' still
+  -- reports it and the next pass drives the rotated generation forward.
+  ContinuedAsNew -> acc{resumed = resumed acc + 1}
 
 {- | Poll-and-resume loop: run 'resumeWorkflowsOnce' on the configured
 'pollInterval' forever. Mirrors how an application schedules
