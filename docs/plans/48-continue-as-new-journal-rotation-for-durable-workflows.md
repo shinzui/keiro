@@ -90,7 +90,29 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-03 (M0 reconcile): **Plan 47 has NOT landed.** The as-shipped
+  `keiro_workflow_steps` primary key is `(workflow_id, step_name)` (not the
+  `(workflow_id, workflow_name, step_name)` plan 47 introduces), the lookup index is
+  `(workflow_id)`, and `stepExists`/`loadStepIndex` take only a `WorkflowId` (no
+  `WorkflowName`). Evidence:
+
+  ```text
+  $ grep -n "PRIMARY KEY" keiro-migrations/sql-migrations/2026-06-03-00-00-00-keiro-workflow-steps.sql
+  17:  PRIMARY KEY (workflow_id, step_name)
+  $ grep -n "stepExists ::\|loadStepIndex ::" keiro/src/Keiro/Workflow/Schema.hs
+  76:loadStepIndex :: (Store :> es) => WorkflowId -> Eff es (Map Text Value)
+  84:stepExists :: (Store :> es) => WorkflowId -> Text -> Eff es Bool
+  ```
+
+  Per the plan's own "Before starting, reconcile" note, this EP therefore folds plan
+  47's name-awareness into its own edits: the M1 migration re-keys to
+  `(workflow_id, workflow_name, generation, step_name)` (doing plan 47's job and
+  EP-48's at once), and M3 gives `stepExists`/`loadStepIndex` an explicit
+  `WorkflowName` parameter alongside the new `generation`. `stepExists`/`loadStepIndex`
+  have no callers outside `Schema.hs`/`Workflow.hs`, so widening their arity is safe.
+  The external append helpers (`appendJournalEntry` / `appendJournalEntryReturningId`,
+  called by Sleep/Awakeable/Child wake sources) keep their logical `(name, wid)`
+  signature and resolve the current generation internally.
 
 
 ## Decision Log
