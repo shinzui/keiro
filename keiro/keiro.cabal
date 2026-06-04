@@ -54,6 +54,7 @@ library
                         Keiro.Timer
                         Keiro.Timer.Schema
                         Keiro.Timer.Types
+                        Keiro.Wake
                         Keiro.Workflow
                         Keiro.Workflow.Awakeable
                         Keiro.Workflow.Awakeable.Schema
@@ -94,6 +95,7 @@ library
                         mmzk-typeid >= 0.7,
                         scientific >= 0.3,
                         shibuya-core >= 0.5,
+                        stm >= 2.5,
                         streamly >= 0.11,
                         streamly-core >= 0.3,
                         text >= 2.1,

@@ -79,13 +79,14 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0 (keiro-side, spike): write a throwaway test that opens a `LISTEN
-  kiroku.events` connection against an ephemeral DB, issues a manual `NOTIFY`
-  via SQL, and proves the listener wakes. Validates the mechanism end-to-end
-  before touching worker code.
-- [ ] M1 (keiro-side): add a `WakeSignal` abstraction in a new module
-  `keiro/src/Keiro/Wake.hs` — a small "block until notified or until a bounded
-  timeout, whichever first" primitive backed by kiroku's `Notifier`.
+- [x] M0 (keiro-side, spike): **dropped.** `withFreshDatabase`/`runSqlOn` are not exported from
+  `Keiro.Test.Postgres`, so the manual-NOTIFY spike + standalone `hasql-notifications` listener
+  are replaced by testing the `WakeSignal` against real appends through `withFreshStore` (M3),
+  which exercises the real production wake path. See the Decision Log.
+- [x] M1 (keiro-side): added `keiro/src/Keiro/Wake.hs` (`WakeSignal`, `WakeReason`,
+  `wakeSignalFromStore`, `neverWake`) backed by kiroku's `Notifier.tickChan` (dup'd once,
+  zero new connections), added `stm` to the keiro lib deps and `Keiro.Wake` to exposed-modules.
+  `cabal build keiro` green (2026-06-03).
 - [ ] M2 (keiro-side): add push-aware worker entry points
   `runWorkflowResumeWorkerPush` (and the generic `runPollLoopWith` driver) that
   wait on a `WakeSignal` instead of `threadDelay`, with the existing
@@ -262,6 +263,24 @@ Record every decision made while working on the plan.
   in `IO`) while keeping each *pass* in the `Store` effect keeps the testable
   single-pass primitive (`resumeWorkflowsOnce`) untouched and effect-polymorphic.
   Date: 2026-06-03.
+
+
+- Decision (implementation): **Adapt to the real test harness and surfaces, which differ
+  from the plan's assumptions.** (1) `keiro/test/Main.hs` is an **hspec** suite, not tasty, so
+  tests are added as `describe`/`it` blocks in `Main.hs` (filtered with `--match`), not as
+  separate tasty modules with `-p`. (2) `Keiro.Test.Postgres` exports only
+  `Fixture`/`withMigratedSuite`/`withFreshStore`/`withFreshStores2` — **not** `withFreshDatabase`
+  or `runSqlOn` — so the M0 manual-NOTIFY spike and the `hasql-notifications` standalone listener
+  are dropped; the `WakeSignal` is instead exercised against **real appends** through
+  `withFreshStore` (which runs a live kiroku `Notifier`), which tests the real production wake path
+  rather than a synthetic NOTIFY. (3) `runStoreIO :: KirokuStore -> Eff '[Store, Error StoreError,
+  IOE] a -> IO (Either StoreError a)`, so `runWorkflowResumeWorkerPush`'s registry row is
+  `'[Store, Error StoreError, IOE]`, not the plan's `'[IOE, Store]`. (4) The smoke/latency tests use
+  `Control.Concurrent` (`forkIO`/`killThread`) + `System.Timeout.timeout` rather than the `async`
+  package, avoiding a new dependency.
+  Rationale: the plan's intent (sub-second push latency + durable fallback) is harness-independent;
+  these are faithful adaptations to what the repo actually provides, and testing against real
+  appends is a stronger end-to-end proof than a manual NOTIFY. Date: 2026-06-03.
 
 
 ## Outcomes & Retrospective

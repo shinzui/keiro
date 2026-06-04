@@ -115,7 +115,7 @@ including multi-region — rejected as out of scope per §6.6.
 |---|-------|------|-----------|-----------|--------|
 | 48 | Continue-as-new journal rotation for durable workflows | docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md | None | None | Complete |
 | 49 | Workflow versioning and patch API | docs/plans/49-workflow-versioning-and-patch-api.md | None | EP-48 | Complete |
-| 50 | LISTEN/NOTIFY push delivery for subscriptions and workflow resume | docs/plans/50-listen-notify-push-delivery-for-subscriptions-and-workflow-resume.md | None | None | Not Started |
+| 50 | LISTEN/NOTIFY push delivery for subscriptions and workflow resume | docs/plans/50-listen-notify-push-delivery-for-subscriptions-and-workflow-resume.md | None | None | In Progress |
 | 51 | Consumer-group sharding for category subscriptions | docs/plans/51-consumer-group-sharding-for-category-subscriptions.md | None | EP-50 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
