@@ -93,11 +93,16 @@ This section must always reflect the actual current state of the work.
   as the fallback timeout. The fixed-poll `runWorkflowResumeWorker`/`runWorkflowResumeWorkerWith`
   are byte-for-byte unchanged. `cabal build keiro` green (2026-06-03). (Registry row corrected to
   `'[Store, Error StoreError, IOE]` per `runStoreIO` — see Decision Log.)
-- [ ] M3 (keiro-side): integration test — measure sub-second resume latency under
-  push (parent/child cascade) and assert it is well under the fallback timeout.
-- [ ] M4 (keiro-side): fallback-correctness test — disable the wake signal and
-  prove the same workflow still drains on the fallback timeout (push dropped ⇒
-  poll still works).
+- [x] M3 (keiro-side): added a `describe "Keiro.Wake"` block (timeout-when-idle,
+  notify-after-real-append, neverWake-always-timeout) and a `describe "Keiro.Workflow push
+  latency"` block — a gated workflow resumes **sub-second** (asserted `< 1.0 s`) after the gate
+  append while the fallback is **10 s**, so only the `NOTIFY` could have woken it. (Used a gated
+  await-then-step workflow rather than parent/child, since the gate append is what makes the
+  instance discoverable; same interactive-latency story.) `cabal test keiro` green (2026-06-03).
+- [x] M4 (keiro-side): added a `describe "Keiro.Workflow push fallback"` block — driving the worker
+  with `runPollLoopWith neverWake 200000 onePass` (every NOTIFY dropped, 200 ms fallback), the same
+  gated workflow still drains to completion on the durable poll. `cabal test keiro` green
+  — **142 examples, 0 failures** (2026-06-03).
 - [ ] M5 (keiro-side): document the pool-sizing story (one shared listener
   connection per store, not per worker) and the channel/payload contract in the
   module haddock and in this plan's Interfaces section.

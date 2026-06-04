@@ -17,7 +17,7 @@ import Effectful (Eff, IOE, (:>))
 import Kiroku.Store.Effect (Store)
 import Data.Vector qualified as Vector
 import Data.UUID (UUID, fromString)
-import Data.Time (UTCTime (..), secondsToDiffTime)
+import Data.Time (UTCTime (..), diffUTCTime, secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Keiro.Test.Postgres (withFreshStore, withFreshStores2, withMigratedSuite)
 import Hasql.Decoders qualified as D
@@ -96,9 +96,10 @@ import Keiro.Inbox
   )
 import Keiro.Inbox.Kafka qualified as InboxKafka
 import Data.Time (NominalDiffTime)
-import Control.Concurrent (threadDelay)
+import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Exception (Exception, SomeException, throwIO, try)
-import Control.Concurrent.MVar (MVar, modifyMVar, newMVar, readMVar)
+import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar)
+import System.Timeout (timeout)
 import Keiro.Prelude
 import Keiro.Projection
 import Keiro.ProcessManager
@@ -151,6 +152,14 @@ import Keiro.Workflow.Resume
   , defaultWorkflowResumeOptions
   , emptyResumeSummary
   , resumeWorkflowsOnce
+  , runPollLoopWith
+  , runWorkflowResumeWorkerPush
+  )
+import Keiro.Wake
+  ( WakeReason (..)
+  , WakeSignal (..)
+  , neverWake
+  , wakeSignalFromStore
   )
 import Keiro.Workflow.Awakeable
   ( WorkflowAwakeableCancelled (..)
@@ -2538,6 +2547,76 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             ]
       freshDecisions `shouldBe` [toJSON True]
 
+  describe "Keiro.Wake" $ around (withFreshStore fixture) $ do
+    -- EP-50: the wake primitive over kiroku's existing per-store notifier.
+    it "returns WokenByTimeout when idle (no append)" $ \store -> do
+      wake <- wakeSignalFromStore store
+      reason <- waitForWake wake 200000 -- 200 ms
+      reason `shouldBe` WokenByTimeout
+
+    it "returns WokenByNotify promptly after a real append" $ \store -> do
+      wake <- wakeSignalFromStore store
+      -- A real append bumps the streams row and fires kiroku's NOTIFY on
+      -- kiroku.events; the store's notifier ticks the broadcast channel.
+      now <- getCurrentTime
+      Right () <-
+        Store.runStoreIO store $
+          appendJournalEntry (WorkflowName "wakedemo") (WorkflowId "w1") (StepRecorded "s" (toJSON True) now)
+      reason <- waitForWake wake 5000000 -- generous 5 s ceiling; the round-trip is milliseconds
+      reason `shouldBe` WokenByNotify
+
+    it "neverWake always returns WokenByTimeout" $ \_store -> do
+      reason <- waitForWake neverWake 100000
+      reason `shouldBe` WokenByTimeout
+
+  describe "Keiro.Workflow push latency (EP-50)" $ around (withFreshStore fixture) $ do
+    -- The user-visible win: a gated workflow resumes within sub-second of the
+    -- gate append, under a deliberately large (10 s) fallback — so a pass that
+    -- resumes it sub-second can only have been woken by the NOTIFY, not the poll.
+    it "resumes a gated workflow sub-second after the gate append (10s fallback)" $ \store -> do
+      done <- newEmptyMVar
+      let name = WorkflowName "pushwf"
+          wid = WorkflowId "p-1"
+          registry = Map.singleton name (WorkflowDef (\_ -> gateThenSignal done))
+          opts = defaultWorkflowResumeOptions & #pollInterval .~ 10000000 -- 10 s fallback
+      first <- Store.runStoreIO store (runWorkflow name wid (gateThenSignal done))
+      first `shouldBe` Right Suspended
+      worker <- forkIO (runWorkflowResumeWorkerPush store opts registry)
+      -- Let the worker start, duplicate the tick channel, and park in its wait
+      -- before we append, so the gate's NOTIFY cannot be missed.
+      threadDelay 250000
+      now <- getCurrentTime
+      Right () <-
+        Store.runStoreIO store $
+          appendJournalEntry name wid (StepRecorded "awk:gate" (toJSON ()) now)
+      resumed <- timeout 5000000 (takeMVar done)
+      t1 <- getCurrentTime
+      killThread worker
+      resumed `shouldBe` Just ()
+      let latency = realToFrac (diffUTCTime t1 now) :: Double
+      latency `shouldSatisfy` (< 1.0)
+
+  describe "Keiro.Workflow push fallback (EP-50)" $ around (withFreshStore fixture) $ do
+    -- Push is strictly an optimization: with the worker on 'neverWake' (every
+    -- NOTIFY dropped) and a small fallback, the gated workflow still drains on
+    -- the durable poll.
+    it "still drains on the fallback timeout when no notification is delivered" $ \store -> do
+      done <- newEmptyMVar
+      let name = WorkflowName "fallbackwf"
+          wid = WorkflowId "f-1"
+          registry = Map.singleton name (WorkflowDef (\_ -> gateThenSignal done))
+          onePass = void (Store.runStoreIO store (resumeWorkflowsOnce defaultWorkflowResumeOptions registry))
+      first <- Store.runStoreIO store (runWorkflow name wid (gateThenSignal done))
+      first `shouldBe` Right Suspended
+      worker <- forkIO (runPollLoopWith neverWake 200000 onePass) -- 200 ms fallback, no notifications
+      now <- getCurrentTime
+      Right () <-
+        Store.runStoreIO store $
+          appendJournalEntry name wid (StepRecorded "awk:gate" (toJSON ()) now)
+      resumed <- timeout 5000000 (takeMVar done)
+      killThread worker
+      resumed `shouldBe` Just ()
+
   describe "Keiro.Workflow observability" $ around (withFreshStore fixture) $ do
     -- The headline operability signal: executed (real work) vs replayed
     -- (recorded history), recorded by the runtime through an SDK meter and read
@@ -3196,6 +3275,17 @@ postPatchWorkflow counter = do
   if useNew
     then step (StepName "new-charge") (pure "new-branch")
     else step (StepName "old-charge") (pure "old-branch")
+
+-- | A workflow (EP-50 push tests) that awaits an external "awk:gate" step, then
+-- runs a step that fills @done@ — so a test can observe the exact moment the
+-- workflow resumes to completion. Awaiting first means the journal is empty until
+-- the external gate append, which is what makes the instance discoverable by the
+-- resume worker (the gate's StepRecorded is the first index row).
+gateThenSignal :: (Workflow :> es, IOE :> es) => MVar () -> Eff es Text
+gateThenSignal done = do
+  (_ :: ()) <- awaitStep (StepName "awk:gate") (pure ())
+  _ <- step (StepName "after-gate") (liftIO (putMVar done ()) >> pure ())
+  pure "resumed"
 
 -- | A two-step workflow whose steps each bump a shared counter.
 demoWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es (Int, Int)
