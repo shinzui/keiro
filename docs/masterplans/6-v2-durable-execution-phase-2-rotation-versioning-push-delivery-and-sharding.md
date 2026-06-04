@@ -114,7 +114,7 @@ including multi-region — rejected as out of scope per §6.6.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 48 | Continue-as-new journal rotation for durable workflows | docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md | None | None | Complete |
-| 49 | Workflow versioning and patch API | docs/plans/49-workflow-versioning-and-patch-api.md | None | EP-48 | In Progress |
+| 49 | Workflow versioning and patch API | docs/plans/49-workflow-versioning-and-patch-api.md | None | EP-48 | Complete |
 | 50 | LISTEN/NOTIFY push delivery for subscriptions and workflow resume | docs/plans/50-listen-notify-push-delivery-for-subscriptions-and-workflow-resume.md | None | None | Not Started |
 | 51 | Consumer-group sharding for category subscriptions | docs/plans/51-consumer-group-sharding-for-category-subscriptions.md | None | EP-50 | Not Started |
 
@@ -211,8 +211,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [x] EP-48: design + implement the generation/rotation journal scheme and `continueAsNew`. (2026-06-03)
 - [x] EP-48: prove a long-running workflow rotates and stays bounded across N rotations. (2026-06-03; 300 steps, 6 generations ≤ 52 events each)
-- [ ] EP-49: add the `patch :: PatchId -> Workflow Bool` primitive and its journaled decision record.
-- [ ] EP-49: prove an in-flight workflow observes a stable patch branch across replays.
+- [x] EP-49: add the `patch :: PatchId -> Eff es Bool` primitive and its journaled decision record. (2026-06-03)
+- [x] EP-49: prove an in-flight workflow observes a stable patch branch across replays. (2026-06-03; old/new branch + once-only journaling)
 - [ ] EP-50: add the LISTEN/NOTIFY push channel with poll fallback; scope the upstream surface.
 - [ ] EP-50: prove sub-second wakeup latency for a process manager / resume worker.
 - [ ] EP-51: add the sharded-ownership table and the cooperative claim/leadership protocol.
@@ -280,6 +280,28 @@ interactions between child plans. Provide concise evidence.
     across 6 generations and still returns 300; the resume worker rediscovers the rotated
     workflow on its current generation. `cabal build all` clean; `cabal test keiro` 136/0;
     `cabal test jitsurei-test` 16/0.
+
+
+- 2026-06-03 (EP-49 shipped): **The patch API (EP-49) is complete, and it confirmed the
+  planning-phase prediction that it needs no codec change.** The `patch :: PatchId -> Eff es Bool`
+  decision journals as an ordinary `StepRecorded` under the reserved `patch:<patchId>` prefix
+  (carrying the `Bool` as the JSON result), so it touched **nothing EP-48 owns** — the
+  `WorkflowContinuedAsNew` constructor remains the only additive `WorkflowJournalEvent` edit of
+  MasterPlan 6. No migration, no codec edit. The only new logic is the first-encounter
+  discriminator (`startedInFlight`, captured from the pre-loaded journal).
+  - **Cross-plan reconciliation:** because EP-48 landed first, EP-49's `isOrdinaryStepKey`
+    discriminator was extended to treat EP-48's reserved `__workflow_seed__` /
+    `__workflow_continued_as_new__` names as non-ordinary, so a freshly-rotated generation's seed
+    step does not falsely classify it as "in flight". The deeper patch×rotation decision-persistence
+    interaction is out of scope for both plans (neither acceptance combines them) and is flagged for
+    a future plan.
+  - **Documentation reconciliation:** EP-49's M4 (the MasterPlan-6 doc reconciliation) also folded
+    in EP-48's user-facing doc/roadmap flip, since EP-48 had no documentation milestone. Both
+    continue-as-new and the patch API are now marked **available** in `docs/user/roadmap.md` and
+    `docs/user/production-status.md`, and both `docs/guides/durable-workflows.md` and
+    `docs/user/durable-workflows.md` document the new surface.
+  - Acceptance: `cabal build all` clean; `cabal test keiro` 137/0. **Wave 1 (EP-48, EP-49) is
+    complete**; the remaining work is Wave 2 (EP-50 push delivery, EP-51 sharding).
 
 
 ## Decision Log

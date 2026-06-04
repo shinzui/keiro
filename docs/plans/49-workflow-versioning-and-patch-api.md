@@ -118,8 +118,8 @@ here, even if it requires splitting a partially completed task into two ("done" 
   **Folded in EP-48's missed doc/roadmap flip** (EP-48 had no doc milestone): updated `WorkflowOutcome`
   (+`ContinuedAsNew`), `WorkflowJournalEvent` (+`WorkflowContinuedAsNew`), the rotation primitives,
   and the continue-as-new roadmap/status lines. See Surprises (2026-06-03).
-- [ ] Milestone 5: full-repo green — `cabal build all`, `cabal test keiro` — recorded
-  in Validation and Acceptance.
+- [x] Milestone 5: full-repo green — `cabal build all` clean (no errors/warnings),
+  `cabal test keiro` **137 examples, 0 failures** (2026-06-03).
 
 
 ## Surprises & Discoveries
@@ -234,7 +234,36 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-03): delivered as specified, zero codec/migration change.** The
+`patch :: PatchId -> Eff es Bool` primitive ships exactly as the Purpose described: an
+in-flight instance keeps the old branch and a fresh instance takes the new branch, with
+the decision journaled once and stable across every replay. The acceptance example
+proves all five behaviours in one ephemeral-Postgres run (old branch on the redeployed
+in-flight id, stable across replay; new branch on a fresh id, stable across replay;
+exactly one `patch:fraud-check-v2` decision per instance, `false`/`true`).
+
+**How it was built.** As the Decision Log predicted, the patch decision is an ordinary
+`StepRecorded` under the reserved `patch:` prefix — so it rode the existing
+`workflowJournalCodec`, `loadJournal` fold, `recordStepTx`/`stepExists`, snapshot codec,
+and EP-48's generation/rotation plumbing with **no codec change and no migration**. The
+only genuinely new logic is the first-encounter discriminator: a `startedInFlight` flag
+captured once from the pre-loaded journal (does it already hold an ordinary, non-reserved
+step?), read by the `Patch` miss path.
+
+**Gaps / reconciliations.** (1) EP-48 had landed, so `isOrdinaryStepKey` was extended to
+treat EP-48's `__workflow_seed__`/`__workflow_continued_as_new__` reserved names as
+non-ordinary (see Surprises); the deeper question of how a patch decision should persist
+*across* a continue-as-new rotation is left to a future plan (neither feature's
+acceptance combines them, and `patch` is an escape hatch). (2) EP-48's user-facing
+doc/roadmap flip was folded into M4 because EP-48 had no documentation milestone (see
+Surprises). (3) `deprecatePatch`/patch cleanup remains future work, as scoped in the
+Decision Log.
+
+**Lessons.** The reserved-prefix-on-`StepRecorded` convention the runtime established for
+sleep/awakeable/child paid off again: a genuinely new authoring primitive needed no
+storage surface at all. The named-step durability model means `patch` is correctly the
+*rare* escape hatch — the guide leads with "rename the step" for the common single-step
+change.
 
 
 ## Context and Orientation
