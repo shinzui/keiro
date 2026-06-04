@@ -88,8 +88,12 @@ This section must always reflect the actual current state of the work.
   `rotateGeneration` (seed-step-on-next-gen-first ordering + advisory snapshot + terminal marker),
   the exported `continueAsNew`/`restoreSeed`, `continueSeedStepName`, and the `bumpForOutcome`
   arm in Resume. `cabal build keiro` green (2026-06-03).
-- [ ] Milestone 5 (resume + discovery point at current generation): make
-  `findUnfinishedWorkflowIds` and the resume re-invocation generation-aware; `cabal build keiro` green.
+- [x] Milestone 5 (resume + discovery point at current generation): rewrote
+  `findUnfinishedWorkflowIdsStmt` as a `current_gen` CTE that scopes the terminal-marker
+  check to `MAX(generation)` per logical id, so a rotated-away generation's marker never
+  masks a still-running newer generation. The resume worker needed no change (re-invocation
+  runs through `runWorkflowWith`, which resolves the current generation). `cabal test keiro`
+  green — 134 examples, 0 failures (2026-06-03).
 - [ ] Milestone 6 (acceptance test): add the bounded-journal rotation test to
   `keiro/test/Main.hs`; prove each generation ≤ K across N rotations and the correct final result.
 - [ ] Milestone 7 (full green): `cabal build all`, `cabal test keiro`, `cabal test jitsurei-test`;

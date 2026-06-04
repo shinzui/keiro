@@ -182,15 +182,33 @@ currentGenerationStmt =
 
 -- The literals '__workflow_completed__' / '__workflow_cancelled__' must match
 -- 'Keiro.Workflow.Types.completedStepName' / '.cancelledStepName'.
+--
+-- EP-48: the terminal-marker check is scoped to the CURRENT (MAX) generation.
+-- A logical workflow (workflow_id, workflow_name) is unfinished when its newest
+-- generation lacks a completed/cancelled row. '__workflow_continued_as_new__'
+-- is deliberately NOT in the terminal set, and because we only look at the
+-- newest generation a rotated-away (lower) generation's rotation marker is never
+-- even considered — so a rotated, still-running workflow is correctly reported
+-- as unfinished rather than masked as finished. The CTE computes one
+-- current-generation row per logical id, so each unfinished workflow is returned
+-- exactly once (this form is used in preference to a HAVING/correlated-MAX
+-- subquery for clarity on PostgreSQL 18+).
 findUnfinishedWorkflowIdsStmt :: Statement () [(Text, Text)]
 findUnfinishedWorkflowIdsStmt =
   preparable
     """
-    SELECT DISTINCT s.workflow_id, s.workflow_name
-    FROM keiro_workflow_steps s
+    WITH current_gen AS (
+      SELECT workflow_id, workflow_name, MAX(generation) AS gen
+      FROM keiro_workflow_steps
+      GROUP BY workflow_id, workflow_name
+    )
+    SELECT cg.workflow_id, cg.workflow_name
+    FROM current_gen cg
     WHERE NOT EXISTS (
       SELECT 1 FROM keiro_workflow_steps c
-      WHERE c.workflow_id = s.workflow_id
+      WHERE c.workflow_id = cg.workflow_id
+        AND c.workflow_name = cg.workflow_name
+        AND c.generation = cg.gen
         AND c.step_name IN ('__workflow_completed__', '__workflow_cancelled__')
     )
     """
