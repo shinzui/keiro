@@ -116,11 +116,15 @@ import Keiro.Workflow
   , WorkflowOutcome (..)
   , appendJournalEntry
   , awaitStep
+  , continueAsNew
+  , currentGeneration
   , defaultWorkflowRunOptions
   , findUnfinishedWorkflowIds
+  , restoreSeed
   , runWorkflow
   , runWorkflowWith
   , step
+  , workflowGenerationStreamName
   , workflowJournalCodec
   )
 import Keiro.Workflow.Child
@@ -2381,6 +2385,105 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       summary2 `shouldBe` emptyResumeSummary
       readIORef counter >>= \c -> c `shouldBe` 3
 
+  describe "Keiro.Workflow continue-as-new" $ around (withFreshStore fixture) $ do
+    -- EP-48 headline proof (Checks 1 & 2): a 300-step rolling-total workflow that
+    -- rotates every 50 steps keeps each physical generation journal bounded by
+    -- K = rotateEvery + 2 (at most rotateEvery work steps + the one seed step that
+    -- opened the generation + the one terminal marker), yet returns the correct
+    -- final total. A single non-rotating run would put all 300 steps on one
+    -- journal and the per-generation `<= K` bound would fail.
+    it "rotates a long workflow, bounds each generation, and returns the correct total" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "roller"
+          wid = WorkflowId "r-1"
+          rotateEvery = 50 :: Int
+          total = 300 :: Int
+          k = rotateEvery + 2
+          body = rollingTotal counter rotateEvery total
+          -- Re-invoke runWorkflow until it Completes; each call resolves and
+          -- advances the current generation, exactly as the resume worker does.
+          drive :: Int -> IO Int
+          drive budget
+            | budget <= 0 =
+                expectationFailure "workflow did not complete within the rotation budget" >> pure (-1)
+            | otherwise = do
+                outcome <- Store.runStoreIO storeHandle (runWorkflow name wid body)
+                case outcome of
+                  Right ContinuedAsNew -> drive (budget - 1)
+                  Right (Completed t) -> pure t
+                  other -> expectationFailure ("unexpected outcome: " <> show other) >> pure (-1)
+      -- The first invocation rotates (generation 0 did rotateEvery steps).
+      firstOutcome <- Store.runStoreIO storeHandle (runWorkflow name wid body)
+      firstOutcome `shouldBe` Right ContinuedAsNew
+      -- Drive the remaining generations to completion (bounded passes).
+      finalTotal <- drive (total `div` rotateEvery + 3)
+      -- Check 2: correct result, and each side effect ran exactly once.
+      finalTotal `shouldBe` total
+      readIORef counter >>= (`shouldBe` total)
+      -- The workflow rotated to its final generation (300/50 = 6 generations: 0..5).
+      Right gen <- Store.runStoreIO storeHandle (currentGeneration name wid)
+      gen `shouldBe` (total `div` rotateEvery - 1)
+      -- Check 1: every generation's physical journal is bounded by K, and the
+      -- total is split ACROSS generations (bounded per generation, not in
+      -- aggregate). Each generation holds exactly 1 seed + rotateEvery work + 1
+      -- marker = K events, so the sum is total + 2 per generation.
+      lengths <- traverse
+        ( \g -> do
+            let streamName = workflowGenerationStreamName name wid g
+            Right evs <- Store.runStoreIO storeHandle (Store.readStreamForward streamName (StreamVersion 0) 1000)
+            pure (Vector.length evs)
+        )
+        [0 .. gen]
+      for_ lengths (`shouldSatisfy` (<= k))
+      sum lengths `shouldBe` (total + 2 * (gen + 1))
+      -- The first generation ends with a rotation marker; the last with a
+      -- completion marker.
+      Right gen0evs <- Store.runStoreIO storeHandle (Store.readStreamForward (workflowGenerationStreamName name wid 0) (StreamVersion 0) 1000)
+      (decodeRecorded workflowJournalCodec <$> Vector.toList gen0evs)
+        `shouldSatisfy` any
+          ( \case
+              Right (WorkflowContinuedAsNew 1 _) -> True
+              _ -> False
+          )
+      Right lastEvs <- Store.runStoreIO storeHandle (Store.readStreamForward (workflowGenerationStreamName name wid gen) (StreamVersion 0) 1000)
+      (decodeRecorded workflowJournalCodec <$> Vector.toList lastEvs)
+        `shouldSatisfy` any
+          ( \case
+              Right (WorkflowCompleted _) -> True
+              _ -> False
+          )
+
+    -- EP-48 Check 3: discovery and resume follow the CURRENT generation. After a
+    -- rotation the rotated (newer) generation is unfinished and discoverable —
+    -- the older generation's WorkflowContinuedAsNew marker does NOT mask it — and
+    -- the resume worker drives the rotated generation forward to completion.
+    it "rediscovers and resumes a rotated workflow on its current generation" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "roller2"
+          wid = WorkflowId "r-2"
+          rotateEvery = 50 :: Int
+          total = 150 :: Int
+          registry = Map.singleton name (WorkflowDef (\_ -> rollingTotal counter rotateEvery total))
+          resumeUntilDone :: Int -> IO ()
+          resumeUntilDone budget
+            | budget <= 0 = expectationFailure "resume did not complete the rotated workflow"
+            | otherwise = do
+                Right summary <-
+                  Store.runStoreIO storeHandle (resumeWorkflowsOnce defaultWorkflowResumeOptions registry)
+                if completed summary == 1 then pure () else resumeUntilDone (budget - 1)
+      -- First run rotates onto generation 1.
+      firstOutcome <- Store.runStoreIO storeHandle (runWorkflow name wid (rollingTotal counter rotateEvery total))
+      firstOutcome `shouldBe` Right ContinuedAsNew
+      -- The rotated current generation (1) is unfinished and discoverable.
+      Right unfinished <- Store.runStoreIO storeHandle findUnfinishedWorkflowIds
+      unfinished `shouldBe` [("r-2", "roller2")]
+      -- The resume worker drives the rotated generation(s) to completion.
+      resumeUntilDone (total `div` rotateEvery + 3)
+      readIORef counter >>= (`shouldBe` total)
+      -- Finished: discovery now reports nothing for it.
+      Right finalUnfinished <- Store.runStoreIO storeHandle findUnfinishedWorkflowIds
+      finalUnfinished `shouldBe` []
+
   describe "Keiro.Workflow observability" $ around (withFreshStore fixture) $ do
     -- The headline operability signal: executed (real work) vs replayed
     -- (recorded history), recorded by the runtime through an SDK meter and read
@@ -2986,6 +3089,34 @@ awaitingThenStep counter = do
   decision <- awaitStep (StepName "awk:approval") (pure ())
   _ <- step (StepName "use") (liftIO (incrementAndRead counter) >> pure (decision <> "!"))
   pure (decision <> "-done")
+
+-- | A rolling-total workflow (EP-48 continue-as-new acceptance). It adds @total@
+-- unit-valued work steps to a running total, rotating its journal every
+-- @rotateEvery@ steps via 'continueAsNew'. The carried seed is the pair
+-- @(runningTotal, stepsDoneGlobally)@ so each generation knows the global
+-- progress; @genDone@ counts steps within the /current/ generation to bound it.
+-- Each work step bumps @counter@ exactly once (proving rotation neither drops
+-- nor double-counts) and returns 1, so the final total equals @total@.
+--
+-- Step names are the global step index (@w0@, @w1@, …), so they are unique
+-- within each generation's journal and replay-stable. Note the regression
+-- direction: on a tree where 'continueAsNew' did not rotate, this body would put
+-- all @total@ steps on generation 0's single journal and the per-generation
+-- @<= K@ bound below would fail for @total > K@.
+rollingTotal :: (Workflow :> es, IOE :> es) => IORef Int -> Int -> Int -> Eff es Int
+rollingTotal counter rotateEvery total = do
+  (acc0, done0) <- restoreSeed (0 :: Int, 0 :: Int)
+  go acc0 done0 0
+  where
+    go acc done genDone
+      | done >= total = pure acc -- all global work done: this generation completes
+      | genDone >= rotateEvery = continueAsNew (acc, done) -- bound this generation; carry onward
+      | otherwise = do
+          n <-
+            step
+              (StepName ("w" <> Text.pack (show done)))
+              (liftIO (modifyIORef' counter (+ 1) >> pure (1 :: Int)))
+          go (acc + n) (done + 1) (genDone + 1)
 
 -- | A two-step workflow whose steps each bump a shared counter.
 demoWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es (Int, Int)

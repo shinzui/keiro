@@ -94,8 +94,13 @@ This section must always reflect the actual current state of the work.
   masks a still-running newer generation. The resume worker needed no change (re-invocation
   runs through `runWorkflowWith`, which resolves the current generation). `cabal test keiro`
   green — 134 examples, 0 failures (2026-06-03).
-- [ ] Milestone 6 (acceptance test): add the bounded-journal rotation test to
-  `keiro/test/Main.hs`; prove each generation ≤ K across N rotations and the correct final result.
+- [x] Milestone 6 (acceptance test): added `describe "Keiro.Workflow continue-as-new"` with two
+  examples. (1) A 300-step rolling-total workflow rotating every 50 steps: each of the 6 physical
+  generation journals holds ≤ K=52 events (sum 312 = total + 2/gen, proving split-across-generations),
+  the final total is 300, and the side-effect counter is 300 (each step ran exactly once). (2) The
+  resume worker rediscovers the rotated workflow on its current generation (`findUnfinishedWorkflowIds`
+  reports it after rotation, `[]` once finished). `cabal test keiro` green — **136 examples, 0
+  failures** (2026-06-03).
 - [ ] Milestone 7 (full green): `cabal build all`, `cabal test keiro`, `cabal test jitsurei-test`;
   reconcile the MasterPlan Integration Points note (the chosen generation scheme).
 
