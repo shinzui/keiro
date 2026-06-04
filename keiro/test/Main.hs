@@ -8,8 +8,11 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
+import Data.ByteString (ByteString)
+import Data.Int (Int32)
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Monoid (mempty)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
@@ -17,7 +20,7 @@ import Effectful (Eff, IOE, (:>))
 import Kiroku.Store.Effect (Store)
 import Data.Vector qualified as Vector
 import Data.UUID (UUID, fromString)
-import Data.Time (UTCTime (..), diffUTCTime, secondsToDiffTime)
+import Data.Time (UTCTime (..), addUTCTime, diffUTCTime, secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Keiro.Test.Postgres (withFreshStore, withFreshStores2, withMigratedSuite)
 import Hasql.Decoders qualified as D
@@ -102,6 +105,22 @@ import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar
 import System.Timeout (timeout)
 import Keiro.Prelude
 import Keiro.Projection
+import Keiro.Subscription.Shard
+  ( WorkerId (..)
+  , fairShareTarget
+  )
+import Keiro.Subscription.Shard.Schema
+  ( claimShardsTx
+  , ensureShardRows
+  , listShardOwnership
+  , releaseShardsTx
+  , renewLeaseTx
+  )
+import Keiro.Subscription.Shard.Worker
+  ( ShardedWorkerOptions (..)
+  , defaultShardedWorkerOptions
+  , runShardedSubscriptionGroup
+  )
 import Keiro.ProcessManager
 import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild qualified as Rebuild
@@ -198,6 +217,10 @@ import Kiroku.Store.Types
   , StreamId (..)
   , StreamName (..)
   , StreamVersion (..)
+  )
+import Kiroku.Store.Subscription.Types
+  ( SubscriptionName (..)
+  , SubscriptionTarget (..)
   )
 import OpenTelemetry.Attributes (Attribute (..), Attributes, PrimitiveAttribute (..), lookupAttribute)
 import OpenTelemetry.Attributes.Key (AttributeKey, unkey)
@@ -2617,6 +2640,132 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       killThread worker
       resumed `shouldBe` Just ()
 
+  describe "Shard lease" $ around (withFreshStore fixture) $ do
+    -- EP-51 M2: claim / renew / release / expiry at the SQL layer, with explicit
+    -- `now` timestamps standing in for the passage of time (no workers yet). The
+    -- exclusion guarantee is the FOR UPDATE SKIP LOCKED claim; disjointness and
+    -- failover are both observable purely from the lease table.
+    let subName = SubscriptionName "orders-shard"
+        wA = WorkerId sampleUuid
+        wB = WorkerId sampleUuid2
+        ttl = 30 :: NominalDiffTime
+        t0 = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
+        tExpired = addUTCTime 60 t0 -- past A's 30 s lease
+
+    it "ensureShardRows populates N rows once (idempotent on re-run)" $ \store -> do
+      Right () <- Store.runStoreIO store $ Store.runTransaction $ do
+        ensureShardRows subName 4
+        ensureShardRows subName 4
+      Right rows <- Store.runStoreIO store $ Store.runTransaction (listShardOwnership subName)
+      map (\(b, _, _) -> b) rows `shouldBe` [0, 1, 2, 3]
+      all (\(_, o, _) -> isNothing o) rows `shouldBe` True
+
+    it "worker A claims all N when free; B claims 0 while A holds valid leases" $ \store -> do
+      Right claimedA <- Store.runStoreIO store $ Store.runTransaction $ do
+        ensureShardRows subName 4
+        claimShardsTx subName wA 4 t0 ttl
+      claimedA `shouldBe` [0, 1, 2, 3]
+      Right claimedB <- Store.runStoreIO store $ Store.runTransaction (claimShardsTx subName wB 4 t0 ttl)
+      claimedB `shouldBe` []
+
+    it "B claims A's buckets after A's lease expires; A then renews nothing" $ \store -> do
+      Right _ <- Store.runStoreIO store $ Store.runTransaction $ do
+        ensureShardRows subName 4
+        claimShardsTx subName wA 4 t0 ttl
+      Right claimedB <- Store.runStoreIO store $ Store.runTransaction (claimShardsTx subName wB 4 tExpired ttl)
+      claimedB `shouldBe` [0, 1, 2, 3]
+      -- A lost every bucket to B, so its renew returns the empty set: this is how
+      -- a worker learns it no longer owns a bucket and stops reading it.
+      Right heldA <- Store.runStoreIO store $ Store.runTransaction (renewLeaseTx subName wA tExpired ttl)
+      heldA `shouldBe` []
+
+    it "renewLease returns only still-held buckets" $ \store -> do
+      Right held <- Store.runStoreIO store $ Store.runTransaction $ do
+        ensureShardRows subName 4
+        _ <- claimShardsTx subName wA 4 t0 ttl
+        renewLeaseTx subName wA t0 ttl
+      held `shouldBe` [0, 1, 2, 3]
+
+    it "releaseShards: relinquished buckets are immediately claimable" $ \store -> do
+      Right _ <- Store.runStoreIO store $ Store.runTransaction $ do
+        ensureShardRows subName 4
+        _ <- claimShardsTx subName wA 4 t0 ttl
+        releaseShardsTx subName wA [0, 1]
+      -- Even while A's lease over 2,3 is still valid, the released 0,1 are claimable.
+      Right claimedB <- Store.runStoreIO store $ Store.runTransaction (claimShardsTx subName wB 4 t0 ttl)
+      claimedB `shouldBe` [0, 1]
+
+    it "fairShareTarget divides buckets evenly (ceil)" $ \_store -> do
+      fairShareTarget 6 3 `shouldBe` 2
+      fairShareTarget 6 4 `shouldBe` 2
+      fairShareTarget 7 3 `shouldBe` 3
+      fairShareTarget 4 0 `shouldBe` 4 -- a non-positive estimate claims everything
+
+  describe "Sharded subscription single worker" $ around (withFreshStore fixture) $ do
+    -- EP-51 M3: one process owning all N buckets drains a seeded category exactly
+    -- once. The sink is idempotent on event_id, so "count == total" proves every
+    -- event was delivered with none missing and none surviving as a duplicate row.
+    it "one worker with N=4 buckets drains a seeded category exactly once" $ \store -> do
+      Right () <- Store.runStoreIO store $ Store.runTransaction (Tx.sql createShardSinkSql)
+      total <- seedOrders store 8 5 -- 40 events across 8 streams
+      let opts =
+            (defaultShardedWorkerOptions (Category (CategoryName "orders")) 4)
+              { leaseTtl = 3, renewInterval = 0.3 }
+      w <- forkIO (runShardedSubscriptionGroup store (SubscriptionName "orders-sub") opts (sinkHandler store 1))
+      drained <- waitUntilSinkCount store total 20_000_000
+      killThread w
+      drained `shouldBe` True
+      count <- shardSinkCount store
+      count `shouldBe` total
+      maxW <- maxWorkersPerStream store
+      maxW `shouldBe` 1
+
+  describe "Sharded subscription drain and failover" $ around (withFreshStore fixture) $ do
+    -- EP-51 M5: the behavioural acceptance. Three worker processes cooperatively
+    -- partition a category; we let ownership converge on the *empty* category
+    -- first (so the churn of cold-start rebalancing touches no events), then seed
+    -- and drain under stable membership — so each stream is owned by exactly one
+    -- worker throughout the drain. Then we kill a worker and prove its buckets are
+    -- re-homed and the new events drain (failover via lease expiry).
+    let sub = SubscriptionName "orders-failover"
+        mkOpts = (defaultShardedWorkerOptions (Category (CategoryName "orders")) 6) {leaseTtl = 3, renewInterval = 0.3}
+    it "three workers drain disjointly, then re-home a killed worker's buckets" $ \store -> do
+      Right () <- Store.runStoreIO store $ Store.runTransaction (Tx.sql createShardSinkSql)
+      w1 <- forkIO (runShardedSubscriptionGroup store sub mkOpts (sinkHandler store 1))
+      w2 <- forkIO (runShardedSubscriptionGroup store sub mkOpts (sinkHandler store 2))
+      w3 <- forkIO (runShardedSubscriptionGroup store sub mkOpts (sinkHandler store 3))
+      -- Wait for cooperative balance on the empty category: all 6 buckets owned,
+      -- spread across >= 2 workers, none holding more than its fair share.
+      balanced <- waitShardsBalanced store sub 6 2 15_000_000
+      balanced `shouldBe` True
+      -- Now seed and drain under stable membership.
+      total1 <- seedOrders store 12 5 -- 60 events
+      ok1 <- waitUntilSinkCount store total1 25_000_000
+      ok1 `shouldBe` True
+      -- Disjoint: no stream key was processed by two workers (stable membership,
+      -- so no re-homing split any stream).
+      maxW <- maxWorkersPerStream store
+      maxW `shouldBe` 1
+      -- The work genuinely spread (not a monopoly): at least two workers participated.
+      spread <- distinctWorkers store
+      spread `shouldSatisfy` (>= 2)
+      -- Counts sum to total with no duplicate event id (PK on event_id + count).
+      c1 <- shardSinkCount store
+      c1 `shouldBe` total1
+      -- Kill worker 1 (its readers stop; it stops renewing, so its leases expire).
+      killThread w1
+      -- Seed more across all streams; some hash to worker 1's now-orphaned buckets.
+      total2 <- seedOrders store 12 5 -- another 60
+      -- Failover: a surviving worker re-claims the expired buckets and drains the
+      -- new events. If re-homing did not happen, events on worker 1's buckets would
+      -- never drain and this would time out.
+      ok2 <- waitUntilSinkCount store (total1 + total2) 30_000_000
+      killThread w2
+      killThread w3
+      ok2 `shouldBe` True
+      c2 <- shardSinkCount store
+      c2 `shouldBe` (total1 + total2)
+
   describe "Keiro.Workflow observability" $ around (withFreshStore fixture) $ do
     -- The headline operability signal: executed (real work) vs replayed
     -- (recorded history), recorded by the runtime through an SDK meter and read
@@ -4548,3 +4697,139 @@ flattenHistogramPoints rmes =
   , MetricExportHistogram n _ _ _ _ pts <- [export]
   , p <- Vector.toList pts
   ]
+
+-- ===========================================================================
+-- EP-51 sharded-subscription test helpers
+-- ===========================================================================
+
+-- A test sink the sharded handlers write to: one row per processed event,
+-- idempotent on event_id (an at-least-once handler may redeliver during a
+-- rebalance). worker_tag identifies which worker process handled it; stream_id
+-- is the originating stream (the partition key kiroku hashes on).
+createShardSinkSql :: ByteString
+createShardSinkSql =
+  "CREATE TABLE IF NOT EXISTS shard_sink \
+  \(event_id uuid PRIMARY KEY, worker_tag int NOT NULL, stream_id bigint NOT NULL)"
+
+-- Seed @nStreams@ category-@orders@ streams with @perStream@ events each
+-- (upsert append, so it is safe to call twice in one test). Returns the total
+-- number of events appended.
+seedOrders :: Store.KirokuStore -> Int -> Int -> IO Int
+seedOrders store nStreams perStream = do
+  for_ [0 .. nStreams - 1] $ \i -> do
+    let sname = StreamName ("orders-" <> Text.pack (show i))
+        evs =
+          [ EventData
+              { eventId = Nothing
+              , eventType = EventType "OrderPlaced"
+              , payload = object ["n" Aeson..= (j :: Int)]
+              , metadata = Nothing
+              , causationId = Nothing
+              , correlationId = Nothing
+              }
+          | j <- [0 .. perStream - 1]
+          ]
+    Right _ <- Store.runStoreIO store $ Store.appendToStream sname AnyVersion evs
+    pure ()
+  pure (nStreams * perStream)
+
+-- A handler for worker @tag@: idempotently record (event_id, tag, stream_id).
+sinkHandler :: Store.KirokuStore -> Int32 -> RecordedEvent -> IO ()
+sinkHandler store tag ev =
+  void $
+    Store.runStoreIO store $
+      Store.runTransaction $
+        Tx.statement (eventUuid (ev ^. #eventId), tag, streamIdInt (ev ^. #originalStreamId)) insertShardSinkStmt
+ where
+  eventUuid (EventId u) = u
+  streamIdInt (StreamId s) = s
+
+insertShardSinkStmt :: Statement (UUID, Int32, Int64) ()
+insertShardSinkStmt =
+  preparable
+    "INSERT INTO shard_sink (event_id, worker_tag, stream_id) VALUES ($1, $2, $3) ON CONFLICT (event_id) DO NOTHING"
+    ( contrazip3
+        (E.param (E.nonNullable E.uuid))
+        (E.param (E.nonNullable E.int4))
+        (E.param (E.nonNullable E.int8))
+    )
+    D.noResult
+
+shardSinkCount :: Store.KirokuStore -> IO Int
+shardSinkCount store =
+  either (const 0) id
+    <$> Store.runStoreIO store (Store.runTransaction (Tx.statement () countShardSinkStmt))
+
+countShardSinkStmt :: Statement () Int
+countShardSinkStmt =
+  preparable
+    "SELECT count(*) FROM shard_sink"
+    E.noParams
+    (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
+
+-- The largest number of distinct workers that processed any single stream. 1
+-- means perfectly disjoint ownership (no stream split across workers).
+maxWorkersPerStream :: Store.KirokuStore -> IO Int
+maxWorkersPerStream store =
+  either (const 0) id
+    <$> Store.runStoreIO store (Store.runTransaction (Tx.statement () maxWorkersPerStreamStmt))
+
+maxWorkersPerStreamStmt :: Statement () Int
+maxWorkersPerStreamStmt =
+  preparable
+    "SELECT COALESCE(MAX(c), 0) FROM \
+    \(SELECT count(DISTINCT worker_tag) AS c FROM shard_sink GROUP BY stream_id) s"
+    E.noParams
+    (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
+
+-- How many distinct workers processed at least one event (proves the work
+-- spread across the pool rather than monopolised by one worker).
+distinctWorkers :: Store.KirokuStore -> IO Int
+distinctWorkers store =
+  either (const 0) id
+    <$> Store.runStoreIO store (Store.runTransaction (Tx.statement () distinctWorkersStmt))
+
+distinctWorkersStmt :: Statement () Int
+distinctWorkersStmt =
+  preparable
+    "SELECT count(DISTINCT worker_tag) FROM shard_sink"
+    E.noParams
+    (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
+
+-- Poll the sink count until it reaches @target@ or the timeout elapses.
+waitUntilSinkCount :: Store.KirokuStore -> Int -> Int -> IO Bool
+waitUntilSinkCount store target timeoutMicros = go (max 1 (timeoutMicros `div` step))
+ where
+  step = 100_000
+  go :: Int -> IO Bool
+  go 0 = (>= target) <$> shardSinkCount store
+  go n = do
+    c <- shardSinkCount store
+    if c >= target
+      then pure True
+      else threadDelay step >> go (n - 1)
+
+-- Poll the lease table until cooperative ownership has converged: every bucket
+-- owned, at least @minWorkers@ distinct owners, and no owner holding more than
+-- its fair share. This is the "balanced on the empty category" gate the
+-- failover test waits on before seeding, so the drain runs under stable
+-- membership.
+waitShardsBalanced :: Store.KirokuStore -> SubscriptionName -> Int -> Int -> Int -> IO Bool
+waitShardsBalanced store sub n minWorkers timeoutMicros = go (max 1 (timeoutMicros `div` step))
+ where
+  step = 200_000
+  go :: Int -> IO Bool
+  go 0 = isBalanced
+  go k = do
+    ok <- isBalanced
+    if ok then pure True else threadDelay step >> go (k - 1)
+  isBalanced :: IO Bool
+  isBalanced = do
+    rows <- either (const []) id <$> Store.runStoreIO store (Store.runTransaction (listShardOwnership sub))
+    let owners = [w | (_, Just w, _) <- rows]
+        distinct = length (nubOrd owners)
+        perOwner = [length g | g <- groupByOwner owners]
+        fairShare = (n + max 1 distinct - 1) `div` max 1 distinct
+    pure (length rows == n && length owners == n && distinct >= minWorkers && all (<= fairShare) perOwner)
+  groupByOwner ws = [filter (== w) ws | w <- nubOrd ws]
+  nubOrd = Set.toList . Set.fromList

@@ -50,6 +50,9 @@ library
                         Keiro.Snapshot
                         Keiro.Snapshot.Codec
                         Keiro.Snapshot.Schema
+                        Keiro.Subscription.Shard
+                        Keiro.Subscription.Shard.Schema
+                        Keiro.Subscription.Shard.Worker
                         Keiro.Telemetry
                         Keiro.Timer
                         Keiro.Timer.Schema
