@@ -449,6 +449,7 @@ loadJournal options name wid = do
         Right (WorkflowCompleted _) -> pure journal
         Right (WorkflowCancelled _) -> pure journal
         Right (WorkflowFailed _ _) -> pure journal
+        Right (WorkflowContinuedAsNew _ _) -> pure journal -- a rotation marker carries no step result
         Left err -> throwIO (WorkflowJournalDecodeError (Text.pack (show err)))
 
 -- ---------------------------------------------------------------------------
@@ -531,6 +532,7 @@ journalKey = \case
   WorkflowCompleted{} -> completedStepName
   WorkflowCancelled{} -> cancelledStepName
   WorkflowFailed{} -> failedStepName
+  WorkflowContinuedAsNew{} -> continuedAsNewStepName
 
 -- | The index row corresponding to a journal event.
 journalRow :: WorkflowName -> WorkflowId -> WorkflowJournalEvent -> WorkflowStepRow
@@ -565,6 +567,14 @@ journalRow name wid = \case
       , workflowName = unWorkflowName name
       , stepName = failedStepName
       , result = Aeson.toJSON r
+      , recordedAt = t
+      }
+  WorkflowContinuedAsNew g t ->
+    WorkflowStepRow
+      { workflowId = unWorkflowId wid
+      , workflowName = unWorkflowName name
+      , stepName = continuedAsNewStepName
+      , result = Aeson.toJSON g -- the NEXT generation this rotation opens
       , recordedAt = t
       }
 

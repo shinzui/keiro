@@ -111,7 +111,7 @@ import Keiro.Workflow
   ( StepName (..)
   , Workflow
   , WorkflowId (..)
-  , WorkflowJournalEvent (StepRecorded, WorkflowCancelled, WorkflowCompleted, WorkflowFailed)
+  , WorkflowJournalEvent (StepRecorded, WorkflowCancelled, WorkflowCompleted, WorkflowContinuedAsNew, WorkflowFailed)
   , WorkflowName (..)
   , WorkflowOutcome (..)
   , appendJournalEntry
@@ -2483,6 +2483,18 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       (workflowStateCodec ^. #decode) ((workflowStateCodec ^. #encode) m) `shouldBe` Right m
       (workflowStateCodec ^. #shapeHash) `shouldBe` "keiro.workflow.stepmap.v1"
       (workflowStateCodec ^. #stateCodecVersion) `shouldBe` 1
+
+  describe "Keiro.Workflow.Types journal codec" $ do
+    -- Pure (no-DB) round-trip of the EP-48 rotation marker, proving the
+    -- additive WorkflowContinuedAsNew constructor encodes and decodes
+    -- self-describingly within schemaVersion 1.
+    it "round-trips a WorkflowContinuedAsNew rotation marker" $ do
+      let t = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 3600)
+          marker = WorkflowContinuedAsNew 3 t
+      (workflowJournalCodec ^. #decode) ((workflowJournalCodec ^. #encode) marker)
+        `shouldBe` Right marker
+      (workflowJournalCodec ^. #schemaVersion) `shouldBe` 1
+      "WorkflowContinuedAsNew" `elem` (workflowJournalCodec ^. #eventTypes) `shouldBe` True
 
   describe "Keiro.Workflow.Sleep" $ do
     -- Pure (no-DB) checks of the id/payload/step-name helpers.

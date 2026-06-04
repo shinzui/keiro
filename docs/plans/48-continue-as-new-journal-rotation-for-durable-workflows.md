@@ -66,12 +66,16 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1 (generation storage): add the `2026-06-05-…-keiro-workflow-generation.sql`
-  migration that adds a `generation` column to `keiro_workflow_steps` and a
-  current-generation lookup; confirm `cabal test keiro-migrations-test` green on a fresh apply.
-- [ ] Milestone 2 (journal event + codec): add the `WorkflowContinuedAsNew` constructor to
-  `Keiro.Workflow.Types.WorkflowJournalEvent` and `workflowJournalCodec` (additive within
-  `schemaVersion = 1`, no upcaster); `cabal build keiro` green; codec round-trip test passes.
+- [x] Milestone 1 (generation storage): added `2026-06-05-00-00-00-keiro-workflow-generation.sql`
+  adding the `generation` column to `keiro_workflow_steps`, re-keying to
+  `(workflow_id, workflow_name, generation, step_name)`, and widening the lookup index.
+  `cabal test keiro-migrations-test` green (1 example, 0 failures) on a fresh apply
+  (2026-06-03). Folded plan 47's `workflow_name` re-key in, since plan 47 had not landed.
+- [x] Milestone 2 (journal event + codec): added the `WorkflowContinuedAsNew {generation, recordedAt}`
+  constructor to `WorkflowJournalEvent` + `workflowJournalCodec` (additive, `schemaVersion = 1`,
+  no upcaster), `continuedAsNewStepName = "__workflow_continued_as_new__"`, and the
+  `loadJournal`/`journalKey`/`journalRow` arms. `cabal build keiro` green; codec round-trip
+  example passes (2026-06-03).
 - [ ] Milestone 3 (generation-aware naming + load + record): add the physical generation
   stream name, the current-generation lookup, and thread the generation through
   `recordStepTx` / `stepExists` / `loadJournal` / `appendJournalTx`; `cabal build keiro` green.

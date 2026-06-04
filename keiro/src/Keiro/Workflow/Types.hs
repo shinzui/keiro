@@ -39,6 +39,7 @@ module Keiro.Workflow.Types
   , completedStepName
   , cancelledStepName
   , failedStepName
+  , continuedAsNewStepName
   , sleepStepPrefix
   , awakeableStepPrefix
   , childStepPrefix
@@ -114,6 +115,11 @@ data WorkflowJournalEvent
   | WorkflowCompleted {recordedAt :: !UTCTime}
   | WorkflowCancelled {recordedAt :: !UTCTime}
   | WorkflowFailed {reason :: !Text, recordedAt :: !UTCTime}
+  | WorkflowContinuedAsNew {generation :: !Int, recordedAt :: !UTCTime}
+  -- ^ Terminal-for-this-generation rotation marker (EP-48). 'generation'
+  --   is the NEXT generation this rotation opens. Additive within
+  --   @schemaVersion = 1@: old journals never carry the
+  --   @"WorkflowContinuedAsNew"@ tag, so no upcaster is needed.
   deriving stock (Eq, Show, Generic)
 
 {- | The 'Codec' that serializes 'WorkflowJournalEvent' to and from the
@@ -125,12 +131,13 @@ payload alone.
 workflowJournalCodec :: Codec WorkflowJournalEvent
 workflowJournalCodec =
   Codec
-    { eventTypes = "StepRecorded" :| ["WorkflowCompleted", "WorkflowCancelled", "WorkflowFailed"]
+    { eventTypes = "StepRecorded" :| ["WorkflowCompleted", "WorkflowCancelled", "WorkflowFailed", "WorkflowContinuedAsNew"]
     , eventType = \case
         StepRecorded{} -> "StepRecorded"
         WorkflowCompleted{} -> "WorkflowCompleted"
         WorkflowCancelled{} -> "WorkflowCancelled"
         WorkflowFailed{} -> "WorkflowFailed"
+        WorkflowContinuedAsNew{} -> "WorkflowContinuedAsNew"
     , schemaVersion = 1
     , encode = encodeJournalEvent
     , decode = decodeJournalEvent
@@ -162,6 +169,12 @@ encodeJournalEvent = \case
       , "reason" Aeson..= r
       , "recordedAt" Aeson..= t
       ]
+  WorkflowContinuedAsNew g t ->
+    Aeson.object
+      [ "kind" Aeson..= ("WorkflowContinuedAsNew" :: Text)
+      , "generation" Aeson..= g
+      , "recordedAt" Aeson..= t
+      ]
 
 decodeJournalEvent :: Aeson.Value -> Either Text WorkflowJournalEvent
 decodeJournalEvent value = first Text.pack (parseEither parser value)
@@ -177,6 +190,8 @@ decodeJournalEvent value = first Text.pack (parseEither parser value)
           WorkflowCancelled <$> o Aeson..: "recordedAt"
         "WorkflowFailed" ->
           WorkflowFailed <$> o Aeson..: "reason" <*> o Aeson..: "recordedAt"
+        "WorkflowContinuedAsNew" ->
+          WorkflowContinuedAsNew <$> o Aeson..: "generation" <*> o Aeson..: "recordedAt"
         other ->
           fail ("unknown workflow journal event kind: " <> Text.unpack other)
 
@@ -230,6 +245,19 @@ cancelledStepName = "__workflow_cancelled__"
 index row) when a workflow is recorded as permanently failed. -}
 failedStepName :: Text
 failedStepName = "__workflow_failed__"
+
+{- | The reserved step name written (as a 'WorkflowContinuedAsNew' journal event
+and an index row) when a workflow's generation rotates via @continueAsNew@
+(EP-48). Its presence on a generation's index row makes that generation terminal
+/for itself/ (a rotated-away generation drops out of any per-generation
+"unfinished" check); the /current/ generation is the one with no terminal marker
+row. Distinct from 'completedStepName'/'cancelledStepName': a rotated workflow is
+NOT finished — its work continues on the next generation —
+so 'Keiro.Workflow.Schema.findUnfinishedWorkflowIds' deliberately scopes its
+terminal-marker check to the current (MAX) generation and does not treat
+'continuedAsNewStepName' as terminal for the logical workflow. -}
+continuedAsNewStepName :: Text
+continuedAsNewStepName = "__workflow_continued_as_new__"
 
 {- | Reserved step-name prefix EP-39 uses to journal a durable @sleep@'s
 completion. Integration contract: EP-39 must use exactly this string. -}
