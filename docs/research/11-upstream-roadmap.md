@@ -320,6 +320,25 @@ EP-4's snapshot write uses an inline `SELECT stream_id FROM streams WHERE stream
 
 *Provenance.* `docs/research/01-kiroku-read-side.md` §"Gaps for Keiro" #10.
 
+### 4.11 Public store-wake combinator (Optional; Provenance: EP-50)
+
+*Already-shipped substrate.* The underlying LISTEN/NOTIFY machinery this would expose **already ships**: the `notify_events()` trigger on `streams` fires `pg_notify('<schema>.events', '<stream_name>,<stream_id>,<stream_version>')` on every append (`kiroku-store-migrations/sql-migrations/2026-05-16-00-00-00-kiroku-bootstrap.sql:145-159`), and `Kiroku.Store.Notification.Notifier` runs **one** dedicated `kiroku-listener` connection per store (started by `withStore`, `Kiroku.Store.Connection`), exposing `tickChan :: TChan ()` (broadcast, every append) and `categoryGenerations :: TVar (Map Text Word64)` (per-category counter). EP-50 found the `docs/research/10-workflow-roadmap.md` §6.11 "introduce a channel / expose a LISTEN connection" ask was therefore essentially **already satisfied upstream** — push delivery is almost entirely keiro-side.
+
+*What is missing today.* keiro reaches the wake signal by importing `Kiroku.Store.Connection (KirokuStore (..))` and `Kiroku.Store.Notification (Notifier (..))` and reading the record fields directly (`tickChan (notifier store)`). That works (the fields are exported) but couples keiro to kiroku's internal `Notifier` representation.
+
+*What keiro needs (ergonomics only).* A small public combinator on kiroku that returns a duplicated wake channel (and/or a per-category counter view) without exposing the `Notifier` record internals, for example:
+
+    storeWakeChannel    :: KirokuStore -> IO (TChan ())          -- dupTChan of the broadcast tick; opens no connection
+    storeWakeCategoryGen :: KirokuStore -> Text -> IO (TVar Word64)  -- a per-category counter view
+
+*Why.* Decouples keiro's `Keiro.Wake` from the `Notifier` record shape. STM-only; opens no database connection (the listener already exists per store).
+
+*Priority.* **Optional.** Not on any critical path: EP-50 shipped (continue-as-new phase-2 push delivery) by reading the exported record fields directly. This is a maintenance nicety, the *only* upstream item EP-50 carries.
+
+*Suggested sequencing.* Block 4.
+
+*Provenance.* `docs/plans/50-listen-notify-push-delivery-for-subscriptions-and-workflow-resume.md` (EP-50, MasterPlan 6); `docs/research/10-workflow-roadmap.md` §6.11.
+
 
 ## 5. shibuya-kiroku-adapter roadmap
 

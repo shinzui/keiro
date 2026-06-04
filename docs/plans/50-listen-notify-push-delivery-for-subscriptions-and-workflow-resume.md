@@ -103,12 +103,16 @@ This section must always reflect the actual current state of the work.
   with `runPollLoopWith neverWake 200000 onePass` (every NOTIFY dropped, 200 ms fallback), the same
   gated workflow still drains to completion on the durable poll. `cabal test keiro` green
   — **142 examples, 0 failures** (2026-06-03).
-- [ ] M5 (keiro-side): document the pool-sizing story (one shared listener
-  connection per store, not per worker) and the channel/payload contract in the
-  module haddock and in this plan's Interfaces section.
-- [ ] M6 (upstream surface): state the re-scoped upstream ask precisely and forward
-  it to `docs/research/11-upstream-roadmap.md` as a new Optional entry. No upstream
-  code is required for this plan to ship.
+- [x] M5 (keiro-side): the pool-sizing story (one shared `kiroku-listener` connection per store,
+  zero added by push) and the channel/payload contract (`kiroku.events`;
+  `stream_name,stream_id,stream_version`, treated as an opaque wake) are documented in the
+  `Keiro.Wake` module haddock and the `runWorkflowResumeWorkerPush` haddock, and in this plan's
+  Interfaces section. (2026-06-03)
+- [x] M6 (upstream surface): forwarded the re-scoped Optional ergonomics ask (a public
+  `storeWakeChannel`/`storeWakeCategoryGen` combinator on kiroku) to
+  `docs/research/11-upstream-roadmap.md` as new §4.11, noting the LISTEN/NOTIFY substrate already
+  shipped in the 2026-05-16 bootstrap migration. No upstream code is required for EP-50 to ship.
+  (2026-06-03)
 
 
 ## Surprises & Discoveries
@@ -294,7 +298,41 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**Outcome (2026-06-03): delivered, and far cheaper than the original framing.** keiro's
+resume worker can now ride kiroku's existing append notifications instead of sleeping a
+fixed interval: `runWorkflowResumeWorkerPush` waits on a `WakeSignal` between passes and
+falls back to `pollInterval` only when no notification arrives. The acceptance proves both
+halves of the purpose: a gated workflow resumes **sub-second** (asserted `< 1.0 s`) after
+the gate append under a deliberately large 10 s fallback (so only the `NOTIFY` could have
+woken it), and the same workflow **still drains** when driven with `neverWake` + a 200 ms
+fallback (every notification dropped) — push is strictly an optimization layered over the
+durable poll.
+
+**The headline discovery held up.** The §6.11 upstream ask ("introduce a channel / expose
+a LISTEN connection") was already satisfied: kiroku ships the `notify_events()` trigger,
+one dedicated `kiroku-listener` connection per store, and the broadcast `tickChan`. So
+push adds **zero** new connections — N workers share kiroku's single listener plus N STM
+cursors — resolving §6.11's pool-sizing worry. The work was almost entirely keiro-side: a
+~110-line `Keiro.Wake` module plus two functions on `Resume`.
+
+**Gaps / adaptations.** (1) The plan assumed a tasty harness and exported
+`withFreshDatabase`/`runSqlOn`; the real suite is hspec and exports neither, so the M0
+manual-NOTIFY spike and `hasql-notifications` were dropped in favour of testing the
+`WakeSignal` against **real appends** through `withFreshStore` (a stronger end-to-end
+proof). (2) `runWorkflowResumeWorkerPush`'s registry row is the concrete
+`'[Store, Error StoreError, IOE]` that `runStoreIO` eliminates, not the plan's `'[IOE,
+Store]`. (3) The acceptance uses a gated await-then-step workflow rather than a parent/child
+cascade — the gate append is what makes the suspended instance discoverable, the same
+interactive-latency story without the extra moving parts. (4) `runTimerWorkerPush` and an
+outbox push scheduler remain documented-not-implemented (the same `runPollLoopWith` pattern
+applies mechanically). (5) The per-category wake refinement (wait on `wf:*` counters instead
+of the global tick) remains a recorded future optimization. (6) The only upstream item is the
+Optional `storeWakeChannel` ergonomics combinator, forwarded to upstream roadmap §4.11.
+
+**Lessons.** Reading the live kiroku tree before designing paid off enormously — the feature
+that looked like it needed an upstream channel needed none. The startup-delay-before-append
+pattern (let the worker dup its channel and park before firing the gate) is the key to a
+non-flaky push-latency test.
 
 
 ## Context and Orientation

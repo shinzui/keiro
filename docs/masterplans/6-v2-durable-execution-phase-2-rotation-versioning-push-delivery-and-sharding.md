@@ -115,7 +115,7 @@ including multi-region — rejected as out of scope per §6.6.
 |---|-------|------|-----------|-----------|--------|
 | 48 | Continue-as-new journal rotation for durable workflows | docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md | None | None | Complete |
 | 49 | Workflow versioning and patch API | docs/plans/49-workflow-versioning-and-patch-api.md | None | EP-48 | Complete |
-| 50 | LISTEN/NOTIFY push delivery for subscriptions and workflow resume | docs/plans/50-listen-notify-push-delivery-for-subscriptions-and-workflow-resume.md | None | None | In Progress |
+| 50 | LISTEN/NOTIFY push delivery for subscriptions and workflow resume | docs/plans/50-listen-notify-push-delivery-for-subscriptions-and-workflow-resume.md | None | None | Complete |
 | 51 | Consumer-group sharding for category subscriptions | docs/plans/51-consumer-group-sharding-for-category-subscriptions.md | None | EP-50 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -213,8 +213,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-48: prove a long-running workflow rotates and stays bounded across N rotations. (2026-06-03; 300 steps, 6 generations ≤ 52 events each)
 - [x] EP-49: add the `patch :: PatchId -> Eff es Bool` primitive and its journaled decision record. (2026-06-03)
 - [x] EP-49: prove an in-flight workflow observes a stable patch branch across replays. (2026-06-03; old/new branch + once-only journaling)
-- [ ] EP-50: add the LISTEN/NOTIFY push channel with poll fallback; scope the upstream surface.
-- [ ] EP-50: prove sub-second wakeup latency for a process manager / resume worker.
+- [x] EP-50: add the LISTEN/NOTIFY push channel with poll fallback; scope the upstream surface. (2026-06-03; `Keiro.Wake` + push worker, upstream §4.11 forwarded)
+- [x] EP-50: prove sub-second wakeup latency for a process manager / resume worker. (2026-06-03; gated workflow resumes <1s under a 10s fallback)
 - [ ] EP-51: add the sharded-ownership table and the cooperative claim/leadership protocol.
 - [ ] EP-51: prove a high-volume category drains across N cooperating workers without duplication.
 
@@ -302,6 +302,25 @@ interactions between child plans. Provide concise evidence.
     `docs/user/durable-workflows.md` document the new surface.
   - Acceptance: `cabal build all` clean; `cabal test keiro` 137/0. **Wave 1 (EP-48, EP-49) is
     complete**; the remaining work is Wave 2 (EP-50 push delivery, EP-51 sharding).
+
+
+- 2026-06-03 (EP-50 shipped): **LISTEN/NOTIFY push delivery (EP-50) is complete, and the
+  planning-phase prediction that kiroku already ships the substrate was confirmed in code.** The
+  feature is entirely keiro-side: a new `Keiro.Wake` module (`WakeSignal`/`wakeSignalFromStore`/
+  `neverWake`) duplicates kiroku's existing per-store `Notifier.tickChan`, and
+  `runWorkflowResumeWorkerPush`/`runPollLoopWith` on `Keiro.Workflow.Resume` wait on it between
+  passes with `pollInterval` repurposed as the fallback. **Push adds zero new connections** (N
+  workers share kiroku's single `kiroku-listener`), resolving the §6.11 pool-sizing worry.
+  - **Acceptance:** a gated workflow resumes sub-second (`< 1.0 s`) after the gate append under a
+    10 s fallback (only the `NOTIFY` could have woken it), and still drains on `neverWake` + a
+    200 ms fallback (push is an optimization over the durable poll). `cabal test keiro` 142/0;
+    `cabal build all` clean.
+  - **Upstream:** the only forwarded item is the Optional `storeWakeChannel` ergonomics combinator,
+    added as `docs/research/11-upstream-roadmap.md` §4.11; no upstream code was needed.
+  - **Harness adaptations:** the suite is hspec (not tasty) and doesn't export
+    `withFreshDatabase`/`runSqlOn`, so the `WakeSignal` is tested against real appends via
+    `withFreshStore`; the registry row is the concrete `'[Store, Error StoreError, IOE]`. See EP-50's
+    Decision Log. **Only EP-51 (sharding) remains in Wave 2.**
 
 
 ## Decision Log
