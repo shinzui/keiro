@@ -23,6 +23,7 @@ module Keiro.Workflow.Types
     WorkflowName (..)
   , WorkflowId (..)
   , StepName (..)
+  , PatchId (..)
 
     -- * Stream naming
   , workflowStreamName
@@ -45,6 +46,8 @@ module Keiro.Workflow.Types
   , sleepStepPrefix
   , awakeableStepPrefix
   , childStepPrefix
+  , patchStepPrefix
+  , patchStepName
   )
 where
 
@@ -77,6 +80,14 @@ label, not on source position, so reordering code between deploys does not
 corrupt an in-flight workflow.
 -}
 newtype StepName = StepName {unStepName :: Text}
+  deriving stock (Eq, Ord, Show, Generic)
+
+{- | The stable identifier of a /patch/ (EP-49) — a guarded, cross-cutting change
+to a running workflow's logic. The author chooses an opaque, never-reused string
+(for example @"fraud-check-v2"@). A patch decision is journaled under the key
+@patch:\<patchId\>@, so the id must not contain the structural @:@ in a way that
+makes the prefix boundary ambiguous, mirroring the 'sleepStepPrefix' caveat. -}
+newtype PatchId = PatchId {unPatchId :: Text}
   deriving stock (Eq, Ord, Show, Generic)
 
 {- | The journal stream name for a workflow instance:
@@ -311,3 +322,15 @@ awakeableStepPrefix = "awk:"
 completion. Integration contract: EP-43 must use exactly this string. -}
 childStepPrefix :: Text
 childStepPrefix = "child:"
+
+{- | Reserved step-name prefix EP-49 uses to journal a 'patch' decision. A patch
+decision is journaled as an ordinary 'StepRecorded' event whose 'stepName' is
+@'patchStepPrefix' <> 'unPatchId' pid@ and whose 'result' is the JSON 'Bool'
+branch decision, so the replay loop and the step index stay uniform — no new
+journal-event constructor is added. -}
+patchStepPrefix :: Text
+patchStepPrefix = "patch:"
+
+-- | The journal key a patch decision is recorded under: @patch:\<patchId\>@.
+patchStepName :: PatchId -> Text
+patchStepName (PatchId pid) = patchStepPrefix <> pid

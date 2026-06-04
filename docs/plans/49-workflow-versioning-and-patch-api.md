@@ -99,9 +99,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 here, even if it requires splitting a partially completed task into two ("done" vs.
 "remaining"). This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: add the `PatchId` newtype, the `patchStepName` helper, and the
-  reserved `patch:` prefix to `keiro/src/Keiro/Workflow/Types.hs`; confirm
-  `cabal build keiro` is green.
+- [x] Milestone 1: added the `PatchId` newtype, `patchStepPrefix = "patch:"`, and
+  `patchStepName :: PatchId -> Text` to `Keiro.Workflow.Types` with exports.
+  `cabal build keiro` green (2026-06-03).
 - [ ] Milestone 2: add the `Patch` operation to the `Workflow` effect and the
   `patch` smart constructor in `keiro/src/Keiro/Workflow.hs`, and interpret it in
   the `handler` of `runWorkflowWith`; confirm `cabal build keiro` is green.
