@@ -130,14 +130,16 @@ shipOrderWorkflow orderId =
 ## Running a workflow
 
 ```haskell
-data WorkflowOutcome a = Completed a | Suspended | Cancelled
+data WorkflowOutcome a = Completed a | Suspended | Cancelled | ContinuedAsNew
 runWorkflow :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
 ```
 
 `runWorkflow name wfId action` runs (or resumes) the workflow and returns
 `Completed a` when it finishes, `Suspended` when it parks at an unresolved wait,
-or `Cancelled` when its journal carries a cancellation marker. Running the same
-`(name, wfId)` again replays the journal and short-circuits completed steps.
+`Cancelled` when its journal carries a cancellation marker, or `ContinuedAsNew`
+when the run rotated its journal via `continueAsNew` (see *Versioning a running
+workflow* below). Running the same `(name, wfId)` again replays the journal and
+short-circuits completed steps.
 
 ## Journaling and replay
 
@@ -162,6 +164,56 @@ codec never fragments. The journal from the demo run:
 Note the awakeable is journaled under `awk:<uuid>` (the deterministic awakeable
 id), and a child contributes two entries: the `child:<id>` spawn record and the
 `child:<id>:result` completion the parent awaits.
+
+## Versioning a running workflow: rename a step, or patch
+
+Because step durability is keyed on the **name**, not the source position, the
+*common* way to evolve a workflow whose instances are already running needs no
+special API: **rename the step**. Change `step (StepName "charge") …` to
+`step (StepName "charge-v2") …` and the new name has no journaled history, so its
+action runs fresh on the next replay — exactly what you want when one step's
+behaviour changed. The rule of thumb: *if a single rename makes the change
+correct, rename.*
+
+The `patch` primitive is the escape hatch for the *rare* case a rename cannot
+express — a change that **cross-cuts several steps**, where an instance already
+past some of them must take one stable branch for the rest of its life:
+
+```haskell
+patch :: (Workflow :> es) => PatchId -> Eff es Bool
+```
+
+`patch (PatchId "fraud-check-v2")` returns `True` for an instance that is fresh at
+this point (run the new branch) and `False` for one already in flight when the
+patch shipped (keep the old branch); the decision is journaled once under
+`patch:<id>` and replayed verbatim forever. For example, wrapping two existing
+steps in a fraud check:
+
+```haskell
+orderFlow orderId = do
+  useFraudCheck <- patch (PatchId "fraud-check-v2")
+  if useFraudCheck
+    then do
+      _ <- step (StepName "reserve-inventory") (reserveInventoryWithHold orderId)
+      _ <- step (StepName "fraud-review")      (fraudReview orderId)
+      _ <- step (StepName "charge")            (chargeWithHold orderId)
+      pure ()
+    else do
+      _ <- step (StepName "reserve-inventory") (reserveInventory orderId)
+      _ <- step (StepName "charge")            (chargeCard orderId)
+      pure ()
+```
+
+An order already mid-flight (it reserved inventory under the old logic, with no
+hold to release) observes `useFraudCheck == False` and finishes on the old path; a
+fresh order observes `True`. Reach for `patch` *only* when an in-flight instance
+would be left incoherent by the new code, and never reuse a retired `PatchId`.
+
+For a workflow that runs an *unbounded* number of steps (a poller, a per-day
+rolling process), `continueAsNew seed` rotates its journal onto a fresh generation
+so the per-generation history stays bounded; read the carried state back at the
+top of the body with `restoreSeed`. A rotating run returns `ContinuedAsNew`, and
+the resume worker drives it forward on its current generation.
 
 ## The resume worker
 

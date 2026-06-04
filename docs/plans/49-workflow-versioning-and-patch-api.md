@@ -111,11 +111,13 @@ here, even if it requires splitting a partially completed task into two ("done" 
   a fresh instance the NEW branch, the decision is stable across replays, and exactly one
   `patch:fraud-check-v2` decision is journaled per instance (`false`/`true`). `cabal test keiro`
   green — **137 examples, 0 failures** (2026-06-03).
-- [ ] Milestone 4: document the primitive — a short note in
-  `docs/guides/durable-workflows.md` (the rename-vs-patch contrast) and a signature
-  entry in `docs/user/durable-workflows.md`; flip the `docs/user/roadmap.md` /
-  `docs/user/production-status.md` lines that still mark "versioning / patch API" as
-  deferred.
+- [x] Milestone 4: documented the primitive — a "Versioning a running workflow: rename a step,
+  or patch" subsection in `docs/guides/durable-workflows.md` (with the fraud-check example) and a
+  "Versioning and rotation" signature block in `docs/user/durable-workflows.md`; flipped the patch
+  API from deferred to available in `docs/user/roadmap.md` and `docs/user/production-status.md`.
+  **Folded in EP-48's missed doc/roadmap flip** (EP-48 had no doc milestone): updated `WorkflowOutcome`
+  (+`ContinuedAsNew`), `WorkflowJournalEvent` (+`WorkflowContinuedAsNew`), the rotation primitives,
+  and the continue-as-new roadmap/status lines. See Surprises (2026-06-03).
 - [ ] Milestone 5: full-repo green — `cabal build all`, `cabal test keiro` — recorded
   in Validation and Acceptance.
 
@@ -139,6 +141,17 @@ implementation. Provide concise evidence.
   not carried in the seed map) is out of scope here — neither plan's acceptance combines `patch`
   with `continueAsNew`, and `patch` is an escape hatch — but it is flagged for a future plan if
   the combination is ever needed.
+
+- 2026-06-03 (M4): **EP-48's user-facing doc/roadmap flip was folded into this milestone.**
+  EP-48 (continue-as-new) shipped under MasterPlan 6 but its plan had no documentation
+  milestone, so `docs/user/roadmap.md`, `docs/user/production-status.md`, and both durable-workflow
+  docs still marked continue-as-new as deferred and still showed the pre-EP-48 `WorkflowOutcome`
+  (no `ContinuedAsNew`) and `WorkflowJournalEvent` (no `WorkflowContinuedAsNew`). Since EP-49's M4
+  is the MasterPlan-6 documentation reconciliation and editing those same files, I corrected the
+  continue-as-new entries alongside the patch-API ones rather than leave shipped features marked
+  deferred. The MasterPlan vision explicitly scopes "the `docs/user/roadmap.md` /
+  `production-status.md` reconciliation flipping each from deferred to available" to the whole
+  initiative, so this is in-scope reconciliation, not creep.
 
 
 ## Decision Log

@@ -59,8 +59,6 @@ Keiro is not yet a good fit when:
 - you need positional-history durable execution (Temporal-style step identity
   derived from call order) — Keiro's runtime uses **named** steps that are stable
   across source reordering, by design;
-- you need continue-as-new journal rotation for unbounded-length workflow
-  histories (still deferred);
 - you need built-in schema migration tooling for user read models;
 - you need a complete sample application and extensive Haddocks before adoption;
 - your deployment cannot run PostgreSQL 18+.
@@ -80,11 +78,13 @@ Inline projections can be transactional with the command append.
 The v2 durable-execution runtime is available (`Keiro.Workflow`): named-step
 `Workflow es a` functions with durable sleep, awakeables, child workflows, a
 crash-recovery resume worker, and journal snapshots. Step identity is by **name**,
-not call-order position, so it is stable across source reordering. V1 process
+not call-order position, so it is stable across source reordering. Continue-as-new
+journal rotation (`continueAsNew`/`restoreSeed`) keeps unbounded histories bounded,
+and the `patch` API gives stable, journaled branch decisions for cross-cutting
+workflow-logic changes (prefer renaming a step for single-step changes). V1 process
 managers and timers remain the saga-style / time-based coordination layer; reach
 for a workflow when the process reads as one long-running function with in-line
-waits. The deferred pieces are continue-as-new journal rotation and the
-versioning/patch API. See the [Durable Workflows guide](../guides/durable-workflows.md).
+waits. See the [Durable Workflows guide](../guides/durable-workflows.md).
 
 ### APIs are low-level
 

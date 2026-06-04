@@ -27,7 +27,7 @@ The umbrella `Keiro` module does **not** re-export the workflow surface; import
 
 ```haskell
 data Workflow :: Effect
-data WorkflowOutcome a = Completed a | Suspended | Cancelled
+data WorkflowOutcome a = Completed a | Suspended | Cancelled | ContinuedAsNew
 
 runWorkflow     :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
 runWorkflowWith :: (IOE :> es, Store :> es) => WorkflowRunOptions -> WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
@@ -73,6 +73,32 @@ cancelChild     :: (IOE :> es, Store :> es) => ChildHandle a -> Eff es Bool
   the parent until the child completes. **Use a `WorkflowId` for the child that is
   distinct from the parent's** (discovery groups by `workflow_id`).
 
+## Versioning and rotation
+
+```haskell
+continueAsNew :: (Workflow :> es, ToJSON s) => s -> Eff es a
+restoreSeed   :: (Workflow :> es, ToJSON s, FromJSON s) => s -> Eff es s
+patch         :: (Workflow :> es) => PatchId -> Eff es Bool
+newtype PatchId = PatchId { unPatchId :: Text }
+```
+
+- `continueAsNew seed` (EP-48) rotates a long-running workflow onto a fresh
+  journal *generation*, carrying `seed` forward so the per-generation journal
+  stays bounded even for an unbounded number of steps. Read the seed back at the
+  top of the body with `restoreSeed def` (a journaled step that returns the
+  carried value on a rotated generation or `def` on the first). A rotating run
+  returns the `ContinuedAsNew` outcome; the resume worker drives it forward on
+  its current generation. Generation 0 keeps the legacy `wf:<name>-<id>` stream
+  name; generation `g > 0` uses `wf:<name>-<id>#<g>`.
+- `patch pid` (EP-49) returns a **stable, journaled** branch decision: `True` for
+  an instance that is fresh at this point (run the new logic), `False` for one
+  already in flight when the patch shipped (keep the old logic). The decision is
+  journaled once under `patch:<pid>` and replayed verbatim forever. This is an
+  escape hatch for changes that cross-cut multiple steps; for a single-step
+  change, **rename the step** instead (a renamed `StepName` has no journaled
+  history, so its action runs fresh) rather than reaching for `patch`. Never
+  reuse a retired `PatchId`.
+
 ## Journal stream and tables
 
 ```haskell
@@ -83,11 +109,15 @@ data WorkflowJournalEvent
   | WorkflowCompleted { recordedAt :: UTCTime }
   | WorkflowCancelled { recordedAt :: UTCTime }
   | WorkflowFailed    { reason :: Text, recordedAt :: UTCTime }
+  | WorkflowContinuedAsNew { generation :: Int, recordedAt :: UTCTime }  -- EP-48 rotation marker
 ```
 
-Each instance journals to `wf:<name>-<id>`. The suspension primitives journal
-their completions as `StepRecorded` under reserved prefixes — `sleep:`, `awk:`,
-`child:` — never as new event types. The runtime keeps two tables in the `kiroku`
+Each instance journals to `wf:<name>-<id>` (generation 0; a rotated generation
+`g` lives on `wf:<name>-<id>#<g>`). The suspension primitives journal their
+completions as `StepRecorded` under reserved prefixes — `sleep:`, `awk:`,
+`child:` — never as new event types; the `patch` decision (EP-49) is likewise a
+`StepRecorded` under the `patch:` prefix, and `continueAsNew` (EP-48) adds the
+one terminal `WorkflowContinuedAsNew` rotation marker. The runtime keeps two tables in the `kiroku`
 schema: `keiro_workflow_steps` (the step-lookup index that backs replay and
 unfinished-workflow discovery) and `keiro_awakeables` (pending external
 completions); child links live in `keiro_workflow_children`.

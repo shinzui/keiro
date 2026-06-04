@@ -19,7 +19,7 @@ exact released surface and `docs/user/production-status.md` for adoption posture
 | Phase 2 | Complete v1 workflow substrate | Complete: outbox, inbox, OpenTelemetry tracing and metrics, process-manager snapshot guidance, and the timer stuck-row recovery API and runbook. |
 | Phase 3 | Read-side maturity | Async projections, subscriptions, and position waits get stronger consistency and scaling options. |
 | Phase 4 | Adoption and ergonomics | The worked-examples app and guides exist; remaining work is full Haddocks, a public stability policy, and higher-level facades. |
-| Phase 5 | v2 durable execution | Complete: a named-step `Workflow es a` runtime with durable sleep, awakeables, child workflows, a crash-recovery resume worker, journal snapshots, and `keiro.workflow.*` observability ships on top of the v1 substrate. Continue-as-new journal rotation and the versioning/patch API remain deferred. |
+| Phase 5 | v2 durable execution | Complete: a named-step `Workflow es a` runtime with durable sleep, awakeables, child workflows, a crash-recovery resume worker, journal snapshots, and `keiro.workflow.*` observability ships on top of the v1 substrate. Phase-2 additions (MasterPlan 6) add continue-as-new journal rotation (`continueAsNew`/`restoreSeed`) and the versioning/patch API (`patch`). |
 
 ## Capability Matrix
 
@@ -41,7 +41,7 @@ exact released surface and `docs/user/production-status.md` for adoption posture
 | Worker metrics | Available now | `Keiro.Telemetry` exposes opt-in OpenTelemetry metrics for outbox, inbox, timer, and async-projection workers (backlog, lag, duplicate, dead-letter, and stuck-timer instruments). |
 | Exactly-once async projections | Planned v1.x / upstream-dependent | Blocks on transactional Shibuya/Kiroku checkpoint handling. |
 | Prefix subscriptions | Planned v1.x / upstream-dependent | Needed for `pm:` and future `wf:` stream families at scale. |
-| Durable execution runtime | Available now | `Keiro.Workflow`: named-step `Workflow es a`, durable `sleep`, awakeables, child workflows, a crash-recovery resume worker, and journal snapshots (`keiro_workflow_steps` + `keiro_awakeables`). Continue-as-new journal rotation for unbounded histories remains deferred. |
+| Durable execution runtime | Available now | `Keiro.Workflow`: named-step `Workflow es a`, durable `sleep`, awakeables, child workflows, a crash-recovery resume worker, and journal snapshots (`keiro_workflow_steps` + `keiro_awakeables`). Continue-as-new journal rotation (`continueAsNew`/`restoreSeed`) keeps unbounded histories bounded; the `patch` API gives stable, journaled branch decisions for cross-cutting workflow-logic changes. |
 
 ## Current Baseline
 
@@ -343,7 +343,8 @@ V2 durable execution means journaled functions with named steps.
 | Resume worker | `resumeWorkflowsOnce` discovers and re-invokes unfinished workflows from a registry. |
 | Snapshots | `runWorkflowWith` + `snapshotPolicy` compact long journals via `workflowStateCodec`. |
 | Observability | `keiro.workflow.*` metrics and a `workflow <name>` span. |
-| Continue-as-new | **Still deferred** — long-history rotation without losing state (§6). |
+| Continue-as-new | **Available** — `continueAsNew`/`restoreSeed` rotate a long-running workflow onto a fresh journal generation, keeping per-generation history bounded without losing state (§6.4, MasterPlan 6). |
+| Versioning / patch | **Available** — `patch :: PatchId -> Eff es Bool` gives a stable, journaled branch decision so in-flight instances keep old logic while fresh ones take new logic across step boundaries (§6.5, MasterPlan 6). Prefer renaming a step for single-step changes. |
 
 The key design decision is named steps, not positional history. Step identity is
 explicit and stable across source-code reordering, avoiding Temporal-style
@@ -369,10 +370,18 @@ Delivered (EP-38…EP-44 under MasterPlan 5):
 - observability for journal replay versus live execution
   (`keiro.workflow.steps.replayed` vs `keiro.workflow.steps.executed`).
 
+Delivered in phase 2 (EP-48…EP-49 under MasterPlan 6):
+
+- continue-as-new journal rotation for unbounded histories
+  (`continueAsNew`/`restoreSeed`);
+- the versioning / patch API for cross-cutting workflow-logic changes (`patch`).
+
 Still deferred (cleanly additive, see §6 of the workflow roadmap):
 
-- versioning or patch APIs for changed workflow logic;
-- long-history compaction / continue-as-new journal rotation.
+- LISTEN/NOTIFY push delivery and consumer-group sharding (the remaining
+  MasterPlan 6 subscription-substrate items);
+- multi-region / global ordering, server-side scripted projections, the schema
+  registry, and field-level encryption (rejected or demand-driven, §6.6–§6.12).
 
 Why v1 is still the right foundation:
 
