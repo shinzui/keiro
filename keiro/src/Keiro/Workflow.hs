@@ -60,6 +60,7 @@ module Keiro.Workflow
   , freshOrdinal
   , continueAsNew
   , restoreSeed
+  , patch
 
     -- * Running a workflow
   , runWorkflow
@@ -154,6 +155,12 @@ data Workflow :: Effect where
   --   and unwind this run; the next run/resume continues from the seed. Never
   --   returns to the caller within this run (result type is fully polymorphic).
   ContinueAsNew :: (Aeson.ToJSON s) => s -> Workflow m a
+  -- | EP-49: decide and journal a cross-cutting branch — returns the stable
+  --   'Bool' branch decision for the given patch. Fresh instances get 'True'
+  --   (new branch); instances already in flight when the patch shipped get
+  --   'False' (old branch). The decision is journaled on first encounter and
+  --   replayed verbatim thereafter.
+  Patch :: PatchId -> Workflow m Bool
 
 type instance DispatchOf Workflow = Dynamic
 
@@ -218,6 +225,26 @@ workflow body that uses 'continueAsNew'.
 -}
 restoreSeed :: (Workflow :> es, Aeson.ToJSON s, Aeson.FromJSON s) => s -> Eff es s
 restoreSeed def = step (StepName continueSeedStepName) (pure def)
+
+{- | Decide a cross-cutting branch for an in-flight-vs-fresh code change, and
+journal the decision so every later replay observes the same branch (EP-49).
+
+@patch (PatchId "fraud-check-v2")@ returns 'True' for an instance that is fresh
+at this point (run the new branch) and 'False' for an instance that was already
+in flight when this patch shipped (keep the old branch). On the first encounter
+the decision is journaled under @patch:\<patchId\>@; every replay returns the
+recorded 'Bool'.
+
+This is an /escape hatch/ for changes that cross-cut multiple steps. For the
+common case — one step changed — do __not__ use 'patch': rename the step's
+'StepName' instead. A renamed step has no journaled history under its new name,
+so its action runs fresh on the next replay, which is exactly the right
+behaviour for a single-step change. Reach for 'patch' only when an in-flight
+instance would be left incoherent by the new code (e.g. the change adds, removes,
+or reorders steps, or changes the meaning of an already-journaled step result).
+-}
+patch :: (Workflow :> es) => PatchId -> Eff es Bool
+patch pid = send (Patch pid)
 
 -- ---------------------------------------------------------------------------
 -- Per-run options
@@ -379,7 +406,13 @@ runWorkflowWith options name wid action = do
           initial <- loadJournal options name wid gen
           journalRef <- liftIO (newIORef initial)
           ordinalRef <- liftIO (newIORef Map.empty)
-          let runHandler = interpret (handler gen journalRef ordinalRef) action
+          -- EP-49: capture, once, whether this instance was already in flight when
+          -- the run began — i.e. whether the PRE-loaded journal already holds any
+          -- ordinary (non-reserved) step key. The 'Patch' miss path reads this
+          -- stable flag rather than the live (mutating) map, so a fresh instance
+          -- that runs a step before its patch call is not misclassified.
+          let startedInFlight = any isOrdinaryStepKey (Map.keys initial)
+          let runHandler = interpret (handler gen startedInFlight journalRef ordinalRef) action
           outcome <-
             (Completed <$> runHandler)
               `catch` (\WorkflowSuspend -> pure Suspended)
@@ -416,10 +449,11 @@ runWorkflowWith options name wid action = do
             ContinuedAsNew -> pure ContinuedAsNew
     handler ::
       Int ->
+      Bool ->
       IORef (Map Text Aeson.Value) ->
       IORef (Map Text Int) ->
       EffectHandler Workflow es
-    handler gen journalRef ordinalRef env operation = case operation of
+    handler gen startedInFlight journalRef ordinalRef env operation = case operation of
       Step (StepName key) act -> do
         journal <- liftIO (readIORef journalRef)
         case Map.lookup key journal of
@@ -472,12 +506,50 @@ runWorkflowWith options name wid action = do
       -- 'runWorkflowWith' catches and turns into 'rotateGeneration'. Never
       -- returns to the caller within this run (result type is polymorphic).
       ContinueAsNew seed -> throwIO (WorkflowRotate (Aeson.toJSON seed))
+      -- EP-49: decide and journal a cross-cutting branch. Mirrors the 'Step'
+      -- hit/miss shape, but the miss path computes the decision from
+      -- 'startedInFlight' (rather than running a user action) and journals a 'Bool'.
+      Patch pid -> do
+        let key = patchStepName pid
+        journal <- liftIO (readIORef journalRef)
+        case Map.lookup key journal of
+          Just stored ->
+            -- Hit: the decision was made on an earlier run; replay it verbatim.
+            decodeStored key stored
+          Nothing -> do
+            -- Miss: first encounter. A fresh instance (nothing ordinary journaled
+            -- when the run began) takes the new branch (True); an in-flight one
+            -- takes the old branch (False). Journal the decision so it is stable.
+            let decision = not startedInFlight
+                encoded = Aeson.toJSON decision
+            _ <- recordStep name wid gen (StepName key) encoded
+            liftIO
+              ( atomicModifyIORef' journalRef $ \m ->
+                  (Map.insert key encoded m, ())
+              )
+            pure decision
 
 -- | Decode a stored journal result into the type the caller expects.
 decodeStored :: (Aeson.FromJSON a) => Text -> Aeson.Value -> Eff es a
 decodeStored key stored = case Aeson.fromJSON stored of
   Aeson.Success a -> pure a
   Aeson.Error message -> throwIO (WorkflowStepDecodeError key (Text.pack message))
+
+{- | A journal key counts as an /ordinary/ step (EP-49) — evidence the instance
+had already begun executing user logic — when it is neither a terminal marker
+nor a reserved runtime step name/prefix. The reserved set is the terminal markers
+('completedStepName' / 'cancelledStepName' / 'failedStepName'), the EP-48 rotation
+names ('continuedAsNewStepName' / 'continueSeedStepName' — a freshly-rotated
+generation carries a seed step but is NOT "in flight under the old code"), and the
+wake-source / patch prefixes ('sleep:' / 'awk:' / 'child:' / 'patch:'). The
+'patch' first-encounter decision uses this to tell a fresh instance (no ordinary
+step yet) from one already in flight past this point. -}
+isOrdinaryStepKey :: Text -> Bool
+isOrdinaryStepKey k =
+  not
+    ( k `elem` [completedStepName, cancelledStepName, failedStepName, continuedAsNewStepName, continueSeedStepName]
+        || any (`Text.isPrefixOf` k) [sleepStepPrefix, awakeableStepPrefix, childStepPrefix, patchStepPrefix]
+    )
 
 {- | Pre-load a workflow's journal stream into a @step name -> result@ map.
 

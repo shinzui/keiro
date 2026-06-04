@@ -19,13 +19,18 @@ common common
 
 library
   import:          common
-  exposed-modules: Keiro.Migrations
+  exposed-modules:
+    Keiro.Migrations
+    Keiro.Migrations.New
+
   hs-source-dirs:  src
   build-depends:
     , base        >=4.18 && <5
     , bytestring  >=0.11
     , codd        >=0.1.8
+    , directory   >=1.3
     , file-embed  >=0.0.15
+    , filepath    >=1.4
     , kiroku-store-migrations
     , streaming
     , text        >=2.0

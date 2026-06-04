@@ -102,9 +102,10 @@ here, even if it requires splitting a partially completed task into two ("done" 
 - [x] Milestone 1: added the `PatchId` newtype, `patchStepPrefix = "patch:"`, and
   `patchStepName :: PatchId -> Text` to `Keiro.Workflow.Types` with exports.
   `cabal build keiro` green (2026-06-03).
-- [ ] Milestone 2: add the `Patch` operation to the `Workflow` effect and the
-  `patch` smart constructor in `keiro/src/Keiro/Workflow.hs`, and interpret it in
-  the `handler` of `runWorkflowWith`; confirm `cabal build keiro` is green.
+- [x] Milestone 2: added the `Patch` operation, the `patch` smart constructor, the handler
+  case (using a `startedInFlight` flag captured from the pre-loaded journal), and the
+  `isOrdinaryStepKey` helper (extended to exclude EP-48's reserved names — see Surprises).
+  `cabal build keiro` green (2026-06-03).
 - [ ] Milestone 3: add the acceptance test to `keiro/test/Main.hs` (a new
   `describe "Keiro.Workflow patch API"` block) proving stable-branch semantics and
   exactly-once journaling; confirm `cabal test keiro` is green.
@@ -122,7 +123,20 @@ here, even if it requires splitting a partially completed task into two ("done" 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-03 (M2, EP-48 reconciliation): **EP-48 (continue-as-new) has landed, so
+  `isOrdinaryStepKey` must also exclude EP-48's two reserved step names.** The plan's
+  `isOrdinaryStepKey` listed only the terminal markers and the `sleep:`/`awk:`/`child:`/
+  `patch:` prefixes. EP-48 added two fixed reserved names — `continuedAsNewStepName`
+  (`__workflow_continued_as_new__`) and `continueSeedStepName` (`__workflow_seed__`) — and a
+  freshly-rotated generation's journal carries the seed step. Without excluding it, a
+  rotated-but-fresh generation would be misclassified as "in flight" and `patch` would wrongly
+  return `False` there. I added both names to the reserved set. This is the kind of cross-plan
+  reconciliation the MasterPlan anticipated; EP-49 still rides the existing `StepRecorded`
+  mechanism with no codec/migration change. The deeper question of how a patch decision should
+  persist *across* a continue-as-new rotation (the decision is a step row in the old generation,
+  not carried in the seed map) is out of scope here — neither plan's acceptance combines `patch`
+  with `continueAsNew`, and `patch` is an escape hatch — but it is flagged for a future plan if
+  the combination is ever needed.
 
 
 ## Decision Log
