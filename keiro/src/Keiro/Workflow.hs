@@ -78,6 +78,7 @@ module Keiro.Workflow
   , recordStepTx
   , loadStepIndex
   , stepExists
+  , currentGeneration
   , findUnfinishedWorkflowIds
   )
 where
@@ -115,6 +116,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import Keiro.Workflow.Snapshot (loadWorkflowSnapshot, writeWorkflowSnapshot)
 import Keiro.Workflow.Schema
   ( WorkflowStepRow (..)
+  , currentGeneration
   , findUnfinishedWorkflowIds
   , loadStepIndex
   , recordStepTx
@@ -300,22 +302,27 @@ runWorkflowWith ::
   Eff (Workflow : es) a ->
   Eff es (WorkflowOutcome a)
 runWorkflowWith options name wid action = do
+  -- EP-48: resolve the CURRENT (highest) generation once per run and operate
+  -- only on it. A never-rotating workflow stays at generation 0, so naming,
+  -- load, and append are byte-for-byte as before. A rotated workflow resolves
+  -- to its newest generation, so discovery/resume transparently continue there.
+  gen <- currentGeneration name wid
   -- Cancellation short-circuit (EP-43): a workflow whose journal carries a
   -- WorkflowCancelled marker makes no further progress. The index row for that
-  -- marker is keyed under 'cancelledStepName', so a single existence check is
-  -- enough and we never run the user action.
-  cancelled <- stepExists wid cancelledStepName
+  -- marker is keyed under 'cancelledStepName' on the current generation, so a
+  -- single existence check is enough and we never run the user action.
+  cancelled <- stepExists name wid gen cancelledStepName
   if cancelled
     then pure Cancelled
-    else runActive
+    else runActive gen
   where
     -- EP-44 telemetry handles, pulled from the run options once. Both default
     -- to 'Nothing' (see 'defaultWorkflowRunOptions'), so a default-options run
     -- records nothing and opens no span — the no-op idiom holds end to end.
     mMetrics = options ^. #metrics
     mTracer = options ^. #tracer
-    runActive :: Eff es (WorkflowOutcome a)
-    runActive =
+    runActive :: Int -> Eff es (WorkflowOutcome a)
+    runActive gen =
       -- EP-44: maintain the process-wide live-run count and sample the
       -- @keiro.workflow.active@ gauge on both entry and exit, and open the
       -- whole-run @workflow \<name\>@ span (step 'Nothing'). The body is
@@ -327,10 +334,10 @@ runWorkflowWith options name wid action = do
       where
         sampleActive = liftIO (readIORef activeCountRef) >>= recordWorkflowActive mMetrics
         interpreted = do
-          initial <- loadJournal options name wid
+          initial <- loadJournal options name wid gen
           journalRef <- liftIO (newIORef initial)
           ordinalRef <- liftIO (newIORef Map.empty)
-          let runHandler = interpret (handler journalRef ordinalRef) action
+          let runHandler = interpret (handler gen journalRef ordinalRef) action
           outcome <- (Completed <$> runHandler) `catch` \WorkflowSuspend -> pure Suspended
           case outcome of
             Completed result -> do
@@ -340,7 +347,7 @@ runWorkflowWith options name wid action = do
               -- marker is not already journaled. On a replay of an already-completed
               -- workflow this is 'Nothing' and no terminal snapshot is taken (one was
               -- already taken on the original completing run, if the policy fired).
-              mAppend <- appendCompletion name wid now
+              mAppend <- appendCompletion name wid gen now
               for_ mAppend $ \appendResult ->
                 when
                   ( shouldSnapshot
@@ -359,10 +366,11 @@ runWorkflowWith options name wid action = do
             Suspended -> pure Suspended
             Cancelled -> pure Cancelled
     handler ::
+      Int ->
       IORef (Map Text Aeson.Value) ->
       IORef (Map Text Int) ->
       EffectHandler Workflow es
-    handler journalRef ordinalRef env operation = case operation of
+    handler gen journalRef ordinalRef env operation = case operation of
       Step (StepName key) act -> do
         journal <- liftIO (readIORef journalRef)
         case Map.lookup key journal of
@@ -374,7 +382,7 @@ runWorkflowWith options name wid action = do
           Nothing -> do
             a <- localSeqUnlift env (\unlift -> unlift act)
             let encoded = Aeson.toJSON a
-            appendResult <- recordStep name wid (StepName key) encoded
+            appendResult <- recordStep name wid gen (StepName key) encoded
             -- Miss: @act@ ran and was journaled — a fresh execution.
             recordWorkflowStepExecuted mMetrics 1
             newMap <-
@@ -433,9 +441,10 @@ loadJournal ::
   WorkflowRunOptions ->
   WorkflowName ->
   WorkflowId ->
+  Int ->
   Eff es (Map Text Aeson.Value)
-loadJournal options name wid = do
-  let journalName = workflowStreamName name wid
+loadJournal options name wid gen = do
+  let journalName = workflowGenerationStreamName name wid gen
   mSeed <- loadWorkflowSnapshot journalName
   let (seedMap, fromVersion) = case mSeed of
         Just (m, v) -> (m, v)
@@ -460,10 +469,10 @@ loadJournal options name wid = do
 one transaction. Used on the @step@ miss path, where the caller already knows
 the step is not journaled (so no existence pre-check is needed).
 -}
-recordStep :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> StepName -> Aeson.Value -> Eff es AppendResult
-recordStep name wid (StepName key) value = do
+recordStep :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Int -> StepName -> Aeson.Value -> Eff es AppendResult
+recordStep name wid gen (StepName key) value = do
   now <- liftIO getCurrentTime
-  snd <$> appendJournalTx name wid (StepRecorded key value now)
+  snd <$> appendJournalTx name wid gen (StepRecorded key value now)
 
 {- | Append a journal event to a workflow's journal stream (and keep its
 index row consistent), idempotently. If the entry already exists this is a
@@ -481,11 +490,17 @@ appendJournalEntry name wid event = void (appendJournalEntryReturningId name wid
 -- the entry. EP-39's fired timer needs this for @markTimerFired@.
 appendJournalEntryReturningId :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> WorkflowJournalEvent -> Eff es EventId
 appendJournalEntryReturningId name wid event = do
+  -- EP-48: a wake source (timer fired, signalAwakeable, child completion)
+  -- resolves the awaited step on whichever generation the suspended run is
+  -- parked on — always the current (highest) one, since runs only ever operate
+  -- on the current generation. Resolve it here so the append and its
+  -- deterministic id are namespaced by that generation.
+  gen <- currentGeneration name wid
   let key = journalKey event
-  exists <- stepExists wid key
+  exists <- stepExists name wid gen key
   if exists
-    then pure (deterministicJournalId name wid key)
-    else fst <$> appendJournalTx name wid event
+    then pure (deterministicJournalId name wid gen key)
+    else fst <$> appendJournalTx name wid gen event
 
 {- | Append a journal entry only if it is not already journaled, returning the
 'AppendResult' of the fresh append (or 'Nothing' if it already existed). Used
@@ -493,31 +508,31 @@ on the completion path so a terminal ('OnTerminal') snapshot can be taken from
 the completing run's 'AppendResult', while a replay of an already-completed
 workflow is a no-op.
 -}
-appendCompletion :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> UTCTime -> Eff es (Maybe AppendResult)
-appendCompletion name wid now = do
+appendCompletion :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Int -> UTCTime -> Eff es (Maybe AppendResult)
+appendCompletion name wid gen now = do
   let event = WorkflowCompleted now
       key = journalKey event
-  exists <- stepExists wid key
+  exists <- stepExists name wid gen key
   if exists
     then pure Nothing
-    else Just . snd <$> appendJournalTx name wid event
+    else Just . snd <$> appendJournalTx name wid gen event
 
 -- | The core append: encode the event, append it under a deterministic id,
 -- and upsert the index row, all in one transaction. Returns the deterministic
 -- event id paired with the store's 'AppendResult' (carrying the stream id and
 -- the post-append stream version the snapshot path needs).
-appendJournalTx :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> WorkflowJournalEvent -> Eff es (EventId, AppendResult)
-appendJournalTx name wid event = do
+appendJournalTx :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Int -> WorkflowJournalEvent -> Eff es (EventId, AppendResult)
+appendJournalTx name wid gen event = do
   let key = journalKey event
-      entryId = deterministicJournalId name wid key
-      row = journalRow name wid event
+      entryId = deterministicJournalId name wid gen key
+      row = journalRow name wid gen event
   base <- case encodeForAppendWithMetadata workflowJournalCodec Nothing event of
     Right encoded -> pure encoded
     Left err -> throwIO (WorkflowJournalEncodeError (Text.pack (show err)))
   let entry = base & #eventId .~ Just entryId :: EventData
   outcome <-
     runTransactionAppending
-      (workflowStreamName name wid)
+      (workflowGenerationStreamName name wid gen)
       AnyVersion
       [entry]
       (\appendResult -> appendResult <$ recordStepTx row)
@@ -534,13 +549,14 @@ journalKey = \case
   WorkflowFailed{} -> failedStepName
   WorkflowContinuedAsNew{} -> continuedAsNewStepName
 
--- | The index row corresponding to a journal event.
-journalRow :: WorkflowName -> WorkflowId -> WorkflowJournalEvent -> WorkflowStepRow
-journalRow name wid = \case
+-- | The index row corresponding to a journal event, on the given generation.
+journalRow :: WorkflowName -> WorkflowId -> Int -> WorkflowJournalEvent -> WorkflowStepRow
+journalRow name wid gen = \case
   StepRecorded key value t ->
     WorkflowStepRow
       { workflowId = unWorkflowId wid
       , workflowName = unWorkflowName name
+      , generation = gen
       , stepName = key
       , result = value
       , recordedAt = t
@@ -549,6 +565,7 @@ journalRow name wid = \case
     WorkflowStepRow
       { workflowId = unWorkflowId wid
       , workflowName = unWorkflowName name
+      , generation = gen
       , stepName = completedStepName
       , result = Aeson.Null
       , recordedAt = t
@@ -557,6 +574,7 @@ journalRow name wid = \case
     WorkflowStepRow
       { workflowId = unWorkflowId wid
       , workflowName = unWorkflowName name
+      , generation = gen
       , stepName = cancelledStepName
       , result = Aeson.Null
       , recordedAt = t
@@ -565,6 +583,7 @@ journalRow name wid = \case
     WorkflowStepRow
       { workflowId = unWorkflowId wid
       , workflowName = unWorkflowName name
+      , generation = gen
       , stepName = failedStepName
       , result = Aeson.toJSON r
       , recordedAt = t
@@ -573,20 +592,27 @@ journalRow name wid = \case
     WorkflowStepRow
       { workflowId = unWorkflowId wid
       , workflowName = unWorkflowName name
+      , generation = gen
       , stepName = continuedAsNewStepName
       , result = Aeson.toJSON g -- the NEXT generation this rotation opens
       , recordedAt = t
       }
 
 {- | A stable, collision-resistant journal-event id from
-@("keiro" : "workflow" : name : id : stepName)@ via a v5 UUID. Mirrors
-'Keiro.ProcessManager.deterministicCommandId': the same inputs always yield
-the same id, so a re-append of the same step collapses to the same row.
+@("keiro" : "workflow" : name : id : generation : stepName)@ via a v5 UUID.
+Mirrors 'Keiro.ProcessManager.deterministicCommandId': the same inputs always
+yield the same id, so a re-append of the same step collapses to the same row.
+
+The /generation/ (EP-48) is part of the id so a step named @"s1"@ in
+generation 0 and the same name in generation 1 produce __different__ kiroku
+event ids — they live on different physical streams, but the event id is
+global, so namespacing it by generation keeps rotated generations from
+colliding on the deterministic id.
 -}
-deterministicJournalId :: WorkflowName -> WorkflowId -> Text -> EventId
-deterministicJournalId (WorkflowName name) (WorkflowId wid) key =
+deterministicJournalId :: WorkflowName -> WorkflowId -> Int -> Text -> EventId
+deterministicJournalId (WorkflowName name) (WorkflowId wid) gen key =
   EventId $
     UUID.V5.generateNamed UUID.V5.namespaceURL $
       fmap (fromIntegral . fromEnum) $
         Text.unpack $
-          Text.intercalate ":" ["keiro", "workflow", name, wid, key]
+          Text.intercalate ":" ["keiro", "workflow", name, wid, Text.pack (show gen), key]

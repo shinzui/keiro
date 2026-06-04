@@ -21,11 +21,13 @@ module Keiro.Workflow.Schema
     -- * Read-only lookups
   , loadStepIndex
   , stepExists
+  , currentGeneration
   , findUnfinishedWorkflowIds
   )
 where
 
-import Contravariant.Extras (contrazip2, contrazip5)
+import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip6)
+import Data.Int (Int32)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Effectful (Eff, (:>))
@@ -34,7 +36,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Keiro.Prelude
-import Keiro.Workflow.Types (WorkflowId (..))
+import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..))
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 
@@ -46,6 +48,9 @@ terminal completion marker is stored as a row whose 'stepName' is
 data WorkflowStepRow = WorkflowStepRow
   { workflowId :: !Text
   , workflowName :: !Text
+  , generation :: !Int
+  -- ^ EP-48: the journal /generation/ this step belongs to. Generation 0 is
+  --   the pre-rotation default; @continueAsNew@ rotates onto higher generations.
   , stepName :: !Text
   , result :: !Value
   , recordedAt :: !UTCTime
@@ -62,6 +67,7 @@ recordStepTx row =
   Tx.statement
     ( row ^. #workflowId
     , row ^. #workflowName
+    , fromIntegral (row ^. #generation) :: Int32
     , row ^. #stepName
     , row ^. #result
     , row ^. #recordedAt
@@ -73,17 +79,28 @@ result@ map (includes the terminal completion marker row if present). Exposed
 for EP-42's resume worker; the replay handler in "Keiro.Workflow" pre-loads
 from the journal stream instead.
 -}
-loadStepIndex :: (Store :> es) => WorkflowId -> Eff es (Map Text Value)
-loadStepIndex (WorkflowId wid) =
-  Map.fromList <$> runTransaction (Tx.statement wid loadStepIndexStmt)
+loadStepIndex :: (Store :> es) => WorkflowName -> WorkflowId -> Int -> Eff es (Map Text Value)
+loadStepIndex (WorkflowName name) (WorkflowId wid) gen =
+  Map.fromList <$> runTransaction (Tx.statement (wid, name, fromIntegral gen :: Int32) loadStepIndexStmt)
 
 {- | Whether a workflow instance already has an index row for the given step
 name. Used to make journal re-appends idempotent without relying on the event
 store's duplicate-id rejection.
 -}
-stepExists :: (Store :> es) => WorkflowId -> Text -> Eff es Bool
-stepExists (WorkflowId wid) key =
-  runTransaction (Tx.statement (wid, key) stepExistsStmt)
+stepExists :: (Store :> es) => WorkflowName -> WorkflowId -> Int -> Text -> Eff es Bool
+stepExists (WorkflowName name) (WorkflowId wid) gen key =
+  runTransaction (Tx.statement (wid, name, fromIntegral gen :: Int32, key) stepExistsStmt)
+
+{- | The current (highest) generation recorded for a logical workflow, or 0 if
+it has no step rows yet (EP-48). Index-supported by the
+@(workflow_id, workflow_name, generation)@ lookup index. A workflow that never
+rotates stays at generation 0 and behaves byte-for-byte as it did before EP-48.
+A rotation commits the next generation's seed step under generation @g+1@ in
+the same logical-id key space, so @MAX(generation)@ is unambiguously the
+current generation. -}
+currentGeneration :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es Int
+currentGeneration (WorkflowName name) (WorkflowId wid) =
+  fromIntegral <$> runTransaction (Tx.statement (wid, name) currentGenerationStmt)
 
 {- | Return the @(workflow_id, workflow_name)@ of every workflow that has at
 least one step row but no terminal marker row — i.e. workflows that are
@@ -96,49 +113,72 @@ findUnfinishedWorkflowIds :: (Store :> es) => Eff es [(Text, Text)]
 findUnfinishedWorkflowIds =
   runTransaction (Tx.statement () findUnfinishedWorkflowIdsStmt)
 
-recordStepStmt :: Statement (Text, Text, Text, Value, UTCTime) ()
+recordStepStmt :: Statement (Text, Text, Int32, Text, Value, UTCTime) ()
 recordStepStmt =
   preparable
     """
     INSERT INTO keiro_workflow_steps
-      (workflow_id, workflow_name, step_name, result, recorded_at)
-    VALUES ($1, $2, $3, $4, $5)
-    ON CONFLICT (workflow_id, step_name) DO NOTHING
+      (workflow_id, workflow_name, generation, step_name, result, recorded_at)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (workflow_id, workflow_name, generation, step_name) DO NOTHING
     """
-    ( contrazip5
+    ( contrazip6
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int4))
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.jsonb))
         (E.param (E.nonNullable E.timestamptz))
     )
     D.noResult
 
-loadStepIndexStmt :: Statement Text [(Text, Value)]
+loadStepIndexStmt :: Statement (Text, Text, Int32) [(Text, Value)]
 loadStepIndexStmt =
   preparable
     """
     SELECT step_name, result
     FROM keiro_workflow_steps
-    WHERE workflow_id = $1
+    WHERE workflow_id = $1 AND workflow_name = $2 AND generation = $3
     """
-    (E.param (E.nonNullable E.text))
+    ( contrazip3
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int4))
+    )
     (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.jsonb)))
 
-stepExistsStmt :: Statement (Text, Text) Bool
+stepExistsStmt :: Statement (Text, Text, Int32, Text) Bool
 stepExistsStmt =
   preparable
     """
     SELECT EXISTS (
       SELECT 1 FROM keiro_workflow_steps
-      WHERE workflow_id = $1 AND step_name = $2
+      WHERE workflow_id = $1 AND workflow_name = $2 AND generation = $3 AND step_name = $4
     )
+    """
+    ( contrazip4
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int4))
+        (E.param (E.nonNullable E.text))
+    )
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
+-- The current generation is MAX(generation) for the logical id+name, or 0 when
+-- the workflow has no rows. Index-supported by keiro_workflow_steps_workflow_idx.
+currentGenerationStmt :: Statement (Text, Text) Int32
+currentGenerationStmt =
+  preparable
+    """
+    SELECT COALESCE(MAX(generation), 0)::int4
+    FROM keiro_workflow_steps
+    WHERE workflow_id = $1 AND workflow_name = $2
     """
     ( contrazip2
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.text))
     )
-    (D.singleRow (D.column (D.nonNullable D.bool)))
+    (D.singleRow (D.column (D.nonNullable D.int4)))
 
 -- The literals '__workflow_completed__' / '__workflow_cancelled__' must match
 -- 'Keiro.Workflow.Types.completedStepName' / '.cancelledStepName'.

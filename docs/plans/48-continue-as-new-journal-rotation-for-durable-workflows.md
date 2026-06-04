@@ -76,9 +76,13 @@ This section must always reflect the actual current state of the work.
   no upcaster), `continuedAsNewStepName = "__workflow_continued_as_new__"`, and the
   `loadJournal`/`journalKey`/`journalRow` arms. `cabal build keiro` green; codec round-trip
   example passes (2026-06-03).
-- [ ] Milestone 3 (generation-aware naming + load + record): add the physical generation
-  stream name, the current-generation lookup, and thread the generation through
-  `recordStepTx` / `stepExists` / `loadJournal` / `appendJournalTx`; `cabal build keiro` green.
+- [x] Milestone 3 (generation-aware naming + load + record): added `workflowGenerationStreamName`
+  (gen 0 keeps the legacy name), `currentGeneration` (MAX query), `generation` on
+  `WorkflowStepRow`/`recordStepStmt` (4-col `ON CONFLICT`), name+gen on `stepExists`/`loadStepIndex`,
+  and threaded `gen` through `runWorkflowWith`/`loadJournal`/`appendJournalTx`/`recordStep`/
+  `appendCompletion`/`appendJournalEntryReturningId`/`deterministicJournalId`. `cabal build keiro`
+  green; full `cabal test keiro` green — **134 examples, 0 failures**, proving generation 0 is
+  behavior-preserving (2026-06-03).
 - [ ] Milestone 4 (`continueAsNew` primitive): add the `ContinueAsNew` effect operation and its
   handler arm in `Keiro.Workflow`; export `continueAsNew`; `cabal build keiro` green.
 - [ ] Milestone 5 (resume + discovery point at current generation): make

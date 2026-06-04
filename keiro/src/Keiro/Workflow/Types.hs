@@ -26,6 +26,7 @@ module Keiro.Workflow.Types
 
     -- * Stream naming
   , workflowStreamName
+  , workflowGenerationStreamName
 
     -- * Journal events and codec
   , WorkflowJournalEvent (..)
@@ -87,6 +88,25 @@ them in a way that makes the boundary ambiguous (the v1 process-manager
 workflowStreamName :: WorkflowName -> WorkflowId -> StreamName
 workflowStreamName (WorkflowName name) (WorkflowId wid) =
   StreamName ("wf:" <> name <> "-" <> wid)
+
+{- | The PHYSICAL journal stream for a given /generation/ of a logical
+workflow (EP-48 continue-as-new).
+
+Generation 0 keeps the legacy name @wf:\<name\>-\<id\>@ — so already-running,
+never-rotated workflows are byte-for-byte unchanged and need zero data
+migration — while generation @g > 0@ appends a @#\<g\>@ suffix. The @#@ is a
+new structural separator, distinct from the @:@ and @-@ that
+'workflowStreamName' already reserves, so it cannot collide with an existing
+boundary. The /logical/ identity @('WorkflowName', 'WorkflowId')@ the author
+and the resume registry see is stable across rotations; only the physical
+stream the journal lives on rotates underneath it.
+-}
+workflowGenerationStreamName :: WorkflowName -> WorkflowId -> Int -> StreamName
+workflowGenerationStreamName name wid gen
+  | gen <= 0 = workflowStreamName name wid
+  | otherwise =
+      let StreamName base = workflowStreamName name wid
+       in StreamName (base <> "#" <> Text.pack (show gen))
 
 {- | The events written to a workflow journal.
 
