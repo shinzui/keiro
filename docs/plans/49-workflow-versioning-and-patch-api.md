@@ -106,9 +106,11 @@ here, even if it requires splitting a partially completed task into two ("done" 
   case (using a `startedInFlight` flag captured from the pre-loaded journal), and the
   `isOrdinaryStepKey` helper (extended to exclude EP-48's reserved names — see Surprises).
   `cabal build keiro` green (2026-06-03).
-- [ ] Milestone 3: add the acceptance test to `keiro/test/Main.hs` (a new
-  `describe "Keiro.Workflow patch API"` block) proving stable-branch semantics and
-  exactly-once journaling; confirm `cabal test keiro` is green.
+- [x] Milestone 3: added `describe "Keiro.Workflow patch API"` + `prePatchWorkflow`/
+  `postPatchWorkflow` helpers + imports. Proves an in-flight instance observes the OLD branch,
+  a fresh instance the NEW branch, the decision is stable across replays, and exactly one
+  `patch:fraud-check-v2` decision is journaled per instance (`false`/`true`). `cabal test keiro`
+  green — **137 examples, 0 failures** (2026-06-03).
 - [ ] Milestone 4: document the primitive — a short note in
   `docs/guides/durable-workflows.md` (the rename-vs-patch contrast) and a signature
   entry in `docs/user/durable-workflows.md`; flip the `docs/user/roadmap.md` /

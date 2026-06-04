@@ -116,10 +116,13 @@ import Keiro.Workflow
   , WorkflowOutcome (..)
   , appendJournalEntry
   , awaitStep
+  , PatchId (..)
   , continueAsNew
   , currentGeneration
   , defaultWorkflowRunOptions
   , findUnfinishedWorkflowIds
+  , patch
+  , patchStepName
   , restoreSeed
   , runWorkflow
   , runWorkflowWith
@@ -2484,6 +2487,57 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right finalUnfinished <- Store.runStoreIO storeHandle findUnfinishedWorkflowIds
       finalUnfinished `shouldBe` []
 
+  describe "Keiro.Workflow patch API" $ around (withFreshStore fixture) $ do
+    it "an in-flight instance observes the OLD branch; a fresh instance the NEW branch; the decision is journaled once and stable" $ \storeHandle -> do
+      counter <- newIORef (0 :: Int)
+      let name = WorkflowName "patchwf"
+          inflight = WorkflowId "inflight-1"
+          fresh = WorkflowId "fresh-1"
+
+      -- 1. Run the in-flight instance to a suspension under the PRE-patch code.
+      pre <- Store.runStoreIO storeHandle $ runWorkflow name inflight (prePatchWorkflow counter)
+      pre `shouldBe` Right Suspended
+
+      -- 2. Redeploy: re-run the SAME instance id under the POST-patch code. It
+      --    already journaled reserve-inventory, so it is in flight -> False.
+      r1 <- Store.runStoreIO storeHandle $ runWorkflow name inflight (postPatchWorkflow counter)
+      r1 `shouldBe` Right (Completed "old-branch")
+
+      -- 3. Replay the in-flight instance again: same OLD branch, every time.
+      r2 <- Store.runStoreIO storeHandle $ runWorkflow name inflight (postPatchWorkflow counter)
+      r2 `shouldBe` Right (Completed "old-branch")
+
+      -- 4. A fresh instance under the POST-patch code takes the NEW branch.
+      f1 <- Store.runStoreIO storeHandle $ runWorkflow name fresh (postPatchWorkflow counter)
+      f1 `shouldBe` Right (Completed "new-branch")
+      -- and stays on the new branch on replay.
+      f2 <- Store.runStoreIO storeHandle $ runWorkflow name fresh (postPatchWorkflow counter)
+      f2 `shouldBe` Right (Completed "new-branch")
+
+      -- 5. The patch decision is journaled exactly once per instance, with the
+      --    expected Bool, on the patch:<id> key.
+      Right inflightJournal <-
+        Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:patchwf-inflight-1") (StreamVersion 0) 20
+      let inflightDecisions =
+            [ v
+            | Right ev <- map (decodeRecorded workflowJournalCodec) (Vector.toList inflightJournal)
+            , StepRecorded k v _ <- [ev]
+            , k == patchStepName fraudPatchId
+            ]
+      inflightDecisions `shouldBe` [toJSON False]
+
+      Right freshJournal <-
+        Store.runStoreIO storeHandle $
+          Store.readStreamForward (StreamName "wf:patchwf-fresh-1") (StreamVersion 0) 20
+      let freshDecisions =
+            [ v
+            | Right ev <- map (decodeRecorded workflowJournalCodec) (Vector.toList freshJournal)
+            , StepRecorded k v _ <- [ev]
+            , k == patchStepName fraudPatchId
+            ]
+      freshDecisions `shouldBe` [toJSON True]
+
   describe "Keiro.Workflow observability" $ around (withFreshStore fixture) $ do
     -- The headline operability signal: executed (real work) vs replayed
     -- (recorded history), recorded by the runtime through an SDK meter and read
@@ -3117,6 +3171,31 @@ rollingTotal counter rotateEvery total = do
               (StepName ("w" <> Text.pack (show done)))
               (liftIO (modifyIORef' counter (+ 1) >> pure (1 :: Int)))
           go (acc + n) (done + 1) (genDone + 1)
+
+-- The patch id under test (EP-49).
+fraudPatchId :: PatchId
+fraudPatchId = PatchId "fraud-check-v2"
+
+-- | The workflow BEFORE the patch shipped: reserve, then await an external step
+-- (so an instance can be left in flight, mid-journal, with one ordinary step
+-- recorded and no completion). Used to create the in-flight instance.
+prePatchWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es Text
+prePatchWorkflow counter = do
+  _ <- step (StepName "reserve-inventory") (liftIO (incrementAndRead counter) >> pure ())
+  (_ :: ()) <- awaitStep (StepName "awk:gate") (pure ()) -- park here, in flight
+  pure "old-done"
+
+-- | The workflow AFTER the patch shipped: the same first step, then a
+-- patch-gated cross-cutting branch. The in-flight instance (which already
+-- journaled reserve-inventory under the pre-patch code) must observe False and
+-- take the OLD branch; a fresh instance must observe True and take the NEW branch.
+postPatchWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es Text
+postPatchWorkflow counter = do
+  _ <- step (StepName "reserve-inventory") (liftIO (incrementAndRead counter) >> pure ())
+  useNew <- patch fraudPatchId
+  if useNew
+    then step (StepName "new-charge") (pure "new-branch")
+    else step (StepName "old-charge") (pure "old-branch")
 
 -- | A two-step workflow whose steps each bump a shared counter.
 demoWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es (Int, Int)
