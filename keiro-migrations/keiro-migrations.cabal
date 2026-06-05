@@ -2,11 +2,24 @@ cabal-version:      3.0
 name:               keiro-migrations
 version:            0.1.0.0
 synopsis:           Schema migrations for keiro
+description:
+  Embedded PostgreSQL schema migrations and a migration runner for the Keiro
+  event-sourcing framework.
+
 license:            BSD-3-Clause
+author:             Nadeem Bitar
+maintainer:         nadeem@gmail.com
+copyright:          2026 Nadeem Bitar
+category:           Database
 build-type:         Simple
+tested-with:        GHC >=9.12 && <9.13
 extra-source-files:
   README.md
   sql-migrations/*.sql
+
+source-repository head
+  type:     git
+  location: https://github.com/shinzui/keiro.git
 
 common common
   default-language:   GHC2024
@@ -25,16 +38,16 @@ library
 
   hs-source-dirs:  src
   build-depends:
-    , base        >=4.18 && <5
-    , bytestring  >=0.11
-    , codd        >=0.1.8
-    , directory   >=1.3
-    , file-embed  >=0.0.15
-    , filepath    >=1.4
+    , base                     >=4.18   && <5
+    , bytestring               >=0.11
+    , codd                     >=0.1.8
+    , directory                >=1.3
+    , file-embed               >=0.0.15
+    , filepath                 >=1.4
     , kiroku-store-migrations
     , streaming
-    , text        >=2.0
-    , time        >=1.12
+    , text                     >=2.0
+    , time                     >=1.12
 
 executable keiro-migrate
   import:         common
@@ -56,19 +69,19 @@ test-suite keiro-migrations-test
   build-depends:
     , aeson
     , attoparsec
-    , base        >=4.18 && <5
+    , base                     >=4.18 && <5
     , codd
     , containers
     , contravariant-extras
-    , ephemeral-pg >=0.2
-    , generic-lens >=2.2
-    , hasql      >=1.10
-    , hasql-pool >=1.2
-    , hspec      >=2.10
+    , ephemeral-pg             >=0.2
+    , generic-lens             >=2.2
+    , hasql                    >=1.10
+    , hasql-pool               >=1.2
+    , hspec                    >=2.10
     , keiro-migrations
     , kiroku-store
     , kiroku-store-migrations
-    , lens       >=5.2
-    , text       >=2.0
-    , time       >=1.12
-    , vector     >=0.13
+    , lens                     >=5.2
+    , text                     >=2.0
+    , time                     >=1.12
+    , vector                   >=0.13

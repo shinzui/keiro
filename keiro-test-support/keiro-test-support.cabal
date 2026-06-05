@@ -1,43 +1,53 @@
-cabal-version:      3.0
-name:               keiro-test-support
-version:            0.1.0.0
-synopsis:           Shared PostgreSQL test fixtures for Keiro test suites
+cabal-version: 3.0
+name:          keiro-test-support
+version:       0.1.0.0
+synopsis:      Shared PostgreSQL test fixtures for Keiro test suites
 description:
-    Suite-level ephemeral-PostgreSQL fixtures shared by the Keiro test
-    suites. Implements the ephemeral-pg template-database pattern: one cached
-    server per suite, one migrated template database, and a clean cloned
-    database per example.
-license:            BSD-3-Clause
-author:             Nadeem Bitar
-maintainer:         nadeem@gmail.com
-copyright:          2026 Nadeem Bitar
-category:           Testing
-build-type:         Simple
-tested-with:        GHC == 9.12.*
+  Suite-level ephemeral-PostgreSQL fixtures shared by the Keiro test
+  suites. Implements the ephemeral-pg template-database pattern: one cached
+  server per suite, one migrated template database, and a clean cloned
+  database per example.
+
+license:       BSD-3-Clause
+author:        Nadeem Bitar
+maintainer:    nadeem@gmail.com
+copyright:     2026 Nadeem Bitar
+category:      Testing
+homepage:      https://github.com/shinzui/keiro#readme
+bug-reports:   https://github.com/shinzui/keiro/issues
+build-type:    Simple
+tested-with:   GHC >=9.12 && <9.13
+
+source-repository head
+  type:     git
+  location: https://github.com/shinzui/keiro.git
 
 common warnings
-    ghc-options:        -Wall -Wcompat -Widentities
-                        -Wincomplete-record-updates -Wincomplete-uni-patterns
-                        -Wpartial-fields -Wredundant-constraints
+  ghc-options:
+    -Wall -Wcompat -Widentities -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
 
 library
-    import:             warnings
-    default-language:   GHC2024
-    default-extensions: BlockArguments
-                        OverloadedRecordDot
-                        OverloadedStrings
-    exposed-modules:    Keiro.Test.Postgres
-    hs-source-dirs:     src
-    build-depends:      aeson >= 2.2,
-                        attoparsec >= 0.14,
-                        base >= 4.21 && < 5,
-                        codd,
-                        containers >= 0.6,
-                        ephemeral-pg >= 0.2,
-                        hasql >= 1.10,
-                        hasql-pool >= 1.2,
-                        keiro-migrations,
-                        kiroku-store >= 0.1,
-                        stm >= 2.5,
-                        text >= 2.1,
-                        time >= 1.12
+  import:             warnings
+  default-language:   GHC2024
+  default-extensions:
+    BlockArguments
+    OverloadedRecordDot
+    OverloadedStrings
+
+  exposed-modules:    Keiro.Test.Postgres
+  hs-source-dirs:     src
+  build-depends:
+    , aeson             >=2.2
+    , attoparsec        >=0.14
+    , base              >=4.21 && <5
+    , codd
+    , containers        >=0.6
+    , ephemeral-pg      >=0.2
+    , hasql             >=1.10
+    , hasql-pool        >=1.2
+    , keiro-migrations
+    , kiroku-store      >=0.1
+    , stm               >=2.5
+    , text              >=2.1
+    , time              >=1.12
