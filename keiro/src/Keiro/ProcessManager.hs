@@ -22,25 +22,25 @@ Shibuya adapter. As with the router, target aggregates should model benign
 rejections as total transitions so they never surface as 'PMCommandFailed'
 and wedge the worker.
 -}
-module Keiro.ProcessManager
-  ( -- * Definition
-    ProcessManager (..)
-  , ProcessManagerAction (..)
-  , PMCommand (..)
+module Keiro.ProcessManager (
+    -- * Definition
+    ProcessManager (..),
+    ProcessManagerAction (..),
+    PMCommand (..),
 
     -- * Results
-  , ProcessManagerResult (..)
-  , PMCommandResult (..)
-  , PMStateResult (..)
+    ProcessManagerResult (..),
+    PMCommandResult (..),
+    PMStateResult (..),
 
     -- * Running
-  , runProcessManagerOnce
-  , runProcessManagerWorker
+    runProcessManagerOnce,
+    runProcessManagerWorker,
 
     -- * Idempotency primitives
-  , deterministicCommandId
-  , eventAlreadyIn
-  )
+    deterministicCommandId,
+    eventAlreadyIn,
+)
 where
 
 import Data.Coerce (coerce)
@@ -60,15 +60,16 @@ import Keiro.Timer (TimerRequest, scheduleTimerTx)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError (..))
 import Kiroku.Store.Read (readStreamForwardStream)
+import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..), RecordedEvent)
 import Kiroku.Store.Types qualified as StoreTypes
-import Prelude (fromIntegral, length, uncurry, zip)
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), HaltReason (..))
 import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
+import Prelude (fromIntegral, length, uncurry, zip)
 
 {- | A process manager wiring together a manager state machine and the target
 aggregate it drives.
@@ -88,17 +89,18 @@ aggregate it drives.
   schedule.
 -}
 data ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo = ProcessManager
-  { name :: !Text
-  , correlate :: !(input -> Text)
-  , eventStream :: !(EventStream phi rs s ci co)
-  , streamFor :: !(Text -> Stream (EventStream phi rs s ci co))
-  , targetEventStream :: !(EventStream targetPhi targetRs targetState targetCi targetCo)
-  , targetProjections :: !(Stream targetCi -> [InlineProjection targetCo])
-  -- ^ Inline projections for the target aggregate, run in the same transaction
-  --   as each dispatched command's append. Return @[]@ for append-only dispatch.
-  , handle :: !(input -> ProcessManagerAction ci targetCi)
-  }
-  deriving stock (Generic)
+    { name :: !Text
+    , correlate :: !(input -> Text)
+    , eventStream :: !(EventStream phi rs s ci co)
+    , streamFor :: !(Text -> Stream (EventStream phi rs s ci co))
+    , targetEventStream :: !(EventStream targetPhi targetRs targetState targetCi targetCo)
+    , targetProjections :: !(Stream targetCi -> [InlineProjection targetCo])
+    {- ^ Inline projections for the target aggregate, run in the same transaction
+    as each dispatched command's append. Return @[]@ for append-only dispatch.
+    -}
+    , handle :: !(input -> ProcessManagerAction ci targetCi)
+    }
+    deriving stock (Generic)
 
 {- | What a process manager decides to do for one input event: advance its own
 state with 'command', dispatch zero or more target 'commands', and schedule
@@ -106,50 +108,52 @@ zero or more 'timers'. All three are applied atomically with crash-safe
 idempotency by 'runProcessManagerOnce'.
 -}
 data ProcessManagerAction ci targetCi = ProcessManagerAction
-  { command :: !ci
-  , commands :: ![PMCommand targetCi]
-  , timers :: ![TimerRequest]
-  }
-  deriving stock (Generic)
+    { command :: !ci
+    , commands :: ![PMCommand targetCi]
+    , timers :: ![TimerRequest]
+    }
+    deriving stock (Generic)
 
 -- | A single command addressed to a specific target stream.
 data PMCommand targetCi = PMCommand
-  { target :: !(Stream targetCi)
-  , command :: !targetCi
-  }
-  deriving stock (Generic, Eq, Show)
+    { target :: !(Stream targetCi)
+    , command :: !targetCi
+    }
+    deriving stock (Generic, Eq, Show)
 
 -- | Outcome of one dispatched target command.
 data PMCommandResult target
-  = -- | The command appended events (carries the 'CommandResult').
-    PMCommandAppended !(CommandResult target)
-  | -- | The command was already applied (idempotent replay); carries the
-    -- deterministic id that already existed.
-    PMCommandDuplicate !EventId
-  | -- | The command failed; the worker treats this as fatal so the source
-    -- event is retried.
-    PMCommandFailed !CommandError
-  deriving stock (Generic, Eq, Show)
+    = -- | The command appended events (carries the 'CommandResult').
+      PMCommandAppended !(CommandResult target)
+    | {- | The command was already applied (idempotent replay); carries the
+      deterministic id that already existed.
+      -}
+      PMCommandDuplicate !EventId
+    | {- | The command failed; the worker treats this as fatal so the source
+      event is retried.
+      -}
+      PMCommandFailed !CommandError
+    deriving stock (Generic, Eq, Show)
 
 {- | Outcome of the manager's own state append. Unlike 'PMCommandResult' there
 is no failure case — a manager-state append that genuinely errors aborts the
 whole reaction via an outer @Left@ 'CommandError'.
 -}
 data PMStateResult target
-  = PMStateAppended !(CommandResult target)
-  | PMStateDuplicate !EventId
-  deriving stock (Generic, Eq, Show)
+    = PMStateAppended !(CommandResult target)
+    | PMStateDuplicate !EventId
+    deriving stock (Generic, Eq, Show)
 
 {- | The complete result of reacting to one event: how the manager state
 advanced, the outcome of each dispatched command in order, and how many
 timers were scheduled.
 -}
 data ProcessManagerResult managerTarget commandTarget = ProcessManagerResult
-  { managerResult :: !(PMStateResult managerTarget)
-  , commandResults :: ![PMCommandResult commandTarget]
-  , timersScheduled :: !Int
-  }
-  deriving stock (Generic, Eq, Show)
+    { managerResult :: !(PMStateResult managerTarget)
+    , commandResults :: ![PMCommandResult commandTarget]
+    , timersScheduled :: !Int
+    }
+    deriving stock (Generic, Eq, Show)
 
 {- | Derive a stable, collision-resistant 'EventId' for a manager write from
 @(manager name, correlation id, source event id, emit index)@ via a v5 UUID.
@@ -161,19 +165,19 @@ it distinct from the dispatched commands (which start at @0@).
 -}
 deterministicCommandId :: Text -> Text -> EventId -> Int -> EventId
 deterministicCommandId managerName correlationId sourceEventId emitIndex =
-  EventId $
-    UUID.V5.generateNamed UUID.V5.namespaceURL $
-      fmap (fromIntegral . fromEnum) $
-      Text.unpack $
-        Text.intercalate
-          ":"
-          [ "keiro"
-          , "process-manager"
-          , managerName
-          , correlationId
-          , UUID.toText (eventIdToUuid sourceEventId)
-          , Text.pack (show emitIndex)
-          ]
+    EventId
+        $ UUID.V5.generateNamed UUID.V5.namespaceURL
+        $ fmap (fromIntegral . fromEnum)
+        $ Text.unpack
+        $ Text.intercalate
+            ":"
+            [ "keiro"
+            , "process-manager"
+            , managerName
+            , correlationId
+            , UUID.toText (eventIdToUuid sourceEventId)
+            , Text.pack (show emitIndex)
+            ]
 
 {- | React to a single source event: advance the manager's state, dispatch
 its target commands, and schedule its timers — each under a deterministic,
@@ -188,84 +192,90 @@ manager-state append fails for a non-duplicate reason; per-command failures
 are reported inside 'commandResults'.
 -}
 runProcessManagerOnce ::
-  forall input phi rs s ci co targetPhi targetRs targetState targetCi targetCo es.
-  ( HasCallStack
-  , IOE :> es
-  , Store :> es
-  , Error StoreError :> es
-  , BoolAlg phi (RegFile rs, ci)
-  , BoolAlg targetPhi (RegFile targetRs, targetCi)
-  , Eq co
-  , Eq targetCo
-  ) =>
-  RunCommandOptions ->
-  ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo ->
-  RecordedEvent ->
-  input ->
-  Eff es (Either CommandError (ProcessManagerResult (EventStream phi rs s ci co) (EventStream targetPhi targetRs targetState targetCi targetCo)))
+    forall input phi rs s ci co targetPhi targetRs targetState targetCi targetCo es.
+    ( HasCallStack
+    , IOE :> es
+    , Store :> es
+    , Error StoreError :> es
+    , BoolAlg phi (RegFile rs, ci)
+    , BoolAlg targetPhi (RegFile targetRs, targetCi)
+    , Eq co
+    , Eq targetCo
+    ) =>
+    RunCommandOptions ->
+    ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo ->
+    RecordedEvent ->
+    input ->
+    Eff es (Either CommandError (ProcessManagerResult (EventStream phi rs s ci co) (EventStream targetPhi targetRs targetState targetCi targetCo)))
 runProcessManagerOnce options manager sourceEvent input = do
-  let correlationId = (manager ^. #correlate) input
-      action = (manager ^. #handle) input
-      managerStream = (manager ^. #streamFor) correlationId
-      managerEventId = deterministicCommandId (manager ^. #name) correlationId (sourceEvent ^. #eventId) (-1)
-      managerOptions = options & #eventIds .~ [managerEventId]
-      managerStreamName = ((manager ^. #eventStream) ^. #resolveStreamName) managerStream
-  managerAlreadyProcessed <- eventAlreadyIn options managerStreamName managerEventId
-  if managerAlreadyProcessed
-    then finish correlationId (PMStateDuplicate managerEventId) action
-    else do
-      managerOutcome <-
-        runCommandWithSql
-          managerOptions
-          (manager ^. #eventStream)
-          managerStream
-          (action ^. #command)
-          (\_ -> traverse_ scheduleTimerTx (action ^. #timers))
-      case managerOutcome of
-        Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == managerEventId ->
-          finish correlationId (PMStateDuplicate managerEventId) action
-        Left (StoreFailed (DuplicateEvent Nothing)) ->
-          finish correlationId (PMStateDuplicate managerEventId) action
-        Left err -> pure (Left err)
-        Right (managerResult, _) ->
-          finish correlationId (PMStateAppended managerResult) action
+    let correlationId = (manager ^. #correlate) input
+        action = (manager ^. #handle) input
+        managerStream = (manager ^. #streamFor) correlationId
+        managerEventId = deterministicCommandId (manager ^. #name) correlationId (sourceEvent ^. #eventId) (-1)
+        managerOptions = options & #eventIds .~ [managerEventId]
+        managerStreamName = ((manager ^. #eventStream) ^. #resolveStreamName) managerStream
+    managerAlreadyProcessed <- eventAlreadyIn options managerStreamName managerEventId
+    if managerAlreadyProcessed
+        then finish correlationId (PMStateDuplicate managerEventId) action
+        else do
+            managerOutcome <-
+                runCommandWithSql
+                    managerOptions
+                    (manager ^. #eventStream)
+                    managerStream
+                    (action ^. #command)
+                    (\_ -> traverse_ scheduleTimerTx (action ^. #timers))
+            case managerOutcome of
+                Left (StoreFailed (DuplicateEvent (Just duplicateId)))
+                    | duplicateId == managerEventId ->
+                        finish correlationId (PMStateDuplicate managerEventId) action
+                Left (StoreFailed (DuplicateEvent Nothing)) ->
+                    finish correlationId (PMStateDuplicate managerEventId) action
+                Left err -> pure (Left err)
+                Right (managerResult, scheduledInAppend) -> do
+                    -- No-op manager commands do not execute runCommandWithSql's callback,
+                    -- so schedule timer-only reactions explicitly.
+                    case scheduledInAppend of
+                        Nothing -> runTransaction (traverse_ scheduleTimerTx (action ^. #timers))
+                        Just () -> pure ()
+                    finish correlationId (PMStateAppended managerResult) action
   where
     finish correlationId managerResult action = do
-      commandResults <- dispatchCommands correlationId (sourceEvent ^. #eventId) (action ^. #commands)
-      pure $
-        Right
-          ProcessManagerResult
-            { managerResult = managerResult
-            , commandResults = commandResults
-            , timersScheduled = length (action ^. #timers)
-            }
+        commandResults <- dispatchCommands correlationId (sourceEvent ^. #eventId) (action ^. #commands)
+        pure
+            $ Right
+                ProcessManagerResult
+                    { managerResult = managerResult
+                    , commandResults = commandResults
+                    , timersScheduled = length (action ^. #timers)
+                    }
 
     dispatchCommands correlationId sourceEventId commands =
-      traverse
-        (uncurry (dispatchCommand correlationId sourceEventId))
-        (zip [0 ..] commands)
+        traverse
+            (uncurry (dispatchCommand correlationId sourceEventId))
+            (zip [0 ..] commands)
 
     dispatchCommand correlationId sourceEventId emitIndex command = do
-      let commandId = deterministicCommandId (manager ^. #name) correlationId sourceEventId emitIndex
-          targetOptions = options & #eventIds .~ [commandId]
-          targetStream = retarget (command ^. #target)
-          targetStreamName = ((manager ^. #targetEventStream) ^. #resolveStreamName) targetStream
-      commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
-      if commandAlreadyProcessed
-        then pure (PMCommandDuplicate commandId)
-        else do
-          outcome <-
-            runCommandWithProjections
-              targetOptions
-              (manager ^. #targetEventStream)
-              targetStream
-              (command ^. #command)
-              ((manager ^. #targetProjections) (command ^. #target))
-          pure $ case outcome of
-            Right result -> PMCommandAppended result
-            Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == commandId -> PMCommandDuplicate commandId
-            Left (StoreFailed (DuplicateEvent Nothing)) -> PMCommandDuplicate commandId
-            Left err -> PMCommandFailed err
+        let commandId = deterministicCommandId (manager ^. #name) correlationId sourceEventId emitIndex
+            targetOptions = options & #eventIds .~ [commandId]
+            targetStream = retarget (command ^. #target)
+            targetStreamName = ((manager ^. #targetEventStream) ^. #resolveStreamName) targetStream
+        commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
+        if commandAlreadyProcessed
+            then pure (PMCommandDuplicate commandId)
+            else do
+                outcome <-
+                    runCommandWithProjections
+                        targetOptions
+                        (manager ^. #targetEventStream)
+                        targetStream
+                        (command ^. #command)
+                        ((manager ^. #targetProjections) (command ^. #target))
+                pure $ case outcome of
+                    Right result -> PMCommandAppended result
+                    Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == commandId -> PMCommandDuplicate commandId
+                    Left (StoreFailed (DuplicateEvent Nothing)) -> PMCommandDuplicate commandId
+                    Left err -> PMCommandFailed err
 
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
@@ -279,34 +289,34 @@ retried; deterministic write ids make that retry safe. A successful reaction
 acks @AckOk@.
 -}
 runProcessManagerWorker ::
-  forall msg input phi rs s ci co targetPhi targetRs targetState targetCi targetCo es.
-  ( HasCallStack
-  , IOE :> es
-  , Store :> es
-  , Error StoreError :> es
-  , BoolAlg phi (RegFile rs, ci)
-  , BoolAlg targetPhi (RegFile targetRs, targetCi)
-  , Eq co
-  , Eq targetCo
-  ) =>
-  RunCommandOptions ->
-  ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo ->
-  Adapter es msg ->
-  (msg -> Maybe (RecordedEvent, input)) ->
-  Eff es ()
+    forall msg input phi rs s ci co targetPhi targetRs targetState targetCi targetCo es.
+    ( HasCallStack
+    , IOE :> es
+    , Store :> es
+    , Error StoreError :> es
+    , BoolAlg phi (RegFile rs, ci)
+    , BoolAlg targetPhi (RegFile targetRs, targetCi)
+    , Eq co
+    , Eq targetCo
+    ) =>
+    RunCommandOptions ->
+    ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo ->
+    Adapter es msg ->
+    (msg -> Maybe (RecordedEvent, input)) ->
+    Eff es ()
 runProcessManagerWorker options manager Adapter{source = adapterSource} decodeMessage =
-  Streamly.fold Fold.drain $
-    Streamly.mapM handleIngested adapterSource
+    Streamly.fold Fold.drain
+        $ Streamly.mapM handleIngested adapterSource
   where
     handleIngested :: Ingested es msg -> Eff es AckDecision
     handleIngested Ingested{envelope = Envelope{payload = message}} =
-      case decodeMessage message of
-        Nothing -> pure (AckHalt (HaltFatal "process-manager worker could not decode message"))
-        Just (recorded, input) -> do
-          outcome <- runProcessManagerOnce options manager recorded input
-          pure $ case outcome of
-            Right _ -> AckOk
-            Left err -> AckHalt (HaltFatal (Text.pack (show err)))
+        case decodeMessage message of
+            Nothing -> pure (AckHalt (HaltFatal "process-manager worker could not decode message"))
+            Just (recorded, input) -> do
+                outcome <- runProcessManagerOnce options manager recorded input
+                pure $ case outcome of
+                    Right _ -> AckOk
+                    Left err -> AckHalt (HaltFatal (Text.pack (show err)))
 
 eventIdToUuid :: EventId -> UUID.UUID
 eventIdToUuid (EventId uuid) = uuid
@@ -317,12 +327,12 @@ command that was already applied on a prior (possibly crashed) attempt is
 recognized as a duplicate before re-running it.
 -}
 eventAlreadyIn ::
-  (Store :> es) =>
-  RunCommandOptions ->
-  StoreTypes.StreamName ->
-  EventId ->
-  Eff es Bool
+    (Store :> es) =>
+    RunCommandOptions ->
+    StoreTypes.StreamName ->
+    EventId ->
+    Eff es Bool
 eventAlreadyIn options streamName eventId =
-  Streamly.fold
-    (Fold.any (\recorded -> recorded ^. #eventId == eventId))
-    (readStreamForwardStream streamName (StoreTypes.StreamVersion 0) (options ^. #pageSize))
+    Streamly.fold
+        (Fold.any (\recorded -> recorded ^. #eventId == eventId))
+        (readStreamForwardStream streamName (StoreTypes.StreamVersion 0) (options ^. #pageSize))

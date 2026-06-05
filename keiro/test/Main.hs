@@ -991,6 +991,34 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     row ^. #correlationId `shouldBe` "order-1"
                 other -> expectationFailure ("expected scheduled timer row, got " <> show other)
 
+        it "schedules timers when the manager command emits no events" $ \storeHandle -> do
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+            result <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerOnce defaultRunCommandOptions timerOnlyProcessManager sourceEvent (CounterAdded 9)
+            case result of
+                Right (Right pmResult) -> do
+                    case pmResult ^. #managerResult of
+                        PMStateAppended managerResult -> do
+                            managerResult ^. #streamVersion `shouldBe` StreamVersion 0
+                            managerResult ^. #eventsAppended `shouldBe` 0
+                        other -> expectationFailure ("expected no-op manager state, got " <> show other)
+                    pmResult ^. #commandResults `shouldBe` []
+                    pmResult ^. #timersScheduled `shouldBe` 1
+                other -> expectationFailure ("expected process-manager success, got " <> show other)
+            dueCount <-
+                Store.runStoreIO storeHandle $
+                    countDueTimers dueTimerTime
+            dueCount `shouldBe` Right 1
+            timer <-
+                Store.runStoreIO storeHandle $
+                    claimDueTimer dueTimerTime
+            case timer of
+                Right (Just row) -> do
+                    row ^. #processManagerName `shouldBe` "timer-only-pm"
+                    row ^. #correlationId `shouldBe` "order-1"
+                other -> expectationFailure ("expected scheduled timer row, got " <> show other)
+
         it "treats duplicate input delivery as idempotent state and command dispatch" $ \storeHandle -> do
             let sourceEvent = recordedFromEventId (EventId sampleUuid2) (CounterAdded 4)
             Right (Right _) <-
@@ -4270,6 +4298,10 @@ counterEventStream =
         , stateCodec = Nothing
         }
 
+noOpCounterEventStream :: CounterEventStream
+noOpCounterEventStream =
+    counterEventStream & #transducer .~ noOpCounterTransducer
+
 counterTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
 counterTransducer =
     SymTransducer
@@ -4279,6 +4311,23 @@ counterTransducer =
                     { guard = matchInCtor addCtor
                     , update = UKeep
                     , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
+                    , target = Counting
+                    }
+                ]
+        , initial = Counting
+        , initialRegs = RNil
+        , isFinal = \_ -> False
+        }
+
+noOpCounterTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
+noOpCounterTransducer =
+    SymTransducer
+        { edgesOut = \case
+            Counting ->
+                [ Edge
+                    { guard = matchInCtor addCtor
+                    , update = UKeep
+                    , output = []
                     , target = Counting
                     }
                 ]
@@ -4496,6 +4545,46 @@ counterProcessManager =
                             }
                         ]
                     , timers = [counterTimerRequest]
+                    }
+            CounterAudited amount ->
+                ProcessManagerAction
+                    { command = Add amount
+                    , commands = []
+                    , timers = []
+                    }
+        }
+
+timerOnlyProcessManager ::
+    ProcessManager
+        CounterEvent
+        (HsPred '[] CounterCommand)
+        '[]
+        CounterState
+        CounterCommand
+        CounterEvent
+        (HsPred '[] CounterCommand)
+        '[]
+        CounterState
+        CounterCommand
+        CounterEvent
+timerOnlyProcessManager =
+    ProcessManager
+        { name = "timer-only-pm"
+        , correlate = \_ -> "order-1"
+        , eventStream = noOpCounterEventStream
+        , streamFor = \correlationId -> stream ("pm:timer-only-" <> correlationId)
+        , targetEventStream = counterEventStream
+        , targetProjections = const []
+        , handle = \case
+            CounterAdded amount ->
+                ProcessManagerAction
+                    { command = Add amount
+                    , commands = []
+                    , timers =
+                        [ counterTimerRequest
+                            & #processManagerName
+                            .~ "timer-only-pm"
+                        ]
                     }
             CounterAudited amount ->
                 ProcessManagerAction

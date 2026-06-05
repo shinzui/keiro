@@ -297,7 +297,7 @@ perKeyPredicate =
         SELECT 1 FROM keiro_outbox earlier
         WHERE earlier.source = r.source
           AND earlier.message_key = r.message_key
-          AND earlier.created_at < r.created_at
+          AND (earlier.created_at, earlier.outbox_id) < (r.created_at, r.outbox_id)
           AND earlier.status NOT IN ('sent', 'dead') ) )
     """
 
@@ -306,7 +306,7 @@ perSourcePredicate =
     """
     NOT EXISTS ( SELECT 1 FROM keiro_outbox earlier
       WHERE earlier.source = r.source
-        AND earlier.created_at < r.created_at
+        AND (earlier.created_at, earlier.outbox_id) < (r.created_at, r.outbox_id)
         AND earlier.status NOT IN ('sent', 'dead') )
     """
 
@@ -314,7 +314,8 @@ claimSql :: Text -> Text
 claimSql predicate =
     """
     WITH ready AS (
-      SELECT r.outbox_id FROM keiro_outbox r
+      SELECT r.outbox_id, r.created_at AS claim_created_at
+      FROM keiro_outbox r
       WHERE r.status IN ('pending', 'failed')
         AND r.next_attempt_at <= $2
         AND (
@@ -323,17 +324,31 @@ claimSql predicate =
         <> """
 
            )
-             ORDER BY r.created_at
+             ORDER BY r.created_at, r.outbox_id
              LIMIT $1
              FOR UPDATE SKIP LOCKED
-           )
+           ),
+           updated AS (
            UPDATE keiro_outbox kt
            SET status = 'publishing', attempt_count = kt.attempt_count + 1, updated_at = $2
-           WHERE kt.outbox_id IN (SELECT outbox_id FROM ready)
-           RETURNING
+           FROM ready
+           WHERE kt.outbox_id = ready.outbox_id
+           RETURNING ready.claim_created_at,
 
            """
         <> rowColumns
+        <> """
+
+           )
+           SELECT
+
+           """
+        <> unqualifiedRowColumns
+        <> """
+
+           FROM updated
+           ORDER BY claim_created_at, outbox_id
+           """
 
 rowColumns :: Text
 rowColumns =
@@ -346,6 +361,19 @@ rowColumns =
     kt.attributes, kt.occurred_at, kt.status, kt.attempt_count,
     kt.next_attempt_at, kt.last_error, kt.published_at, kt.created_at,
     kt.updated_at
+    """
+
+unqualifiedRowColumns :: Text
+unqualifiedRowColumns =
+    """
+    outbox_id, message_id, source, destination, message_key,
+    event_type, schema_version, content_type, schema_registry,
+    schema_subject, schema_version_ref, schema_id, schema_fingerprint,
+    source_event_id, source_global_position, causation_id,
+    correlation_id, traceparent, tracestate, payload_bytes,
+    attributes, occurred_at, status, attempt_count,
+    next_attempt_at, last_error, published_at, created_at,
+    updated_at
     """
 
 claimResultDecoder :: D.Row OutboxRow
