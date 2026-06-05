@@ -35,7 +35,8 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-06-05: Finished and validated the outbox claim-order patch in `keiro/src/Keiro/Outbox/Schema.hs`; `KEIRO_MIGRATE_NO_CHECK=1 cabal test keiro:keiro-test --test-options="--match=Outbox"` passed with 14 examples and 0 failures.
 - [x] 2026-06-05: Ran `nix fmt`; treefmt processed the repo and reported `formatted 3 files (0 changed)`.
 - [x] 2026-06-05: Ran focused outbox tests, `cabal build all`, and `KEIRO_MIGRATE_NO_CHECK=1 cabal test all`; all exited successfully.
-- [x] 2026-06-05: Committed the process-manager/outbox audit fixes as `0b35a17 fix(runtime): harden idempotent release paths` with an `ExecPlan: docs/plans/53-audit-release-blocking-runtime-idempotency.md` trailer.
+- [x] 2026-06-05: Committed the process-manager/outbox audit fixes as `4537fe2 fix(runtime): harden idempotent release paths` with an `ExecPlan: docs/plans/53-audit-release-blocking-runtime-idempotency.md` trailer.
+- [x] 2026-06-05: Re-read the plan during `$exec-plan implement` and reconciled stale milestone prose and commit-hash references with the already-committed repository state.
 
 
 ## Surprises & Discoveries
@@ -116,11 +117,11 @@ exist at the end, commands to run, acceptance criteria.
 
 Milestone 1, already completed, repaired workflow journal append idempotency. In `keiro/src/Keiro/Workflow.hs`, `appendJournalEntryReturningId` now computes the deterministic journal event id and stream name, checks the physical journal stream when the derived step index is missing, repairs the step index with `recordStepTx`, and repeats that source-of-truth check after append failure to handle concurrent duplicate completion. The regression test in `keiro/test/Main.hs` deletes the derived `keiro_workflow_steps` row and confirms the second append returns the same event id, restores the index, and leaves only one physical journal event.
 
-Milestone 2, currently implemented but uncommitted, fixes process-manager timer-only reactions. In `keiro/src/Keiro/ProcessManager.hs`, keep the current `runCommandWithSql` callback for the append path. When the result is `Right (managerResult, Nothing)`, run `runTransaction (traverse_ scheduleTimerTx timers)` before finishing. In `keiro/test/Main.hs`, add `noOpCounterEventStream`, `noOpCounterTransducer`, and `timerOnlyProcessManager`, then add a test that verifies a manager command with zero appended events still schedules one due timer.
+Milestone 2, completed and committed, fixes process-manager timer-only reactions. In `keiro/src/Keiro/ProcessManager.hs`, the append path keeps the `runCommandWithSql` callback. When the result is `Right (managerResult, Nothing)`, the implementation runs `runTransaction (traverse_ scheduleTimerTx timers)` before finishing. In `keiro/test/Main.hs`, the fixtures `noOpCounterEventStream`, `noOpCounterTransducer`, and `timerOnlyProcessManager` support a regression test that verifies a manager command with zero appended events still schedules one due timer.
 
-Milestone 3, currently in progress, fixes outbox claim ordering. In `keiro/src/Keiro/Outbox/Schema.hs`, change the policy predicates to compare `(created_at, outbox_id)` so equal timestamps still have a stable predecessor. Change `claimSql` so `ready` carries `claim_created_at`, the `UPDATE` joins through `ready`, and the final result selects from an `updated` CTE ordered by `claim_created_at, outbox_id`. Add or update a focused outbox test if validation reveals the existing tests do not exercise the ordering guarantee.
+Milestone 3, completed and committed, fixes outbox claim ordering. In `keiro/src/Keiro/Outbox/Schema.hs`, the policy predicates compare `(created_at, outbox_id)` so equal timestamps still have a stable predecessor. `claimSql` carries `claim_created_at` through `ready`, joins the `UPDATE` through `ready`, and selects the final result from an `updated` CTE ordered by `claim_created_at, outbox_id`.
 
-Milestone 4 validates and commits the current audit fixes. Run the focused process-manager and outbox tests first, then `cabal build all`, then `KEIRO_MIGRATE_NO_CHECK=1 cabal test all`. Run formatting before commit if the tree is not already formatted. Commit only the files belonging to this plan and leave unrelated worktree changes, especially the pre-existing `Justfile` modification, unstaged.
+Milestone 4, completed and committed, validates the current audit fixes. The focused process-manager and outbox tests passed, then `cabal build all` passed, then `KEIRO_MIGRATE_NO_CHECK=1 cabal test all` passed. Formatting was run before the runtime fix commit. Commit only files belonging to this plan and leave unrelated worktree changes unstaged.
 
 
 ## Concrete Steps
@@ -296,4 +297,6 @@ The SQL in `keiro/src/Keiro/Outbox/Schema.hs` must continue to decode rows with 
 
 2026-06-05: Updated progress and validation after focused outbox tests, formatting, `cabal build all`, and `KEIRO_MIGRATE_NO_CHECK=1 cabal test all` all completed successfully.
 
-2026-06-05: Updated progress after committing `0b35a17 fix(runtime): harden idempotent release paths` with the required ExecPlan trailer.
+2026-06-05: Updated progress after committing `4537fe2 fix(runtime): harden idempotent release paths` with the required ExecPlan trailer.
+
+2026-06-05: Reconciled stale implementation prose after re-reading the plan in implement mode. The code work was already complete and committed, so this revision updates the milestone descriptions and commit hash references to match the repository state.
