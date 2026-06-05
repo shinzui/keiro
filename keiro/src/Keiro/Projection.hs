@@ -17,23 +17,22 @@ Both ultimately fold events into a SQL read model via a
 'Hasql.Transaction.Transaction'; the difference is only /when/ that
 transaction runs.
 -}
-module Keiro.Projection
-  ( -- * Inline projections
-    InlineProjection (..)
-  , runCommandWithProjections
+module Keiro.Projection (
+    -- * Inline projections
+    InlineProjection (..),
+    runCommandWithProjections,
 
     -- * Asynchronous projections
-  , AsyncProjection (..)
-  , applyAsyncProjection
-  , recordProjectionLag
-  )
+    AsyncProjection (..),
+    applyAsyncProjection,
+    recordProjectionLag,
+)
 where
 
 import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import GHC.Stack (HasCallStack)
-import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Command (CommandError, CommandResult, RunCommandOptions, runCommandWithSqlEvents)
 import Keiro.EventStream (EventStream)
@@ -46,6 +45,7 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Read (readAllBackward)
 import Kiroku.Store.Types (EventId, GlobalPosition (..), RecordedEvent)
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
 
 {- | A read-model update applied synchronously with the command that emits
@@ -54,10 +54,10 @@ the event. 'apply' receives both the decoded event @co@ and the
 'name' identifies the projection for diagnostics.
 -}
 data InlineProjection co = InlineProjection
-  { name :: !Text
-  , apply :: !(co -> RecordedEvent -> Tx.Transaction ())
-  }
-  deriving stock (Generic)
+    { name :: !Text
+    , apply :: !(co -> RecordedEvent -> Tx.Transaction ())
+    }
+    deriving stock (Generic)
 
 {- | A read-model update applied asynchronously by a subscription worker.
 
@@ -69,12 +69,12 @@ data InlineProjection co = InlineProjection
   redelivery, making the projection safe to retry.
 -}
 data AsyncProjection = AsyncProjection
-  { name :: !Text
-  , subscriptionName :: !Text
-  , applyRecorded :: !(RecordedEvent -> Tx.Transaction ())
-  , idempotencyKey :: !(RecordedEvent -> EventId)
-  }
-  deriving stock (Generic)
+    { name :: !Text
+    , subscriptionName :: !Text
+    , applyRecorded :: !(RecordedEvent -> Tx.Transaction ())
+    , idempotencyKey :: !(RecordedEvent -> EventId)
+    }
+    deriving stock (Generic)
 
 {- | Run a command and apply every supplied 'InlineProjection' to the events
 it emits, all inside the command's append transaction. A projection failure
@@ -82,37 +82,38 @@ aborts the whole transaction, so the events and the read-model update commit
 together or not at all.
 -}
 runCommandWithProjections ::
-  forall phi rs s ci co es.
-  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
-  RunCommandOptions ->
-  EventStream phi rs s ci co ->
-  Stream (EventStream phi rs s ci co) ->
-  ci ->
-  [InlineProjection co] ->
-  Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co)))
+    forall phi rs s ci co es.
+    (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+    RunCommandOptions ->
+    EventStream phi rs s ci co ->
+    Stream (EventStream phi rs s ci co) ->
+    ci ->
+    [InlineProjection co] ->
+    Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co)))
 runCommandWithProjections options eventStream targetStream command projections = do
-  result <-
-    runCommandWithSqlEvents
-      options
-      eventStream
-      targetStream
-      command
-      ( \pairs _appendResult ->
-          traverse_
-            ( \projection ->
+    result <-
+        runCommandWithSqlEvents
+            options
+            eventStream
+            targetStream
+            command
+            ( \pairs _appendResult ->
                 traverse_
-                  (\(event, recorded) -> (projection ^. #apply) event recorded)
-                  pairs
+                    ( \projection ->
+                        traverse_
+                            (\(event, recorded) -> (projection ^. #apply) event recorded)
+                            pairs
+                    )
+                    projections
             )
-            projections
-      )
-  pure (fmap Prelude.fst result)
+    pure (fmap Prelude.fst result)
 
--- | Apply one event to an 'AsyncProjection', returning the read-model update
--- as a 'Hasql.Transaction.Transaction' for the subscription worker to run.
+{- | Apply one event to an 'AsyncProjection', returning the read-model update
+as a 'Hasql.Transaction.Transaction' for the subscription worker to run.
+-}
 applyAsyncProjection :: AsyncProjection -> RecordedEvent -> Tx.Transaction ()
 applyAsyncProjection projection recorded =
-  (projection ^. #applyRecorded) recorded
+    (projection ^. #applyRecorded) recorded
 
 {- | Record 'keiro.projection.lag' for one async projection: how many events its
 subscription is behind the global log head, computed as the store head global
@@ -125,26 +126,27 @@ There is no in-library polling drain loop today (the application drives
 calls to surface lag for a subscription.
 -}
 recordProjectionLag ::
-  (IOE :> es, Store :> es) =>
-  Maybe KeiroMetrics ->
-  AsyncProjection ->
-  Eff es ()
+    (IOE :> es, Store :> es) =>
+    Maybe KeiroMetrics ->
+    AsyncProjection ->
+    Eff es ()
 recordProjectionLag metrics projection = do
-  headPos <- storeHeadPosition
-  checkpoint <-
-    fromMaybe (GlobalPosition 0)
-      <$> readSubscriptionPosition (projection ^. #subscriptionName)
-  Telemetry.recordProjectionLag metrics (positionGap headPos checkpoint)
+    headPos <- storeHeadPosition
+    checkpoint <-
+        fromMaybe (GlobalPosition 0)
+            <$> readSubscriptionPosition (projection ^. #subscriptionName)
+    Telemetry.recordProjectionLag metrics (positionGap headPos checkpoint)
 
--- | The global position of the most recent event in the @$all@ log, or
--- @GlobalPosition 0@ when the log is empty. 'readAllBackward' treats
--- @GlobalPosition 0@ as "after everything", so a limit of 1 returns the head.
+{- | The global position of the most recent event in the @$all@ log, or
+@GlobalPosition 0@ when the log is empty. 'readAllBackward' treats
+@GlobalPosition 0@ as "after everything", so a limit of 1 returns the head.
+-}
 storeHeadPosition :: (Store :> es) => Eff es GlobalPosition
 storeHeadPosition = do
-  recent <- readAllBackward (GlobalPosition 0) 1
-  pure $ case Vector.toList recent of
-    (event : _) -> event ^. #globalPosition
-    [] -> GlobalPosition 0
+    recent <- readAllBackward (GlobalPosition 0) 1
+    pure $ case Vector.toList recent of
+        (event : _) -> event ^. #globalPosition
+        [] -> GlobalPosition 0
 
 -- | The non-negative gap between the log head and a checkpoint, in events.
 positionGap :: GlobalPosition -> GlobalPosition -> Int64

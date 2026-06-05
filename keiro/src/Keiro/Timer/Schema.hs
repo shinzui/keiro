@@ -10,28 +10,28 @@ records completion and the produced event id.
 Callers normally use the re-exports from "Keiro.Timer" rather than this
 module directly.
 -}
-module Keiro.Timer.Schema
-  ( -- * Rows and status
-    TimerStatus (..)
-  , TimerRow (..)
+module Keiro.Timer.Schema (
+    -- * Rows and status
+    TimerStatus (..),
+    TimerRow (..),
 
     -- * Storage
-  , scheduleTimerTx
-  , claimDueTimer
-  , markTimerFired
+    scheduleTimerTx,
+    claimDueTimer,
+    markTimerFired,
 
     -- * Read-only counts
-  , countDueTimers
-  , countStuckTimers
+    countDueTimers,
+    countStuckTimers,
 
     -- * Recovery
-  , StuckTimerFilter (..)
-  , anyStuckTimer
-  , findStuckTimers
-  , requeueStuckTimer
-  , cancelTimer
-  , deadLetterTimer
-  )
+    StuckTimerFilter (..),
+    anyStuckTimer,
+    findStuckTimers,
+    requeueStuckTimer,
+    cancelTimer,
+    deadLetterTimer,
+)
 where
 
 import Contravariant.Extras (contrazip2, contrazip6)
@@ -41,12 +41,12 @@ import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
-import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Keiro.Prelude
 import Keiro.Timer.Types (TimerId (..), TimerRequest (..))
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..))
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 {- | A timer's lifecycle state.
 
@@ -60,28 +60,28 @@ import Kiroku.Store.Types (EventId (..))
   optional @last_error@ describing why it was given up on.
 -}
 data TimerStatus
-  = Scheduled
-  | Firing
-  | Fired
-  | Cancelled
-  | Dead
-  deriving stock (Generic, Eq, Show)
+    = Scheduled
+    | Firing
+    | Fired
+    | Cancelled
+    | Dead
+    deriving stock (Generic, Eq, Show)
 
 {- | A timer row as stored: the original 'TimerRequest' fields plus the live
 'status', the 'attempts' count (incremented on each claim), and the
 'firedEventId' recorded once it fires.
 -}
 data TimerRow = TimerRow
-  { timerId :: !TimerId
-  , processManagerName :: !Text
-  , correlationId :: !Text
-  , fireAt :: !UTCTime
-  , payload :: !Value
-  , status :: !TimerStatus
-  , attempts :: !Int
-  , firedEventId :: !(Maybe EventId)
-  }
-  deriving stock (Generic, Eq, Show)
+    { timerId :: !TimerId
+    , processManagerName :: !Text
+    , correlationId :: !Text
+    , fireAt :: !UTCTime
+    , payload :: !Value
+    , status :: !TimerStatus
+    , attempts :: !Int
+    , firedEventId :: !(Maybe EventId)
+    }
+    deriving stock (Generic, Eq, Show)
 
 {- | Criteria selecting timers stranded in 'Firing'. A row is "stuck" when its
 'status' is @firing@ and it matches every set bound: 'minAge' (it has been
@@ -90,10 +90,10 @@ has been claimed at least this many times). Both unset selects every @firing@
 row.
 -}
 data StuckTimerFilter = StuckTimerFilter
-  { minAge :: !(Maybe NominalDiffTime)
-  , minAttempts :: !(Maybe Int)
-  }
-  deriving stock (Generic, Eq, Show)
+    { minAge :: !(Maybe NominalDiffTime)
+    , minAttempts :: !(Maybe Int)
+    }
+    deriving stock (Generic, Eq, Show)
 
 -- | Select every @firing@ row regardless of age or attempts.
 anyStuckTimer :: StuckTimerFilter
@@ -106,15 +106,15 @@ cancelled is not resurrected.
 -}
 scheduleTimerTx :: TimerRequest -> Tx.Transaction ()
 scheduleTimerTx request =
-  Tx.statement
-    ( timerIdToUuid (request ^. #timerId)
-    , request ^. #processManagerName
-    , request ^. #correlationId
-    , request ^. #fireAt
-    , request ^. #payload
-    , statusToText Scheduled
-    )
-    scheduleTimerStmt
+    Tx.statement
+        ( timerIdToUuid (request ^. #timerId)
+        , request ^. #processManagerName
+        , request ^. #correlationId
+        , request ^. #fireAt
+        , request ^. #payload
+        , statusToText Scheduled
+        )
+        scheduleTimerStmt
 
 {- | Atomically claim the single earliest timer due at @now@, moving it to
 @Firing@ and bumping its attempt count. Uses @FOR UPDATE SKIP LOCKED@ so
@@ -123,15 +123,16 @@ due.
 -}
 claimDueTimer :: (Store :> es) => UTCTime -> Eff es (Maybe TimerRow)
 claimDueTimer now =
-  runTransaction $
-    Tx.statement now claimDueTimerStmt
+    runTransaction $
+        Tx.statement now claimDueTimerStmt
 
--- | Mark a claimed timer @Fired@, recording the id of the event its firing
--- produced.
+{- | Mark a claimed timer @Fired@, recording the id of the event its firing
+produced.
+-}
 markTimerFired :: (Store :> es) => TimerId -> EventId -> Eff es ()
 markTimerFired timerId eventId =
-  runTransaction $
-    Tx.statement (timerIdToUuid timerId, eventIdToUuid eventId) markTimerFiredStmt
+    runTransaction $
+        Tx.statement (timerIdToUuid timerId, eventIdToUuid eventId) markTimerFiredStmt
 
 {- | Count timers that are @scheduled@ and already due at @now@ — the timer
 backlog. Read-only; mirrors 'claimDueTimer''s WHERE clause but counts rather
@@ -139,8 +140,8 @@ than locking, so it never claims or mutates a row.
 -}
 countDueTimers :: (Store :> es) => UTCTime -> Eff es Int
 countDueTimers now =
-  runTransaction $
-    Tx.statement now countDueTimersStmt
+    runTransaction $
+        Tx.statement now countDueTimersStmt
 
 {- | Count timers stranded in @Firing@ that match the given 'StuckTimerFilter' —
 the same "stuck" predicate 'findStuckTimers' lists, evaluated against @now@.
@@ -148,10 +149,10 @@ Read-only. 'anyStuckTimer' counts every @firing@ row.
 -}
 countStuckTimers :: (Store :> es) => UTCTime -> StuckTimerFilter -> Eff es Int
 countStuckTimers now stuckFilter =
-  runTransaction $
-    Tx.statement (cutoff, fmap fromIntegral (stuckFilter ^. #minAttempts)) countStuckTimersStmt
- where
-  cutoff = fmap (\age -> addUTCTime (negate age) now) (stuckFilter ^. #minAge)
+    runTransaction $
+        Tx.statement (cutoff, fmap fromIntegral (stuckFilter ^. #minAttempts)) countStuckTimersStmt
+  where
+    cutoff = fmap (\age -> addUTCTime (negate age) now) (stuckFilter ^. #minAge)
 
 {- | List timers stranded in @Firing@ that match the given 'StuckTimerFilter'.
 The @minAge@ bound is evaluated against @now@: a row qualifies when its
@@ -159,12 +160,12 @@ The @minAge@ bound is evaluated against @now@: a row qualifies when its
 are ordered oldest-first by @updated_at@.
 -}
 findStuckTimers ::
-  (Store :> es) => UTCTime -> StuckTimerFilter -> Eff es [TimerRow]
+    (Store :> es) => UTCTime -> StuckTimerFilter -> Eff es [TimerRow]
 findStuckTimers now stuckFilter =
-  runTransaction $
-    Tx.statement (cutoff, fmap fromIntegral (stuckFilter ^. #minAttempts)) findStuckTimersStmt
- where
-  cutoff = fmap (\age -> addUTCTime (negate age) now) (stuckFilter ^. #minAge)
+    runTransaction $
+        Tx.statement (cutoff, fmap fromIntegral (stuckFilter ^. #minAttempts)) findStuckTimersStmt
+  where
+    cutoff = fmap (\age -> addUTCTime (negate age) now) (stuckFilter ^. #minAge)
 
 {- | Move a timer from @Firing@ back to @Scheduled@ so the ordinary claim loop
 re-fires it. Leaves @fire_at@ unchanged, so a due timer becomes immediately
@@ -173,8 +174,8 @@ already-requeued row affects nothing. Returns 'True' when a row changed.
 -}
 requeueStuckTimer :: (Store :> es) => TimerId -> Eff es Bool
 requeueStuckTimer timerId =
-  runTransaction $
-    Tx.statement (timerIdToUuid timerId) requeueStuckTimerStmt
+    runTransaction $
+        Tx.statement (timerIdToUuid timerId) requeueStuckTimerStmt
 
 {- | Move a timer from @Scheduled@ or @Firing@ to the terminal @Cancelled@
 state so it never fires. Terminal rows (@fired@, @cancelled@, @dead@) are left
@@ -182,8 +183,8 @@ untouched. Idempotent. Returns 'True' when a row changed.
 -}
 cancelTimer :: (Store :> es) => TimerId -> Eff es Bool
 cancelTimer timerId =
-  runTransaction $
-    Tx.statement (timerIdToUuid timerId) cancelTimerStmt
+    runTransaction $
+        Tx.statement (timerIdToUuid timerId) cancelTimerStmt
 
 {- | Move a timer from @Scheduled@ or @Firing@ to the terminal @Dead@ state,
 recording @reason@ in @last_error@ so an operator can see why it was abandoned
@@ -192,194 +193,194 @@ untouched. Idempotent. Returns 'True' when a row changed.
 -}
 deadLetterTimer :: (Store :> es) => TimerId -> Text -> Eff es Bool
 deadLetterTimer timerId reason =
-  runTransaction $
-    Tx.statement (timerIdToUuid timerId, reason) deadLetterTimerStmt
+    runTransaction $
+        Tx.statement (timerIdToUuid timerId, reason) deadLetterTimerStmt
 
 scheduleTimerStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text) ()
 scheduleTimerStmt =
-  preparable
-    """
-    INSERT INTO keiro_timers
-      (timer_id, process_manager_name, correlation_id, fire_at, payload, status)
-    VALUES
-      ($1, $2, $3, $4, $5, $6)
-    ON CONFLICT (timer_id) DO UPDATE
-      SET process_manager_name = EXCLUDED.process_manager_name,
-          correlation_id = EXCLUDED.correlation_id,
-          fire_at = EXCLUDED.fire_at,
-          payload = EXCLUDED.payload,
-          status = EXCLUDED.status,
-          updated_at = now()
-      WHERE keiro_timers.status = 'scheduled'
-    """
-    ( contrazip6
-        (E.param (E.nonNullable E.uuid))
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.timestamptz))
-        (E.param (E.nonNullable E.jsonb))
-        (E.param (E.nonNullable E.text))
-    )
-    D.noResult
+    preparable
+        """
+        INSERT INTO keiro_timers
+          (timer_id, process_manager_name, correlation_id, fire_at, payload, status)
+        VALUES
+          ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (timer_id) DO UPDATE
+          SET process_manager_name = EXCLUDED.process_manager_name,
+              correlation_id = EXCLUDED.correlation_id,
+              fire_at = EXCLUDED.fire_at,
+              payload = EXCLUDED.payload,
+              status = EXCLUDED.status,
+              updated_at = now()
+          WHERE keiro_timers.status = 'scheduled'
+        """
+        ( contrazip6
+            (E.param (E.nonNullable E.uuid))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.timestamptz))
+            (E.param (E.nonNullable E.jsonb))
+            (E.param (E.nonNullable E.text))
+        )
+        D.noResult
 
 claimDueTimerStmt :: Statement UTCTime (Maybe TimerRow)
 claimDueTimerStmt =
-  preparable
-    """
-    WITH due AS (
-      SELECT timer_id
-      FROM keiro_timers
-      WHERE status = 'scheduled'
-        AND fire_at <= $1
-      ORDER BY fire_at, timer_id
-      LIMIT 1
-      FOR UPDATE SKIP LOCKED
-    )
-    UPDATE keiro_timers kt
-    SET status = 'firing',
-        attempts = kt.attempts + 1,
-        updated_at = now()
-    FROM due
-    WHERE kt.timer_id = due.timer_id
-    RETURNING kt.timer_id, kt.process_manager_name, kt.correlation_id, kt.fire_at,
-      kt.payload, kt.status, kt.attempts, kt.fired_event_id
-    """
-    (E.param (E.nonNullable E.timestamptz))
-    (D.rowMaybe timerRowDecoder)
+    preparable
+        """
+        WITH due AS (
+          SELECT timer_id
+          FROM keiro_timers
+          WHERE status = 'scheduled'
+            AND fire_at <= $1
+          ORDER BY fire_at, timer_id
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE keiro_timers kt
+        SET status = 'firing',
+            attempts = kt.attempts + 1,
+            updated_at = now()
+        FROM due
+        WHERE kt.timer_id = due.timer_id
+        RETURNING kt.timer_id, kt.process_manager_name, kt.correlation_id, kt.fire_at,
+          kt.payload, kt.status, kt.attempts, kt.fired_event_id
+        """
+        (E.param (E.nonNullable E.timestamptz))
+        (D.rowMaybe timerRowDecoder)
 
 markTimerFiredStmt :: Statement (UUID, UUID) ()
 markTimerFiredStmt =
-  preparable
-    """
-    UPDATE keiro_timers
-    SET status = 'fired',
-        fired_event_id = $2,
-        updated_at = now()
-    WHERE timer_id = $1
-    """
-    ( contrazip2
-        (E.param (E.nonNullable E.uuid))
-        (E.param (E.nonNullable E.uuid))
-    )
-    D.noResult
+    preparable
+        """
+        UPDATE keiro_timers
+        SET status = 'fired',
+            fired_event_id = $2,
+            updated_at = now()
+        WHERE timer_id = $1
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.uuid))
+            (E.param (E.nonNullable E.uuid))
+        )
+        D.noResult
 
 countDueTimersStmt :: Statement UTCTime Int
 countDueTimersStmt =
-  preparable
-    """
-    SELECT count(*)
-    FROM keiro_timers
-    WHERE status = 'scheduled'
-      AND fire_at <= $1
-    """
-    (E.param (E.nonNullable E.timestamptz))
-    (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
+    preparable
+        """
+        SELECT count(*)
+        FROM keiro_timers
+        WHERE status = 'scheduled'
+          AND fire_at <= $1
+        """
+        (E.param (E.nonNullable E.timestamptz))
+        (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
 
 countStuckTimersStmt :: Statement (Maybe UTCTime, Maybe Int64) Int
 countStuckTimersStmt =
-  preparable
-    """
-    SELECT count(*)
-    FROM keiro_timers
-    WHERE status = 'firing'
-      AND ($1::timestamptz IS NULL OR updated_at <= $1)
-      AND ($2::bigint IS NULL OR attempts >= $2)
-    """
-    ( contrazip2
-        (E.param (E.nullable E.timestamptz))
-        (E.param (E.nullable E.int8))
-    )
-    (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
+    preparable
+        """
+        SELECT count(*)
+        FROM keiro_timers
+        WHERE status = 'firing'
+          AND ($1::timestamptz IS NULL OR updated_at <= $1)
+          AND ($2::bigint IS NULL OR attempts >= $2)
+        """
+        ( contrazip2
+            (E.param (E.nullable E.timestamptz))
+            (E.param (E.nullable E.int8))
+        )
+        (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
 
 findStuckTimersStmt :: Statement (Maybe UTCTime, Maybe Int64) [TimerRow]
 findStuckTimersStmt =
-  preparable
-    """
-    SELECT timer_id, process_manager_name, correlation_id, fire_at,
-      payload, status, attempts, fired_event_id
-    FROM keiro_timers
-    WHERE status = 'firing'
-      AND ($1::timestamptz IS NULL OR updated_at <= $1)
-      AND ($2::bigint IS NULL OR attempts >= $2)
-    ORDER BY updated_at, timer_id
-    """
-    ( contrazip2
-        (E.param (E.nullable E.timestamptz))
-        (E.param (E.nullable E.int8))
-    )
-    (D.rowList timerRowDecoder)
+    preparable
+        """
+        SELECT timer_id, process_manager_name, correlation_id, fire_at,
+          payload, status, attempts, fired_event_id
+        FROM keiro_timers
+        WHERE status = 'firing'
+          AND ($1::timestamptz IS NULL OR updated_at <= $1)
+          AND ($2::bigint IS NULL OR attempts >= $2)
+        ORDER BY updated_at, timer_id
+        """
+        ( contrazip2
+            (E.param (E.nullable E.timestamptz))
+            (E.param (E.nullable E.int8))
+        )
+        (D.rowList timerRowDecoder)
 
 requeueStuckTimerStmt :: Statement UUID Bool
 requeueStuckTimerStmt =
-  preparable
-    """
-    UPDATE keiro_timers
-    SET status = 'scheduled',
-        updated_at = now()
-    WHERE timer_id = $1
-      AND status = 'firing'
-    """
-    (E.param (E.nonNullable E.uuid))
-    ((> 0) <$> D.rowsAffected)
+    preparable
+        """
+        UPDATE keiro_timers
+        SET status = 'scheduled',
+            updated_at = now()
+        WHERE timer_id = $1
+          AND status = 'firing'
+        """
+        (E.param (E.nonNullable E.uuid))
+        ((> 0) <$> D.rowsAffected)
 
 cancelTimerStmt :: Statement UUID Bool
 cancelTimerStmt =
-  preparable
-    """
-    UPDATE keiro_timers
-    SET status = 'cancelled',
-        updated_at = now()
-    WHERE timer_id = $1
-      AND status IN ('scheduled', 'firing')
-    """
-    (E.param (E.nonNullable E.uuid))
-    ((> 0) <$> D.rowsAffected)
+    preparable
+        """
+        UPDATE keiro_timers
+        SET status = 'cancelled',
+            updated_at = now()
+        WHERE timer_id = $1
+          AND status IN ('scheduled', 'firing')
+        """
+        (E.param (E.nonNullable E.uuid))
+        ((> 0) <$> D.rowsAffected)
 
 deadLetterTimerStmt :: Statement (UUID, Text) Bool
 deadLetterTimerStmt =
-  preparable
-    """
-    UPDATE keiro_timers
-    SET status = 'dead',
-        last_error = $2,
-        updated_at = now()
-    WHERE timer_id = $1
-      AND status IN ('scheduled', 'firing')
-    """
-    ( contrazip2
-        (E.param (E.nonNullable E.uuid))
-        (E.param (E.nonNullable E.text))
-    )
-    ((> 0) <$> D.rowsAffected)
+    preparable
+        """
+        UPDATE keiro_timers
+        SET status = 'dead',
+            last_error = $2,
+            updated_at = now()
+        WHERE timer_id = $1
+          AND status IN ('scheduled', 'firing')
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.uuid))
+            (E.param (E.nonNullable E.text))
+        )
+        ((> 0) <$> D.rowsAffected)
 
 timerRowDecoder :: D.Row TimerRow
 timerRowDecoder =
-  TimerRow
-    <$> (TimerId <$> D.column (D.nonNullable D.uuid))
-    <*> D.column (D.nonNullable D.text)
-    <*> D.column (D.nonNullable D.text)
-    <*> D.column (D.nonNullable D.timestamptz)
-    <*> D.column (D.nonNullable D.jsonb)
-    <*> (statusFromText <$> D.column (D.nonNullable D.text))
-    <*> (fromIntegral <$> D.column (D.nonNullable D.int8))
-    <*> (fmap EventId <$> D.column (D.nullable D.uuid))
+    TimerRow
+        <$> (TimerId <$> D.column (D.nonNullable D.uuid))
+        <*> D.column (D.nonNullable D.text)
+        <*> D.column (D.nonNullable D.text)
+        <*> D.column (D.nonNullable D.timestamptz)
+        <*> D.column (D.nonNullable D.jsonb)
+        <*> (statusFromText <$> D.column (D.nonNullable D.text))
+        <*> (fromIntegral <$> D.column (D.nonNullable D.int8))
+        <*> (fmap EventId <$> D.column (D.nullable D.uuid))
 
 statusToText :: TimerStatus -> Text
 statusToText = \case
-  Scheduled -> "scheduled"
-  Firing -> "firing"
-  Fired -> "fired"
-  Cancelled -> "cancelled"
-  Dead -> "dead"
+    Scheduled -> "scheduled"
+    Firing -> "firing"
+    Fired -> "fired"
+    Cancelled -> "cancelled"
+    Dead -> "dead"
 
 statusFromText :: Text -> TimerStatus
 statusFromText = \case
-  "scheduled" -> Scheduled
-  "firing" -> Firing
-  "fired" -> Fired
-  "cancelled" -> Cancelled
-  "dead" -> Dead
-  _ -> Cancelled
+    "scheduled" -> Scheduled
+    "firing" -> Firing
+    "fired" -> Fired
+    "cancelled" -> Cancelled
+    "dead" -> Dead
+    _ -> Cancelled
 
 timerIdToUuid :: TimerId -> UUID
 timerIdToUuid (TimerId uuid) = uuid

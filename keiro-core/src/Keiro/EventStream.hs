@@ -17,11 +17,11 @@ The type parameters thread through from the underlying transducer:
 * @ci@ — the command input the machine consumes.
 * @co@ — the event output the machine emits (what 'eventCodec' serializes).
 -}
-module Keiro.EventStream
-  ( EventStream (..)
-  , SnapshotPolicy (..)
-  , StateCodec (..)
-  )
+module Keiro.EventStream (
+    EventStream (..),
+    SnapshotPolicy (..),
+    StateCodec (..),
+)
 where
 
 import Keiki.Core (RegFile, SymTransducer)
@@ -46,15 +46,15 @@ import Kiroku.Store.Types (StreamName, StreamVersion)
   snapshotting regardless of 'snapshotPolicy'.
 -}
 data EventStream phi rs s ci co = EventStream
-  { transducer :: !(SymTransducer phi rs s ci co)
-  , initialState :: !s
-  , initialRegisters :: !(RegFile rs)
-  , eventCodec :: !(Codec co)
-  , resolveStreamName :: !(Stream (EventStream phi rs s ci co) -> StreamName)
-  , snapshotPolicy :: !(SnapshotPolicy (s, RegFile rs))
-  , stateCodec :: !(Maybe (StateCodec (s, RegFile rs)))
-  }
-  deriving stock (Generic)
+    { transducer :: !(SymTransducer phi rs s ci co)
+    , initialState :: !s
+    , initialRegisters :: !(RegFile rs)
+    , eventCodec :: !(Codec co)
+    , resolveStreamName :: !(Stream (EventStream phi rs s ci co) -> StreamName)
+    , snapshotPolicy :: !(SnapshotPolicy (s, RegFile rs))
+    , stateCodec :: !(Maybe (StateCodec (s, RegFile rs)))
+    }
+    deriving stock (Generic)
 
 {- | When to persist a snapshot of a stream's folded state.
 
@@ -68,11 +68,11 @@ data EventStream phi rs s ci co = EventStream
 See 'Keiro.Snapshot.Policy.shouldSnapshot' for the evaluation rules.
 -}
 data SnapshotPolicy state
-  = Never
-  | Every !Int
-  | OnTerminal
-  | Custom !(state -> StreamVersion -> Bool)
-  deriving stock (Generic)
+    = Never
+    | Every !Int
+    | OnTerminal
+    | Custom !(state -> StreamVersion -> Bool)
+    deriving stock (Generic)
 
 {- | How to serialize and deserialize a stream's snapshot state.
 
@@ -89,9 +89,9 @@ snapshots and forces a clean rehydration from events.
   registers)@ pair.
 -}
 data StateCodec state = StateCodec
-  { stateCodecVersion :: !Int
-  , shapeHash :: !Text
-  , encode :: !(state -> Value)
-  , decode :: !(Value -> Either Text state)
-  }
-  deriving stock (Generic)
+    { stateCodecVersion :: !Int
+    , shapeHash :: !Text
+    , encode :: !(state -> Value)
+    , decode :: !(Value -> Either Text state)
+    }
+    deriving stock (Generic)

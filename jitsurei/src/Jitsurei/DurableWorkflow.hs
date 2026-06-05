@@ -13,26 +13,26 @@ then ship via a child workflow and return the tracking number. Every checkpoint
 is journaled to @wf:order-fulfillment-\<id\>@, so a re-invocation short-circuits
 the work already done and never repeats a side effect.
 -}
-module Jitsurei.DurableWorkflow
-  ( -- * Workflow names
-    orderFulfillmentWorkflowName
-  , shipOrderWorkflowName
+module Jitsurei.DurableWorkflow (
+    -- * Workflow names
+    orderFulfillmentWorkflowName,
+    shipOrderWorkflowName,
 
     -- * The workflows
-  , orderFulfillmentWorkflow
-  , shipOrderWorkflow
+    orderFulfillmentWorkflow,
+    shipOrderWorkflow,
 
     -- * Payload type
-  , PaymentConfirmation (..)
+    PaymentConfirmation (..),
 
     -- * Deterministic ids and the resume registry
-  , paymentWebhookAwakeableId
-  , jitsureiWorkflowRegistry
-  , coolingOffDelay
-  , workflowIdFor
-  , orderIdFromWf
-  , shipChildId
-  )
+    paymentWebhookAwakeableId,
+    jitsureiWorkflowRegistry,
+    coolingOffDelay,
+    workflowIdFor,
+    orderIdFromWf,
+    shipChildId,
+)
 where
 
 import Data.Aeson (FromJSON, ToJSON)
@@ -43,17 +43,17 @@ import Data.Time (NominalDiffTime)
 import Effectful (Eff, IOE, liftIO, (:>))
 import GHC.Generics (Generic)
 import Jitsurei.Domain (OrderId (..), orderIdText)
-import Keiro.Workflow
-  ( StepName (..)
-  , Workflow
-  , WorkflowId (..)
-  , step
-  )
-import Keiro.Workflow.Awakeable
-  ( AwakeableId
-  , awakeableNamed
-  , deterministicAwakeableId
-  )
+import Keiro.Workflow (
+    StepName (..),
+    Workflow,
+    WorkflowId (..),
+    step,
+ )
+import Keiro.Workflow.Awakeable (
+    AwakeableId,
+    awakeableNamed,
+    deterministicAwakeableId,
+ )
 import Keiro.Workflow.Child (awaitChild, spawnChild)
 import Keiro.Workflow.Resume (WorkflowDef (..), WorkflowRegistry)
 import Keiro.Workflow.Sleep (sleepNamed)
@@ -102,12 +102,13 @@ the child's journal (@wf:ship-order-\<order\>-ship@) independent.
 shipChildId :: OrderId -> WorkflowId
 shipChildId orderId = WorkflowId (orderIdText orderId <> "-ship")
 
--- | The inverse of 'workflowIdFor': recover the 'OrderId' a workflow instance
--- belongs to from its 'WorkflowId'. Total and obvious, so the
--- 'jitsureiWorkflowRegistry' can rebuild a workflow body from its id alone.
--- (The @ship-order@ child reconstructs an order id carrying the @-ship@ suffix,
--- which only flavours its display tracking number — the child's correctness
--- does not depend on the exact order id.)
+{- | The inverse of 'workflowIdFor': recover the 'OrderId' a workflow instance
+belongs to from its 'WorkflowId'. Total and obvious, so the
+'jitsureiWorkflowRegistry' can rebuild a workflow body from its id alone.
+(The @ship-order@ child reconstructs an order id carrying the @-ship@ suffix,
+which only flavours its display tracking number — the child's correctness
+does not depend on the exact order id.)
+-}
 orderIdFromWf :: WorkflowId -> OrderId
 orderIdFromWf = OrderId . unWorkflowId
 
@@ -120,20 +121,21 @@ orderIdFromWf = OrderId . unWorkflowId
 awakeable can journal it and the workflow can decode it on a later run.
 -}
 data PaymentConfirmation = PaymentConfirmation
-  { paymentRef :: !Text
-  , amountCents :: !Int
-  }
-  deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+    { paymentRef :: !Text
+    , amountCents :: !Int
+    }
+    deriving stock (Eq, Show, Generic)
+    deriving anyclass (ToJSON, FromJSON)
 
--- | The deterministic 'AwakeableId' the demo's external @signalAwakeable@ must
--- target. It is exactly the id 'awakeableNamed' allocates inside the workflow
--- for the @payment-webhook@ label (the idempotent-arming contract: the external
--- signaller computes the same id the workflow registered, without reading the
--- journal back).
+{- | The deterministic 'AwakeableId' the demo's external @signalAwakeable@ must
+target. It is exactly the id 'awakeableNamed' allocates inside the workflow
+for the @payment-webhook@ label (the idempotent-arming contract: the external
+signaller computes the same id the workflow registered, without reading the
+journal back).
+-}
 paymentWebhookAwakeableId :: OrderId -> AwakeableId
 paymentWebhookAwakeableId orderId =
-  deterministicAwakeableId orderFulfillmentWorkflowName (workflowIdFor orderId) "payment-webhook"
+    deterministicAwakeableId orderFulfillmentWorkflowName (workflowIdFor orderId) "payment-webhook"
 
 -- ---------------------------------------------------------------------------
 -- The workflows
@@ -155,28 +157,28 @@ On a replay, every completed checkpoint short-circuits, so no side effect runs
 twice.
 -}
 orderFulfillmentWorkflow ::
-  (Workflow :> es, Store :> es, IOE :> es) =>
-  OrderId ->
-  Eff es Text
+    (Workflow :> es, Store :> es, IOE :> es) =>
+    OrderId ->
+    Eff es Text
 orderFulfillmentWorkflow orderId = do
-  _reservation <- step (StepName "reserve-inventory") (reserveInventory orderId)
-  sleepNamed (StepName "cooling-off") coolingOffDelay
-  (_awkId, awaitPayment) <- awakeableNamed (StepName "payment-webhook")
-  payment <- awaitPayment
-  _charge <- step (StepName "charge") (chargeCard orderId payment)
-  childHandle <- spawnChild shipOrderWorkflowName (shipChildId orderId) (shipOrderWorkflow orderId)
-  awaitChild childHandle
+    _reservation <- step (StepName "reserve-inventory") (reserveInventory orderId)
+    sleepNamed (StepName "cooling-off") coolingOffDelay
+    (_awkId, awaitPayment) <- awakeableNamed (StepName "payment-webhook")
+    payment <- awaitPayment
+    _charge <- step (StepName "charge") (chargeCard orderId payment)
+    childHandle <- spawnChild shipOrderWorkflowName (shipChildId orderId) (shipOrderWorkflow orderId)
+    awaitChild childHandle
 
 {- | The @ship-order@ child workflow: a one-step workflow that produces a
 shipment tracking number. Spawned and awaited by 'orderFulfillmentWorkflow';
 driven to completion by the resume worker from 'jitsureiWorkflowRegistry'.
 -}
 shipOrderWorkflow ::
-  (Workflow :> es, IOE :> es) =>
-  OrderId ->
-  Eff es Text
+    (Workflow :> es, IOE :> es) =>
+    OrderId ->
+    Eff es Text
 shipOrderWorkflow orderId =
-  step (StepName "create-shipment") (createShipment orderId)
+    step (StepName "create-shipment") (createShipment orderId)
 
 -- ---------------------------------------------------------------------------
 -- The "side effects" (deterministic, but they print when they actually run)
@@ -189,30 +191,31 @@ shipOrderWorkflow orderId =
 
 reserveInventory :: (IOE :> es) => OrderId -> Eff es Text
 reserveInventory orderId = do
-  let reservation = "RES-" <> orderIdText orderId
-  say ("step reserve-inventory ran (reservation " <> reservation <> ")")
-  pure reservation
+    let reservation = "RES-" <> orderIdText orderId
+    say ("step reserve-inventory ran (reservation " <> reservation <> ")")
+    pure reservation
 
 chargeCard :: (IOE :> es) => OrderId -> PaymentConfirmation -> Eff es Text
 chargeCard orderId payment = do
-  let chargeId = "CHG-" <> orderIdText orderId
-  say
-    ( "step charge ran (charge "
-        <> chargeId
-        <> " for "
-        <> paymentRef payment
-        <> ")"
-    )
-  pure chargeId
+    let chargeId = "CHG-" <> orderIdText orderId
+    say
+        ( "step charge ran (charge "
+            <> chargeId
+            <> " for "
+            <> paymentRef payment
+            <> ")"
+        )
+    pure chargeId
 
 createShipment :: (IOE :> es) => OrderId -> Eff es Text
 createShipment orderId = do
-  let tracking = "TRK-" <> orderIdText orderId
-  say ("child step create-shipment ran (tracking " <> tracking <> ")")
-  pure tracking
+    let tracking = "TRK-" <> orderIdText orderId
+    say ("child step create-shipment ran (tracking " <> tracking <> ")")
+    pure tracking
 
--- | Print an indented, flushed line from inside a workflow step, so the
--- interleaving with the demo driver's banners is faithful in the transcript.
+{- | Print an indented, flushed line from inside a workflow step, so the
+interleaving with the demo driver's banners is faithful in the transcript.
+-}
 say :: (IOE :> es) => Text -> Eff es ()
 say msg = liftIO (putStrLn ("  " <> Text.unpack msg) >> hFlush stdout)
 
@@ -229,7 +232,7 @@ zero-step child and drives it to completion, which wakes the awaiting parent.
 -}
 jitsureiWorkflowRegistry :: (Store :> es, IOE :> es) => WorkflowRegistry es
 jitsureiWorkflowRegistry =
-  Map.fromList
-    [ (orderFulfillmentWorkflowName, WorkflowDef (\wid -> orderFulfillmentWorkflow (orderIdFromWf wid)))
-    , (shipOrderWorkflowName, WorkflowDef (\wid -> shipOrderWorkflow (orderIdFromWf wid)))
-    ]
+    Map.fromList
+        [ (orderFulfillmentWorkflowName, WorkflowDef (\wid -> orderFulfillmentWorkflow (orderIdFromWf wid)))
+        , (shipOrderWorkflowName, WorkflowDef (\wid -> shipOrderWorkflow (orderIdFromWf wid)))
+        ]

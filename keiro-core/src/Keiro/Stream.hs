@@ -7,12 +7,12 @@ bare 'StreamName', so a name for one aggregate cannot be passed where
 another is expected. The wrapper is otherwise transparent — use 'stream'
 to construct one and 'streamName' to recover the underlying name.
 -}
-module Keiro.Stream
-  ( Stream (..)
-  , stream
-  , streamName
-  , mapStreamName
-  )
+module Keiro.Stream (
+    Stream (..),
+    stream,
+    streamName,
+    mapStreamName,
+)
 where
 
 import Keiro.Prelude
@@ -20,13 +20,13 @@ import Kiroku.Store.Types (StreamName (..))
 
 -- | A 'StreamName' tagged with the phantom type @a@ of the stream it names.
 newtype Stream a = Stream
-  { name :: StreamName
-  }
-  deriving stock (Generic, Eq, Ord, Show)
+    { name :: StreamName
+    }
+    deriving stock (Generic, Eq, Ord, Show)
 
 -- | Build a 'Stream' handle from a raw stream-name 'Text'.
 stream :: Text -> Stream a
-stream name = Stream { name = StreamName name }
+stream name = Stream{name = StreamName name}
 
 -- | Recover the underlying 'StreamName' from a 'Stream' handle.
 streamName :: Stream a -> StreamName

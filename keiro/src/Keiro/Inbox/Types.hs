@@ -7,17 +7,17 @@ transaction. Duplicate redeliveries (Kafka offset retry, rebalance,
 producer republish) become observable as duplicates instead of
 re-running the handler.
 -}
-module Keiro.Inbox.Types
-  ( InboxDedupePolicy (..)
-  , InboxStatus (..)
-  , InboxResult (..)
-  , InboxError (..)
-  , InboxRow (..)
-  , KafkaDeliveryRef (..)
-  , inboxStatusText
-  , parseInboxStatus
-  , dedupeKeyFor
-  )
+module Keiro.Inbox.Types (
+    InboxDedupePolicy (..),
+    InboxStatus (..),
+    InboxResult (..),
+    InboxError (..),
+    InboxRow (..),
+    KafkaDeliveryRef (..),
+    inboxStatusText,
+    parseInboxStatus,
+    dedupeKeyFor,
+)
 where
 
 import Data.Text qualified as Text
@@ -46,11 +46,11 @@ import Kiroku.Store.Types (EventId (..), GlobalPosition (..))
   owns key collision resistance.
 -}
 data InboxDedupePolicy
-  = PreferIntegrationMessageId
-  | PreferSourceEventIdentity
-  | KafkaDeliveryIdentity
-  | CustomDedupeKey !Text
-  deriving stock (Generic, Eq, Show)
+    = PreferIntegrationMessageId
+    | PreferSourceEventIdentity
+    | KafkaDeliveryIdentity
+    | CustomDedupeKey !Text
+    deriving stock (Generic, Eq, Show)
 
 {- | Lifecycle state of an inbox row.
 
@@ -63,10 +63,10 @@ data InboxDedupePolicy
   retry).
 -}
 data InboxStatus
-  = InboxProcessing
-  | InboxCompleted
-  | InboxFailed
-  deriving stock (Generic, Eq, Show)
+    = InboxProcessing
+    | InboxCompleted
+    | InboxFailed
+    deriving stock (Generic, Eq, Show)
 
 {- | The classified outcome of 'Keiro.Inbox.runInboxTransaction'.
 
@@ -79,19 +79,19 @@ data InboxStatus
   failure. Operator should review before reprocessing.
 -}
 data InboxResult a
-  = InboxProcessed !a
-  | InboxDuplicate
-  | InboxInProgress
-  | InboxPreviouslyFailed !(Maybe Text)
-  deriving stock (Generic, Eq, Show)
+    = InboxProcessed !a
+    | InboxDuplicate
+    | InboxInProgress
+    | InboxPreviouslyFailed !(Maybe Text)
+    deriving stock (Generic, Eq, Show)
 
 {- | Errors surfaced by the inbox wrapper that originate from the inbox
 itself rather than from the supplied handler.
 -}
 data InboxError
-  = -- | The integration event lacked the field required by the chosen policy.
-    DedupePolicyUnsatisfied !InboxDedupePolicy
-  deriving stock (Generic, Eq, Show)
+    = -- | The integration event lacked the field required by the chosen policy.
+      DedupePolicyUnsatisfied !InboxDedupePolicy
+    deriving stock (Generic, Eq, Show)
 
 {- | Optional Kafka-delivery metadata recorded alongside an inbox row.
 
@@ -100,38 +100,38 @@ the row regardless of policy so operators can correlate the inbox
 record with Kafka logs. Not part of the EP-19 envelope.
 -}
 data KafkaDeliveryRef = KafkaDeliveryRef
-  { topic :: !Text
-  , partition :: !Int64
-  , offset :: !Int64
-  }
-  deriving stock (Generic, Eq, Show)
+    { topic :: !Text
+    , partition :: !Int64
+    , offset :: !Int64
+    }
+    deriving stock (Generic, Eq, Show)
 
 -- | One row read back from @keiro_inbox@. Used by tests and inspection tooling.
 data InboxRow = InboxRow
-  { source :: !Text
-  , dedupeKey :: !Text
-  , event :: !IntegrationEvent
-  , kafka :: !(Maybe KafkaDeliveryRef)
-  , status :: !InboxStatus
-  , receivedAt :: !UTCTime
-  , completedAt :: !(Maybe UTCTime)
-  , failedAt :: !(Maybe UTCTime)
-  , lastError :: !(Maybe Text)
-  }
-  deriving stock (Generic, Eq, Show)
+    { source :: !Text
+    , dedupeKey :: !Text
+    , event :: !IntegrationEvent
+    , kafka :: !(Maybe KafkaDeliveryRef)
+    , status :: !InboxStatus
+    , receivedAt :: !UTCTime
+    , completedAt :: !(Maybe UTCTime)
+    , failedAt :: !(Maybe UTCTime)
+    , lastError :: !(Maybe Text)
+    }
+    deriving stock (Generic, Eq, Show)
 
 inboxStatusText :: InboxStatus -> Text
 inboxStatusText = \case
-  InboxProcessing -> "processing"
-  InboxCompleted -> "completed"
-  InboxFailed -> "failed"
+    InboxProcessing -> "processing"
+    InboxCompleted -> "completed"
+    InboxFailed -> "failed"
 
 parseInboxStatus :: Text -> InboxStatus
 parseInboxStatus = \case
-  "processing" -> InboxProcessing
-  "completed" -> InboxCompleted
-  "failed" -> InboxFailed
-  _ -> InboxFailed
+    "processing" -> InboxProcessing
+    "completed" -> InboxCompleted
+    "failed" -> InboxFailed
+    _ -> InboxFailed
 
 {- | Compute the inbox dedupe key for an integration event under the
 given policy plus optional Kafka delivery context. Returns 'Left' when
@@ -140,35 +140,35 @@ the policy demands a field the envelope does not carry (for example,
 @sourceEventId@).
 -}
 dedupeKeyFor ::
-  InboxDedupePolicy ->
-  IntegrationEvent ->
-  Maybe KafkaDeliveryRef ->
-  Either InboxError Text
+    InboxDedupePolicy ->
+    IntegrationEvent ->
+    Maybe KafkaDeliveryRef ->
+    Either InboxError Text
 dedupeKeyFor policy event kafka = case policy of
-  PreferIntegrationMessageId ->
-    let mid = event ^. #messageId
-     in if Text.null mid
-          then Left (DedupePolicyUnsatisfied policy)
-          else Right mid
-  PreferSourceEventIdentity ->
-    case event ^. #sourceEventId of
-      Just (EventId u) -> Right (UUID.toText u)
-      Nothing ->
-        case event ^. #sourceGlobalPosition of
-          Just (GlobalPosition p) -> Right (Text.pack (show p))
-          Nothing -> Left (DedupePolicyUnsatisfied policy)
-  KafkaDeliveryIdentity ->
-    case kafka of
-      Just ref ->
-        Right
-          ( (ref ^. #topic)
-              <> ":"
-              <> Text.pack (show (ref ^. #partition))
-              <> ":"
-              <> Text.pack (show (ref ^. #offset))
-          )
-      Nothing -> Left (DedupePolicyUnsatisfied policy)
-  CustomDedupeKey k ->
-    if Text.null k
-      then Left (DedupePolicyUnsatisfied policy)
-      else Right k
+    PreferIntegrationMessageId ->
+        let mid = event ^. #messageId
+         in if Text.null mid
+                then Left (DedupePolicyUnsatisfied policy)
+                else Right mid
+    PreferSourceEventIdentity ->
+        case event ^. #sourceEventId of
+            Just (EventId u) -> Right (UUID.toText u)
+            Nothing ->
+                case event ^. #sourceGlobalPosition of
+                    Just (GlobalPosition p) -> Right (Text.pack (show p))
+                    Nothing -> Left (DedupePolicyUnsatisfied policy)
+    KafkaDeliveryIdentity ->
+        case kafka of
+            Just ref ->
+                Right
+                    ( (ref ^. #topic)
+                        <> ":"
+                        <> Text.pack (show (ref ^. #partition))
+                        <> ":"
+                        <> Text.pack (show (ref ^. #offset))
+                    )
+            Nothing -> Left (DedupePolicyUnsatisfied policy)
+    CustomDedupeKey k ->
+        if Text.null k
+            then Left (DedupePolicyUnsatisfied policy)
+            else Right k

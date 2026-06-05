@@ -6,89 +6,90 @@ incident — a data-dependent recipient set that is not derivable from the
 @IncidentRaised@ event alone, which is exactly why paging is a router (effectful
 target resolution) rather than a process manager.
 -}
-module Jitsurei.OncallRoster
-  ( ResponderId (..)
-  , responderIdText
-  , Responder (..)
-  , serviceOncallReadModel
-  , initializeOncallRosterTable
-  , insertOncallStmt
-  , selectOncallStmt
-  )
+module Jitsurei.OncallRoster (
+    ResponderId (..),
+    responderIdText,
+    Responder (..),
+    serviceOncallReadModel,
+    initializeOncallRosterTable,
+    insertOncallStmt,
+    selectOncallStmt,
+)
 where
 
 import Contravariant.Extras (contrazip3)
 import Data.Int (Int32)
 import Data.Text (Text)
+import GHC.Generics (Generic)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
-import "hasql-transaction" Hasql.Transaction qualified as Tx
-import GHC.Generics (Generic)
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..))
 import Jitsurei.Incident (Service (..))
+import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..))
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 newtype ResponderId = ResponderId Text
-  deriving stock (Generic, Eq, Ord, Show)
+    deriving stock (Generic, Eq, Ord, Show)
 
 responderIdText :: ResponderId -> Text
 responderIdText (ResponderId value) = value
 
 data Responder = Responder
-  { responderId :: !ResponderId
-  , tier :: !Int
-  }
-  deriving stock (Generic, Eq, Ord, Show)
+    { responderId :: !ResponderId
+    , tier :: !Int
+    }
+    deriving stock (Generic, Eq, Ord, Show)
 
 serviceOncallReadModel :: ReadModel Service [Responder]
-serviceOncallReadModel = ReadModel
-  { name = "jitsurei-service-oncall"
-  , tableName = "jitsurei_service_oncall"
-  , subscriptionName = "jitsurei-service-oncall-sub"
-  , version = 1
-  , shapeHash = "jitsurei-service-oncall-v1"
-  , defaultConsistency = Strong
-  , query = \(Service service) -> Tx.statement service selectOncallStmt
-  }
+serviceOncallReadModel =
+    ReadModel
+        { name = "jitsurei-service-oncall"
+        , tableName = "jitsurei_service_oncall"
+        , subscriptionName = "jitsurei-service-oncall-sub"
+        , version = 1
+        , shapeHash = "jitsurei-service-oncall-v1"
+        , defaultConsistency = Strong
+        , query = \(Service service) -> Tx.statement service selectOncallStmt
+        }
 
 initializeOncallRosterTable :: Tx.Transaction ()
 initializeOncallRosterTable =
-  Tx.sql
-    """
-    CREATE TABLE IF NOT EXISTS jitsurei_service_oncall (
-      service TEXT NOT NULL,
-      responder_id TEXT NOT NULL,
-      tier INT NOT NULL
-    )
-    """
+    Tx.sql
+        """
+        CREATE TABLE IF NOT EXISTS jitsurei_service_oncall (
+          service TEXT NOT NULL,
+          responder_id TEXT NOT NULL,
+          tier INT NOT NULL
+        )
+        """
 
 insertOncallStmt :: Statement (Text, Text, Int32) ()
 insertOncallStmt =
-  preparable
-    """
-    INSERT INTO jitsurei_service_oncall (service, responder_id, tier)
-    VALUES ($1, $2, $3)
-    """
-    ( contrazip3
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.int4))
-    )
-    D.noResult
+    preparable
+        """
+        INSERT INTO jitsurei_service_oncall (service, responder_id, tier)
+        VALUES ($1, $2, $3)
+        """
+        ( contrazip3
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.int4))
+        )
+        D.noResult
 
 selectOncallStmt :: Statement Text [Responder]
 selectOncallStmt =
-  preparable
-    """
-    SELECT responder_id, tier
-    FROM jitsurei_service_oncall
-    WHERE service = $1
-    ORDER BY tier, responder_id
-    """
-    (E.param (E.nonNullable E.text))
-    ( D.rowList
-        ( Responder
-            <$> (ResponderId <$> D.column (D.nonNullable D.text))
-            <*> (fromIntegral <$> D.column (D.nonNullable D.int4))
+    preparable
+        """
+        SELECT responder_id, tier
+        FROM jitsurei_service_oncall
+        WHERE service = $1
+        ORDER BY tier, responder_id
+        """
+        (E.param (E.nonNullable E.text))
+        ( D.rowList
+            ( Responder
+                <$> (ResponderId <$> D.column (D.nonNullable D.text))
+                <*> (fromIntegral <$> D.column (D.nonNullable D.int4))
+            )
         )
-    )

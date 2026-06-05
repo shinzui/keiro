@@ -386,12 +386,13 @@ runAgentQualDemo = withJitsureiStore $ \store -> do
         )
         [(MemberId "m1", ChapterId "c1"), (MemberId "m2", ChapterId "c2"), (MemberId "m3", ChapterId "c3")]
 
--- | A durable order-fulfillment workflow demo. It runs the workflow to its
--- first suspension, fires the cooling-off sleep timer, resumes it past the
--- sleep, signals the payment-webhook awakeable, drives the resume worker until
--- the parent and its ship-order child both complete, dumps both journals, and
--- finally re-opens the store and re-runs discovery to prove the completed
--- workflow lives in the journal — not in the process.
+{- | A durable order-fulfillment workflow demo. It runs the workflow to its
+first suspension, fires the cooling-off sleep timer, resumes it past the
+sleep, signals the payment-webhook awakeable, drives the resume worker until
+the parent and its ship-order child both complete, dumps both journals, and
+finally re-opens the store and re-runs discovery to prove the completed
+workflow lives in the journal — not in the process.
+-}
 runDurableWorkflowDemo :: IO ()
 runDurableWorkflowDemo = do
     orderId <- freshOrderId "workflow"
@@ -465,22 +466,25 @@ runDurableWorkflowDemo = do
             else
                 putStrLn ("  restart: UNEXPECTED — workflow still unfinished: " <> show remaining)
 
--- | The journal stream name for a workflow instance, as the 'Text' 'readEvents'
--- expects (unwrapping the 'StreamName' 'workflowStreamName' returns).
+{- | The journal stream name for a workflow instance, as the 'Text' 'readEvents'
+expects (unwrapping the 'StreamName' 'workflowStreamName' returns).
+-}
 workflowStreamNameText :: WorkflowName -> WorkflowId -> Text
 workflowStreamNameText name wid =
     let StreamName s = workflowStreamName name wid in s
 
--- | Unfinished workflows (per 'findUnfinishedWorkflowIds') whose id is one of
--- ours this run — the parent and the ship-order child carry distinct ids.
+{- | Unfinished workflows (per 'findUnfinishedWorkflowIds') whose id is one of
+ours this run — the parent and the ship-order child carry distinct ids.
+-}
 ourUnfinishedWorkflows :: Store.KirokuStore -> [Text] -> IO [(Text, Text)]
 ourUnfinishedWorkflows store ourIds = do
     pairs <- requireEither =<< Store.runStoreIO store findUnfinishedWorkflowIds
     pure [pair | pair@(wid, _) <- pairs, wid `elem` ourIds]
 
--- | Fire workflow-sleep timers (with a clock well past the delay) until the
--- @sleep:cooling-off@ completion appears in the journal, bounded so a stray
--- non-sleep timer cannot hang the demo.
+{- | Fire workflow-sleep timers (with a clock well past the delay) until the
+@sleep:cooling-off@ completion appears in the journal, bounded so a stray
+non-sleep timer cannot hang the demo.
+-}
 fireSleepTimerUntilJournaled :: Store.KirokuStore -> Text -> IO ()
 fireSleepTimerUntilJournaled store parentStream = do
     fireTime <- addUTCTime 3600 <$> getCurrentTime
@@ -498,8 +502,9 @@ fireSleepTimerUntilJournaled store parentStream = do
                         loop (n + 1)
     loop 0
 
--- | Run the resume worker until no workflow of ours remains unfinished, bounded
--- so a non-converging journal cannot hang the demo. Prints each pass's summary.
+{- | Run the resume worker until no workflow of ours remains unfinished, bounded
+so a non-converging journal cannot hang the demo. Prints each pass's summary.
+-}
 driveResumeUntilDone :: Store.KirokuStore -> [Text] -> Int -> IO ()
 driveResumeUntilDone store ourIds = go
   where

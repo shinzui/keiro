@@ -27,13 +27,13 @@ returns 'Nothing' — meaning "replay from version 0" — when the stream has no
 id yet, no matching snapshot, or an undecodable snapshot. So a stale or corrupt
 snapshot degrades performance at worst, never correctness.
 -}
-module Keiro.Workflow.Snapshot
-  ( workflowStateCodec
-  , workflowStateCodecVersion
-  , workflowStateShapeHash
-  , loadWorkflowSnapshot
-  , writeWorkflowSnapshot
-  )
+module Keiro.Workflow.Snapshot (
+    workflowStateCodec,
+    workflowStateCodecVersion,
+    workflowStateShapeHash,
+    loadWorkflowSnapshot,
+    writeWorkflowSnapshot,
+)
 where
 
 import Data.Aeson (Result (..))
@@ -48,9 +48,10 @@ import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Read (lookupStreamId)
 import Kiroku.Store.Types (StreamId, StreamName, StreamVersion)
 
--- | The codec version of the workflow snapshot envelope. Bumped only if the
--- map /envelope/ encoding itself changes (e.g. a switch from a bare JSON
--- object to a tagged container), never for a per-step result-type change.
+{- | The codec version of the workflow snapshot envelope. Bumped only if the
+map /envelope/ encoding itself changes (e.g. a switch from a bare JSON
+object to a tagged container), never for a per-step result-type change.
+-}
 workflowStateCodecVersion :: Int
 workflowStateCodecVersion = 1
 
@@ -69,14 +70,14 @@ discriminant ('workflowStateCodecVersion', 'workflowStateShapeHash').
 -}
 workflowStateCodec :: StateCodec WorkflowState
 workflowStateCodec =
-  StateCodec
-    { stateCodecVersion = workflowStateCodecVersion
-    , shapeHash = workflowStateShapeHash
-    , encode = toJSON
-    , decode = \value -> case fromJSON value of
-        Success m -> Right m
-        Error msg -> Left (Text.pack msg)
-    }
+    StateCodec
+        { stateCodecVersion = workflowStateCodecVersion
+        , shapeHash = workflowStateShapeHash
+        , encode = toJSON
+        , decode = \value -> case fromJSON value of
+            Success m -> Right m
+            Error msg -> Left (Text.pack msg)
+        }
 
 {- | Encode the accumulated map and upsert @keiro_snapshots@ for the journal
 stream. Called from the @step@ miss-path (and the completion site) with the
@@ -86,7 +87,7 @@ at an already-snapshotted version is a harmless no-op.
 -}
 writeWorkflowSnapshot :: (Store :> es) => StreamId -> StreamVersion -> WorkflowState -> Eff es ()
 writeWorkflowSnapshot streamId version state =
-  writeSnapshot streamId version workflowStateCodec state
+    writeSnapshot streamId version workflowStateCodec state
 
 {- | Resolve the journal stream id, look up the latest matching snapshot row,
 and decode it to a @('WorkflowState', 'StreamVersion')@ seed. Returns
@@ -96,12 +97,12 @@ matching snapshot, or an undecodable snapshot (advisory semantics). Mirrors
 -}
 loadWorkflowSnapshot :: (Store :> es) => StreamName -> Eff es (Maybe (WorkflowState, StreamVersion))
 loadWorkflowSnapshot journalName = do
-  mStreamId <- lookupStreamId journalName
-  case mStreamId of
-    Nothing -> pure Nothing
-    Just streamId -> do
-      mRow <- lookupSnapshot streamId workflowStateCodecVersion workflowStateShapeHash
-      pure $ do
-        row <- mRow
-        state <- either (const Nothing) Just ((workflowStateCodec ^. #decode) (row ^. #state))
-        pure (state, row ^. #streamVersion)
+    mStreamId <- lookupStreamId journalName
+    case mStreamId of
+        Nothing -> pure Nothing
+        Just streamId -> do
+            mRow <- lookupSnapshot streamId workflowStateCodecVersion workflowStateShapeHash
+            pure $ do
+                row <- mRow
+                state <- either (const Nothing) Just ((workflowStateCodec ^. #decode) (row ^. #state))
+                pure (state, row ^. #streamVersion)

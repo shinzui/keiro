@@ -72,22 +72,22 @@ already journaled and returns immediately, and only @step \"b\"@ runs for real.
   surface ('Keiro.Timer.findStuckTimers' / 'Keiro.Timer.requeueStuckTimer' /
   'Keiro.Timer.deadLetterTimer') for free.
 -}
-module Keiro.Workflow.Sleep
-  ( -- * Authoring surface
-    sleepNamed
-  , sleep
+module Keiro.Workflow.Sleep (
+    -- * Authoring surface
+    sleepNamed,
+    sleep,
 
     -- * Firing and worker wiring
-  , workflowSleepFireAction
-  , runWorkflowTimerWorker
+    workflowSleepFireAction,
+    runWorkflowTimerWorker,
 
     -- * Timer id, payload, and step-name helpers
-  , sleepTimerId
-  , sleepStepName
-  , sleepTimerPayload
-  , parseSleepPayload
-  , workflowSleepKind
-  )
+    sleepTimerId,
+    sleepStepName,
+    sleepTimerPayload,
+    parseSleepPayload,
+    workflowSleepKind,
+)
 where
 
 import Data.Aeson (Value (..), object)
@@ -99,25 +99,25 @@ import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Keiro.Prelude
 import Keiro.Telemetry (KeiroMetrics)
-import Keiro.Timer
-  ( TimerId (..)
-  , TimerRequest (..)
-  , TimerRow
-  , runTimerWorker
-  , scheduleTimerTx
-  )
-import Keiro.Workflow
-  ( StepName (..)
-  , Workflow
-  , WorkflowId (..)
-  , WorkflowJournalEvent (..)
-  , WorkflowName (..)
-  , appendJournalEntryReturningId
-  , awaitStep
-  , currentWorkflow
-  , freshOrdinal
-  , sleepStepPrefix
-  )
+import Keiro.Timer (
+    TimerId (..),
+    TimerRequest (..),
+    TimerRow,
+    runTimerWorker,
+    scheduleTimerTx,
+ )
+import Keiro.Workflow (
+    StepName (..),
+    Workflow,
+    WorkflowId (..),
+    WorkflowJournalEvent (..),
+    WorkflowName (..),
+    appendJournalEntryReturningId,
+    awaitStep,
+    currentWorkflow,
+    freshOrdinal,
+    sleepStepPrefix,
+ )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
@@ -138,7 +138,7 @@ is the full @"sleep:\<suffix\>"@ journal step name the firing will record.
 -}
 sleepTimerPayload :: Text -> Value
 sleepTimerPayload fullStep =
-  object ["kind" Aeson..= workflowSleepKind, "step" Aeson..= fullStep]
+    object ["kind" Aeson..= workflowSleepKind, "step" Aeson..= fullStep]
 
 {- | Recognise and extract a workflow-sleep payload: @Just fullStep@ for a
 payload this module wrote, 'Nothing' for any other timer (e.g. a process
@@ -146,12 +146,12 @@ manager's). The full step name returned is what the fire action journals.
 -}
 parseSleepPayload :: Value -> Maybe Text
 parseSleepPayload = \case
-  Object o
-    | KeyMap.lookup "kind" o == Just (String workflowSleepKind) ->
-        case KeyMap.lookup "step" o of
-          Just (String s) -> Just s
-          _ -> Nothing
-  _ -> Nothing
+    Object o
+        | KeyMap.lookup "kind" o == Just (String workflowSleepKind) ->
+            case KeyMap.lookup "step" o of
+                Just (String s) -> Just s
+                _ -> Nothing
+    _ -> Nothing
 
 -- ---------------------------------------------------------------------------
 -- Deterministic ids and step names
@@ -164,18 +164,18 @@ is part of the key so two distinct sleeps in one workflow get distinct timers.
 -}
 sleepTimerId :: WorkflowName -> WorkflowId -> Text -> TimerId
 sleepTimerId name wid fullStep =
-  TimerId $
-    UUID.V5.generateNamed UUID.V5.namespaceURL $
-      fmap (fromIntegral . fromEnum) $
-        Text.unpack $
-          Text.intercalate
-            ":"
-            [ "keiro"
-            , "workflow-sleep"
-            , unWorkflowName name
-            , unWorkflowId wid
-            , fullStep
-            ]
+    TimerId $
+        UUID.V5.generateNamed UUID.V5.namespaceURL $
+            fmap (fromIntegral . fromEnum) $
+                Text.unpack $
+                    Text.intercalate
+                        ":"
+                        [ "keiro"
+                        , "workflow-sleep"
+                        , unWorkflowName name
+                        , unWorkflowId wid
+                        , fullStep
+                        ]
 
 {- | The durable journal step name for a sleep: the user's suffix prefixed with
 'sleepStepPrefix'. @'sleepStepName' (StepName \"cool\") == \"sleep:cool\"@. The
@@ -207,25 +207,25 @@ resolves): it upserts on a deterministic 'sleepTimerId', and
 'scheduleTimerTx' re-arms only a still-@Scheduled@ row.
 -}
 sleepNamed ::
-  (Workflow :> es, Store :> es, IOE :> es) =>
-  StepName ->
-  NominalDiffTime ->
-  Eff es ()
+    (Workflow :> es, Store :> es, IOE :> es) =>
+    StepName ->
+    NominalDiffTime ->
+    Eff es ()
 sleepNamed userStep delta = do
-  (name, wid) <- currentWorkflow
-  let full = sleepStepName userStep
-      armedStep = StepName full
-  void . awaitValue armedStep $ do
-    now <- liftIO getCurrentTime
-    let request =
-          TimerRequest
-            { timerId = sleepTimerId name wid full
-            , processManagerName = unWorkflowName name
-            , correlationId = unWorkflowId wid
-            , fireAt = addUTCTime delta now
-            , payload = sleepTimerPayload full
-            }
-    runTransaction (scheduleTimerTx request)
+    (name, wid) <- currentWorkflow
+    let full = sleepStepName userStep
+        armedStep = StepName full
+    void . awaitValue armedStep $ do
+        now <- liftIO getCurrentTime
+        let request =
+                TimerRequest
+                    { timerId = sleepTimerId name wid full
+                    , processManagerName = unWorkflowName name
+                    , correlationId = unWorkflowId wid
+                    , fireAt = addUTCTime delta now
+                    , payload = sleepTimerPayload full
+                    }
+        runTransaction (scheduleTimerTx request)
 
 {- | Durably pause the workflow for @delta@ under an ordinal name (the @N@th
 sleep in a run becomes @sleep:N@). Convenient but its determinism is
@@ -234,8 +234,8 @@ survive a code change mid-flight.
 -}
 sleep :: (Workflow :> es, Store :> es, IOE :> es) => NominalDiffTime -> Eff es ()
 sleep delta = do
-  n <- freshOrdinal "sleep"
-  sleepNamed (StepName (Text.pack (show n))) delta
+    n <- freshOrdinal "sleep"
+    sleepNamed (StepName (Text.pack (show n))) delta
 
 -- ---------------------------------------------------------------------------
 -- Firing and worker wiring
@@ -255,20 +255,20 @@ same deterministic id on a re-fire, so at-least-once timer firing yields
 exactly-once journaling.
 -}
 workflowSleepFireAction ::
-  (Store :> es, IOE :> es) => TimerRow -> Eff es (Maybe EventId)
+    (Store :> es, IOE :> es) => TimerRow -> Eff es (Maybe EventId)
 workflowSleepFireAction row =
-  case parseSleepPayload (row ^. #payload) of
-    Nothing -> pure Nothing
-    Just full -> do
-      now <- liftIO getCurrentTime
-      let name = WorkflowName (row ^. #processManagerName)
-          wid = WorkflowId (row ^. #correlationId)
-      eid <-
-        appendJournalEntryReturningId
-          name
-          wid
-          (StepRecorded {stepName = full, result = Null, recordedAt = now})
-      pure (Just eid)
+    case parseSleepPayload (row ^. #payload) of
+        Nothing -> pure Nothing
+        Just full -> do
+            now <- liftIO getCurrentTime
+            let name = WorkflowName (row ^. #processManagerName)
+                wid = WorkflowId (row ^. #correlationId)
+            eid <-
+                appendJournalEntryReturningId
+                    name
+                    wid
+                    (StepRecorded{stepName = full, result = Null, recordedAt = now})
+            pure (Just eid)
 
 {- | A timer worker pass that handles __both__ workflow-sleep timers and
 ordinary process-manager timers. For each claimed timer: if its payload is a
@@ -282,15 +282,15 @@ and workflow sleeps passes its existing PM fire action so one worker drains
 both kinds.
 -}
 runWorkflowTimerWorker ::
-  (IOE :> es, Store :> es) =>
-  Maybe KeiroMetrics ->
-  UTCTime ->
-  -- | Fallback fire action for non-sleep (process-manager) timers.
-  (TimerRow -> Eff es (Maybe EventId)) ->
-  Eff es (Maybe TimerRow)
+    (IOE :> es, Store :> es) =>
+    Maybe KeiroMetrics ->
+    UTCTime ->
+    -- | Fallback fire action for non-sleep (process-manager) timers.
+    (TimerRow -> Eff es (Maybe EventId)) ->
+    Eff es (Maybe TimerRow)
 runWorkflowTimerWorker metrics now pmFire =
-  runTimerWorker metrics now $ \row -> do
-    handled <- workflowSleepFireAction row
-    case handled of
-      Just eid -> pure (Just eid)
-      Nothing -> pmFire row
+    runTimerWorker metrics now $ \row -> do
+        handled <- workflowSleepFireAction row
+        case handled of
+            Just eid -> pure (Just eid)
+            Nothing -> pmFire row

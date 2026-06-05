@@ -14,16 +14,16 @@ falls back to a full replay rather than decoding stale bytes. The JSON
 encoding lives in "Keiro.Snapshot.Codec" and the SQL storage in
 "Keiro.Snapshot.Schema", both re-exported here.
 -}
-module Keiro.Snapshot
-  ( -- * Hydration seed
-    SnapshotSeed (..)
-  , hydrateWithSnapshot
-  , writeSnapshot
+module Keiro.Snapshot (
+    -- * Hydration seed
+    SnapshotSeed (..),
+    hydrateWithSnapshot,
+    writeSnapshot,
 
     -- * State codec and storage
-  , module Keiro.Snapshot.Codec
-  , module Keiro.Snapshot.Schema
-  )
+    module Keiro.Snapshot.Codec,
+    module Keiro.Snapshot.Schema,
+)
 where
 
 import Effectful (Eff, (:>))
@@ -41,11 +41,11 @@ import Kiroku.Store.Types (StreamId, StreamName, StreamVersion)
 events after 'streamVersion' instead of the entire stream.
 -}
 data SnapshotSeed rs s = SnapshotSeed
-  { state :: !s
-  , registers :: !(RegFile rs)
-  , streamVersion :: !StreamVersion
-  }
-  deriving stock (Generic)
+    { state :: !s
+    , registers :: !(RegFile rs)
+    , streamVersion :: !StreamVersion
+    }
+    deriving stock (Generic)
 
 {- | Load the latest snapshot compatible with @codec@ for the named stream.
 
@@ -56,24 +56,25 @@ miss rather than an error, so a corrupt or stale snapshot never blocks
 hydration.
 -}
 hydrateWithSnapshot ::
-  (Store :> es) =>
-  StreamName ->
-  StateCodec (s, RegFile rs) ->
-  Eff es (Maybe (SnapshotSeed rs s))
+    (Store :> es) =>
+    StreamName ->
+    StateCodec (s, RegFile rs) ->
+    Eff es (Maybe (SnapshotSeed rs s))
 hydrateWithSnapshot streamName codec = do
-  streamId <- lookupStreamId streamName
-  case streamId of
-    Nothing -> pure Nothing
-    Just foundStreamId -> do
-      row <- lookupSnapshot foundStreamId (codec ^. #stateCodecVersion) (codec ^. #shapeHash)
-      pure $ do
-        snapshot <- row
-        (state, registers) <- either (const Nothing) Just ((codec ^. #decode) (snapshot ^. #state))
-        pure SnapshotSeed
-          { state = state
-          , registers = registers
-          , streamVersion = snapshot ^. #streamVersion
-          }
+    streamId <- lookupStreamId streamName
+    case streamId of
+        Nothing -> pure Nothing
+        Just foundStreamId -> do
+            row <- lookupSnapshot foundStreamId (codec ^. #stateCodecVersion) (codec ^. #shapeHash)
+            pure $ do
+                snapshot <- row
+                (state, registers) <- either (const Nothing) Just ((codec ^. #decode) (snapshot ^. #state))
+                pure
+                    SnapshotSeed
+                        { state = state
+                        , registers = registers
+                        , streamVersion = snapshot ^. #streamVersion
+                        }
 
 {- | Encode @state@ with @codec@ and upsert it as the snapshot for the given
 stream at @streamVersion@. The underlying write keeps only the
@@ -81,17 +82,18 @@ highest-version snapshot per stream, so an out-of-order or stale write is
 ignored.
 -}
 writeSnapshot ::
-  (Store :> es) =>
-  StreamId ->
-  StreamVersion ->
-  StateCodec state ->
-  state ->
-  Eff es ()
+    (Store :> es) =>
+    StreamId ->
+    StreamVersion ->
+    StateCodec state ->
+    state ->
+    Eff es ()
 writeSnapshot streamId streamVersion codec state =
-  writeSnapshotRow SnapshotWrite
-    { streamId = streamId
-    , streamVersion = streamVersion
-    , state = (codec ^. #encode) state
-    , stateCodecVersion = codec ^. #stateCodecVersion
-    , regfileShapeHash = codec ^. #shapeHash
-    }
+    writeSnapshotRow
+        SnapshotWrite
+            { streamId = streamId
+            , streamVersion = streamVersion
+            , state = (codec ^. #encode) state
+            , stateCodecVersion = codec ^. #stateCodecVersion
+            , regfileShapeHash = codec ^. #shapeHash
+            }

@@ -47,24 +47,24 @@ journal. The __next__ run replays past the now-resolved @await@ and 'Completed's
 * @countPendingAwakeables@ (in "Keiro.Workflow.Awakeable.Schema") backs EP-44's
   @keiro.workflow.awakeables.pending@ gauge.
 -}
-module Keiro.Workflow.Awakeable
-  ( -- * Awakeable ids
-    AwakeableId (..)
-  , awakeableIdToUuid
-  , awakeableIdText
-  , deterministicAwakeableId
+module Keiro.Workflow.Awakeable (
+    -- * Awakeable ids
+    AwakeableId (..),
+    awakeableIdToUuid,
+    awakeableIdText,
+    deterministicAwakeableId,
 
     -- * Authoring surface (inside a workflow)
-  , awakeableNamed
-  , awakeable
+    awakeableNamed,
+    awakeable,
 
     -- * External completion (outside a workflow)
-  , signalAwakeable
-  , cancelAwakeable
+    signalAwakeable,
+    cancelAwakeable,
 
     -- * Errors
-  , WorkflowAwakeableCancelled (..)
-  )
+    WorkflowAwakeableCancelled (..),
+)
 where
 
 import Control.Exception (Exception)
@@ -75,25 +75,25 @@ import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
 import Keiro.Prelude
-import Keiro.Workflow
-  ( StepName (..)
-  , Workflow
-  , WorkflowId (..)
-  , WorkflowJournalEvent (..)
-  , WorkflowName (..)
-  , appendJournalEntry
-  , awaitStep
-  , awakeableStepPrefix
-  , currentWorkflow
-  , freshOrdinal
-  )
-import Keiro.Workflow.Awakeable.Schema
-  ( AwakeableStatus (..)
-  , cancelAwakeableTx
-  , completeAwakeableTx
-  , lookupAwakeable
-  , registerAwakeableTx
-  )
+import Keiro.Workflow (
+    StepName (..),
+    Workflow,
+    WorkflowId (..),
+    WorkflowJournalEvent (..),
+    WorkflowName (..),
+    appendJournalEntry,
+    awaitStep,
+    awakeableStepPrefix,
+    currentWorkflow,
+    freshOrdinal,
+ )
+import Keiro.Workflow.Awakeable.Schema (
+    AwakeableStatus (..),
+    cancelAwakeableTx,
+    completeAwakeableTx,
+    lookupAwakeable,
+    registerAwakeableTx,
+ )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 
@@ -108,8 +108,8 @@ inner UUID, so a workflow may journal the id with 'Keiro.Workflow.step' and a
 webhook payload may carry it.
 -}
 newtype AwakeableId = AwakeableId UUID
-  deriving stock (Eq, Show, Generic)
-  deriving newtype (ToJSON, FromJSON)
+    deriving stock (Eq, Show, Generic)
+    deriving newtype (ToJSON, FromJSON)
 
 -- | The raw UUID inside an 'AwakeableId'.
 awakeableIdToUuid :: AwakeableId -> UUID
@@ -130,11 +130,11 @@ the external system and journaled.
 -}
 deterministicAwakeableId :: WorkflowName -> WorkflowId -> Text -> AwakeableId
 deterministicAwakeableId (WorkflowName name) (WorkflowId wid) label =
-  AwakeableId $
-    UUID.V5.generateNamed UUID.V5.namespaceURL $
-      fmap (fromIntegral . fromEnum) $
-        Text.unpack $
-          Text.intercalate ":" ["keiro", "awakeable", name, wid, label]
+    AwakeableId $
+        UUID.V5.generateNamed UUID.V5.namespaceURL $
+            fmap (fromIntegral . fromEnum) $
+                Text.unpack $
+                    Text.intercalate ":" ["keiro", "awakeable", name, wid, label]
 
 -- ---------------------------------------------------------------------------
 -- Errors
@@ -147,7 +147,7 @@ completing would fabricate a result; the workflow author can @catch@ this to
 run compensation, and EP-42's resume worker treats it as a failure.
 -}
 newtype WorkflowAwakeableCancelled = WorkflowAwakeableCancelled AwakeableId
-  deriving stock (Eq, Show)
+    deriving stock (Eq, Show)
 
 instance Exception WorkflowAwakeableCancelled
 
@@ -166,15 +166,15 @@ argument EP-38 makes for named steps over positional history). Prefer this over
 'awakeable' for anything that may outlive a code change mid-flight.
 -}
 awakeableNamed ::
-  (Workflow :> es, Store :> es, FromJSON a) =>
-  StepName ->
-  Eff es (AwakeableId, Eff es a)
+    (Workflow :> es, Store :> es, FromJSON a) =>
+    StepName ->
+    Eff es (AwakeableId, Eff es a)
 awakeableNamed (StepName label) = do
-  (name, wid) <- currentWorkflow
-  let aid = deterministicAwakeableId name wid label
-      stepNm = StepName (awakeableStepPrefix <> awakeableIdText aid)
-      await = awaitCancellable name wid aid stepNm
-  pure (aid, await)
+    (name, wid) <- currentWorkflow
+    let aid = deterministicAwakeableId name wid label
+        stepNm = StepName (awakeableStepPrefix <> awakeableIdText aid)
+        await = awaitCancellable name wid aid stepNm
+    pure (aid, await)
 
 {- | Allocate an awakeable under an ordinal label (the @N@th awakeable in a run
 becomes @ord:N@). Convenient, but its determinism is __conditional__: adding or
@@ -184,11 +184,11 @@ the way EP-38 warns positional history does. Prefer 'awakeableNamed' for
 anything that may outlive a code edit.
 -}
 awakeable ::
-  (Workflow :> es, Store :> es, FromJSON a) =>
-  Eff es (AwakeableId, Eff es a)
+    (Workflow :> es, Store :> es, FromJSON a) =>
+    Eff es (AwakeableId, Eff es a)
 awakeable = do
-  n <- freshOrdinal awakeableStepPrefix
-  awakeableNamed (StepName ("ord:" <> Text.pack (show n)))
+    n <- freshOrdinal awakeableStepPrefix
+    awakeableNamed (StepName ("ord:" <> Text.pack (show n)))
 
 {- | EP-38's 'awaitStep', wrapped so that a re-entered @await@ on a
 'Cancelled' awakeable throws 'WorkflowAwakeableCancelled' instead of suspending
@@ -201,18 +201,18 @@ signalled-then-cancelled race still returns the signalled value (signal wins —
 resolved promise cannot be un-resolved).
 -}
 awaitCancellable ::
-  (Workflow :> es, Store :> es, FromJSON a) =>
-  WorkflowName -> WorkflowId -> AwakeableId -> StepName -> Eff es a
+    (Workflow :> es, Store :> es, FromJSON a) =>
+    WorkflowName -> WorkflowId -> AwakeableId -> StepName -> Eff es a
 awaitCancellable name wid aid stepNm =
-  awaitStep stepNm $ do
-    existing <- lookupAwakeable (awakeableIdToUuid aid)
-    case existing of
-      Just row
-        | row ^. #status == Cancelled ->
-            throwIO (WorkflowAwakeableCancelled aid)
-      _ ->
-        runTransaction $
-          registerAwakeableTx (awakeableIdToUuid aid) (unWorkflowName name) (unWorkflowId wid)
+    awaitStep stepNm $ do
+        existing <- lookupAwakeable (awakeableIdToUuid aid)
+        case existing of
+            Just row
+                | row ^. #status == Cancelled ->
+                    throwIO (WorkflowAwakeableCancelled aid)
+            _ ->
+                runTransaction $
+                    registerAwakeableTx (awakeableIdToUuid aid) (unWorkflowName name) (unWorkflowId wid)
 
 -- ---------------------------------------------------------------------------
 -- External completion
@@ -239,33 +239,33 @@ still have been repaired. Returns 'False' for an unknown id.
 -}
 signalAwakeable :: (IOE :> es, Store :> es, ToJSON r) => AwakeableId -> r -> Eff es Bool
 signalAwakeable aid result = do
-  mrow <- lookupAwakeable (awakeableIdToUuid aid)
-  case mrow of
-    Nothing -> pure False
-    Just row -> do
-      now <- liftIO getCurrentTime
-      transitioned <-
-        runTransaction $
-          completeAwakeableTx (awakeableIdToUuid aid) (toJSON result) now
-      -- Decide what (if anything) to journal: the value we just wrote if we
-      -- transitioned, else the row's stored payload (crash-safe re-append for
-      -- an already-completed row whose journal entry is missing).
-      let journalled
-            | transitioned = Just (toJSON result)
-            | row ^. #status == Completed = row ^. #payload
-            | otherwise = Nothing
-      case journalled of
-        Just payload ->
-          appendJournalEntry
-            (WorkflowName (row ^. #ownerWorkflowName))
-            (WorkflowId (row ^. #ownerWorkflowId))
-            StepRecorded
-              { stepName = awakeableStepPrefix <> awakeableIdText aid
-              , result = payload
-              , recordedAt = now
-              }
-        Nothing -> pure ()
-      pure transitioned
+    mrow <- lookupAwakeable (awakeableIdToUuid aid)
+    case mrow of
+        Nothing -> pure False
+        Just row -> do
+            now <- liftIO getCurrentTime
+            transitioned <-
+                runTransaction $
+                    completeAwakeableTx (awakeableIdToUuid aid) (toJSON result) now
+            -- Decide what (if anything) to journal: the value we just wrote if we
+            -- transitioned, else the row's stored payload (crash-safe re-append for
+            -- an already-completed row whose journal entry is missing).
+            let journalled
+                    | transitioned = Just (toJSON result)
+                    | row ^. #status == Completed = row ^. #payload
+                    | otherwise = Nothing
+            case journalled of
+                Just payload ->
+                    appendJournalEntry
+                        (WorkflowName (row ^. #ownerWorkflowName))
+                        (WorkflowId (row ^. #ownerWorkflowId))
+                        StepRecorded
+                            { stepName = awakeableStepPrefix <> awakeableIdText aid
+                            , result = payload
+                            , recordedAt = now
+                            }
+                Nothing -> pure ()
+            pure transitioned
 
 {- | Abandon a still-@pending@ awakeable: flips its row to @cancelled@ and
 writes __no__ journal entry (there is no result value to record). Returns 'True'
@@ -275,4 +275,4 @@ already cancelled, or unknown). A workflow that later re-enters the awakeable's
 -}
 cancelAwakeable :: (Store :> es) => AwakeableId -> Eff es Bool
 cancelAwakeable aid =
-  runTransaction $ cancelAwakeableTx (awakeableIdToUuid aid)
+    runTransaction $ cancelAwakeableTx (awakeableIdToUuid aid)

@@ -89,7 +89,6 @@ jitsurei-db-create:
 jitsurei-migrate: jitsurei-db-create
     mkdir -p .dev/codd-expected-schema
     KEIRO_MIGRATE_NO_CHECK=1 CODD_CONNECTION="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" CODD_MIGRATION_DIRS=unused-for-embedded-migrations CODD_EXPECTED_SCHEMA_DIR=.dev/codd-expected-schema CODD_SCHEMAS=kiroku cabal run keiro-migrate
-    PGHOST="{{pg_host}}" psql -d "{{jitsurei_database}}" -v ON_ERROR_STOP=1 -c 'CREATE TABLE IF NOT EXISTS jitsurei_order_summary (order_id TEXT PRIMARY KEY, sku TEXT NOT NULL, quantity BIGINT NOT NULL, status TEXT NOT NULL, last_seen BIGINT NOT NULL)'
 
 [group('jitsurei')]
 jitsurei-fulfillment: jitsurei-migrate
@@ -110,6 +109,10 @@ jitsurei-escalation: jitsurei-migrate
 [group('jitsurei')]
 jitsurei-agent-qual: jitsurei-migrate
     PGHOST="{{pg_host}}" PGDATABASE="{{jitsurei_database}}" PG_CONNECTION_STRING="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" cabal run jitsurei-demo -- agent-qual
+
+[group('jitsurei')]
+jitsurei-workflow: jitsurei-migrate
+    PGHOST="{{pg_host}}" PGDATABASE="{{jitsurei_database}}" PG_CONNECTION_STRING="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" cabal run jitsurei-demo -- workflow
 
 [group('jitsurei')]
 jitsurei-all: jitsurei-migrate

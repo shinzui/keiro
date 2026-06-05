@@ -13,11 +13,11 @@ topic, optional partition key, the raw payload bytes from the EP-19
 envelope, and the canonical header set. Building the record is pure;
 publishing is the caller's responsibility.
 -}
-module Keiro.Outbox.Kafka
-  ( KafkaProducerRecord (..)
-  , outboxRowToKafkaRecord
-  , integrationEventToKafkaRecord
-  )
+module Keiro.Outbox.Kafka (
+    KafkaProducerRecord (..),
+    outboxRowToKafkaRecord,
+    integrationEventToKafkaRecord,
+)
 where
 
 import Data.ByteString (ByteString)
@@ -44,12 +44,12 @@ treats both as opaque bytes, so a future binary-key transport can drop
 the encoding by populating 'key' directly.
 -}
 data KafkaProducerRecord = KafkaProducerRecord
-  { topic :: !Text
-  , key :: !(Maybe ByteString)
-  , payload :: !ByteString
-  , headers :: ![(ByteString, ByteString)]
-  }
-  deriving stock (Generic, Eq, Show)
+    { topic :: !Text
+    , key :: !(Maybe ByteString)
+    , payload :: !ByteString
+    , headers :: ![(ByteString, ByteString)]
+    }
+    deriving stock (Generic, Eq, Show)
 
 -- | Build a 'KafkaProducerRecord' from a published outbox row.
 outboxRowToKafkaRecord :: OutboxRow -> KafkaProducerRecord
@@ -58,9 +58,9 @@ outboxRowToKafkaRecord row = integrationEventToKafkaRecord (row ^. #event)
 -- | Build a 'KafkaProducerRecord' directly from an 'IntegrationEvent'.
 integrationEventToKafkaRecord :: IntegrationEvent -> KafkaProducerRecord
 integrationEventToKafkaRecord event =
-  KafkaProducerRecord
-    { topic = event ^. #destination
-    , key = fmap TE.encodeUtf8 (event ^. #key)
-    , payload = integrationPayload event
-    , headers = [(TE.encodeUtf8 n, TE.encodeUtf8 v) | (n, v) <- integrationHeaders event]
-    }
+    KafkaProducerRecord
+        { topic = event ^. #destination
+        , key = fmap TE.encodeUtf8 (event ^. #key)
+        , payload = integrationPayload event
+        , headers = [(TE.encodeUtf8 n, TE.encodeUtf8 v) | (n, v) <- integrationHeaders event]
+        }

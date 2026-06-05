@@ -13,28 +13,28 @@ directly when needed: read models ("Keiro.ReadModel"), projections
 integration in/outbox ("Keiro.Inbox", "Keiro.Outbox"), timers
 ("Keiro.Timer"), and telemetry ("Keiro.Telemetry").
 -}
-module Keiro
-  ( -- * Library version
-    version
+module Keiro (
+    -- * Library version
+    version,
 
     -- * Command side
-  , module Keiro.Command
-  , module Keiro.Codec
+    module Keiro.Command,
+    module Keiro.Codec,
 
     -- * Stream definitions
-  , EventStream (..)
-  , SnapshotPolicy (..)
-  , StateCodec (..)
-  , module Keiro.Stream
+    EventStream (..),
+    SnapshotPolicy (..),
+    StateCodec (..),
+    module Keiro.Stream,
 
     -- * Routing and snapshots
-  , module Keiro.Router
-  , module Keiro.Snapshot
-  )
+    module Keiro.Router,
+    module Keiro.Snapshot,
+)
 where
 
-import Keiro.Command
 import Keiro.Codec
+import Keiro.Command
 import Keiro.EventStream
 import Keiro.Prelude
 import Keiro.Router

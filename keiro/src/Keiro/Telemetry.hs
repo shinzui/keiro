@@ -24,176 +24,179 @@ Only the @keiro.*@ keys ('keiro_stream_name', 'keiro_retry_attempt',
 'keiro_events_appended') are defined locally: they are bespoke to keiro and
 have no upstream equivalent.
 -}
-module Keiro.Telemetry
-  ( -- * Span helpers
-    Tracer
-  , withProducerSpan
-  , withConsumerSpan
-  , withCommandSpan
-  , withWorkflowSpan
+module Keiro.Telemetry (
+    -- * Span helpers
+    Tracer,
+    withProducerSpan,
+    withConsumerSpan,
+    withCommandSpan,
+    withWorkflowSpan,
 
     -- * W3C TraceContext bridge
-  , traceContextFromCurrentSpan
-  , traceContextFromHeaders
-  , injectTraceContext
+    traceContextFromCurrentSpan,
+    traceContextFromHeaders,
+    injectTraceContext,
 
     -- * Re-exported semantic-convention 'AttributeKey's
+
     --
     -- $semconv_keys
-  , messaging_operation_type
-  , messaging_operation_name
-  , messaging_destination_partition_id
-  , messaging_consumer_group_name
-  , messaging_client_id
-  , messaging_kafka_offset
-  , db_system_name
-  , db_namespace
-  , db_collection_name
-  , db_operation_name
+    messaging_operation_type,
+    messaging_operation_name,
+    messaging_destination_partition_id,
+    messaging_consumer_group_name,
+    messaging_client_id,
+    messaging_kafka_offset,
+    db_system_name,
+    db_namespace,
+    db_collection_name,
+    db_operation_name,
 
     -- * Bespoke keiro 'AttributeKey's
-  , keiro_stream_name
-  , keiro_retry_attempt
-  , keiro_events_appended
-  , keiro_workflow_name
-  , keiro_workflow_id
-  , keiro_workflow_step
+    keiro_stream_name,
+    keiro_retry_attempt,
+    keiro_events_appended,
+    keiro_workflow_name,
+    keiro_workflow_id,
+    keiro_workflow_step,
 
     -- * Metrics surface
+
     --
     -- $metrics
-  , Meter
-  , InstrumentationLibrary (..)
-  , keiroInstrumentationLibrary
-  , keiroOutboxBacklogName
-  , keiroOutboxPublishedName
-  , keiroOutboxRetriedName
-  , keiroOutboxDeadletteredName
-  , keiroInboxProcessedName
-  , keiroInboxDuplicatesName
-  , keiroInboxFailedName
-  , keiroInboxBacklogName
-  , keiroTimerBacklogName
-  , keiroTimerFireLagName
-  , keiroTimerAttemptsName
-  , keiroTimerStuckName
-  , keiroProjectionLagName
-  , keiroProjectionWaitTimeoutsName
-  , keiroWorkflowStepsExecutedName
-  , keiroWorkflowStepsReplayedName
-  , keiroWorkflowResumedName
-  , keiroWorkflowJournalLengthName
-  , keiroWorkflowAwakeablesPendingName
-  , keiroWorkflowActiveName
-  , KeiroMetrics (..)
-  , newKeiroMetrics
-  , recordOutboxBacklog
-  , recordOutboxPublished
-  , recordOutboxRetried
-  , recordOutboxDeadlettered
-  , recordInboxProcessed
-  , recordInboxDuplicates
-  , recordInboxFailed
-  , recordInboxBacklog
-  , recordTimerBacklog
-  , recordTimerFireLag
-  , recordTimerAttempts
-  , recordTimerStuck
-  , recordProjectionLag
-  , recordProjectionWaitTimeouts
-  , recordWorkflowStepExecuted
-  , recordWorkflowStepReplayed
-  , recordWorkflowResumed
-  , recordWorkflowActive
-  , recordWorkflowJournalLength
-  , recordWorkflowAwakeablesPending
-  )
+    Meter,
+    InstrumentationLibrary (..),
+    keiroInstrumentationLibrary,
+    keiroOutboxBacklogName,
+    keiroOutboxPublishedName,
+    keiroOutboxRetriedName,
+    keiroOutboxDeadletteredName,
+    keiroInboxProcessedName,
+    keiroInboxDuplicatesName,
+    keiroInboxFailedName,
+    keiroInboxBacklogName,
+    keiroTimerBacklogName,
+    keiroTimerFireLagName,
+    keiroTimerAttemptsName,
+    keiroTimerStuckName,
+    keiroProjectionLagName,
+    keiroProjectionWaitTimeoutsName,
+    keiroWorkflowStepsExecutedName,
+    keiroWorkflowStepsReplayedName,
+    keiroWorkflowResumedName,
+    keiroWorkflowJournalLengthName,
+    keiroWorkflowAwakeablesPendingName,
+    keiroWorkflowActiveName,
+    KeiroMetrics (..),
+    newKeiroMetrics,
+    recordOutboxBacklog,
+    recordOutboxPublished,
+    recordOutboxRetried,
+    recordOutboxDeadlettered,
+    recordInboxProcessed,
+    recordInboxDuplicates,
+    recordInboxFailed,
+    recordInboxBacklog,
+    recordTimerBacklog,
+    recordTimerFireLag,
+    recordTimerAttempts,
+    recordTimerStuck,
+    recordProjectionLag,
+    recordProjectionWaitTimeouts,
+    recordWorkflowStepExecuted,
+    recordWorkflowStepReplayed,
+    recordWorkflowResumed,
+    recordWorkflowActive,
+    recordWorkflowJournalLength,
+    recordWorkflowAwakeablesPending,
+)
 where
 
 import "base" Control.Exception (bracket)
-import "bytestring" Data.ByteString qualified as ByteString
 import "base" GHC.Stack (HasCallStack)
-import "hs-opentelemetry-api" OpenTelemetry.Context (insertSpan, lookupSpan)
-import "hs-opentelemetry-api" OpenTelemetry.Attributes.Key (AttributeKey (..))
-import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal
-  ( attachContext
-  , detachContext
-  , getContext
-  )
-import "hs-opentelemetry-api" OpenTelemetry.Trace.Core
-  ( InstrumentationLibrary (..)
-  , Span
-  , SpanArguments (..)
-  , SpanKind (..)
-  , Tracer
-  , addAttribute
-  , defaultSpanArguments
-  , inSpan'
-  , wrapSpanContext
-  )
-import "hs-opentelemetry-api" OpenTelemetry.Metric.Core
-  ( Counter
-  , Gauge
-  , Histogram
-  , Meter
-  , counterAdd
-  , defaultAdvisoryParameters
-  , gaugeRecord
-  , histogramRecord
-  , meterCreateCounterInt64
-  , meterCreateGaugeInt64
-  , meterCreateHistogram
-  )
+import "bytestring" Data.ByteString qualified as ByteString
 import "hs-opentelemetry-api" OpenTelemetry.Attributes (emptyAttributes)
-import "hs-opentelemetry-semantic-conventions" OpenTelemetry.SemanticConventions
-  ( messaging_system
-  , messaging_operation_type
-  , messaging_operation_name
-  , messaging_destination_name
-  , messaging_destination_partition_id
-  , messaging_consumer_group_name
-  , messaging_client_id
-  , messaging_message_id
-  , messaging_kafka_message_key
-  , messaging_kafka_offset
-  , db_system_name
-  , db_namespace
-  , db_collection_name
-  , db_operation_name
-  )
+import "hs-opentelemetry-api" OpenTelemetry.Attributes.Key (AttributeKey (..))
+import "hs-opentelemetry-api" OpenTelemetry.Context (insertSpan, lookupSpan)
+import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal (
+    attachContext,
+    detachContext,
+    getContext,
+ )
+import "hs-opentelemetry-api" OpenTelemetry.Metric.Core (
+    Counter,
+    Gauge,
+    Histogram,
+    Meter,
+    counterAdd,
+    defaultAdvisoryParameters,
+    gaugeRecord,
+    histogramRecord,
+    meterCreateCounterInt64,
+    meterCreateGaugeInt64,
+    meterCreateHistogram,
+ )
+import "hs-opentelemetry-api" OpenTelemetry.Trace.Core (
+    InstrumentationLibrary (..),
+    Span,
+    SpanArguments (..),
+    SpanKind (..),
+    Tracer,
+    addAttribute,
+    defaultSpanArguments,
+    inSpan',
+    wrapSpanContext,
+ )
+import "hs-opentelemetry-semantic-conventions" OpenTelemetry.SemanticConventions (
+    db_collection_name,
+    db_namespace,
+    db_operation_name,
+    db_system_name,
+    messaging_client_id,
+    messaging_consumer_group_name,
+    messaging_destination_name,
+    messaging_destination_partition_id,
+    messaging_kafka_message_key,
+    messaging_kafka_offset,
+    messaging_message_id,
+    messaging_operation_name,
+    messaging_operation_type,
+    messaging_system,
+ )
 import "text" Data.Text qualified as Text
 import "text" Data.Text.Encoding qualified as TE
 import "unliftio-core" Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 
 import Keiro.Inbox.Kafka (KafkaInboundRecord)
-import Keiro.Integration.Event
-  ( IntegrationEvent
-  , TraceContext (..)
-  , headerTraceParent
-  , headerTraceState
-  )
+import Keiro.Integration.Event (
+    IntegrationEvent,
+    TraceContext (..),
+    headerTraceParent,
+    headerTraceState,
+ )
 import Keiro.Outbox.Kafka (KafkaProducerRecord)
 import Keiro.Prelude
 import Keiro.Workflow.Types (StepName (..), WorkflowId (..), WorkflowName (..))
 
-import "hs-opentelemetry-propagator-w3c" OpenTelemetry.Propagator.W3CTraceContext
-  ( decodeSpanContext
-  , encodeSpanContext
-  )
+import "hs-opentelemetry-propagator-w3c" OpenTelemetry.Propagator.W3CTraceContext (
+    decodeSpanContext,
+    encodeSpanContext,
+ )
 
 -- ---------------------------------------------------------------------------
 -- Bespoke keiro AttributeKeys
 -- ---------------------------------------------------------------------------
 
--- $semconv_keys
--- The messaging.* / db.* 'AttributeKey's re-exported here are imported
--- directly from 'OpenTelemetry.SemanticConventions'
--- (@hs-opentelemetry-semantic-conventions@ @1.40.0.0@). They are surfaced
--- from this module so 'Keiro.Telemetry' stays the single telemetry import
--- for the library; their definitions live upstream.
---
--- The @keiro_*@ keys below are bespoke to keiro and have no upstream
--- equivalent, so they are defined locally.
+{- $semconv_keys
+The messaging.* / db.* 'AttributeKey's re-exported here are imported
+directly from 'OpenTelemetry.SemanticConventions'
+(@hs-opentelemetry-semantic-conventions@ @1.40.0.0@). They are surfaced
+from this module so 'Keiro.Telemetry' stays the single telemetry import
+for the library; their definitions live upstream.
+
+The @keiro_*@ keys below are bespoke to keiro and have no upstream
+equivalent, so they are defined locally.
+-}
 
 keiro_stream_name :: AttributeKey Text
 keiro_stream_name = AttributeKey "keiro.stream.name"
@@ -230,21 +233,21 @@ tracer.
 The body receives the producer 'Span' so it can record a publish failure
 via 'recordPublishError'.
 -}
-withProducerSpan
-  :: (MonadUnliftIO m, HasCallStack)
-  => Maybe Tracer
-  -> IntegrationEvent
-  -> KafkaProducerRecord
-  -> (Maybe Span -> m a)
-  -> m a
+withProducerSpan ::
+    (MonadUnliftIO m, HasCallStack) =>
+    Maybe Tracer ->
+    IntegrationEvent ->
+    KafkaProducerRecord ->
+    (Maybe Span -> m a) ->
+    m a
 withProducerSpan Nothing _ _ body = body Nothing
 withProducerSpan (Just tracer) event record body =
-  inSpan' tracer name args $ \sp -> do
-    setProducerAttributes sp event record
-    body (Just sp)
+    inSpan' tracer name args $ \sp -> do
+        setProducerAttributes sp event record
+        body (Just sp)
   where
     name = "send " <> (event ^. #destination)
-    args = defaultSpanArguments {kind = Producer}
+    args = defaultSpanArguments{kind = Producer}
 
 {- | Run @body@ inside a @Consumer@-kind span named @"process " <> topic@.
 
@@ -259,25 +262,25 @@ attached when present (decode succeeded), so @messaging.message.id@
 is set; otherwise the helper records only the headers known from the
 broker record.
 -}
-withConsumerSpan
-  :: (MonadUnliftIO m, HasCallStack)
-  => Maybe Tracer
-  -> Maybe Text
-  -- ^ consumer group name (optional)
-  -> KafkaInboundRecord
-  -> Maybe IntegrationEvent
-  -- ^ decoded envelope; 'Nothing' on a decode failure path
-  -> (Maybe Span -> m a)
-  -> m a
+withConsumerSpan ::
+    (MonadUnliftIO m, HasCallStack) =>
+    Maybe Tracer ->
+    -- | consumer group name (optional)
+    Maybe Text ->
+    KafkaInboundRecord ->
+    -- | decoded envelope; 'Nothing' on a decode failure path
+    Maybe IntegrationEvent ->
+    (Maybe Span -> m a) ->
+    m a
 withConsumerSpan Nothing _ _ _ body = body Nothing
 withConsumerSpan (Just tracer) consumerGroup record mEvent body =
-  withRemoteParent (record ^. #headers) $
-    inSpan' tracer name args $ \sp -> do
-      setConsumerAttributes sp consumerGroup record mEvent
-      body (Just sp)
+    withRemoteParent (record ^. #headers) $
+        inSpan' tracer name args $ \sp -> do
+            setConsumerAttributes sp consumerGroup record mEvent
+            body (Just sp)
   where
     name = "process " <> (record ^. #topic)
-    args = defaultSpanArguments {kind = Consumer}
+    args = defaultSpanArguments{kind = Consumer}
 
 {- | Run @body@ with the OpenTelemetry context temporarily augmented by a
 parent span extracted from the supplied header list via the W3C
@@ -290,23 +293,23 @@ This is the bridge that makes a 'Consumer'-kind span open in this
 process a *child* of the 'Producer'-kind span that emitted the message
 in the upstream process, joining the two traces by trace id.
 -}
-withRemoteParent
-  :: (MonadUnliftIO m) => [(Text, Text)] -> m a -> m a
+withRemoteParent ::
+    (MonadUnliftIO m) => [(Text, Text)] -> m a -> m a
 withRemoteParent hs body =
-  case parentSpanContext hs of
-    Nothing -> body
-    Just spanCtx -> withRunInIO $ \runInIO -> do
-      ctx <- getContext
-      let newCtx = insertSpan (wrapSpanContext spanCtx) ctx
-      bracket
-        (attachContext newCtx)
-        detachContext
-        (const (runInIO body))
+    case parentSpanContext hs of
+        Nothing -> body
+        Just spanCtx -> withRunInIO $ \runInIO -> do
+            ctx <- getContext
+            let newCtx = insertSpan (wrapSpanContext spanCtx) ctx
+            bracket
+                (attachContext newCtx)
+                detachContext
+                (const (runInIO body))
   where
     parentSpanContext hsList =
-      let tp = fmap TE.encodeUtf8 (Prelude.lookup headerTraceParent hsList)
-          ts = fmap TE.encodeUtf8 (Prelude.lookup headerTraceState hsList)
-       in decodeSpanContext tp ts
+        let tp = fmap TE.encodeUtf8 (Prelude.lookup headerTraceParent hsList)
+            ts = fmap TE.encodeUtf8 (Prelude.lookup headerTraceState hsList)
+         in decodeSpanContext tp ts
 
 {- | Open an @Internal@ span around a command run, named after the resolved
 stream identifier. Attributes capture the stream name and (when the
@@ -314,25 +317,25 @@ caller supplies it) the retry attempt number. The number of events
 appended is attached after a successful append by the caller via
 'addAttribute span keiro_events_appended n'.
 -}
-withCommandSpan
-  :: (MonadUnliftIO m, HasCallStack)
-  => Maybe Tracer
-  -> Text
-  -- ^ resolved stream name
-  -> Maybe Int64
-  -- ^ retry attempt (1-based); 'Nothing' to omit
-  -> (Maybe Span -> m a)
-  -> m a
+withCommandSpan ::
+    (MonadUnliftIO m, HasCallStack) =>
+    Maybe Tracer ->
+    -- | resolved stream name
+    Text ->
+    -- | retry attempt (1-based); 'Nothing' to omit
+    Maybe Int64 ->
+    (Maybe Span -> m a) ->
+    m a
 withCommandSpan Nothing _ _ body = body Nothing
 withCommandSpan (Just tracer) streamName retryAttempt body =
-  inSpan' tracer streamName args $ \sp -> do
-    addAttribute sp (unkey keiro_stream_name) streamName
-    case retryAttempt of
-      Nothing -> pure ()
-      Just n -> addAttribute sp (unkey keiro_retry_attempt) n
-    body (Just sp)
+    inSpan' tracer streamName args $ \sp -> do
+        addAttribute sp (unkey keiro_stream_name) streamName
+        case retryAttempt of
+            Nothing -> pure ()
+            Just n -> addAttribute sp (unkey keiro_retry_attempt) n
+        body (Just sp)
   where
-    args = defaultSpanArguments {kind = Internal}
+    args = defaultSpanArguments{kind = Internal}
 
 {- | Open an @Internal@ span around a workflow run (or a single step/resume when
 a 'StepName' is supplied), named @"workflow " <> name@. Attributes carry the
@@ -340,26 +343,26 @@ bespoke @keiro.workflow.name@, @keiro.workflow.id@, and — when present —
 @keiro.workflow.step@ keys. Like 'withCommandSpan', a 'Nothing' tracer makes the
 helper a pass-through, so it is safe to call unconditionally.
 -}
-withWorkflowSpan
-  :: (MonadUnliftIO m, HasCallStack)
-  => Maybe Tracer
-  -> WorkflowName
-  -> WorkflowId
-  -> Maybe StepName
-  -> (Maybe Span -> m a)
-  -> m a
+withWorkflowSpan ::
+    (MonadUnliftIO m, HasCallStack) =>
+    Maybe Tracer ->
+    WorkflowName ->
+    WorkflowId ->
+    Maybe StepName ->
+    (Maybe Span -> m a) ->
+    m a
 withWorkflowSpan Nothing _ _ _ body = body Nothing
 withWorkflowSpan (Just tracer) name wid mStep body =
-  inSpan' tracer spanName args $ \sp -> do
-    addAttribute sp (unkey keiro_workflow_name) (unWorkflowName name)
-    addAttribute sp (unkey keiro_workflow_id) (unWorkflowId wid)
-    case mStep of
-      Nothing -> pure ()
-      Just s -> addAttribute sp (unkey keiro_workflow_step) (unStepName s)
-    body (Just sp)
+    inSpan' tracer spanName args $ \sp -> do
+        addAttribute sp (unkey keiro_workflow_name) (unWorkflowName name)
+        addAttribute sp (unkey keiro_workflow_id) (unWorkflowId wid)
+        case mStep of
+            Nothing -> pure ()
+            Just s -> addAttribute sp (unkey keiro_workflow_step) (unStepName s)
+        body (Just sp)
   where
     spanName = "workflow " <> unWorkflowName name
-    args = defaultSpanArguments {kind = Internal}
+    args = defaultSpanArguments{kind = Internal}
 
 -- ---------------------------------------------------------------------------
 -- W3C TraceContext bridge
@@ -377,16 +380,16 @@ in-memory span and the keiro 'TraceContext' record stored on
 -}
 traceContextFromCurrentSpan :: (MonadIO m) => m (Maybe TraceContext)
 traceContextFromCurrentSpan = do
-  ctx <- getContext
-  case lookupSpan ctx of
-    Nothing -> pure Nothing
-    Just sp -> do
-      (traceparentBytes, tracestateBytes) <- liftIO (encodeSpanContext sp)
-      let traceparent = TE.decodeUtf8 traceparentBytes
-          tracestate
-            | ByteString.null tracestateBytes = Nothing
-            | otherwise = Just (TE.decodeUtf8 tracestateBytes)
-      pure (Just (TraceContext traceparent tracestate))
+    ctx <- getContext
+    case lookupSpan ctx of
+        Nothing -> pure Nothing
+        Just sp -> do
+            (traceparentBytes, tracestateBytes) <- liftIO (encodeSpanContext sp)
+            let traceparent = TE.decodeUtf8 traceparentBytes
+                tracestate
+                    | ByteString.null tracestateBytes = Nothing
+                    | otherwise = Just (TE.decodeUtf8 tracestateBytes)
+            pure (Just (TraceContext traceparent tracestate))
 
 {- | Lift a 'TraceContext' out of a flat @[(Text, Text)]@ header list. This
 is the mirror image of 'integrationHeaders': it does not validate the
@@ -396,8 +399,8 @@ envelope record.
 -}
 traceContextFromHeaders :: [(Text, Text)] -> Maybe TraceContext
 traceContextFromHeaders hs = case Prelude.lookup headerTraceParent hs of
-  Nothing -> Nothing
-  Just tp -> Just (TraceContext tp (Prelude.lookup headerTraceState hs))
+    Nothing -> Nothing
+    Just tp -> Just (TraceContext tp (Prelude.lookup headerTraceState hs))
 
 {- | Append the W3C @traceparent@ / @tracestate@ headers for the current
 thread-local span to the supplied header list. When no span is active
@@ -410,53 +413,53 @@ event explicitly.
 -}
 injectTraceContext :: (MonadIO m) => [(Text, Text)] -> m [(Text, Text)]
 injectTraceContext hs = do
-  mctx <- traceContextFromCurrentSpan
-  pure $ case mctx of
-    Nothing -> hs
-    Just tc ->
-      hs
-        ++ [(headerTraceParent, tc ^. #traceparent)]
-        ++ maybe [] (\ts -> [(headerTraceState, ts)]) (tc ^. #tracestate)
+    mctx <- traceContextFromCurrentSpan
+    pure $ case mctx of
+        Nothing -> hs
+        Just tc ->
+            hs
+                ++ [(headerTraceParent, tc ^. #traceparent)]
+                ++ maybe [] (\ts -> [(headerTraceState, ts)]) (tc ^. #tracestate)
 
 -- ---------------------------------------------------------------------------
 -- Internal helpers
 -- ---------------------------------------------------------------------------
 
-setProducerAttributes
-  :: (MonadIO m) => Span -> IntegrationEvent -> KafkaProducerRecord -> m ()
+setProducerAttributes ::
+    (MonadIO m) => Span -> IntegrationEvent -> KafkaProducerRecord -> m ()
 setProducerAttributes sp event _record = do
-  addAttribute sp (unkey messaging_system) ("kafka" :: Text)
-  addAttribute sp (unkey messaging_operation_type) ("publish" :: Text)
-  addAttribute sp (unkey messaging_operation_name) ("send" :: Text)
-  addAttribute sp (unkey messaging_destination_name) (event ^. #destination)
-  addAttribute sp (unkey messaging_message_id) (event ^. #messageId)
-  case event ^. #key of
-    Nothing -> pure ()
-    Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
+    addAttribute sp (unkey messaging_system) ("kafka" :: Text)
+    addAttribute sp (unkey messaging_operation_type) ("publish" :: Text)
+    addAttribute sp (unkey messaging_operation_name) ("send" :: Text)
+    addAttribute sp (unkey messaging_destination_name) (event ^. #destination)
+    addAttribute sp (unkey messaging_message_id) (event ^. #messageId)
+    case event ^. #key of
+        Nothing -> pure ()
+        Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
 
-setConsumerAttributes
-  :: (MonadIO m)
-  => Span
-  -> Maybe Text
-  -> KafkaInboundRecord
-  -> Maybe IntegrationEvent
-  -> m ()
+setConsumerAttributes ::
+    (MonadIO m) =>
+    Span ->
+    Maybe Text ->
+    KafkaInboundRecord ->
+    Maybe IntegrationEvent ->
+    m ()
 setConsumerAttributes sp consumerGroup record mEvent = do
-  addAttribute sp (unkey messaging_system) ("kafka" :: Text)
-  addAttribute sp (unkey messaging_operation_type) ("process" :: Text)
-  addAttribute sp (unkey messaging_operation_name) ("process" :: Text)
-  addAttribute sp (unkey messaging_destination_name) (record ^. #topic)
-  addAttribute sp (unkey messaging_destination_partition_id) (showText (record ^. #partition))
-  addAttribute sp (unkey messaging_kafka_offset) (record ^. #offset)
-  case record ^. #key of
-    Nothing -> pure ()
-    Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
-  case consumerGroup of
-    Nothing -> pure ()
-    Just g -> addAttribute sp (unkey messaging_consumer_group_name) g
-  case mEvent of
-    Nothing -> pure ()
-    Just event -> addAttribute sp (unkey messaging_message_id) (event ^. #messageId)
+    addAttribute sp (unkey messaging_system) ("kafka" :: Text)
+    addAttribute sp (unkey messaging_operation_type) ("process" :: Text)
+    addAttribute sp (unkey messaging_operation_name) ("process" :: Text)
+    addAttribute sp (unkey messaging_destination_name) (record ^. #topic)
+    addAttribute sp (unkey messaging_destination_partition_id) (showText (record ^. #partition))
+    addAttribute sp (unkey messaging_kafka_offset) (record ^. #offset)
+    case record ^. #key of
+        Nothing -> pure ()
+        Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
+    case consumerGroup of
+        Nothing -> pure ()
+        Just g -> addAttribute sp (unkey messaging_consumer_group_name) g
+    case mEvent of
+        Nothing -> pure ()
+        Just event -> addAttribute sp (unkey messaging_message_id) (event ^. #messageId)
 
 showText :: (Show a) => a -> Text
 showText = Text.pack . show
@@ -465,28 +468,30 @@ showText = Text.pack . show
 -- Metrics surface
 -- ---------------------------------------------------------------------------
 
--- $metrics
--- Alongside the span helpers above, 'Keiro.Telemetry' exposes the library's
--- metrics surface: a 'KeiroMetrics' record holding every instrument keiro
--- records (built once from a 'Meter' by 'newKeiroMetrics'), and one
--- @record*@ helper per instrument that takes a @'Maybe' 'KeiroMetrics'@ and
--- no-ops on 'Nothing'. This mirrors the @'Maybe' 'Tracer'@ opt-in the span
--- helpers use: an application that never configures a 'MeterProvider' pays
--- only one 'Maybe' branch per recording site. The per-instrument name, unit,
--- kind, and description are catalogued in
--- @docs/research/opentelemetry-semconv-audit.md@.
+{- $metrics
+Alongside the span helpers above, 'Keiro.Telemetry' exposes the library's
+metrics surface: a 'KeiroMetrics' record holding every instrument keiro
+records (built once from a 'Meter' by 'newKeiroMetrics'), and one
+@record*@ helper per instrument that takes a @'Maybe' 'KeiroMetrics'@ and
+no-ops on 'Nothing'. This mirrors the @'Maybe' 'Tracer'@ opt-in the span
+helpers use: an application that never configures a 'MeterProvider' pays
+only one 'Maybe' branch per recording site. The per-instrument name, unit,
+kind, and description are catalogued in
+@docs/research/opentelemetry-semconv-audit.md@.
+-}
 
--- | The instrumentation scope keiro tags all its metric instruments with.
--- Mirrors the @"keiro"@ scope name the span helpers use on the application's
--- 'Tracer'.
+{- | The instrumentation scope keiro tags all its metric instruments with.
+Mirrors the @"keiro"@ scope name the span helpers use on the application's
+'Tracer'.
+-}
 keiroInstrumentationLibrary :: InstrumentationLibrary
 keiroInstrumentationLibrary =
-  InstrumentationLibrary
-    { libraryName = "keiro"
-    , libraryVersion = ""
-    , librarySchemaUrl = ""
-    , libraryAttributes = emptyAttributes
-    }
+    InstrumentationLibrary
+        { libraryName = "keiro"
+        , libraryVersion = ""
+        , librarySchemaUrl = ""
+        , libraryAttributes = emptyAttributes
+        }
 
 keiroOutboxBacklogName :: Text
 keiroOutboxBacklogName = "keiro.outbox.backlog"
@@ -541,27 +546,27 @@ monotonic counters; distributions are histograms. See
 name / unit / kind / description catalogue.
 -}
 data KeiroMetrics = KeiroMetrics
-  { outboxBacklog :: Gauge Int64
-  , outboxPublished :: Counter Int64
-  , outboxRetried :: Counter Int64
-  , outboxDeadlettered :: Counter Int64
-  , inboxProcessed :: Counter Int64
-  , inboxDuplicates :: Counter Int64
-  , inboxFailed :: Counter Int64
-  , inboxBacklog :: Gauge Int64
-  , timerBacklog :: Gauge Int64
-  , timerFireLag :: Histogram
-  , timerAttempts :: Histogram
-  , timerStuck :: Gauge Int64
-  , projectionLag :: Gauge Int64
-  , projectionWaitTimeouts :: Counter Int64
-  , workflowStepsExecuted :: Counter Int64
-  , workflowStepsReplayed :: Counter Int64
-  , workflowResumed :: Counter Int64
-  , workflowActive :: Gauge Int64
-  , workflowJournalLength :: Histogram
-  , workflowAwakeablesPending :: Gauge Int64
-  }
+    { outboxBacklog :: Gauge Int64
+    , outboxPublished :: Counter Int64
+    , outboxRetried :: Counter Int64
+    , outboxDeadlettered :: Counter Int64
+    , inboxProcessed :: Counter Int64
+    , inboxDuplicates :: Counter Int64
+    , inboxFailed :: Counter Int64
+    , inboxBacklog :: Gauge Int64
+    , timerBacklog :: Gauge Int64
+    , timerFireLag :: Histogram
+    , timerAttempts :: Histogram
+    , timerStuck :: Gauge Int64
+    , projectionLag :: Gauge Int64
+    , projectionWaitTimeouts :: Counter Int64
+    , workflowStepsExecuted :: Counter Int64
+    , workflowStepsReplayed :: Counter Int64
+    , workflowResumed :: Counter Int64
+    , workflowActive :: Gauge Int64
+    , workflowJournalLength :: Histogram
+    , workflowAwakeablesPending :: Gauge Int64
+    }
 
 {- | Construct every keiro metric instrument from a 'Meter'. Call this once at
 application start after building an SDK 'OpenTelemetry.Metric.Core.MeterProvider'
@@ -572,75 +577,75 @@ unconditionally.
 -}
 newKeiroMetrics :: (MonadIO m) => Meter -> m KeiroMetrics
 newKeiroMetrics meter = liftIO $ do
-  outboxBacklog' <- gaugeI64 keiroOutboxBacklogName "{event}" "Outbox rows awaiting publish."
-  outboxPublished' <- counterI64 keiroOutboxPublishedName "{event}" "Outbox events successfully published."
-  outboxRetried' <- counterI64 keiroOutboxRetriedName "{event}" "Outbox publish attempts that failed and will retry."
-  outboxDeadlettered' <- counterI64 keiroOutboxDeadletteredName "{event}" "Outbox events parked after exhausting retries."
-  inboxProcessed' <- counterI64 keiroInboxProcessedName "{message}" "Inbox messages processed successfully."
-  inboxDuplicates' <- counterI64 keiroInboxDuplicatesName "{message}" "Inbox messages skipped as duplicates."
-  inboxFailed' <- counterI64 keiroInboxFailedName "{message}" "Inbox messages whose handler failed."
-  inboxBacklog' <- gaugeI64 keiroInboxBacklogName "{message}" "Inbox messages awaiting processing."
-  timerBacklog' <- gaugeI64 keiroTimerBacklogName "{timer}" "Due timers awaiting firing."
-  timerFireLag' <- histogram keiroTimerFireLagName "ms" "Delay between a timer's scheduled time and when it fired."
-  timerAttempts' <- histogram keiroTimerAttemptsName "{attempt}" "Number of attempts a timer took to fire."
-  timerStuck' <- gaugeI64 keiroTimerStuckName "{timer}" "Timers stuck in the Firing state past threshold."
-  projectionLag' <- gaugeI64 keiroProjectionLagName "{event}" "Events between the log head and a projection's checkpoint."
-  projectionWaitTimeouts' <- counterI64 keiroProjectionWaitTimeoutsName "{timeout}" "Position-wait calls that timed out before the projection caught up."
-  workflowStepsExecuted' <- counterI64 keiroWorkflowStepsExecutedName "{step}" "Workflow steps that ran their action (a journal miss)."
-  workflowStepsReplayed' <- counterI64 keiroWorkflowStepsReplayedName "{step}" "Workflow steps short-circuited to a recorded result (a journal hit)."
-  workflowResumed' <- counterI64 keiroWorkflowResumedName "{workflow}" "Workflow re-invocations performed by the resume worker."
-  workflowActive' <- gaugeI64 keiroWorkflowActiveName "{workflow}" "Workflow runs currently in progress in this process."
-  workflowJournalLength' <- histogram keiroWorkflowJournalLengthName "{event}" "Journal event count of a workflow at completion."
-  workflowAwakeablesPending' <- gaugeI64 keiroWorkflowAwakeablesPendingName "{awakeable}" "Awakeables awaiting an external signal."
-  pure
-    KeiroMetrics
-      { outboxBacklog = outboxBacklog'
-      , outboxPublished = outboxPublished'
-      , outboxRetried = outboxRetried'
-      , outboxDeadlettered = outboxDeadlettered'
-      , inboxProcessed = inboxProcessed'
-      , inboxDuplicates = inboxDuplicates'
-      , inboxFailed = inboxFailed'
-      , inboxBacklog = inboxBacklog'
-      , timerBacklog = timerBacklog'
-      , timerFireLag = timerFireLag'
-      , timerAttempts = timerAttempts'
-      , timerStuck = timerStuck'
-      , projectionLag = projectionLag'
-      , projectionWaitTimeouts = projectionWaitTimeouts'
-      , workflowStepsExecuted = workflowStepsExecuted'
-      , workflowStepsReplayed = workflowStepsReplayed'
-      , workflowResumed = workflowResumed'
-      , workflowActive = workflowActive'
-      , workflowJournalLength = workflowJournalLength'
-      , workflowAwakeablesPending = workflowAwakeablesPending'
-      }
+    outboxBacklog' <- gaugeI64 keiroOutboxBacklogName "{event}" "Outbox rows awaiting publish."
+    outboxPublished' <- counterI64 keiroOutboxPublishedName "{event}" "Outbox events successfully published."
+    outboxRetried' <- counterI64 keiroOutboxRetriedName "{event}" "Outbox publish attempts that failed and will retry."
+    outboxDeadlettered' <- counterI64 keiroOutboxDeadletteredName "{event}" "Outbox events parked after exhausting retries."
+    inboxProcessed' <- counterI64 keiroInboxProcessedName "{message}" "Inbox messages processed successfully."
+    inboxDuplicates' <- counterI64 keiroInboxDuplicatesName "{message}" "Inbox messages skipped as duplicates."
+    inboxFailed' <- counterI64 keiroInboxFailedName "{message}" "Inbox messages whose handler failed."
+    inboxBacklog' <- gaugeI64 keiroInboxBacklogName "{message}" "Inbox messages awaiting processing."
+    timerBacklog' <- gaugeI64 keiroTimerBacklogName "{timer}" "Due timers awaiting firing."
+    timerFireLag' <- histogram keiroTimerFireLagName "ms" "Delay between a timer's scheduled time and when it fired."
+    timerAttempts' <- histogram keiroTimerAttemptsName "{attempt}" "Number of attempts a timer took to fire."
+    timerStuck' <- gaugeI64 keiroTimerStuckName "{timer}" "Timers stuck in the Firing state past threshold."
+    projectionLag' <- gaugeI64 keiroProjectionLagName "{event}" "Events between the log head and a projection's checkpoint."
+    projectionWaitTimeouts' <- counterI64 keiroProjectionWaitTimeoutsName "{timeout}" "Position-wait calls that timed out before the projection caught up."
+    workflowStepsExecuted' <- counterI64 keiroWorkflowStepsExecutedName "{step}" "Workflow steps that ran their action (a journal miss)."
+    workflowStepsReplayed' <- counterI64 keiroWorkflowStepsReplayedName "{step}" "Workflow steps short-circuited to a recorded result (a journal hit)."
+    workflowResumed' <- counterI64 keiroWorkflowResumedName "{workflow}" "Workflow re-invocations performed by the resume worker."
+    workflowActive' <- gaugeI64 keiroWorkflowActiveName "{workflow}" "Workflow runs currently in progress in this process."
+    workflowJournalLength' <- histogram keiroWorkflowJournalLengthName "{event}" "Journal event count of a workflow at completion."
+    workflowAwakeablesPending' <- gaugeI64 keiroWorkflowAwakeablesPendingName "{awakeable}" "Awakeables awaiting an external signal."
+    pure
+        KeiroMetrics
+            { outboxBacklog = outboxBacklog'
+            , outboxPublished = outboxPublished'
+            , outboxRetried = outboxRetried'
+            , outboxDeadlettered = outboxDeadlettered'
+            , inboxProcessed = inboxProcessed'
+            , inboxDuplicates = inboxDuplicates'
+            , inboxFailed = inboxFailed'
+            , inboxBacklog = inboxBacklog'
+            , timerBacklog = timerBacklog'
+            , timerFireLag = timerFireLag'
+            , timerAttempts = timerAttempts'
+            , timerStuck = timerStuck'
+            , projectionLag = projectionLag'
+            , projectionWaitTimeouts = projectionWaitTimeouts'
+            , workflowStepsExecuted = workflowStepsExecuted'
+            , workflowStepsReplayed = workflowStepsReplayed'
+            , workflowResumed = workflowResumed'
+            , workflowActive = workflowActive'
+            , workflowJournalLength = workflowJournalLength'
+            , workflowAwakeablesPending = workflowAwakeablesPending'
+            }
   where
     counterI64 :: Text -> Text -> Text -> IO (Counter Int64)
     counterI64 name unit desc =
-      meterCreateCounterInt64 meter name (Just unit) (Just desc) defaultAdvisoryParameters
+        meterCreateCounterInt64 meter name (Just unit) (Just desc) defaultAdvisoryParameters
     gaugeI64 :: Text -> Text -> Text -> IO (Gauge Int64)
     gaugeI64 name unit desc =
-      meterCreateGaugeInt64 meter name (Just unit) (Just desc) defaultAdvisoryParameters
+        meterCreateGaugeInt64 meter name (Just unit) (Just desc) defaultAdvisoryParameters
     histogram :: Text -> Text -> Text -> IO Histogram
     histogram name unit desc =
-      meterCreateHistogram meter name (Just unit) (Just desc) defaultAdvisoryParameters
+        meterCreateHistogram meter name (Just unit) (Just desc) defaultAdvisoryParameters
 
 -- Internal: record an Int64 on the counter selected by @sel@, or do nothing.
-recordCounter
-  :: (MonadIO m) => (KeiroMetrics -> Counter Int64) -> Maybe KeiroMetrics -> Int64 -> m ()
+recordCounter ::
+    (MonadIO m) => (KeiroMetrics -> Counter Int64) -> Maybe KeiroMetrics -> Int64 -> m ()
 recordCounter _ Nothing _ = pure ()
 recordCounter sel (Just ms) n = liftIO (counterAdd (sel ms) n emptyAttributes)
 
 -- Internal: record an Int64 on the gauge selected by @sel@, or do nothing.
-recordGaugeI64
-  :: (MonadIO m) => (KeiroMetrics -> Gauge Int64) -> Maybe KeiroMetrics -> Int64 -> m ()
+recordGaugeI64 ::
+    (MonadIO m) => (KeiroMetrics -> Gauge Int64) -> Maybe KeiroMetrics -> Int64 -> m ()
 recordGaugeI64 _ Nothing _ = pure ()
 recordGaugeI64 sel (Just ms) n = liftIO (gaugeRecord (sel ms) n emptyAttributes)
 
 -- Internal: record a Double on the histogram selected by @sel@, or do nothing.
-recordHistogram
-  :: (MonadIO m) => (KeiroMetrics -> Histogram) -> Maybe KeiroMetrics -> Double -> m ()
+recordHistogram ::
+    (MonadIO m) => (KeiroMetrics -> Histogram) -> Maybe KeiroMetrics -> Double -> m ()
 recordHistogram _ Nothing _ = pure ()
 recordHistogram sel (Just ms) v = liftIO (histogramRecord (sel ms) v emptyAttributes)
 

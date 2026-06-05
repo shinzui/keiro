@@ -5,9 +5,9 @@ append to decide whether to persist a snapshot of the folded state. It
 keeps the 'SnapshotPolicy' constructors purely declarative — the meaning
 of each constructor lives here.
 -}
-module Keiro.Snapshot.Policy
-  ( shouldSnapshot
-  )
+module Keiro.Snapshot.Policy (
+    shouldSnapshot,
+)
 where
 
 import Keiro.EventStream (SnapshotPolicy (..))
@@ -28,7 +28,7 @@ folded state, and the post-append stream version.
 shouldSnapshot :: SnapshotPolicy state -> Bool -> state -> StreamVersion -> Bool
 shouldSnapshot Never _ _ _ = False
 shouldSnapshot (Every interval) _ _ (StreamVersion version)
-  | interval <= 0 = False
-  | otherwise = version `Prelude.mod` Prelude.fromIntegral interval == 0
+    | interval <= 0 = False
+    | otherwise = version `Prelude.mod` Prelude.fromIntegral interval == 0
 shouldSnapshot OnTerminal terminal _ _ = terminal
 shouldSnapshot (Custom decide) _ state version = decide state version

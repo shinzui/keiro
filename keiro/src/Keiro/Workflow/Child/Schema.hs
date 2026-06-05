@@ -22,25 +22,25 @@ the effectful spawn\/await\/cancel surface.
 Callers normally use the surface from "Keiro.Workflow.Child" rather than this
 module directly.
 -}
-module Keiro.Workflow.Child.Schema
-  ( -- * Rows and status
-    ChildStatus (..)
-  , ChildRow (..)
-  , statusToText
-  , statusFromText
+module Keiro.Workflow.Child.Schema (
+    -- * Rows and status
+    ChildStatus (..),
+    ChildRow (..),
+    statusToText,
+    statusFromText,
 
     -- * Storage (run inside the caller's transaction)
-  , registerChildTx
-  , markChildResultTx
-  , markChildCancelledTx
+    registerChildTx,
+    markChildResultTx,
+    markChildCancelledTx,
 
     -- * Read-only lookups
-  , lookupChild
-  , lookupChildrenOfParent
-  , childStatus
-  , countActiveChildren
-  , findRunningChildIds
-  )
+    lookupChild,
+    lookupChildrenOfParent,
+    childStatus,
+    countActiveChildren,
+    findRunningChildIds,
+)
 where
 
 import Contravariant.Extras (contrazip2, contrazip4, contrazip5)
@@ -48,10 +48,10 @@ import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
-import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Keiro.Prelude
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 {- | A child workflow's lifecycle, as seen from its parent.
 
@@ -67,10 +67,10 @@ The constructors are prefixed @Child@ to avoid clashing with
 @Cancelled@ constructors.
 -}
 data ChildStatus
-  = Running
-  | ChildCompleted
-  | ChildCancelled
-  deriving stock (Generic, Eq, Show)
+    = Running
+    | ChildCompleted
+    | ChildCancelled
+    deriving stock (Generic, Eq, Show)
 
 {- | A child link row as stored: the child's (id, name), the parent's (id,
 name), the parent-journal step the parent awaits ('awaitStep' =
@@ -78,18 +78,18 @@ name), the parent-journal step the parent awaits ('awaitStep' =
 once 'ChildCompleted'), and the timestamps.
 -}
 data ChildRow = ChildRow
-  { childId :: !Text
-  , childName :: !Text
-  , parentId :: !Text
-  , parentName :: !Text
-  , awaitStep :: !Text
-  , status :: !ChildStatus
-  , result :: !(Maybe Value)
-  , createdAt :: !UTCTime
-  , updatedAt :: !UTCTime
-  , completedAt :: !(Maybe UTCTime)
-  }
-  deriving stock (Generic, Eq, Show)
+    { childId :: !Text
+    , childName :: !Text
+    , parentId :: !Text
+    , parentName :: !Text
+    , awaitStep :: !Text
+    , status :: !ChildStatus
+    , result :: !(Maybe Value)
+    , createdAt :: !UTCTime
+    , updatedAt :: !UTCTime
+    , completedAt :: !(Maybe UTCTime)
+    }
+    deriving stock (Generic, Eq, Show)
 
 {- | Insert a @running@ child link row inside the caller's transaction, given
 the child's @(id, name)@, the parent's @(id, name)@, and the parent-journal
@@ -102,7 +102,7 @@ no clock read is needed at the spawn site (mirrors
 -}
 registerChildTx :: Text -> Text -> Text -> Text -> Text -> Tx.Transaction ()
 registerChildTx cid cname pid pname awaitStep =
-  Tx.statement (cid, cname, pid, pname, awaitStep) registerChildStmt
+    Tx.statement (cid, cname, pid, pname, awaitStep) registerChildStmt
 
 {- | Transition a @running@ child to @completed@, storing @result@ and the
 completion time, inside the caller's transaction. The @status = 'running'@
@@ -111,7 +111,7 @@ performed the transition.
 -}
 markChildResultTx :: Text -> Text -> Value -> UTCTime -> Tx.Transaction Bool
 markChildResultTx cid cname result now =
-  Tx.statement (cid, cname, result, now) markChildResultStmt
+    Tx.statement (cid, cname, result, now) markChildResultStmt
 
 {- | Transition a @running@ child to @cancelled@ inside the caller's
 transaction. Only @running@ rows match, so an already-completed (or
@@ -119,17 +119,17 @@ already-cancelled) child is left untouched and the call returns 'False'.
 -}
 markChildCancelledTx :: Text -> Text -> Tx.Transaction Bool
 markChildCancelledTx cid cname =
-  Tx.statement (cid, cname) markChildCancelledStmt
+    Tx.statement (cid, cname) markChildCancelledStmt
 
 -- | Read a child link row by @(child_id, child_name)@. 'Nothing' if absent.
 lookupChild :: (Store :> es) => Text -> Text -> Eff es (Maybe ChildRow)
 lookupChild cid cname =
-  runTransaction (Tx.statement (cid, cname) lookupChildStmt)
+    runTransaction (Tx.statement (cid, cname) lookupChildStmt)
 
 -- | Read every child link of a parent @(parent_id, parent_name)@.
 lookupChildrenOfParent :: (Store :> es) => Text -> Text -> Eff es [ChildRow]
 lookupChildrenOfParent pid pname =
-  runTransaction (Tx.statement (pid, pname) lookupChildrenOfParentStmt)
+    runTransaction (Tx.statement (pid, pname) lookupChildrenOfParentStmt)
 
 -- | The 'ChildStatus' of a child by @(child_id, child_name)@, if it exists.
 childStatus :: (Store :> es) => Text -> Text -> Eff es (Maybe ChildStatus)
@@ -140,7 +140,7 @@ childStatus cid cname = fmap (^. #status) <$> lookupChild cid cname
 -}
 countActiveChildren :: (Store :> es) => Eff es Int
 countActiveChildren =
-  runTransaction (Tx.statement () countActiveChildrenStmt)
+    runTransaction (Tx.statement () countActiveChildrenStmt)
 
 {- | The @(child_id, child_name)@ of every @running@ child. The resume worker
 unions this with 'Keiro.Workflow.findUnfinishedWorkflowIds' so a freshly
@@ -149,142 +149,142 @@ and driven. The tuple order matches 'findUnfinishedWorkflowIds' — @(id, name)@
 -}
 findRunningChildIds :: (Store :> es) => Eff es [(Text, Text)]
 findRunningChildIds =
-  runTransaction (Tx.statement () findRunningChildIdsStmt)
+    runTransaction (Tx.statement () findRunningChildIdsStmt)
 
 registerChildStmt :: Statement (Text, Text, Text, Text, Text) ()
 registerChildStmt =
-  preparable
-    """
-    INSERT INTO keiro_workflow_children
-      (child_id, child_name, parent_id, parent_name, await_step, status)
-    VALUES ($1, $2, $3, $4, $5, 'running')
-    ON CONFLICT (child_id, child_name) DO NOTHING
-    """
-    ( contrazip5
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.text))
-    )
-    D.noResult
+    preparable
+        """
+        INSERT INTO keiro_workflow_children
+          (child_id, child_name, parent_id, parent_name, await_step, status)
+        VALUES ($1, $2, $3, $4, $5, 'running')
+        ON CONFLICT (child_id, child_name) DO NOTHING
+        """
+        ( contrazip5
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        D.noResult
 
 markChildResultStmt :: Statement (Text, Text, Value, UTCTime) Bool
 markChildResultStmt =
-  preparable
-    """
-    UPDATE keiro_workflow_children
-    SET status = 'completed',
-        result = $3,
-        completed_at = $4,
-        updated_at = now()
-    WHERE child_id = $1
-      AND child_name = $2
-      AND status = 'running'
-    """
-    ( contrazip4
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.jsonb))
-        (E.param (E.nonNullable E.timestamptz))
-    )
-    ((> 0) <$> D.rowsAffected)
+    preparable
+        """
+        UPDATE keiro_workflow_children
+        SET status = 'completed',
+            result = $3,
+            completed_at = $4,
+            updated_at = now()
+        WHERE child_id = $1
+          AND child_name = $2
+          AND status = 'running'
+        """
+        ( contrazip4
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.jsonb))
+            (E.param (E.nonNullable E.timestamptz))
+        )
+        ((> 0) <$> D.rowsAffected)
 
 markChildCancelledStmt :: Statement (Text, Text) Bool
 markChildCancelledStmt =
-  preparable
-    """
-    UPDATE keiro_workflow_children
-    SET status = 'cancelled',
-        updated_at = now()
-    WHERE child_id = $1
-      AND child_name = $2
-      AND status = 'running'
-    """
-    ( contrazip2
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.text))
-    )
-    ((> 0) <$> D.rowsAffected)
+    preparable
+        """
+        UPDATE keiro_workflow_children
+        SET status = 'cancelled',
+            updated_at = now()
+        WHERE child_id = $1
+          AND child_name = $2
+          AND status = 'running'
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        ((> 0) <$> D.rowsAffected)
 
 lookupChildStmt :: Statement (Text, Text) (Maybe ChildRow)
 lookupChildStmt =
-  preparable
-    """
-    SELECT child_id, child_name, parent_id, parent_name, await_step,
-      status, result, created_at, updated_at, completed_at
-    FROM keiro_workflow_children
-    WHERE child_id = $1
-      AND child_name = $2
-    """
-    ( contrazip2
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.text))
-    )
-    (D.rowMaybe childRowDecoder)
+    preparable
+        """
+        SELECT child_id, child_name, parent_id, parent_name, await_step,
+          status, result, created_at, updated_at, completed_at
+        FROM keiro_workflow_children
+        WHERE child_id = $1
+          AND child_name = $2
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        (D.rowMaybe childRowDecoder)
 
 lookupChildrenOfParentStmt :: Statement (Text, Text) [ChildRow]
 lookupChildrenOfParentStmt =
-  preparable
-    """
-    SELECT child_id, child_name, parent_id, parent_name, await_step,
-      status, result, created_at, updated_at, completed_at
-    FROM keiro_workflow_children
-    WHERE parent_id = $1
-      AND parent_name = $2
-    ORDER BY created_at, child_id
-    """
-    ( contrazip2
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.text))
-    )
-    (D.rowList childRowDecoder)
+    preparable
+        """
+        SELECT child_id, child_name, parent_id, parent_name, await_step,
+          status, result, created_at, updated_at, completed_at
+        FROM keiro_workflow_children
+        WHERE parent_id = $1
+          AND parent_name = $2
+        ORDER BY created_at, child_id
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        (D.rowList childRowDecoder)
 
 countActiveChildrenStmt :: Statement () Int
 countActiveChildrenStmt =
-  preparable
-    """
-    SELECT count(*)
-    FROM keiro_workflow_children
-    WHERE status = 'running'
-    """
-    E.noParams
-    (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
+    preparable
+        """
+        SELECT count(*)
+        FROM keiro_workflow_children
+        WHERE status = 'running'
+        """
+        E.noParams
+        (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
 
 findRunningChildIdsStmt :: Statement () [(Text, Text)]
 findRunningChildIdsStmt =
-  preparable
-    """
-    SELECT child_id, child_name
-    FROM keiro_workflow_children
-    WHERE status = 'running'
-    """
-    E.noParams
-    (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))
+    preparable
+        """
+        SELECT child_id, child_name
+        FROM keiro_workflow_children
+        WHERE status = 'running'
+        """
+        E.noParams
+        (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))
 
 childRowDecoder :: D.Row ChildRow
 childRowDecoder =
-  ChildRow
-    <$> D.column (D.nonNullable D.text)
-    <*> D.column (D.nonNullable D.text)
-    <*> D.column (D.nonNullable D.text)
-    <*> D.column (D.nonNullable D.text)
-    <*> D.column (D.nonNullable D.text)
-    <*> (statusFromText <$> D.column (D.nonNullable D.text))
-    <*> D.column (D.nullable D.jsonb)
-    <*> D.column (D.nonNullable D.timestamptz)
-    <*> D.column (D.nonNullable D.timestamptz)
-    <*> D.column (D.nullable D.timestamptz)
+    ChildRow
+        <$> D.column (D.nonNullable D.text)
+        <*> D.column (D.nonNullable D.text)
+        <*> D.column (D.nonNullable D.text)
+        <*> D.column (D.nonNullable D.text)
+        <*> D.column (D.nonNullable D.text)
+        <*> (statusFromText <$> D.column (D.nonNullable D.text))
+        <*> D.column (D.nullable D.jsonb)
+        <*> D.column (D.nonNullable D.timestamptz)
+        <*> D.column (D.nonNullable D.timestamptz)
+        <*> D.column (D.nullable D.timestamptz)
 
 statusToText :: ChildStatus -> Text
 statusToText = \case
-  Running -> "running"
-  ChildCompleted -> "completed"
-  ChildCancelled -> "cancelled"
+    Running -> "running"
+    ChildCompleted -> "completed"
+    ChildCancelled -> "cancelled"
 
 statusFromText :: Text -> ChildStatus
 statusFromText = \case
-  "running" -> Running
-  "completed" -> ChildCompleted
-  "cancelled" -> ChildCancelled
-  _ -> ChildCancelled
+    "running" -> Running
+    "completed" -> ChildCompleted
+    "cancelled" -> ChildCancelled
+    _ -> ChildCancelled

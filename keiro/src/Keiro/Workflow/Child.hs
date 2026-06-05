@@ -49,26 +49,26 @@ parent = do
 * @'Keiro.Workflow.Child.Schema.countActiveChildren'@ backs a potential
   @keiro.workflow.children.active@ gauge for EP-44.
 -}
-module Keiro.Workflow.Child
-  ( -- * Child handles and reserved step names
-    ChildHandle (..)
-  , childSpawnStepName
-  , childResultStepName
+module Keiro.Workflow.Child (
+    -- * Child handles and reserved step names
+    ChildHandle (..),
+    childSpawnStepName,
+    childResultStepName,
 
     -- * Authoring surface (inside a parent workflow)
-  , spawnChild
-  , awaitChild
+    spawnChild,
+    awaitChild,
 
     -- * External control
-  , cancelChild
+    cancelChild,
 
     -- * Driving a child to completion (used by the resume worker)
-  , runChildWorkflow
-  , childCompletionHook
+    runChildWorkflow,
+    childCompletionHook,
 
     -- * Errors
-  , WorkflowChildCancelled (..)
-  )
+    WorkflowChildCancelled (..),
+)
 where
 
 import Control.Exception (Exception)
@@ -76,28 +76,28 @@ import Data.Aeson qualified as Aeson
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
 import Keiro.Prelude
-import Keiro.Workflow
-  ( StepName (..)
-  , Workflow
-  , WorkflowId (..)
-  , WorkflowJournalEvent (..)
-  , WorkflowName (..)
-  , WorkflowOutcome (..)
-  , WorkflowRunOptions
-  , appendJournalEntry
-  , awaitStep
-  , childStepPrefix
-  , currentWorkflow
-  , runWorkflowWith
-  , step
-  )
-import Keiro.Workflow.Child.Schema
-  ( ChildStatus (..)
-  , lookupChild
-  , markChildCancelledTx
-  , markChildResultTx
-  , registerChildTx
-  )
+import Keiro.Workflow (
+    StepName (..),
+    Workflow,
+    WorkflowId (..),
+    WorkflowJournalEvent (..),
+    WorkflowName (..),
+    WorkflowOutcome (..),
+    WorkflowRunOptions,
+    appendJournalEntry,
+    awaitStep,
+    childStepPrefix,
+    currentWorkflow,
+    runWorkflowWith,
+    step,
+ )
+import Keiro.Workflow.Child.Schema (
+    ChildStatus (..),
+    lookupChild,
+    markChildCancelledTx,
+    markChildResultTx,
+    registerChildTx,
+ )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 
@@ -112,18 +112,20 @@ handle itself carries only the child's name and id (the child journal is
 @wf:\<childName\>-\<childWfId\>@).
 -}
 data ChildHandle a = ChildHandle
-  { childName :: !WorkflowName
-  , childWfId :: !WorkflowId
-  }
-  deriving stock (Eq, Show)
+    { childName :: !WorkflowName
+    , childWfId :: !WorkflowId
+    }
+    deriving stock (Eq, Show)
 
--- | The reserved /spawn/ step name a child is recorded under in its parent's
--- journal: @child:\<childId\>@ (uses EP-38's 'childStepPrefix').
+{- | The reserved /spawn/ step name a child is recorded under in its parent's
+journal: @child:\<childId\>@ (uses EP-38's 'childStepPrefix').
+-}
 childSpawnStepName :: WorkflowId -> Text
 childSpawnStepName (WorkflowId wid) = childStepPrefix <> wid
 
--- | The reserved /result/ step name the parent awaits and the child's
--- completion is propagated under: @child:\<childId\>:result@.
+{- | The reserved /result/ step name the parent awaits and the child's
+completion is propagated under: @child:\<childId\>:result@.
+-}
 childResultStepName :: WorkflowId -> Text
 childResultStepName (WorkflowId wid) = childStepPrefix <> wid <> ":result"
 
@@ -138,7 +140,7 @@ run compensation, and EP-42's resume worker treats it as a parent failure.
 Mirrors EP-40's 'Keiro.Workflow.Awakeable.WorkflowAwakeableCancelled'.
 -}
 data WorkflowChildCancelled = WorkflowChildCancelled WorkflowName WorkflowId
-  deriving stock (Eq, Show)
+    deriving stock (Eq, Show)
 
 instance Exception WorkflowChildCancelled
 
@@ -154,31 +156,31 @@ child is driven to completion by the resume worker from the registry, so
 ergonomics but is not run here.
 -}
 spawnChild ::
-  (Workflow :> es, Store :> es) =>
-  -- | The child's name (must be in the resume worker's registry).
-  WorkflowName ->
-  -- | The child's id (names the child journal).
-  WorkflowId ->
-  -- | The child workflow definition (for authoring; the registry actually runs it).
-  Eff (Workflow : es) a ->
-  Eff es (ChildHandle a)
+    (Workflow :> es, Store :> es) =>
+    -- | The child's name (must be in the resume worker's registry).
+    WorkflowName ->
+    -- | The child's id (names the child journal).
+    WorkflowId ->
+    -- | The child workflow definition (for authoring; the registry actually runs it).
+    Eff (Workflow : es) a ->
+    Eff es (ChildHandle a)
 spawnChild childNm childWid _childDef = do
-  (parentNm, parentWid) <- currentWorkflow
-  let spawnStep = StepName (childSpawnStepName childWid)
-      resultStep = childResultStepName childWid
-  -- Journaled as a step in the PARENT journal: a parent replay short-circuits
-  -- this body, and the ON CONFLICT DO NOTHING register collapses on re-run.
-  _ <-
-    step spawnStep $ do
-      runTransaction $
-        registerChildTx
-          (unWorkflowId childWid)
-          (unWorkflowName childNm)
-          (unWorkflowId parentWid)
-          (unWorkflowName parentNm)
-          resultStep
-      pure ()
-  pure (ChildHandle childNm childWid)
+    (parentNm, parentWid) <- currentWorkflow
+    let spawnStep = StepName (childSpawnStepName childWid)
+        resultStep = childResultStepName childWid
+    -- Journaled as a step in the PARENT journal: a parent replay short-circuits
+    -- this body, and the ON CONFLICT DO NOTHING register collapses on re-run.
+    _ <-
+        step spawnStep $ do
+            runTransaction $
+                registerChildTx
+                    (unWorkflowId childWid)
+                    (unWorkflowName childNm)
+                    (unWorkflowId parentWid)
+                    (unWorkflowName parentNm)
+                    resultStep
+            pure ()
+    pure (ChildHandle childNm childWid)
 
 {- | Suspend the parent until the child completes, then return the child's
 result. This is EP-38's 'awaitStep' on the @child:\<childId\>:result@ step:
@@ -190,26 +192,26 @@ the suspend path (the arm checks the child row's status) and on the hit path
 (a cancelled child's result entry is a @{"cancelled": true}@ sentinel).
 -}
 awaitChild ::
-  (Workflow :> es, Store :> es, FromJSON a) =>
-  ChildHandle a ->
-  Eff es a
+    (Workflow :> es, Store :> es, FromJSON a) =>
+    ChildHandle a ->
+    Eff es a
 awaitChild (ChildHandle childNm childWid) = do
-  let resultStep = StepName (childResultStepName childWid)
-      arm = do
-        mrow <- lookupChild (unWorkflowId childWid) (unWorkflowName childNm)
-        case mrow of
-          Just row
-            | (row ^. #status) == ChildCancelled ->
-                throwIO (WorkflowChildCancelled childNm childWid)
-          -- The spawn already registered the link; nothing more to (re-)arm.
-          _ -> pure ()
-  raw <- awaitStep resultStep arm
-  if isCancelledSentinel raw
-    then throwIO (WorkflowChildCancelled childNm childWid)
-    else case Aeson.fromJSON raw of
-      Aeson.Success a -> pure a
-      Aeson.Error e ->
-        error ("awaitChild: cannot decode child result for " <> show childWid <> ": " <> e)
+    let resultStep = StepName (childResultStepName childWid)
+        arm = do
+            mrow <- lookupChild (unWorkflowId childWid) (unWorkflowName childNm)
+            case mrow of
+                Just row
+                    | (row ^. #status) == ChildCancelled ->
+                        throwIO (WorkflowChildCancelled childNm childWid)
+                -- The spawn already registered the link; nothing more to (re-)arm.
+                _ -> pure ()
+    raw <- awaitStep resultStep arm
+    if isCancelledSentinel raw
+        then throwIO (WorkflowChildCancelled childNm childWid)
+        else case Aeson.fromJSON raw of
+            Aeson.Success a -> pure a
+            Aeson.Error e ->
+                error ("awaitChild: cannot decode child result for " <> show childWid <> ": " <> e)
 
 -- ---------------------------------------------------------------------------
 -- External control
@@ -224,29 +226,29 @@ suspended parent's 'awaitChild' throws 'WorkflowChildCancelled'. Both appends
 use deterministic ids (idempotent), so a retried cancel is safe.
 -}
 cancelChild ::
-  (IOE :> es, Store :> es) =>
-  ChildHandle a ->
-  Eff es Bool
+    (IOE :> es, Store :> es) =>
+    ChildHandle a ->
+    Eff es Bool
 cancelChild (ChildHandle childNm childWid) = do
-  cancelled <-
-    runTransaction $
-      markChildCancelledTx (unWorkflowId childWid) (unWorkflowName childNm)
-  when cancelled $ do
-    now <- liftIO getCurrentTime
-    -- 1) durable cancellation marker in the CHILD journal:
-    appendJournalEntry childNm childWid (WorkflowCancelled{recordedAt = now})
-    -- 2) wake the parent's awaitChild with a cancellation sentinel result:
-    mrow <- lookupChild (unWorkflowId childWid) (unWorkflowName childNm)
-    for_ mrow $ \row ->
-      appendJournalEntry
-        (WorkflowName (row ^. #parentName))
-        (WorkflowId (row ^. #parentId))
-        StepRecorded
-          { stepName = row ^. #awaitStep
-          , result = cancelledSentinel
-          , recordedAt = now
-          }
-  pure cancelled
+    cancelled <-
+        runTransaction $
+            markChildCancelledTx (unWorkflowId childWid) (unWorkflowName childNm)
+    when cancelled $ do
+        now <- liftIO getCurrentTime
+        -- 1) durable cancellation marker in the CHILD journal:
+        appendJournalEntry childNm childWid (WorkflowCancelled{recordedAt = now})
+        -- 2) wake the parent's awaitChild with a cancellation sentinel result:
+        mrow <- lookupChild (unWorkflowId childWid) (unWorkflowName childNm)
+        for_ mrow $ \row ->
+            appendJournalEntry
+                (WorkflowName (row ^. #parentName))
+                (WorkflowId (row ^. #parentId))
+                StepRecorded
+                    { stepName = row ^. #awaitStep
+                    , result = cancelledSentinel
+                    , recordedAt = now
+                    }
+    pure cancelled
 
 -- ---------------------------------------------------------------------------
 -- Completion propagation
@@ -259,19 +261,19 @@ that is some parent's child, so a finished child wakes its waiting parent. A
 'Suspended' or 'Cancelled' child propagates nothing (it has no result yet).
 -}
 runChildWorkflow ::
-  (IOE :> es, Store :> es, ToJSON a) =>
-  WorkflowRunOptions ->
-  WorkflowName ->
-  WorkflowId ->
-  Eff (Workflow : es) a ->
-  Eff es (WorkflowOutcome a)
+    (IOE :> es, Store :> es, ToJSON a) =>
+    WorkflowRunOptions ->
+    WorkflowName ->
+    WorkflowId ->
+    Eff (Workflow : es) a ->
+    Eff es (WorkflowOutcome a)
 runChildWorkflow opts childNm childWid action = do
-  outcome <- runWorkflowWith opts childNm childWid action
-  case outcome of
-    Completed result -> do
-      childCompletionHook childNm childWid (toJSON result)
-      pure (Completed result)
-    other -> pure other
+    outcome <- runWorkflowWith opts childNm childWid action
+    case outcome of
+        Completed result -> do
+            childCompletionHook childNm childWid (toJSON result)
+            pure (Completed result)
+        other -> pure other
 
 {- | Propagate a finished child's result to its parent: flip the child row to
 @completed@ (storing the result) and append the @child:\<childId\>:result@
@@ -282,33 +284,34 @@ between the child completing and the parent being notified self-heals on the
 next drive. Normally invoked via 'runChildWorkflow'.
 -}
 childCompletionHook ::
-  (IOE :> es, Store :> es) =>
-  WorkflowName ->
-  WorkflowId ->
-  Aeson.Value ->
-  Eff es ()
+    (IOE :> es, Store :> es) =>
+    WorkflowName ->
+    WorkflowId ->
+    Aeson.Value ->
+    Eff es ()
 childCompletionHook childNm childWid resultValue = do
-  now <- liftIO getCurrentTime
-  _ <-
-    runTransaction $
-      markChildResultTx (unWorkflowId childWid) (unWorkflowName childNm) resultValue now
-  mrow <- lookupChild (unWorkflowId childWid) (unWorkflowName childNm)
-  for_ mrow $ \row ->
-    appendJournalEntry
-      (WorkflowName (row ^. #parentName))
-      (WorkflowId (row ^. #parentId))
-      StepRecorded
-        { stepName = row ^. #awaitStep
-        , result = resultValue
-        , recordedAt = now
-        }
+    now <- liftIO getCurrentTime
+    _ <-
+        runTransaction $
+            markChildResultTx (unWorkflowId childWid) (unWorkflowName childNm) resultValue now
+    mrow <- lookupChild (unWorkflowId childWid) (unWorkflowName childNm)
+    for_ mrow $ \row ->
+        appendJournalEntry
+            (WorkflowName (row ^. #parentName))
+            (WorkflowId (row ^. #parentId))
+            StepRecorded
+                { stepName = row ^. #awaitStep
+                , result = resultValue
+                , recordedAt = now
+                }
 
 -- ---------------------------------------------------------------------------
 -- The cancellation sentinel
 -- ---------------------------------------------------------------------------
 
--- | The @{"cancelled": true}@ value 'cancelChild' writes as a cancelled child's
--- await-step result so 'awaitChild' can detect it and throw.
+{- | The @{"cancelled": true}@ value 'cancelChild' writes as a cancelled child's
+await-step result so 'awaitChild' can detect it and throw.
+-}
 cancelledSentinel :: Aeson.Value
 cancelledSentinel = Aeson.object ["cancelled" Aeson..= True]
 

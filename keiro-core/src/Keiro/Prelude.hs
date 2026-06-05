@@ -11,12 +11,28 @@ The @generic-lens@ @Data.Generics.Labels@ orphan instances are imported
 for their effect only, enabling the @^. #field@ overloaded-label optics
 used throughout the codebase.
 -}
-module Keiro.Prelude
-  ( module X
-  , module Control.Lens
-  )
+module Keiro.Prelude (
+    module X,
+    module Control.Lens,
+)
 where
 
+import "aeson" Data.Aeson as X (
+    FromJSON,
+    Options,
+    SumEncoding (..),
+    ToJSON,
+    Value,
+    defaultOptions,
+    fromJSON,
+    genericParseJSON,
+    genericToEncoding,
+    genericToJSON,
+    parseJSON,
+    toEncoding,
+    toJSON,
+ )
+import "aeson-casing" Data.Aeson.Casing as X (aesonDrop, aesonPrefix, camelCase, pascalCase, snakeCase, trainCase)
 import "base" Control.Applicative as X ((<|>))
 import "base" Control.Monad as X (guard, unless, void, when)
 import "base" Control.Monad.IO.Class as X (MonadIO, liftIO)
@@ -34,33 +50,17 @@ import "base" Data.Proxy as X (Proxy (..))
 import "base" Data.Semigroup as X (Semigroup (..))
 import "base" Data.String as X (String)
 import "base" GHC.Generics as X (Generic)
-import "base" Prelude as X
-  ( Applicative (..)
-  , Bounded (..)
-  , Enum (..)
-  , IO
-  , Monad (..)
-  , Show (..)
-  , error
-  , pure
-  )
-import "aeson" Data.Aeson as X
-  ( FromJSON
-  , Options
-  , SumEncoding (..)
-  , ToJSON
-  , Value
-  , defaultOptions
-  , fromJSON
-  , genericParseJSON
-  , genericToEncoding
-  , genericToJSON
-  , parseJSON
-  , toEncoding
-  , toJSON
-  )
-import "aeson-casing" Data.Aeson.Casing as X (aesonDrop, aesonPrefix, camelCase, pascalCase, snakeCase, trainCase)
 import "generic-lens" Data.Generics.Labels ()
 import "lens" Control.Lens
 import "text" Data.Text as X (Text)
 import "time" Data.Time as X (UTCTime, getCurrentTime)
+import "base" Prelude as X (
+    Applicative (..),
+    Bounded (..),
+    Enum (..),
+    IO,
+    Monad (..),
+    Show (..),
+    error,
+    pure,
+ )

@@ -1,19 +1,19 @@
-module Jitsurei
-  ( module Jitsurei.AgentQualRouter
-  , module Jitsurei.Database
-  , module Jitsurei.Diagrams
-  , module Jitsurei.Domain
-  , module Jitsurei.DurableWorkflow
-  , module Jitsurei.EscalationProcess
-  , module Jitsurei.FulfillmentProcess
-  , module Jitsurei.Incident
-  , module Jitsurei.OncallRoster
-  , module Jitsurei.OrderStream
-  , module Jitsurei.Paging
-  , module Jitsurei.ReadModels
-  , module Jitsurei.Snapshots
-  , module Jitsurei.Timers
-  )
+module Jitsurei (
+    module Jitsurei.AgentQualRouter,
+    module Jitsurei.Database,
+    module Jitsurei.Diagrams,
+    module Jitsurei.Domain,
+    module Jitsurei.DurableWorkflow,
+    module Jitsurei.EscalationProcess,
+    module Jitsurei.FulfillmentProcess,
+    module Jitsurei.Incident,
+    module Jitsurei.OncallRoster,
+    module Jitsurei.OrderStream,
+    module Jitsurei.Paging,
+    module Jitsurei.ReadModels,
+    module Jitsurei.Snapshots,
+    module Jitsurei.Timers,
+)
 where
 
 import Jitsurei.AgentQualRouter

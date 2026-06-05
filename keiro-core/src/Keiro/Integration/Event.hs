@@ -11,39 +11,41 @@ helpers. Storage of the envelope ('Keiro.Outbox', 'Keiro.Inbox') and
 Kafka-specific producer/consumer wrappers consume this contract; they do
 not redefine it.
 -}
-module Keiro.Integration.Event
-  ( -- * Envelope
-    IntegrationEvent (..)
-  , IntegrationContentType (..)
-  , SchemaReference (..)
-  , TraceContext (..)
-  , IntegrationEventError (..)
+module Keiro.Integration.Event (
+    -- * Envelope
+    IntegrationEvent (..),
+    IntegrationContentType (..),
+    SchemaReference (..),
+    TraceContext (..),
+    IntegrationEventError (..),
+
     -- * JSON convenience helpers
-  , encodeJsonIntegrationEvent
-  , decodeJsonIntegrationEvent
+    encodeJsonIntegrationEvent,
+    decodeJsonIntegrationEvent,
+
     -- * Wire mapping
-  , integrationPayload
-  , integrationHeaders
-  , headerMessageId
-  , headerSource
-  , headerDestination
-  , headerEventType
-  , headerSchemaVersion
-  , headerContentType
-  , headerSchemaRegistry
-  , headerSchemaSubject
-  , headerSchemaVersionRef
-  , headerSchemaId
-  , headerSchemaFingerprint
-  , headerSourceEventId
-  , headerSourceGlobalPosition
-  , headerCausationId
-  , headerCorrelationId
-  , headerTraceParent
-  , headerTraceState
-  , contentTypeText
-  , parseContentType
-  )
+    integrationPayload,
+    integrationHeaders,
+    headerMessageId,
+    headerSource,
+    headerDestination,
+    headerEventType,
+    headerSchemaVersion,
+    headerContentType,
+    headerSchemaRegistry,
+    headerSchemaSubject,
+    headerSchemaVersionRef,
+    headerSchemaId,
+    headerSchemaFingerprint,
+    headerSourceEventId,
+    headerSourceGlobalPosition,
+    headerCausationId,
+    headerCorrelationId,
+    headerTraceParent,
+    headerTraceState,
+    contentTypeText,
+    parseContentType,
+)
 where
 
 import Data.Aeson qualified as Aeson
@@ -84,24 +86,24 @@ Routing:
   head-of-line publisher policy.
 -}
 data IntegrationEvent = IntegrationEvent
-  { messageId :: !Text
-  , source :: !Text
-  , destination :: !Text
-  , key :: !(Maybe Text)
-  , eventType :: !Text
-  , schemaVersion :: !Int
-  , contentType :: !IntegrationContentType
-  , schemaReference :: !(Maybe SchemaReference)
-  , sourceEventId :: !(Maybe EventId)
-  , sourceGlobalPosition :: !(Maybe GlobalPosition)
-  , payloadBytes :: !ByteString
-  , occurredAt :: !UTCTime
-  , causationId :: !(Maybe EventId)
-  , correlationId :: !(Maybe EventId)
-  , traceContext :: !(Maybe TraceContext)
-  , attributes :: !(Maybe Value)
-  }
-  deriving stock (Eq, Show, Generic)
+    { messageId :: !Text
+    , source :: !Text
+    , destination :: !Text
+    , key :: !(Maybe Text)
+    , eventType :: !Text
+    , schemaVersion :: !Int
+    , contentType :: !IntegrationContentType
+    , schemaReference :: !(Maybe SchemaReference)
+    , sourceEventId :: !(Maybe EventId)
+    , sourceGlobalPosition :: !(Maybe GlobalPosition)
+    , payloadBytes :: !ByteString
+    , occurredAt :: !UTCTime
+    , causationId :: !(Maybe EventId)
+    , correlationId :: !(Maybe EventId)
+    , traceContext :: !(Maybe TraceContext)
+    , attributes :: !(Maybe Value)
+    }
+    deriving stock (Eq, Show, Generic)
 
 {- | Content type of the payload bytes.
 
@@ -110,9 +112,9 @@ for Avro, Protobuf, or any future registry-backed binary format; a future
 schema-registry adapter can populate 'schemaReference' alongside.
 -}
 data IntegrationContentType
-  = ApplicationJson
-  | OtherContentType !Text
-  deriving stock (Eq, Show, Generic)
+    = ApplicationJson
+    | OtherContentType !Text
+    deriving stock (Eq, Show, Generic)
 
 {- | Optional registry-neutral schema reference.
 
@@ -122,13 +124,13 @@ numeric schema id, or fingerprint depending on the registry vendor. The
 core envelope preserves all fields verbatim through publish and consume.
 -}
 data SchemaReference = SchemaReference
-  { registry :: !(Maybe Text)
-  , subject :: !(Maybe Text)
-  , version :: !(Maybe Int)
-  , schemaId :: !(Maybe Int64)
-  , fingerprint :: !(Maybe Text)
-  }
-  deriving stock (Eq, Show, Generic)
+    { registry :: !(Maybe Text)
+    , subject :: !(Maybe Text)
+    , version :: !(Maybe Int)
+    , schemaId :: !(Maybe Int64)
+    , fingerprint :: !(Maybe Text)
+    }
+    deriving stock (Eq, Show, Generic)
 
 {- | W3C Trace Context propagation fields.
 
@@ -138,21 +140,21 @@ publish and consume via Kafka headers so a consumer can continue the
 same trace.
 -}
 data TraceContext = TraceContext
-  { traceparent :: !Text
-  , tracestate :: !(Maybe Text)
-  }
-  deriving stock (Eq, Show, Generic)
+    { traceparent :: !Text
+    , tracestate :: !(Maybe Text)
+    }
+    deriving stock (Eq, Show, Generic)
 
 {- | Typed decode errors. The encode side cannot fail; the decode side can
 fail if payload bytes are malformed JSON, the JSON does not satisfy the
 target type, or required envelope metadata is missing.
 -}
 data IntegrationEventError
-  = MalformedPayload !Text
-  | DecodeFailed !Text
-  | MissingField !Text
-  | UnsupportedContentType !Text
-  deriving stock (Eq, Show, Generic)
+    = MalformedPayload !Text
+    | DecodeFailed !Text
+    | MissingField !Text
+    | UnsupportedContentType !Text
+    deriving stock (Eq, Show, Generic)
 
 -- | The payload bytes as they should be put on the wire.
 integrationPayload :: IntegrationEvent -> ByteString
@@ -171,34 +173,35 @@ reference does not pay a header for it.
 -}
 integrationHeaders :: IntegrationEvent -> [(Text, Text)]
 integrationHeaders event =
-  concat
-    [ [ (headerMessageId, event ^. #messageId)
-      , (headerSource, event ^. #source)
-      , (headerDestination, event ^. #destination)
-      , (headerEventType, event ^. #eventType)
-      , (headerSchemaVersion, Text.pack (show (event ^. #schemaVersion)))
-      , (headerContentType, contentTypeText (event ^. #contentType))
-      ]
-    , case event ^. #schemaReference of
-        Nothing -> []
-        Just ref ->
-          concat
-            [ maybeHeader headerSchemaRegistry (ref ^. #registry)
-            , maybeHeader headerSchemaSubject (ref ^. #subject)
-            , maybeHeader headerSchemaVersionRef (fmap (Text.pack . show) (ref ^. #version))
-            , maybeHeader headerSchemaId (fmap (Text.pack . show) (ref ^. #schemaId))
-            , maybeHeader headerSchemaFingerprint (ref ^. #fingerprint)
+    concat
+        [
+            [ (headerMessageId, event ^. #messageId)
+            , (headerSource, event ^. #source)
+            , (headerDestination, event ^. #destination)
+            , (headerEventType, event ^. #eventType)
+            , (headerSchemaVersion, Text.pack (show (event ^. #schemaVersion)))
+            , (headerContentType, contentTypeText (event ^. #contentType))
             ]
-    , maybeHeader headerSourceEventId (fmap (UUID.toText . eventIdToUuid) (event ^. #sourceEventId))
-    , maybeHeader headerSourceGlobalPosition (fmap globalPositionText (event ^. #sourceGlobalPosition))
-    , maybeHeader headerCausationId (fmap (UUID.toText . eventIdToUuid) (event ^. #causationId))
-    , maybeHeader headerCorrelationId (fmap (UUID.toText . eventIdToUuid) (event ^. #correlationId))
-    , case event ^. #traceContext of
-        Nothing -> []
-        Just tc ->
-          (headerTraceParent, tc ^. #traceparent)
-            : maybeHeader headerTraceState (tc ^. #tracestate)
-    ]
+        , case event ^. #schemaReference of
+            Nothing -> []
+            Just ref ->
+                concat
+                    [ maybeHeader headerSchemaRegistry (ref ^. #registry)
+                    , maybeHeader headerSchemaSubject (ref ^. #subject)
+                    , maybeHeader headerSchemaVersionRef (fmap (Text.pack . show) (ref ^. #version))
+                    , maybeHeader headerSchemaId (fmap (Text.pack . show) (ref ^. #schemaId))
+                    , maybeHeader headerSchemaFingerprint (ref ^. #fingerprint)
+                    ]
+        , maybeHeader headerSourceEventId (fmap (UUID.toText . eventIdToUuid) (event ^. #sourceEventId))
+        , maybeHeader headerSourceGlobalPosition (fmap globalPositionText (event ^. #sourceGlobalPosition))
+        , maybeHeader headerCausationId (fmap (UUID.toText . eventIdToUuid) (event ^. #causationId))
+        , maybeHeader headerCorrelationId (fmap (UUID.toText . eventIdToUuid) (event ^. #correlationId))
+        , case event ^. #traceContext of
+            Nothing -> []
+            Just tc ->
+                (headerTraceParent, tc ^. #traceparent)
+                    : maybeHeader headerTraceState (tc ^. #tracestate)
+        ]
   where
     maybeHeader name = maybe [] (\value -> [(name, value)])
 
@@ -231,8 +234,8 @@ headerTraceState = "tracestate"
 -- | The canonical wire string for a 'IntegrationContentType'.
 contentTypeText :: IntegrationContentType -> Text
 contentTypeText = \case
-  ApplicationJson -> "application/json"
-  OtherContentType raw -> raw
+    ApplicationJson -> "application/json"
+    OtherContentType raw -> raw
 
 {- | Parse a content-type header back into an 'IntegrationContentType'. The
 JSON form round-trips to 'ApplicationJson'; everything else is preserved
@@ -240,8 +243,8 @@ verbatim as 'OtherContentType'.
 -}
 parseContentType :: Text -> IntegrationContentType
 parseContentType raw
-  | normalized == "application/json" = ApplicationJson
-  | otherwise = OtherContentType raw
+    | normalized == "application/json" = ApplicationJson
+    | otherwise = OtherContentType raw
   where
     normalized = Text.toLower (Text.strip raw)
 
@@ -253,17 +256,19 @@ parseContentType raw
 @envelope@ verbatim, so the caller controls identity, routing, and
 metadata.
 -}
-encodeJsonIntegrationEvent
-  :: ToJSON a
-  => IntegrationEvent
-  -- ^ Envelope template carrying identity, routing, and metadata.
-  -> a
-  -- ^ Business payload to encode as JSON.
-  -> IntegrationEvent
+encodeJsonIntegrationEvent ::
+    (ToJSON a) =>
+    -- | Envelope template carrying identity, routing, and metadata.
+    IntegrationEvent ->
+    -- | Business payload to encode as JSON.
+    a ->
+    IntegrationEvent
 encodeJsonIntegrationEvent envelope value =
-  envelope
-    & #contentType .~ ApplicationJson
-    & #payloadBytes .~ Lazy.toStrict (Aeson.encode value)
+    envelope
+        & #contentType
+        .~ ApplicationJson
+        & #payloadBytes
+        .~ Lazy.toStrict (Aeson.encode value)
 
 {- | Decode the JSON payload of an 'IntegrationEvent' into a business
 type.
@@ -273,20 +278,20 @@ Returns 'MalformedPayload' if the bytes are not valid JSON,
 instance, and 'UnsupportedContentType' if the envelope's 'contentType'
 is not 'ApplicationJson'.
 -}
-decodeJsonIntegrationEvent
-  :: FromJSON a
-  => IntegrationEvent
-  -> Either IntegrationEventError a
+decodeJsonIntegrationEvent ::
+    (FromJSON a) =>
+    IntegrationEvent ->
+    Either IntegrationEventError a
 decodeJsonIntegrationEvent event = do
-  case event ^. #contentType of
-    ApplicationJson -> pure ()
-    OtherContentType raw -> Left (UnsupportedContentType raw)
-  parsed <- case Aeson.eitherDecodeStrict (event ^. #payloadBytes) of
-    Left err -> Left (MalformedPayload (Text.pack err))
-    Right value -> Right (value :: Value)
-  case parseEither parseJSON parsed of
-    Left err -> Left (DecodeFailed (Text.pack err))
-    Right value -> Right value
+    case event ^. #contentType of
+        ApplicationJson -> pure ()
+        OtherContentType raw -> Left (UnsupportedContentType raw)
+    parsed <- case Aeson.eitherDecodeStrict (event ^. #payloadBytes) of
+        Left err -> Left (MalformedPayload (Text.pack err))
+        Right value -> Right (value :: Value)
+    case parseEither parseJSON parsed of
+        Left err -> Left (DecodeFailed (Text.pack err))
+        Right value -> Right value
 
 eventIdToUuid :: EventId -> UUID.UUID
 eventIdToUuid (EventId uuid) = uuid

@@ -8,11 +8,11 @@ table from the event log, then 'promote' to serve it again — or
 'abandonRebuild' to back out. While a model is rebuilding,
 'Keiro.ReadModel.runQuery' rejects it with 'ReadModelNotLive'.
 -}
-module Keiro.ReadModel.Rebuild
-  ( rebuild
-  , promote
-  , abandonRebuild
-  )
+module Keiro.ReadModel.Rebuild (
+    rebuild,
+    promote,
+    abandonRebuild,
+)
 where
 
 import Effectful (Eff, (:>))
@@ -20,27 +20,28 @@ import Keiro.Prelude
 import Keiro.ReadModel
 import Kiroku.Store.Effect (Store)
 
--- | Mark a model 'Rebuilding', taking it out of service while it is
--- repopulated from the event log.
+{- | Mark a model 'Rebuilding', taking it out of service while it is
+repopulated from the event log.
+-}
 rebuild :: (Store :> es) => ReadModel q r -> Eff es ReadModelMetadata
 rebuild readModel =
-  markRebuilding
-    (readModel ^. #name)
-    (readModel ^. #version)
-    (readModel ^. #shapeHash)
+    markRebuilding
+        (readModel ^. #name)
+        (readModel ^. #version)
+        (readModel ^. #shapeHash)
 
 -- | Mark a rebuilt model 'Live', returning it to service.
 promote :: (Store :> es) => ReadModel q r -> Eff es ReadModelMetadata
 promote readModel =
-  markLive
-    (readModel ^. #name)
-    (readModel ^. #version)
-    (readModel ^. #shapeHash)
+    markLive
+        (readModel ^. #name)
+        (readModel ^. #version)
+        (readModel ^. #shapeHash)
 
 -- | Mark a model 'Abandoned', backing out of an in-progress rebuild.
 abandonRebuild :: (Store :> es) => ReadModel q r -> Eff es ReadModelMetadata
 abandonRebuild readModel =
-  markAbandoned
-    (readModel ^. #name)
-    (readModel ^. #version)
-    (readModel ^. #shapeHash)
+    markAbandoned
+        (readModel ^. #name)
+        (readModel ^. #version)
+        (readModel ^. #shapeHash)

@@ -2,19 +2,20 @@
 storage ("Keiro.Timer.Schema") so process-manager code can construct timer
 requests without depending on the persistence layer.
 -}
-module Keiro.Timer.Types
-  ( TimerId (..)
-  , TimerRequest (..)
-  )
+module Keiro.Timer.Types (
+    TimerId (..),
+    TimerRequest (..),
+)
 where
 
 import Data.UUID (UUID)
 import Keiro.Prelude
 
--- | A timer's stable identifier. A caller-chosen id makes scheduling
--- idempotent (rescheduling the same id updates rather than duplicates).
+{- | A timer's stable identifier. A caller-chosen id makes scheduling
+idempotent (rescheduling the same id updates rather than duplicates).
+-}
 newtype TimerId = TimerId UUID
-  deriving stock (Generic, Eq, Ord, Show)
+    deriving stock (Generic, Eq, Ord, Show)
 
 {- | A request to schedule a timer.
 
@@ -25,10 +26,10 @@ newtype TimerId = TimerId UUID
 * 'payload' — opaque JSON carried through to the @fire@ action.
 -}
 data TimerRequest = TimerRequest
-  { timerId :: !TimerId
-  , processManagerName :: !Text
-  , correlationId :: !Text
-  , fireAt :: !UTCTime
-  , payload :: !Value
-  }
-  deriving stock (Generic, Eq, Show)
+    { timerId :: !TimerId
+    , processManagerName :: !Text
+    , correlationId :: !Text
+    , fireAt :: !UTCTime
+    , payload :: !Value
+    }
+    deriving stock (Generic, Eq, Show)

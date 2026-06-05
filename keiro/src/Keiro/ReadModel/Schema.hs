@@ -11,20 +11,20 @@ All operations run as single-statement 'Hasql.Transaction.Transaction's
 against the @keiro_read_models@ table; an unrecognized stored status decodes
 to 'Paused' defensively rather than failing the read.
 -}
-module Keiro.ReadModel.Schema
-  ( -- * Metadata
-    ReadModelMetadata (..)
-  , ReadModelStatus (..)
+module Keiro.ReadModel.Schema (
+    -- * Metadata
+    ReadModelMetadata (..),
+    ReadModelStatus (..),
 
     -- * Registration and lookup
-  , registerReadModel
-  , lookupReadModel
+    registerReadModel,
+    lookupReadModel,
 
     -- * Status transitions
-  , markRebuilding
-  , markLive
-  , markAbandoned
-  )
+    markRebuilding,
+    markLive,
+    markAbandoned,
+)
 where
 
 import Contravariant.Extras (contrazip3, contrazip4)
@@ -32,10 +32,10 @@ import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
-import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Keiro.Prelude
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
 
 {- | Lifecycle status of a registered read model.
@@ -47,24 +47,24 @@ import Prelude qualified
 * 'Abandoned' — a rebuild that was given up on.
 -}
 data ReadModelStatus
-  = Live
-  | Rebuilding
-  | Paused
-  | Abandoned
-  deriving stock (Generic, Eq, Show)
+    = Live
+    | Rebuilding
+    | Paused
+    | Abandoned
+    deriving stock (Generic, Eq, Show)
 
 {- | One row of the @keiro_read_models@ registry: a model's name, schema
 identity ('version' and 'shapeHash'), the time it was last (re)built, and
 its current 'status'.
 -}
 data ReadModelMetadata = ReadModelMetadata
-  { name :: !Text
-  , version :: !Int
-  , shapeHash :: !Text
-  , lastBuiltAt :: !(Maybe UTCTime)
-  , status :: !ReadModelStatus
-  }
-  deriving stock (Generic, Eq, Show)
+    { name :: !Text
+    , version :: !Int
+    , shapeHash :: !Text
+    , lastBuiltAt :: !(Maybe UTCTime)
+    , status :: !ReadModelStatus
+    }
+    deriving stock (Generic, Eq, Show)
 
 {- | Register a read model, inserting a 'Live' row if none exists. Idempotent:
 an existing registration is returned unchanged (the @version@ and
@@ -73,16 +73,16 @@ schema drift.
 -}
 registerReadModel :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 registerReadModel name version shapeHash =
-  runTransaction $
-    Tx.statement
-      (name, Prelude.fromIntegral version, shapeHash)
-      registerReadModelStmt
+    runTransaction
+        $ Tx.statement
+            (name, Prelude.fromIntegral version, shapeHash)
+            registerReadModelStmt
 
 -- | Look up a read model's registry row by name, if it exists.
 lookupReadModel :: (Store :> es) => Text -> Eff es (Maybe ReadModelMetadata)
 lookupReadModel name =
-  runTransaction $
-    Tx.statement name lookupReadModelStmt
+    runTransaction
+        $ Tx.statement name lookupReadModelStmt
 
 {- | Upsert the registry row to 'Rebuilding' at the given schema identity.
 Marks the model as being repopulated so queries stop serving it until
@@ -90,115 +90,116 @@ Marks the model as being repopulated so queries stop serving it until
 -}
 markRebuilding :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 markRebuilding name version shapeHash =
-  runTransaction $
-    Tx.statement
-      (name, Prelude.fromIntegral version, shapeHash, statusToText Rebuilding)
-      transitionReadModelStmt
+    runTransaction
+        $ Tx.statement
+            (name, Prelude.fromIntegral version, shapeHash, statusToText Rebuilding)
+            transitionReadModelStmt
 
 {- | Upsert the registry row to 'Live' at the given schema identity, stamping
 @last_built_at@. Makes the model queryable again after a rebuild.
 -}
 markLive :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 markLive name version shapeHash =
-  runTransaction $
-    Tx.statement
-      (name, Prelude.fromIntegral version, shapeHash, statusToText Live)
-      transitionReadModelStmt
+    runTransaction
+        $ Tx.statement
+            (name, Prelude.fromIntegral version, shapeHash, statusToText Live)
+            transitionReadModelStmt
 
--- | Upsert the registry row to 'Abandoned' at the given schema identity,
--- recording that a rebuild was given up on.
+{- | Upsert the registry row to 'Abandoned' at the given schema identity,
+recording that a rebuild was given up on.
+-}
 markAbandoned :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 markAbandoned name version shapeHash =
-  runTransaction $
-    Tx.statement
-      (name, Prelude.fromIntegral version, shapeHash, statusToText Abandoned)
-      transitionReadModelStmt
+    runTransaction
+        $ Tx.statement
+            (name, Prelude.fromIntegral version, shapeHash, statusToText Abandoned)
+            transitionReadModelStmt
 
 registerReadModelStmt :: Statement (Text, Int64, Text) ReadModelMetadata
 registerReadModelStmt =
-  preparable
-    """
-    WITH inserted AS (
-      INSERT INTO keiro_read_models (name, version, shape_hash, status, last_built_at)
-      VALUES ($1, $2, $3, 'live', now())
-      ON CONFLICT (name) DO NOTHING
-      RETURNING name, version, shape_hash, last_built_at, status
-    )
-    SELECT name, version, shape_hash, last_built_at, status
-    FROM inserted
-    UNION ALL
-    SELECT name, version, shape_hash, last_built_at, status
-    FROM keiro_read_models
-    WHERE name = $1
-    LIMIT 1
-    """
-    ( contrazip3
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.int8))
-        (E.param (E.nonNullable E.text))
-    )
-    readModelMetadataSingle
+    preparable
+        """
+        WITH inserted AS (
+          INSERT INTO keiro_read_models (name, version, shape_hash, status, last_built_at)
+          VALUES ($1, $2, $3, 'live', now())
+          ON CONFLICT (name) DO NOTHING
+          RETURNING name, version, shape_hash, last_built_at, status
+        )
+        SELECT name, version, shape_hash, last_built_at, status
+        FROM inserted
+        UNION ALL
+        SELECT name, version, shape_hash, last_built_at, status
+        FROM keiro_read_models
+        WHERE name = $1
+        LIMIT 1
+        """
+        ( contrazip3
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.int8))
+            (E.param (E.nonNullable E.text))
+        )
+        readModelMetadataSingle
 
 lookupReadModelStmt :: Statement Text (Maybe ReadModelMetadata)
 lookupReadModelStmt =
-  preparable
-    """
-    SELECT name, version, shape_hash, last_built_at, status
-    FROM keiro_read_models
-    WHERE name = $1
-    """
-    (E.param (E.nonNullable E.text))
-    (D.rowMaybe readModelMetadataDecoder)
+    preparable
+        """
+        SELECT name, version, shape_hash, last_built_at, status
+        FROM keiro_read_models
+        WHERE name = $1
+        """
+        (E.param (E.nonNullable E.text))
+        (D.rowMaybe readModelMetadataDecoder)
 
 transitionReadModelStmt :: Statement (Text, Int64, Text, Text) ReadModelMetadata
 transitionReadModelStmt =
-  preparable
-    """
-    INSERT INTO keiro_read_models (name, version, shape_hash, status, last_built_at, updated_at)
-    VALUES ($1, $2, $3, $4, now(), now())
-    ON CONFLICT (name) DO UPDATE
-      SET version = EXCLUDED.version,
-          shape_hash = EXCLUDED.shape_hash,
-          status = EXCLUDED.status,
-          last_built_at = CASE
-            WHEN EXCLUDED.status = 'live' THEN now()
-            ELSE keiro_read_models.last_built_at
-          END,
-          updated_at = now()
-    RETURNING name, version, shape_hash, last_built_at, status
-    """
-    ( contrazip4
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.int8))
-        (E.param (E.nonNullable E.text))
-        (E.param (E.nonNullable E.text))
-    )
-    readModelMetadataSingle
+    preparable
+        """
+        INSERT INTO keiro_read_models (name, version, shape_hash, status, last_built_at, updated_at)
+        VALUES ($1, $2, $3, $4, now(), now())
+        ON CONFLICT (name) DO UPDATE
+          SET version = EXCLUDED.version,
+              shape_hash = EXCLUDED.shape_hash,
+              status = EXCLUDED.status,
+              last_built_at = CASE
+                WHEN EXCLUDED.status = 'live' THEN now()
+                ELSE keiro_read_models.last_built_at
+              END,
+              updated_at = now()
+        RETURNING name, version, shape_hash, last_built_at, status
+        """
+        ( contrazip4
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.int8))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        readModelMetadataSingle
 
 readModelMetadataSingle :: D.Result ReadModelMetadata
 readModelMetadataSingle =
-  D.singleRow readModelMetadataDecoder
+    D.singleRow readModelMetadataDecoder
 
 readModelMetadataDecoder :: D.Row ReadModelMetadata
 readModelMetadataDecoder =
-  ReadModelMetadata
-    <$> D.column (D.nonNullable D.text)
-    <*> (Prelude.fromIntegral <$> D.column (D.nonNullable D.int8))
-    <*> D.column (D.nonNullable D.text)
-    <*> D.column (D.nullable D.timestamptz)
-    <*> (statusFromText <$> D.column (D.nonNullable D.text))
+    ReadModelMetadata
+        <$> D.column (D.nonNullable D.text)
+        <*> (Prelude.fromIntegral <$> D.column (D.nonNullable D.int8))
+        <*> D.column (D.nonNullable D.text)
+        <*> D.column (D.nullable D.timestamptz)
+        <*> (statusFromText <$> D.column (D.nonNullable D.text))
 
 statusToText :: ReadModelStatus -> Text
 statusToText = \case
-  Live -> "live"
-  Rebuilding -> "rebuilding"
-  Paused -> "paused"
-  Abandoned -> "abandoned"
+    Live -> "live"
+    Rebuilding -> "rebuilding"
+    Paused -> "paused"
+    Abandoned -> "abandoned"
 
 statusFromText :: Text -> ReadModelStatus
 statusFromText = \case
-  "live" -> Live
-  "rebuilding" -> Rebuilding
-  "paused" -> Paused
-  "abandoned" -> Abandoned
-  _ -> Paused
+    "live" -> Live
+    "rebuilding" -> Rebuilding
+    "paused" -> Paused
+    "abandoned" -> Abandoned
+    _ -> Paused

@@ -16,25 +16,25 @@ upcaster chain ('GapInUpcasterChain'), an upcaster that rejected its input
 ('UpcasterError'), an out-of-range stored version ('UnknownVersion'), or a
 payload the current decoder rejects ('DecodeFailed').
 -}
-module Keiro.Codec
-  ( -- * Codec
-    Codec (..)
-  , Upcaster
-  , CodecError (..)
+module Keiro.Codec (
+    -- * Codec
+    Codec (..),
+    Upcaster,
+    CodecError (..),
 
     -- * Encoding
-  , encodeForAppend
-  , encodeForAppendWithMetadata
+    encodeForAppend,
+    encodeForAppendWithMetadata,
 
     -- * Decoding
-  , decodeRecorded
-  , decodeRaw
-  , migrateToCurrent
+    decodeRecorded,
+    decodeRaw,
+    migrateToCurrent,
 
     -- * Metadata helpers
-  , extractSchemaVersion
-  , metadataFor
-  )
+    extractSchemaVersion,
+    metadataFor,
+)
 where
 
 import Data.Aeson (Value (..))
@@ -43,13 +43,13 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Scientific qualified as Scientific
-import Prelude qualified
 import Keiro.Prelude
-import Kiroku.Store.Types
-  ( EventData (..)
-  , EventType (..)
-  , RecordedEvent (..)
-  )
+import Kiroku.Store.Types (
+    EventData (..),
+    EventType (..),
+    RecordedEvent (..),
+ )
+import Prelude qualified
 
 {- | One rung of an upcaster chain: the source schema version it upgrades
 /from/, paired with a pure migration that rewrites a version-@n@ payload
@@ -75,41 +75,46 @@ type Upcaster = (Int, Value -> Either Text Value)
   'GapInUpcasterChain'.
 -}
 data Codec e = Codec
-  { eventTypes :: !(NonEmpty Text)
-  , eventType :: !(e -> Text)
-  , schemaVersion :: !Int
-  , encode :: !(e -> Value)
-  , decode :: !(Value -> Either Text e)
-  , upcasters :: ![Upcaster]
-  }
-  deriving stock (Generic)
+    { eventTypes :: !(NonEmpty Text)
+    , eventType :: !(e -> Text)
+    , schemaVersion :: !Int
+    , encode :: !(e -> Value)
+    , decode :: !(Value -> Either Text e)
+    , upcasters :: ![Upcaster]
+    }
+    deriving stock (Generic)
 
 -- | Why an encode or decode could not be completed.
 data CodecError
-  = -- | The event-type tag is not one of the codec's 'eventTypes' (carries
-    -- the offending tag and the allowed set).
-    UnknownEventType !EventType ![Text]
-  | -- | The codec's 'schemaVersion' is not @>= 1@.
-    InvalidSchemaVersion !Int
-  | -- | A stored payload declared a version the chain cannot reach (e.g.
-    -- @< 1@, or beyond the available upcasters).
-    UnknownVersion !Int
-  | -- | An upcaster rejected its input; carries the source version and the
-    -- migration's error message.
-    UpcasterError !Int !Text
-  | -- | The current 'decode' rejected an already-migrated payload.
-    DecodeFailed !Text
-  | -- | The upcaster chain is missing a rung: migration reached version
-    -- @n@ but the next available upcaster starts at a later version.
-    GapInUpcasterChain !Int !Int
-  deriving stock (Generic, Eq, Show)
+    = {- | The event-type tag is not one of the codec's 'eventTypes' (carries
+      the offending tag and the allowed set).
+      -}
+      UnknownEventType !EventType ![Text]
+    | -- | The codec's 'schemaVersion' is not @>= 1@.
+      InvalidSchemaVersion !Int
+    | {- | A stored payload declared a version the chain cannot reach (e.g.
+      @< 1@, or beyond the available upcasters).
+      -}
+      UnknownVersion !Int
+    | {- | An upcaster rejected its input; carries the source version and the
+      migration's error message.
+      -}
+      UpcasterError !Int !Text
+    | -- | The current 'decode' rejected an already-migrated payload.
+      DecodeFailed !Text
+    | {- | The upcaster chain is missing a rung: migration reached version
+      @n@ but the next available upcaster starts at a later version.
+      -}
+      GapInUpcasterChain !Int !Int
+    deriving stock (Generic, Eq, Show)
 
 schemaVersionKey :: Key.Key
 schemaVersionKey = "schemaVersion"
 
--- | Encode a domain event into 'EventData' ready for append, stamping the
--- codec's 'schemaVersion' into fresh metadata. Equivalent to
--- 'encodeForAppendWithMetadata' with no caller metadata.
+{- | Encode a domain event into 'EventData' ready for append, stamping the
+codec's 'schemaVersion' into fresh metadata. Equivalent to
+'encodeForAppendWithMetadata' with no caller metadata.
+-}
 encodeForAppend :: Codec e -> e -> Either CodecError EventData
 encodeForAppend codec value = encodeForAppendWithMetadata codec Nothing value
 
@@ -123,19 +128,20 @@ the caller's metadata so the stamp on disk is authoritative.
 -}
 encodeForAppendWithMetadata :: Codec e -> Maybe Value -> e -> Either CodecError EventData
 encodeForAppendWithMetadata codec metadata value = do
-  unless (codec ^. #schemaVersion > 0) $
-    Left (InvalidSchemaVersion (codec ^. #schemaVersion))
-  let selectedType = codec ^. #eventType $ value
-  unless (selectedType `List.elem` NonEmpty.toList (codec ^. #eventTypes)) $
-    Left (UnknownEventType (EventType selectedType) (NonEmpty.toList (codec ^. #eventTypes)))
-  pure EventData
-    { eventId = Nothing
-    , eventType = EventType selectedType
-    , payload = codec ^. #encode $ value
-    , metadata = Just (metadataFor (codec ^. #schemaVersion) metadata)
-    , causationId = Nothing
-    , correlationId = Nothing
-    }
+    unless (codec ^. #schemaVersion > 0)
+        $ Left (InvalidSchemaVersion (codec ^. #schemaVersion))
+    let selectedType = codec ^. #eventType $ value
+    unless (selectedType `List.elem` NonEmpty.toList (codec ^. #eventTypes))
+        $ Left (UnknownEventType (EventType selectedType) (NonEmpty.toList (codec ^. #eventTypes)))
+    pure
+        EventData
+            { eventId = Nothing
+            , eventType = EventType selectedType
+            , payload = codec ^. #encode $ value
+            , metadata = Just (metadataFor (codec ^. #schemaVersion) metadata)
+            , causationId = Nothing
+            , correlationId = Nothing
+            }
 
 {- | Build the metadata object stored alongside an event, inserting the
 schema version under the @schemaVersion@ key. A non-object @existing@
@@ -144,9 +150,9 @@ version.
 -}
 metadataFor :: Int -> Maybe Value -> Value
 metadataFor version existing =
-  Object $
-    baseObject existing
-      & KeyMap.insert schemaVersionKey (Number (Prelude.fromIntegral version))
+    Object
+        $ baseObject existing
+        & KeyMap.insert schemaVersionKey (Number (Prelude.fromIntegral version))
   where
     baseObject (Just (Object object)) = object
     baseObject _ = KeyMap.empty
@@ -158,9 +164,9 @@ migrates the payload up to the codec's current version, then runs
 -}
 decodeRecorded :: Codec e -> RecordedEvent -> Either CodecError e
 decodeRecorded codec recorded = do
-  unless (isKnownEventType (recorded ^. #eventType) codec) $
-    Left (UnknownEventType (recorded ^. #eventType) (NonEmpty.toList (codec ^. #eventTypes)))
-  decodeRaw codec (extractSchemaVersion recorded) (recorded ^. #payload)
+    unless (isKnownEventType (recorded ^. #eventType) codec)
+        $ Left (UnknownEventType (recorded ^. #eventType) (NonEmpty.toList (codec ^. #eventTypes)))
+    decodeRaw codec (extractSchemaVersion recorded) (recorded ^. #payload)
 
 {- | Decode a raw JSON payload whose source schema version is already
 known. Migrates from @version@ to the codec's current version and runs
@@ -169,10 +175,10 @@ recorded-event metadata (e.g. a snapshot or a replay tool).
 -}
 decodeRaw :: Codec e -> Int -> Value -> Either CodecError e
 decodeRaw codec version payload = do
-  migrated <- migrateToCurrent codec version payload
-  case codec ^. #decode $ migrated of
-    Right value -> Right value
-    Left message -> Left (DecodeFailed message)
+    migrated <- migrateToCurrent codec version payload
+    case codec ^. #decode $ migrated of
+        Right value -> Right value
+        Left message -> Left (DecodeFailed message)
 
 {- | Replay the upcaster chain to bring a payload from @sourceVersion@ up
 to the codec's current 'schemaVersion'.
@@ -185,27 +191,27 @@ a source version below @1@.
 -}
 migrateToCurrent :: Codec e -> Int -> Value -> Either CodecError Value
 migrateToCurrent codec sourceVersion payload
-  | sourceVersion >= codec ^. #schemaVersion = Right payload
-  | sourceVersion < 1 = Left (UnknownVersion sourceVersion)
-  | otherwise = go sourceVersion payload
+    | sourceVersion >= codec ^. #schemaVersion = Right payload
+    | sourceVersion < 1 = Left (UnknownVersion sourceVersion)
+    | otherwise = go sourceVersion payload
   where
     go version current
-      | version >= codec ^. #schemaVersion = Right current
-      | otherwise =
-          case Prelude.lookup version (codec ^. #upcasters) of
-            Nothing ->
-              case nextChainStart version of
-                Just nextVersion -> Left (GapInUpcasterChain version nextVersion)
-                Nothing -> Left (UnknownVersion version)
-            Just upcast ->
-              case upcast current of
-                Left message -> Left (UpcasterError version message)
-                Right next -> go (version Prelude.+ 1) next
+        | version >= codec ^. #schemaVersion = Right current
+        | otherwise =
+            case Prelude.lookup version (codec ^. #upcasters) of
+                Nothing ->
+                    case nextChainStart version of
+                        Just nextVersion -> Left (GapInUpcasterChain version nextVersion)
+                        Nothing -> Left (UnknownVersion version)
+                Just upcast ->
+                    case upcast current of
+                        Left message -> Left (UpcasterError version message)
+                        Right next -> go (version Prelude.+ 1) next
 
     nextChainStart version =
-      case [next | (next, _) <- codec ^. #upcasters, next > version] of
-        next : _ -> Just next
-        [] -> Nothing
+        case [next | (next, _) <- codec ^. #upcasters, next > version] of
+            next : _ -> Just next
+            [] -> Nothing
 
 {- | Read the schema version stamped into a recorded event's metadata.
 Defaults to @1@ when the metadata is absent, is not an object, lacks the
@@ -213,11 +219,11 @@ Defaults to @1@ when the metadata is absent, is not an object, lacks the
 -}
 extractSchemaVersion :: RecordedEvent -> Int
 extractSchemaVersion recorded =
-  fromMaybe 1 $ do
-    Object object <- recorded ^. #metadata
-    Number number <- KeyMap.lookup schemaVersionKey object
-    Scientific.toBoundedInteger number
+    fromMaybe 1 $ do
+        Object object <- recorded ^. #metadata
+        Number number <- KeyMap.lookup schemaVersionKey object
+        Scientific.toBoundedInteger number
 
 isKnownEventType :: EventType -> Codec e -> Bool
 isKnownEventType (EventType selectedType) codec =
-  selectedType `List.elem` NonEmpty.toList (codec ^. #eventTypes)
+    selectedType `List.elem` NonEmpty.toList (codec ^. #eventTypes)

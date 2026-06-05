@@ -6,43 +6,43 @@ it". The producer subscription writes one outbox row per mapped private
 event; the publisher worker drains rows into Kafka and marks each one
 sent, retryable, or dead.
 -}
-module Keiro.Outbox.Types
-  ( OutboxId (..)
-  , OutboxStatus (..)
-  , OrderingPolicy (..)
-  , BackoffSchedule (..)
-  , ExponentialBackoffOptions (..)
-  , OutboxMessage (..)
-  , OutboxRow (..)
-  , OutboxPublishOptions (..)
-  , OutboxPublishSummary (..)
-  , defaultPublishOptions
-  , statusText
-  , parseStatus
-  , nextDelay
-  )
+module Keiro.Outbox.Types (
+    OutboxId (..),
+    OutboxStatus (..),
+    OrderingPolicy (..),
+    BackoffSchedule (..),
+    ExponentialBackoffOptions (..),
+    OutboxMessage (..),
+    OutboxRow (..),
+    OutboxPublishOptions (..),
+    OutboxPublishSummary (..),
+    defaultPublishOptions,
+    statusText,
+    parseStatus,
+    nextDelay,
+)
 where
 
+import Data.Time.Clock (NominalDiffTime)
 import Data.UUID (UUID)
 import Data.UUID qualified as UUID
-import Data.Time.Clock (NominalDiffTime)
-import OpenTelemetry.Trace.Core (Tracer)
 import Keiro.Integration.Event (IntegrationEvent)
 import Keiro.Prelude
+import OpenTelemetry.Trace.Core (Tracer)
 
 -- | Primary key of a 'keiro_outbox' row. Stable across publish retries.
 newtype OutboxId = OutboxId {unOutboxId :: UUID}
-  deriving stock (Generic, Eq, Ord, Show)
+    deriving stock (Generic, Eq, Ord, Show)
 
 instance ToJSON OutboxId where
-  toJSON = toJSON . UUID.toText . unOutboxId
+    toJSON = toJSON . UUID.toText . unOutboxId
 
 instance FromJSON OutboxId where
-  parseJSON v = do
-    text <- parseJSON v
-    case UUID.fromText text of
-      Nothing -> fail ("OutboxId: not a UUID: " <> show text)
-      Just uuid -> pure (OutboxId uuid)
+    parseJSON v = do
+        text <- parseJSON v
+        case UUID.fromText text of
+            Nothing -> fail ("OutboxId: not a UUID: " <> show text)
+            Just uuid -> pure (OutboxId uuid)
 
 {- | Lifecycle state of an outbox row.
 
@@ -57,12 +57,12 @@ instance FromJSON OutboxId where
   failures. Stays in the table for operator inspection.
 -}
 data OutboxStatus
-  = OutboxPending
-  | OutboxPublishing
-  | OutboxSent
-  | OutboxFailed
-  | OutboxDead
-  deriving stock (Generic, Eq, Show)
+    = OutboxPending
+    | OutboxPublishing
+    | OutboxSent
+    | OutboxFailed
+    | OutboxDead
+    deriving stock (Generic, Eq, Show)
 
 {- | Ordering policy enforced by the publisher worker's claim query.
 
@@ -80,20 +80,19 @@ data OutboxStatus
   only when published events have no per-key/causal relationship.
 -}
 data OrderingPolicy
-  = PerKeyHeadOfLine
-  | PerSourceStream
-  | StopTheLine
-  | BestEffort
-  deriving stock (Generic, Eq, Show)
+    = PerKeyHeadOfLine
+    | PerSourceStream
+    | StopTheLine
+    | BestEffort
+    deriving stock (Generic, Eq, Show)
 
-{- | Knobs for 'ExponentialBackoff'. @delay = min maxDelay (initial * multiplier ^ (attempt - 1))@.
--}
+-- | Knobs for 'ExponentialBackoff'. @delay = min maxDelay (initial * multiplier ^ (attempt - 1))@.
 data ExponentialBackoffOptions = ExponentialBackoffOptions
-  { initial :: !NominalDiffTime
-  , maxDelay :: !NominalDiffTime
-  , multiplier :: !Double
-  }
-  deriving stock (Generic, Eq, Show)
+    { initial :: !NominalDiffTime
+    , maxDelay :: !NominalDiffTime
+    , multiplier :: !Double
+    }
+    deriving stock (Generic, Eq, Show)
 
 {- | Backoff curve used to compute 'next_attempt_at' after a failure.
 
@@ -101,9 +100,9 @@ data ExponentialBackoffOptions = ExponentialBackoffOptions
 * 'ExponentialBackoff' — exponential growth capped at @maxDelay@.
 -}
 data BackoffSchedule
-  = ConstantBackoff !NominalDiffTime
-  | ExponentialBackoff !ExponentialBackoffOptions
-  deriving stock (Generic, Eq, Show)
+    = ConstantBackoff !NominalDiffTime
+    | ExponentialBackoff !ExponentialBackoffOptions
+    deriving stock (Generic, Eq, Show)
 
 {- | Compute the retry delay for an attempt number (1-based: 1 = first
 failure, 2 = second failure, …). Used by 'Keiro.Outbox.Schema.markOutboxFailedTx'
@@ -112,34 +111,34 @@ to derive @next_attempt_at@.
 nextDelay :: BackoffSchedule -> Int -> NominalDiffTime
 nextDelay (ConstantBackoff delay) _ = delay
 nextDelay (ExponentialBackoff opts) attempt =
-  let raw = (opts ^. #initial) * realToFrac ((opts ^. #multiplier) ** fromIntegral (max 0 (attempt - 1)))
-   in min (opts ^. #maxDelay) raw
+    let raw = (opts ^. #initial) * realToFrac ((opts ^. #multiplier) ** fromIntegral (max 0 (attempt - 1)))
+     in min (opts ^. #maxDelay) raw
 
 {- | A request to enqueue one integration event into the outbox. Callers
 generate 'outboxId' (use a random UUID for ad-hoc enqueues, a
 deterministic UUID for idempotent retries from a saga/process manager).
 -}
 data OutboxMessage = OutboxMessage
-  { outboxId :: !OutboxId
-  , event :: !IntegrationEvent
-  }
-  deriving stock (Generic, Eq, Show)
+    { outboxId :: !OutboxId
+    , event :: !IntegrationEvent
+    }
+    deriving stock (Generic, Eq, Show)
 
 {- | A row read back from @keiro_outbox@. Worker code consumes these to
 publish to Kafka; tests use them to assert state transitions.
 -}
 data OutboxRow = OutboxRow
-  { outboxId :: !OutboxId
-  , event :: !IntegrationEvent
-  , status :: !OutboxStatus
-  , attemptCount :: !Int
-  , nextAttemptAt :: !UTCTime
-  , lastError :: !(Maybe Text)
-  , publishedAt :: !(Maybe UTCTime)
-  , createdAt :: !UTCTime
-  , updatedAt :: !UTCTime
-  }
-  deriving stock (Generic, Eq, Show)
+    { outboxId :: !OutboxId
+    , event :: !IntegrationEvent
+    , status :: !OutboxStatus
+    , attemptCount :: !Int
+    , nextAttemptAt :: !UTCTime
+    , lastError :: !(Maybe Text)
+    , publishedAt :: !(Maybe UTCTime)
+    , createdAt :: !UTCTime
+    , updatedAt :: !UTCTime
+    }
+    deriving stock (Generic, Eq, Show)
 
 {- | Knobs that govern one invocation of 'Keiro.Outbox.publishClaimedOutbox'.
 
@@ -151,13 +150,13 @@ and Kafka key per the messaging semantic conventions. When 'tracer' is
 'Nothing' (the default) the publisher emits no spans.
 -}
 data OutboxPublishOptions = OutboxPublishOptions
-  { batchSize :: !Int
-  , maxAttempts :: !Int
-  , backoff :: !BackoffSchedule
-  , orderingPolicy :: !OrderingPolicy
-  , tracer :: !(Maybe Tracer)
-  }
-  deriving stock (Generic)
+    { batchSize :: !Int
+    , maxAttempts :: !Int
+    , backoff :: !BackoffSchedule
+    , orderingPolicy :: !OrderingPolicy
+    , tracer :: !(Maybe Tracer)
+    }
+    deriving stock (Generic)
 
 {- | Aggregate result of one publisher pass.
 
@@ -165,42 +164,42 @@ data OutboxPublishOptions = OutboxPublishOptions
 'haltedOn' is populated only by 'StopTheLine' policy.
 -}
 data OutboxPublishSummary = OutboxPublishSummary
-  { claimed :: !Int
-  , published :: !Int
-  , retried :: !Int
-  , dead :: !Int
-  , haltedOn :: !(Maybe OutboxId)
-  }
-  deriving stock (Generic, Eq, Show)
+    { claimed :: !Int
+    , published :: !Int
+    , retried :: !Int
+    , dead :: !Int
+    , haltedOn :: !(Maybe OutboxId)
+    }
+    deriving stock (Generic, Eq, Show)
 
 {- | Sensible defaults: batch of 32, ten retry attempts, two-second
 constant backoff, per-key head-of-line ordering.
 -}
 defaultPublishOptions :: OutboxPublishOptions
 defaultPublishOptions =
-  OutboxPublishOptions
-    { batchSize = 32
-    , maxAttempts = 10
-    , backoff = ConstantBackoff 2
-    , orderingPolicy = PerKeyHeadOfLine
-    , tracer = Nothing
-    }
+    OutboxPublishOptions
+        { batchSize = 32
+        , maxAttempts = 10
+        , backoff = ConstantBackoff 2
+        , orderingPolicy = PerKeyHeadOfLine
+        , tracer = Nothing
+        }
 
 -- | Wire representation of 'OutboxStatus' used in the @status@ column.
 statusText :: OutboxStatus -> Text
 statusText = \case
-  OutboxPending -> "pending"
-  OutboxPublishing -> "publishing"
-  OutboxSent -> "sent"
-  OutboxFailed -> "failed"
-  OutboxDead -> "dead"
+    OutboxPending -> "pending"
+    OutboxPublishing -> "publishing"
+    OutboxSent -> "sent"
+    OutboxFailed -> "failed"
+    OutboxDead -> "dead"
 
 -- | Inverse of 'statusText'. Unknown values map to 'OutboxFailed' (safe default).
 parseStatus :: Text -> OutboxStatus
 parseStatus = \case
-  "pending" -> OutboxPending
-  "publishing" -> OutboxPublishing
-  "sent" -> OutboxSent
-  "failed" -> OutboxFailed
-  "dead" -> OutboxDead
-  _ -> OutboxFailed
+    "pending" -> OutboxPending
+    "publishing" -> OutboxPublishing
+    "sent" -> OutboxSent
+    "failed" -> OutboxFailed
+    "dead" -> OutboxDead
+    _ -> OutboxFailed

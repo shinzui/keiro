@@ -20,64 +20,64 @@ hands each row to a caller-supplied publish function, and marks the row
 sent, retryable, or dead. The Kafka adapter lives in
 'Keiro.Outbox.Kafka'.
 -}
-module Keiro.Outbox
-  ( -- * Re-exports
-    module Keiro.Outbox.Types
+module Keiro.Outbox (
+    -- * Re-exports
+    module Keiro.Outbox.Types,
 
     -- * Storage primitives (transport-neutral)
-  , enqueueOutboxTx
-  , claimOutboxBatch
-  , markOutboxSent
-  , lookupOutbox
-  , listOutbox
-  , countOutboxBacklog
+    enqueueOutboxTx,
+    claimOutboxBatch,
+    markOutboxSent,
+    lookupOutbox,
+    listOutbox,
+    countOutboxBacklog,
 
     -- * Inline escape hatch
-  , freshOutboxId
-  , enqueueIntegrationEventTx
+    freshOutboxId,
+    enqueueIntegrationEventTx,
 
     -- * Canonical producer-subscription helper
-  , IntegrationProducer (..)
-  , IntegrationEventDraft (..)
-  , mintIntegrationEvent
-  , draftToEvent
-  , enqueueProducerEventTx
+    IntegrationProducer (..),
+    IntegrationEventDraft (..),
+    mintIntegrationEvent,
+    draftToEvent,
+    enqueueProducerEventTx,
 
     -- * Publisher worker
-  , PublishOutcome (..)
-  , publishClaimedOutbox
-  )
+    PublishOutcome (..),
+    publishClaimedOutbox,
+)
 where
 
 import Data.ByteString (ByteString)
 import Data.TypeID qualified as TypeID
 import Data.UUID.V7 qualified as V7
 import Effectful (Eff, IOE, (:>))
-import "hasql-transaction" Hasql.Transaction qualified as Tx
-import OpenTelemetry.Attributes.Key (unkey)
-import OpenTelemetry.SemanticConventions (error_type)
-import OpenTelemetry.Trace.Core (addAttribute, setStatus, SpanStatus (..))
-import Keiro.Integration.Event
-  ( IntegrationContentType
-  , IntegrationEvent (..)
-  , SchemaReference
-  , TraceContext
-  )
+import Keiro.Integration.Event (
+    IntegrationContentType,
+    IntegrationEvent (..),
+    SchemaReference,
+    TraceContext,
+ )
 import Keiro.Outbox.Kafka (outboxRowToKafkaRecord)
 import Keiro.Outbox.Schema
 import Keiro.Outbox.Types
 import Keiro.Prelude
-import Keiro.Telemetry
-  ( KeiroMetrics
-  , recordOutboxBacklog
-  , recordOutboxDeadlettered
-  , recordOutboxPublished
-  , recordOutboxRetried
-  , withProducerSpan
-  )
+import Keiro.Telemetry (
+    KeiroMetrics,
+    recordOutboxBacklog,
+    recordOutboxDeadlettered,
+    recordOutboxPublished,
+    recordOutboxRetried,
+    withProducerSpan,
+ )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId, GlobalPosition, RecordedEvent)
+import OpenTelemetry.Attributes.Key (unkey)
+import OpenTelemetry.SemanticConventions (error_type)
+import OpenTelemetry.Trace.Core (SpanStatus (..), addAttribute, setStatus)
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 -- | Mint a fresh time-ordered UUIDv7 for use as an 'OutboxId'.
 freshOutboxId :: (IOE :> es) => Eff es OutboxId
@@ -89,11 +89,11 @@ caller supplies a stable 'OutboxId' so retried command attempts coalesce
 on the @(source, message_id)@ unique constraint.
 -}
 enqueueIntegrationEventTx ::
-  OutboxId ->
-  IntegrationEvent ->
-  Tx.Transaction ()
+    OutboxId ->
+    IntegrationEvent ->
+    Tx.Transaction ()
 enqueueIntegrationEventTx outboxId event =
-  enqueueOutboxTx (OutboxMessage {outboxId, event})
+    enqueueOutboxTx (OutboxMessage{outboxId, event})
 
 -- ---------------------------------------------------------------------------
 -- Producer-subscription helper
@@ -117,12 +117,12 @@ each 'Just' result writes one 'keiro_outbox' row. The helper mints
   skips the event without enqueuing a row.
 -}
 data IntegrationProducer e = IntegrationProducer
-  { name :: !Text
-  , source :: !Text
-  , messageIdPrefix :: !Text
-  , mapEvent :: !(RecordedEvent -> e -> Maybe IntegrationEventDraft)
-  }
-  deriving stock (Generic)
+    { name :: !Text
+    , source :: !Text
+    , messageIdPrefix :: !Text
+    , mapEvent :: !(RecordedEvent -> e -> Maybe IntegrationEventDraft)
+    }
+    deriving stock (Generic)
 
 {- | Everything in 'IntegrationEvent' except 'messageId' and 'source' —
 those are filled in by 'mintIntegrationEvent' from the producer
@@ -133,57 +133,57 @@ underlying 'RecordedEvent' (see 'mintIntegrationEvent'); a mapper that
 needs to override them can replace the draft fields directly.
 -}
 data IntegrationEventDraft = IntegrationEventDraft
-  { destination :: !Text
-  , key :: !(Maybe Text)
-  , eventType :: !Text
-  , schemaVersion :: !Int
-  , contentType :: !IntegrationContentType
-  , schemaReference :: !(Maybe SchemaReference)
-  , sourceEventId :: !(Maybe EventId)
-  , sourceGlobalPosition :: !(Maybe GlobalPosition)
-  , payloadBytes :: !ByteString
-  , occurredAt :: !UTCTime
-  , causationId :: !(Maybe EventId)
-  , correlationId :: !(Maybe EventId)
-  , traceContext :: !(Maybe TraceContext)
-  , attributes :: !(Maybe Value)
-  }
-  deriving stock (Generic, Eq, Show)
+    { destination :: !Text
+    , key :: !(Maybe Text)
+    , eventType :: !Text
+    , schemaVersion :: !Int
+    , contentType :: !IntegrationContentType
+    , schemaReference :: !(Maybe SchemaReference)
+    , sourceEventId :: !(Maybe EventId)
+    , sourceGlobalPosition :: !(Maybe GlobalPosition)
+    , payloadBytes :: !ByteString
+    , occurredAt :: !UTCTime
+    , causationId :: !(Maybe EventId)
+    , correlationId :: !(Maybe EventId)
+    , traceContext :: !(Maybe TraceContext)
+    , attributes :: !(Maybe Value)
+    }
+    deriving stock (Generic, Eq, Show)
 
 {- | Mint a fresh @messageId@ (TypeID with the producer's prefix) and build
 the full 'IntegrationEvent' from the draft. Lives in 'IO' because TypeID
 generation reads the global UUIDv7 sequence counter.
 -}
 mintIntegrationEvent ::
-  (IOE :> es) =>
-  IntegrationProducer e ->
-  IntegrationEventDraft ->
-  Eff es IntegrationEvent
+    (IOE :> es) =>
+    IntegrationProducer e ->
+    IntegrationEventDraft ->
+    Eff es IntegrationEvent
 mintIntegrationEvent producer draft = do
-  typeId <- liftIO (TypeID.genTypeID (producer ^. #messageIdPrefix))
-  pure (draftToEvent (producer ^. #source) (TypeID.toText typeId) draft)
+    typeId <- liftIO (TypeID.genTypeID (producer ^. #messageIdPrefix))
+    pure (draftToEvent (producer ^. #source) (TypeID.toText typeId) draft)
 
 -- | Build an 'IntegrationEvent' from a source, a minted message id, and a draft.
 draftToEvent :: Text -> Text -> IntegrationEventDraft -> IntegrationEvent
 draftToEvent source minted draft =
-  IntegrationEvent
-    { messageId = minted
-    , source
-    , destination = draft ^. #destination
-    , key = draft ^. #key
-    , eventType = draft ^. #eventType
-    , schemaVersion = draft ^. #schemaVersion
-    , contentType = draft ^. #contentType
-    , schemaReference = draft ^. #schemaReference
-    , sourceEventId = draft ^. #sourceEventId
-    , sourceGlobalPosition = draft ^. #sourceGlobalPosition
-    , payloadBytes = draft ^. #payloadBytes
-    , occurredAt = draft ^. #occurredAt
-    , causationId = draft ^. #causationId
-    , correlationId = draft ^. #correlationId
-    , traceContext = draft ^. #traceContext
-    , attributes = draft ^. #attributes
-    }
+    IntegrationEvent
+        { messageId = minted
+        , source
+        , destination = draft ^. #destination
+        , key = draft ^. #key
+        , eventType = draft ^. #eventType
+        , schemaVersion = draft ^. #schemaVersion
+        , contentType = draft ^. #contentType
+        , schemaReference = draft ^. #schemaReference
+        , sourceEventId = draft ^. #sourceEventId
+        , sourceGlobalPosition = draft ^. #sourceGlobalPosition
+        , payloadBytes = draft ^. #payloadBytes
+        , occurredAt = draft ^. #occurredAt
+        , causationId = draft ^. #causationId
+        , correlationId = draft ^. #correlationId
+        , traceContext = draft ^. #traceContext
+        , attributes = draft ^. #attributes
+        }
 
 {- | Enqueue one drafted producer event inside an existing transaction.
 
@@ -198,15 +198,15 @@ mints a different id. Idempotency at the row level relies on a stable
 'OutboxId', not the minted message id.
 -}
 enqueueProducerEventTx ::
-  forall e es.
-  (IOE :> es) =>
-  IntegrationProducer e ->
-  OutboxId ->
-  IntegrationEventDraft ->
-  Eff es (Tx.Transaction ())
+    forall e es.
+    (IOE :> es) =>
+    IntegrationProducer e ->
+    OutboxId ->
+    IntegrationEventDraft ->
+    Eff es (Tx.Transaction ())
 enqueueProducerEventTx producer outboxId draft = do
-  event <- mintIntegrationEvent producer draft
-  pure (enqueueOutboxTx (OutboxMessage {outboxId, event}))
+    event <- mintIntegrationEvent producer draft
+    pure (enqueueOutboxTx (OutboxMessage{outboxId, event}))
 
 -- ---------------------------------------------------------------------------
 -- Publisher worker
@@ -214,11 +214,11 @@ enqueueProducerEventTx producer outboxId draft = do
 
 -- | Result of one publish attempt as reported by the transport-specific publisher.
 data PublishOutcome
-  = -- | Kafka acknowledged the publish.
-    PublishSucceeded
-  | -- | Publish failed; will be retried after the configured backoff.
-    PublishFailed !Text
-  deriving stock (Generic, Eq, Show)
+    = -- | Kafka acknowledged the publish.
+      PublishSucceeded
+    | -- | Publish failed; will be retried after the configured backoff.
+      PublishFailed !Text
+    deriving stock (Generic, Eq, Show)
 
 {- | Drain claimed outbox rows by handing each to @publish@ and reflecting
 the outcome back into the row's status.
@@ -238,70 +238,69 @@ The worker does not loop indefinitely; the application is expected to
 schedule it repeatedly (e.g. once per process-compose tick).
 -}
 publishClaimedOutbox ::
-  forall es.
-  (IOE :> es, Store :> es) =>
-  (OutboxRow -> Eff es PublishOutcome) ->
-  OutboxPublishOptions ->
-  Maybe KeiroMetrics ->
-  Eff es OutboxPublishSummary
+    forall es.
+    (IOE :> es, Store :> es) =>
+    (OutboxRow -> Eff es PublishOutcome) ->
+    OutboxPublishOptions ->
+    Maybe KeiroMetrics ->
+    Eff es OutboxPublishSummary
 publishClaimedOutbox publish options mMetrics = do
-  now <- liftIO getCurrentTime
-  rows <- claimOutboxBatch (options ^. #orderingPolicy) (options ^. #batchSize) now
-  -- Backlog gauge, recorded once per pass after the claim has moved this
-  -- batch to 'publishing': it counts rows still awaiting a publisher. This is
-  -- the synchronous-gauge baseline; a 'Nothing' handle makes it a no-op.
-  backlog <- countOutboxBacklog
-  recordOutboxBacklog mMetrics (fromIntegral backlog)
-  summary <-
-    drainBatch rows OutboxPublishSummary {claimed = 0, published = 0, retried = 0, dead = 0, haltedOn = Nothing}
-  -- Counters from the aggregated pass summary (each a no-op under 'Nothing';
-  -- a zero delta is harmless).
-  recordOutboxPublished mMetrics (fromIntegral (summary ^. #published))
-  recordOutboxRetried mMetrics (fromIntegral (summary ^. #retried))
-  recordOutboxDeadlettered mMetrics (fromIntegral (summary ^. #dead))
-  pure summary
+    now <- liftIO getCurrentTime
+    rows <- claimOutboxBatch (options ^. #orderingPolicy) (options ^. #batchSize) now
+    -- Backlog gauge, recorded once per pass after the claim has moved this
+    -- batch to 'publishing': it counts rows still awaiting a publisher. This is
+    -- the synchronous-gauge baseline; a 'Nothing' handle makes it a no-op.
+    backlog <- countOutboxBacklog
+    recordOutboxBacklog mMetrics (fromIntegral backlog)
+    summary <-
+        drainBatch rows OutboxPublishSummary{claimed = 0, published = 0, retried = 0, dead = 0, haltedOn = Nothing}
+    -- Counters from the aggregated pass summary (each a no-op under 'Nothing';
+    -- a zero delta is harmless).
+    recordOutboxPublished mMetrics (fromIntegral (summary ^. #published))
+    recordOutboxRetried mMetrics (fromIntegral (summary ^. #retried))
+    recordOutboxDeadlettered mMetrics (fromIntegral (summary ^. #dead))
+    pure summary
   where
     drainBatch ::
-      [OutboxRow] ->
-      OutboxPublishSummary ->
-      Eff es OutboxPublishSummary
+        [OutboxRow] ->
+        OutboxPublishSummary ->
+        Eff es OutboxPublishSummary
     drainBatch [] acc = pure acc
     drainBatch (row : rest) acc = do
-      outcome <-
-        withProducerSpan
-          (options ^. #tracer)
-          (row ^. #event)
-          (outboxRowToKafkaRecord row)
-          $ \mSpan -> do
-            out <- publish row
-            case (mSpan, out) of
-              (Just sp, PublishFailed errMsg) -> do
-                addAttribute sp (unkey error_type) ("publish_failed" :: Text)
-                setStatus sp (Error errMsg)
-              _ -> pure ()
-            pure out
-      now <- liftIO getCurrentTime
-      case outcome of
-        PublishSucceeded -> do
-          markOutboxSent (row ^. #outboxId) now
-          drainBatch rest (acc & #claimed +~ 1 & #published +~ 1)
-        PublishFailed errMsg -> do
-          let attempt = row ^. #attemptCount
-              delay = nextDelay (options ^. #backoff) attempt
-          resultStatus <-
-            runTransaction $
-              markOutboxFailedTx
-                (row ^. #outboxId)
-                errMsg
-                (options ^. #maxAttempts)
-                delay
-                now
-          let bumped = acc & #claimed +~ 1
-              acc' = case resultStatus of
-                OutboxDead -> bumped & #dead +~ 1
-                _ -> bumped & #retried +~ 1
-          case options ^. #orderingPolicy of
-            StopTheLine ->
-              pure (acc' & #haltedOn ?~ row ^. #outboxId)
-            _ -> drainBatch rest acc'
-
+        outcome <-
+            withProducerSpan
+                (options ^. #tracer)
+                (row ^. #event)
+                (outboxRowToKafkaRecord row)
+                $ \mSpan -> do
+                    out <- publish row
+                    case (mSpan, out) of
+                        (Just sp, PublishFailed errMsg) -> do
+                            addAttribute sp (unkey error_type) ("publish_failed" :: Text)
+                            setStatus sp (Error errMsg)
+                        _ -> pure ()
+                    pure out
+        now <- liftIO getCurrentTime
+        case outcome of
+            PublishSucceeded -> do
+                markOutboxSent (row ^. #outboxId) now
+                drainBatch rest (acc & #claimed +~ 1 & #published +~ 1)
+            PublishFailed errMsg -> do
+                let attempt = row ^. #attemptCount
+                    delay = nextDelay (options ^. #backoff) attempt
+                resultStatus <-
+                    runTransaction $
+                        markOutboxFailedTx
+                            (row ^. #outboxId)
+                            errMsg
+                            (options ^. #maxAttempts)
+                            delay
+                            now
+                let bumped = acc & #claimed +~ 1
+                    acc' = case resultStatus of
+                        OutboxDead -> bumped & #dead +~ 1
+                        _ -> bumped & #retried +~ 1
+                case options ^. #orderingPolicy of
+                    StopTheLine ->
+                        pure (acc' & #haltedOn ?~ row ^. #outboxId)
+                    _ -> drainBatch rest acc'

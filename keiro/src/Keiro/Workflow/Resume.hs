@@ -45,28 +45,28 @@ Discovery is the 'findUnfinishedWorkflowIds' index query only — __no kiroku
 @wf:@ prefix subscription__ is used or needed, so this surface has zero
 upstream dependency.
 -}
-module Keiro.Workflow.Resume
-  ( -- * Registry
-    WorkflowDef (..)
-  , WorkflowRegistry
+module Keiro.Workflow.Resume (
+    -- * Registry
+    WorkflowDef (..),
+    WorkflowRegistry,
 
     -- * Options
-  , WorkflowResumeOptions (..)
-  , defaultWorkflowResumeOptions
+    WorkflowResumeOptions (..),
+    defaultWorkflowResumeOptions,
 
     -- * Per-pass summary
-  , ResumeSummary (..)
-  , emptyResumeSummary
+    ResumeSummary (..),
+    emptyResumeSummary,
 
     -- * Running (fixed-poll baseline)
-  , resumeWorkflowsOnce
-  , runWorkflowResumeWorker
-  , runWorkflowResumeWorkerWith
+    resumeWorkflowsOnce,
+    runWorkflowResumeWorker,
+    runWorkflowResumeWorkerWith,
 
     -- * Running (push-aware, EP-50)
-  , runPollLoopWith
-  , runWorkflowResumeWorkerPush
-  )
+    runPollLoopWith,
+    runWorkflowResumeWorkerPush,
+)
 where
 
 import Control.Concurrent (threadDelay)
@@ -81,16 +81,16 @@ import Effectful.Error.Static (Error)
 import Keiro.Prelude
 import Keiro.Telemetry (recordWorkflowAwakeablesPending, recordWorkflowResumed)
 import Keiro.Wake (WakeSignal (..), wakeSignalFromStore)
-import Keiro.Workflow
-  ( Workflow
-  , WorkflowId (..)
-  , WorkflowName (..)
-  , WorkflowOutcome (..)
-  , WorkflowRunOptions
-  , defaultWorkflowRunOptions
-  , findUnfinishedWorkflowIds
-  , runWorkflowWith
-  )
+import Keiro.Workflow (
+    Workflow,
+    WorkflowId (..),
+    WorkflowName (..),
+    WorkflowOutcome (..),
+    WorkflowRunOptions,
+    defaultWorkflowRunOptions,
+    findUnfinishedWorkflowIds,
+    runWorkflowWith,
+ )
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Child.Schema (findRunningChildIds, lookupChild)
@@ -110,8 +110,8 @@ whether a re-invocation reached 'Completed' or 'Suspended'), so one registry
 can hold workflows of different return types.
 -}
 data WorkflowDef es = forall a. (Aeson.ToJSON a) => WorkflowDef
-  { runDef :: WorkflowId -> Eff (Workflow : es) a
-  }
+    { runDef :: WorkflowId -> Eff (Workflow : es) a
+    }
 
 {- | The application-supplied map from workflow name to its definition. The
 worker looks up each discovered workflow's name here; an absent name is
@@ -129,36 +129,38 @@ type WorkflowRegistry es = Map WorkflowName (WorkflowDef es)
 and 'pollInterval' is the loop driver's gap between passes.
 -}
 data WorkflowResumeOptions = WorkflowResumeOptions
-  { runOptions :: !WorkflowRunOptions
-  -- ^ Threaded into 'runWorkflowWith' (or 'runChildWorkflow' for a child) so a
-  --   resumed run honours the same snapshot (EP-41) and telemetry (EP-44)
-  --   options as its first run.
-  , pollInterval :: !Int
-  -- ^ Microseconds the loop driver sleeps between passes.
-  , useAdvisoryLock :: !Bool
-  -- ^ __Reserved (default 'False').__ The original design proposed a
-  --   per-workflow @pg_try_advisory_xact_lock@ to let multiple worker
-  --   processes claim disjoint workflows. That is __not wired__: the kiroku
-  --   'Store' is connection-/pooled/, and a re-invocation spans several
-  --   transactions (one per step append), so a transaction-scoped advisory
-  --   lock cannot be held across a whole 'runWorkflowWith' run, and a
-  --   session-scoped lock has no connection affinity through the pool.
-  --   Concurrency is instead safe by construction (see the module docs):
-  --   EP-38 journals each step under a deterministic id and short-circuits
-  --   already-journaled steps, so two workers racing the same workflow
-  --   converge to the same journal with each side effect run at most once.
-  --   The field is kept for forward compatibility; setting it has no effect.
-  }
-  deriving stock (Generic)
+    { runOptions :: !WorkflowRunOptions
+    {- ^ Threaded into 'runWorkflowWith' (or 'runChildWorkflow' for a child) so a
+    resumed run honours the same snapshot (EP-41) and telemetry (EP-44)
+    options as its first run.
+    -}
+    , pollInterval :: !Int
+    -- ^ Microseconds the loop driver sleeps between passes.
+    , useAdvisoryLock :: !Bool
+    {- ^ __Reserved (default 'False').__ The original design proposed a
+    per-workflow @pg_try_advisory_xact_lock@ to let multiple worker
+    processes claim disjoint workflows. That is __not wired__: the kiroku
+    'Store' is connection-/pooled/, and a re-invocation spans several
+    transactions (one per step append), so a transaction-scoped advisory
+    lock cannot be held across a whole 'runWorkflowWith' run, and a
+    session-scoped lock has no connection affinity through the pool.
+    Concurrency is instead safe by construction (see the module docs):
+    EP-38 journals each step under a deterministic id and short-circuits
+    already-journaled steps, so two workers racing the same workflow
+    converge to the same journal with each side effect run at most once.
+    The field is kept for forward compatibility; setting it has no effect.
+    -}
+    }
+    deriving stock (Generic)
 
 -- | Defaults: EP-41's 'defaultWorkflowRunOptions', a 1-second poll, no lock.
 defaultWorkflowResumeOptions :: WorkflowResumeOptions
 defaultWorkflowResumeOptions =
-  WorkflowResumeOptions
-    { runOptions = defaultWorkflowRunOptions
-    , pollInterval = 1_000_000
-    , useAdvisoryLock = False
-    }
+    WorkflowResumeOptions
+        { runOptions = defaultWorkflowRunOptions
+        , pollInterval = 1_000_000
+        , useAdvisoryLock = False
+        }
 
 -- ---------------------------------------------------------------------------
 -- Per-pass summary
@@ -168,18 +170,18 @@ defaultWorkflowResumeOptions =
 @keiro.workflow.resumed@.
 -}
 data ResumeSummary = ResumeSummary
-  { discovered :: !Int
-  -- ^ Unfinished workflows 'findUnfinishedWorkflowIds' returned this pass.
-  , resumed :: !Int
-  -- ^ Workflows re-invoked (found in the registry and run).
-  , completed :: !Int
-  -- ^ Re-invocations that reached 'Completed' this pass.
-  , stillSuspended :: !Int
-  -- ^ Re-invocations that returned 'Suspended' (wake source not yet resolved).
-  , unknownName :: !Int
-  -- ^ Discovered workflows whose name was absent from the registry (skipped + logged).
-  }
-  deriving stock (Generic, Eq, Show)
+    { discovered :: !Int
+    -- ^ Unfinished workflows 'findUnfinishedWorkflowIds' returned this pass.
+    , resumed :: !Int
+    -- ^ Workflows re-invoked (found in the registry and run).
+    , completed :: !Int
+    -- ^ Re-invocations that reached 'Completed' this pass.
+    , stillSuspended :: !Int
+    -- ^ Re-invocations that returned 'Suspended' (wake source not yet resolved).
+    , unknownName :: !Int
+    -- ^ Discovered workflows whose name was absent from the registry (skipped + logged).
+    }
+    deriving stock (Generic, Eq, Show)
 
 -- | A zeroed 'ResumeSummary'.
 emptyResumeSummary :: ResumeSummary
@@ -205,75 +207,76 @@ so drops out of discovery; re-invoking an unfinished one twice converges to the
 same journal (EP-38 deterministic ids + step short-circuit).
 -}
 resumeWorkflowsOnce ::
-  forall es.
-  (IOE :> es, Store :> es) =>
-  WorkflowResumeOptions ->
-  WorkflowRegistry es ->
-  Eff es ResumeSummary
+    forall es.
+    (IOE :> es, Store :> es) =>
+    WorkflowResumeOptions ->
+    WorkflowRegistry es ->
+    Eff es ResumeSummary
 resumeWorkflowsOnce opts registry = do
-  -- EP-44: sample the @keiro.workflow.awakeables.pending@ gauge once per pass,
-  -- on the same Store the discovery query uses. The metrics handle rides on the
-  -- run options (EP-44 threads telemetry through 'WorkflowRunOptions'), so it is
-  -- already forwarded into 'runWorkflowWith' for every re-invocation.
-  pending <- countPendingAwakeables
-  recordWorkflowAwakeablesPending mMetrics (fromIntegral pending)
-  -- Discovery unions two sources: workflows with steps but no terminal marker
-  -- ('findUnfinishedWorkflowIds') and freshly-spawned children that have no
-  -- step rows yet ('findRunningChildIds', EP-43) — so a zero-step child is
-  -- still driven. The dedup collapses a child that appears in both.
-  unfinished <- findUnfinishedWorkflowIds
-  runningChildren <- findRunningChildIds
-  let pairs = nub (unfinished <> runningChildren)
-      seed = emptyResumeSummary{discovered = length pairs}
-  foldM advance seed pairs
+    -- EP-44: sample the @keiro.workflow.awakeables.pending@ gauge once per pass,
+    -- on the same Store the discovery query uses. The metrics handle rides on the
+    -- run options (EP-44 threads telemetry through 'WorkflowRunOptions'), so it is
+    -- already forwarded into 'runWorkflowWith' for every re-invocation.
+    pending <- countPendingAwakeables
+    recordWorkflowAwakeablesPending mMetrics (fromIntegral pending)
+    -- Discovery unions two sources: workflows with steps but no terminal marker
+    -- ('findUnfinishedWorkflowIds') and freshly-spawned children that have no
+    -- step rows yet ('findRunningChildIds', EP-43) — so a zero-step child is
+    -- still driven. The dedup collapses a child that appears in both.
+    unfinished <- findUnfinishedWorkflowIds
+    runningChildren <- findRunningChildIds
+    let pairs = nub (unfinished <> runningChildren)
+        seed = emptyResumeSummary{discovered = length pairs}
+    foldM advance seed pairs
   where
     mMetrics = runOptions opts ^. #metrics
     advance :: ResumeSummary -> (Text, Text) -> Eff es ResumeSummary
     advance acc (widText, wnameText) =
-      case Map.lookup (WorkflowName wnameText) registry of
-        Nothing -> do
-          liftIO $
-            hPutStrLn
-              stderr
-              ( "keiro resume worker: no registry entry for workflow "
-                  <> Text.unpack wnameText
-                  <> " (id "
-                  <> Text.unpack widText
-                  <> "); skipping"
-              )
-          pure acc{unknownName = unknownName acc + 1}
-        Just (WorkflowDef runDef) -> do
-          let wid = WorkflowId widText
-              name = WorkflowName wnameText
-          -- A workflow that is some parent's child is driven through
-          -- 'runChildWorkflow' so its result propagates to the parent on
-          -- completion (EP-43); any other workflow uses bare 'runWorkflowWith'.
-          mChild <- lookupChild widText wnameText
-          outcome <- case mChild of
-            Just _ -> runChildWorkflow (runOptions opts) name wid (runDef wid)
-            Nothing -> runWorkflowWith (runOptions opts) name wid (runDef wid)
-          -- EP-44: one @keiro.workflow.resumed@ increment per re-invocation of a
-          -- registered workflow (the unknown-name branch above is not a
-          -- re-invocation, so it does not count).
-          recordWorkflowResumed mMetrics 1
-          pure (bumpForOutcome outcome acc)
+        case Map.lookup (WorkflowName wnameText) registry of
+            Nothing -> do
+                liftIO $
+                    hPutStrLn
+                        stderr
+                        ( "keiro resume worker: no registry entry for workflow "
+                            <> Text.unpack wnameText
+                            <> " (id "
+                            <> Text.unpack widText
+                            <> "); skipping"
+                        )
+                pure acc{unknownName = unknownName acc + 1}
+            Just (WorkflowDef runDef) -> do
+                let wid = WorkflowId widText
+                    name = WorkflowName wnameText
+                -- A workflow that is some parent's child is driven through
+                -- 'runChildWorkflow' so its result propagates to the parent on
+                -- completion (EP-43); any other workflow uses bare 'runWorkflowWith'.
+                mChild <- lookupChild widText wnameText
+                outcome <- case mChild of
+                    Just _ -> runChildWorkflow (runOptions opts) name wid (runDef wid)
+                    Nothing -> runWorkflowWith (runOptions opts) name wid (runDef wid)
+                -- EP-44: one @keiro.workflow.resumed@ increment per re-invocation of a
+                -- registered workflow (the unknown-name branch above is not a
+                -- re-invocation, so it does not count).
+                recordWorkflowResumed mMetrics 1
+                pure (bumpForOutcome outcome acc)
 
--- | Fold one re-invocation's outcome into the running summary. The existential
--- result @a@ is discarded here, so it never escapes the registry.
+{- | Fold one re-invocation's outcome into the running summary. The existential
+result @a@ is discarded here, so it never escapes the registry.
+-}
 bumpForOutcome :: WorkflowOutcome a -> ResumeSummary -> ResumeSummary
 bumpForOutcome outcome acc = case outcome of
-  Completed _ -> acc{resumed = resumed acc + 1, completed = completed acc + 1}
-  Suspended -> acc{resumed = resumed acc + 1, stillSuspended = stillSuspended acc + 1}
-  -- A workflow cancelled between discovery and re-invocation short-circuits to
-  -- 'Cancelled' (EP-43); count it as re-invoked but neither completed nor
-  -- suspended. (A cancelled workflow also drops out of discovery, so this is a
-  -- rare race, not the steady state.)
-  Cancelled -> acc{resumed = resumed acc + 1}
-  -- A workflow that rotated via continueAsNew (EP-48) returns 'ContinuedAsNew':
-  -- it is re-invoked but neither completed nor suspended this pass. Its new
-  -- generation has no terminal marker, so 'findUnfinishedWorkflowIds' still
-  -- reports it and the next pass drives the rotated generation forward.
-  ContinuedAsNew -> acc{resumed = resumed acc + 1}
+    Completed _ -> acc{resumed = resumed acc + 1, completed = completed acc + 1}
+    Suspended -> acc{resumed = resumed acc + 1, stillSuspended = stillSuspended acc + 1}
+    -- A workflow cancelled between discovery and re-invocation short-circuits to
+    -- 'Cancelled' (EP-43); count it as re-invoked but neither completed nor
+    -- suspended. (A cancelled workflow also drops out of discovery, so this is a
+    -- rare race, not the steady state.)
+    Cancelled -> acc{resumed = resumed acc + 1}
+    -- A workflow that rotated via continueAsNew (EP-48) returns 'ContinuedAsNew':
+    -- it is re-invoked but neither completed nor suspended this pass. Its new
+    -- generation has no terminal marker, so 'findUnfinishedWorkflowIds' still
+    -- reports it and the next pass drives the rotated generation forward.
+    ContinuedAsNew -> acc{resumed = resumed acc + 1}
 
 {- | Poll-and-resume loop: run 'resumeWorkflowsOnce' on the configured
 'pollInterval' forever. Mirrors how an application schedules
@@ -281,19 +284,19 @@ bumpForOutcome outcome acc = case outcome of
 single-pass 'resumeWorkflowsOnce' remains the testable unit.
 -}
 runWorkflowResumeWorkerWith ::
-  (IOE :> es, Store :> es) =>
-  WorkflowResumeOptions ->
-  WorkflowRegistry es ->
-  Eff es ()
+    (IOE :> es, Store :> es) =>
+    WorkflowResumeOptions ->
+    WorkflowRegistry es ->
+    Eff es ()
 runWorkflowResumeWorkerWith opts registry = forever $ do
-  _summary <- resumeWorkflowsOnce opts registry
-  liftIO (threadDelay (pollInterval opts))
+    _summary <- resumeWorkflowsOnce opts registry
+    liftIO (threadDelay (pollInterval opts))
 
 -- | 'runWorkflowResumeWorkerWith' with 'defaultWorkflowResumeOptions'.
 runWorkflowResumeWorker ::
-  (IOE :> es, Store :> es) =>
-  WorkflowRegistry es ->
-  Eff es ()
+    (IOE :> es, Store :> es) =>
+    WorkflowRegistry es ->
+    Eff es ()
 runWorkflowResumeWorker = runWorkflowResumeWorkerWith defaultWorkflowResumeOptions
 
 -- ---------------------------------------------------------------------------
@@ -312,15 +315,15 @@ and 'Keiro.Outbox.publishClaimedOutbox' (documented, not implemented here; the
 resume worker carries the acceptance via parent/child cascades).
 -}
 runPollLoopWith ::
-  -- | the wake signal to block on between passes
-  WakeSignal ->
-  -- | fallback timeout in microseconds (the maximum gap when no notification arrives)
-  Int ->
-  -- | one pass, already wrapped to run in 'IO'
-  IO () ->
-  IO ()
+    -- | the wake signal to block on between passes
+    WakeSignal ->
+    -- | fallback timeout in microseconds (the maximum gap when no notification arrives)
+    Int ->
+    -- | one pass, already wrapped to run in 'IO'
+    IO () ->
+    IO ()
 runPollLoopWith wake fallbackMicros pass =
-  forever (pass >> void (waitForWake wake fallbackMicros))
+    forever (pass >> void (waitForWake wake fallbackMicros))
 
 {- | The workflow resume worker, push-aware (EP-50). Runs 'resumeWorkflowsOnce'
 on each pass; between passes it waits on the store's notifier (sub-second wake on
@@ -343,12 +346,12 @@ needing a richer effect row can use 'runPollLoopWith' directly with their own
 @runStoreIO@-equivalent pass.
 -}
 runWorkflowResumeWorkerPush ::
-  KirokuStore ->
-  WorkflowResumeOptions ->
-  WorkflowRegistry '[Store, Error StoreError, IOE] ->
-  IO ()
+    KirokuStore ->
+    WorkflowResumeOptions ->
+    WorkflowRegistry '[Store, Error StoreError, IOE] ->
+    IO ()
 runWorkflowResumeWorkerPush store opts registry = do
-  wake <- wakeSignalFromStore store
-  runPollLoopWith wake (pollInterval opts) onePass
- where
-  onePass = void (runStoreIO store (resumeWorkflowsOnce opts registry))
+    wake <- wakeSignalFromStore store
+    runPollLoopWith wake (pollInterval opts) onePass
+  where
+    onePass = void (runStoreIO store (resumeWorkflowsOnce opts registry))

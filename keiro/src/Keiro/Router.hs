@@ -12,15 +12,15 @@ new.
 Use 'runRouterOnce' to dispatch a single event, or 'runRouterWorker' to run
 the router as a live subscription draining a Shibuya adapter.
 -}
-module Keiro.Router
-  ( -- * Definition
-    Router (..)
-  , RouterResult (..)
+module Keiro.Router (
+    -- * Definition
+    Router (..),
+    RouterResult (..),
 
     -- * Running
-  , runRouterOnce
-  , runRouterWorker
-  )
+    runRouterOnce,
+    runRouterWorker,
+)
 where
 
 import Data.Coerce (coerce)
@@ -38,7 +38,6 @@ import Keiro.Stream (Stream)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError (..))
 import Kiroku.Store.Types (RecordedEvent)
-import Prelude (zip)
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), HaltReason (..))
 import Shibuya.Core.AckHandle (AckHandle (..))
@@ -46,6 +45,7 @@ import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
+import Prelude (zip)
 
 {- | A stateless, content-based router (in the Enterprise Integration Patterns
 sense): for each incoming event it resolves a data-dependent set of target
@@ -69,20 +69,22 @@ build projections closed over stream-local keys. Return @[]@ to preserve
 append-only dispatch.
 -}
 data Router input targetPhi targetRs targetState targetCi targetCo es = Router
-  { name :: !Text
-  -- ^ Stable identifier; part of every dispatched command's deterministic id.
-  , key :: !(input -> Text)
-  -- ^ Correlation string for the source event (e.g. the transaction id).
-  , resolve :: !(input -> Eff es [PMCommand targetCi])
-  -- ^ The effectful seam: compute the data-dependent target set, typically
-  --   @runQuery readModel q@.
-  , targetEventStream :: !(EventStream targetPhi targetRs targetState targetCi targetCo)
-  -- ^ The aggregate every resolved command is dispatched to.
-  , targetProjections :: !(Stream targetCi -> [InlineProjection targetCo])
-  -- ^ Inline projections for the target aggregate, run in the same transaction
-  --   as each dispatched command's append. Return @[]@ for append-only dispatch.
-  }
-  deriving stock (Generic)
+    { name :: !Text
+    -- ^ Stable identifier; part of every dispatched command's deterministic id.
+    , key :: !(input -> Text)
+    -- ^ Correlation string for the source event (e.g. the transaction id).
+    , resolve :: !(input -> Eff es [PMCommand targetCi])
+    {- ^ The effectful seam: compute the data-dependent target set, typically
+    @runQuery readModel q@.
+    -}
+    , targetEventStream :: !(EventStream targetPhi targetRs targetState targetCi targetCo)
+    -- ^ The aggregate every resolved command is dispatched to.
+    , targetProjections :: !(Stream targetCi -> [InlineProjection targetCo])
+    {- ^ Inline projections for the target aggregate, run in the same transaction
+    as each dispatched command's append. Return @[]@ for append-only dispatch.
+    -}
+    }
+    deriving stock (Generic)
 
 {- | The outcome of a single 'runRouterOnce' invocation: one
 'PMCommandResult' per resolved target, in resolution order.
@@ -92,9 +94,9 @@ result, because a router has no state stream. A failed dispatch surfaces as a
 'PMCommandFailed' element rather than an outer 'Either'.
 -}
 newtype RouterResult target = RouterResult
-  { commandResults :: [PMCommandResult target]
-  }
-  deriving stock (Generic, Eq, Show)
+    { commandResults :: [PMCommandResult target]
+    }
+    deriving stock (Generic, Eq, Show)
 
 {- | Resolve the targets for one source event, then dispatch one command per
 target with the same crash-safe, exactly-once-per-target idempotency the
@@ -111,50 +113,50 @@ the process manager — there is no manager-state append that can fail before
 dispatch.
 -}
 runRouterOnce ::
-  forall input targetPhi targetRs targetState targetCi targetCo es.
-  ( HasCallStack
-  , IOE :> es
-  , Store :> es
-  , Error StoreError :> es
-  , BoolAlg targetPhi (RegFile targetRs, targetCi)
-  , Eq targetCo
-  ) =>
-  RunCommandOptions ->
-  Router input targetPhi targetRs targetState targetCi targetCo es ->
-  RecordedEvent ->
-  input ->
-  Eff es (RouterResult (EventStream targetPhi targetRs targetState targetCi targetCo))
+    forall input targetPhi targetRs targetState targetCi targetCo es.
+    ( HasCallStack
+    , IOE :> es
+    , Store :> es
+    , Error StoreError :> es
+    , BoolAlg targetPhi (RegFile targetRs, targetCi)
+    , Eq targetCo
+    ) =>
+    RunCommandOptions ->
+    Router input targetPhi targetRs targetState targetCi targetCo es ->
+    RecordedEvent ->
+    input ->
+    Eff es (RouterResult (EventStream targetPhi targetRs targetState targetCi targetCo))
 runRouterOnce options router sourceEvent input = do
-  let correlationId = (router ^. #key) input
-  commands <- (router ^. #resolve) input
-  results <-
-    traverse
-      (\(emitIndex, command) -> dispatchCommand correlationId (sourceEvent ^. #eventId) emitIndex command)
-      (zip [0 ..] commands)
-  pure (RouterResult results)
+    let correlationId = (router ^. #key) input
+    commands <- (router ^. #resolve) input
+    results <-
+        traverse
+            (\(emitIndex, command) -> dispatchCommand correlationId (sourceEvent ^. #eventId) emitIndex command)
+            (zip [0 ..] commands)
+    pure (RouterResult results)
   where
     dispatchCommand correlationId sourceEventId emitIndex command = do
-      let commandId = deterministicCommandId (router ^. #name) correlationId sourceEventId emitIndex
-          targetOptions = options & #eventIds .~ [commandId]
-          targetEventStream = router ^. #targetEventStream
-          targetStream = retarget (command ^. #target)
-          targetStreamName = (targetEventStream ^. #resolveStreamName) targetStream
-      commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
-      if commandAlreadyProcessed
-        then pure (PMCommandDuplicate commandId)
-        else do
-          outcome <-
-            runCommandWithProjections
-              targetOptions
-              targetEventStream
-              targetStream
-              (command ^. #command)
-              ((router ^. #targetProjections) (command ^. #target))
-          pure $ case outcome of
-            Right result -> PMCommandAppended result
-            Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == commandId -> PMCommandDuplicate commandId
-            Left (StoreFailed (DuplicateEvent Nothing)) -> PMCommandDuplicate commandId
-            Left err -> PMCommandFailed err
+        let commandId = deterministicCommandId (router ^. #name) correlationId sourceEventId emitIndex
+            targetOptions = options & #eventIds .~ [commandId]
+            targetEventStream = router ^. #targetEventStream
+            targetStream = retarget (command ^. #target)
+            targetStreamName = (targetEventStream ^. #resolveStreamName) targetStream
+        commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
+        if commandAlreadyProcessed
+            then pure (PMCommandDuplicate commandId)
+            else do
+                outcome <-
+                    runCommandWithProjections
+                        targetOptions
+                        targetEventStream
+                        targetStream
+                        (command ^. #command)
+                        ((router ^. #targetProjections) (command ^. #target))
+                pure $ case outcome of
+                    Right result -> PMCommandAppended result
+                    Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == commandId -> PMCommandDuplicate commandId
+                    Left (StoreFailed (DuplicateEvent Nothing)) -> PMCommandDuplicate commandId
+                    Left err -> PMCommandFailed err
 
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
@@ -185,35 +187,35 @@ and discards it — this worker invokes the ingested message's
 "called exactly once" ack contract so the decision actually reaches the adapter.
 -}
 runRouterWorker ::
-  forall msg input targetPhi targetRs targetState targetCi targetCo es.
-  ( HasCallStack
-  , IOE :> es
-  , Store :> es
-  , Error StoreError :> es
-  , BoolAlg targetPhi (RegFile targetRs, targetCi)
-  , Eq targetCo
-  ) =>
-  RunCommandOptions ->
-  Router input targetPhi targetRs targetState targetCi targetCo es ->
-  Adapter es msg ->
-  (msg -> Maybe (RecordedEvent, input)) ->
-  Eff es ()
+    forall msg input targetPhi targetRs targetState targetCi targetCo es.
+    ( HasCallStack
+    , IOE :> es
+    , Store :> es
+    , Error StoreError :> es
+    , BoolAlg targetPhi (RegFile targetRs, targetCi)
+    , Eq targetCo
+    ) =>
+    RunCommandOptions ->
+    Router input targetPhi targetRs targetState targetCi targetCo es ->
+    Adapter es msg ->
+    (msg -> Maybe (RecordedEvent, input)) ->
+    Eff es ()
 runRouterWorker options router Adapter{source = adapterSource} decodeMessage =
-  Streamly.fold Fold.drain $
-    Streamly.mapM handleIngested adapterSource
+    Streamly.fold Fold.drain
+        $ Streamly.mapM handleIngested adapterSource
   where
     handleIngested :: Ingested es msg -> Eff es AckDecision
     handleIngested Ingested{envelope = Envelope{payload = message}, ack = AckHandle finalizeAck} = do
-      decision <- case decodeMessage message of
-        Nothing -> pure (AckHalt (HaltFatal "router worker could not decode message"))
-        Just (recorded, input) -> do
-          RouterResult results <- runRouterOnce options router recorded input
-          pure (ackDecisionFor results)
-      finalizeAck decision
-      pure decision
+        decision <- case decodeMessage message of
+            Nothing -> pure (AckHalt (HaltFatal "router worker could not decode message"))
+            Just (recorded, input) -> do
+                RouterResult results <- runRouterOnce options router recorded input
+                pure (ackDecisionFor results)
+        finalizeAck decision
+        pure decision
 
     ackDecisionFor :: [PMCommandResult target] -> AckDecision
     ackDecisionFor results =
-      case [err | PMCommandFailed err <- results] of
-        (err : _) -> AckHalt (HaltFatal (Text.pack (show err)))
-        [] -> AckOk
+        case [err | PMCommandFailed err <- results] of
+            (err : _) -> AckHalt (HaltFatal (Text.pack (show err)))
+            [] -> AckOk
