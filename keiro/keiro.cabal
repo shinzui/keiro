@@ -82,6 +82,7 @@ library
   reexported-modules:
     keiro-core:Keiro.Codec,
     keiro-core:Keiro.EventStream,
+    keiro-core:Keiro.EventStream.Validate,
     keiro-core:Keiro.Integration.Event,
     keiro-core:Keiro.Prelude,
     keiro-core:Keiro.Snapshot.Policy,

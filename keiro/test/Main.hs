@@ -48,6 +48,11 @@ import Keiki.Core (
 import Keiki.Core qualified as Keiki
 import Keiro
 import Keiro qualified as KeiroRoot
+import Keiro.EventStream.Validate (
+    EventStreamWarning (..),
+    mkEventStream,
+    validateEventStream,
+ )
 import Keiro.Inbox (
     InboxDedupePolicy (..),
     InboxError (..),
@@ -374,6 +379,28 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 typedStream = stream "order-123" :: Stream (EventStream () '[] OrderState OrderCommand OrderEvent)
             contract ^. #initialState `shouldBe` Idle
             (contract ^. #resolveStreamName) typedStream `shouldBe` StreamName "order-123"
+
+    describe "EventStream replay-safety (validateEventStream)" $ do
+        it "every production-intent stream validates clean" $
+            concat
+                [ validateEventStream "counter" counterEventStream
+                , validateEventStream "snapshot-counter" snapshotCounterEventStream
+                ]
+                `shouldBe` []
+
+    describe "mkEventStream" $ do
+        it "rejects a hidden-input stream by label" $ do
+            let warns = validateEventStream "broken" brokenHiddenInputEventStream
+            warns `shouldNotBe` []
+            map eswStreamLabel warns `shouldSatisfy` all (== "broken")
+            case mkEventStream "broken" brokenHiddenInputEventStream of
+                Left ws -> map eswStreamLabel ws `shouldSatisfy` all (== "broken")
+                Right _ -> expectationFailure "expected mkEventStream to reject the hidden-input stream"
+
+        it "accepts a replay-safe stream" $
+            case mkEventStream "counter" counterEventStream of
+                Right _ -> pure ()
+                Left ws -> expectationFailure ("expected mkEventStream to accept the stream, got " <> show ws)
 
     describe "Keiro.Command" $ around (withFreshStore fixture) $ do
         it "creates a stream and appends the first command event" $ \storeHandle -> do
@@ -4283,7 +4310,7 @@ data CounterEvent
 
 data CounterState
     = Counting
-    deriving stock (Generic, Eq, Show)
+    deriving stock (Generic, Eq, Show, Enum, Bounded, Ord)
     deriving anyclass (FromJSON, ToJSON)
 
 counterEventStream :: CounterEventStream
@@ -4442,6 +4469,36 @@ guardedSnapshotCounterTransducer =
                             (#lastAmount :: IndexN "lastAmount" SnapshotCounterRegs Int)
                             (inpCtor addCtor #amount)
                     , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
+                    , target = Counting
+                    }
+                ]
+        , initial = Counting
+        , initialRegs = RCons (Proxy @"lastAmount") 0 RNil
+        , isFinal = \_ -> False
+        }
+
+{- | A deliberately replay-unsafe stream: its single edge is an ε-edge
+(empty @output@) whose @update@ reads the command's @amount@. Because
+the edge emits no event, that command field cannot be recovered on
+replay, so keiki's hidden-input check flags it. Used to prove
+'validateEventStream' / 'mkEventStream' reject an unsafe stream.
+-}
+brokenHiddenInputEventStream :: SnapshotCounterEventStream
+brokenHiddenInputEventStream =
+    snapshotCounterEventStream & #transducer .~ brokenHiddenInputTransducer
+
+brokenHiddenInputTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
+brokenHiddenInputTransducer =
+    SymTransducer
+        { edgesOut = \case
+            Counting ->
+                [ Edge
+                    { guard = matchInCtor addCtor
+                    , update =
+                        USet
+                            (#lastAmount :: IndexN "lastAmount" SnapshotCounterRegs Int)
+                            (inpCtor addCtor #amount)
+                    , output = []
                     , target = Counting
                     }
                 ]
@@ -5124,6 +5181,7 @@ routerTestEnvelope message =
         , partition = Nothing
         , enqueuedAt = Nothing
         , traceContext = Nothing
+        , headers = Nothing
         , attempt = Nothing
         , attributes = mempty
         , payload = message

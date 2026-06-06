@@ -4,6 +4,26 @@ All notable changes to the `keiro` library are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
+## [Unreleased]
+
+_In-flight work is tracked under `docs/plans/`. Entries land here as features merge, so
+consumers of `keiro` can see what changed and what they need to update._
+
+### Added
+
+- `Keiro.EventStream.Validate`: `validateEventStream` / `validateEventStreamWith` run keiki's
+  pure `validateTransducer` over an `EventStream`'s transducer (replay-safety + determinism +
+  dead-edge), returning labelled `EventStreamWarning`s; `mkEventStream` is a fail-fast smart
+  constructor returning `Left [EventStreamWarning]` for an unsafe stream. The bare `EventStream`
+  record literal remains available. Validation requires the control state to satisfy
+  `(Bounded s, Enum s, Ord s, Show s)`.
+
+### Changed
+
+- Bumped the pinned `keiki` dependency to a commit that ships `validateTransducer` and the
+  structured `TransducerValidationWarning` (keiki EP-56), which the new validation surface builds
+  on. The previously pinned `keiki` predated that work.
+
 ## 0.1.0.0 — 2026-05-22
 
 The initial release of `keiro`, an event-sourcing framework and workflow engine
