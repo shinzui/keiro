@@ -568,6 +568,7 @@ processManagerAdapter recorded event =
                             , partition = Nothing
                             , enqueuedAt = Nothing
                             , traceContext = Nothing
+                            , headers = Nothing
                             , attempt = Nothing
                             , attributes = mempty
                             , payload = (recorded, event)
