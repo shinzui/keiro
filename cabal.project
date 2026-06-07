@@ -2,6 +2,7 @@ packages:
   keiro
   keiro-core
   keiro-migrations
+  keiro-pgmq
   keiro-test-support
   jitsurei
 

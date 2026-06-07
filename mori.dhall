@@ -32,6 +32,12 @@ in  Schema.Project::{
         , language = Schema.Language.Haskell
         , description = Some "Shared PostgreSQL test fixtures for Keiro test suites"
         }
+      , Schema.Package::{
+        , name = "keiro-pgmq"
+        , type = Schema.PackageType.Library
+        , language = Schema.Language.Haskell
+        , description = Some "PostgreSQL job-queue (PGMQ) integration for Keiro"
+        }
       ]
     , dependencies =
       [ "shinzui/kiroku"
