@@ -106,7 +106,7 @@ framework by shipping pure transport codecs.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Build the keiro-pgmq package with typed Job and Runtime layers | docs/plans/55-build-the-keiro-pgmq-package-with-typed-job-and-runtime-layers.md | None | None | In Progress |
+| 1 | Build the keiro-pgmq package with typed Job and Runtime layers | docs/plans/55-build-the-keiro-pgmq-package-with-typed-job-and-runtime-layers.md | None | None | Complete |
 | 2 | Migrate rei background queues onto keiro-pgmq | docs/plans/56-migrate-rei-background-queues-onto-keiro-pgmq.md | EP-1 | None | Not Started |
 | 3 | Migrate hospital-capacity reservation work onto keiro-pgmq | docs/plans/57-migrate-hospital-capacity-reservation-work-onto-keiro-pgmq.md | EP-1 | None | Not Started |
 | 4 | Deferred pgmq-as-transport for integration events (case B) | docs/plans/58-deferred-pgmq-as-transport-for-integration-events-case-b.md | None | EP-1 | Deferred (Not Started) |
@@ -174,6 +174,11 @@ and both EP-2 and EP-3's "Interfaces and Dependencies" sections to match before 
 begin. EP-2 and EP-3 must reference these signatures only through `keiro-pgmq`, never by
 re-deriving shibuya/pgmq types directly.
 
+**EP-1 outcome (2026-06-07): the listed signatures all hold as published, with two
+refinements (see Surprises & Discoveries).** `RetryDelay` is re-exported from `Keiro.PGMQ`,
+so import it from there, not `Shibuya.Core.Ack`. `enqueueWithDelay :: (Pgmq :> es, IOE :> es)
+=> Job p -> Int32 -> p -> Eff es Pgmq.MessageId` takes PGMQ's `Delay` (= `Int32`).
+
 **2. The two-layer module split (shared by EP-1 and EP-4).** EP-1 owns the boundary:
 `Keiro.PGMQ.Runtime` holds transport-agnostic plumbing (queue-name derivation via
 `QueueRef`, the `Pgmq : Tracing : Error PgmqRuntimeError : IOE` runner, pool + tracer
@@ -198,11 +203,11 @@ repo — both carry the `MasterPlan:` trailer (the path is relative to the keiro
 
 Track milestone-level progress across all child plans.
 
-- [ ] EP-1: Scaffold `keiro-pgmq` package (cabal, mori.dhall, cabal.project, empty modules build)
-- [ ] EP-1: `Keiro.PGMQ.Runtime` — `QueueRef` name derivation + effect-stack runner + pool/tracer lifecycle
-- [ ] EP-1: `Keiro.PGMQ.Codec` — `JobCodec`, `aesonJobCodec`, versioned `keiroJobCodec`
-- [ ] EP-1: `Keiro.PGMQ.Job` — `Job`/`JobOutcome`/`RetryPolicy`, `enqueue`, `ensureJobQueue`, `jobProcessor`, `runJobWorkers`, `runJobOnce`
-- [ ] EP-1: Integration test — enqueue → consume → Done/Retry/Dead against ephemeral Postgres with PGMQ installed
+- [x] EP-1: Scaffold `keiro-pgmq` package (cabal, mori.dhall, cabal.project, empty modules build) (2026-06-07)
+- [x] EP-1: `Keiro.PGMQ.Runtime` — `QueueRef` name derivation + effect-stack runner + pool/tracer lifecycle (2026-06-07)
+- [x] EP-1: `Keiro.PGMQ.Codec` — `JobCodec`, `aesonJobCodec`, versioned `keiroJobCodec` (2026-06-07)
+- [x] EP-1: `Keiro.PGMQ.Job` — `Job`/`JobOutcome`/`RetryPolicy`, `enqueue`, `ensureJobQueue`, `jobProcessor`, `runJobWorkers`, `runJobOnce` (2026-06-07)
+- [x] EP-1: Integration test — enqueue → consume → Done/Retry/Dead against ephemeral Postgres with PGMQ installed (2026-06-07 — `cabal test keiro-pgmq`: 5 examples, 0 failures)
 - [ ] EP-2: Pin `keiro-pgmq` in rei; port one queue (git sync) as a template
 - [ ] EP-2: Port remaining rei queues (reminders, reflections, agent work); delete hand-rolled boilerplate
 - [ ] EP-2: End-to-end verification of rei background-work parity
@@ -213,7 +218,33 @@ Track milestone-level progress across all child plans.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-06-07 (EP-1) — **The `keiro-pgmq` public API is final and matches Integration Point 1,
+  with two refinements EP-2 and EP-3 must adopt.** (1) `RetryDelay` is now re-exported from
+  `Keiro.PGMQ` (the package), because `JobOutcome`'s `Retry !RetryDelay` constructor is
+  public — consumers should import `RetryDelay` from `Keiro.PGMQ`, **not** from
+  `Shibuya.Core.Ack`. (2) `enqueueWithDelay`'s delay argument is `Int32` (PGMQ's
+  `type Delay = Int32`), not a named `Pgmq.Delay`. All other signatures in Integration
+  Point 1 hold exactly as published. The producer signatures retain their `IOE` constraint
+  as published.
+
+- 2026-06-07 (EP-1) — **Affects Integration Point 3 (cross-repo pin) for EP-2/EP-3.** Inside
+  the keiro repo, the pgmq/shibuya family is NOT pinned via `source-repository-package`; it
+  resolves from a private cabal mirror served under the `hackage.haskell.org` repository
+  name (versions in play: pgmq-* 0.3.0.0, shibuya-* 0.7.0.0). EP-1 added exactly one pin to
+  keiro's `cabal.project`: the patched `github.com/shinzui/hasql-migration` fork (tag
+  `4aaff6c…`), required only by the *test* build (`pgmq-migration` → `hasql-migration`;
+  Hackage's 0.3.1 will not build against hasql 1.10). EP-2/EP-3 should expect that their
+  own repos already pin the pgmq/shibuya family their own way (per Integration Point 3) and
+  add a `keiro-pgmq` pin at the keiro SHA produced here. When `keiro-pgmq`'s *test* is built
+  inside a consumer repo (rarely needed — consumers depend on the library, not its test),
+  that repo would also need the `hasql-migration` fork pin; depending on the library alone
+  does not pull it in.
+
+- 2026-06-07 (EP-1) — **`runJobOnce` cadence confirmed against the real reference.** The
+  one-shot drain is implemented with `Shibuya.Runner.Supervised.runWithMetrics` over
+  `Streamly.Data.Stream.take n adapter.source`, mirroring `hospital-capacity`'s
+  `runReservationWorkConsumerOnceWithTelemetry`. EP-3's migration is therefore a near
+  mechanical swap onto `runJobOnce`.
 
 
 ## Decision Log

@@ -325,7 +325,7 @@ data JobCodec p = JobCodec { encodeJob :: p -> Value, decodeJob :: Value -> Eith
 aesonJobCodec  :: (ToJSON p, FromJSON p) => JobCodec p
 
 -- Keiro.PGMQ.Job
-data JobOutcome = Done | Retry !RetryDelay | Dead !Text          -- RetryDelay from Shibuya.Core.Ack
+data JobOutcome = Done | Retry !RetryDelay | Dead !Text          -- RetryDelay is RE-EXPORTED from Keiro.PGMQ
 data RetryPolicy = RetryPolicy { maxRetries :: !Int64, defaultRetryDelay :: !RetryDelay, useDeadLetter :: !Bool }
 data Job p = Job { jobName :: !Text, jobQueue :: !QueueRef, jobCodec :: !(JobCodec p), jobPolicy :: !RetryPolicy }
 enqueue        :: (Pgmq :> es, IOE :> es) => Job p -> p -> Eff es Pgmq.MessageId
@@ -333,10 +333,14 @@ ensureJobQueue :: (Pgmq :> es) => Job p -> Eff es ()
 runJobOnce     :: (Pgmq :> es, IOE :> es, Tracing :> es) => Int -> Job p -> (p -> Eff es JobOutcome) -> Eff es ()
 ```
 
-Import from `Keiro.PGMQ` (umbrella) or the submodules. The service's existing
-`runPgmqIOWithTelemetry` already establishes the `Pgmq : Tracing : Error PgmqRuntimeError :
-IOE` stack that `enqueue`/`ensureJobQueue`/`runJobOnce` require, so they slot in without
-re-plumbing.
+Import from `Keiro.PGMQ` (umbrella) or the submodules. **`RetryDelay` is re-exported by
+`Keiro.PGMQ` (EP-1 outcome, 2026-06-07) — import it from there, not from `Shibuya.Core.Ack`.**
+The service's existing `runPgmqIOWithTelemetry` already establishes the
+`Pgmq : Tracing : Error PgmqRuntimeError : IOE` stack that
+`enqueue`/`ensureJobQueue`/`runJobOnce` require, so they slot in without re-plumbing. EP-1
+confirmed `runJobOnce` is implemented exactly as this service's
+`runReservationWorkConsumerOnceWithTelemetry` does its one-shot drain
+(`Shibuya.Runner.Supervised.runWithMetrics` over `Stream.take n`), so the swap is mechanical.
 
 If `docs/plans/55-...` changed any of these signatures during its implementation, the
 MasterPlan's Integration Points section is the authority — reconcile against it before

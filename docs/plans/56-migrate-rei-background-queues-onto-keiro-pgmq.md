@@ -342,20 +342,22 @@ data JobCodec p
 aesonJobCodec :: (ToJSON p, FromJSON p) => JobCodec p
 
 -- Keiro.PGMQ.Job
-data JobOutcome = Done | Retry !RetryDelay | Dead !Text          -- RetryDelay from Shibuya.Core.Ack
+data JobOutcome = Done | Retry !RetryDelay | Dead !Text          -- RetryDelay is RE-EXPORTED from Keiro.PGMQ
 data RetryPolicy = RetryPolicy { maxRetries :: !Int64, defaultRetryDelay :: !RetryDelay, useDeadLetter :: !Bool }
 defaultRetryPolicy :: RetryPolicy
 data Job p = Job { jobName :: !Text, jobQueue :: !QueueRef, jobCodec :: !(JobCodec p), jobPolicy :: !RetryPolicy }
-enqueue        :: (Pgmq :> es, IOE :> es) => Job p -> p -> Eff es Pgmq.MessageId
+enqueue          :: (Pgmq :> es, IOE :> es) => Job p -> p -> Eff es Pgmq.MessageId
+enqueueWithDelay :: (Pgmq :> es, IOE :> es) => Job p -> Int32 -> p -> Eff es Pgmq.MessageId  -- Int32 = PGMQ Delay
 ensureJobQueue :: (Pgmq :> es) => Job p -> Eff es ()
 jobProcessor   :: (Pgmq :> es, IOE :> es, Tracing :> es) => Job p -> (p -> Eff es JobOutcome) -> Eff es (ProcessorId, QueueProcessor es)
 runJobWorkers  :: (Pgmq :> es, IOE :> es, Tracing :> es) => SupervisionStrategy -> Int -> [Eff es (ProcessorId, QueueProcessor es)] -> Eff es (Either AppError (AppHandle es))
 ```
 
-Import these from `Keiro.PGMQ` (umbrella) or the specific submodules. `RetryDelay`,
-`SupervisionStrategy`, `ProcessorId`, `QueueProcessor`, and `AppError`/`AppHandle` come from
-shibuya (`Shibuya.Core.Ack`, `Shibuya.App`) and are re-exported through the package's types
-where used; you reference them only via the signatures above.
+Import these from `Keiro.PGMQ` (umbrella) or the specific submodules. **`RetryDelay` is
+re-exported by `Keiro.PGMQ` (EP-1 outcome, 2026-06-07) — import it from there, not from
+`Shibuya.Core.Ack`.** `SupervisionStrategy`, `ProcessorId`, `QueueProcessor`, and
+`AppError`/`AppHandle` come from shibuya (`Shibuya.App`) and are referenced only via the
+signatures above. Note `enqueueWithDelay` takes `Int32` (PGMQ's `Delay`).
 
 If `docs/plans/55-...` changed any of these signatures during its implementation, the
 MasterPlan's Integration Points section is the authority — reconcile against it before
