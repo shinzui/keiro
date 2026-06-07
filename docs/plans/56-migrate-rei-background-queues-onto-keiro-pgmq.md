@@ -41,15 +41,56 @@ periodic `pg_cron` sweeps.
 
 ## Progress
 
-- [ ] Milestone 1: Add the `keiro-pgmq` pin to rei and confirm it resolves.
-- [ ] Milestone 2: Port the workspace git-sync queue as the template (one queue, end to end).
-- [ ] Milestone 3: Port reminders, reflections, and agent-work queues; rewire the runner.
-- [ ] Milestone 4: Delete the now-dead hand-rolled plumbing; verify parity end to end.
+- [x] Milestone 1: Add the `keiro-pgmq` pin to rei and confirm it resolves. (2026-06-07 — rei
+  commit `7516fe61`; `cabal build rei-core` builds `keiro-pgmq-0.1.0.0` cleanly.)
+- [x] Milestone 2: Port the workspace git-sync queue as the template (one queue, end to end).
+  (2026-06-07 — handler now `NoteGitSyncPayload -> Eff es JobOutcome`, producer uses
+  `enqueueWithDelay gitSyncJob`, both runners use `jobProcessor gitSyncJob`; dead legacy
+  git-sync code removed; `cabal build rei-core rei-cli` + git-sync handler test pass.)
+- [x] Milestone 3: Port reminders, reflections, and agent-work queues; rewire the runner.
+  (2026-06-07 — rei commit `88b366ce`; three Job declarations + `payload -> JobOutcome`
+  handlers + `enqueue`-based producers; runner now uses `runJobWorkers` over four
+  `jobProcessor` actions; `cabal build` + full 932-test suite pass.)
+- [x] Milestone 4: Delete the now-dead hand-rolled plumbing; verify parity end to end.
+  (2026-06-07 — rei commit `6f179474`; legacy git-sync code already removed in M2, runner no
+  longer constructs adapters, unused `shibuya-pgmq-adapter` direct dep dropped from rei-cli.
+  Grep confirms no `pgmqAdapter`/`mkProcessor`/`SendMessage`/`AckDecision`/`Ingested` in any
+  migrated queue module.)
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-06-07 (M1) — **rei capped shibuya at `^>=0.6` but keiro-pgmq requires `>=0.7`.** The
+  pin was not a trivial add: keiro-pgmq needs `shibuya-* >=0.7 && <0.8` and
+  `pgmq-* >=0.3 && <0.4`, while rei's `rei-core`/`rei-cli` pinned `shibuya-core ^>=0.6`
+  (< 0.7) and `shibuya-pgmq-adapter ^>=0.6`. The user upgraded rei's whole eventing stack
+  first (rei commits `f26c6a7e`, `df1f4a86`, rei-side "ExecPlan 122"): shibuya-core 0.7,
+  shibuya-pgmq-adapter 0.7, shibuya-kiroku-adapter 0.3 (taken from the kiroku git pin because
+  Hackage only carries 0.2), and bumped the keiro pin to `cb252e2` (which contains
+  keiro-pgmq) + keiki to `bc987f4`. After that, adding `keiro-pgmq` to the keiro
+  `source-repository-package` subdir list and to `build-depends` resolved cleanly. **This is
+  the cross-repo precondition EP-3 should expect too** — keiro-runtime-jitsurei must already
+  be on shibuya 0.7 before pinning keiro-pgmq.
+
+- 2026-06-07 (M2) — **The pre-migration adapters had NO dead-letter queue and 3 retries.**
+  shibuya's `defaultConfig` sets `deadLetterConfig = Nothing` and `maxRetries = 3`. rei's
+  runner built every queue with `defaultConfig`, so for parity the shared `reiQueuePolicy`
+  uses `useDeadLetter = False, maxRetries = 3` (NOT keiro-pgmq's `defaultRetryPolicy`, which
+  is 5 retries + DLQ). EP-3 (hospital-capacity) genuinely uses a DLQ, so it will differ here.
+
+- 2026-06-07 (M2) — **The live git-sync producer is a transactional projection, not the
+  `enqueue` producer.** `enqueueNoteGitSync` (in `Rei/Workspace/Queue/Producer.hs`) has no
+  callers anywhere in the rei tree. The real enqueue path is
+  `Rei/Modules/Note/Projection/GitSyncEnqueueProjection.hs`, which builds the
+  `NoteGitSyncPayload` JSON and calls `pgmq.send` via a **raw Hasql `Statement` in the same
+  transaction** as a `note_git_sync_enqueue_dedup` claim insert, for exactly-once enqueue.
+  keiro-pgmq's `enqueue` uses the `Pgmq` effect in a separate transaction and therefore
+  CANNOT replace this without losing the transactional exactly-once guarantee — so the
+  migration deliberately covers only the consumer side (handler + runner) for git-sync and
+  leaves the projection's transactional enqueue untouched. The wire JSON is unchanged
+  (same `NoteGitSyncPayload` `ToJSON`), so the migrated consumer (`aesonJobCodec`) decodes it
+  identically. The same pattern likely holds for the other queues' enqueue side (the periodic
+  `pg_cron`/projection paths), so M3 will likewise migrate only the consumer side.
 
 
 ## Decision Log
@@ -64,6 +105,72 @@ periodic `pg_cron` sweeps.
   Rationale: Drop-in behavioral parity is the goal of this migration; adopting versioned
   `keiroJobCodec` is a separate, optional follow-up.
   Date: 2026-06-07
+
+- Decision: All four rei queues share one `reiQueuePolicy = RetryPolicy { maxRetries = 3,
+  defaultRetryDelay = RetryDelay 60, useDeadLetter = False }`, NOT keiro-pgmq's
+  `defaultRetryPolicy`.
+  Rationale: rei's pre-migration runner built every adapter with shibuya's
+  `defaultConfig`, whose defaults are `maxRetries = 3` and `deadLetterConfig = Nothing` (no
+  DLQ). keiro-pgmq's `defaultRetryPolicy` differs (5 retries, DLQ on). To preserve exact
+  behaviour the shared policy reproduces `defaultConfig`. `reiQueuePolicy` and a
+  `reiQueueRef :: ReiQueue -> QueueRef` helper live in `Rei/Workspace/Queue/Types.hs`, the
+  existing central queue registry, so `reiQueueName` stays the single source of name strings.
+  Date: 2026-06-07
+
+- Decision: Remove the dead legacy git-sync code (`WorkspaceGitSyncPayload`,
+  `enqueueWorkspaceGitSync`, `gitSyncHandler`, `processLegacyGitSync`) during Milestone 2
+  rather than Milestone 4.
+  Rationale: It is verified-dead (no callers anywhere in the rei tree) and lives in the exact
+  three files Milestone 2 rewrites. Leaving it would keep `SendMessage`/`AckDecision` imports
+  in files the migration is supposed to clean, so removing it now keeps each commit coherent.
+  Date: 2026-06-07
+
+- Decision: Do not call `ensureJobQueue` at worker startup.
+  Rationale: rei already creates every queue via SQL migrations under
+  `rei-core/migrations/scripts/` (`pgmq.create('workspace_git_sync')` etc.), and the policy
+  disables the DLQ, so there is nothing extra to create. Skipping it keeps startup side
+  effects identical to today. (It is idempotent, so adding it later is harmless.)
+  Date: 2026-06-07
+
+
+## Outcomes & Retrospective
+
+Completed 2026-06-07. All four rei background queues (workspace git-sync, reminder trigger,
+reflection scheduler, agent work) now run through `keiro-pgmq`'s typed `Job` API. Each queue
+is a `Job p` declaration plus a `p -> Eff es JobOutcome` handler; the worker runner builds all
+four processors with `jobProcessor` and supervises them with `runJobWorkers IgnoreFailures
+100`. rei no longer wires `shibuya-pgmq-adapter` by hand — its only direct uses of that
+package are gone, and the direct dep was dropped from `rei-cli`. Behaviour is preserved: the
+shared `reiQueuePolicy` reproduces the old shibuya `defaultConfig` (3 retries, no DLQ), the
+wire JSON is unchanged, and the full 932-test rei-core suite (including the git-sync handler
+integration test) passes.
+
+What went differently from the plan:
+
+- **The pin was not free.** rei capped shibuya at `<0.7` but keiro-pgmq needs `>=0.7`, so the
+  whole eventing stack had to be upgraded first (done by the user: rei commits `f26c6a7e` /
+  `df1f4a86`). Milestone 1's "just add the pin" assumed version compatibility that did not hold.
+
+- **The producer side was mostly not the `enqueue` path.** The real git-sync and agent-task
+  enqueues are transactional raw-SQL projections (`GitSyncEnqueueProjection`,
+  `AgentTaskEnqueueProjection`) for exactly-once delivery, which keiro-pgmq's `enqueue`
+  (separate `Pgmq`-effect transaction) cannot replace. The migration therefore centres on the
+  consumer side (handlers + runner), which is where the shibuya `Ingested`/`AckDecision`
+  coupling actually lived. The periodic reminder/reflection/agent-check producers (which DO
+  use the `Pgmq` effect) were migrated to `enqueue`.
+
+- **No DLQ today.** The pre-migration adapters used `defaultConfig` (no dead-letter queue, 3
+  retries), so parity required a custom `reiQueuePolicy` rather than keiro-pgmq's
+  DLQ-enabled `defaultRetryPolicy`. Adopting versioned `keiroJobCodec` and a real DLQ are
+  available follow-ups, deliberately out of scope for this behaviour-preserving migration.
+
+Cross-plan note for EP-3 (hospital-capacity): expect the same shibuya-0.7 precondition, and
+note that hospital-capacity genuinely uses a DLQ, so it will use a DLQ-enabled policy (unlike
+rei) and the one-shot `runJobOnce` cadence rather than `runJobWorkers`.
+
+Net result: each queue module shrank to a `Job` + domain handler, the per-queue
+adapter/`mkProcessor`/`runApp` boilerplate is gone, and rei depends on `keiro-pgmq` instead of
+hand-wiring `pgmq-effectful` + `shibuya-pgmq-adapter`.
 
 
 ## Context and Orientation

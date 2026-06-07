@@ -107,7 +107,7 @@ framework by shipping pure transport codecs.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Build the keiro-pgmq package with typed Job and Runtime layers | docs/plans/55-build-the-keiro-pgmq-package-with-typed-job-and-runtime-layers.md | None | None | Complete |
-| 2 | Migrate rei background queues onto keiro-pgmq | docs/plans/56-migrate-rei-background-queues-onto-keiro-pgmq.md | EP-1 | None | Not Started |
+| 2 | Migrate rei background queues onto keiro-pgmq | docs/plans/56-migrate-rei-background-queues-onto-keiro-pgmq.md | EP-1 | None | Complete |
 | 3 | Migrate hospital-capacity reservation work onto keiro-pgmq | docs/plans/57-migrate-hospital-capacity-reservation-work-onto-keiro-pgmq.md | EP-1 | None | Not Started |
 | 4 | Deferred pgmq-as-transport for integration events (case B) | docs/plans/58-deferred-pgmq-as-transport-for-integration-events-case-b.md | None | EP-1 | Deferred (Not Started) |
 
@@ -208,9 +208,9 @@ Track milestone-level progress across all child plans.
 - [x] EP-1: `Keiro.PGMQ.Codec` — `JobCodec`, `aesonJobCodec`, versioned `keiroJobCodec` (2026-06-07)
 - [x] EP-1: `Keiro.PGMQ.Job` — `Job`/`JobOutcome`/`RetryPolicy`, `enqueue`, `ensureJobQueue`, `jobProcessor`, `runJobWorkers`, `runJobOnce` (2026-06-07)
 - [x] EP-1: Integration test — enqueue → consume → Done/Retry/Dead against ephemeral Postgres with PGMQ installed (2026-06-07 — `cabal test keiro-pgmq`: 5 examples, 0 failures)
-- [ ] EP-2: Pin `keiro-pgmq` in rei; port one queue (git sync) as a template
-- [ ] EP-2: Port remaining rei queues (reminders, reflections, agent work); delete hand-rolled boilerplate
-- [ ] EP-2: End-to-end verification of rei background-work parity
+- [x] EP-2: Pin `keiro-pgmq` in rei; port one queue (git sync) as a template (2026-06-07 — rei commits `7516fe61`, `c4c8c06c`)
+- [x] EP-2: Port remaining rei queues (reminders, reflections, agent work); delete hand-rolled boilerplate (2026-06-07 — rei commits `88b366ce`, `6f179474`)
+- [x] EP-2: End-to-end verification of rei background-work parity (2026-06-07 — full rei-core suite, 932 tests, passes; git-sync handler integration test green)
 - [ ] EP-3: Pin `keiro-pgmq` in keiro-runtime-jitsurei; port hospital-capacity reservation work + DLQ
 - [ ] EP-3: End-to-end verification of hospital-capacity reservation-work parity
 - [ ] EP-4: (Deferred) design captured; not implemented this initiative
@@ -239,6 +239,31 @@ Track milestone-level progress across all child plans.
   inside a consumer repo (rarely needed — consumers depend on the library, not its test),
   that repo would also need the `hasql-migration` fork pin; depending on the library alone
   does not pull it in.
+
+- 2026-06-07 (EP-2) — **The cross-repo pin required a shibuya 0.6→0.7 upgrade first; EP-3
+  should expect the same precondition.** rei pinned `shibuya-core`/`shibuya-pgmq-adapter` at
+  `^>=0.6` (< 0.7) while `keiro-pgmq` requires `shibuya-* >=0.7 && <0.8`. Adding the
+  `keiro-pgmq` pin was therefore blocked until rei's whole eventing stack was upgraded to
+  shibuya 0.7 (also pulling `shibuya-kiroku-adapter` 0.3 from the kiroku git pin, since
+  Hackage only carries 0.2). Integration Point 3 said "expect your repo already pins the
+  pgmq/shibuya family their own way" — the sharper lesson is that the family must be at **0.7**,
+  not merely pinned. EP-3 (keiro-runtime-jitsurei) must be on shibuya 0.7 before pinning
+  keiro-pgmq.
+
+- 2026-06-07 (EP-2) — **rei's pre-migration queues had NO dead-letter queue (shibuya
+  `defaultConfig`: `deadLetterConfig = Nothing`, `maxRetries = 3`).** Behaviour-preserving
+  parity therefore used a custom `reiQueuePolicy` (3 retries, `useDeadLetter = False`), not
+  keiro-pgmq's `defaultRetryPolicy` (5 retries + DLQ). This is a per-consumer choice:
+  **EP-3 (hospital-capacity) genuinely uses a DLQ**, so it will use a DLQ-enabled policy and
+  the `runJobOnce` one-shot cadence, exercising package surface that EP-2 did not.
+
+- 2026-06-07 (EP-2) — **The migration's payoff is on the consumer side, not the producer
+  side.** rei's real git-sync and agent-task enqueues are transactional raw-SQL `pgmq.send`
+  projections (exactly-once, committed with a dedup-claim insert), which keiro-pgmq's
+  `enqueue` (a separate `Pgmq`-effect transaction) cannot and should not replace. The shibuya
+  `Ingested`/`AckDecision` coupling lived in the handlers + runner, and that is what
+  keiro-pgmq absorbed. The periodic-check producers (which use the `Pgmq` effect) did move to
+  `enqueue`. EP-3 reviewers: don't assume every producer becomes `enqueue`.
 
 - 2026-06-07 (EP-1) — **`runJobOnce` cadence confirmed against the real reference.** The
   one-shot drain is implemented with `Shibuya.Runner.Supervised.runWithMetrics` over
