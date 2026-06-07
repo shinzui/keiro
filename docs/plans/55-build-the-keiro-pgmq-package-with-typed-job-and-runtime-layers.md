@@ -61,7 +61,7 @@ leaves it for redelivery, and a `Dead` handler routes it to the DLQ.
 - [x] Milestone 2: `Keiro.PGMQ.Runtime` — `QueueRef` name derivation + effect-stack runner. (2026-06-07 — compiles; `runJobEff` mirrors jitsurei's `runErrorNoCallStack`/`runTracing`/`runPgmqTraced` ordering. `withJobRuntime` acquires/releases a hasql pool. Tracer threaded via shibuya's re-exported `Tracer`. Used parenthesized `$` lambda instead of `BlockArguments`.)
 - [x] Milestone 3: `Keiro.PGMQ.Codec` — `JobCodec`, `aesonJobCodec`, versioned `keiroJobCodec`. (2026-06-07 — compiles; `keiroJobCodec` wraps `{v,data}` and replays `Keiro.Codec.migrateToCurrent`.)
 - [x] Milestone 4: `Keiro.PGMQ.Job` — types, `enqueue`, `ensureJobQueue`, `jobProcessor`, `runJobWorkers`, `runJobOnce`, umbrella re-export. (2026-06-07 — full public API compiles. `runJobOnce` uses `Shibuya.Runner.Supervised.runWithMetrics` over `Stream.take n`. `enqueueWithDelay` takes `Int32` (PGMQ `Delay = Int32`, not exported from `Pgmq.Types`). Kept the published `IOE` constraint on producers via a localized `-Wno-redundant-constraints`.)
-- [ ] Milestone 5: Integration test proving enqueue → consume → Done/Retry/Dead.
+- [x] Milestone 5: Integration test proving enqueue → consume → Done/Retry/Dead. (2026-06-07 — `cabal test keiro-pgmq` → 5 examples, 0 failures against an ephemeral Postgres with PGMQ installed via `pgmq-migration`. Required pinning the patched `shinzui/hasql-migration` fork in `cabal.project` because Hackage `hasql-migration 0.3.1` does not build against hasql 1.10; only the test build pulls it in.)
 
 
 ## Surprises & Discoveries
@@ -92,6 +92,25 @@ leaves it for redelivery, and a `Dead` handler routes it to the DLQ.
   `runErrorNoCallStack @PgmqRuntimeError` from `Effectful.Error.Static`. `pgmq-effectful`'s
   `dropQueue` returns `Bool` (not `()`). `queueMetrics :: QueueName -> Eff es QueueMetrics`
   with field `queueLength :: Int64` is the cleanest read-back for test assertions.
+
+- 2026-06-07 — **`pgmq-migration` drags a broken `hasql-migration` into the test build.**
+  `pgmq-migration` depends on `hasql-migration ^>=0.3.1`, but Hackage's `hasql-migration
+  0.3.1` does not compile against the hasql 1.10 ecosystem this repo uses — it uses
+  `Statement` as a term-level constructor, which fails with
+  `Illegal term-level use of the type constructor 'Statement'`. `pgmq-hs`'s own
+  `cabal.project` works around this by pinning a patched fork
+  (`github.com/shinzui/hasql-migration` tag `4aaff6c…`, "hasql 1.10 ecosystem"). EP-1 adds
+  the same `source-repository-package` pin to keiro's `cabal.project`. This is the *only*
+  pin EP-1 adds, and it affects the test build only (the library does not depend on
+  `pgmq-migration`). Adding it also nudged the solver toward an inconsistent
+  shibuya-core 0.6/0.7 plan, fixed by bounding the test stanza to
+  `shibuya-core >=0.7 && <0.8`.
+
+- 2026-06-07 — **`RetryDelay` is now re-exported from `Keiro.PGMQ.Job`.** `JobOutcome`'s
+  `Retry !RetryDelay` constructor is public, so callers need `RetryDelay` to build a retry
+  outcome. Rather than force every consumer (and the test) to reach into
+  `Shibuya.Core.Ack`, the `Job` module re-exports `RetryDelay (..)`. EP-2/EP-3 should use
+  `Keiro.PGMQ`'s `RetryDelay`, not shibuya's directly.
 
 
 ## Decision Log
@@ -126,6 +145,58 @@ leaves it for redelivery, and a `Dead` handler routes it to the DLQ.
   in the MasterPlan's Integration Point 3 still governs how the *consumer* repos —
   `rei`, `keiro-runtime-jitsurei` — reach `keiro-pgmq`; that is EP-2/EP-3's concern.)
   Date: 2026-06-07
+
+- Decision: Re-export `RetryDelay (..)` from `Keiro.PGMQ.Job` (and thus `Keiro.PGMQ`).
+  Rationale: `JobOutcome`'s `Retry !RetryDelay` is public, so callers must be able to name
+  and construct a `RetryDelay`. Re-exporting it keeps consumers from importing
+  `Shibuya.Core.Ack` directly. Recorded in Surprises & Discoveries.
+  Date: 2026-06-07
+
+- Decision: Use `Int32` (PGMQ's `Delay`) for `enqueueWithDelay`'s delay argument instead of
+  a named `Pgmq.Delay`.
+  Rationale: `Delay` is a `type Delay = Int32` alias and is not exported from `Pgmq.Types`,
+  so naming it would require importing it from somewhere awkward; `Int32` is the same type
+  and self-documenting with a doc comment. The published-contract producer signatures keep
+  the `IOE` constraint (suppressing the otherwise-correct redundant-constraint warning
+  locally) so EP-2/EP-3 see the exact signatures the MasterPlan pins.
+  Date: 2026-06-07
+
+
+## Outcomes & Retrospective
+
+2026-06-07 — **EP-1 complete.** The `keiro-pgmq` library package exists in the keiro repo
+and its five-scenario integration test passes (`cabal test keiro-pgmq` → 5 examples, 0
+failures) against a throwaway PostgreSQL with PGMQ installed. The full public API
+type-checks and behaves: an enqueued message a handler marks `Done` is deleted, one marked
+`Retry` stays on the queue, and one marked `Dead` — or one whose payload the codec rejects
+— is routed to the dead-letter queue, all read back through `pgmq-effectful`'s
+`queueMetrics`. The two layers are cleanly separated: `Keiro.PGMQ.Runtime` (queue-name
+derivation + the `Pgmq : Tracing : Error : IOE` runner + pool/tracer lifecycle) carries no
+Job-specific concerns, so EP-4 (case B) can later build `Keiro.PGMQ.Inbox`/`.Outbox` on it
+without touching `Keiro.PGMQ.Job`.
+
+What landed: `Keiro.PGMQ.Runtime` (`QueueRef`/`queueRef`, `JobRuntime`, `withJobRuntime`,
+`runJobEff`), `Keiro.PGMQ.Codec` (`JobCodec`, `aesonJobCodec`, `keiroJobCodec`),
+`Keiro.PGMQ.Job` (`JobOutcome`, `RetryDelay` re-export, `RetryPolicy`, `defaultRetryPolicy`,
+`Job`, `enqueue`, `enqueueWithDelay`, `ensureJobQueue`, `jobProcessor`, `runJobWorkers`,
+`runJobOnce`), and the `Keiro.PGMQ` umbrella.
+
+Deltas from the plan as written, all recorded above: (1) no `source-repository-package` pins
+for the pgmq/shibuya family were needed — they resolve from the private cabal mirror; (2)
+the only pin added was the patched `shinzui/hasql-migration` fork, required by
+`pgmq-migration` in the *test* build; (3) `runJobOnce` is implemented with
+`Shibuya.Runner.Supervised.runWithMetrics` over `Stream.take n` (mirroring the
+`hospital-capacity` reference) rather than a hand-rolled streamly fold; (4) `RetryDelay` is
+re-exported from the package; (5) `enqueueWithDelay` takes `Int32`.
+
+Interface note for EP-2/EP-3: the signatures in this plan's "What this milestone set must
+yield" and the MasterPlan's Integration Point 1 hold as published, with two refinements the
+consumers should adopt — import `RetryDelay` from `Keiro.PGMQ` (not shibuya), and treat the
+delay argument of `enqueueWithDelay` as `Int32`.
+
+What remains: nothing for EP-1. Next in the MasterPlan are EP-2 (`rei`) and EP-3
+(`hospital-capacity`), which may proceed in parallel now that the package and its API are
+real.
 
 
 ## Context and Orientation

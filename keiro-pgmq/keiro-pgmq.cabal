@@ -81,4 +81,5 @@ test-suite keiro-pgmq-test
     , pgmq-core       >=0.3  && <0.4
     , pgmq-effectful  >=0.3  && <0.4
     , pgmq-migration  >=0.3  && <0.4
+    , shibuya-core    >=0.7  && <0.8
     , text            >=2.1

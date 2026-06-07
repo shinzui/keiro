@@ -35,5 +35,15 @@ source-repository-package
   tag: d176b3088f23ef2218c7a1f31835e8ee0c0601aa
   subdir: codd
 
+-- The keiro-pgmq test suite installs the PGMQ schema with pgmq-migration, which
+-- depends on hasql-migration. The Hackage hasql-migration 0.3.1 does not build
+-- against the hasql 1.10 ecosystem this repo uses (it uses Statement as a
+-- term-level constructor). Pin the patched fork, matching pgmq-hs's own
+-- cabal.project. Only the test build pulls this in; the library does not.
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/hasql-migration
+  tag: 4aaff6c0919d1fe8e1c248c3ce4ce05775c59c8c
+
 allow-newer:
   haxl:time

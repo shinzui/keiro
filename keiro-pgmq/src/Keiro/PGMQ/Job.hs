@@ -26,6 +26,7 @@ shibuya's @Ingested@/@AckDecision@ or PGMQ's wire types. The package provides:
 module Keiro.PGMQ.Job (
     -- * Job declaration
     JobOutcome (..),
+    RetryDelay (..),
     RetryPolicy (..),
     defaultRetryPolicy,
     Job (..),
