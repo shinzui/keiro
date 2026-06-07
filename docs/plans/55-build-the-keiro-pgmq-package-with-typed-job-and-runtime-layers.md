@@ -58,9 +58,9 @@ leaves it for redelivery, and a `Dead` handler routes it to the DLQ.
 ## Progress
 
 - [x] Milestone 1: Scaffold the `keiro-pgmq` package so an empty library builds. (2026-06-07 — `cabal build keiro-pgmq` compiles the 4 stub modules; deps resolve from the private registry, no `source-repository-package` pins.)
-- [ ] Milestone 2: `Keiro.PGMQ.Runtime` — `QueueRef` name derivation + effect-stack runner.
-- [ ] Milestone 3: `Keiro.PGMQ.Codec` — `JobCodec`, `aesonJobCodec`, versioned `keiroJobCodec`.
-- [ ] Milestone 4: `Keiro.PGMQ.Job` — types, `enqueue`, `ensureJobQueue`, `jobProcessor`, `runJobWorkers`, `runJobOnce`, umbrella re-export.
+- [x] Milestone 2: `Keiro.PGMQ.Runtime` — `QueueRef` name derivation + effect-stack runner. (2026-06-07 — compiles; `runJobEff` mirrors jitsurei's `runErrorNoCallStack`/`runTracing`/`runPgmqTraced` ordering. `withJobRuntime` acquires/releases a hasql pool. Tracer threaded via shibuya's re-exported `Tracer`. Used parenthesized `$` lambda instead of `BlockArguments`.)
+- [x] Milestone 3: `Keiro.PGMQ.Codec` — `JobCodec`, `aesonJobCodec`, versioned `keiroJobCodec`. (2026-06-07 — compiles; `keiroJobCodec` wraps `{v,data}` and replays `Keiro.Codec.migrateToCurrent`.)
+- [x] Milestone 4: `Keiro.PGMQ.Job` — types, `enqueue`, `ensureJobQueue`, `jobProcessor`, `runJobWorkers`, `runJobOnce`, umbrella re-export. (2026-06-07 — full public API compiles. `runJobOnce` uses `Shibuya.Runner.Supervised.runWithMetrics` over `Stream.take n`. `enqueueWithDelay` takes `Int32` (PGMQ `Delay = Int32`, not exported from `Pgmq.Types`). Kept the published `IOE` constraint on producers via a localized `-Wno-redundant-constraints`.)
 - [ ] Milestone 5: Integration test proving enqueue → consume → Done/Retry/Dead.
 
 

@@ -52,6 +52,7 @@ library
     , aeson                 >=2.2
     , base                  >=4.21 && <5
     , effectful-core        >=2.6
+    , hasql                 >=1.10
     , hasql-pool            >=1.2
     , hs-opentelemetry-api  >=1.0  && <1.1
     , keiro-core            >=0.1
