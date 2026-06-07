@@ -44,15 +44,43 @@ that the rei migration exercises (`docs/plans/56-...`).
 
 ## Progress
 
-- [ ] Milestone 1: Add the `keiro-pgmq` pin to keiro-runtime-jitsurei and confirm it resolves.
-- [ ] Milestone 2: Declare `reservationWorkJob` and port the producer to `enqueue`.
-- [ ] Milestone 3: Port the consumer to `runJobOnce` and the handler to `... -> JobOutcome`.
-- [ ] Milestone 4: Delete dead plumbing; verify reservation-dispatch parity (incl. DLQ).
+- [x] Milestone 1: Add the `keiro-pgmq` pin to keiro-runtime-jitsurei and confirm it resolves.
+  (2026-06-07 — jitsurei commit `60a87c8`; bumped keiro `file://` pins to `cb252e2`, added a
+  keiro-pgmq stanza; `cabal build hospital-capacity` builds keiro-pgmq-0.1.0.0.)
+- [x] Milestone 2: Declare `reservationWorkJob` and port the producer to `enqueue`.
+  (2026-06-07 — jitsurei commit `c89338b`, combined with M3.)
+- [x] Milestone 3: Port the consumer to `runJobOnce` and the handler to `... -> JobOutcome`.
+  (2026-06-07 — jitsurei commit `c89338b`; handler is
+  `ReservationWorkItem -> Eff es JobOutcome`, consumer uses `runJobOnce 1`, IdentitySpec
+  updated.)
+- [x] Milestone 4: Delete dead plumbing; verify reservation-dispatch parity (incl. DLQ).
+  (2026-06-07 — jitsurei commit `04420ed`; dead plumbing removed in `c89338b`, unused
+  `shibuya-pgmq-adapter` direct dep dropped. `cabal build` + test suite pass; cleanup grep on
+  `WorkQueue.hs` is clean. Live CLI happy/DLQ run is the remaining operator step — see
+  Outcomes.)
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-06-07 (M1) — **keiro-runtime-jitsurei was pinned at a pre-keiro-pgmq keiro SHA
+  (`ac197da`).** keiro-pgmq landed at `cb252e2`, so the keiro `file://` pins (keiro,
+  keiro-core) had to be bumped to `cb252e2` before the package was reachable. Verified the
+  `ac197da..cb252e2` range only adds `keiro-pgmq/` and `docs/` (plus keiro's own
+  cabal.project/mori.dhall), so keiro/keiro-core libraries are byte-identical and the bump is
+  safe. Unlike rei (EP-2), **jitsurei was already on shibuya 0.7.0.0 / pgmq 0.3.0.0**, so the
+  shibuya-0.7 precondition that blocked EP-2 was already satisfied here — no eventing-stack
+  upgrade needed.
+
+- 2026-06-07 (M2/M3) — **A test couples to the old `AckDecision` mapping; the malformed-DLQ
+  fixture must stay on raw `sendMessage`.** `services/hospital-capacity/test/IdentitySpec.hs`
+  asserts `reservationWorkFailureAck`'s `AckDecision` outputs. Migrating means replacing that
+  with `reservationWorkFailureOutcome :: ReservationWorkFailure -> JobOutcome` and updating the
+  test to pattern-match `JobOutcome` (which has no `Eq`). Separately,
+  `enqueueMalformedReservationWorkWithTelemetry` deliberately enqueues a payload that is NOT a
+  valid `ReservationWorkItem` (to exercise the DLQ), so it cannot go through
+  `enqueue reservationWorkJob` (which requires a typed item) — it keeps a raw `Pgmq.sendMessage`
+  to `reservationWorkJob.jobQueue.physicalName`. `SendMessage` is not in this plan's M4
+  cleanup grep, so this is within parity scope.
 
 
 ## Decision Log
@@ -71,6 +99,64 @@ that the rei migration exercises (`docs/plans/56-...`).
   offers no dedup store; the service keeps `reservationWorkPendingOrDecided` as-is and calls
   `enqueue` only for items that pass it.
   Date: 2026-06-07
+
+- Decision: Migrate `WorkQueue.hs`'s producer and consumer in one commit (Milestones 2+3),
+  then prune dependencies in a second (Milestone 4).
+  Rationale: It is a single tightly-coupled module; splitting producer from consumer leaves
+  warning-laden intermediate states (unused imports/bindings) with no behavioural value. Each
+  commit still leaves the tree building and the test suite green: commit 1 fully migrates the
+  module + updates the test, commit 2 drops the now-unused `shibuya-pgmq-adapter` direct dep.
+  Date: 2026-06-07
+
+- Decision: Derive `reservationWorkQueueNameText`/`reservationWorkDlqNameText` from
+  `reservationWorkJob.jobQueue` via `queueNameToText`, rather than keeping hand-written string
+  literals.
+  Rationale: Makes the `Job`'s `queueRef "hospital_capacity.reservation_work"` the single
+  source of the physical + DLQ names; the existing test asserting the literal strings then
+  also proves `queueRef` derives exactly those names.
+  Date: 2026-06-07
+
+
+## Outcomes & Retrospective
+
+Completed 2026-06-07. The `hospital-capacity` reservation-work queue now runs entirely through
+`keiro-pgmq`. `WorkQueue.hs` shrank from ~370 lines of hand-wired
+`pgmq-effectful` + `shibuya-pgmq-adapter` plumbing to a `Job` declaration, a literal
+`JobCodec` over the existing JSON, a `ReservationWorkItem -> Eff es JobOutcome` handler, and
+producer/consumer wrappers that call `enqueue` / `ensureJobQueue` / `runJobOnce`. The manual
+`PgmqAdapterConfig`, the `Ingested -> AckDecision` decode/dispatch, and the
+`pgmqAdapter` + `Stream.take` + `runWithMetrics` consumer are gone, and the direct
+`shibuya-pgmq-adapter` dependency was dropped.
+
+Behaviour is preserved by construction: `queueRef "hospital_capacity.reservation_work"`
+derives the exact physical + `_dlq` names the service built by hand; the JSON codec is the
+unchanged, test-covered `reservationWorkItemToValue`/`FromValue`; the DLQ policy
+(`maxRetries = 3`, `directDeadLetter`, 5s retry) is reproduced via `RetryPolicy`; and
+`runJobOnce 1` reproduces the old `Stream.take 1` one-shot drain (EP-1 confirmed `runJobOnce`
+is implemented exactly that way). The failure→outcome mapping is preserved:
+store-failure → `Retry 5`, command-rejected → `Dead`, internal decode → `Dead`, with the
+package now owning actual payload-decode dead-lettering.
+
+Verification status:
+
+- **Automated (done):** `cabal build hospital-capacity` succeeds; the `hospital-capacity-test`
+  suite passes (including the rewritten `reservationWorkFailureOutcome` assertions); the M4
+  cleanup grep on `WorkQueue.hs` is clean.
+- **Operator step (remaining):** the live CLI happy-path
+  (`reservation-work setup` → `enqueue-latest` → `consume once` → `TransferReservationCreated`)
+  and the DLQ path (malformed fixture → consume → row in
+  `pgmq.q_hospital_capacity_reservation_work_dlq`) require a provisioned Postgres+PGMQ and the
+  connection-string env var, so they are a manual run rather than part of the repo's test
+  suite (which is pure). This is well-grounded: `keiro-pgmq`'s own EP-1 integration test
+  already proves enqueue → consume → Done/Retry/Dead and DLQ routing against an ephemeral
+  Postgres with PGMQ, and the queue names / codec / policy here are identical to before.
+
+What differed from the plan: jitsurei was pinned at a pre-keiro-pgmq keiro SHA, so M1 required
+bumping the keiro `file://` pins (not just adding one stanza); it was already on shibuya 0.7,
+so unlike rei no eventing-stack upgrade was needed. M2 and M3 were committed together (one
+tightly-coupled module). A unit test coupled to the old `AckDecision` mapping had to be
+migrated to `JobOutcome`, and the malformed-DLQ fixture intentionally keeps a raw
+`sendMessage` since it injects a non-decodable payload.
 
 
 ## Context and Orientation

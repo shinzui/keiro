@@ -108,7 +108,7 @@ framework by shipping pure transport codecs.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Build the keiro-pgmq package with typed Job and Runtime layers | docs/plans/55-build-the-keiro-pgmq-package-with-typed-job-and-runtime-layers.md | None | None | Complete |
 | 2 | Migrate rei background queues onto keiro-pgmq | docs/plans/56-migrate-rei-background-queues-onto-keiro-pgmq.md | EP-1 | None | Complete |
-| 3 | Migrate hospital-capacity reservation work onto keiro-pgmq | docs/plans/57-migrate-hospital-capacity-reservation-work-onto-keiro-pgmq.md | EP-1 | None | Not Started |
+| 3 | Migrate hospital-capacity reservation work onto keiro-pgmq | docs/plans/57-migrate-hospital-capacity-reservation-work-onto-keiro-pgmq.md | EP-1 | None | Complete |
 | 4 | Deferred pgmq-as-transport for integration events (case B) | docs/plans/58-deferred-pgmq-as-transport-for-integration-events-case-b.md | None | EP-1 | Deferred (Not Started) |
 
 Status values: Not Started, In Progress, Complete, Cancelled, Deferred.
@@ -211,8 +211,8 @@ Track milestone-level progress across all child plans.
 - [x] EP-2: Pin `keiro-pgmq` in rei; port one queue (git sync) as a template (2026-06-07 — rei commits `7516fe61`, `c4c8c06c`)
 - [x] EP-2: Port remaining rei queues (reminders, reflections, agent work); delete hand-rolled boilerplate (2026-06-07 — rei commits `88b366ce`, `6f179474`)
 - [x] EP-2: End-to-end verification of rei background-work parity (2026-06-07 — full rei-core suite, 932 tests, passes; git-sync handler integration test green)
-- [ ] EP-3: Pin `keiro-pgmq` in keiro-runtime-jitsurei; port hospital-capacity reservation work + DLQ
-- [ ] EP-3: End-to-end verification of hospital-capacity reservation-work parity
+- [x] EP-3: Pin `keiro-pgmq` in keiro-runtime-jitsurei; port hospital-capacity reservation work + DLQ (2026-06-07 — jitsurei commits `60a87c8`, `c89338b`, `04420ed`)
+- [x] EP-3: End-to-end verification of hospital-capacity reservation-work parity (2026-06-07 — build + `hospital-capacity-test` pass, cleanup grep clean; live CLI/DLQ run is an operator step, grounded by EP-1's package integration test — see EP-57 Outcomes)
 - [ ] EP-4: (Deferred) design captured; not implemented this initiative
 
 
@@ -239,6 +239,25 @@ Track milestone-level progress across all child plans.
   inside a consumer repo (rarely needed — consumers depend on the library, not its test),
   that repo would also need the `hasql-migration` fork pin; depending on the library alone
   does not pull it in.
+
+- 2026-06-07 (EP-3) — **jitsurei was already on shibuya 0.7, but pinned at a pre-keiro-pgmq
+  keiro SHA.** Unlike rei (EP-2), keiro-runtime-jitsurei's `file://` pins were already on
+  shibuya-core/shibuya-pgmq-adapter 0.7.0.0 and pgmq 0.3.0.0, so the EP-2 shibuya-0.7
+  precondition was satisfied with no eventing-stack upgrade. The only blocker was that its
+  keiro pin (`ac197da`) predated keiro-pgmq (added at `cb252e2`); bumping the keiro `file://`
+  pins to `cb252e2` (verified to only add `keiro-pgmq/` + docs, leaving keiro/keiro-core
+  byte-identical) made the package reachable. Net: the shibuya-0.7 precondition is real but
+  per-repo — confirm each consumer's actual pinned versions rather than assuming.
+
+- 2026-06-07 (EP-3) — **EP-3 exercised the package surface EP-2 did not: DLQ policy +
+  one-shot drain.** hospital-capacity genuinely dead-letters, so `reservationWorkJob` uses a
+  DLQ-enabled `RetryPolicy { maxRetries = 3, defaultRetryDelay = RetryDelay 5, useDeadLetter =
+  True }` (vs rei's no-DLQ `reiQueuePolicy`), and the consumer uses `runJobOnce 1` (vs rei's
+  continuous `runJobWorkers`). Both run shapes and both policy paths of the package are now
+  validated by real consumers. One nuance: the malformed-payload DLQ test fixture keeps a raw
+  `Pgmq.sendMessage` because it injects a deliberately non-decodable body that the typed
+  `enqueue` would reject — the package's own decode-failure dead-lettering covers the real
+  path.
 
 - 2026-06-07 (EP-2) — **The cross-repo pin required a shibuya 0.6→0.7 upgrade first; EP-3
   should expect the same precondition.** rei pinned `shibuya-core`/`shibuya-pgmq-adapter` at
@@ -304,6 +323,49 @@ Track milestone-level progress across all child plans.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+As of 2026-06-07 the initiative's built scope is complete: EP-1 (the `keiro-pgmq` package),
+EP-2 (rei migration), and EP-3 (hospital-capacity migration) are all Complete; EP-4 (case B,
+pgmq-as-integration-event-transport) remains deliberately Deferred and unbuilt.
+
+What exists now that did not before:
+
+- A reusable `keiro-pgmq` library with the two-layer split (`Keiro.PGMQ.Runtime` /
+  `Keiro.PGMQ.Job`), validated by its own integration test against ephemeral Postgres + PGMQ.
+- Both proving-ground consumers migrated off hand-wired `pgmq-effectful` +
+  `shibuya-pgmq-adapter` and onto the typed `Job` API, each exercising a different slice of the
+  surface: **rei** — the continuous, multi-processor `runJobWorkers` cadence across four
+  queues with a no-DLQ policy; **hospital-capacity** — the one-shot `runJobOnce` drain with a
+  DLQ-enabled policy. Both run shapes and both policy paths are now validated by real code.
+
+Validation: `keiro-pgmq` integration test passes (EP-1); rei builds and its full 932-test
+suite passes (EP-2); hospital-capacity builds and its test suite passes, with the live
+CLI/DLQ run remaining as an operator step grounded by EP-1's integration test (EP-3).
+
+Key cross-plan lessons (full detail in Surprises & Discoveries):
+
+1. **The cross-repo version pin was the real coordination cost**, exactly as the MasterPlan
+   premise predicted — but the sharp edge was a concrete version floor: `keiro-pgmq` requires
+   shibuya 0.7, so each consumer had to be on 0.7 first. rei needed a full eventing-stack
+   upgrade; jitsurei was already on 0.7 but on a pre-keiro-pgmq keiro pin. Confirm each
+   consumer's actual pinned versions; don't assume.
+
+2. **The migration's value lives on the consumer side.** In both apps the real enqueues that
+   needed exactly-once semantics are transactional raw-SQL `pgmq.send` paths that
+   `keiro-pgmq`'s effect-based `enqueue` cannot and should not replace. The shibuya
+   `Ingested`/`AckDecision` coupling that the package actually absorbs lived in the handlers +
+   runners. Effect-based periodic producers did move to `enqueue`.
+
+3. **Behaviour parity required per-consumer policy choices, not the package default.** rei's
+   pre-migration adapters had no DLQ (3 retries); hospital-capacity did. Reproducing
+   `defaultConfig` vs a DLQ policy was a deliberate per-consumer decision rather than reaching
+   for `keiro-pgmq`'s `defaultRetryPolicy`.
+
+4. **The two-layer split held.** Nothing in either migration needed `Keiro.PGMQ.Runtime`
+   changes to accommodate the `Job` layer, leaving EP-4 (case B) cheap to pick up later on the
+   Runtime layer as designed.
+
+Follow-ups (out of scope, deliberately deferred): adopting the versioned `keiroJobCodec` (both
+migrations used `aesonJobCodec` for drop-in parity); adding a real DLQ to rei's queues if
+desired; and EP-4 itself.
 </content>
 </invoke>
