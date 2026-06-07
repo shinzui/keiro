@@ -431,4 +431,3 @@ confirmed `runJobOnce` is implemented exactly as this service's
 If `docs/plans/55-...` changed any of these signatures during its implementation, the
 MasterPlan's Integration Points section is the authority — reconcile against it before
 starting, and update this section to match.
-</content>

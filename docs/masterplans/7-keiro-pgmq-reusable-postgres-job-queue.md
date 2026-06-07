@@ -55,11 +55,12 @@ domain events), the two consumer migrations, and a recorded-but-deferred design 
 
 Explicitly excluded (case B, deferred): using PGMQ as a delivery transport for domain
 **integration events** as a Kafka alternative (leveraging PGMQ topics/fan-out under
-`Keiro.Inbox` / `Keiro.Outbox`). Case B is captured as a deferred child plan
-(`docs/plans/58-deferred-pgmq-as-transport-for-integration-events-case-b.md`) so the design
-is not lost, and the package's two-layer split is engineered so case B can later reuse
-`Keiro.PGMQ.Runtime` without disturbing the `Job` layer. Case B is not built in this
-initiative.
+`Keiro.Inbox` / `Keiro.Outbox`). Case B's design is captured as a roadmap doc
+(`docs/roadmap/pgmq-as-transport-for-integration-events.md`) so it is not lost, and the
+package's two-layer split is engineered so case B can later reuse `Keiro.PGMQ.Runtime` without
+disturbing the `Job` layer. Case B is not built in this initiative. (It was originally recorded
+as deferred child plan EP-4 / `docs/plans/58-...`; that plan was promoted to the roadmap doc on
+2026-06-07 once the built scope completed — see the Decision Log.)
 
 
 ## Decomposition Strategy
@@ -109,10 +110,12 @@ framework by shipping pure transport codecs.
 | 1 | Build the keiro-pgmq package with typed Job and Runtime layers | docs/plans/55-build-the-keiro-pgmq-package-with-typed-job-and-runtime-layers.md | None | None | Complete |
 | 2 | Migrate rei background queues onto keiro-pgmq | docs/plans/56-migrate-rei-background-queues-onto-keiro-pgmq.md | EP-1 | None | Complete |
 | 3 | Migrate hospital-capacity reservation work onto keiro-pgmq | docs/plans/57-migrate-hospital-capacity-reservation-work-onto-keiro-pgmq.md | EP-1 | None | Complete |
-| 4 | Deferred pgmq-as-transport for integration events (case B) | docs/plans/58-deferred-pgmq-as-transport-for-integration-events-case-b.md | None | EP-1 | Deferred (Not Started) |
+| 4 | Deferred pgmq-as-transport for integration events (case B) | docs/roadmap/pgmq-as-transport-for-integration-events.md | None | EP-1 | Promoted to roadmap (not scheduled) |
 
-Status values: Not Started, In Progress, Complete, Cancelled, Deferred.
-Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1).
+Status values: Not Started, In Progress, Complete, Cancelled, Deferred, Promoted to roadmap.
+Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1). EP-4 was a
+deferred design-capture plan; its content now lives at
+`docs/roadmap/pgmq-as-transport-for-integration-events.md` and it is not scheduled.
 
 
 ## Dependency Graph
@@ -213,7 +216,7 @@ Track milestone-level progress across all child plans.
 - [x] EP-2: End-to-end verification of rei background-work parity (2026-06-07 — full rei-core suite, 932 tests, passes; git-sync handler integration test green)
 - [x] EP-3: Pin `keiro-pgmq` in keiro-runtime-jitsurei; port hospital-capacity reservation work + DLQ (2026-06-07 — jitsurei commits `60a87c8`, `c89338b`, `04420ed`)
 - [x] EP-3: End-to-end verification of hospital-capacity reservation-work parity (2026-06-07 — build + `hospital-capacity-test` pass, cleanup grep clean; live CLI/DLQ run is an operator step, grounded by EP-1's package integration test — see EP-57 Outcomes)
-- [ ] EP-4: (Deferred) design captured; not implemented this initiative
+- [x] EP-4: (Deferred) design captured and promoted to `docs/roadmap/pgmq-as-transport-for-integration-events.md`; not implemented this initiative (2026-06-07)
 
 
 ## Surprises & Discoveries
@@ -320,6 +323,17 @@ Track milestone-level progress across all child plans.
   transport via PGMQ fan-out) is a real future option teams may want and must not be lost.
   Date: 2026-06-07
 
+- Decision: Promote EP-4 (case B) from a deferred child ExecPlan
+  (`docs/plans/58-...`) to a roadmap doc
+  (`docs/roadmap/pgmq-as-transport-for-integration-events.md`).
+  Rationale: The initiative's built scope (EP-1, EP-2, EP-3) is complete, so a permanently
+  deferred child plan sitting in `docs/plans/` alongside finished plans was easy to overlook.
+  Moving the design into `docs/roadmap/` makes it discoverable as future work independent of
+  this closed MasterPlan. The design content and the hard integration constraint (build on
+  `Keiro.PGMQ.Runtime`, not `Keiro.PGMQ.Job`) are carried over verbatim; scheduling it now
+  means recording a decision here and authoring a fresh ExecPlan from the roadmap sketch.
+  Date: 2026-06-07
+
 
 ## Outcomes & Retrospective
 
@@ -367,5 +381,16 @@ Key cross-plan lessons (full detail in Surprises & Discoveries):
 Follow-ups (out of scope, deliberately deferred): adopting the versioned `keiroJobCodec` (both
 migrations used `aesonJobCodec` for drop-in parity); adding a real DLQ to rei's queues if
 desired; and EP-4 itself.
-</content>
-</invoke>
+
+
+## Revision Notes
+
+- 2026-06-07 — Promoted EP-4 (case B) from the deferred child ExecPlan
+  `docs/plans/58-deferred-pgmq-as-transport-for-integration-events-case-b.md` to a roadmap doc
+  at `docs/roadmap/pgmq-as-transport-for-integration-events.md`, now that the built scope
+  (EP-1, EP-2, EP-3) is complete and EP-4 is permanently out of this initiative. Updated the
+  Vision & Scope reference, the Exec-Plan Registry row (path + status "Promoted to roadmap"),
+  the status legend, the Progress checklist, and the Decision Log. The Dependency Graph and
+  Integration Point 2 still describe EP-4's design constraint by label, which remains accurate.
+  Also removed stray `</content>`/`</invoke>` artifacts that had been left at the end of this
+  file by the original generation step.

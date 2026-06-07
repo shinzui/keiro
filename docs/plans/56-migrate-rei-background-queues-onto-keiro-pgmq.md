@@ -469,4 +469,3 @@ signatures above. Note `enqueueWithDelay` takes `Int32` (PGMQ's `Delay`).
 If `docs/plans/55-...` changed any of these signatures during its implementation, the
 MasterPlan's Integration Points section is the authority — reconcile against it before
 starting, and update this section to match.
-</content>

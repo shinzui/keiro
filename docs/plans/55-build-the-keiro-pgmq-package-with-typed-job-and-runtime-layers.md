@@ -908,4 +908,3 @@ jobProcessor   :: (Pgmq :> es, IOE :> es, Tracing :> es) => Job p -> (p -> Eff e
 runJobWorkers  :: (Pgmq :> es, IOE :> es, Tracing :> es) => SupervisionStrategy -> Int -> [Eff es (ProcessorId, QueueProcessor es)] -> Eff es (Either AppError (AppHandle es))
 runJobOnce     :: (Pgmq :> es, IOE :> es, Tracing :> es) => Int -> Job p -> (p -> Eff es JobOutcome) -> Eff es ()
 ```
-</content>
