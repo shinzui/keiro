@@ -14,7 +14,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as T
 import Keiro.Codec (Codec (..))
-
+import HospitalCapacity.Reservation.Holes (upcastTransferReservationCreatedV1)
 
 parsePatientAcuity :: Text -> Parser PatientAcuity
 parsePatientAcuity = \case
@@ -43,10 +43,10 @@ reservationCodec =
     , eventType = \case
         TransferReservationCreated {} -> "TransferReservationCreated"
         TransferReservationConfirmed {} -> "TransferReservationConfirmed"
-    , schemaVersion = 1
+    , schemaVersion = 2
     , encode = encodeReservationEvent
     , decode = parseReservationEvent
-    , upcasters = []
+    , upcasters = [(1, upcastTransferReservationCreatedV1)]
     }
 
 encodeReservationEvent :: ReservationEvent -> Value
@@ -60,6 +60,7 @@ encodeReservationEvent = \case
       , "patientAcuity" .= patientAcuityText payload.patientAcuity
       , "divertStatus" .= divertStatusText payload.divertStatus
       , "lifeCriticalOverride" .= payload.lifeCriticalOverride
+      , "triageNote" .= payload.triageNote
       ]
   TransferReservationConfirmed payload ->
     object
@@ -76,7 +77,7 @@ parseReservationEvent = mapLeftText . parseEither (withObject "ReservationEvent"
       kind <- o .: "kind" :: Parser Text
       case kind of
         "TransferReservationCreated" ->
-          TransferReservationCreated <$> (TransferReservationCreatedData <$> (TransferReservationId <$> o .: "reservationId") <*> (HospitalId <$> o .: "hospitalId") <*> (CommandId <$> o .: "commandId") <*> (o .: "patientAcuity" >>= parsePatientAcuity) <*> (o .: "divertStatus" >>= parseDivertStatus) <*> o .: "lifeCriticalOverride")
+          TransferReservationCreated <$> (TransferReservationCreatedData <$> (TransferReservationId <$> o .: "reservationId") <*> (HospitalId <$> o .: "hospitalId") <*> (CommandId <$> o .: "commandId") <*> (o .: "patientAcuity" >>= parsePatientAcuity) <*> (o .: "divertStatus" >>= parseDivertStatus) <*> o .: "lifeCriticalOverride" <*> o .: "triageNote")
         "TransferReservationConfirmed" ->
           TransferReservationConfirmed <$> (TransferReservationConfirmedData <$> (TransferReservationId <$> o .: "reservationId") <*> (HospitalId <$> o .: "hospitalId") <*> (CommandId <$> o .: "commandId"))
         _ -> fail "unknown event kind"

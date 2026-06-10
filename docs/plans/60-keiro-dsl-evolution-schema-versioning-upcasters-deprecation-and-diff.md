@@ -103,16 +103,22 @@ M2 — `Keiro.Dsl.Diff` engine + `diff --since` CLI: **DONE 2026-06-10**
 - [x] Unit tests over fixture pairs (field-add → Breaking; v2+upcaster → Additive; no-change →
       none) + `keiro-dsl/test/diff-test.sh` git-integration gate. (2026-06-10)
 
-M3 — scaffold the `Codec` schemaVersion+upcaster wiring + harness:
+M3 — scaffold the `Codec` schemaVersion+upcaster wiring + harness: **DONE 2026-06-10**
 
-- [ ] Extend `Keiro.Dsl.Scaffold` so the emitted `Keiro.Codec` derives `schemaVersion` from
-      the max event version and `upcasters` from the `upcast from` clauses (symbol-free).
-- [ ] Emit the upcaster type signature `…V<n> :: Value -> Either Text Value` as a typed
-      `HoleStub` in the hand-owned holes module (never the body).
-- [ ] Extend `Keiro.Dsl.Harness` to emit a golden round-trip test per version proving an
-      old-version wire payload decodes through the upcaster chain to the current value.
-- [ ] Conformance: scaffold a two-version fixture; show `Generated` modules compile, the
-      firewall invariant holds, and after filling the upcaster hole the harness is green.
+- [x] `Keiro.Dsl.Scaffold`: the emitted `Keiro.Codec` derives `schemaVersion` from the max
+      event version and `upcasters = [(m, upcast<Event>V<m>)]` from the `upcast from`
+      clauses; the Codec imports the upcaster holes from the Holes module. Symbol-free
+      (firewall holds). (2026-06-10)
+- [x] Emit the upcaster signature `upcast<Event>V<m> :: Value -> Either Text Value` as a
+      typed `HoleStub` (stub body `Left "HOLE: …"`); never the body. (2026-06-10)
+- [x] `Keiro.Dsl.Harness`: emit a per-upcaster wiring-proof assertion — a source-version
+      payload fed through `decodeRaw codec m …` runs the upcaster chain then decodes; red
+      while the hole returns `Left`, green once filled. (See Surprises for why this proves
+      wiring rather than re-deriving the exact old payload.) (2026-06-10)
+- [x] Conformance: `keiro-dsl-conformance-v2` scaffolds `reservation-v2.kdsl`, the
+      `Generated` modules (codec `schemaVersion = 2`, `upcasters = [(1, …)]`) compile against
+      keiki/keiro, the firewall holds, and with the upcaster filled the harness is 6/6 green;
+      reverting the upcaster to the hole turns the `upcaster wired` assertion red. (2026-06-10)
 
 
 ## Surprises & Discoveries
@@ -120,7 +126,29 @@ M3 — scaffold the `Codec` schemaVersion+upcaster wiring + harness:
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **M2: `git rev-parse --show-toplevel` is symlink-resolved but `makeAbsolute` is not.** On
+  macOS `/tmp` is a symlink to `/private/tmp`; git returned `/private/tmp/evo-demo` while
+  `makeAbsolute "/tmp/evo-demo/svc.kdsl"` kept `/tmp/…`, so `makeRelative` found no common
+  prefix and left the path absolute — `git show HEAD:/tmp/…/svc.kdsl` then failed with
+  "exists on disk, but not in 'HEAD'". Fix: use `canonicalizePath` (resolves symlinks) so
+  both paths agree, yielding the repo-relative `svc.kdsl`.
+
+- **M3: the grammar records only the current event shape, not the per-version field delta.**
+  A `v2` event lists its full v2 field set; what was *added* at v2 (vs. v1) is not captured.
+  So a generic harness cannot reconstruct a faithful v1-on-disk payload to round-trip. The
+  emitted harness therefore proves the upcaster *chain is wired and must be filled* — it
+  feeds a source-version-tagged payload through `decodeRaw codec m …` (which runs the
+  upcaster then decodes) and asserts success; the hole's `Left` makes it red, a filled
+  upcaster makes it green. Evidence: `keiro-dsl-conformance-v2` is 6/6 green with the
+  upcaster filled; reverting it to the `Left "HOLE: …"` stub turns exactly the
+  `upcaster wired` assertion red.
+
+- **M3: a v2-added event field has no command source, so the transducer emits it as a
+  literal.** `triageNote` was added to the `TransferReservationCreated` v2 event but not to
+  the `RequestTransferReservation` command, so the hand-filled transducer supplies it with
+  `triageNote = lit ""` in the emit's `TermFields`. This is the kind of behaviour the spec
+  cannot derive — squarely a hole — and the upcaster mirrors it by defaulting `triageNote`
+  on old payloads that lack the key.
 
 
 ## Decision Log
@@ -191,7 +219,25 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**EP-2 complete (2026-06-10).** The `.kdsl` spec is now a lifecycle source of truth for
+event-payload evolution. Against the original purpose: an author can declare
+`event … vN { … } upcast from v(N-1) = HOLE` and `deprecated event …`; `keiro-dsl check`
+rejects a `vN>1` without a contiguous upcaster; `keiro-dsl diff --since <ref>` classifies
+each change ADDITIVE/BREAKING against the prior git blob and exits non-zero on any
+unguarded breaking change (the headline gate); and `scaffold` lowers the constructs to a
+`Keiro.Codec` with `schemaVersion = max event version` and
+`upcasters = [(m, upcast<Event>V<m>)]`, the upcaster bodies left as typed holes and pinned
+by a harness. The firewall invariant still holds (the codec/upcaster wiring contains no
+keiki symbolic operator). The versioning fields live on the shared `Grammar.Event`, so
+EP-3…EP-6 events inherit evolution for free.
+
+**Scope honoured:** read-model table migrations remain delegated to `codd`; only the event
+payload (`Keiro.Codec`) surface is handled here. **Limitation recorded (see Surprises):**
+the grammar captures only the current event shape, so the harness proves the upcaster chain
+is wired and must be filled rather than re-deriving the exact old payload — sufficient to
+make a wrong/empty upcaster fail loudly. Two contract refinements: `parseSpec` keeps the
+`FilePath` source-name form, and `diff --since` canonicalizes paths to match git's
+symlink-resolved toplevel.
 
 
 ## Context and Orientation

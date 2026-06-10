@@ -99,6 +99,10 @@ data ResolvedCtor = ResolvedCtor
     { rcName :: !Text
     , rcFields :: ![(Text, Text)]
     -- ^ (field name, resolved Haskell type)
+    , rcVersion :: !Int
+    -- ^ EP-2: schema version (1 for commands and unversioned events).
+    , rcUpcastFrom :: !(Maybe Int)
+    -- ^ EP-2: the source version this event migrates from (the upcaster step).
     }
 
 defaultWire :: WireSpec
@@ -114,8 +118,8 @@ resolveAgg ctx spec agg =
         , aEnums = specEnums spec
         , aRegs = aggRegs agg
         , aStates = aggStates agg
-        , aCommands = map (resolveCtor . commandCtor) (aggCommands agg)
-        , aEvents = map (resolveCtor . eventCtor) (aggEvents agg)
+        , aCommands = map resolveCommand (aggCommands agg)
+        , aEvents = map resolveEvent (aggEvents agg)
         , aTransitions = aggTransitions agg
         , aWire = fromMaybe defaultWire (aggWire agg)
         , aProjection = aggProjection agg
@@ -128,14 +132,23 @@ resolveAgg ctx spec agg =
     vertexType = nm <> "Vertex"
     root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
     commandFieldTypes = [(cmdName c, cmdFields c) | c <- aggCommands agg]
-    commandCtor c = (cmdName c, cmdFields c)
-    eventCtor e =
-        ( evName e
-        , case evBody e of
+    resolveCommand c = (mkCtor (cmdName c) (cmdFields c)){rcVersion = 1, rcUpcastFrom = Nothing}
+    resolveEvent e =
+        (mkCtor (evName e) (eventFields e))
+            { rcVersion = evVersion e
+            , rcUpcastFrom = fst <$> evUpcastFrom e
+            }
+      where
+        eventFields ev = case evBody ev of
             EventFields fs -> fs
             EventFromCommand cn -> fromMaybe [] (lookup cn commandFieldTypes)
-        )
-    resolveCtor (cn, fs) = ResolvedCtor{rcName = cn, rcFields = map (\f -> (fieldName f, resolveFieldType f)) fs}
+    mkCtor cn fs =
+        ResolvedCtor
+            { rcName = cn
+            , rcFields = map (\f -> (fieldName f, resolveFieldType f)) fs
+            , rcVersion = 1
+            , rcUpcastFrom = Nothing
+            }
     regTypes = [(regName r, regType r) | r <- aggRegs agg]
     idNames = map idName (specIds spec)
     enumNames = map enumName (specEnums spec)
@@ -357,6 +370,7 @@ emitCodec a =
         , "import Data.Text (Text)"
         , "import qualified Data.Text as T"
         , "import Keiro.Codec (Codec (..))"
+        , upcasterImport a
         , ""
         , emitEnumParsers a
         , ""
@@ -392,16 +406,43 @@ emitCodecValue a =
         , "    , eventType = \\case"
         ]
             ++ ["        " <> rcName e <> " {} -> " <> tshow (rcName e) | e <- aEvents a]
-            ++ [ "    , schemaVersion = " <> tshow' (wireSchemaVersion (aWire a))
+            ++ [ "    , schemaVersion = " <> tshow' (maxEventVersion a)
                , "    , encode = encode" <> aName a <> "Event"
                , "    , decode = parse" <> aName a <> "Event"
-               , "    , upcasters = []"
+               , "    , upcasters = " <> upcastersExpr a
                , "    }"
                ]
   where
     eventTypesExpr = case map rcName (aEvents a) of
         [] -> "error \"no events\""
         (e : es) -> tshow e <> " :| [" <> T.intercalate ", " (map tshow es) <> "]"
+
+-- | The codec's @schemaVersion@: the maximum declared event version (EP-2).
+maxEventVersion :: Agg -> Int
+maxEventVersion a = maximum (1 : map rcVersion (aEvents a))
+
+{- | One @(sourceVersion, upcasterName)@ entry per event that declares an
+@upcast from@. The upcaster name is per-event (e.g. @upcastFooV1@) and its
+body is a hole in the hand-owned Holes module.
+-}
+upcasterEntries :: Agg -> [(Int, Text)]
+upcasterEntries a =
+    [ (m, "upcast" <> rcName e <> "V" <> tshow' m)
+    | e <- aEvents a
+    , Just m <- [rcUpcastFrom e]
+    ]
+
+upcastersExpr :: Agg -> Text
+upcastersExpr a =
+    "[" <> T.intercalate ", " ["(" <> tshow' m <> ", " <> fn <> ")" | (m, fn) <- upcasterEntries a] <> "]"
+
+{- | When the codec references upcasters, it imports their (hole) definitions
+from the hand-owned Holes module.
+-}
+upcasterImport :: Agg -> Text
+upcasterImport a = case upcasterEntries a of
+    [] -> ""
+    es -> "import " <> aHolePrefix a <> ".Holes (" <> T.intercalate ", " (map snd es) <> ")"
 
 emitEncode :: Agg -> Text
 emitEncode a =
@@ -567,12 +608,14 @@ emitHoles a =
         , "module " <> aHolePrefix a <> ".Holes"
         , "  ( " <> lowerFirst (aName a) <> "Transducer"
         , holeProjectionExport a
+        , holeUpcasterExports a
         , "  ) where"
         , ""
         , "import " <> aGenPrefix a <> ".Domain"
         , "import Keiki.Builder ((=:))"
         , "import qualified Keiki.Builder as B"
         , "import Keiki.Core (HsPred, RegFile, SymTransducer, lit, (.==), (./=), (.||))"
+        , holeUpcasterImports a
         , ""
         , "-- HOLE: the transducer body. Reproduce the structure below, replacing each"
         , "-- `-- HOLE` line with the keiki symbolic operators it describes."
@@ -591,7 +634,34 @@ emitHoles a =
         , nl ["    " <> vertexCtor a (stName s) <> " -> True" | s <- aStates a, stTerminal s]
         , "    _ -> False"
         , holeProjectionStub a
+        , holeUpcasterStubs a
         ]
+
+-- | Export, import, and stub the per-event upcaster holes (EP-2 evolution).
+holeUpcasterExports :: Agg -> Text
+holeUpcasterExports a = case upcasterEntries a of
+    [] -> ""
+    es -> nl ["  , " <> fn | (_, fn) <- es]
+
+holeUpcasterImports :: Agg -> Text
+holeUpcasterImports a = case upcasterEntries a of
+    [] -> ""
+    _ -> nl ["import Data.Aeson (Value)", "import Data.Text (Text)"]
+
+holeUpcasterStubs :: Agg -> Text
+holeUpcasterStubs a = case upcasterEntries a of
+    [] -> ""
+    es ->
+        nl $
+            concat
+                [ [ ""
+                  , "-- HOLE upcaster: bring a " <> fn <> " payload up one version. Decide the"
+                  , "-- default/derivation for any field added at the new version here."
+                  , fn <> " :: Value -> Either Text Value"
+                  , fn <> " _ = Left \"HOLE: upcaster not implemented\""
+                  ]
+                | (_, fn) <- es
+                ]
 
 holeProjectionExport :: Agg -> Text
 holeProjectionExport a = case aProjection a of

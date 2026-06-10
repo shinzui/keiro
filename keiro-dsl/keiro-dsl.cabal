@@ -95,3 +95,28 @@ test-suite keiro-dsl-conformance
     , keiki  >=0.1
     , keiro
     , text   >=2.1
+
+-- Conformance for the evolved (v2) Reservation aggregate: proves the scaffolded
+-- Codec schemaVersion=2 + upcasters wiring compiles and that the filled upcaster
+-- migrates a v1-tagged payload through the chain (the harness "upcaster wired"
+-- assertion). These sources are raw `keiro-dsl scaffold` output of
+-- reservation-v2.kdsl plus a hand-filled Holes.hs.
+test-suite keiro-dsl-conformance-v2
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-v2
+  main-is:        Main.hs
+  other-modules:
+    Generated.HospitalCapacity.Reservation.Codec
+    Generated.HospitalCapacity.Reservation.Domain
+    Generated.HospitalCapacity.Reservation.EventStream
+    Generated.HospitalCapacity.Reservation.Harness
+    Generated.HospitalCapacity.Reservation.Projection
+    HospitalCapacity.Reservation.Holes
+
+  build-depends:
+    , aeson  >=2.2
+    , base   >=4.21 && <5
+    , keiki  >=0.1
+    , keiro
+    , text   >=2.1

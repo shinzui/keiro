@@ -3,10 +3,10 @@
 module Generated.HospitalCapacity.Reservation.Harness (harnessAssertions) where
 
 import Generated.HospitalCapacity.Reservation.Domain
-import Generated.HospitalCapacity.Reservation.Codec (encodeReservationEvent, parseReservationEvent)
+import Generated.HospitalCapacity.Reservation.Codec (encodeReservationEvent, parseReservationEvent, reservationCodec)
 import HospitalCapacity.Reservation.Holes (reservationTransducer)
 import Keiki.Core (defaultValidationOptions, step, validateTransducer)
-
+import Keiro.Codec (decodeRaw)
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
 -- naming the failing assertion. Filling a hole wrongly turns a specific
@@ -18,13 +18,14 @@ harnessAssertions =
   , ("golden round-trip: TransferReservationCreated", roundTrips sampleEventTransferReservationCreated)
   , ("golden round-trip: TransferReservationConfirmed", roundTrips sampleEventTransferReservationConfirmed)
   , ("accepts RequestTransferReservation from ReservationUnrequested", acceptRequestTransferReservation)
+  , ("upcaster wired: a v1 TransferReservationCreated payload decodes through the chain", upcastsTransferReservationCreated)
   ]
 
 roundTrips :: ReservationEvent -> Bool
 roundTrips e = parseReservationEvent (encodeReservationEvent e) == Right e
 
 sampleEventTransferReservationCreated :: ReservationEvent
-sampleEventTransferReservationCreated = (TransferReservationCreated (TransferReservationCreatedData (TransferReservationId "sample") (HospitalId "sample") (CommandId "sample") RedTag Open False))
+sampleEventTransferReservationCreated = (TransferReservationCreated (TransferReservationCreatedData (TransferReservationId "sample") (HospitalId "sample") (CommandId "sample") RedTag Open False "sample"))
 
 sampleEventTransferReservationConfirmed :: ReservationEvent
 sampleEventTransferReservationConfirmed = (TransferReservationConfirmed (TransferReservationConfirmedData (TransferReservationId "sample") (HospitalId "sample") (CommandId "sample")))
@@ -34,3 +35,8 @@ acceptRequestTransferReservation =
   case step reservationTransducer (ReservationUnrequested, initialReservationRegs) ((RequestTransferReservation (RequestTransferReservationData (TransferReservationId "sample") (HospitalId "sample") (CommandId "sample") RedTag Open False))) of
     Just (v, _, _) -> v == ReservationHeld
     Nothing -> False
+
+upcastsTransferReservationCreated :: Bool
+upcastsTransferReservationCreated =
+  either (const False) (const True)
+    (decodeRaw reservationCodec 1 (encodeReservationEvent sampleEventTransferReservationCreated))

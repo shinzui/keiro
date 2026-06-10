@@ -46,9 +46,10 @@ emitHarness a =
         , "module " <> aGenPrefix a <> ".Harness (harnessAssertions) where"
         , ""
         , "import " <> aGenPrefix a <> ".Domain"
-        , "import " <> aGenPrefix a <> ".Codec (encode" <> nm <> "Event, parse" <> nm <> "Event)"
+        , "import " <> aGenPrefix a <> ".Codec (encode" <> nm <> "Event, parse" <> nm <> "Event" <> codecValueImport <> ")"
         , "import " <> aHolePrefix a <> ".Holes (" <> lowerFirst nm <> "Transducer)"
         , "import Keiki.Core (defaultValidationOptions, step, validateTransducer)"
+        , codecDecodeRawImport
         , ""
         , "-- | (label, passed). A driver runs these and exits non-zero on any False,"
         , "-- naming the failing assertion. Filling a hole wrongly turns a specific"
@@ -64,6 +65,10 @@ emitHarness a =
             ++ [ "  , (\"accepts " <> tCommand t <> " from " <> initialVertex a <> "\", accept" <> tCommand t <> ")"
                | t <- initialTransitions a
                ]
+            ++ [ "  , (\"upcaster wired: a v" <> tInt m <> " " <> rcName e <> " payload decodes through the chain\", upcasts" <> rcName e <> ")"
+               | e <- upcastEvents
+               , Just m <- [rcUpcastFrom e]
+               ]
             ++ [ "  ]"
                , ""
                , "roundTrips :: " <> nm <> "Event -> Bool"
@@ -71,10 +76,35 @@ emitHarness a =
                ]
             ++ concatMap (sampleEventDecl a) (aEvents a)
             ++ concatMap (acceptDecl a) (initialTransitions a)
+            ++ concatMap (upcastDecl a) upcastEvents
   where
     nm = aName a
     -- Bake the clock-free result computed from the spec at scaffold time.
     clockFreeLit = if specIsClockFree a then "True" else "False"
+    upcastEvents = [e | e <- aEvents a, rcUpcastFrom e /= Nothing]
+    codecValueImport = if null upcastEvents then "" else ", " <> lowerFirst nm <> "Codec"
+    codecDecodeRawImport = if null upcastEvents then "" else "import Keiro.Codec (decodeRaw)"
+
+{- | A wiring-proof assertion: feed a current-shape payload tagged at the
+upcaster's source version through @decodeRaw@, which runs the upcaster chain
+then @decode@. Red while the upcaster hole returns @Left@; green once filled.
+(The grammar records only the current event shape, not the per-version field
+delta, so this proves the chain is wired and the hole must be filled rather
+than re-deriving the exact old payload.)
+-}
+upcastDecl :: Agg -> ResolvedCtor -> [Text]
+upcastDecl a e = case rcUpcastFrom e of
+    Nothing -> []
+    Just m ->
+        [ ""
+        , "upcasts" <> rcName e <> " :: Bool"
+        , "upcasts" <> rcName e <> " ="
+        , "  either (const False) (const True)"
+        , "    (decodeRaw " <> lowerFirst (aName a) <> "Codec " <> tInt m <> " (encode" <> aName a <> "Event sampleEvent" <> rcName e <> "))"
+        ]
+
+tInt :: Int -> Text
+tInt = T.pack . show
 
 nl :: [Text] -> Text
 nl = T.intercalate "\n"
