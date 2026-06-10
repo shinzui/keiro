@@ -21,7 +21,7 @@ process HospitalSurge
 
   timer surgeFollowUp
     id uuidv5 "hospital-surge-timer:" <> correlationId
-    fireAt input.observedAt + 5m
+    fireAt input.now + 5m
     payload { kind="hospital-surge-follow-up" hospitalId }
     fire dispatch Surge@correlationId MarkSurgeTimerFired { hospitalId timerId }
       fired-event-id uuidv5 "hospital-surge-fired:" <> correlationId

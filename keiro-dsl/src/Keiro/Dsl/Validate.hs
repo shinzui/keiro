@@ -46,6 +46,11 @@ data DiagnosticCode
     | WireSchemaVersionMismatch
     | EvtFieldAddedWithoutBump
     | EvtRemovedNotDeprecated
+    | -- EP-3 (process manager + durable timer).
+      ProcessFireAtNotInjected
+    | ProcessDispatchIdSupplied
+    | ProcessUnresolvedRef
+    | ProcessBenignInversion
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -89,7 +94,71 @@ validateSpec spec =
 
 validateNode :: Spec -> Node -> [Diagnostic]
 validateNode spec (NAggregate agg) = validateAggregate spec agg
-validateNode _spec (NProcess _) = [] -- EP-3 M2 adds the process/timer rules
+validateNode spec (NProcess p) = validateProcess spec p
+
+-- | EP-3 rules for a process manager + its nested timer.
+validateProcess :: Spec -> ProcessNode -> [Diagnostic]
+validateProcess spec p =
+    concat [noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, benignInversions]
+  where
+    aggNames = [aggName a | NAggregate a <- specNodes spec]
+    inputFields = map fieldName (inFields (procInput p))
+    timeFields = [fieldName f | f <- inFields (procInput p), fieldType f == Just "Time"]
+    timer = procTimer p
+    pl = locLine (procLoc p)
+
+    -- TIME IS INJECTED, NOT SAMPLED: fireAt's field must be a declared :Time
+    -- input field. (FireAtExpr has no clock-sampling constructor, so this is a
+    -- field-resolution + typed-as-Time check.)
+    noWallClock =
+        let f = faField (tmFireAt timer)
+         in [ mkErr (locLine (tmLoc timer)) ProcessFireAtNotInjected $
+                "timer '" <> tmName timer <> "' fireAt references '" <> f <> "', which is not a declared :Time field of input '" <> inName (procInput p) <> "'"
+            | f `notElem` timeFields
+            ]
+                ++ [ mkErr (locLine (tmLoc timer)) ProcessFireAtNotInjected $
+                        "timer '" <> tmName timer <> "' fireAt field '" <> f <> "' is not a field of input '" <> inName (procInput p) <> "'"
+                   | f `notElem` inputFields
+                   ]
+
+    -- Dispatched (and fired) command ids are runtime-owned; no field binding may
+    -- supply a commandId/id.
+    runtimeOwnedDispatchId =
+        [ mkErr pl ProcessDispatchIdSupplied $
+            "dispatch to '" <> dispTarget d <> "' supplies a runtime-owned id field '" <> fbName b <> "'; remove it"
+        | d <- hDispatch (procHandle p)
+        , b <- dispFields d
+        , fbName b `elem` (["commandId", "id"] :: [Name])
+        ]
+            ++ [ mkErr (locLine (tmLoc timer)) ProcessDispatchIdSupplied $
+                    "timer fire supplies a runtime-owned id field '" <> fbName b <> "'; remove it"
+               | b <- fireFields (tmFire timer)
+               , fbName b `elem` (["commandId", "id"] :: [Name])
+               ]
+
+    -- saga / target / fire-target must resolve to declared aggregates.
+    crossNodeCoupling =
+        [ mkErr pl ProcessUnresolvedRef ("saga '" <> sagaAgg (procSaga p) <> "' does not resolve to a declared aggregate")
+        | sagaAgg (procSaga p) `notElem` aggNames
+        ]
+            ++ [ mkErr pl ProcessUnresolvedRef ("target '" <> procTarget p <> "' does not resolve to a declared aggregate")
+               | procTarget p `notElem` aggNames
+               ]
+            ++ [ mkErr (locLine (tmLoc timer)) ProcessUnresolvedRef ("timer fire target '" <> fireTarget (tmFire timer) <> "' must be the saga or the target aggregate")
+               | fireTarget (tmFire timer) `notElem` [sagaAgg (procSaga p), procTarget p]
+               ]
+
+    -- Surface the dangerous benign inversions the author confirmed (warnings).
+    benignInversions =
+        [ Diagnostic (locLine (tmLoc timer)) Warning ProcessBenignInversion $
+            "timer '" <> tmName timer <> "' maps on-reject => Fired (a CommandRejected is treated as benign success)"
+        | onReject (fireDisposition (tmFire timer)) == OFired
+        ]
+            ++ [ Diagnostic pl Warning ProcessBenignInversion $
+                    "dispatch to '" <> dispTarget d <> "' maps on-duplicate => AckOk (a duplicate is treated as benign success)"
+               | d <- hDispatch (procHandle p)
+               , onDuplicate (dispDisposition d) == DAckOk
+               ]
 
 validateAggregate :: Spec -> Aggregate -> [Diagnostic]
 validateAggregate spec agg =

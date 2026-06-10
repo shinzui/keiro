@@ -13,7 +13,7 @@ import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate)
-import Keiro.Dsl.Validate (renderDiagnostic, validateSpec)
+import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
 import System.Exit (ExitCode (..), exitFailure)
@@ -77,10 +77,10 @@ run (Check fp) = do
             exitFailure
         Right spec -> do
             let diags = validateSpec spec
-            unless (null diags) $ do
-                mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
-                exitFailure
-            putStrLn "OK"
+            mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
+            if any ((== Error) . severity) diags
+                then exitFailure
+                else putStrLn "OK"
 run (Scaffold fp out) = do
     input <- TIO.readFile fp
     case parseSpec fp input of

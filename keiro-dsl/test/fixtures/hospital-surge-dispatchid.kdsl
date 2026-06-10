@@ -13,7 +13,7 @@ process HospitalSurge
 
   on SurgeInput
     advance NoteSurgeThreshold { hospitalId availableIcuBeds redDemand timerId=timer.id }
-    dispatch Hospital@input.hospitalId ActivateSurge { hospitalId }
+    dispatch Hospital@input.hospitalId ActivateSurge { hospitalId commandId=foo.bar }
       on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
     schedule surgeFollowUp
 

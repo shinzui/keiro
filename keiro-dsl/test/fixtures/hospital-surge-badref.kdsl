@@ -7,7 +7,7 @@ process HospitalSurge
   name "hospital-surge"
   input SurgeInput { hospitalId availableIcuBeds:Int redDemand:Int observedAt:Time }
   correlate input.hospitalId via idText
-  saga Surge stream="hospital-surge-" <> correlationId
+  saga Nonexistent stream="hospital-surge-" <> correlationId
   target Hospital
   projections [ hospitalReadiness ]
 

@@ -12,7 +12,7 @@ import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate)
-import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), validateSpec)
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateSpec)
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
 
@@ -92,6 +92,18 @@ main = hspec $ do
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+        it "accepts the hospital-surge spec (no errors; benign-inversion warnings only)" $ do
+            codes <- errorCodesOf "test/fixtures/hospital-surge.kdsl"
+            codes `shouldBe` []
+        it "rejects a wall-clock fireAt as ProcessFireAtNotInjected" $ do
+            codes <- errorCodesOf "test/fixtures/hospital-surge-clock.kdsl"
+            codes `shouldContain` [ProcessFireAtNotInjected]
+        it "rejects a user-supplied dispatch id as ProcessDispatchIdSupplied" $ do
+            codes <- errorCodesOf "test/fixtures/hospital-surge-dispatchid.kdsl"
+            codes `shouldContain` [ProcessDispatchIdSupplied]
+        it "rejects an unresolved saga reference as ProcessUnresolvedRef" $ do
+            codes <- errorCodesOf "test/fixtures/hospital-surge-badref.kdsl"
+            codes `shouldContain` [ProcessUnresolvedRef]
 
     describe "diff (evolution classification)" $ do
         it "classifies a field added without a version bump as BREAKING" $ do
@@ -146,6 +158,16 @@ diagnosticCodesOf path = do
     case parseSpec path input of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right spec -> pure (map code (validateSpec spec))
+
+{- | Like 'diagnosticCodesOf' but only the Error-severity codes (warnings, e.g.
+the benign-inversion notices, are excluded).
+-}
+errorCodesOf :: FilePath -> IO [DiagnosticCode]
+errorCodesOf path = do
+    input <- TIO.readFile path
+    case parseSpec path input of
+        Left err -> expectationFailure (T.unpack err) >> pure []
+        Right spec -> pure [code d | d <- validateSpec spec, severity d == Error]
 
 -- | Parse two fixtures and diff them (old, new).
 diffFixtures :: FilePath -> FilePath -> IO [Change]

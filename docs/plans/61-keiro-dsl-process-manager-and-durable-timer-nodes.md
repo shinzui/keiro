@@ -89,10 +89,10 @@ Milestone 1 — Grammar + parser for `process`/`timer`: **DONE 2026-06-10**
 - [x] Extend `Keiro.Dsl.PrettyPrint` so a parsed `process`/`timer` round-trips. (2026-06-10)
 - [x] `keiro-dsl parse hospital-surge.kdsl` echoes the process + nested timer byte-identically; round-trip + shape unit tests green. (2026-06-10)
 
-Milestone 2 — Validator rules:
+Milestone 2 — Validator rules: **DONE 2026-06-10**
 
-- [ ] Implement the M-level rules in `Keiro.Dsl.Validate`: clock-free deadline, runtime-owned dispatch-id, complete disposition table for every dispatch and every timer fire, explicit `max-attempts`+`dead-letter`, deterministic fired-event-id and timer-id, cross-node coupling resolution, explicit optionality, decode-strictness ack.
-- [ ] `keiro-dsl check` rejects each violation with a line-numbered diagnostic; a complete spec passes clean.
+- [x] Implement `validateProcess` rules in `Keiro.Dsl.Validate`: `ProcessFireAtNotInjected` (fireAt field must be a declared `:Time` input field — TIME IS INJECTED), `ProcessDispatchIdSupplied` (no `commandId`/`id` binding on a dispatch or fire), `ProcessUnresolvedRef` (saga/target/fire-target resolve to declared aggregates), and `ProcessBenignInversion` *warnings* surfacing `on-reject => Fired` / `on-duplicate => AckOk`. The mandatory `max-attempts`/`dead-letter`, complete disposition tables, deterministic ids, and decode-strictness ack are enforced by the grammar/parser (their absence is a parse error). (2026-06-10)
+- [x] `keiro-dsl check` now exits non-zero only on *errors* (warnings pass): the hospital-surge spec passes clean (exit 0, two benign-inversion warnings); the clock/dispatch-id/bad-ref mutated fixtures each fail with the expected `error[Process…]`. Unit tests via `errorCodesOf`. (2026-06-10)
 
 Milestone 3 — Scaffold emitters:
 
