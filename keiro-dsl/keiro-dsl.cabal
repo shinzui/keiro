@@ -3,7 +3,7 @@ name:          keiro-dsl
 version:       0.1.0.0
 synopsis:      Typed specification toolchain for keiro services
 description:
-  keiro-dsl is the toolchain over a typed `.kdsl` specification of a keiro
+  keiro-dsl is the toolchain over a typed `.keiro` specification of a keiro
   service: a parser + checker + scaffolder + harness emitter. It emits the
   symbol-free deterministic layer plus typed holes, never a keiki symbolic
   operator (the firewall invariant).
@@ -316,7 +316,7 @@ test-suite keiro-dsl-conformance-process-runtime
     , uuid   >=1.3
 
 -- Process-manager facts harness (EP-3 M4): the self-contained, firewall-clean
--- ProcessHarness module scaffolded from hospital-surge.kdsl, compiled + run to
+-- ProcessHarness module scaffolded from hospital-surge.keiro, compiled + run to
 -- prove the scaffolder lowered the spec's deterministic process/timer decisions
 -- faithfully. (The runtime-coupled Process/ProcessHoles modules are emitted to
 -- disk but not in this component; their live conformance is the M5 step.)
@@ -334,7 +334,7 @@ test-suite keiro-dsl-conformance-process
 -- Codec schemaVersion=2 + upcasters wiring compiles and that the filled upcaster
 -- migrates a v1-tagged payload through the chain (the harness "upcaster wired"
 -- assertion). These sources are raw `keiro-dsl scaffold` output of
--- reservation-v2.kdsl plus a hand-filled Holes.hs.
+-- reservation-v2.keiro plus a hand-filled Holes.hs.
 test-suite keiro-dsl-conformance-v2
   import:         warnings, shared
   type:           exitcode-stdio-1.0

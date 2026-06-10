@@ -38,7 +38,7 @@ child's terminal marker mask the parent's incompleteness. A read-model query tha
 `Eventual` consistency where the caller needs read-your-writes returns stale data.
 
 `keiro-dsl` is a toolchain over a **typed specification** of a keiro service — a plain-text
-file with extension `.kdsl` written in a terse, readable notation, which is the permanent,
+file with extension `.keiro` written in a terse, readable notation, which is the permanent,
 machine-checkable source of truth for the service. The foundation (parser, validator,
 scaffolder, harness, CLI) and the `aggregate` node are built by **EP-1**
 (`docs/plans/59-keiro-dsl-foundations-grammar-parser-validator-scaffold-and-harness-engine-aggregate-vertical.md`),
@@ -49,9 +49,9 @@ external resolution points, durable sleeps, and child workflows) and `operation`
 service entry shapes: command, query, signal, workflow-run).
 
 After this plan, a developer (or a coding agent planning a feature) can write a `workflow`
-block and one or more `operation` blocks in a `.kdsl` file, then:
+block and one or more `operation` blocks in a `.keiro` file, then:
 
-1. Run `keiro-dsl check service.kdsl` and have the tool **reject the spec** — with a
+1. Run `keiro-dsl check service.keiro` and have the tool **reject the spec** — with a
    precise, line-numbered diagnostic, *before any Haskell is written* — if a workflow's body
    samples the wall clock outside a journaled step, if a `sleep` deadline comes from a fresh
    clock read instead of injected data, if two steps share a journal name, if an `await`
@@ -59,7 +59,7 @@ block and one or more `operation` blocks in a `.kdsl` file, then:
    child resolves to no registered workflow or could share the parent's id, or if a query
    operation asks for `Eventual`/`PositionWait` on a `Strong` read model without an explicit
    override.
-2. Run `keiro-dsl scaffold service.kdsl --out <dir>` and get the **symbol-free
+2. Run `keiro-dsl scaffold service.keiro --out <dir>` and get the **symbol-free
    deterministic layer** — the workflow runner wiring, the stable `WorkflowName`, the
    `WorkflowId` derivation, the *structural* skeleton of the body (the ordered
    `step`/`await`/`sleep`/`child` calls with their journal names and result types), the
@@ -127,7 +127,7 @@ Milestone 4 — Harness emission:
 Milestone 5 — Conformance vs `ReservationWorkflow` + `EvacuationWorkflow`:
 
 - [ ] Capture `ReservationWorkflow.hs`, `EvacuationWorkflow.hs`, `Reservation/CommandProcessor.hs`, `Reservation/Projection.hs`, and the relevant `Store.hs` operation wrappers as read-only fixtures under `keiro-dsl/test/fixtures/`.
-- [ ] Author `hospital-reservation.kdsl` and `incident-evacuation.kdsl`; `check` passes; `scaffold` produces modules that compile once step bodies are filled to match the captured reference; harness green.
+- [ ] Author `hospital-reservation.keiro` and `incident-evacuation.keiro`; `check` passes; `scaffold` produces modules that compile once step bodies are filled to match the captured reference; harness green.
 - [ ] Mutation test: changing one side of the await↔signal label (or a step result type) turns a specific harness test red.
 
 
@@ -663,7 +663,7 @@ and touches no existing one.
 
 Scope: make a `workflow` block (with its ordered body) and an `operation` block (in all four
 forms) first-class parts of the AST and parseable, round-trippable parts of the notation. At
-the end, `keiro-dsl parse` accepts a `.kdsl` containing a `workflow` and its operations and
+the end, `keiro-dsl parse` accepts a `.keiro` containing a `workflow` and its operations and
 prints it back out identically.
 
 Edits:
@@ -697,7 +697,7 @@ Edits:
 - In `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`, add `prettyWorkflow`/`prettyOperation` so that
   `parse` then pretty-print is idempotent on a `workflow`-bearing spec, preserving body order.
 
-Acceptance: `cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.kdsl`
+Acceptance: `cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.keiro`
 prints a model that, re-parsed, equals the first (round-trip test green).
 
 ### Milestone 2 — Validator rules
@@ -792,7 +792,7 @@ Acceptance: `cabal test keiro-dsl` on the emitted harness is green with filled h
 ### Milestone 5 — Conformance vs `ReservationWorkflow` + `EvacuationWorkflow`
 
 Scope: prove the whole vertical against the real corpus. At the end, the captured fixtures, the
-authored `.kdsl` files, and the round-trip check → scaffold → fill → harness loop all pass, and
+authored `.keiro` files, and the round-trip check → scaffold → fill → harness loop all pass, and
 a mutation demonstrably breaks a specific test.
 
 Edits and steps:
@@ -803,9 +803,9 @@ Edits and steps:
   `/Users/shinzui/Keikaku/bokuno/keiro-runtime-jitsurei/services/hospital-capacity/src/HospitalCapacity/`;
   `incident-evacuation/` ← `EvacuationWorkflow.hs` from
   `/Users/shinzui/Keikaku/bokuno/keiro-runtime-jitsurei/services/incident-command/src/IncidentCommand/`.
-- Author `keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.kdsl` (the notation
+- Author `keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.keiro` (the notation
   above: the `workflow` plus the four `operation`s) and
-  `keiro-dsl/test/fixtures/incident-evacuation/incident-evacuation.kdsl` (the evacuation
+  `keiro-dsl/test/fixtures/incident-evacuation/incident-evacuation.keiro` (the evacuation
   workflow plus its capacity-acknowledgement signal — `EvacuationWorkflow.hs:73-86`).
 - Run check → scaffold → fill the step-body holes to match the captured reference → run
   harness; confirm green.
@@ -837,7 +837,7 @@ Expected: a successful build line ending in the `keiro-dsl` library and exe comp
 After the Grammar/Parser/PrettyPrint edits, capture the fixtures and author the spec, then:
 
 ```bash
-cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.kdsl
+cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.keiro
 ```
 
 Expected (abridged): a pretty-printed echo of the spec, including the `workflow
@@ -855,7 +855,7 @@ Expected: `1 example, 0 failures` (or the project's test-runner equivalent).
 ### Milestone 2 — check rejects dangerous omissions
 
 ```bash
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.kdsl
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.keiro
 echo "exit=$?"
 ```
 
@@ -865,15 +865,15 @@ For each rule, a mutated copy must fail. Example (break the await↔signal label
 
 ```bash
 sed 's/signal reservation-confirmation/signal reservation-confirmed/' \
-  keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.kdsl > /tmp/bad-signal.kdsl
-cabal run keiro-dsl -- check /tmp/bad-signal.kdsl
+  keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.keiro > /tmp/bad-signal.keiro
+cabal run keiro-dsl -- check /tmp/bad-signal.keiro
 echo "exit=$?"
 ```
 
 Expected: a line-numbered error such as
 
 ```text
-hospital-reservation.kdsl:NN:C: error: signal 'reservation-confirmed' of HospitalTransferReservation has no matching 'await' (workflow declares await 'reservation-confirmation'); the deterministic awakeable id will not match and the workflow will wait forever
+hospital-reservation.keiro:NN:C: error: signal 'reservation-confirmed' of HospitalTransferReservation has no matching 'await' (workflow declares await 'reservation-confirmation'); the deterministic awakeable id will not match and the workflow will wait forever
 exit=1
 ```
 
@@ -886,7 +886,7 @@ cooling-off after now` (`error: sleep 'cooling-off' deadline must be an injected
 ### Milestone 3 — scaffold and firewall
 
 ```bash
-cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.kdsl --out /tmp/reservation-scaffold
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.keiro --out /tmp/reservation-scaffold
 ls /tmp/reservation-scaffold
 ```
 
@@ -934,11 +934,11 @@ Mutation (prove the harness pins the await↔signal coupling):
 
 ```bash
 sed -i.bak 's/signal reservation-confirmation/signal reservation-confirmed/' \
-  keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.kdsl
-cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.kdsl --out /tmp/reservation-mut
+  keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.keiro
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.keiro --out /tmp/reservation-mut
 cabal test keiro-dsl --test-options='--match "harness/hospital-reservation/await-signal"'
 echo "exit=$?"
-mv keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.kdsl.bak keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.kdsl
+mv keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.keiro.bak keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.keiro
 ```
 
 Expected: the `await-signal` example **fails** (`exit` non-zero) under the mutated spec — and
@@ -953,7 +953,7 @@ and codecs are genuinely pinned.
 The plan is accepted when all of the following observable behaviors hold, each demonstrable by
 the commands in *Concrete Steps*:
 
-1. **Parse + round-trip.** `keiro-dsl parse` on `hospital-reservation.kdsl` echoes a `workflow`
+1. **Parse + round-trip.** `keiro-dsl parse` on `hospital-reservation.keiro` echoes a `workflow`
    block with its ordered `body` and the four `operation` blocks, and re-parsing the output
    yields an equal model (`parser/round-trip workflow` test green). This proves the notation is
    a real language with a stable body order, not freeform text.
@@ -997,7 +997,7 @@ to the `Keiro.Workflow` and `Keiro.Command`/`Keiro.ReadModel` primitives.
 
 Every step in this plan is safe to repeat.
 
-- **`parse` and `check`** are pure reads of a `.kdsl` file and produce no side effects; run them
+- **`parse` and `check`** are pure reads of a `.keiro` file and produce no side effects; run them
   as often as you like.
 - **`scaffold`** is idempotent by construction (the EP-1 discipline this plan inherits):
   `Generated` modules are overwritten verbatim on every run, so re-scaffolding after a spec edit
@@ -1012,7 +1012,7 @@ Every step in this plan is safe to repeat.
   and `…/services/incident-command/src/IncidentCommand/`.
 - **The mutation test** edits the spec in place; the step takes a `.bak` and restores it, so the
   working tree returns to its prior state. If interrupted mid-mutation, restore with
-  `git checkout -- keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.kdsl`.
+  `git checkout -- keiro-dsl/test/fixtures/hospital-reservation/hospital-reservation.keiro`.
 
 This plan adds no migrations, touches no database, and modifies no runtime package, so there is
 nothing destructive to roll back. The only durable artifacts are new `keiro-dsl` source modules

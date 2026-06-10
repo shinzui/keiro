@@ -39,12 +39,12 @@ genuinely behavior-bearing logic as precisely-typed holes a human or agent fills
   against already-decided/already-queued work, and enqueues the survivors onto a
   `workqueue`.
 
-After this change a developer can write a `.kdsl` spec containing a `workqueue` and a
-`dispatch` block, run `keiro-dsl check spec.kdsl` to have the validator **reject** a queue
+After this change a developer can write a `.keiro` spec containing a `workqueue` and a
+`dispatch` block, run `keiro-dsl check spec.keiro` to have the validator **reject** a queue
 that has no failure policy, a disposition table with a dangerous inversion (a transient
 store error routed to the DLQ instead of retried, or a poison/decode payload retried
 forever), or a physical-table name that drifts from what name derivation actually produces;
-then run `keiro-dsl scaffold spec.kdsl --out <dir>` to emit the symbol-free `Job`
+then run `keiro-dsl scaffold spec.keiro --out <dir>` to emit the symbol-free `Job`
 declaration, `JobCodec` field map, retry policy, and queue wiring into `-- @generated`
 modules, plus typed holes for the two pieces of real logic (the effectful fan-out body and
 the raw-SQL dedup predicate), plus a harness that round-trips the codec, asserts the
@@ -75,7 +75,7 @@ This section must always reflect the actual current state of the work.
 - [x] Milestone 2 (validator) DONE 2026-06-10 (headline rules): physical-name divergence vs queueRef, the storeFailure/decodeFailure inversions, dlq=on/maxRetries ceiling, and dispatch enqueue resolution. Lower-value rules (dedup-key-binds-to-payload, dlq-off-with-DeadLetter warning) remain. Originally: to `Keiro.Dsl.Validate` — require-a-derivation (+ fixture-divergence check by re-running `queueRef` semantics), require-a-disposition, dangerous-inversion flags, queue-name-divergence across nodes, dedup-key-binds-to-payload-field, `maxRetries ≥ 1` when `dlq=on`, dlq-off-with-DeadLetter-arm warning, and the producer-failure-vs-consumer-JobOutcome separation.
 - [ ] Milestone 3 (scaffold): emit the symbol-free `Generated` layer (the `Job` value, the `JobCodec` field map, the `RetryPolicy`, the `queueRef` wiring, the disposition `JobOutcome` mapping) plus `HoleStub` signatures for the fan-out body and the raw-SQL dedup predicate; **never** emit the raw SQL. Confirm the firewall invariant holds.
 - [ ] Milestone 4 (harness): emit codec round-trip, disposition-coverage, and the captured-physical-name-fixture-matches-`queueRef` tests.
-- [ ] Milestone 5 (conformance): capture the *reservation-work* reference modules under `keiro-dsl/test/fixtures/`, scaffold from a hand-written `reservation-work.kdsl`, show the `Generated` modules compile and the harness is green, and show a fixture mutation turns a test red.
+- [ ] Milestone 5 (conformance): capture the *reservation-work* reference modules under `keiro-dsl/test/fixtures/`, scaffold from a hand-written `reservation-work.keiro`, show the `Generated` modules compile and the harness is green, and show a fixture mutation turns a test red.
 - [ ] Record the honest coverage gaps (raw-SQL dedup predicate, fan-out body + its producer-failure arms, trace-header propagation, deliberate-malformed test path, versioned `{v,data}` codec, run cadence) in Surprises and in the scaffold hole comments.
 
 
@@ -399,7 +399,7 @@ it against the one real corpus instance. All paths below are repository-relative
 
 **Scope.** Add two constructors to EP-1's `Node` sum type in
 `keiro-dsl/src/Keiro/Dsl/Grammar.hs` and teach the parser and pretty-printer the two new
-blocks. **What exists at the end:** a `.kdsl` file containing a `workqueue` and a `dispatch`
+blocks. **What exists at the end:** a `.keiro` file containing a `workqueue` and a `dispatch`
 block parses to a `Spec`, and re-printing it round-trips. The bijection table gains its two
 rows in the same commit.
 
@@ -430,7 +430,7 @@ Concretely:
 - Append the two bijection-table rows (above) to this plan's Context **in the same commit**
   (the faithfulness contract).
 
-**Acceptance.** `cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation-work/reservation-work.kdsl`
+**Acceptance.** `cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation-work/reservation-work.keiro`
 (once the fixture exists in Milestone 5; until then a small inline test spec) succeeds and
 prints the parsed `Spec`; the round-trip property test passes.
 
@@ -557,7 +557,7 @@ mutating the captured `physical` fixture (e.g. dropping a character) turns the
 ### Milestone 5 — Conformance against reservation-work
 
 **Scope.** Capture the real reservation-work reference modules read-only under
-`keiro-dsl/test/fixtures/reservation-work/`, write the canonical `reservation-work.kdsl`,
+`keiro-dsl/test/fixtures/reservation-work/`, write the canonical `reservation-work.keiro`,
 scaffold from it, and prove end-to-end. **What exists at the end:** a conformance fixture
 demonstrating the whole loop on the one real instance.
 
@@ -565,7 +565,7 @@ demonstrating the whole loop on the one real instance.
   and `.../Integration/ReservationWorkDispatch.hs` into
   `keiro-dsl/test/fixtures/reservation-work/reference/` (read-only reference, per EP-1's
   fixture convention).
-- Write `keiro-dsl/test/fixtures/reservation-work/reservation-work.kdsl` (the notation
+- Write `keiro-dsl/test/fixtures/reservation-work/reservation-work.keiro` (the notation
   above).
 - Scaffold it; diff the `Generated` payload/codec/`Job`/disposition modules against the
   captured reference to confirm the deterministic layer matches (modulo the holes).
@@ -593,7 +593,7 @@ cabal build keiro-dsl
 After Milestone 1 (grammar + parser), parse a spec and confirm round-trip:
 
 ```bash
-cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation-work/reservation-work.kdsl
+cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation-work/reservation-work.keiro
 ```
 
 Expected (shape, not exact): a pretty-printed `Spec` echoing the `workqueue reservation_work`
@@ -606,8 +606,8 @@ cabal test keiro-dsl --test-options='--match "round-trip"'
 After Milestone 2 (validator), check the real spec and a negative fixture:
 
 ```bash
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-work/reservation-work.kdsl
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-work/negative/divergent-physical.kdsl
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-work/reservation-work.keiro
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-work/negative/divergent-physical.keiro
 ```
 
 Expected: the first prints no diagnostics and exits 0; the second prints an `Error` naming
@@ -615,7 +615,7 @@ the divergence between the captured `physical` fixture and what `queueRef` deriv
 non-zero. Sample expected text:
 
 ```text
-error: keiro-dsl/test/fixtures/reservation-work/negative/divergent-physical.kdsl
+error: keiro-dsl/test/fixtures/reservation-work/negative/divergent-physical.keiro
   workqueue reservation_work: captured physical "hospital_capacity_reservation_wor"
   diverges from queueRef("hospital_capacity.reservation_work") =
   "hospital_capacity_reservation_work"
@@ -624,7 +624,7 @@ error: keiro-dsl/test/fixtures/reservation-work/negative/divergent-physical.kdsl
 After Milestone 3 (scaffold), emit modules into a scratch output directory and inspect:
 
 ```bash
-cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation-work/reservation-work.kdsl --out /tmp/rw-scaffold
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation-work/reservation-work.keiro --out /tmp/rw-scaffold
 ls -R /tmp/rw-scaffold
 ```
 
@@ -722,7 +722,7 @@ module, by contrast, **depends on `keiro-pgmq`** so it can call the real
   symbolic operator and no raw SQL`.
 - End of M4 — `Keiro.Dsl.Harness` exposes a pgmq harness emitter returning the codec
   round-trip, disposition-coverage, and `queueRef`-fixture-match test modules.
-- End of M5 — `keiro-dsl/test/fixtures/reservation-work/` holds the `.kdsl`, the read-only
+- End of M5 — `keiro-dsl/test/fixtures/reservation-work/` holds the `.keiro`, the read-only
   reference modules, and the negative fixtures; `cabal test keiro-dsl` is green.
 
 **Soft EP-4 reuse.** The dedup envelope-key↔payload-field binding (validator rule 6) is the

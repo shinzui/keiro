@@ -4,10 +4,10 @@
 # assertions (they diverge from the hand-written expectation in
 # test/conformance-workflow/Main.hs). Exit 0 => the mutation was caught.
 set -euo pipefail
-SPEC="keiro-dsl/test/fixtures/workflow.kdsl"
+SPEC="keiro-dsl/test/fixtures/workflow.keiro"
 OUT="keiro-dsl/test/conformance-workflow"
 EXE="$(cabal list-bin keiro-dsl 2>/dev/null)"
-MUT="$(mktemp).kdsl"
+MUT="$(mktemp).keiro"
 restore() { "$EXE" scaffold "$SPEC" --out "$OUT" >/dev/null 2>&1 || true; rm -f "$MUT"; }
 trap restore EXIT
 

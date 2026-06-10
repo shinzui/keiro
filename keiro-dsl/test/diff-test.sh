@@ -16,21 +16,21 @@ cleanup() { rm -rf "$DEMO"; }
 trap cleanup EXIT
 
 git -C "$DEMO" init -q
-cp "$FIX/reservation.kdsl" "$DEMO/svc.kdsl"
-git -C "$DEMO" add svc.kdsl
+cp "$FIX/reservation.keiro" "$DEMO/svc.keiro"
+git -C "$DEMO" add svc.keiro
 git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "baseline v1 spec"
 
 echo "== 1) field-add without bump must be BREAKING (exit != 0) =="
-cp "$FIX/reservation-fieldadd.kdsl" "$DEMO/svc.kdsl"
-if "$EXE" diff --since HEAD "$DEMO/svc.kdsl"; then
+cp "$FIX/reservation-fieldadd.keiro" "$DEMO/svc.keiro"
+if "$EXE" diff --since HEAD "$DEMO/svc.keiro"; then
   echo "FAIL: field-add was not flagged breaking"; exit 1
 else
   echo "ok: flagged breaking, gate blocks the merge"
 fi
 
 echo "== 2) v2 + upcaster must be ADDITIVE (exit 0) =="
-cp "$FIX/reservation-v2.kdsl" "$DEMO/svc.kdsl"
-if "$EXE" diff --since HEAD "$DEMO/svc.kdsl"; then
+cp "$FIX/reservation-v2.keiro" "$DEMO/svc.keiro"
+if "$EXE" diff --since HEAD "$DEMO/svc.keiro"; then
   echo "ok: additive, gate allows the merge"
 else
   echo "FAIL: v2 + upcaster was wrongly flagged breaking"; exit 1

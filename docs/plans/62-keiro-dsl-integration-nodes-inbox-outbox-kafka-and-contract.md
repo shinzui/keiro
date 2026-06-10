@@ -44,16 +44,16 @@ of a service becomes a **typed specification** instead of hand-written boilerpla
 
 After this change a developer (or a coding agent planning a feature) can:
 
-1. Write the integration surface of a service in terse `.kdsl` notation that names a real
+1. Write the integration surface of a service in terse `.keiro` notation that names a real
    Kafka topic, the real event types on it, and every required header binding.
-2. Run `keiro-dsl check service.kdsl` and have the checker **reject the spec before any
+2. Run `keiro-dsl check service.keiro` and have the checker **reject the spec before any
    Haskell is written** if the disposition table is incomplete, if a dangerous inversion is
    stated the safe-but-wrong way (duplicate⇒retry, previouslyFailed⇒retry,
    invalid-payload⇒unbounded-retry), if a contract field is left unbound to any wire
    source, if a header that exists in both the Kafka header and the JSON body is not given
    an explicit cross-check decision, or if a producer and consumer of the same topic
    reference different contracts.
-3. Run `keiro-dsl scaffold service.kdsl` and get the **symbol-free deterministic layer**
+3. Run `keiro-dsl scaffold service.keiro` and get the **symbol-free deterministic layer**
    — the `IntegrationMessage`/`IntegrationPayload` contract types, the inbox/outbox wiring,
    the consumer/publisher config records — emitted into `-- @generated` modules, plus
    precisely-typed **holes** (Haskell function signatures with `undefined` bodies and a
@@ -67,7 +67,7 @@ You can see it working by running, from `keiro-dsl/`, `cabal run keiro-dsl -- ch
 spec with a deliberately wrong disposition row and observing a non-zero exit with a precise
 diagnostic; then `cabal run keiro-dsl -- scaffold` and `cabal test` to see the generated
 contract types compile and the harness exercise every event type. The end-state acceptance
-is **conformance**: a `.kdsl` transcribed from the real `hospital-capacity` and
+is **conformance**: a `.keiro` transcribed from the real `hospital-capacity` and
 `incident-command` Kafka integration modules scaffolds code whose generated contract is
 byte-for-byte equivalent (same topics, event types, field-sets, discriminator) to the
 hand-written `Integration/Contracts.hs` it was derived from.
@@ -91,7 +91,7 @@ Milestone 1 — Grammar + parser: **IN PROGRESS 2026-06-10** (contract node done
 - [x] Add the `NContract`/`ContractNode` constructor to `Keiro.Dsl.Grammar` (schemaVersion, discriminator, topic aliases, events-on-topic with typed fields `typeid \"x\"`/`text`/`int`). The `intake`/`emit`/`publisher` constructors remain. (2026-06-10)
 - [x] Extend `Keiro.Dsl.Parser.parseSpec` to parse the `contract` block (adapted to the existing flat `context` top-level rather than a `service { … }` wrapper, for consistency with EP-1–EP-3). (2026-06-10)
 - [x] Extend the pretty-printer so parse→print→parse round-trips for the contract block. (2026-06-10)
-- [x] Unit tests: parse `contract.kdsl` into the expected AST + round-trip. (2026-06-10)
+- [x] Unit tests: parse `contract.keiro` into the expected AST + round-trip. (2026-06-10)
 - [x] `intake` node (contract/topic/accept, envelope bind rows with wire sources + cross-check, dedupe, decode strictness, the mandatory disposition table) — grammar, parser, pretty, round-trip. The runtime-config `consumer` block is hole-kind 8, deferred. (2026-06-10)
 - [x] `emit` node (status→event map + mandatory `_ => skip`, topic/source/key, messageId/idempotencyKey derive holes) and `publisher` node (ordering/maxAttempts/backoff/outboxId) — grammar, parser, pretty, round-trip. (2026-06-10)
 - **All four EP-4 node types (contract/intake/emit/publisher) now parse, round-trip, and validate.**
@@ -134,7 +134,7 @@ Milestone 4 — Harness:
 Milestone 5 — Conformance:
 
 - [ ] Capture `hospital-capacity` and `incident-command` `Integration/` into
-      `keiro-dsl/test/fixtures/` (read-only reference modules + the derived `.kdsl`).
+      `keiro-dsl/test/fixtures/` (read-only reference modules + the derived `.keiro`).
 - [ ] Prove generated contract equals the captured `Contracts.hs` shape (same topics,
       event types, field-sets, discriminator) and the harness is green.
 - [ ] Mutation check: flip one disposition row in the spec; the harness coverage test turns
@@ -235,7 +235,7 @@ is a **hard prerequisite** for this plan and must be Complete before you start. 
 the `keiro-dsl` package and these modules, whose signatures this plan restates because you
 will extend them:
 
-- `Keiro.Dsl.Grammar` — the abstract syntax tree (AST) of a `.kdsl` spec. EP-1 defines a
+- `Keiro.Dsl.Grammar` — the abstract syntax tree (AST) of a `.keiro` spec. EP-1 defines a
   top-level record `Spec` that aggregates a list of nodes, the shared declaration types
   (`IdDecl`, `EnumDecl`, `RuleDecl`), the eight hole types, and a small expression
   sublanguage `Expr`. A "node" is one block in the spec (today only `Aggregate`). **You add
@@ -608,7 +608,7 @@ runtime package is touched, only the `keiro-dsl` package is extended.
 
 ### Milestone 1 — Grammar and parser
 
-**Scope.** Teach the DSL to *represent and read* the four new blocks. At the end, a `.kdsl`
+**Scope.** Teach the DSL to *represent and read* the four new blocks. At the end, a `.keiro`
 file containing `contract`/`intake`/`emit`/`publisher` parses into a `Spec` AST and
 pretty-prints back to equivalent source.
 
@@ -648,7 +648,7 @@ block, matching the notation in the Context example. Add the new blocks to the t
 `parseSpec . prettySpec == Right` for any spec (round-trip property).
 
 Acceptance: from `keiro-dsl/`, `cabal test` runs a parser unit test that parses the
-conformance `.kdsl` (Milestone 5's fixture, also embedded as a string literal in the test)
+conformance `.keiro` (Milestone 5's fixture, also embedded as a string literal in the test)
 and asserts the resulting `Spec` has one `Contract` with seven events across two topics, one
 `Intake` with a seven-row disposition table, one `Emit` with a five-case status map ending
 in `MapSkip`, and one `Publisher`. The round-trip property test passes.
@@ -744,7 +744,7 @@ In `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, add emitters:
 After building each `ScaffoldModule`, run the EP-1 firewall check over every `Generated`
 module and fail scaffolding if any `-- @generated` line contains a keiki symbolic operator.
 
-Acceptance: from `keiro-dsl/`, `cabal run keiro-dsl -- scaffold test/fixtures/hospital-capacity.kdsl --out <tmp>`
+Acceptance: from `keiro-dsl/`, `cabal run keiro-dsl -- scaffold test/fixtures/hospital-capacity.keiro --out <tmp>`
 emits modules; a test compiles the emitted contract module against `keiro-core`/`keiro`
 (via a small fixture cabal target or by `ghc -fno-code` type-check) and asserts the
 firewall invariant holds on every `Generated` module. The `HoleStub` modules contain
@@ -775,18 +775,18 @@ captured reference modules, `cabal test` runs the emitted harness green: N round
 
 ### Milestone 5 — Conformance against the corpus
 
-**Scope.** Prove the vertical is faithful to real services. At the end, a `.kdsl` derived
+**Scope.** Prove the vertical is faithful to real services. At the end, a `.keiro` derived
 from `hospital-capacity` and one from `incident-command` scaffold code structurally
 equivalent to the hand-written originals, and the harness is green.
 
 Capture the corpus into `keiro-dsl/test/fixtures/`:
 
 - `keiro-dsl/test/fixtures/hospital-capacity/` — a read-only copy of the five
-  `Integration/*.hs` reference modules plus `hospital-capacity.kdsl` (the spec in the Context
+  `Integration/*.hs` reference modules plus `hospital-capacity.keiro` (the spec in the Context
   section). Primary example: one topic-pair, the four-status `emit` map, the seven-row
   disposition table.
 - `keiro-dsl/test/fixtures/incident-command/` — the `incident-command` `Integration/*.hs`
-  plus `incident-command.kdsl`. This proves the **one-union-across-two-topics** shape: a
+  plus `incident-command.keiro`. This proves the **one-union-across-two-topics** shape: a
   single `contract` whose `IntegrationPayload` spans `incidentEvents` and `hospitalEvents`
   and whose generated `isIncidentTopicMessage`/`isHospitalTopicMessage` predicates match the
   captured `Contracts.hs:210-218`.
@@ -798,7 +798,7 @@ field-sets (name + type), the same `messageType` discriminator strings, and (for
 incident-command) the same topic-routing partition of constructors. Then fill the holes from
 the captured `Inbox.hs`/`Outbox.hs` and run the harness green.
 
-Finally, the **mutation check**: edit `hospital-capacity.kdsl` to flip
+Finally, the **mutation check**: edit `hospital-capacity.keiro` to flip
 `duplicate => ackOk` to `duplicate => retry 5s`, re-run `check`, and confirm it now *fails*
 validation (rule 2); separately, with validation bypassed, confirm the harness disposition
 coverage test would turn red. Restore the file.
@@ -843,7 +843,7 @@ Milestone 1 acceptance transcript (parser test):
 
 ```text
 Grammar/Parser
-  parses hospital-capacity.kdsl
+  parses hospital-capacity.keiro
     contract emergency: 7 events across 2 topics      [✔]
     intake incidentInbox: 7-row disposition table     [✔]
     emit reservationResponse: status map ends in skip  [✔]
@@ -855,7 +855,7 @@ Milestone 2 — run the checker on a deliberately broken spec and observe reject
 
 ```bash
 cd keiro-dsl
-cabal run keiro-dsl -- check test/fixtures/bad-duplicate-retry.kdsl ; echo "exit=$?"
+cabal run keiro-dsl -- check test/fixtures/bad-duplicate-retry.keiro ; echo "exit=$?"
 ```
 
 Expected:
@@ -870,7 +870,7 @@ exit=1
 And the clean spec passes:
 
 ```bash
-cabal run keiro-dsl -- check test/fixtures/hospital-capacity/hospital-capacity.kdsl ; echo "exit=$?"
+cabal run keiro-dsl -- check test/fixtures/hospital-capacity/hospital-capacity.keiro ; echo "exit=$?"
 ```
 
 ```text
@@ -882,7 +882,7 @@ Milestone 3 — scaffold and inspect the generated contract:
 
 ```bash
 cd keiro-dsl
-cabal run keiro-dsl -- scaffold test/fixtures/hospital-capacity/hospital-capacity.kdsl \
+cabal run keiro-dsl -- scaffold test/fixtures/hospital-capacity/hospital-capacity.keiro \
   --out /tmp/hc-scaffold
 grep -c '^-- @generated' /tmp/hc-scaffold/**/Contracts.hs        # marker present
 grep -rl 'HOLE:' /tmp/hc-scaffold                                # the hole stubs
@@ -906,10 +906,10 @@ Mutation check (Milestone 5):
 ```bash
 cd keiro-dsl
 sed -i.bak 's/duplicate        => ackOk/duplicate        => retry 5s/' \
-  test/fixtures/hospital-capacity/hospital-capacity.kdsl
-cabal run keiro-dsl -- check test/fixtures/hospital-capacity/hospital-capacity.kdsl ; echo "exit=$?"
-mv test/fixtures/hospital-capacity/hospital-capacity.kdsl.bak \
-   test/fixtures/hospital-capacity/hospital-capacity.kdsl
+  test/fixtures/hospital-capacity/hospital-capacity.keiro
+cabal run keiro-dsl -- check test/fixtures/hospital-capacity/hospital-capacity.keiro ; echo "exit=$?"
+mv test/fixtures/hospital-capacity/hospital-capacity.keiro.bak \
+   test/fixtures/hospital-capacity/hospital-capacity.keiro
 ```
 
 Expected: `exit=1` with the rule-2 diagnostic, then the file is restored.
@@ -980,7 +980,7 @@ Every step in this plan is safe to repeat.
   to reset.
 - **The captured fixtures** under `keiro-dsl/test/fixtures/` are read-only copies of external
   corpus modules; they are never mutated by the toolchain. The mutation check in Milestone 5
-  edits a `.kdsl` in place but immediately restores it from the `.bak` it writes; if
+  edits a `.keiro` in place but immediately restores it from the `.bak` it writes; if
   interrupted, restore with `git checkout -- keiro-dsl/test/fixtures/`.
 - **No runtime package is touched.** This plan adds only to `keiro-dsl`; `keiro`,
   `keiro-core`, and the corpus services are read-only here, so there is no migration or

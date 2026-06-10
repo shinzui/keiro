@@ -1,6 +1,6 @@
 # keiro-dsl notation reference
 
-A `.kdsl` file is `context <name>` followed by top-level declarations and nodes. `#` begins a
+A `.keiro` file is `context <name>` followed by top-level declarations and nodes. `#` begins a
 line comment; whitespace/newlines are insignificant (structure comes from keywords). Every
 node family below is parsed, validated, and round-tripped by the toolchain.
 

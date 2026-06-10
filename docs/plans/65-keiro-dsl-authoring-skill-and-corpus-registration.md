@@ -16,7 +16,7 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-`keiro-dsl` is a **typed-spec toolchain** over `.kdsl` files: the spec is the permanent,
+`keiro-dsl` is a **typed-spec toolchain** over `.keiro` files: the spec is the permanent,
 machine-checkable source of truth for what a keiro service is, and the toolchain `check`s
 it before any code exists, `scaffold`s the symbol-free deterministic layer (into
 `-- @generated` modules) plus precisely-typed holes (into hand-owned modules) plus a
@@ -31,7 +31,7 @@ plans of this MasterPlan: `docs/plans/59-keiro-dsl-foundations-grammar-parser-va
 
 What is missing — and what this plan delivers — is the **last mile to the agent**. The
 toolchain exists, but nothing yet *teaches a coding agent how to drive it* end to end, and
-the captured conformance corpus (the `.kdsl` specs + hand-written reference modules under
+the captured conformance corpus (the `.keiro` specs + hand-written reference modules under
 `keiro-dsl/test/fixtures/`) is not discoverable as worked examples. After this change:
 
 1. A coding agent (or a human) can invoke a reusable **authoring skill** that hands it the
@@ -46,7 +46,7 @@ the captured conformance corpus (the `.kdsl` specs + hand-written reference modu
    hand-filled holes.
 
 The user-visible proof (Milestone 3): a *fresh* coding agent, given **only** the skill and
-a one-line feature description, produces a `.kdsl`, runs `keiro-dsl check`, runs
+a one-line feature description, produces a `.keiro`, runs `keiro-dsl check`, runs
 `keiro-dsl scaffold`, fills the holes for at least one non-trivial node, and gets a **green
 harness** — demonstrating that the authoring loop closes without the agent ever touching a
 generated module or being told the answer.
@@ -91,7 +91,7 @@ This section must always reflect the actual current state of the work.
 
 - [x] Build the capture-index: enumerate every vertical's fixtures under
       `keiro-dsl/test/fixtures/` (aggregate, process+timer, integration, pgmq,
-      workflow+operation) with their `.kdsl` + reference-module paths.
+      workflow+operation) with their `.keiro` + reference-module paths.
 - [x] Write `docs/corpus/keiro-dsl-corpus.md` — the in-repo docs index of the corpus.
 - [x] (keiro-dsl package registered in mori.dhall; skill discoverable via .claude/skills symlink + docs index) Register the skill + corpus in `mori.dhall` (`skills` entry + `docs` DocRef entries);
       `mori validate` passes and `mori registry show keiro --full` lists them.
@@ -101,7 +101,7 @@ This section must always reflect the actual current state of the work.
 **M3 — end-to-end acceptance**
 
 - [x] Pick a non-trivial node + a one-line feature description for the cold-start test.
-- [x] Run the cold-start: a fresh agent given only the skill produces a `.kdsl`, `check`s,
+- [x] Run the cold-start: a fresh agent given only the skill produces a `.keiro`, `check`s,
       `scaffold`s, fills holes, and gets a green harness.
 - [x] Record the transcript/outcome in Concrete Steps and Outcomes & Retrospective.
 
@@ -182,7 +182,7 @@ documentation (a skill) and registry entries, not code.
 
 ### What keiro-dsl is (restated for self-containment)
 
-`keiro-dsl` is a toolchain over `.kdsl` files. A `.kdsl` file is **a typed spec** — the
+`keiro-dsl` is a toolchain over `.keiro` files. A `.keiro` file is **a typed spec** — the
 permanent, machine-checkable source of truth for what a keiro service (a bounded context
 using event sourcing, process managers, durable timers, durable workflows, and Kafka/PGMQ
 integration) is. The toolchain is a CLI (`keiro-dsl`) with these subcommands:
@@ -250,7 +250,7 @@ extended by each vertical). The skill's notation reference covers all of them:
 
 Each vertical captures slices of the external sibling repo
 `keiro-runtime-jitsurei` (`services/hospital-capacity/`, `services/incident-command/`) as
-**read-only fixtures** under `keiro-dsl/test/fixtures/` — a `.kdsl` spec plus the
+**read-only fixtures** under `keiro-dsl/test/fixtures/` — a `.keiro` spec plus the
 hand-written reference modules it corresponds to — so the test suite is hermetic. These
 fixtures are the worked examples this plan registers. The canonical aggregate example is the
 **Reservation** aggregate (registers + a guard + register writes + a `status-map`
@@ -317,7 +317,7 @@ directory exists and is discoverable/invocable exactly like the existing `exec-p
    `description` ending in `TRIGGER when:` the user wants to author/spec a keiro service,
    fill keiro-dsl scaffold holes, or run the keiro-dsl authoring loop; `argument-hint`;
    `user-invocable: true`). Body: a thin router that (a) states the one-line job — *write a
-   `.kdsl`, drive `check → scaffold → fill → harness → diff`, fill holes + the transducer
+   `.keiro`, drive `check → scaffold → fill → harness → diff`, fill holes + the transducer
    body against the generated signatures, never edit `-- @generated` modules*; (b) points at
    `NOTATION.md`, `LOOP.md`, `WALKTHROUGH.md`; (c) restates the firewall invariant and the
    time-injected-not-sampled rule as non-negotiable constraints. Mirror the
@@ -334,7 +334,7 @@ directory exists and is discoverable/invocable exactly like the existing `exec-p
    exact notation from the predecessor plans rather than inventing it.
 
 3. `agents/skills/keiro-dsl-authoring/LOOP.md` — the loop as explicit numbered steps with the
-   exact commands: (1) write the `.kdsl`; (2) `keiro-dsl check <file>` and fix every
+   exact commands: (1) write the `.keiro`; (2) `keiro-dsl check <file>` and fix every
    diagnostic before proceeding; (3) `keiro-dsl scaffold <file> --out <dir>`; (4) fill the
    transducer body + each hole in the hand-owned `Holes.hs` against the generated signatures
    — and the contract: **never edit `-- @generated` modules**; (5) build + run the emitted
@@ -343,7 +343,7 @@ directory exists and is discoverable/invocable exactly like the existing `exec-p
    overwrites generated modules and leaves `Holes.hs` untouched).
 
 4. `agents/skills/keiro-dsl-authoring/WALKTHROUGH.md` — a worked end-to-end pass on the
-   captured Reservation aggregate fixture: show the `.kdsl`, the `check` output, the
+   captured Reservation aggregate fixture: show the `.keiro`, the `check` output, the
    `scaffold` output (which modules are generated vs hole), the filled `Holes.hs` (the guard
    `divertStatus != TotalDivert || lifeCriticalOverride`, the `write reservationState := Held`,
    the `status-map`), and the green harness. End with the mutation demonstration (flip the
@@ -365,7 +365,7 @@ every vertical's fixtures.
 **Edits.**
 
 1. `docs/corpus/keiro-dsl-corpus.md` — the capture-index. A table with one row per captured
-   fixture: node type, the `.kdsl` path under `keiro-dsl/test/fixtures/…`, the hand-written
+   fixture: node type, the `.keiro` path under `keiro-dsl/test/fixtures/…`, the hand-written
    reference module(s) it was captured from in `keiro-runtime-jitsurei`, and which
    hole-kinds it exercises. Cover all verticals: aggregate (Reservation and others),
    process+timer (`SurgeManager`/`EscalationProcess`), integration (hospital-capacity &
@@ -400,7 +400,7 @@ behavioral acceptance for the entire MasterPlan's delivery goal.
 aggregate that holds a bed reservation and refuses to hold one while the hospital is on total
 divert unless the patient is life-critical"* — deliberately the Reservation shape so the
 harness target is known, but **the agent is not shown the fixture**). Hand a fresh agent only
-the `keiro-dsl-authoring` skill. The agent must: author a `.kdsl`; run `keiro-dsl check` and
+the `keiro-dsl-authoring` skill. The agent must: author a `.keiro`; run `keiro-dsl check` and
 clear diagnostics; run `keiro-dsl scaffold`; fill the holes in `Holes.hs` (guard, write,
 status-map, any disposition/derivation holes) against the generated signatures; build and run
 the emitted harness until green — without editing any `-- @generated` module. Capture the
@@ -442,7 +442,7 @@ and `/keiro-dsl-authoring` is invocable.
 ```bash
 # 1. Enumerate the captured fixtures the verticals produced, to build the index.
 ls -R keiro-dsl/test/fixtures
-# expect: per-vertical .kdsl files plus captured reference modules.
+# expect: per-vertical .keiro files plus captured reference modules.
 
 # 2. Write docs/corpus/keiro-dsl-corpus.md indexing them (one row per fixture).
 
@@ -461,8 +461,8 @@ mori registry docs keiro
 
 ```bash
 # Hand a fresh agent ONLY the skill + a one-line feature description, then verify its output:
-cabal run keiro-dsl -- check  <agent-authored>.kdsl          # exit 0
-cabal run keiro-dsl -- scaffold <agent-authored>.kdsl --out /tmp/coldstart
+cabal run keiro-dsl -- check  <agent-authored>.keiro          # exit 0
+cabal run keiro-dsl -- scaffold <agent-authored>.keiro --out /tmp/coldstart
 # agent fills /tmp/coldstart/.../Holes.hs only, then:
 cabal test keiro-dsl                                          # emitted harness green
 git -C /tmp/coldstart diff --stat                            # only Holes.hs changed; no @generated edits
@@ -504,21 +504,21 @@ mori registry docs keiro                          # lists the corpus doc (not "(
 ```
 
 - `docs/corpus/keiro-dsl-corpus.md` has one row per captured fixture across all five
-  verticals, each with a real `.kdsl` path, the reference module it was captured from, and the
-  hole-kinds it exercises. Every listed `.kdsl` path resolves under `keiro-dsl/test/fixtures/`.
+  verticals, each with a real `.keiro` path, the reference module it was captured from, and the
+  hole-kinds it exercises. Every listed `.keiro` path resolves under `keiro-dsl/test/fixtures/`.
 - An agent that runs `mori registry docs keiro` is led to the corpus index; an agent that
   runs `mori registry show keiro` finds the skill.
 
 **M3 — the loop closes for a cold-start agent (the headline acceptance).**
 
 ```bash
-cabal run keiro-dsl -- check  <agent>.kdsl        # exit 0 — agent's spec is valid
-cabal run keiro-dsl -- scaffold <agent>.kdsl --out /tmp/coldstart
+cabal run keiro-dsl -- check  <agent>.keiro        # exit 0 — agent's spec is valid
+cabal run keiro-dsl -- scaffold <agent>.keiro --out /tmp/coldstart
 cabal test keiro-dsl                              # the emitted harness for the new node is green
 git -C /tmp/coldstart diff --name-only            # ONLY .../Holes.hs — no @generated file touched
 ```
 
-- Given only the skill + a one-line feature description, the agent produces a `.kdsl` that
+- Given only the skill + a one-line feature description, the agent produces a `.keiro` that
   passes `check`, scaffolds it, fills the holes, and gets a green harness for at least one
   non-trivial node (a guard + write + status-map, or a disposition/derivation hole).
 - The agent edited **only** the hand-owned `Holes.hs`; no `-- @generated` line changed
@@ -548,7 +548,7 @@ or runtime state, so all steps are safe to repeat.
 - **M3 (acceptance).** The cold-start runs against a scratch output dir (`/tmp/coldstart`),
   so re-running just re-scaffolds; the scaffolder itself is idempotent (overwrites
   `-- @generated`, preserves `Holes.hs`). To retry cleanly, delete the scratch dir and the
-  agent-authored `.kdsl`. No part of M3 writes into the committed tree.
+  agent-authored `.keiro`. No part of M3 writes into the committed tree.
 
 The whole plan is fully reversible by reverting the (small) set of added files and the
 `mori.dhall` hunk; it touches no existing keiro package and no `keiro-dsl/` source.

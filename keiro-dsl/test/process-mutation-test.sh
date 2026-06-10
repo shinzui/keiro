@@ -9,10 +9,10 @@
 # Exit 0 => the mutation was caught. Run from the keiro repo root.
 set -euo pipefail
 
-SPEC="keiro-dsl/test/fixtures/hospital-surge.kdsl"
+SPEC="keiro-dsl/test/fixtures/hospital-surge.keiro"
 OUT="keiro-dsl/test/conformance-process"
 EXE="$(cabal list-bin keiro-dsl 2>/dev/null)"
-MUT="$(mktemp).kdsl"
+MUT="$(mktemp).keiro"
 restore() { "$EXE" scaffold "$SPEC" --out "$OUT" >/dev/null 2>&1 || true; rm -f "$MUT"; }
 trap restore EXIT
 

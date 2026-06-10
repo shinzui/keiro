@@ -4,14 +4,14 @@ Run everything from the repo root (`/Users/shinzui/Keikaku/bokuno/keiro`).
 
 ### 1. Write the spec
 
-Author `service.kdsl` in the notation (`NOTATION.md`). Start from `context <name>` and add
+Author `service.keiro` in the notation (`NOTATION.md`). Start from `context <name>` and add
 exactly the nodes the feature needs. Prefer the smallest spec that captures the decisions;
 the deterministic boilerplate is derived, so don't hand-write it.
 
 ### 2. Parse (sanity)
 
 ```bash
-cabal run keiro-dsl -- parse service.kdsl
+cabal run keiro-dsl -- parse service.keiro
 ```
 
 It echoes the spec pretty-printed. A parse error is line-numbered; fix the notation.
@@ -19,7 +19,7 @@ It echoes the spec pretty-printed. A parse error is line-numbered; fix the notat
 ### 3. Check (the gate — before any Haskell)
 
 ```bash
-cabal run keiro-dsl -- check service.kdsl ; echo "exit=$?"
+cabal run keiro-dsl -- check service.keiro ; echo "exit=$?"
 ```
 
 `OK` / exit 0 means every required decision is present and no dangerous inversion is stated
@@ -35,7 +35,7 @@ Common rejections you must resolve in the spec:
 ### 4. Scaffold (emit generated layer + holes)
 
 ```bash
-cabal run keiro-dsl -- scaffold service.kdsl --out gen/
+cabal run keiro-dsl -- scaffold service.keiro --out gen/
 ```
 
 You get `-- @generated` modules (overwritten every run) and create-if-absent hole modules
@@ -53,7 +53,7 @@ the spec decision to encode (e.g. `-- HOLE guard: divertStatus != TotalDivert ||
 the body against the **generated** names (the TH-produced `inCtor…`/`wire…`/`…TermFields`,
 the `Keiro.Codec`, the `ProcessManager` wiring). Use the corpus
 (`docs/corpus/keiro-dsl-corpus.md`) to see how a real spec's holes were filled. **Never edit
-a `-- @generated` module** — change the `.kdsl` and re-scaffold instead.
+a `-- @generated` module** — change the `.keiro` and re-scaffold instead.
 
 ### 6. Run the harness (pin behaviour)
 
@@ -68,7 +68,7 @@ harness = your fill matches the spec.
 When you later change the spec, gate the change against history:
 
 ```bash
-cabal run keiro-dsl -- diff --since <git-ref> service.kdsl ; echo "exit=$?"
+cabal run keiro-dsl -- diff --since <git-ref> service.keiro ; echo "exit=$?"
 ```
 
 `BREAKING` (exit non-zero) means an on-disk event payload could now fail to decode — add a

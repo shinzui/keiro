@@ -1,6 +1,6 @@
 # keiro-dsl conformance corpus
 
-Worked examples of the typed-spec toolchain: each `.kdsl` spec paired with the validation it
+Worked examples of the typed-spec toolchain: each `.keiro` spec paired with the validation it
 passes/fails, the scaffolded layer, and (where compiled) the hand-filled reference modules
 and a green harness. Use these to see exactly how a spec maps to filled holes. All paths are
 under `keiro-dsl/` in the keiro repo.
@@ -9,22 +9,22 @@ under `keiro-dsl/` in the keiro repo.
 
 | Spec | Node families | Demonstrates |
 |---|---|---|
-| `reservation.kdsl` | aggregate | the canonical aggregate (regs, guard, write, status-map) |
-| `reservation-v2.kdsl` | aggregate + evolution | `event … v2 { … } upcast from v1 = HOLE`, `schemaVersion=2` |
-| `reservation-{no-statusmap,bad-command,clock}.kdsl` | aggregate (negative) | `StatusMapNotTotal`, `UndeclaredCommand`, `ClockSampled` |
-| `reservation-fieldadd.kdsl` | aggregate (diff) | a field added without a version bump → BREAKING |
-| `order.kdsl` | aggregate (register-free) | the smoke target (OrderStream) |
-| `hospital-surge.kdsl` | process + timer | the saga: correlate, dispatch, schedule, timer fire, disposition |
-| `hospital-surge-{clock,dispatchid,badref}.kdsl` | process (negative) | fireAt-not-injected, runtime-owned dispatch-id, unresolved ref |
-| `contract.kdsl` | contract | the cross-service Kafka schema (topics, events, typed fields) |
-| `intake.kdsl` | contract + intake | the inbox: bind rows, dedupe, decode, the complete disposition table |
-| `intake-{dup-retry,pf-retry,incomplete}.kdsl` | intake (negative) | the three dangerous inbox inversions + incompleteness |
-| `emit.kdsl` | contract + emit + publisher | the outbox map (`_ => skip`), publisher policy, contract coupling |
-| `emit-{noskip,badevent}.kdsl` | emit (negative) | skip-totality, mapping to an undeclared event |
-| `reservation-work.kdsl` | workqueue + dispatch | pgmq: derive fixtures, payload map, retry, JobOutcome disposition |
-| `reservation-work-{divergent,sf-deadletter,df-retry}.kdsl` | workqueue (negative) | physical-name drift, the storeFailure/decodeFailure inversions |
-| `workflow.kdsl` | workflow + operation | durable workflow body + the four operation shapes |
-| `workflow-signal-mismatch.kdsl` | operation (negative) | a signal with no matching await |
+| `reservation.keiro` | aggregate | the canonical aggregate (regs, guard, write, status-map) |
+| `reservation-v2.keiro` | aggregate + evolution | `event … v2 { … } upcast from v1 = HOLE`, `schemaVersion=2` |
+| `reservation-{no-statusmap,bad-command,clock}.keiro` | aggregate (negative) | `StatusMapNotTotal`, `UndeclaredCommand`, `ClockSampled` |
+| `reservation-fieldadd.keiro` | aggregate (diff) | a field added without a version bump → BREAKING |
+| `order.keiro` | aggregate (register-free) | the smoke target (OrderStream) |
+| `hospital-surge.keiro` | process + timer | the saga: correlate, dispatch, schedule, timer fire, disposition |
+| `hospital-surge-{clock,dispatchid,badref}.keiro` | process (negative) | fireAt-not-injected, runtime-owned dispatch-id, unresolved ref |
+| `contract.keiro` | contract | the cross-service Kafka schema (topics, events, typed fields) |
+| `intake.keiro` | contract + intake | the inbox: bind rows, dedupe, decode, the complete disposition table |
+| `intake-{dup-retry,pf-retry,incomplete}.keiro` | intake (negative) | the three dangerous inbox inversions + incompleteness |
+| `emit.keiro` | contract + emit + publisher | the outbox map (`_ => skip`), publisher policy, contract coupling |
+| `emit-{noskip,badevent}.keiro` | emit (negative) | skip-totality, mapping to an undeclared event |
+| `reservation-work.keiro` | workqueue + dispatch | pgmq: derive fixtures, payload map, retry, JobOutcome disposition |
+| `reservation-work-{divergent,sf-deadletter,df-retry}.keiro` | workqueue (negative) | physical-name drift, the storeFailure/decodeFailure inversions |
+| `workflow.keiro` | workflow + operation | durable workflow body + the four operation shapes |
+| `workflow-signal-mismatch.keiro` | operation (negative) | a signal with no matching await |
 
 ## Compiled conformance + harness components
 

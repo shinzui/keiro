@@ -5,21 +5,21 @@ to `/Users/shinzui/Keikaku/bokuno/keiro`.
 
 ## 1. The spec
 
-`keiro-dsl/test/fixtures/reservation.kdsl` declares one `aggregate Reservation`: three id
+`keiro-dsl/test/fixtures/reservation.keiro` declares one `aggregate Reservation`: three id
 types, three enums, a `rule`, four registers, six states (three terminal), two commands, two
 events, two transitions (the first with a guard `divertStatus != TotalDivert ||
 lifeCriticalOverride` and a register write), a `wire` line, and a `projection` with a
 `status-map`.
 
 ```bash
-cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation.kdsl   # round-trips
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation.kdsl   # OK, exit 0
+cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation.keiro   # round-trips
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation.keiro   # OK, exit 0
 ```
 
 ## 2. Scaffold
 
 ```bash
-cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation.kdsl --out /tmp/gen
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation.keiro --out /tmp/gen
 find /tmp/gen -name '*.hs' | sort
 ```
 
@@ -71,7 +71,7 @@ green.
 
 ## 6. Evolution (diff)
 
-`keiro-dsl/test/fixtures/reservation-v2.kdsl` evolves `TransferReservationCreated` to v2 with
+`keiro-dsl/test/fixtures/reservation-v2.keiro` evolves `TransferReservationCreated` to v2 with
 `upcast from v1 = HOLE`. `bash keiro-dsl/test/diff-test.sh` shows that adding a field WITHOUT
 the version bump is `BREAKING` (exit non-zero), while the v2 + upcaster form is `ADDITIVE`
 (exit 0) — the merge gate. The `keiro-dsl-conformance-v2` component proves the v2 codec

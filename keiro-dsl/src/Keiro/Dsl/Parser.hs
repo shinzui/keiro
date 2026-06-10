@@ -1,4 +1,4 @@
-{- | The megaparsec parser for the keiro DSL. Turns @.kdsl@ text into the typed
+{- | The megaparsec parser for the keiro DSL. Turns @.keiro@ text into the typed
 'Spec' AST. The notation is keyword-driven: newlines and @#@-comments are
 whitespace, structure comes from keywords (@aggregate@, @regs@, @states@,
 @command@, @event@, @wire@, @projection@) and the transition arrow
@@ -26,7 +26,7 @@ type ParseError = Text
 
 type P = Parsec Void Text
 
-{- | Parse a @.kdsl@ source. The 'FilePath' is used only as the source name in
+{- | Parse a @.keiro@ source. The 'FilePath' is used only as the source name in
 diagnostics (megaparsec's line/column reporting); it need not exist on disk.
 This is the canonical signature shared across all keiro-dsl plans.
 -}

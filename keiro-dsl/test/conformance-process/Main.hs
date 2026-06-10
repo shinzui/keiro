@@ -13,7 +13,7 @@ import Control.Monad (forM_, unless)
 import Generated.HospitalCapacity.HospitalSurge.ProcessHarness (processHarnessValues)
 import System.Exit (exitFailure)
 
--- | The expected lowering of hospital-surge.kdsl's process/timer decisions.
+-- | The expected lowering of hospital-surge.keiro's process/timer decisions.
 expected :: [(String, String)]
 expected =
   [ ("fireAtField", "observedAt") -- time is injected (deadline = window + observedAt)

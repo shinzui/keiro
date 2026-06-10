@@ -1,4 +1,4 @@
-{- | The abstract syntax of the keiro DSL (@.kdsl@) — the shared engine type that
+{- | The abstract syntax of the keiro DSL (@.keiro@) — the shared engine type that
 every later vertical (EP-2…EP-6) extends additively. EP-1 defines the shared
 declarations, the 'Expr' sublanguage, the eight hole-kind types, and the
 'Aggregate' node. New node families add a 'Node' constructor here in lockstep
@@ -794,7 +794,7 @@ data Node
     | NOperation OperationNode
     deriving stock (Eq, Show, Generic)
 
-{- | A whole @.kdsl@ file: one context name, the shared id/enum/rule
+{- | A whole @.keiro@ file: one context name, the shared id/enum/rule
 declarations, and the list of nodes.
 -}
 data Spec = Spec

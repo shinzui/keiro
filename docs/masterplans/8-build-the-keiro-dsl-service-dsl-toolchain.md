@@ -29,7 +29,7 @@ deterministic template, and the non-derivable remainder collapses into a closed 
 semantics, opaque id derivations, fields whose names lie about their semantics) are
 exactly the ones a human or coding agent gets wrong when left implicit.
 
-After this initiative, a `.kdsl` file is **a typed specification** of a keiro service —
+After this initiative, a `.keiro` file is **a typed specification** of a keiro service —
 the permanent, machine-checkable source of truth — and `keiro-dsl` is the toolchain
 around it. A developer (or a coding agent planning a feature) can:
 
@@ -192,7 +192,7 @@ node type **must** extend the bijection table and `Keiro.Dsl.Grammar` in the sam
    form; the no-FilePath occurrences in the child plans are shorthand, not a competing
    signature.
 7. **The captured-fixture corpus (`keiro-dsl/test/fixtures/`).** EP-1 establishes the
-   convention (a `.kdsl` plus the hand-written reference modules captured read-only from
+   convention (a `.keiro` plus the hand-written reference modules captured read-only from
    `keiro-runtime-jitsurei`). Each vertical captures its own slice. EP-7 registers the
    corpus for agent use.
 8. **The `contract` block.** Defined by EP-4 (cross-service message schema, define-once,

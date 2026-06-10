@@ -1,18 +1,18 @@
 ---
 name: keiro-dsl-authoring
 description: >
-  Author a keiro service as a typed `.kdsl` specification and drive the keiro-dsl toolchain
+  Author a keiro service as a typed `.keiro` specification and drive the keiro-dsl toolchain
   end to end: write the spec, `check` it, `scaffold` the symbol-free deterministic layer plus
   typed holes, fill the holes and the transducer body against the GENERATED signatures, run
   the harness, and `diff` the spec to gate unsafe evolution. TRIGGER when: building or changing
   a keiro service (aggregate, process manager + timer, Kafka inbox/outbox/contract, pgmq
   workqueue/dispatch, durable workflow/operation) and you want the spec to be the source of truth.
-argument-hint: <feature description, or a path to an existing .kdsl>
+argument-hint: <feature description, or a path to an existing .keiro>
 ---
 
 # keiro-dsl authoring skill
 
-A `.kdsl` file is the permanent, machine-checkable source of truth for a keiro service. The
+A `.keiro` file is the permanent, machine-checkable source of truth for a keiro service. The
 `keiro-dsl` CLI turns it into compiling Haskell: a `-- @generated` deterministic layer
 (domain ADTs, codecs, stream/projection wiring, the TH splice, process/timer/contract
 wiring) plus precisely-typed **holes** in hand-owned modules for the behaviour-bearing
@@ -47,7 +47,7 @@ edit a `-- @generated` module.
 - `LOOP.md` — the write → check → scaffold → fill → harness → diff loop as numbered steps.
 - `WALKTHROUGH.md` — a worked end-to-end example on the Reservation aggregate.
 - `docs/corpus/keiro-dsl-corpus.md` (repo root) — the captured conformance corpus: real
-  `.kdsl` specs paired with the hand-filled reference modules they map to. Consult these as
+  `.keiro` specs paired with the hand-filled reference modules they map to. Consult these as
   worked examples of how a spec lowers to filled holes.
 
 ## The CLI
@@ -55,8 +55,8 @@ edit a `-- @generated` module.
 Run from the repo root (`/Users/shinzui/Keikaku/bokuno/keiro`):
 
 ```bash
-cabal run keiro-dsl -- parse   <file.kdsl>            # parse + pretty-print (proves it's a real spec)
-cabal run keiro-dsl -- check   <file.kdsl>            # validate; exits non-zero on any error (warnings pass)
-cabal run keiro-dsl -- scaffold <file.kdsl> --out DIR # emit @generated modules + create-if-absent holes
-cabal run keiro-dsl -- diff --since <git-ref> <file.kdsl>  # classify changes ADDITIVE/BREAKING; gate a merge
+cabal run keiro-dsl -- parse   <file.keiro>            # parse + pretty-print (proves it's a real spec)
+cabal run keiro-dsl -- check   <file.keiro>            # validate; exits non-zero on any error (warnings pass)
+cabal run keiro-dsl -- scaffold <file.keiro> --out DIR # emit @generated modules + create-if-absent holes
+cabal run keiro-dsl -- diff --since <git-ref> <file.keiro>  # classify changes ADDITIVE/BREAKING; gate a merge
 ```

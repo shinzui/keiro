@@ -1,4 +1,4 @@
-{- | Pretty-printer for the keiro DSL: renders a 'Spec' back to @.kdsl@ text.
+{- | Pretty-printer for the keiro DSL: renders a 'Spec' back to @.keiro@ text.
 The layout need not be byte-identical to the original source (the parser
 treats whitespace as insignificant), but it must round-trip:
 @parseSpec (renderSpec s) == Right s@ modulo source locations. The only

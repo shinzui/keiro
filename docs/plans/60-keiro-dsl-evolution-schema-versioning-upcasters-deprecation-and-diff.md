@@ -26,8 +26,8 @@ payload into the wrong value. keiro already has the runtime machinery to do this
 rewrite an old payload into the next version's shape) — but nothing today tells an author
 *when* a spec edit requires one, and nothing stops a breaking change from merging.
 
-This ExecPlan, EP-2 of the `keiro-dsl` initiative, makes the `.kdsl` spec file a
-**lifecycle source of truth** for event evolution. A `.kdsl` file is a typed, terse
+This ExecPlan, EP-2 of the `keiro-dsl` initiative, makes the `.keiro` spec file a
+**lifecycle source of truth** for event evolution. A `.keiro` file is a typed, terse
 specification of a keiro service (the full toolchain is built by EP-1 Foundations,
 `docs/plans/59-keiro-dsl-foundations-grammar-parser-validator-scaffold-and-harness-engine-aggregate-vertical.md`,
 which this plan hard-depends on and whose engine signatures are restated below). After this
@@ -86,8 +86,8 @@ M1 — grammar + parser + validator for evolution constructs: **DONE 2026-06-10*
 - [x] Add validator rules (`EvtVersionMissingUpcaster`, `DeprecatedEventStillEmitted`,
       `WireSchemaVersionMismatch`; plus `EvtFieldAddedWithoutBump`/`EvtRemovedNotDeprecated`
       registered for the diff path). (2026-06-10)
-- [x] `keiro-dsl check` passes `reservation-v2.kdsl` (exit 0) and fails
-      `reservation-v2-noupcast.kdsl` with `error[EvtVersionMissingUpcaster]` on the v2 line
+- [x] `keiro-dsl check` passes `reservation-v2.keiro` (exit 0) and fails
+      `reservation-v2-noupcast.keiro` with `error[EvtVersionMissingUpcaster]` on the v2 line
       (exit 1). (2026-06-10)
 
 M2 — `Keiro.Dsl.Diff` engine + `diff --since` CLI: **DONE 2026-06-10**
@@ -115,7 +115,7 @@ M3 — scaffold the `Codec` schemaVersion+upcaster wiring + harness: **DONE 2026
       payload fed through `decodeRaw codec m …` runs the upcaster chain then decodes; red
       while the hole returns `Left`, green once filled. (See Surprises for why this proves
       wiring rather than re-deriving the exact old payload.) (2026-06-10)
-- [x] Conformance: `keiro-dsl-conformance-v2` scaffolds `reservation-v2.kdsl`, the
+- [x] Conformance: `keiro-dsl-conformance-v2` scaffolds `reservation-v2.keiro`, the
       `Generated` modules (codec `schemaVersion = 2`, `upcasters = [(1, …)]`) compile against
       keiki/keiro, the firewall holds, and with the upcaster filled the harness is 6/6 green;
       reverting the upcaster to the hole turns the `upcaster wired` assertion red. (2026-06-10)
@@ -128,10 +128,10 @@ implementation. Provide concise evidence.
 
 - **M2: `git rev-parse --show-toplevel` is symlink-resolved but `makeAbsolute` is not.** On
   macOS `/tmp` is a symlink to `/private/tmp`; git returned `/private/tmp/evo-demo` while
-  `makeAbsolute "/tmp/evo-demo/svc.kdsl"` kept `/tmp/…`, so `makeRelative` found no common
-  prefix and left the path absolute — `git show HEAD:/tmp/…/svc.kdsl` then failed with
+  `makeAbsolute "/tmp/evo-demo/svc.keiro"` kept `/tmp/…`, so `makeRelative` found no common
+  prefix and left the path absolute — `git show HEAD:/tmp/…/svc.keiro` then failed with
   "exists on disk, but not in 'HEAD'". Fix: use `canonicalizePath` (resolves symlinks) so
-  both paths agree, yielding the repo-relative `svc.kdsl`.
+  both paths agree, yielding the repo-relative `svc.keiro`.
 
 - **M3: the grammar records only the current event shape, not the per-version field delta.**
   A `v2` event lists its full v2 field set; what was *added* at v2 (vs. v1) is not captured.
@@ -219,7 +219,7 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-**EP-2 complete (2026-06-10).** The `.kdsl` spec is now a lifecycle source of truth for
+**EP-2 complete (2026-06-10).** The `.keiro` spec is now a lifecycle source of truth for
 event-payload evolution. Against the original purpose: an author can declare
 `event … vN { … } upcast from v(N-1) = HOLE` and `deprecated event …`; `keiro-dsl check`
 rejects a `vN>1` without a contiguous upcaster; `keiro-dsl diff --since <ref>` classifies
@@ -258,7 +258,7 @@ Read this fully before touching code; it assumes no prior knowledge of keiro or 
   `type Upcaster = (Int, Value -> Either Text Value)` — a source version paired with a pure
   function that rewrites a version-`n` JSON payload into the version-`(n+1)` shape, or
   rejects it with `Left`. Defined at `keiro-core/src/Keiro/Codec.hs:54-59`.
-- **`.kdsl` file / spec.** A terse, typed text description of a keiro service, parsed by the
+- **`.keiro` file / spec.** A terse, typed text description of a keiro service, parsed by the
   toolchain into a `Keiro.Dsl.Grammar.Spec` value. `#` begins a comment; `!` after a state
   name marks it terminal; `HOLE` names an unfilled hole.
 - **Hole.** A part of the spec the tool deliberately does not derive — a typed placeholder a
@@ -411,7 +411,7 @@ All new code is inside the existing `keiro-dsl` package
 - `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` — extend `Codec` emission + upcaster `HoleStub`.
 - `keiro-dsl/src/Keiro/Dsl/Harness.hs` — per-version golden round-trip test.
 - `keiro-dsl/app/Main.hs` — the `diff` subcommand.
-- `keiro-dsl/test/fixtures/` — new `.kdsl` fixtures for the diff cases.
+- `keiro-dsl/test/fixtures/` — new `.keiro` fixtures for the diff cases.
 
 
 ## Plan of Work
@@ -427,7 +427,7 @@ round-trip. M2 is the milestone that delivers the headline acceptance.
 Scope: extend the shared grammar so an event can declare a version and an upcaster hole, or
 be deprecated; teach the parser and pretty-printer the new clauses; and add validator rules
 that reject the dangerous-by-omission cases before any diff or scaffold. At the end the
-`.kdsl` language has evolution constructs and `keiro-dsl check` enforces their consistency.
+`.keiro` language has evolution constructs and `keiro-dsl check` enforces their consistency.
 
 Work, file by file:
 
@@ -470,8 +470,8 @@ Work, file by file:
   the per-event `vN` from drifting.
 
 Commands and acceptance: see *Validation and Acceptance*, M1 block. Headline: `check` passes
-`reservation-v2.kdsl` (a v2 with an `upcast from v1 = HOLE`) and fails
-`reservation-v2-noupcast.kdsl` (a v2 with no upcaster) with `EvtVersionMissingUpcaster` on
+`reservation-v2.keiro` (a v2 with an `upcast from v1 = HOLE`) and fails
+`reservation-v2-noupcast.keiro` (a v2 with no upcaster) with `EvtVersionMissingUpcaster` on
 the v2 line.
 
 ### Milestone 2 — the `Keiro.Dsl.Diff` engine and `diff --since` CLI
@@ -527,7 +527,7 @@ Work:
      additive changes, or none, exits zero.)
 - Tests in `keiro-dsl/test/`: unit tests over in-memory `Spec` pairs covering every `Change`
   variant above (no git needed — call `diffSpecs` directly). One *integration* test that
-  uses a temporary git repo: write `reservation.kdsl`, `git commit`, edit it (the field-add
+  uses a temporary git repo: write `reservation.keiro`, `git commit`, edit it (the field-add
   case), and run the `diff --since HEAD` code path end-to-end, asserting a BREAKING result
   and non-zero exit; then switch to the v2+upcaster edit and assert ADDITIVE + zero exit.
 
@@ -586,20 +586,20 @@ package builds and `parse`/`check`/`scaffold` work). Confirm first:
 
 ```bash
 cabal build keiro-dsl
-cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation.kdsl   # exit 0, echoes the spec
+cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation.keiro   # exit 0, echoes the spec
 ```
 
 ### M1 — author the evolution fixtures, then extend grammar/parser/validator
 
-First create the three fixtures the milestones use. `reservation-v2.kdsl` is the canonical
+First create the three fixtures the milestones use. `reservation-v2.keiro` is the canonical
 spec with `TransferReservationCreated` evolved to v2 plus an upcaster hole:
 
 ```bash
 # Copy the canonical spec, then add a v2 event with an upcaster hole and bump the wire line.
-cp keiro-dsl/test/fixtures/reservation.kdsl keiro-dsl/test/fixtures/reservation-v2.kdsl
+cp keiro-dsl/test/fixtures/reservation.keiro keiro-dsl/test/fixtures/reservation-v2.keiro
 ```
 
-Edit `keiro-dsl/test/fixtures/reservation-v2.kdsl` so the event block reads:
+Edit `keiro-dsl/test/fixtures/reservation-v2.keiro` so the event block reads:
 
 ```text
   event TransferReservationCreated v2 { reservationId hospitalId commandId patientAcuity divertStatus lifeCriticalOverride:Bool triageNote:Text }
@@ -609,15 +609,15 @@ Edit `keiro-dsl/test/fixtures/reservation-v2.kdsl` so the event block reads:
   wire kind=ctorName fields=camelCase schemaVersion=2
 ```
 
-`reservation-v2-noupcast.kdsl` is the same but with the `upcast from v1 = HOLE` line deleted
-(the validator must reject it). `reservation-fieldadd.kdsl` is the canonical spec with
+`reservation-v2-noupcast.keiro` is the same but with the `upcast from v1 = HOLE` line deleted
+(the validator must reject it). `reservation-fieldadd.keiro` is the canonical spec with
 `triageNote:Text` added to `TransferReservationCreated` but **no** `v2` and **no** upcaster
 (the diff must call this BREAKING):
 
 ```bash
-cp keiro-dsl/test/fixtures/reservation-v2.kdsl keiro-dsl/test/fixtures/reservation-v2-noupcast.kdsl
-# then delete the `upcast from v1 = HOLE` line in reservation-v2-noupcast.kdsl
-cp keiro-dsl/test/fixtures/reservation.kdsl keiro-dsl/test/fixtures/reservation-fieldadd.kdsl
+cp keiro-dsl/test/fixtures/reservation-v2.keiro keiro-dsl/test/fixtures/reservation-v2-noupcast.keiro
+# then delete the `upcast from v1 = HOLE` line in reservation-v2-noupcast.keiro
+cp keiro-dsl/test/fixtures/reservation.keiro keiro-dsl/test/fixtures/reservation-fieldadd.keiro
 # then append `triageNote:Text` to the TransferReservationCreated field list (no version bump)
 ```
 
@@ -626,18 +626,18 @@ and build:
 
 ```bash
 cabal build keiro-dsl
-cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation-v2.kdsl   # round-trips, exit 0
+cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation-v2.keiro   # round-trips, exit 0
 ```
 
 Expected `check` behavior:
 
 ```bash
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-v2.kdsl
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-v2.keiro
 # OK
 # (exit 0)
 
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-v2-noupcast.kdsl
-# error: keiro-dsl/test/fixtures/reservation-v2-noupcast.kdsl:NN: event
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-v2-noupcast.keiro
+# error: keiro-dsl/test/fixtures/reservation-v2-noupcast.keiro:NN: event
 #   'TransferReservationCreated' version 2 has no 'upcast from v1' clause
 #   [EvtVersionMissingUpcaster]
 # (exit != 0)
@@ -651,27 +651,27 @@ reproducible:
 
 ```bash
 # Establish a baseline commit of the canonical (v1) spec under a path the tool will diff.
-cp keiro-dsl/test/fixtures/reservation.kdsl /tmp/svc.kdsl
-git -C /tmp init -q evo-demo && cp /tmp/svc.kdsl /tmp/evo-demo/svc.kdsl
-git -C /tmp/evo-demo add svc.kdsl && git -C /tmp/evo-demo commit -qm "baseline v1 spec"
+cp keiro-dsl/test/fixtures/reservation.keiro /tmp/svc.keiro
+git -C /tmp init -q evo-demo && cp /tmp/svc.keiro /tmp/evo-demo/svc.keiro
+git -C /tmp/evo-demo add svc.keiro && git -C /tmp/evo-demo commit -qm "baseline v1 spec"
 
 # 1) BREAKING: add a field with no version bump and no upcaster.
-cp keiro-dsl/test/fixtures/reservation-fieldadd.kdsl /tmp/evo-demo/svc.kdsl
-cabal run keiro-dsl -- diff --since HEAD /tmp/evo-demo/svc.kdsl
+cp keiro-dsl/test/fixtures/reservation-fieldadd.keiro /tmp/evo-demo/svc.keiro
+cabal run keiro-dsl -- diff --since HEAD /tmp/evo-demo/svc.keiro
 # BREAKING: aggregate Reservation event TransferReservationCreated:
 #   field 'triageNote' added to version 1 without a version bump or upcaster
 #   [EvtFieldAddedWithoutBump]
 # (exit != 0)
 
 # 2) ADDITIVE: the same field, but wrapped as a v2 with an upcaster hole.
-cp keiro-dsl/test/fixtures/reservation-v2.kdsl /tmp/evo-demo/svc.kdsl
-cabal run keiro-dsl -- diff --since HEAD /tmp/evo-demo/svc.kdsl
+cp keiro-dsl/test/fixtures/reservation-v2.keiro /tmp/evo-demo/svc.keiro
+cabal run keiro-dsl -- diff --since HEAD /tmp/evo-demo/svc.keiro
 # ADDITIVE: aggregate Reservation event TransferReservationCreated: new version v2
 #   with upcaster from v1
 # (exit 0)
 ```
 
-The `--since HEAD` ref resolves the spec's prior blob with `git show HEAD:svc.kdsl` inside
+The `--since HEAD` ref resolves the spec's prior blob with `git show HEAD:svc.keiro` inside
 `/tmp/evo-demo` (the tool runs `git rev-parse --show-toplevel` from the spec's directory to
 find the repo). Run `cabal test keiro-dsl` to exercise the in-memory `diffSpecs` unit tests
 and the temporary-repo integration test.
@@ -679,7 +679,7 @@ and the temporary-repo integration test.
 ### M3 — scaffold the codec/upcaster wiring + harness
 
 ```bash
-cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation-v2.kdsl --out /tmp/genv2
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation-v2.keiro --out /tmp/genv2
 
 # The emitted codec carries schemaVersion = 2 and a hole-backed upcaster:
 grep -n 'schemaVersion = 2' /tmp/genv2/Generated/HospitalCapacity/Reservation/EventStream.hs
@@ -713,14 +713,14 @@ passes. All commands run from `/Users/shinzui/Keikaku/bokuno/keiro`.
 ```bash
 cabal test keiro-dsl
 # expect: the round-trip property still passes for specs that include versioned/deprecated
-# events; a unit test asserts `parseSpec reservation-v2.kdsl` yields a
+# events; a unit test asserts `parseSpec reservation-v2.keiro` yields a
 # TransferReservationCreated Event with version == 2 and upcastFrom == Just (1, Hole);
-# a unit test asserts `validateSpec` of reservation-v2-noupcast.kdsl contains a
+# a unit test asserts `validateSpec` of reservation-v2-noupcast.keiro contains a
 # Diagnostic with code EvtVersionMissingUpcaster on the v2 line; and a unit test asserts
 # a `deprecated` event that appears in an `emit` yields DeprecatedEventStillEmitted.
 
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-v2.kdsl          # OK, exit 0
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-v2-noupcast.kdsl # EvtVersionMissingUpcaster, exit != 0
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-v2.keiro          # OK, exit 0
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-v2-noupcast.keiro # EvtVersionMissingUpcaster, exit != 0
 ```
 
 The proof beyond compilation: deleting the `upcast from v1 = HOLE` line flips `check` from
@@ -741,9 +741,9 @@ cabal test keiro-dsl
 #    Additive; field-add-no-bump → Breaking; remove-not-deprecated → Breaking;
 #    remove-with-deprecated → Additive; gap-in-chain → Breaking) is asserted on a fixture
 #    Spec pair.
-#  - the temporary-repo integration test: commit reservation.kdsl, replace with
-#    reservation-fieldadd.kdsl, run the `diff --since HEAD` code path → Breaking present →
-#    non-zero exit; replace with reservation-v2.kdsl → no Breaking → zero exit.
+#  - the temporary-repo integration test: commit reservation.keiro, replace with
+#    reservation-fieldadd.keiro, run the `diff --since HEAD` code path → Breaking present →
+#    non-zero exit; replace with reservation-v2.keiro → no Breaking → zero exit.
 ```
 
 A reader can reproduce the end-to-end gate manually with the `/tmp/evo-demo` commands above
@@ -752,7 +752,7 @@ and observe the two exit codes (`echo $?` after each `diff` run).
 ### M3 — scaffold + harness round-trip
 
 ```bash
-cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation-v2.kdsl --out /tmp/genv2
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation-v2.keiro --out /tmp/genv2
 cabal test keiro-dsl
 # expect:
 #  - the emitted Generated EventStream codec has `schemaVersion = 2` and
@@ -793,7 +793,7 @@ hand-edited `Holes.hs` is byte-identical after the second run).
 
 To roll back this plan entirely: revert the edits to `Grammar.hs`, `Parser.hs`,
 `PrettyPrint.hs`, `Validate.hs`, `Scaffold.hs`, `Harness.hs`, and `Main.hs`; delete
-`keiro-dsl/src/Keiro/Dsl/Diff.hs` and the `reservation-v2*.kdsl`/`reservation-fieldadd.kdsl`
+`keiro-dsl/src/Keiro/Dsl/Diff.hs` and the `reservation-v2*.keiro`/`reservation-fieldadd.keiro`
 fixtures. The changes are additive to EP-1 (new record fields default to `version = 1`,
 `upcastFrom = Nothing`, `deprecated = False`, reproducing pre-EP-2 behavior), so an
 unversioned spec behaves exactly as before.

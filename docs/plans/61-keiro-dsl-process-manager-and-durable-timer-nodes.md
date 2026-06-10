@@ -28,7 +28,7 @@ ids that must not be hand-supplied, and a default timer policy that silently ret
 forever.
 
 `keiro-dsl` is a toolchain over a **typed specification** of a keiro service — a plain-text
-file with extension `.kdsl` written in a terse, readable notation, which is the permanent,
+file with extension `.keiro` written in a terse, readable notation, which is the permanent,
 machine-checkable source of truth for the service. The foundation (parser, validator,
 scaffolder, harness, CLI) and the `aggregate` node are built by **EP-1**
 (`docs/plans/59-keiro-dsl-foundations-grammar-parser-validator-scaffold-and-harness-engine-aggregate-vertical.md`),
@@ -37,16 +37,16 @@ which this plan hard-depends on. This plan, **EP-3** of the MasterPlan
 top of that foundation: `process` (process manager) and `timer` (durable timer).
 
 After this plan, a developer (or a coding agent planning a feature) can write a `process`
-block plus a nested `timer` block in a `.kdsl` file, then:
+block plus a nested `timer` block in a `.keiro` file, then:
 
-1. Run `keiro-dsl check service.kdsl` and have the tool **reject the spec** — with a
+1. Run `keiro-dsl check service.keiro` and have the tool **reject the spec** — with a
    precise, line-numbered diagnostic, *before any Haskell is written* — if the timer
    deadline samples the wall clock instead of an injected timestamp, if a dispatched
    command supplies its own id (which must be runtime-owned), if any dispatch or timer-fire
    omits a complete error-disposition table, if `max-attempts`/`dead-letter` is absent (the
    dangerous "retry forever" default), or if a deterministic fired-event-id or timer-id is
    missing.
-2. Run `keiro-dsl scaffold service.kdsl --out <dir>` and get the **symbol-free
+2. Run `keiro-dsl scaffold service.keiro --out <dir>` and get the **symbol-free
    deterministic layer** for the process manager and timer — the `ProcessManager` record
    wiring whose fields are derivable, the `TimerRequest` builder, the timer-worker
    skeleton, the codecs and stream handles — emitted into `-- @generated` modules, plus
@@ -87,7 +87,7 @@ Milestone 1 — Grammar + parser for `process`/`timer`: **DONE 2026-06-10**
 - [x] Add `NProcess`/`ProcessNode` + nested `TimerNode` (and `InputDecl`, `CorrelateDecl`, `SagaRef`, `HandleNode`, `AdvanceNode`, `DispatchNode`, `DispatchDisposition`/`Disp`, `FireNode`, `FireDisposition`/`FireOutcome`, `IdExpr`/`IdStrategy`, `FireAtExpr`, `FieldBinding`) to `Keiro.Dsl.Grammar`. (2026-06-10)
 - [x] Extend `Keiro.Dsl.Parser` with `pProcess`/`pTimerNode` wired into the top-level node parser; the `dispatch-id` line is a fixed `strategy=uuidv5` form (parsed and discarded; the AST has no user-id field). (2026-06-10)
 - [x] Extend `Keiro.Dsl.PrettyPrint` so a parsed `process`/`timer` round-trips. (2026-06-10)
-- [x] `keiro-dsl parse hospital-surge.kdsl` echoes the process + nested timer byte-identically; round-trip + shape unit tests green. (2026-06-10)
+- [x] `keiro-dsl parse hospital-surge.keiro` echoes the process + nested timer byte-identically; round-trip + shape unit tests green. (2026-06-10)
 
 Milestone 2 — Validator rules: **DONE 2026-06-10**
 
@@ -106,7 +106,7 @@ Milestone 4 — Harness emission: **DONE 2026-06-10**
 
 Milestone 5 — Conformance vs `SurgeManager`: **PARTIAL 2026-06-10** (spec→behaviour pin delivered; full-corpus source compilation deferred)
 
-- [x] Author `hospital-surge.kdsl` (+ minimal Surge/Hospital aggregate decls); `check` passes clean (benign-inversion warnings only). (2026-06-10)
+- [x] Author `hospital-surge.keiro` (+ minimal Surge/Hospital aggregate decls); `check` passes clean (benign-inversion warnings only). (2026-06-10)
 - [x] Mutation test (`keiro-dsl/test/process-mutation-test.sh`): flipping the timer-fire `on-reject` from `Fired` to `Retry` in the spec, re-scaffolding, turns the *specific* `onReject` assertion red against the hand-written expectation in `test/conformance-process/Main.hs`; restoring returns to green. This is the headline spec→behaviour pin. (2026-06-10)
 - [ ] **Deferred:** capturing the external `SurgeManager.hs` + `Surge/Transducer.hs` and compiling the runtime-coupled Generated `Process` module against the full effectful/hasql/kiroku stack (a much heavier integration than the aggregate codec). The aggregate-level compilation conformance is already proven in EP-1; the process facts harness + mutation pin demonstrate the spec→behaviour link without it.
 
@@ -120,7 +120,7 @@ implementation. Provide concise evidence.
   inversions (`on-reject => Fired`, `on-duplicate => AckOk`) as *warnings*, but the EP-1
   `check` CLI exited non-zero on any diagnostic. Fixed to exit non-zero only when a
   diagnostic has `severity == Error`, so a valid process spec passes clean (exit 0) while
-  still printing its warnings. Evidence: `check hospital-surge.kdsl` → exit 0 with two
+  still printing its warnings. Evidence: `check hospital-surge.keiro` → exit 0 with two
   warnings.
 
 - **M4: a generated facts harness is circular unless the expectation is hand-written.** The
@@ -495,7 +495,7 @@ and touches no existing one.
 
 Scope: make a `process` block (with its nested `timer`) a first-class part of the AST and a
 parseable, round-trippable part of the notation. At the end, `keiro-dsl parse` accepts a
-`.kdsl` containing a `process` and prints it back out identically.
+`.keiro` containing a `process` and prints it back out identically.
 
 Edits:
 
@@ -527,7 +527,7 @@ Edits:
 - In `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`, add `prettyProcess`/`prettyTimer` so that
   `parse` then pretty-print is idempotent on a `process`-bearing spec.
 
-Acceptance: `cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/hospital-surge/hospital-surge.kdsl`
+Acceptance: `cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/hospital-surge/hospital-surge.keiro`
 prints a model that, re-parsed, equals the first (round-trip test green).
 
 ### Milestone 2 — Validator rules
@@ -617,7 +617,7 @@ Acceptance: `cabal test` on the emitted harness is green with filled holes.
 ### Milestone 5 — Conformance vs `SurgeManager`
 
 Scope: prove the whole vertical against the real corpus. At the end, the captured fixtures,
-the authored `.kdsl`, and the round-trip check → scaffold → fill → harness loop all pass,
+the authored `.keiro`, and the round-trip check → scaffold → fill → harness loop all pass,
 and a mutation demonstrably breaks a specific test.
 
 Edits and steps:
@@ -625,7 +625,7 @@ Edits and steps:
 - Capture read-only fixtures under `keiro-dsl/test/fixtures/hospital-surge/`:
   `SurgeManager.hs` and `Surge/Transducer.hs` from
   `/Users/shinzui/Keikaku/bokuno/keiro-runtime-jitsurei/services/hospital-capacity/src/HospitalCapacity/`.
-- Author `keiro-dsl/test/fixtures/hospital-surge/hospital-surge.kdsl` (the notation above),
+- Author `keiro-dsl/test/fixtures/hospital-surge/hospital-surge.keiro` (the notation above),
   plus the `Surge` aggregate block (reusing EP-1's `aggregate` node) and the two `derive
   strategy=uuidv5` declarations.
 - Run check → scaffold → fill holes to match the captured reference → run harness; confirm
@@ -657,7 +657,7 @@ Expected: a successful build line ending in the `keiro-dsl` library and exe comp
 After the Grammar/Parser/PrettyPrint edits, capture the fixtures and author the spec, then:
 
 ```bash
-cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/hospital-surge/hospital-surge.kdsl
+cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/hospital-surge/hospital-surge.keiro
 ```
 
 Expected (abridged): a pretty-printed echo of the spec, including the `process HospitalSurge`
@@ -674,7 +674,7 @@ Expected: `1 example, 0 failures` (or the project's test-runner equivalent).
 ### Milestone 2 — check rejects dangerous omissions
 
 ```bash
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/hospital-surge/hospital-surge.kdsl
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/hospital-surge/hospital-surge.keiro
 echo "exit=$?"
 ```
 
@@ -683,15 +683,15 @@ Expected: no diagnostics, `exit=0`.
 For each rule, a mutated copy must fail. Example (drop the attempt ceiling):
 
 ```bash
-sed '/max-attempts/d' keiro-dsl/test/fixtures/hospital-surge/hospital-surge.kdsl > /tmp/no-ceiling.kdsl
-cabal run keiro-dsl -- check /tmp/no-ceiling.kdsl
+sed '/max-attempts/d' keiro-dsl/test/fixtures/hospital-surge/hospital-surge.keiro > /tmp/no-ceiling.keiro
+cabal run keiro-dsl -- check /tmp/no-ceiling.keiro
 echo "exit=$?"
 ```
 
 Expected: a line-numbered error such as
 
 ```text
-hospital-surge.kdsl:NN:C: error: timer 'surgeFollowUp' must declare 'max-attempts N dead-letter "<reason>"'; an absent ceiling never auto-dead-letters and retries forever
+hospital-surge.keiro:NN:C: error: timer 'surgeFollowUp' must declare 'max-attempts N dead-letter "<reason>"'; an absent ceiling never auto-dead-letters and retries forever
 exit=1
 ```
 
@@ -706,7 +706,7 @@ removing the `decode unknown-status` line (`error: timer must acknowledge the un
 ### Milestone 3 — scaffold and firewall
 
 ```bash
-cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/hospital-surge/hospital-surge.kdsl --out /tmp/surge-scaffold
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/hospital-surge/hospital-surge.keiro --out /tmp/surge-scaffold
 ls /tmp/surge-scaffold
 ```
 
@@ -747,11 +747,11 @@ cabal test keiro-dsl
 Mutation (prove the harness pins the inversion):
 
 ```bash
-sed -i.bak 's/on-reject Fired/on-reject Retry/' keiro-dsl/test/fixtures/hospital-surge/hospital-surge.kdsl
-cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/hospital-surge/hospital-surge.kdsl --out /tmp/surge-mut
+sed -i.bak 's/on-reject Fired/on-reject Retry/' keiro-dsl/test/fixtures/hospital-surge/hospital-surge.keiro
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/hospital-surge/hospital-surge.keiro --out /tmp/surge-mut
 cabal test keiro-dsl --test-options='--match "harness/hospital-surge/fire-disposition"'
 echo "exit=$?"
-mv keiro-dsl/test/fixtures/hospital-surge/hospital-surge.kdsl.bak keiro-dsl/test/fixtures/hospital-surge/hospital-surge.kdsl
+mv keiro-dsl/test/fixtures/hospital-surge/hospital-surge.keiro.bak keiro-dsl/test/fixtures/hospital-surge/hospital-surge.keiro
 ```
 
 Expected: the `fire-disposition` example **fails** (`exit` non-zero) under the mutated spec,
@@ -764,7 +764,7 @@ benign-inversion decision is genuinely pinned.
 The plan is accepted when all of the following observable behaviors hold, each demonstrable
 by the commands in *Concrete Steps*:
 
-1. **Parse + round-trip.** `keiro-dsl parse` on `hospital-surge.kdsl` echoes a `process`
+1. **Parse + round-trip.** `keiro-dsl parse` on `hospital-surge.keiro` echoes a `process`
    block with a nested `timer`, and re-parsing the output yields an equal model
    (`parser/round-trip process` test green). This proves the notation is a real language,
    not freeform text.
@@ -804,7 +804,7 @@ not an internal attribute. The conformance target is the real, external
 
 Every step in this plan is safe to repeat.
 
-- **`parse` and `check`** are pure reads of a `.kdsl` file and produce no side effects; run
+- **`parse` and `check`** are pure reads of a `.keiro` file and produce no side effects; run
   them as often as you like.
 - **`scaffold`** is idempotent by construction (the EP-1 discipline this plan inherits):
   `Generated` modules are overwritten verbatim on every run, so re-scaffolding after a spec
@@ -818,7 +818,7 @@ Every step in this plan is safe to repeat.
   `/Users/shinzui/Keikaku/bokuno/keiro-runtime-jitsurei/services/hospital-capacity/src/HospitalCapacity/`.
 - **The mutation test** edits the spec in place; the step takes a `.bak` and restores it, so
   the working tree returns to its prior state. If interrupted mid-mutation, restore with
-  `git checkout -- keiro-dsl/test/fixtures/hospital-surge/hospital-surge.kdsl`.
+  `git checkout -- keiro-dsl/test/fixtures/hospital-surge/hospital-surge.keiro`.
 
 This plan adds no migrations, touches no database, and modifies no runtime package, so there
 is nothing destructive to roll back. The only durable artifacts are new `keiro-dsl` source

@@ -23,10 +23,10 @@ main = hspec $ do
             forAll genSpec $ \s ->
                 parseSpec "<gen>" (renderSpec s) === Right s
 
-    describe "canonical reservation.kdsl" $
+    describe "canonical reservation.keiro" $
         it "parses into the expected aggregate shape" $ do
-            input <- TIO.readFile "test/fixtures/reservation.kdsl"
-            case parseSpec "test/fixtures/reservation.kdsl" input of
+            input <- TIO.readFile "test/fixtures/reservation.keiro"
+            case parseSpec "test/fixtures/reservation.keiro" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> do
                     specContext spec `shouldBe` "hospital-capacity"
@@ -44,29 +44,29 @@ main = hspec $ do
                         other -> expectationFailure ("expected one aggregate node, got " <> show (length other))
 
     describe "validator" $ do
-        it "accepts the canonical reservation.kdsl" $ do
-            codes <- diagnosticCodesOf "test/fixtures/reservation.kdsl"
+        it "accepts the canonical reservation.keiro" $ do
+            codes <- diagnosticCodesOf "test/fixtures/reservation.keiro"
             codes `shouldBe` []
         it "rejects a missing status-map as StatusMapNotTotal" $ do
-            codes <- diagnosticCodesOf "test/fixtures/reservation-no-statusmap.kdsl"
+            codes <- diagnosticCodesOf "test/fixtures/reservation-no-statusmap.keiro"
             codes `shouldContain` [StatusMapNotTotal]
         it "rejects an undeclared command as UndeclaredCommand" $ do
-            codes <- diagnosticCodesOf "test/fixtures/reservation-bad-command.kdsl"
+            codes <- diagnosticCodesOf "test/fixtures/reservation-bad-command.keiro"
             codes `shouldContain` [UndeclaredCommand]
         it "rejects a wall-clock guard atom as ClockSampled" $ do
-            codes <- diagnosticCodesOf "test/fixtures/reservation-clock.kdsl"
+            codes <- diagnosticCodesOf "test/fixtures/reservation-clock.keiro"
             codes `shouldContain` [ClockSampled]
         it "accepts a v2 event with a contiguous upcaster hole" $ do
-            codes <- diagnosticCodesOf "test/fixtures/reservation-v2.kdsl"
+            codes <- diagnosticCodesOf "test/fixtures/reservation-v2.keiro"
             codes `shouldBe` []
         it "rejects a v2 event with no upcaster as EvtVersionMissingUpcaster" $ do
-            codes <- diagnosticCodesOf "test/fixtures/reservation-v2-noupcast.kdsl"
+            codes <- diagnosticCodesOf "test/fixtures/reservation-v2-noupcast.keiro"
             codes `shouldContain` [EvtVersionMissingUpcaster]
 
     describe "evolution parsing" $
-        it "parses event version and upcaster from reservation-v2.kdsl" $ do
-            input <- TIO.readFile "test/fixtures/reservation-v2.kdsl"
-            case parseSpec "test/fixtures/reservation-v2.kdsl" input of
+        it "parses event version and upcaster from reservation-v2.keiro" $ do
+            input <- TIO.readFile "test/fixtures/reservation-v2.keiro"
+            case parseSpec "test/fixtures/reservation-v2.keiro" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> case [e | NAggregate a <- specNodes spec, e <- aggEvents a, evName e == "TransferReservationCreated"] of
                     (e : _) -> do
@@ -76,8 +76,8 @@ main = hspec $ do
 
     describe "process/timer (EP-3)" $ do
         it "parses the hospital-surge process + nested timer" $ do
-            input <- TIO.readFile "test/fixtures/hospital-surge.kdsl"
-            case parseSpec "test/fixtures/hospital-surge.kdsl" input of
+            input <- TIO.readFile "test/fixtures/hospital-surge.keiro"
+            case parseSpec "test/fixtures/hospital-surge.keiro" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> case [p | NProcess p <- specNodes spec] of
                     (p : _) -> do
@@ -88,24 +88,24 @@ main = hspec $ do
                         tmMaxAttempts (procTimer p) `shouldBe` 5
                     [] -> expectationFailure "no process node parsed"
         it "round-trips the hospital-surge spec through parse . pretty" $ do
-            input <- TIO.readFile "test/fixtures/hospital-surge.kdsl"
+            input <- TIO.readFile "test/fixtures/hospital-surge.keiro"
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
         it "accepts the hospital-surge spec (no errors; benign-inversion warnings only)" $ do
-            codes <- errorCodesOf "test/fixtures/hospital-surge.kdsl"
+            codes <- errorCodesOf "test/fixtures/hospital-surge.keiro"
             codes `shouldBe` []
         it "rejects a wall-clock fireAt as ProcessFireAtNotInjected" $ do
-            codes <- errorCodesOf "test/fixtures/hospital-surge-clock.kdsl"
+            codes <- errorCodesOf "test/fixtures/hospital-surge-clock.keiro"
             codes `shouldContain` [ProcessFireAtNotInjected]
         it "rejects a user-supplied dispatch id as ProcessDispatchIdSupplied" $ do
-            codes <- errorCodesOf "test/fixtures/hospital-surge-dispatchid.kdsl"
+            codes <- errorCodesOf "test/fixtures/hospital-surge-dispatchid.keiro"
             codes `shouldContain` [ProcessDispatchIdSupplied]
         it "rejects an unresolved saga reference as ProcessUnresolvedRef" $ do
-            codes <- errorCodesOf "test/fixtures/hospital-surge-badref.kdsl"
+            codes <- errorCodesOf "test/fixtures/hospital-surge-badref.keiro"
             codes `shouldContain` [ProcessUnresolvedRef]
         it "scaffolds the process: Generated wiring is firewall-clean + a HoleStub" $ do
-            mods <- scaffoldProcessFixture "test/fixtures/hospital-surge.kdsl"
+            mods <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
             let gens = [m | m <- mods, kind m == Generated]
                 holes = [m | m <- mods, kind m == HoleStub]
             length gens `shouldBe` 1
@@ -114,14 +114,14 @@ main = hspec $ do
             -- the worker uses the spec's ceiling, never the dangerous default
             ("max-attempts = 5" `T.isInfixOf` moduleText (head gens)) `shouldBe` True
         it "process scaffold is deterministic" $ do
-            a <- scaffoldProcessFixture "test/fixtures/hospital-surge.kdsl"
-            b <- scaffoldProcessFixture "test/fixtures/hospital-surge.kdsl"
+            a <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
+            b <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
             map moduleText a `shouldBe` map moduleText b
 
     describe "contract (EP-4)" $ do
         it "parses the emergency contract (topics + events-on-topic + typed fields)" $ do
-            input <- TIO.readFile "test/fixtures/contract.kdsl"
-            case parseSpec "test/fixtures/contract.kdsl" input of
+            input <- TIO.readFile "test/fixtures/contract.keiro"
+            case parseSpec "test/fixtures/contract.keiro" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> case [c | NContract c <- specNodes spec] of
                     (c : _) -> do
@@ -131,90 +131,90 @@ main = hspec $ do
                         map ceName (ctrEvents c) `shouldBe` ["IncidentTransferNeedDeclared", "TransferReservationAccepted"]
                     [] -> expectationFailure "no contract node parsed"
         it "round-trips the contract spec through parse . pretty" $ do
-            input <- TIO.readFile "test/fixtures/contract.kdsl"
+            input <- TIO.readFile "test/fixtures/contract.keiro"
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
         it "round-trips the intake (inbox) spec through parse . pretty" $ do
-            input <- TIO.readFile "test/fixtures/intake.kdsl"
+            input <- TIO.readFile "test/fixtures/intake.keiro"
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
         it "accepts the intake spec (complete disposition, no inversions)" $ do
-            codes <- errorCodesOf "test/fixtures/intake.kdsl"
+            codes <- errorCodesOf "test/fixtures/intake.keiro"
             codes `shouldBe` []
         it "rejects duplicate => retry (inversion 1)" $ do
-            codes <- errorCodesOf "test/fixtures/intake-dup-retry.kdsl"
+            codes <- errorCodesOf "test/fixtures/intake-dup-retry.keiro"
             codes `shouldContain` [DispositionDuplicateRetry]
         it "rejects previouslyFailed => retry (inversion 2)" $ do
-            codes <- errorCodesOf "test/fixtures/intake-pf-retry.kdsl"
+            codes <- errorCodesOf "test/fixtures/intake-pf-retry.keiro"
             codes `shouldContain` [DispositionPreviouslyFailedRetry]
         it "rejects an incomplete disposition table" $ do
-            codes <- errorCodesOf "test/fixtures/intake-incomplete.kdsl"
+            codes <- errorCodesOf "test/fixtures/intake-incomplete.keiro"
             codes `shouldContain` [DispositionIncomplete]
         it "round-trips the emit/publisher spec through parse . pretty" $ do
-            input <- TIO.readFile "test/fixtures/emit.kdsl"
+            input <- TIO.readFile "test/fixtures/emit.keiro"
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
         it "accepts the emit/publisher spec (skip present, coupling resolves)" $ do
-            codes <- errorCodesOf "test/fixtures/emit.kdsl"
+            codes <- errorCodesOf "test/fixtures/emit.keiro"
             codes `shouldBe` []
         it "rejects a missing _ => skip catch-all as EmitSkipMissing" $ do
-            codes <- errorCodesOf "test/fixtures/emit-noskip.kdsl"
+            codes <- errorCodesOf "test/fixtures/emit-noskip.keiro"
             codes `shouldContain` [EmitSkipMissing]
         it "rejects mapping to an undeclared contract event as EmitUnresolvedContract" $ do
-            codes <- errorCodesOf "test/fixtures/emit-badevent.kdsl"
+            codes <- errorCodesOf "test/fixtures/emit-badevent.keiro"
             codes `shouldContain` [EmitUnresolvedContract]
 
     describe "pgmq workqueue/dispatch (EP-5)" $ do
         it "round-trips the reservation-work spec through parse . pretty" $ do
-            input <- TIO.readFile "test/fixtures/reservation-work.kdsl"
+            input <- TIO.readFile "test/fixtures/reservation-work.keiro"
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
         it "accepts the reservation-work spec (physical matches, no inversions)" $ do
-            codes <- errorCodesOf "test/fixtures/reservation-work.kdsl"
+            codes <- errorCodesOf "test/fixtures/reservation-work.keiro"
             codes `shouldBe` []
         it "rejects a divergent captured physical name as WqPhysicalDivergence" $ do
-            codes <- errorCodesOf "test/fixtures/reservation-work-divergent.kdsl"
+            codes <- errorCodesOf "test/fixtures/reservation-work-divergent.keiro"
             codes `shouldContain` [WqPhysicalDivergence]
         it "rejects storeFailure => deadLetter as WqStoreFailureNotRetry" $ do
-            codes <- errorCodesOf "test/fixtures/reservation-work-sf-deadletter.kdsl"
+            codes <- errorCodesOf "test/fixtures/reservation-work-sf-deadletter.keiro"
             codes `shouldContain` [WqStoreFailureNotRetry]
         it "rejects decodeFailure => retry as WqDecodeFailureNotDeadLetter" $ do
-            codes <- errorCodesOf "test/fixtures/reservation-work-df-retry.kdsl"
+            codes <- errorCodesOf "test/fixtures/reservation-work-df-retry.keiro"
             codes `shouldContain` [WqDecodeFailureNotDeadLetter]
 
     describe "workflow/operation (EP-6)" $ do
         it "round-trips the workflow spec through parse . pretty" $ do
-            input <- TIO.readFile "test/fixtures/workflow.kdsl"
+            input <- TIO.readFile "test/fixtures/workflow.keiro"
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
         it "accepts the workflow spec (await<->signal matches, run resolves)" $ do
-            codes <- errorCodesOf "test/fixtures/workflow.kdsl"
+            codes <- errorCodesOf "test/fixtures/workflow.keiro"
             codes `shouldBe` []
         it "rejects a signal label with no matching await as AwaitSignalMismatch" $ do
-            codes <- errorCodesOf "test/fixtures/workflow-signal-mismatch.kdsl"
+            codes <- errorCodesOf "test/fixtures/workflow-signal-mismatch.keiro"
             codes `shouldContain` [AwaitSignalMismatch]
 
     describe "diff (evolution classification)" $ do
         it "classifies a field added without a version bump as BREAKING" $ do
-            cs <- diffFixtures "test/fixtures/reservation.kdsl" "test/fixtures/reservation-fieldadd.kdsl"
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-fieldadd.keiro"
             any isBreaking cs `shouldBe` True
             [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtFieldAddedWithoutBump]
         it "classifies the same field wrapped as v2 + upcaster as ADDITIVE" $ do
-            cs <- diffFixtures "test/fixtures/reservation.kdsl" "test/fixtures/reservation-v2.kdsl"
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-v2.keiro"
             any isBreaking cs `shouldBe` False
             [ck | Additive ck <- cs] `shouldSatisfy` any ((== "TransferReservationCreated") . ckSubject)
         it "reports no breaking change when the spec is unchanged" $ do
-            cs <- diffFixtures "test/fixtures/reservation.kdsl" "test/fixtures/reservation.kdsl"
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation.keiro"
             any isBreaking cs `shouldBe` False
 
     describe "scaffold" $ do
         it "never emits a keiki symbolic operator into a Generated module (firewall)" $ do
-            mods <- scaffoldFixture "test/fixtures/reservation.kdsl"
+            mods <- scaffoldFixture "test/fixtures/reservation.keiro"
             let breaches =
                     [ (modulePath m, op)
                     | m <- mods
@@ -224,20 +224,20 @@ main = hspec $ do
                     ]
             breaches `shouldBe` []
         it "marks the Holes module HoleStub and the rest Generated" $ do
-            mods <- scaffoldFixture "test/fixtures/reservation.kdsl"
+            mods <- scaffoldFixture "test/fixtures/reservation.keiro"
             let holes = [m | m <- mods, "Holes.hs" `T.isSuffixOf` T.pack (modulePath m)]
             map kind holes `shouldBe` [HoleStub]
             -- Domain, Codec, EventStream, Projection, Harness.
             length [m | m <- mods, kind m == Generated] `shouldBe` 5
         it "is deterministic (re-scaffolding yields byte-identical text)" $ do
-            a <- scaffoldFixture "test/fixtures/reservation.kdsl"
-            b <- scaffoldFixture "test/fixtures/reservation.kdsl"
+            a <- scaffoldFixture "test/fixtures/reservation.keiro"
+            b <- scaffoldFixture "test/fixtures/reservation.keiro"
             map moduleText a `shouldBe` map moduleText b
         it "matches the committed compiling Generated conformance modules (modulo whitespace)" $ do
-            mods <- scaffoldFixture "test/fixtures/reservation.kdsl"
+            mods <- scaffoldFixture "test/fixtures/reservation.keiro"
             mapM_ assertMatchesCommitted [m | m <- mods, kind m == Generated]
         it "scaffolds the register-free OrderStream smoke target without error" $ do
-            mods <- scaffoldFixture "test/fixtures/order.kdsl"
+            mods <- scaffoldFixture "test/fixtures/order.keiro"
             -- 5 Generated (Domain/Codec/EventStream/Projection/Harness) + 1 Holes.
             length mods `shouldBe` 6
             let breaches = [() | m <- mods, kind m == Generated, op <- symbolicOperators, op `T.isInfixOf` moduleText m]

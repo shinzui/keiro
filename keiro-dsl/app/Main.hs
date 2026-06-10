@@ -40,13 +40,13 @@ commands =
     subparser
         ( command
             "parse"
-            (info (Parse <$> fileArg <**> helper) (progDesc "Parse a .kdsl file and pretty-print it back"))
+            (info (Parse <$> fileArg <**> helper) (progDesc "Parse a .keiro file and pretty-print it back"))
             <> command
                 "check"
-                (info (Check <$> fileArg <**> helper) (progDesc "Validate a .kdsl file; print diagnostics and exit non-zero on any error"))
+                (info (Check <$> fileArg <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
             <> command
                 "scaffold"
-                (info (Scaffold <$> fileArg <*> outOpt <**> helper) (progDesc "Emit the generated layer + typed holes from a .kdsl file"))
+                (info (Scaffold <$> fileArg <*> outOpt <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
             <> command
                 "diff"
                 (info (Diff <$> fileArg <*> sinceOpt <**> helper) (progDesc "Classify spec changes since a git ref as ADDITIVE/BREAKING; exit non-zero on any breaking change"))
@@ -59,7 +59,7 @@ sinceOpt :: Parser String
 sinceOpt = strOption (long "since" <> metavar "GIT-REF" <> help "Git ref to diff the spec against (e.g. HEAD, a tag, a branch)")
 
 fileArg :: Parser FilePath
-fileArg = argument str (metavar "FILE" <> help "Path to a .kdsl spec (use /dev/stdin for stdin)")
+fileArg = argument str (metavar "FILE" <> help "Path to a .keiro spec (use /dev/stdin for stdin)")
 
 run :: Command -> IO ()
 run (Parse fp) = do

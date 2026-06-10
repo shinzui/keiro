@@ -23,20 +23,20 @@ keiro services found that roughly two-thirds to nine-tenths of the code per feat
 deterministic template, and the non-derivable remainder collapses into a small, closed
 set of **eight "hole-kinds"** (defined in *Context and Orientation* below). This plan
 builds the foundation of **`keiro-dsl`**: a toolchain over a **typed specification** of a
-keiro service. That specification is a plain-text file with the extension `.kdsl` written
+keiro service. That specification is a plain-text file with the extension `.keiro` written
 in a terse, readable notation; it is the permanent, machine-checkable source of truth for
 what a service is.
 
 After this plan, a developer (or a coding agent planning a feature) can do three concrete
 things from a single binary called `keiro-dsl`:
 
-1. Run `keiro-dsl parse service.kdsl` and get the spec parsed into a typed in-memory model
+1. Run `keiro-dsl parse service.keiro` and get the spec parsed into a typed in-memory model
    and pretty-printed back out — proving the notation is a real, parseable language rather
    than freeform text.
-2. Run `keiro-dsl check service.kdsl` and have the tool **reject the spec** with a precise,
+2. Run `keiro-dsl check service.keiro` and have the tool **reject the spec** with a precise,
    line-numbered diagnostic if any required decision is left unspecified or any structural
    rule is violated — *before any Haskell is written*.
-3. Run `keiro-dsl scaffold service.kdsl --out <dir>` and get two kinds of Haskell modules:
+3. Run `keiro-dsl scaffold service.keiro --out <dir>` and get two kinds of Haskell modules:
    `-- @generated` modules holding the **symbol-free deterministic layer** (domain data
    types, id newtypes, codec, event-stream and projection wiring, the register type-list,
    and the Template-Haskell splice), plus **typed hole** modules (created only if absent)
@@ -87,7 +87,7 @@ Milestone 1 — package, grammar, parser, pretty-printer, round-trip, `parse` CL
 - [x] Write `Keiro.Dsl.PrettyPrint` exposing `renderSpec :: Spec -> Text`. (2026-06-10)
 - [x] Write the round-trip property test `parse . pretty == id` (100 generated specs pass) and the canonical-spec unit test. (2026-06-10)
 - [x] Write `keiro-dsl/app/Main.hs` with the optparse-applicative command tree and the `parse` subcommand. (2026-06-10)
-- [x] Capture the canonical `reservation.kdsl` fixture; confirm `keiro-dsl parse` round-trips it. (2026-06-10)
+- [x] Capture the canonical `reservation.keiro` fixture; confirm `keiro-dsl parse` round-trips it. (2026-06-10)
 
 Milestone 2 — validator + `check` CLI: **DONE 2026-06-10**
 
@@ -151,7 +151,7 @@ implementation. Provide concise evidence.
   (caught)`.
 
 - **M3: bare command/event field types resolve via registers, then a Pascal-case
-  fallback.** The `.kdsl` writes bare fields like `reservationId hospitalId commandId`,
+  fallback.** The `.keiro` writes bare fields like `reservationId hospitalId commandId`,
   and the scaffolder must recover each Haskell type. `reservationId` Pascal-cases to
   `ReservationId`, which is *not* a declared id (`TransferReservationId` is) — so a
   name→type-by-capitalization rule alone fails. Resolution that works for the corpus: (1)
@@ -237,7 +237,7 @@ they are repeated here so this plan is self-contained.
 - Decision: Generated code and hand-filled holes live in **separate modules**. `Generated`
   modules carry a `-- @generated` marker and are fully overwritten on every scaffold; hole
   modules (`Holes.hs`) are created only when absent and never overwritten.
-  Rationale: the `.kdsl` file is a permanent source of truth, regenerated on every change.
+  Rationale: the `.keiro` file is a permanent source of truth, regenerated on every change.
   If regeneration overwrote hand-written logic the tool would be unusable past the first
   edit. The generated/hole split makes the Nth scaffold as safe as the first. This matters
   *more* under the scaffold+verify decision, because the transducer body lives in
@@ -335,7 +335,7 @@ Compare the result against the original purpose.
 harness — is proven end-to-end on the aggregate vertical. Against the original purpose, a
 developer can now:
 
-1. `keiro-dsl parse keiro-dsl/test/fixtures/reservation.kdsl` — round-trips the terse
+1. `keiro-dsl parse keiro-dsl/test/fixtures/reservation.keiro` — round-trips the terse
    notation through a typed AST (property-tested over 100 generated specs).
 2. `keiro-dsl check …` — `OK`/exit 0 for the canonical spec; precise line-numbered
    `error[StatusMapNotTotal|UndeclaredCommand|ClockSampled|…]` + exit 1 for broken specs,
@@ -389,7 +389,7 @@ EP-1 and handled by sibling plans `docs/plans/60`…`docs/plans/65`.
 
 ### Key terms used throughout this plan
 
-- **`.kdsl` file** — a plain-text service specification in the terse notation shown below.
+- **`.keiro` file** — a plain-text service specification in the terse notation shown below.
   It is indentation-structured; `#` begins a line comment; a `!` immediately after a state
   name marks that state **terminal** (no outgoing transitions allowed); the literal word
   `HOLE` names an unfilled hole.
@@ -455,7 +455,7 @@ reproduced verbatim from the predecessor plan
 `docs/plans/58-build-the-keiro-dsl-service-dsl-toolchain.md`. It is a faithful transcription
 of the real external aggregate
 `keiro-runtime-jitsurei/services/hospital-capacity/src/HospitalCapacity/Reservation/Transducer.hs`.
-Save it as `keiro-dsl/test/fixtures/reservation.kdsl`.
+Save it as `keiro-dsl/test/fixtures/reservation.keiro`.
 
 ```text
 context hospital-capacity
@@ -599,7 +599,7 @@ The **conformance corpus** is the external sibling repo
 `/Users/shinzui/Keikaku/bokuno/keiro-runtime-jitsurei`; its rich worked examples live under
 `services/hospital-capacity/` and `services/incident-command/`. EP-1 captures one slice —
 the `HospitalCapacity/Reservation` aggregate — as **read-only fixtures** under
-`keiro-dsl/test/fixtures/` (the `.kdsl` plus copies of the hand-written reference modules)
+`keiro-dsl/test/fixtures/` (the `.keiro` plus copies of the hand-written reference modules)
 so the test suite is hermetic and does not require the sibling repo to be checked out. The
 in-repo `jitsurei` context's `OrderStream` (at
 `/Users/shinzui/Keikaku/bokuno/keiro/jitsurei/src/Jitsurei/OrderStream.hs`) is a secondary,
@@ -659,12 +659,12 @@ Work, file by file:
   subcommand reads a file (or stdin), runs `parseSpec`, prints `renderSpec` on success
   (exit 0), and prints the line-numbered parse error to stderr on failure (exit non-zero).
 - Write `keiro-dsl/test/Main.hs` (the test driver) with: a unit test asserting that parsing
-  `reservation.kdsl` yields an `Aggregate` named `Reservation` with 6 states, 2 commands,
+  `reservation.keiro` yields an `Aggregate` named `Reservation` with 6 states, 2 commands,
   2 events, and 2 transitions; and a QuickCheck property that for a generated `Spec`,
   `parseSpec (renderSpec s)` returns `Right s`. (Write a small `Arbitrary Spec` generator
   restricted to the aggregate subset; keep field names valid Haskell identifiers.)
 
-Result: `keiro-dsl parse keiro-dsl/test/fixtures/reservation.kdsl` round-trips, and the test
+Result: `keiro-dsl parse keiro-dsl/test/fixtures/reservation.keiro` round-trips, and the test
 suite passes. Acceptance: see *Validation and Acceptance*, M1.
 
 ### Milestone 2 — validator + `check` CLI
@@ -755,13 +755,13 @@ Work:
 - Capture the reference fixtures: copy the four hand-written
   `HospitalCapacity/Reservation` modules (`Transducer.hs`, `EventStream.hs`, `Projection.hs`,
   and the shared `Domain/Types.hs` slice they need) into `keiro-dsl/test/fixtures/reference/`
-  as read-only text, plus the `reservation.kdsl`. A conformance test scaffolds the spec and
+  as read-only text, plus the `reservation.keiro`. A conformance test scaffolds the spec and
   diffs the `Generated` domain/codec/wiring against the captured reference (modulo whitespace
   and module-name prefix) to confirm the scaffold lines up with real, compiling code.
 - Add the smoke target: capture `jitsurei`'s `OrderStream.hs` plus its `Jitsurei.Domain`
-  slice as a second fixture pair, write its `.kdsl`, and assert it scaffolds without error.
+  slice as a second fixture pair, write its `.keiro`, and assert it scaffolds without error.
 
-Result: scaffolding `reservation.kdsl` yields `Generated` modules that compile against
+Result: scaffolding `reservation.keiro` yields `Generated` modules that compile against
 keiro/keiki, plus a `Holes.hs` whose signatures typecheck once filled. Acceptance: see
 *Validation*, M3.
 
@@ -817,7 +817,7 @@ cabal build keiro-dsl
 # optparse-applicative / prettyprinter from Hackage.
 
 # 3. Save the canonical spec (from Context and Orientation) to the fixture, then parse it:
-cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation.kdsl
+cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation.keiro
 ```
 
 Expected (the pretty-printed spec echoed back, exit code 0):
@@ -841,23 +841,23 @@ echo "not a spec" | cabal run keiro-dsl -- parse /dev/stdin ; echo "exit=$?"
 ### M2 — validation
 
 ```bash
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation.kdsl ; echo "exit=$?"
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation.keiro ; echo "exit=$?"
 # expect: "OK" then "exit=0"
 
-# Remove the status-map line, save as reservation-no-statusmap.kdsl:
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-no-statusmap.kdsl ; echo "exit=$?"
+# Remove the status-map line, save as reservation-no-statusmap.keiro:
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-no-statusmap.keiro ; echo "exit=$?"
 ```
 
 Expected:
 
 ```text
-keiro-dsl/test/fixtures/reservation-no-statusmap.kdsl:27: error[StatusMapNotTotal]: projection 'transfer_decisions' status-map is not total over events {TransferReservationCreated, TransferReservationConfirmed}
+keiro-dsl/test/fixtures/reservation-no-statusmap.keiro:27: error[StatusMapNotTotal]: projection 'transfer_decisions' status-map is not total over events {TransferReservationCreated, TransferReservationConfirmed}
 exit=1
 ```
 
 ```bash
-# Referencing an undeclared command in a transition (reservation-bad-command.kdsl):
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-bad-command.kdsl ; echo "exit=$?"
+# Referencing an undeclared command in a transition (reservation-bad-command.keiro):
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-bad-command.keiro ; echo "exit=$?"
 # expect a line-numbered error[UndeclaredCommand] and exit=1
 ```
 
@@ -865,7 +865,7 @@ cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-bad-command.kds
 
 ```bash
 # Scaffold the rich aggregate (registers + guard + write + status-map).
-rm -rf /tmp/gen && cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation.kdsl --out /tmp/gen
+rm -rf /tmp/gen && cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation.keiro --out /tmp/gen
 find /tmp/gen -name '*.hs' | sort
 ```
 
@@ -890,7 +890,7 @@ grep -n 'HOLE guard' /tmp/gen/HospitalCapacity/Reservation/Holes.hs
 
 # Idempotence: hand-edit Holes.hs, re-scaffold, confirm the edit survives.
 echo '-- SENTINEL hand edit' >> /tmp/gen/HospitalCapacity/Reservation/Holes.hs
-cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation.kdsl --out /tmp/gen
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation.keiro --out /tmp/gen
 grep -c 'SENTINEL' /tmp/gen/HospitalCapacity/Reservation/Holes.hs
 # expect: 1  (the HoleStub was NOT overwritten)
 ```
@@ -925,9 +925,9 @@ passes. All commands run from `/Users/shinzui/Keikaku/bokuno/keiro`.
 cabal test keiro-dsl
 # expect a test suite that includes:
 #  - a property "parse . pretty round-trips" that passes for generated Specs;
-#  - a unit test asserting `parseSpec reservation.kdsl` yields an Aggregate node named
+#  - a unit test asserting `parseSpec reservation.keiro` yields an Aggregate node named
 #    "Reservation" with 6 states, 2 commands, 2 events, and 2 transitions.
-cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation.kdsl   # exit 0, echoes spec
+cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation.keiro   # exit 0, echoes spec
 echo "not a spec" | cabal run keiro-dsl -- parse /dev/stdin             # exit != 0, line-numbered error
 ```
 
@@ -938,10 +938,10 @@ through parse → pretty → parse unchanged, and malformed input is rejected wi
 fixture with a precise, line-numbered diagnostic:
 
 ```bash
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation.kdsl            # "OK", exit 0
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-no-statusmap.kdsl   # error[StatusMapNotTotal], exit != 0
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-bad-command.kdsl    # error[UndeclaredCommand], exit != 0
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-clock.kdsl          # error[ClockSampled], exit != 0
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation.keiro            # "OK", exit 0
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-no-statusmap.keiro   # error[StatusMapNotTotal], exit != 0
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-bad-command.keiro    # error[UndeclaredCommand], exit != 0
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation-clock.keiro          # error[ClockSampled], exit != 0
 cabal test keiro-dsl   # the validator unit tests assert each fixture yields the expected DiagnosticCode
 ```
 
@@ -952,7 +952,7 @@ guard atom, a clock sample) is caught *before any Haskell is written*.
 **M3 — scaffold + firewall + idempotence + conformance.**
 
 ```bash
-rm -rf /tmp/gen && cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation.kdsl --out /tmp/gen
+rm -rf /tmp/gen && cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation.keiro --out /tmp/gen
 # The Generated modules compile against keiro/keiki. Verify by building the captured-fixture
 # conformance test, which depends on the scaffold output shape:
 cabal test keiro-dsl
@@ -1083,6 +1083,6 @@ keiro-dsl in the keiro repo keeps a deriver/wiring change and the scaffolder cha
 commit.
 
 The captured-fixture corpus convention established here
-(`keiro-dsl/test/fixtures/` holding a `.kdsl` plus read-only copies of the hand-written
+(`keiro-dsl/test/fixtures/` holding a `.keiro` plus read-only copies of the hand-written
 reference modules from `keiro-runtime-jitsurei`) is reused by every later vertical, which
 captures its own slice. EP-7 registers the corpus for agent use.
