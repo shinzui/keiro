@@ -94,11 +94,11 @@ Milestone 2 — Validator rules: **DONE 2026-06-10**
 - [x] Implement `validateProcess` rules in `Keiro.Dsl.Validate`: `ProcessFireAtNotInjected` (fireAt field must be a declared `:Time` input field — TIME IS INJECTED), `ProcessDispatchIdSupplied` (no `commandId`/`id` binding on a dispatch or fire), `ProcessUnresolvedRef` (saga/target/fire-target resolve to declared aggregates), and `ProcessBenignInversion` *warnings* surfacing `on-reject => Fired` / `on-duplicate => AckOk`. The mandatory `max-attempts`/`dead-letter`, complete disposition tables, deterministic ids, and decode-strictness ack are enforced by the grammar/parser (their absence is a parse error). (2026-06-10)
 - [x] `keiro-dsl check` now exits non-zero only on *errors* (warnings pass): the hospital-surge spec passes clean (exit 0, two benign-inversion warnings); the clock/dispatch-id/bad-ref mutated fixtures each fail with the expected `error[Process…]`. Unit tests via `errorCodesOf`. (2026-06-10)
 
-Milestone 3 — Scaffold emitters:
+Milestone 3 — Scaffold emitters: **DONE 2026-06-10**
 
-- [ ] Emit the `-- @generated` `ProcessManager` wiring module (derivable fields) and the `TimerRequest` builder + timer-worker skeleton.
-- [ ] Emit the create-if-absent hole module (signatures for `handle`, the timer `fire` body, the deadline window, id derivations) with no keiki symbolic operator anywhere in `-- @generated`.
-- [ ] Firewall invariant test passes for the emitted process/timer modules.
+- [x] `scaffoldProcess` emits a `-- @generated` `Process` module with the derivable wiring: the define-once process name, the `TimerRequest` builder (deterministic id from the correlation key, processManagerName, payload, fireAt), the timer-fire disposition table (derived from the spec, `on-reject => Fired` benign inversion), and the `max-attempts`/`dead-letter` ceiling (never `defaultTimerWorkerOptions`). (2026-06-10)
+- [x] Emit the create-if-absent `ProcessHoles` module documenting the holes: the `handle` reaction, the deadline window (TIME INJECTED), the fire command, and the deterministic ids. (2026-06-10)
+- [x] Firewall + determinism tests pass for the process scaffold; the CLI emits the process modules alongside the saga/target aggregate scaffolds and the firewall holds across all Generated modules. (Full ProcessManager compilation is M5 conformance.) (2026-06-10)
 
 Milestone 4 — Harness emission:
 

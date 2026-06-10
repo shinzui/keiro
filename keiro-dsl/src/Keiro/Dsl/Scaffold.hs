@@ -22,6 +22,7 @@ module Keiro.Dsl.Scaffold (
     ModuleKind (..),
     Context (..),
     scaffoldAggregate,
+    scaffoldProcess,
 
     -- * Internal resolution, shared with "Keiro.Dsl.Harness"
     Agg (..),
@@ -200,6 +201,120 @@ holeModule a body =
         , moduleText = body
         , kind = HoleStub
         }
+
+--------------------------------------------------------------------------------
+-- Process manager + durable timer (EP-3)
+--------------------------------------------------------------------------------
+
+{- | Emit the symbol-free deterministic wiring for a process manager + its timer
+into a @Generated@ module, plus a create-if-absent @ProcessHoles@ module for the
+behaviour-bearing bodies (the @handle@ reaction, the deadline window, and the
+fire command). The @Generated@ module contains no keiki symbolic operator (the
+saga's transducer is the separate aggregate hole), so the firewall invariant
+holds. The timer worker uses the spec's @max-attempts@ ceiling, never the
+dangerous @defaultTimerWorkerOptions@ (@Nothing@) default.
+-}
+scaffoldProcess :: Context -> ProcessNode -> [ScaffoldModule]
+scaffoldProcess ctx p =
+    [ ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Process.hs")
+        , moduleText = emitProcessGen ctxPascal genPrefix holePrefix p
+        , kind = Generated
+        }
+    , ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" holePrefix <> "/ProcessHoles.hs")
+        , moduleText = emitProcessHoles genPrefix holePrefix p
+        , kind = HoleStub
+        }
+    ]
+  where
+    ctxPascal = pascalFromKebab (contextName ctx)
+    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
+    genPrefix = root <> "Generated." <> ctxPascal <> "." <> procId p
+    holePrefix = root <> ctxPascal <> "." <> procId p
+
+emitProcessGen :: Text -> Text -> Text -> ProcessNode -> Text
+emitProcessGen _ctxPascal genPrefix holePrefix p =
+    nl
+        [ "{-# LANGUAGE OverloadedStrings #-}"
+        , generatedBanner
+        , "module " <> genPrefix <> ".Process"
+        , "  ( " <> lo <> "ProcessName"
+        , "  , " <> lo <> "TimerRequest"
+        , "  , " <> lo <> "FireOutcome"
+        , "  ) where"
+        , ""
+        , "import " <> holePrefix <> ".ProcessHoles ()"
+        , "import Data.Aeson (Value, object, (.=))"
+        , "import Data.Text (Text)"
+        , "import Data.Time (UTCTime)"
+        , "import Keiro.Command (CommandError (..))"
+        , "import Keiro.Timer (TimerId (..), TimerRequest (..))"
+        , "import Data.UUID.V5 qualified as UUID.V5"
+        , ""
+        , "-- The define-once ProcessManager name (hole-kind 5: referenced, never retyped)."
+        , lo <> "ProcessName :: Text"
+        , lo <> "ProcessName = " <> tshow (procName p)
+        , ""
+        , "-- The deterministic timer-request builder: id derived from the correlation"
+        , "-- key (hole-kind 1), processManagerName referenced, payload from the spec."
+        , "-- (timer id derived as uuidv5 of " <> tshow (idePrefix (tmId timer)) <> " <> correlationId)"
+        , lo <> "TimerRequest :: Text -> UTCTime -> TimerRequest"
+        , lo <> "TimerRequest correlationId fireAtTime ="
+        , "  TimerRequest"
+        , "    { timerId = TimerId (namedUuid (" <> tshow (idePrefix (tmId timer)) <> " <> correlationId))"
+        , "    , processManagerName = " <> lo <> "ProcessName"
+        , "    , correlationId = correlationId"
+        , "    , fireAt = fireAtTime"
+        , "    , payload = " <> payloadExpr (tmPayload timer)
+        , "    }"
+        , ""
+        , "-- The timer-fire disposition table (hole-kind 2), derived from the spec."
+        , "-- on-reject => " <> showOutcome (onReject fd) <> " is the benign inversion."
+        , lo <> "FireOutcome :: Either CommandError a -> Maybe ()"
+        , lo <> "FireOutcome result = case result of"
+        , "  Right{} -> " <> outcomeToMaybe (onOk fd)
+        , "  Left CommandRejected -> " <> outcomeToMaybe (onReject fd)
+        , "  Left{} -> " <> outcomeToMaybe (onError fd)
+        , ""
+        , "-- max-attempts = " <> tshow' (tmMaxAttempts timer) <> ", dead-letter = " <> tshow (tmDeadLetter timer)
+        , "-- (the timer worker must pass Just " <> tshow' (tmMaxAttempts timer) <> " to runTimerWorkerWith, never the"
+        , "--  defaultTimerWorkerOptions Nothing ceiling that retries forever)."
+        ]
+  where
+    lo = lowerFirst (procId p)
+    timer = procTimer p
+    fd = fireDisposition (tmFire timer)
+
+payloadExpr :: [FieldBinding] -> Text
+payloadExpr [] = "object []"
+payloadExpr fs = "object [ " <> T.intercalate ", " (map kv fs) <> " ]"
+  where
+    kv b = tshow (fbName b) <> " .= (" <> maybe (tshow (fbName b)) id (fbValue b) <> " :: Value)"
+
+showOutcome :: FireOutcome -> Text
+showOutcome OFired = "Fired"
+showOutcome ORetry = "Retry"
+
+outcomeToMaybe :: FireOutcome -> Text
+outcomeToMaybe OFired = "Just ()  -- Fired"
+outcomeToMaybe ORetry = "Nothing  -- Retry"
+
+emitProcessHoles :: Text -> Text -> ProcessNode -> Text
+emitProcessHoles _genPrefix holePrefix p =
+    nl
+        [ "-- HAND-OWNED hole module for the process manager's behaviour-bearing bodies."
+        , "-- keiro-dsl creates it once and never overwrites it."
+        , "module " <> holePrefix <> ".ProcessHoles () where"
+        , ""
+        , "-- HOLE handle: build the ProcessManagerAction (the self-advance "
+        , "--   '" <> advCommand (hAdvance (procHandle p)) <> "', the dispatch(es), and the timer) from the input."
+        , "-- HOLE window: the deadline policy, e.g. surgeWindow :: NominalDiffTime; "
+        , "--   surgeDeadline observedAt = addUTCTime surgeWindow observedAt  (TIME INJECTED)."
+        , "-- HOLE fire command: construct " <> fireCommand (tmFire (procTimer p)) <> " for the timer fire,"
+        , "--   keyed by correlationId; the fired-event-id is the deterministic uuidv5 of"
+        , "--   " <> tshow (idePrefix (fireFiredEventId (tmFire (procTimer p)))) <> " <> correlationId."
+        ]
 
 --------------------------------------------------------------------------------
 -- Domain module

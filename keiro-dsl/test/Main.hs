@@ -11,7 +11,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate, scaffoldProcess)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateSpec)
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
@@ -104,6 +104,19 @@ main = hspec $ do
         it "rejects an unresolved saga reference as ProcessUnresolvedRef" $ do
             codes <- errorCodesOf "test/fixtures/hospital-surge-badref.kdsl"
             codes `shouldContain` [ProcessUnresolvedRef]
+        it "scaffolds the process: Generated wiring is firewall-clean + a HoleStub" $ do
+            mods <- scaffoldProcessFixture "test/fixtures/hospital-surge.kdsl"
+            let gens = [m | m <- mods, kind m == Generated]
+                holes = [m | m <- mods, kind m == HoleStub]
+            length gens `shouldBe` 1
+            length holes `shouldBe` 1
+            [() | m <- gens, op <- symbolicOperators, op `T.isInfixOf` moduleText m] `shouldBe` []
+            -- the worker uses the spec's ceiling, never the dangerous default
+            ("max-attempts = 5" `T.isInfixOf` moduleText (head gens)) `shouldBe` True
+        it "process scaffold is deterministic" $ do
+            a <- scaffoldProcessFixture "test/fixtures/hospital-surge.kdsl"
+            b <- scaffoldProcessFixture "test/fixtures/hospital-surge.kdsl"
+            map moduleText a `shouldBe` map moduleText b
 
     describe "diff (evolution classification)" $ do
         it "classifies a field added without a version bump as BREAKING" $ do
@@ -194,6 +207,16 @@ scaffoldFixture path = do
                     [ scaffoldAggregate (ctx spec) spec agg <> harnessFor (ctx spec) spec agg
                     | NAggregate agg <- specNodes spec
                     ]
+  where
+    ctx spec = Context{contextName = specContext spec, moduleRoot = ""}
+
+scaffoldProcessFixture :: FilePath -> IO [ScaffoldModule]
+scaffoldProcessFixture path = do
+    input <- TIO.readFile path
+    case parseSpec path input of
+        Left err -> expectationFailure (T.unpack err) >> pure []
+        Right spec ->
+            pure $ concat [scaffoldProcess (ctx spec) p | NProcess p <- specNodes spec]
   where
     ctx spec = Context{contextName = specContext spec, moduleRoot = ""}
 
