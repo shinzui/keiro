@@ -108,7 +108,7 @@ vertical emits symbol-free scaffold + holes + harness, never a symbolic compiler
 | EP-4 | Integration nodes: inbox, outbox, Kafka, contract | docs/plans/62-keiro-dsl-integration-nodes-inbox-outbox-kafka-and-contract.md | EP-1 | EP-2 | In Progress (all 4 nodes — contract/intake/emit/publisher — parse+validate incl. inbox inversions, skip-totality, contract coupling; scaffold/harness remaining for intake/emit/publisher; contract scaffold+codec conformance done) |
 | EP-5 | PGMQ workqueue + dispatch nodes | docs/plans/63-keiro-dsl-pgmq-workqueue-and-dispatch-nodes.md | EP-1 | EP-4 | In Progress (workqueue+dispatch parse+validate incl. physical-name divergence + disposition inversions; Job-codec scaffold+conformance done; fan-out/dispatch runtime scaffold remaining) |
 | EP-6 | Workflow + operation nodes | docs/plans/64-keiro-dsl-workflow-and-operation-nodes.md | EP-1 | EP-2 | In Progress (workflow+operation parse+validate incl. await<->signal match; workflow facts harness + mutation pin done; full Keiro.Workflow runtime conformance remaining) |
-| EP-7 | Authoring skill + corpus registration | docs/plans/65-keiro-dsl-authoring-skill-and-corpus-registration.md | EP-1, EP-3, EP-4, EP-5, EP-6 | EP-2 | In Progress (skill + corpus index + symlink + mori package registered; live cold-start test remaining) |
+| EP-7 | Authoring skill + corpus registration | docs/plans/65-keiro-dsl-authoring-skill-and-corpus-registration.md | EP-1, EP-3, EP-4, EP-5, EP-6 | EP-2 | Complete (skill + corpus index + symlink + mori; cold-start proven: a fresh subscription spec went check->scaffold->fill->green harness) |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 
@@ -217,7 +217,7 @@ Track milestone-level progress across all child plans.
 - [~] EP-4: `contract` + `intake` nodes done — contract schema (topics/events/typed fields), inbox envelope-binding + dedupe + decode + the mandatory disposition table, and the dangerous-inversion validator (duplicate⇒retry, previouslyFailed⇒retry, decodeFailed⇒unbounded-retry, incompleteness). `emit`/`publisher` + scaffold/harness/conformance remaining. (2026-06-10)
 - [~] EP-5: `workqueue`/`dispatch` nodes — grammar/parser/pretty + validators (physical-name divergence vs queueRef, storeFailure/decodeFailure inversions, dlq ceiling, enqueue resolution). Scaffold/harness/conformance remaining. (2026-06-10) Originally: — physical-table-name fixture, read-model→enqueue coupling, dual disposition surfaces; conformance vs reservation-work.
 - [~] EP-6: `workflow`/`operation` nodes — grammar/parser/pretty (ordered step/await/sleep/child body; command/query/signal/run shapes) + validators (await<->signal label match, run resolution). Scaffold/harness/conformance remaining. (2026-06-10) Originally: — steps/await/sleep/child, deterministic ids, await↔signal coupling; conformance vs `ReservationWorkflow`/`EvacuationWorkflow`.
-- [~] EP-7: authoring skill (SKILL/NOTATION/LOOP/WALKTHROUGH covering all 7 node families + the loop + hole-filling contract), corpus index docs/corpus/keiro-dsl-corpus.md, .claude/skills symlink, keiro-dsl registered in mori.dhall. Live cold-start test remaining. (2026-06-10)
+- [x] EP-7: authoring skill (SKILL/NOTATION/LOOP/WALKTHROUGH covering all 7 node families + the loop + hole-filling contract), corpus index docs/corpus/keiro-dsl-corpus.md, .claude/skills symlink, keiro-dsl registered in mori.dhall. Live cold-start test remaining. (2026-06-10)
 
 
 ## Surprises & Discoveries

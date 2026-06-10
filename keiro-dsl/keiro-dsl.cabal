@@ -96,6 +96,29 @@ test-suite keiro-dsl-conformance
     , keiro
     , text   >=2.1
 
+-- EP-7 cold-start: a fresh `subscription` aggregate authored from only the skill
+-- notation, scaffolded + hand-filled, compiling against keiki/keiro with a green
+-- spec-derived harness — proof the authoring loop closes on a non-corpus spec.
+test-suite keiro-dsl-conformance-coldstart
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-coldstart
+  main-is:        Main.hs
+  other-modules:
+    Billing.Subscription.Holes
+    Generated.Billing.Subscription.Codec
+    Generated.Billing.Subscription.Domain
+    Generated.Billing.Subscription.EventStream
+    Generated.Billing.Subscription.Harness
+    Generated.Billing.Subscription.Projection
+
+  build-depends:
+    , aeson  >=2.2
+    , base   >=4.21 && <5
+    , keiki  >=0.1
+    , keiro
+    , text   >=2.1
+
 -- Contract codec conformance (EP-4): the scaffolded self-contained contract
 -- payload ADT + codec, compiled + round-tripped per event type.
 test-suite keiro-dsl-conformance-contract

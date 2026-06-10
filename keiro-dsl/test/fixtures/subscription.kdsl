@@ -1,0 +1,29 @@
+context billing
+
+id SubscriptionId prefix=sub
+id CustomerId     prefix=cust
+
+enum Plan { Paid=paid Free=free }
+
+aggregate Subscription
+  regs
+    plan              Plan              = Free
+    subscriptionState SubscriptionVertex = Inactive
+  states Inactive Active Closed!
+
+  command ActivateSubscription { subscriptionId customerId plan }
+  command CancelSubscription   { subscriptionId customerId }
+
+  event SubscriptionActivated = fields(ActivateSubscription)
+  event SubscriptionCancelled { subscriptionId customerId }
+
+  Inactive -- ActivateSubscription -->
+    guard plan != Free
+    write subscriptionState := Active
+    emit  SubscriptionActivated
+    goto  Active
+  Active -- CancelSubscription --> write subscriptionState := Closed ; emit SubscriptionCancelled ; goto Closed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection subscriptions consistency=Strong key=subscriptionId
+    status-map { Activated=>active Cancelled=>cancelled }

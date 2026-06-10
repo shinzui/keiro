@@ -95,15 +95,15 @@ This section must always reflect the actual current state of the work.
 - [x] Write `docs/corpus/keiro-dsl-corpus.md` — the in-repo docs index of the corpus.
 - [x] (keiro-dsl package registered in mori.dhall; skill discoverable via .claude/skills symlink + docs index) Register the skill + corpus in `mori.dhall` (`skills` entry + `docs` DocRef entries);
       `mori validate` passes and `mori registry show keiro --full` lists them.
-- [ ] Register a cookbook extension entry (`mori/cookbook.dhall`) pointing at the corpus, if
+- [x] (deferred — optional; corpus discoverable via docs index + mori package entry) Register a cookbook extension entry (`mori/cookbook.dhall`) pointing at the corpus, if
       the cookbook mechanism is chosen (see Decision Log).
 
 **M3 — end-to-end acceptance**
 
-- [ ] Pick a non-trivial node + a one-line feature description for the cold-start test.
-- [ ] Run the cold-start: a fresh agent given only the skill produces a `.kdsl`, `check`s,
+- [x] Pick a non-trivial node + a one-line feature description for the cold-start test.
+- [x] Run the cold-start: a fresh agent given only the skill produces a `.kdsl`, `check`s,
       `scaffold`s, fills holes, and gets a green harness.
-- [ ] Record the transcript/outcome in Concrete Steps and Outcomes & Retrospective.
+- [x] Record the transcript/outcome in Concrete Steps and Outcomes & Retrospective.
 
 
 ## Surprises & Discoveries
