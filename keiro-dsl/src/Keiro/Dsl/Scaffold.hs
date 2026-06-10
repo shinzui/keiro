@@ -25,6 +25,7 @@ module Keiro.Dsl.Scaffold (
     scaffoldProcess,
     scaffoldContract,
     scaffoldIntake,
+    scaffoldPublisher,
     scaffoldWorkqueue,
 
     -- * Internal resolution, shared with "Keiro.Dsl.Harness"
@@ -396,6 +397,55 @@ emitIntakeGen genPrefix i =
         Just (IRetry _) -> "retry"
         Just (IDeadLetter _) -> "deadLetter"
         Nothing -> "retry"
+
+--------------------------------------------------------------------------------
+-- Integration publisher (EP-4): config vs the live Keiro.Outbox runtime
+--------------------------------------------------------------------------------
+
+{- | Emit the publisher's at-least-once policy compiled against the LIVE
+@Keiro.Outbox.Types@: the ordering policy (a real 'OrderingPolicy'), the backoff
+curve (a real 'BackoffSchedule'), and the max-attempts ceiling. Firewall holds.
+-}
+scaffoldPublisher :: Context -> PublisherNode -> [ScaffoldModule]
+scaffoldPublisher ctx pb =
+    [ ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Publisher.hs")
+        , moduleText = emitPublisherGen genPrefix pb
+        , kind = Generated
+        }
+    ]
+  where
+    ctxPascal = pascalFromKebab (contextName ctx)
+    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
+    genPrefix = root <> "Generated." <> ctxPascal <> "." <> pascal (pubName pb)
+
+emitPublisherGen :: Text -> PublisherNode -> Text
+emitPublisherGen genPrefix pb =
+    nl
+        [ "{-# OPTIONS_GHC -Wno-unused-top-binds #-}"
+        , generatedBanner
+        , "module " <> genPrefix <> ".Publisher"
+        , "  ( publisherOrdering"
+        , "  , publisherBackoff"
+        , "  , publisherMaxAttempts"
+        , "  ) where"
+        , ""
+        , "import Keiro.Outbox.Types (BackoffSchedule (..), OrderingPolicy (..))"
+        , ""
+        , "publisherOrdering :: OrderingPolicy"
+        , "publisherOrdering = " <> pubOrdering pb
+        , ""
+        , "publisherBackoff :: BackoffSchedule"
+        , "publisherBackoff = " <> backoffExpr (pubBackoff pb)
+        , ""
+        , "publisherMaxAttempts :: Int"
+        , "publisherMaxAttempts = " <> tshow' (pubMaxAttempts pb)
+        ]
+  where
+    secondsOf t = let ds = T.takeWhile (`elem` ("0123456789" :: String)) t in if T.null ds then "0" else ds
+    backoffExpr b = case boKind b of
+        "constant" -> "ConstantBackoff " <> secondsOf (boWindow b)
+        _ -> "ConstantBackoff " <> secondsOf (boWindow b)
 
 --------------------------------------------------------------------------------
 -- pgmq workqueue (EP-5): a self-contained Job payload record + codec

@@ -144,6 +144,18 @@ test-suite keiro-dsl-conformance-intake-runtime
     , base   >=4.21 && <5
     , keiro
 
+-- EP-4 publisher runtime conformance: the scaffolded Publisher config compiled
+-- against the LIVE Keiro.Outbox.Types (OrderingPolicy / BackoffSchedule).
+test-suite keiro-dsl-conformance-publisher-runtime
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-publisher-runtime
+  main-is:        Main.hs
+  other-modules:  Generated.HospitalCapacity.HospitalPublisher.Publisher
+  build-depends:
+    , base   >=4.21 && <5
+    , keiro
+
 -- pgmq Job codec conformance (EP-5): the scaffolded self-contained Job payload
 -- record + field->wire codec, compiled + round-tripped.
 test-suite keiro-dsl-conformance-queue
