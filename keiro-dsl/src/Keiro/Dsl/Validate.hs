@@ -38,6 +38,14 @@ data DiagnosticCode
     | GuardAtomOutOfScope
     | StatusMapNotTotal
     | ClockSampled
+    | -- EP-2 (evolution). The first three fire in single-spec @validateSpec@;
+      -- the last two are emitted by the @diff@ path (they need a prior spec) and
+      -- live here so the enum is the single registry of evolution rules.
+      EvtVersionMissingUpcaster
+    | DeprecatedEventStillEmitted
+    | WireSchemaVersionMismatch
+    | EvtFieldAddedWithoutBump
+    | EvtRemovedNotDeprecated
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -91,6 +99,7 @@ validateAggregate spec agg =
         , guardScope
         , clockFree
         , statusMapTotality
+        , evolutionRules
         ]
   where
     states = Set.fromList (map stName (aggStates agg))
@@ -203,6 +212,46 @@ validateAggregate spec agg =
                 | not (null evs)
                 , not (null uncovered)
                 ]
+
+    -- EP-2 evolution rules (single-spec; the diff path adds the cross-spec ones).
+    evolutionRules = versionUpcasterRule ++ deprecatedEmitRule ++ wireVersionRule
+    emittedNames = Set.fromList (concatMap tEmits (aggTransitions agg))
+    maxEventVersion = maximum (1 : map evVersion (aggEvents agg))
+
+    -- A non-initial event version must carry a contiguous upcaster (from v-1).
+    versionUpcasterRule =
+        [ mkErr (locLine (evLoc e)) EvtVersionMissingUpcaster $
+            "event '" <> evName e <> "' version " <> tInt (evVersion e) <> " has no 'upcast from v" <> tInt (evVersion e - 1) <> "' clause"
+        | e <- aggEvents agg
+        , evVersion e > 1
+        , maybe True ((/= evVersion e - 1) . fst) (evUpcastFrom e)
+        ]
+
+    -- A deprecated event must have left the write path.
+    deprecatedEmitRule =
+        [ mkErr (locLine (evLoc e)) DeprecatedEventStillEmitted $
+            "deprecated event '" <> evName e <> "' is still emitted by a transition"
+        | e <- aggEvents agg
+        , evDeprecated e
+        , evName e `Set.member` emittedNames
+        ]
+
+    -- The explicit `wire schemaVersion=` (if any) must equal the max event version.
+    wireVersionRule = case aggWire agg of
+        Just w
+            | wireSchemaVersion w /= maxEventVersion ->
+                [ Diagnostic
+                    { line = locLine (aggLoc agg)
+                    , severity = Warning
+                    , code = WireSchemaVersionMismatch
+                    , message =
+                        "wire schemaVersion=" <> tInt (wireSchemaVersion w) <> " does not match the maximum event version " <> tInt maxEventVersion
+                    }
+                ]
+        _ -> []
+
+tInt :: Int -> Text
+tInt = T.pack . show
 
 mkErr :: Int -> DiagnosticCode -> Text -> Diagnostic
 mkErr l c m = Diagnostic{line = l, severity = Error, code = c, message = m}

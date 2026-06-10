@@ -55,6 +55,23 @@ main = hspec $ do
         it "rejects a wall-clock guard atom as ClockSampled" $ do
             codes <- diagnosticCodesOf "test/fixtures/reservation-clock.kdsl"
             codes `shouldContain` [ClockSampled]
+        it "accepts a v2 event with a contiguous upcaster hole" $ do
+            codes <- diagnosticCodesOf "test/fixtures/reservation-v2.kdsl"
+            codes `shouldBe` []
+        it "rejects a v2 event with no upcaster as EvtVersionMissingUpcaster" $ do
+            codes <- diagnosticCodesOf "test/fixtures/reservation-v2-noupcast.kdsl"
+            codes `shouldContain` [EvtVersionMissingUpcaster]
+
+    describe "evolution parsing" $
+        it "parses event version and upcaster from reservation-v2.kdsl" $ do
+            input <- TIO.readFile "test/fixtures/reservation-v2.kdsl"
+            case parseSpec "test/fixtures/reservation-v2.kdsl" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> case [e | NAggregate a <- specNodes spec, e <- aggEvents a, evName e == "TransferReservationCreated"] of
+                    (e : _) -> do
+                        evVersion e `shouldBe` 2
+                        evUpcastFrom e `shouldBe` Just (1, Hole)
+                    [] -> expectationFailure "TransferReservationCreated not found"
 
     describe "scaffold" $ do
         it "never emits a keiki symbolic operator into a Generated module (firewall)" $ do
@@ -193,7 +210,14 @@ genCommand :: Gen Command
 genCommand = Command <$> genName <*> smallList genField <*> pure noLoc
 
 genEvent :: Gen Event
-genEvent = Event <$> genName <*> body <*> pure noLoc
+genEvent =
+    Event
+        <$> genName
+        <*> body
+        <*> choose (1, 3)
+        <*> genMaybe ((,) <$> choose (0, 3) <*> pure Hole)
+        <*> arbitrary
+        <*> pure noLoc
   where
     body = oneof [EventFromCommand <$> genName, EventFields <$> smallList genField]
 

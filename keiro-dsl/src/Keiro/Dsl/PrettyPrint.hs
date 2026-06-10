@@ -92,9 +92,19 @@ docField f = case fieldType f of
     Just ty -> pretty (fieldName f) <> ":" <> pretty ty
 
 docEvent :: Event -> Doc ann
-docEvent e = case evBody e of
-    EventFromCommand cmd -> "event" <+> pretty (evName e) <+> "=" <+> ("fields(" <> pretty cmd <> ")")
-    EventFields fs -> "event" <+> pretty (evName e) <+> braced (map docField fs)
+docEvent e =
+    case evUpcastFrom e of
+        Nothing -> line1
+        Just (m, _) -> vsep [line1, indent 2 ("upcast from v" <> pretty m <+> "=" <+> "HOLE")]
+  where
+    kw = if evDeprecated e then "deprecated event" else "event"
+    nameVer =
+        pretty (evName e)
+            <> (if evVersion e > 1 then " v" <> pretty (evVersion e) else mempty)
+    bodyDoc = case evBody e of
+        EventFromCommand cmd -> "=" <+> ("fields(" <> pretty cmd <> ")")
+        EventFields fs -> braced (map docField fs)
+    line1 = kw <+> nameVer <+> bodyDoc
 
 docTransition :: Transition -> Doc ann
 docTransition t =

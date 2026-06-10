@@ -1,0 +1,37 @@
+context hospital-capacity
+
+id  TransferReservationId  prefix=rsv
+id  HospitalId             prefix=hosp
+id  CommandId              prefix=cmd
+
+enum PatientAcuity { RedTag=red YellowTag=yellow GreenTag=green }
+enum BedType       { Icu=icu MedicalSurgical=medical-surgical }
+enum DivertStatus  { Open=open PartialDivert=partial-divert TotalDivert=total-divert }
+
+rule lifeCriticalOverride : PatientAcuity -> Bool
+  ex RedTag => true ; YellowTag => false ; GreenTag => false
+
+aggregate Reservation
+  regs
+    reservationId    TransferReservationId = placeholder
+    hospitalId       HospitalId            = placeholder
+    patientAcuity    PatientAcuity         = GreenTag
+    reservationState ReservationVertex     = Unrequested
+  states Unrequested Held Confirmed Expired! Admitted! Released!
+
+  command RequestTransferReservation { reservationId hospitalId commandId patientAcuity divertStatus lifeCriticalOverride:Bool }
+  command ConfirmReservation         { reservationId hospitalId commandId }
+
+  event TransferReservationCreated v2 { reservationId hospitalId commandId patientAcuity divertStatus lifeCriticalOverride:Bool triageNote:Text }
+  event TransferReservationConfirmed { reservationId hospitalId commandId }
+
+  Unrequested -- RequestTransferReservation -->
+    guard divertStatus != TotalDivert || lifeCriticalOverride
+    write reservationState := Held
+    emit  TransferReservationCreated
+    goto  Held
+  Held -- ConfirmReservation --> write reservationState := Confirmed ; emit TransferReservationConfirmed ; goto Confirmed
+
+  wire kind=ctorName fields=camelCase schemaVersion=2
+  projection transfer_decisions consistency=Strong key=reservationId
+    status-map { Created=>held Confirmed=>confirmed }

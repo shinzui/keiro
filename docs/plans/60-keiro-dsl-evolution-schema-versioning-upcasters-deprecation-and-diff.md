@@ -75,19 +75,20 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-M1 — grammar + parser + validator for evolution constructs:
+M1 — grammar + parser + validator for evolution constructs: **DONE 2026-06-10**
 
-- [ ] Extend `Keiro.Dsl.Grammar` `Event` with version fields (`version :: Int`,
-      `upcastFrom :: Maybe (Int, Hole)`, `deprecated :: Bool`) and a `Hole` placeholder.
-- [ ] Extend `Keiro.Dsl.Parser` to accept `event Name vN { … } upcast from vM = HOLE` and
-      `deprecated event Name …`; default unversioned events to `version = 1`.
-- [ ] Extend `Keiro.Dsl.PrettyPrint` to render the new clauses; confirm `parse . pretty == id`
-      still holds (extend the `Arbitrary Spec` generator).
-- [ ] Add validator rules to `Keiro.Dsl.Validate` (new `DiagnosticCode`s): non-initial event
-      version must carry an upcaster hole; a removed/renamed event must be `deprecated`; an
-      added field on an existing event version without a version bump is an error.
-- [ ] `keiro-dsl check` passes the v2+upcaster fixture and fails the field-add-without-bump
-      fixture with a precise line-numbered diagnostic.
+- [x] Extend `Keiro.Dsl.Grammar` `Event` with version fields (`evVersion :: Int`,
+      `evUpcastFrom :: Maybe (Int, Hole)`, `evDeprecated :: Bool`) and a `Hole` placeholder. (2026-06-10)
+- [x] Extend `Keiro.Dsl.Parser` to accept `event Name vN { … }` + `upcast from vM = HOLE` and
+      `deprecated event Name …`; unversioned events default to `evVersion = 1`. (2026-06-10)
+- [x] Extend `Keiro.Dsl.PrettyPrint` to render the new clauses; `parse . pretty == id` still
+      holds (generator extended with version/upcaster/deprecated). (2026-06-10)
+- [x] Add validator rules (`EvtVersionMissingUpcaster`, `DeprecatedEventStillEmitted`,
+      `WireSchemaVersionMismatch`; plus `EvtFieldAddedWithoutBump`/`EvtRemovedNotDeprecated`
+      registered for the diff path). (2026-06-10)
+- [x] `keiro-dsl check` passes `reservation-v2.kdsl` (exit 0) and fails
+      `reservation-v2-noupcast.kdsl` with `error[EvtVersionMissingUpcaster]` on the v2 line
+      (exit 1). (2026-06-10)
 
 M2 — `Keiro.Dsl.Diff` engine + `diff --since` CLI:
 

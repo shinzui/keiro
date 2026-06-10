@@ -91,6 +91,10 @@ reservedWords =
     , "status-map"
     , "true"
     , "false"
+    , "deprecated"
+    , "upcast"
+    , "from"
+    , "HOLE"
     ]
 
 {- | A CamelCase / snake_case identifier (no dashes): type names, register
@@ -293,14 +297,39 @@ pField = do
 pEvent :: P Event
 pEvent = do
     loc <- getLoc
+    dep <- option False (True <$ keyword "deprecated")
     keyword "event"
     name <- ident
+    ver <- option 1 pVersion
     body <-
         choice
             [ EventFromCommand <$> (symbol "=" *> keyword "fields" *> parens ident)
             , EventFields <$> braces (many pField)
             ]
-    pure Event{evName = name, evBody = body, evLoc = loc}
+    up <- optional pUpcast
+    pure
+        Event
+            { evName = name
+            , evBody = body
+            , evVersion = ver
+            , evUpcastFrom = up
+            , evDeprecated = dep
+            , evLoc = loc
+            }
+  where
+    pUpcast = do
+        keyword "upcast"
+        keyword "from"
+        m <- pVersion
+        _ <- symbol "="
+        keyword "HOLE"
+        pure (m, Hole)
+
+{- | A @vN@ schema-version token (e.g. @v2@). Fails (backtracking) on anything
+that is not @v@ immediately followed by digits.
+-}
+pVersion :: P Int
+pVersion = lexeme (try (char 'v' *> L.decimal <* notFollowedBy identChar))
 
 pWire :: P WireSpec
 pWire = do

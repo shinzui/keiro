@@ -36,6 +36,7 @@ module Keiro.Dsl.Grammar (
     Command (..),
     Event (..),
     EventBody (..),
+    Hole (..),
     Transition (..),
     WireSpec (..),
     ProjectionSpec (..),
@@ -222,10 +223,25 @@ data Command = Command
     }
     deriving stock (Eq, Show, Generic)
 
--- | @event Name { … }@ or @event Name = fields(Command)@.
+{- | @event Name { … }@ or @event Name = fields(Command)@. EP-2 (evolution) adds
+the version/upcaster/deprecation fields: an unversioned event is @evVersion = 1@,
+@evUpcastFrom = Nothing@, @evDeprecated = False@, reproducing the EP-1 surface.
+These fields live on the shared 'Event' so every node family's events inherit
+schema-versioning for free.
+-}
 data Event = Event
     { evName :: !Name
     , evBody :: !EventBody
+    , evVersion :: !Int
+    -- ^ The schema version of this event shape. Default 1; written @vN@ for N>1.
+    , evUpcastFrom :: !(Maybe (Int, Hole))
+    {- ^ The source version this shape migrates /from/, paired with the upcaster
+    hole. @Just (n-1, …)@ for a @vN@ shape; 'Nothing' for v1.
+    -}
+    , evDeprecated :: !Bool
+    {- ^ Retired from the write path (no transition may @emit@ it) but still
+    decodable from the log.
+    -}
     , evLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
@@ -233,6 +249,12 @@ data Event = Event
 data EventBody
     = EventFields ![Field]
     | EventFromCommand !Name
+    deriving stock (Eq, Show, Generic)
+
+{- | A spec hole: an unfilled placeholder ('Hole', written @HOLE@ in the
+notation) or a value the author supplied inline ('Filled').
+-}
+data Hole = Hole | Filled !Text
     deriving stock (Eq, Show, Generic)
 
 {- | A transition @Src -- Command --> clauses@. Clauses may be written
