@@ -95,6 +95,16 @@ reservedWords =
     , "upcast"
     , "from"
     , "HOLE"
+    , -- EP-4 integration: structural keywords never used as identifiers, so a
+      -- list like @accept A B C@ stops at the next block keyword.
+      "intake"
+    , "contract"
+    , "topic"
+    , "accept"
+    , "bind"
+    , "dedupe"
+    , "decode"
+    , "disposition"
     ]
 
 {- | A CamelCase / snake_case identifier (no dashes): type names, register
@@ -154,6 +164,7 @@ pTopItem =
         , TIRule <$> pRuleDecl
         , TINode . NProcess <$> pProcess
         , TINode . NContract <$> pContract
+        , TINode . NIntake <$> pIntake
         , TINode . NAggregate <$> pAggregate
         ]
 
@@ -433,6 +444,88 @@ pContract = do
             [ CTypeId <$> (keyword "typeid" *> stringLit)
             , CText <$ keyword "text"
             , CInt <$ keyword "int"
+            ]
+
+pIntake :: P IntakeNode
+pIntake = do
+    loc <- getLoc
+    keyword "intake"
+    nm <- ident
+    _ <- symbol "{"
+    keyword "contract"
+    ctr <- ident
+    keyword "topic"
+    tp <- ident
+    keyword "accept"
+    acc <- some ident
+    binds <- many pBindRow
+    keyword "dedupe"
+    keyword "key"
+    dk <- ident
+    keyword "policy"
+    dp <- ident
+    dec <- pDecode
+    disp <- pDisposition
+    _ <- symbol "}"
+    pure
+        IntakeNode
+            { inkName = nm
+            , inkContract = ctr
+            , inkTopic = tp
+            , inkAccept = acc
+            , inkBinds = binds
+            , inkDedupeKey = dk
+            , inkDedupePolicy = dp
+            , inkDecode = dec
+            , inkDisposition = disp
+            , inkLoc = loc
+            }
+  where
+    pBindRow = do
+        keyword "bind"
+        f <- ident
+        keyword "from"
+        src <- pWireSource
+        req <- option False (True <$ keyword "required")
+        xc <- option False (True <$ (keyword "cross-check" *> keyword "body"))
+        pure BindRow{brField = f, brSource = src, brRequired = req, brCrossCheck = xc}
+    pWireSource =
+        choice
+            [ SrcHeader <$> (keyword "header" *> stringLit)
+            , SrcKafkaKey <$ keyword "kafka-key"
+            , SrcKafkaCursor <$ keyword "kafka-cursor"
+            , SrcBody <$ keyword "body"
+            ]
+    pDecode = do
+        keyword "decode"
+        _ <- symbol "{"
+        keyword "envelope"
+        env <- pEnvelopePolicy
+        keyword "body"
+        strict <- (True <$ keyword "strict") <|> (False <$ keyword "lenient")
+        keyword "schemaVersion"
+        _ <- symbol "=="
+        v <- lexeme L.decimal
+        _ <- symbol "}"
+        pure DecodeSpec{decEnvelope = env, decBodyStrict = strict, decBodySchemaVersion = v}
+    pEnvelopePolicy = do
+        a <- wireWord
+        b <- wireWord
+        pure (a <> " " <> b)
+    pDisposition = do
+        keyword "disposition"
+        rows <- braces (many pDispositionRow)
+        pure rows
+    pDispositionRow = do
+        o <- ident
+        _ <- symbol "=>"
+        act <- pInboxAction
+        pure DispositionRow{drOutcome = o, drAction = act}
+    pInboxAction =
+        choice
+            [ IAckOk <$ keyword "ackOk"
+            , IRetry <$> (keyword "retry" *> pWindow)
+            , IDeadLetter <$> (keyword "deadLetter" *> optional stringLit)
             ]
 
 --------------------------------------------------------------------------------

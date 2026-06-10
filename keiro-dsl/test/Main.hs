@@ -135,6 +135,23 @@ main = hspec $ do
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+        it "round-trips the intake (inbox) spec through parse . pretty" $ do
+            input <- TIO.readFile "test/fixtures/intake.kdsl"
+            case parseSpec "in" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+        it "accepts the intake spec (complete disposition, no inversions)" $ do
+            codes <- errorCodesOf "test/fixtures/intake.kdsl"
+            codes `shouldBe` []
+        it "rejects duplicate => retry (inversion 1)" $ do
+            codes <- errorCodesOf "test/fixtures/intake-dup-retry.kdsl"
+            codes `shouldContain` [DispositionDuplicateRetry]
+        it "rejects previouslyFailed => retry (inversion 2)" $ do
+            codes <- errorCodesOf "test/fixtures/intake-pf-retry.kdsl"
+            codes `shouldContain` [DispositionPreviouslyFailedRetry]
+        it "rejects an incomplete disposition table" $ do
+            codes <- errorCodesOf "test/fixtures/intake-incomplete.kdsl"
+            codes `shouldContain` [DispositionIncomplete]
 
     describe "diff (evolution classification)" $ do
         it "classifies a field added without a version bump as BREAKING" $ do

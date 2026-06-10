@@ -51,6 +51,11 @@ data DiagnosticCode
     | ProcessDispatchIdSupplied
     | ProcessUnresolvedRef
     | ProcessBenignInversion
+    | -- EP-4 (integration intake / inbox disposition).
+      DispositionIncomplete
+    | DispositionDuplicateRetry
+    | DispositionPreviouslyFailedRetry
+    | DispositionDecodeUnboundedRetry
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -95,7 +100,40 @@ validateSpec spec =
 validateNode :: Spec -> Node -> [Diagnostic]
 validateNode spec (NAggregate agg) = validateAggregate spec agg
 validateNode spec (NProcess p) = validateProcess spec p
-validateNode _spec (NContract _) = [] -- EP-4 M2 adds the contract/intake rules
+validateNode _spec (NContract _) = [] -- EP-4 M2 adds the contract rules
+validateNode _spec (NIntake i) = validateIntake i
+
+-- | EP-4 inbox disposition rules: the table must be complete over the seven
+-- outcomes, and the three dangerous inversions must be stated the safe way.
+validateIntake :: IntakeNode -> [Diagnostic]
+validateIntake i = concat [completeness, inversions]
+  where
+    il = locLine (inkLoc i)
+    rows = inkDisposition i
+    action o = lookup o [(drOutcome r, drAction r) | r <- rows]
+    requiredOutcomes =
+        ["processed", "duplicate", "inProgress", "previouslyFailed", "decodeFailed", "dedupeFailed", "storeFailed"]
+    completeness =
+        [ mkErr il DispositionIncomplete $
+            "intake '" <> inkName i <> "' disposition table is missing outcome '" <> o <> "'"
+        | o <- requiredOutcomes
+        , o `notElem` map drOutcome rows
+        ]
+    isRetry a = case a of IRetry _ -> True; _ -> False
+    retriesOn o = maybe False isRetry (action o)
+    inversions =
+        [ mkErr il DispositionDuplicateRetry $
+            "intake '" <> inkName i <> "': a 'duplicate' redelivery must be ackOk (success), not retry"
+        | retriesOn "duplicate"
+        ]
+            ++ [ mkErr il DispositionPreviouslyFailedRetry $
+                "intake '" <> inkName i <> "': 'previouslyFailed' must dead-letter, not retry (a prior failure won't succeed on replay)"
+               | retriesOn "previouslyFailed"
+               ]
+            ++ [ mkErr il DispositionDecodeUnboundedRetry $
+                "intake '" <> inkName i <> "': 'decodeFailed' must dead-letter (terminal), not retry unboundedly"
+               | retriesOn "decodeFailed"
+               ]
 
 -- | EP-3 rules for a process manager + its nested timer.
 validateProcess :: Spec -> ProcessNode -> [Diagnostic]

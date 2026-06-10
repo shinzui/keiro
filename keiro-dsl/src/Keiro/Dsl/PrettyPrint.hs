@@ -58,6 +58,47 @@ docNode :: Node -> Doc ann
 docNode (NAggregate a) = docAggregate a
 docNode (NProcess p) = docProcess p
 docNode (NContract c) = docContract c
+docNode (NIntake i) = docIntake i
+
+docIntake :: IntakeNode -> Doc ann
+docIntake i =
+    vsep $
+        [ "intake" <+> pretty (inkName i) <+> "{"
+        , indent 2 ("contract" <+> pretty (inkContract i))
+        , indent 2 ("topic" <+> pretty (inkTopic i))
+        , indent 2 ("accept" <+> hsep (map pretty (inkAccept i)))
+        ]
+            ++ map (indent 2 . docBind) (inkBinds i)
+            ++ [ indent 2 ("dedupe key" <+> pretty (inkDedupeKey i) <+> "policy" <+> pretty (inkDedupePolicy i))
+               , indent 2 (docDecode (inkDecode i))
+               , indent 2 "disposition {"
+               ]
+            ++ map (indent 4 . docDispRow) (inkDisposition i)
+            ++ [indent 2 "}", "}"]
+  where
+    docBind b =
+        "bind"
+            <+> pretty (brField b)
+            <+> "from"
+            <+> docSource (brSource b)
+            <> (if brRequired b then " required" else mempty)
+            <> (if brCrossCheck b then " cross-check body" else mempty)
+    docSource (SrcHeader h) = "header" <+> dquoted h
+    docSource SrcBody = "body"
+    docSource SrcKafkaKey = "kafka-key"
+    docSource SrcKafkaCursor = "kafka-cursor"
+    docDecode d =
+        vsep
+            [ "decode {"
+            , indent 2 ("envelope" <+> pretty (decEnvelope d))
+            , indent 2 ("body" <+> (if decBodyStrict d then "strict" else "lenient") <+> "schemaVersion ==" <+> pretty (decBodySchemaVersion d))
+            , "}"
+            ]
+    docDispRow r = pretty (drOutcome r) <+> "=>" <+> docAction (drAction r)
+    docAction IAckOk = "ackOk"
+    docAction (IRetry w) = "retry" <+> pretty w
+    docAction (IDeadLetter Nothing) = "deadLetter"
+    docAction (IDeadLetter (Just reason)) = "deadLetter" <+> dquoted reason
 
 --------------------------------------------------------------------------------
 -- Integration contract (EP-4)

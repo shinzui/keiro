@@ -68,6 +68,14 @@ module Keiro.Dsl.Grammar (
     ContractEvent (..),
     ContractNode (..),
 
+    -- * The integration intake (inbox) node (EP-4)
+    WireSource (..),
+    BindRow (..),
+    InboxAction (..),
+    DispositionRow (..),
+    DecodeSpec (..),
+    IntakeNode (..),
+
     -- * Top level
     Node (..),
     Spec (..),
@@ -531,13 +539,77 @@ data ContractNode = ContractNode
     }
     deriving stock (Eq, Show, Generic)
 
+-- EP-4: the @intake@ (Kafka consumer / inbox) node.
+
+-- | Where an envelope field is read from on the wire.
+data WireSource
+    = SrcHeader !Text
+    | SrcBody
+    | SrcKafkaKey
+    | SrcKafkaCursor
+    deriving stock (Eq, Show, Generic)
+
+-- | One envelope-binding row: @bind <field> from <source> [required] [cross-check body]@.
+data BindRow = BindRow
+    { brField :: !Name
+    , brSource :: !WireSource
+    , brRequired :: !Bool
+    , brCrossCheck :: !Bool
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | An inbox outcome action. The dangerous defaults the validator guards: a
+-- @duplicate@\/@previouslyFailed@ must not be 'IRetry'; @decodeFailed@ must not
+-- be an unbounded 'IRetry'.
+data InboxAction
+    = IAckOk
+    | IRetry !Text
+    -- ^ @retry <window>@, e.g. @retry 5s@
+    | IDeadLetter !(Maybe Text)
+    deriving stock (Eq, Show, Generic)
+
+-- | One row of the mandatory, complete inbox disposition table.
+data DispositionRow = DispositionRow
+    { drOutcome :: !Name
+    , drAction :: !InboxAction
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | The body decode-strictness decision (hole-kind 6).
+data DecodeSpec = DecodeSpec
+    { decEnvelope :: !Text
+    -- ^ the envelope policy text, e.g. @strict-required lenient-optional@
+    , decBodyStrict :: !Bool
+    , decBodySchemaVersion :: !Int
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | An @intake@ (Kafka consumer / inbox) node. The runtime-config @consumer@
+-- block (brokers/groupId/offsetReset) is hole-kind 8, delegated to deployment
+-- and not modelled here.
+data IntakeNode = IntakeNode
+    { inkName :: !Name
+    , inkContract :: !Name
+    , inkTopic :: !Name
+    , inkAccept :: ![Name]
+    , inkBinds :: ![BindRow]
+    , inkDedupeKey :: !Name
+    , inkDedupePolicy :: !Name
+    , inkDecode :: !DecodeSpec
+    , inkDisposition :: ![DispositionRow]
+    , inkLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
 {- | A top-level node. EP-1 defines 'NAggregate'; EP-3 adds 'NProcess'; EP-4 adds
-'NContract'. EP-4's intake/emit/publisher and EP-5\/EP-6 add further constructors.
+'NContract' and 'NIntake'. EP-4's emit/publisher and EP-5\/EP-6 add further
+constructors.
 -}
 data Node
     = NAggregate Aggregate
     | NProcess ProcessNode
     | NContract ContractNode
+    | NIntake IntakeNode
     deriving stock (Eq, Show, Generic)
 
 {- | A whole @.kdsl@ file: one context name, the shared id/enum/rule
