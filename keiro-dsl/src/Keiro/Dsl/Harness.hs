@@ -130,6 +130,11 @@ harnessWorkflow ctx w =
         , moduleText = emitWorkflowFacts genPrefix w
         , kind = Generated
         }
+    , ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/WorkflowRuntime.hs")
+        , moduleText = emitWorkflowRuntime genPrefix w
+        , kind = Generated
+        }
     ]
   where
     ctxPascal = pascalFromKebab' (contextName ctx)
@@ -161,6 +166,40 @@ emitWorkflowFacts genPrefix w =
     bodyTag (WfAwait l _) = "await:" <> l
     bodyTag (WfSleep l _) = "sleep:" <> l
     bodyTag (WfChild l _ _) = "child:" <> l
+
+{- | Emit the workflow's deterministic id derivation compiled against the LIVE
+@Keiro.Workflow@: the 'WorkflowName' and the awakeable-id function (the actual
+'deterministicAwakeableId'). A signal operation deriving the SAME (name, id,
+label) lands on the same 'AwakeableId' — so this module compiling + the
+conformance comparing the two sides proves the await↔signal coupling holds over
+the real runtime function, not just by label-string equality.
+-}
+emitWorkflowRuntime :: Text -> WorkflowNode -> Text
+emitWorkflowRuntime genPrefix w =
+    nl $
+        [ "{-# LANGUAGE OverloadedStrings #-}"
+        , generatedBanner
+        , "module " <> genPrefix <> ".WorkflowRuntime"
+        , "  ( workflowName"
+        , "  , awaitAwakeableId"
+        , "  , awaitLabels"
+        , "  ) where"
+        , ""
+        , "import Data.Text (Text)"
+        , "import Keiro.Workflow.Awakeable (AwakeableId, deterministicAwakeableId)"
+        , "import Keiro.Workflow.Types (WorkflowId, WorkflowName (..))"
+        , ""
+        , "workflowName :: WorkflowName"
+        , "workflowName = WorkflowName " <> tshow (wfStable w)
+        , ""
+        , "-- The awakeable id an await allocates — the real deterministicAwakeableId."
+        , "-- A signal op deriving the same (name, id, label) gets the same id."
+        , "awaitAwakeableId :: WorkflowId -> Text -> AwakeableId"
+        , "awaitAwakeableId wid label = deterministicAwakeableId workflowName wid label"
+        , ""
+        , "awaitLabels :: [Text]"
+        , "awaitLabels = [" <> T.intercalate ", " [tshow l | WfAwait l _ <- wfBody w] <> "]"
+        ]
 
 emitHarness :: Agg -> Text
 emitHarness a =

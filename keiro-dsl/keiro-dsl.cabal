@@ -194,6 +194,22 @@ test-suite keiro-dsl-conformance-workflow
 
   build-depends:  base >=4.21 && <5
 
+-- EP-6 workflow runtime conformance: the scaffolded WorkflowRuntime
+-- (WorkflowName + awakeable-id derivation) compiled against the LIVE
+-- Keiro.Workflow; pins the await<->signal id match over deterministicAwakeableId.
+test-suite keiro-dsl-conformance-workflow-runtime
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-workflow-runtime
+  main-is:        Main.hs
+  other-modules:
+    Generated.HospitalCapacity.HospitalTransferReservation.WorkflowRuntime
+
+  build-depends:
+    , base   >=4.21 && <5
+    , keiro
+    , text   >=2.1
+
 -- EP-3 process runtime conformance: the scaffolded Process module's
 -- deterministic wiring (timer-request builder + fire disposition) compiled
 -- against the LIVE keiro runtime (Keiro.Timer / Keiro.Command), not just text.
