@@ -335,6 +335,40 @@ runtime-coupled scaffold/harness tail and the EP-7 cold-start remain.
   `docs/corpus/keiro-dsl-corpus.md`, the `.claude/skills` symlink, and the `keiro-dsl`
   package registered in `mori.dhall` (typechecks).
 
+**Update (2026-06-10, later): every vertical's deterministic layer now compiles
+against the LIVE keiro runtime.** Beyond the self-contained codecs, the scaffolder
+now emits, and a conformance component compiles + runs against the real runtime
+types, the deterministic wiring for each non-aggregate vertical — thirteen
+keiro-dsl conformance suites total:
+
+- EP-3 process: the `Process` module (timer-request builder → real
+  `Keiro.Timer.TimerRequest` with a v5 `TimerId`; fire disposition over
+  `Keiro.Command.CommandError`) — `keiro-dsl-conformance-process-runtime`.
+- EP-4 intake: the `Inbox` module (dedupe policy → `InboxDedupePolicy`;
+  disposition over the real `InboxResult`, pinning duplicate⇒ackOk /
+  previouslyFailed⇒deadLetter) — `keiro-dsl-conformance-intake-runtime`.
+- EP-4 publisher: the `Publisher` config (`OrderingPolicy` / `BackoffSchedule`)
+  — `keiro-dsl-conformance-publisher-runtime`.
+- EP-5 pgmq: the `QueuePolicy` (`RetryPolicy` + `JobOutcome` disposition, pinning
+  storeFailure⇒Retry / decodeFailure⇒Dead) — `keiro-dsl-conformance-queue-runtime`.
+- EP-6 workflow: the `WorkflowRuntime` (await↔signal id via the real
+  `deterministicAwakeableId`) — `keiro-dsl-conformance-workflow-runtime`.
+
+So the **dangerous-decision semantics for every vertical are now pinned as
+compiled code over the actual keiro runtime types**, not just text or
+self-contained facts.
+
+**Remaining (the by-design agent-written holes + their full-service integration):**
+The one category still open is the *effectful, behaviour-bearing hole bodies* — the
+process `handle`, the inbox/outbox transaction, the pgmq dispatch worker, the
+workflow step bodies — and the M5 integration that fills them and compiles a whole
+multi-aggregate reference service. Per the Vision/Decision Log these bodies are
+**deliberately out of scope** for the scaffolder (the firewall: they are holes the
+agent fills, pinned by the harness). For the aggregate vertical the hole is filled
+and compiled (EP-1 conformance + the EP-7 cold-start); doing the same for a
+non-aggregate vertical requires composing the live multi-aggregate service code and
+is the genuine multi-session remainder.
+
 **Remaining (the heavy, framework-locked tail — genuinely multi-session):**
 
 - Full runtime-compilation scaffold + harness for the behaviour-bearing, runtime-coupled
