@@ -152,6 +152,20 @@ main = hspec $ do
         it "rejects an incomplete disposition table" $ do
             codes <- errorCodesOf "test/fixtures/intake-incomplete.kdsl"
             codes `shouldContain` [DispositionIncomplete]
+        it "round-trips the emit/publisher spec through parse . pretty" $ do
+            input <- TIO.readFile "test/fixtures/emit.kdsl"
+            case parseSpec "in" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+        it "accepts the emit/publisher spec (skip present, coupling resolves)" $ do
+            codes <- errorCodesOf "test/fixtures/emit.kdsl"
+            codes `shouldBe` []
+        it "rejects a missing _ => skip catch-all as EmitSkipMissing" $ do
+            codes <- errorCodesOf "test/fixtures/emit-noskip.kdsl"
+            codes `shouldContain` [EmitSkipMissing]
+        it "rejects mapping to an undeclared contract event as EmitUnresolvedContract" $ do
+            codes <- errorCodesOf "test/fixtures/emit-badevent.kdsl"
+            codes `shouldContain` [EmitUnresolvedContract]
 
     describe "diff (evolution classification)" $ do
         it "classifies a field added without a version bump as BREAKING" $ do

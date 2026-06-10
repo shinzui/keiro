@@ -93,12 +93,16 @@ Milestone 1 — Grammar + parser: **IN PROGRESS 2026-06-10** (contract node done
 - [x] Extend the pretty-printer so parse→print→parse round-trips for the contract block. (2026-06-10)
 - [x] Unit tests: parse `contract.kdsl` into the expected AST + round-trip. (2026-06-10)
 - [x] `intake` node (contract/topic/accept, envelope bind rows with wire sources + cross-check, dedupe, decode strictness, the mandatory disposition table) — grammar, parser, pretty, round-trip. The runtime-config `consumer` block is hole-kind 8, deferred. (2026-06-10)
-- [ ] Remaining: `emit` (mapping + skip + topic/key), `publisher` (ordering/max-attempts/backoff).
+- [x] `emit` node (status→event map + mandatory `_ => skip`, topic/source/key, messageId/idempotencyKey derive holes) and `publisher` node (ordering/maxAttempts/backoff/outboxId) — grammar, parser, pretty, round-trip. (2026-06-10)
+- **All four EP-4 node types (contract/intake/emit/publisher) now parse, round-trip, and validate.**
 
 Milestone 2 — Validator rules: **PARTIAL 2026-06-10** (the inbox-disposition rules — EP-4's headline value — done)
 
 - [x] `validateIntake`: `DispositionIncomplete` (the table must cover all seven outcomes) and the three dangerous inversions — `DispositionDuplicateRetry`, `DispositionPreviouslyFailedRetry`, `DispositionDecodeUnboundedRetry` — each rejected with a line-numbered diagnostic; the canonical intake passes clean. (2026-06-10)
-- [ ] Remaining: envelope-binding completeness, cross-check declaration, dedupe-key resolution, explicit decode strictness, cross-node contract coupling, producer at-least-once pairing, skip-totality (these depend on emit/publisher).
+- [x] `EmitSkipMissing` (skip-totality), cross-node contract coupling (`IntakeUnresolvedContract`, `EmitUnresolvedContract` over contract/topic/event), and `PublisherUnresolvedEmit` (producer pairing). (2026-06-10)
+- [ ] Remaining (lower-value): envelope-binding completeness, cross-check-declaration, dedupe-key resolution, explicit-decode-strictness checks.
+
+Milestones 3–4 (scaffold + harness for the integration nodes) and M5 (conformance vs the captured `Integration/` modules) remain.
 
 Milestone 2 — Validator rules:
 

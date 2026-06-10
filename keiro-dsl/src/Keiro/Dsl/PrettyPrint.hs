@@ -59,6 +59,41 @@ docNode (NAggregate a) = docAggregate a
 docNode (NProcess p) = docProcess p
 docNode (NContract c) = docContract c
 docNode (NIntake i) = docIntake i
+docNode (NEmit e) = docEmit e
+docNode (NPublisher p) = docPublisher p
+
+docEmit :: EmitNode -> Doc ann
+docEmit e =
+    vsep $
+        [ "emit" <+> pretty (emName e) <+> "{"
+        , indent 2 ("contract" <+> pretty (emContract e))
+        , indent 2 ("topic" <+> pretty (emTopic e))
+        , indent 2 ("source" <+> dquoted (emSource e))
+        , indent 2 ("key" <+> pretty (emKey e))
+        , indent 2 ("map" <+> pretty (emDiscriminant e) <+> "{")
+        ]
+            ++ map (indent 4 . row) (emMap e)
+            ++ [indent 4 "_ => skip" | emSkip e]
+            ++ [ indent 2 "}"
+               , indent 2 ("messageId" <+> docDerive (emMessageId e))
+               , indent 2 ("idempotencyKey" <+> docDerive (emIdempotencyKey e))
+               , "}"
+               ]
+  where
+    row r = dquoted (emrValue r) <+> "=>" <+> pretty (emrEvent r)
+    docDerive d = "derive" <> maybe mempty (\p -> " " <> dquoted p) (dsPrefix d) <+> "hole"
+
+docPublisher :: PublisherNode -> Doc ann
+docPublisher p =
+    vsep
+        [ "publisher" <+> pretty (pubName p) <+> "{"
+        , indent 2 ("emit" <+> pretty (pubEmit p))
+        , indent 2 ("ordering" <+> pretty (pubOrdering p))
+        , indent 2 ("maxAttempts" <+> pretty (pubMaxAttempts p))
+        , indent 2 ("backoff" <+> pretty (boKind (pubBackoff p)) <+> pretty (boWindow (pubBackoff p)))
+        , indent 2 ("outboxId stable from" <+> pretty (pubOutboxField p))
+        , "}"
+        ]
 
 docIntake :: IntakeNode -> Doc ann
 docIntake i =

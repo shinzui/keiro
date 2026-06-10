@@ -56,6 +56,11 @@ data DiagnosticCode
     | DispositionDuplicateRetry
     | DispositionPreviouslyFailedRetry
     | DispositionDecodeUnboundedRetry
+    | -- EP-4 (integration coupling).
+      EmitSkipMissing
+    | EmitUnresolvedContract
+    | PublisherUnresolvedEmit
+    | IntakeUnresolvedContract
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -100,8 +105,55 @@ validateSpec spec =
 validateNode :: Spec -> Node -> [Diagnostic]
 validateNode spec (NAggregate agg) = validateAggregate spec agg
 validateNode spec (NProcess p) = validateProcess spec p
-validateNode _spec (NContract _) = [] -- EP-4 M2 adds the contract rules
-validateNode _spec (NIntake i) = validateIntake i
+validateNode _spec (NContract _) = [] -- a contract is a declaration; coupling is checked at the referrers
+validateNode spec (NIntake i) = validateIntake i ++ intakeCoupling spec i
+validateNode spec (NEmit e) = validateEmit spec e
+validateNode spec (NPublisher p) = validatePublisher spec p
+
+-- | The declared contracts in a spec, by name.
+specContracts :: Spec -> [ContractNode]
+specContracts spec = [c | NContract c <- specNodes spec]
+
+-- | EP-4 cross-node coupling: an intake's contract/topic/accepted-events resolve.
+intakeCoupling :: Spec -> IntakeNode -> [Diagnostic]
+intakeCoupling spec i = case lookupContract (inkContract i) of
+    Nothing ->
+        [mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' references undeclared contract '" <> inkContract i <> "'")]
+    Just c ->
+        [ mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' topic '" <> inkTopic i <> "' is not a topic of contract '" <> inkContract i <> "'")
+        | inkTopic i `notElem` map fst (ctrTopics c)
+        ]
+            ++ [ mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' accepts event '" <> ev <> "' not declared in contract '" <> inkContract i <> "'")
+               | ev <- inkAccept i
+               , ev `notElem` map ceName (ctrEvents c)
+               ]
+  where
+    lookupContract n = case [c | c <- specContracts spec, ctrName c == n] of (c : _) -> Just c; [] -> Nothing
+
+validateEmit :: Spec -> EmitNode -> [Diagnostic]
+validateEmit spec e = skipRule ++ coupling
+  where
+    el = locLine (emLoc e)
+    skipRule =
+        [ mkErr el EmitSkipMissing ("emit '" <> emName e <> "' map must end with an explicit '_ => skip' catch-all (hole-kind 7 optionality)")
+        | not (emSkip e)
+        ]
+    coupling = case [c | c <- specContracts spec, ctrName c == emContract e] of
+        [] -> [mkErr el EmitUnresolvedContract ("emit '" <> emName e <> "' references undeclared contract '" <> emContract e <> "'")]
+        (c : _) ->
+            [ mkErr el EmitUnresolvedContract ("emit '" <> emName e <> "' topic '" <> emTopic e <> "' is not a topic of contract '" <> emContract e <> "'")
+            | emTopic e `notElem` map fst (ctrTopics c)
+            ]
+                ++ [ mkErr el EmitUnresolvedContract ("emit '" <> emName e <> "' maps to event '" <> emrEvent r <> "' not declared in contract '" <> emContract e <> "'")
+                   | r <- emMap e
+                   , emrEvent r `notElem` map ceName (ctrEvents c)
+                   ]
+
+validatePublisher :: Spec -> PublisherNode -> [Diagnostic]
+validatePublisher spec p =
+    [ mkErr (locLine (pubLoc p)) PublisherUnresolvedEmit ("publisher '" <> pubName p <> "' references undeclared emit '" <> pubEmit p <> "'")
+    | pubEmit p `notElem` [emName e | NEmit e <- specNodes spec]
+    ]
 
 -- | EP-4 inbox disposition rules: the table must be complete over the seven
 -- outcomes, and the three dangerous inversions must be stated the safe way.

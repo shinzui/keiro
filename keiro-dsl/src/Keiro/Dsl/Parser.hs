@@ -105,6 +105,8 @@ reservedWords =
     , "dedupe"
     , "decode"
     , "disposition"
+    , "publisher"
+    , "map"
     ]
 
 {- | A CamelCase / snake_case identifier (no dashes): type names, register
@@ -165,6 +167,8 @@ pTopItem =
         , TINode . NProcess <$> pProcess
         , TINode . NContract <$> pContract
         , TINode . NIntake <$> pIntake
+        , TINode . NEmit <$> pEmit
+        , TINode . NPublisher <$> pPublisher
         , TINode . NAggregate <$> pAggregate
         ]
 
@@ -527,6 +531,89 @@ pIntake = do
             , IRetry <$> (keyword "retry" *> pWindow)
             , IDeadLetter <$> (keyword "deadLetter" *> optional stringLit)
             ]
+
+pEmit :: P EmitNode
+pEmit = do
+    loc <- getLoc
+    keyword "emit"
+    nm <- ident
+    _ <- symbol "{"
+    keyword "contract"
+    ctr <- ident
+    keyword "topic"
+    tp <- ident
+    keyword "source"
+    src <- stringLit
+    keyword "key"
+    k <- ident
+    keyword "map"
+    disc <- ident
+    (rows, skip) <- braces pMapRows
+    keyword "messageId"
+    mid <- pDerive
+    keyword "idempotencyKey"
+    idk <- pDerive
+    _ <- symbol "}"
+    pure
+        EmitNode
+            { emName = nm
+            , emContract = ctr
+            , emTopic = tp
+            , emSource = src
+            , emKey = k
+            , emDiscriminant = disc
+            , emMap = rows
+            , emSkip = skip
+            , emMessageId = mid
+            , emIdempotencyKey = idk
+            , emLoc = loc
+            }
+  where
+    pMapRows = do
+        rows <- many pMapRow
+        skip <- option False (True <$ try (symbol "_" *> symbol "=>" *> keyword "skip"))
+        pure (rows, skip)
+    pMapRow = try $ do
+        v <- stringLit
+        _ <- symbol "=>"
+        ev <- ident
+        pure EmitMapRow{emrValue = v, emrEvent = ev}
+    pDerive = do
+        keyword "derive"
+        pfx <- optional stringLit
+        keyword "hole"
+        pure DeriveSpec{dsPrefix = pfx}
+
+pPublisher :: P PublisherNode
+pPublisher = do
+    loc <- getLoc
+    keyword "publisher"
+    nm <- ident
+    _ <- symbol "{"
+    keyword "emit"
+    em <- ident
+    keyword "ordering"
+    ord <- ident
+    keyword "maxAttempts"
+    ma <- lexeme L.decimal
+    keyword "backoff"
+    bk <- ident
+    bw <- pWindow
+    keyword "outboxId"
+    keyword "stable"
+    keyword "from"
+    obf <- ident
+    _ <- symbol "}"
+    pure
+        PublisherNode
+            { pubName = nm
+            , pubEmit = em
+            , pubOrdering = ord
+            , pubMaxAttempts = ma
+            , pubBackoff = BackoffSpec{boKind = bk, boWindow = bw}
+            , pubOutboxField = obf
+            , pubLoc = loc
+            }
 
 --------------------------------------------------------------------------------
 -- Process manager + durable timer (EP-3)

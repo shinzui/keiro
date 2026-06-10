@@ -76,6 +76,13 @@ module Keiro.Dsl.Grammar (
     DecodeSpec (..),
     IntakeNode (..),
 
+    -- * The integration emit/publisher nodes (EP-4)
+    DeriveSpec (..),
+    EmitMapRow (..),
+    EmitNode (..),
+    BackoffSpec (..),
+    PublisherNode (..),
+
     -- * Top level
     Node (..),
     Spec (..),
@@ -601,8 +608,59 @@ data IntakeNode = IntakeNode
     }
     deriving stock (Eq, Show, Generic)
 
+-- EP-4: the @emit@ (outbox mapping) and @publisher@ nodes.
+
+-- | A deterministic id derivation hole: @derive [\"prefix\"] hole@.
+newtype DeriveSpec = DeriveSpec {dsPrefix :: Maybe Text}
+    deriving stock (Eq, Show, Generic)
+
+-- | One @\"value\" => EventType@ row of an emit's status mapping.
+data EmitMapRow = EmitMapRow
+    { emrValue :: !Text
+    , emrEvent :: !Name
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | An @emit@ (outbox) node: maps a private status discriminant to contract
+-- event types, with a mandatory explicit @_ => skip@ catch-all.
+data EmitNode = EmitNode
+    { emName :: !Name
+    , emContract :: !Name
+    , emTopic :: !Name
+    , emSource :: !Text
+    , emKey :: !Name
+    , emDiscriminant :: !Name
+    , emMap :: ![EmitMapRow]
+    , emSkip :: !Bool
+    -- ^ whether the explicit @_ => skip@ catch-all is present
+    , emMessageId :: !DeriveSpec
+    , emIdempotencyKey :: !DeriveSpec
+    , emLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | @backoff <kind> <window>@, e.g. @backoff constant 2s@.
+data BackoffSpec = BackoffSpec
+    { boKind :: !Name
+    , boWindow :: !Text
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | A @publisher@ node: the at-least-once publishing policy for an emit's topic.
+data PublisherNode = PublisherNode
+    { pubName :: !Name
+    , pubEmit :: !Name
+    , pubOrdering :: !Name
+    , pubMaxAttempts :: !Int
+    , pubBackoff :: !BackoffSpec
+    , pubOutboxField :: !Name
+    -- ^ @outboxId stable from <field>@: retries coalesce on (source, this field)
+    , pubLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
 {- | A top-level node. EP-1 defines 'NAggregate'; EP-3 adds 'NProcess'; EP-4 adds
-'NContract' and 'NIntake'. EP-4's emit/publisher and EP-5\/EP-6 add further
+'NContract', 'NIntake', 'NEmit', 'NPublisher'. EP-5\/EP-6 add further
 constructors.
 -}
 data Node
@@ -610,6 +668,8 @@ data Node
     | NProcess ProcessNode
     | NContract ContractNode
     | NIntake IntakeNode
+    | NEmit EmitNode
+    | NPublisher PublisherNode
     deriving stock (Eq, Show, Generic)
 
 {- | A whole @.kdsl@ file: one context name, the shared id/enum/rule

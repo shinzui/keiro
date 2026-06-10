@@ -105,7 +105,7 @@ vertical emits symbol-free scaffold + holes + harness, never a symbolic compiler
 | EP-1 | Foundations: grammar, parser, validator, scaffold/harness engine, aggregate vertical | docs/plans/59-keiro-dsl-foundations-grammar-parser-validator-scaffold-and-harness-engine-aggregate-vertical.md | None | None | Complete |
 | EP-2 | Evolution: schema versioning, upcasters, deprecation, diff | docs/plans/60-keiro-dsl-evolution-schema-versioning-upcasters-deprecation-and-diff.md | EP-1 | None | Complete |
 | EP-3 | Process manager + durable timer nodes | docs/plans/61-keiro-dsl-process-manager-and-durable-timer-nodes.md | EP-1 | EP-2 | In Progress (M1–M4 done; M5 spec→behaviour pin done, full-corpus compilation deferred) |
-| EP-4 | Integration nodes: inbox, outbox, Kafka, contract | docs/plans/62-keiro-dsl-integration-nodes-inbox-outbox-kafka-and-contract.md | EP-1 | EP-2 | In Progress (contract + intake nodes done incl. the inbox-disposition inversion checker; emit/publisher + scaffold/harness remaining) |
+| EP-4 | Integration nodes: inbox, outbox, Kafka, contract | docs/plans/62-keiro-dsl-integration-nodes-inbox-outbox-kafka-and-contract.md | EP-1 | EP-2 | In Progress (all 4 nodes — contract/intake/emit/publisher — parse+validate incl. inbox inversions, skip-totality, contract coupling; scaffold/harness/conformance remaining) |
 | EP-5 | PGMQ workqueue + dispatch nodes | docs/plans/63-keiro-dsl-pgmq-workqueue-and-dispatch-nodes.md | EP-1 | EP-4 | Not Started |
 | EP-6 | Workflow + operation nodes | docs/plans/64-keiro-dsl-workflow-and-operation-nodes.md | EP-1 | EP-2 | Not Started |
 | EP-7 | Authoring skill + corpus registration | docs/plans/65-keiro-dsl-authoring-skill-and-corpus-registration.md | EP-1, EP-3, EP-4, EP-5, EP-6 | EP-2 | Not Started |
