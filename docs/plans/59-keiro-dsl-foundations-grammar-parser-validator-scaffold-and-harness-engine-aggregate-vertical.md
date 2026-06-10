@@ -107,12 +107,12 @@ Milestone 3 — scaffold engine + firewall invariant + `scaffold` CLI: **DONE 20
 - [x] Capture the `HospitalCapacity/Reservation` Generated modules under `keiro-dsl/test/conformance/`; the `keiro-dsl-conformance` suite compiles them + a hand-filled `Holes.hs` against keiki/keiro and a scaffold-conformance test pins live output to them. (2026-06-10)
 - [x] Scaffold the register-free smoke target (`OrderStream`); show it scaffolds without error and respects the firewall. (2026-06-10)
 
-Milestone 4 — harness engine + aggregate conformance:
+Milestone 4 — harness engine + aggregate conformance: **DONE 2026-06-10**
 
-- [ ] Write `Keiro.Dsl.Harness` exposing `harnessFor :: Context -> Aggregate -> [ScaffoldModule]`.
-- [ ] Emit `validateTransducer defaultValidationOptions` calls, golden wire fixtures (encode/decode round-trip per event), and a clock-free static assertion.
-- [ ] Hand-fill the captured Reservation `Holes.hs` to match the reference; show the aggregate compiles and the emitted harness is green.
-- [ ] Add the mutation test: flipping a filled guard or a status-map entry turns a specific harness test red.
+- [x] Write `Keiro.Dsl.Harness` exposing `harnessFor :: Context -> Spec -> Aggregate -> [ScaffoldModule]` (Spec threaded, as for `scaffoldAggregate`). (2026-06-10)
+- [x] Emit `harnessAssertions :: [(String, Bool)]`: `validateTransducer defaultValidationOptions … == []`, a baked clock-free assertion, golden wire round-trips (encode/decode per event), and a behavioural accept check per initial-state transition (`step` lands on the declared `goto`). The `scaffold` CLI now emits the Harness module too. (2026-06-10)
+- [x] Hand-fill the captured Reservation `Holes.hs` to match the reference; the `keiro-dsl-conformance` suite compiles the aggregate and the emitted harness is green (5/5 assertions PASS). (2026-06-10)
+- [x] Add the mutation test (`keiro-dsl/test/mutation-test.sh`): flipping the filled guard `./=`→`.==` turns the specific `accepts RequestTransferReservation …` assertion red while the other four stay green; reverting restores green. (2026-06-10)
 
 
 ## Surprises & Discoveries
@@ -137,6 +137,18 @@ implementation. Provide concise evidence.
   `try`) so the identifier is left for `pTransition`. This is the kind of grammar bug a
   hand-written fixture never exercises but a generator finds on the sixth case — strong
   evidence the round-trip property is doing real work.
+
+- **M4: the harness's behavioural sample must defeat the guard's short-circuit.** The
+  mutation test flips `./=`→`.==` in the filled guard
+  `divertStatus ./= TotalDivert .|| lifeCriticalOverride .== lit True`. With the obvious
+  sample (enum→first ctor, Bool→`True`), `lifeCriticalOverride = True` makes the `.||`
+  short-circuit to true under *both* operators, so the flip would slip through undetected.
+  The fix: the emitted sample uses Bool→`False` (and enum→first ctor, which is `Open` ≠
+  `TotalDivert` for `DivertStatus`). Then the original guard accepts (`Open ≠ TotalDivert`)
+  and the flipped guard rejects (`Open == TotalDivert || False`), so the behavioural
+  `accepts RequestTransferReservation …` assertion flips green→red exactly as intended.
+  Evidence: `mutation-test.sh` reports `the guard mutation turned a harness assertion red
+  (caught)`.
 
 - **M3: bare command/event field types resolve via registers, then a Pascal-case
   fallback.** The `.kdsl` writes bare fields like `reservationId hospitalId commandId`,
@@ -319,7 +331,42 @@ they are repeated here so this plan is self-contained.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+**EP-1 complete (2026-06-10).** The full engine — grammar → parse → validate → scaffold →
+harness — is proven end-to-end on the aggregate vertical. Against the original purpose, a
+developer can now:
+
+1. `keiro-dsl parse keiro-dsl/test/fixtures/reservation.kdsl` — round-trips the terse
+   notation through a typed AST (property-tested over 100 generated specs).
+2. `keiro-dsl check …` — `OK`/exit 0 for the canonical spec; precise line-numbered
+   `error[StatusMapNotTotal|UndeclaredCommand|ClockSampled|…]` + exit 1 for broken specs,
+   *before any Haskell is written*.
+3. `keiro-dsl scaffold … --out <dir>` — emits four `-- @generated` modules (Domain, Codec,
+   EventStream, Projection) + a generated Harness module + a create-if-absent `Holes.hs`;
+   re-scaffolding is byte-identical for Generated and preserves a hand-edited `Holes.hs`.
+4. Fill the holes and run the harness: `keiro-dsl-conformance` compiles the scaffold +
+   filled holes against keiki/keiro and prints 5/5 green assertions; `mutation-test.sh`
+   shows a wrong guard turns a *specific* assertion red — the behavioural determinism
+   guarantee, delivered by the harness rather than by construction.
+
+The **firewall invariant** holds and is tested: no `Generated` module contains a keiki
+symbolic operator. The shared engine types (`Grammar`, `Parser`, `PrettyPrint`, `Validate`'s
+`Diagnostic`, `Scaffold`'s `ScaffoldModule`/`ModuleKind`/`Context`, `Harness`) are frozen as
+the contract EP-2…EP-6 extend additively.
+
+**Scope honoured vs. deferred (all per the MasterPlan, not gaps):** the symbolic transducer
+body is a hole (the load-bearing scope decision); codec decode is strict (lenient/optional
+decode is EP-4); the projection SQL `apply` is a hole (read-model migrations → codd). Two
+small signature refinements were made and recorded: `scaffoldAggregate`/`harnessFor` take
+the `Spec` (for shared id/enum decls), and `parseSpec` takes a `FilePath` source name (the
+MasterPlan reconciliation).
+
+**Lessons.** (1) The QuickCheck round-trip earned its keep — it found a states/transition
+grammar ambiguity a hand fixture never would. (2) Proving generated code *compiles* is worth
+far more than diffing it against a reference: the committed conformance suite that actually
+builds against keiki/keiro is the real guarantee, and it absorbed the reality that a generic
+scaffolder cannot reproduce a hand-written service's codec/SQL verbatim. (3) A harness
+mutation test is only as good as its sample inputs — short-circuiting operators can hide a
+mutation unless the sample is chosen to exercise the mutated atom.
 
 
 ## Context and Orientation

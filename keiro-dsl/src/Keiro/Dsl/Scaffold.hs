@@ -22,6 +22,19 @@ module Keiro.Dsl.Scaffold (
     ModuleKind (..),
     Context (..),
     scaffoldAggregate,
+
+    -- * Internal resolution, shared with "Keiro.Dsl.Harness"
+    Agg (..),
+    ResolvedCtor (..),
+    resolveAgg,
+    FieldCat (..),
+    fieldCat,
+    vertexCtor,
+    initialVertex,
+    firstEnumCtor,
+    lowerFirst,
+    pascal,
+    generatedBanner,
 ) where
 
 import Data.Char (toLower, toUpper)
@@ -639,6 +652,13 @@ fieldCat a ty
     | ty `elem` map idName (aIds a) = IdCat
     | ty `elem` map enumName (aEnums a) = EnumCat
     | otherwise = OtherCat
+
+-- | The first constructor of a declared enum, used to build sample values.
+firstEnumCtor :: Agg -> Text -> Maybe Text
+firstEnumCtor a ty =
+    case [c | e <- aEnums a, enumName e == ty, (c, _) <- take 1 (enumCtors e)] of
+        (c : _) -> Just c
+        [] -> Nothing
 
 vertexCtor :: Agg -> Text -> Text
 vertexCtor a s = aName a <> s

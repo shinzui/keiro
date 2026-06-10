@@ -8,6 +8,7 @@ import Control.Monad (forM_, unless)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
+import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate)
@@ -78,7 +79,11 @@ run (Scaffold fp out) = do
             hPutStrLn stderr (T.unpack err)
             exitFailure
         Right spec -> do
-            let mods = concat [scaffoldAggregate (mkContext spec) spec agg | NAggregate agg <- specNodes spec]
+            let mods =
+                    concat
+                        [ scaffoldAggregate (mkContext spec) spec agg <> harnessFor (mkContext spec) spec agg
+                        | NAggregate agg <- specNodes spec
+                        ]
             forM_ mods (writeModule out)
 
 {- | Write one module honouring the kind discipline: Generated modules are

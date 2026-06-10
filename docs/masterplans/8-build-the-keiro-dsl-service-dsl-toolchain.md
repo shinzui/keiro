@@ -102,7 +102,7 @@ vertical emits symbol-free scaffold + holes + harness, never a symbolic compiler
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| EP-1 | Foundations: grammar, parser, validator, scaffold/harness engine, aggregate vertical | docs/plans/59-keiro-dsl-foundations-grammar-parser-validator-scaffold-and-harness-engine-aggregate-vertical.md | None | None | Not Started |
+| EP-1 | Foundations: grammar, parser, validator, scaffold/harness engine, aggregate vertical | docs/plans/59-keiro-dsl-foundations-grammar-parser-validator-scaffold-and-harness-engine-aggregate-vertical.md | None | None | Complete |
 | EP-2 | Evolution: schema versioning, upcasters, deprecation, diff | docs/plans/60-keiro-dsl-evolution-schema-versioning-upcasters-deprecation-and-diff.md | EP-1 | None | Not Started |
 | EP-3 | Process manager + durable timer nodes | docs/plans/61-keiro-dsl-process-manager-and-durable-timer-nodes.md | EP-1 | EP-2 | Not Started |
 | EP-4 | Integration nodes: inbox, outbox, Kafka, contract | docs/plans/62-keiro-dsl-integration-nodes-inbox-outbox-kafka-and-contract.md | EP-1 | EP-2 | Not Started |
@@ -208,10 +208,10 @@ node type **must** extend the bijection table and `Keiro.Dsl.Grammar` in the sam
 
 Track milestone-level progress across all child plans.
 
-- [ ] EP-1: package skeleton + `cabal.project` wiring; Grammar AST (incl. `Expr`); parser; pretty-printer + round-trip; `parse` CLI.
-- [ ] EP-1: validator framework + `check` CLI (hole-kinds, reachability, clock-free, `Expr` scope-check).
-- [ ] EP-1: scaffold engine (`ScaffoldModule`/`ModuleKind`, create-if-absent holes, firewall invariant) + `scaffold` CLI.
-- [ ] EP-1: harness engine; aggregate vertical conformance against captured `HospitalCapacity/Reservation` fixture (scaffold compiles, holes filled, harness green; mutation turns a test red).
+- [x] EP-1: package skeleton + `cabal.project` wiring; Grammar AST (incl. `Expr`); parser; pretty-printer + round-trip; `parse` CLI. (2026-06-10)
+- [x] EP-1: validator framework + `check` CLI (hole-kinds, reachability, clock-free, `Expr` scope-check). (2026-06-10)
+- [x] EP-1: scaffold engine (`ScaffoldModule`/`ModuleKind`, create-if-absent holes, firewall invariant) + `scaffold` CLI. (2026-06-10)
+- [x] EP-1: harness engine; aggregate vertical conformance against captured `HospitalCapacity/Reservation` fixture (scaffold compiles, holes filled, harness green 5/5; mutation turns a specific test red). (2026-06-10)
 - [ ] EP-2: `schemaVersion`/`upcast`/`deprecated` grammar + `diff --since` classifying additive vs breaking.
 - [ ] EP-3: `process`/`timer` nodes — grammar, validator rules (clock-free deadline, runtime-owned dispatch-id, mandatory disposition, explicit max-attempts), scaffold, harness; conformance vs `SurgeManager`/`EscalationProcess`.
 - [ ] EP-4: `contract`/`intake`/`emit`/`publisher` nodes — envelope-binding + disposition holes (with the two inversions), strict decode; conformance vs hospital-capacity & incident-command `Integration/`.

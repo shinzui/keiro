@@ -1,31 +1,26 @@
-{-# LANGUAGE OverloadedStrings #-}
+{- | Conformance driver for the captured HospitalCapacity/Reservation aggregate.
+It runs the spec-derived harness emitted by 'Keiro.Dsl.Harness.harnessFor'
+(the @Generated.…Harness@ module) over the hand-filled @Holes.hs@, printing
+each labelled assertion and exiting non-zero if any is False. Compiling this
+component at all proves the scaffolded Generated modules + filled holes build
+against keiki/keiro; running it proves the filled transducer is valid, every
+event round-trips, and the guarded transition behaves as specified.
 
-{- | Conformance harness for the captured HospitalCapacity/Reservation aggregate.
-This component exists to prove that the scaffolded @Generated@ modules plus a
-hand-filled @Holes.hs@ actually compile against keiki/keiro, and that the
-filled transducer passes keiki's validator and the codec round-trips. EP-1
-milestone 4 replaces this hand-written driver with the spec-derived harness
-emitted by 'Keiro.Dsl.Harness.harnessFor'.
+The mutation check (flip @./=@ to @.==@ in Holes, rebuild) turns the
+"accepts RequestTransferReservation …" assertion red, proving the harness —
+not the scaffold — pins behaviour.
 -}
 module Main (main) where
 
-import Generated.HospitalCapacity.Reservation.Codec (encodeReservationEvent, parseReservationEvent)
-import Generated.HospitalCapacity.Reservation.Domain
-import HospitalCapacity.Reservation.Holes (reservationTransducer)
-import Keiki.Core (defaultValidationOptions, validateTransducer)
+import Control.Monad (forM_, unless)
+import Generated.HospitalCapacity.Reservation.Harness (harnessAssertions)
 import System.Exit (exitFailure)
 
 main :: IO ()
 main = do
-    let warnings = validateTransducer defaultValidationOptions reservationTransducer
-    ok1 <-
-        if null warnings
-            then putStrLn "conformance: validateTransducer == [] OK" >> pure True
-            else putStrLn ("conformance: validateTransducer warnings: " <> show warnings) >> pure False
-    let sample =
-            TransferReservationConfirmed
-                (TransferReservationConfirmedData (TransferReservationId "r1") (HospitalId "h1") (CommandId "c1"))
-    ok2 <- case parseReservationEvent (encodeReservationEvent sample) of
-        Right ev | ev == sample -> putStrLn "conformance: codec round-trip OK" >> pure True
-        other -> putStrLn ("conformance: codec round-trip FAIL: " <> show other) >> pure False
-    if ok1 && ok2 then pure () else exitFailure
+    forM_ harnessAssertions $ \(label, ok) ->
+        putStrLn ((if ok then "PASS  " else "FAIL  ") <> label)
+    let failed = [label | (label, ok) <- harnessAssertions, not ok]
+    unless (null failed) $ do
+        putStrLn ("harness: " <> show (length failed) <> " assertion(s) failed")
+        exitFailure

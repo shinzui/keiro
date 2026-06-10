@@ -30,6 +30,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Keiro.Dsl.Grammar
+    Keiro.Dsl.Harness
     Keiro.Dsl.Parser
     Keiro.Dsl.PrettyPrint
     Keiro.Dsl.Scaffold
@@ -82,6 +83,7 @@ test-suite keiro-dsl-conformance
     Generated.HospitalCapacity.Reservation.Codec
     Generated.HospitalCapacity.Reservation.Domain
     Generated.HospitalCapacity.Reservation.EventStream
+    Generated.HospitalCapacity.Reservation.Harness
     Generated.HospitalCapacity.Reservation.Projection
     HospitalCapacity.Reservation.Holes
 

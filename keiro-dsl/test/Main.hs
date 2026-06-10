@@ -7,6 +7,7 @@ module Main (main) where
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate)
@@ -70,7 +71,8 @@ main = hspec $ do
             mods <- scaffoldFixture "test/fixtures/reservation.kdsl"
             let holes = [m | m <- mods, "Holes.hs" `T.isSuffixOf` T.pack (modulePath m)]
             map kind holes `shouldBe` [HoleStub]
-            length [m | m <- mods, kind m == Generated] `shouldBe` 4
+            -- Domain, Codec, EventStream, Projection, Harness.
+            length [m | m <- mods, kind m == Generated] `shouldBe` 5
         it "is deterministic (re-scaffolding yields byte-identical text)" $ do
             a <- scaffoldFixture "test/fixtures/reservation.kdsl"
             b <- scaffoldFixture "test/fixtures/reservation.kdsl"
@@ -80,7 +82,8 @@ main = hspec $ do
             mapM_ assertMatchesCommitted [m | m <- mods, kind m == Generated]
         it "scaffolds the register-free OrderStream smoke target without error" $ do
             mods <- scaffoldFixture "test/fixtures/order.kdsl"
-            length mods `shouldBe` 5
+            -- 5 Generated (Domain/Codec/EventStream/Projection/Harness) + 1 Holes.
+            length mods `shouldBe` 6
             let breaches = [() | m <- mods, kind m == Generated, op <- symbolicOperators, op `T.isInfixOf` moduleText m]
             breaches `shouldBe` []
 
@@ -105,7 +108,11 @@ scaffoldFixture path = do
     case parseSpec path input of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right spec ->
-            pure $ concat [scaffoldAggregate (ctx spec) spec agg | NAggregate agg <- specNodes spec]
+            pure $
+                concat
+                    [ scaffoldAggregate (ctx spec) spec agg <> harnessFor (ctx spec) spec agg
+                    | NAggregate agg <- specNodes spec
+                    ]
   where
     ctx spec = Context{contextName = specContext spec, moduleRoot = ""}
 
