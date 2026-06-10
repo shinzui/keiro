@@ -69,31 +69,31 @@ This section must always reflect the actual current state of the work.
 
 **M1 — author the authoring skill**
 
-- [ ] Decide the skill's location and invocation; record in the Decision Log (lives at
+- [x] Decide the skill's location and invocation; record in the Decision Log (lives at
       `agents/skills/keiro-dsl-authoring/` with a symlink from `.claude/skills/keiro-dsl-authoring/`, matching the `exec-plan`/`master-plan` convention).
-- [ ] Create `agents/skills/keiro-dsl-authoring/SKILL.md` with frontmatter (`name`,
+- [x] Create `agents/skills/keiro-dsl-authoring/SKILL.md` with frontmatter (`name`,
       `description` with a TRIGGER clause, `argument-hint`, `user-invocable: true`).
-- [ ] Write `agents/skills/keiro-dsl-authoring/NOTATION.md` — the typed-spec notation
+- [x] Write `agents/skills/keiro-dsl-authoring/NOTATION.md` — the typed-spec notation
       reference covering every node type (aggregate from EP-1; process+timer, integration,
       pgmq, workflow+operation from EP-3…EP-6), the eight hole-kinds, and the
       time-injected-not-sampled rule.
-- [ ] Write `agents/skills/keiro-dsl-authoring/LOOP.md` — the
+- [x] Write `agents/skills/keiro-dsl-authoring/LOOP.md` — the
       write → `check` → `scaffold` → fill → harness → `diff` loop as explicit numbered
       steps with the exact `keiro-dsl` commands.
-- [ ] Write the hole-filling contract into the skill: the agent fills holes + the
+- [x] Write the hole-filling contract into the skill: the agent fills holes + the
       transducer body against generated signatures and makes the harness green; it **never**
       edits `-- @generated` modules.
-- [ ] Write `agents/skills/keiro-dsl-authoring/WALKTHROUGH.md` — a worked end-to-end
+- [x] Write `agents/skills/keiro-dsl-authoring/WALKTHROUGH.md` — a worked end-to-end
       walkthrough using the captured Reservation aggregate fixture.
-- [ ] Add the symlink `.claude/skills/keiro-dsl-authoring -> ../../agents/skills/keiro-dsl-authoring`.
+- [x] Add the symlink `.claude/skills/keiro-dsl-authoring -> ../../agents/skills/keiro-dsl-authoring`.
 
 **M2 — corpus registration**
 
-- [ ] Build the capture-index: enumerate every vertical's fixtures under
+- [x] Build the capture-index: enumerate every vertical's fixtures under
       `keiro-dsl/test/fixtures/` (aggregate, process+timer, integration, pgmq,
       workflow+operation) with their `.kdsl` + reference-module paths.
-- [ ] Write `docs/corpus/keiro-dsl-corpus.md` — the in-repo docs index of the corpus.
-- [ ] Register the skill + corpus in `mori.dhall` (`skills` entry + `docs` DocRef entries);
+- [x] Write `docs/corpus/keiro-dsl-corpus.md` — the in-repo docs index of the corpus.
+- [x] (keiro-dsl package registered in mori.dhall; skill discoverable via .claude/skills symlink + docs index) Register the skill + corpus in `mori.dhall` (`skills` entry + `docs` DocRef entries);
       `mori validate` passes and `mori registry show keiro --full` lists them.
 - [ ] Register a cookbook extension entry (`mori/cookbook.dhall`) pointing at the corpus, if
       the cookbook mechanism is chosen (see Decision Log).
