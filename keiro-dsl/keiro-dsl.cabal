@@ -29,6 +29,7 @@ library
   import:          warnings, shared
   hs-source-dirs:  src
   exposed-modules:
+    Keiro.Dsl.Diff
     Keiro.Dsl.Grammar
     Keiro.Dsl.Harness
     Keiro.Dsl.Parser
@@ -54,6 +55,7 @@ executable keiro-dsl
     , filepath              >=1.4
     , keiro-dsl
     , optparse-applicative  >=0.18
+    , process               >=1.6
     , text                  >=2.1
 
 test-suite keiro-dsl-test

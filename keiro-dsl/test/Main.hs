@@ -6,6 +6,7 @@ module Main (main) where
 
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
+import Keiro.Dsl.Diff (Change (..), ChangeKind (..), diffSpecs, isBreaking)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Parser (parseSpec)
@@ -73,6 +74,19 @@ main = hspec $ do
                         evUpcastFrom e `shouldBe` Just (1, Hole)
                     [] -> expectationFailure "TransferReservationCreated not found"
 
+    describe "diff (evolution classification)" $ do
+        it "classifies a field added without a version bump as BREAKING" $ do
+            cs <- diffFixtures "test/fixtures/reservation.kdsl" "test/fixtures/reservation-fieldadd.kdsl"
+            any isBreaking cs `shouldBe` True
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtFieldAddedWithoutBump]
+        it "classifies the same field wrapped as v2 + upcaster as ADDITIVE" $ do
+            cs <- diffFixtures "test/fixtures/reservation.kdsl" "test/fixtures/reservation-v2.kdsl"
+            any isBreaking cs `shouldBe` False
+            [ck | Additive ck <- cs] `shouldSatisfy` any ((== "TransferReservationCreated") . ckSubject)
+        it "reports no breaking change when the spec is unchanged" $ do
+            cs <- diffFixtures "test/fixtures/reservation.kdsl" "test/fixtures/reservation.kdsl"
+            any isBreaking cs `shouldBe` False
+
     describe "scaffold" $ do
         it "never emits a keiki symbolic operator into a Generated module (firewall)" $ do
             mods <- scaffoldFixture "test/fixtures/reservation.kdsl"
@@ -113,6 +127,15 @@ diagnosticCodesOf path = do
     case parseSpec path input of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right spec -> pure (map code (validateSpec spec))
+
+-- | Parse two fixtures and diff them (old, new).
+diffFixtures :: FilePath -> FilePath -> IO [Change]
+diffFixtures oldP newP = do
+    old <- TIO.readFile oldP
+    new <- TIO.readFile newP
+    case (,) <$> parseSpec oldP old <*> parseSpec newP new of
+        Left err -> expectationFailure (T.unpack err) >> pure []
+        Right (o, n) -> pure (diffSpecs o n)
 
 -- | The keiki symbolic operators that must never appear in a Generated module.
 symbolicOperators :: [T.Text]

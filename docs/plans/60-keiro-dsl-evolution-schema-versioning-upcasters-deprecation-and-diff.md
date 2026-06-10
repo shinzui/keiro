@@ -90,15 +90,18 @@ M1 — grammar + parser + validator for evolution constructs: **DONE 2026-06-10*
       `reservation-v2-noupcast.kdsl` with `error[EvtVersionMissingUpcaster]` on the v2 line
       (exit 1). (2026-06-10)
 
-M2 — `Keiro.Dsl.Diff` engine + `diff --since` CLI:
+M2 — `Keiro.Dsl.Diff` engine + `diff --since` CLI: **DONE 2026-06-10**
 
-- [ ] Write `Keiro.Dsl.Diff` exposing `diffSpecs :: Spec -> Spec -> [Change]` with
-      `Change = Additive … | Breaking …`.
-- [ ] Implement the additive-vs-breaking classifier (per-node, per-event field/version delta).
-- [ ] Add the `diff --since <git-ref>` subcommand: `git show <ref>:<path>` → parse old →
-      `diffSpecs old new` → print classified changes → exit non-zero on any unguarded Breaking.
-- [ ] Unit tests over fixture pairs cover every `Change` variant; an integration test commits
-      a spec, edits it, and runs `diff --since` against the prior commit.
+- [x] Write `Keiro.Dsl.Diff` exposing `diffSpecs :: Spec -> Spec -> [Change]` with
+      `Change = Additive ChangeKind | Breaking ChangeKind` (`ckCode :: Maybe DiagnosticCode`). (2026-06-10)
+- [x] Implement the additive-vs-breaking classifier (new event type → Additive; new version +
+      contiguous upcaster → Additive; field added/removed at same version → Breaking; event
+      removed-not-deprecated / aggregate removed → Breaking; deprecation → Additive). (2026-06-10)
+- [x] Add the `diff --since <git-ref>` subcommand: `git rev-parse --show-toplevel` +
+      `git show <ref>:<relpath>` → parse old → `diffSpecs old new` → print ADDITIVE/BREAKING →
+      exit non-zero on any Breaking. (2026-06-10)
+- [x] Unit tests over fixture pairs (field-add → Breaking; v2+upcaster → Additive; no-change →
+      none) + `keiro-dsl/test/diff-test.sh` git-integration gate. (2026-06-10)
 
 M3 — scaffold the `Codec` schemaVersion+upcaster wiring + harness:
 
