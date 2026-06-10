@@ -157,6 +157,19 @@ test-suite keiro-dsl-conformance-queue
     , base   >=4.21 && <5
     , text   >=2.1
 
+-- EP-5 pgmq runtime conformance: the scaffolded QueuePolicy (RetryPolicy +
+-- JobOutcome disposition) compiled against the LIVE Keiro.PGMQ.Job runtime.
+test-suite keiro-dsl-conformance-queue-runtime
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-queue-runtime
+  main-is:        Main.hs
+  other-modules:  Generated.HospitalCapacity.Reservation_work.QueuePolicy
+  build-depends:
+    , base        >=4.21 && <5
+    , keiro-pgmq
+    , text        >=2.1
+
 -- Workflow facts harness (EP-6): the scaffolded self-contained WorkflowFacts
 -- module asserted against a hand-written expectation (mutation-pinnable).
 test-suite keiro-dsl-conformance-workflow

@@ -413,6 +413,11 @@ scaffoldWorkqueue ctx w =
         , moduleText = emitWorkqueueGen genPrefix w
         , kind = Generated
         }
+    , ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/QueuePolicy.hs")
+        , moduleText = emitQueuePolicy genPrefix w
+        , kind = Generated
+        }
     ]
   where
     ctxPascal = pascalFromKebab (contextName ctx)
@@ -472,6 +477,42 @@ emitWorkqueueGen genPrefix w =
     lead _ kv = "    , " <> kv
     fieldApps [] = ""
     fieldApps fs = " <$> " <> T.intercalate " <*> " ["o .: " <> tshow (wqfWire f) | f <- fs]
+
+{- | Emit the pgmq retry policy + JobOutcome disposition compiled against the
+LIVE @Keiro.PGMQ.Job@ runtime (RetryPolicy / JobOutcome / RetryDelay). This pins
+the dangerous inversions over the runtime types: storeFailure ⇒ Retry (transient)
+and decodeFailure ⇒ Dead (poison).
+-}
+emitQueuePolicy :: Text -> WorkqueueNode -> Text
+emitQueuePolicy genPrefix w =
+    nl $
+        [ "{-# LANGUAGE OverloadedStrings #-}"
+        , generatedBanner
+        , "module " <> genPrefix <> ".QueuePolicy (retryPolicy, jobOutcomeFor) where"
+        , ""
+        , "import Data.Text (Text)"
+        , "import Keiro.PGMQ.Job (JobOutcome (..), RetryDelay (..), RetryPolicy (..))"
+        , ""
+        , "retryPolicy :: RetryPolicy"
+        , "retryPolicy ="
+        , "  RetryPolicy"
+        , "    { maxRetries = " <> tshow' (wqMaxRetries w)
+        , "    , defaultRetryDelay = RetryDelay " <> secondsOf (wqDelay w)
+        , "    , useDeadLetter = " <> (if wqDlqOn w then "True" else "False")
+        , "    }"
+        , ""
+        , "-- The consumer JobOutcome disposition over the spec's named domain outcomes,"
+        , "-- lowered to the live Keiro.PGMQ.Job.JobOutcome."
+        , "jobOutcomeFor :: Text -> JobOutcome"
+        , "jobOutcomeFor o = case o of"
+        ]
+            ++ ["  " <> tshow (wqdOutcome r) <> " -> " <> outcome (wqdAction r) | r <- wqDisposition w]
+            ++ ["  _ -> Retry (RetryDelay " <> secondsOf (wqDelay w) <> ")"]
+  where
+    secondsOf t = let ds = T.takeWhile (`elem` ("0123456789" :: String)) t in if T.null ds then "0" else ds
+    outcome IAckOk = "Done"
+    outcome (IRetry win) = "Retry (RetryDelay " <> secondsOf win <> ")"
+    outcome (IDeadLetter mr) = "Dead " <> tshow (fromMaybe "dead-lettered" mr)
 
 --------------------------------------------------------------------------------
 -- Process manager + durable timer (EP-3)
