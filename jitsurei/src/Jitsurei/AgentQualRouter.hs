@@ -75,7 +75,7 @@ import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.ProcessManager (PMCommand (..))
 import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), runQuery)
 import Keiro.Router (Router (..))
-import Keiro.Stream (Stream, stream)
+import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 import Kiroku.Store.Effect (Store)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -167,10 +167,15 @@ chapterEventStream =
         , stateCodec = Nothing
         }
 
--- | The chapter stream a @(member, chapter)@ pair records into.
+{- | The chapter stream a @(member, chapter)@ pair records into: category
+@chapter@ with a composite id segment @\<member\>-\<chapter\>@.
+-}
+chapterCategory :: Stream.StreamCategory a
+chapterCategory = Stream.categoryUnsafe "chapter"
+
 chapterStream :: MemberId -> ChapterId -> Stream ChapterCommand
 chapterStream member chapter =
-    stream ("chapter-" <> memberIdText member <> "-" <> chapterIdText chapter)
+    Stream.entityStream chapterCategory (memberIdText member <> "-" <> chapterIdText chapter)
 
 chapterTransducer ::
     SymTransducer (HsPred ChapterRegs ChapterCommand) ChapterRegs ChapterState ChapterCommand ChapterEvent

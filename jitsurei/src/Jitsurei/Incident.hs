@@ -57,7 +57,7 @@ import Keiki.Core (HsPred, RegFile (..), SymTransducer)
 import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
-import Keiro.Stream (Stream, stream)
+import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 
 newtype IncidentId = IncidentId Text
@@ -182,12 +182,15 @@ incidentEventStream =
         , stateCodec = Nothing
         }
 
+incidentCategory :: Stream.StreamCategory a
+incidentCategory = Stream.categoryUnsafe "incident"
+
 incidentStream :: IncidentId -> Stream IncidentEventStream
-incidentStream incidentId = stream ("incident-" <> incidentIdText incidentId)
+incidentStream = Stream.entityStream incidentCategory . incidentIdText
 
 -- | Same stream, typed as a command target (for process-manager dispatch).
 incidentCommandStream :: IncidentId -> Stream IncidentCommand
-incidentCommandStream incidentId = stream ("incident-" <> incidentIdText incidentId)
+incidentCommandStream = Stream.entityStream incidentCategory . incidentIdText
 
 incidentTransducer ::
     SymTransducer (HsPred IncidentRegs IncidentCommand) IncidentRegs IncidentState IncidentCommand IncidentEvent

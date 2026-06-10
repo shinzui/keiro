@@ -46,7 +46,7 @@ import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.ProcessManager (PMCommand (..))
 import Keiro.ReadModel (runQuery)
 import Keiro.Router (Router (..))
-import Keiro.Stream (Stream, stream)
+import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 import Kiroku.Store.Effect (Store)
 
@@ -113,14 +113,21 @@ pageEventStream =
         , stateCodec = Nothing
         }
 
+{- | A page stream is keyed by @(incident, responder)@: category @page@ with a
+composite id segment @\<incident\>-\<responder\>@ (the @-@ after the category
+boundary is part of the id and does not change the @page@ category).
+-}
+pageCategory :: Stream.StreamCategory a
+pageCategory = Stream.categoryUnsafe "page"
+
 pageStream :: IncidentId -> ResponderId -> Stream PageEventStream
 pageStream incidentId responderId =
-    stream ("page-" <> incidentIdText incidentId <> "-" <> responderIdText responderId)
+    Stream.entityStream pageCategory (incidentIdText incidentId <> "-" <> responderIdText responderId)
 
 -- | Same stream, typed as a command target (for router dispatch).
 pageCommandStream :: IncidentId -> ResponderId -> Stream PageCommand
 pageCommandStream incidentId responderId =
-    stream ("page-" <> incidentIdText incidentId <> "-" <> responderIdText responderId)
+    Stream.entityStream pageCategory (incidentIdText incidentId <> "-" <> responderIdText responderId)
 
 pageTransducer ::
     SymTransducer (HsPred PageRegs PageCommand) PageRegs PageState PageCommand PageEvent

@@ -91,7 +91,7 @@ import Keiro.ProcessManager (
     ProcessManagerResult,
     runProcessManagerOnce,
  )
-import Keiro.Stream (Stream, stream)
+import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow, runTimerWorker)
 import Kiroku.Store.Effect (Store)
@@ -157,8 +157,11 @@ escalationEventStream =
         , stateCodec = Nothing
         }
 
+escalationCategory :: Stream.StreamCategory a
+escalationCategory = Stream.categoryUnsafe "esc"
+
 escalationStream :: IncidentId -> Stream EscalationEventStream
-escalationStream incidentId = stream ("esc-" <> incidentIdText incidentId)
+escalationStream = Stream.entityStream escalationCategory . incidentIdText
 
 escalationTransducer ::
     SymTransducer (HsPred EscalationRegs EscalationCommand) EscalationRegs EscalationState EscalationCommand EscalationEvent

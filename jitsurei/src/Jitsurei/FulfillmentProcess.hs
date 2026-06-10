@@ -40,7 +40,7 @@ import Keiro.ProcessManager (
     ProcessManagerResult,
     runProcessManagerOnce,
  )
-import Keiro.Stream (Stream, stream)
+import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
@@ -106,8 +106,11 @@ fulfillmentEventStream =
         , stateCodec = Nothing
         }
 
+fulfillmentCategory :: Stream.StreamCategory a
+fulfillmentCategory = Stream.categoryUnsafe "fulfillment"
+
 fulfillmentStream :: OrderId -> Stream FulfillmentEventStream
-fulfillmentStream orderId = stream ("fulfillment-" <> orderIdText orderId)
+fulfillmentStream = Stream.entityStream fulfillmentCategory . orderIdText
 
 fulfillmentProcessManager :: FulfillmentProcessManager
 fulfillmentProcessManager =

@@ -25,7 +25,7 @@ import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.Snapshot (defaultStateCodec)
-import Keiro.Stream (Stream, stream)
+import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 
 type OrderRegs = '[]
@@ -57,11 +57,14 @@ snapshotOrderEventStream =
         , stateCodec = Just (defaultStateCodec @OrderRegs @OrderState 1)
         }
 
+orderCategory :: Stream.StreamCategory a
+orderCategory = Stream.categoryUnsafe "order"
+
 orderStream :: OrderId -> Stream OrderEventStream
-orderStream orderId = stream ("order-" <> orderIdText orderId)
+orderStream = Stream.entityStream orderCategory . orderIdText
 
 orderCommandStream :: OrderId -> Stream OrderCommand
-orderCommandStream orderId = stream ("order-" <> orderIdText orderId)
+orderCommandStream = Stream.entityStream orderCategory . orderIdText
 
 orderTransducer :: SymTransducer (HsPred OrderRegs OrderCommand) OrderRegs OrderState OrderCommand OrderEvent
 orderTransducer =

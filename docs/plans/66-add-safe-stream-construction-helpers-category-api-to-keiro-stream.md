@@ -110,11 +110,23 @@ This section must always reflect the actual current state of the work.
   `keiro/test/Main.hs`: validation cases (empty / `-` / `$all` / `_` compound / `:` workflow), the
   `entityStream` round-trip asserted against kiroku's own `Store.categoryName`, and the
   `entityStreamId` `Text`/`String` paths. `cabal test keiro-test --match "Keiro.Stream"` →
-  `4 examples, 0 failures`, suite PASS. (The full DB-backed suite is blocked by an unrelated
-  codd schema-mismatch from the kiroku version jump — see Surprises.)
-- [ ] **M3 — Adopt in the in-repo example + reconcile compound categories.** Migrate
-  `keiro/jitsurei` stream construction to the Category API; document/validate the `wf:` and
-  saga (`hospital-surge-`) compound-category conventions. In-repo build + tests pass.
+  `4 examples, 0 failures`, suite PASS. The full `keiro-test` suite also passes (the codd log
+  line is benign — see Surprises).
+- [x] **M3 — Adopt in the in-repo example + reconcile compound categories.** (2026-06-10)
+  Migrated all six `keiro/jitsurei` stream constructors
+  (`OrderStream`, `Incident`, `FulfillmentProcess`, `EscalationProcess`, `Paging`,
+  `AgentQualRouter`) to a phantom-polymorphic `StreamCategory a` + `Stream.entityStream`,
+  preserving every stream name byte-for-byte (all categories are single-word: `order`,
+  `incident`, `fulfillment`, `esc`, `page`, `chapter`; composite keys like
+  `page-<inc>-<resp>` / `chapter-<member>-<chapter>` keep `-` in the *id* segment, which never
+  shifts the leading category). `cabal build jitsurei` clean; `jitsurei-test` → `16 examples, 0
+  failures` (the suite reads by exact literal names like `order-order-100`, `chapter-m1-c1`, so
+  green proves names are unchanged). Workflow + DSL-saga reconciliation handled by decision (see
+  Decision Log), not code: `wf:<name>` already uses the reserved `:` and is conformant; the DSL
+  saga `hospital-surge-` rename is a documented follow-up (changing it regenerates golden
+  conformance fixtures). The demo-harness `readEvents store ("order-" <> …)` calls in
+  `keiro/jitsurei/app/Main.hs` were intentionally left as-is (test-harness reads, not API
+  surface).
 - [ ] **M4 (cross-repo, optional) — Migrate `keiro-runtime-jitsurei` services.** Replace
   per-aggregate hand-concat with module-level `Category` values and `StreamIdSegment`
   instances; rebuild that repo against the new `keiro-core`.
@@ -187,6 +199,29 @@ Record every decision made while working on the plan.
   Rationale: matches the existing per-module `idText = Text.pack . show` exactly while removing
   the duplicated category literal; does not force an instance on users who already hold `Text`.
   Date: 2026-06-10
+
+- Decision (M3): Migrate jitsurei with a phantom-**polymorphic** `StreamCategory a` per
+  aggregate (e.g. `orderCategory :: StreamCategory a = categoryUnsafe "order"`), so one category
+  value serves both the `Stream EventStream` and `Stream Command` phantoms — each function's
+  signature pins the phantom. Use `entityStream cat . idText` (reusing the existing `*IdText`
+  accessors) rather than adding `StreamIdSegment` instances, keeping the change contained and
+  orphan-free. Composite-keyed streams (`page`, `chapter`) pass a `-`-joined id segment to
+  `entityStream` — the `-` after the boundary stays part of the id and does not change the
+  single-word category. Net effect: every stream name is byte-for-byte unchanged. Date: 2026-06-10
+
+- Decision (M3): Leave `Keiro.Workflow.Types.workflowStreamName` unchanged. It builds
+  `wf:<name>-<id>`, whose category is `wf:<name>` — already using the reserved `:` family
+  namespace, so it is conformant with the convention. Re-expressing it via `entityStream` is
+  rejected: it is load-bearing and carries the `#<gen>` continue-as-new extension
+  (`workflowGenerationStreamName`) that `entityStream` does not model. A hyphenated `WorkflowName`
+  remains a latent footgun, but adding rejection would be a behavior change to existing workflows
+  and belongs to a separate hardening pass. Date: 2026-06-10
+
+- Decision (M3): Defer the DSL saga-prefix reconciliation to a follow-up. `SagaRef.sagaStreamPrefix`
+  (`keiro-dsl/src/Keiro/Dsl/Grammar.hs:397-405`) carries the raw compound prefix
+  `"hospital-surge-"` (category collapses to `hospital`). Switching it to `hospital_surge` is the
+  correct fix per the `_` convention, but it changes generated stream names and regenerates the
+  DSL golden conformance fixtures — too broad to fold into M3 safely. Tracked as follow-up. Date: 2026-06-10
 
 - Decision: Compound categories use `_` (e.g. `hospital_surge`), not `:`. The colon is reserved
   for the workflow stream family (`wf:<name>`).
