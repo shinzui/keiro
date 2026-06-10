@@ -102,7 +102,7 @@ Milestone 2 — Validator rules: **PARTIAL 2026-06-10** (the inbox-disposition r
 - [x] `EmitSkipMissing` (skip-totality), cross-node contract coupling (`IntakeUnresolvedContract`, `EmitUnresolvedContract` over contract/topic/event), and `PublisherUnresolvedEmit` (producer pairing). (2026-06-10)
 - [ ] Remaining (lower-value): envelope-binding completeness, cross-check-declaration, dedupe-key resolution, explicit-decode-strictness checks.
 
-Milestones 3–4 (scaffold + harness for the integration nodes) and M5 (conformance vs the captured `Integration/` modules) remain.
+Milestone 3–4 (scaffold + harness) — **PARTIAL 2026-06-10**: `scaffoldContract` emits a self-contained `-- @generated` payload ADT (per-event Data records) + topic constants + `messageType` discriminator + strict codec; the `keiro-dsl-conformance-contract` component compiles it and round-trips every contract event type (firewall holds). The intake/emit/publisher scaffold (inbox/outbox wiring, runtime-coupled) and M5 conformance vs the captured `Integration/` modules remain.
 
 Milestone 2 — Validator rules:
 

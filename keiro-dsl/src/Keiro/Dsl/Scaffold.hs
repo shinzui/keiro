@@ -23,6 +23,7 @@ module Keiro.Dsl.Scaffold (
     Context (..),
     scaffoldAggregate,
     scaffoldProcess,
+    scaffoldContract,
 
     -- * Internal resolution, shared with "Keiro.Dsl.Harness"
     Agg (..),
@@ -201,6 +202,122 @@ holeModule a body =
         , moduleText = body
         , kind = HoleStub
         }
+
+--------------------------------------------------------------------------------
+-- Integration contract (EP-4): a self-contained payload ADT + codec
+--------------------------------------------------------------------------------
+
+{- | Emit the deterministic, symbol-free contract layer: a payload ADT
+(per-event records), the topic constants, the @messageType@ discriminator, and a
+strict encode\/decode keyed by it. Self-contained (base\/text\/aeson), so it
+compiles standalone — the cross-service schema both producer and consumer agree
+on. No keiki symbolic operator (firewall holds).
+-}
+scaffoldContract :: Context -> ContractNode -> [ScaffoldModule]
+scaffoldContract ctx c =
+    [ ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Contract.hs")
+        , moduleText = emitContractGen genPrefix c
+        , kind = Generated
+        }
+    ]
+  where
+    ctxPascal = pascalFromKebab (contextName ctx)
+    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
+    genPrefix = root <> "Generated." <> ctxPascal <> "." <> pascal (ctrName c)
+
+emitContractGen :: Text -> ContractNode -> Text
+emitContractGen genPrefix c =
+    nl $
+        [ "{-# LANGUAGE DuplicateRecordFields #-}"
+        , "{-# LANGUAGE OverloadedRecordDot #-}"
+        , "{-# LANGUAGE OverloadedStrings #-}"
+        , "{-# OPTIONS_GHC -Wno-unused-top-binds #-}"
+        , generatedBanner
+        , "module " <> genPrefix <> ".Contract"
+        , "  ( " <> payloadTy <> " (..)"
+        , nl ["  , " <> ceName e <> "Data (..)" | e <- ctrEvents c]
+        , "  , messageTypeOf"
+        , "  , encode" <> payloadTy
+        , "  , parse" <> payloadTy
+        , "  ) where"
+        , ""
+        , "import Data.Aeson (Value, object, withObject, (.:), (.=))"
+        , "import Data.Aeson.Types (Parser, parseEither)"
+        , "import Data.Text (Text)"
+        , "import qualified Data.Text as T"
+        , ""
+        , "-- topic constants"
+        ]
+            ++ [lowerFirst alias <> "Topic :: Text\n" <> lowerFirst alias <> "Topic = " <> tshow t | (alias, t) <- ctrTopics c]
+            ++ [ ""
+               , "-- the closed payload set (discriminated by " <> tshow (ctrDiscriminator c) <> ")"
+               ]
+            ++ [emitPayloadAdt payloadTy (ctrEvents c)]
+            ++ [ ""
+               , "messageTypeOf :: " <> payloadTy <> " -> Text"
+               , "messageTypeOf = \\case"
+               ]
+            ++ ["  " <> ceName e <> " {} -> " <> tshow (ceName e) | e <- ctrEvents c]
+            ++ [ ""
+               , "encode" <> payloadTy <> " :: " <> payloadTy <> " -> Value"
+               , "encode" <> payloadTy <> " = \\case"
+               ]
+            ++ concatMap encodeArm (ctrEvents c)
+            ++ [ ""
+               , "parse" <> payloadTy <> " :: Value -> Either Text " <> payloadTy
+               , "parse" <> payloadTy <> " = mapLeftText . parseEither (withObject " <> tshow payloadTy <> " go)"
+               , "  where"
+               , "    go o = do"
+               , "      kind <- o .: " <> tshow (ctrDiscriminator c) <> " :: Parser Text"
+               , "      case kind of"
+               ]
+            ++ concatMap decodeArm (ctrEvents c)
+            ++ [ "        _ -> fail \"unknown message type\""
+               , ""
+               , "mapLeftText :: Either String b -> Either Text b"
+               , "mapLeftText = either (Left . T.pack) Right"
+               ]
+  where
+    payloadTy = pascal (ctrName c) <> "Payload"
+    encodeArm e =
+        [ "  " <> ceName e <> " payload ->"
+        , "    object"
+        ]
+            ++ [lead i kv | (i, kv) <- zip [(0 :: Int) ..] ((tshow (ctrDiscriminator c) <> " .= (" <> tshow (ceName e) <> " :: Text)") : [tshow (cfName f) <> " .= payload." <> cfName f | f <- ceFields e])]
+            ++ ["      ]"]
+    lead 0 kv = "      [ " <> kv
+    lead _ kv = "      , " <> kv
+    decodeArm e =
+        [ "        " <> tshow (ceName e) <> " ->"
+        , "          " <> ceName e <> " <$> (" <> ceName e <> "Data" <> fieldApps (ceFields e) <> ")"
+        ]
+    fieldApps [] = ""
+    fieldApps fs = " <$> " <> T.intercalate " <*> " ["o .: " <> tshow (cfName f) | f <- fs]
+
+emitPayloadAdt :: Text -> [ContractEvent] -> Text
+emitPayloadAdt tyName events =
+    sectionsOf [map dataRecord events, [sumDecl]]
+  where
+    hsType CText = "Text"
+    hsType CInt = "Int"
+    hsType (CTypeId _) = "Text"
+    dataRecord e =
+        "data "
+            <> ceName e
+            <> "Data = "
+            <> ceName e
+            <> "Data { "
+            <> T.intercalate ", " [cfName f <> " :: !" <> hsType (cfType f) | f <- ceFields e]
+            <> " }\n  deriving stock (Eq, Show)"
+    arm e = ceName e <> " !" <> ceName e <> "Data"
+    sumDecl = case events of
+        [] -> "data " <> tyName <> " = " <> tyName <> "Empty\n  deriving stock (Eq, Show)"
+        (e : es) ->
+            nl $
+                ["data " <> tyName <> " = " <> arm e]
+                    ++ ["  | " <> arm e2 | e2 <- es]
+                    ++ ["  deriving stock (Eq, Show)"]
 
 --------------------------------------------------------------------------------
 -- Process manager + durable timer (EP-3)
