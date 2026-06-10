@@ -18,6 +18,7 @@ body by construction. The emitted module exposes @harnessAssertions ::
 module Keiro.Dsl.Harness (
     harnessFor,
     harnessProcess,
+    harnessWorkflow,
 ) where
 
 import Data.Text (Text)
@@ -112,6 +113,54 @@ pascalFromKebab' = T.concat . map cap . T.splitOn "-"
     cap t = case T.uncons t of
         Just (c, rest) -> T.cons (T.head (T.toUpper (T.singleton c))) rest
         Nothing -> t
+
+{- | A self-contained, firewall-clean facts harness for a durable workflow,
+pinning the spec's deterministic decisions: the stable name, the WorkflowId
+derivation, the ordered body (step/await/sleep/child by label), and the await
+labels (whose ids the signal operations must match). Exposes
+@workflowFacts :: [(String, String)]@ so a driver asserts them against a
+hand-written expectation — a spec change (e.g. renaming an await label) diverges
+and reddens a specific assertion. (Full @Keiro.Workflow@ runtime conformance is
+the heavier remaining step.)
+-}
+harnessWorkflow :: Context -> WorkflowNode -> [ScaffoldModule]
+harnessWorkflow ctx w =
+    [ ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/WorkflowFacts.hs")
+        , moduleText = emitWorkflowFacts genPrefix w
+        , kind = Generated
+        }
+    ]
+  where
+    ctxPascal = pascalFromKebab' (contextName ctx)
+    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
+    genPrefix = root <> "Generated." <> ctxPascal <> "." <> wfId w
+
+emitWorkflowFacts :: Text -> WorkflowNode -> Text
+emitWorkflowFacts genPrefix w =
+    nl
+        [ "{-# LANGUAGE OverloadedStrings #-}"
+        , generatedBanner
+        , "module " <> genPrefix <> ".WorkflowFacts (workflowFacts) where"
+        , ""
+        , "-- | (label, value): the workflow's deterministic decisions, pinned as pure"
+        , "-- facts. A driver asserts them against a hand-written expectation, so a spec"
+        , "-- change (e.g. renaming an await) reddens a specific assertion."
+        , "workflowFacts :: [(String, String)]"
+        , "workflowFacts ="
+        , "  [ (\"name\", " <> hs (wfStable w) <> ")"
+        , "  , (\"idVia\", " <> hs (wfIdVia w) <> ")"
+        , "  , (\"idField\", " <> hs (maybe "input" id (wfIdField w)) <> ")"
+        , "  , (\"body\", " <> hs (T.intercalate "," (map bodyTag (wfBody w))) <> ")"
+        , "  , (\"awaits\", " <> hs (T.intercalate "," [l | WfAwait l _ <- wfBody w]) <> ")"
+        , "  ]"
+        ]
+  where
+    hs = tshow
+    bodyTag (WfStep l _) = "step:" <> l
+    bodyTag (WfAwait l _) = "await:" <> l
+    bodyTag (WfSleep l _) = "sleep:" <> l
+    bodyTag (WfChild l _ _) = "child:" <> l
 
 emitHarness :: Agg -> Text
 emitHarness a =

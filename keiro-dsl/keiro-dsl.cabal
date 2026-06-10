@@ -122,6 +122,18 @@ test-suite keiro-dsl-conformance-queue
     , base   >=4.21 && <5
     , text   >=2.1
 
+-- Workflow facts harness (EP-6): the scaffolded self-contained WorkflowFacts
+-- module asserted against a hand-written expectation (mutation-pinnable).
+test-suite keiro-dsl-conformance-workflow
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-workflow
+  main-is:        Main.hs
+  other-modules:
+    Generated.HospitalCapacity.HospitalTransferReservation.WorkflowFacts
+
+  build-depends:  base >=4.21 && <5
+
 -- Process-manager facts harness (EP-3 M4): the self-contained, firewall-clean
 -- ProcessHarness module scaffolded from hospital-surge.kdsl, compiled + run to
 -- prove the scaffolder lowered the spec's deterministic process/timer decisions
