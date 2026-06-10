@@ -157,6 +157,23 @@ test-suite keiro-dsl-conformance-workflow
 
   build-depends:  base >=4.21 && <5
 
+-- EP-3 process runtime conformance: the scaffolded Process module's
+-- deterministic wiring (timer-request builder + fire disposition) compiled
+-- against the LIVE keiro runtime (Keiro.Timer / Keiro.Command), not just text.
+test-suite keiro-dsl-conformance-process-runtime
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-process-runtime
+  main-is:        Main.hs
+  other-modules:  Generated.HospitalCapacity.HospitalSurge.Process
+  build-depends:
+    , aeson  >=2.2
+    , base   >=4.21 && <5
+    , keiro
+    , text   >=2.1
+    , time   >=1.12
+    , uuid   >=1.3
+
 -- Process-manager facts harness (EP-3 M4): the self-contained, firewall-clean
 -- ProcessHarness module scaffolded from hospital-surge.kdsl, compiled + run to
 -- prove the scaffolder lowered the spec's deterministic process/timer decisions

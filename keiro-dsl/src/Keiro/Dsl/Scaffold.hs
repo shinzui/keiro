@@ -428,7 +428,7 @@ scaffoldProcess ctx p =
     holePrefix = root <> ctxPascal <> "." <> procId p
 
 emitProcessGen :: Text -> Text -> Text -> ProcessNode -> Text
-emitProcessGen _ctxPascal genPrefix holePrefix p =
+emitProcessGen _ctxPascal genPrefix _holePrefix p =
     nl
         [ "{-# LANGUAGE OverloadedStrings #-}"
         , generatedBanner
@@ -438,13 +438,14 @@ emitProcessGen _ctxPascal genPrefix holePrefix p =
         , "  , " <> lo <> "FireOutcome"
         , "  ) where"
         , ""
-        , "import " <> holePrefix <> ".ProcessHoles ()"
         , "import Data.Aeson (Value, object, (.=))"
         , "import Data.Text (Text)"
+        , "import qualified Data.Text as T"
         , "import Data.Time (UTCTime)"
+        , "import Data.UUID (UUID)"
+        , "import qualified Data.UUID.V5 as UUID.V5"
         , "import Keiro.Command (CommandError (..))"
         , "import Keiro.Timer (TimerId (..), TimerRequest (..))"
-        , "import Data.UUID.V5 qualified as UUID.V5"
         , ""
         , "-- The define-once ProcessManager name (hole-kind 5: referenced, never retyped)."
         , lo <> "ProcessName :: Text"
@@ -474,17 +475,27 @@ emitProcessGen _ctxPascal genPrefix holePrefix p =
         , "-- max-attempts = " <> tshow' (tmMaxAttempts timer) <> ", dead-letter = " <> tshow (tmDeadLetter timer)
         , "-- (the timer worker must pass Just " <> tshow' (tmMaxAttempts timer) <> " to runTimerWorkerWith, never the"
         , "--  defaultTimerWorkerOptions Nothing ceiling that retries forever)."
+        , ""
+        , "-- deterministic v5 UUID of a correlation-keyed string (hole-kind 1)."
+        , "namedUuid :: Text -> UUID"
+        , "namedUuid v = UUID.V5.generateNamed UUID.V5.namespaceURL (map (fromIntegral . fromEnum) (T.unpack v))"
         ]
   where
     lo = lowerFirst (procId p)
     timer = procTimer p
     fd = fireDisposition (tmFire timer)
 
+{- | The timer payload, restricted to the spec's literal (@name=\"value\"@)
+bindings so it compiles in the deterministic builder. Bare fields and
+ref-valued bindings are input-driven (the agent-written hole), not emitted.
+-}
 payloadExpr :: [FieldBinding] -> Text
-payloadExpr [] = "object []"
-payloadExpr fs = "object [ " <> T.intercalate ", " (map kv fs) <> " ]"
+payloadExpr fs = case [b | b <- fs, isLiteral b] of
+    [] -> "object []"
+    lits -> "object [ " <> T.intercalate ", " (map kv lits) <> " ]"
   where
-    kv b = tshow (fbName b) <> " .= (" <> maybe (tshow (fbName b)) id (fbValue b) <> " :: Value)"
+    isLiteral b = case fbValue b of Just v -> "\"" `T.isPrefixOf` v; Nothing -> False
+    kv b = tshow (fbName b) <> " .= (" <> maybe "\"\"" id (fbValue b) <> " :: Value)"
 
 showOutcome :: FireOutcome -> Text
 showOutcome OFired = "Fired"
