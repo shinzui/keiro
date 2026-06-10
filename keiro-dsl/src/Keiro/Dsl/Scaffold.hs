@@ -24,6 +24,7 @@ module Keiro.Dsl.Scaffold (
     scaffoldAggregate,
     scaffoldProcess,
     scaffoldContract,
+    scaffoldWorkqueue,
 
     -- * Internal resolution, shared with "Keiro.Dsl.Harness"
     Agg (..),
@@ -318,6 +319,82 @@ emitPayloadAdt tyName events =
                 ["data " <> tyName <> " = " <> arm e]
                     ++ ["  | " <> arm e2 | e2 <- es]
                     ++ ["  deriving stock (Eq, Show)"]
+
+--------------------------------------------------------------------------------
+-- pgmq workqueue (EP-5): a self-contained Job payload record + codec
+--------------------------------------------------------------------------------
+
+{- | Emit the deterministic, symbol-free pgmq layer: the Job payload record, the
+field→wire-name JSON codec, and the captured physical\/dlq\/table name constants.
+Self-contained (base\/text\/aeson). The fan-out body and the raw-SQL dedup
+predicate are holes (not emitted). Firewall holds.
+-}
+scaffoldWorkqueue :: Context -> WorkqueueNode -> [ScaffoldModule]
+scaffoldWorkqueue ctx w =
+    [ ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Queue.hs")
+        , moduleText = emitWorkqueueGen genPrefix w
+        , kind = Generated
+        }
+    ]
+  where
+    ctxPascal = pascalFromKebab (contextName ctx)
+    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
+    genPrefix = root <> "Generated." <> ctxPascal <> "." <> pascal (wqName w)
+
+emitWorkqueueGen :: Text -> WorkqueueNode -> Text
+emitWorkqueueGen genPrefix w =
+    nl $
+        [ "{-# LANGUAGE OverloadedRecordDot #-}"
+        , "{-# LANGUAGE OverloadedStrings #-}"
+        , "{-# OPTIONS_GHC -Wno-unused-top-binds #-}"
+        , generatedBanner
+        , "module " <> genPrefix <> ".Queue"
+        , "  ( " <> payloadTy <> " (..)"
+        , "  , encode" <> payloadTy
+        , "  , parse" <> payloadTy
+        , "  , queuePhysical, queueDlq, queueTable"
+        , "  ) where"
+        , ""
+        , "import Data.Aeson (Value, object, withObject, (.:), (.=))"
+        , "import Data.Aeson.Types (parseEither)"
+        , "import Data.Text (Text)"
+        , "import qualified Data.Text as T"
+        , ""
+        , "queuePhysical, queueDlq, queueTable :: Text"
+        , "queuePhysical = " <> tshow (wqPhysical w)
+        , "queueDlq = " <> tshow (wqDlq w)
+        , "queueTable = " <> tshow (wqTable w)
+        , ""
+        , "data " <> payloadTy <> " = " <> payloadTy
+        , "  { " <> T.intercalate "\n  , " [wqfName f <> " :: !" <> hsType (wqfType f) | f <- wqPayload w]
+        , "  }"
+        , "  deriving stock (Eq, Show)"
+        , ""
+        , "encode" <> payloadTy <> " :: " <> payloadTy <> " -> Value"
+        , "encode" <> payloadTy <> " p ="
+        , "  object"
+        ]
+            ++ [lead i (tshow (wqfWire f) <> " .= p." <> wqfName f) | (i, f) <- zip [(0 :: Int) ..] (wqPayload w)]
+            ++ [ "    ]"
+               , ""
+               , "parse" <> payloadTy <> " :: Value -> Either Text " <> payloadTy
+               , "parse" <> payloadTy <> " = mapLeftText . parseEither (withObject " <> tshow payloadTy <> " go)"
+               , "  where"
+               , "    go o = " <> payloadTy <> fieldApps (wqPayload w)
+               , ""
+               , "mapLeftText :: Either String b -> Either Text b"
+               , "mapLeftText = either (Left . T.pack) Right"
+               ]
+  where
+    payloadTy = wqPayloadName w
+    hsType "bool" = "Bool"
+    hsType "int" = "Int"
+    hsType _ = "Text"
+    lead 0 kv = "    [ " <> kv
+    lead _ kv = "    , " <> kv
+    fieldApps [] = ""
+    fieldApps fs = " <$> " <> T.intercalate " <*> " ["o .: " <> tshow (wqfWire f) | f <- fs]
 
 --------------------------------------------------------------------------------
 -- Process manager + durable timer (EP-3)

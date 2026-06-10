@@ -109,6 +109,19 @@ test-suite keiro-dsl-conformance-contract
     , base   >=4.21 && <5
     , text   >=2.1
 
+-- pgmq Job codec conformance (EP-5): the scaffolded self-contained Job payload
+-- record + field->wire codec, compiled + round-tripped.
+test-suite keiro-dsl-conformance-queue
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-queue
+  main-is:        Main.hs
+  other-modules:  Generated.HospitalCapacity.Reservation_work.Queue
+  build-depends:
+    , aeson  >=2.2
+    , base   >=4.21 && <5
+    , text   >=2.1
+
 -- Process-manager facts harness (EP-3 M4): the self-contained, firewall-clean
 -- ProcessHarness module scaffolded from hospital-surge.kdsl, compiled + run to
 -- prove the scaffolder lowered the spec's deterministic process/timer decisions

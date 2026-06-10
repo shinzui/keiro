@@ -12,7 +12,7 @@ import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessFor, harnessProcess)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate, scaffoldContract, scaffoldProcess)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate, scaffoldContract, scaffoldProcess, scaffoldWorkqueue)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
@@ -96,7 +96,8 @@ run (Scaffold fp out) = do
                         ]
                 procMods = concat [scaffoldProcess ctx p <> harnessProcess ctx p | NProcess p <- specNodes spec]
                 contractMods = concat [scaffoldContract ctx c | NContract c <- specNodes spec]
-            forM_ (aggMods <> procMods <> contractMods) (writeModule out)
+                wqMods = concat [scaffoldWorkqueue ctx wq | NWorkqueue wq <- specNodes spec]
+            forM_ (aggMods <> procMods <> contractMods <> wqMods) (writeModule out)
 run (Diff fp ref) = do
     -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.
     let dir = takeDirectory fp
