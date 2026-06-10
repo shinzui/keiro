@@ -186,6 +186,19 @@ main = hspec $ do
             codes <- errorCodesOf "test/fixtures/reservation-work-df-retry.kdsl"
             codes `shouldContain` [WqDecodeFailureNotDeadLetter]
 
+    describe "workflow/operation (EP-6)" $ do
+        it "round-trips the workflow spec through parse . pretty" $ do
+            input <- TIO.readFile "test/fixtures/workflow.kdsl"
+            case parseSpec "in" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+        it "accepts the workflow spec (await<->signal matches, run resolves)" $ do
+            codes <- errorCodesOf "test/fixtures/workflow.kdsl"
+            codes `shouldBe` []
+        it "rejects a signal label with no matching await as AwaitSignalMismatch" $ do
+            codes <- errorCodesOf "test/fixtures/workflow-signal-mismatch.kdsl"
+            codes `shouldContain` [AwaitSignalMismatch]
+
     describe "diff (evolution classification)" $ do
         it "classifies a field added without a version bump as BREAKING" $ do
             cs <- diffFixtures "test/fixtures/reservation.kdsl" "test/fixtures/reservation-fieldadd.kdsl"

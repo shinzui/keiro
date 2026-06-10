@@ -89,6 +89,12 @@ module Keiro.Dsl.Grammar (
     WorkqueueNode (..),
     PgmqDispatchNode (..),
 
+    -- * The workflow/operation nodes (EP-6)
+    WfBodyItem (..),
+    WorkflowNode (..),
+    OperationShape (..),
+    OperationNode (..),
+
     -- * Top level
     Node (..),
     Spec (..),
@@ -720,9 +726,60 @@ data PgmqDispatchNode = PgmqDispatchNode
     }
     deriving stock (Eq, Show, Generic)
 
+-- EP-6: the durable @workflow@ + @operation@ nodes.
+
+-- | One ordered item of a workflow body. Replay matches on the label, not the
+-- position. (Positional constructors avoid partial record fields.)
+data WfBodyItem
+    = -- | @step <label> -> <ResultType>@
+      WfStep !Name !Name
+    | -- | @await <label> -> <ResultType>@
+      WfAwait !Name !Name
+    | -- | @sleep <label> after <injected-delay-field>@ (TIME INJECTED)
+      WfSleep !Name !Name
+    | -- | @child <label> id input via <childIdFn> -> <ResultType>@
+      WfChild !Name !Name !Name
+    deriving stock (Eq, Show, Generic)
+
+-- | A durable @workflow@ node.
+data WorkflowNode = WorkflowNode
+    { wfId :: !Name
+    -- ^ block identifier (e.g. @HospitalTransferReservation@)
+    , wfStable :: !Text
+    -- ^ the stable @name "…"@ (journal stream + every deterministic id)
+    , wfInput :: !Name
+    , wfInputFields :: ![Field]
+    , wfOutput :: !Name
+    , wfIdField :: !(Maybe Name)
+    -- ^ @id from input.<field>@; 'Nothing' for @id from input@
+    , wfIdVia :: !Name
+    , wfBody :: ![WfBodyItem]
+    , wfLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | The four operation shapes.
+data OperationShape
+    = -- | @command on <Agg> stream from <field> via <fn> project [ … ]@
+      CommandOp !Name !Name !Name ![Name]
+    | -- | @query <ReadModel> input <T> result <Type> consistency <C>@
+      QueryOp !Name !Name !Text !Name
+    | -- | @signal <label> of <Workflow> key from <field> via <fn> value <T>@
+      SignalOp !Name !Name !Name !Name !Name
+    | -- | @run <Workflow> input <T> outcome -> <Result>@
+      RunOp !Name !Name !Name
+    deriving stock (Eq, Show, Generic)
+
+data OperationNode = OperationNode
+    { opName :: !Name
+    , opShape :: !OperationShape
+    , opLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
 {- | A top-level node. EP-1 defines 'NAggregate'; EP-3 adds 'NProcess'; EP-4 adds
 'NContract'\/'NIntake'\/'NEmit'\/'NPublisher'; EP-5 adds 'NWorkqueue'\/
-'NPgmqDispatch'. EP-6 adds further constructors.
+'NPgmqDispatch'; EP-6 adds 'NWorkflow'\/'NOperation'.
 -}
 data Node
     = NAggregate Aggregate
@@ -733,6 +790,8 @@ data Node
     | NPublisher PublisherNode
     | NWorkqueue WorkqueueNode
     | NPgmqDispatch PgmqDispatchNode
+    | NWorkflow WorkflowNode
+    | NOperation OperationNode
     deriving stock (Eq, Show, Generic)
 
 {- | A whole @.kdsl@ file: one context name, the shared id/enum/rule

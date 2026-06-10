@@ -116,6 +116,16 @@ reservedWords =
     , "dedup"
     , "enqueue"
     , "seenIn"
+    , -- EP-6 workflow/operation: reserved so the multi-word result-type parse and
+      -- node boundaries don't swallow the next block keyword.
+      "workflow"
+    , "operation"
+    , "consistency"
+    , "body"
+    , "step"
+    , "await"
+    , "sleep"
+    , "child"
     ]
 
 {- | A CamelCase / snake_case identifier (no dashes): type names, register
@@ -180,6 +190,8 @@ pTopItem =
         , TINode . NPublisher <$> pPublisher
         , TINode . NWorkqueue <$> pWorkqueue
         , TINode . NPgmqDispatch <$> pPgmqDispatch
+        , TINode . NWorkflow <$> pWorkflow
+        , TINode . NOperation <$> pOperation
         , TINode . NAggregate <$> pAggregate
         ]
 
@@ -727,6 +739,108 @@ pPgmqDispatch = do
             , pdEnqueueTo = enq
             , pdLoc = loc
             }
+
+pWorkflow :: P WorkflowNode
+pWorkflow = do
+    loc <- getLoc
+    keyword "workflow"
+    wid <- ident
+    keyword "name"
+    nm <- stringLit
+    keyword "in"
+    inTy <- ident
+    inFields <- option [] (braces (many pField))
+    keyword "out"
+    outTy <- ident
+    keyword "id"
+    keyword "from"
+    keyword "input"
+    idField <- optional (symbol "." *> ident)
+    keyword "via"
+    idVia <- ident
+    keyword "body"
+    body <- many pWfBodyItem
+    pure
+        WorkflowNode
+            { wfId = wid
+            , wfStable = nm
+            , wfInput = inTy
+            , wfInputFields = inFields
+            , wfOutput = outTy
+            , wfIdField = idField
+            , wfIdVia = idVia
+            , wfBody = body
+            , wfLoc = loc
+            }
+  where
+    pWfBodyItem =
+        choice
+            [ WfStep <$> (keyword "step" *> wireWord) <*> (symbol "->" *> ident)
+            , WfAwait <$> (keyword "await" *> wireWord) <*> (symbol "->" *> ident)
+            , WfSleep <$> (keyword "sleep" *> wireWord) <*> (keyword "after" *> ident)
+            , WfChild
+                <$> (keyword "child" *> wireWord)
+                <*> (keyword "id" *> keyword "input" *> keyword "via" *> ident)
+                <*> (symbol "->" *> ident)
+            ]
+
+pOperation :: P OperationNode
+pOperation = do
+    loc <- getLoc
+    keyword "operation"
+    nm <- ident
+    shape <-
+        choice
+            [ pCommandOp
+            , pQueryOp
+            , pSignalOp
+            , pRunOp
+            ]
+    pure OperationNode{opName = nm, opShape = shape, opLoc = loc}
+  where
+    pCommandOp = do
+        keyword "command"
+        keyword "on"
+        agg <- ident
+        _ <- keyword "stream" *> keyword "from"
+        sf <- ident
+        keyword "via"
+        sv <- ident
+        proj <- option [] (keyword "project" *> brackets (many ident))
+        pure (CommandOp agg sf sv proj)
+    pQueryOp = do
+        keyword "query"
+        rm <- ident
+        keyword "input"
+        inp <- ident
+        keyword "result"
+        res <- pTypeExpr
+        cons <- option "Strong" (keyword "consistency" *> ident)
+        pure (QueryOp rm inp res cons)
+    pSignalOp = do
+        keyword "signal"
+        lbl <- wireWord
+        keyword "of"
+        wf <- ident
+        _ <- keyword "key" *> keyword "from"
+        kf <- ident
+        keyword "via"
+        kv <- ident
+        keyword "value"
+        val <- ident
+        pure (SignalOp lbl wf kf kv val)
+    pRunOp = do
+        keyword "run"
+        wf <- ident
+        keyword "input"
+        inp <- ident
+        _ <- keyword "outcome" *> symbol "->"
+        oc <- ident
+        pure (RunOp wf inp oc)
+    -- A result type expression, possibly multi-word like @Maybe TransferDecision@.
+    pTypeExpr = do
+        ws <- some ident
+        pure (T.unwords ws)
 
 --------------------------------------------------------------------------------
 -- Process manager + durable timer (EP-3)

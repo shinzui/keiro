@@ -67,6 +67,9 @@ data DiagnosticCode
     | WqDecodeFailureNotDeadLetter
     | WqDlqWithoutCeiling
     | DispatchEnqueueUnresolved
+    | -- EP-6 (workflow/operation).
+      AwaitSignalMismatch
+    | RunWorkflowUnresolved
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -117,6 +120,34 @@ validateNode spec (NEmit e) = validateEmit spec e
 validateNode spec (NPublisher p) = validatePublisher spec p
 validateNode _spec (NWorkqueue w) = validateWorkqueue w
 validateNode spec (NPgmqDispatch d) = validatePgmqDispatch spec d
+validateNode _spec (NWorkflow _) = []
+validateNode spec (NOperation o) = validateOperation spec o
+
+-- | EP-6 operation rules: a @signal <label> of <wf>@ must match an @await@ of
+-- that workflow (else the deterministic awakeable id never matches and the
+-- workflow waits forever); a @run <wf>@ must resolve to a declared workflow.
+validateOperation :: Spec -> OperationNode -> [Diagnostic]
+validateOperation spec o = case opShape o of
+    SignalOp lbl wf _ _ _ ->
+        case lookupWorkflow wf of
+            Nothing ->
+                [mkErr ol AwaitSignalMismatch ("signal operation '" <> opName o <> "' targets undeclared workflow '" <> wf <> "'")]
+            Just w
+                | lbl `elem` awaitLabels w -> []
+                | otherwise ->
+                    [ mkErr ol AwaitSignalMismatch $
+                        "signal '" <> lbl <> "' of " <> wf <> " has no matching 'await' (workflow declares awaits {" <> T.intercalate ", " (awaitLabels w) <> "}); the deterministic awakeable id will not match and the workflow will wait forever"
+                    ]
+    RunOp wf _ _ ->
+        [ mkErr ol RunWorkflowUnresolved ("run operation '" <> opName o <> "' targets undeclared workflow '" <> wf <> "'")
+        | wf `notElem` map wfId workflows
+        ]
+    _ -> []
+  where
+    ol = locLine (opLoc o)
+    workflows = [w | NWorkflow w <- specNodes spec]
+    lookupWorkflow n = case [w | w <- workflows, wfId w == n] of (w : _) -> Just w; [] -> Nothing
+    awaitLabels w = [l | WfAwait l _ <- wfBody w]
 
 -- | EP-5 workqueue rules: the captured physical name must match the queueRef
 -- derivation; the disposition inversions (storeFailure transient => must retry;

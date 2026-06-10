@@ -63,6 +63,54 @@ docNode (NEmit e) = docEmit e
 docNode (NPublisher p) = docPublisher p
 docNode (NWorkqueue w) = docWorkqueue w
 docNode (NPgmqDispatch d) = docPgmqDispatch d
+docNode (NWorkflow w) = docWorkflow w
+docNode (NOperation o) = docOperation o
+
+docWorkflow :: WorkflowNode -> Doc ann
+docWorkflow w =
+    vsep $
+        [ "workflow" <+> pretty (wfId w)
+        , indent 2 ("name" <+> dquoted (wfStable w))
+        , indent 2 ("in" <+> pretty (wfInput w) <> inFieldsDoc)
+        , indent 2 ("out" <+> pretty (wfOutput w))
+        , indent 2 ("id from input" <> maybe mempty (\f -> "." <> pretty f) (wfIdField w) <+> "via" <+> pretty (wfIdVia w))
+        , indent 2 "body"
+        ]
+            ++ map (indent 4 . bodyItem) (wfBody w)
+  where
+    inFieldsDoc = case wfInputFields w of
+        [] -> mempty
+        fs -> " " <> braced (map docField fs)
+    bodyItem (WfStep l r) = "step" <+> pretty l <+> "->" <+> pretty r
+    bodyItem (WfAwait l r) = "await" <+> pretty l <+> "->" <+> pretty r
+    bodyItem (WfSleep l a) = "sleep" <+> pretty l <+> "after" <+> pretty a
+    bodyItem (WfChild l v r) = "child" <+> pretty l <+> "id input via" <+> pretty v <+> "->" <+> pretty r
+
+docOperation :: OperationNode -> Doc ann
+docOperation o =
+    vsep $ ["operation" <+> pretty (opName o)] ++ map (indent 2) (shapeLines (opShape o))
+  where
+    shapeLines (CommandOp agg sf sv proj) =
+        [ "command on" <+> pretty agg
+        , indent 2 ("stream from" <+> pretty sf <+> "via" <+> pretty sv)
+        ]
+            ++ [indent 2 ("project" <+> bracketed (map pretty proj)) | not (null proj)]
+    shapeLines (QueryOp rm inp res cons) =
+        [ "query" <+> pretty rm
+        , indent 2 ("input" <+> pretty inp)
+        , indent 2 ("result" <+> pretty res)
+        , indent 2 ("consistency" <+> pretty cons)
+        ]
+    shapeLines (SignalOp lbl wf kf kv val) =
+        [ "signal" <+> pretty lbl <+> "of" <+> pretty wf
+        , indent 2 ("key from" <+> pretty kf <+> "via" <+> pretty kv)
+        , indent 2 ("value" <+> pretty val)
+        ]
+    shapeLines (RunOp wf inp oc) =
+        [ "run" <+> pretty wf
+        , indent 2 ("input" <+> pretty inp)
+        , indent 2 ("outcome ->" <+> pretty oc)
+        ]
 
 docWorkqueue :: WorkqueueNode -> Doc ann
 docWorkqueue w =

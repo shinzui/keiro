@@ -100,14 +100,16 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-Milestone 1 — Grammar + parser for `workflow`/`operation`:
+Milestone 1 — Grammar + parser for `workflow`/`operation`: **DONE 2026-06-10** (NWorkflow + NOperation parse/pretty/round-trip)
+
 
 - [ ] Add a `Workflow !WorkflowNode` and an `Operation !OperationNode` constructor (and their field records) to `Keiro.Dsl.Grammar`, including the ordered `BodyItem` sum (`StepItem`/`AwaitItem`/`SleepItem`/`ChildItem`), the `OperationShape` sum (`CommandOp`/`QueryOp`/`SignalOp`/`RunOp`), and the `Consistency` type.
 - [ ] Extend `Keiro.Dsl.Parser` with `pWorkflow` and `pOperation`, wired into the top-level node parser; the workflow `id from <field>` clause, the body lines (`step`/`await`/`sleep`/`child`), and the four operation forms all parse.
 - [ ] Extend `Keiro.Dsl.PrettyPrint` so a parsed `workflow`/`operation` round-trips (`parse` then pretty-print is idempotent).
 - [ ] `keiro-dsl parse` on a `workflow`-bearing spec prints the parsed model back out.
 
-Milestone 2 — Validator rules:
+Milestone 2 — Validator rules: **PARTIAL 2026-06-10** (headline await<->signal + run resolution done; remaining rules deferred)
+
 
 - [ ] Implement the rules in `Keiro.Dsl.Validate`: no wall-clock/randomness outside a journaled step; sleep deadline from injected data only; step + await labels unique per workflow; every `await` has a matching `signal` operation (or is flagged external-only) deriving the same `(name,id,label)`; `child` resolves to a declared+registered workflow with a provably-distinct id; step/await result types require JSON codecs (a type change is breaking); `WorkflowName` and read-model `shapeHash`/`version` are stable (warn on rename); command `stream … from <field>` and `via`/`project` resolve; reject `Eventual`/`PositionWait` on a `Strong` read model without an explicit override.
 - [ ] `keiro-dsl check` rejects each violation with a line-numbered diagnostic; a complete spec passes clean.
