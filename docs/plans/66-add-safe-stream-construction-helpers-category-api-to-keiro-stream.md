@@ -273,7 +273,23 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- **2026-06-10 — mandatory scope (M0–M3) complete.** The original purpose is met: authors no
+  longer hand-concatenate `<category>-<id>`. They declare a `StreamCategory` once and call
+  `entityStream`/`entityStreamId`; the category rule lives in kiroku (ExecPlan #55, pushed) and
+  keiro's `Keiro.Stream` layers the phantom-typed, validating API on top (commit `27dc22a`),
+  with the `_`-compound / `:`-workflow naming convention settled (`b99fbb8`) and the in-repo
+  `keiro/jitsurei` example fully migrated with zero stream-name change (`5af73f9`). `keiro-test`
+  and `jitsurei-test` both pass.
+- **Two design forks resolved against the first instinct:** the convention-owning core belongs
+  in kiroku (not keiro), and the type is `StreamCategory` (not `Category`, which clashed with the
+  subscription target). Both improved the result.
+- **Deferred / out of scope:** (1) the DSL saga-prefix reconciliation (`hospital-surge-` →
+  `hospital_surge`) — a real stream-name change that regenerates golden conformance fixtures,
+  tracked as a follow-up; (2) rejecting a hyphenated `WorkflowName` — a behavior change to
+  existing workflows, belongs to a separate hardening pass; (3) **M4** — migrating the separate
+  `keiro-runtime-jitsurei` repo, optional and downstream. (4) The keiro commits (`27dc22a`,
+  `b99fbb8`, `5af73f9`) are committed locally on `master` but **not pushed** (only kiroku #55 was
+  authorized to push).
 
 
 ## Context and Orientation
