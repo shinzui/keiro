@@ -182,6 +182,26 @@ test-suite keiro-dsl-conformance-queue-runtime
     , keiro-pgmq
     , text        >=2.1
 
+-- EP-5 M5 full-service conformance: a complete pgmq dispatch service — scaffolded
+-- Job codec + retry policy + a filled worker handler assembled into a live
+-- Keiro.PGMQ.Job.Job value — compiled against keiro-pgmq.
+test-suite keiro-dsl-conformance-dispatch-full
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-dispatch-full
+  main-is:        Main.hs
+  other-modules:
+    Generated.HospitalCapacity.Reservation_work.Queue
+    Generated.HospitalCapacity.Reservation_work.QueuePolicy
+    HospitalCapacity.ReservationWork.WorkqueueJob
+
+  build-depends:
+    , aeson           >=2.2
+    , base            >=4.21 && <5
+    , effectful-core
+    , keiro-pgmq
+    , text            >=2.1
+
 -- Workflow facts harness (EP-6): the scaffolded self-contained WorkflowFacts
 -- module asserted against a hand-written expectation (mutation-pinnable).
 test-suite keiro-dsl-conformance-workflow
