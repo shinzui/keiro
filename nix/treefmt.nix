@@ -17,6 +17,12 @@
         programs.fourmolu.enable = true;
         programs.fourmolu.package = haskellPkgs.fourmolu;
         programs.cabal-fmt.enable = true;
+        # The keiro-dsl conformance slice is captured/scaffolded fixture source
+        # (the `-- @generated` Generated.* modules plus a hand-filled Holes.hs).
+        # It must stay byte-stable: the scaffold-conformance test pins the live
+        # `keiro-dsl scaffold` output against these files, and reformatting them
+        # (e.g. reordering imports) would spuriously break that pin.
+        settings.global.excludes = [ "keiro-dsl/test/conformance/**" ];
       };
     };
 }

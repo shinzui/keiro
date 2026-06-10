@@ -32,6 +32,7 @@ library
     Keiro.Dsl.Grammar
     Keiro.Dsl.Parser
     Keiro.Dsl.PrettyPrint
+    Keiro.Dsl.Scaffold
     Keiro.Dsl.Validate
 
   build-depends:
@@ -48,6 +49,8 @@ executable keiro-dsl
   main-is:        Main.hs
   build-depends:
     , base                  >=4.21 && <5
+    , directory             >=1.3
+    , filepath              >=1.4
     , keiro-dsl
     , optparse-applicative  >=0.18
     , text                  >=2.1
@@ -64,3 +67,27 @@ test-suite keiro-dsl-test
     , keiro-dsl
     , QuickCheck  >=2.14
     , text        >=2.1
+
+-- Conformance: proves the scaffolded Generated modules plus a hand-filled
+-- Holes.hs compile against keiki/keiro and that the filled transducer passes
+-- keiki's validator and the codec round-trips. The Generated.* modules under
+-- test/conformance/ are byte-identical to `keiro-dsl scaffold` output (pinned
+-- by the scaffold-conformance test in keiro-dsl-test).
+test-suite keiro-dsl-conformance
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance
+  main-is:        Main.hs
+  other-modules:
+    Generated.HospitalCapacity.Reservation.Codec
+    Generated.HospitalCapacity.Reservation.Domain
+    Generated.HospitalCapacity.Reservation.EventStream
+    Generated.HospitalCapacity.Reservation.Projection
+    HospitalCapacity.Reservation.Holes
+
+  build-depends:
+    , aeson  >=2.2
+    , base   >=4.21 && <5
+    , keiki  >=0.1
+    , keiro
+    , text   >=2.1

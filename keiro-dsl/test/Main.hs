@@ -9,6 +9,7 @@ import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), validateSpec)
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
@@ -54,6 +55,35 @@ main = hspec $ do
             codes <- diagnosticCodesOf "test/fixtures/reservation-clock.kdsl"
             codes `shouldContain` [ClockSampled]
 
+    describe "scaffold" $ do
+        it "never emits a keiki symbolic operator into a Generated module (firewall)" $ do
+            mods <- scaffoldFixture "test/fixtures/reservation.kdsl"
+            let breaches =
+                    [ (modulePath m, op)
+                    | m <- mods
+                    , kind m == Generated
+                    , op <- symbolicOperators
+                    , op `T.isInfixOf` moduleText m
+                    ]
+            breaches `shouldBe` []
+        it "marks the Holes module HoleStub and the rest Generated" $ do
+            mods <- scaffoldFixture "test/fixtures/reservation.kdsl"
+            let holes = [m | m <- mods, "Holes.hs" `T.isSuffixOf` T.pack (modulePath m)]
+            map kind holes `shouldBe` [HoleStub]
+            length [m | m <- mods, kind m == Generated] `shouldBe` 4
+        it "is deterministic (re-scaffolding yields byte-identical text)" $ do
+            a <- scaffoldFixture "test/fixtures/reservation.kdsl"
+            b <- scaffoldFixture "test/fixtures/reservation.kdsl"
+            map moduleText a `shouldBe` map moduleText b
+        it "matches the committed compiling Generated conformance modules (modulo whitespace)" $ do
+            mods <- scaffoldFixture "test/fixtures/reservation.kdsl"
+            mapM_ assertMatchesCommitted [m | m <- mods, kind m == Generated]
+        it "scaffolds the register-free OrderStream smoke target without error" $ do
+            mods <- scaffoldFixture "test/fixtures/order.kdsl"
+            length mods `shouldBe` 5
+            let breaches = [() | m <- mods, kind m == Generated, op <- symbolicOperators, op `T.isInfixOf` moduleText m]
+            breaches `shouldBe` []
+
 {- | Parse a fixture and return the validator's diagnostic codes (failing the
 test on a parse error).
 -}
@@ -63,6 +93,42 @@ diagnosticCodesOf path = do
     case parseSpec path input of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right spec -> pure (map code (validateSpec spec))
+
+-- | The keiki symbolic operators that must never appear in a Generated module.
+symbolicOperators :: [T.Text]
+symbolicOperators = ["./=", ".==", ".||", ".&&", "lit ", "B.slot", "B.requireGuard"]
+
+-- | Parse a fixture and scaffold every aggregate in it.
+scaffoldFixture :: FilePath -> IO [ScaffoldModule]
+scaffoldFixture path = do
+    input <- TIO.readFile path
+    case parseSpec path input of
+        Left err -> expectationFailure (T.unpack err) >> pure []
+        Right spec ->
+            pure $ concat [scaffoldAggregate (ctx spec) spec agg | NAggregate agg <- specNodes spec]
+  where
+    ctx spec = Context{contextName = specContext spec, moduleRoot = ""}
+
+{- | Assert a freshly-scaffolded Generated module matches its committed copy
+under test/conformance/ (whitespace-normalized). The committed copies are the
+ones the keiro-dsl-conformance suite compiles, so this pins the live scaffolder
+to known-compiling output.
+-}
+assertMatchesCommitted :: ScaffoldModule -> IO ()
+assertMatchesCommitted m = do
+    let committedPath = "test/conformance/" <> modulePath m
+    committed <- TIO.readFile committedPath
+    normalize committed `shouldBe` normalize (moduleText m)
+  where
+    -- Compare the deterministic body, robust to formatting. Import lines are
+    -- dropped because the autoformatter (fourmolu) may reorder import-list items
+    -- and move `qualified`; correctness of the imports is already proven by the
+    -- keiro-dsl-conformance suite compiling. Everything else (types, codec,
+    -- wiring) is whitespace-normalized.
+    normalize = T.unwords . T.words . T.unlines . filter (not . isImport) . T.lines
+    isImport l = case T.words l of
+        ("import" : _) -> True
+        _ -> False
 
 --------------------------------------------------------------------------------
 -- Generators (bounded; restricted to valid, non-reserved identifiers)

@@ -1,0 +1,32 @@
+context jitsurei
+
+id OrderId    prefix=ord
+id Sku        prefix=sku
+id Quantity   prefix=qty
+id PaymentRef prefix=pay
+id Carrier    prefix=car
+id TrackingId prefix=trk
+
+aggregate Order
+  regs
+  states NotStarted Placed Paid Packed Shipped! Cancelled!
+
+  command PlaceOrder     { orderId sku quantity }
+  command ApprovePayment { orderId paymentRef }
+  command CancelOrder    { orderId reason:Text }
+  command MarkPacked     { orderId }
+  command ShipOrder      { orderId carrier trackingId }
+
+  event OrderPlaced     = fields(PlaceOrder)
+  event PaymentApproved { orderId paymentRef }
+  event OrderCancelled  { orderId reason:Text }
+  event OrderPacked     { orderId }
+  event OrderShipped    { orderId carrier trackingId }
+
+  NotStarted -- PlaceOrder     --> emit OrderPlaced ; goto Placed
+  Placed     -- ApprovePayment --> emit PaymentApproved ; goto Paid
+  Placed     -- CancelOrder    --> emit OrderCancelled ; goto Cancelled
+  Paid       -- MarkPacked     --> emit OrderPacked ; goto Packed
+  Packed     -- ShipOrder      --> emit OrderShipped ; goto Shipped
+
+  wire kind=ctorName fields=camelCase schemaVersion=2
