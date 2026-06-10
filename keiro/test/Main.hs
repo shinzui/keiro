@@ -331,6 +331,33 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Stream.streamName (mapStreamName (\(StreamName name) -> StreamName (name <> "-archived")) orderStream)
                 `shouldBe` StreamName "order-123-archived"
 
+        it "validates categories, rejecting the dash boundary and reserved names" $ do
+            (Stream.category "incident" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Right (Stream.StreamCategory "incident")
+            -- ':' sub-namespacing is allowed (matches the wf:<name> convention)
+            (Stream.category "hospital:surge" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Right (Stream.StreamCategory "hospital:surge")
+            (Stream.category "" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Left Stream.CategoryEmpty
+            (Stream.category "hospital-surge" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Left (Stream.CategoryContainsSeparator "hospital-surge")
+            (Stream.category "$all" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Left (Stream.CategoryReserved "$all")
+
+        it "builds entity streams that round-trip through kiroku's category rule" $ do
+            let cat = Stream.categoryUnsafe "orders" :: Stream.StreamCategory OrderStream
+            Stream.streamName (Stream.entityStream cat "1") `shouldBe` StreamName "orders-1"
+            Stream.categoryName cat `shouldBe` CategoryName "orders"
+            -- The category keiro reports equals kiroku's own parse of the produced
+            -- name, even when the id segment itself contains a dash.
+            Store.categoryName (Stream.streamName (Stream.entityStream cat "a-b-c"))
+                `shouldBe` Stream.categoryName cat
+
+        it "entityStreamId renders ids via StreamIdSegment (Text and String)" $ do
+            let cat = Stream.categoryUnsafe "orders" :: Stream.StreamCategory OrderStream
+            Stream.streamName (Stream.entityStreamId cat ("o-1" :: Text)) `shouldBe` StreamName "orders-o-1"
+            Stream.streamName (Stream.entityStreamId cat ("o-1" :: String)) `shouldBe` StreamName "orders-o-1"
+
     describe "Keiro.Codec" $ do
         it "encodes current events with type tags and schema-version metadata" $ do
             encoded <- shouldBeRight (encodeForAppend orderCodec (OrderPlaced "order-123" 5))

@@ -54,7 +54,7 @@ library
     , bytestring    >=0.11
     , generic-lens  >=2.2
     , keiki         >=0.1
-    , kiroku-store  >=0.1
+    , kiroku-store  >=0.2
     , lens          >=5.2
     , scientific    >=0.3
     , text          >=2.1
