@@ -118,6 +118,24 @@ main = hspec $ do
             b <- scaffoldProcessFixture "test/fixtures/hospital-surge.kdsl"
             map moduleText a `shouldBe` map moduleText b
 
+    describe "contract (EP-4)" $ do
+        it "parses the emergency contract (topics + events-on-topic + typed fields)" $ do
+            input <- TIO.readFile "test/fixtures/contract.kdsl"
+            case parseSpec "test/fixtures/contract.kdsl" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> case [c | NContract c <- specNodes spec] of
+                    (c : _) -> do
+                        ctrName c `shouldBe` "emergency"
+                        ctrDiscriminator c `shouldBe` "messageType"
+                        map fst (ctrTopics c) `shouldBe` ["incidentEvents", "hospitalEvents"]
+                        map ceName (ctrEvents c) `shouldBe` ["IncidentTransferNeedDeclared", "TransferReservationAccepted"]
+                    [] -> expectationFailure "no contract node parsed"
+        it "round-trips the contract spec through parse . pretty" $ do
+            input <- TIO.readFile "test/fixtures/contract.kdsl"
+            case parseSpec "in" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+
     describe "diff (evolution classification)" $ do
         it "classifies a field added without a version bump as BREAKING" $ do
             cs <- diffFixtures "test/fixtures/reservation.kdsl" "test/fixtures/reservation-fieldadd.kdsl"

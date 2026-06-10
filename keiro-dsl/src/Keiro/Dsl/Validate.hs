@@ -95,6 +95,7 @@ validateSpec spec =
 validateNode :: Spec -> Node -> [Diagnostic]
 validateNode spec (NAggregate agg) = validateAggregate spec agg
 validateNode spec (NProcess p) = validateProcess spec p
+validateNode _spec (NContract _) = [] -- EP-4 M2 adds the contract/intake rules
 
 -- | EP-3 rules for a process manager + its nested timer.
 validateProcess :: Spec -> ProcessNode -> [Diagnostic]

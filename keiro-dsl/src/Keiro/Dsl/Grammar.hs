@@ -62,6 +62,12 @@ module Keiro.Dsl.Grammar (
     TimerNode (..),
     ProcessNode (..),
 
+    -- * The integration contract node (EP-4)
+    ContractType (..),
+    ContractField (..),
+    ContractEvent (..),
+    ContractNode (..),
+
     -- * Top level
     Node (..),
     Spec (..),
@@ -491,12 +497,47 @@ data ProcessNode = ProcessNode
     }
     deriving stock (Eq, Show, Generic)
 
-{- | A top-level node. EP-1 defines 'NAggregate'; EP-3 adds 'NProcess'
-(carrying its nested timer). EP-4…EP-6 add further constructors.
+-- EP-4: the cross-service @contract@ (shared Kafka message schema, define-once).
+
+-- | A contract field type: @typeid \"inc\"@, @text@, or @int@.
+data ContractType = CTypeId !Text | CText | CInt
+    deriving stock (Eq, Show, Generic)
+
+data ContractField = ContractField
+    { cfName :: !Name
+    , cfType :: !ContractType
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | @event <Name> on <topicAlias> { field: type … }@ within a contract.
+data ContractEvent = ContractEvent
+    { ceName :: !Name
+    , ceTopic :: !Name
+    , ceFields :: ![ContractField]
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | A @contract@ node: the shared cross-service message schema, declared once
+-- and referenced by both producer (@emit@) and consumer (@intake@). EP-5's
+-- pgmq @dispatch@ also couples to it.
+data ContractNode = ContractNode
+    { ctrName :: !Name
+    , ctrSchemaVersion :: !Int
+    , ctrDiscriminator :: !Name
+    , ctrTopics :: ![(Name, Text)]
+    -- ^ (topic alias, real Kafka topic string)
+    , ctrEvents :: ![ContractEvent]
+    , ctrLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+{- | A top-level node. EP-1 defines 'NAggregate'; EP-3 adds 'NProcess'; EP-4 adds
+'NContract'. EP-4's intake/emit/publisher and EP-5\/EP-6 add further constructors.
 -}
 data Node
     = NAggregate Aggregate
     | NProcess ProcessNode
+    | NContract ContractNode
     deriving stock (Eq, Show, Generic)
 
 {- | A whole @.kdsl@ file: one context name, the shared id/enum/rule

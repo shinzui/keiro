@@ -153,6 +153,7 @@ pTopItem =
         , TIEnum <$> pEnumDecl
         , TIRule <$> pRuleDecl
         , TINode . NProcess <$> pProcess
+        , TINode . NContract <$> pContract
         , TINode . NAggregate <$> pAggregate
         ]
 
@@ -381,6 +382,58 @@ pStatusMap = do
         _ <- symbol "=>"
         r <- wireWord
         pure (l, r)
+
+--------------------------------------------------------------------------------
+-- Integration contract (EP-4)
+--------------------------------------------------------------------------------
+
+pContract :: P ContractNode
+pContract = do
+    loc <- getLoc
+    keyword "contract"
+    nm <- ident
+    _ <- symbol "{"
+    keyword "schemaVersion"
+    sv <- lexeme L.decimal
+    keyword "discriminator"
+    disc <- ident
+    topics <- many pTopic
+    events <- many pContractEvent
+    _ <- symbol "}"
+    pure
+        ContractNode
+            { ctrName = nm
+            , ctrSchemaVersion = sv
+            , ctrDiscriminator = disc
+            , ctrTopics = topics
+            , ctrEvents = events
+            , ctrLoc = loc
+            }
+  where
+    pTopic = do
+        keyword "topic"
+        alias <- ident
+        t <- stringLit
+        pure (alias, t)
+    pContractEvent = do
+        keyword "event"
+        nm <- ident
+        keyword "on"
+        topicAlias <- ident
+        fs <- braces (many pContractField)
+        pure ContractEvent{ceName = nm, ceTopic = topicAlias, ceFields = fs}
+    pContractField = do
+        n <- ident
+        _ <- symbol ":"
+        ty <- pContractType
+        _ <- optional (symbol ";")
+        pure ContractField{cfName = n, cfType = ty}
+    pContractType =
+        choice
+            [ CTypeId <$> (keyword "typeid" *> stringLit)
+            , CText <$ keyword "text"
+            , CInt <$ keyword "int"
+            ]
 
 --------------------------------------------------------------------------------
 -- Process manager + durable timer (EP-3)

@@ -57,6 +57,33 @@ docRule d =
 docNode :: Node -> Doc ann
 docNode (NAggregate a) = docAggregate a
 docNode (NProcess p) = docProcess p
+docNode (NContract c) = docContract c
+
+--------------------------------------------------------------------------------
+-- Integration contract (EP-4)
+--------------------------------------------------------------------------------
+
+docContract :: ContractNode -> Doc ann
+docContract c =
+    vsep $
+        [ "contract" <+> pretty (ctrName c) <+> "{"
+        , indent 2 ("schemaVersion" <+> pretty (ctrSchemaVersion c))
+        , indent 2 ("discriminator" <+> pretty (ctrDiscriminator c))
+        ]
+            ++ map (indent 2 . docTopic) (ctrTopics c)
+            ++ map (indent 2 . docContractEvent) (ctrEvents c)
+            ++ ["}"]
+  where
+    docTopic (alias, t) = "topic" <+> pretty alias <+> dquoted t
+    docContractEvent e =
+        vsep $
+            ["event" <+> pretty (ceName e) <+> "on" <+> pretty (ceTopic e) <+> "{"]
+                ++ map (indent 2 . docContractField) (ceFields e)
+                ++ ["}"]
+    docContractField f = pretty (cfName f) <> ":" <+> docContractType (cfType f)
+    docContractType (CTypeId p) = "typeid" <+> dquoted p
+    docContractType CText = "text"
+    docContractType CInt = "int"
 
 --------------------------------------------------------------------------------
 -- Process + timer (EP-3)

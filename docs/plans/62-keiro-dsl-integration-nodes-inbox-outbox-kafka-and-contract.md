@@ -86,13 +86,13 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work. All items begin
 unchecked; check them off with a timestamp as work proceeds.
 
-Milestone 1 — Grammar + parser:
+Milestone 1 — Grammar + parser: **IN PROGRESS 2026-06-10** (contract node done; intake/emit/publisher remaining)
 
-- [ ] Add `Contract`, `Intake`, `Emit`, `Publisher` constructors to `Keiro.Dsl.Grammar`
-      with their sub-records (envelope-binding rows, disposition rows, mapping rows).
-- [ ] Extend `Keiro.Dsl.Parser.parseSpec` to parse the four new blocks.
-- [ ] Extend the pretty-printer so parse→print→parse round-trips for the new blocks.
-- [ ] Unit tests: parse the conformance `.kdsl` (below) into the expected AST.
+- [x] Add the `NContract`/`ContractNode` constructor to `Keiro.Dsl.Grammar` (schemaVersion, discriminator, topic aliases, events-on-topic with typed fields `typeid \"x\"`/`text`/`int`). The `intake`/`emit`/`publisher` constructors remain. (2026-06-10)
+- [x] Extend `Keiro.Dsl.Parser.parseSpec` to parse the `contract` block (adapted to the existing flat `context` top-level rather than a `service { … }` wrapper, for consistency with EP-1–EP-3). (2026-06-10)
+- [x] Extend the pretty-printer so parse→print→parse round-trips for the contract block. (2026-06-10)
+- [x] Unit tests: parse `contract.kdsl` into the expected AST + round-trip. (2026-06-10)
+- [ ] Remaining: `intake` (bind rows + dedupe + decode + disposition table), `emit` (mapping + skip + topic/key), `publisher` (ordering/max-attempts/backoff).
 
 Milestone 2 — Validator rules:
 
