@@ -266,7 +266,7 @@ data ProjectionSpec = ProjectionSpec
     { projTable :: !Name
     , projConsistency :: !Consistency
     , projKey :: !Name
-    , projStatusMap :: !Mapping
+    , projStatusMap :: !(Maybe Mapping)
     , projLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)

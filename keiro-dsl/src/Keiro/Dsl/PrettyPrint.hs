@@ -117,13 +117,13 @@ docWire w =
 
 docProjection :: ProjectionSpec -> Doc ann
 docProjection p =
-    vsep
+    vsep $
         [ "projection"
             <+> pretty (projTable p)
             <+> ("consistency=" <> docConsistency (projConsistency p))
             <+> ("key=" <> pretty (projKey p))
-        , indent 2 ("status-map" <+> braced (map pair (mapPairs (projStatusMap p))))
         ]
+            ++ maybe [] (\m -> [indent 2 ("status-map" <+> braced (map pair (mapPairs m)))]) (projStatusMap p)
   where
     pair (l, r) = pretty l <> "=>" <> pretty r
 

@@ -89,12 +89,12 @@ Milestone 1 — package, grammar, parser, pretty-printer, round-trip, `parse` CL
 - [x] Write `keiro-dsl/app/Main.hs` with the optparse-applicative command tree and the `parse` subcommand. (2026-06-10)
 - [x] Capture the canonical `reservation.kdsl` fixture; confirm `keiro-dsl parse` round-trips it. (2026-06-10)
 
-Milestone 2 — validator + `check` CLI:
+Milestone 2 — validator + `check` CLI: **DONE 2026-06-10**
 
-- [ ] Write `Keiro.Dsl.Validate` exposing the `Diagnostic` type and `validateSpec :: Spec -> [Diagnostic]`.
-- [ ] Implement the cross-cutting checks (reachability, terminal-no-outgoing, guard `Expr` scope-check, status-map totality, clock-free).
-- [ ] Add the `check` subcommand; wire diagnostics to a non-zero exit.
-- [ ] Add validator unit tests (good spec passes; each broken-spec fixture yields the expected diagnostic).
+- [x] Write `Keiro.Dsl.Validate` exposing the `Diagnostic` type and `validateSpec :: Spec -> [Diagnostic]`. (2026-06-10)
+- [x] Implement the cross-cutting checks (declared-reference, reachability, terminal-no-outgoing, guard `Expr` scope-check, status-map totality, clock-free). (2026-06-10)
+- [x] Add the `check` subcommand; wire diagnostics to a non-zero exit. (2026-06-10)
+- [x] Add validator unit tests (good spec passes; each broken-spec fixture yields the expected diagnostic) + captured `reservation-no-statusmap/-bad-command/-clock` fixtures. (2026-06-10)
 
 Milestone 3 — scaffold engine + firewall invariant + `scaffold` CLI:
 
@@ -137,6 +137,24 @@ implementation. Provide concise evidence.
   `try`) so the identifier is left for `pTransition`. This is the kind of grammar bug a
   hand-written fixture never exercises but a generator finds on the sixth case — strong
   evidence the round-trip property is doing real work.
+
+- **M2: write right-hand sides and guards range over state names too.** The guard
+  scope-check initially resolved atoms against registers ∪ command-fields ∪ enum-ctors ∪
+  rules, and the canonical spec immediately failed with two `GuardAtomOutOfScope` on
+  `write reservationState := Held` / `:= Confirmed`. `Held`/`Confirmed` are *state* names,
+  i.e. constructors of the implicit vertex enum (`ReservationVertex`) the scaffolder will
+  generate, and a register of that type is legitimately assigned one. Fix: add the
+  aggregate's state names to the in-scope set. Evidence: the four `check` invocations now
+  yield `OK`/exit 0 for the canonical spec and exactly one precise diagnostic each for the
+  three broken fixtures.
+
+- **M2: `status-map` made optional in the grammar.** The plan wants *deleting the
+  status-map line* to be a validation error (`StatusMapNotTotal`), not a parse error, so
+  `ProjectionSpec.projStatusMap` became `Maybe Mapping` (parser uses `optional`,
+  pretty-printer omits it when absent, generator wraps it in `genMaybe`). Totality matches
+  a status-map key to an event when the key is a (non-empty) suffix of the event name
+  (`Created` ⊑ `TransferReservationCreated`), mirroring how the corpus's TH wire deriver
+  produces short constructor names.
 
 - **M1: source locations vs. structural equality.** The AST carries a line number on
   every declaration (for M2 diagnostics), but the pretty-printer cannot reproduce exact

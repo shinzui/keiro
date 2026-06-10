@@ -9,6 +9,7 @@ import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), validateSpec)
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
 
@@ -38,6 +39,30 @@ main = hspec $ do
                             length (aggTransitions a) `shouldBe` 2
                             map stTerminal (aggStates a) `shouldBe` [False, False, False, True, True, True]
                         other -> expectationFailure ("expected one aggregate node, got " <> show (length other))
+
+    describe "validator" $ do
+        it "accepts the canonical reservation.kdsl" $ do
+            codes <- diagnosticCodesOf "test/fixtures/reservation.kdsl"
+            codes `shouldBe` []
+        it "rejects a missing status-map as StatusMapNotTotal" $ do
+            codes <- diagnosticCodesOf "test/fixtures/reservation-no-statusmap.kdsl"
+            codes `shouldContain` [StatusMapNotTotal]
+        it "rejects an undeclared command as UndeclaredCommand" $ do
+            codes <- diagnosticCodesOf "test/fixtures/reservation-bad-command.kdsl"
+            codes `shouldContain` [UndeclaredCommand]
+        it "rejects a wall-clock guard atom as ClockSampled" $ do
+            codes <- diagnosticCodesOf "test/fixtures/reservation-clock.kdsl"
+            codes `shouldContain` [ClockSampled]
+
+{- | Parse a fixture and return the validator's diagnostic codes (failing the
+test on a parse error).
+-}
+diagnosticCodesOf :: FilePath -> IO [DiagnosticCode]
+diagnosticCodesOf path = do
+    input <- TIO.readFile path
+    case parseSpec path input of
+        Left err -> expectationFailure (T.unpack err) >> pure []
+        Right spec -> pure (map code (validateSpec spec))
 
 --------------------------------------------------------------------------------
 -- Generators (bounded; restricted to valid, non-reserved identifiers)
@@ -119,7 +144,7 @@ genProjection =
         <$> genName
         <*> elements [Strong, Eventual]
         <*> genName
-        <*> (Mapping <$> smallList ((,) <$> genName <*> genWire) <*> pure False)
+        <*> genMaybe (Mapping <$> smallList ((,) <$> genName <*> genWire) <*> pure False)
         <*> pure noLoc
 
 genAggregate :: Gen Aggregate

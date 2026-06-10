@@ -32,6 +32,7 @@ library
     Keiro.Dsl.Grammar
     Keiro.Dsl.Parser
     Keiro.Dsl.PrettyPrint
+    Keiro.Dsl.Validate
 
   build-depends:
     , base                >=4.21 && <5

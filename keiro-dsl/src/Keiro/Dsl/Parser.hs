@@ -327,7 +327,7 @@ pProjection = do
     _ <- symbol "key"
     _ <- symbol "="
     k <- ident
-    sm <- pStatusMap
+    sm <- optional pStatusMap
     pure
         ProjectionSpec
             { projTable = table
