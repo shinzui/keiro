@@ -12,7 +12,7 @@ import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessFor, harnessProcess, harnessWorkflow)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate, scaffoldContract, scaffoldProcess, scaffoldWorkqueue)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate, scaffoldContract, scaffoldIntake, scaffoldProcess, scaffoldWorkqueue)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
@@ -96,9 +96,10 @@ run (Scaffold fp out) = do
                         ]
                 procMods = concat [scaffoldProcess ctx p <> harnessProcess ctx p | NProcess p <- specNodes spec]
                 contractMods = concat [scaffoldContract ctx c | NContract c <- specNodes spec]
+                intakeMods = concat [scaffoldIntake ctx ik | NIntake ik <- specNodes spec]
                 wqMods = concat [scaffoldWorkqueue ctx wq | NWorkqueue wq <- specNodes spec]
                 wfMods = concat [harnessWorkflow ctx wf | NWorkflow wf <- specNodes spec]
-            forM_ (aggMods <> procMods <> contractMods <> wqMods <> wfMods) (writeModule out)
+            forM_ (aggMods <> procMods <> contractMods <> intakeMods <> wqMods <> wfMods) (writeModule out)
 run (Diff fp ref) = do
     -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.
     let dir = takeDirectory fp

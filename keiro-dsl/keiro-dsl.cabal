@@ -132,6 +132,18 @@ test-suite keiro-dsl-conformance-contract
     , base   >=4.21 && <5
     , text   >=2.1
 
+-- EP-4 intake runtime conformance: the scaffolded Inbox disposition + dedupe
+-- policy compiled against the LIVE Keiro.Inbox.Types (InboxResult / dedupe).
+test-suite keiro-dsl-conformance-intake-runtime
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-intake-runtime
+  main-is:        Main.hs
+  other-modules:  Generated.HospitalCapacity.IncidentInbox.Inbox
+  build-depends:
+    , base   >=4.21 && <5
+    , keiro
+
 -- pgmq Job codec conformance (EP-5): the scaffolded self-contained Job payload
 -- record + field->wire codec, compiled + round-tripped.
 test-suite keiro-dsl-conformance-queue

@@ -24,6 +24,7 @@ module Keiro.Dsl.Scaffold (
     scaffoldAggregate,
     scaffoldProcess,
     scaffoldContract,
+    scaffoldIntake,
     scaffoldWorkqueue,
 
     -- * Internal resolution, shared with "Keiro.Dsl.Harness"
@@ -319,6 +320,82 @@ emitPayloadAdt tyName events =
                 ["data " <> tyName <> " = " <> arm e]
                     ++ ["  | " <> arm e2 | e2 <- es]
                     ++ ["  deriving stock (Eq, Show)"]
+
+--------------------------------------------------------------------------------
+-- Integration intake (EP-4): inbox disposition vs the live Keiro.Inbox runtime
+--------------------------------------------------------------------------------
+
+{- | Emit the inbox node's deterministic disposition wiring compiled against the
+LIVE @Keiro.Inbox.Types@: the dedupe policy (a real 'InboxDedupePolicy') and a
+disposition function over the real @InboxResult@ (Processed\/Duplicate\/
+InProgress\/PreviouslyFailed). This pins the dangerous inversions
+(duplicate ⇒ ackOk, previouslyFailed ⇒ deadLetter) as compiled code over the
+runtime types. The handler-level decode\/dedupe\/store failures are noted but not
+part of @InboxResult@. Firewall holds (no keiki symbolic operator).
+-}
+scaffoldIntake :: Context -> IntakeNode -> [ScaffoldModule]
+scaffoldIntake ctx i =
+    [ ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Inbox.hs")
+        , moduleText = emitIntakeGen genPrefix i
+        , kind = Generated
+        }
+    ]
+  where
+    ctxPascal = pascalFromKebab (contextName ctx)
+    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
+    genPrefix = root <> "Generated." <> ctxPascal <> "." <> pascal (inkName i)
+
+emitIntakeGen :: Text -> IntakeNode -> Text
+emitIntakeGen genPrefix i =
+    nl
+        [ "{-# OPTIONS_GHC -Wno-unused-top-binds #-}"
+        , generatedBanner
+        , "module " <> genPrefix <> ".Inbox"
+        , "  ( InboxAck (..)"
+        , "  , inboxDedupePolicy"
+        , "  , inboxDisposition"
+        , "  ) where"
+        , ""
+        , "import Keiro.Inbox.Types (InboxDedupePolicy (..), InboxResult (..))"
+        , ""
+        , "-- The dedupe policy (hole-kind 4), lowered to the live InboxDedupePolicy."
+        , "inboxDedupePolicy :: InboxDedupePolicy"
+        , "inboxDedupePolicy = " <> inkDedupePolicy i
+        , ""
+        , "-- The service's ack decision for each inbox classification."
+        , "data InboxAck = InboxAckOk | InboxRetry | InboxDeadLetter"
+        , "  deriving stock (Eq, Show)"
+        , ""
+        , "-- The disposition table (hole-kind 2) over the LIVE Keiro.Inbox.Types.InboxResult."
+        , "-- duplicate => ackOk and previouslyFailed => deadLetter are the dangerous"
+        , "-- inversions the spec states explicitly."
+        , "inboxDisposition :: InboxResult a -> InboxAck"
+        , "inboxDisposition r = case r of"
+        , "  InboxProcessed _ -> " <> ackFor "processed"
+        , "  InboxDuplicate -> " <> ackFor "duplicate"
+        , "  InboxInProgress -> " <> ackFor "inProgress"
+        , "  InboxPreviouslyFailed _ -> " <> ackFor "previouslyFailed"
+        , ""
+        , "-- handler-level failures (not InboxResult): decodeFailed => "
+            <> ackText "decodeFailed"
+            <> ", dedupeFailed => "
+            <> ackText "dedupeFailed"
+            <> ", storeFailed => "
+            <> ackText "storeFailed"
+        ]
+  where
+    act o = lookup o [(drOutcome r, drAction r) | r <- inkDisposition i]
+    ackFor o = case act o of
+        Just IAckOk -> "InboxAckOk"
+        Just (IRetry _) -> "InboxRetry"
+        Just (IDeadLetter _) -> "InboxDeadLetter"
+        Nothing -> "InboxRetry"
+    ackText o = case act o of
+        Just IAckOk -> "ackOk"
+        Just (IRetry _) -> "retry"
+        Just (IDeadLetter _) -> "deadLetter"
+        Nothing -> "retry"
 
 --------------------------------------------------------------------------------
 -- pgmq workqueue (EP-5): a self-contained Job payload record + codec
