@@ -61,6 +61,12 @@ data DiagnosticCode
     | EmitUnresolvedContract
     | PublisherUnresolvedEmit
     | IntakeUnresolvedContract
+    | -- EP-5 (pgmq workqueue/dispatch).
+      WqPhysicalDivergence
+    | WqStoreFailureNotRetry
+    | WqDecodeFailureNotDeadLetter
+    | WqDlqWithoutCeiling
+    | DispatchEnqueueUnresolved
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -109,6 +115,45 @@ validateNode _spec (NContract _) = [] -- a contract is a declaration; coupling i
 validateNode spec (NIntake i) = validateIntake i ++ intakeCoupling spec i
 validateNode spec (NEmit e) = validateEmit spec e
 validateNode spec (NPublisher p) = validatePublisher spec p
+validateNode _spec (NWorkqueue w) = validateWorkqueue w
+validateNode spec (NPgmqDispatch d) = validatePgmqDispatch spec d
+
+-- | EP-5 workqueue rules: the captured physical name must match the queueRef
+-- derivation; the disposition inversions (storeFailure transient => must retry;
+-- decodeFailure poison => must dead-letter); and dlq=on requires a retry ceiling.
+validateWorkqueue :: WorkqueueNode -> [Diagnostic]
+validateWorkqueue w = concat [divergence, inversions, ceiling]
+  where
+    wl = locLine (wqLoc w)
+    -- queueRef: the physical name sanitizes the logical name (non-[a-z0-9_] => _).
+    derivedPhysical = T.map (\c -> if isSafe c then c else '_') (wqLogical w)
+    isSafe c = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
+    divergence =
+        [ mkErr wl WqPhysicalDivergence $
+            "workqueue '" <> wqName w <> "': captured physical \"" <> wqPhysical w <> "\" diverges from queueRef(\"" <> wqLogical w <> "\") = \"" <> derivedPhysical <> "\""
+        | wqPhysical w /= derivedPhysical
+        ]
+    act o = lookup o [(wqdOutcome r, wqdAction r) | r <- wqDisposition w]
+    isRetry a = case a of Just (IRetry _) -> True; _ -> False
+    isDeadLetter a = case a of Just (IDeadLetter _) -> True; _ -> False
+    inversions =
+        [ mkErr wl WqStoreFailureNotRetry ("workqueue '" <> wqName w <> "': 'storeFailure' is transient and MUST retry, not dead-letter")
+        | isDeadLetter (act "storeFailure")
+        ]
+            ++ [ mkErr wl WqDecodeFailureNotDeadLetter ("workqueue '" <> wqName w <> "': 'decodeFailure' is poison and MUST dead-letter, not retry")
+               | isRetry (act "decodeFailure")
+               ]
+    ceiling =
+        [ mkErr wl WqDlqWithoutCeiling ("workqueue '" <> wqName w <> "': dlq=on requires maxRetries >= 1 (an absent ceiling never dead-letters)")
+        | wqDlqOn w && wqMaxRetries w < 1
+        ]
+
+-- | EP-5 dispatch rule: the @enqueue to@ target must resolve to a declared workqueue.
+validatePgmqDispatch :: Spec -> PgmqDispatchNode -> [Diagnostic]
+validatePgmqDispatch spec d =
+    [ mkErr (locLine (pdLoc d)) DispatchEnqueueUnresolved ("dispatch '" <> pdName d <> "' enqueues to undeclared workqueue '" <> pdEnqueueTo d <> "'")
+    | pdEnqueueTo d `notElem` [wqName w | NWorkqueue w <- specNodes spec]
+    ]
 
 -- | The declared contracts in a spec, by name.
 specContracts :: Spec -> [ContractNode]

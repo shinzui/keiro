@@ -61,6 +61,46 @@ docNode (NContract c) = docContract c
 docNode (NIntake i) = docIntake i
 docNode (NEmit e) = docEmit e
 docNode (NPublisher p) = docPublisher p
+docNode (NWorkqueue w) = docWorkqueue w
+docNode (NPgmqDispatch d) = docPgmqDispatch d
+
+docWorkqueue :: WorkqueueNode -> Doc ann
+docWorkqueue w =
+    vsep $
+        [ "workqueue" <+> pretty (wqName w) <+> "{"
+        , indent 2 ("queue logical =" <+> dquoted (wqLogical w))
+        , indent 2 ("derive physical =" <+> dquoted (wqPhysical w))
+        , indent 4 ("dlq =" <+> dquoted (wqDlq w))
+        , indent 4 ("table =" <+> dquoted (wqTable w))
+        , indent 2 ("payload" <+> pretty (wqPayloadName w) <+> "{")
+        ]
+            ++ map (indent 4 . field) (wqPayload w)
+            ++ [ indent 2 "}"
+               , indent 2 ("retry maxRetries =" <+> pretty (wqMaxRetries w) <+> "delay =" <+> pretty (wqDelay w) <+> "dlq =" <+> (if wqDlqOn w then "on" else "off"))
+               , indent 2 "disposition {"
+               ]
+            ++ map (indent 4 . dispRow) (wqDisposition w)
+            ++ [indent 2 "}", "}"]
+  where
+    field f = pretty (wqfName f) <+> "->" <+> dquoted (wqfWire f) <+> pretty (wqfType f) <> (if wqfRequired f then " required" else mempty)
+    dispRow r = pretty (wqdOutcome r) <+> "->" <+> act (wqdAction r)
+    act IAckOk = "ackOk"
+    act (IRetry win) = "retry" <+> pretty win
+    act (IDeadLetter Nothing) = "deadLetter"
+    act (IDeadLetter (Just reason)) = "deadLetter" <+> dquoted reason
+
+docPgmqDispatch :: PgmqDispatchNode -> Doc ann
+docPgmqDispatch d =
+    vsep
+        [ "dispatch" <+> pretty (pdName d) <+> "{"
+        , indent 2 ("source readModel =" <+> pretty (pdSourceReadModel d) <+> "key =" <+> pretty (pdSourceKey d))
+        , indent 2 ("fanout body =" <+> pretty (pdFanoutBody d))
+        , indent 2 ("dedup key =" <+> pretty (pdDedupKey d))
+        , indent 4 ("seenIn readModel =" <+> pretty (pdDedupReadModel d) <+> "field =" <+> pretty (pdDedupReadModelField d))
+        , indent 4 ("seenIn queue =" <+> pretty (pdDedupQueue d) <+> "field =" <+> pretty (pdDedupQueueField d))
+        , indent 2 ("enqueue to =" <+> pretty (pdEnqueueTo d))
+        , "}"
+        ]
 
 docEmit :: EmitNode -> Doc ann
 docEmit e =

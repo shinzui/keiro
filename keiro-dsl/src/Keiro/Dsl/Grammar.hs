@@ -83,6 +83,12 @@ module Keiro.Dsl.Grammar (
     BackoffSpec (..),
     PublisherNode (..),
 
+    -- * The pgmq workqueue/dispatch nodes (EP-5)
+    WqField (..),
+    WqDispRow (..),
+    WorkqueueNode (..),
+    PgmqDispatchNode (..),
+
     -- * Top level
     Node (..),
     Spec (..),
@@ -659,9 +665,64 @@ data PublisherNode = PublisherNode
     }
     deriving stock (Eq, Show, Generic)
 
+-- EP-5: the pgmq @workqueue@ + @dispatch@ nodes.
+
+-- | One @field -> \"wire_name\" type required@ row of a workqueue payload.
+data WqField = WqField
+    { wqfName :: !Name
+    , wqfWire :: !Text
+    , wqfType :: !Name
+    , wqfRequired :: !Bool
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | One row of a workqueue's consumer @JobOutcome@ disposition (reusing
+-- 'InboxAction': @retry <window>@ \/ @deadLetter@).
+data WqDispRow = WqDispRow
+    { wqdOutcome :: !Name
+    , wqdAction :: !InboxAction
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | A pgmq @workqueue@ node. The @derive@ trio (physical\/dlq\/table) is a
+-- /captured fixture/ (hole-kind 1): the validator re-derives the physical name
+-- from @logical@ and flags any divergence (the drift hazard at the dedup site).
+data WorkqueueNode = WorkqueueNode
+    { wqName :: !Name
+    , wqLogical :: !Text
+    , wqPhysical :: !Text
+    , wqDlq :: !Text
+    , wqTable :: !Text
+    , wqPayloadName :: !Name
+    , wqPayload :: ![WqField]
+    , wqMaxRetries :: !Int
+    , wqDelay :: !Text
+    , wqDlqOn :: !Bool
+    , wqDisposition :: ![WqDispRow]
+    , wqLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | A pgmq @dispatch@ node: a read-model→enqueue coupling with a fan-out hole
+-- and a dedup check (one arm of which is a raw-SQL hole).
+data PgmqDispatchNode = PgmqDispatchNode
+    { pdName :: !Name
+    , pdSourceReadModel :: !Name
+    , pdSourceKey :: !Name
+    , pdFanoutBody :: !Name
+    , pdDedupKey :: !Name
+    , pdDedupReadModel :: !Name
+    , pdDedupReadModelField :: !Text
+    , pdDedupQueue :: !Name
+    , pdDedupQueueField :: !Text
+    , pdEnqueueTo :: !Name
+    , pdLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
 {- | A top-level node. EP-1 defines 'NAggregate'; EP-3 adds 'NProcess'; EP-4 adds
-'NContract', 'NIntake', 'NEmit', 'NPublisher'. EP-5\/EP-6 add further
-constructors.
+'NContract'\/'NIntake'\/'NEmit'\/'NPublisher'; EP-5 adds 'NWorkqueue'\/
+'NPgmqDispatch'. EP-6 adds further constructors.
 -}
 data Node
     = NAggregate Aggregate
@@ -670,6 +731,8 @@ data Node
     | NIntake IntakeNode
     | NEmit EmitNode
     | NPublisher PublisherNode
+    | NWorkqueue WorkqueueNode
+    | NPgmqDispatch PgmqDispatchNode
     deriving stock (Eq, Show, Generic)
 
 {- | A whole @.kdsl@ file: one context name, the shared id/enum/rule

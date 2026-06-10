@@ -106,7 +106,7 @@ vertical emits symbol-free scaffold + holes + harness, never a symbolic compiler
 | EP-2 | Evolution: schema versioning, upcasters, deprecation, diff | docs/plans/60-keiro-dsl-evolution-schema-versioning-upcasters-deprecation-and-diff.md | EP-1 | None | Complete |
 | EP-3 | Process manager + durable timer nodes | docs/plans/61-keiro-dsl-process-manager-and-durable-timer-nodes.md | EP-1 | EP-2 | In Progress (M1–M4 done; M5 spec→behaviour pin done, full-corpus compilation deferred) |
 | EP-4 | Integration nodes: inbox, outbox, Kafka, contract | docs/plans/62-keiro-dsl-integration-nodes-inbox-outbox-kafka-and-contract.md | EP-1 | EP-2 | In Progress (all 4 nodes — contract/intake/emit/publisher — parse+validate incl. inbox inversions, skip-totality, contract coupling; scaffold/harness/conformance remaining) |
-| EP-5 | PGMQ workqueue + dispatch nodes | docs/plans/63-keiro-dsl-pgmq-workqueue-and-dispatch-nodes.md | EP-1 | EP-4 | Not Started |
+| EP-5 | PGMQ workqueue + dispatch nodes | docs/plans/63-keiro-dsl-pgmq-workqueue-and-dispatch-nodes.md | EP-1 | EP-4 | In Progress (workqueue+dispatch parse+validate incl. physical-name divergence + disposition inversions; scaffold/harness/conformance remaining) |
 | EP-6 | Workflow + operation nodes | docs/plans/64-keiro-dsl-workflow-and-operation-nodes.md | EP-1 | EP-2 | Not Started |
 | EP-7 | Authoring skill + corpus registration | docs/plans/65-keiro-dsl-authoring-skill-and-corpus-registration.md | EP-1, EP-3, EP-4, EP-5, EP-6 | EP-2 | Not Started |
 
@@ -215,7 +215,7 @@ Track milestone-level progress across all child plans.
 - [x] EP-2: `schemaVersion`/`upcast`/`deprecated` grammar + `diff --since` classifying additive vs breaking. (2026-06-10)
 - [~] EP-3: `process`/`timer` nodes — grammar, validator (clock-free deadline, runtime-owned dispatch-id, cross-node coupling, benign-inversion warnings), scaffold (firewall-clean wiring + holes), facts harness; spec→behaviour mutation pin vs hospital-surge. Full `SurgeManager.hs` source-compilation conformance deferred (heavy runtime integration). (2026-06-10)
 - [~] EP-4: `contract` + `intake` nodes done — contract schema (topics/events/typed fields), inbox envelope-binding + dedupe + decode + the mandatory disposition table, and the dangerous-inversion validator (duplicate⇒retry, previouslyFailed⇒retry, decodeFailed⇒unbounded-retry, incompleteness). `emit`/`publisher` + scaffold/harness/conformance remaining. (2026-06-10)
-- [ ] EP-5: `workqueue`/`dispatch` nodes — physical-table-name fixture, read-model→enqueue coupling, dual disposition surfaces; conformance vs reservation-work.
+- [~] EP-5: `workqueue`/`dispatch` nodes — grammar/parser/pretty + validators (physical-name divergence vs queueRef, storeFailure/decodeFailure inversions, dlq ceiling, enqueue resolution). Scaffold/harness/conformance remaining. (2026-06-10) Originally: — physical-table-name fixture, read-model→enqueue coupling, dual disposition surfaces; conformance vs reservation-work.
 - [ ] EP-6: `workflow`/`operation` nodes — steps/await/sleep/child, deterministic ids, await↔signal coupling; conformance vs `ReservationWorkflow`/`EvacuationWorkflow`.
 - [ ] EP-7: authoring skill (write → check → scaffold → fill → harness → diff) + corpus registration.
 

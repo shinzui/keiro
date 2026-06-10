@@ -167,6 +167,25 @@ main = hspec $ do
             codes <- errorCodesOf "test/fixtures/emit-badevent.kdsl"
             codes `shouldContain` [EmitUnresolvedContract]
 
+    describe "pgmq workqueue/dispatch (EP-5)" $ do
+        it "round-trips the reservation-work spec through parse . pretty" $ do
+            input <- TIO.readFile "test/fixtures/reservation-work.kdsl"
+            case parseSpec "in" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+        it "accepts the reservation-work spec (physical matches, no inversions)" $ do
+            codes <- errorCodesOf "test/fixtures/reservation-work.kdsl"
+            codes `shouldBe` []
+        it "rejects a divergent captured physical name as WqPhysicalDivergence" $ do
+            codes <- errorCodesOf "test/fixtures/reservation-work-divergent.kdsl"
+            codes `shouldContain` [WqPhysicalDivergence]
+        it "rejects storeFailure => deadLetter as WqStoreFailureNotRetry" $ do
+            codes <- errorCodesOf "test/fixtures/reservation-work-sf-deadletter.kdsl"
+            codes `shouldContain` [WqStoreFailureNotRetry]
+        it "rejects decodeFailure => retry as WqDecodeFailureNotDeadLetter" $ do
+            codes <- errorCodesOf "test/fixtures/reservation-work-df-retry.kdsl"
+            codes `shouldContain` [WqDecodeFailureNotDeadLetter]
+
     describe "diff (evolution classification)" $ do
         it "classifies a field added without a version bump as BREAKING" $ do
             cs <- diffFixtures "test/fixtures/reservation.kdsl" "test/fixtures/reservation-fieldadd.kdsl"

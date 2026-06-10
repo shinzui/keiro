@@ -107,6 +107,15 @@ reservedWords =
     , "disposition"
     , "publisher"
     , "map"
+    , -- EP-5 pgmq structural keywords.
+      "workqueue"
+    , "queue"
+    , "payload"
+    , "retry"
+    , "fanout"
+    , "dedup"
+    , "enqueue"
+    , "seenIn"
     ]
 
 {- | A CamelCase / snake_case identifier (no dashes): type names, register
@@ -169,6 +178,8 @@ pTopItem =
         , TINode . NIntake <$> pIntake
         , TINode . NEmit <$> pEmit
         , TINode . NPublisher <$> pPublisher
+        , TINode . NWorkqueue <$> pWorkqueue
+        , TINode . NPgmqDispatch <$> pPgmqDispatch
         , TINode . NAggregate <$> pAggregate
         ]
 
@@ -613,6 +624,108 @@ pPublisher = do
             , pubBackoff = BackoffSpec{boKind = bk, boWindow = bw}
             , pubOutboxField = obf
             , pubLoc = loc
+            }
+
+pWorkqueue :: P WorkqueueNode
+pWorkqueue = do
+    loc <- getLoc
+    keyword "workqueue"
+    nm <- ident
+    _ <- symbol "{"
+    keyword "queue"
+    _ <- symbol "logical" *> symbol "="
+    logical <- stringLit
+    keyword "derive"
+    _ <- symbol "physical" *> symbol "="
+    phys <- stringLit
+    _ <- symbol "dlq" *> symbol "="
+    dlqName <- stringLit
+    _ <- symbol "table" *> symbol "="
+    tbl <- stringLit
+    keyword "payload"
+    pn <- ident
+    fields <- braces (many pWqField)
+    keyword "retry"
+    _ <- symbol "maxRetries" *> symbol "="
+    mr <- lexeme L.decimal
+    _ <- symbol "delay" *> symbol "="
+    dl <- pWindow
+    _ <- symbol "dlq" *> symbol "="
+    dlqOn <- (True <$ keyword "on") <|> (False <$ keyword "off")
+    keyword "disposition"
+    disp <- braces (many pWqDispRow)
+    _ <- symbol "}"
+    pure
+        WorkqueueNode
+            { wqName = nm
+            , wqLogical = logical
+            , wqPhysical = phys
+            , wqDlq = dlqName
+            , wqTable = tbl
+            , wqPayloadName = pn
+            , wqPayload = fields
+            , wqMaxRetries = mr
+            , wqDelay = dl
+            , wqDlqOn = dlqOn
+            , wqDisposition = disp
+            , wqLoc = loc
+            }
+  where
+    pWqField = do
+        n <- ident
+        _ <- symbol "->"
+        w <- stringLit
+        ty <- ident
+        req <- option False (True <$ keyword "required")
+        pure WqField{wqfName = n, wqfWire = w, wqfType = ty, wqfRequired = req}
+    pWqDispRow = do
+        o <- ident
+        _ <- symbol "->"
+        act <- choice [IAckOk <$ keyword "ackOk", IRetry <$> (keyword "retry" *> pWindow), IDeadLetter <$> (keyword "deadLetter" *> optional stringLit)]
+        pure WqDispRow{wqdOutcome = o, wqdAction = act}
+
+pPgmqDispatch :: P PgmqDispatchNode
+pPgmqDispatch = do
+    loc <- getLoc
+    keyword "dispatch"
+    nm <- ident
+    _ <- symbol "{"
+    keyword "source"
+    _ <- symbol "readModel" *> symbol "="
+    srm <- ident
+    _ <- symbol "key" *> symbol "="
+    sk <- ident
+    keyword "fanout"
+    _ <- symbol "body" *> symbol "="
+    fb <- ident
+    keyword "dedup"
+    _ <- symbol "key" *> symbol "="
+    dk <- ident
+    _ <- keyword "seenIn" *> symbol "readModel" *> symbol "="
+    drm <- ident
+    _ <- symbol "field" *> symbol "="
+    drmf <- ident
+    _ <- keyword "seenIn" *> symbol "queue" *> symbol "="
+    dq <- ident
+    _ <- symbol "field" *> symbol "="
+    dqf <- ident
+    keyword "enqueue"
+    _ <- symbol "to" *> symbol "="
+    enq <- ident
+    _ <- symbol "}"
+    pure
+        PgmqDispatchNode
+            { pdName = nm
+            , pdSourceReadModel = srm
+            , pdSourceKey = sk
+            , pdFanoutBody = fb
+            , pdDedupKey = dk
+            , pdDedupReadModel = drm
+            , pdDedupReadModelField = drmf
+            , pdDedupQueue = dq
+            , pdDedupQueueField = dqf
+            , pdEnqueueTo = enq
+            , pdLoc = loc
             }
 
 --------------------------------------------------------------------------------
