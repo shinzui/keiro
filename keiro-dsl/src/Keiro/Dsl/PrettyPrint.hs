@@ -56,6 +56,121 @@ docRule d =
 
 docNode :: Node -> Doc ann
 docNode (NAggregate a) = docAggregate a
+docNode (NProcess p) = docProcess p
+
+--------------------------------------------------------------------------------
+-- Process + timer (EP-3)
+--------------------------------------------------------------------------------
+
+docProcess :: ProcessNode -> Doc ann
+docProcess p =
+    vsep
+        [ "process" <+> pretty (procId p)
+        , indent 2 ("name" <+> dquoted (procName p))
+        , indent 2 (docInput (procInput p))
+        , indent 2 (docCorrelate (procCorrelate p))
+        , indent 2 (docSaga (procSaga p))
+        , indent 2 ("target" <+> pretty (procTarget p))
+        , indent 2 ("projections" <+> bracketed (map pretty (procProjections p)))
+        , mempty
+        , indent 2 (docHandle (procHandle p))
+        , mempty
+        , indent 2 "dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)"
+        , mempty
+        , indent 2 (docTimer (procTimer p))
+        ]
+
+docInput :: InputDecl -> Doc ann
+docInput i = "input" <+> pretty (inName i) <+> braced (map docField (inFields i))
+
+docCorrelate :: CorrelateDecl -> Doc ann
+docCorrelate c = "correlate" <+> ("input." <> pretty (corrField c)) <+> "via" <+> pretty (corrVia c)
+
+docSaga :: SagaRef -> Doc ann
+docSaga s = "saga" <+> pretty (sagaAgg s) <+> ("stream=" <> dquoted (sagaStreamPrefix s) <+> "<>" <+> "correlationId")
+
+docHandle :: HandleNode -> Doc ann
+docHandle h =
+    vsep $
+        ["on" <+> pretty (hOn h)]
+            ++ [indent 2 (docAdvance (hAdvance h))]
+            ++ map (indent 2 . docDispatch) (hDispatch h)
+            ++ [indent 2 ("schedule" <+> pretty (hSchedule h))]
+
+docAdvance :: AdvanceNode -> Doc ann
+docAdvance a = "advance" <+> pretty (advCommand a) <+> braced (map docFieldBinding (advFields a))
+
+docDispatch :: DispatchNode -> Doc ann
+docDispatch d =
+    vsep
+        [ "dispatch" <+> (pretty (dispTarget d) <> "@" <> pretty (dispKey d)) <+> pretty (dispCommand d) <+> braced (map docFieldBinding (dispFields d))
+        , indent 2 (docDispDisposition (dispDisposition d))
+        ]
+
+docDispDisposition :: DispatchDisposition -> Doc ann
+docDispDisposition x =
+    "on-appended" <+> docDisp (onAppended x) <+> ";" <+> "on-duplicate" <+> docDisp (onDuplicate x) <+> ";" <+> "on-failed" <+> docDisp (onFailed x)
+
+docDisp :: Disp -> Doc ann
+docDisp DAckOk = "AckOk"
+docDisp DRetry = "Retry"
+docDisp (DDeadLetter r) = "DeadLetter" <+> dquoted r
+
+docTimer :: TimerNode -> Doc ann
+docTimer t =
+    vsep
+        [ "timer" <+> pretty (tmName t)
+        , indent 2 ("id" <+> docIdExpr (tmId t))
+        , indent 2 ("fireAt" <+> docFireAt (tmFireAt t))
+        , indent 2 ("payload" <+> braced (map docFieldBinding (tmPayload t)))
+        , indent 2 (docFire (tmFire t))
+        , indent 2 ("decode unknown-status =>" <+> pretty (tmDecodeUnknown t))
+        , indent 2 ("max-attempts" <+> pretty (tmMaxAttempts t) <+> "dead-letter" <+> dquoted (tmDeadLetter t))
+        ]
+
+docIdExpr :: IdExpr -> Doc ann
+docIdExpr e = "uuidv5" <+> dquoted (idePrefix e) <+> "<>" <+> "correlationId"
+
+docFireAt :: FireAtExpr -> Doc ann
+docFireAt f = ("input." <> pretty (faField f)) <+> "+" <+> pretty (faWindow f)
+
+docFire :: FireNode -> Doc ann
+docFire f =
+    vsep
+        [ "fire dispatch" <+> (pretty (fireTarget f) <> "@" <> pretty (fireKey f)) <+> pretty (fireCommand f) <+> braced (map docFieldBinding (fireFields f))
+        , indent 2 ("fired-event-id" <+> docIdExpr (fireFiredEventId f))
+        , indent 2 (docFireDisposition (fireDisposition f))
+        ]
+
+docFireDisposition :: FireDisposition -> Doc ann
+docFireDisposition x =
+    "on-ok"
+        <+> docFireOutcome (onOk x)
+        <+> ";"
+        <+> "on-reject"
+        <+> docFireOutcome (onReject x)
+        <+> ";"
+        <+> "on-error"
+        <+> docFireOutcome (onError x)
+        <+> ";"
+        <+> "not-mine"
+        <+> docFireOutcome (notMine x)
+
+docFireOutcome :: FireOutcome -> Doc ann
+docFireOutcome OFired = "Fired"
+docFireOutcome ORetry = "Retry"
+
+docFieldBinding :: FieldBinding -> Doc ann
+docFieldBinding b = case fbValue b of
+    Nothing -> pretty (fbName b)
+    Just v -> pretty (fbName b) <> "=" <> pretty v
+
+dquoted :: Text -> Doc ann
+dquoted t = "\"" <> pretty t <> "\""
+
+bracketed :: [Doc ann] -> Doc ann
+bracketed [] = "[ ]"
+bracketed ds = "[" <+> hsep ds <+> "]"
 
 docAggregate :: Aggregate -> Doc ann
 docAggregate a =

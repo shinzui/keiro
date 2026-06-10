@@ -89,6 +89,7 @@ validateSpec spec =
 
 validateNode :: Spec -> Node -> [Diagnostic]
 validateNode spec (NAggregate agg) = validateAggregate spec agg
+validateNode _spec (NProcess _) = [] -- EP-3 M2 adds the process/timer rules
 
 validateAggregate :: Spec -> Aggregate -> [Diagnostic]
 validateAggregate spec agg =

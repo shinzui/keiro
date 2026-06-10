@@ -82,12 +82,12 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-Milestone 1 — Grammar + parser for `process`/`timer`:
+Milestone 1 — Grammar + parser for `process`/`timer`: **DONE 2026-06-10**
 
-- [ ] Add `Process` and `Timer` constructors (and their field records) to `Keiro.Dsl.Grammar`, including the `Disposition`, `FireDisposition`, `IdStrategy`, and `Window` types.
-- [ ] Extend `Keiro.Dsl.Parser` with `pProcess` and `pTimer` parsers wired into the top-level node parser; `dispatch-id` parses as a fixed `strategy=uuidv5` form with no user id field.
-- [ ] Extend `Keiro.Dsl.PrettyPrint` so a parsed `process`/`timer` round-trips (`parse` then pretty-print is idempotent).
-- [ ] `keiro-dsl parse` on a `process`-bearing spec prints the parsed model back out.
+- [x] Add `NProcess`/`ProcessNode` + nested `TimerNode` (and `InputDecl`, `CorrelateDecl`, `SagaRef`, `HandleNode`, `AdvanceNode`, `DispatchNode`, `DispatchDisposition`/`Disp`, `FireNode`, `FireDisposition`/`FireOutcome`, `IdExpr`/`IdStrategy`, `FireAtExpr`, `FieldBinding`) to `Keiro.Dsl.Grammar`. (2026-06-10)
+- [x] Extend `Keiro.Dsl.Parser` with `pProcess`/`pTimerNode` wired into the top-level node parser; the `dispatch-id` line is a fixed `strategy=uuidv5` form (parsed and discarded; the AST has no user-id field). (2026-06-10)
+- [x] Extend `Keiro.Dsl.PrettyPrint` so a parsed `process`/`timer` round-trips. (2026-06-10)
+- [x] `keiro-dsl parse hospital-surge.kdsl` echoes the process + nested timer byte-identically; round-trip + shape unit tests green. (2026-06-10)
 
 Milestone 2 — Validator rules:
 

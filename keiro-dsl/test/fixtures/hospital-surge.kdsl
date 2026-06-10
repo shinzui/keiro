@@ -1,0 +1,30 @@
+context hospital-capacity
+
+id  HospitalId  prefix=hosp
+id  CommandId   prefix=cmd
+
+process HospitalSurge
+  name "hospital-surge"
+  input SurgeInput { hospitalId availableIcuBeds:Int redDemand:Int observedAt:Time }
+  correlate input.hospitalId via idText
+  saga Surge stream="hospital-surge-" <> correlationId
+  target Hospital
+  projections [ hospitalReadiness ]
+
+  on SurgeInput
+    advance NoteSurgeThreshold { hospitalId availableIcuBeds redDemand timerId=timer.id }
+    dispatch Hospital@input.hospitalId ActivateSurge { hospitalId }
+      on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+    schedule surgeFollowUp
+
+  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)
+
+  timer surgeFollowUp
+    id uuidv5 "hospital-surge-timer:" <> correlationId
+    fireAt input.observedAt + 5m
+    payload { kind="hospital-surge-follow-up" hospitalId }
+    fire dispatch Surge@correlationId MarkSurgeTimerFired { hospitalId timerId }
+      fired-event-id uuidv5 "hospital-surge-fired:" <> correlationId
+      on-ok Fired ; on-reject Fired ; on-error Retry ; not-mine Retry
+    decode unknown-status => Cancelled
+    max-attempts 5 dead-letter "surge timer exceeded ceiling"

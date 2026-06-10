@@ -43,6 +43,25 @@ module Keiro.Dsl.Grammar (
     Consistency (..),
     Aggregate (..),
 
+    -- * The process + timer nodes (EP-3)
+    FieldBinding (..),
+    InputDecl (..),
+    CorrelateDecl (..),
+    SagaRef (..),
+    Disp (..),
+    DispatchDisposition (..),
+    AdvanceNode (..),
+    DispatchNode (..),
+    HandleNode (..),
+    IdExpr (..),
+    IdStrategy (..),
+    FireAtExpr (..),
+    FireOutcome (..),
+    FireDisposition (..),
+    FireNode (..),
+    TimerNode (..),
+    ProcessNode (..),
+
     -- * Top level
     Node (..),
     Spec (..),
@@ -312,10 +331,172 @@ data Aggregate = Aggregate
     }
     deriving stock (Eq, Show, Generic)
 
-{- | A top-level node. Only 'NAggregate' exists in EP-1; EP-3…EP-6 add
-@NProcess@, @NTimer@, @NIntake@, @NWorkqueue@, @NWorkflow@, etc.
+-- EP-3: process manager + durable timer nodes.
+
+{- | A @field@ or @field=value@ binding inside a command\/payload field list.
+A bare field reuses the input field of the same name; @name=value@ binds it to
+an expression (kept as raw text, e.g. @timerId=timer.id@).
 -}
-newtype Node = NAggregate Aggregate
+data FieldBinding = FieldBinding
+    { fbName :: !Name
+    , fbValue :: !(Maybe Text)
+    }
+    deriving stock (Eq, Show, Generic)
+
+{- | @input SurgeInput { hospitalId … observedAt:Time }@ — the process's incoming
+event shape (one field must be a @:Time@ field used by the timer deadline).
+-}
+data InputDecl = InputDecl
+    { inName :: !Name
+    , inFields :: ![Field]
+    }
+    deriving stock (Eq, Show, Generic)
+
+{- | @correlate input.hospitalId via idText@ — the correlation key (hole-kind 1
+derivation + hole-kind 4 field-source).
+-}
+data CorrelateDecl = CorrelateDecl
+    { corrField :: !Name
+    , corrVia :: !Name
+    }
+    deriving stock (Eq, Show, Generic)
+
+{- | @saga Surge stream=\"hospital-surge-\" <> correlationId@ — the saga's own
+aggregate plus the @streamFor@ suffix-splice prefix.
+-}
+data SagaRef = SagaRef
+    { sagaAgg :: !Name
+    , sagaStreamPrefix :: !Text
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | A command dispatch outcome action.
+data Disp = DAckOk | DRetry | DDeadLetter !Text
+    deriving stock (Eq, Show, Generic)
+
+{- | The complete dispatch disposition table (every arm mandatory; the
+@on-duplicate AckOk@ benign inversion is explicit). Named to avoid clashing
+with the hole-kind 'Disposition'.
+-}
+data DispatchDisposition = DispatchDisposition
+    { onAppended :: !Disp
+    , onDuplicate :: !Disp
+    , onFailed :: !Disp
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | @advance NoteSurgeThreshold { … }@ — the self-command that advances the saga.
+data AdvanceNode = AdvanceNode
+    { advCommand :: !Name
+    , advFields :: ![FieldBinding]
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | @dispatch Hospital\@input.hospitalId ActivateSurge { … } on-appended … on-duplicate … on-failed …@.
+data DispatchNode = DispatchNode
+    { dispTarget :: !Name
+    , dispKey :: !Text
+    , dispCommand :: !Name
+    , dispFields :: ![FieldBinding]
+    , dispDisposition :: !DispatchDisposition
+    }
+    deriving stock (Eq, Show, Generic)
+
+{- | The @on <Input>@ reaction: a self-advance, zero or more dispatches, and a
+@schedule@ of the timer.
+-}
+data HandleNode = HandleNode
+    { hOn :: !Name
+    , hAdvance :: !AdvanceNode
+    , hDispatch :: ![DispatchNode]
+    , hSchedule :: !Name
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | A deterministic id derivation: @uuidv5 \"prefix:\" <> correlationId@.
+data IdExpr = IdExpr
+    { ideStrategy :: !IdStrategy
+    , idePrefix :: !Text
+    }
+    deriving stock (Eq, Show, Generic)
+
+data IdStrategy = UuidV5Id
+    deriving stock (Eq, Show, Generic)
+
+{- | @fireAt input.observedAt + 5m@ — an injected timestamp field plus a window.
+There is no clock-sampling constructor, so the no-wall-clock rule holds by
+construction.
+-}
+data FireAtExpr = FireAtExpr
+    { faField :: !Name
+    , faWindow :: !Text
+    }
+    deriving stock (Eq, Show, Generic)
+
+data FireOutcome = OFired | ORetry
+    deriving stock (Eq, Show, Generic)
+
+{- | The complete timer-fire disposition table; @on-reject OFired@ is the benign
+inversion (a CommandRejected means \"already applied\" = success).
+-}
+data FireDisposition = FireDisposition
+    { onOk :: !FireOutcome
+    , onReject :: !FireOutcome
+    , onError :: !FireOutcome
+    , notMine :: !FireOutcome
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | @fire dispatch Surge\@correlationId MarkSurgeTimerFired { … } fired-event-id … on-ok …@.
+data FireNode = FireNode
+    { fireTarget :: !Name
+    , fireKey :: !Text
+    , fireCommand :: !Name
+    , fireFields :: ![FieldBinding]
+    , fireFiredEventId :: !IdExpr
+    , fireDisposition :: !FireDisposition
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | A nested @timer@ sub-node of a process.
+data TimerNode = TimerNode
+    { tmName :: !Name
+    , tmId :: !IdExpr
+    , tmFireAt :: !FireAtExpr
+    , tmPayload :: ![FieldBinding]
+    , tmFire :: !FireNode
+    , tmDecodeUnknown :: !Name
+    , tmMaxAttempts :: !Int
+    , tmDeadLetter :: !Text
+    , tmLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+{- | A @process@ (process manager / saga) node. The dispatch-id strategy is fixed
+(runtime-owned uuidv5), so it is implicit in the AST and always rendered.
+-}
+data ProcessNode = ProcessNode
+    { procId :: !Name
+    -- ^ The block identifier (@process HospitalSurge@), used for module names.
+    , procName :: !Text
+    -- ^ The define-once ProcessManager @name@ (@name \"hospital-surge\"@).
+    , procInput :: !InputDecl
+    , procCorrelate :: !CorrelateDecl
+    , procSaga :: !SagaRef
+    , procTarget :: !Name
+    , procProjections :: ![Name]
+    , procHandle :: !HandleNode
+    , procTimer :: !TimerNode
+    , procLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+{- | A top-level node. EP-1 defines 'NAggregate'; EP-3 adds 'NProcess'
+(carrying its nested timer). EP-4…EP-6 add further constructors.
+-}
+data Node
+    = NAggregate Aggregate
+    | NProcess ProcessNode
     deriving stock (Eq, Show, Generic)
 
 {- | A whole @.kdsl@ file: one context name, the shared id/enum/rule

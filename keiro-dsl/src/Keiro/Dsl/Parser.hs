@@ -152,6 +152,7 @@ pTopItem =
         [ TIId <$> pIdDecl
         , TIEnum <$> pEnumDecl
         , TIRule <$> pRuleDecl
+        , TINode . NProcess <$> pProcess
         , TINode . NAggregate <$> pAggregate
         ]
 
@@ -380,6 +381,220 @@ pStatusMap = do
         _ <- symbol "=>"
         r <- wireWord
         pure (l, r)
+
+--------------------------------------------------------------------------------
+-- Process manager + durable timer (EP-3)
+--------------------------------------------------------------------------------
+
+pProcess :: P ProcessNode
+pProcess = do
+    loc <- getLoc
+    keyword "process"
+    pid <- ident
+    keyword "name"
+    nm <- stringLit
+    inp <- pInputDecl
+    corr <- pCorrelate
+    saga <- pSaga
+    keyword "target"
+    tgt <- ident
+    projs <- keyword "projections" *> brackets (many ident)
+    handle <- pHandle
+    _ <- optional pDispatchIdLine
+    timer <- pTimerNode
+    pure
+        ProcessNode
+            { procId = pid
+            , procName = nm
+            , procInput = inp
+            , procCorrelate = corr
+            , procSaga = saga
+            , procTarget = tgt
+            , procProjections = projs
+            , procHandle = handle
+            , procTimer = timer
+            , procLoc = loc
+            }
+
+pInputDecl :: P InputDecl
+pInputDecl = do
+    keyword "input"
+    nm <- ident
+    fs <- braces (many pField)
+    pure InputDecl{inName = nm, inFields = fs}
+
+pCorrelate :: P CorrelateDecl
+pCorrelate = do
+    keyword "correlate"
+    _ <- keyword "input" *> symbol "."
+    f <- ident
+    keyword "via"
+    v <- ident
+    pure CorrelateDecl{corrField = f, corrVia = v}
+
+pSaga :: P SagaRef
+pSaga = do
+    keyword "saga"
+    agg <- ident
+    _ <- symbol "stream"
+    _ <- symbol "="
+    pfx <- stringLit
+    _ <- symbol "<>"
+    _ <- ident -- correlationId (fixed)
+    pure SagaRef{sagaAgg = agg, sagaStreamPrefix = pfx}
+
+pHandle :: P HandleNode
+pHandle = do
+    keyword "on"
+    onName <- ident
+    adv <- pAdvance
+    disps <- many pDispatch
+    keyword "schedule"
+    sched <- ident
+    pure HandleNode{hOn = onName, hAdvance = adv, hDispatch = disps, hSchedule = sched}
+
+pAdvance :: P AdvanceNode
+pAdvance = do
+    keyword "advance"
+    cmd <- ident
+    fs <- braces (many pFieldBinding)
+    pure AdvanceNode{advCommand = cmd, advFields = fs}
+
+pDispatch :: P DispatchNode
+pDispatch = do
+    keyword "dispatch"
+    tgt <- ident
+    _ <- symbol "@"
+    key <- dottedRef
+    cmd <- ident
+    fs <- braces (many pFieldBinding)
+    disp <-
+        DispatchDisposition
+            <$> (keyword "on-appended" *> pDisp)
+            <*> (symbol ";" *> keyword "on-duplicate" *> pDisp)
+            <*> (symbol ";" *> keyword "on-failed" *> pDisp)
+    pure DispatchNode{dispTarget = tgt, dispKey = key, dispCommand = cmd, dispFields = fs, dispDisposition = disp}
+
+pDisp :: P Disp
+pDisp =
+    choice
+        [ DAckOk <$ keyword "AckOk"
+        , DRetry <$ keyword "Retry"
+        , DDeadLetter <$> (keyword "DeadLetter" *> stringLit)
+        ]
+
+-- The dispatch-id line is a fixed, runtime-owned strategy; parse and discard.
+pDispatchIdLine :: P ()
+pDispatchIdLine = do
+    keyword "dispatch-id"
+    _ <- symbol "strategy" *> symbol "=" *> ident
+    _ <- symbol "from" *> symbol "=" *> parens (sepBy dottedRef (symbol ","))
+    pure ()
+
+pTimerNode :: P TimerNode
+pTimerNode = do
+    loc <- getLoc
+    keyword "timer"
+    nm <- ident
+    tid <- keyword "id" *> pIdExpr
+    fat <- keyword "fireAt" *> pFireAt
+    pay <- keyword "payload" *> braces (many pFieldBinding)
+    fire <- pFire
+    _ <- keyword "decode" *> keyword "unknown-status" *> symbol "=>"
+    unk <- ident
+    keyword "max-attempts"
+    ma <- lexeme L.decimal
+    keyword "dead-letter"
+    dl <- stringLit
+    pure
+        TimerNode
+            { tmName = nm
+            , tmId = tid
+            , tmFireAt = fat
+            , tmPayload = pay
+            , tmFire = fire
+            , tmDecodeUnknown = unk
+            , tmMaxAttempts = ma
+            , tmDeadLetter = dl
+            , tmLoc = loc
+            }
+
+pIdExpr :: P IdExpr
+pIdExpr = do
+    keyword "uuidv5"
+    pfx <- stringLit
+    _ <- symbol "<>"
+    _ <- ident -- correlationId (fixed)
+    pure IdExpr{ideStrategy = UuidV5Id, idePrefix = pfx}
+
+pFireAt :: P FireAtExpr
+pFireAt = do
+    _ <- keyword "input" *> symbol "."
+    f <- ident
+    _ <- symbol "+"
+    w <- pWindow
+    pure FireAtExpr{faField = f, faWindow = w}
+
+pWindow :: P Text
+pWindow = lexeme $ do
+    ds <- some digitChar
+    u <- some letterChar
+    pure (T.pack (ds <> u))
+
+pFire :: P FireNode
+pFire = do
+    keyword "fire"
+    keyword "dispatch"
+    tgt <- ident
+    _ <- symbol "@"
+    key <- dottedRef
+    cmd <- ident
+    fs <- braces (many pFieldBinding)
+    fid <- keyword "fired-event-id" *> pIdExpr
+    disp <-
+        FireDisposition
+            <$> (keyword "on-ok" *> pFireOutcome)
+            <*> (symbol ";" *> keyword "on-reject" *> pFireOutcome)
+            <*> (symbol ";" *> keyword "on-error" *> pFireOutcome)
+            <*> (symbol ";" *> keyword "not-mine" *> pFireOutcome)
+    pure FireNode{fireTarget = tgt, fireKey = key, fireCommand = cmd, fireFields = fs, fireFiredEventId = fid, fireDisposition = disp}
+
+pFireOutcome :: P FireOutcome
+pFireOutcome = choice [OFired <$ keyword "Fired", ORetry <$ keyword "Retry"]
+
+pFieldBinding :: P FieldBinding
+pFieldBinding = do
+    n <- ident
+    v <- optional (symbol "=" *> pBindingValue)
+    pure FieldBinding{fbName = n, fbValue = v}
+
+-- | A binding value: a quoted string (kept quoted) or a dotted reference.
+pBindingValue :: P Text
+pBindingValue = choice [quoted, dottedRef]
+  where
+    quoted = do
+        s <- stringLit
+        pure ("\"" <> s <> "\"")
+
+{- | A dotted/plain reference token like @input.hospitalId@, @timer.id@,
+@correlationId@.
+-}
+dottedRef :: P Text
+dottedRef = lexeme $ do
+    c <- letterChar
+    cs <- many (alphaNumChar <|> char '_' <|> char '.')
+    pure (T.pack (c : cs))
+
+-- | A double-quoted string literal (no escapes), returning the inner text.
+stringLit :: P Text
+stringLit = lexeme $ do
+    _ <- char '"'
+    s <- many (anySingleBut '"')
+    _ <- char '"'
+    pure (T.pack s)
+
+brackets :: P a -> P a
+brackets = between (symbol "[") (symbol "]")
 
 --------------------------------------------------------------------------------
 -- Transitions

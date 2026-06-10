@@ -74,6 +74,25 @@ main = hspec $ do
                         evUpcastFrom e `shouldBe` Just (1, Hole)
                     [] -> expectationFailure "TransferReservationCreated not found"
 
+    describe "process/timer (EP-3)" $ do
+        it "parses the hospital-surge process + nested timer" $ do
+            input <- TIO.readFile "test/fixtures/hospital-surge.kdsl"
+            case parseSpec "test/fixtures/hospital-surge.kdsl" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> case [p | NProcess p <- specNodes spec] of
+                    (p : _) -> do
+                        procId p `shouldBe` "HospitalSurge"
+                        procName p `shouldBe` "hospital-surge"
+                        tmName (procTimer p) `shouldBe` "surgeFollowUp"
+                        onReject (fireDisposition (tmFire (procTimer p))) `shouldBe` OFired
+                        tmMaxAttempts (procTimer p) `shouldBe` 5
+                    [] -> expectationFailure "no process node parsed"
+        it "round-trips the hospital-surge spec through parse . pretty" $ do
+            input <- TIO.readFile "test/fixtures/hospital-surge.kdsl"
+            case parseSpec "in" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+
     describe "diff (evolution classification)" $ do
         it "classifies a field added without a version bump as BREAKING" $ do
             cs <- diffFixtures "test/fixtures/reservation.kdsl" "test/fixtures/reservation-fieldadd.kdsl"
