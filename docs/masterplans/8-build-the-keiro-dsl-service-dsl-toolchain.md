@@ -104,7 +104,7 @@ vertical emits symbol-free scaffold + holes + harness, never a symbolic compiler
 |---|-------|------|-----------|-----------|--------|
 | EP-1 | Foundations: grammar, parser, validator, scaffold/harness engine, aggregate vertical | docs/plans/59-keiro-dsl-foundations-grammar-parser-validator-scaffold-and-harness-engine-aggregate-vertical.md | None | None | Complete |
 | EP-2 | Evolution: schema versioning, upcasters, deprecation, diff | docs/plans/60-keiro-dsl-evolution-schema-versioning-upcasters-deprecation-and-diff.md | EP-1 | None | Complete |
-| EP-3 | Process manager + durable timer nodes | docs/plans/61-keiro-dsl-process-manager-and-durable-timer-nodes.md | EP-1 | EP-2 | Not Started |
+| EP-3 | Process manager + durable timer nodes | docs/plans/61-keiro-dsl-process-manager-and-durable-timer-nodes.md | EP-1 | EP-2 | In Progress (M1–M4 done; M5 spec→behaviour pin done, full-corpus compilation deferred) |
 | EP-4 | Integration nodes: inbox, outbox, Kafka, contract | docs/plans/62-keiro-dsl-integration-nodes-inbox-outbox-kafka-and-contract.md | EP-1 | EP-2 | Not Started |
 | EP-5 | PGMQ workqueue + dispatch nodes | docs/plans/63-keiro-dsl-pgmq-workqueue-and-dispatch-nodes.md | EP-1 | EP-4 | Not Started |
 | EP-6 | Workflow + operation nodes | docs/plans/64-keiro-dsl-workflow-and-operation-nodes.md | EP-1 | EP-2 | Not Started |
@@ -213,7 +213,7 @@ Track milestone-level progress across all child plans.
 - [x] EP-1: scaffold engine (`ScaffoldModule`/`ModuleKind`, create-if-absent holes, firewall invariant) + `scaffold` CLI. (2026-06-10)
 - [x] EP-1: harness engine; aggregate vertical conformance against captured `HospitalCapacity/Reservation` fixture (scaffold compiles, holes filled, harness green 5/5; mutation turns a specific test red). (2026-06-10)
 - [x] EP-2: `schemaVersion`/`upcast`/`deprecated` grammar + `diff --since` classifying additive vs breaking. (2026-06-10)
-- [ ] EP-3: `process`/`timer` nodes — grammar, validator rules (clock-free deadline, runtime-owned dispatch-id, mandatory disposition, explicit max-attempts), scaffold, harness; conformance vs `SurgeManager`/`EscalationProcess`.
+- [~] EP-3: `process`/`timer` nodes — grammar, validator (clock-free deadline, runtime-owned dispatch-id, cross-node coupling, benign-inversion warnings), scaffold (firewall-clean wiring + holes), facts harness; spec→behaviour mutation pin vs hospital-surge. Full `SurgeManager.hs` source-compilation conformance deferred (heavy runtime integration). (2026-06-10)
 - [ ] EP-4: `contract`/`intake`/`emit`/`publisher` nodes — envelope-binding + disposition holes (with the two inversions), strict decode; conformance vs hospital-capacity & incident-command `Integration/`.
 - [ ] EP-5: `workqueue`/`dispatch` nodes — physical-table-name fixture, read-model→enqueue coupling, dual disposition surfaces; conformance vs reservation-work.
 - [ ] EP-6: `workflow`/`operation` nodes — steps/await/sleep/child, deterministic ids, await↔signal coupling; conformance vs `ReservationWorkflow`/`EvacuationWorkflow`.

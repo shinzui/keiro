@@ -9,7 +9,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), diffSpecs, isBreaking)
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
-import Keiro.Dsl.Harness (harnessFor)
+import Keiro.Dsl.Harness (harnessFor, harnessProcess)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate, scaffoldProcess)
@@ -94,7 +94,7 @@ run (Scaffold fp out) = do
                         [ scaffoldAggregate ctx spec agg <> harnessFor ctx spec agg
                         | NAggregate agg <- specNodes spec
                         ]
-                procMods = concat [scaffoldProcess ctx p | NProcess p <- specNodes spec]
+                procMods = concat [scaffoldProcess ctx p <> harnessProcess ctx p | NProcess p <- specNodes spec]
             forM_ (aggMods <> procMods) (writeModule out)
 run (Diff fp ref) = do
     -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.

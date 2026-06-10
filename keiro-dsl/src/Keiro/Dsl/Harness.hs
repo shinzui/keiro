@@ -17,6 +17,7 @@ body by construction. The emitted module exposes @harnessAssertions ::
 -}
 module Keiro.Dsl.Harness (
     harnessFor,
+    harnessProcess,
 ) where
 
 import Data.Text (Text)
@@ -37,6 +38,80 @@ harnessFor ctx spec agg =
     ]
   where
     a = resolveAgg ctx spec agg
+
+{- | Emit a self-contained, firewall-clean facts harness for a process manager,
+pinning the spec's deterministic decisions: the time-injection formula, the
+deterministic timer-id and fired-event-id derivation strings, the runtime-owned
+dispatch-id (no user id), and the dispatch\/fire disposition tables (incl. the
+@on-reject => Fired@ benign inversion). It exposes
+@processHarnessFacts :: [(String, Bool)]@ over pure values, so it compiles and
+runs without the effectful\/hasql runtime. (Behavioural conformance of the
+/filled/ ProcessManager against the live runtime is the M5 step.)
+-}
+harnessProcess :: Context -> ProcessNode -> [ScaffoldModule]
+harnessProcess ctx p =
+    [ ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/ProcessHarness.hs")
+        , moduleText = emitProcessHarness genPrefix p
+        , kind = Generated
+        }
+    ]
+  where
+    ctxPascal = pascalFromKebab' (contextName ctx)
+    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
+    genPrefix = root <> "Generated." <> ctxPascal <> "." <> procId p
+
+emitProcessHarness :: Text -> ProcessNode -> Text
+emitProcessHarness genPrefix p =
+    nl
+        [ "{-# LANGUAGE OverloadedStrings #-}"
+        , generatedBanner
+        , "module " <> genPrefix <> ".ProcessHarness (processHarnessValues) where"
+        , ""
+        , "-- | (label, value): the spec's deterministic process/timer decisions, "
+        , "-- lowered to plain values so a driver can assert them against a committed"
+        , "-- expectation. The driver's expectation is hand-written (not generated), so a"
+        , "-- spec change that alters a decision diverges from it and turns a specific"
+        , "-- assertion red — the spec->behaviour pin. (Live-runtime behavioural"
+        , "-- conformance of the filled ProcessManager is the M5 step.)"
+        , "processHarnessValues :: [(String, String)]"
+        , "processHarnessValues ="
+        , "  [ (\"fireAtField\", " <> hs (faField (tmFireAt timer)) <> ")"
+        , "  , (\"timerIdPrefix\", " <> hs (idePrefix (tmId timer)) <> ")"
+        , "  , (\"firedEventIdPrefix\", " <> hs (idePrefix (fireFiredEventId timer')) <> ")"
+        , "  , (\"dispatchIdUserField\", \"none\")"
+        , "  , (\"onReject\", " <> hs (showFireOutcome (onReject fd)) <> ")"
+        , "  , (\"onFailed\", " <> hs (showDisp (onFailed (firstDispDisposition p))) <> ")"
+        , "  , (\"maxAttempts\", " <> hs (tInt (tmMaxAttempts timer)) <> ")"
+        , "  ]"
+        ]
+  where
+    timer = procTimer p
+    timer' = tmFire timer
+    fd = fireDisposition timer'
+    hs = tshow
+
+firstDispDisposition :: ProcessNode -> DispatchDisposition
+firstDispDisposition p = case hDispatch (procHandle p) of
+    (d : _) -> dispDisposition d
+    [] -> DispatchDisposition DAckOk DAckOk DRetry
+
+showFireOutcome :: FireOutcome -> Text
+showFireOutcome OFired = "Fired"
+showFireOutcome ORetry = "Retry"
+
+showDisp :: Disp -> Text
+showDisp DAckOk = "AckOk"
+showDisp DRetry = "Retry"
+showDisp (DDeadLetter _) = "DeadLetter"
+
+-- A local copy (Scaffold's pascalFromKebab is not exported).
+pascalFromKebab' :: Text -> Text
+pascalFromKebab' = T.concat . map cap . T.splitOn "-"
+  where
+    cap t = case T.uncons t of
+        Just (c, rest) -> T.cons (T.head (T.toUpper (T.singleton c))) rest
+        Nothing -> t
 
 emitHarness :: Agg -> Text
 emitHarness a =
@@ -105,6 +180,10 @@ upcastDecl a e = case rcUpcastFrom e of
 
 tInt :: Int -> Text
 tInt = T.pack . show
+
+-- | Render a Text as a Haskell string literal (quoted, escaped).
+tshow :: Text -> Text
+tshow = T.pack . show
 
 nl :: [Text] -> Text
 nl = T.intercalate "\n"

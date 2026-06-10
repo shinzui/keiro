@@ -100,15 +100,15 @@ Milestone 3 — Scaffold emitters: **DONE 2026-06-10**
 - [x] Emit the create-if-absent `ProcessHoles` module documenting the holes: the `handle` reaction, the deadline window (TIME INJECTED), the fire command, and the deterministic ids. (2026-06-10)
 - [x] Firewall + determinism tests pass for the process scaffold; the CLI emits the process modules alongside the saga/target aggregate scaffolds and the firewall holds across all Generated modules. (Full ProcessManager compilation is M5 conformance.) (2026-06-10)
 
-Milestone 4 — Harness emission:
+Milestone 4 — Harness emission: **DONE 2026-06-10**
 
-- [ ] Emit a harness test module that pins the disposition tables, the time-injection assertion, the runtime-owned dispatch-id, and the deterministic ids.
+- [x] `harnessProcess` emits a self-contained, firewall-clean `ProcessHarness` Generated module exporting the spec's deterministic decisions (time-injection field, deterministic timer-id/fired-event-id prefixes, runtime-owned dispatch-id, the dispatch/fire disposition tables, the max-attempts ceiling) as plain values. The `keiro-dsl-conformance-process` suite compiles + runs it (7/7 green). (2026-06-10)
 
-Milestone 5 — Conformance vs `SurgeManager`:
+Milestone 5 — Conformance vs `SurgeManager`: **PARTIAL 2026-06-10** (spec→behaviour pin delivered; full-corpus source compilation deferred)
 
-- [ ] Capture `SurgeManager.hs` + `Surge/Transducer.hs` as read-only fixtures under `keiro-dsl/test/fixtures/hospital-surge/`.
-- [ ] Author `hospital-surge.kdsl`; `check` passes; `scaffold` produces modules that compile once holes are filled to match the captured reference; harness green.
-- [ ] Mutation test: flipping the timer-fire `on-reject` disposition turns a specific harness test red.
+- [x] Author `hospital-surge.kdsl` (+ minimal Surge/Hospital aggregate decls); `check` passes clean (benign-inversion warnings only). (2026-06-10)
+- [x] Mutation test (`keiro-dsl/test/process-mutation-test.sh`): flipping the timer-fire `on-reject` from `Fired` to `Retry` in the spec, re-scaffolding, turns the *specific* `onReject` assertion red against the hand-written expectation in `test/conformance-process/Main.hs`; restoring returns to green. This is the headline spec→behaviour pin. (2026-06-10)
+- [ ] **Deferred:** capturing the external `SurgeManager.hs` + `Surge/Transducer.hs` and compiling the runtime-coupled Generated `Process` module against the full effectful/hasql/kiroku stack (a much heavier integration than the aggregate codec). The aggregate-level compilation conformance is already proven in EP-1; the process facts harness + mutation pin demonstrate the spec→behaviour link without it.
 
 
 ## Surprises & Discoveries
@@ -116,7 +116,29 @@ Milestone 5 — Conformance vs `SurgeManager`:
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **M2: `check` had to stop failing on warnings.** The process validator surfaces the benign
+  inversions (`on-reject => Fired`, `on-duplicate => AckOk`) as *warnings*, but the EP-1
+  `check` CLI exited non-zero on any diagnostic. Fixed to exit non-zero only when a
+  diagnostic has `severity == Error`, so a valid process spec passes clean (exit 0) while
+  still printing its warnings. Evidence: `check hospital-surge.kdsl` → exit 0 with two
+  warnings.
+
+- **M4: a generated facts harness is circular unless the expectation is hand-written.** The
+  first process harness compared spec-derived values against spec-derived literals — both
+  regenerated from the spec, so flipping `on-reject` in the spec changed *both* and the test
+  still passed (the mutation slipped through). Fixed by having the Generated `ProcessHarness`
+  module export the raw values and the *hand-written* conformance `Main` hold the expected
+  values; now a spec change diverges from the committed expectation and reddens exactly the
+  affected assertion. Evidence: `process-mutation-test.sh` — flipping `on-reject Fired`→
+  `Retry` turns only `onReject` red. (Lesson echoing EP-1 M4: a behaviour pin is only as
+  good as having an independent reference to pin against.)
+
+- **M5 scope: the runtime-coupled process scaffold is much heavier to compile than the
+  aggregate codec.** The aggregate Generated layer compiles against base/text/aeson/keiki/
+  keiro-core; the `ProcessManager` wiring pulls in effectful, hasql-transaction,
+  kiroku-store, and both the saga and target aggregates. Full source-level compilation of
+  the captured `SurgeManager.hs` is therefore deferred; the deterministic spec→behaviour
+  decisions are pinned by the self-contained facts harness + mutation test instead.
 
 
 ## Decision Log

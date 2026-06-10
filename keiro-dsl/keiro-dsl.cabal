@@ -96,6 +96,21 @@ test-suite keiro-dsl-conformance
     , keiro
     , text   >=2.1
 
+-- Process-manager facts harness (EP-3 M4): the self-contained, firewall-clean
+-- ProcessHarness module scaffolded from hospital-surge.kdsl, compiled + run to
+-- prove the scaffolder lowered the spec's deterministic process/timer decisions
+-- faithfully. (The runtime-coupled Process/ProcessHoles modules are emitted to
+-- disk but not in this component; their live conformance is the M5 step.)
+test-suite keiro-dsl-conformance-process
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-process
+  main-is:        Main.hs
+  other-modules:  Generated.HospitalCapacity.HospitalSurge.ProcessHarness
+  build-depends:
+    , base  >=4.21 && <5
+    , text  >=2.1
+
 -- Conformance for the evolved (v2) Reservation aggregate: proves the scaffolded
 -- Codec schemaVersion=2 + upcasters wiring compiles and that the filled upcaster
 -- migrates a v1-tagged payload through the chain (the harness "upcaster wired"
