@@ -334,9 +334,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "validates categories, rejecting the dash boundary and reserved names" $ do
             (Stream.category "incident" :: Either Stream.CategoryError (Stream.StreamCategory ()))
                 `shouldBe` Right (Stream.StreamCategory "incident")
-            -- ':' sub-namespacing is allowed (matches the wf:<name> convention)
-            (Stream.category "hospital:surge" :: Either Stream.CategoryError (Stream.StreamCategory ()))
-                `shouldBe` Right (Stream.StreamCategory "hospital:surge")
+            -- '_' joins a compound category; ':' (reserved for the wf: family) is also accepted
+            (Stream.category "hospital_surge" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Right (Stream.StreamCategory "hospital_surge")
+            (Stream.category "wf:fulfillment" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Right (Stream.StreamCategory "wf:fulfillment")
             (Stream.category "" :: Either Stream.CategoryError (Stream.StreamCategory ()))
                 `shouldBe` Left Stream.CategoryEmpty
             (Stream.category "hospital-surge" :: Either Stream.CategoryError (Stream.StreamCategory ()))

@@ -107,7 +107,7 @@ This section must always reflect the actual current state of the work.
   `Store.streamNameInCategory`), `entityStreamId` to `Keiro.Stream`; re-exports `CategoryName`.
   `cabal build keiro-core` clean against the local kiroku `0.2.0.0`.
 - [x] **M2 — Unit tests.** (2026-06-10) Extended the `Keiro.Stream` group in
-  `keiro/test/Main.hs`: validation cases (empty / `-` / `$all` / `:` sub-namespace), the
+  `keiro/test/Main.hs`: validation cases (empty / `-` / `$all` / `_` compound / `:` workflow), the
   `entityStream` round-trip asserted against kiroku's own `Store.categoryName`, and the
   `entityStreamId` `Text`/`String` paths. `cabal test keiro-test --match "Keiro.Stream"` →
   `4 examples, 0 failures`, suite PASS. (The full DB-backed suite is blocked by an unrelated
@@ -135,7 +135,8 @@ implementation. Provide concise evidence.
   hospital aggregate streams. Whether intended or not, today nothing makes this visible. The
   workflow helper avoids it by using `:` as an intra-family separator: `wf:<name>-<id>`
   (`keiro/src/Keiro/Workflow/Types.hs:101-103`) keeps the category as `wf:<name>`. The Category
-  API will standardize on that convention (use `:` to sub-namespace; reject `-` in a category).
+  API rejects `-` in a category and the convention joins a compound category with `_` (e.g.
+  `hospital_surge`), reserving `:` for the workflow family (see Decision Log).
 
 - **2026-06-10 — `Category` name collides with the subscription target.** Exporting a
   `Category` type from `Keiro.Stream` (re-exported wholesale by the `Keiro` umbrella) produced
@@ -172,7 +173,8 @@ Record every decision made while working on the plan.
   Date: 2026-06-10
 
 - Decision: Reject `-` in a category at construction (`category` returns `Either CategoryError`;
-  `categoryUnsafe` calls `error`). Use `:` for intra-family sub-namespacing.
+  `categoryUnsafe` calls `error`). Join compound categories with `_`; `:` is reserved for the
+  workflow family (see the dedicated decision below).
   Rationale: `-` is Kiroku's category/id boundary; allowing it in a category reintroduces the
   silent fan-in footgun (see Surprises). `:` is already the established convention (`wf:`,
   `pm:fulfillment`) and is accepted by the store.
@@ -184,6 +186,15 @@ Record every decision made while working on the plan.
   instance, typically `renderIdSegment = Text.pack . show`).
   Rationale: matches the existing per-module `idText = Text.pack . show` exactly while removing
   the duplicated category literal; does not force an instance on users who already hold `Text`.
+  Date: 2026-06-10
+
+- Decision: Compound categories use `_` (e.g. `hospital_surge`), not `:`. The colon is reserved
+  for the workflow stream family (`wf:<name>`).
+  Rationale: workflows already own `:` as their family namespace (`Keiro.Workflow.Types`); using
+  it for saga/process-manager compound categories too would overload its meaning. `_` is not the
+  `-` category boundary, so `hospital_surge-<id>` keeps category `hospital_surge` — distinct from
+  the `hospital` aggregate. Validation is unchanged (it rejects only `-`/`$all`/empty; both `_`
+  and `:` are accepted) — this is a naming convention, enforced by guidance, not by the type.
   Date: 2026-06-10
 
 - Decision: Do not re-export `CategoryName` from `Keiro.Stream`.
@@ -370,8 +381,8 @@ Edit `keiro-core/src/Keiro/Stream.hs`:
    -- @-@ in every stream name belonging to this family. Kiroku defines a
    -- stream's category as the substring before its first @-@, so a category
    -- must itself contain no @-@. Carries the same phantom type @a@ as the
-   -- 'Stream' handles it produces. Use @:@ to sub-namespace within a family
-   -- (e.g. @"hospital:surge"@), matching the @wf:<name>@ workflow convention.
+   -- 'Stream' handles it produces. Join a compound category with @_@ (e.g.
+   -- @"hospital_surge"@); @:@ is reserved for the workflow family (@wf:<name>@).
    newtype Category a = Category { categoryTextOf :: Text }
        deriving stock (Generic, Eq, Ord, Show)
 
@@ -455,7 +466,8 @@ framework — inspect the top of `keiro/test/Main.hs` to match tasty/hspec style
 - `category ""` → `Left CategoryEmpty`.
 - `category "hospital-surge"` → `Left (CategoryContainsSeparator "hospital-surge")`.
 - `category "$all"` → `Left (CategoryReserved "$all")`.
-- `category "hospital:surge"` → `Right …` (the `:` sub-namespace convention is allowed).
+- `category "hospital_surge"` → `Right …` (compound categories join with `_`); `category
+  "wf:fulfillment"` → `Right …` (`:` is accepted; reserved for the workflow family).
 - `streamName (entityStream (categoryUnsafe "incident") "inc_01h")` ==
   `StreamName "incident-inc_01h"`.
 - `entityStreamId (categoryUnsafe "orders") (OrderId 100)` renders `"orders-…"` using a local
@@ -474,20 +486,19 @@ Scope: prove the API on real call sites inside the keiro repo and standardize th
 category convention surfaced in Surprises.
 
 - In `keiro/jitsurei/` (the in-repo example package), replace hand-concatenated stream names
-  with module-level `Category` values + `entityStream`/`entityStreamId`. Concretely, the
+  with module-level `StreamCategory` values + `entityStream`/`entityStreamId`. Concretely, the
   `"chapter-" <> … <> "-" <> …` name in `keiro/jitsurei/app/Main.hs:382` is itself a *compound*
   case: a chapter is keyed by `(member, chapter)`, so its category should be `chapter` with a
-  composite id segment `"<member>:<chapter>"` (use `:` inside the id, `-` only as the
-  category boundary), or model it explicitly as a sub-namespace — record the choice in the
-  Decision Log.
+  composite id segment joined by `_` (e.g. `<member>_<chapter>`) — `-` stays the category
+  boundary only — record the choice in the Decision Log.
 - Reconcile the `wf:` workflow helper with the API: either re-express
   `workflowStreamName` in terms of `entityStream (categoryUnsafe ("wf:" <> name)) wid`, or, at
   minimum, validate that `name` contains no `-` (today a hyphenated `WorkflowName` silently
   shifts the category — see Surprises). Pick one and document it.
 - Reconcile the saga prefix: `SagaRef.sagaStreamPrefix` in
   `keiro-dsl/src/Keiro/Dsl/Grammar.hs:397-405` currently carries a raw trailing-`-` string. At
-  minimum, add validation/documentation that a compound saga family must use `:` (e.g.
-  `hospital:surge`) rather than `hospital-surge-` to keep its own category. Updating the DSL
+  minimum, add validation/documentation that a compound saga family must use `_` (e.g.
+  `hospital_surge`) rather than `hospital-surge-` to keep its own category. Updating the DSL
   parser/scaffold to enforce this is in scope here only if low-risk; otherwise split into a
   follow-up item under Progress.
 
@@ -517,7 +528,7 @@ incidentCommandStream = entityStreamId (coerceCategory incidentCategory)  -- or 
 ```
 
 For the compound process-manager streams (`hospital-surge-…`, `incident-escalation-…`), switch
-to `:` sub-namespaced categories (`hospital:surge`, `incident:escalation`) so each gets its own
+to `_`-joined categories (`hospital_surge`, `incident_escalation`) so each gets its own
 category — and note in that repo's changelog that this is a **stream-name change** (existing
 data under the old names would need migration; flag it, do not silently rename live streams).
 
