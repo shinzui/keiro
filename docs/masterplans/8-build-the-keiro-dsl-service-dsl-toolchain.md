@@ -306,4 +306,57 @@ Cross-plan insights carried forward from the #58 feasibility + coverage audits
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+### Progress snapshot (2026-06-10)
+
+The shared engine and the complete typed-spec surface are delivered and green; the
+runtime-coupled scaffold/harness tail and the EP-7 cold-start remain.
+
+**Done and proven (green tests / conformance):**
+
+- **Engine (EP-1):** `Keiro.Dsl.{Grammar,Parser,PrettyPrint,Validate,Scaffold,Harness,Diff}`
+  + the `parse`/`check`/`scaffold`/`diff` CLI. The firewall invariant holds across every
+  Generated module and is tested. `parse . pretty == id` is a QuickCheck property.
+- **All seven node families parse, validate, and round-trip:** `aggregate`, `process`+`timer`,
+  `contract`/`intake`/`emit`/`publisher`, `workqueue`/`dispatch`, `workflow`/`operation`,
+  plus evolution (`vN`/`upcast`/`deprecated`). 44 unit tests.
+- **The dangerous-decision checkers (the project's core value):** status-map totality,
+  clock-free guards, event-version upcasters, process time-injection + runtime-owned
+  dispatch-id + benign-inversion warnings, the three inbox-disposition inversions +
+  skip-totality + contract coupling, the pgmq physical-name-divergence + store/decode
+  inversions, and the workflow await↔signal match — each rejected with a line-numbered
+  diagnostic, each with a passing/failing fixture.
+- **Six compiled conformance components** (build against keiki/keiro + run):
+  `keiro-dsl-conformance` (aggregate: scaffold + filled holes compile, harness green,
+  guard-mutation reddens a specific test), `-v2` (evolution: v2 codec + filled upcaster),
+  `-process` (process facts harness + spec→behaviour mutation pin), `-contract` (EP-4
+  contract codec round-trip), `-queue` (EP-5 Job codec round-trip). Plus the
+  `mutation-test.sh` / `diff-test.sh` / `process-mutation-test.sh` gates.
+- **EP-7 delivery:** the `keiro-dsl-authoring` skill (SKILL/NOTATION/LOOP/WALKTHROUGH),
+  `docs/corpus/keiro-dsl-corpus.md`, the `.claude/skills` symlink, and the `keiro-dsl`
+  package registered in `mori.dhall` (typechecks).
+
+**Remaining (the heavy, framework-locked tail — genuinely multi-session):**
+
+- Full runtime-compilation scaffold + harness for the behaviour-bearing, runtime-coupled
+  bodies: the process `handle` against the effectful/hasql `ProcessManager` stack; the
+  intake/emit/publisher inbox/outbox wiring; the pgmq dispatch worker; the workflow body
+  against `Keiro.Workflow`. (The self-contained codegen — domain/codec/contract/Job — is
+  already compiled and conformance-tested; this tail is the part the Vision flags as the
+  most brittle, framework-coupled work, and is exactly why those bodies are holes.)
+- EP-3 M5 full `SurgeManager.hs` source compilation; EP-6 workflow scaffold + conformance;
+  EP-7's live cold-start (a fresh agent authoring a green-harness service from only the skill).
+
+### Lessons
+
+- **The validation surface is where the value concentrates.** Catching the dangerous
+  inversions (duplicate⇒retry, previouslyFailed⇒retry, decodeFailed⇒unbounded-retry,
+  storeFailure⇒deadLetter, on-reject⇒Fired, await/signal mismatch, physical-name drift)
+  before any Haskell exists is the bulk of the payoff, and it landed for every vertical.
+- **Behaviour pins need an independent reference.** Both the EP-1 guard mutation and the
+  EP-3 process facts harness only became real tests once the expectation was hand-written
+  (not regenerated from the spec) — a generated-vs-generated assertion is a tautology.
+- **Self-contained codegen compiles cheaply; runtime-coupled codegen is the hard tail.** The
+  domain/codec/contract/Job layers compile against base/text/aeson/keiki/keiro-core and were
+  conformance-proven; the `ProcessManager`/`Inbox`/`Workflow` wiring pulls the whole
+  effectful/hasql stack and is the deferred work — which validates the original scope
+  decision to leave behaviour-bearing bodies as harness-pinned holes.
