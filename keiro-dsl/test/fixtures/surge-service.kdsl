@@ -1,0 +1,60 @@
+context surge-demo
+
+id HospitalId prefix=hosp
+
+process SurgeFlow
+  name "surge-demo"
+  input SurgeInput { hospitalId observedAt:Time }
+  correlate input.hospitalId via idText
+  saga Surge stream="surge-" <> correlationId
+  target Hospital
+  projections [ ]
+
+  on SurgeInput
+    advance NoteSurgeThreshold { hospitalId }
+    dispatch Hospital@input.hospitalId ActivateSurge { hospitalId }
+      on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+    schedule surgeFollowUp
+
+  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)
+
+  timer surgeFollowUp
+    id uuidv5 "surge-timer:" <> correlationId
+    fireAt input.observedAt + 5m
+    payload { kind="surge-follow-up" }
+    fire dispatch Surge@correlationId MarkSurgeTimerFired { hospitalId }
+      fired-event-id uuidv5 "surge-fired:" <> correlationId
+      on-ok Fired ; on-reject Fired ; on-error Retry ; not-mine Retry
+    decode unknown-status => Cancelled
+    max-attempts 5 dead-letter "ceiling"
+
+aggregate Surge
+  regs
+    surgeState SurgeVertex = Watching
+  states Watching Noted Fired!
+
+  command NoteSurgeThreshold { hospitalId }
+  command MarkSurgeTimerFired { hospitalId }
+  event SurgeThresholdNoted = fields(NoteSurgeThreshold)
+  event SurgeTimerFired = fields(MarkSurgeTimerFired)
+
+  Watching -- NoteSurgeThreshold --> emit SurgeThresholdNoted ; goto Noted
+  Noted -- MarkSurgeTimerFired --> emit SurgeTimerFired ; goto Fired
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection surge consistency=Strong key=hospitalId
+    status-map { Noted=>noted Fired=>fired }
+
+aggregate Hospital
+  regs
+    hospitalState HospitalVertex = Idle
+  states Idle Surging!
+
+  command ActivateSurge { hospitalId }
+  event SurgeActivated = fields(ActivateSurge)
+
+  Idle -- ActivateSurge --> emit SurgeActivated ; goto Surging
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection hospital consistency=Strong key=hospitalId
+    status-map { Activated=>surging }
