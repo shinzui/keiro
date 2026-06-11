@@ -55,8 +55,8 @@ mapStreamName f value = value & #name %~ f
 every stream name belonging to this family. Kiroku defines a stream's category
 as the substring before its first @-@ (see 'Kiroku.Store.Types.categoryName'),
 so a category must itself contain no @-@. Carries the same phantom type @a@ as
-the 'Stream' handles it produces. Join a compound category with @_@ (e.g.
-@"hospital_surge"@ for a saga over hospital surges); @:@ is reserved for the
+the 'Stream' handles it produces. Write a compound category in camelCase (e.g.
+@"hospitalSurge"@ for a saga over hospital surges); @:@ is reserved for the
 workflow stream family (@wf:\<name\>@).
 
 Named 'StreamCategory' (not @Category@) to avoid clashing with the

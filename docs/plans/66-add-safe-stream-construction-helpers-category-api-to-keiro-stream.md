@@ -147,8 +147,8 @@ implementation. Provide concise evidence.
   hospital aggregate streams. Whether intended or not, today nothing makes this visible. The
   workflow helper avoids it by using `:` as an intra-family separator: `wf:<name>-<id>`
   (`keiro/src/Keiro/Workflow/Types.hs:101-103`) keeps the category as `wf:<name>`. The Category
-  API rejects `-` in a category and the convention joins a compound category with `_` (e.g.
-  `hospital_surge`), reserving `:` for the workflow family (see Decision Log).
+  API rejects `-` in a category and the convention writes a compound category in camelCase (e.g.
+  `hospitalSurge`), reserving `:` for the workflow family (see Decision Log).
 
 - **2026-06-10 — `Category` name collides with the subscription target.** Exporting a
   `Category` type from `Keiro.Stream` (re-exported wholesale by the `Keiro` umbrella) produced
@@ -185,7 +185,7 @@ Record every decision made while working on the plan.
   Date: 2026-06-10
 
 - Decision: Reject `-` in a category at construction (`category` returns `Either CategoryError`;
-  `categoryUnsafe` calls `error`). Join compound categories with `_`; `:` is reserved for the
+  `categoryUnsafe` calls `error`). Write compound categories in camelCase; `:` is reserved for the
   workflow family (see the dedicated decision below).
   Rationale: `-` is Kiroku's category/id boundary; allowing it in a category reintroduces the
   silent fan-in footgun (see Surprises). `:` is already the established convention (`wf:`,
@@ -219,17 +219,20 @@ Record every decision made while working on the plan.
 
 - Decision (M3): Defer the DSL saga-prefix reconciliation to a follow-up. `SagaRef.sagaStreamPrefix`
   (`keiro-dsl/src/Keiro/Dsl/Grammar.hs:397-405`) carries the raw compound prefix
-  `"hospital-surge-"` (category collapses to `hospital`). Switching it to `hospital_surge` is the
+  `"hospital-surge-"` (category collapses to `hospital`). Switching it to `hospitalSurge` is the
   correct fix per the `_` convention, but it changes generated stream names and regenerates the
   DSL golden conformance fixtures — too broad to fold into M3 safely. Tracked as follow-up. Date: 2026-06-10
 
-- Decision: Compound categories use `_` (e.g. `hospital_surge`), not `:`. The colon is reserved
-  for the workflow stream family (`wf:<name>`).
-  Rationale: workflows already own `:` as their family namespace (`Keiro.Workflow.Types`); using
-  it for saga/process-manager compound categories too would overload its meaning. `_` is not the
-  `-` category boundary, so `hospital_surge-<id>` keeps category `hospital_surge` — distinct from
-  the `hospital` aggregate. Validation is unchanged (it rejects only `-`/`$all`/empty; both `_`
-  and `:` are accepted) — this is a naming convention, enforced by guidance, not by the type.
+- Decision (revised 2026-06-10): Compound categories use **camelCase** (e.g. `hospitalSurge`,
+  `incidentEscalation`), not `:` and not `_`. The colon stays reserved for the workflow stream
+  family (`wf:<name>`).
+  Rationale: camelCase reads best and avoids overloading `:` (workflows own it) or `_` (TypeID id
+  segments already contain `_`, e.g. `hosp_01h…`, so a `hospital_surge-hosp_01h…` name mixes `_`
+  in both the category and the id, which is muddy). camelCase contains no `-`, so
+  `hospitalSurge-<id>` keeps category `hospitalSurge` — distinct from the `hospital` aggregate.
+  Validation is unchanged (rejects only `-`/`$all`/empty) — this is naming guidance, not enforced
+  by the type. (Supersedes the earlier `_`-separator decision; the docstring, tests, and plan
+  references were updated accordingly.)
   Date: 2026-06-10
 
 - Decision: Do not re-export `CategoryName` from `Keiro.Stream`.
@@ -284,7 +287,7 @@ Compare the result against the original purpose.
   in kiroku (not keiro), and the type is `StreamCategory` (not `Category`, which clashed with the
   subscription target). Both improved the result.
 - **Deferred / out of scope:** (1) the DSL saga-prefix reconciliation (`hospital-surge-` →
-  `hospital_surge`) — a real stream-name change that regenerates golden conformance fixtures,
+  `hospitalSurge`) — a real stream-name change that regenerates golden conformance fixtures,
   tracked as a follow-up; (2) rejecting a hyphenated `WorkflowName` — a behavior change to
   existing workflows, belongs to a separate hardening pass; (3) **M4** — migrating the separate
   `keiro-runtime-jitsurei` repo, optional and downstream. (4) The keiro commits (`27dc22a`,
@@ -432,8 +435,8 @@ Edit `keiro-core/src/Keiro/Stream.hs`:
    -- @-@ in every stream name belonging to this family. Kiroku defines a
    -- stream's category as the substring before its first @-@, so a category
    -- must itself contain no @-@. Carries the same phantom type @a@ as the
-   -- 'Stream' handles it produces. Join a compound category with @_@ (e.g.
-   -- @"hospital_surge"@); @:@ is reserved for the workflow family (@wf:<name>@).
+   -- 'Stream' handles it produces. Write a compound category in camelCase (e.g.
+   -- @"hospitalSurge"@); @:@ is reserved for the workflow family (@wf:<name>@).
    newtype Category a = Category { categoryTextOf :: Text }
        deriving stock (Generic, Eq, Ord, Show)
 
@@ -517,7 +520,7 @@ framework — inspect the top of `keiro/test/Main.hs` to match tasty/hspec style
 - `category ""` → `Left CategoryEmpty`.
 - `category "hospital-surge"` → `Left (CategoryContainsSeparator "hospital-surge")`.
 - `category "$all"` → `Left (CategoryReserved "$all")`.
-- `category "hospital_surge"` → `Right …` (compound categories join with `_`); `category
+- `category "hospitalSurge"` → `Right …` (compound categories are camelCase); `category
   "wf:fulfillment"` → `Right …` (`:` is accepted; reserved for the workflow family).
 - `streamName (entityStream (categoryUnsafe "incident") "inc_01h")` ==
   `StreamName "incident-inc_01h"`.
@@ -549,7 +552,7 @@ category convention surfaced in Surprises.
 - Reconcile the saga prefix: `SagaRef.sagaStreamPrefix` in
   `keiro-dsl/src/Keiro/Dsl/Grammar.hs:397-405` currently carries a raw trailing-`-` string. At
   minimum, add validation/documentation that a compound saga family must use `_` (e.g.
-  `hospital_surge`) rather than `hospital-surge-` to keep its own category. Updating the DSL
+  `hospitalSurge`) rather than `hospital-surge-` to keep its own category. Updating the DSL
   parser/scaffold to enforce this is in scope here only if low-risk; otherwise split into a
   follow-up item under Progress.
 
@@ -579,7 +582,7 @@ incidentCommandStream = entityStreamId (coerceCategory incidentCategory)  -- or 
 ```
 
 For the compound process-manager streams (`hospital-surge-…`, `incident-escalation-…`), switch
-to `_`-joined categories (`hospital_surge`, `incident_escalation`) so each gets its own
+to camelCase categories (`hospitalSurge`, `incidentEscalation`) so each gets its own
 category — and note in that repo's changelog that this is a **stream-name change** (existing
 data under the old names would need migration; flag it, do not silently rename live streams).
 

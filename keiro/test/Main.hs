@@ -334,9 +334,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "validates categories, rejecting the dash boundary and reserved names" $ do
             (Stream.category "incident" :: Either Stream.CategoryError (Stream.StreamCategory ()))
                 `shouldBe` Right (Stream.StreamCategory "incident")
-            -- '_' joins a compound category; ':' (reserved for the wf: family) is also accepted
-            (Stream.category "hospital_surge" :: Either Stream.CategoryError (Stream.StreamCategory ()))
-                `shouldBe` Right (Stream.StreamCategory "hospital_surge")
+            -- compound categories are camelCase; ':' (reserved for the wf: family) is also accepted
+            (Stream.category "hospitalSurge" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Right (Stream.StreamCategory "hospitalSurge")
             (Stream.category "wf:fulfillment" :: Either Stream.CategoryError (Stream.StreamCategory ()))
                 `shouldBe` Right (Stream.StreamCategory "wf:fulfillment")
             (Stream.category "" :: Either Stream.CategoryError (Stream.StreamCategory ()))
