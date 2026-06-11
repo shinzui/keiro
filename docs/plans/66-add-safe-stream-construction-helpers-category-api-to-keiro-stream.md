@@ -127,9 +127,17 @@ This section must always reflect the actual current state of the work.
   conformance fixtures). The demo-harness `readEvents store ("order-" <> …)` calls in
   `keiro/jitsurei/app/Main.hs` were intentionally left as-is (test-harness reads, not API
   surface).
-- [ ] **M4 (cross-repo, optional) — Migrate `keiro-runtime-jitsurei` services.** Replace
-  per-aggregate hand-concat with module-level `Category` values and `StreamIdSegment`
-  instances; rebuild that repo against the new `keiro-core`.
+- [x] **M4 (cross-repo, optional) — Migrate `keiro-runtime-jitsurei` services.** (2026-06-10)
+  Migrated all six aggregates (hospital, capacity, reservation, triage, resource, incident) to a
+  phantom-polymorphic `StreamCategory` + `entityStream` (names unchanged), and renamed the two
+  compound saga/PM categories to camelCase — `hospital-surge-<id>` → `hospitalSurge-<id>`,
+  `incident-escalation-<id>` → `incidentEscalation-<id>` (a `BREAKING CHANGE` / stream-name
+  change, flagged in the commit; process names + UUID seeds + telemetry kept their old spelling).
+  Bumped that repo's `cabal.project` keiro pin to the StreamCategory commit (`3ba633c`) and the
+  kiroku-store pin to the #55 commit (`ffcf3a1`). Both service test suites
+  (`hospital-capacity-test`, `incident-command-test`) build and pass inside the repo's nix dev
+  shell (which provides `librdkafka`); the surge stream-name assertion was updated to the new
+  name. Commit `8157bf1` in `keiro-runtime-jitsurei`.
 
 
 ## Surprises & Discoveries
@@ -286,13 +294,18 @@ Compare the result against the original purpose.
 - **Two design forks resolved against the first instinct:** the convention-owning core belongs
   in kiroku (not keiro), and the type is `StreamCategory` (not `Category`, which clashed with the
   subscription target). Both improved the result.
+- **2026-06-10 — all milestones complete (M0–M4).** M4 landed: `keiro-runtime-jitsurei` migrated
+  and both service suites green, with the compound saga categories adopting the camelCase
+  convention (`hospitalSurge`, `incidentEscalation`) — a deliberate, `BREAKING CHANGE`-flagged
+  stream-name change (commit `8157bf1` in that repo). The compound-category convention itself was
+  revised twice during the work: `:` → `_` → camelCase (final).
 - **Deferred / out of scope:** (1) the DSL saga-prefix reconciliation (`hospital-surge-` →
-  `hospitalSurge`) — a real stream-name change that regenerates golden conformance fixtures,
-  tracked as a follow-up; (2) rejecting a hyphenated `WorkflowName` — a behavior change to
-  existing workflows, belongs to a separate hardening pass; (3) **M4** — migrating the separate
-  `keiro-runtime-jitsurei` repo, optional and downstream. (4) The keiro commits (`27dc22a`,
-  `b99fbb8`, `5af73f9`) are committed locally on `master` but **not pushed** (only kiroku #55 was
-  authorized to push).
+  `hospitalSurge`) in keiro-dsl — a stream-name change that regenerates golden conformance
+  fixtures, tracked as a follow-up; (2) rejecting a hyphenated `WorkflowName` — a behavior change
+  to existing workflows, belongs to a separate hardening pass.
+- **Push state:** kiroku #55 (`ffcf3a1`) and the keiro #66 commits are on their `origin/master`;
+  the `keiro-runtime-jitsurei` M4 commit (`8157bf1`) is local on `master` (push at your
+  discretion).
 
 
 ## Context and Orientation
