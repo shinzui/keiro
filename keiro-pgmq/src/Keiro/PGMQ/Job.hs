@@ -75,7 +75,17 @@ module Keiro.PGMQ.Job (
     enqueueTracedWithDelay,
 
     -- * Queue lifecycle
+    QueueKind (..),
+    PartitionSpec (..),
+    QueueProvision (..),
+    standardProvision,
+    unloggedProvision,
+    partitionedProvision,
+    withFifoIndexProvision,
+    queueProvisionConfigs,
     ensureJobQueue,
+    ensureJobQueueWith,
+    ensureFifoIndex,
 
     -- * Consuming work
     JobContext (..),
@@ -90,12 +100,14 @@ import Keiro.PGMQ.Codec (JobCodec, JobDecodeError (..), decodeJob, encodeJob)
 import Keiro.PGMQ.Runtime (QueueRef (..))
 import "aeson" Data.Aeson (Value)
 import "base" Control.Exception (SomeException)
-import "base" Control.Monad (foldM, void, when)
+import "base" Control.Monad (foldM, void)
 import "base" Data.Int (Int32, Int64)
 import "effectful-core" Effectful (Eff, IOE, liftIO, (:>))
 import "effectful-core" Effectful.Exception qualified as EffException
 import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal (getContext)
 import "hs-opentelemetry-api" OpenTelemetry.Trace.Core (TracerProvider)
+import "pgmq-config" Pgmq.Config.Effectful (ensureQueuesEff)
+import "pgmq-config" Pgmq.Config.Types qualified as Config
 import "pgmq-effectful" Pgmq.Effectful (
     BatchSendMessage (..),
     BatchSendMessageWithHeaders (..),
@@ -419,15 +431,118 @@ enqueueTracedWithDelay provider job d extraHeaders p = do
     let merged = MessageHeaders (mergeTraceHeaders traceHeaders (Just extraHeaders.unMessageHeaders))
     enqueueWithHeadersAndDelay job d merged p
 
+{- | The three PostgreSQL storage shapes a job's main queue can take.
+
+  * 'StandardKind' — a normal write-ahead-logged queue table (today's default).
+  * 'UnloggedKind' — an /unlogged/ table: writes skip the WAL (faster) but the
+    table is truncated to empty on a database crash. For transient, regenerable
+    work.
+  * 'PartitionedKind' — storage split across child tables by time or message-id
+    range, managed by the PostgreSQL extension @pg_partman@. Requires a
+    @pg_partman@-enabled server (see 'partitionedProvision').
+-}
+data QueueKind
+    = StandardKind
+    | UnloggedKind
+    | PartitionedKind !PartitionSpec
+    deriving stock (Eq, Show)
+
+{- | Partition interval + retention interval for a partitioned queue. Both are
+PostgreSQL/@pg_partman@ duration or integer strings — e.g. @"daily"@ or
+@"10000"@ for the interval, @"7 days"@ or @"100000"@ for the retention.
+-}
+data PartitionSpec = PartitionSpec
+    { partitionInterval :: !Text
+    , retentionInterval :: !Text
+    }
+    deriving stock (Eq, Show)
+
+{- | The provisioning choice for a job's /main/ queue: which storage shape, and
+whether to create the FIFO GIN index. The DLQ (when the policy enables one) is
+always a plain standard queue with no FIFO index.
+-}
+data QueueProvision = QueueProvision
+    { provisionKind :: !QueueKind
+    , provisionFifoIndex :: !Bool
+    }
+    deriving stock (Eq, Show)
+
+-- | A standard main queue with no FIFO index — exactly today's behavior.
+standardProvision :: QueueProvision
+standardProvision = QueueProvision{provisionKind = StandardKind, provisionFifoIndex = False}
+
+-- | An unlogged main queue with no FIFO index.
+unloggedProvision :: QueueProvision
+unloggedProvision = QueueProvision{provisionKind = UnloggedKind, provisionFifoIndex = False}
+
+-- | A partitioned main queue (no FIFO index) with the given interval/retention.
+partitionedProvision :: PartitionSpec -> QueueProvision
+partitionedProvision spec =
+    QueueProvision{provisionKind = PartitionedKind spec, provisionFifoIndex = False}
+
+-- | Turn on FIFO-index creation for a provisioning choice.
+withFifoIndexProvision :: QueueProvision -> QueueProvision
+withFifoIndexProvision provision = provision{provisionFifoIndex = True}
+
+{- | Pure: the list of @pgmq-config@ 'Config.QueueConfig's that
+'ensureJobQueueWith' will reconcile — the main queue first (with its chosen kind
+and optional FIFO index), then the DLQ (always a standard queue) when the policy
+enables one. Exposed so the partitioned path is testable without a
+@pg_partman@-enabled database.
+-}
+queueProvisionConfigs :: QueueProvision -> Job p -> [Config.QueueConfig]
+queueProvisionConfigs provision job =
+    mainConfig : dlqConfigs
+  where
+    mainBase =
+        case provision.provisionKind of
+            StandardKind -> Config.standardQueue job.jobQueue.physicalName
+            UnloggedKind -> Config.unloggedQueue job.jobQueue.physicalName
+            PartitionedKind spec ->
+                Config.partitionedQueue
+                    job.jobQueue.physicalName
+                    Config.PartitionConfig
+                        { Config.partitionInterval = spec.partitionInterval
+                        , Config.retentionInterval = spec.retentionInterval
+                        }
+    mainConfig
+        | provision.provisionFifoIndex = Config.withFifoIndex mainBase
+        | otherwise = mainBase
+    dlqConfigs
+        | job.jobPolicy.useDeadLetter = [Config.standardQueue job.jobQueue.dlqName]
+        | otherwise = []
+
+{- | Idempotent: create the job's main queue with the chosen storage kind and
+(optionally) its FIFO index, plus the DLQ (always a standard queue) when the
+policy uses one. Routes through @pgmq-config@'s additive reconciler, which lists
+existing queues first and only creates what is missing, so this is safe to call
+at every worker startup.
+-}
+ensureJobQueueWith :: (Pgmq :> es) => QueueProvision -> Job p -> Eff es ()
+ensureJobQueueWith provision job =
+    ensureQueuesEff (queueProvisionConfigs provision job)
+
 {- | Idempotent: create the main queue, and the DLQ too when the policy uses
-one. @Pgmq.createQueue@ is idempotent in PGMQ, so this is safe to call at every
-worker startup.
+one. Unchanged behavior: @ensureJobQueueWith standardProvision@. Safe to call at
+every worker startup.
 -}
 ensureJobQueue :: (Pgmq :> es) => Job p -> Eff es ()
-ensureJobQueue job = do
-    Pgmq.createQueue job.jobQueue.physicalName
-    when job.jobPolicy.useDeadLetter $
-        Pgmq.createQueue job.jobQueue.dlqName
+ensureJobQueue = ensureJobQueueWith standardProvision
+
+{- | Create the FIFO GIN index on the job's /main/ queue's @headers@ column —
+the index PGMQ's grouped/ordered reads (@read_grouped@/@read_grouped_rr@) match
+against. Idempotent: the index step is always re-applied and the underlying SQL
+is @CREATE INDEX IF NOT EXISTS@, so a second call is a harmless no-op. Routing
+through @pgmq-config@'s reconciler (which lists existing queues first) means
+calling this on an already-provisioned queue does not recreate the queue. This
+is the artifact the FIFO ordered-delivery plan
+(@docs/plans/77-add-fifo-ordered-delivery-via-message-groups-to-keiro-pgmq.md@)
+consumes for ordered jobs.
+-}
+ensureFifoIndex :: (Pgmq :> es) => Job p -> Eff es ()
+ensureFifoIndex job =
+    ensureQueuesEff
+        [Config.withFifoIndex (Config.standardQueue job.jobQueue.physicalName)]
 
 {- | Build the shibuya PGMQ adapter config from a job's queue and policy: route
 to the DLQ via the adapter's @directDeadLetter@ path when the policy enables it.

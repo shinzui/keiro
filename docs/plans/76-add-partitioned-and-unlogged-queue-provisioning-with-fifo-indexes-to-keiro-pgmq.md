@@ -66,27 +66,27 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Add `pgmq-config >=0.3 && <0.4` to the `library` `build-depends` in
-  `keiro-pgmq/keiro-pgmq.cabal`.
-- [ ] M1: Define `QueueProvision`, `QueueKind`, the smart constructors
+- [x] M1: Add `pgmq-config >=0.3 && <0.4` to the `library` `build-depends` in
+  `keiro-pgmq/keiro-pgmq.cabal`. (2026-06-13)
+- [x] M1: Define `QueueProvision`, `QueueKind`, the smart constructors
   (`standardProvision`, `unloggedProvision`, `partitionedProvision`,
   `withFifoIndexProvision`) and `ensureJobQueueWith` in
-  `keiro-pgmq/src/Keiro/PGMQ/Job.hs`; re-express `ensureJobQueue` through it.
-- [ ] M1: Export the new surface from `Keiro.PGMQ.Job`'s module export list.
-- [ ] M1: Test — `ensureJobQueueWith unloggedProvision` creates a queue `listQueues` marks
+  `keiro-pgmq/src/Keiro/PGMQ/Job.hs`; re-express `ensureJobQueue` through it. (2026-06-13)
+- [x] M1: Export the new surface from `Keiro.PGMQ.Job`'s module export list. (2026-06-13)
+- [x] M1: Test — `ensureJobQueueWith unloggedProvision` creates a queue `listQueues` marks
   `isUnlogged = True`; standard path still marks `isUnlogged = False`. `cabal test
-  keiro-pgmq-test` passes.
-- [ ] M2: Implement the partitioned path (map `partitionedProvision` to a
+  keiro-pgmq-test` passes. (2026-06-13)
+- [x] M2: Implement the partitioned path (map `partitionedProvision` to a
   `PartitionedQueue PartitionConfig` `QueueConfig`). Handle the `pg_partman` test caveat
-  (pure assertion on the constructed `QueueConfig` plus a `pendingWith` live test).
-- [ ] M2: Test — partitioned provisioning builds the expected `QueueConfig` (unit/pure
+  (pure assertion on the constructed `QueueConfig` plus a `pendingWith` live test). (2026-06-13)
+- [x] M2: Test — partitioned provisioning builds the expected `QueueConfig` (unit/pure
   assertion); a live partitioned-creation test is `pendingWith` an operator-provided
-  partman-enabled Postgres. `cabal test keiro-pgmq-test` passes.
-- [ ] M3: Implement `ensureFifoIndex job` (standalone, routed through `pgmq-config`'s
-  reconciler) and the `withFifoIndexProvision` modifier; export both.
-- [ ] M3: Test — `ensureFifoIndex` run twice is idempotent and the queue still accepts a
-  grouped/normal read afterward. `cabal test keiro-pgmq-test` passes.
-- [ ] Update Surprises, Decision Log, Outcomes, and the MasterPlan EP-2 Progress rows.
+  partman-enabled Postgres. `cabal test keiro-pgmq-test` passes. (2026-06-13)
+- [x] M3: Implement `ensureFifoIndex job` (standalone, routed through `pgmq-config`'s
+  reconciler) and the `withFifoIndexProvision` modifier; export both. (2026-06-13)
+- [x] M3: Test — `ensureFifoIndex` run twice is idempotent and the queue still accepts a
+  grouped/normal read afterward. `cabal test keiro-pgmq-test` passes. (2026-06-13)
+- [x] Update Surprises, Decision Log, Outcomes, and the MasterPlan EP-2 Progress rows. (2026-06-13)
 
 
 ## Surprises & Discoveries
@@ -94,7 +94,22 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-13 — **`pgmq-config`'s `QueueType`/`PartitionConfig` derive `Show` (and
+  `PartitionConfig` derives `Generic`) but not `Eq`** (verified in
+  `pgmq-config/src/Pgmq/Config/Types.hs`: `QueueType` has `deriving stock (Show)`,
+  `PartitionConfig` has `deriving stock (Generic, Show)`). The M2 pure test therefore
+  pattern-matches on `mainCfg.queueType` and asserts the `PartitionConfig` *fields*
+  (`partitionInterval`/`retentionInterval` via record-dot, both `Text` so `==`-comparable)
+  rather than comparing the whole `QueueType` with `==`. The plan anticipated this.
+- 2026-06-13 — **`pgmq-config-0.3.0.0` resolved cleanly from the package repository with no
+  `cabal.project` edit.** `cabal build keiro-pgmq` downloaded and built it as a normal
+  dependency, exactly like the sibling `pgmq-core`/`pgmq-effectful`/`pgmq-migration`
+  packages; no `source-repository-package` stanza was needed.
+- 2026-06-13 — **Full suite green: 42 examples, 0 failures, 2 pending.** The two pending are
+  the pre-existing crash-safety test (blocked on `docs/plans/67-…`) and this plan's
+  intentional `ensureJobQueueWith partitioned creates a partitioned queue (live)`
+  `pendingWith` (no `pg_partman` in the ephemeral test DB). The `ensureFifoIndex`-twice test
+  confirms idempotence and a working post-index round-trip in one example.
 
 
 ## Decision Log
@@ -155,7 +170,22 @@ Record every decision made while working on the plan.
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 
-(To be filled during and after implementation.)
+- 2026-06-13 — **Complete.** All three milestones landed in one pass, no deviations from the
+  Plan of Work. `keiro-pgmq` now exposes `QueueKind`, `PartitionSpec`, `QueueProvision`, the
+  smart constructors (`standardProvision`/`unloggedProvision`/`partitionedProvision`/
+  `withFifoIndexProvision`), the pure `queueProvisionConfigs`, `ensureJobQueueWith`, and the
+  standalone `ensureFifoIndex` — all from `Keiro.PGMQ.Job` and therefore through the
+  `Keiro.PGMQ` umbrella with no umbrella edit. `ensureJobQueue` is re-expressed as
+  `ensureJobQueueWith standardProvision`, so every existing call site is behavior-identical
+  (the `ensureJobQueue (standard) creates a logged queue` test pins `isUnlogged = False`).
+- Gap (known, documented): no live partitioned-queue test runs in CI because the ephemeral
+  test PostgreSQL has no `pg_partman` (see the pg_partman caveat). The partitioned path is
+  verified by the pure `queueProvisionConfigs` assertion; the live test is `pendingWith` an
+  operator note.
+- Hand-off to EP-3: `ensureFifoIndex :: (Pgmq :> es) => Job p -> Eff es ()` is the artifact
+  EP-3 (`docs/plans/77-…`) invokes for ordered jobs — Integration Point 3 is satisfied. EP-3
+  no longer needs the reconcile-note fallback to import the raw `createFifoIndex`; it can call
+  `ensureFifoIndex job` (or provision with `withFifoIndexProvision`) directly.
 
 
 ## Context and Orientation

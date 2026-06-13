@@ -28,6 +28,7 @@ import Data.Either (isRight)
 import Data.Foldable (toList, traverse_)
 import Data.IORef (modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Int (Int32, Int64)
+import Data.List (find)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -46,6 +47,7 @@ import OpenTelemetry.Context.ThreadLocal qualified as CtxtLocal
 import OpenTelemetry.Propagator.W3CTraceContext qualified as W3C
 import OpenTelemetry.Trace.Core qualified as OTel
 import OpenTelemetry.Trace.Id.Generator.Default (defaultIdGenerator)
+import Pgmq.Config.Types qualified as Config
 import Pgmq.Effectful (Message (..), MessageBody (..), Pgmq, QueueMetrics (..), ReadMessage (..), SendMessage (..))
 import Pgmq.Effectful qualified as Pgmq
 import Pgmq.Migration qualified as Migration
@@ -143,6 +145,13 @@ queueLen :: QueueName -> Eff Stack Int64
 queueLen q = do
     metrics <- Pgmq.queueMetrics q
     pure metrics.queueLength
+
+{- | Look up a queue by physical name in a 'Pgmq.listQueues' result and report
+whether it is unlogged. 'Nothing' means the queue was not found.
+-}
+queueIsUnlogged :: QueueName -> [Pgmq.Queue] -> Maybe Bool
+queueIsUnlogged qn queues =
+    fmap (.isUnlogged) (find (\q -> q.name == qn) queues)
 
 readOneIsEmpty :: QueueName -> Eff Stack Bool
 readOneIsEmpty q = do
@@ -750,3 +759,56 @@ spec = do
         headerKey "traceparent" captured `shouldSatisfy` \case
             Just (String _) -> True
             _ -> False
+
+    -- EP-2 M1: unlogged vs standard provisioning.
+    it "ensureJobQueueWith unlogged creates an unlogged queue" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.unlogged"
+        unlogged <-
+            runDb connStr $ do
+                ensureJobQueueWith unloggedProvision job
+                queues <- Pgmq.listQueues
+                pure (queueIsUnlogged job.jobQueue.physicalName queues)
+        unlogged `shouldBe` Just True
+
+    it "ensureJobQueue (standard) creates a logged queue" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.standard_logged"
+        unlogged <-
+            runDb connStr $ do
+                ensureJobQueue job
+                queues <- Pgmq.listQueues
+                pure (queueIsUnlogged job.jobQueue.physicalName queues)
+        unlogged `shouldBe` Just False
+
+    -- EP-2 M2: partitioned config shape (pure) + pending live test.
+    it "ensureJobQueueWith partitioned builds a partitioned QueueConfig" $ \_connStr -> do
+        let job = mkJob "keiro_pgmq_test.partitioned"
+            spec = PartitionSpec{partitionInterval = "daily", retentionInterval = "7 days"}
+        case queueProvisionConfigs (partitionedProvision spec) job of
+            (mainCfg : _) ->
+                case mainCfg.queueType of
+                    Config.PartitionedQueue pc -> do
+                        pc.partitionInterval `shouldBe` "daily"
+                        pc.retentionInterval `shouldBe` "7 days"
+                        mainCfg.queueName `shouldBe` job.jobQueue.physicalName
+                    other ->
+                        expectationFailure
+                            ("expected PartitionedQueue, got " <> show other)
+            [] -> expectationFailure "expected at least the main queue config"
+
+    it "ensureJobQueueWith partitioned creates a partitioned queue (live)" $ \_connStr ->
+        pendingWith
+            "requires a pg_partman-enabled PostgreSQL; the keiro test database installs only \
+            \the PGMQ schema via pgmq-migration, which does not load pg_partman"
+
+    -- EP-2 M3: FIFO index idempotence.
+    it "ensureFifoIndex is idempotent and the queue still accepts reads" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.fifo_index"
+        roundTripped <-
+            runDb connStr $ do
+                ensureJobQueue job
+                ensureFifoIndex job
+                ensureFifoIndex job -- second call must not error
+                _ <- enqueue job (Ping "after-index" 1)
+                runJobOnce 1 job (\_ -> pure Done)
+                queueLen job.jobQueue.physicalName
+        roundTripped `shouldBe` 0

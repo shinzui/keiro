@@ -152,7 +152,7 @@ in `keiro-pgmq` alongside the surface they extend.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Add message headers, trace propagation, and batch enqueue to keiro-pgmq producers | docs/plans/75-add-message-headers-trace-propagation-and-batch-enqueue-to-keiro-pgmq-producers.md | None | None | Complete |
-| 2 | Add partitioned and unlogged queue provisioning with FIFO indexes to keiro-pgmq | docs/plans/76-add-partitioned-and-unlogged-queue-provisioning-with-fifo-indexes-to-keiro-pgmq.md | None | None | Not Started |
+| 2 | Add partitioned and unlogged queue provisioning with FIFO indexes to keiro-pgmq | docs/plans/76-add-partitioned-and-unlogged-queue-provisioning-with-fifo-indexes-to-keiro-pgmq.md | None | None | Complete |
 | 3 | Add FIFO ordered delivery via message groups to keiro-pgmq | docs/plans/77-add-fifo-ordered-delivery-via-message-groups-to-keiro-pgmq.md | EP-1, EP-2 | EP-4 | Not Started |
 | 4 | Add queue metrics and archive/retention API to keiro-pgmq | docs/plans/78-add-queue-metrics-and-archive-retention-api-to-keiro-pgmq.md | None | None | Not Started |
 
@@ -290,9 +290,9 @@ Track milestone-level progress across all child plans.
 - [x] EP-1: Header-carrying enqueue (`enqueueWithHeaders`) + reserved-key safety, exported and tested. (2026-06-13)
 - [x] EP-1: Batch enqueue (`enqueueBatch`, with-headers/with-delay variants) over `batchSendMessage`. (2026-06-13)
 - [x] EP-1: Handler-visible headers on `JobContext` (worker + drain paths), incl. W3C `traceparent` propagation helper. (2026-06-13)
-- [ ] EP-2: `QueueType` (standard/unlogged/partitioned) provisioning surface for `ensureJobQueue`.
-- [ ] EP-2: FIFO index creation wired into provisioning (via `pgmq-config` or direct `createFifoIndex`).
-- [ ] EP-2: Tests — unlogged/partitioned queue creation and FIFO-index idempotence against ephemeral PG.
+- [x] EP-2: `QueueType` (standard/unlogged/partitioned) provisioning surface for `ensureJobQueue`. (2026-06-13)
+- [x] EP-2: FIFO index creation wired into provisioning (via `pgmq-config` or direct `createFifoIndex`). (2026-06-13)
+- [x] EP-2: Tests — unlogged/partitioned queue creation and FIFO-index idempotence against ephemeral PG. (2026-06-13)
 - [ ] EP-3: `JobOrdering` on `JobTuning` mapped to the adapter `fifoConfig` (worker path).
 - [ ] EP-3: Grouped reads in the `runJobOnceWithContext` drain (one-shot ordered path).
 - [ ] EP-3: Group-keyed producer (`enqueueToGroup`) + ordered FIFO index in queue setup.
@@ -335,7 +335,16 @@ interactions between child plans. Provide concise evidence.
   `enqueueToGroup` on it without any change to Integration Point 2. `MessageHeaders (..)` is
   now re-exported from `Keiro.PGMQ.Job` (and the umbrella). The batch-with-headers producer
   takes `[(MessageHeaders, p)]` pairs, not parallel lists.
-- 2026-06-13 (EP-1 complete) — **The genuine W3C `traceparent` round-trip works in tests; no
+- 2026-06-13 (EP-2 complete) — **EP-2 shipped the Integration Point 3 artifact EP-3 needs, so
+  EP-3's reconcile-note fallback is unnecessary.** `ensureFifoIndex :: (Pgmq :> es) => Job p ->
+  Eff es ()` is live in `Keiro.PGMQ.Job` (and through the umbrella), routed through
+  `pgmq-config`'s `ensureQueuesEff` — EP-3 calls `ensureFifoIndex job` (or provisions with
+  `withFifoIndexProvision`) for ordered jobs and never imports the raw `createFifoIndex` op.
+  EP-2 also added `ensureJobQueueWith :: QueueProvision -> Job p -> Eff es ()` and the pure
+  `queueProvisionConfigs`; the provisioning choice is a *parameter*, so `Job`/`QueueRef`
+  remain frozen (Integration Point 4 intact). `pgmq-config-0.3.0.0` is now a `keiro-pgmq`
+  library + test build-dep and resolved with no `cabal.project` change.
+- 2026-06-13 (EP-2 complete) — **The genuine W3C `traceparent` round-trip works in tests; no
   fallback was needed**, but it cost three test-only build-deps on `keiro-pgmq-test`
   (`hs-opentelemetry-api`, `hs-opentelemetry-propagator-w3c`, `hs-opentelemetry-sdk`). The
   *library* still needs no new dependency. Pattern mirrors `pgmq-effectful`'s
