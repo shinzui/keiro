@@ -44,6 +44,7 @@ library
   exposed-modules:
     Keiro.PGMQ
     Keiro.PGMQ.Codec
+    Keiro.PGMQ.Dlq
     Keiro.PGMQ.Job
     Keiro.PGMQ.Runtime
 

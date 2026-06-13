@@ -80,9 +80,9 @@ Milestone 6 — `runJobOnce` becomes a real drain:
 
 Milestone 7 — DLQ consumption and redrive:
 
-- [ ] Add `DlqEntry p`, `readDlq`, `redriveDlq`, and `purgeDlq` to a new module `keiro-pgmq/src/Keiro/PGMQ/Dlq.hs`, re-exported from `Keiro.PGMQ`.
-- [ ] Document the DLQ envelope shape, the at-least-once redrive window, and a retention story.
-- [ ] Tests: dead-lettered payload is decodable via `readDlq`; `redriveDlq` moves it back and it processes; `purgeDlq` empties the DLQ.
+- [x] Add `DlqEntry p`, `readDlq`, `redriveDlq`, and `purgeDlq` to a new module `keiro-pgmq/src/Keiro/PGMQ/Dlq.hs`, re-exported from `Keiro.PGMQ`. Completed 2026-06-13T14:20:07Z.
+- [x] Document the DLQ envelope shape, the at-least-once redrive window, and a retention story. Completed 2026-06-13T14:20:07Z.
+- [x] Tests: dead-lettered payload is decodable via `readDlq`; `redriveDlq` moves it back and it processes; `purgeDlq` empties the DLQ. Completed 2026-06-13T14:20:07Z; evidence: `cabal test keiro-pgmq-test` passed (`30 examples, 0 failures`), including malformed-DLQ-wrapper inspection.
 
 Milestone 8 — honest contracts, gated resilience test, and wiring:
 
@@ -147,6 +147,7 @@ Compare the result against the original purpose.
 - Milestone 4 completed on 2026-06-13T14:02:13Z. Long logical queue names and `_dlq`-suffixed logical names now derive hash-disambiguated physical names, while short names remain unchanged. The queue-name haddock documents sanitization equivalence, the main-queue/DLQ suffix invariant, and the migration note for affected long-name deployments.
 - Milestone 5 completed on 2026-06-13T14:10:39Z. Worker handlers can now opt into `JobContext` to extend a delivery lease and inspect the zero-based attempt number, while existing `jobProcessor` callers keep the old payload-only handler shape. `JobTuning` now reaches the PGMQ adapter on the worker path, and tests cover lease extension, attempt exposure, worker smoke processing, retry-limit DLQ routing, and delayed enqueue visibility.
 - Milestone 6 completed on 2026-06-13T14:16:16Z. `runJobOnceWithContext` now drains directly from PGMQ and returns the number of messages it actually acknowledged, retried, or dead-lettered, while `runJobOnce` remains a compatibility wrapper. The old infinite-stream hang is removed, batch drains work without pre-reading the whole queue, handler exceptions leave messages for visibility-timeout redelivery while later messages continue, and direct-drain retry/DLQ behavior now matches the worker path.
+- Milestone 7 completed on 2026-06-13T14:20:07Z. `Keiro.PGMQ.Dlq` now exposes decoded DLQ inspection, at-least-once redrive back to the main queue, and purge. The module documents the shibuya DLQ envelope, retention expectations, and redrive duplicate window, and the suite covers decoded payload inspection, redrive-and-process, purge, and malformed wrapper preservation.
 
 
 ## Context and Orientation

@@ -526,6 +526,72 @@ spec = do
         mainLen `shouldBe` 0
         dlqLen `shouldBe` 1
 
+    it "readDlq decodes the original dead-lettered payload" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.dlq_read"
+            payload = Ping "poison" 3
+        entries <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job payload
+                runJobOnce 1 job (\_ -> pure (Dead "bad"))
+                readDlq job 1
+        case entries of
+            [entry] -> do
+                entry.reason `shouldSatisfy` Text.isPrefixOf "poison_pill"
+                entry.originalPayload `shouldBe` Right payload
+                entry.originalMessageId `shouldSatisfy` (/= Nothing)
+                entry.readCount `shouldBe` Just 1
+            _ -> expectationFailure ("expected one DLQ entry, got " <> show (length entries))
+
+    it "redriveDlq moves dead-lettered payloads back to the main queue" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.dlq_redrive"
+        redriven <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "redrive" 1)
+                runJobOnce 1 job (\_ -> pure (Dead "bad"))
+                redriveDlq job 10
+        redriven `shouldBe` 1
+        dlqLen <- runDb connStr (queueLen job.jobQueue.dlqName)
+        mainLen <- runDb connStr (queueLen job.jobQueue.physicalName)
+        dlqLen `shouldBe` 0
+        mainLen `shouldBe` 1
+        runDb connStr $
+            runJobOnce 1 job (\_ -> pure Done)
+        finalMainLen <- runDb connStr (queueLen job.jobQueue.physicalName)
+        finalMainLen `shouldBe` 0
+
+    it "purgeDlq empties the DLQ" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.dlq_purge"
+        runDb connStr $ do
+            ensureJobQueue job
+            _ <- enqueue job (Ping "purge" 1)
+            runJobOnce 1 job (\_ -> pure (Dead "bad"))
+            purgeDlq job
+        dlqLen <- runDb connStr (queueLen job.jobQueue.dlqName)
+        dlqLen `shouldBe` 0
+
+    it "readDlq preserves malformed DLQ wrappers as malformed entries" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.dlq_malformed"
+        entries <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <-
+                    Pgmq.sendMessage
+                        SendMessage
+                            { queueName = job.jobQueue.dlqName
+                            , messageBody = MessageBody (String "not a dlq wrapper")
+                            , delay = Nothing
+                            }
+                readDlq job 1
+        case entries of
+            [entry] -> do
+                entry.reason `shouldSatisfy` Text.isPrefixOf "malformed_dlq_payload"
+                entry.originalPayload `shouldSatisfy` \case
+                    Left (JobPayloadMalformed _) -> True
+                    _ -> False
+            _ -> expectationFailure ("expected one malformed DLQ entry, got " <> show (length entries))
+
     it "undecodable payload routes to the DLQ" $ \connStr -> do
         let job = mkJob "keiro_pgmq_test.bad"
         runDb connStr $ do
