@@ -153,7 +153,7 @@ in `keiro-pgmq` alongside the surface they extend.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Add message headers, trace propagation, and batch enqueue to keiro-pgmq producers | docs/plans/75-add-message-headers-trace-propagation-and-batch-enqueue-to-keiro-pgmq-producers.md | None | None | Complete |
 | 2 | Add partitioned and unlogged queue provisioning with FIFO indexes to keiro-pgmq | docs/plans/76-add-partitioned-and-unlogged-queue-provisioning-with-fifo-indexes-to-keiro-pgmq.md | None | None | Complete |
-| 3 | Add FIFO ordered delivery via message groups to keiro-pgmq | docs/plans/77-add-fifo-ordered-delivery-via-message-groups-to-keiro-pgmq.md | EP-1, EP-2 | EP-4 | Not Started |
+| 3 | Add FIFO ordered delivery via message groups to keiro-pgmq | docs/plans/77-add-fifo-ordered-delivery-via-message-groups-to-keiro-pgmq.md | EP-1, EP-2 | EP-4 | Complete |
 | 4 | Add queue metrics and archive/retention API to keiro-pgmq | docs/plans/78-add-queue-metrics-and-archive-retention-api-to-keiro-pgmq.md | None | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled, Deferred.
@@ -293,10 +293,10 @@ Track milestone-level progress across all child plans.
 - [x] EP-2: `QueueType` (standard/unlogged/partitioned) provisioning surface for `ensureJobQueue`. (2026-06-13)
 - [x] EP-2: FIFO index creation wired into provisioning (via `pgmq-config` or direct `createFifoIndex`). (2026-06-13)
 - [x] EP-2: Tests — unlogged/partitioned queue creation and FIFO-index idempotence against ephemeral PG. (2026-06-13)
-- [ ] EP-3: `JobOrdering` on `JobTuning` mapped to the adapter `fifoConfig` (worker path).
-- [ ] EP-3: Grouped reads in the `runJobOnceWithContext` drain (one-shot ordered path).
-- [ ] EP-3: Group-keyed producer (`enqueueToGroup`) + ordered FIFO index in queue setup.
-- [ ] EP-3: End-to-end ordering test — same group processed in order, distinct groups concurrent.
+- [x] EP-3: `JobOrdering` on `JobTuning` mapped to the adapter `fifoConfig` (worker path). (2026-06-13)
+- [x] EP-3: Grouped reads in the `runJobOnceWithContext` drain (one-shot ordered path). (2026-06-13)
+- [x] EP-3: Group-keyed producer (`enqueueToGroup`) + ordered FIFO index in queue setup. (2026-06-13)
+- [x] EP-3: End-to-end ordering test — same group processed in order, distinct groups concurrent. (2026-06-13)
 - [ ] EP-4: Typed metrics surface (`queueDepth`/`jobMetrics` over `queueMetrics`/`allQueueMetrics`) for main + DLQ.
 - [ ] EP-4: Archive operation + archive-based retention helper; tests for metrics and archive.
 
@@ -335,6 +335,27 @@ interactions between child plans. Provide concise evidence.
   `enqueueToGroup` on it without any change to Integration Point 2. `MessageHeaders (..)` is
   now re-exported from `Keiro.PGMQ.Job` (and the umbrella). The batch-with-headers producer
   takes `[(MessageHeaders, p)]` pairs, not parallel lists.
+- 2026-06-13 (EP-3 complete) — **The `ReadGrouped` request record forced a new `pgmq-hasql`
+  library dependency, contradicting EP-3's "no new dependency" claim.** EP-3's grouped-read
+  drain needs the `ReadGrouped` *record* type, but `Pgmq.Effectful.Effect` exports a name
+  `ReadGrouped` that is the `Pgmq` GADT data constructor (not the record), so `ReadGrouped (..)`
+  fails to compile (GHC-35373), and the `Pgmq.Effectful` umbrella does not re-export the record
+  at all. The record type lives only in `Pgmq.Hasql.Statements.Types` (package `pgmq-hasql`).
+  Resolution: import the functions from `Pgmq.Effectful.Effect` and the record from
+  `Pgmq.Hasql.Statements.Types`, adding `pgmq-hasql >=0.3 && <0.4` to `keiro-pgmq`'s library
+  build-deps (additive; it was already a transitive dep via `pgmq-effectful`). **Relevant to a
+  future EP-4** if it ever needs grouped-read or other `Pgmq.Hasql.Statements.Types`-only
+  records: the umbrella is not always sufficient; check whether the record type (vs the effect
+  op) is re-exported before assuming `pgmq-effectful` alone suffices.
+- 2026-06-13 (EP-3 complete) — **EP-3 consumed EP-1's `enqueueWithHeaders` and EP-2's
+  `ensureFifoIndex` exactly as the Integration Points specified; no reconcile note was needed.**
+  `enqueueToGroup`/`enqueueToGroupWithDelay` are thin wrappers over EP-1's header producers
+  writing the literal `x-pgmq-group`, and `ensureOrderedJobQueue = ensureJobQueue >>
+  ensureFifoIndex` composes EP-2's helpers. The strict `ordering` field added to `JobTuning`
+  (Integration Point 1) touched no construction site outside `Job.hs` — no test or keiro-dsl
+  fixture builds a `JobTuning` by record literal — so the one well-justified breaking change was
+  fully absorbed. `Job`/`QueueRef` stayed frozen (Integration Point 4). EP-4 remains the only
+  unstarted plan; EP-3's soft dependency on it is satisfied by the raw `Pgmq.queueMetrics` call.
 - 2026-06-13 (EP-2 complete) — **EP-2 shipped the Integration Point 3 artifact EP-3 needs, so
   EP-3's reconcile-note fallback is unnecessary.** `ensureFifoIndex :: (Pgmq :> es) => Job p ->
   Eff es ()` is live in `Keiro.PGMQ.Job` (and through the umbrella), routed through

@@ -55,10 +55,12 @@ module Keiro.PGMQ.Job (
     defaultRetryPolicy,
     Job (..),
     JobPolling (..),
+    JobOrdering (..),
     JobTuning (..),
     JobTuningConfigError (..),
     mkJobTuning,
     defaultJobTuning,
+    withOrdering,
 
     -- * Message metadata
     MessageHeaders (..),
@@ -73,6 +75,8 @@ module Keiro.PGMQ.Job (
     enqueueBatchWithHeaders,
     enqueueTraced,
     enqueueTracedWithDelay,
+    enqueueToGroup,
+    enqueueToGroupWithDelay,
 
     -- * Queue lifecycle
     QueueKind (..),
@@ -86,6 +90,7 @@ module Keiro.PGMQ.Job (
     ensureJobQueue,
     ensureJobQueueWith,
     ensureFifoIndex,
+    ensureOrderedJobQueue,
 
     -- * Consuming work
     JobContext (..),
@@ -98,7 +103,7 @@ module Keiro.PGMQ.Job (
 
 import Keiro.PGMQ.Codec (JobCodec, JobDecodeError (..), decodeJob, encodeJob)
 import Keiro.PGMQ.Runtime (QueueRef (..))
-import "aeson" Data.Aeson (Value)
+import "aeson" Data.Aeson (Value, object, (.=))
 import "base" Control.Exception (SomeException)
 import "base" Control.Monad (foldM, void)
 import "base" Data.Int (Int32, Int64)
@@ -125,6 +130,8 @@ import "pgmq-effectful" Pgmq.Effectful (
     mergeTraceHeaders,
  )
 import "pgmq-effectful" Pgmq.Effectful qualified as Pgmq
+import "pgmq-effectful" Pgmq.Effectful.Effect (readGrouped, readGroupedRoundRobin)
+import "pgmq-hasql" Pgmq.Hasql.Statements.Types (ReadGrouped (..))
 import "shibuya-core" Shibuya.App (
     AppError,
     AppHandle,
@@ -140,6 +147,8 @@ import "shibuya-core" Shibuya.Core.Lease (Lease (..))
 import "shibuya-core" Shibuya.Core.Types (Attempt (..), Envelope (..))
 import "shibuya-core" Shibuya.Telemetry.Effect (Tracing)
 import "shibuya-pgmq-adapter" Shibuya.Adapter.Pgmq (
+    FifoConfig (..),
+    FifoReadStrategy (..),
     PgmqAdapterConfig (..),
     PollingConfig (..),
     defaultConfig,
@@ -218,6 +227,26 @@ data JobPolling
       LongPoll !Int32 !Int32
     deriving stock (Eq, Show)
 
+{- | How a consumer orders deliveries.
+
+'Unordered' is the historical behavior: PGMQ's plain @read@, FIFO only in
+selection order (@msg_id@ ascending), with NO per-key delivery-order guarantee
+under concurrent workers, retries, or visibility-timeout expiry.
+
+'FifoThroughput' and 'FifoRoundRobin' enable strict per-group ordering via PGMQ
+message groups (the reserved @x-pgmq-group@ header). Within one group, messages
+are delivered in strict send order; distinct groups proceed in parallel.
+'FifoThroughput' fills a batch from the oldest eligible group first (SQS-style,
+@read_grouped@); 'FifoRoundRobin' interleaves fairly across groups
+(@read_grouped_rr@). Delivery is still at-least-once and there is no
+deduplication, so handlers must be idempotent.
+-}
+data JobOrdering
+    = Unordered
+    | FifoThroughput
+    | FifoRoundRobin
+    deriving stock (Eq, Show)
+
 {- | How a consumer reads the queue.
 
 The raw constructor is exported but not validated. Prefer 'mkJobTuning' so
@@ -227,16 +256,18 @@ data JobTuning = JobTuning
     { visibilityTimeout :: !Int32
     , batchSize :: !Int32
     , polling :: !JobPolling
+    , ordering :: !JobOrdering
     }
     deriving stock (Eq, Show)
 
--- | 30 s visibility timeout, batch of 1, 1 s standard polling.
+-- | 30 s visibility timeout, batch of 1, 1 s standard polling, unordered reads.
 defaultJobTuning :: JobTuning
 defaultJobTuning =
     JobTuning
         { visibilityTimeout = 30
         , batchSize = 1
         , polling = PollEvery 1
+        , ordering = Unordered
         }
 
 data JobTuningConfigError
@@ -250,7 +281,14 @@ mkJobTuning visibilityTimeout batchSize polling
     | visibilityTimeout < 1 = Left (NonPositiveVisibilityTimeout visibilityTimeout)
     | batchSize < 1 = Left (NonPositiveBatchSize batchSize)
     | not (validPolling polling) = Left NonPositivePollInterval
-    | otherwise = Right JobTuning{visibilityTimeout, batchSize, polling}
+    | otherwise = Right JobTuning{visibilityTimeout, batchSize, polling, ordering = Unordered}
+
+{- | Set the FIFO read strategy on an existing tuning, e.g.
+@withOrdering FifoThroughput defaultJobTuning@. Every 'JobOrdering' value is
+valid, so this is a plain record update rather than a validating constructor.
+-}
+withOrdering :: JobOrdering -> JobTuning -> JobTuning
+withOrdering o tuning = tuning{ordering = o}
 
 validPolling :: JobPolling -> Bool
 validPolling (PollEvery interval) = interval > 0
@@ -260,6 +298,12 @@ validPolling (LongPoll maxPollSeconds pollIntervalMs) =
 toPollingConfig :: JobPolling -> PollingConfig
 toPollingConfig (PollEvery interval) = StandardPolling interval
 toPollingConfig (LongPoll maxPollSeconds pollIntervalMs) = LongPolling maxPollSeconds pollIntervalMs
+
+-- | Map an ordering choice to the shibuya adapter's FIFO read config (worker path).
+toFifoConfig :: JobOrdering -> Maybe FifoConfig
+toFifoConfig Unordered = Nothing
+toFifoConfig FifoThroughput = Just (FifoConfig ThroughputOptimized)
+toFifoConfig FifoRoundRobin = Just (FifoConfig RoundRobin)
 
 retryDelaySeconds :: RetryDelay -> NominalDiffTime
 retryDelaySeconds (RetryDelay seconds) = seconds
@@ -431,6 +475,28 @@ enqueueTracedWithDelay provider job d extraHeaders p = do
     let merged = MessageHeaders (mergeTraceHeaders traceHeaders (Just extraHeaders.unMessageHeaders))
     enqueueWithHeadersAndDelay job d merged p
 
+{- | Enqueue a payload into the FIFO group named by @groupKey@. The group key is
+written under the reserved @x-pgmq-group@ JSONB header, which PGMQ's grouped
+reads and the shibuya adapter use to order deliveries per group. Consume with an
+ordered 'JobTuning' (see 'withOrdering') to honor the order; within one group,
+messages are handled in strict send order while distinct groups proceed in
+parallel.
+-}
+enqueueToGroup ::
+    (Pgmq :> es, IOE :> es) => Job p -> Text -> p -> Eff es MessageId
+enqueueToGroup job groupKey p =
+    enqueueWithHeaders job (groupHeader groupKey) p
+
+-- | 'enqueueToGroup' with an explicit first-delivery delay (in seconds).
+enqueueToGroupWithDelay ::
+    (Pgmq :> es, IOE :> es) => Job p -> Int32 -> Text -> p -> Eff es MessageId
+enqueueToGroupWithDelay job d groupKey p =
+    enqueueWithHeadersAndDelay job d (groupHeader groupKey) p
+
+-- | The reserved FIFO group header for a group key.
+groupHeader :: Text -> MessageHeaders
+groupHeader k = MessageHeaders (object ["x-pgmq-group" .= k])
+
 {- | The three PostgreSQL storage shapes a job's main queue can take.
 
   * 'StandardKind' — a normal write-ahead-logged queue table (today's default).
@@ -544,6 +610,16 @@ ensureFifoIndex job =
     ensureQueuesEff
         [Config.withFifoIndex (Config.standardQueue job.jobQueue.physicalName)]
 
+{- | Provision an ordered job's queue: create the main queue (and the DLQ when
+the policy uses one) plus the FIFO GIN index that grouped reads need. Composes
+'ensureJobQueue' and 'ensureFifoIndex'; both are idempotent, so this is safe to
+call at every startup.
+-}
+ensureOrderedJobQueue :: (Pgmq :> es) => Job p -> Eff es ()
+ensureOrderedJobQueue job = do
+    ensureJobQueue job
+    ensureFifoIndex job
+
 {- | Build the shibuya PGMQ adapter config from a job's queue and policy: route
 to the DLQ via the adapter's @directDeadLetter@ path when the policy enables it.
 -}
@@ -553,6 +629,7 @@ adapterConfigFor tuning job =
         { visibilityTimeout = tuning.visibilityTimeout
         , batchSize = tuning.batchSize
         , polling = toPollingConfig tuning.polling
+        , fifoConfig = toFifoConfig tuning.ordering
         , maxRetries = job.jobPolicy.maxRetries
         , deadLetterConfig =
             if job.jobPolicy.useDeadLetter
@@ -655,14 +732,30 @@ runJobOnceWithContext tuning n job handle
     drain handled
         | handled >= n = pure handled
         | otherwise = do
-            messages <-
-                Pgmq.readMessage
-                    ReadMessage
-                        { queueName = job.jobQueue.physicalName
-                        , delay = tuning.visibilityTimeout
-                        , batchSize = Just (nextBatchSize (n - handled))
-                        , conditional = Nothing
-                        }
+            let qty = nextBatchSize (n - handled)
+            messages <- case tuning.ordering of
+                Unordered ->
+                    Pgmq.readMessage
+                        ReadMessage
+                            { queueName = job.jobQueue.physicalName
+                            , delay = tuning.visibilityTimeout
+                            , batchSize = Just qty
+                            , conditional = Nothing
+                            }
+                FifoThroughput ->
+                    readGrouped
+                        ReadGrouped
+                            { queueName = job.jobQueue.physicalName
+                            , visibilityTimeout = tuning.visibilityTimeout
+                            , qty = qty
+                            }
+                FifoRoundRobin ->
+                    readGroupedRoundRobin
+                        ReadGrouped
+                            { queueName = job.jobQueue.physicalName
+                            , visibilityTimeout = tuning.visibilityTimeout
+                            , qty = qty
+                            }
             if null messages
                 then pure handled
                 else do

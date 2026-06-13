@@ -812,3 +812,83 @@ spec = do
                 runJobOnce 1 job (\_ -> pure Done)
                 queueLen job.jobQueue.physicalName
         roundTripped `shouldBe` 0
+
+    -- EP-3 M3: group-keyed producer + ordered queue setup.
+    it "enqueueToGroup writes the x-pgmq-group header" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.group_header"
+        msgs <-
+            runDb connStr $ do
+                ensureOrderedJobQueue job
+                _ <- enqueueToGroup job "g1" (Ping "grouped" 1)
+                readMessages job.jobQueue.physicalName 1
+        case msgs of
+            [m] -> headerKey "x-pgmq-group" m.headers `shouldBe` Just (String "g1")
+            _ -> expectationFailure ("expected one message, got " <> show (length msgs))
+
+    it "ensureOrderedJobQueue is idempotent and the queue accepts grouped work" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.ordered_setup"
+        len <-
+            runDb connStr $ do
+                ensureOrderedJobQueue job
+                ensureOrderedJobQueue job -- second call must not error
+                _ <- enqueueToGroup job "g1" (Ping "x" 1)
+                _ <-
+                    runJobOnceWithContext (withOrdering FifoThroughput defaultJobTuning) 1 job \_ctx _p ->
+                        pure Done
+                queueLen job.jobQueue.physicalName
+        len `shouldBe` 0
+
+    -- EP-3 M4: end-to-end ordering proof.
+    it "FifoThroughput drain preserves strict within-group order and fully drains" $ \connStr -> do
+        observed <- newIORef ([] :: [Text])
+        let job = mkJob "keiro_pgmq_test.fifo_order"
+        drained <-
+            runDb connStr $ do
+                ensureOrderedJobQueue job
+                _ <- enqueueToGroup job "a" (Ping "a1" 1)
+                _ <- enqueueToGroup job "b" (Ping "b1" 1)
+                _ <- enqueueToGroup job "a" (Ping "a2" 2)
+                _ <- enqueueToGroup job "a" (Ping "a3" 3)
+                _ <- enqueueToGroup job "b" (Ping "b2" 2)
+                runJobOnceWithContext (withOrdering FifoThroughput defaultJobTuning) 5 job \_ctx payload -> do
+                    liftIO $ modifyIORef' observed (<> [payload.message])
+                    pure Done
+        log' <- readIORef observed
+        drained `shouldBe` 5
+        len <- runDb connStr (queueLen job.jobQueue.physicalName)
+        len `shouldBe` 0
+        filter (Text.isPrefixOf "a") log' `shouldBe` ["a1", "a2", "a3"]
+        filter (Text.isPrefixOf "b") log' `shouldBe` ["b1", "b2"]
+
+    it "FifoThroughput worker path preserves within-group order" $ \connStr -> do
+        observed <- newIORef ([] :: [Text])
+        let job = mkJob "keiro_pgmq_test.fifo_worker"
+            tuning =
+                withOrdering FifoThroughput $
+                    either (error . show) id $
+                        mkJobTuning 30 1 (PollEvery 0.1)
+        processed <-
+            runDb connStr $ do
+                ensureOrderedJobQueue job
+                _ <- enqueueToGroup job "a" (Ping "a1" 1)
+                _ <- enqueueToGroup job "a" (Ping "a2" 2)
+                _ <- enqueueToGroup job "a" (Ping "a3" 3)
+                result <-
+                    runJobWorkers
+                        IgnoreFailures
+                        16
+                        [ jobProcessorWithContext tuning job \_ctx payload -> do
+                            liftIO $ modifyIORef' observed (<> [payload.message])
+                            pure Done
+                        ]
+                case result of
+                    Left err -> liftIO $ fail ("runJobWorkers failed: " <> show err)
+                    Right app -> do
+                        ok <- liftIO $ waitUntil ((>= 3) . length <$> readIORef observed)
+                        stopAppQuickly app
+                        pure ok
+        processed `shouldBe` True
+        log' <- readIORef observed
+        filter (Text.isPrefixOf "a") log' `shouldBe` ["a1", "a2", "a3"]
+        len <- runDb connStr (queueLen job.jobQueue.physicalName)
+        len `shouldBe` 0

@@ -81,35 +81,58 @@ not yet landed, are stated in Interfaces and Dependencies.
 
 ## Progress
 
-- [ ] M1: Add `JobOrdering` and an `ordering` field to `JobTuning` in
+- [x] M1: Add `JobOrdering` and an `ordering` field to `JobTuning` in
   `keiro-pgmq/src/Keiro/PGMQ/Job.hs`; add `withOrdering`; default `defaultJobTuning` to
-  `Unordered`; keep `mkJobTuning`'s arity (defaulting `ordering = Unordered`).
-- [ ] M1: Map `ordering` to the shibuya adapter's `fifoConfig` in `adapterConfigFor` (the
-  worker path); import `FifoConfig`/`FifoReadStrategy` from `Shibuya.Adapter.Pgmq`.
-- [ ] M1: Export `JobOrdering (..)` and `withOrdering` from `Keiro.PGMQ.Job`; fix every
-  in-repo `JobTuning`/`mkJobTuning` site that the new strict field forces (grep first).
-- [ ] M1: `cabal build keiro-pgmq` is clean and `cabal test keiro-pgmq-test` is green (no new
-  behavioral test yet; this milestone is a compile-and-no-regression checkpoint).
-- [ ] M2: Generalize the `runJobOnceWithContext` drain so an ordered tuning issues grouped
-  reads (`readGrouped`/`readGroupedRoundRobin` from `Pgmq.Effectful.Effect`) instead of the
-  plain `readMessage`, reusing the existing ack/decode mechanics unchanged.
-- [ ] M2: `cabal test keiro-pgmq-test` is green; the existing `Unordered` drain tests still
-  pass (ordered path exercised end-to-end in M4).
-- [ ] M3: Add `enqueueToGroup` and `enqueueToGroupWithDelay` over EP-1's `enqueueWithHeaders`
+  `Unordered`; keep `mkJobTuning`'s arity (defaulting `ordering = Unordered`). (2026-06-13)
+- [x] M1: Map `ordering` to the shibuya adapter's `fifoConfig` in `adapterConfigFor` (the
+  worker path); import `FifoConfig`/`FifoReadStrategy` from `Shibuya.Adapter.Pgmq`. (2026-06-13)
+- [x] M1: Export `JobOrdering (..)` and `withOrdering` from `Keiro.PGMQ.Job`; fix every
+  in-repo `JobTuning`/`mkJobTuning` site that the new strict field forces (grep first — only
+  `defaultJobTuning`/`mkJobTuning` in `Job.hs`; no test or keiro-dsl record literal). (2026-06-13)
+- [x] M1: `cabal build keiro-pgmq` is clean and `cabal test keiro-pgmq-test` is green (no new
+  behavioral test yet; this milestone is a compile-and-no-regression checkpoint). (2026-06-13)
+- [x] M2: Generalize the `runJobOnceWithContext` drain so an ordered tuning issues grouped
+  reads (`readGrouped`/`readGroupedRoundRobin` from `Pgmq.Effectful.Effect`; **the `ReadGrouped`
+  record type comes from `Pgmq.Hasql.Statements.Types`, not `Effect.hs` — see Surprises**)
+  instead of the plain `readMessage`, reusing the existing ack/decode mechanics unchanged. (2026-06-13)
+- [x] M2: `cabal test keiro-pgmq-test` is green; the existing `Unordered` drain tests still
+  pass (ordered path exercised end-to-end in M4). (2026-06-13)
+- [x] M3: Add `enqueueToGroup` and `enqueueToGroupWithDelay` over EP-1's `enqueueWithHeaders`
   / `enqueueWithHeadersAndDelay`; add `ensureOrderedJobQueue` (ensure queue + FIFO index);
-  export all three.
-- [ ] M3: `cabal test keiro-pgmq-test` is green; a small test proves `enqueueToGroup` puts
-  the literal `x-pgmq-group` header on the wire and `ensureOrderedJobQueue` is idempotent.
-- [ ] M4: Add the end-to-end ordering test (drain path, deterministic within-group ordering
-  + full drainage) and a worker-path ordering smoke test.
-- [ ] M4: `cabal test keiro-pgmq-test` is green with the M3 and M4 examples present.
-- [ ] Final: Fill Outcomes & Retrospective; tick MasterPlan #10 Progress rows for EP-3 and set
-  the Exec-Plan Registry row `#3` status from `Not Started` to `Complete`.
+  export all three. (2026-06-13)
+- [x] M3: `cabal test keiro-pgmq-test` is green; a small test proves `enqueueToGroup` puts
+  the literal `x-pgmq-group` header on the wire and `ensureOrderedJobQueue` is idempotent. (2026-06-13)
+- [x] M4: Add the end-to-end ordering test (drain path, deterministic within-group ordering
+  + full drainage) and a worker-path ordering smoke test. (2026-06-13)
+- [x] M4: `cabal test keiro-pgmq-test` is green with the M3 and M4 examples present
+  (46 examples, 0 failures, 2 pending). (2026-06-13)
+- [x] Final: Fill Outcomes & Retrospective; tick MasterPlan #10 Progress rows for EP-3 and set
+  the Exec-Plan Registry row `#3` status from `Not Started` to `Complete`. (2026-06-13)
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-06-13 (M2) — **The `ReadGrouped` *record type* is not importable from
+  `Pgmq.Effectful.Effect`, and a new `pgmq-hasql` dependency was required.** The plan's
+  Interfaces section said to `import "pgmq-effectful" Pgmq.Effectful.Effect (ReadGrouped (..),
+  readGrouped, readGroupedRoundRobin)` and that "no new Cabal build dependency is needed."
+  That is wrong: `Pgmq.Effectful.Effect` exports a name `ReadGrouped` that is the **`Pgmq` GADT
+  data constructor** (`ReadGrouped :: ReadGrouped -> Pgmq m (Vector Message)`), not the request
+  *record* type, so `ReadGrouped (..)` fails to compile with GHC-35373 ("it is a data
+  constructor of `Pgmq`"). The `Pgmq.Effectful` umbrella does not export the record type at all.
+  The record type with its fields (`queueName`/`visibilityTimeout`/`qty`) is exported only from
+  `Pgmq.Hasql.Statements.Types (ReadGrouped (..))` in package `pgmq-hasql` (verified: it is the
+  sole module matching `ReadGrouped (..)` across `pgmq-effectful`/`pgmq-hasql`). Resolution:
+  import the two functions from `Pgmq.Effectful.Effect` and the record type from
+  `Pgmq.Hasql.Statements.Types`, and add `pgmq-hasql >=0.3 && <0.4` to `keiro-pgmq`'s library
+  `build-depends`. The two `ReadGrouped` types unify because `pgmq-effectful` re-uses
+  `pgmq-hasql`'s record. (`ReadMessage (..)`, by contrast, the umbrella *does* re-export, which
+  is why the unordered path never hit this.) See the Decision Log entry for the reconcile.
+- 2026-06-13 (M4) — **Both FIFO milestones pass with no flakiness in the chosen test design.**
+  Single-threaded drain over 5 messages in 2 groups gives a deterministic within-group order
+  (`["a1","a2","a3"]`, `["b1","b2"]`) and full drainage in one poll; the worker-path smoke test
+  uses a single group so the grouped read cannot return a later message while an earlier one is
+  in-flight. Final suite: 46 examples, 0 failures, 2 pending (the two pre-existing pendings).
 
 
 ## Decision Log
@@ -193,10 +216,46 @@ not yet landed, are stated in Interfaces and Dependencies.
   therefore asserts only within-group order and full drainage, never a cross-group order.
   Date: 2026-06-13
 
+- Decision: Import the `ReadGrouped` request *record* from `Pgmq.Hasql.Statements.Types` and
+  add `pgmq-hasql >=0.3 && <0.4` to `keiro-pgmq`'s library `build-depends`, rather than from
+  `Pgmq.Effectful.Effect` as the plan originally specified.
+  Rationale: `Pgmq.Effectful.Effect`'s exported `ReadGrouped` is the `Pgmq` GADT data
+  constructor, not the request record, so `import … Effect (ReadGrouped (..))` fails with
+  GHC-35373; the `Pgmq.Effectful` umbrella does not re-export the record at all. The only module
+  exporting the record type with its fields is `Pgmq.Hasql.Statements.Types`. The grouped-read
+  *functions* (`readGrouped`/`readGroupedRoundRobin`) still come from `Pgmq.Effectful.Effect`,
+  and the two `ReadGrouped` types unify because `pgmq-effectful` re-uses `pgmq-hasql`'s record.
+  This is the one deviation from the plan's "no new dependency" claim; it is additive and
+  test-only-adjacent (the library now depends on `pgmq-hasql`, which was already a transitive
+  dependency via `pgmq-effectful`). Captured in Surprises with the GHC evidence.
+  Date: 2026-06-13
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+- 2026-06-13 — **Complete.** All four milestones landed. `keiro-pgmq` now offers ordered
+  delivery end to end: `JobOrdering` (`Unordered`/`FifoThroughput`/`FifoRoundRobin`) on
+  `JobTuning` with `withOrdering`, mapped to the shibuya adapter's `fifoConfig` on the worker
+  path (`adapterConfigFor`) and to `readGrouped`/`readGroupedRoundRobin` on the one-shot drain
+  path; the group-keyed producers `enqueueToGroup`/`enqueueToGroupWithDelay` (built on EP-1's
+  `enqueueWithHeaders` family, writing the literal `x-pgmq-group` header); and
+  `ensureOrderedJobQueue` (queue + EP-2's FIFO index). All public surface is in
+  `Keiro.PGMQ.Job`, so the umbrella needed no edit.
+- The one breaking change — the strict `ordering` field on `JobTuning` — was fully absorbed:
+  the grep found no record literal outside `Job.hs` (every `mkJobTuning` *call* keeps compiling
+  because the arity is unchanged and the field defaults to `Unordered`), so no test or keiro-dsl
+  fixture needed editing. Integration Point 1 is satisfied as designed.
+- Deviation from plan: one new library dependency, `pgmq-hasql`, was required because the
+  `ReadGrouped` request record is not importable from `pgmq-effectful` (see Surprises and the
+  Decision Log). This is additive and was already a transitive dependency.
+- Proof: 46 examples, 0 failures, 2 pending. The headline `FifoThroughput drain preserves
+  strict within-group order and fully drains` and the `FifoThroughput worker path preserves
+  within-group order` smoke test both pass, alongside the M3 wire-contract and idempotence
+  tests. Every pre-existing unordered example still passes, confirming the new field and drain
+  dispatch did not disturb the historical path.
+- Soft dependency on EP-4 left as-is: FIFO-queue depth is observed via the raw
+  `Pgmq.queueMetrics` call (the suite's `queueLen` helper) since EP-4 has not yet landed. No
+  reconcile needed beyond that note.
 
 
 ## Context and Orientation
