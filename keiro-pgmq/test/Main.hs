@@ -19,7 +19,7 @@ handler (or an undecodable payload) routes it to the dead-letter queue.
 module Main (main) where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception (bracket)
+import Control.Exception (bracket, throwIO)
 import Data.Aeson (FromJSON, ToJSON, Value (String), object, parseJSON, toJSON, (.=))
 import Data.Aeson.Types (parseEither)
 import Data.Either (isRight)
@@ -290,6 +290,105 @@ spec = do
         emptyImmediateRead <- runDb connStr (readOneIsEmpty job.jobQueue.physicalName)
         len `shouldBe` 1
         emptyImmediateRead `shouldBe` True
+
+    it "runJobOnceWithContext returns promptly when n exceeds the queue length" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.once_short_queue"
+        result <-
+            timeout 2_000_000 $
+                runDb connStr $ do
+                    ensureJobQueue job
+                    _ <- enqueue job (Ping "only" 1)
+                    runJobOnceWithContext defaultJobTuning 5 job \_ctx _payload ->
+                        pure Done
+        result `shouldBe` Just 1
+        len <- runDb connStr (queueLen job.jobQueue.physicalName)
+        len `shouldBe` 0
+
+    it "runJobOnceWithContext drains messages in batches greater than one" $ \connStr -> do
+        handled <- newIORef (0 :: Int)
+        let job = mkJob "keiro_pgmq_test.once_batch"
+            tuning =
+                either (error . show) id $
+                    mkJobTuning 30 2 (PollEvery 1)
+        drained <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "first" 1)
+                _ <- enqueue job (Ping "second" 2)
+                _ <- enqueue job (Ping "third" 3)
+                runJobOnceWithContext tuning 3 job \_ctx _payload -> do
+                    liftIO $ modifyIORef' handled (+ 1)
+                    pure Done
+        drained `shouldBe` 3
+        readIORef handled `shouldReturn` 3
+        len <- runDb connStr (queueLen job.jobQueue.physicalName)
+        len `shouldBe` 0
+
+    it "runJobOnceWithContext Retry delay hides the message until the delay expires" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.once_retry_delay"
+        drained <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "later" 1)
+                runJobOnceWithContext defaultJobTuning 1 job \_ctx _payload ->
+                    pure (Retry (RetryDelay 5))
+        drained `shouldBe` 1
+        len <- runDb connStr (queueLen job.jobQueue.physicalName)
+        emptyImmediateRead <- runDb connStr (readOneIsEmpty job.jobQueue.physicalName)
+        len `shouldBe` 1
+        emptyImmediateRead `shouldBe` True
+
+    it "runJobOnceWithContext leaves thrown-handler messages invisible and continues" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.once_throw"
+            tuning =
+                either (error . show) id $
+                    mkJobTuning 2 2 (PollEvery 1)
+        drained <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "throw" 1)
+                _ <- enqueue job (Ping "ok" 2)
+                runJobOnceWithContext tuning 2 job \_ctx payload ->
+                    if payload.message == "throw"
+                        then liftIO $ throwIO (userError "handler failed")
+                        else pure Done
+        drained `shouldBe` 1
+        len <- runDb connStr (queueLen job.jobQueue.physicalName)
+        emptyImmediateRead <- runDb connStr (readOneIsEmpty job.jobQueue.physicalName)
+        len `shouldBe` 1
+        emptyImmediateRead `shouldBe` True
+        threadDelay 2_200_000
+        drainedAfterVisibilityTimeout <-
+            runDb connStr $
+                runJobOnceWithContext tuning 1 job \_ctx _payload ->
+                    pure Done
+        drainedAfterVisibilityTimeout `shouldBe` 1
+
+    it "runJobOnceWithContext auto-routes max-retry messages to the DLQ before rerunning the handler" $ \connStr -> do
+        callCount <- newIORef (0 :: Int)
+        let job =
+                (mkJob "keiro_pgmq_test.once_max_retries")
+                    { jobPolicy = RetryPolicy 1 (RetryDelay 0) True
+                    }
+        firstDrain <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "retry-limit" 1)
+                runJobOnceWithContext defaultJobTuning 1 job \_ctx _payload -> do
+                    liftIO $ modifyIORef' callCount (+ 1)
+                    pure (Retry (RetryDelay 0))
+        secondDrain <-
+            runDb connStr $
+                runJobOnceWithContext defaultJobTuning 1 job \_ctx _payload -> do
+                    liftIO $ modifyIORef' callCount (+ 1)
+                    pure Done
+        firstDrain `shouldBe` 1
+        secondDrain `shouldBe` 1
+        readIORef callCount `shouldReturn` 1
+        mainLen <- runDb connStr (queueLen job.jobQueue.physicalName)
+        dlqLen <- runDb connStr (queueLen job.jobQueue.dlqName)
+        mainLen `shouldBe` 0
+        dlqLen `shouldBe` 1
 
     it "worker-path lease extension prevents redelivery" $ \connStr -> do
         callCount <- newIORef (0 :: Int)

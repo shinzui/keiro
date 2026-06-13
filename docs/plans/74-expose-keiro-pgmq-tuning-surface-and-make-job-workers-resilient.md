@@ -74,9 +74,9 @@ Milestone 5 — consumer tuning, lease access, and attempt numbers:
 
 Milestone 6 — `runJobOnce` becomes a real drain:
 
-- [ ] Implement `runJobOnceWithContext :: JobTuning -> Int -> Job p -> (JobContext es -> p -> Eff es JobOutcome) -> Eff es Int` as a direct read-loop drain (no shibuya runner); re-express `runJobOnce` through it.
-- [ ] Per-message exception safety in the drain (handler throw leaves the message invisible until the visibility timeout, drain continues).
-- [ ] Tests: `n` greater than queue length returns promptly (regression for the hang); drains in batches > 1; `Retry` delay actually delays; handler-throw path; auto-DLQ parity with the worker path.
+- [x] Implement `runJobOnceWithContext :: JobTuning -> Int -> Job p -> (JobContext es -> p -> Eff es JobOutcome) -> Eff es Int` as a direct read-loop drain (no shibuya runner); re-express `runJobOnce` through it. Completed 2026-06-13T14:16:16Z.
+- [x] Per-message exception safety in the drain (handler throw leaves the message invisible until the visibility timeout, drain continues). Completed 2026-06-13T14:16:16Z.
+- [x] Tests: `n` greater than queue length returns promptly (regression for the hang); drains in batches > 1; `Retry` delay actually delays; handler-throw path; auto-DLQ parity with the worker path. Completed 2026-06-13T14:16:16Z; evidence: `cabal build keiro-pgmq keiro-test-support` and `cabal test keiro-pgmq-test` passed (`26 examples, 0 failures`).
 
 Milestone 7 — DLQ consumption and redrive:
 
@@ -146,6 +146,7 @@ Compare the result against the original purpose.
 - Milestone 3 completed on 2026-06-13T13:59:29Z. Consumers now have validated smart constructors for retry policies and job tuning, while raw constructors remain available and documented as unvalidated. `RetryDefault` consumes `defaultRetryDelay`, and `runJobWorkers` clamps invalid inbox sizes to at least one.
 - Milestone 4 completed on 2026-06-13T14:02:13Z. Long logical queue names and `_dlq`-suffixed logical names now derive hash-disambiguated physical names, while short names remain unchanged. The queue-name haddock documents sanitization equivalence, the main-queue/DLQ suffix invariant, and the migration note for affected long-name deployments.
 - Milestone 5 completed on 2026-06-13T14:10:39Z. Worker handlers can now opt into `JobContext` to extend a delivery lease and inspect the zero-based attempt number, while existing `jobProcessor` callers keep the old payload-only handler shape. `JobTuning` now reaches the PGMQ adapter on the worker path, and tests cover lease extension, attempt exposure, worker smoke processing, retry-limit DLQ routing, and delayed enqueue visibility.
+- Milestone 6 completed on 2026-06-13T14:16:16Z. `runJobOnceWithContext` now drains directly from PGMQ and returns the number of messages it actually acknowledged, retried, or dead-lettered, while `runJobOnce` remains a compatibility wrapper. The old infinite-stream hang is removed, batch drains work without pre-reading the whole queue, handler exceptions leave messages for visibility-timeout redelivery while later messages continue, and direct-drain retry/DLQ behavior now matches the worker path.
 
 
 ## Context and Orientation

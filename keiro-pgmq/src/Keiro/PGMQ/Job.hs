@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
 -- @enqueue@/@enqueueWithDelay@ carry an @IOE :> es@ constraint that the @Pgmq@
 -- send operation does not strictly require. It is kept deliberately: it is part
 -- of the published @keiro-pgmq@ contract (mirrored in the MasterPlan's
@@ -50,18 +51,31 @@ module Keiro.PGMQ.Job (
     jobProcessorWithContext,
     jobProcessor,
     runJobWorkers,
+    runJobOnceWithContext,
     runJobOnce,
 ) where
 
 import Keiro.PGMQ.Codec (JobCodec, JobDecodeError (..), decodeJob, encodeJob)
 import Keiro.PGMQ.Runtime (QueueRef (..))
 import "aeson" Data.Aeson (Value)
-import "base" Control.Monad (when)
+import "base" Control.Exception (SomeException)
+import "base" Control.Monad (foldM, void, when)
 import "base" Data.Int (Int32, Int64)
 import "effectful-core" Effectful (Eff, IOE, (:>))
-import "pgmq-effectful" Pgmq.Effectful (MessageBody (..), MessageId, Pgmq, SendMessage (..))
+import "effectful-core" Effectful.Exception qualified as EffException
+import "pgmq-effectful" Pgmq.Effectful (
+    Message (..),
+    MessageBody (..),
+    MessageHeaders (..),
+    MessageId,
+    MessageQuery (..),
+    Pgmq,
+    ReadMessage (..),
+    SendMessage (..),
+    SendMessageWithHeaders (..),
+    VisibilityTimeoutQuery (..),
+ )
 import "pgmq-effectful" Pgmq.Effectful qualified as Pgmq
-import "shibuya-core" Shibuya.Adapter (Adapter (..))
 import "shibuya-core" Shibuya.App (
     AppError,
     AppHandle,
@@ -75,7 +89,6 @@ import "shibuya-core" Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..),
 import "shibuya-core" Shibuya.Core.Ingested (Ingested (..))
 import "shibuya-core" Shibuya.Core.Lease (Lease (..))
 import "shibuya-core" Shibuya.Core.Types (Attempt (..), Envelope (..))
-import "shibuya-core" Shibuya.Runner.Supervised (runWithMetrics)
 import "shibuya-core" Shibuya.Telemetry.Effect (Tracing)
 import "shibuya-pgmq-adapter" Shibuya.Adapter.Pgmq (
     PgmqAdapterConfig (..),
@@ -84,9 +97,12 @@ import "shibuya-pgmq-adapter" Shibuya.Adapter.Pgmq (
     directDeadLetter,
     pgmqAdapter,
  )
-import "streamly-core" Streamly.Data.Stream qualified as Stream
+import "shibuya-pgmq-adapter" Shibuya.Adapter.Pgmq.Convert (
+    mkDlqPayload,
+    pgmqMessageToEnvelope,
+ )
 import "text" Data.Text (Text)
-import "time" Data.Time (NominalDiffTime)
+import "time" Data.Time (NominalDiffTime, nominalDiffTimeToSeconds)
 
 -- | What a job handler decides. Never exposes shibuya/PGMQ wire types to the caller.
 data JobOutcome
@@ -198,6 +214,17 @@ toPollingConfig (LongPoll maxPollSeconds pollIntervalMs) = LongPolling maxPollSe
 
 retryDelaySeconds :: RetryDelay -> NominalDiffTime
 retryDelaySeconds (RetryDelay seconds) = seconds
+
+nominalToSeconds :: NominalDiffTime -> Int32
+nominalToSeconds dt =
+    let seconds :: Double
+        seconds = realToFrac (nominalDiffTimeToSeconds dt)
+        maxSec :: Double
+        maxSec = fromIntegral (maxBound :: Int32)
+        minSec :: Double
+        minSec = fromIntegral (minBound :: Int32)
+        clamped = max minSec (min maxSec seconds)
+     in ceiling clamped
 
 {- | A declarative job: a queue, a payload codec, and a retry policy, named for
 telemetry. Construct one and pair it with a handler of type
@@ -338,10 +365,158 @@ runJobWorkers strategy inboxSize procs = do
     ps <- sequence procs
     runApp strategy (max 1 inboxSize) ps
 
+{- | One-shot drain of up to @n@ messages with explicit tuning and a
+context-aware handler. This reads directly from PGMQ and returns when the queue
+is empty or @n@ messages have been acknowledged/retried/dead-lettered,
+whichever comes first.
+
+If a handler throws, the message is left on the main queue and remains invisible
+until the active visibility timeout expires; the drain keeps processing the rest
+of the batch and does not count that message in the returned total.
+-}
+runJobOnceWithContext ::
+    (Pgmq :> es, IOE :> es, Tracing :> es) =>
+    JobTuning ->
+    Int ->
+    Job p ->
+    (JobContext es -> p -> Eff es JobOutcome) ->
+    Eff es Int
+runJobOnceWithContext tuning n job handle
+    | n <= 0 = pure 0
+    | otherwise = drain 0
+  where
+    drain handled
+        | handled >= n = pure handled
+        | otherwise = do
+            messages <-
+                Pgmq.readMessage
+                    ReadMessage
+                        { queueName = job.jobQueue.physicalName
+                        , delay = tuning.visibilityTimeout
+                        , batchSize = Just (nextBatchSize (n - handled))
+                        , conditional = Nothing
+                        }
+            if null messages
+                then pure handled
+                else do
+                    handledInBatch <- foldM step 0 messages
+                    drain (handled + handledInBatch)
+
+    nextBatchSize remaining =
+        fromIntegral (min remaining (fromIntegral tuning.batchSize :: Int))
+
+    step count message = do
+        disposed <- processMessage message
+        pure $
+            if disposed
+                then count + 1
+                else count
+
+    processMessage message
+        | message.readCount > job.jobPolicy.maxRetries = do
+            ackMessage message (AckDeadLetter MaxRetriesExceeded)
+            pure True
+        | otherwise =
+            case decodeJob job.jobCodec (messagePayload message) of
+                Left (JobPayloadFromFuture _payloadVersion _workerVersion) -> do
+                    ackMessage message (AckRetry job.jobPolicy.defaultRetryDelay)
+                    pure True
+                Left (JobPayloadMalformed err) -> do
+                    ackMessage message (AckDeadLetter (InvalidPayload err))
+                    pure True
+                Right p -> do
+                    outcome <- EffException.try @SomeException (handle (contextFor message) p)
+                    case outcome of
+                        Left _handlerException ->
+                            pure False
+                        Right jobOutcome -> do
+                            ackMessage message (outcomeToAck jobOutcome)
+                            pure True
+
+    messagePayload = (.payload) . pgmqMessageToEnvelope
+
+    contextFor message =
+        let envelope = pgmqMessageToEnvelope message
+         in JobContext
+                { extendLease = \duration ->
+                    void $
+                        Pgmq.changeVisibilityTimeout
+                            VisibilityTimeoutQuery
+                                { queueName = job.jobQueue.physicalName
+                                , messageId = message.messageId
+                                , visibilityTimeoutOffset = nominalToSeconds duration
+                                }
+                , attempt = fmap (.unAttempt) envelope.attempt
+                }
+
+    outcomeToAck Done = AckOk
+    outcomeToAck (Retry d) = AckRetry d
+    outcomeToAck RetryDefault = AckRetry job.jobPolicy.defaultRetryDelay
+    outcomeToAck (Dead why) = AckDeadLetter (PoisonPill why)
+
+    ackMessage message AckOk =
+        void $
+            Pgmq.deleteMessage
+                MessageQuery
+                    { queueName = job.jobQueue.physicalName
+                    , messageId = message.messageId
+                    }
+    ackMessage message (AckRetry delay) =
+        void $
+            Pgmq.changeVisibilityTimeout
+                VisibilityTimeoutQuery
+                    { queueName = job.jobQueue.physicalName
+                    , messageId = message.messageId
+                    , visibilityTimeoutOffset = nominalToSeconds (retryDelaySeconds delay)
+                    }
+    ackMessage message (AckDeadLetter reason)
+        | job.jobPolicy.useDeadLetter = do
+            sendDlq message reason
+            void $
+                Pgmq.deleteMessage
+                    MessageQuery
+                        { queueName = job.jobQueue.physicalName
+                        , messageId = message.messageId
+                        }
+        | otherwise =
+            void $
+                Pgmq.archiveMessage
+                    MessageQuery
+                        { queueName = job.jobQueue.physicalName
+                        , messageId = message.messageId
+                        }
+    ackMessage message (AckHalt _reason) =
+        void $
+            Pgmq.changeVisibilityTimeout
+                VisibilityTimeoutQuery
+                    { queueName = job.jobQueue.physicalName
+                    , messageId = message.messageId
+                    , visibilityTimeoutOffset = 3600
+                    }
+
+    sendDlq message reason =
+        case message.headers of
+            Just headers ->
+                void $
+                    Pgmq.sendMessageWithHeaders
+                        SendMessageWithHeaders
+                            { queueName = job.jobQueue.dlqName
+                            , messageBody = mkDlqPayload message reason True
+                            , messageHeaders = MessageHeaders headers
+                            , delay = Nothing
+                            }
+            Nothing ->
+                void $
+                    Pgmq.sendMessage
+                        SendMessage
+                            { queueName = job.jobQueue.dlqName
+                            , messageBody = mkDlqPayload message reason True
+                            , delay = Nothing
+                            }
+
 {- | One-shot drain of up to @n@ messages (the @hospital-capacity@ cadence):
-build the job's adapter, take @n@ messages from its source stream, and run the
-wrapped handler over each (auto-acking via the returned 'AckDecision'), then
-stop. The inbox size used by the underlying runner is clamped to at least 1.
+read directly from PGMQ with 'defaultJobTuning', run the handler on each
+available message, and return promptly when the queue is empty.
 -}
 runJobOnce ::
     (Pgmq :> es, IOE :> es, Tracing :> es) =>
@@ -349,13 +524,10 @@ runJobOnce ::
     Job p ->
     (p -> Eff es JobOutcome) ->
     Eff es ()
-runJobOnce n job handle = do
-    adapter <- pgmqAdapter (adapterConfigFor defaultJobTuning job)
-    let limited = adapter{source = Stream.take n adapter.source}
-    _ <-
-        runWithMetrics
-            (fromIntegral (max 1 n))
-            (ProcessorId job.jobName)
-            limited
-            (wrapHandler job (\_context p -> handle p))
-    pure ()
+runJobOnce n job handle =
+    void $
+        runJobOnceWithContext
+            defaultJobTuning
+            n
+            job
+            (\_context p -> handle p)
