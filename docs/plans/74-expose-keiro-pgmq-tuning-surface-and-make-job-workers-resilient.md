@@ -60,10 +60,10 @@ Milestone 3 — validated configuration surface:
 
 Milestone 4 — collision-free queue naming:
 
-- [ ] Replace truncation in `queueRef` with prefix + 16-hex-char FNV-1a-64 suffix for over-long bases and for bases ending in `_dlq`.
-- [ ] Document the sanitization-equivalence rule ("a.b" ≡ "a_b") and the new invariant (physical names never end in `_dlq`).
-- [ ] Add a migration note for deployments with sanitized names longer than 43 characters.
-- [ ] Tests: long-name divergence, `_dlq`-suffix disambiguation, short names unchanged, derived names always parse.
+- [x] Replace truncation in `queueRef` with prefix + 16-hex-char FNV-1a-64 suffix for over-long bases and for bases ending in `_dlq`. Completed 2026-06-13T14:02:13Z.
+- [x] Document the sanitization-equivalence rule ("a.b" ≡ "a_b") and the new invariant (physical names never end in `_dlq`). Completed 2026-06-13T14:02:13Z.
+- [x] Add a migration note for deployments with sanitized names longer than 43 characters. Completed 2026-06-13T14:02:13Z.
+- [x] Tests: long-name divergence, `_dlq`-suffix disambiguation, short names unchanged, derived names always parse. Completed 2026-06-13T14:02:13Z; evidence: `cabal build keiro-pgmq keiro-test-support` and `cabal test keiro-pgmq-test` passed (`16 examples, 0 failures`).
 
 Milestone 5 — consumer tuning, lease access, and attempt numbers:
 
@@ -144,6 +144,7 @@ Compare the result against the original purpose.
 - Milestone 1 completed on 2026-06-13T13:51:14Z. `keiro-test-support` now exposes a reusable template-migration hook and fresh database helper, and `keiro-pgmq-test` uses them so PGMQ schema installation happens once on the suite template while every example runs against its own clone. The shared fixture remains compatible with `keiro-test`.
 - Milestone 2 completed on 2026-06-13T13:55:21Z. `JobCodec` now distinguishes malformed payloads from future-version payloads, `keiroJobCodec` detects version-ahead envelopes before migration, and the worker path retries future payloads with the policy's default retry delay. The single `keiro-dsl` direct codec construction was migrated to `mkJobCodec`, and pure tests cover the new codec behavior.
 - Milestone 3 completed on 2026-06-13T13:59:29Z. Consumers now have validated smart constructors for retry policies and job tuning, while raw constructors remain available and documented as unvalidated. `RetryDefault` consumes `defaultRetryDelay`, and `runJobWorkers` clamps invalid inbox sizes to at least one.
+- Milestone 4 completed on 2026-06-13T14:02:13Z. Long logical queue names and `_dlq`-suffixed logical names now derive hash-disambiguated physical names, while short names remain unchanged. The queue-name haddock documents sanitization equivalence, the main-queue/DLQ suffix invariant, and the migration note for affected long-name deployments.
 
 
 ## Context and Orientation

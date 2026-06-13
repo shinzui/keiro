@@ -21,6 +21,8 @@ module Main (main) where
 import Control.Exception (bracket)
 import Data.Aeson (FromJSON, ToJSON, Value (String), object, parseJSON, toJSON, (.=))
 import Data.Aeson.Types (parseEither)
+import Data.Either (isRight)
+import Data.Foldable (traverse_)
 import Data.Int (Int64)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
@@ -38,7 +40,7 @@ import Keiro.Test.Postgres qualified as Postgres
 import Pgmq.Effectful (MessageBody (..), Pgmq, QueueMetrics (..), ReadMessage (..), SendMessage (..))
 import Pgmq.Effectful qualified as Pgmq
 import Pgmq.Migration qualified as Migration
-import Pgmq.Types (QueueName)
+import Pgmq.Types (QueueName, parseQueueName, queueNameToText)
 import Shibuya.Telemetry.Effect (Tracing)
 import Test.Hspec
 
@@ -198,6 +200,45 @@ spec = do
             `shouldBe` Left NonPositivePollInterval
         mkJobTuning 30 1 (PollEvery 1)
             `shouldBe` Right defaultJobTuning
+
+    it "derives distinct physical names for long logical queue names" $ \_connStr -> do
+        let commonPrefix = Text.replicate 43 "a"
+            first = queueRef (commonPrefix <> "x")
+            second = queueRef (commonPrefix <> "y")
+        first.physicalName `shouldNotBe` second.physicalName
+        Text.length (queueNameToText first.physicalName) `shouldBe` 43
+        Text.length (queueNameToText second.physicalName) `shouldBe` 43
+
+    it "disambiguates logical names ending in _dlq from derived DLQ names" $ \_connStr -> do
+        let foo = queueRef "foo"
+            masquerading = queueRef "foo_dlq"
+            masqueradingPhysical = queueNameToText masquerading.physicalName
+        masquerading.physicalName `shouldNotBe` foo.dlqName
+        masqueradingPhysical `shouldNotSatisfy` Text.isSuffixOf "_dlq"
+
+    it "keeps short physical queue names unchanged" $ \_connStr -> do
+        queueNameToText (queueRef "hospital_capacity.reservation_work").physicalName
+            `shouldBe` "hospital_capacity_reservation_work"
+
+    it "always derives PGMQ-parseable queue names" $ \_connStr -> do
+        let logicalNames =
+                [ ""
+                , "!!!"
+                , Text.replicate 100 "x"
+                , "___trailing___"
+                , "foo_dlq"
+                , "9starts.with.digit"
+                ]
+        traverse_
+            ( \logical -> do
+                let ref = queueRef logical
+                    physical = queueNameToText ref.physicalName
+                    dlq = queueNameToText ref.dlqName
+                parseQueueName physical `shouldSatisfy` isRight
+                parseQueueName dlq `shouldSatisfy` isRight
+                physical `shouldNotSatisfy` Text.isSuffixOf "_dlq"
+            )
+            logicalNames
 
     it "Done deletes the message" $ \connStr -> do
         let job = mkJob "keiro_pgmq_test.done"

@@ -29,6 +29,10 @@ module Keiro.PGMQ.Runtime (
 ) where
 
 import "base" Control.Exception (bracket)
+import "base" Data.Bits (xor)
+import "base" Data.Char (ord)
+import "base" Data.Word (Word64)
+import "base" Numeric (showHex)
 import "effectful-core" Effectful (Eff, IOE, runEff)
 import "effectful-core" Effectful.Error.Static (Error, runErrorNoCallStack)
 import "hasql" Hasql.Connection.Settings qualified as Conn
@@ -61,8 +65,25 @@ data QueueRef = QueueRef
 {- | Derive a 'QueueRef' from a logical name. Total: it sanitizes rather than
 failing. It lower-cases, replaces every character that is not @[a-z0-9_]@ with
 @'_'@, collapses repeated underscores (also trimming leading/trailing ones),
-guarantees a leading letter, and trims the result to 43 characters so the
-@"_dlq"@ suffix still fits inside PGMQ's 47-character ceiling.
+and guarantees a leading letter.
+
+Short sanitized names are used byte-for-byte unless they end in @"_dlq"@.
+Sanitization equivalence is intentional: @"a.b"@ and @"a_b"@ name the same
+queue, so distinct logical queues must differ after lower-casing and replacing
+illegal characters with underscores.
+
+When the sanitized base exceeds 43 characters, or the base ends in @"_dlq"@,
+the physical main-queue name is @<first 26 chars>_<16 hex chars>@ where the hex
+suffix is FNV-1a-64 over the full original logical name. This keeps the derived
+DLQ name inside PGMQ's 47-character ceiling and establishes the invariant that
+physical main-queue names never end in @"_dlq"@ while derived DLQ names always
+do.
+
+Migration note: pre-existing deployments whose sanitized logical name exceeded
+43 characters, or ended in @"_dlq"@, derive a different physical queue after
+this change. Messages in the old physical queue are not lost, but new workers
+will not read them. Drain the old queue before upgrading or temporarily run a
+worker against the old physical name.
 
 For example, @queueRef "hospital_capacity.reservation_work"@ yields
 @physicalName == "hospital_capacity_reservation_work"@ and
@@ -76,16 +97,26 @@ queueRef logical =
         , dlqName = forceQueueName (base <> "_dlq")
         }
   where
-    base = sanitize logical
+    base = physicalBase logical
 
 -- | Reserve 4 characters for the @"_dlq"@ suffix below the 47-char ceiling.
 maxBaseLength :: Int
 maxBaseLength = 43
 
+hashedPrefixLength :: Int
+hashedPrefixLength = 26
+
+physicalBase :: Text -> Text
+physicalBase logical =
+    if Text.length base <= maxBaseLength && not ("_dlq" `Text.isSuffixOf` base)
+        then base
+        else hashedBase logical base
+  where
+    base = sanitize logical
+
 sanitize :: Text -> Text
 sanitize =
-    Text.take maxBaseLength
-        . ensureLeadingLetter
+    ensureLeadingLetter
         . collapseUnderscores
         . Text.map toLegal
         . Text.toLower
@@ -111,6 +142,26 @@ ensureLeadingLetter t =
         Just (c, _)
             | c >= 'a' && c <= 'z' -> t
             | otherwise -> Text.cons 'q' t
+
+hashedBase :: Text -> Text -> Text
+hashedBase logical base =
+    prefix <> "_" <> fnv1a64Hex logical
+  where
+    trimmedPrefix = Text.dropWhileEnd (== '_') (Text.take hashedPrefixLength base)
+    prefix
+        | Text.null trimmedPrefix = "q"
+        | otherwise = trimmedPrefix
+
+fnv1a64Hex :: Text -> Text
+fnv1a64Hex logical =
+    Text.pack (replicate (16 - length rendered) '0' <> rendered)
+  where
+    rendered = showHex (Text.foldl' step offset logical) ""
+    offset :: Word64
+    offset = 0xcbf29ce484222325
+    prime :: Word64
+    prime = 0x100000001b3
+    step hash c = (hash `xor` fromIntegral (ord c)) * prime
 
 {- | Build a 'QueueName' from an already-sanitized 'Text'. The sanitizer should
 never produce an invalid name; if it somehow does, that is a programmer error,
