@@ -18,16 +18,18 @@ handler (or an undecodable payload) routes it to the dead-letter queue.
 -}
 module Main (main) where
 
+import Control.Concurrent (threadDelay)
 import Control.Exception (bracket)
 import Data.Aeson (FromJSON, ToJSON, Value (String), object, parseJSON, toJSON, (.=))
 import Data.Aeson.Types (parseEither)
 import Data.Either (isRight)
 import Data.Foldable (traverse_)
+import Data.IORef (modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Int (Int64)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Effectful (Eff, IOE)
+import Effectful (Eff, IOE, liftIO, (:>))
 import Effectful.Error.Static (Error)
 import GHC.Generics (Generic)
 import Hasql.Connection.Settings qualified as Conn
@@ -41,7 +43,9 @@ import Pgmq.Effectful (MessageBody (..), Pgmq, QueueMetrics (..), ReadMessage (.
 import Pgmq.Effectful qualified as Pgmq
 import Pgmq.Migration qualified as Migration
 import Pgmq.Types (QueueName, parseQueueName, queueNameToText)
+import Shibuya.App (AppHandle, ShutdownConfig (..), SupervisionStrategy (IgnoreFailures), stopAppGracefully)
 import Shibuya.Telemetry.Effect (Tracing)
+import System.Timeout (timeout)
 import Test.Hspec
 
 -- | A sample job payload defined entirely in the test.
@@ -144,6 +148,21 @@ readOneIsEmpty q = do
                 , conditional = Nothing
                 }
     pure (null messages)
+
+stopAppQuickly :: (IOE :> es) => AppHandle es -> Eff es ()
+stopAppQuickly app = do
+    _ <- stopAppGracefully ShutdownConfig{drainTimeout = 1} app
+    pure ()
+
+waitUntil :: IO Bool -> IO Bool
+waitUntil predicate =
+    maybe False id <$> timeout 10_000_000 loop
+  where
+    loop = do
+        ok <- predicate
+        if ok
+            then pure True
+            else threadDelay 100_000 >> loop
 
 spec :: SpecWith Text
 spec = do
@@ -267,6 +286,131 @@ spec = do
             ensureJobQueue job
             _ <- enqueue job (Ping "again by default" 2)
             runJobOnce 1 job (\_ -> pure RetryDefault)
+        len <- runDb connStr (queueLen job.jobQueue.physicalName)
+        emptyImmediateRead <- runDb connStr (readOneIsEmpty job.jobQueue.physicalName)
+        len `shouldBe` 1
+        emptyImmediateRead `shouldBe` True
+
+    it "worker-path lease extension prevents redelivery" $ \connStr -> do
+        callCount <- newIORef (0 :: Int)
+        handlerDone <- newIORef False
+        let job = mkJob "keiro_pgmq_test.worker_lease"
+            tuning =
+                either (error . show) id $
+                    mkJobTuning 2 1 (PollEvery 0.2)
+        processed <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "slow" 4)
+                result <-
+                    runJobWorkers
+                        IgnoreFailures
+                        16
+                        [ jobProcessorWithContext tuning job \ctx _payload -> do
+                            liftIO $ modifyIORef' callCount (+ 1)
+                            ctx.extendLease 30
+                            liftIO $ threadDelay 4_000_000
+                            liftIO $ writeIORef handlerDone True
+                            pure Done
+                        ]
+                case result of
+                    Left err -> liftIO $ fail ("runJobWorkers failed: " <> show err)
+                    Right app -> do
+                        ok <- liftIO $ waitUntil (readIORef handlerDone)
+                        stopAppQuickly app
+                        pure ok
+        processed `shouldBe` True
+        readIORef callCount `shouldReturn` 1
+        len <- runDb connStr (queueLen job.jobQueue.physicalName)
+        len `shouldBe` 0
+
+    it "worker-path context exposes the first attempt number" $ \connStr -> do
+        seenAttempt <- newIORef Nothing
+        let job = mkJob "keiro_pgmq_test.worker_attempt"
+        processed <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "attempt" 1)
+                result <-
+                    runJobWorkers
+                        IgnoreFailures
+                        16
+                        [ jobProcessorWithContext defaultJobTuning job \ctx _payload -> do
+                            liftIO $ writeIORef seenAttempt (Just ctx.attempt)
+                            pure Done
+                        ]
+                case result of
+                    Left err -> liftIO $ fail ("runJobWorkers failed: " <> show err)
+                    Right app -> do
+                        ok <- liftIO $ waitUntil ((/= Nothing) <$> readIORef seenAttempt)
+                        stopAppQuickly app
+                        pure ok
+        processed `shouldBe` True
+        readIORef seenAttempt `shouldReturn` Just (Just 0)
+
+    it "runJobWorkers processes an enqueued message" $ \connStr -> do
+        processedRef <- newIORef False
+        let job = mkJob "keiro_pgmq_test.worker_smoke"
+        processed <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "worker" 1)
+                result <-
+                    runJobWorkers
+                        IgnoreFailures
+                        16
+                        [ jobProcessor job \_payload -> do
+                            liftIO $ writeIORef processedRef True
+                            pure Done
+                        ]
+                case result of
+                    Left err -> liftIO $ fail ("runJobWorkers failed: " <> show err)
+                    Right app -> do
+                        ok <- liftIO $ waitUntil (readIORef processedRef)
+                        stopAppQuickly app
+                        pure ok
+        processed `shouldBe` True
+        len <- runDb connStr (queueLen job.jobQueue.physicalName)
+        len `shouldBe` 0
+
+    it "worker-path retry limit auto-routes to the DLQ before the handler reruns" $ \connStr -> do
+        callCount <- newIORef (0 :: Int)
+        let job =
+                (mkJob "keiro_pgmq_test.worker_max_retries")
+                    { jobPolicy = RetryPolicy 1 (RetryDelay 0) True
+                    }
+            tuning =
+                either (error . show) id $
+                    mkJobTuning 30 1 (PollEvery 0.1)
+        dlqReached <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "retry-limit" 1)
+                result <-
+                    runJobWorkers
+                        IgnoreFailures
+                        16
+                        [ jobProcessorWithContext tuning job \_ctx _payload -> do
+                            liftIO $ modifyIORef' callCount (+ 1)
+                            pure (Retry (RetryDelay 0))
+                        ]
+                case result of
+                    Left err -> liftIO $ fail ("runJobWorkers failed: " <> show err)
+                    Right app -> do
+                        ok <- liftIO $ waitUntil do
+                            dlqLen <- runDb connStr (queueLen job.jobQueue.dlqName)
+                            pure (dlqLen == 1)
+                        stopAppQuickly app
+                        pure ok
+        dlqReached `shouldBe` True
+        readIORef callCount `shouldReturn` 1
+
+    it "enqueueWithDelay delays first delivery" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.enqueue_delay"
+        runDb connStr $ do
+            ensureJobQueue job
+            _ <- enqueueWithDelay job 5 (Ping "later" 1)
+            pure ()
         len <- runDb connStr (queueLen job.jobQueue.physicalName)
         emptyImmediateRead <- runDb connStr (readOneIsEmpty job.jobQueue.physicalName)
         len `shouldBe` 1

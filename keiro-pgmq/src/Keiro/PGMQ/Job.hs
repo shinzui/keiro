@@ -46,6 +46,8 @@ module Keiro.PGMQ.Job (
     ensureJobQueue,
 
     -- * Consuming work
+    JobContext (..),
+    jobProcessorWithContext,
     jobProcessor,
     runJobWorkers,
     runJobOnce,
@@ -71,7 +73,8 @@ import "shibuya-core" Shibuya.App (
  )
 import "shibuya-core" Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), RetryDelay (..))
 import "shibuya-core" Shibuya.Core.Ingested (Ingested (..))
-import "shibuya-core" Shibuya.Core.Types (Envelope (..))
+import "shibuya-core" Shibuya.Core.Lease (Lease (..))
+import "shibuya-core" Shibuya.Core.Types (Attempt (..), Envelope (..))
 import "shibuya-core" Shibuya.Runner.Supervised (runWithMetrics)
 import "shibuya-core" Shibuya.Telemetry.Effect (Tracing)
 import "shibuya-pgmq-adapter" Shibuya.Adapter.Pgmq (
@@ -208,6 +211,14 @@ data Job p = Job
     , jobPolicy :: !RetryPolicy
     }
 
+-- | Per-delivery capabilities handed to context-aware handlers.
+data JobContext es = JobContext
+    { extendLease :: !(NominalDiffTime -> Eff es ())
+    -- ^ Push the message's visibility timeout further into the future.
+    , attempt :: !(Maybe Word)
+    -- ^ Zero-based delivery attempt; @Just 0@ is the first delivery.
+    }
+
 -- | Producer: encode @p@ with the job's codec and send it to the queue, no delay.
 enqueue :: (Pgmq :> es, IOE :> es) => Job p -> p -> Eff es MessageId
 enqueue job p =
@@ -262,7 +273,7 @@ shibuya 'AckDecision'. A payload the codec rejects is dead-lettered.
 -}
 wrapHandler ::
     Job p ->
-    (p -> Eff es JobOutcome) ->
+    (JobContext es -> p -> Eff es JobOutcome) ->
     (Ingested es Value -> Eff es AckDecision)
 wrapHandler job handle ingested =
     case decodeJob job.jobCodec ingested.envelope.payload of
@@ -270,25 +281,48 @@ wrapHandler job handle ingested =
             pure (AckRetry job.jobPolicy.defaultRetryDelay)
         Left (JobPayloadMalformed err) ->
             pure (AckDeadLetter (InvalidPayload err))
-        Right p -> toAck <$> handle p
+        Right p -> toAck <$> handle (contextFor ingested) p
   where
+    contextFor message =
+        JobContext
+            { extendLease = maybe (\_ -> pure ()) (.leaseExtend) message.lease
+            , attempt = fmap (.unAttempt) message.envelope.attempt
+            }
+
     toAck Done = AckOk
     toAck (Retry d) = AckRetry d
     toAck RetryDefault = AckRetry job.jobPolicy.defaultRetryDelay
     toAck (Dead why) = AckDeadLetter (PoisonPill why)
 
-{- | Build a shibuya processor for a job: a PGMQ adapter configured from the
-job's policy, paired with the wrapped handler. Pass the result to
-'runJobWorkers'.
+{- | Build a shibuya processor for a job with explicit tuning and a context-aware
+handler. The handler must finish, or call 'extendLease', before
+'visibilityTimeout' expires; otherwise PGMQ may redeliver the message
+concurrently and each redelivery consumes one retry attempt. After a worker
+crash, redelivery happens when the visibility timeout expires; the 'RetryPolicy'
+delay only governs explicit 'Retry' and 'RetryDefault' outcomes.
+-}
+jobProcessorWithContext ::
+    (Pgmq :> es, IOE :> es, Tracing :> es) =>
+    JobTuning ->
+    Job p ->
+    (JobContext es -> p -> Eff es JobOutcome) ->
+    Eff es (ProcessorId, QueueProcessor es)
+jobProcessorWithContext tuning job handle = do
+    adapter <- pgmqAdapter (adapterConfigFor tuning job)
+    pure (ProcessorId job.jobName, mkProcessor adapter (wrapHandler job handle))
+
+{- | Build a shibuya processor for a job using 'defaultJobTuning': a PGMQ adapter
+configured from the job's policy, paired with the wrapped handler. Pass the
+result to 'runJobWorkers'. The same visibility-timeout and crash-redelivery
+rules documented on 'jobProcessorWithContext' apply here.
 -}
 jobProcessor ::
     (Pgmq :> es, IOE :> es, Tracing :> es) =>
     Job p ->
     (p -> Eff es JobOutcome) ->
     Eff es (ProcessorId, QueueProcessor es)
-jobProcessor job handle = do
-    adapter <- pgmqAdapter (adapterConfigFor defaultJobTuning job)
-    pure (ProcessorId job.jobName, mkProcessor adapter (wrapHandler job handle))
+jobProcessor job handle =
+    jobProcessorWithContext defaultJobTuning job (\_context p -> handle p)
 
 {- | Continuous, multi-processor run (the @rei@ cadence): run a supervised app
 over several processors built with 'jobProcessor'. Returns the app handle; the
@@ -323,5 +357,5 @@ runJobOnce n job handle = do
             (fromIntegral (max 1 n))
             (ProcessorId job.jobName)
             limited
-            (wrapHandler job handle)
+            (wrapHandler job (\_context p -> handle p))
     pure ()

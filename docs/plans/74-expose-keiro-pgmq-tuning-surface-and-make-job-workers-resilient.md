@@ -67,10 +67,10 @@ Milestone 4 — collision-free queue naming:
 
 Milestone 5 — consumer tuning, lease access, and attempt numbers:
 
-- [ ] Add `JobContext` (`extendLease`, `attempt`) and `jobProcessorWithContext :: JobTuning -> Job p -> (JobContext es -> p -> Eff es JobOutcome) -> …`; re-express `jobProcessor` through it.
-- [ ] Thread `JobTuning` through `adapterConfigFor` (visibility timeout, batch size, polling).
-- [ ] Document the invariant handler-duration < visibility-timeout and the crash-retry cadence (the visibility timeout, not `RetryPolicy`).
-- [ ] Tests: worker-path lease extension prevents redelivery; `maxRetries` auto-DLQ; `runJobWorkers` end-to-end smoke test; `enqueueWithDelay` delays first delivery.
+- [x] Add `JobContext` (`extendLease`, `attempt`) and `jobProcessorWithContext :: JobTuning -> Job p -> (JobContext es -> p -> Eff es JobOutcome) -> …`; re-express `jobProcessor` through it. Completed 2026-06-13T14:10:39Z.
+- [x] Thread `JobTuning` through `adapterConfigFor` (visibility timeout, batch size, polling). Completed 2026-06-13T14:10:39Z.
+- [x] Document the invariant handler-duration < visibility-timeout and the crash-retry cadence (the visibility timeout, not `RetryPolicy`). Completed 2026-06-13T14:10:39Z.
+- [x] Tests: worker-path lease extension prevents redelivery; `maxRetries` auto-DLQ; `runJobWorkers` end-to-end smoke test; `enqueueWithDelay` delays first delivery. Completed 2026-06-13T14:10:39Z; evidence: `cabal build keiro-pgmq keiro-test-support` and `cabal test keiro-pgmq-test` passed (`21 examples, 0 failures`).
 
 Milestone 6 — `runJobOnce` becomes a real drain:
 
@@ -145,6 +145,7 @@ Compare the result against the original purpose.
 - Milestone 2 completed on 2026-06-13T13:55:21Z. `JobCodec` now distinguishes malformed payloads from future-version payloads, `keiroJobCodec` detects version-ahead envelopes before migration, and the worker path retries future payloads with the policy's default retry delay. The single `keiro-dsl` direct codec construction was migrated to `mkJobCodec`, and pure tests cover the new codec behavior.
 - Milestone 3 completed on 2026-06-13T13:59:29Z. Consumers now have validated smart constructors for retry policies and job tuning, while raw constructors remain available and documented as unvalidated. `RetryDefault` consumes `defaultRetryDelay`, and `runJobWorkers` clamps invalid inbox sizes to at least one.
 - Milestone 4 completed on 2026-06-13T14:02:13Z. Long logical queue names and `_dlq`-suffixed logical names now derive hash-disambiguated physical names, while short names remain unchanged. The queue-name haddock documents sanitization equivalence, the main-queue/DLQ suffix invariant, and the migration note for affected long-name deployments.
+- Milestone 5 completed on 2026-06-13T14:10:39Z. Worker handlers can now opt into `JobContext` to extend a delivery lease and inspect the zero-based attempt number, while existing `jobProcessor` callers keep the old payload-only handler shape. `JobTuning` now reaches the PGMQ adapter on the worker path, and tests cover lease extension, attempt exposure, worker smoke processing, retry-limit DLQ routing, and delayed enqueue visibility.
 
 
 ## Context and Orientation
