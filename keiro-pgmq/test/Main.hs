@@ -20,12 +20,14 @@ module Main (main) where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (bracket, throwIO)
-import Data.Aeson (FromJSON, ToJSON, Value (String), object, parseJSON, toJSON, (.=))
+import Data.Aeson (FromJSON, ToJSON, Value (..), object, parseJSON, toJSON, (.=))
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Data.Either (isRight)
-import Data.Foldable (traverse_)
+import Data.Foldable (toList, traverse_)
 import Data.IORef (modifyIORef', newIORef, readIORef, writeIORef)
-import Data.Int (Int64)
+import Data.Int (Int32, Int64)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -39,7 +41,12 @@ import Hasql.Pool.Config qualified as Pool.Config
 import Keiro.Codec qualified as CoreCodec
 import Keiro.PGMQ
 import Keiro.Test.Postgres qualified as Postgres
-import Pgmq.Effectful (MessageBody (..), Pgmq, QueueMetrics (..), ReadMessage (..), SendMessage (..))
+import OpenTelemetry.Context qualified as Ctxt
+import OpenTelemetry.Context.ThreadLocal qualified as CtxtLocal
+import OpenTelemetry.Propagator.W3CTraceContext qualified as W3C
+import OpenTelemetry.Trace.Core qualified as OTel
+import OpenTelemetry.Trace.Id.Generator.Default (defaultIdGenerator)
+import Pgmq.Effectful (Message (..), MessageBody (..), Pgmq, QueueMetrics (..), ReadMessage (..), SendMessage (..))
 import Pgmq.Effectful qualified as Pgmq
 import Pgmq.Migration qualified as Migration
 import Pgmq.Types (QueueName, parseQueueName, queueNameToText)
@@ -148,6 +155,39 @@ readOneIsEmpty q = do
                 , conditional = Nothing
                 }
     pure (null messages)
+
+-- | Read up to @n@ messages back off a queue (making them invisible for 30 s).
+readMessages :: QueueName -> Int32 -> Eff Stack [Message]
+readMessages q n = do
+    messages <-
+        Pgmq.readMessage
+            ReadMessage
+                { queueName = q
+                , delay = 30
+                , batchSize = Just n
+                , conditional = Nothing
+                }
+    pure (toList messages)
+
+-- | Look up a single key in a @Maybe Value@ header object.
+headerKey :: Text -> Maybe Value -> Maybe Value
+headerKey k = \case
+    Just (Object o) -> KeyMap.lookup (Key.fromText k) o
+    _ -> Nothing
+
+{- | A real tracer provider with the W3C Trace Context propagator and a
+non-dummy id generator, so an active span produces a @traceparent@ on injection.
+No span processors are needed — the test inspects propagated headers, not
+exported spans.
+-}
+setupW3CProvider :: IO OTel.TracerProvider
+setupW3CProvider =
+    OTel.createTracerProvider
+        []
+        OTel.emptyTracerProviderOptions
+            { OTel.tracerProviderOptionsIdGenerator = defaultIdGenerator
+            , OTel.tracerProviderOptionsPropagators = W3C.w3cTraceContextPropagator
+            }
 
 stopAppQuickly :: (IOE :> es) => AppHandle es -> Eff es ()
 stopAppQuickly app = do
@@ -612,3 +652,101 @@ spec = do
         dlqLen <- runDb connStr (queueLen job.jobQueue.dlqName)
         mainLen `shouldBe` 0
         dlqLen `shouldBe` 1
+
+    -- EP-1 M1: header-carrying enqueue and the reserved-key contract.
+    it "enqueueWithHeaders attaches a header readable on the raw PGMQ message" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.hdr_attach"
+        msgs <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <-
+                    enqueueWithHeaders
+                        job
+                        (MessageHeaders (object ["tenant" .= ("acme" :: Text)]))
+                        (Ping "hdr" 1)
+                readMessages job.jobQueue.physicalName 1
+        case msgs of
+            [m] -> headerKey "tenant" m.headers `shouldBe` Just (String "acme")
+            _ -> expectationFailure ("expected one message, got " <> show (length msgs))
+
+    it "enqueueWithHeaders leaves the x-pgmq-group key untouched" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.hdr_group"
+        msgs <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <-
+                    enqueueWithHeaders
+                        job
+                        (MessageHeaders (object ["x-pgmq-group" .= ("g1" :: Text)]))
+                        (Ping "g" 1)
+                readMessages job.jobQueue.physicalName 1
+        case msgs of
+            [m] -> headerKey "x-pgmq-group" m.headers `shouldBe` Just (String "g1")
+            _ -> expectationFailure ("expected one message, got " <> show (length msgs))
+
+    -- EP-1 M2: batch enqueue.
+    it "enqueueBatch of three payloads yields three ids and queue depth three" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.batch"
+        ids <-
+            runDb connStr $ do
+                ensureJobQueue job
+                enqueueBatch job [Ping "a" 1, Ping "b" 2, Ping "c" 3]
+        length ids `shouldBe` 3
+        len <- runDb connStr (queueLen job.jobQueue.physicalName)
+        len `shouldBe` 3
+
+    it "enqueueBatchWithHeaders attaches per-message headers" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.batch_headers"
+        msgs <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <-
+                    enqueueBatchWithHeaders
+                        job
+                        [ (MessageHeaders (object ["i" .= (1 :: Int)]), Ping "a" 1)
+                        , (MessageHeaders (object ["i" .= (2 :: Int)]), Ping "b" 2)
+                        ]
+                readMessages job.jobQueue.physicalName 2
+        length msgs `shouldBe` 2
+        map (headerKey "i" . (.headers)) msgs
+            `shouldMatchList` [Just (Number 1), Just (Number 2)]
+
+    -- EP-1 M3: handler-visible headers and trace propagation.
+    it "drain-path JobContext exposes the enqueued headers" $ \connStr -> do
+        seen <- newIORef Nothing
+        let job = mkJob "keiro_pgmq_test.ctx_headers"
+        runDb connStr $ do
+            ensureJobQueue job
+            _ <-
+                enqueueWithHeaders
+                    job
+                    (MessageHeaders (object ["tenant" .= ("acme" :: Text)]))
+                    (Ping "h" 1)
+            _ <-
+                runJobOnceWithContext defaultJobTuning 1 job \ctx _payload -> do
+                    liftIO (writeIORef seen ctx.headers)
+                    pure Done
+            pure ()
+        captured <- readIORef seen
+        headerKey "tenant" captured `shouldBe` Just (String "acme")
+
+    it "a traceparent set at enqueue is visible to the drain-path handler" $ \connStr -> do
+        seen <- newIORef Nothing
+        provider <- setupW3CProvider
+        let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+            job = mkJob "keiro_pgmq_test.traceparent"
+        parentSpan <- OTel.createSpan tracer Ctxt.empty "enqueue" OTel.defaultSpanArguments
+        _ <- CtxtLocal.attachContext (Ctxt.insertSpan parentSpan Ctxt.empty)
+        runDb connStr $ do
+            ensureJobQueue job
+            _ <- enqueueTraced provider job (MessageHeaders (object [])) (Ping "t" 1)
+            _ <-
+                runJobOnceWithContext defaultJobTuning 1 job \ctx _payload -> do
+                    liftIO (writeIORef seen ctx.headers)
+                    pure Done
+            pure ()
+        OTel.endSpan parentSpan Nothing
+        captured <- readIORef seen
+        headerKey "traceparent" captured `shouldSatisfy` \case
+            Just (String _) -> True
+            _ -> False

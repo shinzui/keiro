@@ -60,9 +60,19 @@ module Keiro.PGMQ.Job (
     mkJobTuning,
     defaultJobTuning,
 
+    -- * Message metadata
+    MessageHeaders (..),
+
     -- * Producing work
     enqueue,
     enqueueWithDelay,
+    enqueueWithHeaders,
+    enqueueWithHeadersAndDelay,
+    enqueueBatch,
+    enqueueBatchWithDelay,
+    enqueueBatchWithHeaders,
+    enqueueTraced,
+    enqueueTracedWithDelay,
 
     -- * Queue lifecycle
     ensureJobQueue,
@@ -82,9 +92,13 @@ import "aeson" Data.Aeson (Value)
 import "base" Control.Exception (SomeException)
 import "base" Control.Monad (foldM, void, when)
 import "base" Data.Int (Int32, Int64)
-import "effectful-core" Effectful (Eff, IOE, (:>))
+import "effectful-core" Effectful (Eff, IOE, liftIO, (:>))
 import "effectful-core" Effectful.Exception qualified as EffException
+import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal (getContext)
+import "hs-opentelemetry-api" OpenTelemetry.Trace.Core (TracerProvider)
 import "pgmq-effectful" Pgmq.Effectful (
+    BatchSendMessage (..),
+    BatchSendMessageWithHeaders (..),
     Message (..),
     MessageBody (..),
     MessageHeaders (..),
@@ -95,6 +109,8 @@ import "pgmq-effectful" Pgmq.Effectful (
     SendMessage (..),
     SendMessageWithHeaders (..),
     VisibilityTimeoutQuery (..),
+    injectTraceContext,
+    mergeTraceHeaders,
  )
 import "pgmq-effectful" Pgmq.Effectful qualified as Pgmq
 import "shibuya-core" Shibuya.App (
@@ -265,6 +281,13 @@ data JobContext es = JobContext
     -- ^ Push the message's visibility timeout further into the future.
     , attempt :: !(Maybe Word)
     -- ^ Zero-based delivery attempt; @Just 0@ is the first delivery.
+    , headers :: !(Maybe Value)
+    {- ^ Drain path: the raw PGMQ message header object (@Just@ when the
+    message carried headers, @Nothing@ otherwise). Worker path: always
+    @Nothing@, because the shibuya adapter's @Envelope@ does not surface
+    arbitrary headers (only the trace context, which shibuya itself uses
+    to continue the trace).
+    -}
     }
 
 -- | Producer: encode @p@ with the job's codec and send it to the queue, no delay.
@@ -288,6 +311,113 @@ enqueueWithDelay job d p =
             , messageBody = MessageBody (encodeJob job.jobCodec p)
             , delay = Just d
             }
+
+{- | Producer that attaches caller-supplied message headers (an arbitrary JSON
+object) alongside the encoded payload. Headers ride in PGMQ's @headers@ column
+and are readable by the consumer (see 'JobContext'\'s @headers@ field on the
+drain path).
+
+The headers are passed through verbatim. In particular the reserved FIFO group
+key @x-pgmq-group@ is neither reserved, injected, stripped, nor rewritten, so a
+caller (or a sibling plan building ordered delivery) may set it freely.
+-}
+enqueueWithHeaders ::
+    (Pgmq :> es, IOE :> es) => Job p -> MessageHeaders -> p -> Eff es MessageId
+enqueueWithHeaders job hdrs p =
+    Pgmq.sendMessageWithHeaders
+        SendMessageWithHeaders
+            { queueName = job.jobQueue.physicalName
+            , messageBody = MessageBody (encodeJob job.jobCodec p)
+            , messageHeaders = hdrs
+            , delay = Nothing
+            }
+
+{- | 'enqueueWithHeaders' with an explicit visibility delay (in seconds) before
+first delivery.
+-}
+enqueueWithHeadersAndDelay ::
+    (Pgmq :> es, IOE :> es) => Job p -> Int32 -> MessageHeaders -> p -> Eff es MessageId
+enqueueWithHeadersAndDelay job d hdrs p =
+    Pgmq.sendMessageWithHeaders
+        SendMessageWithHeaders
+            { queueName = job.jobQueue.physicalName
+            , messageBody = MessageBody (encodeJob job.jobCodec p)
+            , messageHeaders = hdrs
+            , delay = Just d
+            }
+
+{- | Batch producer: encode and enqueue many payloads in a single database
+round-trip, returning one 'MessageId' per payload in order. An empty input
+short-circuits to @[]@ and issues no statement.
+-}
+enqueueBatch :: (Pgmq :> es, IOE :> es) => Job p -> [p] -> Eff es [MessageId]
+enqueueBatch _ [] = pure []
+enqueueBatch job ps =
+    Pgmq.batchSendMessage
+        BatchSendMessage
+            { queueName = job.jobQueue.physicalName
+            , messageBodies = map (MessageBody . encodeJob job.jobCodec) ps
+            , delay = Nothing
+            }
+
+{- | 'enqueueBatch' with a single visibility delay (in seconds) applied to every
+message in the batch.
+-}
+enqueueBatchWithDelay ::
+    (Pgmq :> es, IOE :> es) => Job p -> Int32 -> [p] -> Eff es [MessageId]
+enqueueBatchWithDelay _ _ [] = pure []
+enqueueBatchWithDelay job d ps =
+    Pgmq.batchSendMessage
+        BatchSendMessage
+            { queueName = job.jobQueue.physicalName
+            , messageBodies = map (MessageBody . encodeJob job.jobCodec) ps
+            , delay = Just d
+            }
+
+{- | Batch producer that attaches a distinct header object to each payload. The
+input pairs each payload with its headers so the body and header lists cannot be
+desynchronized. An empty input short-circuits to @[]@.
+-}
+enqueueBatchWithHeaders ::
+    (Pgmq :> es, IOE :> es) => Job p -> [(MessageHeaders, p)] -> Eff es [MessageId]
+enqueueBatchWithHeaders _ [] = pure []
+enqueueBatchWithHeaders job pairs =
+    Pgmq.batchSendMessageWithHeaders
+        BatchSendMessageWithHeaders
+            { queueName = job.jobQueue.physicalName
+            , messageBodies = map (MessageBody . encodeJob job.jobCodec . snd) pairs
+            , messageHeaders = map fst pairs
+            , delay = Nothing
+            }
+
+{- | Producer that propagates the current OpenTelemetry trace context onto the
+enqueued message so the handler runs inside the same trace. The current
+thread-local context is injected to carrier headers via the provider's
+configured propagator (W3C @traceparent@ by default) and additively merged onto
+@extraHeaders@ — any key already present in @extraHeaders@ wins, so a
+caller-set @x-pgmq-group@ survives. Pass @MessageHeaders (object [])@ to inject
+only the trace.
+-}
+enqueueTraced ::
+    (Pgmq :> es, IOE :> es) =>
+    TracerProvider -> Job p -> MessageHeaders -> p -> Eff es MessageId
+enqueueTraced provider job extraHeaders p = do
+    ctx <- liftIO getContext
+    traceHeaders <- injectTraceContext provider ctx
+    let merged = MessageHeaders (mergeTraceHeaders traceHeaders (Just extraHeaders.unMessageHeaders))
+    enqueueWithHeaders job merged p
+
+{- | 'enqueueTraced' with an explicit visibility delay (in seconds) before first
+delivery.
+-}
+enqueueTracedWithDelay ::
+    (Pgmq :> es, IOE :> es) =>
+    TracerProvider -> Job p -> Int32 -> MessageHeaders -> p -> Eff es MessageId
+enqueueTracedWithDelay provider job d extraHeaders p = do
+    ctx <- liftIO getContext
+    traceHeaders <- injectTraceContext provider ctx
+    let merged = MessageHeaders (mergeTraceHeaders traceHeaders (Just extraHeaders.unMessageHeaders))
+    enqueueWithHeadersAndDelay job d merged p
 
 {- | Idempotent: create the main queue, and the DLQ too when the policy uses
 one. @Pgmq.createQueue@ is idempotent in PGMQ, so this is safe to call at every
@@ -335,6 +465,7 @@ wrapHandler job handle ingested =
         JobContext
             { extendLease = maybe (\_ -> pure ()) (.leaseExtend) message.lease
             , attempt = fmap (.unAttempt) message.envelope.attempt
+            , headers = Nothing
             }
 
     toAck Done = AckOk
@@ -468,6 +599,7 @@ runJobOnceWithContext tuning n job handle
                                 , visibilityTimeoutOffset = nominalToSeconds duration
                                 }
                 , attempt = fmap (.unAttempt) envelope.attempt
+                , headers = message.headers
                 }
 
     outcomeToAck Done = AckOk
