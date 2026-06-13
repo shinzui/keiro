@@ -70,16 +70,16 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: Create `keiro-pgmq/src/Keiro/PGMQ/Metrics.hs` with `jobQueueMetrics`, `jobDlqMetrics`, `queueDepth`, and `allJobMetrics`.
-- [ ] M1: Add `Keiro.PGMQ.Metrics` to `exposed-modules` in `keiro-pgmq/keiro-pgmq.cabal`.
-- [ ] M1: Re-export `Keiro.PGMQ.Metrics` from the umbrella `keiro-pgmq/src/Keiro/PGMQ.hs` (Integration Point 5).
-- [ ] M1: Add metrics tests to `keiro-pgmq/test/Main.hs` (main-queue depth, DLQ depth after a `Dead` outcome).
-- [ ] M1: `cabal test keiro-pgmq-test` passes with the new metrics examples.
-- [ ] M2: Add the archive/retention API (`archiveDlq`, `archiveDlqEntry`) to `keiro-pgmq/src/Keiro/PGMQ/Dlq.hs` and its export list.
-- [ ] M2: Add archive-retention tests to `keiro-pgmq/test/Main.hs`, asserting active-DLQ depth drops AND the row is present in `pgmq.a_<dlq>`.
-- [ ] M2: `cabal test keiro-pgmq-test` passes with the new archive examples.
-- [ ] M3 (optional): Author module haddock documenting the archive-then-purge / depth-alert retention model; add an end-to-end retention scenario test (enqueue → dead-letter → archiveDlq → purgeDlq, archive still populated).
-- [ ] Update this plan's Progress, Decision Log, Surprises, and Outcomes sections as work lands; update the MasterPlan registry row for EP-4.
+- [x] M1: Create `keiro-pgmq/src/Keiro/PGMQ/Metrics.hs` with `jobQueueMetrics`, `jobDlqMetrics`, `queueDepth`, and `allJobMetrics`. (2026-06-13)
+- [x] M1: Add `Keiro.PGMQ.Metrics` to `exposed-modules` in `keiro-pgmq/keiro-pgmq.cabal`. (2026-06-13)
+- [x] M1: Re-export `Keiro.PGMQ.Metrics` from the umbrella `keiro-pgmq/src/Keiro/PGMQ.hs` (Integration Point 5). (2026-06-13)
+- [x] M1: Add metrics tests to `keiro-pgmq/test/Main.hs` (main-queue depth, DLQ depth after a `Dead` outcome). (2026-06-13)
+- [x] M1: `cabal test keiro-pgmq-test` passes with the new metrics examples. (2026-06-13)
+- [x] M2: Add the archive/retention API (`archiveDlq`, `archiveDlqEntry`) to `keiro-pgmq/src/Keiro/PGMQ/Dlq.hs` and its export list. (2026-06-13)
+- [x] M2: Add archive-retention tests to `keiro-pgmq/test/Main.hs`, asserting active-DLQ depth drops AND the row is present in `pgmq.a_<dlq>`. (2026-06-13)
+- [x] M2: `cabal test keiro-pgmq-test` passes with the new archive examples. (2026-06-13)
+- [x] M3 (optional): Author module haddock documenting the archive-then-purge / depth-alert retention model; add an end-to-end retention scenario test (enqueue → dead-letter → archiveDlq → purgeDlq, archive still populated). (2026-06-13)
+- [x] Update this plan's Progress, Decision Log, Surprises, and Outcomes sections as work lands; update the MasterPlan registry row for EP-4. (2026-06-13)
 
 
 ## Surprises & Discoveries
@@ -87,7 +87,17 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-13 (M2) — **`hasql >=1.10` hides the `Statement` data constructor; use the smart
+  constructor `Hasql.Statement.preparable`.** The plan's archive-count session sketch built a
+  `Statement.Statement bytes Encoders.noParams decoder True` value, but in `hasql-1.10.3.2`
+  `Hasql.Statement` exports only the `Statement` *type* plus `preparable`/`unpreparable`/
+  `refineResult`/`toSql` (GHC-01928: "Illegal term-level use of the type constructor"). Two
+  further deltas from the sketch: `preparable` takes the SQL as **`Text`, not `ByteString`** (so
+  no `Data.Text.Encoding.encodeUtf8` wrapping — GHC-83865), and it bakes in the
+  prepared-statement flag (the old fourth `True` argument), so the call is simply
+  `Statement.preparable sql Encoders.noParams (Decoders.singleRow (Decoders.column
+  (Decoders.nonNullable Decoders.int8)))`. No other part of the plan was affected. Recorded for
+  any future test that builds a raw `hasql` `Statement` against this version.
 
 
 ## Decision Log
@@ -150,7 +160,37 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All three milestones (M1, M2, and the optional M3) are complete; `cabal test keiro-pgmq-test`
+reports **50 examples, 0 failures, 2 pending** (the two pre-existing unrelated pendings:
+shibuya poll-retry and the pg_partman live test). EP-4 is done.
+
+What shipped, exactly as designed:
+
+- **M1 — typed metrics surface.** New module `keiro-pgmq/src/Keiro/PGMQ/Metrics.hs` exposes
+  `jobQueueMetrics`, `jobDlqMetrics`, `queueDepth`, and `allJobMetrics`, all keyed on `Job p`
+  (Integration Point 4: `Job`/`QueueRef` unchanged), re-exporting `QueueMetrics (..)` from
+  `pgmq-effectful` directly per the Decision Log. Wired into `keiro-pgmq.cabal`'s
+  `exposed-modules` and the `Keiro.PGMQ` umbrella (Integration Point 5). The constraint is
+  `(Pgmq :> es)` only — no `IOE` — because `queueMetrics`/`allQueueMetrics` are read-only.
+- **M2 — archive/retention API.** `archiveDlq :: Job p -> Int -> Eff es Int` and
+  `archiveDlqEntry :: Job p -> MessageId -> Eff es Bool` added to `Keiro.PGMQ.Dlq` next to
+  `purgeDlq`, sharing the existing imports (`Message`, `MessageQuery`, `ReadMessage`, `foldM`,
+  and `Pgmq.archiveMessage` through the already-imported umbrella) — no new library dependency.
+  The module haddock now documents the "archive-then-purge" retention model.
+- **M3 — lifecycle test.** Example "archived DLQ rows survive a purge" proves `purgeDlq` does
+  not touch the archive table.
+
+The load-bearing proof is the M2 example "archiveDlq retains dead-lettered rows in the archive
+table": it asserts `archiveDlq` returns `1`, the active DLQ drains to `0` (`jobDlqMetrics`), and
+a raw `hasql` `SELECT count(*) FROM pgmq.a_<dlq>` returns `1` — distinguishing *retention* from
+*deletion*.
+
+Only deviation from the plan: the raw archive-count `hasql` session uses
+`Hasql.Statement.preparable` rather than the hidden `Statement` data constructor the sketch
+assumed (see Surprises). This was a mechanical, test-only adjustment with no design impact.
+
+EP-4 completes MasterPlan #10: all four child plans (producers, provisioning, FIFO ordering,
+observability) are now Complete.
 
 
 ## Context and Orientation

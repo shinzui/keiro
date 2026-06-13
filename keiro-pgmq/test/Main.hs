@@ -36,9 +36,13 @@ import Effectful (Eff, IOE, liftIO, (:>))
 import Effectful.Error.Static (Error)
 import GHC.Generics (Generic)
 import Hasql.Connection.Settings qualified as Conn
+import Hasql.Decoders qualified as Decoders
+import Hasql.Encoders qualified as Encoders
 import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool.Config
+import Hasql.Session qualified as Session
+import Hasql.Statement qualified as Statement
 import Keiro.Codec qualified as CoreCodec
 import Keiro.PGMQ
 import Keiro.Test.Postgres qualified as Postgres
@@ -93,6 +97,24 @@ withPool connStr =
                 [Pool.Config.staticConnectionSettings (Conn.connectionString connStr)]
         )
         Pool.release
+
+{- | Count the rows currently in a DLQ's archive table @pgmq.a_<dlqPhysical>@ via a
+raw @hasql@ session. PGMQ exposes no "read the archive" function, so retention is
+proven with plain SQL. The queue name is sanitized to @[a-z0-9_]@ by 'queueRef',
+so interpolating it into the table identifier is safe here.
+-}
+archiveCount :: Text -> Text -> IO Int64
+archiveCount connStr dlqPhysical =
+    withPool connStr $ \pool -> do
+        let sql = "SELECT count(*) FROM pgmq.a_" <> dlqPhysical
+            session =
+                Session.statement () $
+                    Statement.preparable
+                        sql
+                        Encoders.noParams
+                        (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.int8)))
+        result <- Pool.use pool session
+        either (\e -> fail ("archive count failed: " <> show e)) pure result
 
 {- | Run a @Stack@ action against a fresh 'JobRuntime' (no tracer), failing the
 test on any PGMQ runtime error.
@@ -892,3 +914,65 @@ spec = do
         filter (Text.isPrefixOf "a") log' `shouldBe` ["a1", "a2", "a3"]
         len <- runDb connStr (queueLen job.jobQueue.physicalName)
         len `shouldBe` 0
+
+    -- EP-4 M1: typed metrics surface (main + DLQ).
+    it "jobQueueMetrics reports main-queue depth after enqueue" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.metrics_depth"
+        (mainMetrics, dlqMetrics) <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "a" 1)
+                _ <- enqueue job (Ping "b" 2)
+                _ <- enqueue job (Ping "c" 3)
+                mainMetrics <- jobQueueMetrics job
+                dlqMetrics <- jobDlqMetrics job
+                pure (mainMetrics, dlqMetrics)
+        mainMetrics.queueLength `shouldBe` 3
+        mainMetrics.queueVisibleLength `shouldBe` 3
+        dlqMetrics.queueLength `shouldBe` 0
+
+    it "jobDlqMetrics reports DLQ depth after a Dead outcome" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.metrics_dlq"
+        (mainMetrics, dlqMetrics) <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "poison" 1)
+                runJobOnce 1 job (\_ -> pure (Dead "bad"))
+                mainMetrics <- jobQueueMetrics job
+                dlqMetrics <- jobDlqMetrics job
+                pure (mainMetrics, dlqMetrics)
+        mainMetrics.queueLength `shouldBe` 0
+        dlqMetrics.queueLength `shouldBe` 1
+
+    -- EP-4 M2: archive/retention API.
+    it "archiveDlq retains dead-lettered rows in the archive table" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.dlq_archive"
+        (archived, dlqLen) <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "poison" 1)
+                runJobOnce 1 job (\_ -> pure (Dead "bad"))
+                archived <- archiveDlq job 10
+                dlqMetrics <- jobDlqMetrics job
+                pure (archived, dlqMetrics.queueLength)
+        archived `shouldBe` 1
+        dlqLen `shouldBe` 0
+        retained <- archiveCount connStr (queueNameToText job.jobQueue.dlqName)
+        retained `shouldBe` 1
+
+    -- EP-4 M3: end-to-end retention lifecycle.
+    it "archived DLQ rows survive a purge" $ \connStr -> do
+        let job = mkJob "keiro_pgmq_test.dlq_archive_purge"
+        archived <-
+            runDb connStr $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "poison" 1)
+                runJobOnce 1 job (\_ -> pure (Dead "bad"))
+                archived <- archiveDlq job 10
+                purgeDlq job
+                pure archived
+        archived `shouldBe` 1
+        dlqLen <- runDb connStr (queueLen job.jobQueue.dlqName)
+        dlqLen `shouldBe` 0
+        retained <- archiveCount connStr (queueNameToText job.jobQueue.dlqName)
+        retained `shouldBe` 1

@@ -12,9 +12,13 @@ metadata as well: @original_message_id@, @original_enqueued_at@, @last_read_at@,
 treat metadata as optional so operators can still inspect legacy or hand-written
 rows.
 
-PGMQ does not expire DLQ rows by itself. Run 'redriveDlq' or 'purgeDlq' from an
-operational job, archive rows before purging when audit retention matters, and
-alert on the DLQ's 'Pgmq.Effectful.queueMetrics' depth.
+PGMQ does not expire DLQ rows by itself. The retention model is "archive-then-
+purge": 'archiveDlq' retains dead letters by moving them into the archive table
+@pgmq.a_<dlq>@ (preserving @enqueued_at@ / @read_ct@ and stamping @archived_at@)
+for audit, while 'purgeDlq' deletes them permanently. An operator who needs an
+audit trail runs 'archiveDlq' (retain) and may then 'purgeDlq' (clear the active
+table); an operator who does not keeps using 'purgeDlq' alone. Either way, alert
+on the DLQ's depth via 'Keiro.PGMQ.Metrics.jobDlqMetrics'.
 
 Redrive is at-least-once: a crash after sending the original payload back to the
 main queue but before deleting the DLQ row leaves the payload in both places.
@@ -25,6 +29,8 @@ module Keiro.PGMQ.Dlq (
     readDlq,
     redriveDlq,
     purgeDlq,
+    archiveDlq,
+    archiveDlqEntry,
 ) where
 
 import Keiro.PGMQ.Codec (JobDecodeError (..), decodeJob)
@@ -193,3 +199,46 @@ redriveDlq job n
 purgeDlq :: (Pgmq :> es, IOE :> es) => Job p -> Eff es ()
 purgeDlq job =
     void (Pgmq.deleteAllMessagesFromQueue job.jobQueue.dlqName)
+
+{- | Archive (retain) up to @n@ DLQ rows: move each out of the active DLQ table
+@pgmq.q_<dlq>@ into the archive table @pgmq.a_<dlq>@, preserving @enqueued_at@ /
+@read_ct@ and stamping @archived_at@. Returns the number archived. This is the
+audit-retention counterpart to the delete-only 'purgeDlq'. At-most-once per row
+per call; a crash before archiving leaves the row in the active DLQ for a re-run.
+-}
+archiveDlq :: (Pgmq :> es, IOE :> es) => Job p -> Int -> Eff es Int
+archiveDlq job n
+    | n <= 0 = pure 0
+    | otherwise = loop 0
+  where
+    loop archived
+        | archived >= n = pure archived
+        | otherwise = do
+            messages <-
+                Pgmq.readMessage
+                    ReadMessage
+                        { queueName = job.jobQueue.dlqName
+                        , delay = 30
+                        , batchSize = Just (fromIntegral (min 100 (n - archived)))
+                        , conditional = Nothing
+                        }
+            if null messages
+                then pure archived
+                else do
+                    archivedInBatch <- foldM archiveOne 0 messages
+                    if archivedInBatch == 0
+                        then pure archived
+                        else loop (archived + archivedInBatch)
+
+    archiveOne count message = do
+        moved <- archiveDlqEntry job message.messageId
+        pure (if moved then count + 1 else count)
+
+-- | Archive one specific DLQ row by message id. 'True' if a row was moved.
+archiveDlqEntry :: (Pgmq :> es, IOE :> es) => Job p -> MessageId -> Eff es Bool
+archiveDlqEntry job msgId =
+    Pgmq.archiveMessage
+        MessageQuery
+            { queueName = job.jobQueue.dlqName
+            , messageId = msgId
+            }

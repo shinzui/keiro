@@ -154,7 +154,7 @@ in `keiro-pgmq` alongside the surface they extend.
 | 1 | Add message headers, trace propagation, and batch enqueue to keiro-pgmq producers | docs/plans/75-add-message-headers-trace-propagation-and-batch-enqueue-to-keiro-pgmq-producers.md | None | None | Complete |
 | 2 | Add partitioned and unlogged queue provisioning with FIFO indexes to keiro-pgmq | docs/plans/76-add-partitioned-and-unlogged-queue-provisioning-with-fifo-indexes-to-keiro-pgmq.md | None | None | Complete |
 | 3 | Add FIFO ordered delivery via message groups to keiro-pgmq | docs/plans/77-add-fifo-ordered-delivery-via-message-groups-to-keiro-pgmq.md | EP-1, EP-2 | EP-4 | Complete |
-| 4 | Add queue metrics and archive/retention API to keiro-pgmq | docs/plans/78-add-queue-metrics-and-archive-retention-api-to-keiro-pgmq.md | None | None | Not Started |
+| 4 | Add queue metrics and archive/retention API to keiro-pgmq | docs/plans/78-add-queue-metrics-and-archive-retention-api-to-keiro-pgmq.md | None | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled, Deferred.
 Hard Deps and Soft Deps reference other rows by their `#` prefix (e.g., EP-1). All four plans
@@ -297,8 +297,8 @@ Track milestone-level progress across all child plans.
 - [x] EP-3: Grouped reads in the `runJobOnceWithContext` drain (one-shot ordered path). (2026-06-13)
 - [x] EP-3: Group-keyed producer (`enqueueToGroup`) + ordered FIFO index in queue setup. (2026-06-13)
 - [x] EP-3: End-to-end ordering test — same group processed in order, distinct groups concurrent. (2026-06-13)
-- [ ] EP-4: Typed metrics surface (`queueDepth`/`jobMetrics` over `queueMetrics`/`allQueueMetrics`) for main + DLQ.
-- [ ] EP-4: Archive operation + archive-based retention helper; tests for metrics and archive.
+- [x] EP-4: Typed metrics surface (`queueDepth`/`jobMetrics` over `queueMetrics`/`allQueueMetrics`) for main + DLQ. (2026-06-13)
+- [x] EP-4: Archive operation + archive-based retention helper; tests for metrics and archive. (2026-06-13)
 
 
 ## Surprises & Discoveries
@@ -365,6 +365,16 @@ interactions between child plans. Provide concise evidence.
   `queueProvisionConfigs`; the provisioning choice is a *parameter*, so `Job`/`QueueRef`
   remain frozen (Integration Point 4 intact). `pgmq-config-0.3.0.0` is now a `keiro-pgmq`
   library + test build-dep and resolved with no `cabal.project` change.
+- 2026-06-13 (EP-4 complete) — **EP-4 consumed only the frozen `Job`/`QueueRef` context and the
+  `pgmq-effectful` umbrella; it added no library dependency and touched no sibling-plan code.**
+  `Keiro.PGMQ.Metrics` (new module) and the `archiveDlq`/`archiveDlqEntry` verbs in
+  `Keiro.PGMQ.Dlq` are built entirely on `Pgmq.queueMetrics`/`allQueueMetrics`/`archiveMessage`
+  (all present in the `Pgmq.Effectful` umbrella — verified, unlike the grouped-read records EP-3
+  needed) plus the frozen `Job (..)`/`QueueRef (..)` (Integration Point 4 intact). The soft
+  dependency EP-3 declared on EP-4 is now satisfiable: `jobDlqMetrics`/`jobQueueMetrics` are the
+  typed depth-alerting surface EP-3's operational docs point to. The one non-library wrinkle was
+  test-only: `hasql >=1.10` hides the `Statement` data constructor, so the archive-count proof
+  uses `Hasql.Statement.preparable` (Text SQL, no `encodeUtf8`); see EP-4's Surprises.
 - 2026-06-13 (EP-2 complete) — **The genuine W3C `traceparent` round-trip works in tests; no
   fallback was needed**, but it cost three test-only build-deps on `keiro-pgmq-test`
   (`hs-opentelemetry-api`, `hs-opentelemetry-propagator-w3c`, `hs-opentelemetry-sdk`). The
@@ -418,4 +428,34 @@ interactions between child plans. Provide concise evidence.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+**Initiative complete.** All four child plans are Complete; `cabal test keiro-pgmq-test` passes
+(50 examples, 0 failures, 2 pre-existing unrelated pendings). The `keiro-pgmq` queue-feature
+surface now offers, on top of the `#74` resilience/tuning baseline:
+
+- **EP-1 (producers)** — `enqueueWithHeaders`, `enqueueBatch`/`enqueueBatchWithHeaders`, a
+  `traceparent` propagation helper, and handler-visible headers on `JobContext`.
+- **EP-2 (provisioning)** — `QueueType`-driven `ensureJobQueueWith` for standard/unlogged/
+  partitioned queues, the pure `queueProvisionConfigs`, and `ensureFifoIndex`.
+- **EP-3 (FIFO ordering)** — a `JobOrdering` field on `JobTuning` (`withOrdering`) mapped to the
+  adapter's `fifoConfig` on the worker path and to grouped reads on the drain path,
+  `enqueueToGroup`/`enqueueToGroupWithDelay`, and `ensureOrderedJobQueue`.
+- **EP-4 (observability)** — `Keiro.PGMQ.Metrics` (`jobQueueMetrics`/`jobDlqMetrics`/`queueDepth`/
+  `allJobMetrics`) and the `archiveDlq`/`archiveDlqEntry` audit-retention verbs in
+  `Keiro.PGMQ.Dlq`.
+
+How the decomposition held up. The wave structure (EP-1 ∥ EP-2 ∥ EP-4 → EP-3) was sound: the
+three foundational plans touched disjoint code paths and the one composite plan (EP-3) consumed
+EP-1's header producer and EP-2's FIFO index *exactly* as Integration Points 1–3 specified, with
+no reconcile note needed. Integration Point 4 (frozen `Job`/`QueueRef`) was never violated by any
+plan, which is what kept the four independent.
+
+The one real cross-plan surprise was EP-3's: a needed `ReadGrouped` *record* lives only in
+`pgmq-hasql` (`Pgmq.Hasql.Statements.Types`), not the `pgmq-effectful` umbrella, forcing an
+additive `pgmq-hasql` build-dep. EP-4 heeded that lesson and verified its umbrella symbols
+(`queueMetrics`/`allQueueMetrics`/`archiveMessage`) up front — all present, so no extra dependency.
+The remaining wrinkles (EP-2's three test-only OpenTelemetry deps; EP-4's `hasql` `Statement`
+constructor change) were test-only and library-dependency-free.
+
+Deferred-as-designed and not regretted: conditional reads on the worker path (needs a
+`shibuya-pgmq-adapter` patch) and PGMQ-as-integration-transport (case B) remain roadmap docs, per
+the Decision Log.
