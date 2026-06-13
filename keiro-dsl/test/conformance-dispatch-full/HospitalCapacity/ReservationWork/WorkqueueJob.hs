@@ -16,7 +16,7 @@ import Generated.HospitalCapacity.Reservation_work.Queue (
     parseReservationWorkItem,
  )
 import Generated.HospitalCapacity.Reservation_work.QueuePolicy (retryPolicy)
-import Keiro.PGMQ.Codec (JobCodec (..))
+import Keiro.PGMQ.Codec (mkJobCodec)
 import Keiro.PGMQ.Job (Job (..), JobOutcome (..))
 import Keiro.PGMQ.Runtime (queueRef)
 
@@ -27,10 +27,9 @@ reservationWorkJob =
         { jobName = "reservation-work"
         , jobQueue = queueRef "hospital_capacity.reservation_work"
         , jobCodec =
-            JobCodec
-                { encodeJob = encodeReservationWorkItem
-                , decodeJob = parseReservationWorkItem
-                }
+            mkJobCodec
+                encodeReservationWorkItem
+                parseReservationWorkItem
         , jobPolicy = retryPolicy
         }
 

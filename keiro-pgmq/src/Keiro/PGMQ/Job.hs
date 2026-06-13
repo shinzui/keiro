@@ -44,7 +44,7 @@ module Keiro.PGMQ.Job (
     runJobOnce,
 ) where
 
-import Keiro.PGMQ.Codec (JobCodec, decodeJob, encodeJob)
+import Keiro.PGMQ.Codec (JobCodec, JobDecodeError (..), decodeJob, encodeJob)
 import Keiro.PGMQ.Runtime (QueueRef (..))
 import "aeson" Data.Aeson (Value)
 import "base" Control.Monad (when)
@@ -173,7 +173,10 @@ wrapHandler ::
     (Ingested es Value -> Eff es AckDecision)
 wrapHandler job handle ingested =
     case decodeJob job.jobCodec ingested.envelope.payload of
-        Left err -> pure (AckDeadLetter (InvalidPayload err))
+        Left (JobPayloadFromFuture _payloadVersion _workerVersion) ->
+            pure (AckRetry job.jobPolicy.defaultRetryDelay)
+        Left (JobPayloadMalformed err) ->
+            pure (AckDeadLetter (InvalidPayload err))
         Right p -> toAck <$> handle p
   where
     toAck Done = AckOk

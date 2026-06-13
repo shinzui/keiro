@@ -42,13 +42,13 @@ Milestone 1 — test harness on keiro-test-support:
 
 Milestone 2 — structured decode errors and version-ahead retry:
 
-- [ ] Introduce `JobDecodeError` in `keiro-pgmq/src/Keiro/PGMQ/Codec.hs`; change `JobCodec.decodeJob` to `Value -> Either JobDecodeError p`.
-- [ ] Add `mkJobCodec :: (p -> Value) -> (Value -> Either Text p) -> JobCodec p` helper; rebase `aesonJobCodec` on it.
-- [ ] Detect `version > schemaVersion` in `keiroJobCodec` and surface `JobPayloadFromFuture`.
-- [ ] Map `JobPayloadFromFuture` to `AckRetry` (policy's `defaultRetryDelay`) and `JobPayloadMalformed` to `AckDeadLetter (InvalidPayload …)` in `wrapHandler`.
-- [ ] Fix the one keiro-dsl compile site (`keiro-dsl/test/conformance-dispatch-full/HospitalCapacity/ReservationWork/WorkqueueJob.hs`) to use `mkJobCodec`.
-- [ ] Document worker-before-producer deploy ordering and the aesonJobCodec→keiroJobCodec switch hazard in the `Keiro.PGMQ.Codec` haddock.
-- [ ] Codec tests: envelope roundtrip, upcaster-chain decode, version-ahead, malformed envelope.
+- [x] Introduce `JobDecodeError` in `keiro-pgmq/src/Keiro/PGMQ/Codec.hs`; change `JobCodec.decodeJob` to `Value -> Either JobDecodeError p`. Completed 2026-06-13T13:55:21Z.
+- [x] Add `mkJobCodec :: (p -> Value) -> (Value -> Either Text p) -> JobCodec p` helper; rebase `aesonJobCodec` on it. Completed 2026-06-13T13:55:21Z.
+- [x] Detect `version > schemaVersion` in `keiroJobCodec` and surface `JobPayloadFromFuture`. Completed 2026-06-13T13:55:21Z.
+- [x] Map `JobPayloadFromFuture` to `AckRetry` (policy's `defaultRetryDelay`) and `JobPayloadMalformed` to `AckDeadLetter (InvalidPayload …)` in `wrapHandler`. Completed 2026-06-13T13:55:21Z.
+- [x] Fix the one keiro-dsl compile site (`keiro-dsl/test/conformance-dispatch-full/HospitalCapacity/ReservationWork/WorkqueueJob.hs`) to use `mkJobCodec`. Completed 2026-06-13T13:55:21Z.
+- [x] Document worker-before-producer deploy ordering and the aesonJobCodec→keiroJobCodec switch hazard in the `Keiro.PGMQ.Codec` haddock. Completed 2026-06-13T13:55:21Z.
+- [x] Codec tests: envelope roundtrip, upcaster-chain decode, version-ahead, malformed envelope. Completed 2026-06-13T13:55:21Z; evidence: `cabal test keiro-pgmq-test` reported `9 examples, 0 failures`; `cabal build all` and `cabal test keiro-test` also passed.
 
 Milestone 3 — validated configuration surface:
 
@@ -142,6 +142,7 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original purpose.
 
 - Milestone 1 completed on 2026-06-13T13:51:14Z. `keiro-test-support` now exposes a reusable template-migration hook and fresh database helper, and `keiro-pgmq-test` uses them so PGMQ schema installation happens once on the suite template while every example runs against its own clone. The shared fixture remains compatible with `keiro-test`.
+- Milestone 2 completed on 2026-06-13T13:55:21Z. `JobCodec` now distinguishes malformed payloads from future-version payloads, `keiroJobCodec` detects version-ahead envelopes before migration, and the worker path retries future payloads with the policy's default retry delay. The single `keiro-dsl` direct codec construction was migrated to `mkJobCodec`, and pure tests cover the new codec behavior.
 
 
 ## Context and Orientation

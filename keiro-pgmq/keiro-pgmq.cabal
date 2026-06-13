@@ -76,6 +76,7 @@ test-suite keiro-pgmq-test
     , hasql               >=1.10
     , hasql-pool          >=1.2
     , hspec               >=2.11
+    , keiro-core
     , keiro-pgmq
     , keiro-test-support
     , pgmq-core           >=0.3  && <0.4

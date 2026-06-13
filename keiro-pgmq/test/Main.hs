@@ -2,6 +2,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -18,9 +19,12 @@ handler (or an undecodable payload) routes it to the dead-letter queue.
 module Main (main) where
 
 import Control.Exception (bracket)
-import Data.Aeson (FromJSON, ToJSON, Value (String))
+import Data.Aeson (FromJSON, ToJSON, Value (String), object, parseJSON, toJSON, (.=))
+import Data.Aeson.Types (parseEither)
 import Data.Int (Int64)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
 import GHC.Generics (Generic)
@@ -28,6 +32,7 @@ import Hasql.Connection.Settings qualified as Conn
 import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool.Config
+import Keiro.Codec qualified as CoreCodec
 import Keiro.PGMQ
 import Keiro.Test.Postgres qualified as Postgres
 import Pgmq.Effectful (MessageBody (..), Pgmq, QueueMetrics (..), SendMessage (..))
@@ -93,6 +98,33 @@ mkJob name =
         , jobPolicy = defaultRetryPolicy
         }
 
+versionedPingCodec :: CoreCodec.Codec Ping
+versionedPingCodec =
+    CoreCodec.Codec
+        { eventTypes = "ping" :| []
+        , eventType = \_ -> "ping"
+        , schemaVersion = 2
+        , encode = toJSON
+        , decode = \value ->
+            case parseEither parseJSON value of
+                Left err -> Left (Text.pack err)
+                Right ping -> Right ping
+        , upcasters =
+            [
+                ( 1
+                , \value ->
+                    case value of
+                        String msg ->
+                            Right $
+                                object
+                                    [ "message" .= msg
+                                    , "count" .= (1 :: Int)
+                                    ]
+                        _ -> Left "expected v1 string payload"
+                )
+            ]
+        }
+
 -- | Total number of messages currently on a queue (visible or not).
 queueLen :: QueueName -> Eff Stack Int64
 queueLen q = do
@@ -105,6 +137,35 @@ spec = do
         let codec = aesonJobCodec :: JobCodec Ping
             sample = Ping "hello" 7
         decodeJob codec (encodeJob codec sample) `shouldBe` Right sample
+
+    it "round-trips a payload through keiroJobCodec's versioned envelope" $ \_connStr -> do
+        let codec = keiroJobCodec versionedPingCodec
+            sample = Ping "hello" 7
+        decodeJob codec (encodeJob codec sample) `shouldBe` Right sample
+
+    it "decodes old keiroJobCodec payloads through the upcaster chain" $ \_connStr -> do
+        let codec = keiroJobCodec versionedPingCodec
+            v1Envelope =
+                object
+                    [ "v" .= (1 :: Int)
+                    , "data" .= String "legacy"
+                    ]
+        decodeJob codec v1Envelope `shouldBe` Right (Ping "legacy" 1)
+
+    it "classifies future keiroJobCodec payloads as retryable" $ \_connStr -> do
+        let codec = keiroJobCodec versionedPingCodec
+            futureEnvelope =
+                object
+                    [ "v" .= (99 :: Int)
+                    , "data" .= object []
+                    ]
+        decodeJob codec futureEnvelope `shouldBe` Left (JobPayloadFromFuture 99 2)
+
+    it "classifies malformed keiroJobCodec envelopes as malformed payloads" $ \_connStr -> do
+        let codec = keiroJobCodec versionedPingCodec
+        decodeJob codec (String "not an envelope") `shouldSatisfy` \case
+            Left (JobPayloadMalformed _) -> True
+            _ -> False
 
     it "Done deletes the message" $ \connStr -> do
         let job = mkJob "keiro_pgmq_test.done"
