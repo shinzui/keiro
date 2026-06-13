@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -6,29 +7,29 @@
 
 {- | End-to-end integration test for @keiro-pgmq@.
 
-Stands up a throwaway PostgreSQL with @ephemeral-pg@, installs the PGMQ schema
-with @pgmq-migration@ (no Postgres extension required), then drives the package's
-public API against it: 'enqueue' puts work on a queue, 'runJobOnce' drains it,
-and we read the queue back through @pgmq-effectful@'s 'queueMetrics' to prove
-that a @Done@ handler deletes the message, a @Retry@ handler leaves it, and a
-@Dead@ handler (or an undecodable payload) routes it to the dead-letter queue.
+Uses @keiro-test-support@ to start one suite-level PostgreSQL server, installs
+the PGMQ schema into the migrated template database, then gives every example a
+fresh cloned database. The tests drive the package's public API against that
+isolated database: 'enqueue' puts work on a queue, 'runJobOnce' drains it, and
+we read the queue back through @pgmq-effectful@'s 'queueMetrics' to prove that a
+@Done@ handler deletes the message, a @Retry@ handler leaves it, and a @Dead@
+handler (or an undecodable payload) routes it to the dead-letter queue.
 -}
 module Main (main) where
 
-import Control.Exception (bracket, finally)
+import Control.Exception (bracket)
 import Data.Aeson (FromJSON, ToJSON, Value (String))
 import Data.Int (Int64)
 import Data.Text (Text)
-import Data.Text qualified as Text
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
-import EphemeralPg qualified as Pg
 import GHC.Generics (Generic)
 import Hasql.Connection.Settings qualified as Conn
 import Hasql.Pool (Pool)
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool.Config
 import Keiro.PGMQ
+import Keiro.Test.Postgres qualified as Postgres
 import Pgmq.Effectful (MessageBody (..), Pgmq, QueueMetrics (..), SendMessage (..))
 import Pgmq.Effectful qualified as Pgmq
 import Pgmq.Migration qualified as Migration
@@ -48,14 +49,11 @@ data Ping = Ping
 type Stack = '[Pgmq, Tracing, Error PgmqRuntimeError, IOE]
 
 main :: IO ()
-main = do
-    started <- Pg.startCached Pg.defaultConfig Pg.defaultCacheConfig
-    case started of
-        Left err -> fail (Text.unpack (Pg.renderStartError err))
-        Right server -> do
-            let connStr = Pg.connectionString server
-            installPgmq connStr
-            hspec (spec connStr) `finally` Pg.stop server
+main =
+    Postgres.withMigratedSuiteWith installPgmq \fixture ->
+        hspec $
+            describe "Keiro.PGMQ" $
+                around (Postgres.withFreshDatabase fixture) spec
 
 -- | Install the PGMQ schema into the ephemeral database via @pgmq-migration@.
 installPgmq :: Text -> IO ()
@@ -101,14 +99,14 @@ queueLen q = do
     metrics <- Pgmq.queueMetrics q
     pure metrics.queueLength
 
-spec :: Text -> Spec
-spec connStr = describe "Keiro.PGMQ" $ do
-    it "round-trips a payload through aesonJobCodec" $ do
+spec :: SpecWith Text
+spec = do
+    it "round-trips a payload through aesonJobCodec" $ \_connStr -> do
         let codec = aesonJobCodec :: JobCodec Ping
             sample = Ping "hello" 7
         decodeJob codec (encodeJob codec sample) `shouldBe` Right sample
 
-    it "Done deletes the message" $ do
+    it "Done deletes the message" $ \connStr -> do
         let job = mkJob "keiro_pgmq_test.done"
         runDb connStr $ do
             ensureJobQueue job
@@ -117,7 +115,7 @@ spec connStr = describe "Keiro.PGMQ" $ do
         len <- runDb connStr (queueLen job.jobQueue.physicalName)
         len `shouldBe` 0
 
-    it "Retry redelivers the message" $ do
+    it "Retry redelivers the message" $ \connStr -> do
         let job = mkJob "keiro_pgmq_test.retry"
         runDb connStr $ do
             ensureJobQueue job
@@ -126,7 +124,7 @@ spec connStr = describe "Keiro.PGMQ" $ do
         len <- runDb connStr (queueLen job.jobQueue.physicalName)
         len `shouldBe` 1
 
-    it "Dead routes the message to the DLQ" $ do
+    it "Dead routes the message to the DLQ" $ \connStr -> do
         let job = mkJob "keiro_pgmq_test.dead"
         runDb connStr $ do
             ensureJobQueue job
@@ -137,7 +135,7 @@ spec connStr = describe "Keiro.PGMQ" $ do
         mainLen `shouldBe` 0
         dlqLen `shouldBe` 1
 
-    it "undecodable payload routes to the DLQ" $ do
+    it "undecodable payload routes to the DLQ" $ \connStr -> do
         let job = mkJob "keiro_pgmq_test.bad"
         runDb connStr $ do
             ensureJobQueue job

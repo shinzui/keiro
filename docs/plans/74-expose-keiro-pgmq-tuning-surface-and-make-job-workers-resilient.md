@@ -33,12 +33,12 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 
 Milestone 1 — test harness on keiro-test-support:
 
-- [ ] Make `runSqlOn` in `keiro-test-support/src/Keiro/Test/Postgres.hs` exception-safe with `bracket`.
-- [ ] Replace the partial `error` in `parseConnString` with an `IO`-based failure carrying the connection string and parser error.
-- [ ] Add `withMigratedSuiteWith :: (Text -> IO ()) -> (Fixture -> IO a) -> IO a` (extra template-migration hook) and re-express `withMigratedSuite` through it.
-- [ ] Export `withFreshDatabase` from `Keiro.Test.Postgres`.
-- [ ] Add `keiro-test-support` to the `keiro-pgmq-test` build-depends and restructure `keiro-pgmq/test/Main.hs` onto `withMigratedSuiteWith` + `around (withFreshDatabase fixture)` (pgmq schema applied to the template via the hook).
-- [ ] All five existing examples pass on isolated databases; `cabal test keiro-test` still passes.
+- [x] Make `runSqlOn` in `keiro-test-support/src/Keiro/Test/Postgres.hs` exception-safe with `bracket`. Completed 2026-06-13T13:51:14Z.
+- [x] Replace the partial `error` in `parseConnString` with an `IO`-based failure carrying the connection string and parser error. Completed 2026-06-13T13:51:14Z.
+- [x] Add `withMigratedSuiteWith :: (Text -> IO ()) -> (Fixture -> IO a) -> IO a` (extra template-migration hook) and re-express `withMigratedSuite` through it. Completed 2026-06-13T13:51:14Z.
+- [x] Export `withFreshDatabase` from `Keiro.Test.Postgres`. Completed 2026-06-13T13:51:14Z.
+- [x] Add `keiro-test-support` to the `keiro-pgmq-test` build-depends and restructure `keiro-pgmq/test/Main.hs` onto `withMigratedSuiteWith` + `around (withFreshDatabase fixture)` (pgmq schema applied to the template via the hook). Completed 2026-06-13T13:51:14Z.
+- [x] All five existing examples pass on isolated databases; `cabal test keiro-test` still passes. Completed 2026-06-13T13:51:14Z; evidence: `cabal build keiro-pgmq keiro-test-support`, `cabal test keiro-pgmq-test` (`5 examples, 0 failures`), and `cabal test keiro-test` (`158 examples, 0 failures`) all passed.
 
 Milestone 2 — structured decode errors and version-ahead retry:
 
@@ -141,7 +141,7 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- Milestone 1 completed on 2026-06-13T13:51:14Z. `keiro-test-support` now exposes a reusable template-migration hook and fresh database helper, and `keiro-pgmq-test` uses them so PGMQ schema installation happens once on the suite template while every example runs against its own clone. The shared fixture remains compatible with `keiro-test`.
 
 
 ## Context and Orientation

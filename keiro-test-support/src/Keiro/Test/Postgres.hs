@@ -17,7 +17,7 @@ Usage from @hspec@:
 @
 main :: IO ()
 main =
-  'withMigratedSuite' \\fixture ->
+  'withMigratedSuiteWith' installExtraSchema \\fixture ->
     hspec $
       describe "..." $ around ('withFreshStore' fixture) $ do
         it "..." $ \\store -> ...
@@ -26,6 +26,8 @@ main =
 module Keiro.Test.Postgres (
     Fixture,
     withMigratedSuite,
+    withMigratedSuiteWith,
+    withFreshDatabase,
     withFreshStore,
     withFreshStores2,
 )
@@ -72,7 +74,15 @@ Kiroku event-store schema and Keiro framework schema to it once, then run
 are applied here against the template before any example clones it.
 -}
 withMigratedSuite :: (Fixture -> IO a) -> IO a
-withMigratedSuite action = do
+withMigratedSuite = withMigratedSuiteWith \_ -> pure ()
+
+{- | Like 'withMigratedSuite', but runs an extra migration hook against the
+template database after the Kiroku and Keiro migrations and before any example
+database is cloned. Use this for suites that need additional schema, such as
+PGMQ tables, in every fresh database.
+-}
+withMigratedSuiteWith :: (Text -> IO ()) -> (Fixture -> IO a) -> IO a
+withMigratedSuiteWith extraTemplateMigration action = do
     started <- Pg.startCached Pg.defaultConfig Pg.defaultCacheConfig
     case started of
         Left err -> fail (Text.unpack (Pg.renderStartError err))
@@ -85,10 +95,12 @@ withMigratedSuite action = do
     setup server = do
         counter <- newTVarIO 0
         runSql server ("CREATE DATABASE " <> quoteIdentifier templateDbName)
+        let templateConnStr = connectionStringFor server templateDbName
         -- Apply migrations through short-lived codd connections, all of which are
         -- released before any clone, so the template has no active sessions when
         -- PostgreSQL copies it.
-        migrateTemplate (connectionStringFor server templateDbName)
+        migrateTemplate templateConnStr
+        extraTemplateMigration templateConnStr
         pure (Fixture server templateDbName counter)
 
 {- | Clone a fresh, empty, migrated database from the template, open a
@@ -136,32 +148,40 @@ withFreshDatabase fixture action =
             "DROP DATABASE IF EXISTS " <> quoteIdentifier dbName <> " WITH (FORCE)"
 
 migrateTemplate :: Text -> IO ()
-migrateTemplate connStr =
-    () <$ runAllKeiroMigrations (templateCoddSettings connStr) (secondsToDiffTime 5) LaxCheck
+migrateTemplate connStr = do
+    settings <- templateCoddSettings connStr
+    () <$ runAllKeiroMigrations settings (secondsToDiffTime 5) LaxCheck
 
 {- | Codd settings for the template database. Kiroku and Keiro migrations both
 target the @kiroku@ schema, matching the default search path configured by
 'Store.defaultConnectionSettings'. 'LaxCheck' is used because the template
 keeps no checked-in expected-schema representation.
 -}
-templateCoddSettings :: Text -> CoddSettings
-templateCoddSettings connStr =
-    CoddSettings
-        { migsConnString = parseConnString connStr
-        , sqlMigrations = []
-        , onDiskReps = Right (DbRep Null Map.empty Map.empty)
-        , namespacesToCheck = IncludeSchemas [SqlSchema "kiroku"]
-        , extraRolesToCheck = []
-        , retryPolicy = singleTryPolicy
-        , txnIsolationLvl = DbDefault
-        , schemaAlgoOpts = SchemaAlgo False False False
-        }
+templateCoddSettings :: Text -> IO CoddSettings
+templateCoddSettings connStr = do
+    migsConnString <- parseConnString connStr
+    pure
+        CoddSettings
+            { migsConnString
+            , sqlMigrations = []
+            , onDiskReps = Right (DbRep Null Map.empty Map.empty)
+            , namespacesToCheck = IncludeSchemas [SqlSchema "kiroku"]
+            , extraRolesToCheck = []
+            , retryPolicy = singleTryPolicy
+            , txnIsolationLvl = DbDefault
+            , schemaAlgoOpts = SchemaAlgo False False False
+            }
 
-parseConnString :: Text -> ConnectionString
+parseConnString :: Text -> IO ConnectionString
 parseConnString connStr =
     case parseOnly (connStringParser <* endOfInput) connStr of
-        Left err -> error ("Could not parse ephemeral PostgreSQL connection string for codd: " <> err)
-        Right parsed -> parsed
+        Left err ->
+            fail $
+                "Keiro.Test.Postgres: could not parse ephemeral PostgreSQL connection string "
+                    <> show connStr
+                    <> ": "
+                    <> err
+        Right parsed -> pure parsed
 
 {- | Build a libpq connection string for a named database on the fixture's
 server, addressing it over the server's Unix socket.
@@ -182,16 +202,16 @@ runSql :: Pg.Database -> Text -> IO ()
 runSql db = runSqlOn (Pg.connectionString db)
 
 runSqlOn :: Text -> Text -> IO ()
-runSqlOn connStr sql = do
-    pool <-
+runSqlOn connStr sql =
+    bracket acquire Pool.release \pool ->
+        Pool.use pool (Session.script sql) >>= either (fail . show) pure
+  where
+    acquire =
         Pool.acquire $
             Pool.Config.settings
                 [ Pool.Config.staticConnectionSettings (Conn.connectionString connStr)
                 , Pool.Config.size 1
                 ]
-    result <- Pool.use pool (Session.script sql)
-    Pool.release pool
-    either (fail . show) pure result
 
 quoteIdentifier :: Text -> Text
 quoteIdentifier ident =

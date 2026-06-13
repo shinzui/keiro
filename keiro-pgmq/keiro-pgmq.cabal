@@ -70,16 +70,16 @@ test-suite keiro-pgmq-test
   main-is:        Main.hs
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , aeson           >=2.2
-    , base            >=4.21 && <5
-    , effectful-core  >=2.6
-    , ephemeral-pg    >=0.2
-    , hasql           >=1.10
-    , hasql-pool      >=1.2
-    , hspec           >=2.11
+    , aeson               >=2.2
+    , base                >=4.21 && <5
+    , effectful-core      >=2.6
+    , hasql               >=1.10
+    , hasql-pool          >=1.2
+    , hspec               >=2.11
     , keiro-pgmq
-    , pgmq-core       >=0.3  && <0.4
-    , pgmq-effectful  >=0.3  && <0.4
-    , pgmq-migration  >=0.3  && <0.4
-    , shibuya-core    >=0.7  && <0.8
-    , text            >=2.1
+    , keiro-test-support
+    , pgmq-core           >=0.3  && <0.4
+    , pgmq-effectful      >=0.3  && <0.4
+    , pgmq-migration      >=0.3  && <0.4
+    , shibuya-core        >=0.7  && <0.8
+    , text                >=2.1
