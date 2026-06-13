@@ -27,7 +27,8 @@ schema applied in production:
 - Production: run `keiro-migrate` before starting application processes.
 - Tests: apply the same migrations to a template database once per suite and
   clone it per example. The `keiro-test-support` `withMigratedSuite` fixture
-  does this with `runAllKeiroMigrations`.
+  does this with `runAllKeiroMigrationsNoCheck`; the dedicated
+  `keiro-migrations-test` suite performs strict checked-in schema verification.
 
 codd records which migrations have run, provides a reviewed forward history, and
 verifies database shape — guarantees an in-application `CREATE TABLE IF NOT
@@ -97,3 +98,30 @@ For local development, an already-initialized database can usually run
 `keiro-migrate` successfully because Keiro's bootstrap SQL uses
 `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS`. After codd records
 the migration, its ledger is the source of truth.
+
+## Updating The Expected Schema
+
+The repository stores codd's expected schema files under
+`keiro-migrations/expected-schema`. These files are the reviewed snapshot used
+by `cabal test keiro-migrations-test` to prove the migrated database still
+matches the schema Keiro intends to ship.
+
+When a real schema change is required, add a new forward SQL migration under
+`keiro-migrations/sql-migrations/`. Then regenerate the expected schema from a
+fresh ephemeral PostgreSQL database:
+
+```bash
+cabal run keiro-write-expected-schema
+```
+
+Review the resulting diff before committing:
+
+```bash
+git diff -- keiro-migrations/sql-migrations keiro-migrations/expected-schema
+cabal test keiro-migrations-test
+```
+
+Commit the SQL migration and `keiro-migrations/expected-schema` changes
+together. Ordinary fixture-based suites intentionally skip expected-schema
+comparison during setup so they remain quiet and fast; `keiro-migrations-test`
+is the strict schema drift gate.

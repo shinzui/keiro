@@ -60,6 +60,20 @@ executable keiro-migrate
     , keiro-migrations
     , time
 
+executable keiro-write-expected-schema
+  import:         common
+  main-is:        WriteExpectedSchema.hs
+  hs-source-dirs: app
+  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+    , attoparsec
+    , base
+    , codd
+    , ephemeral-pg      >=0.2
+    , keiro-migrations
+    , text
+    , time
+
 test-suite keiro-migrations-test
   import:         common
   type:           exitcode-stdio-1.0
@@ -73,6 +87,7 @@ test-suite keiro-migrations-test
     , codd
     , containers
     , contravariant-extras
+    , directory
     , ephemeral-pg             >=0.2
     , generic-lens             >=2.2
     , hasql                    >=1.10

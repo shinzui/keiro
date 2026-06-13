@@ -1,0 +1,53 @@
+{
+    "accessmethod": "heap",
+    "amoptions": null,
+    "columns_in_order": [
+        "source",
+        "dedupe_key",
+        "message_id",
+        "source_event_id",
+        "source_global_position",
+        "destination",
+        "event_type",
+        "schema_version",
+        "content_type",
+        "schema_registry",
+        "schema_subject",
+        "schema_version_ref",
+        "schema_id",
+        "schema_fingerprint",
+        "causation_id",
+        "correlation_id",
+        "traceparent",
+        "tracestate",
+        "kafka_topic",
+        "kafka_partition",
+        "kafka_offset",
+        "payload_bytes",
+        "attributes",
+        "occurred_at",
+        "status",
+        "received_at",
+        "completed_at",
+        "failed_at",
+        "last_error"
+    ],
+    "compositetype": null,
+    "forcerowsecurity": false,
+    "kind": "r",
+    "owner": "shinzui",
+    "partition": false,
+    "persistence": "p",
+    "privileges": {
+        "shinzui": [
+            [
+                "damxrtDw",
+                "shinzui"
+            ]
+        ]
+    },
+    "replident": "d",
+    "rowsecurity": false,
+    "rowtype": "keiro_inbox",
+    "shared": false
+}

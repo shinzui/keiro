@@ -1,0 +1,32 @@
+{
+    "accessmethod": "heap",
+    "amoptions": null,
+    "columns_in_order": [
+        "awakeable_id",
+        "owner_workflow_name",
+        "owner_workflow_id",
+        "status",
+        "payload",
+        "created_at",
+        "updated_at",
+        "completed_at"
+    ],
+    "compositetype": null,
+    "forcerowsecurity": false,
+    "kind": "r",
+    "owner": "shinzui",
+    "partition": false,
+    "persistence": "p",
+    "privileges": {
+        "shinzui": [
+            [
+                "damxrtDw",
+                "shinzui"
+            ]
+        ]
+    },
+    "replident": "d",
+    "rowsecurity": false,
+    "rowtype": "keiro_awakeables",
+    "shared": false
+}

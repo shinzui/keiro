@@ -1,0 +1,21 @@
+{
+    "accessmethod": "btree",
+    "amoptions": null,
+    "compositetype": null,
+    "definition": "CREATE UNIQUE INDEX keiro_workflow_children_pkey ON kiroku.keiro_workflow_children USING btree (child_id, child_name)",
+    "exclusion": false,
+    "forcerowsecurity": false,
+    "immediate": true,
+    "kind": "i",
+    "nullsnotdistinct": false,
+    "owner": "shinzui",
+    "partition": false,
+    "persistence": "p",
+    "primary": true,
+    "replident": "n",
+    "rowsecurity": false,
+    "rowtype": null,
+    "shared": false,
+    "unique": true,
+    "valid": true
+}

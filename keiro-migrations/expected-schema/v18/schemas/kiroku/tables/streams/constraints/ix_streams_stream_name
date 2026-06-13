@@ -1,0 +1,16 @@
+{
+    "deferrable": false,
+    "deferred": false,
+    "definition": "UNIQUE (stream_name)",
+    "fk_deltype": " ",
+    "fk_matchtype": " ",
+    "fk_ref_table": null,
+    "fk_updtype": " ",
+    "inhcount": 0,
+    "local": true,
+    "noinherit": true,
+    "parent_constraint": null,
+    "supporting_index": "ix_streams_stream_name",
+    "type": "u",
+    "validated": true
+}

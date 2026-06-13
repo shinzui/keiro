@@ -33,15 +33,12 @@ module Keiro.Test.Postgres (
 )
 where
 
-import Codd (CoddSettings (..), VerifySchemas (LaxCheck))
+import Codd (CoddSettings (..))
 import Codd.Parsing (connStringParser)
-import Codd.Representations.Types (DbRep (..))
 import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
 import Control.Concurrent.STM (TVar, atomically, newTVarIO, stateTVar)
 import Control.Exception (bracket, onException)
-import Data.Aeson (Value (Null))
 import Data.Attoparsec.Text (endOfInput, parseOnly)
-import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Time (secondsToDiffTime)
@@ -50,7 +47,7 @@ import Hasql.Connection.Settings qualified as Conn
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool.Config
 import Hasql.Session qualified as Session
-import Keiro.Migrations (runAllKeiroMigrations)
+import Keiro.Migrations (runAllKeiroMigrationsNoCheck)
 import Kiroku.Store qualified as Store
 
 {- | A running, migrated suite fixture: one cached PostgreSQL server owning a
@@ -150,12 +147,13 @@ withFreshDatabase fixture action =
 migrateTemplate :: Text -> IO ()
 migrateTemplate connStr = do
     settings <- templateCoddSettings connStr
-    () <$ runAllKeiroMigrations settings (secondsToDiffTime 5) LaxCheck
+    runAllKeiroMigrationsNoCheck settings (secondsToDiffTime 5)
 
 {- | Codd settings for the template database. Kiroku and Keiro migrations both
 target the @kiroku@ schema, matching the default search path configured by
-'Store.defaultConnectionSettings'. 'LaxCheck' is used because the template
-keeps no checked-in expected-schema representation.
+'Store.defaultConnectionSettings'. Template setup intentionally skips schema
+verification; @keiro-migrations-test@ owns checked-in expected-schema drift
+checking.
 -}
 templateCoddSettings :: Text -> IO CoddSettings
 templateCoddSettings connStr = do
@@ -164,7 +162,7 @@ templateCoddSettings connStr = do
         CoddSettings
             { migsConnString
             , sqlMigrations = []
-            , onDiskReps = Right (DbRep Null Map.empty Map.empty)
+            , onDiskReps = Left "keiro-migrations/expected-schema"
             , namespacesToCheck = IncludeSchemas [SqlSchema "kiroku"]
             , extraRolesToCheck = []
             , retryPolicy = singleTryPolicy

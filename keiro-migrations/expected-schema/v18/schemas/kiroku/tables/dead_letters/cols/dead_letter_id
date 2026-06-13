@@ -1,0 +1,13 @@
+{
+    "collation": null,
+    "collation_nsp": null,
+    "default": "nextval('kiroku.dead_letters_dead_letter_id_seq'::regclass)",
+    "generated": "",
+    "hasdefault": true,
+    "identity": "",
+    "inhcount": 0,
+    "local": true,
+    "notnull": true,
+    "privileges": null,
+    "type": "bigint"
+}

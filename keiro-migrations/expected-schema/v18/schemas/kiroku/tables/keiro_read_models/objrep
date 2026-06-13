@@ -1,0 +1,30 @@
+{
+    "accessmethod": "heap",
+    "amoptions": null,
+    "columns_in_order": [
+        "name",
+        "version",
+        "shape_hash",
+        "last_built_at",
+        "status",
+        "updated_at"
+    ],
+    "compositetype": null,
+    "forcerowsecurity": false,
+    "kind": "r",
+    "owner": "shinzui",
+    "partition": false,
+    "persistence": "p",
+    "privileges": {
+        "shinzui": [
+            [
+                "damxrtDw",
+                "shinzui"
+            ]
+        ]
+    },
+    "replident": "d",
+    "rowsecurity": false,
+    "rowtype": "keiro_read_models",
+    "shared": false
+}

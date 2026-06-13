@@ -33,3 +33,22 @@ withStore
     & #schemaInitialization .~ SkipSchemaInitialization)
   app
 ```
+
+## Updating expected schema
+
+Keiro checks migration drift with codd's on-disk expected-schema representation
+in `keiro-migrations/expected-schema`. When a legitimate framework schema
+change is needed, add a new forward SQL file under
+`keiro-migrations/sql-migrations/`, regenerate the representation from a fresh
+ephemeral database, inspect the git diff, and commit the SQL migration and
+expected-schema files together:
+
+```bash
+cabal run keiro-write-expected-schema
+git diff -- keiro-migrations/sql-migrations keiro-migrations/expected-schema
+cabal test keiro-migrations-test
+```
+
+Fixture-only test suites use `runAllKeiroMigrationsNoCheck` by design: they only
+need a freshly migrated database. `keiro-migrations-test` is the canonical drift
+gate and runs a strict comparison against the checked-in expected schema.

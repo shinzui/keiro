@@ -1,0 +1,21 @@
+{
+    "accessmethod": "btree",
+    "amoptions": null,
+    "compositetype": null,
+    "definition": "CREATE UNIQUE INDEX subscriptions_pkey ON kiroku.subscriptions USING btree (subscription_id)",
+    "exclusion": false,
+    "forcerowsecurity": false,
+    "immediate": true,
+    "kind": "i",
+    "nullsnotdistinct": false,
+    "owner": "shinzui",
+    "partition": false,
+    "persistence": "p",
+    "primary": true,
+    "replident": "n",
+    "rowsecurity": false,
+    "rowtype": null,
+    "shared": false,
+    "unique": true,
+    "valid": true
+}

@@ -1,0 +1,14 @@
+{
+    "associated_constraint": null,
+    "deferrable": false,
+    "definition": "CREATE TRIGGER no_truncate_events BEFORE TRUNCATE ON kiroku.events FOR EACH STATEMENT EXECUTE FUNCTION kiroku.protect_truncation()",
+    "enabled": "O",
+    "function": "protect_truncation;",
+    "initdeferred": false,
+    "nargs": 0,
+    "newtblname": null,
+    "oldtblname": null,
+    "supporting_index": null,
+    "table_ref": null,
+    "type": 34
+}

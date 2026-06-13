@@ -1,0 +1,30 @@
+{
+    "accessmethod": "heap",
+    "amoptions": null,
+    "columns_in_order": [
+        "stream_id",
+        "stream_name",
+        "category",
+        "stream_version",
+        "created_at",
+        "deleted_at"
+    ],
+    "compositetype": null,
+    "forcerowsecurity": false,
+    "kind": "r",
+    "owner": "shinzui",
+    "partition": false,
+    "persistence": "p",
+    "privileges": {
+        "shinzui": [
+            [
+                "damxrtDw",
+                "shinzui"
+            ]
+        ]
+    },
+    "replident": "d",
+    "rowsecurity": false,
+    "rowtype": "streams",
+    "shared": false
+}

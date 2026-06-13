@@ -1,0 +1,33 @@
+{
+    "argmodes": null,
+    "argnames": null,
+    "args": "",
+    "config": null,
+    "definition": "\nBEGIN\n    RAISE EXCEPTION 'Immutable table: % cannot be updated', TG_TABLE_NAME;\nEND;\n",
+    "kind": "f",
+    "lang": "plpgsql",
+    "leakproof": false,
+    "nargs": 0,
+    "nargs_defaults": 0,
+    "owner": "shinzui",
+    "parallel": "u",
+    "privileges": {
+        "public": [
+            [
+                "X",
+                "shinzui"
+            ]
+        ],
+        "shinzui": [
+            [
+                "X",
+                "shinzui"
+            ]
+        ]
+    },
+    "return_type": "trigger",
+    "returns_set": false,
+    "security_definer": false,
+    "strict": false,
+    "volatile": "v"
+}

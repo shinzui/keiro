@@ -1,0 +1,34 @@
+{
+    "accessmethod": "heap",
+    "amoptions": null,
+    "columns_in_order": [
+        "child_id",
+        "child_name",
+        "parent_id",
+        "parent_name",
+        "await_step",
+        "status",
+        "result",
+        "created_at",
+        "updated_at",
+        "completed_at"
+    ],
+    "compositetype": null,
+    "forcerowsecurity": false,
+    "kind": "r",
+    "owner": "shinzui",
+    "partition": false,
+    "persistence": "p",
+    "privileges": {
+        "shinzui": [
+            [
+                "damxrtDw",
+                "shinzui"
+            ]
+        ]
+    },
+    "replident": "d",
+    "rowsecurity": false,
+    "rowtype": "keiro_workflow_children",
+    "shared": false
+}

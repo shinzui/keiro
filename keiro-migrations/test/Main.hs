@@ -3,14 +3,12 @@ module Main (
 )
 where
 
-import Codd (CoddSettings (..), VerifySchemas (LaxCheck))
+import Codd (ApplyResult (..), CoddSettings (..), VerifySchemas (StrictCheck))
 import Codd.Parsing (connStringParser)
-import Codd.Representations.Types (DbRep (..))
 import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
 import Contravariant.Extras (contrazip3)
-import Data.Aeson (Value (Null))
+import Control.Monad (filterM)
 import Data.Attoparsec.Text (endOfInput, parseOnly)
-import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Time (secondsToDiffTime)
 import EphemeralPg qualified as Pg
@@ -21,23 +19,24 @@ import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool.Config
 import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
-import Keiro.Migrations (runAllKeiroMigrations)
+import Keiro.Migrations (runAllKeiroMigrations, runAllKeiroMigrationsNoCheck)
+import System.Directory (doesDirectoryExist)
 import Test.Hspec
 
 main :: IO ()
 main =
     hspec $
-        describe "Keiro codd migrations" $
+        describe "Keiro codd migrations" $ do
             it "applies Kiroku and Keiro migrations to a fresh database and is repeatable" $ do
                 result <- Pg.withCached $ \db -> do
                     let connStr = Pg.connectionString db
-                        coddSettings = testCoddSettings connStr
+                        coddSettings = testCoddSettings connStr "keiro-migrations/expected-schema"
 
-                    _ <- runAllKeiroMigrations coddSettings (secondsToDiffTime 5) LaxCheck
+                    runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
                     assertTablesExist connStr "kiroku" expectedTables
                     assertTablesAbsent connStr "public" expectedTables
 
-                    _ <- runAllKeiroMigrations coddSettings (secondsToDiffTime 5) LaxCheck
+                    runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
                     assertTablesExist connStr "kiroku" expectedTables
                     assertTablesAbsent connStr "public" expectedTables
                     assertColumnExists connStr "kiroku" "keiro_timers" "last_error"
@@ -45,6 +44,18 @@ main =
                 case result of
                     Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
                     Right () -> pure ()
+
+            it "matches the checked-in expected schema" $ do
+                expectedSchemaDir <- findExpectedSchemaDir
+                result <- Pg.withCached $ \db -> do
+                    let coddSettings = testCoddSettings (Pg.connectionString db) expectedSchemaDir
+                    runAllKeiroMigrations coddSettings (secondsToDiffTime 5) StrictCheck
+
+                case result of
+                    Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
+                    Right (SchemasMatch _) -> pure ()
+                    Right SchemasNotVerified -> expectationFailure "StrictCheck did not verify schemas"
+                    Right (SchemasDiffer _) -> expectationFailure "StrictCheck returned a schema mismatch without throwing"
 
 expectedTables :: [Text]
 expectedTables =
@@ -59,12 +70,12 @@ expectedTables =
     , "subscriptions"
     ]
 
-testCoddSettings :: Text -> CoddSettings
-testCoddSettings connStr =
+testCoddSettings :: Text -> FilePath -> CoddSettings
+testCoddSettings connStr expectedSchemaDir =
     CoddSettings
         { migsConnString = parseConnString connStr
         , sqlMigrations = []
-        , onDiskReps = Right (DbRep Null Map.empty Map.empty)
+        , onDiskReps = Left expectedSchemaDir
         , namespacesToCheck = IncludeSchemas [SqlSchema "kiroku"]
         , extraRolesToCheck = []
         , retryPolicy = singleTryPolicy
@@ -77,6 +88,19 @@ parseConnString connStr =
     case parseOnly (connStringParser <* endOfInput) connStr of
         Left err -> error ("Could not parse ephemeral PostgreSQL connection string for codd: " <> err)
         Right parsed -> parsed
+
+findExpectedSchemaDir :: IO FilePath
+findExpectedSchemaDir = do
+    let candidates =
+            [ "keiro-migrations/expected-schema"
+            , "expected-schema"
+            ]
+    existing <- filterM doesDirectoryExist candidates
+    case existing of
+        dir : _ -> pure dir
+        [] ->
+            expectationFailure "Could not find keiro-migrations/expected-schema"
+                >> pure "keiro-migrations/expected-schema"
 
 assertTablesExist :: Text -> Text -> [Text] -> IO ()
 assertTablesExist connStr schema tables = do
