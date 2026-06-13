@@ -23,6 +23,27 @@ shibuya's @Ingested@/@AckDecision@ or PGMQ's wire types. The package provides:
   * 'jobProcessor' — build a shibuya processor from a 'Job' plus a handler.
   * 'runJobWorkers' — continuous, multi-processor supervised run (the @rei@ cadence).
   * 'runJobOnce' — one-shot drain of up to @n@ messages (the @hospital-capacity@ cadence).
+
+== Delivery and crash semantics
+
+Delivery is at-least-once. A handler must be idempotent because the same message
+can be delivered again after a worker crash, a handler exception, or a visibility
+timeout expiry. Crash redelivery cadence is the active visibility timeout, not
+the 'RetryPolicy' delay; the policy delay applies only to explicit 'Retry' and
+'RetryDefault' outcomes. Every visibility-timeout expiry consumes one PGMQ
+@read_ct@ attempt, and messages whose read count exceeds 'maxRetries' are
+dead-lettered before the handler sees them.
+
+Dead-lettering sends a DLQ row and then deletes the main-queue row, so a crash
+between those two statements can leave the message in both places. 'redriveDlq'
+has the same at-least-once window in the other direction: it sends the preserved
+payload back to the main queue and then deletes the DLQ row.
+
+Known limitation, pending
+docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md:
+a transient database error during 'runJobWorkers' polling can terminate the
+worker's polling loop permanently and silently. Until that upstream plan lands,
+monitor queue depth externally and restart workers on alert.
 -}
 module Keiro.PGMQ.Job (
     -- * Job declaration

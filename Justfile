@@ -46,6 +46,7 @@ haskell-build:
 [group('haskell')]
 haskell-test:
     cabal test keiro-test
+    cabal test keiro-pgmq-test
     cabal test jitsurei-test
     cabal run jitsurei:exe:jitsurei-diagrams -- --check
 

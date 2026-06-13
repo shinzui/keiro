@@ -472,6 +472,9 @@ spec = do
         len <- runDb connStr (queueLen job.jobQueue.physicalName)
         len `shouldBe` 0
 
+    it "runJobWorkers survives a transient database error during polling" $ \_connStr ->
+        pendingWith "blocked on docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md (shibuya ingester supervision + pgmq poll retry)"
+
     it "worker-path retry limit auto-routes to the DLQ before the handler reruns" $ \connStr -> do
         callCount <- newIORef (0 :: Int)
         let job =

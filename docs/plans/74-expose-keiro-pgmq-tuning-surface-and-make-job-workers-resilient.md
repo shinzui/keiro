@@ -86,10 +86,10 @@ Milestone 7 — DLQ consumption and redrive:
 
 Milestone 8 — honest contracts, gated resilience test, and wiring:
 
-- [ ] Write the "Delivery and crash semantics" haddock section in `Keiro.PGMQ.Job` (at-least-once windows, idempotent-handler requirement, DLQ send-then-delete duplicate window, transient-poll-error caveat pending plan 67).
-- [ ] Add the worker-resilience acceptance test (`pg_terminate_backend` mid-poll; worker keeps polling) as `pendingWith` until `docs/plans/67-…` lands; flip to active and reconcile against plan 67's Interfaces section when it does.
-- [ ] Add `cabal test keiro-pgmq-test` to the `haskell-test` recipe in `Justfile`.
-- [ ] Final pass: `cabal build all` and all suites green; update MasterPlan rollup checkboxes.
+- [x] Write the "Delivery and crash semantics" haddock section in `Keiro.PGMQ.Job` (at-least-once windows, idempotent-handler requirement, DLQ send-then-delete duplicate window, transient-poll-error caveat pending plan 67). Completed 2026-06-13T14:22:06Z.
+- [x] Add the worker-resilience acceptance test (`pg_terminate_backend` mid-poll; worker keeps polling) as `pendingWith` until `docs/plans/67-…` lands; flip to active and reconcile against plan 67's Interfaces section when it does. Completed 2026-06-13T14:22:06Z.
+- [x] Add `cabal test keiro-pgmq-test` to the `haskell-test` recipe in `Justfile`. Completed 2026-06-13T14:22:06Z.
+- [x] Final pass: `cabal build all` and all suites green; update MasterPlan rollup checkboxes. Completed 2026-06-13T14:24:13Z; evidence: `cabal build all`, `just haskell-test`, and `cabal test keiro-migrations-test` passed. `keiro-pgmq-test` reported `31 examples, 0 failures, 1 pending` for the plan-67-gated resilience test.
 
 
 ## Surprises & Discoveries
@@ -148,6 +148,7 @@ Compare the result against the original purpose.
 - Milestone 5 completed on 2026-06-13T14:10:39Z. Worker handlers can now opt into `JobContext` to extend a delivery lease and inspect the zero-based attempt number, while existing `jobProcessor` callers keep the old payload-only handler shape. `JobTuning` now reaches the PGMQ adapter on the worker path, and tests cover lease extension, attempt exposure, worker smoke processing, retry-limit DLQ routing, and delayed enqueue visibility.
 - Milestone 6 completed on 2026-06-13T14:16:16Z. `runJobOnceWithContext` now drains directly from PGMQ and returns the number of messages it actually acknowledged, retried, or dead-lettered, while `runJobOnce` remains a compatibility wrapper. The old infinite-stream hang is removed, batch drains work without pre-reading the whole queue, handler exceptions leave messages for visibility-timeout redelivery while later messages continue, and direct-drain retry/DLQ behavior now matches the worker path.
 - Milestone 7 completed on 2026-06-13T14:20:07Z. `Keiro.PGMQ.Dlq` now exposes decoded DLQ inspection, at-least-once redrive back to the main queue, and purge. The module documents the shibuya DLQ envelope, retention expectations, and redrive duplicate window, and the suite covers decoded payload inspection, redrive-and-process, purge, and malformed wrapper preservation.
+- Milestone 8 completed on 2026-06-13T14:24:13Z. `Keiro.PGMQ.Job` now states the at-least-once delivery contract, visibility-timeout crash cadence, DLQ/redrive duplicate windows, idempotency requirement, and current transient-poll limitation. The worker-resilience acceptance test is present but pending on plan 67, `keiro-pgmq-test` is wired into `just haskell-test`, the MasterPlan EP-8 rollup checkboxes are ticked, and the final build/test gate passed.
 
 
 ## Context and Orientation

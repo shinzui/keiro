@@ -108,8 +108,8 @@ Milestone-level rollup across child plans; the authoritative per-step state live
 - [ ] EP-6: signal/child-completion/cancel crash windows closed
 - [ ] EP-7: sleeps fire under an active resume worker; generation-namespaced wake sources
 - [ ] EP-7: patch classification journaled at first run; discovery via instance table; pruning
-- [ ] EP-8: vt/batch/polling exposed; lease-extension handle; `runJobOnce` is a real drain
-- [ ] EP-8: retry-policy validation; future-version payloads retry instead of dead-letter; codec tests
+- [x] EP-8: vt/batch/polling exposed; lease-extension handle; `runJobOnce` is a real drain
+- [x] EP-8: retry-policy validation; future-version payloads retry instead of dead-letter; codec tests
 
 
 ## Surprises & Discoveries
