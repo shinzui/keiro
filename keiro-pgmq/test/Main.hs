@@ -35,7 +35,7 @@ import Hasql.Pool.Config qualified as Pool.Config
 import Keiro.Codec qualified as CoreCodec
 import Keiro.PGMQ
 import Keiro.Test.Postgres qualified as Postgres
-import Pgmq.Effectful (MessageBody (..), Pgmq, QueueMetrics (..), SendMessage (..))
+import Pgmq.Effectful (MessageBody (..), Pgmq, QueueMetrics (..), ReadMessage (..), SendMessage (..))
 import Pgmq.Effectful qualified as Pgmq
 import Pgmq.Migration qualified as Migration
 import Pgmq.Types (QueueName)
@@ -131,6 +131,18 @@ queueLen q = do
     metrics <- Pgmq.queueMetrics q
     pure metrics.queueLength
 
+readOneIsEmpty :: QueueName -> Eff Stack Bool
+readOneIsEmpty q = do
+    messages <-
+        Pgmq.readMessage
+            ReadMessage
+                { queueName = q
+                , delay = 30
+                , batchSize = Just 1
+                , conditional = Nothing
+                }
+    pure (null messages)
+
 spec :: SpecWith Text
 spec = do
     it "round-trips a payload through aesonJobCodec" $ \_connStr -> do
@@ -167,6 +179,26 @@ spec = do
             Left (JobPayloadMalformed _) -> True
             _ -> False
 
+    it "validates retry policies" $ \_connStr -> do
+        mkRetryPolicy 0 (RetryDelay 60) True
+            `shouldBe` Left (NonPositiveMaxRetries 0)
+        mkRetryPolicy 1 (RetryDelay (-1)) True
+            `shouldBe` Left (NegativeRetryDelay (RetryDelay (-1)))
+        mkRetryPolicy 1 (RetryDelay 0) True
+            `shouldBe` Right (RetryPolicy 1 (RetryDelay 0) True)
+
+    it "validates job tuning" $ \_connStr -> do
+        mkJobTuning 0 1 (PollEvery 1)
+            `shouldBe` Left (NonPositiveVisibilityTimeout 0)
+        mkJobTuning 30 0 (PollEvery 1)
+            `shouldBe` Left (NonPositiveBatchSize 0)
+        mkJobTuning 30 1 (PollEvery 0)
+            `shouldBe` Left NonPositivePollInterval
+        mkJobTuning 30 1 (LongPoll 0 100)
+            `shouldBe` Left NonPositivePollInterval
+        mkJobTuning 30 1 (PollEvery 1)
+            `shouldBe` Right defaultJobTuning
+
     it "Done deletes the message" $ \connStr -> do
         let job = mkJob "keiro_pgmq_test.done"
         runDb connStr $ do
@@ -184,6 +216,20 @@ spec = do
             runJobOnce 1 job (\_ -> pure (Retry (RetryDelay 0)))
         len <- runDb connStr (queueLen job.jobQueue.physicalName)
         len `shouldBe` 1
+
+    it "RetryDefault redelivers after the policy default delay" $ \connStr -> do
+        let job =
+                (mkJob "keiro_pgmq_test.retry_default")
+                    { jobPolicy = RetryPolicy 5 (RetryDelay 5) True
+                    }
+        runDb connStr $ do
+            ensureJobQueue job
+            _ <- enqueue job (Ping "again by default" 2)
+            runJobOnce 1 job (\_ -> pure RetryDefault)
+        len <- runDb connStr (queueLen job.jobQueue.physicalName)
+        emptyImmediateRead <- runDb connStr (readOneIsEmpty job.jobQueue.physicalName)
+        len `shouldBe` 1
+        emptyImmediateRead `shouldBe` True
 
     it "Dead routes the message to the DLQ" $ \connStr -> do
         let job = mkJob "keiro_pgmq_test.dead"

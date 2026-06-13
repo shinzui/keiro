@@ -52,11 +52,11 @@ Milestone 2 — structured decode errors and version-ahead retry:
 
 Milestone 3 — validated configuration surface:
 
-- [ ] Add `JobTuning` (+ `JobPolling`), `defaultJobTuning`, and `mkJobTuning :: … -> Either JobTuningConfigError JobTuning` to `keiro-pgmq/src/Keiro/PGMQ/Job.hs`.
-- [ ] Add `mkRetryPolicy :: … -> Either RetryPolicyConfigError RetryPolicy` (`maxRetries >= 1`, delay `>= 0`); document the raw constructor as unvalidated, including the `maxRetries <= 0` dead-letters-everything trap.
-- [ ] Add the `RetryDefault` constructor to `JobOutcome` (consumes `defaultRetryDelay`); fix the `Dead` docstring (archives, not DLQ, when `useDeadLetter = False`).
-- [ ] Clamp `runJobWorkers` inbox size with `max 1` (matching `runJobOnce`) and document.
-- [ ] Validation tests for `mkRetryPolicy` / `mkJobTuning`; behavioral test for `RetryDefault`.
+- [x] Add `JobTuning` (+ `JobPolling`), `defaultJobTuning`, and `mkJobTuning :: … -> Either JobTuningConfigError JobTuning` to `keiro-pgmq/src/Keiro/PGMQ/Job.hs`. Completed 2026-06-13T13:59:29Z.
+- [x] Add `mkRetryPolicy :: … -> Either RetryPolicyConfigError RetryPolicy` (`maxRetries >= 1`, delay `>= 0`); document the raw constructor as unvalidated, including the `maxRetries <= 0` dead-letters-everything trap. Completed 2026-06-13T13:59:29Z.
+- [x] Add the `RetryDefault` constructor to `JobOutcome` (consumes `defaultRetryDelay`); fix the `Dead` docstring (archives, not DLQ, when `useDeadLetter = False`). Completed 2026-06-13T13:59:29Z.
+- [x] Clamp `runJobWorkers` inbox size with `max 1` (matching `runJobOnce`) and document. Completed 2026-06-13T13:59:29Z.
+- [x] Validation tests for `mkRetryPolicy` / `mkJobTuning`; behavioral test for `RetryDefault`. Completed 2026-06-13T13:59:29Z; evidence: `cabal test keiro-pgmq-test` reported `12 examples, 0 failures`; `cabal build all` and `cabal test keiro-test` also passed.
 
 Milestone 4 — collision-free queue naming:
 
@@ -143,6 +143,7 @@ Compare the result against the original purpose.
 
 - Milestone 1 completed on 2026-06-13T13:51:14Z. `keiro-test-support` now exposes a reusable template-migration hook and fresh database helper, and `keiro-pgmq-test` uses them so PGMQ schema installation happens once on the suite template while every example runs against its own clone. The shared fixture remains compatible with `keiro-test`.
 - Milestone 2 completed on 2026-06-13T13:55:21Z. `JobCodec` now distinguishes malformed payloads from future-version payloads, `keiroJobCodec` detects version-ahead envelopes before migration, and the worker path retries future payloads with the policy's default retry delay. The single `keiro-dsl` direct codec construction was migrated to `mkJobCodec`, and pure tests cover the new codec behavior.
+- Milestone 3 completed on 2026-06-13T13:59:29Z. Consumers now have validated smart constructors for retry policies and job tuning, while raw constructors remain available and documented as unvalidated. `RetryDefault` consumes `defaultRetryDelay`, and `runJobWorkers` clamps invalid inbox sizes to at least one.
 
 
 ## Context and Orientation

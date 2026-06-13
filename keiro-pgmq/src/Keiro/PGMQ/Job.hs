@@ -28,8 +28,15 @@ module Keiro.PGMQ.Job (
     JobOutcome (..),
     RetryDelay (..),
     RetryPolicy (..),
+    RetryPolicyConfigError (..),
+    mkRetryPolicy,
     defaultRetryPolicy,
     Job (..),
+    JobPolling (..),
+    JobTuning (..),
+    JobTuningConfigError (..),
+    mkJobTuning,
+    defaultJobTuning,
 
     -- * Producing work
     enqueue,
@@ -69,12 +76,14 @@ import "shibuya-core" Shibuya.Runner.Supervised (runWithMetrics)
 import "shibuya-core" Shibuya.Telemetry.Effect (Tracing)
 import "shibuya-pgmq-adapter" Shibuya.Adapter.Pgmq (
     PgmqAdapterConfig (..),
+    PollingConfig (..),
     defaultConfig,
     directDeadLetter,
     pgmqAdapter,
  )
 import "streamly-core" Streamly.Data.Stream qualified as Stream
 import "text" Data.Text (Text)
+import "time" Data.Time (NominalDiffTime)
 
 -- | What a job handler decides. Never exposes shibuya/PGMQ wire types to the caller.
 data JobOutcome
@@ -82,11 +91,21 @@ data JobOutcome
       Done
     | -- | Leave the message on the queue; redeliver after the delay.
       Retry !RetryDelay
-    | -- | Poison message; route to the dead-letter queue with this reason.
+    | -- | Leave the message on the queue; redeliver after the policy's default retry delay.
+      RetryDefault
+    | -- | Poison message; route to the dead-letter queue when enabled, otherwise archive it, with this reason.
       Dead !Text
     deriving stock (Show)
 
-{- | How a queue retries and dead-letters. 'maxRetries' is the number of
+{- | How a queue retries and dead-letters.
+
+The raw constructor is exported for advanced/manual configuration, but it is
+not validated. Prefer 'mkRetryPolicy': @maxRetries <= 0@ dead-letters every
+message before the handler runs because PGMQ's @read_ct@ is 1 on first delivery
+and the adapter auto-dead-letters when @read_ct > maxRetries@. Negative retry
+delays can create immediate redelivery storms.
+
+'maxRetries' is the number of
 deliveries PGMQ allows before auto-dead-lettering; 'defaultRetryDelay' is a
 convenience default a handler can reach for; 'useDeadLetter' decides whether a
 DLQ is created and routed to at all.
@@ -96,6 +115,24 @@ data RetryPolicy = RetryPolicy
     , defaultRetryDelay :: !RetryDelay
     , useDeadLetter :: !Bool
     }
+    deriving stock (Eq, Show)
+
+data RetryPolicyConfigError
+    = NonPositiveMaxRetries !Int64
+    | NegativeRetryDelay !RetryDelay
+    deriving stock (Eq, Show)
+
+mkRetryPolicy :: Int64 -> RetryDelay -> Bool -> Either RetryPolicyConfigError RetryPolicy
+mkRetryPolicy maxRetries defaultRetryDelay useDeadLetter
+    | maxRetries < 1 = Left (NonPositiveMaxRetries maxRetries)
+    | retryDelaySeconds defaultRetryDelay < 0 = Left (NegativeRetryDelay defaultRetryDelay)
+    | otherwise =
+        Right
+            RetryPolicy
+                { maxRetries
+                , defaultRetryDelay
+                , useDeadLetter
+                }
 
 -- | Five deliveries, a 60-second default retry delay, and a DLQ enabled.
 defaultRetryPolicy :: RetryPolicy
@@ -105,6 +142,59 @@ defaultRetryPolicy =
         , defaultRetryDelay = RetryDelay 60
         , useDeadLetter = True
         }
+
+data JobPolling
+    = -- | Sleep this long between empty polls.
+      PollEvery !NominalDiffTime
+    | -- | Long-poll inside the database: max seconds to wait, then check interval in milliseconds.
+      LongPoll !Int32 !Int32
+    deriving stock (Eq, Show)
+
+{- | How a consumer reads the queue.
+
+The raw constructor is exported but not validated. Prefer 'mkJobTuning' so
+visibility timeouts, batch sizes, and polling intervals are positive.
+-}
+data JobTuning = JobTuning
+    { visibilityTimeout :: !Int32
+    , batchSize :: !Int32
+    , polling :: !JobPolling
+    }
+    deriving stock (Eq, Show)
+
+-- | 30 s visibility timeout, batch of 1, 1 s standard polling.
+defaultJobTuning :: JobTuning
+defaultJobTuning =
+    JobTuning
+        { visibilityTimeout = 30
+        , batchSize = 1
+        , polling = PollEvery 1
+        }
+
+data JobTuningConfigError
+    = NonPositiveVisibilityTimeout !Int32
+    | NonPositiveBatchSize !Int32
+    | NonPositivePollInterval
+    deriving stock (Eq, Show)
+
+mkJobTuning :: Int32 -> Int32 -> JobPolling -> Either JobTuningConfigError JobTuning
+mkJobTuning visibilityTimeout batchSize polling
+    | visibilityTimeout < 1 = Left (NonPositiveVisibilityTimeout visibilityTimeout)
+    | batchSize < 1 = Left (NonPositiveBatchSize batchSize)
+    | not (validPolling polling) = Left NonPositivePollInterval
+    | otherwise = Right JobTuning{visibilityTimeout, batchSize, polling}
+
+validPolling :: JobPolling -> Bool
+validPolling (PollEvery interval) = interval > 0
+validPolling (LongPoll maxPollSeconds pollIntervalMs) =
+    maxPollSeconds > 0 && pollIntervalMs > 0
+
+toPollingConfig :: JobPolling -> PollingConfig
+toPollingConfig (PollEvery interval) = StandardPolling interval
+toPollingConfig (LongPoll maxPollSeconds pollIntervalMs) = LongPolling maxPollSeconds pollIntervalMs
+
+retryDelaySeconds :: RetryDelay -> NominalDiffTime
+retryDelaySeconds (RetryDelay seconds) = seconds
 
 {- | A declarative job: a queue, a payload codec, and a retry policy, named for
 telemetry. Construct one and pair it with a handler of type
@@ -153,10 +243,13 @@ ensureJobQueue job = do
 {- | Build the shibuya PGMQ adapter config from a job's queue and policy: route
 to the DLQ via the adapter's @directDeadLetter@ path when the policy enables it.
 -}
-adapterConfigFor :: Job p -> PgmqAdapterConfig
-adapterConfigFor job =
+adapterConfigFor :: JobTuning -> Job p -> PgmqAdapterConfig
+adapterConfigFor tuning job =
     (defaultConfig job.jobQueue.physicalName)
-        { maxRetries = job.jobPolicy.maxRetries
+        { visibilityTimeout = tuning.visibilityTimeout
+        , batchSize = tuning.batchSize
+        , polling = toPollingConfig tuning.polling
+        , maxRetries = job.jobPolicy.maxRetries
         , deadLetterConfig =
             if job.jobPolicy.useDeadLetter
                 then Just (directDeadLetter job.jobQueue.dlqName True)
@@ -181,6 +274,7 @@ wrapHandler job handle ingested =
   where
     toAck Done = AckOk
     toAck (Retry d) = AckRetry d
+    toAck RetryDefault = AckRetry job.jobPolicy.defaultRetryDelay
     toAck (Dead why) = AckDeadLetter (PoisonPill why)
 
 {- | Build a shibuya processor for a job: a PGMQ adapter configured from the
@@ -193,12 +287,12 @@ jobProcessor ::
     (p -> Eff es JobOutcome) ->
     Eff es (ProcessorId, QueueProcessor es)
 jobProcessor job handle = do
-    adapter <- pgmqAdapter (adapterConfigFor job)
+    adapter <- pgmqAdapter (adapterConfigFor defaultJobTuning job)
     pure (ProcessorId job.jobName, mkProcessor adapter (wrapHandler job handle))
 
 {- | Continuous, multi-processor run (the @rei@ cadence): run a supervised app
 over several processors built with 'jobProcessor'. Returns the app handle; the
-caller decides whether to block on it.
+caller decides whether to block on it. The inbox size is clamped to at least 1.
 -}
 runJobWorkers ::
     (Pgmq :> es, IOE :> es, Tracing :> es) =>
@@ -208,12 +302,12 @@ runJobWorkers ::
     Eff es (Either AppError (AppHandle es))
 runJobWorkers strategy inboxSize procs = do
     ps <- sequence procs
-    runApp strategy inboxSize ps
+    runApp strategy (max 1 inboxSize) ps
 
 {- | One-shot drain of up to @n@ messages (the @hospital-capacity@ cadence):
 build the job's adapter, take @n@ messages from its source stream, and run the
 wrapped handler over each (auto-acking via the returned 'AckDecision'), then
-stop.
+stop. The inbox size used by the underlying runner is clamped to at least 1.
 -}
 runJobOnce ::
     (Pgmq :> es, IOE :> es, Tracing :> es) =>
@@ -222,7 +316,7 @@ runJobOnce ::
     (p -> Eff es JobOutcome) ->
     Eff es ()
 runJobOnce n job handle = do
-    adapter <- pgmqAdapter (adapterConfigFor job)
+    adapter <- pgmqAdapter (adapterConfigFor defaultJobTuning job)
     let limited = adapter{source = Stream.take n adapter.source}
     _ <-
         runWithMetrics

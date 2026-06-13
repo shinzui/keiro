@@ -62,6 +62,7 @@ library
     , shibuya-pgmq-adapter  >=0.7  && <0.8
     , streamly-core         >=0.3
     , text                  >=2.1
+    , time                  >=1.12
 
 test-suite keiro-pgmq-test
   import:         warnings, shared
