@@ -2131,11 +2131,140 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
             now <- getCurrentTime
             Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
-            Right () <- Store.runStoreIO storeHandle (markOutboxSent oid now)
+            Right True <- Store.runStoreIO storeHandle (markOutboxSent oid now)
             Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
             row ^. #status `shouldBe` OutboxSent
             row ^. #publishedAt `shouldSatisfy` isJust
             row ^. #lastError `shouldBe` Nothing
+
+        it "reclaims a row stranded in publishing by a crashed worker" $ \storeHandle -> do
+            let oid = OutboxId outboxUuid1
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
+            now <- getCurrentTime
+            let pastNow = addUTCTime (-3600) now
+            Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
+            Right () <- Store.runStoreIO storeHandle (backdateOutboxUpdatedAt oid pastNow)
+            Right (Just stranded) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+            stranded ^. #status `shouldBe` OutboxPublishing
+            publishedRef <- newIORef (0 :: Int)
+            let publish _ = do
+                    liftIO (modifyIORef' publishedRef (+ 1))
+                    pure PublishSucceeded
+            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+            summary ^. #published `shouldBe` 1
+            published <- readIORef publishedRef
+            published `shouldBe` 1
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+            row ^. #status `shouldBe` OutboxSent
+
+        it "head-of-line traffic unwedges after reclaim" $ \storeHandle -> do
+            let firstId = OutboxId outboxUuid1
+                secondId = OutboxId outboxUuid2
+                first = sampleIntegrationEnvelope & #messageId .~ "stuck-first" & #key .~ Just "same-key"
+                second = sampleIntegrationEnvelope & #messageId .~ "stuck-second" & #key .~ Just "same-key"
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx firstId first)
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx secondId second)
+            now <- getCurrentTime
+            let pastNow = addUTCTime (-3600) now
+            Right [claimedFirst] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 1 now)
+            claimedFirst ^. #outboxId `shouldBe` firstId
+            Right () <- Store.runStoreIO storeHandle (backdateOutboxUpdatedAt firstId pastNow)
+            publishedRef <- newIORef []
+            let publish row = do
+                    liftIO (modifyIORef' publishedRef (<> [row ^. #outboxId]))
+                    pure PublishSucceeded
+            Right firstPass <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+            firstPass ^. #published `shouldBe` 1
+            Right secondPass <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+            secondPass ^. #published `shouldBe` 1
+            published <- readIORef publishedRef
+            published `shouldBe` [firstId, secondId]
+            Right (Just secondRow) <- Store.runStoreIO storeHandle (lookupOutbox secondId)
+            secondRow ^. #status `shouldBe` OutboxSent
+
+        it "does not reclaim a recently claimed row" $ \storeHandle -> do
+            let oid = OutboxId outboxUuid1
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
+            now <- getCurrentTime
+            Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
+            publishedRef <- newIORef (0 :: Int)
+            let publish _ = do
+                    liftIO (modifyIORef' publishedRef (+ 1))
+                    pure PublishSucceeded
+            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+            summary ^. #claimed `shouldBe` 0
+            published <- readIORef publishedRef
+            published `shouldBe` 0
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+            row ^. #status `shouldBe` OutboxPublishing
+
+        it "a throwing publish callback fails one row and continues the batch" $ \storeHandle -> do
+            let throwId = OutboxId outboxUuid1
+                okId = OutboxId outboxUuid2
+                throwEvent = sampleIntegrationEnvelope & #messageId .~ "throwing-publish" & #key .~ Just "throw-key"
+                okEvent = sampleIntegrationEnvelope & #messageId .~ "ok-after-throw" & #key .~ Just "ok-key"
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx throwId throwEvent)
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx okId okEvent)
+            let publish row
+                    | row ^. #outboxId == throwId = liftIO (throwIO (userError "kafka exploded"))
+                    | otherwise = pure PublishSucceeded
+            Right summary <-
+                Store.runStoreIO storeHandle $
+                    publishClaimedOutbox publish (defaultPublishOptions & #backoff .~ ConstantBackoff 0) Nothing
+            summary ^. #retried `shouldBe` 1
+            summary ^. #published `shouldBe` 1
+            Right (Just throwRow) <- Store.runStoreIO storeHandle (lookupOutbox throwId)
+            throwRow ^. #status `shouldBe` OutboxFailed
+            throwRow ^. #lastError `shouldSatisfy` maybe False (Text.isInfixOf "kafka exploded")
+            Right (Just okRow) <- Store.runStoreIO storeHandle (lookupOutbox okId)
+            okRow ^. #status `shouldBe` OutboxSent
+
+        it "a row that exhausts attempts while crash-looping is dead-lettered by the sweeper" $ \storeHandle -> do
+            let oid = OutboxId outboxUuid1
+                opts = defaultPublishOptions & #maxAttempts .~ 1
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
+            now <- getCurrentTime
+            let pastNow = addUTCTime (-3600) now
+            Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
+            Right () <- Store.runStoreIO storeHandle (backdateOutboxUpdatedAt oid pastNow)
+            publishedRef <- newIORef (0 :: Int)
+            let publish _ = do
+                    liftIO (modifyIORef' publishedRef (+ 1))
+                    pure PublishSucceeded
+            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
+            summary ^. #dead `shouldBe` 0
+            published <- readIORef publishedRef
+            published `shouldBe` 0
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+            row ^. #status `shouldBe` OutboxDead
+
+        it "markOutboxSent does not resurrect a dead row" $ \storeHandle -> do
+            let oid = OutboxId outboxUuid1
+                opts = defaultPublishOptions & #maxAttempts .~ 1 & #backoff .~ ConstantBackoff 0
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
+            let publish _ = pure (PublishFailed "boom")
+            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
+            now <- getCurrentTime
+            Right marked <- Store.runStoreIO storeHandle (markOutboxSent oid now)
+            marked `shouldBe` False
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+            row ^. #status `shouldBe` OutboxDead
 
         it "publishClaimedOutbox marks success and records failures with last_error" $ \storeHandle -> do
             let okId = OutboxId outboxUuid1
@@ -4768,6 +4897,21 @@ sampleOutboxRow event =
         , createdAt = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
         , updatedAt = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
         }
+
+backdateOutboxUpdatedAt :: (Store :> es) => OutboxId -> UTCTime -> Eff es ()
+backdateOutboxUpdatedAt oid timestamp =
+    Store.runTransaction $
+        Tx.statement (unOutboxId oid, timestamp) backdateOutboxUpdatedAtStmt
+
+backdateOutboxUpdatedAtStmt :: Statement (UUID, UTCTime) ()
+backdateOutboxUpdatedAtStmt =
+    preparable
+        "UPDATE keiro_outbox SET updated_at = $2 WHERE outbox_id = $1"
+        ( contrazip2
+            (E.param (E.nonNullable E.uuid))
+            (E.param (E.nonNullable E.timestamptz))
+        )
+        D.noResult
 
 outboxUuid1, outboxUuid2, outboxUuid3 :: UUID
 outboxUuid1 = case fromString "018f0f18-0000-7000-8000-000000000a01" of

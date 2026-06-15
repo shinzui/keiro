@@ -49,7 +49,8 @@ instance FromJSON OutboxId where
 * 'OutboxPending' — never attempted.
 * 'OutboxPublishing' — currently held by a publisher worker (between
   claim and the call to mark sent/failed/dead). Rows left in this state
-  after a worker crash are reclaimable through the same claim query.
+  after a worker crash are reclaimed by the publisher's stale-row
+  sweeper after 'publishingTimeout'.
 * 'OutboxSent' — Kafka acknowledged the publish; terminal.
 * 'OutboxFailed' — last attempt failed; will be retried after
   'next_attempt_at'.
@@ -154,6 +155,7 @@ data OutboxPublishOptions = OutboxPublishOptions
     , maxAttempts :: !Int
     , backoff :: !BackoffSchedule
     , orderingPolicy :: !OrderingPolicy
+    , publishingTimeout :: !NominalDiffTime
     , tracer :: !(Maybe Tracer)
     }
     deriving stock (Generic)
@@ -182,6 +184,7 @@ defaultPublishOptions =
         , maxAttempts = 10
         , backoff = ConstantBackoff 2
         , orderingPolicy = PerKeyHeadOfLine
+        , publishingTimeout = 300
         , tracer = Nothing
         }
 
@@ -194,12 +197,12 @@ statusText = \case
     OutboxFailed -> "failed"
     OutboxDead -> "dead"
 
--- | Inverse of 'statusText'. Unknown values map to 'OutboxFailed' (safe default).
-parseStatus :: Text -> OutboxStatus
+-- | Inverse of 'statusText'. Unknown database values are decode failures.
+parseStatus :: Text -> Either Text OutboxStatus
 parseStatus = \case
-    "pending" -> OutboxPending
-    "publishing" -> OutboxPublishing
-    "sent" -> OutboxSent
-    "failed" -> OutboxFailed
-    "dead" -> OutboxDead
-    _ -> OutboxFailed
+    "pending" -> Right OutboxPending
+    "publishing" -> Right OutboxPublishing
+    "sent" -> Right OutboxSent
+    "failed" -> Right OutboxFailed
+    "dead" -> Right OutboxDead
+    bad -> Left ("unknown keiro_outbox.status: " <> bad)

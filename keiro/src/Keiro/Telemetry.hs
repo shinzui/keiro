@@ -71,6 +71,7 @@ module Keiro.Telemetry (
     keiroOutboxPublishedName,
     keiroOutboxRetriedName,
     keiroOutboxDeadletteredName,
+    keiroOutboxReclaimedName,
     keiroInboxProcessedName,
     keiroInboxDuplicatesName,
     keiroInboxFailedName,
@@ -97,6 +98,7 @@ module Keiro.Telemetry (
     recordOutboxPublished,
     recordOutboxRetried,
     recordOutboxDeadlettered,
+    recordOutboxReclaimed,
     recordInboxProcessed,
     recordInboxDuplicates,
     recordInboxFailed,
@@ -509,6 +511,8 @@ keiroOutboxRetriedName :: Text
 keiroOutboxRetriedName = "keiro.outbox.retried"
 keiroOutboxDeadletteredName :: Text
 keiroOutboxDeadletteredName = "keiro.outbox.deadlettered"
+keiroOutboxReclaimedName :: Text
+keiroOutboxReclaimedName = "keiro.outbox.reclaimed"
 keiroInboxProcessedName :: Text
 keiroInboxProcessedName = "keiro.inbox.processed"
 keiroInboxDuplicatesName :: Text
@@ -566,6 +570,7 @@ data KeiroMetrics = KeiroMetrics
     , outboxPublished :: Counter Int64
     , outboxRetried :: Counter Int64
     , outboxDeadlettered :: Counter Int64
+    , outboxReclaimed :: Counter Int64
     , inboxProcessed :: Counter Int64
     , inboxDuplicates :: Counter Int64
     , inboxFailed :: Counter Int64
@@ -601,6 +606,7 @@ newKeiroMetrics meter = liftIO $ do
     outboxPublished' <- counterI64 keiroOutboxPublishedName "{event}" "Outbox events successfully published."
     outboxRetried' <- counterI64 keiroOutboxRetriedName "{event}" "Outbox publish attempts that failed and will retry."
     outboxDeadlettered' <- counterI64 keiroOutboxDeadletteredName "{event}" "Outbox events parked after exhausting retries."
+    outboxReclaimed' <- counterI64 keiroOutboxReclaimedName "{event}" "Outbox rows reclaimed from a crashed or stalled publisher."
     inboxProcessed' <- counterI64 keiroInboxProcessedName "{message}" "Inbox messages processed successfully."
     inboxDuplicates' <- counterI64 keiroInboxDuplicatesName "{message}" "Inbox messages skipped as duplicates."
     inboxFailed' <- counterI64 keiroInboxFailedName "{message}" "Inbox messages whose handler failed."
@@ -627,6 +633,7 @@ newKeiroMetrics meter = liftIO $ do
             , outboxPublished = outboxPublished'
             , outboxRetried = outboxRetried'
             , outboxDeadlettered = outboxDeadlettered'
+            , outboxReclaimed = outboxReclaimed'
             , inboxProcessed = inboxProcessed'
             , inboxDuplicates = inboxDuplicates'
             , inboxFailed = inboxFailed'
@@ -685,6 +692,8 @@ recordOutboxRetried :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordOutboxRetried = recordCounter outboxRetried
 recordOutboxDeadlettered :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordOutboxDeadlettered = recordCounter outboxDeadlettered
+recordOutboxReclaimed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordOutboxReclaimed = recordCounter outboxReclaimed
 recordInboxProcessed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordInboxProcessed = recordCounter inboxProcessed
 recordInboxDuplicates :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()

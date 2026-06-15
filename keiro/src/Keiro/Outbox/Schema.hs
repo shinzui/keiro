@@ -9,6 +9,7 @@ helpers ('Keiro.Outbox') and transport adapters
 module Keiro.Outbox.Schema (
     enqueueOutboxTx,
     claimOutboxBatch,
+    requeueStuckOutbox,
     markOutboxSent,
     markOutboxFailedTx,
     lookupOutbox,
@@ -17,7 +18,7 @@ module Keiro.Outbox.Schema (
 )
 where
 
-import Contravariant.Extras (contrazip2, contrazip5)
+import Contravariant.Extras (contrazip2, contrazip3, contrazip5)
 import Data.ByteString (ByteString)
 import Data.Functor.Contravariant ((>$<))
 import Data.Time.Clock (NominalDiffTime, addUTCTime)
@@ -103,8 +104,32 @@ claimOutboxBatch policy limit now =
     runTransaction $
         Tx.statement (fromIntegral limit, now) (claimStmt policy)
 
--- | Mark a row as successfully published. Sets @published_at@ and clears @last_error@.
-markOutboxSent :: (Store :> es) => OutboxId -> UTCTime -> Eff es ()
+{- | Reclaim rows stranded in @publishing@ longer than @olderThan@.
+
+Rows whose claim already consumed the attempt budget are dead-lettered; the
+rest return to @failed@ so the regular claim query can retry them. Returns
+@(requeued, deadLettered)@.
+-}
+requeueStuckOutbox ::
+    (Store :> es) =>
+    Int ->
+    NominalDiffTime ->
+    UTCTime ->
+    Eff es (Int, Int)
+requeueStuckOutbox maxAttempts olderThan now =
+    runTransaction $ do
+        let cutoff = addUTCTime (negate olderThan) now
+        dead <- Tx.statement (cutoff, fromIntegral maxAttempts, now) deadLetterStuckStmt
+        requeued <- Tx.statement (cutoff, fromIntegral maxAttempts, now) requeueStuckStmt
+        pure (fromIntegral requeued, fromIntegral dead)
+
+{- | Mark a row as successfully published. Sets @published_at@ and clears
+@last_error@. Returns 'False' if the row left @publishing@ before the mark,
+for example because a stale-row sweeper or operator changed it while the
+transport publish was in flight. The publish may still have happened; callers
+must treat this as at-least-once delivery.
+-}
+markOutboxSent :: (Store :> es) => OutboxId -> UTCTime -> Eff es Bool
 markOutboxSent outboxId now =
     runTransaction $
         Tx.statement (unOutboxId outboxId, now) markSentStmt
@@ -393,7 +418,44 @@ readAttemptCountStmt =
         (E.param (E.nonNullable E.uuid))
         (D.rowMaybe (fromIntegral <$> D.column (D.nonNullable D.int8)))
 
-markSentStmt :: Statement (UUID, UTCTime) ()
+deadLetterStuckStmt :: Statement (UTCTime, Int64, UTCTime) Int64
+deadLetterStuckStmt =
+    preparable
+        """
+        UPDATE keiro_outbox
+        SET status = 'dead',
+            last_error = COALESCE(last_error, 'reclaimed: publisher crashed mid-publish'),
+            updated_at = $3
+        WHERE status = 'publishing'
+          AND updated_at <= $1
+          AND attempt_count >= $2
+        """
+        ( contrazip3
+            (E.param (E.nonNullable E.timestamptz))
+            (E.param (E.nonNullable E.int8))
+            (E.param (E.nonNullable E.timestamptz))
+        )
+        D.rowsAffected
+
+requeueStuckStmt :: Statement (UTCTime, Int64, UTCTime) Int64
+requeueStuckStmt =
+    preparable
+        """
+        UPDATE keiro_outbox
+        SET status = 'failed',
+            updated_at = $3
+        WHERE status = 'publishing'
+          AND updated_at <= $1
+          AND attempt_count < $2
+        """
+        ( contrazip3
+            (E.param (E.nonNullable E.timestamptz))
+            (E.param (E.nonNullable E.int8))
+            (E.param (E.nonNullable E.timestamptz))
+        )
+        D.rowsAffected
+
+markSentStmt :: Statement (UUID, UTCTime) Bool
 markSentStmt =
     preparable
         """
@@ -403,12 +465,13 @@ markSentStmt =
             last_error = NULL,
             updated_at = $2
         WHERE outbox_id = $1
+          AND status = 'publishing'
         """
         ( contrazip2
             (E.param (E.nonNullable E.uuid))
             (E.param (E.nonNullable E.timestamptz))
         )
-        D.noResult
+        ((> 0) <$> D.rowsAffected)
 
 markFailedStmt :: Statement (UUID, Text, Text, UTCTime, UTCTime) ()
 markFailedStmt =
@@ -518,7 +581,7 @@ rawRowDecoder =
         <*> D.column (D.nonNullable D.bytea)
         <*> D.column (D.nullable D.jsonb)
         <*> D.column (D.nonNullable D.timestamptz)
-        <*> (parseStatus <$> D.column (D.nonNullable D.text))
+        <*> D.column (D.nonNullable (D.refine parseStatus D.text))
         <*> (fromIntegral <$> D.column (D.nonNullable D.int8))
         <*> D.column (D.nonNullable D.timestamptz)
         <*> D.column (D.nullable D.text)

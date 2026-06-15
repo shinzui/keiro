@@ -27,6 +27,7 @@ module Keiro.Outbox (
     -- * Storage primitives (transport-neutral)
     enqueueOutboxTx,
     claimOutboxBatch,
+    requeueStuckOutbox,
     markOutboxSent,
     lookupOutbox,
     listOutbox,
@@ -50,9 +51,11 @@ module Keiro.Outbox (
 where
 
 import Data.ByteString (ByteString)
+import Data.Text qualified as Text
 import Data.TypeID qualified as TypeID
 import Data.UUID.V7 qualified as V7
 import Effectful (Eff, IOE, (:>))
+import Effectful.Exception (displayException, trySync)
 import Keiro.Integration.Event (
     IntegrationContentType,
     IntegrationEvent (..),
@@ -68,6 +71,7 @@ import Keiro.Telemetry (
     recordOutboxBacklog,
     recordOutboxDeadlettered,
     recordOutboxPublished,
+    recordOutboxReclaimed,
     recordOutboxRetried,
     withProducerSpan,
  )
@@ -246,12 +250,19 @@ publishClaimedOutbox ::
     Eff es OutboxPublishSummary
 publishClaimedOutbox publish options mMetrics = do
     now <- liftIO getCurrentTime
+    (requeued, deadened) <-
+        requeueStuckOutbox
+            (options ^. #maxAttempts)
+            (options ^. #publishingTimeout)
+            now
+    recordOutboxReclaimed mMetrics (fromIntegral requeued)
+    recordOutboxDeadlettered mMetrics (fromIntegral deadened)
     rows <- claimOutboxBatch (options ^. #orderingPolicy) (options ^. #batchSize) now
     -- Backlog gauge, recorded once per pass after the claim has moved this
-    -- batch to 'publishing': it counts rows still awaiting a publisher. This is
-    -- the synchronous-gauge baseline; a 'Nothing' handle makes it a no-op.
-    backlog <- countOutboxBacklog
-    recordOutboxBacklog mMetrics (fromIntegral backlog)
+    -- batch to 'publishing': it counts rows still awaiting a publisher.
+    for_ mMetrics $ \metrics -> do
+        backlog <- countOutboxBacklog
+        recordOutboxBacklog (Just metrics) (fromIntegral backlog)
     summary <-
         drainBatch rows OutboxPublishSummary{claimed = 0, published = 0, retried = 0, dead = 0, haltedOn = Nothing}
     -- Counters from the aggregated pass summary (each a no-op under 'Nothing';
@@ -273,7 +284,10 @@ publishClaimedOutbox publish options mMetrics = do
                 (row ^. #event)
                 (outboxRowToKafkaRecord row)
                 $ \mSpan -> do
-                    out <- publish row
+                    attempted <- trySync (publish row)
+                    let out = case attempted of
+                            Left err -> PublishFailed (Text.pack (displayException err))
+                            Right ok -> ok
                     case (mSpan, out) of
                         (Just sp, PublishFailed errMsg) -> do
                             addAttribute sp (unkey error_type) ("publish_failed" :: Text)
@@ -283,7 +297,7 @@ publishClaimedOutbox publish options mMetrics = do
         now <- liftIO getCurrentTime
         case outcome of
             PublishSucceeded -> do
-                markOutboxSent (row ^. #outboxId) now
+                _ <- markOutboxSent (row ^. #outboxId) now
                 drainBatch rest (acc & #claimed +~ 1 & #published +~ 1)
             PublishFailed errMsg -> do
                 let attempt = row ^. #attemptCount

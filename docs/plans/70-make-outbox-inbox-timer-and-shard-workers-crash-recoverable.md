@@ -28,14 +28,14 @@ After this plan is implemented, every documented recovery guarantee in these fou
 - [x] M1: generate the new migration `keiro-messaging-crash-recovery` (inbox `attempt_count` column, inbox backlog index, outbox sent-GC index, outbox per-source ordering index) (completed 2026-06-15; migration `keiro-migrations/sql-migrations/2026-06-15-13-22-31-keiro-messaging-crash-recovery.sql`)
 - [x] M1: add the `SET search_path TO kiroku, pg_catalog;` pin to the seven older migrations that lack it (completed 2026-06-15)
 - [x] M1: touch the embed comment in `keiro-migrations/src/Keiro/Migrations.hs` and verify with `cabal test keiro-migrations-test` (completed 2026-06-15; `keiro-migrations-test` passed with 2 examples, 0 failures; `keiro-test` passed with 182 examples, 0 failures)
-- [ ] M2: add `requeueStuckOutbox` to `keiro/src/Keiro/Outbox/Schema.hs` and re-export it from `keiro/src/Keiro/Outbox.hs`
-- [ ] M2: add `publishingTimeout` to `OutboxPublishOptions` (default 300 s) and call the sweeper at the start of `publishClaimedOutbox`
-- [ ] M2: wrap the publish callback in `trySync` so an exception becomes `PublishFailed` instead of stranding the batch
-- [ ] M2: guard `markOutboxSent` with `AND status = 'publishing'` and return `Bool`
-- [ ] M2: make `parseStatus` return `Either Text OutboxStatus` and fail the row decode via `D.refine` on unknown statuses
-- [ ] M2: fix the false reclaim claim in the `OutboxStatus` haddock in `keiro/src/Keiro/Outbox/Types.hs`
-- [ ] M2: add the `keiro.outbox.reclaimed` counter to `keiro/src/Keiro/Telemetry.hs`
-- [ ] M2: write the crash-window tests (reclaim after timeout, no premature reclaim, exception guard, dead-letter on exhausted crash loop, sent-guard lost race)
+- [x] M2: add `requeueStuckOutbox` to `keiro/src/Keiro/Outbox/Schema.hs` and re-export it from `keiro/src/Keiro/Outbox.hs` (completed 2026-06-15)
+- [x] M2: add `publishingTimeout` to `OutboxPublishOptions` (default 300 s) and call the sweeper at the start of `publishClaimedOutbox` (completed 2026-06-15)
+- [x] M2: wrap the publish callback in `trySync` so an exception becomes `PublishFailed` instead of stranding the batch (completed 2026-06-15)
+- [x] M2: guard `markOutboxSent` with `AND status = 'publishing'` and return `Bool` (completed 2026-06-15)
+- [x] M2: make `parseStatus` return `Either Text OutboxStatus` and fail the row decode via `D.refine` on unknown statuses (completed 2026-06-15)
+- [x] M2: fix the false reclaim claim in the `OutboxStatus` haddock in `keiro/src/Keiro/Outbox/Types.hs` (completed 2026-06-15)
+- [x] M2: add the `keiro.outbox.reclaimed` counter to `keiro/src/Keiro/Telemetry.hs` (completed 2026-06-15)
+- [x] M2: write the crash-window tests (reclaim after timeout, no premature reclaim, exception guard, dead-letter on exhausted crash loop, sent-guard lost race) (completed 2026-06-15; focused `Keiro.Outbox` run passed with 20 examples, 0 failures; full `keiro-test` passed with 188 examples, 0 failures)
 - [ ] M3: add `garbageCollectSent` to the outbox schema and public module, with tests
 - [ ] M3: document the per-key ordering constraint on `enqueueOutboxTx` / `enqueueIntegrationEventTx` / `OrderingPolicy` (M1 finding, documentation-only)
 - [ ] M3: extend the `KafkaDeliveryIdentity` docstring (does not dedupe producer republishes)
@@ -73,6 +73,7 @@ Authoring-time findings that correct or extend the June 2026 audit notes (re-ver
 - The haddock on `runTimerWorkerWith` in `keiro/src/Keiro/Timer.hs` (lines 87–88) claims "A @fire@ that returns 'Nothing' leaves the timer @Firing@ to be retried on a later claim" — false today for the same reason as H2 (the claim query only takes `scheduled` rows). The M5 fix makes this sentence true.
 - `Data.TypeID.genTypeID` from the `mmzk-typeid` package throws a `TypeIDError` at runtime for an invalid prefix (verified in `/Users/shinzui/Keikaku/hub/haskell/mmzk-typeid-project/mmzk-typeid/src/Data/TypeID/Internal.hs`, `genTypeIDs`), and the package exports `checkPrefix :: Text -> Maybe TypeIDError` from `Data.TypeID` — exactly what `mkIntegrationProducer` needs for construction-time validation (L4).
 - Milestone 1 also requires regenerating `keiro-migrations/expected-schema` with `cabal run keiro-write-expected-schema`. The new migration applied and repeated successfully before regeneration, but `cabal test keiro-migrations-test` failed its strict schema comparison until the expected-schema files included the inbox `attempt_count` column and the new inbox/outbox indexes.
+- The M2 head-of-line reclaim test needs two publisher passes for two same-key rows, not one. `publishClaimedOutbox` is intentionally a one-batch worker: after the sweeper moves the stranded first row from `publishing` to `failed`, the claim query can claim that first row, but the second row remains blocked by the non-terminal first row until the first reaches `sent`. This preserves the one-shot worker contract and still proves the key is unwedgeable.
 
 
 ## Decision Log
@@ -133,6 +134,8 @@ Authoring-time findings that correct or extend the June 2026 audit notes (re-ver
 ## Outcomes & Retrospective
 
 Milestone 1 completed on 2026-06-15. The migration layer now creates the inbox failure-attempt column and the three indexes later milestones rely on, every Keiro-owned framework migration pins `search_path`, and the embedded-migration comment plus checked-in expected schema were updated. Validation passed with `cabal test keiro-migrations-test` (2 examples, 0 failures) and `cabal test keiro-test` (182 examples, 0 failures).
+
+Milestone 2 completed on 2026-06-15. The outbox worker now reclaims stale `publishing` rows, dead-letters stale rows that have exhausted their claim budget, converts synchronous publisher exceptions into ordinary failed attempts so the batch continues, guards `markOutboxSent` against stale races, decodes unknown statuses loudly, and records `keiro.outbox.reclaimed`. Validation passed with focused `cabal test keiro-test --test-show-details=direct --test-options='--match "Keiro.Outbox"'` (20 examples, 0 failures) and full `cabal test keiro-test` (188 examples, 0 failures).
 
 
 ## Context and Orientation
