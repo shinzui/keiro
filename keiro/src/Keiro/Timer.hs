@@ -22,6 +22,7 @@ module Keiro.Timer (
 
     -- * Storage
     scheduleTimerTx,
+    scheduleTimerOnceTx,
     claimDueTimer,
     markTimerFired,
     countDueTimers,

@@ -46,8 +46,8 @@ Alternatives considered. A severity-ordered decomposition ("blockers plan, highs
 | 3 | Fix event-store command path, snapshot, and read-model correctness | docs/plans/69-fix-event-store-command-path-snapshot-and-read-model-correctness.md | None | EP-2 | Complete |
 | 4 | Make outbox, inbox, timer, and shard workers crash-recoverable | docs/plans/70-make-outbox-inbox-timer-and-shard-workers-crash-recoverable.md | None | None | Complete |
 | 5 | Fix process manager and router delivery correctness | docs/plans/71-fix-process-manager-and-router-delivery-correctness.md | EP-1 | None | Complete |
-| 6 | Workflow engine failure handling, instance leasing, and crash-window atomicity | docs/plans/72-workflow-engine-failure-handling-instance-leasing-and-crash-window-atomicity.md | None | None | In Progress |
-| 7 | Workflow sleep, generation, and patch semantics plus journal scale hygiene | docs/plans/73-workflow-sleep-generation-and-patch-semantics-plus-journal-scale-hygiene.md | EP-6 | EP-4 | Not Started |
+| 6 | Workflow engine failure handling, instance leasing, and crash-window atomicity | docs/plans/72-workflow-engine-failure-handling-instance-leasing-and-crash-window-atomicity.md | None | None | Complete |
+| 7 | Workflow sleep, generation, and patch semantics plus journal scale hygiene | docs/plans/73-workflow-sleep-generation-and-patch-semantics-plus-journal-scale-hygiene.md | EP-6 | EP-4 | In Progress |
 | 8 | Expose keiro-pgmq tuning surface and make job workers resilient | docs/plans/74-expose-keiro-pgmq-tuning-surface-and-make-job-workers-resilient.md | None | EP-1, EP-2 | Not Started |
 
 
@@ -161,6 +161,11 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
   arms repair completed rows that predate the journal entry. The EP-6 crash-window rollup
   remains open until M5 closes child cancellation. Full `cabal test keiro-test` passed with
   231 examples, 0 failures.
+- EP-7 Milestone 1 is complete as of 2026-06-15. EP-4 had already landed the final
+  timer recovery statements, and the insert-only workflow sleep arm composes with them
+  without changing claim, requeue, mark, cancel, or dead-letter behavior. The active-resume
+  regression now exercises EP-6's real instance lease path, and full `cabal test keiro`
+  passed with 239 examples, 0 failures.
 
 
 ## Decision Log
@@ -225,6 +230,8 @@ EP-6 Milestone 5 is complete as of 2026-06-15. Child cancellation now writes the
 
 EP-6 is complete as of 2026-06-15. The workflow engine now has poison-workflow isolation and terminal failure marking, per-instance leases, transaction-composable journal appends, atomic awakeable and child wake paths, cancel repair, child result envelopes, failed-child propagation, and documentation that matches those semantics. Final validation passed with `cabal build all`, `cabal test keiro-test` (237 examples, 0 failures), `cabal test keiro-migrations-test` (2 examples, 0 failures), and `cabal test jitsurei-test` (16 examples, 0 failures).
 
+EP-7 Milestone 1 is complete as of 2026-06-15. Long workflow sleeps no longer livelock under an active resume worker: re-entering the arm leaves the original timer `fire_at` intact, and a one-second sleep completes under a 250 ms resume cadence. Milestone 2 remains next for generation-namespaced sleep, awakeable, and child wake-source identity.
+
 
 ---
 
@@ -241,3 +248,5 @@ Revision note (2026-06-15): EP-6 Milestone 4 was completed. Surprises & Discover
 Revision note (2026-06-15): EP-6 Milestone 5 was completed. The third EP-6 Progress rollup item is now checked, and Outcomes & Retrospective records the cancel atomicity, child-result envelope, failed-child wake, and mid-run cancellation work. Validation passed with `cabal test keiro-test --test-options='--match "Keiro.Workflow.Child"'` (14 examples, 0 failures), `cabal test keiro-test --test-options='--match "Keiro.Workflow"'` (68 examples, 0 failures), and full `cabal test keiro-test` (237 examples, 0 failures).
 
 Revision note (2026-06-15): EP-6 Milestone 6 completed the haddock truth pass and final validation. EP-6 is now fully implemented; final validation passed with `cabal build all`, `cabal test keiro-test` (237 examples, 0 failures), `cabal test keiro-migrations-test` (2 examples, 0 failures), and `cabal test jitsurei-test` (16 examples, 0 failures).
+
+Revision note (2026-06-15): EP-7 was marked In Progress after EP-6 completion bookkeeping was reconciled, and EP-7 Milestone 1 was completed. Surprises & Discoveries and Outcomes & Retrospective now record the insert-only workflow sleep arming change and validation evidence.

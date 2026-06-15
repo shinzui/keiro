@@ -4,6 +4,7 @@ slug: workflow-sleep-generation-and-patch-semantics-plus-journal-scale-hygiene
 title: "Workflow sleep, generation, and patch semantics plus journal scale hygiene"
 kind: exec-plan
 created_at: 2026-06-11T04:45:56Z
+intention: intention_01kv40hzwaenftzem0gxypz4mj
 master_plan: "docs/masterplans/9-keiro-production-readiness-hardening.md"
 ---
 
@@ -29,10 +30,10 @@ This plan is a child of the MasterPlan at `docs/masterplans/9-keiro-production-r
 
 ## Progress
 
-- [ ] Milestone 1: add `scheduleTimerOnceTx` (insert-only arm) to `keiro/src/Keiro/Timer/Schema.hs`
-- [ ] Milestone 1: switch `sleepNamed` in `keiro/src/Keiro/Workflow/Sleep.hs` to `scheduleTimerOnceTx`; correct the false "collapses to a no-op" module/function docs
-- [ ] Milestone 1: test — arm a sleep, run a resume pass, assert `fire_at` unchanged
-- [ ] Milestone 1: test — a sleep longer than the poll interval fires under an actively polling resume worker
+- [x] Milestone 1: add `scheduleTimerOnceTx` (insert-only arm) to `keiro/src/Keiro/Timer/Schema.hs` (completed 2026-06-15)
+- [x] Milestone 1: switch `sleepNamed` in `keiro/src/Keiro/Workflow/Sleep.hs` to `scheduleTimerOnceTx`; correct the false "collapses to a no-op" module/function docs (completed 2026-06-15)
+- [x] Milestone 1: test — arm a sleep, run a resume pass, assert `fire_at` unchanged (completed 2026-06-15)
+- [x] Milestone 1: test — a sleep longer than the poll interval fires under an actively polling resume worker (completed 2026-06-15)
 - [ ] Milestone 2: capture golden gen-0 id values (sleep timer id, awakeable id) from the pre-change code before editing
 - [ ] Milestone 2: add `CurrentRunGeneration` operation + `currentRunGeneration` to the `Workflow` effect in `keiro/src/Keiro/Workflow.hs`
 - [ ] Milestone 2: generation-namespace `sleepTimerId` (legacy derivation preserved at generation 0)
@@ -65,6 +66,7 @@ This plan is a child of the MasterPlan at `docs/masterplans/9-keiro-production-r
 - **kiroku already exposes stream deletion.** `hardDeleteStream :: (HasCallStack, Store :> es) => StreamName -> Eff es (Maybe StreamId)` exists in `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store/src/Kiroku/Store/Lifecycle.hs` (lines 92–97), so pruning journal streams (milestone 5) needs no upstream kiroku work and no reach-around SQL into kiroku's tables.
 - **The C2 livelock is confirmed and the in-tree documentation actively asserts the opposite.** `keiro/src/Keiro/Workflow/Sleep.hs` lines 57–60 and 205–208 claim re-arms "collapse to a no-op"; the SQL at `keiro/src/Keiro/Timer/Schema.hs` lines 207–214 (`ON CONFLICT (timer_id) DO UPDATE SET ... fire_at = EXCLUDED.fire_at ... WHERE keiro_timers.status = 'scheduled'`) updates `fire_at` on every re-arm of a still-scheduled row, and the arm at `Sleep.hs` lines 218–228 recomputes `fireAt = addUTCTime delta now` from a fresh clock read on every resume. The existing sleep tests (`keiro/test/Main.hs` ~3278–3391) never run a resume pass between arm and fire, which is why this was never caught.
 - **The C3 generation omission is confirmed by contrast within the same codebase.** `deterministicJournalId` (`keiro/src/Keiro/Workflow.hs` lines 829–835) deliberately includes the generation in its UUID-v5 input and documents why; `sleepTimerId` (`Sleep.hs` 165–178) and `deterministicAwakeableId` (`Awakeable.hs` 131–137) hash the same kind of coordinates *without* it.
+- **Milestone 1 implementation discovery (2026-06-15): EP-4 and EP-6 have landed since this plan was authored.** EP-4's final `Keiro.Timer.Schema` already has stale-`firing` requeue, status-guarded mark/cancel/dead-letter statements, and additive timer worker validation; `scheduleTimerOnceTx` inserts the same row shape and leaves those claim/recovery paths untouched. EP-6's instance table and resume lease are also live, which let the active-resume sleep regression exercise the real production worker path rather than a stubbed rediscovery loop.
 
 
 ## Decision Log
@@ -116,7 +118,7 @@ This plan is a child of the MasterPlan at `docs/masterplans/9-keiro-production-r
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Milestone 1 is complete as of 2026-06-15. Workflow sleep arming now uses insert-only timer scheduling, so the first `fire_at` persists across repeated resume passes. The module documentation no longer claims the old `scheduleTimerTx` upsert makes re-arms harmless. Focused validation passed with `cabal test keiro --test-options='--match "Keiro.Workflow.Sleep"'` (7 examples, 0 failures), and full validation passed with `cabal test keiro` (239 examples, 0 failures). Milestone 2 remains next for generation-namespaced wake-source identity.
 
 
 ## Context and Orientation
@@ -127,7 +129,7 @@ Everything below assumes no prior knowledge of this repository. Work happens in 
 
 **Suspension and wake sources.** A workflow pauses with `awaitStep name arm` (`Workflow.hs` 191–192, handler at 498–510): if `name` is journaled, return its result; otherwise run the *arming* action and throw an internal suspend sentinel so `runWorkflow` returns `Suspended`. The arm must be idempotent because **every resume re-runs it** until the step resolves (documented contract, `Workflow.hs` 25–29). A *wake source* is whatever resolves the awaited step from outside by appending a `StepRecorded` with the awaited step name via `appendJournalEntry` / `appendJournalEntryReturningId` (`Workflow.hs` 623–657). There are three wake sources:
 
-- *Sleep* (`keiro/src/Keiro/Workflow/Sleep.hs`): the arm inserts a row into the `keiro_timers` table (shared with process-manager timers; DDL in `keiro-migrations/sql-migrations/2026-05-17-00-00-00-keiro-bootstrap.sql`) via `scheduleTimerTx` (`keiro/src/Keiro/Timer/Schema.hs` 107–117). A timer worker (`Keiro.Timer.runTimerWorker`, driven here through `runWorkflowTimerWorker`, `Sleep.hs` 284–296) claims due rows and calls `workflowSleepFireAction`, which appends the `sleep:<name>` completion to the journal.
+- *Sleep* (`keiro/src/Keiro/Workflow/Sleep.hs`): the arm inserts a row into the `keiro_timers` table (shared with process-manager timers; DDL in `keiro-migrations/sql-migrations/2026-05-17-00-00-00-keiro-bootstrap.sql`) via `scheduleTimerOnceTx` (`keiro/src/Keiro/Timer/Schema.hs`). A timer worker (`Keiro.Timer.runTimerWorker`, driven here through `runWorkflowTimerWorker`, `Sleep.hs`) claims due rows and calls `workflowSleepFireAction`, which appends the `sleep:<name>` completion to the journal.
 - *Awakeable* (`keiro/src/Keiro/Workflow/Awakeable.hs`): a durable promise. The workflow allocates an `AwakeableId`, hands it to an external system, and awaits `awk:<uuid>`; the external system calls `signalAwakeable`, which flips a `keiro_awakeables` row (`keiro-migrations/sql-migrations/2026-06-03-01-00-00-keiro-awakeables.sql`) to `completed` and appends the journal entry.
 - *Child workflow* (`keiro/src/Keiro/Workflow/Child.hs` and `Child/Schema.hs`): `spawnChild` journals a spawn step and inserts a link row in `keiro_workflow_children` (PK `(child_id, child_name)`); the resume worker drives the child; on child completion `childCompletionHook` appends `child:<id>:result` to the parent journal.
 
@@ -742,3 +744,7 @@ If plan 72's final DDL differs from the assumed shape, only milestone 5/6 SQL ch
 - `docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md` — will add a kiroku event-id point lookup; noted as the future replacement for the L1 fold, not a dependency.
 
 **Signatures that must exist at the end of each milestone** are listed inline in the milestone steps above; the externally visible additions are `scheduleTimerOnceTx`, `currentRunGeneration`, the widened `sleepTimerId`, the `IOE`-constrained `awakeableNamed`/`awaitChild`, `activePatches`, `patchSetStepName`, `awakeableAllocStepPrefix`, the `UTCTime`-taking `findUnfinishedWorkflowIds`, `setWorkflowWakeAfterTx`, the `Keiro.Workflow.Gc` module, and `mkWorkflowName`/`mkWorkflowId`/`WorkflowIdentityError`.
+
+---
+
+Revision note (2026-06-15): Milestone 1 was implemented and validated. The plan now records `scheduleTimerOnceTx`, the workflow sleep call-site switch, two regression tests for re-arm livelock, full `keiro` test evidence, and the fact that EP-4/EP-6 had landed before implementation.

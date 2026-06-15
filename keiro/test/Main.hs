@@ -5126,6 +5126,53 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 afterSecond <- readIORef counter
                 afterSecond `shouldBe` 2
 
+            it "does not postpone fire_at when a resume pass re-arms the sleep" $ \storeHandle -> do
+                counter <- newIORef (0 :: Int)
+                let name = WorkflowName "sleeponce"
+                    wid = WorkflowId "so-1"
+                    TimerId timerUuid = sleepTimerId name wid "sleep:cool"
+                    registry = Map.singleton name (WorkflowDef (\_ -> sleepDemoNamed counter (StepName "cool") 300))
+                Right Suspended <-
+                    Store.runStoreIO storeHandle $
+                        runWorkflow name wid (sleepDemoNamed counter (StepName "cool") 300)
+                Right (Just firstFireAt) <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction $
+                            Tx.statement timerUuid sleepTimerFireAtStmt
+                Right summary <-
+                    Store.runStoreIO storeHandle $
+                        resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+                stillSuspended summary `shouldBe` 1
+                Right (Just secondFireAt) <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction $
+                            Tx.statement timerUuid sleepTimerFireAtStmt
+                secondFireAt `shouldBe` firstFireAt
+                readIORef counter >>= (`shouldBe` 1)
+
+            it "fires a sleep longer than the resume cadence under an active resume worker" $ \storeHandle -> do
+                counter <- newIORef (0 :: Int)
+                let name = WorkflowName "sleepactive"
+                    wid = WorkflowId "sa-1"
+                    registry = Map.singleton name (WorkflowDef (\_ -> sleepDemoNamed counter (StepName "wait") 1))
+                    drive 0 = expectationFailure "active resume cadence kept postponing the sleep"
+                    drive n = do
+                        Right summary <-
+                            Store.runStoreIO storeHandle $
+                                resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+                        now <- getCurrentTime
+                        _ <-
+                            Store.runStoreIO storeHandle $
+                                runWorkflowTimerWorker Nothing now (\_ -> pure Nothing)
+                        if completed summary == 1
+                            then pure ()
+                            else threadDelay 250_000 >> drive (n - 1)
+                Right Suspended <-
+                    Store.runStoreIO storeHandle $
+                        runWorkflow name wid (sleepDemoNamed counter (StepName "wait") 1)
+                drive (16 :: Int)
+                readIORef counter >>= (`shouldBe` 2)
+
     describe "Keiro.Workflow.Awakeable" $ do
         -- Pure (no-DB) check of the deterministic id derivation.
         it "derives a deterministic AwakeableId, stable across calls and label-sensitive" $ do
@@ -6796,6 +6843,18 @@ sleepTimerStatusStmt =
         """
         (E.param (E.nonNullable E.uuid))
         (D.rowMaybe ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.jsonb)))
+
+-- | Read a timer's fire time by id (for workflow-sleep re-arm tests).
+sleepTimerFireAtStmt :: Statement UUID (Maybe UTCTime)
+sleepTimerFireAtStmt =
+    preparable
+        """
+        SELECT fire_at
+        FROM keiro_timers
+        WHERE timer_id = $1
+        """
+        (E.param (E.nonNullable E.uuid))
+        (D.rowMaybe (D.column (D.nonNullable D.timestamptz)))
 
 recordedFrom :: EventData -> RecordedEvent
 recordedFrom event =

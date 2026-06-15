@@ -53,11 +53,11 @@ already journaled and returns immediately, and only @step \"b\"@ runs for real.
 
 * __Deterministic timer id.__ The timer id is a v5 UUID over
   @(\"keiro\":\"workflow-sleep\":name:id:sleepStepName)@ ('sleepTimerId'),
-  mirroring 'Keiro.ProcessManager.deterministicCommandId'. Because
-  'Keiro.Timer.scheduleTimerTx' re-arms only a still-@Scheduled@ row, every
-  resume that re-enters the not-yet-resolved sleep re-arms the same id and
-  collapses to a no-op — exactly the idempotent arming
-  'Keiro.Workflow.awaitStep' requires.
+  mirroring 'Keiro.ProcessManager.deterministicCommandId'. The workflow sleep
+  arm uses 'Keiro.Timer.scheduleTimerOnceTx', so the first arm's @fire_at@ wins
+  and every resume that re-enters the not-yet-resolved sleep leaves the row
+  untouched. The sleep duration is measured from the first arm, not from the
+  latest resume pass.
 
 * __No @keiro_timers@ schema change.__ Routing is entirely a function of the
   caller-supplied fire action and the JSON payload; this module owns no
@@ -104,7 +104,7 @@ import Keiro.Timer (
     TimerRequest (..),
     TimerRow,
     runTimerWorker,
-    scheduleTimerTx,
+    scheduleTimerOnceTx,
  )
 import Keiro.Workflow (
     StepName (..),
@@ -203,8 +203,8 @@ suspends the run; the suspension resolves when a timer worker fires the row
 a later run replays past the sleep without re-arming.
 
 The arming action is idempotent (a resumed workflow re-runs it until the sleep
-resolves): it upserts on a deterministic 'sleepTimerId', and
-'scheduleTimerTx' re-arms only a still-@Scheduled@ row.
+resolves): it inserts with a deterministic 'sleepTimerId' only when the row is
+absent, so the first @fire_at@ persists across every resume pass.
 -}
 sleepNamed ::
     (Workflow :> es, Store :> es, IOE :> es) =>
@@ -225,7 +225,7 @@ sleepNamed userStep delta = do
                     , fireAt = addUTCTime delta now
                     , payload = sleepTimerPayload full
                     }
-        runTransaction (scheduleTimerTx request)
+        runTransaction (scheduleTimerOnceTx request)
 
 {- | Durably pause the workflow for @delta@ under an ordinal name (the @N@th
 sleep in a run becomes @sleep:N@). Convenient but its determinism is

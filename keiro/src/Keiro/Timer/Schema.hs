@@ -18,6 +18,7 @@ module Keiro.Timer.Schema (
 
     -- * Storage
     scheduleTimerTx,
+    scheduleTimerOnceTx,
     claimDueTimer,
     markTimerFired,
 
@@ -116,6 +117,26 @@ scheduleTimerTx request =
         , statusToText Scheduled
         )
         scheduleTimerStmt
+
+{- | Schedule a timer only if no row with the same 'timerId' already exists.
+
+This is for callers whose first arm must win, such as durable workflow sleeps:
+every resume pass re-runs the sleep arm until the timer fires, and preserving
+the original 'fireAt' keeps the sleep measured from the first arm. Process
+managers that intentionally push a deadline back should keep using
+'scheduleTimerTx'.
+-}
+scheduleTimerOnceTx :: TimerRequest -> Tx.Transaction ()
+scheduleTimerOnceTx request =
+    Tx.statement
+        ( timerIdToUuid (request ^. #timerId)
+        , request ^. #processManagerName
+        , request ^. #correlationId
+        , request ^. #fireAt
+        , request ^. #payload
+        , statusToText Scheduled
+        )
+        scheduleTimerOnceStmt
 
 {- | Atomically claim the single earliest timer due at @now@, moving it to
 @Firing@ and bumping its attempt count. Uses @FOR UPDATE SKIP LOCKED@ so
@@ -225,6 +246,26 @@ scheduleTimerStmt =
               status = EXCLUDED.status,
               updated_at = now()
           WHERE keiro_timers.status = 'scheduled'
+        """
+        ( contrazip6
+            (E.param (E.nonNullable E.uuid))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.timestamptz))
+            (E.param (E.nonNullable E.jsonb))
+            (E.param (E.nonNullable E.text))
+        )
+        D.noResult
+
+scheduleTimerOnceStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text) ()
+scheduleTimerOnceStmt =
+    preparable
+        """
+        INSERT INTO keiro_timers
+          (timer_id, process_manager_name, correlation_id, fire_at, payload, status)
+        VALUES
+          ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (timer_id) DO NOTHING
         """
         ( contrazip6
             (E.param (E.nonNullable E.uuid))
