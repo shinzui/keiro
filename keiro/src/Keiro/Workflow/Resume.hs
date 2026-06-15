@@ -81,9 +81,9 @@ import Control.Exception qualified as Exception
 import Control.Monad (foldM, forever)
 import Data.Aeson qualified as Aeson
 import Data.IORef (newIORef, readIORef, writeIORef)
-import Data.List (nub)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
 import Data.UUID qualified as UUID
@@ -300,12 +300,20 @@ resumeWorkflowsOnce opts registry = do
     now <- liftIO getCurrentTime
     unfinished <- findUnfinishedWorkflowIds now
     runningChildren <- findRunningChildIds
-    let pairs = nub (unfinished <> runningChildren)
+    let pairs = dedupeFirstSeen (unfinished <> runningChildren)
         seed = emptyResumeSummary{discovered = length pairs}
     owner <- UUID.toText <$> liftIO UUIDv4.nextRandom
     foldM (advance owner) seed pairs
   where
     mMetrics = runOptions opts ^. #metrics
+    dedupeFirstSeen :: [(Text, Text)] -> [(Text, Text)]
+    dedupeFirstSeen = go Set.empty
+      where
+        go !_ [] = []
+        go !seen (pair : rest)
+            | pair `Set.member` seen = go seen rest
+            | otherwise = pair : go (Set.insert pair seen) rest
+
     advance :: Text -> ResumeSummary -> (Text, Text) -> Eff es ResumeSummary
     advance owner acc (widText, wnameText) =
         case Map.lookup (WorkflowName wnameText) registry of

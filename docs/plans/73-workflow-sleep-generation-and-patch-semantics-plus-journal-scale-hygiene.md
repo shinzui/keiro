@@ -54,10 +54,10 @@ This plan is a child of the MasterPlan at `docs/masterplans/9-keiro-production-r
 - [x] Milestone 5: tests — discovery equivalence (unfinished / finished / rotated / cancelled), GC deletes all per-instance data past retention, retains recent, idempotent under re-run mid-crash (completed 2026-06-15)
 - [x] Milestone 6 (gated on plan 72): migration adding `wake_after` to `keiro_workflows`; sleep arm sets it in the same transaction as the timer insert (completed 2026-06-15)
 - [x] Milestone 6: discovery skips instances with a future `wake_after`; tests (skipped before fire time, discovered after, no re-invocation between) (completed 2026-06-15)
-- [ ] Milestone 7: `journalEntryExists` short-circuits via `Fold.any`
-- [ ] Milestone 7: `nub` → `Set` dedup in `resumeWorkflowsOnce`
-- [ ] Milestone 7: `mkWorkflowName` / `mkWorkflowId` smart constructors + separator documentation in Types.hs
-- [ ] Final: full `cabal test keiro` and `cabal test keiro-migrations-test` green; Outcomes & Retrospective written
+- [x] Milestone 7: `journalEntryExists` short-circuits via `Fold.any` (completed 2026-06-15; target removed by the earlier transaction-scoped append rewrite)
+- [x] Milestone 7: `nub` → `Set` dedup in `resumeWorkflowsOnce` (completed 2026-06-15)
+- [x] Milestone 7: `mkWorkflowName` / `mkWorkflowId` smart constructors + separator documentation in Types.hs (completed 2026-06-15)
+- [x] Final: full `cabal test keiro` and `cabal test keiro-migrations-test` green; Outcomes & Retrospective written (completed 2026-06-15)
 
 
 ## Surprises & Discoveries
@@ -72,6 +72,7 @@ This plan is a child of the MasterPlan at `docs/masterplans/9-keiro-production-r
 - **Milestone 4 implementation discovery (2026-06-15): first-run step return values now match replay values exactly.** The `Step` miss path decodes the JSON value it just recorded, so lossy codecs are observed on the initial run and an invalid `ToJSON`/`FromJSON` round-trip fails immediately with `WorkflowStepDecodeError` after the journal row has been committed.
 - **Milestone 5 implementation discovery (2026-06-15): plan 72 landed with a richer instance table than this draft assumed.** The final table includes `suspended`, attempt/backoff columns, lease columns, and `completed_at`; discovery now reads non-terminal statuses from `keiro_workflows`, while GC uses `completed_at` as the terminal-age column. `gcWorkflowsOnce` does not need `IOE` because kiroku's `hardDeleteStream` is a `Store` operation; only `runWorkflowGcWorker` needs `IOE` for clock/sleep.
 - **Milestone 6 implementation discovery (2026-06-15): the wake hint composes with insert-only sleep arming.** `wake_after` is written from the same requested `fireAt` value as `scheduleTimerOnceTx`. A re-arm can only happen after discovery considers the hint expired, so overwriting the hint on that pass suppresses only future not-yet-due passes; the focused active-cadence sleep test still completes.
+- **Milestone 7 implementation discovery (2026-06-15): the L1 target was already gone.** EP-6's transaction-scoped append rewrite removed `journalEntryExists`, so there was no remaining stream fold to change to `Fold.any`. The resume de-dup still benefits from `Set` membership, but the first full-suite run showed that sorted `Set.toList` changes child/parent resume ordering and makes a failed child wake its parent in the same pass; the implementation therefore uses `Set` for membership while preserving first-seen discovery order.
 
 
 ## Decision Log
@@ -134,6 +135,10 @@ Milestone 4 is complete as of 2026-06-15. Fresh `step` calls now return the deco
 Milestone 5 is complete as of 2026-06-15. Workflow discovery now reads the `keiro_workflows` instance table with an explicit `UTCTime` parameter, and `Keiro.Workflow.Gc` can prune terminal workflow streams, snapshots, step rows, awakeable rows, child links, terminal workflow-sleep timers, and instance rows after retention while protecting completed children of live parents. The migration adds `keiro_workflows_gc_idx` and expected-schema coverage. Focused validation passed with `cabal test keiro --test-options='--match "Keiro.Workflow.Gc" --match "discovers unfinished workflows from the instance table"'` (3 examples, 0 failures), full validation passed with `cabal test keiro` (252 examples, 0 failures), and migration validation passed with `cabal test keiro-migrations-test` (2 examples, 0 failures). Milestone 6 remains next for `wake_after` sleeper skips.
 
 Milestone 6 is complete as of 2026-06-15. The workflow instance table now has `wake_after`, `sleepNamed` writes it in the same transaction as the sleep timer arm, and discovery skips non-terminal workflows whose wake hint is still in the future. Focused validation passed with `cabal test keiro --test-options='--match "Keiro.Workflow.Sleep"'` (11 examples, 0 failures), full validation passed with `cabal test keiro` (255 examples, 0 failures), and migration validation passed with `cabal test keiro-migrations-test` (2 examples, 0 failures). Milestone 7 remains next for low-severity hygiene.
+
+Milestone 7 is complete as of 2026-06-15. The obsolete `journalEntryExists` fold had already disappeared with EP-6's append rewrite, `resumeWorkflowsOnce` now uses `Set` membership for duplicate suppression while preserving first-seen order, and `WorkflowIdentityError`, `mkWorkflowName`, and `mkWorkflowId` provide additive validation for names and ids without breaking raw-constructor callers. Focused validation passed with `cabal test keiro --test-options='--match "Keiro.Workflow.Types" --match "Keiro.Workflow.Resume"'` (13 examples, 0 failures) and the failed-child ordering regression passed with `cabal test keiro --test-options='--match "/Keiro.Workflow.Child/wakes a parent with WorkflowChildFailed when a child reaches the failure ceiling/"'` (1 example, 0 failures).
+
+EP-7 is complete as of 2026-06-15. Final validation passed with `cabal test keiro` (256 examples, 0 failures) and `cabal test keiro-migrations-test` (2 examples, 0 failures).
 
 
 ## Context and Orientation
@@ -778,3 +783,5 @@ Revision note (2026-06-15): Milestone 4 was implemented and validated. The plan 
 Revision note (2026-06-15): Milestone 5 was implemented and validated. The plan now records the final plan-72 table reconciliation (`completed_at` terminal age and richer lifecycle columns), instance-table discovery, the `Keiro.Workflow.Gc` module, GC index migration plus expected schema, pruning/live-parent/idempotence tests, and full `keiro` plus migration validation.
 
 Revision note (2026-06-15): Milestone 6 was implemented and validated. The plan now records the `wake_after` migration, sleep-arm wake hint write, discovery skip predicate, missing-row no-op behavior, no-reinvoke sleeper tests, active-cadence regression evidence, expected-schema update, and full `keiro` plus migration validation.
+
+Revision note (2026-06-15): Milestone 7 and the EP-7 final closeout were implemented and validated. The plan now records the already-removed `journalEntryExists` target, stable `Set`-backed resume de-dup, workflow identity smart constructors, the ordering regression caught by full-suite validation, and final `keiro` plus migration validation.

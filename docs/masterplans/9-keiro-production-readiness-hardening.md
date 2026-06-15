@@ -47,7 +47,7 @@ Alternatives considered. A severity-ordered decomposition ("blockers plan, highs
 | 4 | Make outbox, inbox, timer, and shard workers crash-recoverable | docs/plans/70-make-outbox-inbox-timer-and-shard-workers-crash-recoverable.md | None | None | Complete |
 | 5 | Fix process manager and router delivery correctness | docs/plans/71-fix-process-manager-and-router-delivery-correctness.md | EP-1 | None | Complete |
 | 6 | Workflow engine failure handling, instance leasing, and crash-window atomicity | docs/plans/72-workflow-engine-failure-handling-instance-leasing-and-crash-window-atomicity.md | None | None | Complete |
-| 7 | Workflow sleep, generation, and patch semantics plus journal scale hygiene | docs/plans/73-workflow-sleep-generation-and-patch-semantics-plus-journal-scale-hygiene.md | EP-6 | EP-4 | In Progress |
+| 7 | Workflow sleep, generation, and patch semantics plus journal scale hygiene | docs/plans/73-workflow-sleep-generation-and-patch-semantics-plus-journal-scale-hygiene.md | EP-6 | EP-4 | Complete |
 | 8 | Expose keiro-pgmq tuning surface and make job workers resilient | docs/plans/74-expose-keiro-pgmq-tuning-surface-and-make-job-workers-resilient.md | None | EP-1, EP-2 | Not Started |
 
 
@@ -109,6 +109,7 @@ Milestone-level rollup across child plans; the authoritative per-step state live
 - [x] EP-6: signal/child-completion/cancel crash windows closed
 - [x] EP-7: sleeps fire under an active resume worker; generation-namespaced wake sources
 - [x] EP-7: patch classification journaled at first run; discovery via instance table; pruning
+- [x] EP-7: future sleepers skipped; stable resume de-dup; identity smart constructors
 - [x] EP-8: vt/batch/polling exposed; lease-extension handle; `runJobOnce` is a real drain
 - [x] EP-8: retry-policy validation; future-version payloads retry instead of dead-letter; codec tests
 
@@ -196,6 +197,13 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
   parked sleepers are no longer re-invoked before their timer is due. Full
   `cabal test keiro` passed with 255 examples, 0 failures, and
   `cabal test keiro-migrations-test` passed with 2 examples, 0 failures.
+- EP-7 is complete as of 2026-06-15. Milestone 7 found that EP-6's append rewrite
+  had already removed the `journalEntryExists` fold target, so no `Fold.any`
+  change remained. Resume discovery now uses `Set` membership to suppress duplicate
+  candidates while preserving first-seen order, and workflow identity smart
+  constructors document and validate ambiguous stream-name separators. Full
+  `cabal test keiro` passed with 256 examples, 0 failures, and
+  `cabal test keiro-migrations-test` passed with 2 examples, 0 failures.
 
 
 ## Decision Log
@@ -272,6 +280,8 @@ EP-7 Milestone 5 is complete as of 2026-06-15. Workflow discovery now uses the p
 
 EP-7 Milestone 6 is complete as of 2026-06-15. Future sleepers now set a self-expiring `wake_after` hint, and discovery ignores them until that timestamp, avoiding repeated replay/arm work while preserving due-sleeper completion. Milestone 7 remains next for low-severity workflow hygiene.
 
+EP-7 is complete as of 2026-06-15. The final hygiene pass confirmed the old `journalEntryExists` fold no longer exists, replaced `nub`-style resume candidate de-dup with stable `Set` membership, and added additive workflow identity smart constructors for separator-safe names and ids. Final validation passed with `cabal test keiro` (256 examples, 0 failures) and `cabal test keiro-migrations-test` (2 examples, 0 failures).
+
 
 ---
 
@@ -300,3 +310,5 @@ Revision note (2026-06-15): EP-7 Milestone 4 was completed. Surprises & Discover
 Revision note (2026-06-15): EP-7 Milestone 5 was completed. The second EP-7 progress rollup item is now checked, and Surprises & Discoveries plus Outcomes & Retrospective record instance-table discovery, workflow GC, plan-72 `completed_at` reconciliation, expected-schema update, and validation evidence.
 
 Revision note (2026-06-15): EP-7 Milestone 6 was completed. Surprises & Discoveries and Outcomes & Retrospective now record the `wake_after` instance-column migration, sleep-arm write, discovery skip, no-reinvoke tests, expected-schema update, and validation evidence.
+
+Revision note (2026-06-15): EP-7 Milestone 7 and final closeout were completed. The registry now marks EP-7 Complete, the progress rollup includes sleeper-skip and hygiene completion, and Surprises & Discoveries plus Outcomes & Retrospective record the already-removed `journalEntryExists` target, stable `Set`-backed de-dup, identity smart constructors, and final validation evidence.

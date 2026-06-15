@@ -156,6 +156,7 @@ import Keiro.Workflow (
     Workflow,
     WorkflowError (..),
     WorkflowId (..),
+    WorkflowIdentityError (..),
     WorkflowJournalEvent (StepRecorded, WorkflowCancelled, WorkflowCompleted, WorkflowContinuedAsNew, WorkflowFailed),
     WorkflowName (..),
     WorkflowOutcome (..),
@@ -168,6 +169,8 @@ import Keiro.Workflow (
     defaultWorkflowRunOptions,
     findUnfinishedWorkflowIds,
     loadStepIndex,
+    mkWorkflowId,
+    mkWorkflowName,
     patch,
     patchSetStepName,
     patchStepName,
@@ -5106,6 +5109,18 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 `shouldBe` Right marker
             (workflowJournalCodec ^. #schemaVersion) `shouldBe` 1
             EventType "WorkflowContinuedAsNew" `elem` (workflowJournalCodec ^. #eventTypes) `shouldBe` True
+
+        it "validates workflow identity smart constructors" $ do
+            mkWorkflowName "orderFulfillment" `shouldBe` Right (WorkflowName "orderFulfillment")
+            mkWorkflowName "" `shouldBe` Left WorkflowNameEmpty
+            mkWorkflowName "order-fulfillment" `shouldBe` Left (WorkflowNameInvalidChar '-' "order-fulfillment")
+            mkWorkflowName "order:fulfillment" `shouldBe` Left (WorkflowNameInvalidChar ':' "order:fulfillment")
+            mkWorkflowName "order#1" `shouldBe` Left (WorkflowNameInvalidChar '#' "order#1")
+            mkWorkflowId "550e8400-e29b-41d4-a716-446655440000"
+                `shouldBe` Right (WorkflowId "550e8400-e29b-41d4-a716-446655440000")
+            mkWorkflowId "" `shouldBe` Left WorkflowIdEmpty
+            mkWorkflowId "customer:42" `shouldBe` Left (WorkflowIdInvalidChar ':' "customer:42")
+            mkWorkflowId "customer#42" `shouldBe` Left (WorkflowIdInvalidChar '#' "customer#42")
 
     describe "Keiro.Workflow.Sleep" $ do
         -- Pure (no-DB) checks of the id/payload/step-name helpers.

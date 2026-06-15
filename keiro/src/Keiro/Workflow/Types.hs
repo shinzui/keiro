@@ -22,6 +22,9 @@ module Keiro.Workflow.Types (
     -- * Identity
     WorkflowName (..),
     WorkflowId (..),
+    WorkflowIdentityError (..),
+    mkWorkflowName,
+    mkWorkflowId,
     StepName (..),
     PatchId (..),
 
@@ -63,19 +66,57 @@ import Keiro.Prelude
 import Kiroku.Store.Types (EventType (..), StreamName (..))
 
 {- | The stable name of a workflow /definition/ (for example
-@"order-fulfillment"@). Part of the journal stream name and of every
-deterministic journal-event id, so it must not change for a given
-definition across deploys.
+@"orderFulfillment"@). Part of the journal stream name and of every
+deterministic journal-event id, so it must not change for a given definition
+across deploys. Prefer 'mkWorkflowName' for new code; the raw constructor is
+kept for compatibility and can create ambiguous journal stream names if the
+text contains structural separators such as @-@, @:@, or @#@.
 -}
 newtype WorkflowName = WorkflowName {unWorkflowName :: Text}
     deriving stock (Eq, Ord, Show, Generic)
 
 {- | The id of a single workflow /instance/ (a UUID-as-text or any stable
-caller-supplied string). Combined with the 'WorkflowName' it identifies
-the instance's journal stream.
+caller-supplied string). Combined with the 'WorkflowName' it identifies the
+instance's journal stream. Prefer 'mkWorkflowId' for new code; the raw
+constructor is kept for compatibility and can create ambiguous journal stream
+names if the text contains structural separators such as @:@ or @#@.
 -}
 newtype WorkflowId = WorkflowId {unWorkflowId :: Text}
     deriving stock (Eq, Ord, Show, Generic)
+
+data WorkflowIdentityError
+    = WorkflowNameEmpty
+    | WorkflowNameInvalidChar !Char !Text
+    | WorkflowIdEmpty
+    | WorkflowIdInvalidChar !Char !Text
+    deriving stock (Eq, Show, Generic)
+
+{- | Validated constructor for workflow names.
+
+Rejects empty names and the structural separators @:@ (stream prefix), @-@
+(name/id boundary), and @#@ (generation suffix). Prefer camelCase compound
+names such as @"orderFulfillment"@; the raw 'WorkflowName' constructor remains
+available for compatibility.
+-}
+mkWorkflowName :: Text -> Either WorkflowIdentityError WorkflowName
+mkWorkflowName raw
+    | Text.null raw = Left WorkflowNameEmpty
+    | Just c <- Text.find (`elem` ([':', '-', '#'] :: [Char])) raw =
+        Left (WorkflowNameInvalidChar c raw)
+    | otherwise = Right (WorkflowName raw)
+
+{- | Validated constructor for workflow ids.
+
+Rejects empty ids and the structural separators @:@ and @#@. The @-@ character
+is permitted so UUID-style ids remain valid; with a validated, hyphen-free
+workflow name, the @wf:\<name\>-\<id\>@ boundary is the first @-@.
+-}
+mkWorkflowId :: Text -> Either WorkflowIdentityError WorkflowId
+mkWorkflowId raw
+    | Text.null raw = Left WorkflowIdEmpty
+    | Just c <- Text.find (`elem` ([':', '#'] :: [Char])) raw =
+        Left (WorkflowIdInvalidChar c raw)
+    | otherwise = Right (WorkflowId raw)
 
 {- | The label identifying a step within a workflow. Replay matches on this
 label, not on source position, so reordering code between deploys does not
@@ -96,9 +137,11 @@ newtype PatchId = PatchId {unPatchId :: Text}
 {- | The journal stream name for a workflow instance:
 @wf:\<name\>-\<id\>@.
 
-The @:@ and @-@ characters are structural. Names and ids must not contain
-them in a way that makes the boundary ambiguous (the v1 process-manager
-@pm:\<name\>-\<correlationId\>@ convention carries the same caveat).
+The @:@ and @-@ characters are structural, and generation streams reserve @#@.
+Use 'mkWorkflowName' and 'mkWorkflowId' for separator-safe identities. Raw
+unvalidated names containing @-@ can make two distinct @(name, id)@ pairs share
+one journal stream (the v1 process-manager @pm:\<name\>-\<correlationId\>@
+convention carries the same caveat).
 -}
 workflowStreamName :: WorkflowName -> WorkflowId -> StreamName
 workflowStreamName (WorkflowName name) (WorkflowId wid) =
