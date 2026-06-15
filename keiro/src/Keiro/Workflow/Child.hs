@@ -73,12 +73,15 @@ where
 
 import Control.Exception (Exception)
 import Data.Aeson qualified as Aeson
+import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
 import Keiro.Prelude
 import Keiro.Workflow (
+    JournalAppendOutcome (..),
     StepName (..),
     Workflow,
+    WorkflowError (..),
     WorkflowId (..),
     WorkflowJournalEvent (..),
     WorkflowName (..),
@@ -87,7 +90,9 @@ import Keiro.Workflow (
     appendJournalEntry,
     awaitStep,
     childStepPrefix,
+    currentGeneration,
     currentWorkflow,
+    prepareJournalAppend,
     runWorkflowWith,
     step,
  )
@@ -101,6 +106,7 @@ import Keiro.Workflow.Child.Schema (
 import Keiro.Workflow.Instance (WorkflowStatus (..), upsertInstanceTx)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 -- ---------------------------------------------------------------------------
 -- Handles and reserved step names
@@ -199,7 +205,7 @@ the suspend path (the arm checks the child row's status) and on the hit path
 (a cancelled child's result entry is a @{"cancelled": true}@ sentinel).
 -}
 awaitChild ::
-    (Workflow :> es, Store :> es, FromJSON a) =>
+    (Workflow :> es, Store :> es, IOE :> es, FromJSON a) =>
     ChildHandle a ->
     Eff es a
 awaitChild (ChildHandle childNm childWid) = do
@@ -210,6 +216,16 @@ awaitChild (ChildHandle childNm childWid) = do
                 Just row
                     | (row ^. #status) == ChildCancelled ->
                         throwIO (WorkflowChildCancelled childNm childWid)
+                    | (row ^. #status) == ChildCompleted
+                    , Just resultValue <- row ^. #result ->
+                        appendJournalEntry
+                            (WorkflowName (row ^. #parentName))
+                            (WorkflowId (row ^. #parentId))
+                            StepRecorded
+                                { stepName = row ^. #awaitStep
+                                , result = resultValue
+                                , recordedAt = fromMaybe (row ^. #updatedAt) (row ^. #completedAt)
+                                }
                 -- The spawn already registered the link; nothing more to (re-)arm.
                 _ -> pure ()
     raw <- awaitStep resultStep arm
@@ -297,20 +313,55 @@ childCompletionHook ::
     Aeson.Value ->
     Eff es ()
 childCompletionHook childNm childWid resultValue = do
-    now <- liftIO getCurrentTime
-    _ <-
-        runTransaction $
-            markChildResultTx (unWorkflowId childWid) (unWorkflowName childNm) resultValue now
     mrow <- lookupChild (unWorkflowId childWid) (unWorkflowName childNm)
-    for_ mrow $ \row ->
-        appendJournalEntry
-            (WorkflowName (row ^. #parentName))
-            (WorkflowId (row ^. #parentId))
-            StepRecorded
-                { stepName = row ^. #awaitStep
-                , result = resultValue
-                , recordedAt = now
-                }
+    for_ mrow $ \row -> case row ^. #status of
+        Running -> do
+            now <- liftIO getCurrentTime
+            let parentName = WorkflowName (row ^. #parentName)
+                parentId = WorkflowId (row ^. #parentId)
+            gen <- currentGeneration parentName parentId
+            appendTx <-
+                prepareJournalAppend
+                    parentName
+                    parentId
+                    gen
+                    StepRecorded
+                        { stepName = row ^. #awaitStep
+                        , result = resultValue
+                        , recordedAt = now
+                        }
+            appendOutcome <-
+                runTransaction $ do
+                    transitioned <- markChildResultTx (unWorkflowId childWid) (unWorkflowName childNm) resultValue now
+                    if transitioned
+                        then do
+                            appendOutcome <- appendTx
+                            condemnOnAppendConflict appendOutcome
+                            pure appendOutcome
+                        else pure (JournalAlreadyPresent resultValue)
+            throwOnAppendConflict appendOutcome
+        ChildCompleted ->
+            for_ (row ^. #result) $ \stored ->
+                appendJournalEntry
+                    (WorkflowName (row ^. #parentName))
+                    (WorkflowId (row ^. #parentId))
+                    StepRecorded
+                        { stepName = row ^. #awaitStep
+                        , result = stored
+                        , recordedAt = fromMaybe (row ^. #updatedAt) (row ^. #completedAt)
+                        }
+        ChildCancelled -> pure ()
+        ChildFailed -> pure ()
+
+condemnOnAppendConflict :: JournalAppendOutcome -> Tx.Transaction ()
+condemnOnAppendConflict = \case
+    JournalAppendConflict{} -> Tx.condemn
+    _ -> pure ()
+
+throwOnAppendConflict :: JournalAppendOutcome -> Eff es ()
+throwOnAppendConflict = \case
+    JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+    _ -> pure ()
 
 -- ---------------------------------------------------------------------------
 -- The cancellation sentinel

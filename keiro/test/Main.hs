@@ -5278,6 +5278,27 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Right afterDecoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList afterRepair))
                 [r | StepRecorded s r _ <- afterDecoded, s == awkStep] `shouldBe` [toJSON ("ok" :: Text)]
 
+            it "repairs a completed awakeable row from the await arm without a second signal" $ \storeHandle -> do
+                let name = WorkflowName "crash-arm"
+                    wid = WorkflowId "wf4"
+                    aid = deterministicAwakeableId name wid "approval"
+                    awkStep = "awk:" <> awakeableIdText aid
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+                now <- getCurrentTime
+                Right True <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction $
+                            Awk.completeAwakeableTx (awakeableIdToUuid aid) (toJSON ("ok" :: Text)) now
+                repairedRun <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+                repairedRun `shouldBe` Right Suspended
+                Right repairedJournal <-
+                    Store.runStoreIO storeHandle $
+                        Store.readStreamForward (StreamName "wf:crash-arm-wf4") (StreamVersion 0) 100
+                Right repairedDecoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList repairedJournal))
+                [r | StepRecorded s r _ <- repairedDecoded, s == awkStep] `shouldBe` [toJSON ("ok" :: Text)]
+                completed <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+                completed `shouldBe` Right (Completed "ok!")
+
     describe "Keiro.Workflow.Child" $ do
         -- M2: the reserved spawn/result step-name derivations are stable.
         it "derives the child spawn and result step names" $ do
@@ -5379,6 +5400,36 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Right decoded3 <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList parentJournal3))
                 any (\case StepRecorded "notify" _ _ -> True; _ -> False) decoded3 `shouldBe` True
                 any (\case WorkflowCompleted{} -> True; _ -> False) decoded3 `shouldBe` True
+
+            it "repairs a completed child row from awaitChild without another completion hook" $ \storeHandle -> do
+                let childWid = WorkflowId "ship-crash"
+                Right Suspended <-
+                    Store.runStoreIO storeHandle $
+                        runWorkflow (WorkflowName "parent") (WorkflowId "p-crash") (parentWorkflow childWid)
+                now <- getCurrentTime
+                Right transitioned <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction $
+                            Child.markChildResultTx "ship-crash" "ship" (toJSON ("packed+labelled" :: Text)) now
+                transitioned `shouldBe` True
+                Right beforeRepair <-
+                    Store.runStoreIO storeHandle $
+                        Store.readStreamForward (StreamName "wf:parent-p-crash") (StreamVersion 0) 10
+                Right beforeDecoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList beforeRepair))
+                [r | StepRecorded "child:ship-crash:result" r _ <- beforeDecoded] `shouldBe` []
+                repaired <-
+                    Store.runStoreIO storeHandle $
+                        runWorkflow (WorkflowName "parent") (WorkflowId "p-crash") (parentWorkflow childWid)
+                repaired `shouldBe` Right Suspended
+                Right afterRepair <-
+                    Store.runStoreIO storeHandle $
+                        Store.readStreamForward (StreamName "wf:parent-p-crash") (StreamVersion 0) 10
+                Right afterDecoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList afterRepair))
+                [r | StepRecorded "child:ship-crash:result" r _ <- afterDecoded] `shouldBe` [toJSON ("packed+labelled" :: Text)]
+                completed <-
+                    Store.runStoreIO storeHandle $
+                        runWorkflow (WorkflowName "parent") (WorkflowId "p-crash") (parentWorkflow childWid)
+                completed `shouldBe` Right (Completed "done:packed+labelled")
 
             -- M5: re-invoking the parent does not re-spawn the child (crash survival).
             it "does not re-spawn the child when the parent is re-invoked" $ \storeHandle -> do
@@ -5609,7 +5660,7 @@ neverArmingWorkflow = awaitStep (StepName "awk:test") (pure ())
 {- | The awakeable validation workflow: allocate a durable promise, suspend on
 it, and (once signalled) append "!" to the payload through a recorded step.
 -}
-approvalFlow :: (Workflow :> es, Store :> es) => Eff es Text
+approvalFlow :: (Workflow :> es, Store :> es, IOE :> es) => Eff es Text
 approvalFlow = do
     (_, await) <- awakeableNamed (StepName "approval")
     v <- await
@@ -5647,7 +5698,7 @@ shipWorkflow = do
 then records a @notify@ step. Parametrised by child id so each test isolates
 its own child journal.
 -}
-parentWorkflow :: (Workflow :> es, Store :> es) => WorkflowId -> Eff es Text
+parentWorkflow :: (Workflow :> es, Store :> es, IOE :> es) => WorkflowId -> Eff es Text
 parentWorkflow childWid = do
     h <- spawnChild (WorkflowName "ship") childWid shipWorkflow
     result <- awaitChild h

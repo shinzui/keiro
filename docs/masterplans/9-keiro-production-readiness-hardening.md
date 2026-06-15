@@ -156,6 +156,11 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
   `prepareJournalAppend` so the loser returns the journaled value. Validation passed with
   focused `Keiro.Workflow` coverage (60 examples) and full `cabal test keiro-test`
   (229 examples), both with 0 failures.
+- EP-6 Milestone 4 is complete as of 2026-06-15. Awakeable signal and child completion
+  now compose their row transition with the parent/workflow journal append, and both await
+  arms repair completed rows that predate the journal entry. The EP-6 crash-window rollup
+  remains open until M5 closes child cancellation. Full `cabal test keiro-test` passed with
+  231 examples, 0 failures.
 
 
 ## Decision Log
@@ -214,6 +219,8 @@ EP-6 Milestone 2 is complete as of 2026-06-15. Poison workflow handling and `Wor
 
 EP-6 Milestone 3 is complete as of 2026-06-15. Per-instance leases are live in the resume worker, lease skips are observable, and journal appends are transaction-composable and same-step race-proof; M4 crash-window atomicity for awakeable signals and child completion remains next.
 
+EP-6 Milestone 4 is complete as of 2026-06-15. Awakeable and child-completion crash windows are closed for new writes and repaired on await-arm re-entry for historical wedges; M5 cancellation atomicity and child-result envelope work remains next.
+
 
 ---
 
@@ -224,3 +231,5 @@ Revision note (2026-06-15): EP-5 was implemented and marked Complete. The regist
 Revision note (2026-06-15): EP-6 Milestone 2 was completed. The Progress rollup now checks the poison-workflow/`WorkflowFailed` item, and Surprises & Discoveries plus Outcomes & Retrospective record the focused resume and push-loop validation evidence.
 
 Revision note (2026-06-15): EP-6 Milestone 3 was completed. The Progress rollup now checks the per-instance lease/concurrent-worker item, and Surprises & Discoveries plus Outcomes & Retrospective record the lease and race-proof journal append validation evidence.
+
+Revision note (2026-06-15): EP-6 Milestone 4 was completed. Surprises & Discoveries plus Outcomes & Retrospective record the awakeable and child-completion atomicity work and validation evidence; the third EP-6 Progress rollup item remains unchecked until M5 cancellation crash windows are closed.
