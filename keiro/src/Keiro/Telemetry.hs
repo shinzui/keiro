@@ -81,6 +81,7 @@ module Keiro.Telemetry (
     keiroTimerFireLagName,
     keiroTimerAttemptsName,
     keiroTimerStuckName,
+    keiroTimerRequeuedName,
     keiroProjectionLagName,
     keiroProjectionWaitTimeoutsName,
     keiroCommandConflictsName,
@@ -109,6 +110,7 @@ module Keiro.Telemetry (
     recordTimerFireLag,
     recordTimerAttempts,
     recordTimerStuck,
+    recordTimerRequeued,
     recordProjectionLag,
     recordProjectionWaitTimeouts,
     recordCommandConflicts,
@@ -533,6 +535,8 @@ keiroTimerAttemptsName :: Text
 keiroTimerAttemptsName = "keiro.timer.attempts"
 keiroTimerStuckName :: Text
 keiroTimerStuckName = "keiro.timer.stuck"
+keiroTimerRequeuedName :: Text
+keiroTimerRequeuedName = "keiro.timer.requeued"
 keiroProjectionLagName :: Text
 keiroProjectionLagName = "keiro.projection.lag"
 keiroProjectionWaitTimeoutsName :: Text
@@ -584,6 +588,7 @@ data KeiroMetrics = KeiroMetrics
     , timerFireLag :: Histogram
     , timerAttempts :: Histogram
     , timerStuck :: Gauge Int64
+    , timerRequeued :: Counter Int64
     , projectionLag :: Gauge Int64
     , projectionWaitTimeouts :: Counter Int64
     , commandConflicts :: Counter Int64
@@ -621,6 +626,7 @@ newKeiroMetrics meter = liftIO $ do
     timerFireLag' <- histogram keiroTimerFireLagName "ms" "Delay between a timer's scheduled time and when it fired."
     timerAttempts' <- histogram keiroTimerAttemptsName "{attempt}" "Number of attempts a timer took to fire."
     timerStuck' <- gaugeI64 keiroTimerStuckName "{timer}" "Timers stuck in the Firing state past threshold."
+    timerRequeued' <- counterI64 keiroTimerRequeuedName "{timer}" "Timers moved from firing back to scheduled after a stale claim."
     projectionLag' <- gaugeI64 keiroProjectionLagName "{event}" "Events between the log head and a projection's checkpoint."
     projectionWaitTimeouts' <- counterI64 keiroProjectionWaitTimeoutsName "{timeout}" "Position-wait calls that timed out before the projection caught up."
     commandConflicts' <- counterI64 keiroCommandConflictsName "{conflict}" "Optimistic-concurrency conflicts observed by command runners."
@@ -649,6 +655,7 @@ newKeiroMetrics meter = liftIO $ do
             , timerFireLag = timerFireLag'
             , timerAttempts = timerAttempts'
             , timerStuck = timerStuck'
+            , timerRequeued = timerRequeued'
             , projectionLag = projectionLag'
             , projectionWaitTimeouts = projectionWaitTimeouts'
             , commandConflicts = commandConflicts'
@@ -719,6 +726,8 @@ recordTimerAttempts :: (MonadIO m) => Maybe KeiroMetrics -> Double -> m ()
 recordTimerAttempts = recordHistogram timerAttempts
 recordTimerStuck :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordTimerStuck = recordGaugeI64 timerStuck
+recordTimerRequeued :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordTimerRequeued = recordCounter timerRequeued
 recordProjectionLag :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordProjectionLag = recordGaugeI64 projectionLag
 recordProjectionWaitTimeouts :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()

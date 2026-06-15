@@ -5,7 +5,8 @@ Holds one row per scheduled timer with its 'TimerStatus' lifecycle.
 id) inside the caller's transaction; 'claimDueTimer' atomically picks the
 single earliest due timer with @FOR UPDATE SKIP LOCKED@ and moves it to
 @Firing@, so competing workers never claim the same timer; 'markTimerFired'
-records completion and the produced event id.
+records completion and the produced event id. Stale @Firing@ rows are requeued
+by 'requeueStuckTimers' so a crashed worker does not strand a timer forever.
 
 Callers normally use the re-exports from "Keiro.Timer" rather than this
 module directly.
@@ -28,6 +29,7 @@ module Keiro.Timer.Schema (
     StuckTimerFilter (..),
     anyStuckTimer,
     findStuckTimers,
+    requeueStuckTimers,
     requeueStuckTimer,
     cancelTimer,
     deadLetterTimer,
@@ -51,11 +53,10 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 {- | A timer's lifecycle state.
 
 * 'Scheduled' — waiting for its 'fireAt'; claimable.
-* 'Firing' — claimed by a worker and being processed (re-claimable if the
-  worker crashes before completing).
+* 'Firing' — claimed by a worker and being processed; stale rows become
+  claimable again when 'requeueStuckTimers' moves them back to 'Scheduled'.
 * 'Fired' — successfully fired; terminal.
-* 'Cancelled' — withdrawn before firing; also the decode fallback for an
-  unrecognized stored value.
+* 'Cancelled' — withdrawn before firing.
 * 'Dead' — abandoned after exceeding the attempt ceiling; terminal; carries an
   optional @last_error@ describing why it was given up on.
 -}
@@ -127,9 +128,10 @@ claimDueTimer now =
         Tx.statement now claimDueTimerStmt
 
 {- | Mark a claimed timer @Fired@, recording the id of the event its firing
-produced.
+produced. Returns 'False' when the row left @Firing@ while the fire action was
+running (for example, it was requeued, cancelled, or dead-lettered).
 -}
-markTimerFired :: (Store :> es) => TimerId -> EventId -> Eff es ()
+markTimerFired :: (Store :> es) => TimerId -> EventId -> Eff es Bool
 markTimerFired timerId eventId =
     runTransaction $
         Tx.statement (timerIdToUuid timerId, eventIdToUuid eventId) markTimerFiredStmt
@@ -166,6 +168,17 @@ findStuckTimers now stuckFilter =
         Tx.statement (cutoff, fmap fromIntegral (stuckFilter ^. #minAttempts)) findStuckTimersStmt
   where
     cutoff = fmap (\age -> addUTCTime (negate age) now) (stuckFilter ^. #minAge)
+
+{- | Move every timer stranded in @Firing@ for at least @olderThan@ back to
+@Scheduled@. The statement preserves @fire_at@, so a due timer becomes
+claimable on the same worker pass. Returns the number of rows requeued.
+-}
+requeueStuckTimers :: (Store :> es) => NominalDiffTime -> UTCTime -> Eff es Int
+requeueStuckTimers olderThan now =
+    runTransaction $
+        Tx.statement cutoff requeueStuckTimersStmt
+  where
+    cutoff = addUTCTime (negate olderThan) now
 
 {- | Move a timer from @Firing@ back to @Scheduled@ so the ordinary claim loop
 re-fires it. Leaves @fire_at@ unchanged, so a due timer becomes immediately
@@ -248,7 +261,7 @@ claimDueTimerStmt =
         (E.param (E.nonNullable E.timestamptz))
         (D.rowMaybe timerRowDecoder)
 
-markTimerFiredStmt :: Statement (UUID, UUID) ()
+markTimerFiredStmt :: Statement (UUID, UUID) Bool
 markTimerFiredStmt =
     preparable
         """
@@ -257,12 +270,13 @@ markTimerFiredStmt =
             fired_event_id = $2,
             updated_at = now()
         WHERE timer_id = $1
+          AND status = 'firing'
         """
         ( contrazip2
             (E.param (E.nonNullable E.uuid))
             (E.param (E.nonNullable E.uuid))
         )
-        D.noResult
+        ((> 0) <$> D.rowsAffected)
 
 countDueTimersStmt :: Statement UTCTime Int
 countDueTimersStmt =
@@ -309,6 +323,19 @@ findStuckTimersStmt =
             (E.param (E.nullable E.int8))
         )
         (D.rowList timerRowDecoder)
+
+requeueStuckTimersStmt :: Statement UTCTime Int
+requeueStuckTimersStmt =
+    preparable
+        """
+        UPDATE keiro_timers
+        SET status = 'scheduled',
+            updated_at = now()
+        WHERE status = 'firing'
+          AND updated_at <= $1
+        """
+        (E.param (E.nonNullable E.timestamptz))
+        (fromIntegral <$> D.rowsAffected)
 
 requeueStuckTimerStmt :: Statement UUID Bool
 requeueStuckTimerStmt =
@@ -361,7 +388,7 @@ timerRowDecoder =
         <*> D.column (D.nonNullable D.text)
         <*> D.column (D.nonNullable D.timestamptz)
         <*> D.column (D.nonNullable D.jsonb)
-        <*> (statusFromText <$> D.column (D.nonNullable D.text))
+        <*> D.column (D.nonNullable (D.refine statusFromText D.text))
         <*> (fromIntegral <$> D.column (D.nonNullable D.int8))
         <*> (fmap EventId <$> D.column (D.nullable D.uuid))
 
@@ -373,14 +400,14 @@ statusToText = \case
     Cancelled -> "cancelled"
     Dead -> "dead"
 
-statusFromText :: Text -> TimerStatus
+statusFromText :: Text -> Either Text TimerStatus
 statusFromText = \case
-    "scheduled" -> Scheduled
-    "firing" -> Firing
-    "fired" -> Fired
-    "cancelled" -> Cancelled
-    "dead" -> Dead
-    _ -> Cancelled
+    "scheduled" -> Right Scheduled
+    "firing" -> Right Firing
+    "fired" -> Right Fired
+    "cancelled" -> Right Cancelled
+    "dead" -> Right Dead
+    other -> Left ("unknown keiro_timers.status: " <> other)
 
 timerIdToUuid :: TimerId -> UUID
 timerIdToUuid (TimerId uuid) = uuid

@@ -2002,6 +2002,82 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Store.readStreamForward (StreamName "timer-target") (StreamVersion 0) 10
             fmap (^. #eventId) (Vector.toList targetEvents) `shouldBe` [firedEventId]
 
+        it "re-fires a timer stranded by a crashed worker" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        scheduleTimerTx counterTimerRequest
+            Right (Just claimed) <- Store.runStoreIO storeHandle $ claimDueTimer dueTimerTime
+            claimed ^. #status `shouldBe` Firing
+            realNow <- getCurrentTime
+            firedRef <- newIORef []
+            let futureNow = addUTCTime 400 realNow
+                firedEventId = EventId sampleUuid2
+            workerResult <-
+                Store.runStoreIO storeHandle $
+                    runTimerWorker Nothing futureNow $ \timer -> do
+                        liftIO (modifyIORef' firedRef (<> [timer ^. #timerId]))
+                        pure (Just firedEventId)
+            case workerResult of
+                Right (Just timer) -> timer ^. #timerId `shouldBe` counterTimerRequest ^. #timerId
+                other -> expectationFailure ("expected stale timer to be requeued and claimed, got " <> show other)
+            firedTimers <- readIORef firedRef
+            firedTimers `shouldBe` [counterTimerRequest ^. #timerId]
+            Right statusRow <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement sampleUuid timerStatusAndErrorStmt
+            statusRow `shouldBe` Just ("fired", Nothing)
+            secondWorkerResult <-
+                Store.runStoreIO storeHandle $
+                    runTimerWorker Nothing futureNow (\_ -> pure (Just firedEventId))
+            secondWorkerResult `shouldBe` Right Nothing
+
+        it "does not requeue a fresh firing row" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        scheduleTimerTx counterTimerRequest
+            Right (Just _) <- Store.runStoreIO storeHandle $ claimDueTimer dueTimerTime
+            realNow <- getCurrentTime
+            firedRef <- newIORef False
+            workerResult <-
+                Store.runStoreIO storeHandle $
+                    runTimerWorker Nothing realNow $ \_ -> do
+                        liftIO (writeIORef firedRef True)
+                        pure (Just (EventId sampleUuid2))
+            workerResult `shouldBe` Right Nothing
+            didFire <- readIORef firedRef
+            didFire `shouldBe` False
+            Right statusRow <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement sampleUuid timerStatusAndErrorStmt
+            statusRow `shouldBe` Just ("firing", Nothing)
+
+        it "requeueStuckAfter = Nothing preserves a stranded firing row" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        scheduleTimerTx counterTimerRequest
+            Right (Just _) <- Store.runStoreIO storeHandle $ claimDueTimer dueTimerTime
+            realNow <- getCurrentTime
+            firedRef <- newIORef False
+            let opts = defaultTimerWorkerOptions & #requeueStuckAfter .~ Nothing
+            workerResult <-
+                Store.runStoreIO storeHandle $
+                    runTimerWorkerWith Nothing opts (addUTCTime 400 realNow) $ \_ -> do
+                        liftIO (writeIORef firedRef True)
+                        pure (Just (EventId sampleUuid2))
+            workerResult `shouldBe` Right Nothing
+            didFire <- readIORef firedRef
+            didFire `shouldBe` False
+            Right statusRow <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement sampleUuid timerStatusAndErrorStmt
+            statusRow `shouldBe` Just ("firing", Nothing)
+
         it "does not claim a cancelled timer" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
@@ -2049,6 +2125,26 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Store.runStoreIO storeHandle $
                     runTimerWorker Nothing dueTimerTime (\_ -> pure (Just firedEventId))
             secondWorkerResult `shouldBe` Right Nothing
+
+        it "markTimerFired does not resurrect a dead timer" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        scheduleTimerTx counterTimerRequest
+            Right (Just _) <- Store.runStoreIO storeHandle $ claimDueTimer dueTimerTime
+            deadened <-
+                Store.runStoreIO storeHandle $
+                    deadLetterTimer (counterTimerRequest ^. #timerId) "operator dead-letter"
+            deadened `shouldBe` Right True
+            marked <-
+                Store.runStoreIO storeHandle $
+                    markTimerFired (counterTimerRequest ^. #timerId) (EventId sampleUuid2)
+            marked `shouldBe` Right False
+            Right statusRow <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement sampleUuid timerStatusAndErrorStmt
+            statusRow `shouldBe` Just ("dead", Just "operator dead-letter")
 
         it "records a row stranded in Firing in the stuck gauge" $ \storeHandle -> do
             (exporter, metricsRef) <- inMemoryMetricExporter
