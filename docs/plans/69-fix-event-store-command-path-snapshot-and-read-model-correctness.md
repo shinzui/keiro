@@ -116,30 +116,35 @@ Milestone 2 — snapshot policy and overwrite correctness:
 
 Milestone 3 — read-model read path correctness:
 
-- [ ] Change `lookupSubscriptionPositionStmt` in `keiro/src/Keiro/ReadModel.hs` to
-      `SELECT min(last_seen)` with a `singleRow`/nullable decoder.
-- [ ] Test: with two consumer-group member rows (positions 7 and 3),
+- [x] Change `lookupSubscriptionPositionStmt` in `keiro/src/Keiro/ReadModel.hs` to
+      `SELECT min(last_seen)` with a `singleRow`/nullable decoder. Completed
+      2026-06-15.
+- [x] Test: with two consumer-group member rows (positions 7 and 3),
       `readSubscriptionPosition` returns `Just (GlobalPosition 3)` instead of throwing.
-- [ ] Move `storeHeadPosition` from `keiro/src/Keiro/Projection.hs` into
+      Completed 2026-06-15.
+- [x] Move `storeHeadPosition` from `keiro/src/Keiro/Projection.hs` into
       `keiro/src/Keiro/ReadModel.hs` (exported); re-import it in `Projection.hs`.
-- [ ] Implement `Strong` in `waitIfNeeded` as a `waitFor` to the store head position
+      Completed 2026-06-15.
+- [x] Implement `Strong` in `waitIfNeeded` as a `waitFor` to the store head position
       captured at query start, using a new exported `defaultStrongWaitOptions`; update the
-      `ConsistencyMode` haddocks.
-- [ ] Update the test fixture `counterReadModel` (`keiro/test/Main.hs`) to
+      `ConsistencyMode` haddocks. Completed 2026-06-15.
+- [x] Update the test fixture `counterReadModel` (`keiro/test/Main.hs`) to
       `defaultConsistency = Eventual` and retitle the inline-projection test; add Strong
       tests: immediate return at head, blocking until a forked thread advances the cursor,
-      and immediate return on an empty log.
-- [ ] Fix the `registerReadModel` readback race in `keiro/src/Keiro/ReadModel/Schema.hs`:
+      and immediate return on an empty log. Completed 2026-06-15.
+- [x] Fix the `registerReadModel` readback race in `keiro/src/Keiro/ReadModel/Schema.hs`:
       replace the `WITH inserted ... UNION ALL` statement with
-      `ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING ...`.
-- [ ] Take registration off the hot path: `ensureReadModel` in
+      `ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING ...`. Completed
+      2026-06-15.
+- [x] Take registration off the hot path: `ensureReadModel` in
       `keiro/src/Keiro/ReadModel.hs` does `lookupReadModel` first and only calls
-      `registerReadModel` when the row is missing.
-- [ ] Test: two consecutive `runQuery` calls leave the registry row's `xmin` unchanged
+      `registerReadModel` when the row is missing. Completed 2026-06-15.
+- [x] Test: two consecutive `runQuery` calls leave the registry row's `xmin` unchanged
       (no write per query); concurrent first-time registration smoke test passes.
-- [ ] Add `UnknownStatus !Text` to `ReadModelStatus`; `statusFromText` preserves the raw
+      Completed 2026-06-15.
+- [x] Add `UnknownStatus !Text` to `ReadModelStatus`; `statusFromText` preserves the raw
       text instead of silently mapping to `Paused`; test that a `'wedged'` status surfaces
-      as `ReadModelNotLive ... (UnknownStatus "wedged")`.
+      as `ReadModelNotLive ... (UnknownStatus "wedged")`. Completed 2026-06-15.
 
 Milestone 4 — honest async-projection contract and documentation:
 
@@ -171,6 +176,9 @@ implementation. Provide concise evidence.
 - 2026-06-15: Full `cabal test keiro-test --test-show-details=direct` passed after milestone 1: 172 examples, 0 failures.
 - 2026-06-15: The focused milestone-2 validation passed with `cabal test keiro-test --test-show-details=direct --test-options='--match /Keiro.EventStream/ --match /Keiro.Snapshot/'`: 12 examples, 0 failures. This covered the new pure span-aware policy checks, command-path boundary crossing, and incompatible snapshot-codec overwrite behavior.
 - 2026-06-15: Full `cabal test keiro-test --test-show-details=direct` passed after milestone 2: 174 examples, 0 failures.
+- 2026-06-15: The focused milestone-3 validation passed with `cabal test keiro-test --test-show-details=direct --test-options='--match /Keiro.ReadModel/'`: 16 examples, 0 failures. This covered sharded subscription positions, `Strong` consistency, lookup-first registration, concurrent first registration, no registry-row churn on repeat queries, and unknown status surfacing.
+- 2026-06-15: Full-suite validation after the first milestone-3 pass exposed that `routerTargetsReadModel` was also an inline-style fixture with no subscription worker but still defaulted to `Strong`. The first router dispatch passed on an empty log; later dispatches timed out under the new real `Strong` semantics once target command events existed. The fixture now defaults to `Eventual`, matching `counterReadModel`.
+- 2026-06-15: Full `cabal test keiro-test --test-show-details=direct` passed after milestone 3 and the router fixture correction: 181 examples, 0 failures.
 
 
 ## Decision Log

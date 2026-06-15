@@ -29,7 +29,6 @@ module Keiro.Projection (
 )
 where
 
-import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import GHC.Stack (HasCallStack)
@@ -37,13 +36,12 @@ import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Command (CommandError, CommandResult, RunCommandOptions, runCommandWithSqlEvents)
 import Keiro.EventStream (EventStream)
 import Keiro.Prelude
-import Keiro.ReadModel (readSubscriptionPosition)
+import Keiro.ReadModel (readSubscriptionPosition, storeHeadPosition)
 import Keiro.Stream (Stream)
 import Keiro.Telemetry (KeiroMetrics)
 import Keiro.Telemetry qualified as Telemetry
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Read (readAllBackward)
 import Kiroku.Store.Types (EventId, GlobalPosition (..), RecordedEvent)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
@@ -136,17 +134,6 @@ recordProjectionLag metrics projection = do
         fromMaybe (GlobalPosition 0)
             <$> readSubscriptionPosition (projection ^. #subscriptionName)
     Telemetry.recordProjectionLag metrics (positionGap headPos checkpoint)
-
-{- | The global position of the most recent event in the @$all@ log, or
-@GlobalPosition 0@ when the log is empty. 'readAllBackward' treats
-@GlobalPosition 0@ as "after everything", so a limit of 1 returns the head.
--}
-storeHeadPosition :: (Store :> es) => Eff es GlobalPosition
-storeHeadPosition = do
-    recent <- readAllBackward (GlobalPosition 0) 1
-    pure $ case Vector.toList recent of
-        (event : _) -> event ^. #globalPosition
-        [] -> GlobalPosition 0
 
 -- | The non-negative gap between the log head and a checkpoint, in events.
 positionGap :: GlobalPosition -> GlobalPosition -> Int64

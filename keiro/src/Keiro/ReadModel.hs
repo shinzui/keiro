@@ -8,9 +8,10 @@ running the query in a transaction.
 
 The consistency modes trade freshness against latency:
 
-* 'Strong' / 'Eventual' — query immediately; the names document the caller's
-  expectation but neither blocks. (Read-your-writes is the projection
-  worker's responsibility under 'Eventual'.)
+* 'Strong' — capture the store head position at query start and block until
+  the model's subscription cursor reaches it.
+* 'Eventual' — query immediately. Read-your-writes is the projection worker's
+  responsibility under 'Eventual'.
 * 'PositionWait' — block until the model's subscription has caught up to a
   target 'GlobalPosition' (typically the position returned by the command
   the caller just ran), giving read-your-writes against an asynchronous
@@ -27,12 +28,14 @@ module Keiro.ReadModel (
     -- * Consistency
     ConsistencyMode (..),
     PositionWaitOptions (..),
+    defaultStrongWaitOptions,
 
     -- * Querying
     runQuery,
     runQueryWith,
     waitFor,
     readSubscriptionPosition,
+    storeHeadPosition,
 
     -- * Errors
     ReadModelError (..),
@@ -44,6 +47,7 @@ where
 
 import Control.Concurrent (threadDelay)
 import Data.Time.Clock (diffUTCTime)
+import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -52,6 +56,7 @@ import Keiro.Prelude
 import Keiro.ReadModel.Schema
 import Keiro.Telemetry (KeiroMetrics, recordProjectionWaitTimeouts)
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Read (readAllBackward)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (GlobalPosition (..))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -82,8 +87,12 @@ data ReadModel q r = ReadModel
 
 {- | How fresh a read must be before the query runs.
 
-'Strong' and 'Eventual' both query without blocking; 'PositionWait' blocks
-until the projection has caught up to a target log position (or times out).
+'Strong' waits for the model's subscription to reach the store head captured
+at query start. It is intended for asynchronous read models with a worker
+advancing that subscription cursor; inline-only models should use 'Eventual'
+because they have no subscription worker to advance while waiting.
+'PositionWait' blocks until the projection has caught up to a caller-supplied
+target log position (or times out). 'Eventual' queries immediately.
 -}
 data ConsistencyMode
     = Strong
@@ -104,6 +113,17 @@ data PositionWaitOptions = PositionWaitOptions
     , pollMicros :: !Int
     }
     deriving stock (Generic, Eq, Show)
+
+{- | Default wait settings used by 'Strong': wait up to five seconds, polling
+every 10ms, for the store head captured at query start.
+-}
+defaultStrongWaitOptions :: PositionWaitOptions
+defaultStrongWaitOptions =
+    PositionWaitOptions
+        { target = Nothing
+        , timeoutMicros = 5000000
+        , pollMicros = 10000
+        }
 
 -- | Why a read-model query could not run.
 data ReadModelError
@@ -196,11 +216,15 @@ ensureReadModel ::
     ReadModel q r ->
     Eff es (Either ReadModelError ())
 ensureReadModel readModel = do
+    found <- lookupReadModel (readModel ^. #name)
     metadata <-
-        registerReadModel
-            (readModel ^. #name)
-            (readModel ^. #version)
-            (readModel ^. #shapeHash)
+        case found of
+            Just metadata -> pure metadata
+            Nothing ->
+                registerReadModel
+                    (readModel ^. #name)
+                    (readModel ^. #version)
+                    (readModel ^. #shapeHash)
     pure (validateMetadata readModel metadata)
 
 validateMetadata :: ReadModel q r -> ReadModelMetadata -> Either ReadModelError ()
@@ -230,7 +254,9 @@ waitIfNeeded ::
     ConsistencyMode ->
     ReadModel q r ->
     Eff es (Either ReadModelError ())
-waitIfNeeded _ Strong _ = pure (Right ())
+waitIfNeeded metrics Strong readModel = do
+    target <- storeHeadPosition
+    waitFor metrics (defaultStrongWaitOptions & #target ?~ target) readModel target
 waitIfNeeded _ Eventual _ = pure (Right ())
 waitIfNeeded metrics (PositionWait options) readModel =
     case options ^. #target of
@@ -249,9 +275,20 @@ lookupSubscriptionPositionStmt :: Statement Text (Maybe GlobalPosition)
 lookupSubscriptionPositionStmt =
     preparable
         """
-        SELECT last_seen
+        SELECT min(last_seen)
         FROM subscriptions
         WHERE subscription_name = $1
         """
         (E.param (E.nonNullable E.text))
-        (D.rowMaybe (GlobalPosition <$> D.column (D.nonNullable D.int8)))
+        (D.singleRow (fmap GlobalPosition <$> D.column (D.nullable D.int8)))
+
+{- | The global position of the most recent event in the @$all@ log, or
+@GlobalPosition 0@ when the log is empty. 'readAllBackward' treats
+@GlobalPosition 0@ as "after everything", so a limit of 1 returns the head.
+-}
+storeHeadPosition :: (Store :> es) => Eff es GlobalPosition
+storeHeadPosition = do
+    recent <- readAllBackward (GlobalPosition 0) 1
+    pure $ case Vector.toList recent of
+        (event : _) -> event ^. #globalPosition
+        [] -> GlobalPosition 0

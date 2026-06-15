@@ -9,7 +9,8 @@ disk, or one that is mid-rebuild. The status transitions ('markRebuilding',
 
 All operations run as single-statement 'Hasql.Transaction.Transaction's
 against the @keiro_read_models@ table; an unrecognized stored status decodes
-to 'Paused' defensively rather than failing the read.
+to 'UnknownStatus' so callers see the raw database value instead of a silent
+fallback.
 -}
 module Keiro.ReadModel.Schema (
     -- * Metadata
@@ -42,15 +43,16 @@ import Prelude qualified
 
 * 'Live' — current and queryable.
 * 'Rebuilding' — being repopulated from the event log; not yet queryable.
-* 'Paused' — temporarily not served (also the fallback for an unrecognized
-  stored value).
+* 'Paused' — temporarily not served.
 * 'Abandoned' — a rebuild that was given up on.
+* 'UnknownStatus' — a database value this library version does not recognize.
 -}
 data ReadModelStatus
     = Live
     | Rebuilding
     | Paused
     | Abandoned
+    | UnknownStatus !Text
     deriving stock (Generic, Eq, Show)
 
 {- | One row of the @keiro_read_models@ registry: a model's name, schema
@@ -119,19 +121,11 @@ registerReadModelStmt :: Statement (Text, Int64, Text) ReadModelMetadata
 registerReadModelStmt =
     preparable
         """
-        WITH inserted AS (
-          INSERT INTO keiro_read_models (name, version, shape_hash, status, last_built_at)
-          VALUES ($1, $2, $3, 'live', now())
-          ON CONFLICT (name) DO NOTHING
-          RETURNING name, version, shape_hash, last_built_at, status
-        )
-        SELECT name, version, shape_hash, last_built_at, status
-        FROM inserted
-        UNION ALL
-        SELECT name, version, shape_hash, last_built_at, status
-        FROM keiro_read_models
-        WHERE name = $1
-        LIMIT 1
+        INSERT INTO keiro_read_models (name, version, shape_hash, status, last_built_at)
+        VALUES ($1, $2, $3, 'live', now())
+        ON CONFLICT (name) DO UPDATE
+          SET name = EXCLUDED.name
+        RETURNING name, version, shape_hash, last_built_at, status
         """
         ( contrazip3
             (E.param (E.nonNullable E.text))
@@ -195,6 +189,7 @@ statusToText = \case
     Rebuilding -> "rebuilding"
     Paused -> "paused"
     Abandoned -> "abandoned"
+    UnknownStatus raw -> raw
 
 statusFromText :: Text -> ReadModelStatus
 statusFromText = \case
@@ -202,4 +197,4 @@ statusFromText = \case
     "rebuilding" -> Rebuilding
     "paused" -> Paused
     "abandoned" -> Abandoned
-    _ -> Paused
+    raw -> UnknownStatus raw

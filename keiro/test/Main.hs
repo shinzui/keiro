@@ -1185,7 +1185,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             snapshotVersionAfter `shouldBe` Just (StreamVersion 2)
 
     describe "Keiro.ReadModel" $ around (withFreshStore fixture) $ do
-        it "queries inline projection with Strong consistency" $ \storeHandle -> do
+        it "queries inline projection with Eventual consistency" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction initializeCounterReadModelTable
@@ -1206,6 +1206,81 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Store.runStoreIO storeHandle $
                     runQuery Nothing counterReadModel "inline"
             queryResult `shouldBe` Right (Right 5)
+
+        it "reads the minimum checkpoint across consumer-group subscription members" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $ do
+                        Tx.statement ("counter-read-model-sub", 1, 7) upsertSubscriptionCursorMemberStmt
+                        Tx.statement ("counter-read-model-sub", 2, 3) upsertSubscriptionCursorMemberStmt
+            position <-
+                Store.runStoreIO storeHandle $
+                    readSubscriptionPosition "counter-read-model-sub"
+            position `shouldBe` Right (Just (GlobalPosition 3))
+
+        it "Strong returns immediately on an empty log" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction initializeCounterReadModelTable
+            queryResult <-
+                Store.runStoreIO storeHandle $
+                    runQueryWith Nothing Strong counterReadModel "empty"
+            queryResult `shouldBe` Right (Right 0)
+
+        it "Strong returns immediately when the subscription is already at the store head" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction initializeCounterReadModelTable
+            let target = stream "read-model-strong-at-head" :: Stream CounterEventStream
+            Right (Right commandResult) <-
+                Store.runStoreIO storeHandle $
+                    runCommandWithProjections
+                        defaultRunCommandOptions
+                        counterEventStream
+                        target
+                        (Add 5)
+                        [counterInlineProjection]
+            globalPosition <- case commandResult ^. #globalPosition of
+                Just position -> pure position
+                Nothing -> expectationFailure "expected command global position" *> error "unreachable"
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement ("counter-read-model-sub", globalPositionToInt globalPosition) upsertSubscriptionCursorStmt
+            queryResult <-
+                Store.runStoreIO storeHandle $
+                    runQueryWith Nothing Strong counterReadModel "inline"
+            queryResult `shouldBe` Right (Right 5)
+
+        it "Strong blocks until the subscription reaches the store head captured at query start" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction initializeCounterReadModelTable
+            let target = stream "read-model-strong-blocking" :: Stream CounterEventStream
+            Right (Right commandResult) <-
+                Store.runStoreIO storeHandle $
+                    runCommandWithProjections
+                        defaultRunCommandOptions
+                        counterEventStream
+                        target
+                        (Add 6)
+                        [counterInlineProjection]
+            globalPosition <- case commandResult ^. #globalPosition of
+                Just position -> pure position
+                Nothing -> expectationFailure "expected command global position" *> error "unreachable"
+            _ <- forkIO $ do
+                threadDelay 20000
+                advanced <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction $
+                            Tx.statement ("counter-read-model-sub", globalPositionToInt globalPosition) upsertSubscriptionCursorStmt
+                case advanced of
+                    Right () -> pure ()
+                    Left err -> expectationFailure ("failed to advance subscription cursor: " <> show err)
+            queryResult <-
+                Store.runStoreIO storeHandle $
+                    runQueryWith Nothing Strong counterReadModel "inline"
+            queryResult `shouldBe` Right (Right 6)
 
         it "inline projection populates actor and source_event_id from command metadata" $ \storeHandle -> do
             Right () <-
@@ -1274,6 +1349,45 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 `shouldBe` Right
                     (Left (ReadModelWaitTimeout "counter-read-model" (GlobalPosition 5) (GlobalPosition 1)))
 
+        it "does not write the registry row on repeated read-model queries" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction initializeCounterReadModelTable
+            Right (Right 0) <-
+                Store.runStoreIO storeHandle $
+                    runQuery Nothing counterReadModel "no-churn"
+            Right xminBefore <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement "counter-read-model" readModelXminStmt
+            Right (Right 0) <-
+                Store.runStoreIO storeHandle $
+                    runQuery Nothing counterReadModel "no-churn"
+            Right xminAfter <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement "counter-read-model" readModelXminStmt
+            xminAfter `shouldBe` xminBefore
+
+        it "handles concurrent first-time read-model registration" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction initializeCounterReadModelTable
+            resultA <- newEmptyMVar
+            resultB <- newEmptyMVar
+            _ <-
+                forkIO $
+                    Store.runStoreIO storeHandle (runQuery Nothing counterReadModel "concurrent")
+                        >>= putMVar resultA
+            _ <-
+                forkIO $
+                    Store.runStoreIO storeHandle (runQuery Nothing counterReadModel "concurrent")
+                        >>= putMVar resultB
+            first <- takeMVar resultA
+            second <- takeMVar resultB
+            first `shouldBe` Right (Right 0)
+            second `shouldBe` Right (Right 0)
+
         it "rejects stale read-model schema" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
@@ -1291,6 +1405,24 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             queryResult
                 `shouldBe` Right
                     (Left (ReadModelStaleSchema "counter-read-model" 1 99 "counter-read-model-v1" "counter-read-model-v1"))
+
+        it "surfaces unknown read-model statuses with the raw status text" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction initializeCounterReadModelTable
+            Right (Right 0) <-
+                Store.runStoreIO storeHandle $
+                    runQuery Nothing counterReadModel "unknown-status"
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement ("counter-read-model", "wedged") updateReadModelStatusStmt
+            queryResult <-
+                Store.runStoreIO storeHandle $
+                    runQuery Nothing counterReadModel "unknown-status"
+            queryResult
+                `shouldBe` Right
+                    (Left (ReadModelNotLive "counter-read-model" (UnknownStatus "wedged")))
 
         it "ignores duplicate async event by source_event_id" $ \storeHandle -> do
             Right () <-
@@ -5359,7 +5491,7 @@ counterReadModel =
         , subscriptionName = "counter-read-model-sub"
         , version = 1
         , shapeHash = "counter-read-model-v1"
-        , defaultConsistency = Strong
+        , defaultConsistency = Eventual
         , query = \modelId -> Tx.statement modelId selectCounterReadModelStmt
         }
 
@@ -5482,6 +5614,23 @@ upsertSubscriptionCursorStmt =
         )
         D.noResult
 
+upsertSubscriptionCursorMemberStmt :: Statement (Text, Int32, Int64) ()
+upsertSubscriptionCursorMemberStmt =
+    preparable
+        """
+        INSERT INTO subscriptions (subscription_name, stream_name, consumer_group_member, consumer_group_size, last_seen)
+        VALUES ($1, '$all', $2, 2, $3)
+        ON CONFLICT (subscription_name, consumer_group_member) DO UPDATE
+          SET last_seen = EXCLUDED.last_seen,
+              updated_at = now()
+        """
+        ( contrazip3
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.int4))
+            (E.param (E.nonNullable E.int8))
+        )
+        D.noResult
+
 updateReadModelVersionStmt :: Statement (Text, Int64) ()
 updateReadModelVersionStmt =
     preparable
@@ -5495,6 +5644,31 @@ updateReadModelVersionStmt =
             (E.param (E.nonNullable E.int8))
         )
         D.noResult
+
+updateReadModelStatusStmt :: Statement (Text, Text) ()
+updateReadModelStatusStmt =
+    preparable
+        """
+        UPDATE keiro_read_models
+        SET status = $2
+        WHERE name = $1
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        D.noResult
+
+readModelXminStmt :: Statement Text Text
+readModelXminStmt =
+    preparable
+        """
+        SELECT xmin::text
+        FROM keiro_read_models
+        WHERE name = $1
+        """
+        (E.param (E.nonNullable E.text))
+        (D.singleRow (D.column (D.nonNullable D.text)))
 
 globalPositionToInt :: GlobalPosition -> Int64
 globalPositionToInt (GlobalPosition value) = value
@@ -5525,7 +5699,7 @@ routerTargetsReadModel =
         , subscriptionName = "router-targets-sub"
         , version = 1
         , shapeHash = "router-targets-v1"
-        , defaultConsistency = Strong
+        , defaultConsistency = Eventual
         , query = \groupId -> Tx.statement groupId selectRouterTargetsStmt
         }
 
