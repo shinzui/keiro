@@ -232,7 +232,7 @@ areaChaptersReadModel =
         , subscriptionName = "jitsurei-area-chapters-sub"
         , version = 1
         , shapeHash = "jitsurei-area-chapters-v1"
-        , defaultConsistency = Strong
+        , defaultConsistency = Eventual
         , query = \(AreaId area) -> Tx.statement area selectAreaChaptersStmt
         }
 

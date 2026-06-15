@@ -148,23 +148,25 @@ Milestone 3 — read-model read path correctness:
 
 Milestone 4 — honest async-projection contract and documentation:
 
-- [ ] Add migration `keiro-migrations/sql-migrations/2026-06-10-00-00-00-keiro-projection-dedup.sql`
+- [x] Add migration `keiro-migrations/sql-migrations/2026-06-15-21-49-37-keiro-projection-dedup.sql`
       creating `keiro_projection_dedup` keyed by `(projection_name, event_id)` with an
-      `applied_at` pruning index.
-- [ ] Implement the dedup guard in `applyAsyncProjection`
+      `applied_at` pruning index. Completed 2026-06-15.
+- [x] Implement the dedup guard in `applyAsyncProjection`
       (`keiro/src/Keiro/Projection.hs`): insert the idempotency key in the same
       transaction; skip `applyRecorded` on conflict. Add
-      `pruneAsyncProjectionDedupBefore` and document the retention contract.
-- [ ] Test: a non-idempotent (incrementing) async projection applied twice in two separate
+      `pruneAsyncProjectionDedupBefore` and document the retention contract. Completed
+      2026-06-15.
+- [x] Test: a non-idempotent (incrementing) async projection applied twice in two separate
       transactions counts the event once; after pruning its dedup row, a re-apply applies
-      again (window semantics demonstrated).
-- [ ] Write the offline-rebuild operator runbook into the
+      again (window semantics demonstrated). Completed 2026-06-15.
+- [x] Write the offline-rebuild operator runbook into the
       `keiro/src/Keiro/ReadModel/Rebuild.hs` module haddock (sequence, verification,
-      explicit non-goals).
-- [ ] Add the kiroku `$all`-row append-serialization known-limits note to the
-      `keiro/src/Keiro.hs` module haddock.
-- [ ] Full verification: `cabal build all`, `cabal test keiro-test`,
+      explicit non-goals). Completed 2026-06-15.
+- [x] Add the kiroku `$all`-row append-serialization known-limits note to the
+      `keiro/src/Keiro.hs` module haddock. Completed 2026-06-15.
+- [x] Full verification: `cabal build all`, `cabal test keiro-test`,
       `cabal test keiro-migrations-test`, `cabal test jitsurei-test` all green.
+      Completed 2026-06-15.
 
 
 ## Surprises & Discoveries
@@ -179,6 +181,23 @@ implementation. Provide concise evidence.
 - 2026-06-15: The focused milestone-3 validation passed with `cabal test keiro-test --test-show-details=direct --test-options='--match /Keiro.ReadModel/'`: 16 examples, 0 failures. This covered sharded subscription positions, `Strong` consistency, lookup-first registration, concurrent first registration, no registry-row churn on repeat queries, and unknown status surfacing.
 - 2026-06-15: Full-suite validation after the first milestone-3 pass exposed that `routerTargetsReadModel` was also an inline-style fixture with no subscription worker but still defaulted to `Strong`. The first router dispatch passed on an empty log; later dispatches timed out under the new real `Strong` semantics once target command events existed. The fixture now defaults to `Eventual`, matching `counterReadModel`.
 - 2026-06-15: Full `cabal test keiro-test --test-show-details=direct` passed after milestone 3 and the router fixture correction: 181 examples, 0 failures.
+- 2026-06-15: The initial projection-dedup migration used a placeholder zeroed time in
+  the filename. It was corrected to the full timestamp
+  `2026-06-15-21-49-37-keiro-projection-dedup.sql`, and regenerated schema/test output
+  showed codd applying that corrected filename.
+- 2026-06-15: Running `cabal build all` and `cabal test jitsurei-test` concurrently after
+  `cabal clean` can collide in `dist-newstyle` package-db setup (`package.conf.inplace
+  already exists`). Re-running the Cabal validations sequentially avoided the build-dir
+  race.
+- 2026-06-15: The milestone-4 validation passed with
+  `cabal test keiro-migrations-test --test-show-details=direct` (2 examples, 0
+  failures), `cabal test keiro-test --test-show-details=direct` (182 examples, 0
+  failures), `cabal test jitsurei-test --test-show-details=direct` (16 examples, 0
+  failures), and `cabal build all`.
+- 2026-06-15: The jitsurei example had three direct-table/inline read models defaulting
+  to `Strong` (`orderSummaryReadModel`, `areaChaptersReadModel`, and
+  `serviceOncallReadModel`). Under real `Strong`, those models wait on subscription
+  cursors that the examples never advance, so the fixtures now default to `Eventual`.
 
 
 ## Decision Log
@@ -300,7 +319,18 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+EP-3 completed on 2026-06-15. The command path now treats post-commit snapshot-write
+failures as observable side effects rather than failed commands, OCC retries are backed
+off and counted, soft-deleted stream conflicts fail fast, snapshot policy handles
+crossed boundaries and codec rollbacks, sharded subscription positions are read by the
+minimum checkpoint, `Strong` is an actual head-position wait, read-model registration no
+longer writes on every query, async projections get transactional deduplication with an
+explicit pruning window, and the rebuild/`$all` known limits are documented.
+
+The main follow-on constraint is operational: `Strong` is only meaningful for
+subscription-backed read models whose cursors advance. Inline or directly seeded
+application tables should choose `Eventual`, as captured in the keiro and jitsurei test
+fixtures.
 
 
 ## Context and Orientation

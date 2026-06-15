@@ -12,6 +12,14 @@ directly when needed: read models ("Keiro.ReadModel"), projections
 ("Keiro.Projection"), process managers ("Keiro.ProcessManager"), the
 integration in/outbox ("Keiro.Inbox", "Keiro.Outbox"), timers
 ("Keiro.Timer"), and telemetry ("Keiro.Telemetry").
+
+Known limit: Keiro currently uses kiroku's PostgreSQL event store, whose append
+path serializes all writers through the @$all@ stream row while assigning the
+global event order. That makes the global position simple and deterministic,
+but it is a throughput ceiling for very high write rates across many unrelated
+streams. This production-readiness hardening pass documents the limit rather
+than redesigning it; applications that outgrow the single-row global append
+lock need a future event-store migration plan.
 -}
 module Keiro (
     -- * Library version

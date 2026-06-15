@@ -43,7 +43,7 @@ Alternatives considered. A severity-ordered decomposition ("blockers plan, highs
 |---|-------|------|-----------|-----------|--------|
 | 1 | Fix upstream crash-safety gaps in kiroku, shibuya, and ephemeral-pg | docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md | None | None | Complete |
 | 2 | Harden keiro-core codec and stream contracts | docs/plans/68-harden-keiro-core-codec-and-stream-contracts.md | None | None | Complete |
-| 3 | Fix event-store command path, snapshot, and read-model correctness | docs/plans/69-fix-event-store-command-path-snapshot-and-read-model-correctness.md | None | EP-2 | In Progress |
+| 3 | Fix event-store command path, snapshot, and read-model correctness | docs/plans/69-fix-event-store-command-path-snapshot-and-read-model-correctness.md | None | EP-2 | Complete |
 | 4 | Make outbox, inbox, timer, and shard workers crash-recoverable | docs/plans/70-make-outbox-inbox-timer-and-shard-workers-crash-recoverable.md | None | None | Not Started |
 | 5 | Fix process manager and router delivery correctness | docs/plans/71-fix-process-manager-and-router-delivery-correctness.md | EP-1 | None | Not Started |
 | 6 | Workflow engine failure handling, instance leasing, and crash-window atomicity | docs/plans/72-workflow-engine-failure-handling-instance-leasing-and-crash-window-atomicity.md | None | None | Not Started |
@@ -97,7 +97,7 @@ Milestone-level rollup across child plans; the authoritative per-step state live
 - [x] EP-2: stream/category constructor hygiene and integration-event wire fixes
 - [x] EP-3: snapshot-write failures no longer fail committed commands
 - [x] EP-3: sharded subscription position reads; `Strong` consistency implemented or removed
-- [ ] EP-3: read-model registry churn eliminated; async-projection contract honest
+- [x] EP-3: read-model registry churn eliminated; async-projection contract honest
 - [ ] EP-4: outbox — stale `publishing` reclaim, publish exception guard, GC
 - [ ] EP-4: inbox — poison-message path public, backlog count off hot path, index
 - [ ] EP-4: timers — stuck `firing` auto-requeue, status-guarded transitions
@@ -129,6 +129,13 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
 - EP-1 ephemeral-pg cache hardening is complete as of 2026-06-15. Atomic cache publication and the concurrent `createCache` regression landed in commit `215e4ae5fc844d322e2c715369bf5ec4ff285294`; `cabal test` passed with 11 examples, 0 failures.
 - EP-1 is complete as of 2026-06-15. The Hackage releases are visible to `cabal update`, keiro consumes kiroku at `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`, and published-package validation passed: `cabal build all`; `keiro-test` 158 examples, 0 failures; `keiro-pgmq-test` 50 examples, 0 failures, 2 pending; `keiro-migrations-test` 2 examples, 0 failures; `jitsurei-test` 16 examples, 0 failures.
 - EP-2 is complete as of 2026-06-15. The final shape re-exports `EventType(..)` from `Keiro.Codec` so pgmq and generated DSL fixtures can construct tags without direct kiroku-store dependencies, and generated harnesses now round-trip through the tag-aware parser using `eventType <codec> e`. Validation passed with `cabal test keiro-test` (166 examples, 0 failures), `cabal build all --enable-tests`, the jitsurei/keiro-dsl/keiro-pgmq suite battery, and `just haskell-test`.
+- EP-3 is complete as of 2026-06-15. Command retries/snapshot failures are observable,
+  snapshot boundaries and codec rollbacks are handled, sharded read-model positions and
+  real `Strong` consistency are implemented, registry hot-path churn is removed, async
+  projection deduplication is transactional with a prune function, and the rebuild/`$all`
+  operator notes are documented. Validation passed with `cabal build all`,
+  `keiro-test` 182 examples, `keiro-migrations-test` 2 examples, and `jitsurei-test` 16
+  examples, all with 0 failures.
 
 
 ## Decision Log
@@ -177,7 +184,7 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
 
 ## Outcomes & Retrospective
 
-EP-1 and EP-2 are complete as of 2026-06-15. EP-2 delivered the planned core-contract hardening: tag-aware codec decode and upcasting, codec configuration validation, explicit migration/metadata errors, stream/category invariant guards, terminality-aware snapshot policy, and Kafka header fidelity for integration-event `occurredAt` and `attributes`.
+EP-1, EP-2, and EP-3 are complete as of 2026-06-15. EP-2 delivered the planned core-contract hardening: tag-aware codec decode and upcasting, codec configuration validation, explicit migration/metadata errors, stream/category invariant guards, terminality-aware snapshot policy, and Kafka header fidelity for integration-event `occurredAt` and `attributes`. EP-3 delivered the command/read-side correctness work: honest command outcomes after committed appends, observable OCC retry behavior, snapshot policy and overwrite fixes, sharded read-model positions, real `Strong` consistency, no registry write churn, transactional async projection deduplication, and the promised operator documentation.
 
 
 ---

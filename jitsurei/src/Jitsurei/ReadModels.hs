@@ -40,7 +40,7 @@ orderSummaryReadModel =
         , subscriptionName = "jitsurei-order-summary-inline"
         , version = 1
         , shapeHash = "jitsurei-order-summary-v1"
-        , defaultConsistency = Strong
+        , defaultConsistency = Eventual
         , query = \(OrderSummaryQuery orderId) ->
             Tx.statement (orderIdText orderId) selectOrderSummaryStmt
         }

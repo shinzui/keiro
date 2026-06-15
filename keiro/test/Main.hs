@@ -1447,6 +1447,53 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     runQuery Nothing counterReadModel "async-idempotent"
             queryResult `shouldBe` Right (Right 7)
 
+        it "deduplicates async projection application across transactions and reopens after pruning" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction initializeProjectionDedupCounterTable
+            let target = stream "read-model-async-dedup-window" :: Stream CounterEventStream
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions counterEventStream target (Add 7)
+            Right recorded <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "read-model-async-dedup-window") (StreamVersion 0) 10
+            event <- case Vector.toList recorded of
+                [onlyEvent] -> pure onlyEvent
+                other -> expectationFailure ("expected one event, got " <> show other) *> error "unreachable"
+            let incrementingProjection =
+                    AsyncProjection
+                        { name = "incrementing-async-projection"
+                        , subscriptionName = "incrementing-async-projection-sub"
+                        , applyRecorded = \_ -> Tx.statement () incrementProjectionDedupCounterStmt
+                        , idempotencyKey = \recordedEvent -> recordedEvent ^. #eventId
+                        }
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        applyAsyncProjection incrementingProjection event
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        applyAsyncProjection incrementingProjection event
+            Right countAfterDuplicate <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement () selectProjectionDedupCounterStmt
+            countAfterDuplicate `shouldBe` 1
+            cutoff <- addUTCTime 1 <$> getCurrentTime
+            pruned <- Store.runStoreIO storeHandle $ pruneAsyncProjectionDedupBefore cutoff
+            pruned `shouldBe` Right 1
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        applyAsyncProjection incrementingProjection event
+            Right countAfterPrune <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement () selectProjectionDedupCounterStmt
+            countAfterPrune `shouldBe` 2
+
         it "tracks rebuild state transitions" $ \storeHandle -> do
             Right rebuilding <-
                 Store.runStoreIO storeHandle $
@@ -5555,6 +5602,20 @@ initializeCounterReadModelTable =
         )
         """
 
+initializeProjectionDedupCounterTable :: Tx.Transaction ()
+initializeProjectionDedupCounterTable =
+    Tx.sql
+        """
+        CREATE TABLE IF NOT EXISTS projection_dedup_counter (
+          id BOOLEAN PRIMARY KEY DEFAULT TRUE,
+          amount BIGINT NOT NULL
+        );
+
+        INSERT INTO projection_dedup_counter (id, amount)
+        VALUES (TRUE, 0)
+        ON CONFLICT (id) DO NOTHING;
+        """
+
 upsertCounterReadModelStmt :: Statement (Text, Int64, Int64, Maybe UUID, Maybe Text) ()
 upsertCounterReadModelStmt =
     preparable
@@ -5571,6 +5632,28 @@ upsertCounterReadModelStmt =
             (E.param (E.nullable E.text))
         )
         D.noResult
+
+incrementProjectionDedupCounterStmt :: Statement () ()
+incrementProjectionDedupCounterStmt =
+    preparable
+        """
+        UPDATE projection_dedup_counter
+        SET amount = amount + 1
+        WHERE id = TRUE
+        """
+        E.noParams
+        D.noResult
+
+selectProjectionDedupCounterStmt :: Statement () Int
+selectProjectionDedupCounterStmt =
+    preparable
+        """
+        SELECT amount
+        FROM projection_dedup_counter
+        WHERE id = TRUE
+        """
+        E.noParams
+        (D.singleRow (Prelude.fromIntegral <$> D.column (D.nonNullable D.int8)))
 
 selectCounterMetaStmt :: Statement Text (Int64, Maybe Text, Maybe UUID)
 selectCounterMetaStmt =

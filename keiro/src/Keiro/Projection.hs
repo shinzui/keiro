@@ -25,13 +25,19 @@ module Keiro.Projection (
     -- * Asynchronous projections
     AsyncProjection (..),
     applyAsyncProjection,
+    pruneAsyncProjectionDedupBefore,
     recordProjectionLag,
 )
 where
 
+import Contravariant.Extras (contrazip2)
+import Data.UUID (UUID)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import GHC.Stack (HasCallStack)
+import Hasql.Decoders qualified as D
+import Hasql.Encoders qualified as E
+import Hasql.Statement (Statement, preparable)
 import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Command (CommandError, CommandResult, RunCommandOptions, runCommandWithSqlEvents)
 import Keiro.EventStream (EventStream)
@@ -42,7 +48,8 @@ import Keiro.Telemetry (KeiroMetrics)
 import Keiro.Telemetry qualified as Telemetry
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Types (EventId, GlobalPosition (..), RecordedEvent)
+import Kiroku.Store.Transaction (runTransaction)
+import Kiroku.Store.Types (EventId (..), GlobalPosition (..), RecordedEvent)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
 
@@ -108,10 +115,30 @@ runCommandWithProjections options eventStream targetStream command projections =
 
 {- | Apply one event to an 'AsyncProjection', returning the read-model update
 as a 'Hasql.Transaction.Transaction' for the subscription worker to run.
+
+The projection's 'idempotencyKey' is inserted into @keiro_projection_dedup@
+inside the same transaction as 'applyRecorded'. When that insert conflicts,
+the event was already applied within the retained dedup window and the update
+is skipped. Use 'pruneAsyncProjectionDedupBefore' only for events older than
+the subscription system can redeliver; pruning intentionally re-opens those
+events for application if they are replayed later.
 -}
 applyAsyncProjection :: AsyncProjection -> RecordedEvent -> Tx.Transaction ()
-applyAsyncProjection projection recorded =
-    (projection ^. #applyRecorded) recorded
+applyAsyncProjection projection recorded = do
+    inserted <-
+        Tx.statement
+            (projection ^. #name, eventIdToUuid ((projection ^. #idempotencyKey) recorded))
+            insertProjectionDedupStmt
+    when inserted
+        $ (projection ^. #applyRecorded) recorded
+
+{- | Delete async-projection dedup rows older than the supplied timestamp.
+Returns the number of rows pruned.
+-}
+pruneAsyncProjectionDedupBefore :: (Store :> es) => UTCTime -> Eff es Int64
+pruneAsyncProjectionDedupBefore cutoff =
+    runTransaction
+        $ Tx.statement cutoff pruneProjectionDedupBeforeStmt
 
 {- | Record 'keiro.projection.lag' for one async projection: how many events its
 subscription is behind the global log head, computed as the store head global
@@ -138,3 +165,30 @@ recordProjectionLag metrics projection = do
 -- | The non-negative gap between the log head and a checkpoint, in events.
 positionGap :: GlobalPosition -> GlobalPosition -> Int64
 positionGap (GlobalPosition headP) (GlobalPosition checkP) = max 0 (headP Prelude.- checkP)
+
+insertProjectionDedupStmt :: Statement (Text, UUID) Bool
+insertProjectionDedupStmt =
+    preparable
+        """
+        INSERT INTO keiro_projection_dedup (projection_name, event_id)
+        VALUES ($1, $2)
+        ON CONFLICT (projection_name, event_id) DO NOTHING
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.uuid))
+        )
+        ((> 0) <$> D.rowsAffected)
+
+pruneProjectionDedupBeforeStmt :: Statement UTCTime Int64
+pruneProjectionDedupBeforeStmt =
+    preparable
+        """
+        DELETE FROM keiro_projection_dedup
+        WHERE applied_at < $1
+        """
+        (E.param (E.nonNullable E.timestamptz))
+        D.rowsAffected
+
+eventIdToUuid :: EventId -> UUID
+eventIdToUuid (EventId value) = value

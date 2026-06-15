@@ -48,7 +48,7 @@ serviceOncallReadModel =
         , subscriptionName = "jitsurei-service-oncall-sub"
         , version = 1
         , shapeHash = "jitsurei-service-oncall-v1"
-        , defaultConsistency = Strong
+        , defaultConsistency = Eventual
         , query = \(Service service) -> Tx.statement service selectOncallStmt
         }
 
