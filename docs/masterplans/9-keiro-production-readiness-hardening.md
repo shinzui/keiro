@@ -4,6 +4,7 @@ slug: keiro-production-readiness-hardening
 title: "Keiro production-readiness hardening"
 kind: master-plan
 created_at: 2026-06-11T04:45:44Z
+intention: intention_01kv40hzwaenftzem0gxypz4mj
 ---
 
 # Keiro production-readiness hardening
@@ -40,7 +41,7 @@ Alternatives considered. A severity-ordered decomposition ("blockers plan, highs
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Fix upstream crash-safety gaps in kiroku, shibuya, and ephemeral-pg | docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md | None | None | Not Started |
+| 1 | Fix upstream crash-safety gaps in kiroku, shibuya, and ephemeral-pg | docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md | None | None | In Progress |
 | 2 | Harden keiro-core codec and stream contracts | docs/plans/68-harden-keiro-core-codec-and-stream-contracts.md | None | None | Not Started |
 | 3 | Fix event-store command path, snapshot, and read-model correctness | docs/plans/69-fix-event-store-command-path-snapshot-and-read-model-correctness.md | None | EP-2 | Not Started |
 | 4 | Make outbox, inbox, timer, and shard workers crash-recoverable | docs/plans/70-make-outbox-inbox-timer-and-shard-workers-crash-recoverable.md | None | None | Not Started |
@@ -88,7 +89,7 @@ EP-4 and EP-6 have no dependencies. Maximum parallelism: EP-1, EP-2, EP-4, and E
 
 Milestone-level rollup across child plans; the authoritative per-step state lives in each child's Progress section.
 
-- [ ] EP-1: kiroku — transactional appends surface `DuplicateEvent`; event-id point lookup added
+- [x] EP-1: kiroku — transactional appends surface `DuplicateEvent`; event-id point lookup added
 - [ ] EP-1: shibuya — ingester async supervised; transient poll errors retried
 - [ ] EP-1: ephemeral-pg — initdb cache written atomically
 - [ ] EP-2: codec decode receives event-type tag; all call sites updated
@@ -123,6 +124,7 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
 - The shipped metric-naming convention is dot-separated `keiro.*` (twenty existing instruments); three plan authors independently flagged that this document's original "snake_case `keiro_`" phrasing contradicted the code. The integration point now follows the code.
 - EP-1 deliberately does not add retry to pgmq-effectful's interpreter: `sendMessage`/`deleteMessage` are not idempotent, so interpreter-level retry would be unsafe. The transient-retry fix lives at the only safe call site, the shibuya-pgmq-adapter polling loop.
 - keiro-pgmq's test suite was not wired into the Justfile's `haskell-test` recipe at all — its tests have not been running in the standard gate. EP-8 milestone 8 fixes the wiring.
+- EP-1 kiroku work is complete as of 2026-06-15. M1 had already landed in upstream commit `fa43ec2`; M2 added and pushed `eventExistsInStream` in commit `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`. `cabal test kiroku-store-test` passed with 226 examples, 0 failures.
 
 
 ## Decision Log

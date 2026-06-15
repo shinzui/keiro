@@ -4,6 +4,7 @@ slug: fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg
 title: "Fix upstream crash-safety gaps in kiroku, shibuya, and ephemeral-pg"
 kind: exec-plan
 created_at: 2026-06-11T04:45:56Z
+intention: intention_01kv40hzwaenftzem0gxypz4mj
 master_plan: "docs/masterplans/9-keiro-production-readiness-hardening.md"
 ---
 
@@ -29,15 +30,15 @@ The final milestone bumps keiro's dependency pins and proves keiro's own test su
 
 ## Progress
 
-- [ ] M1: kiroku — add `mapTransactionUsageError` to `Kiroku/Store/Error.hs` and export it
-- [ ] M1: kiroku — route `runTxOnPool` failures through `mapTransactionUsageError` in `Kiroku/Store/Effect.hs`
-- [ ] M1: kiroku — regression test in `kiroku-store/test/Test/Transaction.hs`: duplicate caller-supplied event id through `runTransaction`+`appendToStreamTx` and through `runTransactionAppending` yields `DuplicateEvent`
-- [ ] M1: kiroku — `cabal test kiroku-store-test` green
-- [ ] M2: kiroku — add `eventExistsInStreamStmt` to `Kiroku/Store/SQL.hs`
-- [ ] M2: kiroku — add `EventExistsInStream` constructor to the `Store` effect and its interpreter branch in `Kiroku/Store/Effect.hs`
-- [ ] M2: kiroku — add `eventExistsInStream` wrapper to `Kiroku/Store/Read.hs` (re-exported via `Kiroku.Store`)
-- [ ] M2: kiroku — tests in `kiroku-store/test/Test/ReadStream.hs` (present id, absent id, wrong stream, soft-deleted stream)
-- [ ] M2: kiroku — bump `kiroku-store` to 0.2.1.0, update `kiroku-store/CHANGELOG.md`, commit, push, record new SHA here
+- [x] M1: kiroku — add `mapTransactionUsageError` to `Kiroku/Store/Error.hs` and export it. Completed before this pass in upstream commit `fa43ec2` and revalidated on 2026-06-15.
+- [x] M1: kiroku — route `runTxOnPool` failures through `mapTransactionUsageError` in `Kiroku/Store/Effect.hs`. Completed before this pass in upstream commit `fa43ec2` and revalidated on 2026-06-15.
+- [x] M1: kiroku — regression test in `kiroku-store/test/Test/Transaction.hs`: duplicate caller-supplied event id through `runTransaction`+`appendToStreamTx` and through `runTransactionAppending` yields `DuplicateEvent`. Completed before this pass in upstream commit `fa43ec2` and revalidated on 2026-06-15.
+- [x] M1: kiroku — `cabal test kiroku-store-test` green. Revalidated on 2026-06-15 with 226 examples, 0 failures.
+- [x] M2: kiroku — add `eventExistsInStreamStmt` to `Kiroku/Store/SQL.hs`. Completed on 2026-06-15 in upstream commit `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`.
+- [x] M2: kiroku — add `EventExistsInStream` constructor to the `Store` effect and its interpreter branch in `Kiroku/Store/Effect.hs`. Completed on 2026-06-15 in upstream commit `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`.
+- [x] M2: kiroku — add `eventExistsInStream` wrapper to `Kiroku/Store/Read.hs` (re-exported via `Kiroku.Store`). Completed on 2026-06-15 in upstream commit `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`.
+- [x] M2: kiroku — tests in `kiroku-store/test/Test/ReadStream.hs` (present id, absent id, wrong stream, soft-deleted stream). Completed on 2026-06-15; `cabal test kiroku-store-test` passed with 226 examples, 0 failures.
+- [x] M2: kiroku — bump `kiroku-store` to 0.2.1.0, update `kiroku-store/CHANGELOG.md`, commit, push, record new SHA here. Version was already 0.2.1.0 from M1; changelog updated and pushed on 2026-06-15. New kiroku HEAD: `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`.
 - [ ] M3: shibuya — `runIngesterAndProcessor` observes the ingester async (poll after drain, mark `Failed`, set done, rethrow)
 - [ ] M3: shibuya — tests in `shibuya-core/test/Shibuya/Runner/SupervisedSpec.hs`: failing source marks processor `Failed` and propagates; healthy path unchanged
 - [ ] M3: shibuya — `cabal test shibuya-core-test` green; bump to 0.7.1.0 + CHANGELOG; commit, push
@@ -54,7 +55,8 @@ The final milestone bumps keiro's dependency pins and proves keiro's own test su
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-06-15: The kiroku M1 code and tests were already present in upstream commit `fa43ec2` when this implementation pass began, although this plan's checklist had not been updated. Running `cabal test kiroku-store-test` after the M2 change revalidated those M1 tests together with the new point-lookup tests.
+- 2026-06-15: `kiroku-store` was already at version `0.2.1.0` before M2, so M2 did not bump the version again. The M2 public API was recorded in `kiroku-store/CHANGELOG.md` under `Unreleased`, and the pushed SHA for keiro's later `cabal.project` pin is `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`.
 
 
 ## Decision Log
