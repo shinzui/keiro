@@ -74,19 +74,23 @@ import Control.Concurrent (threadDelay)
 import Control.Exception qualified as Exception
 import Control.Monad (foldM, forever)
 import Data.Aeson qualified as Aeson
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.List (nub)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
+import Data.UUID qualified as UUID
+import Data.UUID.V4 qualified as UUIDv4
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import Effectful.Error.Static qualified as Error
-import Effectful.Exception (catchSync)
+import Effectful.Exception (catchSync, finally)
 import Keiro.Prelude
 import Keiro.Telemetry (
     recordWorkflowAwakeablesPending,
     recordWorkflowFailed,
+    recordWorkflowLeaseSkipped,
     recordWorkflowResumeErrors,
     recordWorkflowResumed,
  )
@@ -106,7 +110,7 @@ import Keiro.Workflow (
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
 import Keiro.Workflow.Child.Schema (findRunningChildIds, lookupChild, markChildFailedTx)
-import Keiro.Workflow.Instance (lookupInstance, recordCrashTx, resetInstanceAttempts)
+import Keiro.Workflow.Instance (claimInstance, recordCrashTx, releaseInstance)
 import Kiroku.Store.Connection (KirokuStore)
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
@@ -286,11 +290,12 @@ resumeWorkflowsOnce opts registry = do
     runningChildren <- findRunningChildIds
     let pairs = nub (unfinished <> runningChildren)
         seed = emptyResumeSummary{discovered = length pairs}
-    foldM advance seed pairs
+    owner <- UUID.toText <$> liftIO UUIDv4.nextRandom
+    foldM (advance owner) seed pairs
   where
     mMetrics = runOptions opts ^. #metrics
-    advance :: ResumeSummary -> (Text, Text) -> Eff es ResumeSummary
-    advance acc (widText, wnameText) =
+    advance :: Text -> ResumeSummary -> (Text, Text) -> Eff es ResumeSummary
+    advance owner acc (widText, wnameText) =
         case Map.lookup (WorkflowName wnameText) registry of
             Nothing -> do
                 liftIO $ logEvent opts (ResumeUnknownName wnameText widText)
@@ -298,40 +303,43 @@ resumeWorkflowsOnce opts registry = do
             Just (WorkflowDef runDef) -> do
                 let wid = WorkflowId widText
                     name = WorkflowName wnameText
-                due <- instanceAttemptDue name wid
-                if not due
-                    then pure acc
+                claimed <- claimInstance owner (leaseTtl opts) name wid
+                if not claimed
+                    then do
+                        recordWorkflowLeaseSkipped mMetrics 1
+                        pure acc{leaseSkipped = leaseSkipped acc + 1}
                     else do
-                        attempt <-
-                            Error.catchError
-                                @StoreError
-                                (AdvOk <$> driveInstance name wid runDef)
-                                (\_ e -> pure (AdvTransient e))
-                                `catchSync` (pure . AdvCrashed)
-                        recordWorkflowResumed mMetrics 1
-                        handleAttempt acc name wid attempt
-    instanceAttemptDue :: WorkflowName -> WorkflowId -> Eff es Bool
-    instanceAttemptDue name wid = do
-        now <- liftIO getCurrentTime
-        lookupInstance name wid <&> \case
-            Just row | Just next <- row ^. #nextAttemptAt -> next <= now
-            _ -> True
+                        progressedRef <- liftIO (newIORef False)
+                        ( do
+                                attempt <-
+                                    Error.catchError
+                                        @StoreError
+                                        (AdvOk <$> driveInstance name wid runDef)
+                                        (\_ e -> pure (AdvTransient e))
+                                        `catchSync` (pure . AdvCrashed)
+                                recordWorkflowResumed mMetrics 1
+                                (acc', progressed) <- handleAttempt acc name wid attempt
+                                liftIO (writeIORef progressedRef progressed)
+                                pure acc'
+                            )
+                            `finally` do
+                                progressed <- liftIO (readIORef progressedRef)
+                                releaseInstance owner progressed name wid
     driveInstance :: (Aeson.ToJSON a) => WorkflowName -> WorkflowId -> (WorkflowId -> Eff (Workflow : es) a) -> Eff es (WorkflowOutcome a)
     driveInstance name@(WorkflowName wnameText) wid@(WorkflowId widText) runDef = do
         mChild <- lookupChild widText wnameText
         case mChild of
             Just _ -> runChildWorkflow (runOptions opts) name wid (runDef wid)
             Nothing -> runWorkflowWith (runOptions opts) name wid (runDef wid)
-    handleAttempt :: ResumeSummary -> WorkflowName -> WorkflowId -> AdvanceResult a -> Eff es ResumeSummary
+    handleAttempt :: ResumeSummary -> WorkflowName -> WorkflowId -> AdvanceResult a -> Eff es (ResumeSummary, Bool)
     handleAttempt acc name@(WorkflowName wnameText) wid@(WorkflowId widText) = \case
         AdvOk outcome -> do
-            resetInstanceAttempts name wid
-            pure (bumpForOutcome outcome acc)
+            pure (bumpForOutcome outcome acc, True)
         AdvTransient err -> do
             let rendered = Text.pack (show err)
             liftIO $ logEvent opts (ResumeTransientError wnameText widText rendered)
             recordWorkflowResumeErrors mMetrics 1
-            pure acc{resumed = resumed acc + 1, transientErrors = transientErrors acc + 1}
+            pure (acc{resumed = resumed acc + 1, transientErrors = transientErrors acc + 1}, False)
         AdvCrashed err -> do
             let rendered = Text.pack (show err)
             attempt <- runTransaction (recordCrashTx widText wnameText rendered)
@@ -345,8 +353,8 @@ resumeWorkflowsOnce opts registry = do
                         void (runTransaction (markChildFailedTx widText wnameText))
                     liftIO $ logEvent opts (ResumeWorkflowMarkedFailed wnameText widText rendered)
                     recordWorkflowFailed mMetrics 1
-                    pure acc{resumed = resumed acc + 1, failed = failed acc + 1}
-                else pure acc{resumed = resumed acc + 1}
+                    pure (acc{resumed = resumed acc + 1, failed = failed acc + 1}, False)
+                else pure (acc{resumed = resumed acc + 1}, False)
 
 data AdvanceResult a
     = AdvOk !(WorkflowOutcome a)

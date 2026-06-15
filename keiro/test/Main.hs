@@ -4304,6 +4304,65 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 ThreadDied -> False
                 _ -> True
 
+        it "claims one workflow instance for a single live owner and releases it" $ \storeHandle -> do
+            let name = WorkflowName "lease-claim"
+                wid = WorkflowId "lc-1"
+            Right claimedA <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-a" 30 name wid
+            claimedA `shouldBe` True
+            Right claimedB <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-b" 30 name wid
+            claimedB `shouldBe` False
+            Right () <- Store.runStoreIO storeHandle $ Instance.releaseInstance "owner-a" False name wid
+            Right claimedBAfterRelease <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-b" 30 name wid
+            claimedBAfterRelease `shouldBe` True
+
+        it "lets an expired workflow lease be taken and resets attempts on progressed release" $ \storeHandle -> do
+            let name = WorkflowName "lease-expire"
+                wid = WorkflowId "le-1"
+            Right claimedA <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-a" 30 name wid
+            claimedA `shouldBe` True
+            Right attempt <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Instance.recordCrashTx "le-1" "lease-expire" "boom"
+            attempt `shouldBe` 1
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.sql "UPDATE keiro_workflows SET lease_expires_at = now() - interval '1 second', next_attempt_at = now() - interval '1 second' WHERE workflow_id = 'le-1' AND workflow_name = 'lease-expire'"
+            Right claimedB <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-b" 30 name wid
+            claimedB `shouldBe` True
+            Right () <- Store.runStoreIO storeHandle $ Instance.releaseInstance "owner-b" True name wid
+            Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            row ^. #attempts `shouldBe` 0
+            row ^. #lastError `shouldBe` Nothing
+            row ^. #nextAttemptAt `shouldBe` Nothing
+            row ^. #leasedBy `shouldBe` Nothing
+
+        it "skips a resume candidate held by another live lease owner" $ \storeHandle -> do
+            ran <- newIORef False
+            let name = WorkflowName "lease-skip"
+                wid = WorkflowId "ls-1"
+                registry =
+                    Map.singleton name $
+                        WorkflowDef
+                            ( \_ -> do
+                                liftIO (writeIORef ran True)
+                                pure (0 :: Int)
+                            )
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry name wid (StepRecorded "seed" (toJSON True) now)
+            Right foreignClaim <- Store.runStoreIO storeHandle $ Instance.claimInstance "foreign-owner" 30 name wid
+            foreignClaim `shouldBe` True
+            Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+            summary
+                `shouldBe` emptyResumeSummary
+                    { discovered = 1
+                    , leaseSkipped = 1
+                    }
+            readIORef ran `shouldReturn` False
+
         -- M4: resume on an already-completed workflow is a genuine no-op.
         it "discovers nothing for an already-completed workflow and is stable" $ \storeHandle -> do
             counter <- newIORef (0 :: Int)

@@ -13,14 +13,17 @@ module Keiro.Workflow.Instance (
     upsertInstanceTx,
     markInstanceSuspended,
     lookupInstance,
+    claimInstance,
+    releaseInstance,
     recordCrashTx,
     resetInstanceAttempts,
 )
 where
 
-import Contravariant.Extras (contrazip2, contrazip3, contrazip5)
+import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Data.Int (Int32)
-import Effectful (Eff, (:>))
+import Data.Time (NominalDiffTime, addUTCTime)
+import Effectful (Eff, IOE, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
@@ -68,6 +71,22 @@ markInstanceSuspended name@(WorkflowName nameText) wid@(WorkflowId widText) = do
 lookupInstance :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es (Maybe WorkflowInstanceRow)
 lookupInstance (WorkflowName name) (WorkflowId wid) =
     runTransaction (Tx.statement (wid, name) lookupInstanceStmt)
+
+claimInstance :: (IOE :> es, Store :> es) => Text -> NominalDiffTime -> WorkflowName -> WorkflowId -> Eff es Bool
+claimInstance owner ttl name@(WorkflowName nameText) wid@(WorkflowId widText) = do
+    now <- liftIO getCurrentTime
+    gen <- currentGeneration name wid
+    runTransaction $ do
+        Tx.statement (widText, nameText, fromIntegral gen :: Int32) ensureInstanceStmt
+        fromMaybe False
+            <$> Tx.statement
+                (widText, nameText, owner, now, addUTCTime ttl now)
+                claimInstanceStmt
+
+releaseInstance :: (Store :> es) => Text -> Bool -> WorkflowName -> WorkflowId -> Eff es ()
+releaseInstance owner progressed (WorkflowName name) (WorkflowId wid) =
+    runTransaction $
+        Tx.statement (wid, name, owner, progressed) releaseInstanceStmt
 
 recordCrashTx :: Text -> Text -> Text -> Tx.Transaction Int32
 recordCrashTx wid name err =
@@ -138,6 +157,69 @@ lookupInstanceStmt =
             (E.param (E.nonNullable E.text))
         )
         (D.rowMaybe instanceRowDecoder)
+
+ensureInstanceStmt :: Statement (Text, Text, Int32) ()
+ensureInstanceStmt =
+    preparable
+        """
+        INSERT INTO keiro_workflows
+          (workflow_id, workflow_name, generation, status)
+        VALUES ($1, $2, $3, 'running')
+        ON CONFLICT (workflow_id, workflow_name) DO NOTHING
+        """
+        ( contrazip3
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.int4))
+        )
+        D.noResult
+
+claimInstanceStmt :: Statement (Text, Text, Text, UTCTime, UTCTime) (Maybe Bool)
+claimInstanceStmt =
+    preparable
+        """
+        UPDATE keiro_workflows
+        SET leased_by = $3,
+            lease_expires_at = $5,
+            updated_at = $4
+        WHERE workflow_id = $1
+          AND workflow_name = $2
+          AND status IN ('running', 'suspended')
+          AND (lease_expires_at IS NULL OR lease_expires_at < $4)
+          AND (next_attempt_at IS NULL OR next_attempt_at <= $4)
+        RETURNING TRUE
+        """
+        ( contrazip5
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.timestamptz))
+            (E.param (E.nonNullable E.timestamptz))
+        )
+        (D.rowMaybe (D.column (D.nonNullable D.bool)))
+
+releaseInstanceStmt :: Statement (Text, Text, Text, Bool) ()
+releaseInstanceStmt =
+    preparable
+        """
+        UPDATE keiro_workflows
+        SET leased_by = NULL,
+            lease_expires_at = NULL,
+            attempts = CASE WHEN $4 THEN 0 ELSE attempts END,
+            last_error = CASE WHEN $4 THEN NULL ELSE last_error END,
+            next_attempt_at = CASE WHEN $4 THEN NULL ELSE next_attempt_at END,
+            updated_at = now()
+        WHERE workflow_id = $1
+          AND workflow_name = $2
+          AND leased_by = $3
+        """
+        ( contrazip4
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.bool))
+        )
+        D.noResult
 
 recordCrashStmt :: Statement (Text, Text, Text) Int32
 recordCrashStmt =
