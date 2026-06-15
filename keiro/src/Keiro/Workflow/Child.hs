@@ -68,11 +68,13 @@ module Keiro.Workflow.Child (
 
     -- * Errors
     WorkflowChildCancelled (..),
+    WorkflowChildFailed (..),
 )
 where
 
 import Control.Exception (Exception)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
@@ -97,6 +99,7 @@ import Keiro.Workflow (
     step,
  )
 import Keiro.Workflow.Child.Schema (
+    ChildRow,
     ChildStatus (..),
     lookupChild,
     markChildCancelledTx,
@@ -150,6 +153,14 @@ data WorkflowChildCancelled = WorkflowChildCancelled WorkflowName WorkflowId
     deriving stock (Eq, Show)
 
 instance Exception WorkflowChildCancelled
+
+{- | Thrown out of 'awaitChild' when the child was terminally failed by the
+resume worker. Carries the child's identity plus the persisted failure reason.
+-}
+data WorkflowChildFailed = WorkflowChildFailed WorkflowName WorkflowId Text
+    deriving stock (Eq, Show)
+
+instance Exception WorkflowChildFailed
 
 -- ---------------------------------------------------------------------------
 -- Authoring surface
@@ -223,18 +234,13 @@ awaitChild (ChildHandle childNm childWid) = do
                             (WorkflowId (row ^. #parentId))
                             StepRecorded
                                 { stepName = row ^. #awaitStep
-                                , result = resultValue
+                                , result = childOkEnvelope resultValue
                                 , recordedAt = fromMaybe (row ^. #updatedAt) (row ^. #completedAt)
                                 }
                 -- The spawn already registered the link; nothing more to (re-)arm.
                 _ -> pure ()
     raw <- awaitStep resultStep arm
-    if isCancelledSentinel raw
-        then throwIO (WorkflowChildCancelled childNm childWid)
-        else case Aeson.fromJSON raw of
-            Aeson.Success a -> pure a
-            Aeson.Error e ->
-                error ("awaitChild: cannot decode child result for " <> show childWid <> ": " <> e)
+    decodeChildResult childNm childWid (unStepName resultStep) raw
 
 -- ---------------------------------------------------------------------------
 -- External control
@@ -253,25 +259,14 @@ cancelChild ::
     ChildHandle a ->
     Eff es Bool
 cancelChild (ChildHandle childNm childWid) = do
-    cancelled <-
-        runTransaction $
-            markChildCancelledTx (unWorkflowId childWid) (unWorkflowName childNm)
-    when cancelled $ do
-        now <- liftIO getCurrentTime
-        -- 1) durable cancellation marker in the CHILD journal:
-        appendJournalEntry childNm childWid (WorkflowCancelled{recordedAt = now})
-        -- 2) wake the parent's awaitChild with a cancellation sentinel result:
-        mrow <- lookupChild (unWorkflowId childWid) (unWorkflowName childNm)
-        for_ mrow $ \row ->
-            appendJournalEntry
-                (WorkflowName (row ^. #parentName))
-                (WorkflowId (row ^. #parentId))
-                StepRecorded
-                    { stepName = row ^. #awaitStep
-                    , result = cancelledSentinel
-                    , recordedAt = now
-                    }
-    pure cancelled
+    mrow <- lookupChild (unWorkflowId childWid) (unWorkflowName childNm)
+    case mrow of
+        Nothing -> pure False
+        Just row -> do
+            (transitioned, childOutcome, parentOutcome) <- ensureChildCancelled row
+            throwOnAppendConflict childOutcome
+            throwOnAppendConflict parentOutcome
+            pure transitioned
 
 -- ---------------------------------------------------------------------------
 -- Completion propagation
@@ -291,12 +286,22 @@ runChildWorkflow ::
     Eff (Workflow : es) a ->
     Eff es (WorkflowOutcome a)
 runChildWorkflow opts childNm childWid action = do
-    outcome <- runWorkflowWith opts childNm childWid action
-    case outcome of
-        Completed result -> do
-            childCompletionHook childNm childWid (toJSON result)
-            pure (Completed result)
-        other -> pure other
+    mrow <- lookupChild (unWorkflowId childWid) (unWorkflowName childNm)
+    case fmap (^. #status) mrow of
+        Just ChildCancelled -> do
+            for_ mrow $ \row -> do
+                (_, childOutcome, parentOutcome) <- ensureChildCancelled row
+                throwOnAppendConflict childOutcome
+                throwOnAppendConflict parentOutcome
+            pure Cancelled
+        Just ChildFailed -> pure Failed
+        _ -> do
+            outcome <- runWorkflowWith opts childNm childWid action
+            case outcome of
+                Completed result -> do
+                    childCompletionHook childNm childWid (toJSON result)
+                    pure (Completed result)
+                other -> pure other
 
 {- | Propagate a finished child's result to its parent: flip the child row to
 @completed@ (storing the result) and append the @child:\<childId\>:result@
@@ -327,7 +332,7 @@ childCompletionHook childNm childWid resultValue = do
                     gen
                     StepRecorded
                         { stepName = row ^. #awaitStep
-                        , result = resultValue
+                        , result = childOkEnvelope resultValue
                         , recordedAt = now
                         }
             appendOutcome <-
@@ -347,7 +352,7 @@ childCompletionHook childNm childWid resultValue = do
                     (WorkflowId (row ^. #parentId))
                     StepRecorded
                         { stepName = row ^. #awaitStep
-                        , result = stored
+                        , result = childOkEnvelope stored
                         , recordedAt = fromMaybe (row ^. #updatedAt) (row ^. #completedAt)
                         }
         ChildCancelled -> pure ()
@@ -363,6 +368,43 @@ throwOnAppendConflict = \case
     JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
     _ -> pure ()
 
+ensureChildCancelled ::
+    (IOE :> es, Store :> es) =>
+    ChildRow ->
+    Eff es (Bool, JournalAppendOutcome, JournalAppendOutcome)
+ensureChildCancelled row = do
+    now <- liftIO getCurrentTime
+    let childNm = WorkflowName (row ^. #childName)
+        childWid = WorkflowId (row ^. #childId)
+        parentNm = WorkflowName (row ^. #parentName)
+        parentWid = WorkflowId (row ^. #parentId)
+    childGen <- currentGeneration childNm childWid
+    parentGen <- currentGeneration parentNm parentWid
+    childAppendTx <- prepareJournalAppend childNm childWid childGen WorkflowCancelled{recordedAt = now}
+    parentAppendTx <-
+        prepareJournalAppend
+            parentNm
+            parentWid
+            parentGen
+            StepRecorded
+                { stepName = row ^. #awaitStep
+                , result = cancelledSentinel
+                , recordedAt = now
+                }
+    runTransaction $ do
+        transitioned <-
+            if row ^. #status == Running
+                then markChildCancelledTx (row ^. #childId) (row ^. #childName)
+                else pure False
+        if transitioned || row ^. #status == ChildCancelled
+            then do
+                childOutcome <- childAppendTx
+                parentOutcome <- parentAppendTx
+                condemnOnAppendConflict childOutcome
+                condemnOnAppendConflict parentOutcome
+                pure (transitioned, childOutcome, parentOutcome)
+            else pure (False, JournalAlreadyPresent Aeson.Null, JournalAlreadyPresent Aeson.Null)
+
 -- ---------------------------------------------------------------------------
 -- The cancellation sentinel
 -- ---------------------------------------------------------------------------
@@ -373,6 +415,28 @@ await-step result so 'awaitChild' can detect it and throw.
 cancelledSentinel :: Aeson.Value
 cancelledSentinel = Aeson.object ["cancelled" Aeson..= True]
 
--- | Whether a journaled await-step result is the cancellation sentinel.
-isCancelledSentinel :: Aeson.Value -> Bool
-isCancelledSentinel v = v == cancelledSentinel
+childOkEnvelope :: Aeson.Value -> Aeson.Value
+childOkEnvelope value = Aeson.object ["ok" Aeson..= value]
+
+decodeChildResult ::
+    (FromJSON a) =>
+    WorkflowName ->
+    WorkflowId ->
+    Text ->
+    Aeson.Value ->
+    Eff es a
+decodeChildResult childNm childWid key raw =
+    case raw of
+        Aeson.Object obj
+            | Just okValue <- KeyMap.lookup "ok" obj ->
+                decodeOrThrow okValue
+            | Just (Aeson.Bool True) <- KeyMap.lookup "cancelled" obj ->
+                throwIO (WorkflowChildCancelled childNm childWid)
+            | Just (Aeson.String reason) <- KeyMap.lookup "failed" obj ->
+                throwIO (WorkflowChildFailed childNm childWid reason)
+        _ -> decodeOrThrow raw
+  where
+    decodeOrThrow value =
+        case Aeson.fromJSON value of
+            Aeson.Success a -> pure a
+            Aeson.Error e -> throwIO (WorkflowStepDecodeError key (Text.pack e))

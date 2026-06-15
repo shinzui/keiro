@@ -106,7 +106,7 @@ Milestone-level rollup across child plans; the authoritative per-step state live
 - [x] EP-5: `eventAlreadyIn` point lookup; concurrent-duplicate test green
 - [x] EP-6: resume worker survives poison workflows; `WorkflowFailed` path live
 - [x] EP-6: per-instance lease; concurrent workers cannot double-run effects
-- [ ] EP-6: signal/child-completion/cancel crash windows closed
+- [x] EP-6: signal/child-completion/cancel crash windows closed
 - [ ] EP-7: sleeps fire under an active resume worker; generation-namespaced wake sources
 - [ ] EP-7: patch classification journaled at first run; discovery via instance table; pruning
 - [x] EP-8: vt/batch/polling exposed; lease-extension handle; `runJobOnce` is a real drain
@@ -221,6 +221,8 @@ EP-6 Milestone 3 is complete as of 2026-06-15. Per-instance leases are live in t
 
 EP-6 Milestone 4 is complete as of 2026-06-15. Awakeable and child-completion crash windows are closed for new writes and repaired on await-arm re-entry for historical wedges; M5 cancellation atomicity and child-result envelope work remains next.
 
+EP-6 Milestone 5 is complete as of 2026-06-15. Child cancellation now writes the child marker and parent sentinel atomically with the row transition, cancelled-but-unmarked children self-heal when driven, child results use tagged envelopes with legacy fallback, failed children wake parents through `WorkflowChildFailed`, and mid-run cancellation stops at the next workflow step boundary.
+
 
 ---
 
@@ -233,3 +235,5 @@ Revision note (2026-06-15): EP-6 Milestone 2 was completed. The Progress rollup 
 Revision note (2026-06-15): EP-6 Milestone 3 was completed. The Progress rollup now checks the per-instance lease/concurrent-worker item, and Surprises & Discoveries plus Outcomes & Retrospective record the lease and race-proof journal append validation evidence.
 
 Revision note (2026-06-15): EP-6 Milestone 4 was completed. Surprises & Discoveries plus Outcomes & Retrospective record the awakeable and child-completion atomicity work and validation evidence; the third EP-6 Progress rollup item remains unchecked until M5 cancellation crash windows are closed.
+
+Revision note (2026-06-15): EP-6 Milestone 5 was completed. The third EP-6 Progress rollup item is now checked, and Outcomes & Retrospective records the cancel atomicity, child-result envelope, failed-child wake, and mid-run cancellation work. Validation passed with `cabal test keiro-test --test-options='--match "Keiro.Workflow.Child"'` (14 examples, 0 failures), `cabal test keiro-test --test-options='--match "Keiro.Workflow"'` (68 examples, 0 failures), and full `cabal test keiro-test` (237 examples, 0 failures).

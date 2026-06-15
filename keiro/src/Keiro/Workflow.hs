@@ -331,6 +331,12 @@ data WorkflowSuspend = WorkflowSuspend
 
 instance Exception WorkflowSuspend
 
+-- | Internal sentinel thrown when a cancellation marker appears mid-run.
+data WorkflowCancelPending = WorkflowCancelPending
+    deriving stock (Show)
+
+instance Exception WorkflowCancelPending
+
 {- | Internal sentinel thrown by the 'ContinueAsNew' handler to unwind a
 rotating run up to 'runWorkflowWith' (EP-48), carrying the JSON-encoded seed for
 the next generation. Mirrors 'WorkflowSuspend': a non-returning unwind the run
@@ -439,6 +445,7 @@ runWorkflowWith options name wid action = do
             outcome <-
                 (Completed <$> runHandler)
                     `catch` (\WorkflowSuspend -> pure Suspended)
+                    `catch` (\WorkflowCancelPending -> pure Cancelled)
                     `catch` (\(WorkflowRotate seedJson) -> rotateGeneration name wid gen seedJson)
             case outcome of
                 Completed result -> do
@@ -487,7 +494,9 @@ runWorkflowWith options name wid action = do
                     recordWorkflowStepReplayed mMetrics 1
                     decodeStored key stored
                 Nothing -> do
+                    checkCancellationPending name wid gen
                     a <- localSeqUnlift env (\unlift -> unlift act)
+                    checkCancellationPending name wid gen
                     let encoded = Aeson.toJSON a
                     now <- liftIO getCurrentTime
                     appendOutcome <- appendJournal name wid gen (StepRecorded key encoded now)
@@ -530,6 +539,7 @@ runWorkflowWith options name wid action = do
                     recordWorkflowStepReplayed mMetrics 1
                     decodeStored key stored
                 Nothing -> do
+                    checkCancellationPending name wid gen
                     localSeqUnlift env (\unlift -> unlift arm)
                     throwIO WorkflowSuspend
         CurrentWorkflow -> pure (name, wid)
@@ -552,6 +562,7 @@ runWorkflowWith options name wid action = do
                     -- Hit: the decision was made on an earlier run; replay it verbatim.
                     decodeStored key stored
                 Nothing -> do
+                    checkCancellationPending name wid gen
                     -- Miss: first encounter. A fresh instance (nothing ordinary journaled
                     -- when the run began) takes the new branch (True); an in-flight one
                     -- takes the old branch (False). Journal the decision so it is stable.
@@ -580,6 +591,11 @@ decodeStored :: (Aeson.FromJSON a) => Text -> Aeson.Value -> Eff es a
 decodeStored key stored = case Aeson.fromJSON stored of
     Aeson.Success a -> pure a
     Aeson.Error message -> throwIO (WorkflowStepDecodeError key (Text.pack message))
+
+checkCancellationPending :: (Store :> es) => WorkflowName -> WorkflowId -> Int -> Eff es ()
+checkCancellationPending name wid gen = do
+    cancelled <- stepExists name wid gen cancelledStepName
+    when cancelled (throwIO WorkflowCancelPending)
 
 {- | A journal key counts as an /ordinary/ step (EP-49) — evidence the instance
 had already begun executing user logic — when it is neither a terminal marker

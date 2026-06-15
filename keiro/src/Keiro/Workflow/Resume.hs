@@ -91,7 +91,7 @@ import Data.UUID.V4 qualified as UUIDv4
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import Effectful.Error.Static qualified as Error
-import Effectful.Exception (catchSync, finally)
+import Effectful.Exception (catchSync, finally, throwIO)
 import Keiro.Prelude
 import Keiro.Telemetry (
     recordWorkflowAwakeablesPending,
@@ -102,26 +102,31 @@ import Keiro.Telemetry (
  )
 import Keiro.Wake (WakeSignal (..), wakeSignalFromStore)
 import Keiro.Workflow (
+    JournalAppendOutcome (..),
     Workflow,
+    WorkflowError (..),
     WorkflowId (..),
     WorkflowJournalEvent (..),
     WorkflowName (..),
     WorkflowOutcome (..),
     WorkflowRunOptions,
     appendJournalEntry,
+    currentGeneration,
     defaultWorkflowRunOptions,
     findUnfinishedWorkflowIds,
+    prepareJournalAppend,
     runWorkflowWith,
  )
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
-import Keiro.Workflow.Child.Schema (findRunningChildIds, lookupChild, markChildFailedTx)
+import Keiro.Workflow.Child.Schema (ChildRow, findRunningChildIds, lookupChild, markChildFailedTx)
 import Keiro.Workflow.Instance (claimInstance, recordCrashTx, releaseInstance)
 import Kiroku.Store.Connection (KirokuStore)
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import System.IO (hPutStrLn, stderr)
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 -- ---------------------------------------------------------------------------
 -- Registry
@@ -353,10 +358,12 @@ resumeWorkflowsOnce opts registry = do
             if attempt >= fromIntegral (maxAttempts opts :: Int)
                 then do
                     now <- liftIO getCurrentTime
-                    appendJournalEntry name wid (WorkflowFailed rendered now)
                     mChild <- lookupChild widText wnameText
-                    for_ mChild $ \_ ->
-                        void (runTransaction (markChildFailedTx widText wnameText))
+                    case mChild of
+                        Nothing ->
+                            appendJournalEntry name wid (WorkflowFailed rendered now)
+                        Just childRow ->
+                            appendFailedChildAndWakeParent name wid rendered now childRow
                     liftIO $ logEvent opts (ResumeWorkflowMarkedFailed wnameText widText rendered)
                     recordWorkflowFailed mMetrics 1
                     pure (acc{resumed = resumed acc + 1, failed = failed acc + 1}, False)
@@ -366,6 +373,51 @@ data AdvanceResult a
     = AdvOk !(WorkflowOutcome a)
     | AdvTransient !StoreError
     | AdvCrashed !Exception.SomeException
+
+appendFailedChildAndWakeParent ::
+    (IOE :> es, Store :> es) =>
+    WorkflowName ->
+    WorkflowId ->
+    Text ->
+    UTCTime ->
+    ChildRow ->
+    Eff es ()
+appendFailedChildAndWakeParent childNm childWid reason now childRow = do
+    childGen <- currentGeneration childNm childWid
+    let parentNm = WorkflowName (childRow ^. #parentName)
+        parentWid = WorkflowId (childRow ^. #parentId)
+    parentGen <- currentGeneration parentNm parentWid
+    childFailTx <- prepareJournalAppend childNm childWid childGen (WorkflowFailed reason now)
+    parentWakeTx <-
+        prepareJournalAppend
+            parentNm
+            parentWid
+            parentGen
+            StepRecorded
+                { stepName = childRow ^. #awaitStep
+                , result = Aeson.object ["failed" Aeson..= reason]
+                , recordedAt = now
+                }
+    (childOutcome, parentOutcome) <-
+        runTransaction $ do
+            childOutcome <- childFailTx
+            _transitioned <- markChildFailedTx (unWorkflowId childWid) (unWorkflowName childNm)
+            parentOutcome <- parentWakeTx
+            condemnOnAppendConflict childOutcome
+            condemnOnAppendConflict parentOutcome
+            pure (childOutcome, parentOutcome)
+    throwOnAppendConflict childOutcome
+    throwOnAppendConflict parentOutcome
+
+condemnOnAppendConflict :: JournalAppendOutcome -> Tx.Transaction ()
+condemnOnAppendConflict = \case
+    JournalAppendConflict{} -> Tx.condemn
+    _ -> pure ()
+
+throwOnAppendConflict :: JournalAppendOutcome -> Eff es ()
+throwOnAppendConflict = \case
+    JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+    _ -> pure ()
 
 {- | Fold one re-invocation's outcome into the running summary. The existential
 result @a@ is discarded here, so it never escapes the registry.
