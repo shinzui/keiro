@@ -1,16 +1,16 @@
 {
     "deferrable": false,
     "deferred": false,
-    "definition": "CHECK (status = ANY (ARRAY['running'::text, 'completed'::text, 'cancelled'::text, 'failed'::text]))",
+    "definition": "PRIMARY KEY (workflow_id, workflow_name)",
     "fk_deltype": " ",
     "fk_matchtype": " ",
     "fk_ref_table": null,
     "fk_updtype": " ",
     "inhcount": 0,
     "local": true,
-    "noinherit": false,
+    "noinherit": true,
     "parent_constraint": null,
-    "supporting_index": null,
-    "type": "c",
+    "supporting_index": "keiro_workflows_pkey",
+    "type": "p",
     "validated": true
 }

@@ -195,6 +195,7 @@ import Keiro.Workflow.Child (
     spawnChild,
  )
 import Keiro.Workflow.Child.Schema qualified as Child
+import Keiro.Workflow.Instance qualified as Instance
 import Keiro.Workflow.Resume (
     ResumeSummary (..),
     WorkflowDef (..),
@@ -3834,6 +3835,64 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     runWorkflow (WorkflowName "pending") (WorkflowId "p-1") (stepThenAwaitWorkflow counter)
             Right unfinished <- Store.runStoreIO storeHandle findUnfinishedWorkflowIds
             unfinished `shouldBe` [("p-1", "pending")]
+
+    describe "Keiro.Workflow instance table" $ around (withFreshStore fixture) $ do
+        it "creates and completes a workflow instance row transactionally with the journal" $ \storeHandle -> do
+            counter <- newIORef (0 :: Int)
+            let name = WorkflowName "inst-complete"
+                wid = WorkflowId "ic-1"
+            Right (Completed _) <- Store.runStoreIO storeHandle $ runWorkflow name wid (demoWorkflow counter)
+            Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            row ^. #workflowId `shouldBe` "ic-1"
+            row ^. #workflowName `shouldBe` "inst-complete"
+            row ^. #generation `shouldBe` 0
+            row ^. #status `shouldBe` Instance.WfCompleted
+            row ^. #completedAt `shouldSatisfy` isJust
+
+        it "records suspended status for workflows that park before journaling" $ \storeHandle -> do
+            let name = WorkflowName "inst-suspended"
+                wid = WorkflowId "is-1"
+            Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid neverArmingWorkflow
+            Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            row ^. #status `shouldBe` Instance.WfSuspended
+            row ^. #generation `shouldBe` 0
+            row ^. #completedAt `shouldBe` Nothing
+
+        it "creates child instance rows at spawn time and flips them to cancelled" $ \storeHandle -> do
+            let childWid = WorkflowId "inst-child"
+                childName = WorkflowName "ship"
+            Right Suspended <-
+                Store.runStoreIO storeHandle $
+                    runWorkflow (WorkflowName "inst-parent") (WorkflowId "ip-1") (parentWorkflow childWid)
+            Right (Just spawned) <- Store.runStoreIO storeHandle $ Instance.lookupInstance childName childWid
+            spawned ^. #status `shouldBe` Instance.WfRunning
+            Right True <- Store.runStoreIO storeHandle $ cancelChild (ChildHandle childName childWid)
+            Right (Just cancelledRow) <- Store.runStoreIO storeHandle $ Instance.lookupInstance childName childWid
+            cancelledRow ^. #status `shouldBe` Instance.WfCancelled
+            cancelledRow ^. #completedAt `shouldSatisfy` isJust
+
+        it "bumps the instance generation when continueAsNew rotates" $ \storeHandle -> do
+            counter <- newIORef (0 :: Int)
+            let name = WorkflowName "inst-rotate"
+                wid = WorkflowId "ir-1"
+            Right ContinuedAsNew <-
+                Store.runStoreIO storeHandle $
+                    runWorkflow name wid (rollingTotal counter 1 2)
+            Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            row ^. #generation `shouldBe` 1
+            row ^. #status `shouldBe` Instance.WfRunning
+
+        it "does not let a late append resurrect a terminal instance row" $ \storeHandle -> do
+            counter <- newIORef (0 :: Int)
+            let name = WorkflowName "inst-terminal"
+                wid = WorkflowId "it-1"
+            Right (Completed _) <- Store.runStoreIO storeHandle $ runWorkflow name wid (demoWorkflow counter)
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry name wid (StepRecorded "late" (toJSON True) now)
+            Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            row ^. #status `shouldBe` Instance.WfCompleted
 
     describe "Keiro.Workflow snapshots" $ around (withFreshStore fixture) $ do
         -- Validation (a): a snapshot row appears at the expected version and

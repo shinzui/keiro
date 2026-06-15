@@ -1,7 +1,7 @@
 {
     "deferrable": false,
     "deferred": false,
-    "definition": "CHECK (status = ANY (ARRAY['running'::text, 'completed'::text, 'cancelled'::text, 'failed'::text]))",
+    "definition": "NOT NULL created_at",
     "fk_deltype": " ",
     "fk_matchtype": " ",
     "fk_ref_table": null,
@@ -11,6 +11,6 @@
     "noinherit": false,
     "parent_constraint": null,
     "supporting_index": null,
-    "type": "c",
+    "type": "n",
     "validated": true
 }

@@ -24,13 +24,13 @@ You can see it working by running the test suite (`cabal test keiro-test` from t
 
 ## Progress
 
-- [ ] M1: add migration `keiro-migrations/sql-migrations/2026-06-11-00-00-00-keiro-workflows-instances.sql` (table, indexes, backfill, children-status constraint widening)
-- [ ] M1: create `keiro/src/Keiro/Workflow/Instance.hs` (`WorkflowStatus`, `WorkflowInstanceRow`, `upsertInstanceTx`, `markInstanceSuspended`, `lookupInstance`) and register it in `keiro/keiro.cabal`
-- [ ] M1: wire `upsertInstanceTx` into the `appendJournalTx` continuation in `keiro/src/Keiro/Workflow.hs` (event-to-status mapping)
-- [ ] M1: write the child's `keiro_workflows` row inside `spawnChild`'s register transaction in `keiro/src/Keiro/Workflow/Child.hs`
-- [ ] M1: best-effort `suspended` status write on the `Suspended` outcome in `runWorkflowWith`
-- [ ] M1: add `ChildFailed` to `ChildStatus` in `keiro/src/Keiro/Workflow/Child/Schema.hs` (constructor, `statusToText`/`statusFromText`)
-- [ ] M1: instance-lifecycle tests in `keiro/test/Main.hs` (row appears on first step; flips to completed/cancelled; generation bumps on continue-as-new; terminal rows frozen)
+- [x] M1: add migration `keiro-migrations/sql-migrations/2026-06-11-00-00-04-keiro-workflows-instances.sql` (table, indexes, backfill, children-status constraint widening) (completed 2026-06-15)
+- [x] M1: create `keiro/src/Keiro/Workflow/Instance.hs` (`WorkflowStatus`, `WorkflowInstanceRow`, `upsertInstanceTx`, `markInstanceSuspended`, `lookupInstance`) and register it in `keiro/keiro.cabal` (completed 2026-06-15)
+- [x] M1: wire `upsertInstanceTx` into the `appendJournalTx` continuation in `keiro/src/Keiro/Workflow.hs` (event-to-status mapping) (completed 2026-06-15)
+- [x] M1: write the child's `keiro_workflows` row inside `spawnChild`'s register transaction in `keiro/src/Keiro/Workflow/Child.hs` (completed 2026-06-15)
+- [x] M1: best-effort `suspended` status write on the `Suspended` outcome in `runWorkflowWith` (completed 2026-06-15)
+- [x] M1: add `ChildFailed` to `ChildStatus` in `keiro/src/Keiro/Workflow/Child/Schema.hs` (constructor, `statusToText`/`statusFromText`) (completed 2026-06-15)
+- [x] M1: instance-lifecycle tests in `keiro/test/Main.hs` (row appears on first step; flips to completed/cancelled; generation bumps on continue-as-new; terminal rows frozen) (completed 2026-06-15)
 - [ ] M2: add `Failed` to `WorkflowOutcome` in `keiro/src/Keiro/Workflow/Types.hs`; short-circuit on the `failed` marker in `runWorkflowWith`; update all `WorkflowOutcome` matches
 - [ ] M2: add `__workflow_failed__` to the terminal set in `findUnfinishedWorkflowIdsStmt` in `keiro/src/Keiro/Workflow/Schema.hs`
 - [ ] M2: add `recordCrashTx` / attempt bookkeeping statements to `Keiro.Workflow.Instance`
@@ -60,6 +60,7 @@ You can see it working by running the test suite (`cabal test keiro-test` from t
 
 - Research discovery (pre-implementation, 2026-06-10): the duplicate-event repair path that already exists in `appendJournalEntryReturningId` (`keiro/src/Keiro/Workflow.hs:649-657`, the `Left err -> racedIntoJournal …` branch) is unreachable for a real duplicate race. kiroku's transaction runner (`runTxOnPool`, `kiroku-store/src/Kiroku/Store/Effect.hs:335-348`) maps *every* `UsageError` — including the `events_pkey` 23505 unique violation that means "duplicate deterministic event id" — to `ConnectionError` and raises it through the `Error StoreError` *effect* (`throwError`), not through the `Either StoreError` that `runTransactionAppending` returns. The `Left` branch only ever carries semantic append conflicts (`WrongExpectedVersion` etc.). This refines audit finding H1 and motivates the advisory-lock append design in Milestone 3 (see Decision Log).
 - Research discovery (2026-06-10): `findUnfinishedWorkflowIdsStmt` (`keiro/src/Keiro/Workflow/Schema.hs:198-218`) treats only `__workflow_completed__` and `__workflow_cancelled__` as terminal. Writing a `WorkflowFailed` journal marker alone would therefore *not* stop rediscovery — the failed workflow would be re-invoked forever. The fix must add `__workflow_failed__` to that SQL literal set (Milestone 2).
+- Implementation discovery (2026-06-15): codd keys migration application by parsed timestamp, and the originally planned `2026-06-11-00-00-00-keiro-workflows-instances.sql` collided with the existing `2026-06-11-00-00-00-notify-trigger-append-guard.sql`. The migration was renamed to `2026-06-11-00-00-04-keiro-workflows-instances.sql`, after the existing 2026-06-11 migrations; the first filtered test run failed with `duplicate key value violates unique constraint "sql_migrations_migration_timestamp_key"`, and the rerun after renaming applied all migrations and passed 5 examples.
 
 
 ## Decision Log
@@ -163,7 +164,7 @@ The work is six milestones. Each is independently verifiable with `cabal test ke
 
 Scope: create the table this whole plan (and plan 73) stands on, and keep it correct on every journal write. At the end, every workflow instance that has ever journaled anything has exactly one row carrying its name, id, current generation, and status, updated transactionally with the journal.
 
-Add the migration `keiro-migrations/sql-migrations/2026-06-11-00-00-00-keiro-workflows-instances.sql` with the exact DDL recorded in Interfaces and Dependencies: the `keiro_workflows` table (primary key `(workflow_id, workflow_name)`; `generation`; `status` checked against `running|suspended|completed|cancelled|failed`; failure bookkeeping `attempts`/`last_error`/`next_attempt_at`; lease columns `leased_by`/`lease_expires_at`; timestamps), a partial index on active statuses, a backfill that derives one row per existing logical instance from `keiro_workflow_steps` (status from the newest generation's terminal markers) plus `running` rows for zero-step children from `keiro_workflow_children`, and a widening of `keiro_workflow_children`'s status check constraint to admit `failed` (used by Milestones 2 and 5). Start the file with `SET search_path TO kiroku, pg_catalog;` like `2026-06-05-00-00-00-keiro-workflow-generation.sql` does. Remember the build gotcha documented in `keiro/src/Keiro/Workflow.hs`'s module header: `embedDir` is a TH directory read, so after adding the SQL file touch a comment in `keiro-migrations/src/Keiro/Migrations.hs` (or `cabal clean`) so the embed re-runs.
+Add the migration `keiro-migrations/sql-migrations/2026-06-11-00-00-04-keiro-workflows-instances.sql` with the exact DDL recorded in Interfaces and Dependencies: the `keiro_workflows` table (primary key `(workflow_id, workflow_name)`; `generation`; `status` checked against `running|suspended|completed|cancelled|failed`; failure bookkeeping `attempts`/`last_error`/`next_attempt_at`; lease columns `leased_by`/`lease_expires_at`; timestamps), a partial index on active statuses, a backfill that derives one row per existing logical instance from `keiro_workflow_steps` (status from the newest generation's terminal markers) plus `running` rows for zero-step children from `keiro_workflow_children`, and a widening of `keiro_workflow_children`'s status check constraint to admit `failed` (used by Milestones 2 and 5). Start the file with `SET search_path TO kiroku, pg_catalog;` like `2026-06-05-00-00-00-keiro-workflow-generation.sql` does. Remember the build gotcha documented in `keiro/src/Keiro/Workflow.hs`'s module header: `embedDir` is a TH directory read, so after adding the SQL file touch a comment in `keiro-migrations/src/Keiro/Migrations.hs` (or `cabal clean`) so the embed re-runs.
 
 Create `keiro/src/Keiro/Workflow/Instance.hs` (add it to `exposed-modules` in `keiro/keiro.cabal`), mirroring the `Keiro.Timer.Schema` style: a `WorkflowStatus` sum (`WfRunning | WfSuspended | WfCompleted | WfCancelled | WfFailed` with `statusToText`/`statusFromText`; decode fallback `WfFailed`, the conservative choice — an unknown status must never look resumable), a `WorkflowInstanceRow` record mirroring the columns, and for this milestone three operations: `upsertInstanceTx :: Text -> Text -> Int32 -> WorkflowStatus -> Maybe Text -> Tx.Transaction ()` (the maybe is `last_error`, set only for `WfFailed`), `markInstanceSuspended :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es ()`, and `lookupInstance :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es (Maybe WorkflowInstanceRow)`. The upsert is one statement: insert with the given status, `ON CONFLICT (workflow_id, workflow_name) DO UPDATE` setting `generation = GREATEST(old, new)`, the new status, `completed_at = now()` for terminal statuses, `updated_at = now()` — guarded by `WHERE keiro_workflows.status NOT IN ('completed','cancelled','failed')` so a terminal row is frozen (a late append from a zombie can never resurrect a finished instance).
 
@@ -309,7 +310,7 @@ docs(keiro): reconcile workflow haddocks with delivered failure semantics (EP-6 
 
 Milestone-by-milestone edit order (file paths; details in Plan of Work):
 
-1. `keiro-migrations/sql-migrations/2026-06-11-00-00-00-keiro-workflows-instances.sql` (new) → `keiro/src/Keiro/Workflow/Instance.hs` (new) + `keiro/keiro.cabal` → `keiro/src/Keiro/Workflow.hs` (`appendJournalTxResult` continuation, `Suspended` write) → `keiro/src/Keiro/Workflow/Child.hs` (`spawnChild`) → `keiro/src/Keiro/Workflow/Child/Schema.hs` (`ChildFailed`) → tests.
+1. `keiro-migrations/sql-migrations/2026-06-11-00-00-04-keiro-workflows-instances.sql` (new) → `keiro/src/Keiro/Workflow/Instance.hs` (new) + `keiro/keiro.cabal` → `keiro/src/Keiro/Workflow.hs` (`appendJournalTxResult` continuation, `Suspended` write) → `keiro/src/Keiro/Workflow/Child.hs` (`spawnChild`) → `keiro/src/Keiro/Workflow/Child/Schema.hs` (`ChildFailed`) → tests.
 2. `keiro/src/Keiro/Workflow/Types.hs` (`Failed`) → `keiro/src/Keiro/Workflow.hs` (short-circuit) → `keiro/src/Keiro/Workflow/Schema.hs` (terminal set) → `keiro/src/Keiro/Workflow/Instance.hs` (`recordCrashTx`, reset) → `keiro/src/Keiro/Workflow/Resume.hs` (options, classification, drivers) → `keiro/src/Keiro/Workflow/Child/Schema.hs` (`markChildFailedTx`) → `keiro/src/Keiro/Telemetry.hs` → tests.
 3. `keiro/src/Keiro/Workflow/Instance.hs` (`claimInstance`/`releaseInstance`) → `keiro/src/Keiro/Workflow.hs` (`prepareJournalAppend`, rewire `recordStep`/`appendCompletion`/`appendJournalEntryReturningId`/`rotateGeneration`, delete `journalEntryExists`) → `keiro/src/Keiro/Workflow/Resume.hs` (claim/release, docs) → tests.
 4. `keiro/src/Keiro/Workflow/Awakeable.hs` (`signalAwakeable`, `awaitCancellable`) → `keiro/src/Keiro/Workflow/Child.hs` (`childCompletionHook`, `awaitChild` arm) → crash-window tests.
@@ -353,7 +354,7 @@ This section is the contract surface other plans read. docs/plans/73-workflow-sl
 
 ### The `keiro_workflows` table (defined here, consumed by plan 73)
 
-One row per logical workflow instance. Exact DDL (file `keiro-migrations/sql-migrations/2026-06-11-00-00-00-keiro-workflows-instances.sql`):
+One row per logical workflow instance. Exact DDL (file `keiro-migrations/sql-migrations/2026-06-11-00-00-04-keiro-workflows-instances.sql`):
 
 ```sql
 SET search_path TO kiroku, pg_catalog;
@@ -419,3 +420,8 @@ WHERE workflow_id = $1 AND workflow_name = $2
 ### External dependencies and the plan-67 question
 
 kiroku (read at `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`) is used as-is: `runTransaction`, `runTransactionAppending`, `appendToStreamTx`, `prepareEventsIO` (`kiroku-store/src/Kiroku/Store/Transaction.hs`). **No hard dependency on docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md**: the advisory-lock append design makes the duplicate-id 23505 unreachable from keiro paths, so this plan never needs kiroku's transactional error mapping fixed (today `runTxOnPool` maps it to `ConnectionError` via `throwError`; see Surprises & Discoveries). When plan 67 lands, an optional follow-up may narrow the worker's transient classification to treat `DuplicateEvent` distinctly — noted here so the MasterPlan's "EP-6: no hard deps" row stays accurate. PostgreSQL ≥ 13 is assumed for `hashtextextended` and `make_interval` (the repo targets PostgreSQL 18+ per `Keiro.Workflow.Schema`'s comments). Test infrastructure: `keiro-test-support` (`withMigratedSuite`, `withFreshStore`); hspec; the existing `SimulatedCrash` helper pattern in `keiro/test/Main.hs`.
+
+
+---
+
+Revision note (2026-06-15): Milestone 1 was implemented and the migration filename was corrected from `2026-06-11-00-00-00-keiro-workflows-instances.sql` to `2026-06-11-00-00-04-keiro-workflows-instances.sql` because codd rejected the original timestamp as a duplicate of an existing migration. The progress checklist, plan-of-work references, and interface contract now name the actual migration file.

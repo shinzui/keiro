@@ -98,6 +98,7 @@ import Keiro.Workflow.Child.Schema (
     markChildResultTx,
     registerChildTx,
  )
+import Keiro.Workflow.Instance (WorkflowStatus (..), upsertInstanceTx)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 
@@ -179,6 +180,12 @@ spawnChild childNm childWid _childDef = do
                     (unWorkflowId parentWid)
                     (unWorkflowName parentNm)
                     resultStep
+                    *> upsertInstanceTx
+                        (unWorkflowId childWid)
+                        (unWorkflowName childNm)
+                        0
+                        WfRunning
+                        Nothing
             pure ()
     pure (ChildHandle childNm childWid)
 

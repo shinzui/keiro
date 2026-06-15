@@ -115,6 +115,11 @@ import Keiro.Telemetry (
     recordWorkflowStepReplayed,
     withWorkflowSpan,
  )
+import Keiro.Workflow.Instance (
+    WorkflowStatus (..),
+    markInstanceSuspended,
+    upsertInstanceTx,
+ )
 import Keiro.Workflow.Schema (
     WorkflowStepRow (..),
     currentGeneration,
@@ -452,7 +457,7 @@ runWorkflowWith options name wid action = do
                     -- step map plus the WorkflowCompleted marker.
                     recordWorkflowJournalLength mMetrics (fromIntegral (Map.size finalMap + 1))
                     pure (Completed result)
-                Suspended -> pure Suspended
+                Suspended -> markInstanceSuspended name wid >> pure Suspended
                 Cancelled -> pure Cancelled
                 -- EP-48: the run unwound via 'WorkflowRotate'; 'rotateGeneration'
                 -- already journaled the seed step on the next generation and the
@@ -738,6 +743,7 @@ appendJournalTxResult name wid gen event = do
     let key = journalKey event
         entryId = deterministicJournalId name wid gen key
         row = journalRow name wid gen event
+        (status, mLastError) = instanceStatusForEvent event
     base <- case encodeForAppendWithMetadata workflowJournalCodec Nothing event of
         Right encoded -> pure encoded
         Left err -> throwIO (WorkflowJournalEncodeError (Text.pack (show err)))
@@ -746,7 +752,24 @@ appendJournalTxResult name wid gen event = do
         (workflowGenerationStreamName name wid gen)
         AnyVersion
         [entry]
-        (\appendResult -> appendResult <$ recordStepTx row)
+        ( \appendResult ->
+            appendResult
+                <$ recordStepTx row
+                <* upsertInstanceTx
+                    (unWorkflowId wid)
+                    (unWorkflowName name)
+                    (fromIntegral gen)
+                    status
+                    mLastError
+        )
+
+instanceStatusForEvent :: WorkflowJournalEvent -> (WorkflowStatus, Maybe Text)
+instanceStatusForEvent = \case
+    StepRecorded{} -> (WfRunning, Nothing)
+    WorkflowCompleted{} -> (WfCompleted, Nothing)
+    WorkflowCancelled{} -> (WfCancelled, Nothing)
+    WorkflowFailed reason _ -> (WfFailed, Just reason)
+    WorkflowContinuedAsNew{} -> (WfRunning, Nothing)
 
 journalEntryExists :: (Store :> es) => StreamName -> EventId -> Eff es Bool
 journalEntryExists journalName entryId =

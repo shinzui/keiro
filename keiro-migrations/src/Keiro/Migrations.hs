@@ -94,7 +94,7 @@ runAllKeiroMigrationsNoCheck settings connectTimeout =
 -- a new .sql file; embedDir is not tracked per-file by GHC's recompilation
 -- checker). Current set includes 2026-06-03-00-00-00-keiro-workflow-steps.sql,
 -- 2026-06-03-01-00-00-keiro-awakeables.sql,
--- 2026-06-03-02-00-00-keiro-workflow-children.sql, (EP-48)
+-- 2026-06-03-02-00-00-keiro-workflow-children.sql, 2026-06-11-00-00-04-keiro-workflows-instances.sql, (EP-48/EP-6)
 -- 2026-06-05-00-00-00-keiro-workflow-generation.sql, and (EP-51)
 -- 2026-06-05-01-00-00-keiro-subscription-shards.sql,
 -- 2026-06-15-21-49-37-keiro-projection-dedup.sql, and

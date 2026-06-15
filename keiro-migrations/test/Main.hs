@@ -65,6 +65,7 @@ expectedTables =
     , "keiro_read_models"
     , "keiro_snapshots"
     , "keiro_timers"
+    , "keiro_workflows"
     , "stream_events"
     , "streams"
     , "subscriptions"

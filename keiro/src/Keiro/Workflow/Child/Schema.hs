@@ -70,6 +70,7 @@ data ChildStatus
     = Running
     | ChildCompleted
     | ChildCancelled
+    | ChildFailed
     deriving stock (Generic, Eq, Show)
 
 {- | A child link row as stored: the child's (id, name), the parent's (id,
@@ -281,10 +282,12 @@ statusToText = \case
     Running -> "running"
     ChildCompleted -> "completed"
     ChildCancelled -> "cancelled"
+    ChildFailed -> "failed"
 
 statusFromText :: Text -> ChildStatus
 statusFromText = \case
     "running" -> Running
     "completed" -> ChildCompleted
     "cancelled" -> ChildCancelled
+    "failed" -> ChildFailed
     _ -> ChildCancelled

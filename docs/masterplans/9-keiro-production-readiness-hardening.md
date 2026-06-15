@@ -46,7 +46,7 @@ Alternatives considered. A severity-ordered decomposition ("blockers plan, highs
 | 3 | Fix event-store command path, snapshot, and read-model correctness | docs/plans/69-fix-event-store-command-path-snapshot-and-read-model-correctness.md | None | EP-2 | Complete |
 | 4 | Make outbox, inbox, timer, and shard workers crash-recoverable | docs/plans/70-make-outbox-inbox-timer-and-shard-workers-crash-recoverable.md | None | None | Complete |
 | 5 | Fix process manager and router delivery correctness | docs/plans/71-fix-process-manager-and-router-delivery-correctness.md | EP-1 | None | Complete |
-| 6 | Workflow engine failure handling, instance leasing, and crash-window atomicity | docs/plans/72-workflow-engine-failure-handling-instance-leasing-and-crash-window-atomicity.md | None | None | Not Started |
+| 6 | Workflow engine failure handling, instance leasing, and crash-window atomicity | docs/plans/72-workflow-engine-failure-handling-instance-leasing-and-crash-window-atomicity.md | None | None | In Progress |
 | 7 | Workflow sleep, generation, and patch semantics plus journal scale hygiene | docs/plans/73-workflow-sleep-generation-and-patch-semantics-plus-journal-scale-hygiene.md | EP-6 | EP-4 | Not Started |
 | 8 | Expose keiro-pgmq tuning surface and make job workers resilient | docs/plans/74-expose-keiro-pgmq-tuning-surface-and-make-job-workers-resilient.md | None | EP-1, EP-2 | Not Started |
 
