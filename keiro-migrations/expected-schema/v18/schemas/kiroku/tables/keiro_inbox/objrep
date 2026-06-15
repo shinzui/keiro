@@ -30,7 +30,8 @@
         "received_at",
         "completed_at",
         "failed_at",
-        "last_error"
+        "last_error",
+        "attempt_count"
     ],
     "compositetype": null,
     "forcerowsecurity": false,

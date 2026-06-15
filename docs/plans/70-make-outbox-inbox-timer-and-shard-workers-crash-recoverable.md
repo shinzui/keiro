@@ -4,6 +4,7 @@ slug: make-outbox-inbox-timer-and-shard-workers-crash-recoverable
 title: "Make outbox, inbox, timer, and shard workers crash-recoverable"
 kind: exec-plan
 created_at: 2026-06-11T04:45:56Z
+intention: intention_01kv40hzwaenftzem0gxypz4mj
 master_plan: "docs/masterplans/9-keiro-production-readiness-hardening.md"
 ---
 
@@ -24,9 +25,9 @@ After this plan is implemented, every documented recovery guarantee in these fou
 
 ## Progress
 
-- [ ] M1: generate the new migration `keiro-messaging-crash-recovery` (inbox `attempt_count` column, inbox backlog index, outbox sent-GC index, outbox per-source ordering index)
-- [ ] M1: add the `SET search_path TO kiroku, pg_catalog;` pin to the seven older migrations that lack it
-- [ ] M1: touch the embed comment in `keiro-migrations/src/Keiro/Migrations.hs` and verify with `cabal test keiro-migrations-test`
+- [x] M1: generate the new migration `keiro-messaging-crash-recovery` (inbox `attempt_count` column, inbox backlog index, outbox sent-GC index, outbox per-source ordering index) (completed 2026-06-15; migration `keiro-migrations/sql-migrations/2026-06-15-13-22-31-keiro-messaging-crash-recovery.sql`)
+- [x] M1: add the `SET search_path TO kiroku, pg_catalog;` pin to the seven older migrations that lack it (completed 2026-06-15)
+- [x] M1: touch the embed comment in `keiro-migrations/src/Keiro/Migrations.hs` and verify with `cabal test keiro-migrations-test` (completed 2026-06-15; `keiro-migrations-test` passed with 2 examples, 0 failures; `keiro-test` passed with 182 examples, 0 failures)
 - [ ] M2: add `requeueStuckOutbox` to `keiro/src/Keiro/Outbox/Schema.hs` and re-export it from `keiro/src/Keiro/Outbox.hs`
 - [ ] M2: add `publishingTimeout` to `OutboxPublishOptions` (default 300 s) and call the sweeper at the start of `publishClaimedOutbox`
 - [ ] M2: wrap the publish callback in `trySync` so an exception becomes `PublishFailed` instead of stranding the batch
@@ -71,6 +72,7 @@ Authoring-time findings that correct or extend the June 2026 audit notes (re-ver
 - codd (the migration tool, source at `/Users/shinzui/Keikaku/hub/haskell/codd-project`) tracks applied migrations purely by file name — `SELECT num_applied_statements, no_txn_failed_at FROM codd_schema.sql_migrations WHERE name=?` in `codd/src/Codd/Internal.hs` (~line 423). There is no content checksum of applied migrations, so editing an already-applied migration in place is safe: existing databases skip it by name, fresh databases (including every test template) get the corrected text.
 - The haddock on `runTimerWorkerWith` in `keiro/src/Keiro/Timer.hs` (lines 87–88) claims "A @fire@ that returns 'Nothing' leaves the timer @Firing@ to be retried on a later claim" — false today for the same reason as H2 (the claim query only takes `scheduled` rows). The M5 fix makes this sentence true.
 - `Data.TypeID.genTypeID` from the `mmzk-typeid` package throws a `TypeIDError` at runtime for an invalid prefix (verified in `/Users/shinzui/Keikaku/hub/haskell/mmzk-typeid-project/mmzk-typeid/src/Data/TypeID/Internal.hs`, `genTypeIDs`), and the package exports `checkPrefix :: Text -> Maybe TypeIDError` from `Data.TypeID` — exactly what `mkIntegrationProducer` needs for construction-time validation (L4).
+- Milestone 1 also requires regenerating `keiro-migrations/expected-schema` with `cabal run keiro-write-expected-schema`. The new migration applied and repeated successfully before regeneration, but `cabal test keiro-migrations-test` failed its strict schema comparison until the expected-schema files included the inbox `attempt_count` column and the new inbox/outbox indexes.
 
 
 ## Decision Log
@@ -130,7 +132,7 @@ Authoring-time findings that correct or extend the June 2026 audit notes (re-ver
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Milestone 1 completed on 2026-06-15. The migration layer now creates the inbox failure-attempt column and the three indexes later milestones rely on, every Keiro-owned framework migration pins `search_path`, and the embedded-migration comment plus checked-in expected schema were updated. Validation passed with `cabal test keiro-migrations-test` (2 examples, 0 failures) and `cabal test keiro-test` (182 examples, 0 failures).
 
 
 ## Context and Orientation

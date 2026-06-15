@@ -10,6 +10,12 @@
 -- The journal stream (wf:<name>-<id>) remains the source of truth for replay;
 -- this table is the external-completion handshake plus operator-visible state
 -- (a stuck 'pending' row is a workflow waiting on a callback that never came).
+-- Pin the session search_path so unqualified names resolve into the kiroku
+-- schema when this migration is applied incrementally to an existing database
+-- (search_path is session-scoped; see
+-- docs/plans/46-keiro-framework-migrations-self-set-search-path-for-incremental-upgrades.md).
+SET search_path TO kiroku, pg_catalog;
+
 CREATE TABLE IF NOT EXISTS keiro_awakeables (
   awakeable_id        UUID PRIMARY KEY,
   owner_workflow_name TEXT        NOT NULL,

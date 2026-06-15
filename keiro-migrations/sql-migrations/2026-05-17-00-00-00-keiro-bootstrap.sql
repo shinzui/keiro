@@ -1,3 +1,9 @@
+-- Pin the session search_path so unqualified names resolve into the kiroku
+-- schema when this migration is applied incrementally to an existing database
+-- (search_path is session-scoped; see
+-- docs/plans/46-keiro-framework-migrations-self-set-search-path-for-incremental-upgrades.md).
+SET search_path TO kiroku, pg_catalog;
+
 CREATE TABLE IF NOT EXISTS keiro_snapshots (
   stream_id BIGINT PRIMARY KEY,
   stream_version BIGINT NOT NULL,
