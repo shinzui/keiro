@@ -96,20 +96,23 @@ Milestone 1 — command path never lies, retries are visible:
 
 Milestone 2 — snapshot policy and overwrite correctness:
 
-- [ ] Add `shouldSnapshotSpan` (pre-append and post-append versions) to
+- [x] Add `shouldSnapshotSpan` (pre-append and post-append versions) to
       `keiro-core/src/Keiro/Snapshot/Policy.hs`; `Every n` fires when a multiple of `n`
       lies in `(pre, post]`; keep `shouldSnapshot` exported and unchanged for
-      `Keiro.Workflow` (owned by sibling plans).
-- [ ] Switch `writeSnapshotIfNeeded` in `keiro/src/Keiro/Command.hs` to
-      `shouldSnapshotSpan`, threading the pre-append version it already holds.
-- [ ] Test: a 2-events-per-command stream with policy `Every 3` snapshots at version 4
-      (the append 2→4 crossed boundary 3); today it never snapshots.
-- [ ] Widen the `writeSnapshotStmt` overwrite guard in
+      `Keiro.Workflow` (owned by sibling plans). Completed 2026-06-15.
+- [x] Switch `writeSnapshotIfNeeded` in `keiro/src/Keiro/Command.hs` to
+      `shouldSnapshotSpan`, threading the pre-append version it already holds. Completed
+      2026-06-15.
+- [x] Test: a 2-events-per-command stream with policy `Every 3` snapshots at version 4
+      (the append 2→4 crossed boundary 3); today it never snapshots. Completed
+      2026-06-15.
+- [x] Widen the `writeSnapshotStmt` overwrite guard in
       `keiro/src/Keiro/Snapshot/Schema.hs` so a row with a different
       `state_codec_version` or `regfile_shape_hash` may be overwritten regardless of
-      stream version.
-- [ ] Test: after a "newer codec" snapshot exists at version 4, a version-2 write under a
+      stream version. Completed 2026-06-15.
+- [x] Test: after a "newer codec" snapshot exists at version 4, a version-2 write under a
       different codec version succeeds (codec rollback no longer bricks snapshotting).
+      Completed 2026-06-15.
 
 Milestone 3 — read-model read path correctness:
 
@@ -166,6 +169,8 @@ implementation. Provide concise evidence.
 
 - 2026-06-15: The focused milestone-1 validation passed with `cabal test keiro-test --test-show-details=direct --test-options='--match /Keiro.Command/ --match /Keiro.Snapshot/'`: 24 examples, 0 failures. This covered the new retry metrics, duplicate counter, soft-delete fixpoint, span attempt attribute, truncated span status, and swallowed snapshot-write failure cases.
 - 2026-06-15: Full `cabal test keiro-test --test-show-details=direct` passed after milestone 1: 172 examples, 0 failures.
+- 2026-06-15: The focused milestone-2 validation passed with `cabal test keiro-test --test-show-details=direct --test-options='--match /Keiro.EventStream/ --match /Keiro.Snapshot/'`: 12 examples, 0 failures. This covered the new pure span-aware policy checks, command-path boundary crossing, and incompatible snapshot-codec overwrite behavior.
+- 2026-06-15: Full `cabal test keiro-test --test-show-details=direct` passed after milestone 2: 174 examples, 0 failures.
 
 
 ## Decision Log

@@ -7,6 +7,7 @@ of each constructor lives here.
 -}
 module Keiro.Snapshot.Policy (
     shouldSnapshot,
+    shouldSnapshotSpan,
 )
 where
 
@@ -32,3 +33,28 @@ shouldSnapshot (Every interval) _ _ (StreamVersion version)
     | otherwise = version > 0 Prelude.&& version `Prelude.mod` Prelude.fromIntegral interval == 0
 shouldSnapshot OnTerminal terminality _ _ = terminality == Terminal
 shouldSnapshot (Custom decide) terminality state version = decide terminality state version
+
+{- | Like 'shouldSnapshot', but evaluated over the half-open stream-version
+span @(preVersion, postVersion]@ that one append covered.
+
+For 'Every' @n@, this fires when any positive multiple of @n@ lies inside
+the span, so a batch append that jumps over a boundary still snapshots at
+the post-append version. The other policies ignore the span and behave like
+'shouldSnapshot'.
+-}
+shouldSnapshotSpan ::
+    SnapshotPolicy state ->
+    Terminality ->
+    state ->
+    StreamVersion ->
+    StreamVersion ->
+    Bool
+shouldSnapshotSpan Never _ _ _ _ = False
+shouldSnapshotSpan (Every interval) _ _ (StreamVersion preVersion) (StreamVersion postVersion)
+    | interval <= 0 = False
+    | postVersion <= 0 = False
+    | otherwise = postVersion `Prelude.div` n > preVersion `Prelude.div` n
+  where
+    n = Prelude.fromIntegral interval
+shouldSnapshotSpan OnTerminal terminality _ _ _ = terminality == Terminal
+shouldSnapshotSpan (Custom decide) terminality state _ postVersion = decide terminality state postVersion

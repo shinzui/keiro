@@ -58,7 +58,7 @@ import Keiro.Codec (Codec, CodecError, decodeRecorded, encodeForAppendWithMetada
 import Keiro.EventStream (EventStream, Terminality (..))
 import Keiro.Prelude
 import Keiro.Snapshot (hydrateWithSnapshot, writeSnapshot)
-import Keiro.Snapshot.Policy (shouldSnapshot)
+import Keiro.Snapshot.Policy (shouldSnapshotSpan)
 import Keiro.Stream (Stream)
 import Keiro.Telemetry (
     KeiroMetrics,
@@ -593,7 +593,7 @@ writeSnapshotIfNeeded options eventStream current events appendResult =
                             if Keiki.isFinal (eventStream ^. #transducer) (Prelude.fst finalState)
                                 then Terminal
                                 else NotTerminal
-                    when (shouldSnapshot (eventStream ^. #snapshotPolicy) terminality finalState finalVersion)
+                    when (shouldSnapshotSpan (eventStream ^. #snapshotPolicy) terminality finalState (current ^. #streamVersion) finalVersion)
                         $ do
                             outcome <- tryError @StoreError (writeSnapshot (appendResult ^. #streamId) finalVersion codec finalState)
                             case outcome of

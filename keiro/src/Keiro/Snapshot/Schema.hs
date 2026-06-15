@@ -124,6 +124,8 @@ writeSnapshotStmt =
               regfile_shape_hash = EXCLUDED.regfile_shape_hash,
               updated_at = now()
           WHERE keiro_snapshots.stream_version <= EXCLUDED.stream_version
+             OR keiro_snapshots.state_codec_version <> EXCLUDED.state_codec_version
+             OR keiro_snapshots.regfile_shape_hash <> EXCLUDED.regfile_shape_hash
         """
         ( contrazip5
             (E.param (E.nonNullable E.int8))

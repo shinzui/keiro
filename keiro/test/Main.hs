@@ -106,7 +106,7 @@ import Keiro.ProcessManager
 import Keiro.Projection
 import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild qualified as Rebuild
-import Keiro.Snapshot.Policy (shouldSnapshot)
+import Keiro.Snapshot.Policy (shouldSnapshot, shouldSnapshotSpan)
 import Keiro.Stream qualified as Stream
 import Keiro.Subscription.Shard (
     WorkerId (..),
@@ -476,6 +476,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             shouldSnapshot (Custom (\terminality _ _ -> terminality == Terminal)) Terminal () (StreamVersion 1)
                 `shouldBe` True
             shouldSnapshot (Custom (\terminality _ _ -> terminality == Terminal)) NotTerminal () (StreamVersion 1)
+                `shouldBe` False
+            shouldSnapshotSpan (Every 3) NotTerminal () (StreamVersion 2) (StreamVersion 4)
+                `shouldBe` True
+            shouldSnapshotSpan (Every 3) NotTerminal () (StreamVersion 4) (StreamVersion 5)
                 `shouldBe` False
 
         it "rejects snapshot policies without a state codec" $ do
@@ -1109,6 +1113,76 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Store.runTransaction $
                         Tx.statement "snapshot-multi-event-batch" snapshotVersionForStreamStmt
             snapshotVersion `shouldBe` Just (StreamVersion 2)
+
+        it "writes a snapshot when a multi-event append crosses an Every boundary" $ \storeHandle -> do
+            let target = stream "snapshot-multi-event-crosses-boundary" :: Stream SnapshotCounterEventStream
+                boundaryEventStream :: SnapshotCounterEventStream
+                boundaryEventStream =
+                    snapshotCounterEventStream
+                        & #transducer
+                        .~ multiSnapshotCounterTransducer
+                        & #snapshotPolicy
+                        .~ Every 3
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions boundaryEventStream target (Add 2)
+            Right firstSnapshotVersion <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement "snapshot-multi-event-crosses-boundary" snapshotVersionForStreamStmt
+            firstSnapshotVersion `shouldBe` Nothing
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions boundaryEventStream target (Add 3)
+            case result of
+                Right (Right commandResult) ->
+                    commandResult ^. #streamVersion `shouldBe` StreamVersion 4
+                other -> expectationFailure ("expected successful boundary-crossing command, got " <> show other)
+            Right snapshotVersion <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement "snapshot-multi-event-crosses-boundary" snapshotVersionForStreamStmt
+            snapshotVersion `shouldBe` Just (StreamVersion 4)
+
+        it "allows an incompatible snapshot codec to replace a higher-version row" $ \storeHandle -> do
+            let target = stream "snapshot-codec-rollback-overwrite" :: Stream SnapshotCounterEventStream
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 1)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 4)
+            Right snapshotVersionBefore <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement "snapshot-codec-rollback-overwrite" snapshotVersionForStreamStmt
+            snapshotVersionBefore `shouldBe` Just (StreamVersion 4)
+            let rollbackCodec = defaultStateCodec @SnapshotCounterRegs @CounterState 2
+            streamId <-
+                Store.runStoreIO storeHandle (Store.lookupStreamId (StreamName "snapshot-codec-rollback-overwrite")) >>= \case
+                    Right (Just sid) -> pure sid
+                    other -> expectationFailure ("expected stream id, got " <> show other) *> error "unreachable"
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    writeSnapshotRow
+                        SnapshotWrite
+                            { streamId = streamId
+                            , streamVersion = StreamVersion 2
+                            , state = (rollbackCodec ^. #encode) (Counting, RCons (Proxy @"lastAmount") 2 RNil)
+                            , stateCodecVersion = rollbackCodec ^. #stateCodecVersion
+                            , regfileShapeHash = rollbackCodec ^. #shapeHash
+                            }
+            Right snapshotVersionAfter <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement "snapshot-codec-rollback-overwrite" snapshotVersionForStreamStmt
+            snapshotVersionAfter `shouldBe` Just (StreamVersion 2)
 
     describe "Keiro.ReadModel" $ around (withFreshStore fixture) $ do
         it "queries inline projection with Strong consistency" $ \storeHandle -> do
