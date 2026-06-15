@@ -44,7 +44,7 @@ import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Types (RecordedEvent)
+import Kiroku.Store.Types (EventType (..), RecordedEvent)
 
 data FulfillmentCommand
     = ObserveFulfillmentEvent !ObserveFulfillmentEventData
@@ -180,9 +180,9 @@ fulfillmentTransducer =
 fulfillmentCodec :: Codec FulfillmentEvent
 fulfillmentCodec =
     Codec
-        { eventTypes = "FulfillmentObserved" :| []
+        { eventTypes = EventType "FulfillmentObserved" :| []
         , eventType = \case
-            FulfillmentObserved{} -> "FulfillmentObserved"
+            FulfillmentObserved{} -> EventType "FulfillmentObserved"
         , schemaVersion = 1
         , encode = \case
             FulfillmentObserved payload ->
@@ -195,19 +195,18 @@ fulfillmentCodec =
         , upcasters = []
         }
 
-parseFulfillmentEvent :: Value -> Either Text FulfillmentEvent
-parseFulfillmentEvent value =
+parseFulfillmentEvent :: EventType -> Value -> Either Text FulfillmentEvent
+parseFulfillmentEvent (EventType tag) value =
     case parseEither parser value of
         Right event -> Right event
         Left message -> Left (Text.pack message)
   where
     parser = withObject "FulfillmentEvent" $ \objectValue -> do
-        kind <- objectValue .: "kind"
-        case kind :: Text of
+        case tag of
             "FulfillmentObserved" ->
                 FulfillmentObserved
                     <$> ( FulfillmentObservedData
                             <$> (OrderId <$> objectValue .: "orderId")
                             <*> objectValue .: "status"
                         )
-            _ -> fail "unknown fulfillment event kind"
+            _ -> fail "unknown fulfillment event type"

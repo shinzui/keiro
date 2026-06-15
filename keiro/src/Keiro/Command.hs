@@ -51,7 +51,7 @@ import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
 import Keiki.Core qualified as Keiki
 import Keiro.Codec (Codec, CodecError, decodeRecorded, encodeForAppendWithMetadata)
-import Keiro.EventStream (EventStream)
+import Keiro.EventStream (EventStream, Terminality (..))
 import Keiro.Prelude
 import Keiro.Snapshot (hydrateWithSnapshot, writeSnapshot)
 import Keiro.Snapshot.Policy (shouldSnapshot)
@@ -551,8 +551,11 @@ writeSnapshotIfNeeded eventStream current events appendResult =
                 Nothing -> pure ()
                 Just finalState -> do
                     let finalVersion = appendResult ^. #streamVersion
-                        terminal = Keiki.isFinal (eventStream ^. #transducer) (Prelude.fst finalState)
-                    when (shouldSnapshot (eventStream ^. #snapshotPolicy) terminal finalState finalVersion)
+                        terminality =
+                            if Keiki.isFinal (eventStream ^. #transducer) (Prelude.fst finalState)
+                                then Terminal
+                                else NotTerminal
+                    when (shouldSnapshot (eventStream ^. #snapshotPolicy) terminality finalState finalVersion)
                         $ writeSnapshot (appendResult ^. #streamId) finalVersion codec finalState
 
 retryOrFail ::

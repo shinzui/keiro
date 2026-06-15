@@ -18,10 +18,13 @@ module Keiro.Inbox.Kafka (
 )
 where
 
+import Data.Aeson qualified as Aeson
 import Data.ByteString (ByteString)
 import Data.Maybe (mapMaybe)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as TextEncoding
 import Data.Text.Read qualified as TextRead
+import Data.Time.Format.ISO8601 (iso8601ParseM)
 import Data.UUID qualified as UUID
 import Keiro.Inbox.Types (KafkaDeliveryRef (..))
 import Keiro.Integration.Event (
@@ -29,12 +32,14 @@ import Keiro.Integration.Event (
     IntegrationEvent (..),
     SchemaReference (..),
     TraceContext (..),
+    headerAttributes,
     headerCausationId,
     headerContentType,
     headerCorrelationId,
     headerDestination,
     headerEventType,
     headerMessageId,
+    headerOccurredAt,
     headerSchemaFingerprint,
     headerSchemaId,
     headerSchemaRegistry,
@@ -70,6 +75,8 @@ data KafkaDecodeError
     = MissingHeader !Text
     | InvalidIntHeader !Text !Text
     | InvalidUuidHeader !Text !Text
+    | InvalidTimeHeader !Text !Text
+    | InvalidJsonHeader !Text !Text
     deriving stock (Generic, Eq, Show)
 
 {- | Reconstruct a full 'IntegrationEvent' plus the 'KafkaDeliveryRef'
@@ -101,6 +108,8 @@ integrationEventFromKafka record = do
         traverseLookup hs headerSourceGlobalPosition (fmap GlobalPosition . parseInt headerSourceGlobalPosition)
     causationId <- traverseLookup hs headerCausationId (fmap EventId . parseUuid headerCausationId)
     correlationId <- traverseLookup hs headerCorrelationId (fmap EventId . parseUuid headerCorrelationId)
+    occurredAt <- fromMaybe (record ^. #receivedAt) <$> traverseLookup hs headerOccurredAt (parseTimeHeader headerOccurredAt)
+    attributes <- traverseLookup hs headerAttributes (parseJsonHeader headerAttributes)
     let traceContext = case Prelude.lookup headerTraceParent hs of
             Nothing -> Nothing
             Just tp -> Just (TraceContext tp (Prelude.lookup headerTraceState hs))
@@ -117,16 +126,11 @@ integrationEventFromKafka record = do
                 , sourceEventId
                 , sourceGlobalPosition
                 , payloadBytes = record ^. #payload
-                , occurredAt = record ^. #receivedAt
-                , -- The producer side does not propagate occurredAt as a
-                  -- canonical header; receivers that need the producer's
-                  -- wall-clock can read it from the payload. Inbox storage
-                  -- preserves the field so future header conventions can add
-                  -- one without a migration.
-                  causationId
+                , occurredAt
+                , causationId
                 , correlationId
                 , traceContext
-                , attributes = Nothing
+                , attributes
                 }
         kafka =
             KafkaDeliveryRef
@@ -163,6 +167,16 @@ parseUuid :: Text -> Text -> Either KafkaDecodeError UUID.UUID
 parseUuid name raw = case UUID.fromText raw of
     Just u -> Right u
     Nothing -> Left (InvalidUuidHeader name raw)
+
+parseTimeHeader :: Text -> Text -> Either KafkaDecodeError UTCTime
+parseTimeHeader name raw =
+    maybe (Left (InvalidTimeHeader name raw)) Right (iso8601ParseM (Text.unpack raw))
+
+parseJsonHeader :: Text -> Text -> Either KafkaDecodeError Value
+parseJsonHeader name raw =
+    case Aeson.eitherDecodeStrict (TextEncoding.encodeUtf8 raw) of
+        Right value -> Right value
+        Left _ -> Left (InvalidJsonHeader name raw)
 
 buildSchemaReference ::
     [(Text, Text)] ->

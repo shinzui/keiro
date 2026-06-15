@@ -32,7 +32,7 @@ import Keiki.Core (
     defaultValidationOptions,
     validateTransducer,
  )
-import Keiro.EventStream (EventStream (..))
+import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 
 {- | A validation warning about one event stream, tagged with the
 caller-supplied label so a multi-aggregate service can tell which stream is at
@@ -68,9 +68,10 @@ validateEventStreamWith ::
     EventStream (HsPred rs ci) rs s ci co ->
     [EventStreamWarning]
 validateEventStreamWith opts label es =
-    [ EventStreamWarning{eswStreamLabel = label, eswReason = renderWarning w}
-    | w <- validateTransducer opts (transducer es)
-    ]
+    snapshotWarnings label es
+        <> [ EventStreamWarning{eswStreamLabel = label, eswReason = renderWarning w}
+           | w <- validateTransducer opts (transducer es)
+           ]
 
 {- | Build a validated 'EventStream'. Returns the warnings (@Left@) for an
 unsafe stream, or the stream itself (@Right@) when it passes. The bare record
@@ -104,3 +105,15 @@ renderWarning w = case w of
         "opaque-guard @" <> showT (edgeSource e) <> ": " <> Text.pack d
   where
     showT = Text.pack . show
+
+snapshotWarnings :: Text -> EventStream phi rs s ci co -> [EventStreamWarning]
+snapshotWarnings label es =
+    case (snapshotPolicy es, stateCodec es) of
+        (Never, _) -> []
+        (_, Just _) -> []
+        (_, Nothing) ->
+            [ EventStreamWarning
+                { eswStreamLabel = label
+                , eswReason = "snapshotPolicy is set but stateCodec is Nothing; snapshots would never be written"
+                }
+            ]

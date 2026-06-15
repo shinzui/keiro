@@ -845,11 +845,11 @@ emitCodec a =
         [ "{-# LANGUAGE OverloadedRecordDot #-}"
         , "{-# LANGUAGE OverloadedStrings #-}"
         , generatedBanner
-        , "module " <> aGenPrefix a <> ".Codec"
-        , "  ( " <> lowerFirst (aName a) <> "Codec"
-        , "  , parse" <> aName a <> "Event"
-        , "  , encode" <> aName a <> "Event"
-        , "  ) where"
+        , "module " <> aGenPrefix a <> ".Codec ("
+        , "    " <> lowerFirst (aName a) <> "Codec,"
+        , "    parse" <> aName a <> "Event,"
+        , "    encode" <> aName a <> "Event,"
+        , ") where"
         , ""
         , "import " <> aGenPrefix a <> ".Domain"
         , "import Data.Aeson (Value, object, withObject, (.:), (.=))"
@@ -857,7 +857,7 @@ emitCodec a =
         , "import Data.List.NonEmpty (NonEmpty (..))"
         , "import Data.Text (Text)"
         , "import qualified Data.Text as T"
-        , "import Keiro.Codec (Codec (..))"
+        , "import Keiro.Codec (Codec (..), EventType (..))"
         , upcasterImport a
         , ""
         , emitEnumParsers a
@@ -893,7 +893,7 @@ emitCodecValue a =
         , "    { eventTypes = " <> eventTypesExpr
         , "    , eventType = \\case"
         ]
-            ++ ["        " <> rcName e <> " {} -> " <> tshow (rcName e) | e <- aEvents a]
+            ++ ["        " <> rcName e <> "{} -> EventType " <> tshow (rcName e) | e <- aEvents a]
             ++ [ "    , schemaVersion = " <> tshow' (maxEventVersion a)
                , "    , encode = encode" <> aName a <> "Event"
                , "    , decode = parse" <> aName a <> "Event"
@@ -903,7 +903,7 @@ emitCodecValue a =
   where
     eventTypesExpr = case map rcName (aEvents a) of
         [] -> "error \"no events\""
-        (e : es) -> tshow e <> " :| [" <> T.intercalate ", " (map tshow es) <> "]"
+        (e : es) -> "EventType " <> tshow e <> " :| [" <> T.intercalate ", " (map (("EventType " <>) . tshow) es) <> "]"
 
 -- | The codec's @schemaVersion@: the maximum declared event version (EP-2).
 maxEventVersion :: Agg -> Int
@@ -922,7 +922,7 @@ upcasterEntries a =
 
 upcastersExpr :: Agg -> Text
 upcastersExpr a =
-    "[" <> T.intercalate ", " ["(" <> tshow' m <> ", " <> fn <> ")" | (m, fn) <- upcasterEntries a] <> "]"
+    "[" <> T.intercalate ", " ["(" <> tshow' m <> ", const " <> fn <> ")" | (m, fn) <- upcasterEntries a] <> "]"
 
 {- | When the codec references upcasters, it imports their (hole) definitions
 from the hand-owned Holes module.
@@ -961,15 +961,14 @@ emitEncode a =
 emitDecode :: Agg -> Text
 emitDecode a =
     nl $
-        [ "parse" <> aName a <> "Event :: Value -> Either Text " <> aName a <> "Event"
-        , "parse" <> aName a <> "Event = mapLeftText . parseEither (withObject " <> tshow (aName a <> "Event") <> " go)"
+        [ "parse" <> aName a <> "Event :: EventType -> Value -> Either Text " <> aName a <> "Event"
+        , "parse" <> aName a <> "Event (EventType tag) = mapLeftText . parseEither (withObject " <> tshow (aName a <> "Event") <> " go)"
         , "  where"
         , "    go o = do"
-        , "      kind <- o .: \"kind\" :: Parser Text"
-        , "      case kind of"
+        , "      case tag of"
         ]
             ++ concatMap decodeArm (aEvents a)
-            ++ ["        _ -> fail \"unknown event kind\""]
+            ++ ["        _ -> fail \"unknown event type\""]
   where
     decodeArm e =
         [ "        " <> tshow (rcName e) <> " ->"

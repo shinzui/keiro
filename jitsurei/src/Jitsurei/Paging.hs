@@ -49,6 +49,7 @@ import Keiro.Router (Router (..))
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Types (EventType (..))
 
 data PageCommand
     = SendPage !SendPageData
@@ -156,10 +157,10 @@ pageTransducer =
 pageCodec :: Codec PageEvent
 pageCodec =
     Codec
-        { eventTypes = "PageSent" :| ["PageAcknowledged"]
+        { eventTypes = EventType "PageSent" :| [EventType "PageAcknowledged"]
         , eventType = \case
-            PageSent{} -> "PageSent"
-            PageAcknowledged{} -> "PageAcknowledged"
+            PageSent{} -> EventType "PageSent"
+            PageAcknowledged{} -> EventType "PageAcknowledged"
         , schemaVersion = 1
         , encode = \case
             PageSent payload ->
@@ -178,22 +179,21 @@ pageCodec =
         , upcasters = []
         }
 
-parsePageEvent :: Value -> Either Text PageEvent
-parsePageEvent value =
+parsePageEvent :: EventType -> Value -> Either Text PageEvent
+parsePageEvent (EventType tag) value =
     case parseEither parser value of
         Right event -> Right event
         Left message -> Left (Text.pack message)
   where
     parser = withObject "PageEvent" $ \objectValue -> do
-        kind <- objectValue .: "kind"
         incidentId <- IncidentId <$> objectValue .: "incidentId"
         responderId <- ResponderId <$> objectValue .: "responderId"
-        case kind :: Text of
+        case tag of
             "PageSent" ->
                 pure (PageSent PageSentData{incidentId, responderId})
             "PageAcknowledged" ->
                 pure (PageAcknowledged PageAcknowledgedData{incidentId, responderId})
-            _ -> fail "unknown page event kind"
+            _ -> fail "unknown page event type"
 
 {- | The paging router: for each raised incident, page every responder on call
 for its service. The recipient set is resolved effectfully from the on-call

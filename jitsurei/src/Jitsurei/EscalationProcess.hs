@@ -96,7 +96,7 @@ import Keiro.Stream qualified as Stream
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow, runTimerWorker)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Types (EventId (..), RecordedEvent)
+import Kiroku.Store.Types (EventId (..), EventType (..), RecordedEvent)
 
 data EscalationCommand
     = NoteRaised !NoteRaisedData
@@ -188,10 +188,10 @@ escalationTransducer =
 escalationCodec :: Codec EscalationEvent
 escalationCodec =
     Codec
-        { eventTypes = "RaiseNoted" :| ["AcknowledgeNoted"]
+        { eventTypes = EventType "RaiseNoted" :| [EventType "AcknowledgeNoted"]
         , eventType = \case
-            RaiseNoted{} -> "RaiseNoted"
-            AcknowledgeNoted{} -> "AcknowledgeNoted"
+            RaiseNoted{} -> EventType "RaiseNoted"
+            AcknowledgeNoted{} -> EventType "AcknowledgeNoted"
         , schemaVersion = 1
         , encode = \case
             RaiseNoted payload ->
@@ -208,19 +208,18 @@ escalationCodec =
         , upcasters = []
         }
 
-parseEscalationEvent :: Value -> Either Text EscalationEvent
-parseEscalationEvent value =
+parseEscalationEvent :: EventType -> Value -> Either Text EscalationEvent
+parseEscalationEvent (EventType tag) value =
     case parseEither parser value of
         Right event -> Right event
         Left message -> Left (Text.pack message)
   where
     parser = withObject "EscalationEvent" $ \objectValue -> do
-        kind <- objectValue .: "kind"
         incidentId <- IncidentId <$> objectValue .: "incidentId"
-        case kind :: Text of
+        case tag of
             "RaiseNoted" -> pure (RaiseNoted (RaiseNotedData{incidentId}))
             "AcknowledgeNoted" -> pure (AcknowledgeNoted (AcknowledgeNotedData{incidentId}))
-            _ -> fail "unknown escalation event kind"
+            _ -> fail "unknown escalation event type"
 
 {- | The two signals the process manager reacts to, each carrying the incident
 it correlates on. In a live worker these come from two subscriptions — the

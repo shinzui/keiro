@@ -41,6 +41,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "upcasts a v1 OrderPlaced payload into the current event shape" $
             decodeRaw
                 orderCodec
+                (EventType "OrderPlaced")
                 1
                 ( object
                     [ "orderId" Aeson..= ("order-100" :: Text)

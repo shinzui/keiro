@@ -59,6 +59,7 @@ import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
+import Kiroku.Store.Types (EventType (..))
 
 newtype IncidentId = IncidentId Text
     deriving stock (Generic, Eq, Ord, Show)
@@ -250,12 +251,12 @@ incidentTransducer =
 incidentCodec :: Codec IncidentEvent
 incidentCodec =
     Codec
-        { eventTypes = "IncidentRaised" :| ["IncidentAcknowledged", "IncidentEscalated", "IncidentResolved"]
+        { eventTypes = EventType "IncidentRaised" :| [EventType "IncidentAcknowledged", EventType "IncidentEscalated", EventType "IncidentResolved"]
         , eventType = \case
-            IncidentRaised{} -> "IncidentRaised"
-            IncidentAcknowledged{} -> "IncidentAcknowledged"
-            IncidentEscalated{} -> "IncidentEscalated"
-            IncidentResolved{} -> "IncidentResolved"
+            IncidentRaised{} -> EventType "IncidentRaised"
+            IncidentAcknowledged{} -> EventType "IncidentAcknowledged"
+            IncidentEscalated{} -> EventType "IncidentEscalated"
+            IncidentResolved{} -> EventType "IncidentResolved"
         , schemaVersion = 1
         , encode = \case
             IncidentRaised payload ->
@@ -285,15 +286,14 @@ incidentCodec =
         , upcasters = []
         }
 
-parseIncidentEvent :: Value -> Either Text IncidentEvent
-parseIncidentEvent value =
+parseIncidentEvent :: EventType -> Value -> Either Text IncidentEvent
+parseIncidentEvent (EventType tag) value =
     case parseEither parser value of
         Right event -> Right event
         Left message -> Left (Text.pack message)
   where
     parser = withObject "IncidentEvent" $ \objectValue -> do
-        kind <- objectValue .: "kind"
-        case kind :: Text of
+        case tag of
             "IncidentRaised" -> do
                 incidentId <- objectValue .: "incidentId"
                 service <- objectValue .: "service"
@@ -318,4 +318,4 @@ parseIncidentEvent value =
             "IncidentResolved" ->
                 IncidentResolved . IncidentResolvedData . IncidentId
                     <$> objectValue .: "incidentId"
-            _ -> fail "unknown incident event kind"
+            _ -> fail "unknown incident event type"

@@ -58,7 +58,7 @@ import Data.Map.Strict (Map)
 import Data.Text qualified as Text
 import Keiro.Codec (Codec (..))
 import Keiro.Prelude
-import Kiroku.Store.Types (StreamName (..))
+import Kiroku.Store.Types (EventType (..), StreamName (..))
 
 {- | The stable name of a workflow /definition/ (for example
 @"order-fulfillment"@). Part of the journal stream name and of every
@@ -165,13 +165,13 @@ payload alone.
 workflowJournalCodec :: Codec WorkflowJournalEvent
 workflowJournalCodec =
     Codec
-        { eventTypes = "StepRecorded" :| ["WorkflowCompleted", "WorkflowCancelled", "WorkflowFailed", "WorkflowContinuedAsNew"]
+        { eventTypes = EventType "StepRecorded" :| [EventType "WorkflowCompleted", EventType "WorkflowCancelled", EventType "WorkflowFailed", EventType "WorkflowContinuedAsNew"]
         , eventType = \case
-            StepRecorded{} -> "StepRecorded"
-            WorkflowCompleted{} -> "WorkflowCompleted"
-            WorkflowCancelled{} -> "WorkflowCancelled"
-            WorkflowFailed{} -> "WorkflowFailed"
-            WorkflowContinuedAsNew{} -> "WorkflowContinuedAsNew"
+            StepRecorded{} -> EventType "StepRecorded"
+            WorkflowCompleted{} -> EventType "WorkflowCompleted"
+            WorkflowCancelled{} -> EventType "WorkflowCancelled"
+            WorkflowFailed{} -> EventType "WorkflowFailed"
+            WorkflowContinuedAsNew{} -> EventType "WorkflowContinuedAsNew"
         , schemaVersion = 1
         , encode = encodeJournalEvent
         , decode = decodeJournalEvent
@@ -210,12 +210,11 @@ encodeJournalEvent = \case
             , "recordedAt" Aeson..= t
             ]
 
-decodeJournalEvent :: Aeson.Value -> Either Text WorkflowJournalEvent
-decodeJournalEvent value = first Text.pack (parseEither parser value)
+decodeJournalEvent :: EventType -> Aeson.Value -> Either Text WorkflowJournalEvent
+decodeJournalEvent (EventType tag) value = first Text.pack (parseEither parser value)
   where
     parser = Aeson.withObject "WorkflowJournalEvent" $ \o -> do
-        kind <- o Aeson..: "kind"
-        case (kind :: Text) of
+        case tag of
             "StepRecorded" ->
                 StepRecorded <$> o Aeson..: "stepName" <*> o Aeson..: "result" <*> o Aeson..: "recordedAt"
             "WorkflowCompleted" ->
@@ -227,7 +226,7 @@ decodeJournalEvent value = first Text.pack (parseEither parser value)
             "WorkflowContinuedAsNew" ->
                 WorkflowContinuedAsNew <$> o Aeson..: "generation" <*> o Aeson..: "recordedAt"
             other ->
-                fail ("unknown workflow journal event kind: " <> Text.unpack other)
+                fail ("unknown workflow journal event type: " <> Text.unpack other)
 
 {- | The accumulated step state a running workflow holds in memory: a map
 from step name to that step's recorded JSON result. This is exactly the

@@ -6,7 +6,7 @@ where
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar)
-import Control.Exception (Exception, SomeException, throwIO, try)
+import Control.Exception (Exception, SomeException, evaluate, throwIO, try)
 import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -48,11 +48,8 @@ import Keiki.Core (
 import Keiki.Core qualified as Keiki
 import Keiro
 import Keiro qualified as KeiroRoot
-import Keiro.EventStream.Validate (
-    EventStreamWarning (..),
-    mkEventStream,
-    validateEventStream,
- )
+import Keiro.EventStream (Terminality (..))
+import Keiro.EventStream.Validate (EventStreamWarning (..), mkEventStream, validateEventStream)
 import Keiro.Inbox (
     InboxDedupePolicy (..),
     InboxError (..),
@@ -109,6 +106,7 @@ import Keiro.ProcessManager
 import Keiro.Projection
 import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild qualified as Rebuild
+import Keiro.Snapshot.Policy (shouldSnapshot)
 import Keiro.Stream qualified as Stream
 import Keiro.Subscription.Shard (
     WorkerId (..),
@@ -332,19 +330,23 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 `shouldBe` StreamName "order-123-archived"
 
         it "validates categories, rejecting the dash boundary and reserved names" $ do
-            (Stream.category "incident" :: Either Stream.CategoryError (Stream.StreamCategory ()))
-                `shouldBe` Right (Stream.StreamCategory "incident")
+            fmap Stream.categoryText (Stream.category "incident" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Right "incident"
             -- compound categories are camelCase; ':' (reserved for the wf: family) is also accepted
-            (Stream.category "hospitalSurge" :: Either Stream.CategoryError (Stream.StreamCategory ()))
-                `shouldBe` Right (Stream.StreamCategory "hospitalSurge")
-            (Stream.category "wf:fulfillment" :: Either Stream.CategoryError (Stream.StreamCategory ()))
-                `shouldBe` Right (Stream.StreamCategory "wf:fulfillment")
+            fmap Stream.categoryText (Stream.category "hospitalSurge" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Right "hospitalSurge"
+            fmap Stream.categoryText (Stream.category "wf:fulfillment" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Right "wf:fulfillment"
             (Stream.category "" :: Either Stream.CategoryError (Stream.StreamCategory ()))
                 `shouldBe` Left Stream.CategoryEmpty
             (Stream.category "hospital-surge" :: Either Stream.CategoryError (Stream.StreamCategory ()))
                 `shouldBe` Left (Stream.CategoryContainsSeparator "hospital-surge")
             (Stream.category "$all" :: Either Stream.CategoryError (Stream.StreamCategory ()))
                 `shouldBe` Left (Stream.CategoryReserved "$all")
+            (Stream.category "ord ers" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Left (Stream.CategoryContainsIllegalChar ' ' "ord ers")
+            (Stream.category "ord\ners" :: Either Stream.CategoryError (Stream.StreamCategory ()))
+                `shouldBe` Left (Stream.CategoryContainsIllegalChar '\n' "ord\ners")
 
         it "builds entity streams that round-trip through kiroku's category rule" $ do
             let cat = Stream.categoryUnsafe "orders" :: Stream.StreamCategory OrderStream
@@ -360,24 +362,81 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Stream.streamName (Stream.entityStreamId cat ("o-1" :: Text)) `shouldBe` StreamName "orders-o-1"
             Stream.streamName (Stream.entityStreamId cat ("o-1" :: String)) `shouldBe` StreamName "orders-o-1"
 
+        it "rejects blank entity stream id segments" $ do
+            let cat = Stream.categoryUnsafe "orders" :: Stream.StreamCategory OrderStream
+            evaluate (Stream.streamName (Stream.entityStream cat "")) `shouldThrow` anyErrorCall
+            evaluate (Stream.streamName (Stream.entityStream cat "   ")) `shouldThrow` anyErrorCall
+
     describe "Keiro.Codec" $ do
         it "encodes current events with type tags and schema-version metadata" $ do
             encoded <- shouldBeRight (encodeForAppend orderCodec (OrderPlaced "order-123" 5))
             encoded ^. #eventType `shouldBe` EventType "OrderPlaced"
             encoded ^. #payload `shouldBe` object ["orderId" Aeson..= ("order-123" :: Text), "quantity" Aeson..= (5 :: Int)]
-            extractSchemaVersion (recordedFrom encoded) `shouldBe` 2
+            extractSchemaVersion (recordedFrom encoded) `shouldBe` Right 2
 
         it "round-trips current events" $ do
             encoded <- shouldBeRight (encodeForAppend orderCodec (OrderPlaced "order-123" 5))
             decodeRecorded orderCodec (recordedFrom encoded) `shouldBe` Right (OrderPlaced "order-123" 5)
 
+        it "decodes by the stored tag, not by payload shape (H1)" $ do
+            let recorded =
+                    recordedFrom
+                        EventData
+                            { eventId = Nothing
+                            , eventType = EventType "CounterAudited"
+                            , payload = object ["amount" Aeson..= (5 :: Int)]
+                            , metadata = Just (metadataForOrDie 1 Nothing)
+                            , causationId = Nothing
+                            , correlationId = Nothing
+                            }
+            decodeRecorded counterCodec recorded `shouldBe` Right (CounterAudited 5)
+
         it "runs upcasters in source-version order" $
-            decodeRaw orderCodec 1 (object ["orderId" Aeson..= ("order-123" :: Text), "qty" Aeson..= (5 :: Int)])
+            decodeRaw orderCodec (EventType "OrderPlaced") 1 (object ["orderId" Aeson..= ("order-123" :: Text), "qty" Aeson..= (5 :: Int)])
                 `shouldBe` Right (OrderPlaced "order-123" 5)
 
         it "rejects gaps in upcaster chains" $
-            decodeRaw gappyCodec 1 (object ["orderId" Aeson..= ("order-123" :: Text), "qty" Aeson..= (5 :: Int)])
+            decodeRaw gappyCodec (EventType "OrderPlaced") 1 (object ["orderId" Aeson..= ("order-123" :: Text), "qty" Aeson..= (5 :: Int)])
                 `shouldBe` Left (GapInUpcasterChain 2 3)
+
+        it "validates codec construction invariants" $ do
+            fmap (const ()) (mkCodec (orderCodec{schemaVersion = 0})) `shouldBe` Left (CodecSchemaVersionInvalid 0)
+            fmap (const ()) (mkCodec (orderCodec{eventTypes = EventType "OrderPlaced" :| [EventType "OrderPlaced"]}))
+                `shouldBe` Left (CodecDuplicateEventTypes [EventType "OrderPlaced"])
+            fmap (const ()) (mkCodec (orderCodec{schemaVersion = 3, upcasters = [(1, const upcastOrderPlacedV1), (1, const upcastOrderPlacedV1)]}))
+                `shouldBe` Left (CodecDuplicateUpcasterSources [1])
+            fmap (const ()) (mkCodec (orderCodec{schemaVersion = 3, upcasters = [(1, const upcastOrderPlacedV1)]}))
+                `shouldBe` Left (CodecUpcasterChainIncomplete [2] 3)
+            case mkCodec orderCodec of
+                Right _ -> pure ()
+                Left err -> expectationFailure ("expected orderCodec to validate, got " <> show err)
+
+        it "rejects future-version, malformed metadata, and incomplete upcaster chains" $ do
+            let v1Payload = object ["orderId" Aeson..= ("order-123" :: Text), "qty" Aeson..= (5 :: Int)]
+                earlyEndCodec =
+                    orderCodec
+                        { schemaVersion = 4
+                        , upcasters = [(1, const upcastOrderPlacedV1), (2, const Right)]
+                        }
+            decodeRaw orderCodec (EventType "OrderPlaced") 3 v1Payload
+                `shouldBe` Left (VersionAhead 3 2)
+            decodeRaw earlyEndCodec (EventType "OrderPlaced") 1 v1Payload
+                `shouldBe` Left (IncompleteUpcasterChain 3 4)
+
+            let malformedStamp =
+                    recordedFrom
+                        EventData
+                            { eventId = Nothing
+                            , eventType = EventType "OrderPlaced"
+                            , payload = object ["orderId" Aeson..= ("order-123" :: Text), "quantity" Aeson..= (5 :: Int)]
+                            , metadata = Just (object ["schemaVersion" Aeson..= ("2" :: Text)])
+                            , causationId = Nothing
+                            , correlationId = Nothing
+                            }
+            extractSchemaVersion malformedStamp
+                `shouldBe` Left (MalformedSchemaVersionStamp (Aeson.String "2"))
+            fmap (const ()) (encodeForAppendWithMetadata orderCodec (Just (Aeson.String "x")) (OrderPlaced "order-123" 5))
+                `shouldBe` Left (NonObjectCallerMetadata (Aeson.String "x"))
 
         it "rejects recorded events with unknown type tags" $ do
             let encoded =
@@ -386,12 +445,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                             { eventId = Nothing
                             , eventType = EventType "OrderCancelled"
                             , payload = object ["orderId" Aeson..= ("order-123" :: Text)]
-                            , metadata = Just (metadataFor 2 Nothing)
+                            , metadata = Just (metadataForOrDie 2 Nothing)
                             , causationId = Nothing
                             , correlationId = Nothing
                             }
             decodeRecorded orderCodec encoded
-                `shouldBe` Left (UnknownEventType (EventType "OrderCancelled") ["OrderPlaced"])
+                `shouldBe` Left (UnknownEventType (EventType "OrderCancelled") [EventType "OrderPlaced"])
 
     describe "Keiro.EventStream" $ do
         it "constructs an author-facing EventStream contract" $ do
@@ -408,6 +467,22 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 typedStream = stream "order-123" :: Stream (EventStream () '[] OrderState OrderCommand OrderEvent)
             contract ^. #initialState `shouldBe` Idle
             (contract ^. #resolveStreamName) typedStream `shouldBe` StreamName "order-123"
+
+        it "evaluates snapshot policies with explicit terminality" $ do
+            shouldSnapshot (Every 2) NotTerminal () (StreamVersion 0) `shouldBe` False
+            shouldSnapshot (Every 2) NotTerminal () (StreamVersion 2) `shouldBe` True
+            shouldSnapshot OnTerminal Terminal () (StreamVersion 1) `shouldBe` True
+            shouldSnapshot OnTerminal NotTerminal () (StreamVersion 1) `shouldBe` False
+            shouldSnapshot (Custom (\terminality _ _ -> terminality == Terminal)) Terminal () (StreamVersion 1)
+                `shouldBe` True
+            shouldSnapshot (Custom (\terminality _ _ -> terminality == Terminal)) NotTerminal () (StreamVersion 1)
+                `shouldBe` False
+
+        it "rejects snapshot policies without a state codec" $ do
+            let contract :: CounterEventStream
+                contract = counterEventStream{snapshotPolicy = Every 10, stateCodec = Nothing}
+            fmap (const ()) (mkEventStream "snapshotless" contract)
+                `shouldBe` Left [EventStreamWarning "snapshotless" "snapshotPolicy is set but stateCodec is Nothing; snapshots would never be written"]
 
     describe "EventStream replay-safety (validateEventStream)" $ do
         it "every production-intent stream validates clean" $
@@ -526,7 +601,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                             { eventId = Nothing
                             , eventType = EventType "OtherEvent"
                             , payload = object []
-                            , metadata = Just (metadataFor 1 Nothing)
+                            , metadata = Just (metadataForOrDie 1 Nothing)
                             , causationId = Nothing
                             , correlationId = Nothing
                             }
@@ -537,7 +612,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     runCommand defaultRunCommandOptions counterEventStream target (Add 1)
             result
                 `shouldBe` Right
-                    (Left (HydrationDecodeFailed (UnknownEventType (EventType "OtherEvent") ["CounterAdded", "CounterAudited"])))
+                    (Left (HydrationDecodeFailed (UnknownEventType (EventType "OtherEvent") [EventType "CounterAdded", EventType "CounterAudited"])))
 
         it "rolls back the append when inline SQL condemns the transaction" $ \storeHandle -> do
             let target = stream "counter-command-rollback" :: Stream CounterEventStream
@@ -2029,6 +2104,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "reconstructs an integration event from headers and payload" $ do
             let envelope = sampleIntegrationEnvelope
                 headers = integrationHeaders envelope
+                receivedAt = addUTCTime 60 (envelope ^. #occurredAt)
                 record =
                     InboxKafka.KafkaInboundRecord
                         { topic = "billing.orders.v1"
@@ -2037,7 +2113,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         , key = Just "order-123"
                         , payload = envelope ^. #payloadBytes
                         , headers
-                        , receivedAt = envelope ^. #occurredAt
+                        , receivedAt
                         }
             case InboxKafka.integrationEventFromKafka record of
                 Right (rebuilt, kafkaRef) -> do
@@ -2049,10 +2125,46 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     rebuilt ^. #sourceEventId `shouldBe` envelope ^. #sourceEventId
                     rebuilt ^. #sourceGlobalPosition `shouldBe` envelope ^. #sourceGlobalPosition
                     rebuilt ^. #payloadBytes `shouldBe` envelope ^. #payloadBytes
+                    rebuilt ^. #occurredAt `shouldBe` envelope ^. #occurredAt
+                    rebuilt ^. #attributes `shouldBe` envelope ^. #attributes
                     kafkaRef ^. #topic `shouldBe` "billing.orders.v1"
                     kafkaRef ^. #partition `shouldBe` 2
                     kafkaRef ^. #offset `shouldBe` 113
                 Left err -> expectationFailure ("expected Right, got Left " <> show err)
+
+        it "falls back to receivedAt when the occurredAt header is absent" $ do
+            let envelope = sampleIntegrationEnvelope
+                receivedAt = addUTCTime 60 (envelope ^. #occurredAt)
+                headers = filter ((/= "keiro-occurred-at") . Prelude.fst) (integrationHeaders envelope)
+                record =
+                    InboxKafka.KafkaInboundRecord
+                        { topic = "billing.orders.v1"
+                        , partition = 2
+                        , offset = 113
+                        , key = Just "order-123"
+                        , payload = envelope ^. #payloadBytes
+                        , headers
+                        , receivedAt
+                        }
+            case InboxKafka.integrationEventFromKafka record of
+                Right (rebuilt, _) -> rebuilt ^. #occurredAt `shouldBe` receivedAt
+                Left err -> expectationFailure ("expected Right, got Left " <> show err)
+
+        it "rejects malformed occurredAt headers" $ do
+            let envelope = sampleIntegrationEnvelope
+                headers = ("keiro-occurred-at", "not-a-time") : filter ((/= "keiro-occurred-at") . Prelude.fst) (integrationHeaders envelope)
+                record =
+                    InboxKafka.KafkaInboundRecord
+                        { topic = "billing.orders.v1"
+                        , partition = 2
+                        , offset = 113
+                        , key = Just "order-123"
+                        , payload = envelope ^. #payloadBytes
+                        , headers
+                        , receivedAt = envelope ^. #occurredAt
+                        }
+            InboxKafka.integrationEventFromKafka record
+                `shouldBe` Left (InboxKafka.InvalidTimeHeader "keiro-occurred-at" "not-a-time")
 
         it "reports MissingHeader for an essential header" $ do
             let envelope = sampleIntegrationEnvelope
@@ -2339,6 +2451,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "parses content-type headers back to the canonical type" $ do
             parseContentType "application/json" `shouldBe` ApplicationJson
             parseContentType "Application/JSON" `shouldBe` ApplicationJson
+            parseContentType "application/json; charset=utf-8" `shouldBe` ApplicationJson
+            parseContentType "APPLICATION/JSON ; CHARSET=UTF-8" `shouldBe` ApplicationJson
             parseContentType "application/vnd.apache.avro.binary"
                 `shouldBe` OtherContentType "application/vnd.apache.avro.binary"
 
@@ -3253,10 +3367,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "round-trips a WorkflowContinuedAsNew rotation marker" $ do
             let t = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 3600)
                 marker = WorkflowContinuedAsNew 3 t
-            (workflowJournalCodec ^. #decode) ((workflowJournalCodec ^. #encode) marker)
+            (workflowJournalCodec ^. #decode) ((workflowJournalCodec ^. #eventType) marker) ((workflowJournalCodec ^. #encode) marker)
                 `shouldBe` Right marker
             (workflowJournalCodec ^. #schemaVersion) `shouldBe` 1
-            "WorkflowContinuedAsNew" `elem` (workflowJournalCodec ^. #eventTypes) `shouldBe` True
+            EventType "WorkflowContinuedAsNew" `elem` (workflowJournalCodec ^. #eventTypes) `shouldBe` True
 
     describe "Keiro.Workflow.Sleep" $ do
         -- Pure (no-DB) checks of the id/payload/step-name helpers.
@@ -3554,7 +3668,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         -- M3(a): the new terminal journal constructors round-trip through the codec.
         it "round-trips WorkflowCancelled and WorkflowFailed through the journal codec" $ do
             let t = UTCTime (ModifiedJulianDay 0) 0
-                rt ev = (workflowJournalCodec ^. #decode) ((workflowJournalCodec ^. #encode) ev)
+                rt ev = (workflowJournalCodec ^. #decode) ((workflowJournalCodec ^. #eventType) ev) ((workflowJournalCodec ^. #encode) ev)
             rt (WorkflowCancelled t) `shouldBe` Right (WorkflowCancelled t)
             rt (WorkflowFailed "boom" t) `shouldBe` Right (WorkflowFailed "boom" t)
 
@@ -4156,7 +4270,7 @@ sampleDraft =
         , causationId = Nothing
         , correlationId = Nothing
         , traceContext = Nothing
-        , attributes = Nothing
+        , attributes = Just (object ["source" Aeson..= ("test-suite" :: Text)])
         }
 
 sampleOutboxRow :: IntegrationEvent -> OutboxRow
@@ -4269,15 +4383,15 @@ data OrderCommand
 orderCodec :: Codec OrderEvent
 orderCodec =
     Codec
-        { eventTypes = "OrderPlaced" :| []
+        { eventTypes = EventType "OrderPlaced" :| []
         , eventType = \case
-            OrderPlaced{} -> "OrderPlaced"
+            OrderPlaced{} -> EventType "OrderPlaced"
         , schemaVersion = 2
         , encode = \case
             OrderPlaced orderId quantity ->
                 object ["orderId" Aeson..= orderId, "quantity" Aeson..= quantity]
         , decode = parseOrderPlaced
-        , upcasters = [(1, upcastOrderPlacedV1)]
+        , upcasters = [(1, const upcastOrderPlacedV1)]
         }
 
 gappyCodec :: Codec OrderEvent
@@ -4288,11 +4402,11 @@ gappyCodec =
         , schemaVersion = 4
         , encode = orderCodec ^. #encode
         , decode = orderCodec ^. #decode
-        , upcasters = [(1, upcastOrderPlacedV1), (3, Right)]
+        , upcasters = [(1, const upcastOrderPlacedV1), (3, const Right)]
         }
 
-parseOrderPlaced :: Value -> Either Text OrderEvent
-parseOrderPlaced value =
+parseOrderPlaced :: EventType -> Value -> Either Text OrderEvent
+parseOrderPlaced _ value =
     case parseEither parser value of
         Right event -> Right event
         Left message -> Left (fromStringLiteral message)
@@ -4312,6 +4426,10 @@ upcastOrderPlacedV1 value =
         orderId <- objectValue .: "orderId"
         quantity <- objectValue .: "qty"
         pure (object ["orderId" Aeson..= (orderId :: Text), "quantity" Aeson..= (quantity :: Int)])
+
+metadataForOrDie :: Int -> Maybe Value -> Value
+metadataForOrDie version existing =
+    either (error . show) id (metadataFor version existing)
 
 emptyTransducer :: SymTransducer () '[] OrderState OrderCommand OrderEvent
 emptyTransducer =
@@ -4573,10 +4691,10 @@ counterAuditedCtor =
 counterCodec :: Codec CounterEvent
 counterCodec =
     Codec
-        { eventTypes = "CounterAdded" :| ["CounterAudited"]
+        { eventTypes = EventType "CounterAdded" :| [EventType "CounterAudited"]
         , eventType = \case
-            CounterAdded{} -> "CounterAdded"
-            CounterAudited{} -> "CounterAudited"
+            CounterAdded{} -> EventType "CounterAdded"
+            CounterAudited{} -> EventType "CounterAudited"
         , schemaVersion = 1
         , encode = \case
             CounterAdded amount -> object ["amount" Aeson..= amount]
@@ -4585,19 +4703,18 @@ counterCodec =
         , upcasters = []
         }
 
-parseCounterEvent :: Value -> Either Text CounterEvent
-parseCounterEvent value =
+parseCounterEvent :: EventType -> Value -> Either Text CounterEvent
+parseCounterEvent (EventType tag) value =
     case parseEither parser value of
         Right event -> Right event
         Left message -> Left (fromStringLiteral message)
   where
     parser = withObject "CounterEvent" $ \objectValue -> do
         amount <- objectValue .: "amount"
-        audited <- objectValue .:? "audited"
-        pure $
-            if audited == Just True
-                then CounterAudited amount
-                else CounterAdded amount
+        case tag of
+            "CounterAdded" -> pure (CounterAdded amount)
+            "CounterAudited" -> pure (CounterAudited amount)
+            _ -> fail "unknown counter event type"
 
 counterProcessManager ::
     ProcessManager

@@ -78,6 +78,7 @@ import Keiro.Router (Router (..))
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Types (EventType (..))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 newtype AreaId = AreaId Text
@@ -193,9 +194,9 @@ chapterTransducer =
 chapterCodec :: Codec ChapterEvent
 chapterCodec =
     Codec
-        { eventTypes = "TransactionRecorded" :| []
+        { eventTypes = EventType "TransactionRecorded" :| []
         , eventType = \case
-            TransactionRecorded{} -> "TransactionRecorded"
+            TransactionRecorded{} -> EventType "TransactionRecorded"
         , schemaVersion = 1
         , encode = \case
             TransactionRecorded payload ->
@@ -207,19 +208,18 @@ chapterCodec =
         , upcasters = []
         }
 
-parseChapterEvent :: Value -> Either Text ChapterEvent
-parseChapterEvent value =
+parseChapterEvent :: EventType -> Value -> Either Text ChapterEvent
+parseChapterEvent (EventType tag) value =
     case parseEither parser value of
         Right event -> Right event
         Left message -> Left (Text.pack message)
   where
     parser = withObject "ChapterEvent" $ \objectValue -> do
-        kind <- objectValue .: "kind"
-        case kind :: Text of
+        case tag of
             "TransactionRecorded" ->
                 TransactionRecorded . TransactionRecordedData . TxnId
                     <$> objectValue .: "txnId"
-            _ -> fail "unknown chapter event kind"
+            _ -> fail "unknown chapter event type"
 
 {- | Maps a geographic area to the @(member, chapter)@ pairs whose service areas
 include it. The router queries this per area in 'agentQualRouter'.

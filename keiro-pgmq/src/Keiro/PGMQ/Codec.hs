@@ -7,9 +7,10 @@ adapter between a domain payload type @p@ and that JSON. Two are provided:
     already use @ToJSON@/@FromJSON@ payloads, so migrating to @keiro-pgmq@ is
     mechanical.
   * 'keiroJobCodec' - the versioned upgrade. It bridges keiro's
-    'Keiro.Codec.Codec' by wrapping payloads in a @{ "v": <version>, "data":
-    <payload> }@ envelope and replaying the codec's upcaster chain on decode,
-    giving job payloads the same schema-evolution story event streams have.
+    'Keiro.Codec.Codec' by wrapping payloads in a @{ "v": <version>, "t":
+    <event-type>, "data": <payload> }@ envelope and replaying the codec's
+    upcaster chain on decode, giving job payloads the same schema-evolution
+    story event streams have.
 
 When raising a 'keiroJobCodec' schema version, deploy upgraded workers before
 upgraded producers. A worker that sees an envelope from a future schema version
@@ -20,7 +21,7 @@ the deploy window.
 
 Do not switch a non-empty queue directly from 'aesonJobCodec' to
 'keiroJobCodec': the wire shape changes from the bare payload to the
-@{"v","data"}@ envelope. Drain the queue first or use a transitional codec that
+@{"v","t","data"}@ envelope. Drain the queue first or use a transitional codec that
 accepts both shapes; otherwise old in-flight messages are malformed and will be
 dead-lettered.
 -}
@@ -32,10 +33,11 @@ module Keiro.PGMQ.Codec (
     keiroJobCodec,
 ) where
 
-import "aeson" Data.Aeson (FromJSON, ToJSON, Value, object, parseJSON, toJSON, withObject, (.:), (.=))
+import "aeson" Data.Aeson (FromJSON, ToJSON, Value, object, parseJSON, toJSON, withObject, (.:), (.:?), (.=))
 import "aeson" Data.Aeson.Types (parseEither)
 import "base" Data.Bifunctor (first)
-import "keiro-core" Keiro.Codec (Codec)
+import "base" Data.List.NonEmpty qualified as NonEmpty
+import "keiro-core" Keiro.Codec (Codec, EventType (..))
 import "keiro-core" Keiro.Codec qualified as Codec
 import "text" Data.Text (Text)
 import "text" Data.Text qualified as Text
@@ -72,39 +74,57 @@ aesonJobCodec :: (ToJSON p, FromJSON p) => JobCodec p
 aesonJobCodec = mkJobCodec toJSON (first Text.pack . parseEither parseJSON)
 
 {- | Versioned bridge to keiro's 'Keiro.Codec.Codec'. On encode it produces
-@{ "v": <schemaVersion>, "data": <encode codec p> }@; on decode it reads the
-version, runs the codec's upcaster chain up to the current version via
-'Keiro.Codec.migrateToCurrent', then runs the codec's current decoder. Codec
-migration faults are surfaced as 'JobPayloadMalformed' (via 'show' of the
-'Keiro.Codec.CodecError'), except for a future envelope version, which surfaces
-as 'JobPayloadFromFuture'.
+@{ "v": <schemaVersion>, "t": <event-type>, "data": <encode codec p> }@; on
+decode it reads the version and event-type tag, runs the codec's upcaster chain
+up to the current version via 'Keiro.Codec.migrateToCurrent', then runs the
+codec's current decoder. Legacy envelopes without @"t"@ still decode for
+single-event codecs. Codec migration faults are surfaced as
+'JobPayloadMalformed' (via 'show' of the 'Keiro.Codec.CodecError'), except for a
+future envelope version, which surfaces as 'JobPayloadFromFuture'.
 -}
 keiroJobCodec :: Codec p -> JobCodec p
 keiroJobCodec codec =
     JobCodec
         { encodeJob = \p ->
-            object
-                [ "v" .= Codec.schemaVersion codec
-                , "data" .= Codec.encode codec p
-                ]
+            let EventType tag = Codec.eventType codec p
+             in object
+                    [ "v" .= Codec.schemaVersion codec
+                    , "t" .= tag
+                    , "data" .= Codec.encode codec p
+                    ]
         , decodeJob = \value -> do
-            (version, dataValue) <- parseEnvelope value
+            (version, tag, dataValue) <- parseEnvelope value
+            selectedType <- resolveEventType codec tag
             let currentVersion = Codec.schemaVersion codec
             if version > currentVersion
                 then Left (JobPayloadFromFuture version currentVersion)
                 else pure ()
             migrated <-
                 first (JobPayloadMalformed . Text.pack . show) $
-                    Codec.migrateToCurrent codec version dataValue
-            first JobPayloadMalformed (Codec.decode codec migrated)
+                    Codec.migrateToCurrent codec selectedType version dataValue
+            first JobPayloadMalformed (Codec.decode codec selectedType migrated)
         }
 
--- | Parse the @{ "v", "data" }@ envelope, surfacing aeson failures as malformed payloads.
-parseEnvelope :: Value -> Either JobDecodeError (Int, Value)
+-- | Parse the @{ "v", "t", "data" }@ envelope, surfacing aeson failures as malformed payloads.
+parseEnvelope :: Value -> Either JobDecodeError (Int, Maybe EventType, Value)
 parseEnvelope =
     first (JobPayloadMalformed . Text.pack) . parseEither parser
   where
     parser = withObject "Keiro.PGMQ.Codec envelope" $ \o -> do
         version <- o .: "v"
+        tag <- fmap EventType <$> o .:? "t"
         dataValue <- o .: "data"
-        pure (version, dataValue)
+        pure (version, tag, dataValue)
+
+resolveEventType :: Codec p -> Maybe EventType -> Either JobDecodeError EventType
+resolveEventType _ (Just tag) = Right tag
+resolveEventType codec Nothing =
+    case NonEmpty.toList (Codec.eventTypes codec) of
+        [tag] -> Right tag
+        tags ->
+            Left
+                . JobPayloadMalformed
+                $ "missing event-type tag in multi-event keiro job envelope; expected one of "
+                    <> Text.intercalate ", " (fmap eventTypeText tags)
+  where
+    eventTypeText (EventType tag) = tag

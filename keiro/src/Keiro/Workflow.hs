@@ -103,7 +103,7 @@ import Effectful (Dispatch (..), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (EffectHandler, interpret, localSeqUnlift, send)
 import Effectful.Exception (bracket_, catch, throwIO)
 import Keiro.Codec (decodeRecorded, encodeForAppendWithMetadata)
-import Keiro.EventStream (SnapshotPolicy (..))
+import Keiro.EventStream (SnapshotPolicy (..), Terminality (..))
 import Keiro.Prelude
 import Keiro.Snapshot.Policy (shouldSnapshot)
 import Keiro.Telemetry (
@@ -441,7 +441,7 @@ runWorkflowWith options name wid action = do
                         when
                             ( shouldSnapshot
                                 (options ^. #snapshotPolicy)
-                                True
+                                Terminal
                                 finalMap
                                 (appendResult ^. #streamVersion)
                             )
@@ -489,7 +489,7 @@ runWorkflowWith options name wid action = do
                     when
                         ( shouldSnapshot
                             (options ^. #snapshotPolicy)
-                            False
+                            NotTerminal
                             newMap
                             (appendResult ^. #streamVersion)
                         )

@@ -214,9 +214,10 @@ emitHarness a =
         , "import Keiki.Core (defaultValidationOptions, step, validateTransducer)"
         , codecDecodeRawImport
         , ""
-        , "-- | (label, passed). A driver runs these and exits non-zero on any False,"
-        , "-- naming the failing assertion. Filling a hole wrongly turns a specific"
-        , "-- entry False; the scaffold cannot."
+        , "{- | (label, passed). A driver runs these and exits non-zero on any False,"
+        , "naming the failing assertion. Filling a hole wrongly turns a specific"
+        , "entry False; the scaffold cannot."
+        , "-}"
         , "harnessAssertions :: [(String, Bool)]"
         , "harnessAssertions ="
         , "  [ (\"validateTransducer is empty\", null (validateTransducer defaultValidationOptions " <> lowerFirst nm <> "Transducer))"
@@ -235,7 +236,7 @@ emitHarness a =
             ++ [ "  ]"
                , ""
                , "roundTrips :: " <> nm <> "Event -> Bool"
-               , "roundTrips e = parse" <> nm <> "Event (encode" <> nm <> "Event e) == Right e"
+               , "roundTrips e = parse" <> nm <> "Event (eventType " <> lowerFirst nm <> "Codec e) (encode" <> nm <> "Event e) == Right e"
                ]
             ++ concatMap (sampleEventDecl a) (aEvents a)
             ++ concatMap (acceptDecl a) (initialTransitions a)
@@ -245,8 +246,11 @@ emitHarness a =
     -- Bake the clock-free result computed from the spec at scaffold time.
     clockFreeLit = if specIsClockFree a then "True" else "False"
     upcastEvents = [e | e <- aEvents a, rcUpcastFrom e /= Nothing]
-    codecValueImport = if null upcastEvents then "" else ", " <> lowerFirst nm <> "Codec"
-    codecDecodeRawImport = if null upcastEvents then "" else "import Keiro.Codec (decodeRaw)"
+    codecValueImport = ", " <> lowerFirst nm <> "Codec"
+    codecDecodeRawImport =
+        if null upcastEvents
+            then "import Keiro.Codec (eventType)"
+            else "import Keiro.Codec (EventType (..), decodeRaw, eventType)"
 
 {- | A wiring-proof assertion: feed a current-shape payload tagged at the
 upcaster's source version through @decodeRaw@, which runs the upcaster chain
@@ -263,7 +267,7 @@ upcastDecl a e = case rcUpcastFrom e of
         , "upcasts" <> rcName e <> " :: Bool"
         , "upcasts" <> rcName e <> " ="
         , "  either (const False) (const True)"
-        , "    (decodeRaw " <> lowerFirst (aName a) <> "Codec " <> tInt m <> " (encode" <> aName a <> "Event sampleEvent" <> rcName e <> "))"
+        , "    (decodeRaw " <> lowerFirst (aName a) <> "Codec (EventType " <> tshow (rcName e) <> ") " <> tInt m <> " (encode" <> aName a <> "Event sampleEvent" <> rcName e <> "))"
         ]
 
 tInt :: Int -> Text

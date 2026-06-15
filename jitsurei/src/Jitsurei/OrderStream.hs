@@ -27,6 +27,7 @@ import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.Snapshot (defaultStateCodec)
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
+import Kiroku.Store.Types (EventType (..))
 
 type OrderRegs = '[]
 
@@ -127,13 +128,13 @@ orderTransducer =
 orderCodec :: Codec OrderEvent
 orderCodec =
     Codec
-        { eventTypes = "OrderPlaced" :| ["PaymentApproved", "OrderPacked", "OrderShipped", "OrderCancelled"]
+        { eventTypes = EventType "OrderPlaced" :| [EventType "PaymentApproved", EventType "OrderPacked", EventType "OrderShipped", EventType "OrderCancelled"]
         , eventType = \case
-            OrderPlaced{} -> "OrderPlaced"
-            PaymentApproved{} -> "PaymentApproved"
-            OrderPacked{} -> "OrderPacked"
-            OrderShipped{} -> "OrderShipped"
-            OrderCancelled{} -> "OrderCancelled"
+            OrderPlaced{} -> EventType "OrderPlaced"
+            PaymentApproved{} -> EventType "PaymentApproved"
+            OrderPacked{} -> EventType "OrderPacked"
+            OrderShipped{} -> EventType "OrderShipped"
+            OrderCancelled{} -> EventType "OrderCancelled"
         , schemaVersion = 2
         , encode = \case
             OrderPlaced payload ->
@@ -168,48 +169,47 @@ orderCodec =
                     , "reason" Aeson..= payload.reason
                     ]
         , decode = parseOrderEvent
-        , upcasters = [(1, upcastOrderPlacedV1)]
+        , upcasters = [(1, const upcastOrderPlacedV1)]
         }
 
-parseOrderEvent :: Value -> Either Text OrderEvent
-parseOrderEvent value =
+parseOrderEvent :: EventType -> Value -> Either Text OrderEvent
+parseOrderEvent (EventType tag) value =
     case parseEither parser value of
         Right event -> Right event
         Left message -> Left (Text.pack message)
   where
     parser = withObject "OrderEvent" $ \objectValue -> do
-        kind <- objectValue .:? "kind"
-        case kind :: Maybe Text of
-            Just "OrderPlaced" ->
+        case tag of
+            "OrderPlaced" ->
                 OrderPlaced
                     <$> ( OrderPlacedData
                             <$> (OrderId <$> objectValue .: "orderId")
                             <*> (Sku <$> objectValue .: "sku")
                             <*> (Quantity <$> objectValue .: "quantity")
                         )
-            Just "PaymentApproved" ->
+            "PaymentApproved" ->
                 PaymentApproved
                     <$> ( PaymentApprovedData
                             <$> (OrderId <$> objectValue .: "orderId")
                             <*> (PaymentRef <$> objectValue .: "paymentRef")
                         )
-            Just "OrderPacked" ->
+            "OrderPacked" ->
                 OrderPacked
                     <$> (OrderPackedData . OrderId <$> objectValue .: "orderId")
-            Just "OrderShipped" ->
+            "OrderShipped" ->
                 OrderShipped
                     <$> ( OrderShippedData
                             <$> (OrderId <$> objectValue .: "orderId")
                             <*> (Carrier <$> objectValue .: "carrier")
                             <*> (TrackingId <$> objectValue .: "trackingId")
                         )
-            Just "OrderCancelled" ->
+            "OrderCancelled" ->
                 OrderCancelled
                     <$> ( OrderCancelledData
                             <$> (OrderId <$> objectValue .: "orderId")
                             <*> objectValue .: "reason"
                         )
-            _ -> fail "unknown order event kind"
+            _ -> fail "unknown order event type"
 
 upcastOrderPlacedV1 :: Value -> Either Text Value
 upcastOrderPlacedV1 value =

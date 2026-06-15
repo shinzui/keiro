@@ -19,6 +19,7 @@ The type parameters thread through from the underlying transducer:
 -}
 module Keiro.EventStream (
     EventStream (..),
+    Terminality (..),
     SnapshotPolicy (..),
     StateCodec (..),
 )
@@ -42,8 +43,9 @@ import Kiroku.Store.Types (StreamName, StreamVersion)
   'StreamName' read and appended to in the store.
 * 'snapshotPolicy' — decides, per append, whether to persist a snapshot of
   the @(state, registers)@ pair.
-* 'stateCodec' — how to serialize that snapshot; 'Nothing' disables
-  snapshotting regardless of 'snapshotPolicy'.
+* 'stateCodec' — how to serialize that snapshot. Set 'snapshotPolicy' and
+  'stateCodec' coherently; 'Keiro.EventStream.Validate.mkEventStream' rejects
+  a snapshotting policy without a state codec.
 -}
 data EventStream phi rs s ci co = EventStream
     { transducer :: !(SymTransducer phi rs s ci co)
@@ -56,14 +58,18 @@ data EventStream phi rs s ci co = EventStream
     }
     deriving stock (Generic)
 
+-- | Whether the append that just happened reached a terminal stream state.
+data Terminality = Terminal | NotTerminal
+    deriving stock (Eq, Show, Generic)
+
 {- | When to persist a snapshot of a stream's folded state.
 
 * 'Never' — never snapshot; always rehydrate from the full event log.
 * 'Every' @n@ — snapshot whenever the stream version is a multiple of @n@
   (a non-positive interval disables snapshotting).
 * 'OnTerminal' — snapshot only when the machine has reached a final state.
-* 'Custom' — an arbitrary predicate over the folded @state@ and the
-  current 'StreamVersion'.
+* 'Custom' — an arbitrary predicate over terminality, folded @state@, and
+  the current 'StreamVersion'.
 
 See 'Keiro.Snapshot.Policy.shouldSnapshot' for the evaluation rules.
 -}
@@ -71,7 +77,7 @@ data SnapshotPolicy state
     = Never
     | Every !Int
     | OnTerminal
-    | Custom !(state -> StreamVersion -> Bool)
+    | Custom !(Terminality -> state -> StreamVersion -> Bool)
     deriving stock (Generic)
 
 {- | How to serialize and deserialize a stream's snapshot state.

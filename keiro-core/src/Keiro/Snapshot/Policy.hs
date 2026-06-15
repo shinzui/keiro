@@ -10,7 +10,7 @@ module Keiro.Snapshot.Policy (
 )
 where
 
-import Keiro.EventStream (SnapshotPolicy (..))
+import Keiro.EventStream (SnapshotPolicy (..), Terminality (..))
 import Keiro.Prelude
 import Kiroku.Store.Types (StreamVersion (..))
 import Prelude qualified
@@ -25,10 +25,10 @@ folded state, and the post-append stream version.
   machine has reached a final state.
 * 'Custom' defers to the caller-supplied predicate over state and version.
 -}
-shouldSnapshot :: SnapshotPolicy state -> Bool -> state -> StreamVersion -> Bool
+shouldSnapshot :: SnapshotPolicy state -> Terminality -> state -> StreamVersion -> Bool
 shouldSnapshot Never _ _ _ = False
 shouldSnapshot (Every interval) _ _ (StreamVersion version)
     | interval <= 0 = False
-    | otherwise = version `Prelude.mod` Prelude.fromIntegral interval == 0
-shouldSnapshot OnTerminal terminal _ _ = terminal
-shouldSnapshot (Custom decide) _ state version = decide state version
+    | otherwise = version > 0 Prelude.&& version `Prelude.mod` Prelude.fromIntegral interval == 0
+shouldSnapshot OnTerminal terminality _ _ = terminality == Terminal
+shouldSnapshot (Custom decide) terminality state version = decide terminality state version

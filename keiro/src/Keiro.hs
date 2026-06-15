@@ -23,6 +23,7 @@ module Keiro (
 
     -- * Stream definitions
     EventStream (..),
+    Terminality (..),
     SnapshotPolicy (..),
     StateCodec (..),
     module Keiro.Stream,

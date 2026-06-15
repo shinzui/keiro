@@ -43,6 +43,7 @@ import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool.Config
 import Hasql.Session qualified as Session
 import Hasql.Statement qualified as Statement
+import Keiro.Codec (EventType (..))
 import Keiro.Codec qualified as CoreCodec
 import Keiro.PGMQ
 import Keiro.Test.Postgres qualified as Postgres
@@ -138,18 +139,18 @@ mkJob name =
 versionedPingCodec :: CoreCodec.Codec Ping
 versionedPingCodec =
     CoreCodec.Codec
-        { eventTypes = "ping" :| []
-        , eventType = \_ -> "ping"
+        { eventTypes = EventType "ping" :| []
+        , eventType = \_ -> EventType "ping"
         , schemaVersion = 2
         , encode = toJSON
-        , decode = \value ->
+        , decode = \_ value ->
             case parseEither parseJSON value of
                 Left err -> Left (Text.pack err)
                 Right ping -> Right ping
         , upcasters =
             [
                 ( 1
-                , \value ->
+                , \_ value ->
                     case value of
                         String msg ->
                             Right $

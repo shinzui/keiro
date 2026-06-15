@@ -4,6 +4,7 @@ slug: harden-keiro-core-codec-and-stream-contracts
 title: "Harden keiro-core codec and stream contracts"
 kind: exec-plan
 created_at: 2026-06-11T04:45:56Z
+intention: intention_01kv40hzwaenftzem0gxypz4mj
 master_plan: "docs/masterplans/9-keiro-production-readiness-hardening.md"
 ---
 
@@ -26,33 +27,33 @@ When the plan is done, you can see it working by running the test suites listed 
 
 ## Progress
 
-- [ ] M1.1: Change `Codec`/`Upcaster`/`CodecError` in `keiro-core/src/Keiro/Codec.hs` (tag threading, `EventType` fields, `VersionAhead`, `IncompleteUpcasterChain`).
-- [ ] M1.2: Update `decodeRaw`, `migrateToCurrent`, `decodeRecorded`, `encodeForAppendWithMetadata` internals for the new shapes.
-- [ ] M1.3: Update codec definitions in `keiro/src/Keiro/Workflow/Types.hs` (workflowJournalCodec).
-- [ ] M1.4: Update codec definitions and call sites in `keiro/test/Main.hs` (orderCodec, gappyCodec, counterCodec, decodeRaw calls, UnknownEventType expectation).
-- [ ] M1.5: Update the six jitsurei codecs (`jitsurei/src/Jitsurei/{OrderStream,Incident,Paging,FulfillmentProcess,EscalationProcess,AgentQualRouter}.hs`) to tag-dispatching decoders.
-- [ ] M1.6: Update `jitsurei/test/Main.hs` (decodeRaw call) and `jitsurei/app/Main.hs` if needed (decodeRecorded callers compile unchanged).
-- [ ] M1.7: Update `keiro-pgmq/src/Keiro/PGMQ/Codec.hs` (`keiroJobCodec` envelope gains a `"t"` tag field).
-- [ ] M1.8: Update keiro-dsl codegen (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs` codec emission, `keiro-dsl/src/Keiro/Dsl/Harness.hs` decodeRaw emission).
-- [ ] M1.9: Update the nine checked-in generated codec fixtures plus the conformance-v2 harness under `keiro-dsl/test/conformance*/`.
-- [ ] M1.10: Add the H1 regression test (tag-vs-kind disagreement) to `keiro/test/Main.hs`; full build green.
-- [ ] M2.1: Add `CodecConfigError` and `mkCodec` to `keiro-core/src/Keiro/Codec.hs`.
-- [ ] M2.2: Change `extractSchemaVersion` and `metadataFor` to return `Either CodecError`; add `MalformedSchemaVersionStamp` and `NonObjectCallerMetadata`.
-- [ ] M2.3: Implement `VersionAhead` guard in `migrateToCurrent`; replace the truncated-chain `UnknownVersion` misuse with `IncompleteUpcasterChain`.
-- [ ] M2.4: Update the two `metadataFor` call sites in `keiro/test/Main.hs` and the `extractSchemaVersion` assertion; add mkCodec/VersionAhead/malformed-stamp tests.
-- [ ] M3.1: Hide the `StreamCategory` constructor; export `categoryText`; fix `keiro/test/Main.hs:335-341`.
-- [ ] M3.2: `categoryUnsafe` gains `HasCallStack` and a descriptive error.
-- [ ] M3.3: `entityStream`/`entityStreamId` reject empty/whitespace id segments (`HasCallStack` error).
-- [ ] M3.4: `category` rejects whitespace/control characters (`CategoryContainsIllegalChar`); doc warning on raw `stream`.
-- [ ] M3.5: Stream tests updated/added; build green.
-- [ ] M4.1: Add `Terminality` to `keiro-core/src/Keiro/EventStream.hs`; thread it through `Custom` and `shouldSnapshot`; fix `Every` at version 0.
-- [ ] M4.2: Update the three `shouldSnapshot` call sites (`keiro/src/Keiro/Command.hs:555`, `keiro/src/Keiro/Workflow.hs:442,490`).
-- [ ] M4.3: `mkEventStream` rejects snapshotPolicy-without-stateCodec; tests added.
-- [ ] M5.1: Emit `keiro-occurred-at` and `keiro-attributes` headers in `keiro-core/src/Keiro/Integration/Event.hs`.
-- [ ] M5.2: Parse them in `keiro/src/Keiro/Inbox/Kafka.hs` (new `InvalidTimeHeader`/`InvalidJsonHeader` errors, receivedAt fallback).
-- [ ] M5.3: Strip media-type parameters in `parseContentType`; tests for charset and the occurredAt/attributes round-trip.
-- [ ] M6.1: Full-repo verification (`cabal build all --enable-tests`, all suites, `just haskell-test`); haddock pass over changed modules.
-- [ ] M6.2: Update this plan's living sections and tick the three EP-2 rollup lines in `docs/masterplans/9-keiro-production-readiness-hardening.md`.
+- [x] M1.1: Change `Codec`/`Upcaster`/`CodecError` in `keiro-core/src/Keiro/Codec.hs` (tag threading, `EventType` fields, `VersionAhead`, `IncompleteUpcasterChain`). Completed 2026-06-15.
+- [x] M1.2: Update `decodeRaw`, `migrateToCurrent`, `decodeRecorded`, `encodeForAppendWithMetadata` internals for the new shapes. Completed 2026-06-15.
+- [x] M1.3: Update codec definitions in `keiro/src/Keiro/Workflow/Types.hs` (workflowJournalCodec). Completed 2026-06-15.
+- [x] M1.4: Update codec definitions and call sites in `keiro/test/Main.hs` (orderCodec, gappyCodec, counterCodec, decodeRaw calls, UnknownEventType expectation). Completed 2026-06-15.
+- [x] M1.5: Update the six jitsurei codecs (`jitsurei/src/Jitsurei/{OrderStream,Incident,Paging,FulfillmentProcess,EscalationProcess,AgentQualRouter}.hs`) to tag-dispatching decoders. Completed 2026-06-15.
+- [x] M1.6: Update `jitsurei/test/Main.hs` (decodeRaw call) and `jitsurei/app/Main.hs` if needed (decodeRecorded callers compile unchanged). Completed 2026-06-15.
+- [x] M1.7: Update `keiro-pgmq/src/Keiro/PGMQ/Codec.hs` (`keiroJobCodec` envelope gains a `"t"` tag field). Completed 2026-06-15.
+- [x] M1.8: Update keiro-dsl codegen (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs` codec emission, `keiro-dsl/src/Keiro/Dsl/Harness.hs` decodeRaw emission). Completed 2026-06-15.
+- [x] M1.9: Update the nine checked-in generated codec fixtures plus the conformance-v2 harness under `keiro-dsl/test/conformance*/`. Completed 2026-06-15.
+- [x] M1.10: Add the H1 regression test (tag-vs-kind disagreement) to `keiro/test/Main.hs`; full build green. Completed 2026-06-15.
+- [x] M2.1: Add `CodecConfigError` and `mkCodec` to `keiro-core/src/Keiro/Codec.hs`. Completed 2026-06-15.
+- [x] M2.2: Change `extractSchemaVersion` and `metadataFor` to return `Either CodecError`; add `MalformedSchemaVersionStamp` and `NonObjectCallerMetadata`. Completed 2026-06-15.
+- [x] M2.3: Implement `VersionAhead` guard in `migrateToCurrent`; replace the truncated-chain `UnknownVersion` misuse with `IncompleteUpcasterChain`. Completed 2026-06-15.
+- [x] M2.4: Update the two `metadataFor` call sites in `keiro/test/Main.hs` and the `extractSchemaVersion` assertion; add mkCodec/VersionAhead/malformed-stamp tests. Completed 2026-06-15.
+- [x] M3.1: Hide the `StreamCategory` constructor; export `categoryText`; fix `keiro/test/Main.hs:335-341`. Completed 2026-06-15.
+- [x] M3.2: `categoryUnsafe` gains `HasCallStack` and a descriptive error. Completed 2026-06-15.
+- [x] M3.3: `entityStream`/`entityStreamId` reject empty/whitespace id segments (`HasCallStack` error). Completed 2026-06-15.
+- [x] M3.4: `category` rejects whitespace/control characters (`CategoryContainsIllegalChar`); doc warning on raw `stream`. Completed 2026-06-15.
+- [x] M3.5: Stream tests updated/added; build green. Completed 2026-06-15.
+- [x] M4.1: Add `Terminality` to `keiro-core/src/Keiro/EventStream.hs`; thread it through `Custom` and `shouldSnapshot`; fix `Every` at version 0. Completed 2026-06-15.
+- [x] M4.2: Update the three `shouldSnapshot` call sites (`keiro/src/Keiro/Command.hs:555`, `keiro/src/Keiro/Workflow.hs:442,490`). Completed 2026-06-15.
+- [x] M4.3: `mkEventStream` rejects snapshotPolicy-without-stateCodec; tests added. Completed 2026-06-15.
+- [x] M5.1: Emit `keiro-occurred-at` and `keiro-attributes` headers in `keiro-core/src/Keiro/Integration/Event.hs`. Completed 2026-06-15.
+- [x] M5.2: Parse them in `keiro/src/Keiro/Inbox/Kafka.hs` (new `InvalidTimeHeader`/`InvalidJsonHeader` errors, receivedAt fallback). Completed 2026-06-15.
+- [x] M5.3: Strip media-type parameters in `parseContentType`; tests for charset and the occurredAt/attributes round-trip. Completed 2026-06-15.
+- [x] M6.1: Full-repo verification (`cabal build all --enable-tests`, all suites, `just haskell-test`); haddock pass over changed modules. Completed 2026-06-15.
+- [x] M6.2: Update this plan's living sections and tick the three EP-2 rollup lines in `docs/masterplans/9-keiro-production-readiness-hardening.md`. Completed 2026-06-15.
 
 
 ## Surprises & Discoveries
@@ -60,7 +61,9 @@ When the plan is done, you can see it working by running the test suites listed 
 - The H1 blast radius is smaller than the master plan implies on the read path: `decodeRecorded :: Codec e -> RecordedEvent -> Either CodecError e` keeps its signature (it already holds the `RecordedEvent` and can pull the tag itself), so `keiro/src/Keiro/Command.hs` and `keiro/src/Keiro/Workflow.hs` — which only call `decodeRecorded` and `encodeForAppendWithMetadata` — need **no edits for H1**. The break surfaces at the fourteen in-repo `Codec { ... }` record literals and at the callers of `decodeRaw`/`migrateToCurrent` (`jitsurei/test/Main.hs:42`, `keiro-pgmq/src/Keiro/PGMQ/Codec.hs:61-62`, keiro-dsl generated harnesses). Recorded here so the implementer does not hunt for phantom Command.hs changes; the master plan's EP-3 soft dependency (same module ordering) still stands.
 - The keiro-dsl package (out of scope as a *feature* surface per the master plan) checks in **generated** Haskell fixtures that construct `Codec` literals: nine `Codec.hs` files under `keiro-dsl/test/conformance*/Generated/` plus the codegen templates in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` (function `emitCodecValue`, line ~887) and `keiro-dsl/src/Keiro/Dsl/Harness.hs` (function `upcastDecl`, line ~259). These break under H1 and must be mechanically updated for `cabal build all --enable-tests` to succeed. See Decision Log.
 
-(More to be added during implementation.)
+- Re-exporting `EventType(..)` from `Keiro.Codec` kept downstream modules from acquiring direct `kiroku-store` imports just to construct tags. This mattered most for `keiro-pgmq` and generated keiro-dsl fixtures, where adding package dependencies would have been unrelated cabal churn.
+- The generated harnesses needed tag-aware round trips, not just tag-aware upcaster fixtures: the emitted property now calls `parseFooEvent (eventType fooCodec e) (encodeFooEvent e)`, so generated tests exercise the final decoder shape.
+- Snapshot-policy coherence warnings are emitted by `validateEventStreamWith`, so both `mkEventStream` and direct validation report the `snapshotPolicy`/`stateCodec` mismatch. That is broader than the milestone wording but keeps the invariant in the single validation path.
 
 
 ## Decision Log
@@ -131,7 +134,9 @@ When the plan is done, you can see it working by running the test suites listed 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-2 is complete as of 2026-06-15. The stored event-type tag is now authoritative for `Codec.decode` and upcasters, `Codec` construction can be validated with `mkCodec`, malformed schema metadata and future-version payloads fail loudly, stream category construction is closed over validated constructors, snapshot policies receive explicit terminality, and integration-event Kafka headers preserve `occurredAt` and `attributes`.
+
+The breaking codec change reached more checked-in generated code than hand-written runtime code, but the final API shape stayed close to the plan: `decodeRecorded` remains stable, while `decodeRaw`, `migrateToCurrent`, codec literals, generated codecs, pgmq envelopes, and tests carry the tag explicitly. Validation passed with `cabal test keiro-test`, `cabal build all --enable-tests`, the jitsurei/keiro-dsl/keiro-pgmq suite battery, and `just haskell-test`.
 
 
 ## Context and Orientation
@@ -446,3 +451,7 @@ data KafkaDecodeError
 ```
 
 `StateCodec` (`keiro-core/src/Keiro/EventStream.hs:91-97`) is deliberately untouched: snapshots are single-shape per stream, there is no tag to thread, and `keiro/src/Keiro/Snapshot/Codec.hs` (`defaultStateCodec`) compiles unchanged. The keiro-pgmq `JobCodec` type is also unchanged; only `keiroJobCodec`'s internals and envelope (`{"v", "t", "data"}`) move.
+
+---
+
+Revision note (2026-06-15): Implementation completed. Progress was marked complete, outcomes and discoveries were updated, and the master-plan EP-2 rollup was closed using the master-plan intention `intention_01kv40hzwaenftzem0gxypz4mj`.

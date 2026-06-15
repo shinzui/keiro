@@ -43,6 +43,8 @@ module Keiro.Integration.Event (
     headerCorrelationId,
     headerTraceParent,
     headerTraceState,
+    headerOccurredAt,
+    headerAttributes,
     contentTypeText,
     parseContentType,
 )
@@ -53,6 +55,8 @@ import Data.Aeson.Types (parseEither)
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as Lazy
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as TextEncoding
+import Data.Time.Format.ISO8601 (iso8601Show)
 import Data.UUID qualified as UUID
 import Keiro.Prelude
 import Kiroku.Store.Types (EventId (..), GlobalPosition (..))
@@ -201,6 +205,8 @@ integrationHeaders event =
             Just tc ->
                 (headerTraceParent, tc ^. #traceparent)
                     : maybeHeader headerTraceState (tc ^. #tracestate)
+        , [(headerOccurredAt, Text.pack (iso8601Show (event ^. #occurredAt)))]
+        , maybeHeader headerAttributes (fmap (TextEncoding.decodeUtf8 . Lazy.toStrict . Aeson.encode) (event ^. #attributes))
         ]
   where
     maybeHeader name = maybe [] (\value -> [(name, value)])
@@ -231,6 +237,10 @@ headerTraceParent, headerTraceState :: Text
 headerTraceParent = "traceparent"
 headerTraceState = "tracestate"
 
+headerOccurredAt, headerAttributes :: Text
+headerOccurredAt = "keiro-occurred-at"
+headerAttributes = "keiro-attributes"
+
 -- | The canonical wire string for a 'IntegrationContentType'.
 contentTypeText :: IntegrationContentType -> Text
 contentTypeText = \case
@@ -246,7 +256,7 @@ parseContentType raw
     | normalized == "application/json" = ApplicationJson
     | otherwise = OtherContentType raw
   where
-    normalized = Text.toLower (Text.strip raw)
+    normalized = Text.toLower (Text.strip (Text.takeWhile (/= ';') raw))
 
 {- | Build an 'IntegrationEvent' from a JSON-serializable business payload.
 
