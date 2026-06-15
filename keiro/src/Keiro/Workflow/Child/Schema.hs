@@ -33,6 +33,7 @@ module Keiro.Workflow.Child.Schema (
     registerChildTx,
     markChildResultTx,
     markChildCancelledTx,
+    markChildFailedTx,
 
     -- * Read-only lookups
     lookupChild,
@@ -122,6 +123,10 @@ markChildCancelledTx :: Text -> Text -> Tx.Transaction Bool
 markChildCancelledTx cid cname =
     Tx.statement (cid, cname) markChildCancelledStmt
 
+markChildFailedTx :: Text -> Text -> Tx.Transaction Bool
+markChildFailedTx cid cname =
+    Tx.statement (cid, cname) markChildFailedStmt
+
 -- | Read a child link row by @(child_id, child_name)@. 'Nothing' if absent.
 lookupChild :: (Store :> es) => Text -> Text -> Eff es (Maybe ChildRow)
 lookupChild cid cname =
@@ -197,6 +202,23 @@ markChildCancelledStmt =
         """
         UPDATE keiro_workflow_children
         SET status = 'cancelled',
+            updated_at = now()
+        WHERE child_id = $1
+          AND child_name = $2
+          AND status = 'running'
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        ((> 0) <$> D.rowsAffected)
+
+markChildFailedStmt :: Statement (Text, Text) Bool
+markChildFailedStmt =
+    preparable
+        """
+        UPDATE keiro_workflow_children
+        SET status = 'failed',
             updated_at = now()
         WHERE child_id = $1
           AND child_name = $2

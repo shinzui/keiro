@@ -249,11 +249,14 @@ type WorkflowState = Map Text Aeson.Value
   child cancelled by its parent, EP-43), so the handler short-circuited and
   executed nothing further. Distinct from 'Suspended' (which will resume) and
   'Completed' (which finished its work).
+* 'Failed' — the run's journal carried a 'WorkflowFailed' marker, so the
+  handler short-circuited and executed nothing further.
 -}
 data WorkflowOutcome a
     = Completed a
     | Suspended
     | Cancelled
+    | Failed
     | {- | EP-48: the run rotated onto a fresh journal generation via
       @continueAsNew@; a subsequent run/resume of the same logical id
       continues from the carried seed. Distinct from 'Suspended' (a wake

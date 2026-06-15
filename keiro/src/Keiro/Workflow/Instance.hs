@@ -13,10 +13,12 @@ module Keiro.Workflow.Instance (
     upsertInstanceTx,
     markInstanceSuspended,
     lookupInstance,
+    recordCrashTx,
+    resetInstanceAttempts,
 )
 where
 
-import Contravariant.Extras (contrazip2, contrazip5)
+import Contravariant.Extras (contrazip2, contrazip3, contrazip5)
 import Data.Int (Int32)
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
@@ -66,6 +68,14 @@ markInstanceSuspended name@(WorkflowName nameText) wid@(WorkflowId widText) = do
 lookupInstance :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es (Maybe WorkflowInstanceRow)
 lookupInstance (WorkflowName name) (WorkflowId wid) =
     runTransaction (Tx.statement (wid, name) lookupInstanceStmt)
+
+recordCrashTx :: Text -> Text -> Text -> Tx.Transaction Int32
+recordCrashTx wid name err =
+    Tx.statement (wid, name, err) recordCrashStmt
+
+resetInstanceAttempts :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es ()
+resetInstanceAttempts (WorkflowName name) (WorkflowId wid) =
+    runTransaction (Tx.statement (wid, name) resetInstanceAttemptsStmt)
 
 statusToText :: WorkflowStatus -> Text
 statusToText = \case
@@ -128,6 +138,46 @@ lookupInstanceStmt =
             (E.param (E.nonNullable E.text))
         )
         (D.rowMaybe instanceRowDecoder)
+
+recordCrashStmt :: Statement (Text, Text, Text) Int32
+recordCrashStmt =
+    preparable
+        """
+        UPDATE keiro_workflows
+        SET attempts = attempts + 1,
+            last_error = $3,
+            next_attempt_at = now() + (LEAST(power(2, attempts + 1), 64) * interval '1 second'),
+            updated_at = now()
+        WHERE workflow_id = $1
+          AND workflow_name = $2
+          AND status NOT IN ('completed', 'cancelled', 'failed')
+        RETURNING attempts
+        """
+        ( contrazip3
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        (D.singleRow (D.column (D.nonNullable D.int4)))
+
+resetInstanceAttemptsStmt :: Statement (Text, Text) ()
+resetInstanceAttemptsStmt =
+    preparable
+        """
+        UPDATE keiro_workflows
+        SET attempts = 0,
+            last_error = NULL,
+            next_attempt_at = NULL,
+            updated_at = now()
+        WHERE workflow_id = $1
+          AND workflow_name = $2
+          AND status NOT IN ('completed', 'cancelled', 'failed')
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        D.noResult
 
 instanceRowDecoder :: D.Row WorkflowInstanceRow
 instanceRowDecoder =

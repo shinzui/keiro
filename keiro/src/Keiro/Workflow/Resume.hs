@@ -52,6 +52,7 @@ module Keiro.Workflow.Resume (
 
     -- * Options
     WorkflowResumeOptions (..),
+    ResumeLogEvent (..),
     defaultWorkflowResumeOptions,
 
     -- * Per-pass summary
@@ -70,33 +71,46 @@ module Keiro.Workflow.Resume (
 where
 
 import Control.Concurrent (threadDelay)
+import Control.Exception qualified as Exception
 import Control.Monad (foldM, forever)
 import Data.Aeson qualified as Aeson
 import Data.List (nub)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Data.Time (NominalDiffTime)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
+import Effectful.Error.Static qualified as Error
+import Effectful.Exception (catchSync)
 import Keiro.Prelude
-import Keiro.Telemetry (recordWorkflowAwakeablesPending, recordWorkflowResumed)
+import Keiro.Telemetry (
+    recordWorkflowAwakeablesPending,
+    recordWorkflowFailed,
+    recordWorkflowResumeErrors,
+    recordWorkflowResumed,
+ )
 import Keiro.Wake (WakeSignal (..), wakeSignalFromStore)
 import Keiro.Workflow (
     Workflow,
     WorkflowId (..),
+    WorkflowJournalEvent (..),
     WorkflowName (..),
     WorkflowOutcome (..),
     WorkflowRunOptions,
+    appendJournalEntry,
     defaultWorkflowRunOptions,
     findUnfinishedWorkflowIds,
     runWorkflowWith,
  )
 import Keiro.Workflow.Awakeable.Schema (countPendingAwakeables)
 import Keiro.Workflow.Child (runChildWorkflow)
-import Keiro.Workflow.Child.Schema (findRunningChildIds, lookupChild)
+import Keiro.Workflow.Child.Schema (findRunningChildIds, lookupChild, markChildFailedTx)
+import Keiro.Workflow.Instance (lookupInstance, recordCrashTx, resetInstanceAttempts)
 import Kiroku.Store.Connection (KirokuStore)
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
+import Kiroku.Store.Transaction (runTransaction)
 import System.IO (hPutStrLn, stderr)
 
 -- ---------------------------------------------------------------------------
@@ -136,22 +150,22 @@ data WorkflowResumeOptions = WorkflowResumeOptions
     -}
     , pollInterval :: !Int
     -- ^ Microseconds the loop driver sleeps between passes.
-    , useAdvisoryLock :: !Bool
-    {- ^ __Reserved (default 'False').__ The original design proposed a
-    per-workflow @pg_try_advisory_xact_lock@ to let multiple worker
-    processes claim disjoint workflows. That is __not wired__: the kiroku
-    'Store' is connection-/pooled/, and a re-invocation spans several
-    transactions (one per step append), so a transaction-scoped advisory
-    lock cannot be held across a whole 'runWorkflowWith' run, and a
-    session-scoped lock has no connection affinity through the pool.
-    Concurrency is instead safe by construction (see the module docs):
-    EP-38 journals each step under a deterministic id and short-circuits
-    already-journaled steps, so two workers racing the same workflow
-    converge to the same journal with each side effect run at most once.
-    The field is kept for forward compatibility; setting it has no effect.
-    -}
+    , maxAttempts :: !Int
+    -- ^ Workflow-level synchronous exceptions before terminal failure.
+    , leaseTtl :: !NominalDiffTime
+    -- ^ Reserved for the M3 lease claim path; present now so options change once.
+    , logEvent :: !(ResumeLogEvent -> IO ())
+    -- ^ Per-worker logging hook. Defaults to a compact stderr renderer.
     }
     deriving stock (Generic)
+
+data ResumeLogEvent
+    = ResumeUnknownName !Text !Text
+    | ResumeTransientError !Text !Text !Text
+    | ResumeWorkflowCrashed !Text !Text !Int !Int !Text
+    | ResumeWorkflowMarkedFailed !Text !Text !Text
+    | ResumePassFailed !Text
+    deriving stock (Eq, Show)
 
 -- | Defaults: EP-41's 'defaultWorkflowRunOptions', a 1-second poll, no lock.
 defaultWorkflowResumeOptions :: WorkflowResumeOptions
@@ -159,8 +173,47 @@ defaultWorkflowResumeOptions =
     WorkflowResumeOptions
         { runOptions = defaultWorkflowRunOptions
         , pollInterval = 1_000_000
-        , useAdvisoryLock = False
+        , maxAttempts = 5
+        , leaseTtl = 60
+        , logEvent = defaultResumeLogEvent
         }
+
+defaultResumeLogEvent :: ResumeLogEvent -> IO ()
+defaultResumeLogEvent event =
+    hPutStrLn stderr $ case event of
+        ResumeUnknownName name wid ->
+            "keiro resume worker: no registry entry for workflow "
+                <> Text.unpack name
+                <> " (id "
+                <> Text.unpack wid
+                <> "); skipping"
+        ResumeTransientError name wid err ->
+            "keiro resume worker: transient store error while advancing "
+                <> Text.unpack name
+                <> " (id "
+                <> Text.unpack wid
+                <> "): "
+                <> Text.unpack err
+        ResumeWorkflowCrashed name wid attempt maxAttempt err ->
+            "keiro resume worker: workflow "
+                <> Text.unpack name
+                <> " (id "
+                <> Text.unpack wid
+                <> ") crashed on attempt "
+                <> show attempt
+                <> "/"
+                <> show maxAttempt
+                <> ": "
+                <> Text.unpack err
+        ResumeWorkflowMarkedFailed name wid err ->
+            "keiro resume worker: marked workflow "
+                <> Text.unpack name
+                <> " (id "
+                <> Text.unpack wid
+                <> ") failed: "
+                <> Text.unpack err
+        ResumePassFailed err ->
+            "keiro resume worker: pass failed: " <> Text.unpack err
 
 -- ---------------------------------------------------------------------------
 -- Per-pass summary
@@ -180,12 +233,18 @@ data ResumeSummary = ResumeSummary
     -- ^ Re-invocations that returned 'Suspended' (wake source not yet resolved).
     , unknownName :: !Int
     -- ^ Discovered workflows whose name was absent from the registry (skipped + logged).
+    , failed :: !Int
+    -- ^ Workflows marked terminally failed this pass.
+    , transientErrors :: !Int
+    -- ^ Store errors observed while advancing individual workflows.
+    , leaseSkipped :: !Int
+    -- ^ Reserved for M3 per-instance lease skips.
     }
     deriving stock (Generic, Eq, Show)
 
 -- | A zeroed 'ResumeSummary'.
 emptyResumeSummary :: ResumeSummary
-emptyResumeSummary = ResumeSummary 0 0 0 0 0
+emptyResumeSummary = ResumeSummary 0 0 0 0 0 0 0 0
 
 -- ---------------------------------------------------------------------------
 -- Running
@@ -208,7 +267,7 @@ same journal (EP-38 deterministic ids + step short-circuit).
 -}
 resumeWorkflowsOnce ::
     forall es.
-    (IOE :> es, Store :> es) =>
+    (IOE :> es, Store :> es, Error StoreError :> es) =>
     WorkflowResumeOptions ->
     WorkflowRegistry es ->
     Eff es ResumeSummary
@@ -234,31 +293,65 @@ resumeWorkflowsOnce opts registry = do
     advance acc (widText, wnameText) =
         case Map.lookup (WorkflowName wnameText) registry of
             Nothing -> do
-                liftIO $
-                    hPutStrLn
-                        stderr
-                        ( "keiro resume worker: no registry entry for workflow "
-                            <> Text.unpack wnameText
-                            <> " (id "
-                            <> Text.unpack widText
-                            <> "); skipping"
-                        )
+                liftIO $ logEvent opts (ResumeUnknownName wnameText widText)
                 pure acc{unknownName = unknownName acc + 1}
             Just (WorkflowDef runDef) -> do
                 let wid = WorkflowId widText
                     name = WorkflowName wnameText
-                -- A workflow that is some parent's child is driven through
-                -- 'runChildWorkflow' so its result propagates to the parent on
-                -- completion (EP-43); any other workflow uses bare 'runWorkflowWith'.
-                mChild <- lookupChild widText wnameText
-                outcome <- case mChild of
-                    Just _ -> runChildWorkflow (runOptions opts) name wid (runDef wid)
-                    Nothing -> runWorkflowWith (runOptions opts) name wid (runDef wid)
-                -- EP-44: one @keiro.workflow.resumed@ increment per re-invocation of a
-                -- registered workflow (the unknown-name branch above is not a
-                -- re-invocation, so it does not count).
-                recordWorkflowResumed mMetrics 1
-                pure (bumpForOutcome outcome acc)
+                due <- instanceAttemptDue name wid
+                if not due
+                    then pure acc
+                    else do
+                        attempt <-
+                            Error.catchError
+                                @StoreError
+                                (AdvOk <$> driveInstance name wid runDef)
+                                (\_ e -> pure (AdvTransient e))
+                                `catchSync` (pure . AdvCrashed)
+                        recordWorkflowResumed mMetrics 1
+                        handleAttempt acc name wid attempt
+    instanceAttemptDue :: WorkflowName -> WorkflowId -> Eff es Bool
+    instanceAttemptDue name wid = do
+        now <- liftIO getCurrentTime
+        lookupInstance name wid <&> \case
+            Just row | Just next <- row ^. #nextAttemptAt -> next <= now
+            _ -> True
+    driveInstance :: (Aeson.ToJSON a) => WorkflowName -> WorkflowId -> (WorkflowId -> Eff (Workflow : es) a) -> Eff es (WorkflowOutcome a)
+    driveInstance name@(WorkflowName wnameText) wid@(WorkflowId widText) runDef = do
+        mChild <- lookupChild widText wnameText
+        case mChild of
+            Just _ -> runChildWorkflow (runOptions opts) name wid (runDef wid)
+            Nothing -> runWorkflowWith (runOptions opts) name wid (runDef wid)
+    handleAttempt :: ResumeSummary -> WorkflowName -> WorkflowId -> AdvanceResult a -> Eff es ResumeSummary
+    handleAttempt acc name@(WorkflowName wnameText) wid@(WorkflowId widText) = \case
+        AdvOk outcome -> do
+            resetInstanceAttempts name wid
+            pure (bumpForOutcome outcome acc)
+        AdvTransient err -> do
+            let rendered = Text.pack (show err)
+            liftIO $ logEvent opts (ResumeTransientError wnameText widText rendered)
+            recordWorkflowResumeErrors mMetrics 1
+            pure acc{resumed = resumed acc + 1, transientErrors = transientErrors acc + 1}
+        AdvCrashed err -> do
+            let rendered = Text.pack (show err)
+            attempt <- runTransaction (recordCrashTx widText wnameText rendered)
+            liftIO $ logEvent opts (ResumeWorkflowCrashed wnameText widText (fromIntegral attempt) (maxAttempts opts) rendered)
+            if attempt >= fromIntegral (maxAttempts opts :: Int)
+                then do
+                    now <- liftIO getCurrentTime
+                    appendJournalEntry name wid (WorkflowFailed rendered now)
+                    mChild <- lookupChild widText wnameText
+                    for_ mChild $ \_ ->
+                        void (runTransaction (markChildFailedTx widText wnameText))
+                    liftIO $ logEvent opts (ResumeWorkflowMarkedFailed wnameText widText rendered)
+                    recordWorkflowFailed mMetrics 1
+                    pure acc{resumed = resumed acc + 1, failed = failed acc + 1}
+                else pure acc{resumed = resumed acc + 1}
+
+data AdvanceResult a
+    = AdvOk !(WorkflowOutcome a)
+    | AdvTransient !StoreError
+    | AdvCrashed !Exception.SomeException
 
 {- | Fold one re-invocation's outcome into the running summary. The existential
 result @a@ is discarded here, so it never escapes the registry.
@@ -272,6 +365,7 @@ bumpForOutcome outcome acc = case outcome of
     -- suspended. (A cancelled workflow also drops out of discovery, so this is a
     -- rare race, not the steady state.)
     Cancelled -> acc{resumed = resumed acc + 1}
+    Failed -> acc{resumed = resumed acc + 1}
     -- A workflow that rotated via continueAsNew (EP-48) returns 'ContinuedAsNew':
     -- it is re-invoked but neither completed nor suspended this pass. Its new
     -- generation has no terminal marker, so 'findUnfinishedWorkflowIds' still
@@ -284,17 +378,24 @@ bumpForOutcome outcome acc = case outcome of
 single-pass 'resumeWorkflowsOnce' remains the testable unit.
 -}
 runWorkflowResumeWorkerWith ::
-    (IOE :> es, Store :> es) =>
+    (IOE :> es, Store :> es, Error StoreError :> es) =>
     WorkflowResumeOptions ->
     WorkflowRegistry es ->
     Eff es ()
 runWorkflowResumeWorkerWith opts registry = forever $ do
-    _summary <- resumeWorkflowsOnce opts registry
+    _summary <-
+        (Just <$> resumeWorkflowsOnce opts registry)
+            `Error.catchError` (\_ (e :: StoreError) -> logPass (Text.pack (show e)))
+            `catchSync` (logPass . Text.pack . show)
     liftIO (threadDelay (pollInterval opts))
+  where
+    logPass msg = do
+        liftIO $ logEvent opts (ResumePassFailed msg)
+        pure Nothing
 
 -- | 'runWorkflowResumeWorkerWith' with 'defaultWorkflowResumeOptions'.
 runWorkflowResumeWorker ::
-    (IOE :> es, Store :> es) =>
+    (IOE :> es, Store :> es, Error StoreError :> es) =>
     WorkflowRegistry es ->
     Eff es ()
 runWorkflowResumeWorker = runWorkflowResumeWorkerWith defaultWorkflowResumeOptions
@@ -354,4 +455,13 @@ runWorkflowResumeWorkerPush store opts registry = do
     wake <- wakeSignalFromStore store
     runPollLoopWith wake (pollInterval opts) onePass
   where
-    onePass = void (runStoreIO store (resumeWorkflowsOnce opts registry))
+    onePass =
+        handleSyncIO $
+            runStoreIO store (resumeWorkflowsOnce opts registry) >>= \case
+                Left err -> logEvent opts (ResumePassFailed (Text.pack (show err)))
+                Right _ -> pure ()
+    handleSyncIO action =
+        action `Exception.catch` \err ->
+            case Exception.fromException err of
+                Just (async :: Exception.SomeAsyncException) -> Exception.throwIO async
+                Nothing -> logEvent opts (ResumePassFailed (Text.pack (show (err :: Exception.SomeException))))

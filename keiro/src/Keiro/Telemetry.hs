@@ -94,6 +94,9 @@ module Keiro.Telemetry (
     keiroWorkflowStepsExecutedName,
     keiroWorkflowStepsReplayedName,
     keiroWorkflowResumedName,
+    keiroWorkflowFailedName,
+    keiroWorkflowResumeErrorsName,
+    keiroWorkflowLeaseSkippedName,
     keiroWorkflowJournalLengthName,
     keiroWorkflowAwakeablesPendingName,
     keiroWorkflowActiveName,
@@ -126,6 +129,9 @@ module Keiro.Telemetry (
     recordWorkflowStepExecuted,
     recordWorkflowStepReplayed,
     recordWorkflowResumed,
+    recordWorkflowFailed,
+    recordWorkflowResumeErrors,
+    recordWorkflowLeaseSkipped,
     recordWorkflowActive,
     recordWorkflowJournalLength,
     recordWorkflowAwakeablesPending,
@@ -567,6 +573,12 @@ keiroWorkflowStepsReplayedName :: Text
 keiroWorkflowStepsReplayedName = "keiro.workflow.steps.replayed"
 keiroWorkflowResumedName :: Text
 keiroWorkflowResumedName = "keiro.workflow.resumed"
+keiroWorkflowFailedName :: Text
+keiroWorkflowFailedName = "keiro.workflow.failed"
+keiroWorkflowResumeErrorsName :: Text
+keiroWorkflowResumeErrorsName = "keiro.workflow.resume.errors"
+keiroWorkflowLeaseSkippedName :: Text
+keiroWorkflowLeaseSkippedName = "keiro.workflow.lease.skipped"
 keiroWorkflowJournalLengthName :: Text
 keiroWorkflowJournalLengthName = "keiro.workflow.journal.length"
 keiroWorkflowAwakeablesPendingName :: Text
@@ -613,6 +625,9 @@ data KeiroMetrics = KeiroMetrics
     , workflowStepsExecuted :: Counter Int64
     , workflowStepsReplayed :: Counter Int64
     , workflowResumed :: Counter Int64
+    , workflowFailed :: Counter Int64
+    , workflowResumeErrors :: Counter Int64
+    , workflowLeaseSkipped :: Counter Int64
     , workflowActive :: Gauge Int64
     , workflowJournalLength :: Histogram
     , workflowAwakeablesPending :: Gauge Int64
@@ -654,6 +669,9 @@ newKeiroMetrics meter = liftIO $ do
     workflowStepsExecuted' <- counterI64 keiroWorkflowStepsExecutedName "{step}" "Workflow steps that ran their action (a journal miss)."
     workflowStepsReplayed' <- counterI64 keiroWorkflowStepsReplayedName "{step}" "Workflow steps short-circuited to a recorded result (a journal hit)."
     workflowResumed' <- counterI64 keiroWorkflowResumedName "{workflow}" "Workflow re-invocations performed by the resume worker."
+    workflowFailed' <- counterI64 keiroWorkflowFailedName "{workflow}" "Workflow instances marked terminally failed by the resume worker."
+    workflowResumeErrors' <- counterI64 keiroWorkflowResumeErrorsName "{error}" "Transient store errors observed by the workflow resume worker."
+    workflowLeaseSkipped' <- counterI64 keiroWorkflowLeaseSkippedName "{workflow}" "Workflow instances skipped because another worker owns their lease."
     workflowActive' <- gaugeI64 keiroWorkflowActiveName "{workflow}" "Workflow runs currently in progress in this process."
     workflowJournalLength' <- histogram keiroWorkflowJournalLengthName "{event}" "Journal event count of a workflow at completion."
     workflowAwakeablesPending' <- gaugeI64 keiroWorkflowAwakeablesPendingName "{awakeable}" "Awakeables awaiting an external signal."
@@ -686,6 +704,9 @@ newKeiroMetrics meter = liftIO $ do
             , workflowStepsExecuted = workflowStepsExecuted'
             , workflowStepsReplayed = workflowStepsReplayed'
             , workflowResumed = workflowResumed'
+            , workflowFailed = workflowFailed'
+            , workflowResumeErrors = workflowResumeErrors'
+            , workflowLeaseSkipped = workflowLeaseSkipped'
             , workflowActive = workflowActive'
             , workflowJournalLength = workflowJournalLength'
             , workflowAwakeablesPending = workflowAwakeablesPending'
@@ -773,6 +794,12 @@ recordWorkflowStepReplayed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowStepReplayed = recordCounter workflowStepsReplayed
 recordWorkflowResumed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowResumed = recordCounter workflowResumed
+recordWorkflowFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordWorkflowFailed = recordCounter workflowFailed
+recordWorkflowResumeErrors :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordWorkflowResumeErrors = recordCounter workflowResumeErrors
+recordWorkflowLeaseSkipped :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordWorkflowLeaseSkipped = recordCounter workflowLeaseSkipped
 recordWorkflowActive :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowActive = recordGaugeI64 workflowActive
 recordWorkflowJournalLength :: (MonadIO m) => Maybe KeiroMetrics -> Double -> m ()

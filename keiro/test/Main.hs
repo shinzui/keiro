@@ -4073,6 +4073,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     , completed = 1
                     , stillSuspended = 0
                     , unknownName = 0
+                    , failed = 0
+                    , transientErrors = 0
+                    , leaseSkipped = 0
                     }
             -- Step 1 short-circuited; steps 2 and 3 ran exactly once.
             readIORef counter >>= \c -> c `shouldBe` 3
@@ -4113,6 +4116,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     , completed = 1
                     , stillSuspended = 0
                     , unknownName = 0
+                    , failed = 0
+                    , transientErrors = 0
+                    , leaseSkipped = 0
                     }
             readIORef counter >>= \c -> c `shouldBe` 1
             Right recorded <-
@@ -4148,12 +4154,108 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     , completed = 0
                     , stillSuspended = 0
                     , unknownName = 1
+                    , failed = 0
+                    , transientErrors = 0
+                    , leaseSkipped = 0
                     }
             -- The journal is unchanged: still one step, no completion.
             Right recorded <-
                 Store.runStoreIO storeHandle $
                     Store.readStreamForward (StreamName "wf:orphan-or-1") (StreamVersion 0) 10
             Vector.length recorded `shouldBe` 1
+
+        it "isolates a poison workflow so a healthy workflow still completes" $ \storeHandle -> do
+            healthyCounter <- newIORef (0 :: Int)
+            let poisonName = WorkflowName "poison"
+                poisonId = WorkflowId "poison-1"
+                healthyName = WorkflowName "healthy"
+                healthyId = WorkflowId "healthy-1"
+                opts =
+                    defaultWorkflowResumeOptions
+                        & #maxAttempts
+                        .~ 1
+                        & #logEvent
+                        .~ const (pure ())
+                registry =
+                    Map.fromList
+                        [ (poisonName, WorkflowDef (\_ -> liftIO (throwIO SimulatedCrash) *> pure (0 :: Int)))
+                        , (healthyName, WorkflowDef (\_ -> threeStep healthyCounter))
+                        ]
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry poisonName poisonId (StepRecorded "seed" (toJSON True) now)
+            crashed <-
+                try
+                    ( Store.runStoreIO storeHandle $
+                        runWorkflow healthyName healthyId (crashAfterStep1 healthyCounter)
+                    ) ::
+                    IO (Either SomeException (Either Store.StoreError (WorkflowOutcome (Int, Int, Int))))
+            case crashed of
+                Left _ -> pure ()
+                Right other -> expectationFailure ("expected a simulated crash, got " <> show other)
+            Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+            summary
+                `shouldBe` emptyResumeSummary
+                    { discovered = 2
+                    , resumed = 2
+                    , completed = 1
+                    , failed = 1
+                    }
+            readIORef healthyCounter >>= \c -> c `shouldBe` 3
+            Right (Just poisonRow) <- Store.runStoreIO storeHandle $ Instance.lookupInstance poisonName poisonId
+            poisonRow ^. #status `shouldBe` Instance.WfFailed
+
+        it "marks a crashing workflow failed and short-circuits later direct runs" $ \storeHandle -> do
+            let name = WorkflowName "terminal-poison"
+                wid = WorkflowId "tp-1"
+                opts =
+                    defaultWorkflowResumeOptions
+                        & #maxAttempts
+                        .~ 1
+                        & #logEvent
+                        .~ const (pure ())
+                registry = Map.singleton name (WorkflowDef (\_ -> liftIO (throwIO SimulatedCrash) *> pure (0 :: Int)))
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry name wid (StepRecorded "seed" (toJSON True) now)
+            Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+            failed summary `shouldBe` 1
+            Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            row ^. #status `shouldBe` Instance.WfFailed
+            row ^. #attempts `shouldBe` 1
+            direct <- Store.runStoreIO storeHandle $ runWorkflow name wid (step (StepName "never") (pure (1 :: Int)))
+            direct `shouldBe` Right Failed
+            Right recordedFailed <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "wf:terminal-poison-tp-1") (StreamVersion 0) 10
+            traverse (decodeRecorded workflowJournalCodec) (Vector.toList recordedFailed)
+                `shouldSatisfy` \case
+                    Right events -> any (\case WorkflowFailed{} -> True; _ -> False) events
+                    _ -> False
+
+        it "classifies thrown store errors as transient without consuming attempts" $ \storeHandle -> do
+            let name = WorkflowName "transient"
+                wid = WorkflowId "tr-1"
+                opts = defaultWorkflowResumeOptions & #logEvent .~ const (pure ())
+                registry =
+                    Map.singleton name $
+                        WorkflowDef
+                            ( \_ -> do
+                                _ <- throwError (Store.ConnectionLost "boom")
+                                pure (0 :: Int)
+                            )
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry name wid (StepRecorded "seed" (toJSON True) now)
+            Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+            transientErrors summary `shouldBe` 1
+            failed summary `shouldBe` 0
+            Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            row ^. #attempts `shouldBe` 0
+            row ^. #status `shouldBe` Instance.WfRunning
 
         -- M4: resume on an already-completed workflow is a genuine no-op.
         it "discovers nothing for an already-completed workflow and is stable" $ \storeHandle -> do

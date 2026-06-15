@@ -107,9 +107,9 @@ currentGeneration (WorkflowName name) (WorkflowId wid) =
 {- | Return the @(workflow_id, workflow_name)@ of every workflow that has at
 least one step row but no terminal marker row — i.e. workflows that are
 unfinished. A terminal marker is a @__workflow_completed__@ row or (EP-43) a
-@__workflow_cancelled__@ row, so a cancelled workflow is treated as finished
-and drops out of resume discovery. EP-42's resume worker consumes this to
-discover what to re-invoke.
+@__workflow_cancelled__@ row, or @__workflow_failed__@ row, so a cancelled or
+failed workflow is treated as finished and drops out of resume discovery.
+EP-42's resume worker consumes this to discover what to re-invoke.
 -}
 findUnfinishedWorkflowIds :: (Store :> es) => Eff es [(Text, Text)]
 findUnfinishedWorkflowIds =
@@ -182,8 +182,9 @@ currentGenerationStmt =
         )
         (D.singleRow (D.column (D.nonNullable D.int4)))
 
--- The literals '__workflow_completed__' / '__workflow_cancelled__' must match
--- 'Keiro.Workflow.Types.completedStepName' / '.cancelledStepName'.
+-- The literals '__workflow_completed__' / '__workflow_cancelled__' /
+-- '__workflow_failed__' must match 'Keiro.Workflow.Types.completedStepName' /
+-- '.cancelledStepName' / '.failedStepName'.
 --
 -- EP-48: the terminal-marker check is scoped to the CURRENT (MAX) generation.
 -- A logical workflow (workflow_id, workflow_name) is unfinished when its newest
@@ -211,7 +212,7 @@ findUnfinishedWorkflowIdsStmt =
           WHERE c.workflow_id = cg.workflow_id
             AND c.workflow_name = cg.workflow_name
             AND c.generation = cg.gen
-            AND c.step_name IN ('__workflow_completed__', '__workflow_cancelled__')
+            AND c.step_name IN ('__workflow_completed__', '__workflow_cancelled__', '__workflow_failed__')
         )
         """
         E.noParams

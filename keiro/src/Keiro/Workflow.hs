@@ -374,8 +374,9 @@ resumed runs honor the same options.
 
 If the workflow's journal already carries a 'WorkflowCancelled' marker (a child
 cancelled by its parent, EP-43), the run short-circuits immediately and returns
-'Cancelled' without executing any step. To /propagate/ a finished child's
-result to its parent, drive the child through
+'Cancelled' without executing any step. If the journal carries a
+'WorkflowFailed' marker, the run likewise short-circuits to 'Failed'. To
+/propagate/ a finished child's result to its parent, drive the child through
 'Keiro.Workflow.Child.runChildWorkflow' rather than this function directly.
 -}
 runWorkflowWith ::
@@ -397,9 +398,11 @@ runWorkflowWith options name wid action = do
     -- marker is keyed under 'cancelledStepName' on the current generation, so a
     -- single existence check is enough and we never run the user action.
     cancelled <- stepExists name wid gen cancelledStepName
-    if cancelled
-        then pure Cancelled
-        else runActive gen
+    failed <- stepExists name wid gen failedStepName
+    case (cancelled, failed) of
+        (True, _) -> pure Cancelled
+        (_, True) -> pure Failed
+        _ -> runActive gen
   where
     -- EP-44 telemetry handles, pulled from the run options once. Both default
     -- to 'Nothing' (see 'defaultWorkflowRunOptions'), so a default-options run
@@ -459,6 +462,7 @@ runWorkflowWith options name wid action = do
                     pure (Completed result)
                 Suspended -> markInstanceSuspended name wid >> pure Suspended
                 Cancelled -> pure Cancelled
+                Failed -> pure Failed
                 -- EP-48: the run unwound via 'WorkflowRotate'; 'rotateGeneration'
                 -- already journaled the seed step on the next generation and the
                 -- rotation marker on this one, so there is nothing more to do here.
