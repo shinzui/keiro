@@ -3,7 +3,7 @@ module Main (
 )
 where
 
-import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
+import Contravariant.Extras (contrazip2, contrazip3, contrazip5)
 import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar)
 import Control.Exception (Exception, SomeException, evaluate, throwIO, try)
@@ -3797,23 +3797,15 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Right [StepRecorded "awk:test" _ _, WorkflowCompleted _] -> True
                     _ -> False
 
-        it "treats a duplicate external journal append as idempotent and repairs the step index" $ \storeHandle -> do
-            let name = WorkflowName "stale-index"
-                wid = WorkflowId "si-1"
+        it "treats a duplicate external journal append as idempotent" $ \storeHandle -> do
+            let name = WorkflowName "duplicate-append"
+                wid = WorkflowId "da-1"
                 stepKey = "awk:test"
                 eventAt t = StepRecorded stepKey (toJSON (42 :: Int)) t
             now <- getCurrentTime
             Right firstId <-
                 Store.runStoreIO storeHandle $
                     appendJournalEntryReturningId name wid (eventAt now)
-            Right () <-
-                Store.runStoreIO storeHandle $
-                    Store.runTransaction $
-                        Tx.statement
-                            (unWorkflowId wid, unWorkflowName name, 0 :: Int32, stepKey)
-                            deleteWorkflowStepStmt
-            Right missingBefore <- Store.runStoreIO storeHandle $ loadStepIndex name wid 0
-            Map.lookup stepKey missingBefore `shouldBe` Nothing
             secondResult <-
                 Store.runStoreIO storeHandle $
                     appendJournalEntryReturningId name wid (eventAt now)
@@ -3821,12 +3813,30 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Right value -> pure value
                 Left err -> expectationFailure ("expected idempotent duplicate append, got " <> show err) *> error "unreachable"
             secondId `shouldBe` firstId
-            Right repaired <- Store.runStoreIO storeHandle $ loadStepIndex name wid 0
-            Map.lookup stepKey repaired `shouldBe` Just (toJSON (42 :: Int))
+            Right indexed <- Store.runStoreIO storeHandle $ loadStepIndex name wid 0
+            Map.lookup stepKey indexed `shouldBe` Just (toJSON (42 :: Int))
             Right recorded <-
                 Store.runStoreIO storeHandle $
-                    Store.readStreamForward (StreamName "wf:stale-index-si-1") (StreamVersion 0) 10
+                    Store.readStreamForward (StreamName "wf:duplicate-append-da-1") (StreamVersion 0) 10
             Vector.length recorded `shouldBe` 1
+
+        it "returns the journaled value when another writer records the same step mid-flight" $ \storeHandle -> do
+            let name = WorkflowName "journal-race"
+                wid = WorkflowId "jr-1"
+                body =
+                    step (StepName "raced") $ do
+                        now <- liftIO getCurrentTime
+                        appendJournalEntry name wid (StepRecorded "raced" (toJSON ("winner" :: Text)) now)
+                        pure ("loser" :: Text)
+            outcome <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+            outcome `shouldBe` Right (Completed "winner")
+            Right recorded <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "wf:journal-race-jr-1") (StreamVersion 0) 10
+            traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded)
+                `shouldSatisfy` \case
+                    Right [StepRecorded "raced" value _, WorkflowCompleted _] -> value == toJSON ("winner" :: Text)
+                    _ -> False
 
         it "discovers unfinished workflows via the step index" $ \storeHandle -> do
             counter <- newIORef (0 :: Int)
@@ -6695,24 +6705,6 @@ corruptSnapshotShapeStmt =
         """
         ( contrazip2
             (E.param (E.nonNullable E.text))
-            (E.param (E.nonNullable E.text))
-        )
-        D.noResult
-
-deleteWorkflowStepStmt :: Statement (Text, Text, Int32, Text) ()
-deleteWorkflowStepStmt =
-    preparable
-        """
-        DELETE FROM keiro_workflow_steps
-        WHERE workflow_id = $1
-          AND workflow_name = $2
-          AND generation = $3
-          AND step_name = $4
-        """
-        ( contrazip4
-            (E.param (E.nonNullable E.text))
-            (E.param (E.nonNullable E.text))
-            (E.param (E.nonNullable E.int4))
             (E.param (E.nonNullable E.text))
         )
         D.noResult

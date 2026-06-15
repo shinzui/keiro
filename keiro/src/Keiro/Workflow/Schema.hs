@@ -17,6 +17,8 @@ module Keiro.Workflow.Schema (
 
     -- * Storage
     recordStepTx,
+    lookupStepResultTx,
+    lockWorkflowStepTx,
 
     -- * Read-only lookups
     loadStepIndex,
@@ -74,6 +76,14 @@ recordStepTx row =
         , row ^. #recordedAt
         )
         recordStepStmt
+
+lookupStepResultTx :: Text -> Text -> Int -> Text -> Tx.Transaction (Maybe Value)
+lookupStepResultTx wid name gen key =
+    Tx.statement (wid, name, fromIntegral gen :: Int32, key) lookupStepResultStmt
+
+lockWorkflowStepTx :: Text -> Tx.Transaction ()
+lockWorkflowStepTx key =
+    void (Tx.statement key lockWorkflowStepStmt)
 
 {- | Load every recorded step for a workflow instance as a @step name ->
 result@ map (includes the terminal completion marker row if present). Exposed
@@ -133,6 +143,31 @@ recordStepStmt =
             (E.param (E.nonNullable E.timestamptz))
         )
         D.noResult
+
+lookupStepResultStmt :: Statement (Text, Text, Int32, Text) (Maybe Value)
+lookupStepResultStmt =
+    preparable
+        """
+        SELECT result
+        FROM keiro_workflow_steps
+        WHERE workflow_id = $1 AND workflow_name = $2 AND generation = $3 AND step_name = $4
+        """
+        ( contrazip4
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.int4))
+            (E.param (E.nonNullable E.text))
+        )
+        (D.rowMaybe (D.column (D.nonNullable D.jsonb)))
+
+lockWorkflowStepStmt :: Statement Text Int32
+lockWorkflowStepStmt =
+    preparable
+        """
+        SELECT 1::int4 FROM pg_advisory_xact_lock(hashtextextended($1, 0))
+        """
+        (E.param (E.nonNullable E.text))
+        (D.singleRow (D.column (D.nonNullable D.int4)))
 
 loadStepIndexStmt :: Statement (Text, Text, Int32) [(Text, Value)]
 loadStepIndexStmt =

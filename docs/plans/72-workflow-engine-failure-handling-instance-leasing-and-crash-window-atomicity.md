@@ -41,9 +41,9 @@ You can see it working by running the test suite (`cabal test keiro-test` from t
 - [x] M2: extend `ResumeSummary` (`failed`, `transientErrors`, `leaseSkipped`) and `KeiroMetrics` (`workflowFailed`, `workflowResumeErrors`, `workflowLeaseSkipped`) (completed 2026-06-15)
 - [x] M2: tests — poison + healthy isolation, max-attempts terminal failure, transient store error survives, fixed-poll and push loop drivers survive a throwing pass (completed 2026-06-15)
 - [x] M3: lease claim/release statements in `Keiro.Workflow.Instance` (`claimInstance`, `releaseInstance`) and worker integration (claim before advance, release after) (completed 2026-06-15)
-- [ ] M3: rebuild the journal append as a single composable transaction (`prepareJournalAppend` builder: advisory xact lock, index existence check, in-transaction append via `appendToStreamTx`, `recordStepTx`, `upsertInstanceTx`); route `recordStep`, `appendCompletion`, `appendJournalEntry(ReturningId)`, and `rotateGeneration` through it; on an already-journaled step return the journaled value, not the locally computed one; delete the now-dead `journalEntryExists` scan
-- [ ] M3: fix the `useAdvisoryLock` / "at most once" haddock lies in `keiro/src/Keiro/Workflow/Resume.hs`
-- [ ] M3: tests — claim conflict, expired-lease takeover, attempt-reset on release, mid-flight duplicate-append race returns the journaled value (claim conflict, expired-lease takeover, attempt-reset, and lease-skip coverage completed 2026-06-15; duplicate-append race remains)
+- [x] M3: rebuild the journal append as a single composable transaction (`prepareJournalAppend` builder: advisory xact lock, index existence check, in-transaction append via `appendToStreamTx`, `recordStepTx`, `upsertInstanceTx`); route `recordStep`, `appendCompletion`, `appendJournalEntry(ReturningId)`, and `rotateGeneration` through it; on an already-journaled step return the journaled value, not the locally computed one; delete the now-dead `journalEntryExists` scan (completed 2026-06-15)
+- [x] M3: fix the `useAdvisoryLock` / "at most once" haddock lies in `keiro/src/Keiro/Workflow/Resume.hs` (completed 2026-06-15)
+- [x] M3: tests — claim conflict, expired-lease takeover, attempt-reset on release, mid-flight duplicate-append race returns the journaled value (completed 2026-06-15)
 - [ ] M4: make `signalAwakeable` commit the row transition and the journal append in one transaction; add the `Completed`-row repair to `awaitCancellable`'s arm
 - [ ] M4: make `childCompletionHook` commit `markChildResultTx` and the parent journal append in one transaction, branching on the child row's actual status (skip on cancelled — finding M3 part 2); add the `ChildCompleted`-row repair to `awaitChild`'s arm
 - [ ] M4: crash-window tests — completed awakeable row without journal entry heals on resume; completed child row without parent entry heals on resume
@@ -64,6 +64,7 @@ You can see it working by running the test suite (`cabal test keiro-test` from t
 - Implementation discovery (2026-06-15): the worker can use effectful's built-in `catchSync` rather than a custom `SomeAsyncException` filter in `Eff`; local source under `/Users/shinzui/Keikaku/hub/haskell/effectful-project/effectful/effectful-core/src/Effectful/Exception.hs` confirms `catchSync` catches only synchronous exceptions. The push-aware `IO` loop still needs an explicit `SomeAsyncException` rethrow because it runs outside `Eff`.
 - Implementation discovery (2026-06-15): the push-loop failure path can be tested without adding a test seam by temporarily renaming `keiro_workflow_steps` in a fresh test database. That makes the worker's first discovery pass return `Left StoreError` through `runStoreIO`; after restoring the table, the same worker drains a suspended workflow, proving the pass-level error was logged rather than fatal.
 - Implementation discovery (2026-06-15): `recordCrashTx` intentionally sets `next_attempt_at`, so an expired workflow lease alone is not enough to make a crashed instance claimable. The takeover test ages both `lease_expires_at` and `next_attempt_at`, matching the claim predicate that requires a free/expired lease and a due retry.
+- Implementation discovery (2026-06-15): the historical stale-index repair test no longer matches the M3 invariant. The new append path writes the event and `keiro_workflow_steps` row in one transaction and re-checks the index under a transaction-scoped advisory lock; there is no supported path that commits the journal without the index, so the old stream-scan repair was removed with `journalEntryExists`.
 
 
 ## Decision Log
@@ -104,10 +105,16 @@ You can see it working by running the test suite (`cabal test keiro-test` from t
   Rationale: It was documented as "reserved, setting it has no effect" and its haddock contains the false "each side effect run at most once" claim. Carrying a dead field alongside a real lease would be actively misleading. This is a breaking record change inside one initiative-owned options type; all construction sites are in this repository.
   Date: 2026-06-10
 
+- Decision: Do not preserve the stale-index stream-scan repair path after introducing `prepareJournalAppend`.
+  Rationale: The M3 append path serializes same-step writers with a transaction-scoped advisory lock, re-checks `keiro_workflow_steps` inside the same transaction, and commits the event append plus index row plus instance-row update atomically. A missing index row for a committed journal event is no longer a reachable state through supported code paths. Keeping the old `journalEntryExists` full-stream scan would make every external duplicate append pay O(stream) cost to preserve a repair path for manually corrupted state, directly contradicting the M3 design.
+  Date: 2026-06-15
+
 
 ## Outcomes & Retrospective
 
 Milestone 2 is complete as of 2026-06-15. The resume worker isolates poison workflows, records bounded attempts, appends a terminal `WorkflowFailed` marker, keeps healthy workflows moving in the same pass, classifies thrown `StoreError`s as transient without consuming attempts, and both fixed-poll and push loop drivers survive pass-level failures.
+
+Milestone 3 is complete as of 2026-06-15. Resume workers now claim a per-instance lease before advancing a workflow, skip live foreign leases without killing the pass, release leases after attempts, and reset attempts on progressed release. Journal appends now go through `prepareJournalAppend`, which locks the workflow step key, re-checks the step index inside the transaction, appends through `appendToStreamTx`, records the step row, and updates the instance row atomically. A mid-flight duplicate append now returns the journaled value rather than the locally computed value.
 
 
 ## Context and Orientation
@@ -434,3 +441,5 @@ Revision note (2026-06-15): Initial Milestone 2 implementation made `Failed` a r
 Revision note (2026-06-15): Milestone 2 is now complete. Added fixed-poll and push loop-driver survival tests; validation passed with `cabal test keiro-test --test-options='--match "Keiro.Workflow.Resume"'` (8 examples, 0 failures), `cabal test keiro-test --test-options='--match "Keiro.Workflow push latency"'` (2 examples, 0 failures), and full `cabal test keiro-test` (225 examples, 0 failures).
 
 Revision note (2026-06-15): The M3 lease slice is implemented. `Keiro.Workflow.Instance` now exposes `claimInstance` and `releaseInstance`, `resumeWorkflowsOnce` claims each candidate before advancing and records `leaseSkipped`, and focused validation passed with `cabal test keiro-test --test-options='--match "Keiro.Workflow.Resume"'` (11 examples, 0 failures). The race-proof journal append work remains in M3.
+
+Revision note (2026-06-15): Milestone 3 is now complete. Added `prepareJournalAppend`, removed `journalEntryExists`, routed step/completion/external append/rotation through the composable transaction builder, updated resume haddocks to describe leases, and changed the duplicate-append test from stale-index repair to the supported idempotent case. Validation passed with `cabal test keiro-test --test-options='--match "Keiro.Workflow"'` (60 examples, 0 failures) and full `cabal test keiro-test` (229 examples, 0 failures).

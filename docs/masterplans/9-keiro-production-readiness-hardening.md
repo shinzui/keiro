@@ -105,7 +105,7 @@ Milestone-level rollup across child plans; the authoritative per-step state live
 - [x] EP-5: PM/router ack contract fixed (no ack on failed dispatch; thrown errors finalize acks)
 - [x] EP-5: `eventAlreadyIn` point lookup; concurrent-duplicate test green
 - [x] EP-6: resume worker survives poison workflows; `WorkflowFailed` path live
-- [ ] EP-6: per-instance lease; concurrent workers cannot double-run effects
+- [x] EP-6: per-instance lease; concurrent workers cannot double-run effects
 - [ ] EP-6: signal/child-completion/cancel crash windows closed
 - [ ] EP-7: sleeps fire under an active resume worker; generation-namespaced wake sources
 - [ ] EP-7: patch classification journaled at first run; discovery via instance table; pruning
@@ -151,6 +151,11 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
   focused survival tests. Validation passed with focused `keiro-test` runs for
   `Keiro.Workflow.Resume` (8 examples) and `Keiro.Workflow push latency` (2 examples), plus
   full `cabal test keiro-test` (225 examples), all with 0 failures.
+- EP-6 Milestone 3 is complete as of 2026-06-15. Resume workers now claim per-instance
+  leases and skip live foreign owners, and same-step journal append races serialize through
+  `prepareJournalAppend` so the loser returns the journaled value. Validation passed with
+  focused `Keiro.Workflow` coverage (60 examples) and full `cabal test keiro-test`
+  (229 examples), both with 0 failures.
 
 
 ## Decision Log
@@ -207,6 +212,8 @@ EP-5 is complete as of 2026-06-15. Process-manager and router delivery now has t
 
 EP-6 Milestone 2 is complete as of 2026-06-15. Poison workflow handling and `WorkflowFailed` are live, and the remaining loop-driver survival tests have landed; M3 leasing and race-proof journal appends remain next.
 
+EP-6 Milestone 3 is complete as of 2026-06-15. Per-instance leases are live in the resume worker, lease skips are observable, and journal appends are transaction-composable and same-step race-proof; M4 crash-window atomicity for awakeable signals and child completion remains next.
+
 
 ---
 
@@ -215,3 +222,5 @@ Revision note (2026-06-10): After the eight child plans were authored, this docu
 Revision note (2026-06-15): EP-5 was implemented and marked Complete. The registry, progress rollup, Surprises & Discoveries, and Outcomes & Retrospective now record the worker ack fix, stream-scoped kiroku point lookup, duplicate-race coverage, dispatch metrics, and final validation evidence.
 
 Revision note (2026-06-15): EP-6 Milestone 2 was completed. The Progress rollup now checks the poison-workflow/`WorkflowFailed` item, and Surprises & Discoveries plus Outcomes & Retrospective record the focused resume and push-loop validation evidence.
+
+Revision note (2026-06-15): EP-6 Milestone 3 was completed. The Progress rollup now checks the per-instance lease/concurrent-worker item, and Surprises & Discoveries plus Outcomes & Retrospective record the lease and race-proof journal append validation evidence.

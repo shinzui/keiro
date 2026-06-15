@@ -30,9 +30,10 @@ the domain behaviour.
   parent's awaited @child:\<id\>@ 'StepRecorded', and the next resume pass
   re-invokes the parent (registered here) so it proceeds past its child-wait.
 * __'ResumeSummary'__ ('discovered', 'resumed', 'completed', 'stillSuspended',
-  'unknownName') — the per-pass observability record. EP-44 reads it for the
-  @keiro.workflow.resumed@ instrument (and may thread a @Maybe KeiroMetrics@
-  into 'WorkflowResumeOptions' \/ 'resumeWorkflowsOnce' following the
+  'unknownName', 'failed', 'transientErrors', 'leaseSkipped') — the per-pass
+  observability record. EP-44 reads it for the @keiro.workflow.resumed@
+  instrument (and may thread a @Maybe KeiroMetrics@ into
+  'WorkflowResumeOptions' \/ 'resumeWorkflowsOnce' following the
   no-op-under-@Nothing@ idiom the timer and outbox workers use).
 * __'resumeWorkflowsOnce'__ is the single-pass, testable unit (like
   'Keiro.Outbox.publishClaimedOutbox'); __'runWorkflowResumeWorker'__ \/
@@ -41,9 +42,14 @@ the domain behaviour.
   carrying 'runOptions', so a resumed run honours the same snapshot/telemetry
   options as its first run.
 
-Discovery is the 'findUnfinishedWorkflowIds' index query only — __no kiroku
-@wf:@ prefix subscription__ is used or needed, so this surface has zero
-upstream dependency.
+Discovery is the 'findUnfinishedWorkflowIds' index query plus the child-row
+seed query. Each candidate is claimed through an expiry-based row lease in
+@keiro_workflows@ before it is advanced. A live foreign lease skips only that
+instance and increments 'leaseSkipped'; a dead worker's lease becomes claimable
+after 'leaseTtl'. The lease prevents duplicate steady-state work, while the
+journal append path still serializes same-step writers so lease expiry races
+converge on one recorded result. There is __no kiroku @wf:@ prefix
+subscription__ and no session-level advisory lock.
 -}
 module Keiro.Workflow.Resume (
     -- * Registry
@@ -157,7 +163,7 @@ data WorkflowResumeOptions = WorkflowResumeOptions
     , maxAttempts :: !Int
     -- ^ Workflow-level synchronous exceptions before terminal failure.
     , leaseTtl :: !NominalDiffTime
-    -- ^ Reserved for the M3 lease claim path; present now so options change once.
+    -- ^ How long a claimed workflow instance stays leased if the worker dies mid-advance.
     , logEvent :: !(ResumeLogEvent -> IO ())
     -- ^ Per-worker logging hook. Defaults to a compact stderr renderer.
     }
@@ -171,7 +177,7 @@ data ResumeLogEvent
     | ResumePassFailed !Text
     deriving stock (Eq, Show)
 
--- | Defaults: EP-41's 'defaultWorkflowRunOptions', a 1-second poll, no lock.
+-- | Defaults: EP-41's 'defaultWorkflowRunOptions', a 1-second poll, and a 60-second lease.
 defaultWorkflowResumeOptions :: WorkflowResumeOptions
 defaultWorkflowResumeOptions =
     WorkflowResumeOptions
@@ -242,7 +248,7 @@ data ResumeSummary = ResumeSummary
     , transientErrors :: !Int
     -- ^ Store errors observed while advancing individual workflows.
     , leaseSkipped :: !Int
-    -- ^ Reserved for M3 per-instance lease skips.
+    -- ^ Candidates skipped because another worker holds a live lease.
     }
     deriving stock (Generic, Eq, Show)
 

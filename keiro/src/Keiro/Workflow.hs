@@ -69,6 +69,8 @@ module Keiro.Workflow (
     defaultWorkflowRunOptions,
 
     -- * Journal append helpers (used by wake-source plans)
+    JournalAppendOutcome (..),
+    prepareJournalAppend,
     appendJournalEntry,
     appendJournalEntryReturningId,
 
@@ -125,19 +127,21 @@ import Keiro.Workflow.Schema (
     currentGeneration,
     findUnfinishedWorkflowIds,
     loadStepIndex,
+    lockWorkflowStepTx,
+    lookupStepResultTx,
     recordStepTx,
     stepExists,
  )
 import Keiro.Workflow.Snapshot (loadWorkflowSnapshot, writeWorkflowSnapshot)
 import Keiro.Workflow.Types
 import Kiroku.Store.Effect (Store)
-import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Read (readStreamForwardStream)
-import Kiroku.Store.Transaction (runTransaction, runTransactionAppending)
-import Kiroku.Store.Types (AppendResult (..), EventData, EventId (..), ExpectedVersion (..), StreamName, StreamVersion (..))
+import Kiroku.Store.Transaction (AppendConflict, appendToStreamTx, prepareEventsIO, runTransaction)
+import Kiroku.Store.Types (AppendResult (..), EventData, EventId (..), ExpectedVersion (..), StreamVersion (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
 import System.IO.Unsafe (unsafePerformIO)
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 -- ---------------------------------------------------------------------------
 -- The effect
@@ -485,25 +489,36 @@ runWorkflowWith options name wid action = do
                 Nothing -> do
                     a <- localSeqUnlift env (\unlift -> unlift act)
                     let encoded = Aeson.toJSON a
-                    appendResult <- recordStep name wid gen (StepName key) encoded
-                    -- Miss: @act@ ran and was journaled — a fresh execution.
-                    recordWorkflowStepExecuted mMetrics 1
-                    newMap <-
-                        liftIO
-                            ( atomicModifyIORef' journalRef $ \m ->
-                                let m' = Map.insert key encoded m in (m', m')
-                            )
-                    -- Evaluate the snapshot policy on the post-append map and version;
-                    -- a step is never the terminal marker, hence @False@.
-                    when
-                        ( shouldSnapshot
-                            (options ^. #snapshotPolicy)
-                            NotTerminal
-                            newMap
-                            (appendResult ^. #streamVersion)
-                        )
-                        (writeWorkflowSnapshot (appendResult ^. #streamId) (appendResult ^. #streamVersion) newMap)
-                    pure a
+                    now <- liftIO getCurrentTime
+                    appendOutcome <- appendJournal name wid gen (StepRecorded key encoded now)
+                    case appendOutcome of
+                        JournalAppended appendResult -> do
+                            -- Miss: @act@ ran and was journaled — a fresh execution.
+                            recordWorkflowStepExecuted mMetrics 1
+                            newMap <-
+                                liftIO
+                                    ( atomicModifyIORef' journalRef $ \m ->
+                                        let m' = Map.insert key encoded m in (m', m')
+                                    )
+                            -- Evaluate the snapshot policy on the post-append map and version;
+                            -- a step is never the terminal marker, hence @False@.
+                            when
+                                ( shouldSnapshot
+                                    (options ^. #snapshotPolicy)
+                                    NotTerminal
+                                    newMap
+                                    (appendResult ^. #streamVersion)
+                                )
+                                (writeWorkflowSnapshot (appendResult ^. #streamId) (appendResult ^. #streamVersion) newMap)
+                            pure a
+                        JournalAlreadyPresent stored -> do
+                            liftIO
+                                ( atomicModifyIORef' journalRef $ \m ->
+                                    (Map.insert key stored m, ())
+                                )
+                            decodeStored key stored
+                        JournalAppendConflict err ->
+                            throwIO (WorkflowJournalAppendError (Text.pack (show err)))
         Await (StepName key) arm -> do
             journal <- liftIO (readIORef journalRef)
             case Map.lookup key journal of
@@ -542,12 +557,23 @@ runWorkflowWith options name wid action = do
                     -- takes the old branch (False). Journal the decision so it is stable.
                     let decision = not startedInFlight
                         encoded = Aeson.toJSON decision
-                    _ <- recordStep name wid gen (StepName key) encoded
-                    liftIO
-                        ( atomicModifyIORef' journalRef $ \m ->
-                            (Map.insert key encoded m, ())
-                        )
-                    pure decision
+                    now <- liftIO getCurrentTime
+                    appendOutcome <- appendJournal name wid gen (StepRecorded key encoded now)
+                    case appendOutcome of
+                        JournalAppended{} -> do
+                            liftIO
+                                ( atomicModifyIORef' journalRef $ \m ->
+                                    (Map.insert key encoded m, ())
+                                )
+                            pure decision
+                        JournalAlreadyPresent stored -> do
+                            liftIO
+                                ( atomicModifyIORef' journalRef $ \m ->
+                                    (Map.insert key stored m, ())
+                                )
+                            decodeStored key stored
+                        JournalAppendConflict err ->
+                            throwIO (WorkflowJournalAppendError (Text.pack (show err)))
 
 -- | Decode a stored journal result into the type the caller expects.
 decodeStored :: (Aeson.FromJSON a) => Text -> Aeson.Value -> Eff es a
@@ -611,14 +637,55 @@ loadJournal options name wid gen = do
 -- Journal append helpers
 -- ---------------------------------------------------------------------------
 
-{- | Append a journal entry for a step that just ran, plus its index row, in
-one transaction. Used on the @step@ miss path, where the caller already knows
-the step is not journaled (so no existence pre-check is needed).
--}
-recordStep :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Int -> StepName -> Aeson.Value -> Eff es AppendResult
-recordStep name wid gen (StepName key) value = do
+data JournalAppendOutcome
+    = JournalAppended !AppendResult
+    | JournalAlreadyPresent !Aeson.Value
+    | JournalAppendConflict !AppendConflict
+    deriving stock (Eq, Show)
+
+prepareJournalAppend ::
+    (IOE :> es) =>
+    WorkflowName ->
+    WorkflowId ->
+    Int ->
+    WorkflowJournalEvent ->
+    Eff es (Tx.Transaction JournalAppendOutcome)
+prepareJournalAppend name wid gen event = do
+    let key = journalKey event
+        entryId = deterministicJournalId name wid gen key
+        row = journalRow name wid gen event
+        (status, mLastError) = instanceStatusForEvent event
+        journalName = workflowGenerationStreamName name wid gen
+        lockKey =
+            Text.intercalate
+                "/"
+                [unWorkflowId wid, unWorkflowName name, Text.pack (show gen), key]
+    base <- case encodeForAppendWithMetadata workflowJournalCodec Nothing event of
+        Right encoded -> pure encoded
+        Left err -> throwIO (WorkflowJournalEncodeError (Text.pack (show err)))
+    let entry = base & #eventId .~ Just entryId :: EventData
+    prepared <- prepareEventsIO [entry]
     now <- liftIO getCurrentTime
-    snd <$> appendJournalTx name wid gen (StepRecorded key value now)
+    pure $ do
+        lockWorkflowStepTx lockKey
+        lookupStepResultTx (unWorkflowId wid) (unWorkflowName name) gen key >>= \case
+            Just stored -> pure (JournalAlreadyPresent stored)
+            Nothing ->
+                appendToStreamTx journalName AnyVersion prepared now >>= \case
+                    Left err -> pure (JournalAppendConflict err)
+                    Right appendResult ->
+                        JournalAppended appendResult
+                            <$ recordStepTx row
+                            <* upsertInstanceTx
+                                (unWorkflowId wid)
+                                (unWorkflowName name)
+                                (fromIntegral gen)
+                                status
+                                mLastError
+
+appendJournal :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Int -> WorkflowJournalEvent -> Eff es JournalAppendOutcome
+appendJournal name wid gen event =
+    prepareJournalAppend name wid gen event >>= runTransaction
 
 {- | Append a journal event to a workflow's journal stream (and keep its
 index row consistent), idempotently. If the entry already exists this is a
@@ -645,25 +712,10 @@ appendJournalEntryReturningId name wid event = do
     gen <- currentGeneration name wid
     let key = journalKey event
         entryId = deterministicJournalId name wid gen key
-        journalName = workflowGenerationStreamName name wid gen
-        row = journalRow name wid gen event
-        repairIndex = runTransaction (recordStepTx row)
-    exists <- stepExists name wid gen key
-    if exists
-        then pure entryId
-        else do
-            alreadyInJournal <- journalEntryExists journalName entryId
-            if alreadyInJournal
-                then repairIndex >> pure entryId
-                else do
-                    result <- appendJournalTxResult name wid gen event
-                    case result of
-                        Right _appendResult -> pure entryId
-                        Left err -> do
-                            racedIntoJournal <- journalEntryExists journalName entryId
-                            if racedIntoJournal
-                                then repairIndex >> pure entryId
-                                else throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+    appendJournal name wid gen event >>= \case
+        JournalAppended{} -> pure entryId
+        JournalAlreadyPresent{} -> pure entryId
+        JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
 
 {- | Append a journal entry only if it is not already journaled, returning the
 'AppendResult' of the fresh append (or 'Nothing' if it already existed). Used
@@ -673,12 +725,10 @@ workflow is a no-op.
 -}
 appendCompletion :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Int -> UTCTime -> Eff es (Maybe AppendResult)
 appendCompletion name wid gen now = do
-    let event = WorkflowCompleted now
-        key = journalKey event
-    exists <- stepExists name wid gen key
-    if exists
-        then pure Nothing
-        else Just . snd <$> appendJournalTx name wid gen event
+    appendJournal name wid gen (WorkflowCompleted now) >>= \case
+        JournalAppended appendResult -> pure (Just appendResult)
+        JournalAlreadyPresent{} -> pure Nothing
+        JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
 
 {- | Perform a continue-as-new rotation (EP-48): close generation @gen@ and open
 generation @gen + 1@, seeded with @seedJson@. Returns 'ContinuedAsNew'.
@@ -714,58 +764,20 @@ rotateGeneration name wid gen seedJson = do
     let nextGen = gen + 1
     now <- liftIO getCurrentTime
     -- 1. Seed step on the NEXT generation first (advances the current generation).
-    seedExists <- stepExists name wid nextGen continueSeedStepName
-    unless seedExists $ do
-        (_, appendResult) <-
-            appendJournalTx name wid nextGen (StepRecorded continueSeedStepName seedJson now)
-        writeWorkflowSnapshot
-            (appendResult ^. #streamId)
-            (appendResult ^. #streamVersion)
-            (Map.singleton continueSeedStepName seedJson)
+    appendJournal name wid nextGen (StepRecorded continueSeedStepName seedJson now) >>= \case
+        JournalAppended appendResult ->
+            writeWorkflowSnapshot
+                (appendResult ^. #streamId)
+                (appendResult ^. #streamVersion)
+                (Map.singleton continueSeedStepName seedJson)
+        JournalAlreadyPresent{} -> pure ()
+        JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
     -- 2. Terminal rotation marker on the CURRENT generation (audit + closes it).
-    markerExists <- stepExists name wid gen continuedAsNewStepName
-    unless markerExists $
-        void (appendJournalTx name wid gen (WorkflowContinuedAsNew nextGen now))
+    appendJournal name wid gen (WorkflowContinuedAsNew nextGen now) >>= \case
+        JournalAppended{} -> pure ()
+        JournalAlreadyPresent{} -> pure ()
+        JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
     pure ContinuedAsNew
-
-{- | The core append: encode the event, append it under a deterministic id,
-and upsert the index row, all in one transaction. Returns the deterministic
-event id paired with the store's 'AppendResult' (carrying the stream id and
-the post-append stream version the snapshot path needs).
--}
-appendJournalTx :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Int -> WorkflowJournalEvent -> Eff es (EventId, AppendResult)
-appendJournalTx name wid gen event = do
-    let key = journalKey event
-        entryId = deterministicJournalId name wid gen key
-    outcome <- appendJournalTxResult name wid gen event
-    case outcome of
-        Right appendResult -> pure (entryId, appendResult)
-        Left err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
-
-appendJournalTxResult :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Int -> WorkflowJournalEvent -> Eff es (Either StoreError AppendResult)
-appendJournalTxResult name wid gen event = do
-    let key = journalKey event
-        entryId = deterministicJournalId name wid gen key
-        row = journalRow name wid gen event
-        (status, mLastError) = instanceStatusForEvent event
-    base <- case encodeForAppendWithMetadata workflowJournalCodec Nothing event of
-        Right encoded -> pure encoded
-        Left err -> throwIO (WorkflowJournalEncodeError (Text.pack (show err)))
-    let entry = base & #eventId .~ Just entryId :: EventData
-    runTransactionAppending
-        (workflowGenerationStreamName name wid gen)
-        AnyVersion
-        [entry]
-        ( \appendResult ->
-            appendResult
-                <$ recordStepTx row
-                <* upsertInstanceTx
-                    (unWorkflowId wid)
-                    (unWorkflowName name)
-                    (fromIntegral gen)
-                    status
-                    mLastError
-        )
 
 instanceStatusForEvent :: WorkflowJournalEvent -> (WorkflowStatus, Maybe Text)
 instanceStatusForEvent = \case
@@ -774,15 +786,6 @@ instanceStatusForEvent = \case
     WorkflowCancelled{} -> (WfCancelled, Nothing)
     WorkflowFailed reason _ -> (WfFailed, Just reason)
     WorkflowContinuedAsNew{} -> (WfRunning, Nothing)
-
-journalEntryExists :: (Store :> es) => StreamName -> EventId -> Eff es Bool
-journalEntryExists journalName entryId =
-    Streamly.fold
-        (Fold.foldlM' accumulate (pure False))
-        (readStreamForwardStream journalName (StreamVersion 0) 256)
-  where
-    accumulate seen recorded =
-        pure (seen || recorded ^. #eventId == entryId)
 
 -- | The reserved step-name key a journal event indexes under.
 journalKey :: WorkflowJournalEvent -> Text
