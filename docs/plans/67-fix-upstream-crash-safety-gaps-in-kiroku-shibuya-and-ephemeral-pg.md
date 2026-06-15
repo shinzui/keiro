@@ -39,9 +39,9 @@ The final milestone bumps keiro's dependency pins and proves keiro's own test su
 - [x] M2: kiroku — add `eventExistsInStream` wrapper to `Kiroku/Store/Read.hs` (re-exported via `Kiroku.Store`). Completed on 2026-06-15 in upstream commit `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`.
 - [x] M2: kiroku — tests in `kiroku-store/test/Test/ReadStream.hs` (present id, absent id, wrong stream, soft-deleted stream). Completed on 2026-06-15; `cabal test kiroku-store-test` passed with 226 examples, 0 failures.
 - [x] M2: kiroku — bump `kiroku-store` to 0.2.1.0, update `kiroku-store/CHANGELOG.md`, commit, push, record new SHA here. Version was already 0.2.1.0 from M1; changelog updated and pushed on 2026-06-15. New kiroku HEAD: `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`.
-- [ ] M3: shibuya — `runIngesterAndProcessor` observes the ingester async (poll after drain, mark `Failed`, set done, rethrow)
-- [ ] M3: shibuya — tests in `shibuya-core/test/Shibuya/Runner/SupervisedSpec.hs`: failing source marks processor `Failed` and propagates; healthy path unchanged
-- [ ] M3: shibuya — `cabal test shibuya-core-test` green; bump to 0.7.1.0 + CHANGELOG; commit, push
+- [x] M3: shibuya — `runIngesterAndProcessor` observes the ingester async (poll after drain, mark `Failed`, set done, rethrow). Completed on 2026-06-15 in upstream commit `f0c9ce3`.
+- [x] M3: shibuya — tests in `shibuya-core/test/Shibuya/Runner/SupervisedSpec.hs`: failing source marks processor `Failed` and propagates; healthy path unchanged. Completed on 2026-06-15 in upstream commit `f0c9ce3`.
+- [x] M3: shibuya — `cabal test shibuya-core-test` green; bump to 0.7.1.0 + CHANGELOG; commit, push. Completed and pushed on 2026-06-15; `cabal test shibuya-core-test` passed with 118 examples, 0 failures.
 - [ ] M4: shibuya-pgmq-adapter — add `PollRetryConfig` (+ default) to `Shibuya/Adapter/Pgmq/Config.hs` and a `pollRetry` field on `PgmqAdapterConfig`
 - [ ] M4: shibuya-pgmq-adapter — wrap the poll in `pgmqChunks` with transient-aware bounded-backoff retry (`Error PgmqRuntimeError` constraint added)
 - [ ] M4: shibuya-pgmq-adapter — new `RetrySpec` with stub Pgmq interpreter (transient-then-success, permanent, exhaustion)
@@ -57,6 +57,7 @@ The final milestone bumps keiro's dependency pins and proves keiro's own test su
 
 - 2026-06-15: The kiroku M1 code and tests were already present in upstream commit `fa43ec2` when this implementation pass began, although this plan's checklist had not been updated. Running `cabal test kiroku-store-test` after the M2 change revalidated those M1 tests together with the new point-lookup tests.
 - 2026-06-15: `kiroku-store` was already at version `0.2.1.0` before M2, so M2 did not bump the version again. The M2 public API was recorded in `kiroku-store/CHANGELOG.md` under `Unreleased`, and the pushed SHA for keiro's later `cabal.project` pin is `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`.
+- 2026-06-15: shibuya-core's `runSupervised` links child failures back to the caller thread, so tests that assert ingester failure propagation must run the supervised app in a separate async and inspect `waitCatch`. Plain `try` around the effectful action does not reliably catch the linked async exception in Hspec.
 
 
 ## Decision Log
