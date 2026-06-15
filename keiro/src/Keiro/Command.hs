@@ -23,8 +23,10 @@ Three runners expose this pipeline at increasing levels of integration:
   the projection, process-manager, and router layers build on.
 
 Snapshots are written transparently after a successful append when the
-stream's 'Keiro.EventStream.SnapshotPolicy' fires. Every runner accepts a
-tracer for optional OpenTelemetry spans.
+stream's 'Keiro.EventStream.SnapshotPolicy' fires. Because that write
+happens after the command's events are already committed, snapshot-write
+failures are swallowed and counted instead of being reported as command
+failures. Every runner accepts a tracer for optional OpenTelemetry spans.
 -}
 module Keiro.Command (
     -- * Results and errors
@@ -42,11 +44,13 @@ module Keiro.Command (
 )
 where
 
+import Control.Concurrent (threadDelay)
 import Data.Functor (($>))
 import Data.Int (Int32)
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, tryError)
+import GHC.Clock (getMonotonicTimeNSec)
 import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
 import Keiki.Core qualified as Keiki
@@ -56,7 +60,16 @@ import Keiro.Prelude
 import Keiro.Snapshot (hydrateWithSnapshot, writeSnapshot)
 import Keiro.Snapshot.Policy (shouldSnapshot)
 import Keiro.Stream (Stream)
-import Keiro.Telemetry (keiro_events_appended, withCommandSpan)
+import Keiro.Telemetry (
+    KeiroMetrics,
+    keiro_events_appended,
+    keiro_retry_attempt,
+    recordCommandConflicts,
+    recordCommandDuplicates,
+    recordCommandRetries,
+    recordSnapshotWriteFailures,
+    withCommandSpan,
+ )
 import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError (..))
@@ -114,10 +127,17 @@ data CommandError
       EncodeFailed !CodecError
     | -- | The underlying store rejected the append.
       StoreFailed !StoreError
-    | {- | Optimistic-concurrency retries were exhausted (carries the attempt
-      count and the last store error).
+    | {- | Optimistic-concurrency retries were exhausted (carries the total
+      attempts made and the last store error).
       -}
       RetryExhausted !Int !StoreError
+    | {- | Retrying after a 'StreamAlreadyExists' conflict re-observed the same
+      stream version: the store says the stream exists but reading it shows no
+      progress. The typical cause is a soft-deleted stream, where reads return
+      nothing but appends still collide. Carries the observed version and the
+      conflict.
+      -}
+      ConflictFixpoint !StreamVersion !StoreError
     deriving stock (Generic, Eq, Show)
 
 {- | Knobs controlling a single command invocation.
@@ -130,12 +150,17 @@ data CommandError
   'Keiro.ProcessManager').
 * 'beforeAppend' — a hook run immediately before each append attempt,
   primarily a test seam for injecting concurrent writes.
+* 'retryBackoffMicros' — base delay before the k-th OCC retry, capped at
+  100 ms and jittered. Set to 0 to disable backoff.
+* 'metrics' — optional metrics handle for command and snapshot counters.
 -}
 data RunCommandOptions = RunCommandOptions
     { retryLimit :: !Int
     , pageSize :: !Int32
     , eventIds :: ![EventId]
     , beforeAppend :: !(IO ())
+    , retryBackoffMicros :: !Int
+    , metrics :: !(Maybe KeiroMetrics)
     , tracer :: !(Maybe Tracer)
     {- ^ Optional OpenTelemetry tracer. When 'Just', the command runner
     opens an 'Internal'-kind span around each invocation, named after
@@ -156,7 +181,8 @@ data RunCommandOptions = RunCommandOptions
     deriving stock (Generic)
 
 {- | Sensible defaults: 3 retries, 256-event read pages, no caller-assigned
-event ids, a no-op pre-append hook, no tracer, and no extra metadata.
+event ids, a no-op pre-append hook, 5ms retry backoff, no metrics, no tracer,
+and no extra metadata.
 -}
 defaultRunCommandOptions :: RunCommandOptions
 defaultRunCommandOptions =
@@ -165,6 +191,8 @@ defaultRunCommandOptions =
         , pageSize = 256
         , eventIds = []
         , beforeAppend = pure ()
+        , retryBackoffMicros = 5000
+        , metrics = Nothing
         , tracer = Nothing
         , metadata = Nothing
         }
@@ -362,22 +390,25 @@ runCommand ::
     Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co)))
 runCommand options eventStream targetStream command =
     withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> do
-        result <- attempt (options ^. #retryLimit)
-        recordCommandOutcome mSpan (^. #eventsAppended) result
+        (result, attemptNo) <- attempt 1 Nothing
+        recordCommandOutcome mSpan (^. #eventsAppended) attemptNo result
         pure result
   where
-    attempt remaining = do
+    attempt attemptNo lastConflict = do
         hydrated <- hydrate options eventStream targetStream
-        either (pure . Left) (runPlan remaining) hydrated
+        either (\err -> pure (Left err, attemptNo)) (runPlan attemptNo lastConflict) hydrated
 
-    runPlan remaining current =
-        case prepareCommandPlan options eventStream targetStream current command of
-            Left err -> pure (Left err)
-            Right (CommandNoOp result) -> pure (Right result)
-            Right (CommandAppend current' events encoded) ->
-                appendOnce remaining current' events encoded
+    runPlan attemptNo lastConflict current =
+        case conflictFixpoint lastConflict (current ^. #streamVersion) of
+            Just err -> pure (Left err, attemptNo)
+            Nothing ->
+                case prepareCommandPlan options eventStream targetStream current command of
+                    Left err -> pure (Left err, attemptNo)
+                    Right (CommandNoOp result) -> pure (Right result, attemptNo)
+                    Right (CommandAppend current' events encoded) ->
+                        appendOnce attemptNo current' events encoded
 
-    appendOnce remaining current events encoded = do
+    appendOnce attemptNo current events encoded = do
         liftIO (options ^. #beforeAppend)
         appended <-
             tryError @StoreError
@@ -387,10 +418,10 @@ runCommand options eventStream targetStream command =
                     encoded
         case appended of
             Right appendResult -> do
-                writeSnapshotIfNeeded eventStream current events appendResult
-                pure (Right (appendedResult targetStream appendResult (Prelude.length encoded)))
+                writeSnapshotIfNeeded options eventStream current events appendResult
+                pure (Right (appendedResult targetStream appendResult (Prelude.length encoded)), attemptNo)
             Left (_, storeError) ->
-                retryOrFail options attempt remaining storeError
+                retryOrFail options attempt attemptNo (current ^. #streamVersion) storeError
 
 {- | Like 'runCommand', but run @afterAppend@ inside the /same/ transaction
 as the append, so a read-model write commits atomically with the events.
@@ -428,22 +459,25 @@ runCommandWithSqlEvents ::
     Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co), Maybe a))
 runCommandWithSqlEvents options eventStream targetStream command afterAppend =
     withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> do
-        result <- attempt (options ^. #retryLimit)
-        recordCommandOutcome mSpan (\(r, _) -> r ^. #eventsAppended) result
+        (result, attemptNo) <- attempt 1 Nothing
+        recordCommandOutcome mSpan (\(r, _) -> r ^. #eventsAppended) attemptNo result
         pure result
   where
-    attempt remaining = do
+    attempt attemptNo lastConflict = do
         hydrated <- hydrate options eventStream targetStream
-        either (pure . Left) (runPlan remaining) hydrated
+        either (\err -> pure (Left err, attemptNo)) (runPlan attemptNo lastConflict) hydrated
 
-    runPlan remaining current =
-        case prepareCommandPlan options eventStream targetStream current command of
-            Left err -> pure (Left err)
-            Right (CommandNoOp result) -> pure (Right (result, Nothing))
-            Right (CommandAppend current' events encoded) ->
-                appendWithSqlOnce remaining current' events encoded
+    runPlan attemptNo lastConflict current =
+        case conflictFixpoint lastConflict (current ^. #streamVersion) of
+            Just err -> pure (Left err, attemptNo)
+            Nothing ->
+                case prepareCommandPlan options eventStream targetStream current command of
+                    Left err -> pure (Left err, attemptNo)
+                    Right (CommandNoOp result) -> pure (Right (result, Nothing), attemptNo)
+                    Right (CommandAppend current' events encoded) ->
+                        appendWithSqlOnce attemptNo current' events encoded
 
-    appendWithSqlOnce remaining current events encoded = do
+    appendWithSqlOnce attemptNo current events encoded = do
         liftIO (options ^. #beforeAppend)
         prepared <- prepareEventsIO encoded
         now <- liftIO getCurrentTime
@@ -461,12 +495,12 @@ runCommandWithSqlEvents options eventStream targetStream command afterAppend =
         outcome <- tryError @StoreError (runTransaction body)
         case outcome of
             Right (Right (appendResult, userValue)) -> do
-                writeSnapshotIfNeeded eventStream current events appendResult
-                pure (Right (appendedResult targetStream appendResult (Prelude.length encoded), Just userValue))
+                writeSnapshotIfNeeded options eventStream current events appendResult
+                pure (Right (appendedResult targetStream appendResult (Prelude.length encoded), Just userValue), attemptNo)
             Right (Left storeError) ->
-                retryOrFail options attempt remaining storeError
+                retryOrFail options attempt attemptNo (current ^. #streamVersion) storeError
             Left (_, storeError) ->
-                retryOrFail options attempt remaining storeError
+                retryOrFail options attempt attemptNo (current ^. #streamVersion) storeError
 
 prepareCommandPlan ::
     (BoolAlg phi (RegFile rs, ci)) =>
@@ -511,17 +545,19 @@ recordCommandOutcome ::
     (IOE :> es) =>
     Maybe Span ->
     (a -> Int) ->
+    Int ->
     Either CommandError a ->
     Eff es ()
-recordCommandOutcome Nothing _ _ = pure ()
-recordCommandOutcome (Just sp) eventsOf result = do
+recordCommandOutcome Nothing _ _ _ = pure ()
+recordCommandOutcome (Just sp) eventsOf attemptNo result = do
     addAttribute sp (unkey db_system_name) ("postgresql" :: Text)
+    addAttribute sp (unkey keiro_retry_attempt) (Prelude.fromIntegral attemptNo :: Int64)
     case result of
         Right v ->
             addAttribute sp (unkey keiro_events_appended) (Prelude.fromIntegral (eventsOf v) :: Int64)
         Left err -> do
             addAttribute sp (unkey error_type) (commandErrorClass err)
-            setStatus sp (Error (Text.pack (show err)))
+            setStatus sp (Error (Text.take 256 (Text.pack (show err))))
 
 {- | Low-cardinality classifier for a 'CommandError'. Used as the
 @error.type@ attribute value on the command span.
@@ -534,16 +570,18 @@ commandErrorClass = \case
     EncodeFailed{} -> "encode_failed"
     StoreFailed{} -> "store_failed"
     RetryExhausted{} -> "retry_exhausted"
+    ConflictFixpoint{} -> "conflict_fixpoint"
 
 writeSnapshotIfNeeded ::
     forall phi rs s ci co es.
-    (BoolAlg phi (RegFile rs, ci), Store :> es, Eq co) =>
+    (BoolAlg phi (RegFile rs, ci), IOE :> es, Store :> es, Error StoreError :> es, Eq co) =>
+    RunCommandOptions ->
     EventStream phi rs s ci co ->
     Hydrated rs s ->
     [co] ->
     AppendResult ->
     Eff es ()
-writeSnapshotIfNeeded eventStream current events appendResult =
+writeSnapshotIfNeeded options eventStream current events appendResult =
     case eventStream ^. #stateCodec of
         Nothing -> pure ()
         Just codec ->
@@ -556,22 +594,53 @@ writeSnapshotIfNeeded eventStream current events appendResult =
                                 then Terminal
                                 else NotTerminal
                     when (shouldSnapshot (eventStream ^. #snapshotPolicy) terminality finalState finalVersion)
-                        $ writeSnapshot (appendResult ^. #streamId) finalVersion codec finalState
+                        $ do
+                            outcome <- tryError @StoreError (writeSnapshot (appendResult ^. #streamId) finalVersion codec finalState)
+                            case outcome of
+                                Right () -> pure ()
+                                Left _ -> recordSnapshotWriteFailures (options ^. #metrics) 1
 
 retryOrFail ::
+    (IOE :> es) =>
     RunCommandOptions ->
-    (Int -> Eff es (Either CommandError a)) ->
+    (Int -> Maybe (StoreError, StreamVersion) -> Eff es (Either CommandError a, Int)) ->
     Int ->
+    StreamVersion ->
     StoreError ->
-    Eff es (Either CommandError a)
-retryOrFail options retry remaining storeError
+    Eff es (Either CommandError a, Int)
+retryOrFail options retry attemptNo observedVersion storeError
     | isRetryableConflict storeError
-    , remaining > 0 =
-        retry (remaining Prelude.- 1)
-    | isRetryableConflict storeError =
-        pure (Left (RetryExhausted (options ^. #retryLimit) storeError))
-    | otherwise =
-        pure (Left (StoreFailed storeError))
+    , attemptNo <= options ^. #retryLimit = do
+        recordCommandConflicts (options ^. #metrics) 1
+        backoffDelay options attemptNo
+        recordCommandRetries (options ^. #metrics) 1
+        retry (attemptNo Prelude.+ 1) (Just (storeError, observedVersion))
+    | isRetryableConflict storeError = do
+        recordCommandConflicts (options ^. #metrics) 1
+        pure (Left (RetryExhausted attemptNo storeError), attemptNo)
+    | otherwise = do
+        case storeError of
+            DuplicateEvent{} -> recordCommandDuplicates (options ^. #metrics) 1
+            _ -> pure ()
+        pure (Left (StoreFailed storeError), attemptNo)
+
+backoffDelay :: (IOE :> es) => RunCommandOptions -> Int -> Eff es ()
+backoffDelay options attemptNo
+    | base <= 0 = pure ()
+    | otherwise = do
+        nanos <- liftIO getMonotonicTimeNSec
+        let exponential = min 100000 (base Prelude.* (2 Prelude.^ (attemptNo Prelude.- 1 :: Int)))
+            jitter =
+                Prelude.fromIntegral (nanos `Prelude.mod` Prelude.fromIntegral exponential)
+                    Prelude.- (exponential `Prelude.div` 2)
+        liftIO (threadDelay (max 0 (exponential Prelude.+ jitter)))
+  where
+    base = options ^. #retryBackoffMicros
+
+conflictFixpoint :: Maybe (StoreError, StreamVersion) -> StreamVersion -> Maybe CommandError
+conflictFixpoint (Just (previousError@StreamAlreadyExists{}, previousVersion)) currentVersion
+    | currentVersion == previousVersion = Just (ConflictFixpoint currentVersion previousError)
+conflictFixpoint _ _ = Nothing
 
 evaluateCommand ::
     (BoolAlg phi (RegFile rs, ci)) =>

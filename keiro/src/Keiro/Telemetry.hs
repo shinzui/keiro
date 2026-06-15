@@ -81,6 +81,10 @@ module Keiro.Telemetry (
     keiroTimerStuckName,
     keiroProjectionLagName,
     keiroProjectionWaitTimeoutsName,
+    keiroCommandConflictsName,
+    keiroCommandRetriesName,
+    keiroCommandDuplicatesName,
+    keiroSnapshotWriteFailuresName,
     keiroWorkflowStepsExecutedName,
     keiroWorkflowStepsReplayedName,
     keiroWorkflowResumedName,
@@ -103,6 +107,10 @@ module Keiro.Telemetry (
     recordTimerStuck,
     recordProjectionLag,
     recordProjectionWaitTimeouts,
+    recordCommandConflicts,
+    recordCommandRetries,
+    recordCommandDuplicates,
+    recordSnapshotWriteFailures,
     recordWorkflowStepExecuted,
     recordWorkflowStepReplayed,
     recordWorkflowResumed,
@@ -521,6 +529,14 @@ keiroProjectionLagName :: Text
 keiroProjectionLagName = "keiro.projection.lag"
 keiroProjectionWaitTimeoutsName :: Text
 keiroProjectionWaitTimeoutsName = "keiro.projection.wait.timeouts"
+keiroCommandConflictsName :: Text
+keiroCommandConflictsName = "keiro.command.conflicts"
+keiroCommandRetriesName :: Text
+keiroCommandRetriesName = "keiro.command.retries"
+keiroCommandDuplicatesName :: Text
+keiroCommandDuplicatesName = "keiro.command.duplicates"
+keiroSnapshotWriteFailuresName :: Text
+keiroSnapshotWriteFailuresName = "keiro.snapshot.write.failures"
 keiroWorkflowStepsExecutedName :: Text
 keiroWorkflowStepsExecutedName = "keiro.workflow.steps.executed"
 keiroWorkflowStepsReplayedName :: Text
@@ -560,6 +576,10 @@ data KeiroMetrics = KeiroMetrics
     , timerStuck :: Gauge Int64
     , projectionLag :: Gauge Int64
     , projectionWaitTimeouts :: Counter Int64
+    , commandConflicts :: Counter Int64
+    , commandRetries :: Counter Int64
+    , commandDuplicates :: Counter Int64
+    , snapshotWriteFailures :: Counter Int64
     , workflowStepsExecuted :: Counter Int64
     , workflowStepsReplayed :: Counter Int64
     , workflowResumed :: Counter Int64
@@ -591,6 +611,10 @@ newKeiroMetrics meter = liftIO $ do
     timerStuck' <- gaugeI64 keiroTimerStuckName "{timer}" "Timers stuck in the Firing state past threshold."
     projectionLag' <- gaugeI64 keiroProjectionLagName "{event}" "Events between the log head and a projection's checkpoint."
     projectionWaitTimeouts' <- counterI64 keiroProjectionWaitTimeoutsName "{timeout}" "Position-wait calls that timed out before the projection caught up."
+    commandConflicts' <- counterI64 keiroCommandConflictsName "{conflict}" "Optimistic-concurrency conflicts observed by command runners."
+    commandRetries' <- counterI64 keiroCommandRetriesName "{retry}" "Command retry attempts started after an optimistic-concurrency conflict."
+    commandDuplicates' <- counterI64 keiroCommandDuplicatesName "{event}" "Command appends rejected as duplicate deterministic event ids."
+    snapshotWriteFailures' <- counterI64 keiroSnapshotWriteFailuresName "{failure}" "Post-commit snapshot writes that failed and were swallowed."
     workflowStepsExecuted' <- counterI64 keiroWorkflowStepsExecutedName "{step}" "Workflow steps that ran their action (a journal miss)."
     workflowStepsReplayed' <- counterI64 keiroWorkflowStepsReplayedName "{step}" "Workflow steps short-circuited to a recorded result (a journal hit)."
     workflowResumed' <- counterI64 keiroWorkflowResumedName "{workflow}" "Workflow re-invocations performed by the resume worker."
@@ -613,6 +637,10 @@ newKeiroMetrics meter = liftIO $ do
             , timerStuck = timerStuck'
             , projectionLag = projectionLag'
             , projectionWaitTimeouts = projectionWaitTimeouts'
+            , commandConflicts = commandConflicts'
+            , commandRetries = commandRetries'
+            , commandDuplicates = commandDuplicates'
+            , snapshotWriteFailures = snapshotWriteFailures'
             , workflowStepsExecuted = workflowStepsExecuted'
             , workflowStepsReplayed = workflowStepsReplayed'
             , workflowResumed = workflowResumed'
@@ -677,6 +705,14 @@ recordProjectionLag :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordProjectionLag = recordGaugeI64 projectionLag
 recordProjectionWaitTimeouts :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordProjectionWaitTimeouts = recordCounter projectionWaitTimeouts
+recordCommandConflicts :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordCommandConflicts = recordCounter commandConflicts
+recordCommandRetries :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordCommandRetries = recordCounter commandRetries
+recordCommandDuplicates :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordCommandDuplicates = recordCounter commandDuplicates
+recordSnapshotWriteFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordSnapshotWriteFailures = recordCounter snapshotWriteFailures
 recordWorkflowStepExecuted :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowStepExecuted = recordCounter workflowStepsExecuted
 recordWorkflowStepReplayed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()

@@ -43,7 +43,7 @@ Alternatives considered. A severity-ordered decomposition ("blockers plan, highs
 |---|-------|------|-----------|-----------|--------|
 | 1 | Fix upstream crash-safety gaps in kiroku, shibuya, and ephemeral-pg | docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md | None | None | Complete |
 | 2 | Harden keiro-core codec and stream contracts | docs/plans/68-harden-keiro-core-codec-and-stream-contracts.md | None | None | Complete |
-| 3 | Fix event-store command path, snapshot, and read-model correctness | docs/plans/69-fix-event-store-command-path-snapshot-and-read-model-correctness.md | None | EP-2 | Not Started |
+| 3 | Fix event-store command path, snapshot, and read-model correctness | docs/plans/69-fix-event-store-command-path-snapshot-and-read-model-correctness.md | None | EP-2 | In Progress |
 | 4 | Make outbox, inbox, timer, and shard workers crash-recoverable | docs/plans/70-make-outbox-inbox-timer-and-shard-workers-crash-recoverable.md | None | None | Not Started |
 | 5 | Fix process manager and router delivery correctness | docs/plans/71-fix-process-manager-and-router-delivery-correctness.md | EP-1 | None | Not Started |
 | 6 | Workflow engine failure handling, instance leasing, and crash-window atomicity | docs/plans/72-workflow-engine-failure-handling-instance-leasing-and-crash-window-atomicity.md | None | None | Not Started |
@@ -95,7 +95,7 @@ Milestone-level rollup across child plans; the authoritative per-step state live
 - [x] EP-2: codec decode receives event-type tag; all call sites updated
 - [x] EP-2: `mkCodec` validation; version-ahead guard; malformed-stamp error
 - [x] EP-2: stream/category constructor hygiene and integration-event wire fixes
-- [ ] EP-3: snapshot-write failures no longer fail committed commands
+- [x] EP-3: snapshot-write failures no longer fail committed commands
 - [ ] EP-3: sharded subscription position reads; `Strong` consistency implemented or removed
 - [ ] EP-3: read-model registry churn eliminated; async-projection contract honest
 - [ ] EP-4: outbox — stale `publishing` reclaim, publish exception guard, GC

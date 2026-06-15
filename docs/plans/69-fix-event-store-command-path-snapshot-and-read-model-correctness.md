@@ -63,34 +63,36 @@ This section must always reflect the actual current state of the work.
 
 Milestone 1 — command path never lies, retries are visible:
 
-- [ ] Add `keiro.command.conflicts`, `keiro.command.retries`, `keiro.command.duplicates`,
+- [x] Add `keiro.command.conflicts`, `keiro.command.retries`, `keiro.command.duplicates`,
       and `keiro.snapshot.write.failures` instruments to `KeiroMetrics` in
       `keiro/src/Keiro/Telemetry.hs` (name constants, record fields, `newKeiroMetrics`
       construction, `record*` helpers), following the existing dot-separated `keiro.*`
-      naming catalogue.
-- [ ] Add `metrics :: !(Maybe KeiroMetrics)` and `retryBackoffMicros :: !Int` fields to
+      naming catalogue. Completed 2026-06-15.
+- [x] Add `metrics :: !(Maybe KeiroMetrics)` and `retryBackoffMicros :: !Int` fields to
       `RunCommandOptions` in `keiro/src/Keiro/Command.hs`; defaults `Nothing` / `5000`.
-- [ ] Guard `writeSnapshotIfNeeded` call sites in `runCommand` and
+      Completed 2026-06-15.
+- [x] Guard `writeSnapshotIfNeeded` call sites in `runCommand` and
       `runCommandWithSqlEvents` with `tryError @StoreError`; swallow the failure and bump
-      `keiro.snapshot.write.failures`.
-- [ ] Test: a command that commits but whose snapshot write fails (CHECK-constraint
+      `keiro.snapshot.write.failures`. Completed 2026-06-15.
+- [x] Test: a command that commits but whose snapshot write fails (CHECK-constraint
       injection on `keiro_snapshots`) returns `Right (Right CommandResult)`, the events are
-      readable, and the failure counter reads 1.
-- [ ] Add exponential backoff with jitter between optimistic-concurrency retries in
+      readable, and the failure counter reads 1. Completed 2026-06-15.
+- [x] Add exponential backoff with jitter between optimistic-concurrency retries in
       `retryOrFail`; make `RetryExhausted` carry the true total attempt count
-      (`retryLimit + 1`); update its haddock.
-- [ ] Wire conflict/retry/duplicate counters into `retryOrFail` and the `StoreFailed
+      (`retryLimit + 1`); update its haddock. Completed 2026-06-15.
+- [x] Wire conflict/retry/duplicate counters into `retryOrFail` and the `StoreFailed
       DuplicateEvent` path; record the final 1-based attempt number on the command span as
       `keiro.retry.attempt`; truncate the span status description to 256 characters in
-      `recordCommandOutcome`.
-- [ ] Test: an exhausted retry budget reports `RetryExhausted 3` for `retryLimit = 2`,
+      `recordCommandOutcome`. Completed 2026-06-15.
+- [x] Test: an exhausted retry budget reports `RetryExhausted 3` for `retryLimit = 2`,
       counters read conflicts=3 / retries=2, and a successful second-attempt command span
-      carries `keiro.retry.attempt = 2`.
-- [ ] Add `ConflictFixpoint !StreamVersion !StoreError` to `CommandError`; detect a
+      carries `keiro.retry.attempt = 2`. Completed 2026-06-15.
+- [x] Add `ConflictFixpoint !StreamVersion !StoreError` to `CommandError`; detect a
       `StreamAlreadyExists` conflict whose rehydration observes no version progress and
       fail fast instead of burning the retry budget; classify it in `commandErrorClass`.
-- [ ] Test: a command against a soft-deleted stream returns `Left (ConflictFixpoint ...)`
-      after one rehydrate, not `RetryExhausted` after three.
+      Completed 2026-06-15.
+- [x] Test: a command against a soft-deleted stream returns `Left (ConflictFixpoint ...)`
+      after one rehydrate, not `RetryExhausted` after three. Completed 2026-06-15.
 
 Milestone 2 — snapshot policy and overwrite correctness:
 
@@ -162,7 +164,8 @@ Milestone 4 — honest async-projection contract and documentation:
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- 2026-06-15: The focused milestone-1 validation passed with `cabal test keiro-test --test-show-details=direct --test-options='--match /Keiro.Command/ --match /Keiro.Snapshot/'`: 24 examples, 0 failures. This covered the new retry metrics, duplicate counter, soft-delete fixpoint, span attempt attribute, truncated span status, and swallowed snapshot-write failure cases.
+- 2026-06-15: Full `cabal test keiro-test --test-show-details=direct` passed after milestone 1: 172 examples, 0 failures.
 
 
 ## Decision Log

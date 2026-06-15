@@ -591,6 +591,148 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             traverse (decodeRecorded counterCodec) (Vector.toList recorded)
                 `shouldBe` Right [CounterAdded 10, CounterAdded 2]
 
+        it "reports true retry attempts and command conflict metrics when the retry budget is exhausted" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            let target = stream "counter-command-exhausted-conflict" :: Stream CounterEventStream
+                conflictStreamName = StreamName "counter-command-exhausted-conflict"
+                insertConflict = do
+                    encoded <- shouldBeRight (encodeForAppend counterCodec (CounterAdded 10))
+                    outcome <-
+                        Store.runStoreIO storeHandle $
+                            Store.appendToStream conflictStreamName AnyVersion [encoded]
+                    case outcome of
+                        Right _ -> pure ()
+                        Left err -> expectationFailure ("failed to insert conflict event: " <> show err)
+                options =
+                    defaultRunCommandOptions
+                        & #beforeAppend
+                        .~ insertConflict
+                        & #retryLimit
+                        .~ 2
+                        & #retryBackoffMicros
+                        .~ 0
+                        & #metrics
+                        ?~ keiroMetrics
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand options counterEventStream target (Add 2)
+            case result of
+                Right (Left (RetryExhausted attempts _)) ->
+                    attempts `shouldBe` 3
+                other -> expectationFailure ("expected exhausted retry budget, got " <> show other)
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            let scalars = flattenScalarPoints exported
+            lookup "keiro.command.conflicts" scalars `shouldBe` Just (IntNumber 3)
+            lookup "keiro.command.retries" scalars `shouldBe` Just (IntNumber 2)
+
+        it "records the successful retry attempt on the command span" $ \storeHandle -> do
+            (processor, spansRef) <- inMemoryListExporter
+            provider <- createTracerProvider [processor] emptyTracerProviderOptions
+            conflictInserted <- newIORef False
+            let tracer = makeTracer provider "keiro-test" tracerOptions
+                target = stream "counter-command-retry-span" :: Stream CounterEventStream
+                conflictStreamName = StreamName "counter-command-retry-span"
+                insertConflict = do
+                    shouldInsert <- atomicModifyIORef' conflictInserted $ \alreadyInserted ->
+                        if alreadyInserted
+                            then (True, False)
+                            else (True, True)
+                    when shouldInsert $ do
+                        encoded <- shouldBeRight (encodeForAppend counterCodec (CounterAdded 10))
+                        outcome <-
+                            Store.runStoreIO storeHandle $
+                                Store.appendToStream conflictStreamName NoStream [encoded]
+                        case outcome of
+                            Right _ -> pure ()
+                            Left err -> expectationFailure ("failed to insert conflict event: " <> show err)
+                options =
+                    defaultRunCommandOptions
+                        & #beforeAppend
+                        .~ insertConflict
+                        & #retryBackoffMicros
+                        .~ 0
+                        & #tracer
+                        ?~ tracer
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand options counterEventStream target (Add 2)
+            _ <- shutdownTracerProvider provider Nothing
+            spans <- traverse captureSpan =<< readIORef spansRef
+            case spans of
+                [sp] ->
+                    case lookupAttribute (csAttributes sp) "keiro.retry.attempt" of
+                        Just (AttributeValue (IntAttribute n)) -> n `shouldBe` 2
+                        other -> expectationFailure ("expected retry attempt attribute 2, got " <> show other)
+                other -> expectationFailure ("expected one span, got " <> show (length other))
+
+        it "counts duplicate deterministic command events" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            let supplied = EventId sampleUuid3
+                first = stream "counter-command-duplicate-a" :: Stream CounterEventStream
+                second = stream "counter-command-duplicate-b" :: Stream CounterEventStream
+                options =
+                    defaultRunCommandOptions
+                        & #eventIds
+                        .~ [supplied]
+                        & #metrics
+                        ?~ keiroMetrics
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand options counterEventStream first (Add 1)
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand options counterEventStream second (Add 2)
+            case result of
+                Right (Left (StoreFailed Store.DuplicateEvent{})) -> pure ()
+                other -> expectationFailure ("expected duplicate event failure, got " <> show other)
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            lookup "keiro.command.duplicates" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
+
+        it "fails fast when a soft-deleted stream causes a conflict fixpoint" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            let target = stream "counter-command-soft-deleted" :: Stream CounterEventStream
+                options =
+                    defaultRunCommandOptions
+                        & #retryBackoffMicros
+                        .~ 0
+                        & #metrics
+                        ?~ keiroMetrics
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand options counterEventStream target (Add 1)
+            Right (Just _) <-
+                Store.runStoreIO storeHandle $
+                    Store.softDeleteStream (StreamName "counter-command-soft-deleted")
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand options counterEventStream target (Add 2)
+            case result of
+                Right (Left (ConflictFixpoint (StreamVersion 0) Store.StreamAlreadyExists{})) -> pure ()
+                other -> expectationFailure ("expected conflict fixpoint, got " <> show other)
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            lookup "keiro.command.conflicts" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
+
         it "surfaces decode failure during hydration" $ \storeHandle -> do
             Right _ <-
                 Store.runStoreIO storeHandle $
@@ -613,6 +755,39 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             result
                 `shouldBe` Right
                     (Left (HydrationDecodeFailed (UnknownEventType (EventType "OtherEvent") [EventType "CounterAdded", EventType "CounterAudited"])))
+
+        it "truncates command span error status descriptions" $ \storeHandle -> do
+            (processor, spansRef) <- inMemoryListExporter
+            provider <- createTracerProvider [processor] emptyTracerProviderOptions
+            let tracer = makeTracer provider "keiro-test" tracerOptions
+                longTag = Text.replicate 400 "x"
+            Right _ <-
+                Store.runStoreIO storeHandle $
+                    Store.appendToStream
+                        (StreamName "counter-command-long-decode-failure")
+                        NoStream
+                        [ EventData
+                            { eventId = Nothing
+                            , eventType = EventType longTag
+                            , payload = object []
+                            , metadata = Just (metadataForOrDie 1 Nothing)
+                            , causationId = Nothing
+                            , correlationId = Nothing
+                            }
+                        ]
+            let target = stream "counter-command-long-decode-failure" :: Stream CounterEventStream
+                options = defaultRunCommandOptions & #tracer ?~ tracer
+            _ <-
+                Store.runStoreIO storeHandle $
+                    runCommand options counterEventStream target (Add 1)
+            _ <- shutdownTracerProvider provider Nothing
+            spans <- traverse captureSpan =<< readIORef spansRef
+            case spans of
+                [sp] ->
+                    case csStatus sp of
+                        Error description -> Text.length description `shouldSatisfy` (<= 256)
+                        other -> expectationFailure ("expected error span status, got " <> show other)
+                other -> expectationFailure ("expected one span, got " <> show (length other))
 
         it "rolls back the append when inline SQL condemns the transaction" $ \storeHandle -> do
             let target = stream "counter-command-rollback" :: Stream CounterEventStream
@@ -779,6 +954,60 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Store.runTransaction $
                         Tx.statement "snapshot-write-threshold" snapshotVersionForStreamStmt
             snapshotVersion `shouldBe` Just (StreamVersion 2)
+
+        it "does not fail a committed command when the post-commit snapshot write fails" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            let target = stream "snapshot-write-failure-swallowed" :: Stream SnapshotCounterEventStream
+                options = defaultRunCommandOptions & #metrics ?~ keiroMetrics
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand options snapshotCounterEventStream target (Add 2)
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.sql "ALTER TABLE keiro_snapshots ADD CONSTRAINT keiro_snapshots_no_writes CHECK (false) NOT VALID"
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand options snapshotCounterEventStream target (Add 3)
+            case result of
+                Right (Right commandResult) -> do
+                    commandResult ^. #streamVersion `shouldBe` StreamVersion 2
+                    commandResult ^. #eventsAppended `shouldBe` 1
+                other -> expectationFailure ("expected committed command despite snapshot failure, got " <> show other)
+            Right recorded <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "snapshot-write-failure-swallowed") (StreamVersion 0) 10
+            traverse (decodeRecorded counterCodec) (Vector.toList recorded)
+                `shouldBe` Right [CounterAdded 2, CounterAdded 3]
+            Right snapshotVersionDuringFailure <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement "snapshot-write-failure-swallowed" snapshotVersionForStreamStmt
+            snapshotVersionDuringFailure `shouldBe` Nothing
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            lookup "keiro.snapshot.write.failures" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.sql "ALTER TABLE keiro_snapshots DROP CONSTRAINT keiro_snapshots_no_writes"
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand options snapshotCounterEventStream target (Add 4)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand options snapshotCounterEventStream target (Add 5)
+            Right snapshotVersionAfterRecovery <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement "snapshot-write-failure-swallowed" snapshotVersionForStreamStmt
+            snapshotVersionAfterRecovery `shouldBe` Just (StreamVersion 4)
 
         it "hydrates from snapshot and replays only the tail" $ \storeHandle -> do
             let target = stream "snapshot-tail-hydration" :: Stream SnapshotCounterEventStream
