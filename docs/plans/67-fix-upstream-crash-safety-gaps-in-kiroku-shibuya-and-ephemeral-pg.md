@@ -46,8 +46,8 @@ The final milestone bumps keiro's dependency pins and proves keiro's own test su
 - [x] M4: shibuya-pgmq-adapter — wrap the poll in `pgmqChunks` with transient-aware bounded-backoff retry (`Error PgmqRuntimeError` constraint added). Completed on 2026-06-15 in upstream commit `319b3b717c0284d8c207375151b388639039a1e1`.
 - [x] M4: shibuya-pgmq-adapter — new `RetrySpec` with stub Pgmq interpreter (transient-then-success, permanent, exhaustion). Implemented in `Shibuya.Adapter.Pgmq.InternalSpec` on 2026-06-15.
 - [x] M4: shibuya-pgmq-adapter — `cabal test shibuya-pgmq-adapter-test` green; bump to 0.8.0.0 + CHANGELOG; commit, push. Completed and pushed on 2026-06-15; `cabal test shibuya-pgmq-adapter:shibuya-pgmq-adapter-test --enable-tests` passed with 134 examples, 0 failures.
-- [ ] M5: ephemeral-pg — `createCache` copies to a unique temp dir and atomically renames; concurrent-winner rename failure treated as success
-- [ ] M5: ephemeral-pg — concurrent `createCache` test in `test/Main.hs`; `cabal test` green; bump to 0.2.2.0 + CHANGELOG; commit, push
+- [x] M5: ephemeral-pg — `createCache` copies to a unique temp dir and atomically renames; concurrent-winner rename failure treated as success. Completed on 2026-06-15 in upstream commit `215e4ae5fc844d322e2c715369bf5ec4ff285294`.
+- [x] M5: ephemeral-pg — concurrent `createCache` test in `test/Main.hs`; `cabal test` green; bump to 0.2.2.0 + CHANGELOG; commit, push. Completed and pushed on 2026-06-15; `cabal test` passed with 11 examples, 0 failures.
 - [ ] M6: publish ephemeral-pg 0.2.2.0, shibuya-core 0.7.1.0, shibuya-pgmq-adapter 0.8.0.0 to Hackage
 - [ ] M6: keiro — bump kiroku `tag:` in `cabal.project` (both stanzas), relax `shibuya-pgmq-adapter` bound in `keiro-pgmq/keiro-pgmq.cabal`, fix the one `PgmqAdapterConfig` construction site if needed
 - [ ] M6: keiro — `cabal build all` and all test suites (`keiro-test`, `keiro-pgmq-test`, `keiro-migrations-test`, `jitsurei-test`) green; commit
@@ -59,6 +59,7 @@ The final milestone bumps keiro's dependency pins and proves keiro's own test su
 - 2026-06-15: `kiroku-store` was already at version `0.2.1.0` before M2, so M2 did not bump the version again. The M2 public API was recorded in `kiroku-store/CHANGELOG.md` under `Unreleased`, and the pushed SHA for keiro's later `cabal.project` pin is `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`.
 - 2026-06-15: shibuya-core's `runSupervised` links child failures back to the caller thread, so tests that assert ingester failure propagation must run the supervised app in a separate async and inspect `waitCatch`. Plain `try` around the effectful action does not reliably catch the linked async exception in Hspec.
 - 2026-06-15: shibuya-pgmq-adapter's Cabal default test selector did not include `shibuya-pgmq-adapter-test`; the reliable command is `cabal test shibuya-pgmq-adapter:shibuya-pgmq-adapter-test --enable-tests`. The codebase's `NoFieldSelectors` setup also means nested record-dot access like `config.pollRetry.initialBackoff` is not available for `PollRetryConfig`; pattern matching the retry config kept the implementation and tests compiling.
+- 2026-06-15: ephemeral-pg's public module does not expose `createCache`, so the concurrent cache regression imports `EphemeralPg.Internal.Cache` as a test home module. That required adding `src` to the test suite's `hs-source-dirs`, listing the needed home modules, and mirroring the library's default extensions and direct dependencies in the test stanza.
 
 
 ## Decision Log

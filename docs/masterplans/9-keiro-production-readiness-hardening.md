@@ -91,7 +91,7 @@ Milestone-level rollup across child plans; the authoritative per-step state live
 
 - [x] EP-1: kiroku — transactional appends surface `DuplicateEvent`; event-id point lookup added
 - [x] EP-1: shibuya — ingester async supervised; transient poll errors retried
-- [ ] EP-1: ephemeral-pg — initdb cache written atomically
+- [x] EP-1: ephemeral-pg — initdb cache written atomically
 - [ ] EP-2: codec decode receives event-type tag; all call sites updated
 - [ ] EP-2: `mkCodec` validation; version-ahead guard; malformed-stamp error
 - [ ] EP-2: stream/category constructor hygiene and integration-event wire fixes
@@ -126,6 +126,7 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
 - keiro-pgmq's test suite was not wired into the Justfile's `haskell-test` recipe at all — its tests have not been running in the standard gate. EP-8 milestone 8 fixes the wiring.
 - EP-1 kiroku work is complete as of 2026-06-15. M1 had already landed in upstream commit `fa43ec2`; M2 added and pushed `eventExistsInStream` in commit `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`. `cabal test kiroku-store-test` passed with 226 examples, 0 failures.
 - EP-1 shibuya work is complete as of 2026-06-15. shibuya-core now propagates ingester failures in commit `f0c9ce3`; shibuya-pgmq-adapter now retries transient poll errors in commit `319b3b717c0284d8c207375151b388639039a1e1`. `cabal test shibuya-core-test` passed with 118 examples, 0 failures, and `cabal test shibuya-pgmq-adapter:shibuya-pgmq-adapter-test --enable-tests` passed with 134 examples, 0 failures.
+- EP-1 ephemeral-pg cache hardening is complete as of 2026-06-15. Atomic cache publication and the concurrent `createCache` regression landed in commit `215e4ae5fc844d322e2c715369bf5ec4ff285294`; `cabal test` passed with 11 examples, 0 failures.
 
 
 ## Decision Log
