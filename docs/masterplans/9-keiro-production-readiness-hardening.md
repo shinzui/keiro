@@ -44,7 +44,7 @@ Alternatives considered. A severity-ordered decomposition ("blockers plan, highs
 | 1 | Fix upstream crash-safety gaps in kiroku, shibuya, and ephemeral-pg | docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md | None | None | Complete |
 | 2 | Harden keiro-core codec and stream contracts | docs/plans/68-harden-keiro-core-codec-and-stream-contracts.md | None | None | Complete |
 | 3 | Fix event-store command path, snapshot, and read-model correctness | docs/plans/69-fix-event-store-command-path-snapshot-and-read-model-correctness.md | None | EP-2 | Complete |
-| 4 | Make outbox, inbox, timer, and shard workers crash-recoverable | docs/plans/70-make-outbox-inbox-timer-and-shard-workers-crash-recoverable.md | None | None | In Progress |
+| 4 | Make outbox, inbox, timer, and shard workers crash-recoverable | docs/plans/70-make-outbox-inbox-timer-and-shard-workers-crash-recoverable.md | None | None | Complete |
 | 5 | Fix process manager and router delivery correctness | docs/plans/71-fix-process-manager-and-router-delivery-correctness.md | EP-1 | None | Not Started |
 | 6 | Workflow engine failure handling, instance leasing, and crash-window atomicity | docs/plans/72-workflow-engine-failure-handling-instance-leasing-and-crash-window-atomicity.md | None | None | Not Started |
 | 7 | Workflow sleep, generation, and patch semantics plus journal scale hygiene | docs/plans/73-workflow-sleep-generation-and-patch-semantics-plus-journal-scale-hygiene.md | EP-6 | EP-4 | Not Started |
@@ -99,9 +99,9 @@ Milestone-level rollup across child plans; the authoritative per-step state live
 - [x] EP-3: sharded subscription position reads; `Strong` consistency implemented or removed
 - [x] EP-3: read-model registry churn eliminated; async-projection contract honest
 - [x] EP-4: outbox — stale `publishing` reclaim, publish exception guard, GC
-- [ ] EP-4: inbox — poison-message path public, backlog count off hot path, index
-- [ ] EP-4: timers — stuck `firing` auto-requeue, status-guarded transitions
-- [ ] EP-4: shard worker — error visibility, reader supervision, lease relinquish
+- [x] EP-4: inbox — poison-message path public, backlog count off hot path, index
+- [x] EP-4: timers — stuck `firing` auto-requeue, status-guarded transitions
+- [x] EP-4: shard worker — error visibility, reader supervision, lease relinquish
 - [ ] EP-5: PM/router ack contract fixed (no ack on failed dispatch; thrown errors finalize acks)
 - [ ] EP-5: `eventAlreadyIn` point lookup; concurrent-duplicate test green
 - [ ] EP-6: resume worker survives poison workflows; `WorkflowFailed` path live
@@ -185,6 +185,8 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
 ## Outcomes & Retrospective
 
 EP-1, EP-2, and EP-3 are complete as of 2026-06-15. EP-2 delivered the planned core-contract hardening: tag-aware codec decode and upcasting, codec configuration validation, explicit migration/metadata errors, stream/category invariant guards, terminality-aware snapshot policy, and Kafka header fidelity for integration-event `occurredAt` and `attributes`. EP-3 delivered the command/read-side correctness work: honest command outcomes after committed appends, observable OCC retry behavior, snapshot policy and overwrite fixes, sharded read-model positions, real `Strong` consistency, no registry write churn, transactional async projection deduplication, and the promised operator documentation.
+
+EP-4 is complete as of 2026-06-15. Outbox rows stranded in `publishing` are reclaimed, publisher exceptions become per-row failures, sent outbox rows can be pruned, inbox poison messages are accounted and dead-lettered through an opt-in retry wrapper, stale `firing` timers requeue by default, shard workers survive transient lease errors and restart dead readers, graceful shutdown relinquishes shard leases, and the worker/producer configs now have typed construction-time validation. Validation passed with `cabal build all`, `keiro-test` 205 examples, `keiro-migrations-test` 2 examples, and `jitsurei-test` 16 examples, all with 0 failures.
 
 
 ---

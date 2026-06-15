@@ -60,7 +60,7 @@ After this plan is implemented, every documented recovery guarantee in these fou
 - [x] M6: document the zombie-worker / checkpoint-regression edge (M5 finding, documentation-only) (completed 2026-06-15)
 - [x] M6: write the shard tests (immediate relinquish on shutdown, dead-reader restart, pure error-path unit test) (completed 2026-06-15; focused shard lease/failover runs passed with 8 + 3 examples, 0 failures; full `keiro-test` passed with 201 examples, 0 failures)
 - [x] M7: add `mkOutboxPublishOptions`, `mkTimerWorkerOptions`, `mkShardedWorkerOptions`, `mkIntegrationProducer` smart constructors with `<Thing>ConfigError` types, with tests (completed 2026-06-15; focused validation run passed with 7 examples, 0 failures; full `keiro-test` passed with 205 examples, 0 failures)
-- [ ] Final: full `cabal build all` and `cabal test keiro-test` green; update masterplan rollup checkboxes for EP-4
+- [x] Final: full `cabal build all` and `cabal test keiro-test` green; update masterplan rollup checkboxes for EP-4 (completed 2026-06-15; final gate passed: `cabal build all`, `keiro-test` 205 examples, `keiro-migrations-test` 2 examples, `jitsurei-test` 16 examples, all with 0 failures)
 
 
 ## Surprises & Discoveries
@@ -149,6 +149,8 @@ Milestone 5 completed on 2026-06-15. Timer workers now requeue stale `firing` ro
 Milestone 6 completed on 2026-06-15. Shard workers now report snapshot/acquire/reader/ensure errors through `onShardError`, keep their previous readers when acquire fails, supervise reader threads and restart a dead reader on the next reconcile, relinquish leases during graceful shutdown, reject shard-count mismatches through `ShardCountMismatch`, and document the at-least-once zombie-worker checkpoint-regression edge. Validation passed with focused `Shard lease` tests (8 examples, 0 failures), focused `Sharded subscription drain and failover` tests (3 examples, 0 failures), and full `cabal test keiro-test --test-show-details=direct` (201 examples, 0 failures).
 
 Milestone 7 completed on 2026-06-15. Outbox publisher options, timer worker options, sharded worker options, and integration producers now have additive smart constructors returning typed `<Thing>ConfigError` values while keeping raw record constructors available. The producer validation uses `Data.TypeID.checkPrefix` so invalid message-id prefixes fail during startup validation instead of at first mint. Validation passed with focused `cabal test keiro-test --test-show-details=direct --test-options '--match validates'` (7 examples, 0 failures), `cabal build keiro`, and full `cabal test keiro-test --test-show-details=direct` (205 examples, 0 failures).
+
+Final gate completed on 2026-06-15. EP-4's implementation and plan/masterplan rollup passed `cabal build all`, `cabal test keiro-test --test-show-details=direct` (205 examples, 0 failures), `cabal test keiro-migrations-test --test-show-details=direct` (2 examples, 0 failures), and `cabal test jitsurei-test --test-show-details=direct` (16 examples, 0 failures).
 
 
 ## Context and Orientation
