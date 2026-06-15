@@ -86,6 +86,7 @@ data InboxResult a
     | InboxDuplicate
     | InboxInProgress
     | InboxPreviouslyFailed !(Maybe Text)
+    | InboxHandlerFailed !Text !Int
     deriving stock (Generic, Eq, Show)
 
 {- | Errors surfaced by the inbox wrapper that originate from the inbox
@@ -116,6 +117,7 @@ data InboxRow = InboxRow
     , event :: !IntegrationEvent
     , kafka :: !(Maybe KafkaDeliveryRef)
     , status :: !InboxStatus
+    , attemptCount :: !Int
     , receivedAt :: !UTCTime
     , completedAt :: !(Maybe UTCTime)
     , failedAt :: !(Maybe UTCTime)
@@ -129,12 +131,12 @@ inboxStatusText = \case
     InboxCompleted -> "completed"
     InboxFailed -> "failed"
 
-parseInboxStatus :: Text -> InboxStatus
+parseInboxStatus :: Text -> Either Text InboxStatus
 parseInboxStatus = \case
-    "processing" -> InboxProcessing
-    "completed" -> InboxCompleted
-    "failed" -> InboxFailed
-    _ -> InboxFailed
+    "processing" -> Right InboxProcessing
+    "completed" -> Right InboxCompleted
+    "failed" -> Right InboxFailed
+    other -> Left ("unknown keiro_inbox.status: " <> other)
 
 {- | Compute the inbox dedupe key for an integration event under the
 given policy plus optional Kafka delivery context. Returns 'Left' when

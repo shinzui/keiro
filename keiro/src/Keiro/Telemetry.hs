@@ -75,6 +75,7 @@ module Keiro.Telemetry (
     keiroInboxProcessedName,
     keiroInboxDuplicatesName,
     keiroInboxFailedName,
+    keiroInboxPoisonedName,
     keiroInboxBacklogName,
     keiroTimerBacklogName,
     keiroTimerFireLagName,
@@ -102,6 +103,7 @@ module Keiro.Telemetry (
     recordInboxProcessed,
     recordInboxDuplicates,
     recordInboxFailed,
+    recordInboxPoisoned,
     recordInboxBacklog,
     recordTimerBacklog,
     recordTimerFireLag,
@@ -519,6 +521,8 @@ keiroInboxDuplicatesName :: Text
 keiroInboxDuplicatesName = "keiro.inbox.duplicates"
 keiroInboxFailedName :: Text
 keiroInboxFailedName = "keiro.inbox.failed"
+keiroInboxPoisonedName :: Text
+keiroInboxPoisonedName = "keiro.inbox.poisoned"
 keiroInboxBacklogName :: Text
 keiroInboxBacklogName = "keiro.inbox.backlog"
 keiroTimerBacklogName :: Text
@@ -574,6 +578,7 @@ data KeiroMetrics = KeiroMetrics
     , inboxProcessed :: Counter Int64
     , inboxDuplicates :: Counter Int64
     , inboxFailed :: Counter Int64
+    , inboxPoisoned :: Counter Int64
     , inboxBacklog :: Gauge Int64
     , timerBacklog :: Gauge Int64
     , timerFireLag :: Histogram
@@ -610,6 +615,7 @@ newKeiroMetrics meter = liftIO $ do
     inboxProcessed' <- counterI64 keiroInboxProcessedName "{message}" "Inbox messages processed successfully."
     inboxDuplicates' <- counterI64 keiroInboxDuplicatesName "{message}" "Inbox messages skipped as duplicates."
     inboxFailed' <- counterI64 keiroInboxFailedName "{message}" "Inbox messages whose handler failed."
+    inboxPoisoned' <- counterI64 keiroInboxPoisonedName "{message}" "Inbox messages dead-lettered after exhausting handler attempts."
     inboxBacklog' <- gaugeI64 keiroInboxBacklogName "{message}" "Inbox messages awaiting processing."
     timerBacklog' <- gaugeI64 keiroTimerBacklogName "{timer}" "Due timers awaiting firing."
     timerFireLag' <- histogram keiroTimerFireLagName "ms" "Delay between a timer's scheduled time and when it fired."
@@ -637,6 +643,7 @@ newKeiroMetrics meter = liftIO $ do
             , inboxProcessed = inboxProcessed'
             , inboxDuplicates = inboxDuplicates'
             , inboxFailed = inboxFailed'
+            , inboxPoisoned = inboxPoisoned'
             , inboxBacklog = inboxBacklog'
             , timerBacklog = timerBacklog'
             , timerFireLag = timerFireLag'
@@ -700,6 +707,8 @@ recordInboxDuplicates :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordInboxDuplicates = recordCounter inboxDuplicates
 recordInboxFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordInboxFailed = recordCounter inboxFailed
+recordInboxPoisoned :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordInboxPoisoned = recordCounter inboxPoisoned
 recordInboxBacklog :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordInboxBacklog = recordGaugeI64 inboxBacklog
 recordTimerBacklog :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()

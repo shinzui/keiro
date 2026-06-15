@@ -59,7 +59,9 @@ import Keiro.Inbox (
     garbageCollectCompleted,
     listInbox,
     lookupInbox,
+    markFailedTx,
     runInboxTransaction,
+    runInboxTransactionWithRetries,
  )
 import Keiro.Inbox.Kafka qualified as InboxKafka
 import Keiro.Integration.Event (
@@ -2743,6 +2745,100 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     runInboxTransaction Nothing PreferIntegrationMessageId event Nothing handler
             Right row <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-msg-rollback")
             row `shouldBe` Nothing
+
+        it "exports markFailedTx from the public inbox module" $ \storeHandle -> do
+            let event =
+                    sampleIntegrationEnvelope
+                        & #messageId
+                        .~ "inbox-msg-public-failed"
+                        & #source
+                        .~ "ordering"
+                handler _ = do
+                    markFailedTx "ordering" "inbox-msg-public-failed" "operator failed" (event ^. #occurredAt)
+                    pure ()
+            Right (Right (InboxProcessed ())) <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransaction Nothing PreferIntegrationMessageId event Nothing handler
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-msg-public-failed")
+            row ^. #status `shouldBe` InboxCompleted
+
+        it "a throwing handler records a failed attempt instead of looping" $ \storeHandle -> do
+            let event =
+                    sampleIntegrationEnvelope
+                        & #messageId
+                        .~ "inbox-msg-poison-1"
+                        & #source
+                        .~ "ordering"
+                handler _ = (pure $! error "inbox exploded") :: Tx.Transaction ()
+            Right result <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionWithRetries Nothing 3 PreferIntegrationMessageId event Nothing handler
+            case result of
+                Right (InboxHandlerFailed err attempts) -> do
+                    Text.isInfixOf "inbox exploded" err `shouldBe` True
+                    attempts `shouldBe` 1
+                other -> expectationFailure ("expected InboxHandlerFailed, got " <> show other)
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-msg-poison-1")
+            row ^. #status `shouldBe` InboxFailed
+            row ^. #attemptCount `shouldBe` 1
+            row ^. #lastError `shouldSatisfy` maybe False (Text.isInfixOf "inbox exploded")
+
+        it "a transient poison message succeeds on retry" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+            let event =
+                    sampleIntegrationEnvelope
+                        & #messageId
+                        .~ "inbox-msg-poison-transient"
+                        & #source
+                        .~ "ordering"
+                failOnce _ = (pure $! error "temporary inbox failure") :: Tx.Transaction ()
+                succeeding ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+            Right result1 <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionWithRetries Nothing 3 PreferIntegrationMessageId event Nothing failOnce
+            case result1 of
+                Right (InboxHandlerFailed _ 1) -> pure ()
+                other -> expectationFailure ("expected first failed attempt, got " <> show other)
+            Right result2 <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionWithRetries Nothing 3 PreferIntegrationMessageId event Nothing succeeding
+            result2 `shouldBe` Right (InboxProcessed ())
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-msg-poison-transient")
+            row ^. #status `shouldBe` InboxCompleted
+            row ^. #attemptCount `shouldBe` 1
+            Right rowCount <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+            rowCount `shouldBe` 1
+
+        it "an unrecoverable message dead-letters at the ceiling" $ \storeHandle -> do
+            let event =
+                    sampleIntegrationEnvelope
+                        & #messageId
+                        .~ "inbox-msg-poison-dead"
+                        & #source
+                        .~ "ordering"
+                handler _ = (pure $! error "always broken") :: Tx.Transaction ()
+            Right result1 <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionWithRetries Nothing 2 PreferIntegrationMessageId event Nothing handler
+            Right result2 <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionWithRetries Nothing 2 PreferIntegrationMessageId event Nothing handler
+            Right result3 <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionWithRetries Nothing 2 PreferIntegrationMessageId event Nothing handler
+            case (result1, result2, result3) of
+                ( Right (InboxHandlerFailed _ 1)
+                    , Right (InboxHandlerFailed _ 2)
+                    , Right (InboxPreviouslyFailed _)
+                    ) -> pure ()
+                other -> expectationFailure ("unexpected poison lifecycle: " <> show other)
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-msg-poison-dead")
+            row ^. #status `shouldBe` InboxFailed
+            row ^. #attemptCount `shouldBe` 2
 
         it "garbage-collects completed rows older than the retention window" $ \storeHandle -> do
             let event =

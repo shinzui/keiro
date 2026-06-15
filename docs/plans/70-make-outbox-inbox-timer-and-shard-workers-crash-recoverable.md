@@ -39,14 +39,14 @@ After this plan is implemented, every documented recovery guarantee in these fou
 - [x] M3: add `garbageCollectSent` to the outbox schema and public module, with tests (completed 2026-06-15)
 - [x] M3: document the per-key ordering constraint on `enqueueOutboxTx` / `enqueueIntegrationEventTx` / `OrderingPolicy` (M1 finding, documentation-only) (completed 2026-06-15)
 - [x] M3: extend the `KafkaDeliveryIdentity` docstring (does not dedupe producer republishes) (completed 2026-06-15; focused `Keiro.Outbox` run passed with 21 examples, 0 failures; full `keiro-test` passed with 189 examples, 0 failures)
-- [ ] M4: skip `countInboxBacklog` in `runInboxTransactionWithKey` when metrics are disabled
-- [ ] M4: add `attemptCount` to `InboxRow`, the decoder, and `selectAllSql`
-- [ ] M4: add `recordFailedAttemptTx` upsert statement to `keiro/src/Keiro/Inbox/Schema.hs`
-- [ ] M4: add `runInboxTransactionWithRetries` / `runInboxTransactionWithRetriesKey` and the `InboxHandlerFailed` result constructor
-- [ ] M4: export `markFailedTx` from `keiro/src/Keiro/Inbox.hs`
-- [ ] M4: add the `keiro.inbox.poisoned` counter
-- [ ] M4: fix `defaultEpoch` partial `read`, the stale race comment, and make `parseInboxStatus` loud
-- [ ] M4: write the poison-message tests (record failure, retry below ceiling, dead-letter at ceiling)
+- [x] M4: skip `countInboxBacklog` in `runInboxTransactionWithKey` when metrics are disabled (completed 2026-06-15)
+- [x] M4: add `attemptCount` to `InboxRow`, the decoder, and `selectAllSql` (completed 2026-06-15)
+- [x] M4: add `recordFailedAttemptTx` upsert statement to `keiro/src/Keiro/Inbox/Schema.hs` (completed 2026-06-15)
+- [x] M4: add `runInboxTransactionWithRetries` / `runInboxTransactionWithRetriesKey` and the `InboxHandlerFailed` result constructor (completed 2026-06-15)
+- [x] M4: export `markFailedTx` from `keiro/src/Keiro/Inbox.hs` (completed 2026-06-15)
+- [x] M4: add the `keiro.inbox.poisoned` counter (completed 2026-06-15)
+- [x] M4: fix `defaultEpoch` partial `read`, the stale race comment, and make `parseInboxStatus` loud (completed 2026-06-15)
+- [x] M4: write the poison-message tests (record failure, retry below ceiling, dead-letter at ceiling) (completed 2026-06-15; focused `Keiro.Inbox` run passed with 17 examples, 0 failures; full `keiro-test` passed with 193 examples, 0 failures)
 - [ ] M5: add `requeueStuckTimers` to `keiro/src/Keiro/Timer/Schema.hs`
 - [ ] M5: add `requeueStuckAfter` to `TimerWorkerOptions` (default `Just 300`) and invoke the requeue in `runTimerWorkerWith`
 - [ ] M5: guard `markTimerFired` with `AND status = 'firing'` and return `Bool`
@@ -74,6 +74,7 @@ Authoring-time findings that correct or extend the June 2026 audit notes (re-ver
 - `Data.TypeID.genTypeID` from the `mmzk-typeid` package throws a `TypeIDError` at runtime for an invalid prefix (verified in `/Users/shinzui/Keikaku/hub/haskell/mmzk-typeid-project/mmzk-typeid/src/Data/TypeID/Internal.hs`, `genTypeIDs`), and the package exports `checkPrefix :: Text -> Maybe TypeIDError` from `Data.TypeID` — exactly what `mkIntegrationProducer` needs for construction-time validation (L4).
 - Milestone 1 also requires regenerating `keiro-migrations/expected-schema` with `cabal run keiro-write-expected-schema`. The new migration applied and repeated successfully before regeneration, but `cabal test keiro-migrations-test` failed its strict schema comparison until the expected-schema files included the inbox `attempt_count` column and the new inbox/outbox indexes.
 - The M2 head-of-line reclaim test needs two publisher passes for two same-key rows, not one. `publishClaimedOutbox` is intentionally a one-batch worker: after the sweeper moves the stranded first row from `publishing` to `failed`, the claim query can claim that first row, but the second row remains blocked by the non-terminal first row until the first reaches `sent`. This preserves the one-shot worker contract and still proves the key is unwedgeable.
+- M4 verified the retry wrapper boundary: `Kiroku.Store.runTransaction` maps SQL failures and `Tx.condemn` through the Store error/rollback path, while `runInboxTransactionWithRetries` catches only synchronous handler exceptions with `trySync`. This preserves the original wrapper's rollback semantics and keeps poison-message accounting opt-in for thrown handler failures.
 
 
 ## Decision Log
@@ -138,6 +139,8 @@ Milestone 1 completed on 2026-06-15. The migration layer now creates the inbox f
 Milestone 2 completed on 2026-06-15. The outbox worker now reclaims stale `publishing` rows, dead-letters stale rows that have exhausted their claim budget, converts synchronous publisher exceptions into ordinary failed attempts so the batch continues, guards `markOutboxSent` against stale races, decodes unknown statuses loudly, and records `keiro.outbox.reclaimed`. Validation passed with focused `cabal test keiro-test --test-show-details=direct --test-options='--match "Keiro.Outbox"'` (20 examples, 0 failures) and full `cabal test keiro-test` (188 examples, 0 failures).
 
 Milestone 3 completed on 2026-06-15. The outbox now exposes `garbageCollectSent` for pruning expired successful publishes while preserving `dead` rows, the ordering caveat for concurrent same-key enqueue escape hatches is documented on the public surfaces, and `KafkaDeliveryIdentity` now states that producer republishes receive new offsets and are not deduplicated by that policy. Validation passed with focused `Keiro.Outbox` tests (21 examples, 0 failures) and full `cabal test keiro-test` (189 examples, 0 failures).
+
+Milestone 4 completed on 2026-06-15. The inbox hot path now skips the backlog count when metrics are disabled, `InboxRow` exposes `attemptCount`, unknown inbox statuses fail decode loudly, `defaultEpoch` no longer uses a partial `read`, `markFailedTx` is available from the public inbox module, and the new opt-in retry wrapper records thrown handler failures as failed attempts with a terminal dead-letter ceiling plus `keiro.inbox.poisoned`. Validation passed with focused `cabal test keiro-test --test-show-details=direct --test-options='--match "Keiro.Inbox"'` (17 examples, 0 failures) and full `cabal test keiro-test --test-show-details=direct` (193 examples, 0 failures).
 
 
 ## Context and Orientation

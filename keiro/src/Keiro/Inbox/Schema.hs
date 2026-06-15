@@ -10,6 +10,7 @@ module Keiro.Inbox.Schema (
     tryInsertProcessingTx,
     markCompletedTx,
     markFailedTx,
+    recordFailedAttemptTx,
     lookupInbox,
     listInbox,
     garbageCollectCompleted,
@@ -21,6 +22,7 @@ import Contravariant.Extras (contrazip2, contrazip3, contrazip4)
 import Data.ByteString (ByteString)
 import Data.Functor.Contravariant ((>$<))
 import Data.Time.Clock (NominalDiffTime, addUTCTime)
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Data.UUID (UUID)
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
@@ -46,6 +48,12 @@ Returns 'Left' carrying the existing row if @(source, dedupe_key)@
 already exists; returns 'Right ()' if the insert created a new row. The
 caller — typically 'Keiro.Inbox.runInboxTransaction' — then either runs
 the handler (new) or branches on the existing row's status (duplicate).
+
+If a concurrent retention job deletes the conflicting row between the
+insert attempt and the lookup, this returns 'Right ()'. The handler then
+runs and the later completed mark may update zero rows, so that delivery
+is not recorded. That edge is acceptable because retention only removes
+rows outside the configured dedupe window.
 -}
 tryInsertProcessingTx ::
     Text ->
@@ -65,11 +73,6 @@ tryInsertProcessingTx src dedupe event kafka now = do
                 Just row -> pure (Left row)
                 Nothing -> pure (Right ())
 
--- Race: another worker inserted then deleted the row between
--- our insert attempt and the lookup. Treat as 'new'; the next
--- insert in this transaction will reflect the up-to-date
--- state on commit.
-
 -- | Mark an inbox row completed inside the same transaction as the handler.
 markCompletedTx :: Text -> Text -> UTCTime -> Tx.Transaction ()
 markCompletedTx src dedupe now =
@@ -79,6 +82,23 @@ markCompletedTx src dedupe now =
 markFailedTx :: Text -> Text -> Text -> UTCTime -> Tx.Transaction ()
 markFailedTx src dedupe errMsg now =
     Tx.statement (src, dedupe, errMsg, now) markFailedStmt
+
+{- | Record one failed handler attempt for @(source, dedupe_key)@.
+
+Creates a failed row when the handler transaction rolled back the initial
+processing insert, or increments the existing failed row's attempt count.
+Returns the new attempt count.
+-}
+recordFailedAttemptTx ::
+    Text ->
+    Text ->
+    IntegrationEvent ->
+    Maybe KafkaDeliveryRef ->
+    Text ->
+    UTCTime ->
+    Tx.Transaction Int
+recordFailedAttemptTx src dedupe event kafka errMsg now =
+    Tx.statement (toEncodedFailedInsert src dedupe event kafka errMsg now) recordFailedAttemptStmt
 
 -- | Read one inbox row.
 lookupInbox :: (Store :> es) => Text -> Text -> Eff es (Maybe InboxRow)
@@ -154,6 +174,12 @@ data EncodedInsert = EncodedInsert
     }
     deriving stock (Generic)
 
+data EncodedFailedInsert = EncodedFailedInsert
+    { insert :: !EncodedInsert
+    , lastError :: !Text
+    }
+    deriving stock (Generic)
+
 toEncodedInsert ::
     Text ->
     Text ->
@@ -191,6 +217,20 @@ toEncodedInsert src dedupe event kafka now =
             , occurredAt = Just (event ^. #occurredAt)
             , receivedAt = now
             }
+
+toEncodedFailedInsert ::
+    Text ->
+    Text ->
+    IntegrationEvent ->
+    Maybe KafkaDeliveryRef ->
+    Text ->
+    UTCTime ->
+    EncodedFailedInsert
+toEncodedFailedInsert src dedupe event kafka errMsg now =
+    EncodedFailedInsert
+        { insert = toEncodedInsert src dedupe event kafka now
+        , lastError = errMsg
+        }
 
 nullIfEmpty :: Text -> Maybe Text
 nullIfEmpty t = if t == mempty then Nothing else Just t
@@ -230,6 +270,11 @@ encodedInsertEncoder =
         , view #occurredAt >$< E.param (E.nullable E.timestamptz)
         , view #receivedAt >$< E.param (E.nonNullable E.timestamptz)
         ]
+
+encodedFailedInsertEncoder :: E.Params EncodedFailedInsert
+encodedFailedInsertEncoder =
+    (view #insert >$< encodedInsertEncoder)
+        <> (view #lastError >$< E.param (E.nonNullable E.text))
 
 -- ---------------------------------------------------------------------------
 -- Statements
@@ -309,6 +354,53 @@ markFailedStmt =
         )
         D.noResult
 
+recordFailedAttemptStmt :: Statement EncodedFailedInsert Int
+recordFailedAttemptStmt =
+    preparable
+        """
+        INSERT INTO keiro_inbox
+          ( source
+          , dedupe_key
+          , message_id
+          , source_event_id
+          , source_global_position
+          , destination
+          , event_type
+          , schema_version
+          , content_type
+          , schema_registry
+          , schema_subject
+          , schema_version_ref
+          , schema_id
+          , schema_fingerprint
+          , causation_id
+          , correlation_id
+          , traceparent
+          , tracestate
+          , kafka_topic
+          , kafka_partition
+          , kafka_offset
+          , payload_bytes
+          , attributes
+          , occurred_at
+          , received_at
+          , status
+          , attempt_count
+          , failed_at
+          , last_error
+          )
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, 'failed', 1, $25, $26)
+        ON CONFLICT (source, dedupe_key) DO UPDATE
+        SET status = 'failed',
+            attempt_count = keiro_inbox.attempt_count + 1,
+            last_error = EXCLUDED.last_error,
+            failed_at = EXCLUDED.failed_at
+        RETURNING attempt_count
+        """
+        encodedFailedInsertEncoder
+        (fmap fromIntegral (D.singleRow (D.column (D.nonNullable D.int8))))
+
 selectByKeyStmt :: Statement (Text, Text) (Maybe InboxRow)
 selectByKeyStmt =
     preparable
@@ -355,7 +447,7 @@ selectAllSql =
            schema_subject, schema_version_ref, schema_id, schema_fingerprint,
            causation_id, correlation_id, traceparent, tracestate, kafka_topic,
            kafka_partition, kafka_offset, payload_bytes, attributes, occurred_at,
-           status, received_at, completed_at, failed_at, last_error
+           status, attempt_count, received_at, completed_at, failed_at, last_error
     FROM keiro_inbox
     """
 
@@ -388,6 +480,7 @@ data RawInbox = RawInbox
     , attributes :: !(Maybe Value)
     , occurredAt :: !(Maybe UTCTime)
     , status :: !InboxStatus
+    , attemptCount :: !Int
     , receivedAt :: !UTCTime
     , completedAt :: !(Maybe UTCTime)
     , failedAt :: !(Maybe UTCTime)
@@ -422,7 +515,8 @@ rawDecoder =
         <*> D.column (D.nonNullable D.bytea)
         <*> D.column (D.nullable D.jsonb)
         <*> D.column (D.nullable D.timestamptz)
-        <*> (parseInboxStatus <$> D.column (D.nonNullable D.text))
+        <*> D.column (D.nonNullable (D.refine parseInboxStatus D.text))
+        <*> (fromIntegral <$> D.column (D.nonNullable D.int8))
         <*> D.column (D.nonNullable D.timestamptz)
         <*> D.column (D.nullable D.timestamptz)
         <*> D.column (D.nullable D.timestamptz)
@@ -483,6 +577,7 @@ assembleInboxRow raw =
             , event
             , kafka
             , status = raw ^. #status
+            , attemptCount = raw ^. #attemptCount
             , receivedAt = raw ^. #receivedAt
             , completedAt = raw ^. #completedAt
             , failedAt = raw ^. #failedAt
@@ -495,4 +590,4 @@ Inbox rows are observability-shaped; consumers that care should
 re-read the timestamp from the envelope payload directly.
 -}
 defaultEpoch :: UTCTime
-defaultEpoch = read "1970-01-01 00:00:00 UTC"
+defaultEpoch = posixSecondsToUTCTime 0

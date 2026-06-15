@@ -21,14 +21,19 @@ module Keiro.Inbox (
     listInbox,
     garbageCollectCompleted,
     countInboxBacklog,
+    markFailedTx,
 
     -- * Transactional handler wrapper
     runInboxTransaction,
     runInboxTransactionWithKey,
+    runInboxTransactionWithRetries,
+    runInboxTransactionWithRetriesKey,
 )
 where
 
+import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
+import Effectful.Exception (displayException, trySync)
 import Keiro.Inbox.Schema
 import Keiro.Inbox.Types
 import Keiro.Integration.Event (IntegrationEvent)
@@ -38,6 +43,7 @@ import Keiro.Telemetry (
     recordInboxBacklog,
     recordInboxDuplicates,
     recordInboxFailed,
+    recordInboxPoisoned,
     recordInboxProcessed,
  )
 import Kiroku.Store.Effect (Store)
@@ -105,12 +111,103 @@ runInboxTransactionWithKey mMetrics src dedupe event kafka handler = do
                 InboxProcessing -> pure InboxInProgress
                 InboxFailed -> pure (InboxPreviouslyFailed (row ^. #lastError))
     -- Record the classification counter and the backlog gauge outside the
-    -- handler transaction (each a no-op under a 'Nothing' handle).
+    -- handler transaction. The backlog count is only paid when metrics are on.
     case result of
         InboxProcessed _ -> recordInboxProcessed mMetrics 1
         InboxDuplicate -> recordInboxDuplicates mMetrics 1
         InboxPreviouslyFailed _ -> recordInboxFailed mMetrics 1
+        InboxHandlerFailed _ _ -> recordInboxFailed mMetrics 1
         InboxInProgress -> pure ()
-    backlog <- countInboxBacklog
-    recordInboxBacklog mMetrics (fromIntegral backlog)
+    for_ mMetrics $ \metrics -> do
+        backlog <- countInboxBacklog
+        recordInboxBacklog (Just metrics) (fromIntegral backlog)
+    pure result
+
+{- | Run @handler@ with opt-in poison-message accounting.
+
+This wrapper behaves like 'runInboxTransaction' for fresh messages,
+duplicates, and in-flight rows, but changes the behavior for handler
+exceptions and previously failed rows:
+
+* A synchronous exception from @handler@ rolls back the handler
+  transaction, then records a failed attempt in a second transaction and
+  returns 'InboxHandlerFailed' with the new attempt count.
+* A previously failed row with @attempt_count < ceiling@ is retried.
+* A previously failed row with @attempt_count >= ceiling@ returns
+  'InboxPreviouslyFailed' without running the handler. The consumer can
+  commit its offset and move on; the failed inbox row is the dead-letter
+  record for operator review.
+
+'Tx.condemn' is not treated as a handler failure by this wrapper. It
+keeps the original rollback semantics from 'runInboxTransaction'.
+-}
+runInboxTransactionWithRetries ::
+    forall a es.
+    (IOE :> es, Store :> es) =>
+    Maybe KeiroMetrics ->
+    Int ->
+    InboxDedupePolicy ->
+    IntegrationEvent ->
+    Maybe KafkaDeliveryRef ->
+    (IntegrationEvent -> Tx.Transaction a) ->
+    Eff es (Either InboxError (InboxResult a))
+runInboxTransactionWithRetries mMetrics attemptCeiling policy event kafka handler =
+    case dedupeKeyFor policy event kafka of
+        Left err -> pure (Left err)
+        Right dedupe ->
+            Right <$> runInboxTransactionWithRetriesKey mMetrics attemptCeiling (event ^. #source) dedupe event kafka handler
+
+-- | Lower-level retrying variant that takes the dedupe key directly.
+runInboxTransactionWithRetriesKey ::
+    forall a es.
+    (IOE :> es, Store :> es) =>
+    Maybe KeiroMetrics ->
+    Int ->
+    Text ->
+    Text ->
+    IntegrationEvent ->
+    Maybe KafkaDeliveryRef ->
+    (IntegrationEvent -> Tx.Transaction a) ->
+    Eff es (InboxResult a)
+runInboxTransactionWithRetriesKey mMetrics attemptCeiling src dedupe event kafka handler = do
+    now <- liftIO getCurrentTime
+    attempted <-
+        trySync $
+            runTransaction $ do
+                inserted <- tryInsertProcessingTx src dedupe event kafka now
+                case inserted of
+                    Right () -> do
+                        handled <- handler event
+                        markCompletedTx src dedupe now
+                        pure (InboxProcessed handled)
+                    Left row -> case row ^. #status of
+                        InboxCompleted -> pure InboxDuplicate
+                        InboxProcessing -> pure InboxInProgress
+                        InboxFailed
+                            | row ^. #attemptCount >= attemptCeiling ->
+                                pure (InboxPreviouslyFailed (row ^. #lastError))
+                            | otherwise -> do
+                                handled <- handler event
+                                markCompletedTx src dedupe now
+                                pure (InboxProcessed handled)
+    result <- case attempted of
+        Right ok -> pure ok
+        Left err -> do
+            failedAt <- liftIO getCurrentTime
+            let errMsg = Text.pack (displayException err)
+            attempts <-
+                runTransaction $
+                    recordFailedAttemptTx src dedupe event kafka errMsg failedAt
+            pure (InboxHandlerFailed errMsg attempts)
+    case result of
+        InboxProcessed _ -> recordInboxProcessed mMetrics 1
+        InboxDuplicate -> recordInboxDuplicates mMetrics 1
+        InboxPreviouslyFailed _ -> recordInboxFailed mMetrics 1
+        InboxHandlerFailed _ attempts -> do
+            recordInboxFailed mMetrics 1
+            when (attempts >= attemptCeiling) (recordInboxPoisoned mMetrics 1)
+        InboxInProgress -> pure ()
+    for_ mMetrics $ \metrics -> do
+        backlog <- countInboxBacklog
+        recordInboxBacklog (Just metrics) (fromIntegral backlog)
     pure result
