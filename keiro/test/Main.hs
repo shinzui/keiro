@@ -169,6 +169,7 @@ import Keiro.Workflow (
     findUnfinishedWorkflowIds,
     loadStepIndex,
     patch,
+    patchSetStepName,
     patchStepName,
     restoreSeed,
     runWorkflow,
@@ -4501,6 +4502,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let name = WorkflowName "patchwf"
                 inflight = WorkflowId "inflight-1"
                 fresh = WorkflowId "fresh-1"
+                patchOptions = defaultWorkflowRunOptions & #activePatches .~ Set.singleton fraudPatchId
 
             -- 1. Run the in-flight instance to a suspension under the PRE-patch code.
             pre <- Store.runStoreIO storeHandle $ runWorkflow name inflight (prePatchWorkflow counter)
@@ -4508,18 +4510,18 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
             -- 2. Redeploy: re-run the SAME instance id under the POST-patch code. It
             --    already journaled reserve-inventory, so it is in flight -> False.
-            r1 <- Store.runStoreIO storeHandle $ runWorkflow name inflight (postPatchWorkflow counter)
+            r1 <- Store.runStoreIO storeHandle $ runWorkflowWith patchOptions name inflight (postPatchWorkflow counter)
             r1 `shouldBe` Right (Completed "old-branch")
 
             -- 3. Replay the in-flight instance again: same OLD branch, every time.
-            r2 <- Store.runStoreIO storeHandle $ runWorkflow name inflight (postPatchWorkflow counter)
+            r2 <- Store.runStoreIO storeHandle $ runWorkflowWith patchOptions name inflight (postPatchWorkflow counter)
             r2 `shouldBe` Right (Completed "old-branch")
 
             -- 4. A fresh instance under the POST-patch code takes the NEW branch.
-            f1 <- Store.runStoreIO storeHandle $ runWorkflow name fresh (postPatchWorkflow counter)
+            f1 <- Store.runStoreIO storeHandle $ runWorkflowWith patchOptions name fresh (postPatchWorkflow counter)
             f1 `shouldBe` Right (Completed "new-branch")
             -- and stays on the new branch on replay.
-            f2 <- Store.runStoreIO storeHandle $ runWorkflow name fresh (postPatchWorkflow counter)
+            f2 <- Store.runStoreIO storeHandle $ runWorkflowWith patchOptions name fresh (postPatchWorkflow counter)
             f2 `shouldBe` Right (Completed "new-branch")
 
             -- 5. The patch decision is journaled exactly once per instance, with the
@@ -4545,6 +4547,63 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     , k == patchStepName fraudPatchId
                     ]
             freshDecisions `shouldBe` [toJSON True]
+            let freshPatchSets =
+                    [ v
+                    | Right ev <- map (decodeRecorded workflowJournalCodec) (Vector.toList freshJournal)
+                    , StepRecorded k v _ <- [ev]
+                    , k == patchSetStepName
+                    ]
+            freshPatchSets `shouldBe` [toJSON [unPatchId fraudPatchId]]
+
+        it "a fresh instance suspended before its patch call still takes the NEW branch" $ \storeHandle -> do
+            counter <- newIORef (0 :: Int)
+            let name = WorkflowName "patch-after-suspend"
+                wid = WorkflowId "pas-1"
+                patchOptions = defaultWorkflowRunOptions & #activePatches .~ Set.singleton fraudPatchId
+            Right Suspended <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith patchOptions name wid (postPatchAfterSuspendWorkflow counter)
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry name wid (StepRecorded "awk:gate" Aeson.Null now)
+            resumed <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith patchOptions name wid (postPatchAfterSuspendWorkflow counter)
+            resumed `shouldBe` Right (Completed "new-branch")
+
+        it "an in-flight instance with only wake-source completions stays on the OLD branch" $ \storeHandle -> do
+            let name = WorkflowName "patch-wake-only"
+                wid = WorkflowId "pwo-1"
+                patchOptions = defaultWorkflowRunOptions & #activePatches .~ Set.singleton fraudPatchId
+            Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid prePatchWakeOnlyWorkflow
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry name wid (StepRecorded "awk:gate" Aeson.Null now)
+            resumed <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith patchOptions name wid postPatchWakeOnlyWorkflow
+            resumed `shouldBe` Right (Completed "old-branch")
+
+        it "records the active patch set again for a fresh rotated generation" $ \storeHandle -> do
+            let name = WorkflowName "patch-rotating"
+                wid = WorkflowId "pr-1"
+                patchOptions = defaultWorkflowRunOptions & #activePatches .~ Set.singleton fraudPatchId
+            first <- Store.runStoreIO storeHandle $ runWorkflowWith patchOptions name wid rotatingPatchWorkflow
+            first `shouldBe` Right ContinuedAsNew
+            second <- Store.runStoreIO storeHandle $ runWorkflowWith patchOptions name wid rotatingPatchWorkflow
+            second `shouldBe` Right (Completed "new-branch")
+            Right gen1Journal <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (workflowGenerationStreamName name wid 1) (StreamVersion 0) 20
+            let gen1PatchSets =
+                    [ v
+                    | Right ev <- map (decodeRecorded workflowJournalCodec) (Vector.toList gen1Journal)
+                    , StepRecorded k v _ <- [ev]
+                    , k == patchSetStepName
+                    ]
+            gen1PatchSets `shouldBe` [toJSON [unPatchId fraudPatchId]]
 
     describe "Keiro.Wake" $ around (withFreshStore fixture) $ do
         -- EP-50: the wake primitive over kiroku's existing per-store notifier.
@@ -5920,6 +5979,39 @@ postPatchWorkflow counter = do
     if useNew
         then step (StepName "new-charge") (pure "new-branch")
         else step (StepName "old-charge") (pure "old-branch")
+
+postPatchAfterSuspendWorkflow :: (Workflow :> es, IOE :> es) => IORef Int -> Eff es Text
+postPatchAfterSuspendWorkflow counter = do
+    _ <- step (StepName "reserve-inventory") (liftIO (incrementAndRead counter) >> pure ())
+    (_ :: ()) <- awaitStep (StepName "awk:gate") (pure ())
+    useNew <- patch fraudPatchId
+    if useNew
+        then step (StepName "new-charge") (pure "new-branch")
+        else step (StepName "old-charge") (pure "old-branch")
+
+prePatchWakeOnlyWorkflow :: (Workflow :> es) => Eff es Text
+prePatchWakeOnlyWorkflow = do
+    (_ :: ()) <- awaitStep (StepName "awk:gate") (pure ())
+    pure "old-done"
+
+postPatchWakeOnlyWorkflow :: (Workflow :> es) => Eff es Text
+postPatchWakeOnlyWorkflow = do
+    (_ :: ()) <- awaitStep (StepName "awk:gate") (pure ())
+    useNew <- patch fraudPatchId
+    if useNew
+        then step (StepName "new-charge") (pure "new-branch")
+        else step (StepName "old-charge") (pure "old-branch")
+
+rotatingPatchWorkflow :: (Workflow :> es) => Eff es Text
+rotatingPatchWorkflow = do
+    seed <- restoreSeed (0 :: Int)
+    if seed < 1
+        then continueAsNew (seed + 1)
+        else do
+            useNew <- patch fraudPatchId
+            if useNew
+                then step (StepName "new-charge") (pure "new-branch")
+                else step (StepName "old-charge") (pure "old-branch")
 
 {- | A workflow (EP-50 push tests) that awaits an external "awk:gate" step, then
 runs a step that fills @done@ — so a test can observe the exact moment the

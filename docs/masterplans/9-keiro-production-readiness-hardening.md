@@ -171,6 +171,11 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
   sleep timer ids, fresh awakeable ids are random and journaled under `awkid:*`, forged
   coordinate-derived awakeable ids fail, and completed child rows attach after
   `continueAsNew`. Full `cabal test keiro` passed with 244 examples, 0 failures.
+- EP-7 Milestone 3 is complete as of 2026-06-15. Patch decisions now read a
+  generation-start active patch set journaled under `__workflow_patches__`, so fresh
+  instances that suspend before their patch call still take the new branch, while
+  pre-change instances with only wake-source completions stay on the old branch.
+  Full `cabal test keiro` passed with 247 examples, 0 failures.
 
 
 ## Decision Log
@@ -239,6 +244,8 @@ EP-7 Milestone 1 is complete as of 2026-06-15. Long workflow sleeps no longer li
 
 EP-7 Milestone 2 is complete as of 2026-06-15. Wake-source identity is now generation-correct: sleeps after `continueAsNew` use fresh timer ids, awakeables after rotation allocate fresh unguessable ids, stale awakeable ids no longer resolve the new generation, and re-spawned completed children attach by re-delivering their stored result onto the current generation. Milestone 3 remains next for honest patch classification.
 
+EP-7 Milestone 3 is complete as of 2026-06-15. Patch classification is now explicit and replayable: application code declares active patch ids in `WorkflowRunOptions`, the runtime records that set once per fresh generation, and each `patch` call journals its branch decision from that recorded set. Milestone 4 remains next for first-run/replay value fidelity and honest side-effect documentation.
+
 
 ---
 
@@ -259,3 +266,5 @@ Revision note (2026-06-15): EP-6 Milestone 6 completed the haddock truth pass an
 Revision note (2026-06-15): EP-7 was marked In Progress after EP-6 completion bookkeeping was reconciled, and EP-7 Milestone 1 was completed. Surprises & Discoveries and Outcomes & Retrospective now record the insert-only workflow sleep arming change and validation evidence.
 
 Revision note (2026-06-15): EP-7 Milestone 2 was completed. The first EP-7 progress rollup item is now checked, and Surprises & Discoveries plus Outcomes & Retrospective record generation-namespaced wake-source identity, random journaled awakeable ids, child attach semantics, and validation evidence.
+
+Revision note (2026-06-15): EP-7 Milestone 3 was completed. Surprises & Discoveries and Outcomes & Retrospective now record explicit active-patch-set classification and validation evidence; the second EP-7 progress rollup item remains unchecked until discovery/pruning are complete.

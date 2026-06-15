@@ -48,6 +48,7 @@ module Keiro.Workflow.Types (
     awakeableAllocStepPrefix,
     childStepPrefix,
     patchStepPrefix,
+    patchSetStepName,
     patchStepName,
 )
 where
@@ -351,6 +352,12 @@ journal-event constructor is added.
 -}
 patchStepPrefix :: Text
 patchStepPrefix = "patch:"
+
+{- | Reserved step name under which a workflow generation records the patch ids
+that were active when that generation first started.
+-}
+patchSetStepName :: Text
+patchSetStepName = "__workflow_patches__"
 
 -- | The journal key a patch decision is recorded under: @patch:\<patchId\>@.
 patchStepName :: PatchId -> Text

@@ -104,6 +104,8 @@ import Data.IORef (
 import Data.Int (Int32)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Dispatch (..), DispatchOf, Eff, Effect, IOE, (:>))
@@ -257,11 +259,13 @@ restoreSeed def = step (StepName continueSeedStepName) (pure def)
 {- | Decide a cross-cutting branch for an in-flight-vs-fresh code change, and
 journal the decision so every later replay observes the same branch (EP-49).
 
-@patch (PatchId "fraud-check-v2")@ returns 'True' for an instance that is fresh
-at this point (run the new branch) and 'False' for an instance that was already
-in flight when this patch shipped (keep the old branch). On the first encounter
-the decision is journaled under @patch:\<patchId\>@; every replay returns the
-recorded 'Bool'.
+@patch (PatchId "fraud-check-v2")@ returns 'True' only when that id was present
+in 'activePatches' when this workflow generation first started. The generation
+records its active set under 'patchSetStepName' exactly once; on the first
+encounter each individual patch decision is journaled under @patch:\<patchId\>@,
+and every replay returns the recorded 'Bool'. Add a patch id to 'activePatches'
+in the deploy that introduces the corresponding 'patch' call; remove it only
+after deleting that call from the workflow body.
 
 This is an /escape hatch/ for changes that cross-cut multiple steps. For the
 common case — one step changed — do __not__ use 'patch': rename the step's
@@ -300,6 +304,11 @@ data WorkflowRunOptions = WorkflowRunOptions
     {- ^ EP-44: when 'Just', the runtime opens a @workflow \<name\>@ 'Internal' span
     around the run. 'Nothing' runs the body unwrapped.
     -}
+    , activePatches :: !(Set PatchId)
+    {- ^ Patch ids currently active in this deployed workflow code. A fresh
+    workflow generation records this set once under 'patchSetStepName', and
+    each 'patch' call returns 'True' iff its id was in that recorded set.
+    -}
     }
     deriving stock (Generic)
 
@@ -314,6 +323,7 @@ defaultWorkflowRunOptions =
         , pageSize = 100
         , metrics = Nothing
         , tracer = Nothing
+        , activePatches = Set.empty
         }
 
 -- ---------------------------------------------------------------------------
@@ -452,15 +462,10 @@ runWorkflowWith options name wid action = do
         sampleActive = liftIO (readIORef activeCountRef) >>= recordWorkflowActive mMetrics
         interpreted = do
             initial <- loadJournal options name wid gen
-            journalRef <- liftIO (newIORef initial)
+            initial' <- recordPatchSetIfFresh gen initial
+            journalRef <- liftIO (newIORef initial')
             ordinalRef <- liftIO (newIORef Map.empty)
-            -- EP-49: capture, once, whether this instance was already in flight when
-            -- the run began — i.e. whether the PRE-loaded journal already holds any
-            -- ordinary (non-reserved) step key. The 'Patch' miss path reads this
-            -- stable flag rather than the live (mutating) map, so a fresh instance
-            -- that runs a step before its patch call is not misclassified.
-            let startedInFlight = any isOrdinaryStepKey (Map.keys initial)
-            let runHandler = interpret (handler gen startedInFlight journalRef ordinalRef) action
+            let runHandler = interpret (handler gen journalRef ordinalRef) action
             outcome <-
                 (Completed <$> runHandler)
                     `catch` (\WorkflowSuspend -> pure Suspended)
@@ -497,13 +502,24 @@ runWorkflowWith options name wid action = do
                 -- already journaled the seed step on the next generation and the
                 -- rotation marker on this one, so there is nothing more to do here.
                 ContinuedAsNew -> pure ContinuedAsNew
+        recordPatchSetIfFresh runGen initial = do
+            let patches = options ^. #activePatches
+                freshStart = Map.keysSet initial `Set.isSubsetOf` Set.singleton continueSeedStepName
+            if freshStart && not (Set.null patches)
+                then do
+                    let encoded = Aeson.toJSON (map unPatchId (Set.toList patches))
+                    now <- liftIO getCurrentTime
+                    appendJournal name wid runGen (StepRecorded patchSetStepName encoded now) >>= \case
+                        JournalAppended{} -> pure (Map.insert patchSetStepName encoded initial)
+                        JournalAlreadyPresent stored -> pure (Map.insert patchSetStepName stored initial)
+                        JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+                else pure initial
     handler ::
         Int ->
-        Bool ->
         IORef (Map Text Aeson.Value) ->
         IORef (Map Text Int) ->
         EffectHandler Workflow es
-    handler gen startedInFlight journalRef ordinalRef env operation = case operation of
+    handler gen journalRef ordinalRef env operation = case operation of
         Step (StepName key) act -> do
             journal <- liftIO (readIORef journalRef)
             case Map.lookup key journal of
@@ -572,8 +588,8 @@ runWorkflowWith options name wid action = do
         -- returns to the caller within this run (result type is polymorphic).
         ContinueAsNew seed -> throwIO (WorkflowRotate (Aeson.toJSON seed))
         -- EP-49: decide and journal a cross-cutting branch. Mirrors the 'Step'
-        -- hit/miss shape, but the miss path computes the decision from
-        -- 'startedInFlight' (rather than running a user action) and journals a 'Bool'.
+        -- hit/miss shape, but the miss path computes the decision from the
+        -- patch set recorded when this workflow generation first started.
         Patch pid -> do
             let key = patchStepName pid
             journal <- liftIO (readIORef journalRef)
@@ -583,10 +599,10 @@ runWorkflowWith options name wid action = do
                     decodeStored key stored
                 Nothing -> do
                     checkCancellationPending name wid gen
-                    -- Miss: first encounter. A fresh instance (nothing ordinary journaled
-                    -- when the run began) takes the new branch (True); an in-flight one
-                    -- takes the old branch (False). Journal the decision so it is stable.
-                    let decision = not startedInFlight
+                    recordedSet <- case Map.lookup patchSetStepName journal of
+                        Nothing -> pure []
+                        Just stored -> decodeStored patchSetStepName stored
+                    let decision = unPatchId pid `elem` (recordedSet :: [Text])
                         encoded = Aeson.toJSON decision
                     now <- liftIO getCurrentTime
                     appendOutcome <- appendJournal name wid gen (StepRecorded key encoded now)
@@ -616,23 +632,6 @@ checkCancellationPending :: (Store :> es) => WorkflowName -> WorkflowId -> Int -
 checkCancellationPending name wid gen = do
     cancelled <- stepExists name wid gen cancelledStepName
     when cancelled (throwIO WorkflowCancelPending)
-
-{- | A journal key counts as an /ordinary/ step (EP-49) — evidence the instance
-had already begun executing user logic — when it is neither a terminal marker
-nor a reserved runtime step name/prefix. The reserved set is the terminal markers
-('completedStepName' / 'cancelledStepName' / 'failedStepName'), the EP-48 rotation
-names ('continuedAsNewStepName' / 'continueSeedStepName' — a freshly-rotated
-generation carries a seed step but is NOT "in flight under the old code"), and the
-wake-source / patch prefixes ('sleep:' / 'awk:' / 'child:' / 'patch:'). The
-'patch' first-encounter decision uses this to tell a fresh instance (no ordinary
-step yet) from one already in flight past this point.
--}
-isOrdinaryStepKey :: Text -> Bool
-isOrdinaryStepKey k =
-    not
-        ( k `elem` [completedStepName, cancelledStepName, failedStepName, continuedAsNewStepName, continueSeedStepName]
-            || any (`Text.isPrefixOf` k) [sleepStepPrefix, awakeableStepPrefix, awakeableAllocStepPrefix, childStepPrefix, patchStepPrefix]
-        )
 
 {- | Pre-load a workflow's journal stream into a @step name -> result@ map.
 
