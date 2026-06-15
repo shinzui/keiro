@@ -52,8 +52,8 @@ This plan is a child of the MasterPlan at `docs/masterplans/9-keiro-production-r
 - [x] Milestone 5: switch `findUnfinishedWorkflowIds` to the `keiro_workflows` instance table (signature gains `UTCTime`) (completed 2026-06-15)
 - [x] Milestone 5: new module `Keiro.Workflow.Gc` — `WorkflowGcPolicy`, `gcWorkflowsOnce`, `runWorkflowGcWorker`; migration adding the GC index (completed 2026-06-15)
 - [x] Milestone 5: tests — discovery equivalence (unfinished / finished / rotated / cancelled), GC deletes all per-instance data past retention, retains recent, idempotent under re-run mid-crash (completed 2026-06-15)
-- [ ] Milestone 6 (gated on plan 72): migration adding `wake_after` to `keiro_workflows`; sleep arm sets it in the same transaction as the timer insert
-- [ ] Milestone 6: discovery skips instances with a future `wake_after`; tests (skipped before fire time, discovered after, no re-invocation between)
+- [x] Milestone 6 (gated on plan 72): migration adding `wake_after` to `keiro_workflows`; sleep arm sets it in the same transaction as the timer insert (completed 2026-06-15)
+- [x] Milestone 6: discovery skips instances with a future `wake_after`; tests (skipped before fire time, discovered after, no re-invocation between) (completed 2026-06-15)
 - [ ] Milestone 7: `journalEntryExists` short-circuits via `Fold.any`
 - [ ] Milestone 7: `nub` → `Set` dedup in `resumeWorkflowsOnce`
 - [ ] Milestone 7: `mkWorkflowName` / `mkWorkflowId` smart constructors + separator documentation in Types.hs
@@ -71,6 +71,7 @@ This plan is a child of the MasterPlan at `docs/masterplans/9-keiro-production-r
 - **Milestone 3 implementation discovery (2026-06-15): the explicit patch set removes the need for the old reserved-key classifier.** `startedInFlight` and `isOrdinaryStepKey` were deleted entirely; the only compatibility rule left is that absence of `__workflow_patches__` means the recorded active set is empty, so all patch calls take the old branch. A fresh rotated generation records the current active set again because its journal contains only `__workflow_seed__` at start.
 - **Milestone 4 implementation discovery (2026-06-15): first-run step return values now match replay values exactly.** The `Step` miss path decodes the JSON value it just recorded, so lossy codecs are observed on the initial run and an invalid `ToJSON`/`FromJSON` round-trip fails immediately with `WorkflowStepDecodeError` after the journal row has been committed.
 - **Milestone 5 implementation discovery (2026-06-15): plan 72 landed with a richer instance table than this draft assumed.** The final table includes `suspended`, attempt/backoff columns, lease columns, and `completed_at`; discovery now reads non-terminal statuses from `keiro_workflows`, while GC uses `completed_at` as the terminal-age column. `gcWorkflowsOnce` does not need `IOE` because kiroku's `hardDeleteStream` is a `Store` operation; only `runWorkflowGcWorker` needs `IOE` for clock/sleep.
+- **Milestone 6 implementation discovery (2026-06-15): the wake hint composes with insert-only sleep arming.** `wake_after` is written from the same requested `fireAt` value as `scheduleTimerOnceTx`. A re-arm can only happen after discovery considers the hint expired, so overwriting the hint on that pass suppresses only future not-yet-due passes; the focused active-cadence sleep test still completes.
 
 
 ## Decision Log
@@ -131,6 +132,8 @@ Milestone 3 is complete as of 2026-06-15. Patch decisions now derive from a jour
 Milestone 4 is complete as of 2026-06-15. Fresh `step` calls now return the decoded stored JSON value rather than the raw action result, so first-run behavior matches replay behavior and an undecodable recorded value surfaces as `WorkflowStepDecodeError` immediately. The workflow Haddocks now document at-least-once step side effects across crashes, step-name replay trade-offs, and the full-map cost of every-n workflow snapshots. Focused validation passed with `cabal test keiro --test-options='--match "Keiro.Workflow"'` (80 examples, 0 failures), and full validation passed with `cabal test keiro` (249 examples, 0 failures). Milestone 5 remains next for discovery via the instance table and pruning.
 
 Milestone 5 is complete as of 2026-06-15. Workflow discovery now reads the `keiro_workflows` instance table with an explicit `UTCTime` parameter, and `Keiro.Workflow.Gc` can prune terminal workflow streams, snapshots, step rows, awakeable rows, child links, terminal workflow-sleep timers, and instance rows after retention while protecting completed children of live parents. The migration adds `keiro_workflows_gc_idx` and expected-schema coverage. Focused validation passed with `cabal test keiro --test-options='--match "Keiro.Workflow.Gc" --match "discovers unfinished workflows from the instance table"'` (3 examples, 0 failures), full validation passed with `cabal test keiro` (252 examples, 0 failures), and migration validation passed with `cabal test keiro-migrations-test` (2 examples, 0 failures). Milestone 6 remains next for `wake_after` sleeper skips.
+
+Milestone 6 is complete as of 2026-06-15. The workflow instance table now has `wake_after`, `sleepNamed` writes it in the same transaction as the sleep timer arm, and discovery skips non-terminal workflows whose wake hint is still in the future. Focused validation passed with `cabal test keiro --test-options='--match "Keiro.Workflow.Sleep"'` (11 examples, 0 failures), full validation passed with `cabal test keiro` (255 examples, 0 failures), and migration validation passed with `cabal test keiro-migrations-test` (2 examples, 0 failures). Milestone 7 remains next for low-severity hygiene.
 
 
 ## Context and Orientation
@@ -745,7 +748,7 @@ If plan 72's final DDL differs from the assumed shape, only milestone 5/6 SQL ch
 - `keiro/src/Keiro/Workflow/Gc.hs` — **new**: `WorkflowGcPolicy`, `WorkflowGcSummary`, `gcWorkflowsOnce :: (Store :> es) => UTCTime -> WorkflowGcPolicy -> Eff es WorkflowGcSummary`, `runWorkflowGcWorker`. Added to `keiro.cabal` exposed-modules.
 - `keiro/src/Keiro/Workflow/Resume.hs` — passes `now` to discovery; `Set`-based dedup.
 - `keiro/test/Main.hs` — all new tests; updated arities and the patch favorable-case option threading.
-- `keiro-migrations/sql-migrations/` — new GC index migration, timestamped after plan 72's instance-table migration; milestone 6 will add the `wake_after` column.
+- `keiro-migrations/sql-migrations/` — GC index migration and `wake_after` migration, both timestamped after plan 72's instance-table migration.
 
 **Consumed external interfaces:**
 
@@ -773,3 +776,5 @@ Revision note (2026-06-15): Milestone 3 was implemented and validated. The plan 
 Revision note (2026-06-15): Milestone 4 was implemented and validated. The plan now records first-run JSON round-trip returns, immediate decode failure on invalid round-trips, at-least-once and name-keyed replay documentation, workflow snapshot cost documentation, and full `keiro` validation.
 
 Revision note (2026-06-15): Milestone 5 was implemented and validated. The plan now records the final plan-72 table reconciliation (`completed_at` terminal age and richer lifecycle columns), instance-table discovery, the `Keiro.Workflow.Gc` module, GC index migration plus expected schema, pruning/live-parent/idempotence tests, and full `keiro` plus migration validation.
+
+Revision note (2026-06-15): Milestone 6 was implemented and validated. The plan now records the `wake_after` migration, sleep-arm wake hint write, discovery skip predicate, missing-row no-op behavior, no-reinvoke sleeper tests, active-cadence regression evidence, expected-schema update, and full `keiro` plus migration validation.

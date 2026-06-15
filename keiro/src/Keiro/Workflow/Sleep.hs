@@ -118,6 +118,7 @@ import Keiro.Workflow (
     currentRunGeneration,
     currentWorkflow,
     freshOrdinal,
+    setWorkflowWakeAfterTx,
     sleepStepPrefix,
  )
 import Kiroku.Store.Effect (Store)
@@ -241,7 +242,11 @@ sleepNamed userStep delta = do
                     , fireAt = addUTCTime delta now
                     , payload = sleepTimerPayload full
                     }
-        runTransaction (scheduleTimerOnceTx request)
+        -- Re-arms can only happen once discovery has found this instance again,
+        -- which means any existing wake_after has already self-expired. A later
+        -- overwrite is therefore bounded by the requested delay and suppresses
+        -- only future not-yet-due resume passes.
+        runTransaction (scheduleTimerOnceTx request >> setWorkflowWakeAfterTx name wid (request ^. #fireAt))
 
 {- | Durably pause the workflow for @delta@ under an ordinal name (the @N@th
 sleep in a run becomes @sleep:N@). Convenient but its determinism is

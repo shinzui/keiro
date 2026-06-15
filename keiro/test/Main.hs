@@ -5260,13 +5260,57 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Right summary <-
                     Store.runStoreIO storeHandle $
                         resumeWorkflowsOnce defaultWorkflowResumeOptions registry
-                stillSuspended summary `shouldBe` 1
+                discovered summary `shouldBe` 0
                 Right (Just secondFireAt) <-
                     Store.runStoreIO storeHandle $
                         Store.runTransaction $
                             Tx.statement timerUuid sleepTimerFireAtStmt
                 secondFireAt `shouldBe` firstFireAt
                 readIORef counter >>= (`shouldBe` 1)
+
+            it "skips a sleeping workflow until wake_after expires" $ \storeHandle -> do
+                counter <- newIORef (0 :: Int)
+                let name = WorkflowName "sleepwakeafter"
+                    wid = WorkflowId "swa-1"
+                Right Suspended <-
+                    Store.runStoreIO storeHandle $
+                        runWorkflow name wid (sleepDemoNamed counter (StepName "wait") 60)
+                now <- getCurrentTime
+                Right mWakeAfter <- Store.runStoreIO storeHandle $ workflowWakeAfter name wid
+                case mWakeAfter of
+                    Nothing -> expectationFailure "expected wake_after"
+                    Just wakeAfter -> wakeAfter `shouldSatisfy` (> now)
+                Right early <- Store.runStoreIO storeHandle $ findUnfinishedWorkflowIds now
+                early `shouldBe` []
+                Right due <- Store.runStoreIO storeHandle $ findUnfinishedWorkflowIds (addUTCTime 61 now)
+                due `shouldBe` [("swa-1", "sleepwakeafter")]
+
+            it "does not re-invoke a parked sleeper before wake_after" $ \storeHandle -> do
+                counter <- newIORef (0 :: Int)
+                let name = WorkflowName "sleepquiet"
+                    wid = WorkflowId "sq-1"
+                    registry = Map.singleton name (WorkflowDef (\_ -> sleepDemoNamed counter (StepName "wait") 60))
+                    pass = Store.runStoreIO storeHandle (resumeWorkflowsOnce defaultWorkflowResumeOptions registry)
+                Right Suspended <-
+                    Store.runStoreIO storeHandle $
+                        runWorkflow name wid (sleepDemoNamed counter (StepName "wait") 60)
+                Right s1 <- pass
+                Right s2 <- pass
+                Right s3 <- pass
+                map discovered [s1, s2, s3] `shouldBe` [0, 0, 0]
+                readIORef counter >>= (`shouldBe` 1)
+
+            it "treats a missing instance row during sleep arm as a no-op wake hint update" $ \storeHandle -> do
+                let name = WorkflowName "sleepmissingrow"
+                    wid = WorkflowId "smr-1"
+                    body = sleepNamed (StepName "wait") 60 >> pure ()
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+                Right () <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction $
+                            Tx.statement ("smr-1", "sleepmissingrow") deleteWorkflowInstanceStmt
+                Store.runStoreIO storeHandle (runWorkflow name wid body)
+                    `shouldReturn` Right Suspended
 
             it "fires a sleep longer than the resume cadence under an active resume worker" $ \storeHandle -> do
                 counter <- newIORef (0 :: Int)
@@ -7957,6 +8001,10 @@ workflowOwnedChildCount :: (Store :> es) => Text -> Text -> Eff es Int64
 workflowOwnedChildCount name wid =
     Store.runTransaction (Tx.statement (wid, name, wid, name) workflowOwnedChildCountStmt)
 
+workflowWakeAfter :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es (Maybe UTCTime)
+workflowWakeAfter (WorkflowName name) (WorkflowId wid) =
+    Store.runTransaction (Tx.statement (wid, name) workflowWakeAfterStmt)
+
 insertGcTimerStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text) ()
 insertGcTimerStmt =
     preparable
@@ -7987,6 +8035,33 @@ deleteGcStepsStmt =
             (E.param (E.nonNullable E.text))
         )
         D.noResult
+
+deleteWorkflowInstanceStmt :: Statement (Text, Text) ()
+deleteWorkflowInstanceStmt =
+    preparable
+        """
+        DELETE FROM keiro_workflows
+        WHERE workflow_id = $1 AND workflow_name = $2
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        D.noResult
+
+workflowWakeAfterStmt :: Statement (Text, Text) (Maybe UTCTime)
+workflowWakeAfterStmt =
+    preparable
+        """
+        SELECT wake_after
+        FROM keiro_workflows
+        WHERE workflow_id = $1 AND workflow_name = $2
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        (maybe Nothing id <$> D.rowMaybe (D.column (D.nullable D.timestamptz)))
 
 workflowOwnedRowCountsStmt :: Statement (Text, Text) (Int64, Int64, Int64, Int64, Int64, Int64)
 workflowOwnedRowCountsStmt =

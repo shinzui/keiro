@@ -19,6 +19,7 @@ module Keiro.Workflow.Schema (
     recordStepTx,
     lookupStepResultTx,
     lockWorkflowStepTx,
+    setWorkflowWakeAfterTx,
 
     -- * Read-only lookups
     loadStepIndex,
@@ -84,6 +85,10 @@ lookupStepResultTx wid name gen key =
 lockWorkflowStepTx :: Text -> Tx.Transaction ()
 lockWorkflowStepTx key =
     void (Tx.statement key lockWorkflowStepStmt)
+
+setWorkflowWakeAfterTx :: WorkflowName -> WorkflowId -> UTCTime -> Tx.Transaction ()
+setWorkflowWakeAfterTx (WorkflowName name) (WorkflowId wid) wakeAfter =
+    Tx.statement (wid, name, wakeAfter) setWorkflowWakeAfterStmt
 
 {- | Load every recorded step for a workflow instance as a @step name ->
 result@ map (includes the terminal completion marker row if present). Exposed
@@ -217,9 +222,9 @@ currentGenerationStmt =
         (D.singleRow (D.column (D.nonNullable D.int4)))
 
 -- The terminal-status literals must match 'Keiro.Workflow.Instance.statusToText'
--- for completed, cancelled, and failed. The timestamp parameter is intentionally
--- present before wake-after filtering lands; the tautology keeps the statement
--- shape stable without changing current discovery behavior.
+-- for completed, cancelled, and failed. The timestamp parameter makes
+-- wake_after a self-expiring skip: future sleepers disappear from discovery
+-- until their timer is due.
 findUnfinishedWorkflowIdsStmt :: Statement UTCTime [(Text, Text)]
 findUnfinishedWorkflowIdsStmt =
     preparable
@@ -227,8 +232,24 @@ findUnfinishedWorkflowIdsStmt =
         SELECT workflow_id, workflow_name
         FROM keiro_workflows
         WHERE status NOT IN ('completed', 'cancelled', 'failed')
-          AND $1 IS NOT NULL
+          AND (wake_after IS NULL OR wake_after <= $1)
         ORDER BY workflow_name, workflow_id
         """
         (E.param (E.nonNullable E.timestamptz))
         (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))
+
+setWorkflowWakeAfterStmt :: Statement (Text, Text, UTCTime) ()
+setWorkflowWakeAfterStmt =
+    preparable
+        """
+        UPDATE keiro_workflows
+        SET wake_after = $3,
+            updated_at = now()
+        WHERE workflow_id = $1 AND workflow_name = $2
+        """
+        ( contrazip3
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.timestamptz))
+        )
+        D.noResult

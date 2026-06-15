@@ -190,6 +190,12 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
   `completed_at` for terminal age. Full `cabal test keiro` passed with 252
   examples, 0 failures, and `cabal test keiro-migrations-test` passed with 2
   examples, 0 failures.
+- EP-7 Milestone 6 is complete as of 2026-06-15. Workflow sleep arms now write
+  `wake_after` on the instance row, and discovery skips future sleepers until
+  the hint expires. The active-resume cadence regression still completes, while
+  parked sleepers are no longer re-invoked before their timer is due. Full
+  `cabal test keiro` passed with 255 examples, 0 failures, and
+  `cabal test keiro-migrations-test` passed with 2 examples, 0 failures.
 
 
 ## Decision Log
@@ -264,6 +270,8 @@ EP-7 Milestone 4 is complete as of 2026-06-15. First-run workflow step results n
 
 EP-7 Milestone 5 is complete as of 2026-06-15. Workflow discovery now uses the per-instance `keiro_workflows` table, avoiding the full-history step-index aggregation, and `Keiro.Workflow.Gc` provides retention-based cleanup of terminal workflow data with live-parent protection for completed children. Milestone 6 remains next for `wake_after` discovery skips for future sleepers.
 
+EP-7 Milestone 6 is complete as of 2026-06-15. Future sleepers now set a self-expiring `wake_after` hint, and discovery ignores them until that timestamp, avoiding repeated replay/arm work while preserving due-sleeper completion. Milestone 7 remains next for low-severity workflow hygiene.
+
 
 ---
 
@@ -290,3 +298,5 @@ Revision note (2026-06-15): EP-7 Milestone 3 was completed. Surprises & Discover
 Revision note (2026-06-15): EP-7 Milestone 4 was completed. Surprises & Discoveries and Outcomes & Retrospective now record first-run JSON round-trip fidelity, immediate decode failure semantics, documentation updates, and validation evidence; the second EP-7 progress rollup item remains unchecked until discovery/pruning are complete.
 
 Revision note (2026-06-15): EP-7 Milestone 5 was completed. The second EP-7 progress rollup item is now checked, and Surprises & Discoveries plus Outcomes & Retrospective record instance-table discovery, workflow GC, plan-72 `completed_at` reconciliation, expected-schema update, and validation evidence.
+
+Revision note (2026-06-15): EP-7 Milestone 6 was completed. Surprises & Discoveries and Outcomes & Retrospective now record the `wake_after` instance-column migration, sleep-arm write, discovery skip, no-reinvoke tests, expected-schema update, and validation evidence.
