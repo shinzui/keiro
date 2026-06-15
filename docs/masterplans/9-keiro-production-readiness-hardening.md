@@ -48,7 +48,7 @@ Alternatives considered. A severity-ordered decomposition ("blockers plan, highs
 | 5 | Fix process manager and router delivery correctness | docs/plans/71-fix-process-manager-and-router-delivery-correctness.md | EP-1 | None | Complete |
 | 6 | Workflow engine failure handling, instance leasing, and crash-window atomicity | docs/plans/72-workflow-engine-failure-handling-instance-leasing-and-crash-window-atomicity.md | None | None | Complete |
 | 7 | Workflow sleep, generation, and patch semantics plus journal scale hygiene | docs/plans/73-workflow-sleep-generation-and-patch-semantics-plus-journal-scale-hygiene.md | EP-6 | EP-4 | Complete |
-| 8 | Expose keiro-pgmq tuning surface and make job workers resilient | docs/plans/74-expose-keiro-pgmq-tuning-surface-and-make-job-workers-resilient.md | None | EP-1, EP-2 | Not Started |
+| 8 | Expose keiro-pgmq tuning surface and make job workers resilient | docs/plans/74-expose-keiro-pgmq-tuning-surface-and-make-job-workers-resilient.md | None | EP-1, EP-2 | Complete |
 
 
 ## Dependency Graph
@@ -204,6 +204,13 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
   constructors document and validate ambiguous stream-name separators. Full
   `cabal test keiro` passed with 256 examples, 0 failures, and
   `cabal test keiro-migrations-test` passed with 2 examples, 0 failures.
+- EP-8 is complete as of 2026-06-15. The child plan had already implemented the
+  keiro-pgmq hardening work; this pass reconciled its status with EP-1's completed
+  upstream shibuya fixes and revalidated `cabal test keiro-pgmq-test` with 50
+  examples, 0 failures, 2 pending. The two pending examples are explicit
+  environment/placeholders, not incomplete hardening: local transient-poll fault
+  injection is covered actively by EP-1's upstream tests, and live partitioned
+  queues require pg_partman.
 
 
 ## Decision Log
@@ -282,6 +289,10 @@ EP-7 Milestone 6 is complete as of 2026-06-15. Future sleepers now set a self-ex
 
 EP-7 is complete as of 2026-06-15. The final hygiene pass confirmed the old `journalEntryExists` fold no longer exists, replaced `nub`-style resume candidate de-dup with stable `Set` membership, and added additive workflow identity smart constructors for separator-safe names and ids. Final validation passed with `cabal test keiro` (256 examples, 0 failures) and `cabal test keiro-migrations-test` (2 examples, 0 failures).
 
+EP-8 is complete as of 2026-06-15. keiro-pgmq now has validated retry/tuning smart constructors, configurable visibility timeout/batch/polling, handler lease extension and attempt context, a prompt direct `runJobOnceWithContext` drain, retry rather than dead-letter for future-version payloads, collision-resistant physical queue names, DLQ inspection/redrive/purge, queue provisioning helpers, FIFO/group ordering support, and queue/DLQ metrics. Final revalidation for this closeout passed with `cabal test keiro-pgmq-test` (50 examples, 0 failures, 2 pending); the pending examples are documented placeholders for upstream transient-poll fault injection and pg_partman-backed partitioned queues.
+
+The production-readiness hardening initiative is complete as of 2026-06-15. All eight child plans are marked Complete, and the remaining documented pending tests are environmental or cross-repository placeholders rather than open implementation work.
+
 
 ---
 
@@ -312,3 +323,5 @@ Revision note (2026-06-15): EP-7 Milestone 5 was completed. The second EP-7 prog
 Revision note (2026-06-15): EP-7 Milestone 6 was completed. Surprises & Discoveries and Outcomes & Retrospective now record the `wake_after` instance-column migration, sleep-arm write, discovery skip, no-reinvoke tests, expected-schema update, and validation evidence.
 
 Revision note (2026-06-15): EP-7 Milestone 7 and final closeout were completed. The registry now marks EP-7 Complete, the progress rollup includes sleeper-skip and hygiene completion, and Surprises & Discoveries plus Outcomes & Retrospective record the already-removed `journalEntryExists` target, stable `Set`-backed de-dup, identity smart constructors, and final validation evidence.
+
+Revision note (2026-06-15): EP-8 was reconciled and marked Complete. The registry now marks every child plan Complete, Surprises & Discoveries records the post-EP-1 transient-poll test boundary, Outcomes & Retrospective records the keiro-pgmq hardening surface and final `cabal test keiro-pgmq-test` evidence, and the initiative is closed out as complete.

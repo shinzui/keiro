@@ -4,6 +4,7 @@ slug: expose-keiro-pgmq-tuning-surface-and-make-job-workers-resilient
 title: "Expose keiro-pgmq tuning surface and make job workers resilient"
 kind: exec-plan
 created_at: 2026-06-11T04:45:56Z
+intention: intention_01kv40hzwaenftzem0gxypz4mj
 master_plan: "docs/masterplans/9-keiro-production-readiness-hardening.md"
 ---
 
@@ -23,7 +24,7 @@ After this plan is implemented, an operator can declare per-queue visibility tim
 cabal test keiro-pgmq-test
 ```
 
-One behavior is explicitly out of this plan's hands: a transient database error during polling currently kills a `runJobWorkers` worker permanently and silently. The root causes live upstream (shibuya's unobserved ingester async and pgmq-effectful's lack of transient-error retry) and are owned by `docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md`. This plan documents the honest contract now and carries a pre-written acceptance test that stays `pending` until that plan lands (see Milestone 8).
+One behavior is explicitly coordinated with `docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md`: transient database errors during polling are fixed upstream in shibuya-core and shibuya-pgmq-adapter, and this package consumes those releases. The keiro-pgmq suite keeps a pending keiro-level acceptance placeholder because the deterministic fault injector lives in the upstream adapter tests; the upstream suites are the active proof that transient poll errors are retried and visible.
 
 
 ## Progress
@@ -87,9 +88,9 @@ Milestone 7 — DLQ consumption and redrive:
 Milestone 8 — honest contracts, gated resilience test, and wiring:
 
 - [x] Write the "Delivery and crash semantics" haddock section in `Keiro.PGMQ.Job` (at-least-once windows, idempotent-handler requirement, DLQ send-then-delete duplicate window, transient-poll-error caveat pending plan 67). Completed 2026-06-13T14:22:06Z.
-- [x] Add the worker-resilience acceptance test (`pg_terminate_backend` mid-poll; worker keeps polling) as `pendingWith` until `docs/plans/67-…` lands; flip to active and reconcile against plan 67's Interfaces section when it does. Completed 2026-06-13T14:22:06Z.
+- [x] Add the worker-resilience acceptance placeholder and reconcile it after `docs/plans/67-…` landed: keiro-pgmq keeps the test `pendingWith` because it lacks a deterministic local transient-poll fault injector, while EP-1's upstream shibuya and shibuya-pgmq-adapter tests are the active coverage. Completed 2026-06-15T00:00:00Z.
 - [x] Add `cabal test keiro-pgmq-test` to the `haskell-test` recipe in `Justfile`. Completed 2026-06-13T14:22:06Z.
-- [x] Final pass: `cabal build all` and all suites green; update MasterPlan rollup checkboxes. Completed 2026-06-13T14:24:13Z; evidence: `cabal build all`, `just haskell-test`, and `cabal test keiro-migrations-test` passed. `keiro-pgmq-test` reported `31 examples, 0 failures, 1 pending` for the plan-67-gated resilience test.
+- [x] Final pass: `cabal build all` and all suites green; update MasterPlan rollup checkboxes. Completed 2026-06-13T14:24:13Z; revalidated 2026-06-15 with `cabal test keiro-pgmq-test` reporting `50 examples, 0 failures, 2 pending`.
 
 
 ## Surprises & Discoveries
@@ -97,7 +98,8 @@ Milestone 8 — honest contracts, gated resilience test, and wiring:
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet. Research-phase notes that shaped the plan are recorded in Context and Orientation and in the Decision Log — notably that `Shibuya.Adapter.Pgmq.Internal` is a hidden module, which forces the `runJobOnce` drain to own its ack mechanics, and that keiro-dsl conformance fixtures construct `Job`/`JobCodec`/`RetryPolicy` records directly, which constrains which record changes are affordable.)
+- 2026-06-15: EP-1 landed the real transient-poll fix upstream: shibuya-core now marks failed ingesters as failed and propagates the exception, while shibuya-pgmq-adapter retries transient poll errors with bounded backoff. The keiro-pgmq suite keeps its worker-resilience test pending because this package does not have a deterministic local fault injector for a single poll; EP-1's upstream tests are the active coverage. Revalidation evidence here: `cabal test keiro-pgmq-test` passed with 50 examples, 0 failures, 2 pending.
+- 2026-06-15: The second pending `keiro-pgmq-test` example is unrelated to production-readiness hardening: live partitioned queues require a pg_partman-enabled PostgreSQL, while the test fixture installs only the PGMQ schema via `pgmq-migration`.
 
 
 ## Decision Log
@@ -135,6 +137,10 @@ Record every decision made while working on the plan.
   Rationale: The fix is upstream-owned (soft dependency). A pending test keeps the acceptance criterion executable and discoverable; honest documentation prevents anyone shipping multi-replica workers believing they self-heal.
   Date: 2026-06-11
 
+- Decision: After EP-1 completed, keep the keiro-pgmq worker-resilience placeholder pending rather than replacing it with a session-killing integration test.
+  Rationale: EP-1's shibuya-pgmq-adapter tests now deterministically exercise transient poll retry with a stub PGMQ interpreter, and shibuya-core tests deterministically prove ingester failure propagation. A keiro-pgmq-level test based on killing PostgreSQL backends would be timing-sensitive and can kill fixture-owned sessions instead of precisely one worker poll. The local pending example remains as a discoverable cross-plan acceptance marker, while the active proof lives at the correct abstraction boundary.
+  Date: 2026-06-15
+
 
 ## Outcomes & Retrospective
 
@@ -148,7 +154,9 @@ Compare the result against the original purpose.
 - Milestone 5 completed on 2026-06-13T14:10:39Z. Worker handlers can now opt into `JobContext` to extend a delivery lease and inspect the zero-based attempt number, while existing `jobProcessor` callers keep the old payload-only handler shape. `JobTuning` now reaches the PGMQ adapter on the worker path, and tests cover lease extension, attempt exposure, worker smoke processing, retry-limit DLQ routing, and delayed enqueue visibility.
 - Milestone 6 completed on 2026-06-13T14:16:16Z. `runJobOnceWithContext` now drains directly from PGMQ and returns the number of messages it actually acknowledged, retried, or dead-lettered, while `runJobOnce` remains a compatibility wrapper. The old infinite-stream hang is removed, batch drains work without pre-reading the whole queue, handler exceptions leave messages for visibility-timeout redelivery while later messages continue, and direct-drain retry/DLQ behavior now matches the worker path.
 - Milestone 7 completed on 2026-06-13T14:20:07Z. `Keiro.PGMQ.Dlq` now exposes decoded DLQ inspection, at-least-once redrive back to the main queue, and purge. The module documents the shibuya DLQ envelope, retention expectations, and redrive duplicate window, and the suite covers decoded payload inspection, redrive-and-process, purge, and malformed wrapper preservation.
-- Milestone 8 completed on 2026-06-13T14:24:13Z. `Keiro.PGMQ.Job` now states the at-least-once delivery contract, visibility-timeout crash cadence, DLQ/redrive duplicate windows, idempotency requirement, and current transient-poll limitation. The worker-resilience acceptance test is present but pending on plan 67, `keiro-pgmq-test` is wired into `just haskell-test`, the MasterPlan EP-8 rollup checkboxes are ticked, and the final build/test gate passed.
+- Milestone 8 completed on 2026-06-13T14:24:13Z and reconciled after EP-1 on 2026-06-15. `Keiro.PGMQ.Job` now states the at-least-once delivery contract, visibility-timeout crash cadence, DLQ/redrive duplicate windows, and idempotency requirement. The upstream transient-poll behavior is covered by EP-1's shibuya and shibuya-pgmq-adapter tests, while the keiro-pgmq worker-resilience placeholder remains pending as a cross-plan marker. `keiro-pgmq-test` is wired into `just haskell-test`, the MasterPlan EP-8 rollup checkboxes are ticked, and `cabal test keiro-pgmq-test` revalidated the package with 50 examples, 0 failures, 2 pending.
+
+EP-8 is complete as of 2026-06-15. The package now exposes validated tuning, context-aware handlers with lease extension and attempt numbers, a prompt direct drain, future-version retry semantics, collision-resistant queue naming, DLQ inspection/redrive/purge, queue provisioning helpers, FIFO/group ordering support, and queue/DLQ metrics. The remaining pending tests are explicit environmental placeholders rather than incomplete hardening work: one local transient-poll marker whose active proof lives upstream in EP-1, and one partitioned-queue live test that requires pg_partman.
 
 
 ## Context and Orientation
@@ -521,3 +529,8 @@ In `Keiro.PGMQ.Runtime`: `queueRef :: Text -> QueueRef` (same signature, hash-di
 In `Keiro.Test.Postgres` (keiro-test-support): existing exports unchanged, plus `withMigratedSuiteWith :: (Text -> IO ()) -> (Fixture -> IO a) -> IO a` and `withFreshDatabase :: Fixture -> (Text -> IO a) -> IO a`.
 
 Cross-plan interface notes: the `<Thing>ConfigError` naming is the convention shared with `docs/plans/70-…` (first to land wins; see Decision Log). The version-ahead detection is local and remains correct whether or not `docs/plans/68-…` adds `VersionAhead` to `Keiro.Codec.CodecError`. The milestone 8 resilience test is the consumer of `docs/plans/67-…`'s shibuya/pgmq-effectful fixes; no keiro-pgmq signature depends on that plan's interfaces, only the test's pass/pending status.
+
+
+---
+
+Revision note (2026-06-15): Reconciled EP-8 after EP-1's upstream shibuya and shibuya-pgmq-adapter fixes landed. The plan frontmatter now carries the MasterPlan intention, the Progress, Surprises & Discoveries, Decision Log, and Outcomes & Retrospective sections now explain why the keiro-pgmq transient-poll placeholder remains pending while upstream tests provide the active proof, and final validation evidence was refreshed with `cabal test keiro-pgmq-test` (50 examples, 0 failures, 2 pending).
