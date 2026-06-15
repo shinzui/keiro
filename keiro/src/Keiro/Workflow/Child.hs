@@ -9,7 +9,7 @@ surviving a crash, because the spawn is recorded in the parent's journal and the
 link is stored in @keiro_workflow_children@.
 
 @
-parent :: ('Workflow' ':>' es, 'Store' ':>' es) => Eff es Text
+parent :: ('Workflow' ':>' es, 'Store' ':>' es, 'IOE' ':>' es) => Eff es Text
 parent = do
   h      <- 'spawnChild' (WorkflowName \"ship-order\") (WorkflowId \"ord-7\") shipWorkflow
   result <- 'awaitChild' h                  -- SUSPEND until the child completes
@@ -33,19 +33,24 @@ parent = do
 * __'awaitChild' reuses EP-38's suspension primitive__ — it is
   @'awaitStep' (StepName \"child:\<childId\>:result\") arm@. On the miss path it
   re-asserts nothing new (the spawn already registered the link) but throws
-  'WorkflowChildCancelled' if the child was cancelled meanwhile; on the hit path
-  it decodes the child's result, which 'childCompletionHook' propagated into the
-  parent journal when the child finished.
+  'WorkflowChildCancelled' if the child was cancelled meanwhile. On the hit path
+  it decodes a tagged parent-journal envelope: @{"ok": result}@ returns the
+  child result, @{"cancelled": true}@ throws 'WorkflowChildCancelled',
+  @{"failed": reason}@ throws 'WorkflowChildFailed', and legacy raw values are
+  still decoded as pre-envelope successful results.
 * __'runChildWorkflow'__ is what the resume worker selects (instead of bare
   'Keiro.Workflow.runWorkflowWith') for any workflow that is some parent's child:
   on 'Completed' it runs 'childCompletionHook', which flips the child row to
-  @completed@ and appends the @child:\<childId\>:result@ 'StepRecorded' to the
-  parent's journal.
-* __'cancelChild'__ flips the child row to @cancelled@ and writes a
-  'Keiro.Workflow.WorkflowCancelled' marker to the /child/ journal (so the
-  child's next resume short-circuits and stops) plus a @{"cancelled": true}@
-  sentinel as the parent's await-step result (so a suspended parent's
-  'awaitChild' throws 'WorkflowChildCancelled' rather than blocking forever).
+  @completed@ and appends @{"ok": result}@ to the parent's
+  @child:\<childId\>:result@ step. If it finds a historically
+  @cancelled@-but-unmarked row, it ensures the child cancellation marker and
+  parent sentinel before returning 'Cancelled'.
+* __'cancelChild'__ flips the child row to @cancelled@ and, in the same
+  transaction, writes a 'Keiro.Workflow.WorkflowCancelled' marker to the
+  /child/ journal plus a @{"cancelled": true}@ sentinel as the parent's
+  await-step result. Retrying after a historical row-only cancel repairs both
+  markers even though the return value remains 'False' ("this call did not
+  transition the row").
 * @'Keiro.Workflow.Child.Schema.countActiveChildren'@ backs a potential
   @keiro.workflow.children.active@ gauge for EP-44.
 -}
@@ -146,7 +151,8 @@ childResultStepName (WorkflowId wid) = childStepPrefix <> wid <> ":result"
 {- | Thrown out of 'awaitChild' when the awaited child was 'cancelChild'led. A
 cancelled child never produces a result, so suspending forever would be wrong
 and fabricating a result would be wrong; the parent author can @catch@ this to
-run compensation, and EP-42's resume worker treats it as a parent failure.
+run compensation. If uncaught, the resume worker records the parent attempt,
+backs it off, and eventually marks the parent failed at its configured ceiling.
 Mirrors EP-40's 'Keiro.Workflow.Awakeable.WorkflowAwakeableCancelled'.
 -}
 data WorkflowChildCancelled = WorkflowChildCancelled WorkflowName WorkflowId
@@ -211,9 +217,10 @@ result. This is EP-38's 'awaitStep' on the @child:\<childId\>:result@ step:
 'childCompletionHook' journals that step into the parent when the child
 finishes, so the next parent run replays past the wait and decodes the result.
 
-If the child was cancelled, throws 'WorkflowChildCancelled' — detected both on
-the suspend path (the arm checks the child row's status) and on the hit path
-(a cancelled child's result entry is a @{"cancelled": true}@ sentinel).
+If the child was cancelled or failed, throws 'WorkflowChildCancelled' or
+'WorkflowChildFailed'. Parent-journal values are tagged envelopes
+(@{"ok": ...}@, @{"cancelled": true}@, @{"failed": reason}@) with a legacy raw
+success fallback; a decode mismatch throws 'WorkflowStepDecodeError'.
 -}
 awaitChild ::
     (Workflow :> es, Store :> es, IOE :> es, FromJSON a) =>
@@ -246,13 +253,14 @@ awaitChild (ChildHandle childNm childWid) = do
 -- External control
 -- ---------------------------------------------------------------------------
 
-{- | Cancel a child. Flips its @keiro_workflow_children@ row from @running@ to
-@cancelled@ (a no-op for an already-resolved child, returning 'False'), and on a
-successful transition: (1) writes a 'WorkflowCancelled' marker to the /child/
-journal so the child's next resume short-circuits via EP-38's handler, and (2)
-writes a @{"cancelled": true}@ sentinel as the parent's await-step result so a
-suspended parent's 'awaitChild' throws 'WorkflowChildCancelled'. Both appends
-use deterministic ids (idempotent), so a retried cancel is safe.
+{- | Cancel a child. For a @running@ child, flips its
+@keiro_workflow_children@ row to @cancelled@ and, in the same transaction,
+writes both the child's 'WorkflowCancelled' marker and the parent's
+@{"cancelled": true}@ await-step sentinel. Returns 'True' only when this call
+performed the row transition. For an already-@cancelled@ row, returns 'False'
+but still ensures both markers, repairing historical crashes that committed the
+row flip before either journal append. Already completed/failed/unknown
+children return 'False' and no marker is fabricated.
 -}
 cancelChild ::
     (IOE :> es, Store :> es) =>
@@ -276,7 +284,9 @@ cancelChild (ChildHandle childNm childWid) = do
 This is 'runWorkflowWith' followed by 'childCompletionHook' on 'Completed': the
 resume worker selects this (instead of bare 'runWorkflowWith') for any workflow
 that is some parent's child, so a finished child wakes its waiting parent. A
-'Suspended' or 'Cancelled' child propagates nothing (it has no result yet).
+'Suspended' child propagates nothing. A child row already marked 'ChildCancelled'
+is repaired by ensuring the child cancellation marker and parent sentinel, then
+returns 'Cancelled'; a 'ChildFailed' row returns 'Failed'.
 -}
 runChildWorkflow ::
     (IOE :> es, Store :> es, ToJSON a) =>
@@ -304,12 +314,13 @@ runChildWorkflow opts childNm childWid action = do
                 other -> pure other
 
 {- | Propagate a finished child's result to its parent: flip the child row to
-@completed@ (storing the result) and append the @child:\<childId\>:result@
-'StepRecorded' to the /parent/ journal — exactly the wake source the parent's
-'awaitChild' resolves on. Idempotent and crash-safe: it always looks the parent
-link up and (re-)appends, treating a duplicate append as success, so a crash
-between the child completing and the parent being notified self-heals on the
-next drive. Normally invoked via 'runChildWorkflow'.
+@completed@ (storing the raw result in the child row) and append an
+@{"ok": result}@ @child:\<childId\>:result@ 'StepRecorded' to the /parent/
+journal — exactly the wake source the parent's 'awaitChild' resolves on. The
+running-row transition and parent append happen in one transaction. An
+already-@completed@ row re-appends from the stored result, repairing historical
+wedges; cancelled/failed children do not fabricate a success. Normally invoked
+via 'runChildWorkflow'.
 -}
 childCompletionHook ::
     (IOE :> es, Store :> es) =>

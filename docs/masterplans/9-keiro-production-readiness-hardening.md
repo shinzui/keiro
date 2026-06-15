@@ -223,6 +223,8 @@ EP-6 Milestone 4 is complete as of 2026-06-15. Awakeable and child-completion cr
 
 EP-6 Milestone 5 is complete as of 2026-06-15. Child cancellation now writes the child marker and parent sentinel atomically with the row transition, cancelled-but-unmarked children self-heal when driven, child results use tagged envelopes with legacy fallback, failed children wake parents through `WorkflowChildFailed`, and mid-run cancellation stops at the next workflow step boundary.
 
+EP-6 is complete as of 2026-06-15. The workflow engine now has poison-workflow isolation and terminal failure marking, per-instance leases, transaction-composable journal appends, atomic awakeable and child wake paths, cancel repair, child result envelopes, failed-child propagation, and documentation that matches those semantics. Final validation passed with `cabal build all`, `cabal test keiro-test` (237 examples, 0 failures), `cabal test keiro-migrations-test` (2 examples, 0 failures), and `cabal test jitsurei-test` (16 examples, 0 failures).
+
 
 ---
 
@@ -237,3 +239,5 @@ Revision note (2026-06-15): EP-6 Milestone 3 was completed. The Progress rollup 
 Revision note (2026-06-15): EP-6 Milestone 4 was completed. Surprises & Discoveries plus Outcomes & Retrospective record the awakeable and child-completion atomicity work and validation evidence; the third EP-6 Progress rollup item remains unchecked until M5 cancellation crash windows are closed.
 
 Revision note (2026-06-15): EP-6 Milestone 5 was completed. The third EP-6 Progress rollup item is now checked, and Outcomes & Retrospective records the cancel atomicity, child-result envelope, failed-child wake, and mid-run cancellation work. Validation passed with `cabal test keiro-test --test-options='--match "Keiro.Workflow.Child"'` (14 examples, 0 failures), `cabal test keiro-test --test-options='--match "Keiro.Workflow"'` (68 examples, 0 failures), and full `cabal test keiro-test` (237 examples, 0 failures).
+
+Revision note (2026-06-15): EP-6 Milestone 6 completed the haddock truth pass and final validation. EP-6 is now fully implemented; final validation passed with `cabal build all`, `cabal test keiro-test` (237 examples, 0 failures), `cabal test keiro-migrations-test` (2 examples, 0 failures), and `cabal test jitsurei-test` (16 examples, 0 failures).

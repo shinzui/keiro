@@ -8,7 +8,7 @@ that system /signals/ the id with a result — no polling, no bespoke
 "wait for event X then react in a process manager" wiring.
 
 @
-approvalFlow :: ('Workflow' ':>' es, 'Store' ':>' es) => Eff es Text
+approvalFlow :: ('Workflow' ':>' es, 'Store' ':>' es, 'IOE' ':>' es) => Eff es Text
 approvalFlow = do
   (aid, await) <- 'awakeableNamed' (StepName \"approval\")  -- allocate the promise
   -- (hand @aid@ to a webhook handler / human / LLM tool here)
@@ -35,15 +35,16 @@ journal. The __next__ run replays past the now-resolved @await@ and 'Completed's
 * Awakeables journal their completion as ordinary 'StepRecorded' events under
   the reserved @awk:@ prefix ('Keiro.Workflow.awakeableStepPrefix'), never a
   new event type, so EP-38's replay loop stays uniform.
-* 'signalAwakeable' is idempotent /and/ crash-safe: a double signal returns
-  'False' and does not change the recorded value, and a signal of an
+* 'signalAwakeable' is idempotent /and/ crash-safe: it commits the row update
+  and journal append in one transaction for new signals, a double signal
+  returns 'False' and does not change the recorded value, and a signal of an
   already-@completed@ awakeable re-appends the journal entry from the stored
-  payload (treating kiroku's @DuplicateEvent@ as success) so a crash between
-  the row update and the journal append self-heals.
+  payload to repair historical wedges.
 * 'cancelAwakeable' abandons a still-@pending@ promise; a workflow that
   re-enters its @await@ then throws 'WorkflowAwakeableCancelled', which the
-  author can @catch@ for compensation and EP-42's resume worker records as a
-  failure.
+  author can @catch@ for compensation. If uncaught, EP-42's resume worker
+  records an attempt, backs off, and eventually appends 'WorkflowFailed' at the
+  configured failure ceiling.
 * @countPendingAwakeables@ (in "Keiro.Workflow.Awakeable.Schema") backs EP-44's
   @keiro.workflow.awakeables.pending@ gauge.
 -}
@@ -149,7 +150,8 @@ deterministicAwakeableId (WorkflowName name) (WorkflowId wid) label =
 @await@ of an awakeable that was 'cancelAwakeable'd. A cancelled awakeable will
 never be signalled, so suspending forever would be wrong and silently
 completing would fabricate a result; the workflow author can @catch@ this to
-run compensation, and EP-42's resume worker treats it as a failure.
+run compensation. If uncaught, the resume worker records the attempt and
+eventually marks the workflow failed at its configured ceiling.
 -}
 newtype WorkflowAwakeableCancelled = WorkflowAwakeableCancelled AwakeableId
     deriving stock (Eq, Show)
@@ -243,12 +245,11 @@ Idempotent and crash-safe:
 * Returns 'True' only when /this/ call transitioned the row @pending@ ->
   @completed@; a second signal (or a signal of a @cancelled@ row) returns
   'False' and leaves the stored payload unchanged.
-* The journal entry is (re-)appended whenever the row is @completed@ — using
-  the value just written, or, for an already-@completed@ row, the stored
-  payload — so a crash between the row update and the journal append heals on a
-  later signal. 'appendJournalEntry' is itself idempotent (deterministic event
-  id, @DuplicateEvent@ treated as success), so the re-append collapses to a
-  no-op once the entry is present.
+* For a @pending@ row, the row transition and journal append happen in one
+  transaction. For an already-@completed@ row, the journal entry is re-appended
+  from the stored payload to repair rows wedged before that atomic path existed.
+  The append path is idempotent (deterministic event id plus step-index check),
+  so a re-append collapses to a no-op once the entry is present.
 
 A 'False' return therefore does not mean "nothing happened": the journal may
 still have been repaired. Returns 'False' for an unknown id.

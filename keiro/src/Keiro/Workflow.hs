@@ -40,6 +40,10 @@ an external signal, or a child), 'runWorkflow' returns a 'WorkflowOutcome'
 * Per-run options live in one record, 'WorkflowRunOptions' (EP-41 adds a
   snapshot policy, EP-44 adds metrics/tracer); 'runWorkflowWith' is the
   single canonical entry EP-42's resume worker re-invokes through.
+* The derived @keiro_workflows@ instance row is maintained by journal append
+  transactions. Terminal markers ('WorkflowCompleted', 'WorkflowCancelled',
+  'WorkflowFailed') freeze the instance as completed/cancelled/failed, and the
+  resume worker uses its attempt/lease fields for crash recovery.
 * Discovery (EP-42) is 'findUnfinishedWorkflowIds' plus 'completedStepName';
   it needs no kiroku prefix subscription.
 
@@ -384,10 +388,15 @@ resumed runs honor the same options.
 
 If the workflow's journal already carries a 'WorkflowCancelled' marker (a child
 cancelled by its parent, EP-43), the run short-circuits immediately and returns
-'Cancelled' without executing any step. If the journal carries a
-'WorkflowFailed' marker, the run likewise short-circuits to 'Failed'. To
-/propagate/ a finished child's result to its parent, drive the child through
-'Keiro.Workflow.Child.runChildWorkflow' rather than this function directly.
+'Cancelled' without executing any step. The handler also re-checks that marker
+on step/await/patch miss paths and after a fresh step action returns, so a
+mid-run cancellation stops at the next workflow boundary. A cancellation that
+lands after the check but before/during the user action may still let that one
+action run; durable workflow steps remain at-least-once at boundaries. If the
+journal carries a 'WorkflowFailed' marker, the run likewise short-circuits to
+'Failed'. To /propagate/ a finished child's result to its parent, drive the
+child through 'Keiro.Workflow.Child.runChildWorkflow' rather than this function
+directly.
 -}
 runWorkflowWith ::
     forall a es.
