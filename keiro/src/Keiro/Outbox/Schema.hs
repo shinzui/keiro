@@ -15,6 +15,7 @@ module Keiro.Outbox.Schema (
     lookupOutbox,
     listOutbox,
     countOutboxBacklog,
+    garbageCollectSent,
 )
 where
 
@@ -76,6 +77,26 @@ exactly the rows a publisher still has to drain (rows held mid-pass in
 countOutboxBacklog :: (Store :> es) => Eff es Int
 countOutboxBacklog =
     runTransaction (Tx.statement () countBacklogStmt)
+
+{- | Delete @sent@ rows whose @published_at@ is older than @keepFor@ before
+@now@.
+
+Returns the number of rows deleted. @dead@ rows are never deleted: they are
+operator action items proving an event was not published. The retention window
+only bounds how long successful publish history remains queryable; consumer
+dedupe lives in the inbox, not here.
+-}
+garbageCollectSent ::
+    (Store :> es) =>
+    NominalDiffTime ->
+    UTCTime ->
+    Eff es Int
+garbageCollectSent keepFor now = do
+    let cutoff = addUTCTime (negate keepFor) now
+    result <-
+        runTransaction $
+            Tx.statement cutoff gcSentStmt
+    pure (fromIntegral result)
 
 {- | Claim up to @limit@ rows ready for publish.
 
@@ -410,6 +431,20 @@ countBacklogStmt =
         "SELECT COUNT(*)::bigint FROM keiro_outbox WHERE status IN ('pending', 'failed')"
         E.noParams
         (fmap fromIntegral (D.singleRow (D.column (D.nonNullable D.int8))))
+
+gcSentStmt :: Statement UTCTime Int64
+gcSentStmt =
+    preparable
+        """
+        WITH deleted AS (
+          DELETE FROM keiro_outbox
+          WHERE status = 'sent' AND published_at < $1
+          RETURNING 1
+        )
+        SELECT COALESCE(COUNT(*), 0)::bigint FROM deleted
+        """
+        (E.param (E.nonNullable E.timestamptz))
+        (D.singleRow (D.column (D.nonNullable D.int8)))
 
 readAttemptCountStmt :: Statement UUID (Maybe Int)
 readAttemptCountStmt =

@@ -71,9 +71,13 @@ data OutboxStatus
   with key @k@ blocks every later row with the same key. Rows with
   'Nothing' key bypass the block (Kafka does not promise cross-key order
   for null-keyed records). One stuck aggregate cannot stall traffic on
-  other aggregates.
+  other aggregates. Ordering is based on @created_at@, which PostgreSQL
+  sets to transaction-start time; callers that concurrently enqueue the
+  same key through escape hatches must serialize those enqueues themselves
+  if commit order matters.
 * 'PerSourceStream' — within a @source@, any non-terminal row blocks
-  every later row. Use when ordering matters across keys (rare).
+  every later row. Use when ordering matters across keys (rare). This has
+  the same @created_at@ concurrency caveat as 'PerKeyHeadOfLine'.
 * 'StopTheLine' — any failure halts the worker until operator
   intervention. Use when correctness requires manual review on every
   failure.

@@ -19,6 +19,13 @@ with @FOR UPDATE SKIP LOCKED@ plus the configured 'OrderingPolicy',
 hands each row to a caller-supplied publish function, and marks the row
 sent, retryable, or dead. The Kafka adapter lives in
 'Keiro.Outbox.Kafka'.
+
+The per-key and per-source ordering policies sort by @created_at@, which
+PostgreSQL fills at transaction start. The canonical 'IntegrationProducer'
+subscription serializes same-key enqueues, so its ordering is stable. Callers
+using the inline 'enqueueIntegrationEventTx' escape hatch concurrently for the
+same key must serialize those enqueues themselves or accept best-effort order:
+two transactions can commit in the opposite order of their @created_at@ values.
 -}
 module Keiro.Outbox (
     -- * Re-exports
@@ -32,6 +39,7 @@ module Keiro.Outbox (
     lookupOutbox,
     listOutbox,
     countOutboxBacklog,
+    garbageCollectSent,
 
     -- * Inline escape hatch
     freshOutboxId,
@@ -91,6 +99,12 @@ freshOutboxId = fmap OutboxId (liftIO V7.genUUID)
 already running inside a 'runCommandWithSqlEvents' transaction. The
 caller supplies a stable 'OutboxId' so retried command attempts coalesce
 on the @(source, message_id)@ unique constraint.
+
+Ordering caveat: under 'PerKeyHeadOfLine' and 'PerSourceStream', the publisher
+orders rows by @created_at@, which PostgreSQL sets to transaction-start time.
+If two concurrent transactions enqueue the same key/source and commit in the
+opposite order, a publisher can observe that order. Serialize same-key enqueues
+when strict order matters.
 -}
 enqueueIntegrationEventTx ::
     OutboxId ->

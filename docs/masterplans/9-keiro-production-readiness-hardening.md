@@ -98,7 +98,7 @@ Milestone-level rollup across child plans; the authoritative per-step state live
 - [x] EP-3: snapshot-write failures no longer fail committed commands
 - [x] EP-3: sharded subscription position reads; `Strong` consistency implemented or removed
 - [x] EP-3: read-model registry churn eliminated; async-projection contract honest
-- [ ] EP-4: outbox — stale `publishing` reclaim, publish exception guard, GC
+- [x] EP-4: outbox — stale `publishing` reclaim, publish exception guard, GC
 - [ ] EP-4: inbox — poison-message path public, backlog count off hot path, index
 - [ ] EP-4: timers — stuck `firing` auto-requeue, status-guarded transitions
 - [ ] EP-4: shard worker — error visibility, reader supervision, lease relinquish

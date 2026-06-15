@@ -36,9 +36,9 @@ After this plan is implemented, every documented recovery guarantee in these fou
 - [x] M2: fix the false reclaim claim in the `OutboxStatus` haddock in `keiro/src/Keiro/Outbox/Types.hs` (completed 2026-06-15)
 - [x] M2: add the `keiro.outbox.reclaimed` counter to `keiro/src/Keiro/Telemetry.hs` (completed 2026-06-15)
 - [x] M2: write the crash-window tests (reclaim after timeout, no premature reclaim, exception guard, dead-letter on exhausted crash loop, sent-guard lost race) (completed 2026-06-15; focused `Keiro.Outbox` run passed with 20 examples, 0 failures; full `keiro-test` passed with 188 examples, 0 failures)
-- [ ] M3: add `garbageCollectSent` to the outbox schema and public module, with tests
-- [ ] M3: document the per-key ordering constraint on `enqueueOutboxTx` / `enqueueIntegrationEventTx` / `OrderingPolicy` (M1 finding, documentation-only)
-- [ ] M3: extend the `KafkaDeliveryIdentity` docstring (does not dedupe producer republishes)
+- [x] M3: add `garbageCollectSent` to the outbox schema and public module, with tests (completed 2026-06-15)
+- [x] M3: document the per-key ordering constraint on `enqueueOutboxTx` / `enqueueIntegrationEventTx` / `OrderingPolicy` (M1 finding, documentation-only) (completed 2026-06-15)
+- [x] M3: extend the `KafkaDeliveryIdentity` docstring (does not dedupe producer republishes) (completed 2026-06-15; focused `Keiro.Outbox` run passed with 21 examples, 0 failures; full `keiro-test` passed with 189 examples, 0 failures)
 - [ ] M4: skip `countInboxBacklog` in `runInboxTransactionWithKey` when metrics are disabled
 - [ ] M4: add `attemptCount` to `InboxRow`, the decoder, and `selectAllSql`
 - [ ] M4: add `recordFailedAttemptTx` upsert statement to `keiro/src/Keiro/Inbox/Schema.hs`
@@ -136,6 +136,8 @@ Authoring-time findings that correct or extend the June 2026 audit notes (re-ver
 Milestone 1 completed on 2026-06-15. The migration layer now creates the inbox failure-attempt column and the three indexes later milestones rely on, every Keiro-owned framework migration pins `search_path`, and the embedded-migration comment plus checked-in expected schema were updated. Validation passed with `cabal test keiro-migrations-test` (2 examples, 0 failures) and `cabal test keiro-test` (182 examples, 0 failures).
 
 Milestone 2 completed on 2026-06-15. The outbox worker now reclaims stale `publishing` rows, dead-letters stale rows that have exhausted their claim budget, converts synchronous publisher exceptions into ordinary failed attempts so the batch continues, guards `markOutboxSent` against stale races, decodes unknown statuses loudly, and records `keiro.outbox.reclaimed`. Validation passed with focused `cabal test keiro-test --test-show-details=direct --test-options='--match "Keiro.Outbox"'` (20 examples, 0 failures) and full `cabal test keiro-test` (188 examples, 0 failures).
+
+Milestone 3 completed on 2026-06-15. The outbox now exposes `garbageCollectSent` for pruning expired successful publishes while preserving `dead` rows, the ordering caveat for concurrent same-key enqueue escape hatches is documented on the public surfaces, and `KafkaDeliveryIdentity` now states that producer republishes receive new offsets and are not deduplicated by that policy. Validation passed with focused `Keiro.Outbox` tests (21 examples, 0 failures) and full `cabal test keiro-test` (189 examples, 0 failures).
 
 
 ## Context and Orientation

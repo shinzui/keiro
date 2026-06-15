@@ -40,7 +40,10 @@ import Kiroku.Store.Types (EventId (..), GlobalPosition (..))
   collapsed to a single handler run.
 * 'KafkaDeliveryIdentity' — use the Kafka topic-partition-offset triple
   as the dedupe key. Fallback only when neither @messageId@ nor source
-  identity is available.
+  identity is available. This identifies one broker delivery, not one
+  logical producer message: if a producer republishes the same logical
+  message, Kafka assigns a new offset and this policy will not collapse
+  the republish.
 * 'CustomDedupeKey' — caller supplies the key. Use only when the other
   policies cannot represent the identity scheme; the consuming service
   owns key collision resistance.

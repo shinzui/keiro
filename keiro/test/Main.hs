@@ -95,6 +95,7 @@ import Keiro.Outbox (
     draftToEvent,
     enqueueIntegrationEventTx,
     freshOutboxId,
+    garbageCollectSent,
     lookupOutbox,
     markOutboxSent,
     mintIntegrationEvent,
@@ -2330,6 +2331,61 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             now <- getCurrentTime
             Right reclaimed <- Store.runStoreIO storeHandle (claimOutboxBatch BestEffort 10 now)
             reclaimed `shouldBe` []
+
+        it "garbageCollectSent deletes only old sent rows" $ \storeHandle -> do
+            let oldSentId = OutboxId outboxUuid1
+                recentSentId = OutboxId outboxUuid2
+                failedId = OutboxId outboxUuid3
+                deadId = OutboxId outboxUuid4
+                base = sampleIntegrationEnvelope & #key .~ Nothing
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx oldSentId (base & #messageId .~ "gc-old-sent"))
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx recentSentId (base & #messageId .~ "gc-recent-sent"))
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx failedId (base & #messageId .~ "gc-failed"))
+            let firstPass row
+                    | row ^. #outboxId == failedId = pure (PublishFailed "keep failed")
+                    | otherwise = pure PublishSucceeded
+                firstPassOpts =
+                    defaultPublishOptions
+                        & #batchSize
+                        .~ 10
+                        & #orderingPolicy
+                        .~ BestEffort
+                        & #backoff
+                        .~ ConstantBackoff 3600
+            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox firstPass firstPassOpts Nothing)
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx deadId (base & #messageId .~ "gc-dead"))
+            let deadPass row
+                    | row ^. #outboxId == deadId = pure (PublishFailed "keep dead")
+                    | otherwise = pure PublishSucceeded
+                deadPassOpts =
+                    defaultPublishOptions
+                        & #batchSize
+                        .~ 10
+                        & #maxAttempts
+                        .~ 1
+                        & #orderingPolicy
+                        .~ BestEffort
+            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox deadPass deadPassOpts Nothing)
+            now <- getCurrentTime
+            Right () <- Store.runStoreIO storeHandle (backdateOutboxPublishedAt oldSentId (addUTCTime (-3600) now))
+            Right deleted <- Store.runStoreIO storeHandle (garbageCollectSent 300 now)
+            deleted `shouldBe` 1
+            Right oldRow <- Store.runStoreIO storeHandle (lookupOutbox oldSentId)
+            oldRow `shouldBe` Nothing
+            Right (Just recentRow) <- Store.runStoreIO storeHandle (lookupOutbox recentSentId)
+            recentRow ^. #status `shouldBe` OutboxSent
+            Right (Just failedRow) <- Store.runStoreIO storeHandle (lookupOutbox failedId)
+            failedRow ^. #status `shouldBe` OutboxFailed
+            Right (Just deadRow) <- Store.runStoreIO storeHandle (lookupOutbox deadId)
+            deadRow ^. #status `shouldBe` OutboxDead
 
         it "enforces per-key head-of-line blocking and unblocks once the predecessor reaches a terminal state" $ \storeHandle -> do
             let a1Id = OutboxId outboxUuid1
@@ -4913,7 +4969,22 @@ backdateOutboxUpdatedAtStmt =
         )
         D.noResult
 
-outboxUuid1, outboxUuid2, outboxUuid3 :: UUID
+backdateOutboxPublishedAt :: (Store :> es) => OutboxId -> UTCTime -> Eff es ()
+backdateOutboxPublishedAt oid timestamp =
+    Store.runTransaction $
+        Tx.statement (unOutboxId oid, timestamp) backdateOutboxPublishedAtStmt
+
+backdateOutboxPublishedAtStmt :: Statement (UUID, UTCTime) ()
+backdateOutboxPublishedAtStmt =
+    preparable
+        "UPDATE keiro_outbox SET published_at = $2 WHERE outbox_id = $1"
+        ( contrazip2
+            (E.param (E.nonNullable E.uuid))
+            (E.param (E.nonNullable E.timestamptz))
+        )
+        D.noResult
+
+outboxUuid1, outboxUuid2, outboxUuid3, outboxUuid4 :: UUID
 outboxUuid1 = case fromString "018f0f18-0000-7000-8000-000000000a01" of
     Just uuid -> uuid
     Nothing -> error "invalid outbox uuid 1"
@@ -4923,6 +4994,9 @@ outboxUuid2 = case fromString "018f0f18-0000-7000-8000-000000000a02" of
 outboxUuid3 = case fromString "018f0f18-0000-7000-8000-000000000a03" of
     Just uuid -> uuid
     Nothing -> error "invalid outbox uuid 3"
+outboxUuid4 = case fromString "018f0f18-0000-7000-8000-000000000a04" of
+    Just uuid -> uuid
+    Nothing -> error "invalid outbox uuid 4"
 
 uniqueIds :: (Eq a) => [a] -> [a]
 uniqueIds = foldr (\x xs -> if x `elem` xs then xs else x : xs) []
