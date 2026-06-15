@@ -108,7 +108,7 @@ Milestone-level rollup across child plans; the authoritative per-step state live
 - [x] EP-6: per-instance lease; concurrent workers cannot double-run effects
 - [x] EP-6: signal/child-completion/cancel crash windows closed
 - [x] EP-7: sleeps fire under an active resume worker; generation-namespaced wake sources
-- [ ] EP-7: patch classification journaled at first run; discovery via instance table; pruning
+- [x] EP-7: patch classification journaled at first run; discovery via instance table; pruning
 - [x] EP-8: vt/batch/polling exposed; lease-extension handle; `runJobOnce` is a real drain
 - [x] EP-8: retry-policy validation; future-version payloads retry instead of dead-letter; codec tests
 
@@ -182,6 +182,14 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
   The workflow docs now spell out at-least-once step side effects, name-keyed replay
   trade-offs, and full-map snapshot rewrite cost. Full `cabal test keiro` passed
   with 249 examples, 0 failures.
+- EP-7 Milestone 5 is complete as of 2026-06-15. Discovery now reads
+  `keiro_workflows` instead of grouping the full step index, and the optional
+  workflow GC deletes terminal workflow streams, snapshots, steps, awakeables,
+  child links, terminal sleep timers, and instance rows after retention while
+  preserving completed children of live parents. Plan 72's final table shape uses
+  `completed_at` for terminal age. Full `cabal test keiro` passed with 252
+  examples, 0 failures, and `cabal test keiro-migrations-test` passed with 2
+  examples, 0 failures.
 
 
 ## Decision Log
@@ -254,6 +262,8 @@ EP-7 Milestone 3 is complete as of 2026-06-15. Patch classification is now expli
 
 EP-7 Milestone 4 is complete as of 2026-06-15. First-run workflow step results now go through the same JSON decode path as replayed step results, so lossy codecs behave consistently and rejecting codecs fail on the initial run after the step row is journaled. The workflow documentation now explicitly describes at-least-once step side effects, step-name replay compatibility, and every-n snapshot rewrite cost. Milestone 5 remains next for discovery via the instance table and pruning.
 
+EP-7 Milestone 5 is complete as of 2026-06-15. Workflow discovery now uses the per-instance `keiro_workflows` table, avoiding the full-history step-index aggregation, and `Keiro.Workflow.Gc` provides retention-based cleanup of terminal workflow data with live-parent protection for completed children. Milestone 6 remains next for `wake_after` discovery skips for future sleepers.
+
 
 ---
 
@@ -278,3 +288,5 @@ Revision note (2026-06-15): EP-7 Milestone 2 was completed. The first EP-7 progr
 Revision note (2026-06-15): EP-7 Milestone 3 was completed. Surprises & Discoveries and Outcomes & Retrospective now record explicit active-patch-set classification and validation evidence; the second EP-7 progress rollup item remains unchecked until discovery/pruning are complete.
 
 Revision note (2026-06-15): EP-7 Milestone 4 was completed. Surprises & Discoveries and Outcomes & Retrospective now record first-run JSON round-trip fidelity, immediate decode failure semantics, documentation updates, and validation evidence; the second EP-7 progress rollup item remains unchecked until discovery/pruning are complete.
+
+Revision note (2026-06-15): EP-7 Milestone 5 was completed. The second EP-7 progress rollup item is now checked, and Surprises & Discoveries plus Outcomes & Retrospective record instance-table discovery, workflow GC, plan-72 `completed_at` reconciliation, expected-schema update, and validation evidence.

@@ -297,7 +297,8 @@ resumeWorkflowsOnce opts registry = do
     -- ('findUnfinishedWorkflowIds') and freshly-spawned children that have no
     -- step rows yet ('findRunningChildIds', EP-43) — so a zero-step child is
     -- still driven. The dedup collapses a child that appears in both.
-    unfinished <- findUnfinishedWorkflowIds
+    now <- liftIO getCurrentTime
+    unfinished <- findUnfinishedWorkflowIds now
     runningChildren <- findRunningChildIds
     let pairs = nub (unfinished <> runningChildren)
         seed = emptyResumeSummary{discovered = length pairs}

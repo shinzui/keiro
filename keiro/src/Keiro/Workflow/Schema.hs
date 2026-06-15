@@ -5,8 +5,8 @@ The journal stream (@wf:\<name\>-\<id\>@) is the source of truth for replay;
 this table is a fast-lookup view kept in sync inside the same transaction as
 each journal append (see "Keiro.Workflow"). 'recordStepTx' upserts a row;
 'loadStepIndex' reads an instance's recorded steps; 'stepExists' checks for
-one step; 'findUnfinishedWorkflowIds' discovers workflows that have steps but
-no terminal completion marker — the seam EP-42's resume worker builds on.
+one step; 'findUnfinishedWorkflowIds' discovers resumable rows from
+@keiro_workflows@ — the seam EP-42's resume worker builds on.
 
 Callers normally use the re-exports from "Keiro.Workflow" rather than this
 module directly.
@@ -114,16 +114,15 @@ currentGeneration :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es Int
 currentGeneration (WorkflowName name) (WorkflowId wid) =
     fromIntegral <$> runTransaction (Tx.statement (wid, name) currentGenerationStmt)
 
-{- | Return the @(workflow_id, workflow_name)@ of every workflow that has at
-least one step row but no terminal marker row — i.e. workflows that are
-unfinished. A terminal marker is a @__workflow_completed__@ row or (EP-43) a
-@__workflow_cancelled__@ row, or @__workflow_failed__@ row, so a cancelled or
-failed workflow is treated as finished and drops out of resume discovery.
-EP-42's resume worker consumes this to discover what to re-invoke.
+{- | Return the @(workflow_id, workflow_name)@ of every non-terminal workflow
+instance. Terminal statuses are @completed@, @cancelled@, and @failed@, matching
+'Keiro.Workflow.Instance.WorkflowStatus'. The explicit time parameter is
+reserved for wake-time filtering; today it keeps the call shape stable for that
+addition.
 -}
-findUnfinishedWorkflowIds :: (Store :> es) => Eff es [(Text, Text)]
-findUnfinishedWorkflowIds =
-    runTransaction (Tx.statement () findUnfinishedWorkflowIdsStmt)
+findUnfinishedWorkflowIds :: (Store :> es) => UTCTime -> Eff es [(Text, Text)]
+findUnfinishedWorkflowIds now =
+    runTransaction (Tx.statement now findUnfinishedWorkflowIdsStmt)
 
 recordStepStmt :: Statement (Text, Text, Int32, Text, Value, UTCTime) ()
 recordStepStmt =
@@ -217,38 +216,19 @@ currentGenerationStmt =
         )
         (D.singleRow (D.column (D.nonNullable D.int4)))
 
--- The literals '__workflow_completed__' / '__workflow_cancelled__' /
--- '__workflow_failed__' must match 'Keiro.Workflow.Types.completedStepName' /
--- '.cancelledStepName' / '.failedStepName'.
---
--- EP-48: the terminal-marker check is scoped to the CURRENT (MAX) generation.
--- A logical workflow (workflow_id, workflow_name) is unfinished when its newest
--- generation lacks a completed/cancelled row. '__workflow_continued_as_new__'
--- is deliberately NOT in the terminal set, and because we only look at the
--- newest generation a rotated-away (lower) generation's rotation marker is never
--- even considered — so a rotated, still-running workflow is correctly reported
--- as unfinished rather than masked as finished. The CTE computes one
--- current-generation row per logical id, so each unfinished workflow is returned
--- exactly once (this form is used in preference to a HAVING/correlated-MAX
--- subquery for clarity on PostgreSQL 18+).
-findUnfinishedWorkflowIdsStmt :: Statement () [(Text, Text)]
+-- The terminal-status literals must match 'Keiro.Workflow.Instance.statusToText'
+-- for completed, cancelled, and failed. The timestamp parameter is intentionally
+-- present before wake-after filtering lands; the tautology keeps the statement
+-- shape stable without changing current discovery behavior.
+findUnfinishedWorkflowIdsStmt :: Statement UTCTime [(Text, Text)]
 findUnfinishedWorkflowIdsStmt =
     preparable
         """
-        WITH current_gen AS (
-          SELECT workflow_id, workflow_name, MAX(generation) AS gen
-          FROM keiro_workflow_steps
-          GROUP BY workflow_id, workflow_name
-        )
-        SELECT cg.workflow_id, cg.workflow_name
-        FROM current_gen cg
-        WHERE NOT EXISTS (
-          SELECT 1 FROM keiro_workflow_steps c
-          WHERE c.workflow_id = cg.workflow_id
-            AND c.workflow_name = cg.workflow_name
-            AND c.generation = cg.gen
-            AND c.step_name IN ('__workflow_completed__', '__workflow_cancelled__', '__workflow_failed__')
-        )
+        SELECT workflow_id, workflow_name
+        FROM keiro_workflows
+        WHERE status NOT IN ('completed', 'cancelled', 'failed')
+          AND $1 IS NOT NULL
+        ORDER BY workflow_name, workflow_id
         """
-        E.noParams
+        (E.param (E.nonNullable E.timestamptz))
         (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))

@@ -3,7 +3,7 @@ module Main (
 )
 where
 
-import Contravariant.Extras (contrazip2, contrazip3, contrazip5)
+import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, contrazip6)
 import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar)
 import Control.Exception (Exception, SomeException, evaluate, throwIO, try)
@@ -203,6 +203,7 @@ import Keiro.Workflow.Child (
     spawnChild,
  )
 import Keiro.Workflow.Child.Schema qualified as Child
+import Keiro.Workflow.Gc qualified as WorkflowGc
 import Keiro.Workflow.Instance qualified as Instance
 import Keiro.Workflow.Resume (
     ResumeLogEvent (..),
@@ -3873,7 +3874,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right Suspended <-
                 Store.runStoreIO storeHandle $
                     runWorkflow (WorkflowName "pending") (WorkflowId "p-1") (stepThenAwaitWorkflow counter)
-            Right unfinished <- Store.runStoreIO storeHandle findUnfinishedWorkflowIds
+            now <- getCurrentTime
+            Right unfinished <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds now)
             unfinished `shouldBe` [("p-1", "pending")]
 
     describe "Keiro.Workflow instance table" $ around (withFreshStore fixture) $ do
@@ -3933,6 +3935,33 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     appendJournalEntry name wid (StepRecorded "late" (toJSON True) now)
             Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
             row ^. #status `shouldBe` Instance.WfCompleted
+
+        it "discovers unfinished workflows from the instance table" $ \storeHandle -> do
+            counter <- newIORef (0 :: Int)
+            let completedName = WorkflowName "discover-completed"
+                cancelledName = WorkflowName "discover-cancelled"
+                crashedName = WorkflowName "discover-crashed"
+                rotatedName = WorkflowName "discover-rotated"
+            Right (Completed _) <-
+                Store.runStoreIO storeHandle $
+                    runWorkflow completedName (WorkflowId "done") (demoWorkflow counter)
+            cancelledAt <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry cancelledName (WorkflowId "cancelled") (WorkflowCancelled cancelledAt)
+            Left (_ :: SimulatedCrash) <-
+                try $
+                    Store.runStoreIO storeHandle $
+                        runWorkflow crashedName (WorkflowId "crashed") (crashAfterStep1 counter)
+            Right ContinuedAsNew <-
+                Store.runStoreIO storeHandle $
+                    runWorkflow rotatedName (WorkflowId "rotated") (rollingTotal counter 1 2)
+            now <- getCurrentTime
+            Right unfinished <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds now)
+            unfinished
+                `shouldBe` [ ("crashed", "discover-crashed")
+                           , ("rotated", "discover-rotated")
+                           ]
 
     describe "Keiro.Workflow snapshots" $ around (withFreshStore fixture) $ do
         -- Validation (a): a snapshot row appears at the expected version and
@@ -4508,13 +4537,15 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             firstOutcome <- Store.runStoreIO storeHandle (runWorkflow name wid (rollingTotal counter rotateEvery total))
             firstOutcome `shouldBe` Right ContinuedAsNew
             -- The rotated current generation (1) is unfinished and discoverable.
-            Right unfinished <- Store.runStoreIO storeHandle findUnfinishedWorkflowIds
+            now <- getCurrentTime
+            Right unfinished <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds now)
             unfinished `shouldBe` [("r-2", "roller2")]
             -- The resume worker drives the rotated generation(s) to completion.
             resumeUntilDone (total `div` rotateEvery + 3)
             readIORef counter >>= (`shouldBe` total)
             -- Finished: discovery now reports nothing for it.
-            Right finalUnfinished <- Store.runStoreIO storeHandle findUnfinishedWorkflowIds
+            finalNow <- getCurrentTime
+            Right finalUnfinished <- Store.runStoreIO storeHandle (findUnfinishedWorkflowIds finalNow)
             finalUnfinished `shouldBe` []
 
     describe "Keiro.Workflow patch API" $ around (withFreshStore fixture) $ do
@@ -5885,6 +5916,89 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 repair `shouldBe` Right Suspended
                 completed <- Store.runStoreIO storeHandle $ runWorkflow parentName parentId body
                 completed `shouldBe` Right (Completed "packed+labelled")
+
+    describe "Keiro.Workflow.Gc" $ around (withFreshStore fixture) $ do
+        it "deletes terminal workflow data after retention" $ \storeHandle -> do
+            let name = WorkflowName "gc-basic"
+                wid = WorkflowId "gb-1"
+                gcStreamName = workflowGenerationStreamName name wid 0
+                aid = fromMaybe (error "invalid gc awakeable uuid") (fromString "00000000-0000-0000-0000-0000000000a1")
+                timerId = fromMaybe (error "invalid gc timer uuid") (fromString "00000000-0000-0000-0000-0000000000a2")
+            counter <- newIORef (0 :: Int)
+            Right (Completed _) <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith
+                        (defaultWorkflowRunOptions & #snapshotPolicy .~ OnTerminal)
+                        name
+                        wid
+                        (demoWorkflow counter)
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $ do
+                        Awk.registerAwakeableTx aid "gc-basic" "gb-1"
+                        Tx.statement (timerId, "gc-basic", "gb-1", now, object ["kind" Aeson..= ("keiro.workflow.sleep" :: Text)], "fired") insertGcTimerStmt
+            Right beforeCounts <- Store.runStoreIO storeHandle $ workflowOwnedRowCounts "gc-basic" "gb-1"
+            beforeCounts `shouldBe` (1, 3, 1, 0, 1, 1)
+            Right freshSummary <-
+                Store.runStoreIO storeHandle $
+                    WorkflowGc.gcWorkflowsOnce
+                        now
+                        WorkflowGc.WorkflowGcPolicy{retention = 3600, batchSize = 10}
+            freshSummary `shouldBe` WorkflowGc.WorkflowGcSummary{scanned = 0, deleted = 0}
+            Right (Just _) <- Store.runStoreIO storeHandle $ Store.lookupStreamId gcStreamName
+            Right deletedSummary <-
+                Store.runStoreIO storeHandle $
+                    WorkflowGc.gcWorkflowsOnce
+                        (addUTCTime 1 now)
+                        WorkflowGc.WorkflowGcPolicy{retention = 0, batchSize = 10}
+            deletedSummary `shouldBe` WorkflowGc.WorkflowGcSummary{scanned = 1, deleted = 1}
+            Right Nothing <- Store.runStoreIO storeHandle $ Store.lookupStreamId gcStreamName
+            Right afterCounts <- Store.runStoreIO storeHandle $ workflowOwnedRowCounts "gc-basic" "gb-1"
+            afterCounts `shouldBe` (0, 0, 0, 0, 0, 0)
+
+        it "keeps completed children while a parent is live and converges after partial cleanup" $ \storeHandle -> do
+            let parentName = WorkflowName "gc-live-parent"
+                parentId = WorkflowId "gp-1"
+                childName = WorkflowName "gc-child"
+                childId = WorkflowId "gc-1"
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $ do
+                        Instance.upsertInstanceTx "gp-1" "gc-live-parent" 0 Instance.WfRunning Nothing
+                        Child.registerChildTx "gc-1" "gc-child" "gp-1" "gc-live-parent" "child:gc-1:result"
+                        void (Child.markChildResultTx "gc-1" "gc-child" (toJSON ("ok" :: Text)) now)
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry childName childId (WorkflowCompleted now)
+            Right held <-
+                Store.runStoreIO storeHandle $
+                    WorkflowGc.gcWorkflowsOnce
+                        (addUTCTime 1 now)
+                        WorkflowGc.WorkflowGcPolicy{retention = 0, batchSize = 10}
+            held `shouldBe` WorkflowGc.WorkflowGcSummary{scanned = 0, deleted = 0}
+            Right childStillThere <- Store.runStoreIO storeHandle $ Store.lookupStreamId (workflowGenerationStreamName childName childId 0)
+            childStillThere `shouldSatisfy` isJust
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry parentName parentId (WorkflowCompleted now)
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement ("gc-1", "gc-child") deleteGcStepsStmt
+            Right collected <-
+                Store.runStoreIO storeHandle $
+                    WorkflowGc.gcWorkflowsOnce
+                        (addUTCTime 1 now)
+                        WorkflowGc.WorkflowGcPolicy{retention = 0, batchSize = 10}
+            collected `shouldBe` WorkflowGc.WorkflowGcSummary{scanned = 2, deleted = 2}
+            Right parentGone <- Store.runStoreIO storeHandle $ Instance.lookupInstance parentName parentId
+            parentGone `shouldBe` Nothing
+            Right childGone <- Store.runStoreIO storeHandle $ Instance.lookupInstance childName childId
+            childGone `shouldBe` Nothing
+            Right childRows <- Store.runStoreIO storeHandle $ workflowOwnedChildCount "gc-child" "gc-1"
+            childRows `shouldBe` 0
 
 {- | Increment a shared counter and return its new value (the step's side
 effect, so replay can be proven by watching the counter).
@@ -7834,3 +7948,90 @@ waitShardsUnowned store sub n timeoutMicros = go (max 1 (timeoutMicros `div` ste
     isUnowned = do
         rows <- either (const []) id <$> Store.runStoreIO store (Store.runTransaction (listShardOwnership sub))
         pure (length rows == n && all (\(_, owner, _) -> isNothing owner) rows)
+
+workflowOwnedRowCounts :: (Store :> es) => Text -> Text -> Eff es (Int64, Int64, Int64, Int64, Int64, Int64)
+workflowOwnedRowCounts name wid =
+    Store.runTransaction (Tx.statement (wid, name) workflowOwnedRowCountsStmt)
+
+workflowOwnedChildCount :: (Store :> es) => Text -> Text -> Eff es Int64
+workflowOwnedChildCount name wid =
+    Store.runTransaction (Tx.statement (wid, name, wid, name) workflowOwnedChildCountStmt)
+
+insertGcTimerStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text) ()
+insertGcTimerStmt =
+    preparable
+        """
+        INSERT INTO keiro_timers
+          (timer_id, process_manager_name, correlation_id, fire_at, payload, status)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        """
+        ( contrazip6
+            (E.param (E.nonNullable E.uuid))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.timestamptz))
+            (E.param (E.nonNullable E.jsonb))
+            (E.param (E.nonNullable E.text))
+        )
+        D.noResult
+
+deleteGcStepsStmt :: Statement (Text, Text) ()
+deleteGcStepsStmt =
+    preparable
+        """
+        DELETE FROM keiro_workflow_steps
+        WHERE workflow_id = $1 AND workflow_name = $2
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        D.noResult
+
+workflowOwnedRowCountsStmt :: Statement (Text, Text) (Int64, Int64, Int64, Int64, Int64, Int64)
+workflowOwnedRowCountsStmt =
+    preparable
+        """
+        SELECT
+          (SELECT count(*) FROM keiro_workflows WHERE workflow_id = $1 AND workflow_name = $2),
+          (SELECT count(*) FROM keiro_workflow_steps WHERE workflow_id = $1 AND workflow_name = $2),
+          (SELECT count(*) FROM keiro_awakeables WHERE owner_workflow_id = $1 AND owner_workflow_name = $2),
+          (SELECT count(*) FROM keiro_workflow_children
+            WHERE (parent_id = $1 AND parent_name = $2) OR (child_id = $1 AND child_name = $2)),
+          (SELECT count(*) FROM keiro_timers
+            WHERE correlation_id = $1 AND process_manager_name = $2 AND payload->>'kind' = 'keiro.workflow.sleep'),
+          (SELECT count(*)
+             FROM keiro_snapshots s
+             JOIN streams st ON st.stream_id = s.stream_id
+            WHERE st.stream_name = 'wf:' || $2 || '-' || $1)
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        ( D.singleRow $
+            (,,,,,)
+                <$> D.column (D.nonNullable D.int8)
+                <*> D.column (D.nonNullable D.int8)
+                <*> D.column (D.nonNullable D.int8)
+                <*> D.column (D.nonNullable D.int8)
+                <*> D.column (D.nonNullable D.int8)
+                <*> D.column (D.nonNullable D.int8)
+        )
+
+workflowOwnedChildCountStmt :: Statement (Text, Text, Text, Text) Int64
+workflowOwnedChildCountStmt =
+    preparable
+        """
+        SELECT count(*)
+        FROM keiro_workflow_children
+        WHERE (parent_id = $1 AND parent_name = $2)
+           OR (child_id = $3 AND child_name = $4)
+        """
+        ( contrazip4
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        (D.singleRow (D.column (D.nonNullable D.int8)))

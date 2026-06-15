@@ -73,6 +73,7 @@ library
     Keiro.Workflow.Awakeable.Schema
     Keiro.Workflow.Child
     Keiro.Workflow.Child.Schema
+    Keiro.Workflow.Gc
     Keiro.Workflow.Instance
     Keiro.Workflow.Resume
     Keiro.Workflow.Schema
