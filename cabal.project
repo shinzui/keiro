@@ -21,13 +21,13 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/shinzui/kiroku.git
-  tag: ffcf3a143ee58c09f17dc8d5746bad7d8ed4525a
+  tag: 4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a
   subdir: kiroku-store
 
 source-repository-package
   type: git
   location: https://github.com/shinzui/kiroku.git
-  tag: ffcf3a143ee58c09f17dc8d5746bad7d8ed4525a
+  tag: 4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a
   subdir: kiroku-store-migrations
 
 source-repository-package

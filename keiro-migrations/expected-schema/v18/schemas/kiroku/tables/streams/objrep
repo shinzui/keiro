@@ -1,6 +1,8 @@
 {
     "accessmethod": "heap",
-    "amoptions": null,
+    "amoptions": [
+        "fillfactor=50"
+    ],
     "columns_in_order": [
         "stream_id",
         "stream_name",

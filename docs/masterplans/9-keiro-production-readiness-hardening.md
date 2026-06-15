@@ -41,7 +41,7 @@ Alternatives considered. A severity-ordered decomposition ("blockers plan, highs
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Fix upstream crash-safety gaps in kiroku, shibuya, and ephemeral-pg | docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md | None | None | In Progress |
+| 1 | Fix upstream crash-safety gaps in kiroku, shibuya, and ephemeral-pg | docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md | None | None | Complete |
 | 2 | Harden keiro-core codec and stream contracts | docs/plans/68-harden-keiro-core-codec-and-stream-contracts.md | None | None | Not Started |
 | 3 | Fix event-store command path, snapshot, and read-model correctness | docs/plans/69-fix-event-store-command-path-snapshot-and-read-model-correctness.md | None | EP-2 | Not Started |
 | 4 | Make outbox, inbox, timer, and shard workers crash-recoverable | docs/plans/70-make-outbox-inbox-timer-and-shard-workers-crash-recoverable.md | None | None | Not Started |
@@ -127,6 +127,7 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
 - EP-1 kiroku work is complete as of 2026-06-15. M1 had already landed in upstream commit `fa43ec2`; M2 added and pushed `eventExistsInStream` in commit `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`. `cabal test kiroku-store-test` passed with 226 examples, 0 failures.
 - EP-1 shibuya work is complete as of 2026-06-15. shibuya-core now propagates ingester failures in commit `f0c9ce3`; shibuya-pgmq-adapter now retries transient poll errors in commit `319b3b717c0284d8c207375151b388639039a1e1`. `cabal test shibuya-core-test` passed with 118 examples, 0 failures, and `cabal test shibuya-pgmq-adapter:shibuya-pgmq-adapter-test --enable-tests` passed with 134 examples, 0 failures.
 - EP-1 ephemeral-pg cache hardening is complete as of 2026-06-15. Atomic cache publication and the concurrent `createCache` regression landed in commit `215e4ae5fc844d322e2c715369bf5ec4ff285294`; `cabal test` passed with 11 examples, 0 failures.
+- EP-1 is complete as of 2026-06-15. The Hackage releases are visible to `cabal update`, keiro consumes kiroku at `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`, and published-package validation passed: `cabal build all`; `keiro-test` 158 examples, 0 failures; `keiro-pgmq-test` 50 examples, 0 failures, 2 pending; `keiro-migrations-test` 2 examples, 0 failures; `jitsurei-test` 16 examples, 0 failures.
 
 
 ## Decision Log

@@ -2,7 +2,7 @@
     "accessmethod": "btree",
     "amoptions": null,
     "compositetype": null,
-    "definition": "CREATE INDEX ix_events_event_type ON kiroku.events USING btree (event_type)",
+    "definition": "CREATE INDEX ix_dead_letters_event_id ON kiroku.dead_letters USING btree (event_id)",
     "exclusion": false,
     "forcerowsecurity": false,
     "immediate": true,

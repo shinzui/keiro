@@ -48,9 +48,9 @@ The final milestone bumps keiro's dependency pins and proves keiro's own test su
 - [x] M4: shibuya-pgmq-adapter — `cabal test shibuya-pgmq-adapter-test` green; bump to 0.8.0.0 + CHANGELOG; commit, push. Completed and pushed on 2026-06-15; `cabal test shibuya-pgmq-adapter:shibuya-pgmq-adapter-test --enable-tests` passed with 134 examples, 0 failures.
 - [x] M5: ephemeral-pg — `createCache` copies to a unique temp dir and atomically renames; concurrent-winner rename failure treated as success. Completed on 2026-06-15 in upstream commit `215e4ae5fc844d322e2c715369bf5ec4ff285294`.
 - [x] M5: ephemeral-pg — concurrent `createCache` test in `test/Main.hs`; `cabal test` green; bump to 0.2.2.0 + CHANGELOG; commit, push. Completed and pushed on 2026-06-15; `cabal test` passed with 11 examples, 0 failures.
-- [ ] M6: publish ephemeral-pg 0.2.2.0, shibuya-core 0.7.1.0, shibuya-pgmq-adapter 0.8.0.0 to Hackage
-- [ ] M6: keiro — bump kiroku `tag:` in `cabal.project` (both stanzas), relax `shibuya-pgmq-adapter` bound in `keiro-pgmq/keiro-pgmq.cabal`, fix the one `PgmqAdapterConfig` construction site if needed
-- [ ] M6: keiro — `cabal build all` and all test suites (`keiro-test`, `keiro-pgmq-test`, `keiro-migrations-test`, `jitsurei-test`) green; commit
+- [x] M6: publish ephemeral-pg 0.2.2.0, shibuya-core 0.7.1.0, shibuya-pgmq-adapter 0.8.0.0 to Hackage. Published by the user and visible after `cabal update` on 2026-06-15; `cabal build all` downloaded `shibuya-core-0.7.1.0` and `shibuya-pgmq-adapter-0.8.0.0` from Hackage, and `cabal info ephemeral-pg-0.2.2.0` confirmed the published ephemeral-pg release is indexed.
+- [x] M6: keiro — bump kiroku `tag:` in `cabal.project` (both stanzas), relax `shibuya-pgmq-adapter` bound in `keiro-pgmq/keiro-pgmq.cabal`, fix the one `PgmqAdapterConfig` construction site if needed. Completed on 2026-06-15; `PgmqAdapterConfig` inherited `pollRetry` from `defaultConfig`, while `jobProcessorWithContext`/`jobProcessor` now expose the adapter's required `Error PgmqRuntimeError` constraint.
+- [x] M6: keiro — `cabal build all` and all test suites (`keiro-test`, `keiro-pgmq-test`, `keiro-migrations-test`, `jitsurei-test`) green; commit. Published-package validation on 2026-06-15: `cabal build all` passed; `keiro-test` 158 examples, 0 failures; `keiro-pgmq-test` 50 examples, 0 failures, 2 pending; `keiro-migrations-test` 2 examples, 0 failures; `jitsurei-test` 16 examples, 0 failures.
 
 
 ## Surprises & Discoveries
@@ -60,7 +60,7 @@ The final milestone bumps keiro's dependency pins and proves keiro's own test su
 - 2026-06-15: shibuya-core's `runSupervised` links child failures back to the caller thread, so tests that assert ingester failure propagation must run the supervised app in a separate async and inspect `waitCatch`. Plain `try` around the effectful action does not reliably catch the linked async exception in Hspec.
 - 2026-06-15: shibuya-pgmq-adapter's Cabal default test selector did not include `shibuya-pgmq-adapter-test`; the reliable command is `cabal test shibuya-pgmq-adapter:shibuya-pgmq-adapter-test --enable-tests`. The codebase's `NoFieldSelectors` setup also means nested record-dot access like `config.pollRetry.initialBackoff` is not available for `PollRetryConfig`; pattern matching the retry config kept the implementation and tests compiling.
 - 2026-06-15: ephemeral-pg's public module does not expose `createCache`, so the concurrent cache regression imports `EphemeralPg.Internal.Cache` as a test home module. That required adding `src` to the test suite's `hs-source-dirs`, listing the needed home modules, and mirroring the library's default extensions and direct dependencies in the test stanza.
-
+- 2026-06-15: Updating keiro's kiroku pin also updates the embedded kiroku schema migrations, so `keiro-migrations-test` failed until `keiro-migrations/expected-schema` was regenerated with `cabal run keiro-write-expected-schema`. The regenerated schema captures upstream kiroku index, trigger, fillfactor, and stream-name length changes.
 
 ## Decision Log
 
@@ -95,7 +95,7 @@ The final milestone bumps keiro's dependency pins and proves keiro's own test su
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-1 is complete. The upstream fixes are pushed and released or pinned through keiro's normal channels: kiroku via git SHA `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a`, shibuya-core 0.7.1.0 via Hackage, shibuya-pgmq-adapter 0.8.0.0 via Hackage, and ephemeral-pg 0.2.2.0 via Hackage. Keiro builds and its required suites pass against that steady-state configuration.
 
 
 ## Context and Orientation

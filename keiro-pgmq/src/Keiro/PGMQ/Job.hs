@@ -39,11 +39,9 @@ between those two statements can leave the message in both places. 'redriveDlq'
 has the same at-least-once window in the other direction: it sends the preserved
 payload back to the main queue and then deletes the DLQ row.
 
-Known limitation, pending
-docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md:
-a transient database error during 'runJobWorkers' polling can terminate the
-worker's polling loop permanently and silently. Until that upstream plan lands,
-monitor queue depth externally and restart workers on alert.
+Transient database errors during PGMQ polling are retried by the adapter, and a
+polling failure that exhausts that retry policy is propagated visibly through
+shibuya supervision rather than completing the worker silently.
 -}
 module Keiro.PGMQ.Job (
     -- * Job declaration
@@ -108,6 +106,7 @@ import "base" Control.Exception (SomeException)
 import "base" Control.Monad (foldM, void)
 import "base" Data.Int (Int32, Int64)
 import "effectful-core" Effectful (Eff, IOE, liftIO, (:>))
+import "effectful-core" Effectful.Error.Static (Error)
 import "effectful-core" Effectful.Exception qualified as EffException
 import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal (getContext)
 import "hs-opentelemetry-api" OpenTelemetry.Trace.Core (TracerProvider)
@@ -122,6 +121,7 @@ import "pgmq-effectful" Pgmq.Effectful (
     MessageId,
     MessageQuery (..),
     Pgmq,
+    PgmqRuntimeError,
     ReadMessage (..),
     SendMessage (..),
     SendMessageWithHeaders (..),
@@ -673,7 +673,7 @@ crash, redelivery happens when the visibility timeout expires; the 'RetryPolicy'
 delay only governs explicit 'Retry' and 'RetryDefault' outcomes.
 -}
 jobProcessorWithContext ::
-    (Pgmq :> es, IOE :> es, Tracing :> es) =>
+    (Pgmq :> es, Error PgmqRuntimeError :> es, IOE :> es, Tracing :> es) =>
     JobTuning ->
     Job p ->
     (JobContext es -> p -> Eff es JobOutcome) ->
@@ -688,7 +688,7 @@ result to 'runJobWorkers'. The same visibility-timeout and crash-redelivery
 rules documented on 'jobProcessorWithContext' apply here.
 -}
 jobProcessor ::
-    (Pgmq :> es, IOE :> es, Tracing :> es) =>
+    (Pgmq :> es, Error PgmqRuntimeError :> es, IOE :> es, Tracing :> es) =>
     Job p ->
     (p -> Eff es JobOutcome) ->
     Eff es (ProcessorId, QueueProcessor es)

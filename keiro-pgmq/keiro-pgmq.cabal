@@ -63,7 +63,7 @@ library
     , pgmq-effectful        >=0.3  && <0.4
     , pgmq-hasql            >=0.3  && <0.4
     , shibuya-core          >=0.7  && <0.8
-    , shibuya-pgmq-adapter  >=0.7  && <0.8
+    , shibuya-pgmq-adapter  >=0.8  && <0.9
     , streamly-core         >=0.3
     , text                  >=2.1
     , time                  >=1.12

@@ -2,7 +2,7 @@
     "accessmethod": "btree",
     "amoptions": null,
     "compositetype": null,
-    "definition": "CREATE INDEX ix_stream_events_stream_version ON kiroku.stream_events USING btree (stream_id, stream_version)",
+    "definition": "CREATE UNIQUE INDEX ux_stream_events_stream_version ON kiroku.stream_events USING btree (stream_id, stream_version)",
     "exclusion": false,
     "forcerowsecurity": false,
     "immediate": true,
@@ -16,6 +16,6 @@
     "rowsecurity": false,
     "rowtype": null,
     "shared": false,
-    "unique": false,
+    "unique": true,
     "valid": true
 }
