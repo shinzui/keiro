@@ -38,7 +38,9 @@ module Keiro.Timer (
 
     -- * Worker
     TimerWorkerOptions (..),
+    TimerWorkerConfigError (..),
     defaultTimerWorkerOptions,
+    mkTimerWorkerOptions,
     runTimerWorker,
     runTimerWorkerWith,
 )
@@ -78,9 +80,22 @@ data TimerWorkerOptions = TimerWorkerOptions
     }
     deriving stock (Generic, Eq, Show)
 
+data TimerWorkerConfigError
+    = InvalidTimerMaxAttempts !Int
+    | InvalidTimerRequeueStuckAfter !NominalDiffTime
+    deriving stock (Generic, Eq, Show)
+
 -- | The default worker policy: never auto-dead-letter; requeue stale firings after five minutes.
 defaultTimerWorkerOptions :: TimerWorkerOptions
 defaultTimerWorkerOptions = TimerWorkerOptions{maxAttempts = Nothing, requeueStuckAfter = Just 300}
+
+-- | Validate timer worker options before starting a worker loop.
+mkTimerWorkerOptions :: TimerWorkerOptions -> Either TimerWorkerConfigError TimerWorkerOptions
+mkTimerWorkerOptions opts =
+    case (opts ^. #maxAttempts, opts ^. #requeueStuckAfter) of
+        (Just attempts, _) | attempts < 0 -> Left (InvalidTimerMaxAttempts attempts)
+        (_, Just ttl) | ttl <= 0 -> Left (InvalidTimerRequeueStuckAfter ttl)
+        _ -> Right opts
 
 {- | Claim and fire at most one timer due at @now@, applying the given
 'TimerWorkerOptions'.

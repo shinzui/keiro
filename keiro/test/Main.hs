@@ -85,10 +85,13 @@ import Keiro.Integration.Event (
 import Keiro.Integration.Event qualified as IntegrationEvent
 import Keiro.Outbox (
     BackoffSchedule (..),
+    ExponentialBackoffOptions (..),
     IntegrationEventDraft (..),
     IntegrationProducer (..),
+    IntegrationProducerConfigError (..),
     OrderingPolicy (..),
     OutboxId (..),
+    OutboxPublishConfigError (..),
     OutboxRow (..),
     OutboxStatus (..),
     PublishOutcome (..),
@@ -101,6 +104,8 @@ import Keiro.Outbox (
     lookupOutbox,
     markOutboxSent,
     mintIntegrationEvent,
+    mkIntegrationProducer,
+    mkOutboxPublishOptions,
     publishClaimedOutbox,
  )
 import Keiro.Outbox.Kafka qualified as OutboxKafka
@@ -127,9 +132,11 @@ import Keiro.Subscription.Shard.Schema (
  )
 import Keiro.Subscription.Shard.Worker (
     ShardWorkerError (..),
+    ShardedWorkerConfigError (..),
     ShardedWorkerOptions (..),
     acquireOutcome,
     defaultShardedWorkerOptions,
+    mkShardedWorkerOptions,
     runShardedSubscriptionGroup,
  )
 import Keiro.Telemetry qualified as Telemetry
@@ -1890,6 +1897,13 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 _ -> False
 
     describe "Keiro.Timer" $ around (withFreshStore fixture) $ do
+        it "validates worker options before startup" $ \_storeHandle -> do
+            shouldBeRight_ (mkTimerWorkerOptions defaultTimerWorkerOptions)
+            mkTimerWorkerOptions (defaultTimerWorkerOptions & #maxAttempts ?~ (-1))
+                `shouldBeLeft` InvalidTimerMaxAttempts (-1)
+            mkTimerWorkerOptions (defaultTimerWorkerOptions & #requeueStuckAfter ?~ 0)
+                `shouldBeLeft` InvalidTimerRequeueStuckAfter 0
+
         it "claims a due timer, fires a command, and marks it complete once" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
@@ -2197,6 +2211,50 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             record ^. #key `shouldBe` Nothing
 
     describe "Keiro.Outbox" $ around (withFreshStore fixture) $ do
+        it "validates publisher options before startup" $ \_storeHandle -> do
+            shouldBeRight_ (mkOutboxPublishOptions defaultPublishOptions)
+            mkOutboxPublishOptions (defaultPublishOptions & #batchSize .~ 0)
+                `shouldBeLeft` InvalidOutboxBatchSize 0
+            mkOutboxPublishOptions (defaultPublishOptions & #maxAttempts .~ 0)
+                `shouldBeLeft` InvalidOutboxMaxAttempts 0
+            mkOutboxPublishOptions (defaultPublishOptions & #publishingTimeout .~ 0)
+                `shouldBeLeft` InvalidOutboxPublishingTimeout 0
+            mkOutboxPublishOptions (defaultPublishOptions & #backoff .~ ConstantBackoff (-1))
+                `shouldBeLeft` InvalidConstantBackoff (-1)
+            mkOutboxPublishOptions
+                ( defaultPublishOptions
+                    & #backoff
+                    .~ ExponentialBackoff
+                        ExponentialBackoffOptions
+                            { initial = 0
+                            , maxDelay = 1
+                            , multiplier = 2
+                            }
+                )
+                `shouldBeLeft` InvalidExponentialBackoffInitial 0
+            mkOutboxPublishOptions
+                ( defaultPublishOptions
+                    & #backoff
+                    .~ ExponentialBackoff
+                        ExponentialBackoffOptions
+                            { initial = 1
+                            , maxDelay = 10
+                            , multiplier = 0.5
+                            }
+                )
+                `shouldBeLeft` InvalidExponentialBackoffMultiplier 0.5
+            mkOutboxPublishOptions
+                ( defaultPublishOptions
+                    & #backoff
+                    .~ ExponentialBackoff
+                        ExponentialBackoffOptions
+                            { initial = 5
+                            , maxDelay = 4
+                            , multiplier = 2
+                            }
+                )
+                `shouldBeLeft` InvalidExponentialBackoffMaxDelay 5 4
+
         it "enqueues and looks up an outbox row" $ \storeHandle -> do
             let envelope = sampleIntegrationEnvelope
                 oid = OutboxId outboxUuid1
@@ -2580,6 +2638,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             minted ^. #source `shouldBe` "ordering"
             minted ^. #destination `shouldBe` "billing.orders.v1"
             Text.isPrefixOf "msg_" (minted ^. #messageId) `shouldBe` True
+
+        it "validates integration producer message id prefixes before startup" $ \_storeHandle -> do
+            shouldBeRight_ (mkIntegrationProducer sampleProducer)
+            case mkIntegrationProducer (sampleProducer & #messageIdPrefix .~ "Bad-Prefix") of
+                Left (InvalidMessageIdPrefix prefix reason) -> do
+                    prefix `shouldBe` "Bad-Prefix"
+                    reason `shouldSatisfy` (not . Text.null)
+                other -> expectationFailure ("expected invalid prefix, got " <> show (void other))
 
         it "draftToEvent stamps source and messageId without minting" $ \_storeHandle -> do
             let event = draftToEvent "ordering" "msg-fixed-1" sampleDraft
@@ -4005,6 +4071,22 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             ttl = 30 :: NominalDiffTime
             t0 = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
             tExpired = addUTCTime 60 t0 -- past A's 30 s lease
+            shardOpts = defaultShardedWorkerOptions (Category (CategoryName "orders")) 4
+        it "validates sharded worker options before startup" $ \_store -> do
+            shouldBeRight_ (mkShardedWorkerOptions shardOpts)
+            mkShardedWorkerOptions (shardOpts & #shardCount .~ 0)
+                `shouldBeLeft` InvalidShardCount 0
+            mkShardedWorkerOptions (shardOpts & #leaseTtl .~ 0)
+                `shouldBeLeft` InvalidShardLeaseTtl 0
+            mkShardedWorkerOptions (shardOpts & #renewInterval .~ 0)
+                `shouldBeLeft` InvalidShardRenewInterval 0
+            mkShardedWorkerOptions (shardOpts & #leaseTtl .~ 10 & #renewInterval .~ 10)
+                `shouldBeLeft` InvalidShardLeaseRenewInterval 10 10
+            mkShardedWorkerOptions (shardOpts & #batchSize .~ 0)
+                `shouldBeLeft` InvalidShardBatchSize 0
+            mkShardedWorkerOptions (shardOpts & #bufferSize .~ 0)
+                `shouldBeLeft` InvalidShardBufferSize 0
+
         it "ensureShardRows populates N rows once (idempotent on re-run)" $ \store -> do
             Right () <- Store.runStoreIO store $ Store.runTransaction $ do
                 ensureShardRows subName 4
@@ -5953,6 +6035,17 @@ shouldBeRight :: (HasCallStack, Show e) => Either e a -> IO a
 shouldBeRight = \case
     Right value -> pure value
     Left err -> expectationFailure ("expected Right, got Left " <> show err) *> error "unreachable"
+
+shouldBeRight_ :: (HasCallStack, Show e) => Either e a -> Expectation
+shouldBeRight_ = \case
+    Right _ -> pure ()
+    Left err -> expectationFailure ("expected Right, got Left " <> show err)
+
+shouldBeLeft :: (HasCallStack, Eq e, Show e) => Either e a -> e -> Expectation
+shouldBeLeft actual expected =
+    case actual of
+        Left err -> err `shouldBe` expected
+        Right _ -> expectationFailure ("expected Left " <> show expected <> ", got Right")
 
 fromStringLiteral :: String -> Text
 fromStringLiteral = Text.pack

@@ -51,7 +51,9 @@ module Keiro.Subscription.Shard.Worker (
     -- * Options
     ShardWorkerError (..),
     ShardedWorkerOptions (..),
+    ShardedWorkerConfigError (..),
     defaultShardedWorkerOptions,
+    mkShardedWorkerOptions,
     acquireOutcome,
 
     -- * Running
@@ -130,6 +132,15 @@ data ShardedWorkerOptions = ShardedWorkerOptions
     }
     deriving stock (Generic)
 
+data ShardedWorkerConfigError
+    = InvalidShardCount !Int
+    | InvalidShardLeaseTtl !NominalDiffTime
+    | InvalidShardRenewInterval !NominalDiffTime
+    | InvalidShardLeaseRenewInterval !NominalDiffTime !NominalDiffTime
+    | InvalidShardBatchSize !Int32
+    | InvalidShardBufferSize !Natural
+    deriving stock (Generic, Eq, Show)
+
 {- | Sensible defaults for a sharded worker: 30 s lease, 10 s renew, batch 100,
 buffer 256. Supply the category target and the bucket count @N@.
 -}
@@ -144,6 +155,18 @@ defaultShardedWorkerOptions target' shardCount' =
         , bufferSize = 256
         , onShardError = Nothing
         }
+
+-- | Validate sharded worker options before starting a worker pool member.
+mkShardedWorkerOptions :: ShardedWorkerOptions -> Either ShardedWorkerConfigError ShardedWorkerOptions
+mkShardedWorkerOptions opts
+    | opts ^. #shardCount < 1 = Left (InvalidShardCount (opts ^. #shardCount))
+    | opts ^. #leaseTtl <= 0 = Left (InvalidShardLeaseTtl (opts ^. #leaseTtl))
+    | opts ^. #renewInterval <= 0 = Left (InvalidShardRenewInterval (opts ^. #renewInterval))
+    | opts ^. #leaseTtl <= opts ^. #renewInterval =
+        Left (InvalidShardLeaseRenewInterval (opts ^. #leaseTtl) (opts ^. #renewInterval))
+    | opts ^. #batchSize < 1 = Left (InvalidShardBatchSize (opts ^. #batchSize))
+    | opts ^. #bufferSize < 1 = Left (InvalidShardBufferSize (opts ^. #bufferSize))
+    | otherwise = Right opts
 
 {- | A live per-bucket reader: the action that stops it (cancels the kiroku
 subscription and kills the drain thread).

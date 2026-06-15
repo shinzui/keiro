@@ -15,8 +15,10 @@ module Keiro.Outbox.Types (
     OutboxMessage (..),
     OutboxRow (..),
     OutboxPublishOptions (..),
+    OutboxPublishConfigError (..),
     OutboxPublishSummary (..),
     defaultPublishOptions,
+    mkOutboxPublishOptions,
     statusText,
     parseStatus,
     nextDelay,
@@ -164,6 +166,16 @@ data OutboxPublishOptions = OutboxPublishOptions
     }
     deriving stock (Generic)
 
+data OutboxPublishConfigError
+    = InvalidOutboxBatchSize !Int
+    | InvalidOutboxMaxAttempts !Int
+    | InvalidOutboxPublishingTimeout !NominalDiffTime
+    | InvalidConstantBackoff !NominalDiffTime
+    | InvalidExponentialBackoffInitial !NominalDiffTime
+    | InvalidExponentialBackoffMultiplier !Double
+    | InvalidExponentialBackoffMaxDelay !NominalDiffTime !NominalDiffTime
+    deriving stock (Generic, Eq, Show)
+
 {- | Aggregate result of one publisher pass.
 
 @published + retried + dead + halted@ equals the number of rows claimed.
@@ -191,6 +203,26 @@ defaultPublishOptions =
         , publishingTimeout = 300
         , tracer = Nothing
         }
+
+-- | Validate outbox publisher options before starting a worker.
+mkOutboxPublishOptions :: OutboxPublishOptions -> Either OutboxPublishConfigError OutboxPublishOptions
+mkOutboxPublishOptions opts
+    | opts ^. #batchSize < 1 = Left (InvalidOutboxBatchSize (opts ^. #batchSize))
+    | opts ^. #maxAttempts < 1 = Left (InvalidOutboxMaxAttempts (opts ^. #maxAttempts))
+    | opts ^. #publishingTimeout <= 0 = Left (InvalidOutboxPublishingTimeout (opts ^. #publishingTimeout))
+    | otherwise = opts <$ validateBackoff (opts ^. #backoff)
+
+validateBackoff :: BackoffSchedule -> Either OutboxPublishConfigError ()
+validateBackoff = \case
+    ConstantBackoff delay
+        | delay < 0 -> Left (InvalidConstantBackoff delay)
+        | otherwise -> Right ()
+    ExponentialBackoff backoff
+        | backoff ^. #initial <= 0 -> Left (InvalidExponentialBackoffInitial (backoff ^. #initial))
+        | backoff ^. #multiplier < 1 -> Left (InvalidExponentialBackoffMultiplier (backoff ^. #multiplier))
+        | backoff ^. #maxDelay < backoff ^. #initial ->
+            Left (InvalidExponentialBackoffMaxDelay (backoff ^. #initial) (backoff ^. #maxDelay))
+        | otherwise -> Right ()
 
 -- | Wire representation of 'OutboxStatus' used in the @status@ column.
 statusText :: OutboxStatus -> Text

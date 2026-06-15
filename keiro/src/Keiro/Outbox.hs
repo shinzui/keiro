@@ -47,7 +47,9 @@ module Keiro.Outbox (
 
     -- * Canonical producer-subscription helper
     IntegrationProducer (..),
+    IntegrationProducerConfigError (..),
     IntegrationEventDraft (..),
+    mkIntegrationProducer,
     mintIntegrationEvent,
     draftToEvent,
     enqueueProducerEventTx,
@@ -130,6 +132,9 @@ each 'Just' result writes one 'keiro_outbox' row. The helper mints
   producing bounded context.
 * 'messageIdPrefix' — TypeID prefix used when minting @messageId@.
   Must be 1-63 lowercase Latin letters (e.g. @\"msg\"@, @\"order\"@).
+  Prefer constructing producers with 'mkIntegrationProducer'; an invalid
+  prefix passed directly to 'IntegrationProducer' raises when the first
+  message id is minted.
 * 'mapEvent' — pure mapper from a private 'RecordedEvent' and its
   decoded payload to an 'IntegrationEventDraft'. Returning 'Nothing'
   skips the event without enqueuing a row.
@@ -141,6 +146,22 @@ data IntegrationProducer e = IntegrationProducer
     , mapEvent :: !(RecordedEvent -> e -> Maybe IntegrationEventDraft)
     }
     deriving stock (Generic)
+
+data IntegrationProducerConfigError
+    = InvalidMessageIdPrefix !Text !Text
+    deriving stock (Generic, Eq, Show)
+
+-- | Validate an integration producer before starting its subscription.
+mkIntegrationProducer :: IntegrationProducer e -> Either IntegrationProducerConfigError (IntegrationProducer e)
+mkIntegrationProducer producer =
+    case TypeID.checkPrefix (producer ^. #messageIdPrefix) of
+        Nothing -> Right producer
+        Just err ->
+            Left
+                ( InvalidMessageIdPrefix
+                    (producer ^. #messageIdPrefix)
+                    (Text.pack (show err))
+                )
 
 {- | Everything in 'IntegrationEvent' except 'messageId' and 'source' —
 those are filled in by 'mintIntegrationEvent' from the producer
