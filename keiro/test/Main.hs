@@ -26,6 +26,7 @@ import Data.Vector qualified as Vector
 import Data.Word (Word64)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, throwError)
+import GHC.Conc (ThreadStatus (..), threadStatus)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
@@ -197,6 +198,7 @@ import Keiro.Workflow.Child (
 import Keiro.Workflow.Child.Schema qualified as Child
 import Keiro.Workflow.Instance qualified as Instance
 import Keiro.Workflow.Resume (
+    ResumeLogEvent (..),
     ResumeSummary (..),
     WorkflowDef (..),
     defaultWorkflowResumeOptions,
@@ -204,6 +206,7 @@ import Keiro.Workflow.Resume (
     resumeWorkflowsOnce,
     runPollLoopWith,
     runWorkflowResumeWorkerPush,
+    runWorkflowResumeWorkerWith,
  )
 import Keiro.Workflow.Sleep (
     parseSleepPayload,
@@ -4257,6 +4260,50 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             row ^. #attempts `shouldBe` 0
             row ^. #status `shouldBe` Instance.WfRunning
 
+        it "keeps the fixed-poll loop alive when one pass contains a poison workflow" $ \storeHandle -> do
+            done <- newEmptyMVar
+            healthyCounter <- newIORef (0 :: Int)
+            let poisonName = WorkflowName "fixed-loop-poison"
+                poisonId = WorkflowId "flp-1"
+                healthyName = WorkflowName "fixed-loop-healthy"
+                healthyId = WorkflowId "flh-1"
+                opts =
+                    defaultWorkflowResumeOptions
+                        & #pollInterval
+                        .~ 50_000
+                        & #maxAttempts
+                        .~ 1
+                        & #logEvent
+                        .~ const (pure ())
+                healthyBody = threeStepThenSignal healthyCounter done
+                registry =
+                    Map.fromList
+                        [ (poisonName, WorkflowDef (\_ -> liftIO (throwIO SimulatedCrash) *> pure (0 :: Int)))
+                        , (healthyName, WorkflowDef (\_ -> healthyBody))
+                        ]
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry poisonName poisonId (StepRecorded "seed" (toJSON True) now)
+            crashed <-
+                try
+                    ( Store.runStoreIO storeHandle $
+                        runWorkflow healthyName healthyId (crashAfterStep1 healthyCounter)
+                    ) ::
+                    IO (Either SomeException (Either Store.StoreError (WorkflowOutcome (Int, Int, Int))))
+            case crashed of
+                Left _ -> pure ()
+                Right other -> expectationFailure ("expected a simulated crash, got " <> show other)
+            worker <- forkIO (void (Store.runStoreIO storeHandle (runWorkflowResumeWorkerWith opts registry)))
+            completed <- timeout 5_000_000 (takeMVar done)
+            status <- threadStatus worker
+            killThread worker
+            completed `shouldBe` Just ()
+            status `shouldSatisfy` \case
+                ThreadFinished -> False
+                ThreadDied -> False
+                _ -> True
+
         -- M4: resume on an already-completed workflow is a genuine no-op.
         it "discovers nothing for an already-completed workflow and is stable" $ \storeHandle -> do
             counter <- newIORef (0 :: Int)
@@ -4473,6 +4520,54 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             resumed `shouldBe` Just ()
             let latency = realToFrac (diffUTCTime t1 now) :: Double
             latency `shouldSatisfy` (< 1.0)
+
+        it "logs a failed push pass and keeps draining after the store recovers" $ \store -> do
+            done <- newEmptyMVar
+            logs <- newIORef []
+            let name = WorkflowName "push-recover"
+                wid = WorkflowId "pr-1"
+                registry = Map.singleton name (WorkflowDef (\_ -> gateThenSignal done))
+                opts =
+                    defaultWorkflowResumeOptions
+                        & #pollInterval
+                        .~ 100_000
+                        & #logEvent
+                        .~ \event -> modifyIORef' logs (<> [event])
+                waitForPassFailure = timeout 5_000_000 $ do
+                    let go = do
+                            seen <- readIORef logs
+                            if any isPassFailure seen
+                                then pure ()
+                                else threadDelay 20_000 >> go
+                    go
+                isPassFailure = \case
+                    ResumePassFailed{} -> True
+                    _ -> False
+            first <- Store.runStoreIO store (runWorkflow name wid (gateThenSignal done))
+            first `shouldBe` Right Suspended
+            Right () <-
+                Store.runStoreIO store $
+                    Store.runTransaction $
+                        Tx.sql "ALTER TABLE keiro_workflow_steps RENAME TO keiro_workflow_steps_hidden"
+            worker <- forkIO (runWorkflowResumeWorkerPush store opts registry)
+            logged <- waitForPassFailure
+            logged `shouldBe` Just ()
+            Right () <-
+                Store.runStoreIO store $
+                    Store.runTransaction $
+                        Tx.sql "ALTER TABLE keiro_workflow_steps_hidden RENAME TO keiro_workflow_steps"
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO store $
+                    appendJournalEntry name wid (StepRecorded "awk:gate" (toJSON ()) now)
+            resumed <- timeout 5_000_000 (takeMVar done)
+            status <- threadStatus worker
+            killThread worker
+            resumed `shouldBe` Just ()
+            status `shouldSatisfy` \case
+                ThreadFinished -> False
+                ThreadDied -> False
+                _ -> True
 
     describe "Keiro.Workflow push fallback (EP-50)" $ around (withFreshStore fixture) $ do
         -- Push is strictly an optimization: with the worker on 'neverWake' (every
@@ -5335,6 +5430,12 @@ threeStep counter = do
     b <- step (StepName "s2") (liftIO (incrementAndRead counter))
     c <- step (StepName "s3") (liftIO (incrementAndRead counter))
     pure (a, b, c)
+
+threeStepThenSignal :: (Workflow :> es, IOE :> es) => IORef Int -> MVar () -> Eff es (Int, Int, Int)
+threeStepThenSignal counter done = do
+    result <- threeStep counter
+    liftIO (putMVar done ())
+    pure result
 
 {- | Runs step @"s1"@ (which commits its own journal append) then crashes, so
 the journal is left with one StepRecorded and no WorkflowCompleted.

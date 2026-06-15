@@ -39,7 +39,7 @@ You can see it working by running the test suite (`cabal test keiro-test` from t
 - [x] M2: terminal-failure marking (append `WorkflowFailed` once attempts reach `maxAttempts`; flip a child instance's `keiro_workflow_children` row to `failed`) (completed 2026-06-15)
 - [x] M2: pass-level catch-and-continue in `runWorkflowResumeWorkerWith` and `runWorkflowResumeWorkerPush` (completed 2026-06-15)
 - [x] M2: extend `ResumeSummary` (`failed`, `transientErrors`, `leaseSkipped`) and `KeiroMetrics` (`workflowFailed`, `workflowResumeErrors`, `workflowLeaseSkipped`) (completed 2026-06-15)
-- [ ] M2: tests — poison + healthy isolation, max-attempts terminal failure, transient store error survives, fixed-poll and push loop drivers survive a throwing pass (poison/terminal/transient cases completed 2026-06-15; loop-driver survival tests remain)
+- [x] M2: tests — poison + healthy isolation, max-attempts terminal failure, transient store error survives, fixed-poll and push loop drivers survive a throwing pass (completed 2026-06-15)
 - [ ] M3: lease claim/release statements in `Keiro.Workflow.Instance` (`claimInstance`, `releaseInstance`) and worker integration (claim before advance, release after)
 - [ ] M3: rebuild the journal append as a single composable transaction (`prepareJournalAppend` builder: advisory xact lock, index existence check, in-transaction append via `appendToStreamTx`, `recordStepTx`, `upsertInstanceTx`); route `recordStep`, `appendCompletion`, `appendJournalEntry(ReturningId)`, and `rotateGeneration` through it; on an already-journaled step return the journaled value, not the locally computed one; delete the now-dead `journalEntryExists` scan
 - [ ] M3: fix the `useAdvisoryLock` / "at most once" haddock lies in `keiro/src/Keiro/Workflow/Resume.hs`
@@ -62,6 +62,7 @@ You can see it working by running the test suite (`cabal test keiro-test` from t
 - Research discovery (2026-06-10): `findUnfinishedWorkflowIdsStmt` (`keiro/src/Keiro/Workflow/Schema.hs:198-218`) treats only `__workflow_completed__` and `__workflow_cancelled__` as terminal. Writing a `WorkflowFailed` journal marker alone would therefore *not* stop rediscovery — the failed workflow would be re-invoked forever. The fix must add `__workflow_failed__` to that SQL literal set (Milestone 2).
 - Implementation discovery (2026-06-15): codd keys migration application by parsed timestamp, and the originally planned `2026-06-11-00-00-00-keiro-workflows-instances.sql` collided with the existing `2026-06-11-00-00-00-notify-trigger-append-guard.sql`. The migration was renamed to `2026-06-11-00-00-04-keiro-workflows-instances.sql`, after the existing 2026-06-11 migrations; the first filtered test run failed with `duplicate key value violates unique constraint "sql_migrations_migration_timestamp_key"`, and the rerun after renaming applied all migrations and passed 5 examples.
 - Implementation discovery (2026-06-15): the worker can use effectful's built-in `catchSync` rather than a custom `SomeAsyncException` filter in `Eff`; local source under `/Users/shinzui/Keikaku/hub/haskell/effectful-project/effectful/effectful-core/src/Effectful/Exception.hs` confirms `catchSync` catches only synchronous exceptions. The push-aware `IO` loop still needs an explicit `SomeAsyncException` rethrow because it runs outside `Eff`.
+- Implementation discovery (2026-06-15): the push-loop failure path can be tested without adding a test seam by temporarily renaming `keiro_workflow_steps` in a fresh test database. That makes the worker's first discovery pass return `Left StoreError` through `runStoreIO`; after restoring the table, the same worker drains a suspended workflow, proving the pass-level error was logged rather than fatal.
 
 
 ## Decision Log
@@ -105,7 +106,7 @@ You can see it working by running the test suite (`cabal test keiro-test` from t
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Milestone 2 is complete as of 2026-06-15. The resume worker isolates poison workflows, records bounded attempts, appends a terminal `WorkflowFailed` marker, keeps healthy workflows moving in the same pass, classifies thrown `StoreError`s as transient without consuming attempts, and both fixed-poll and push loop drivers survive pass-level failures.
 
 
 ## Context and Orientation
@@ -427,4 +428,6 @@ kiroku (read at `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`) is used a
 
 Revision note (2026-06-15): Milestone 1 was implemented and the migration filename was corrected from `2026-06-11-00-00-00-keiro-workflows-instances.sql` to `2026-06-11-00-00-04-keiro-workflows-instances.sql` because codd rejected the original timestamp as a duplicate of an existing migration. The progress checklist, plan-of-work references, and interface contract now name the actual migration file.
 
-Revision note (2026-06-15): Most of Milestone 2 was implemented: `Failed` is a real outcome, failed markers drop out of discovery, resume options/logging/summary/metrics were extended, per-instance classification handles store errors separately from synchronous workflow exceptions, terminal failure appends `WorkflowFailed`, and fixed/push loop drivers log pass-level failures. The remaining M2 checklist item is narrowed to explicit loop-driver survival tests; focused resume validation currently covers poison+healthy isolation, terminal failure, and transient store-error classification.
+Revision note (2026-06-15): Initial Milestone 2 implementation made `Failed` a real outcome, failed markers drop out of discovery, extended resume options/logging/summary/metrics, separated per-instance store errors from synchronous workflow exceptions, appended terminal `WorkflowFailed`, and made fixed/push loop drivers log pass-level failures. At that checkpoint, explicit loop-driver survival tests still remained.
+
+Revision note (2026-06-15): Milestone 2 is now complete. Added fixed-poll and push loop-driver survival tests; validation passed with `cabal test keiro-test --test-options='--match "Keiro.Workflow.Resume"'` (8 examples, 0 failures), `cabal test keiro-test --test-options='--match "Keiro.Workflow push latency"'` (2 examples, 0 failures), and full `cabal test keiro-test` (225 examples, 0 failures).

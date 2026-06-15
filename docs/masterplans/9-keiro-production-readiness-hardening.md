@@ -104,7 +104,7 @@ Milestone-level rollup across child plans; the authoritative per-step state live
 - [x] EP-4: shard worker — error visibility, reader supervision, lease relinquish
 - [x] EP-5: PM/router ack contract fixed (no ack on failed dispatch; thrown errors finalize acks)
 - [x] EP-5: `eventAlreadyIn` point lookup; concurrent-duplicate test green
-- [ ] EP-6: resume worker survives poison workflows; `WorkflowFailed` path live
+- [x] EP-6: resume worker survives poison workflows; `WorkflowFailed` path live
 - [ ] EP-6: per-instance lease; concurrent workers cannot double-run effects
 - [ ] EP-6: signal/child-completion/cancel crash windows closed
 - [ ] EP-7: sleeps fire under an active resume worker; generation-namespaced wake sources
@@ -145,6 +145,12 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
   assumptions unrelated to EP-5: the builder expected an untracked optional `spikes/`
   directory and linkcheck treated Markdown source-file references in generated plan pages
   as navigable site links; both were corrected so verification passes in a clean checkout.
+- EP-6 Milestone 2 is complete as of 2026-06-15. The resume worker isolates poison workflows,
+  writes `WorkflowFailed`, preserves healthy workflow progress in the same pass, classifies
+  thrown `StoreError`s as transient, and both fixed-poll and push loop drivers now have
+  focused survival tests. Validation passed with focused `keiro-test` runs for
+  `Keiro.Workflow.Resume` (8 examples) and `Keiro.Workflow push latency` (2 examples), plus
+  full `cabal test keiro-test` (225 examples), all with 0 failures.
 
 
 ## Decision Log
@@ -199,9 +205,13 @@ EP-4 is complete as of 2026-06-15. Outbox rows stranded in `publishing` are recl
 
 EP-5 is complete as of 2026-06-15. Process-manager and router delivery now has the promised production behavior: no failed dispatch is silently acked, thrown store errors finalize the in-flight message, duplicate races fold through kiroku's `DuplicateEvent`, and operators can see dispatch failures/duplicates/poison counts. Validation passed with `just haskell-verify`: `cabal build all`; `keiro-test` 215 examples, 0 failures; `keiro-pgmq-test` 50 examples, 0 failures, 2 pending; `jitsurei-test` 16 examples, 0 failures; jitsurei diagrams check; website build; and linkcheck across 99 HTML pages.
 
+EP-6 Milestone 2 is complete as of 2026-06-15. Poison workflow handling and `WorkflowFailed` are live, and the remaining loop-driver survival tests have landed; M3 leasing and race-proof journal appends remain next.
+
 
 ---
 
 Revision note (2026-06-10): After the eight child plans were authored, this document was reconciled against their research findings: corrected the EP-2 blast-radius description in the Codec integration point (Command.hs unaffected), added the EP-2↔EP-8 job-envelope integration point and EP-8's soft dependency on EP-2, added EP-5 to the KeiroMetrics integration point and switched its naming convention to the shipped dot-separated form, refined the EP-7 dependency note (hard dependency binds milestones 5–6 only) and the EP-7↔EP-4 timer coordination (insert-only `scheduleTimerOnceTx`), amended the keiro-dsl scope exclusion, and populated Surprises & Discoveries with the cross-plan findings (EP-6 needs no EP-1 dependency; the PM worker never finalizes acks at all; codd permits in-place `search_path` pins; seven migrations affected, not four; pgmq-effectful retry intentionally out; keiro-pgmq tests missing from the Justfile gate).
 
 Revision note (2026-06-15): EP-5 was implemented and marked Complete. The registry, progress rollup, Surprises & Discoveries, and Outcomes & Retrospective now record the worker ack fix, stream-scoped kiroku point lookup, duplicate-race coverage, dispatch metrics, and final validation evidence.
+
+Revision note (2026-06-15): EP-6 Milestone 2 was completed. The Progress rollup now checks the poison-workflow/`WorkflowFailed` item, and Surprises & Discoveries plus Outcomes & Retrospective record the focused resume and push-loop validation evidence.
