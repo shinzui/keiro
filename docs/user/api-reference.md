@@ -169,13 +169,24 @@ Types and functions:
 - `PMCommand (..)`
 - `PMCommandResult (..)`
 - `PMStateResult (..)`
+- `PoisonPolicy (..)`
+- `WorkerOptions (..)`
+- `defaultWorkerOptions`
+- `isTransientStoreError`
+- `isTransientCommandError`
+- `ackForCommandError`
 - `deterministicCommandId`
 - `eventAlreadyIn`
 - `runProcessManagerOnce`
+- `runProcessManagerWorkerWith`
 - `runProcessManagerWorker`
 
 Use it for event-sourced coordination across streams. `eventAlreadyIn` is the
-idempotency pre-check, exported so routers and other callers can reuse it.
+idempotency point-lookup pre-check, exported so routers and other callers can
+reuse it. `runProcessManagerWorkerWith` accepts `WorkerOptions` for
+poison-message policy, transient retry delay, and dispatch metrics; the default
+worker finalizes each ack exactly once, retries transient store failures, and
+halts deterministic failures.
 `ProcessManager.targetProjections` is a list of inline projections for target
 events only; `[]` preserves append-only dispatch, while a non-empty list gives
 read-your-own-writes for target read models updated by process-manager dispatch.
@@ -190,6 +201,7 @@ Types and functions:
 - `Router (..)`
 - `RouterResult (..)`
 - `runRouterOnce`
+- `runRouterWorkerWith`
 - `runRouterWorker`
 
 Use it for stateless, effectful fan-out (content-based router / recipient list).
@@ -198,7 +210,8 @@ example from a read-model `runQuery`) rather than purely from manager state, and
 keeps no state stream. `Router.targetProjections` has the same target-only
 meaning as the process-manager field: use `[]` for the migration/default path,
 or pass the target aggregate's inline projections when router-dispatched writes
-must update target read models in the append transaction. Re-exported from
+must update target read models in the append transaction. `runRouterWorkerWith`
+uses the same `WorkerOptions` as process-manager workers. Re-exported from
 `Keiro`.
 
 ## `Keiro.Timer`
@@ -249,10 +262,12 @@ Use it to deduplicate inbound integration events by `(source, dedupe_key)`.
 
 ## `Keiro.Telemetry`
 
-OpenTelemetry instrumentation. Exports the span helpers `withCommandSpan`,
-`withProducerSpan`, and `withConsumerSpan`, W3C trace-context propagation
-(`traceContextFromCurrentSpan`, `traceContextFromHeaders`, `injectTraceContext`),
-and the semantic-convention attribute-name constants. Spans only; no metrics yet.
+OpenTelemetry instrumentation. Exports span helpers, W3C trace-context
+propagation, semantic-convention attribute-name constants, `KeiroMetrics`,
+`newKeiroMetrics`, and `record*` helpers for the `keiro.*` metric instruments.
+Process-manager and router workers can record `keiro.dispatch.failed`,
+`keiro.dispatch.duplicates`, and `keiro.dispatch.poison` through
+`WorkerOptions.metrics`.
 
 ## `Keiro.Migrations` (package `keiro-migrations`)
 

@@ -88,6 +88,9 @@ module Keiro.Telemetry (
     keiroCommandRetriesName,
     keiroCommandDuplicatesName,
     keiroSnapshotWriteFailuresName,
+    keiroDispatchFailedName,
+    keiroDispatchDuplicatesName,
+    keiroDispatchPoisonName,
     keiroWorkflowStepsExecutedName,
     keiroWorkflowStepsReplayedName,
     keiroWorkflowResumedName,
@@ -117,6 +120,9 @@ module Keiro.Telemetry (
     recordCommandRetries,
     recordCommandDuplicates,
     recordSnapshotWriteFailures,
+    recordDispatchFailed,
+    recordDispatchDuplicate,
+    recordDispatchPoison,
     recordWorkflowStepExecuted,
     recordWorkflowStepReplayed,
     recordWorkflowResumed,
@@ -549,6 +555,12 @@ keiroCommandDuplicatesName :: Text
 keiroCommandDuplicatesName = "keiro.command.duplicates"
 keiroSnapshotWriteFailuresName :: Text
 keiroSnapshotWriteFailuresName = "keiro.snapshot.write.failures"
+keiroDispatchFailedName :: Text
+keiroDispatchFailedName = "keiro.dispatch.failed"
+keiroDispatchDuplicatesName :: Text
+keiroDispatchDuplicatesName = "keiro.dispatch.duplicates"
+keiroDispatchPoisonName :: Text
+keiroDispatchPoisonName = "keiro.dispatch.poison"
 keiroWorkflowStepsExecutedName :: Text
 keiroWorkflowStepsExecutedName = "keiro.workflow.steps.executed"
 keiroWorkflowStepsReplayedName :: Text
@@ -595,6 +607,9 @@ data KeiroMetrics = KeiroMetrics
     , commandRetries :: Counter Int64
     , commandDuplicates :: Counter Int64
     , snapshotWriteFailures :: Counter Int64
+    , dispatchFailed :: Counter Int64
+    , dispatchDuplicates :: Counter Int64
+    , dispatchPoison :: Counter Int64
     , workflowStepsExecuted :: Counter Int64
     , workflowStepsReplayed :: Counter Int64
     , workflowResumed :: Counter Int64
@@ -633,6 +648,9 @@ newKeiroMetrics meter = liftIO $ do
     commandRetries' <- counterI64 keiroCommandRetriesName "{retry}" "Command retry attempts started after an optimistic-concurrency conflict."
     commandDuplicates' <- counterI64 keiroCommandDuplicatesName "{event}" "Command appends rejected as duplicate deterministic event ids."
     snapshotWriteFailures' <- counterI64 keiroSnapshotWriteFailuresName "{failure}" "Post-commit snapshot writes that failed and were swallowed."
+    dispatchFailed' <- counterI64 keiroDispatchFailedName "{command}" "Process-manager/router dispatch commands that failed."
+    dispatchDuplicates' <- counterI64 keiroDispatchDuplicatesName "{command}" "Process-manager/router dispatch commands skipped as duplicate deterministic event ids."
+    dispatchPoison' <- counterI64 keiroDispatchPoisonName "{message}" "Process-manager/router worker messages classified as poison."
     workflowStepsExecuted' <- counterI64 keiroWorkflowStepsExecutedName "{step}" "Workflow steps that ran their action (a journal miss)."
     workflowStepsReplayed' <- counterI64 keiroWorkflowStepsReplayedName "{step}" "Workflow steps short-circuited to a recorded result (a journal hit)."
     workflowResumed' <- counterI64 keiroWorkflowResumedName "{workflow}" "Workflow re-invocations performed by the resume worker."
@@ -662,6 +680,9 @@ newKeiroMetrics meter = liftIO $ do
             , commandRetries = commandRetries'
             , commandDuplicates = commandDuplicates'
             , snapshotWriteFailures = snapshotWriteFailures'
+            , dispatchFailed = dispatchFailed'
+            , dispatchDuplicates = dispatchDuplicates'
+            , dispatchPoison = dispatchPoison'
             , workflowStepsExecuted = workflowStepsExecuted'
             , workflowStepsReplayed = workflowStepsReplayed'
             , workflowResumed = workflowResumed'
@@ -740,6 +761,12 @@ recordCommandDuplicates :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordCommandDuplicates = recordCounter commandDuplicates
 recordSnapshotWriteFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotWriteFailures = recordCounter snapshotWriteFailures
+recordDispatchFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordDispatchFailed = recordCounter dispatchFailed
+recordDispatchDuplicate :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordDispatchDuplicate = recordCounter dispatchDuplicates
+recordDispatchPoison :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordDispatchPoison = recordCounter dispatchPoison
 recordWorkflowStepExecuted :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowStepExecuted = recordCounter workflowStepsExecuted
 recordWorkflowStepReplayed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()

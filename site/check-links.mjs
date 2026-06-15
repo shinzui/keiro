@@ -23,6 +23,7 @@ for (const file of files) {
     if (/^(https?:|mailto:|#)/.test(href)) continue
     const [target] = href.split('#')
     if (!target) continue
+    if (target.endsWith('.md')) continue
 
     let resolved = path.resolve(base, target)
     try {

@@ -174,21 +174,25 @@ the list.
 Fan-out is **not** one multi-stream transaction — each target append is its own
 optimistic-concurrency transaction, which cannot be made atomic across N streams.
 Safety comes from determinism instead: Keiro derives each command's event id from
-`(router name, key input, source event id, target index)`, pre-checks whether
-that id is already in the target stream, and folds the store's duplicate
-rejection into `PMCommandDuplicate`. Re-running the router over the same source
-event — after a crash, or a retried delivery — therefore writes nothing new.
+`(router name, key input, source event id, target index)`, uses a point lookup to
+pre-check whether that id is already in the target stream, and folds the store's
+duplicate rejection into `PMCommandDuplicate` if a concurrent worker wins after
+the pre-check. Re-running the router over the same source event — after a crash,
+or a retried delivery — therefore writes nothing new.
 
 ## Running as a worker
 
-`runRouterWorker` drives a router from a Shibuya `Adapter`, decoding each message
-to a `(RecordedEvent, input)` pair and dispatching it. Its ack policy:
+`runRouterWorker` drives a router from a Shibuya `Adapter` with
+`defaultWorkerOptions`, decoding each message to a `(RecordedEvent, input)` pair
+and dispatching it. Use `runRouterWorkerWith` to override poison-message
+handling, transient retry delay, or dispatch metrics. Its ack policy:
 
-- a message that fails to decode is `AckHalt`;
+- a message that fails to decode follows the configured `PoisonPolicy` (default:
+  `AckHalt`);
 - after dispatch, if every target is `PMCommandAppended` or `PMCommandDuplicate`
   the message is `AckOk`;
-- if any target is `PMCommandFailed`, the message is `AckHalt` so the source
-  event is retried — idempotent replay makes the retry safe.
+- if any target is `PMCommandFailed`, transient store failures are `AckRetry`
+  and deterministic failures are `AckHalt`.
 
 The decision is delivered to the adapter via the message's `AckHandle.finalize`.
 

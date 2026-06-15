@@ -17,12 +17,25 @@ consumers of `keiro` can see what changed and what they need to update._
   constructor returning `Left [EventStreamWarning]` for an unsafe stream. The bare `EventStream`
   record literal remains available. Validation requires the control state to satisfy
   `(Bounded s, Enum s, Ord s, Show s)`.
+- `Keiro.ProcessManager`: `WorkerOptions`, `PoisonPolicy`, `defaultWorkerOptions`,
+  `runProcessManagerWorkerWith`, and the dispatch-error classifier helpers. Existing
+  `runProcessManagerWorker` keeps its signature and delegates to the default options.
+- `Keiro.Router`: `runRouterWorkerWith`, sharing the process-manager worker options.
+- `Keiro.Telemetry`: dispatch counters `keiro.dispatch.failed`,
+  `keiro.dispatch.duplicates`, and `keiro.dispatch.poison`, plus recording helpers.
 
 ### Changed
 
 - Bumped the pinned `keiki` dependency to a commit that ships `validateTransducer` and the
   structured `TransducerValidationWarning` (keiki EP-56), which the new validation surface builds
   on. The previously pinned `keiki` predated that work.
+- Process-manager and router workers now finalize every Shibuya `AckHandle` exactly once.
+  Successful and duplicate dispatches ack `AckOk`, transient store failures `AckRetry`,
+  deterministic failures `AckHalt`, and undecodable messages follow the configured
+  `PoisonPolicy`.
+- `eventAlreadyIn` now uses kiroku's `eventExistsInStream` point lookup instead of scanning a
+  whole stream. Concurrent duplicate writes are folded to `PMCommandDuplicate` /
+  `PMStateDuplicate` through kiroku's `DuplicateEvent` mapping.
 
 ## 0.1.0.0 — 2026-05-22
 

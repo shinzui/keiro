@@ -25,6 +25,7 @@ import Data.UUID (UUID, fromString)
 import Data.Vector qualified as Vector
 import Data.Word (Word64)
 import Effectful (Eff, IOE, (:>))
+import Effectful.Error.Static (Error, throwError)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
@@ -274,7 +275,7 @@ import OpenTelemetry.Trace.Core (
     getSpanContext,
  )
 import Shibuya.Adapter (Adapter (..))
-import Shibuya.Core.Ack (AckDecision (..), HaltReason (..))
+import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..))
 import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
@@ -1728,6 +1729,180 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             sharedPmCategoryEvents `shouldBe` Vector.empty
             sharedPmNamespaceEvents `shouldBe` Vector.empty
 
+        it "worker finalizes AckOk through the ack handle on success" $ \storeHandle -> do
+            decisionsRef <- newIORef []
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+                messages = [(sourceEvent, CounterAdded 9)]
+                adapter = inMemoryAdapter decisionsRef messages
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerWorker defaultRunCommandOptions counterProcessManager adapter Just
+            decisions <- readIORef decisionsRef
+            decisions `shouldBe` [AckOk]
+
+        it "worker halts instead of acking when a target dispatch is rejected" $ \storeHandle -> do
+            decisionsRef <- newIORef []
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+                messages = [(sourceEvent, CounterAdded 9)]
+                adapter = inMemoryAdapter decisionsRef messages
+                rejectingPm =
+                    (counterProcessManager :: ProcessManager CounterEvent (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent)
+                        { targetEventStream = rejectingEventStream
+                        }
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerWorker defaultRunCommandOptions rejectingPm adapter Just
+            decisions <- readIORef decisionsRef
+            decisions `shouldSatisfy` \case
+                [AckHalt (HaltFatal _)] -> True
+                _ -> False
+            Right targetEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "counter-target-order-1") (StreamVersion 0) 10
+            Right managerEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "pm:counter-order-1") (StreamVersion 0) 10
+            Vector.length targetEvents `shouldBe` 0
+            Vector.length managerEvents `shouldBe` 1
+
+        it "records dispatch failures through worker metrics" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            decisionsRef <- newIORef []
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+                messages = [(sourceEvent, CounterAdded 9)]
+                adapter = inMemoryAdapter decisionsRef messages
+                rejectingPm =
+                    (counterProcessManager :: ProcessManager CounterEvent (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent)
+                        { targetEventStream = rejectingEventStream
+                        }
+                workerOptions = defaultWorkerOptions & #metrics ?~ keiroMetrics
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerWorkerWith workerOptions defaultRunCommandOptions rejectingPm adapter Just
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            lookup "keiro.dispatch.failed" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
+
+        it "classifies transient store failures as retry and command rejections as halt" $ \_storeHandle -> do
+            ackForCommandError (RetryDelay 5) (StoreFailed (Store.ConnectionLost "boom"))
+                `shouldBe` AckRetry (RetryDelay 5)
+            ackForCommandError (RetryDelay 5) CommandRejected `shouldSatisfy` \case
+                AckHalt (HaltFatal _) -> True
+                _ -> False
+
+        it "worker applies poison-message policy on decode failure" $ \storeHandle -> do
+            let badMessages = ["not-decodable" :: Text]
+            defaultDecisions <- newIORef []
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerWorker
+                        defaultRunCommandOptions
+                        counterProcessManager
+                        (inMemoryAdapter defaultDecisions badMessages)
+                        (const Nothing)
+            defaultObserved <- readIORef defaultDecisions
+            defaultObserved `shouldSatisfy` \case
+                [AckHalt (HaltFatal _)] -> True
+                _ -> False
+
+            skippedRef <- newIORef []
+            skipDecisions <- newIORef []
+            let skipOptions =
+                    defaultWorkerOptions
+                        & #poisonPolicy
+                        .~ PoisonSkip (\env -> liftIO (modifyIORef' skippedRef (<> [env ^. #payload])))
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerWorkerWith
+                        skipOptions
+                        defaultRunCommandOptions
+                        counterProcessManager
+                        (inMemoryAdapter skipDecisions badMessages)
+                        (const Nothing)
+            readIORef skipDecisions `shouldReturn` [AckOk]
+            readIORef skippedRef `shouldReturn` badMessages
+
+            deadLetterDecisions <- newIORef []
+            deadLetterRef <- newIORef []
+            let deadLetterOptions =
+                    defaultWorkerOptions
+                        & #poisonPolicy
+                        .~ PoisonDeadLetter (\env -> liftIO (modifyIORef' deadLetterRef (<> [env ^. #payload])))
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerWorkerWith
+                        deadLetterOptions
+                        defaultRunCommandOptions
+                        counterProcessManager
+                        (inMemoryAdapter deadLetterDecisions badMessages)
+                        (const Nothing)
+            deadLetterObserved <- readIORef deadLetterDecisions
+            deadLetterObserved `shouldSatisfy` \case
+                [AckDeadLetter (InvalidPayload _)] -> True
+                _ -> False
+            readIORef deadLetterRef `shouldReturn` badMessages
+
+        it "folds a concurrent duplicate target dispatch to PMCommandDuplicate" $ \storeHandle -> do
+            insertCount <- newIORef (0 :: Int)
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+                commandId = deterministicCommandId "counter-pm" "order-1" (sourceEvent ^. #eventId) 0
+                targetStreamName = StreamName "counter-target-order-1"
+                insertConcurrentTarget = do
+                    callNo <- atomicModifyIORef' insertCount (\n -> (n + 1, n))
+                    when (callNo == 1) $ appendCounterEventWithId storeHandle targetStreamName commandId (CounterAdded 9)
+                options =
+                    defaultRunCommandOptions
+                        & #beforeAppend
+                        .~ insertConcurrentTarget
+                        & #retryBackoffMicros
+                        .~ 0
+            result <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerOnce options counterProcessManager sourceEvent (CounterAdded 9)
+            case result of
+                Right (Right pmResult) ->
+                    pmResult ^. #commandResults `shouldSatisfy` \case
+                        [PMCommandDuplicate duplicateId] -> duplicateId == commandId
+                        _ -> False
+                other -> expectationFailure ("expected duplicate target dispatch fold, got " <> show other)
+            Right targetEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward targetStreamName (StreamVersion 0) 10
+            Vector.length targetEvents `shouldBe` 1
+
+        it "folds a concurrent duplicate manager-state append to PMStateDuplicate" $ \storeHandle -> do
+            insertCount <- newIORef (0 :: Int)
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+                managerId = deterministicCommandId "counter-pm" "order-1" (sourceEvent ^. #eventId) (-1)
+                managerStreamName = StreamName "pm:counter-order-1"
+                insertConcurrentManager = do
+                    callNo <- atomicModifyIORef' insertCount (\n -> (n + 1, n))
+                    when (callNo == 0) $ appendCounterEventWithId storeHandle managerStreamName managerId (CounterAdded 9)
+                options =
+                    defaultRunCommandOptions
+                        & #beforeAppend
+                        .~ insertConcurrentManager
+                        & #retryBackoffMicros
+                        .~ 0
+            result <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerOnce options counterProcessManager sourceEvent (CounterAdded 9)
+            case result of
+                Right (Right pmResult) -> do
+                    pmResult ^. #managerResult `shouldSatisfy` \case
+                        PMStateDuplicate duplicateId -> duplicateId == managerId
+                        _ -> False
+                    pmResult ^. #commandResults `shouldSatisfy` \case
+                        [PMCommandAppended{}] -> True
+                        _ -> False
+                other -> expectationFailure ("expected duplicate manager-state fold, got " <> show other)
+
     describe "Keiro.ProcessManager snapshots" $ around (withFreshStore fixture) $ do
         it "writes a snapshot of the manager state stream after the policy threshold" $ \storeHandle -> do
             -- Two distinct source events, both correlating to "order-1", drive the one
@@ -1895,6 +2070,105 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             decisions `shouldSatisfy` \case
                 [AckHalt (HaltFatal _)] -> True
                 _ -> False
+
+        it "finalizes AckRetry for a transient thrown resolver error and continues" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction initializeRouterTargetsTable
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.statement ("g2", "worker-after-retry") insertRouterTargetStmt)
+            decisionsRef <- newIORef []
+            attemptsRef <- newIORef (0 :: Int)
+            let sourceEvent1 = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+                sourceEvent2 = recordedFromEventId (EventId sampleUuid2) (CounterAdded 1)
+                messages = [(sourceEvent1, RouteGroup "g1"), (sourceEvent2, RouteGroup "g2")]
+                adapter = inMemoryAdapter decisionsRef messages
+                flakyRouter ::
+                    (IOE :> es, Store :> es, Error Store.StoreError :> es) =>
+                    Router RouteGroup (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent es
+                flakyRouter =
+                    Router
+                        { name = "flaky-router"
+                        , key = \(RouteGroup g) -> g
+                        , resolve = \(RouteGroup g) -> do
+                            attempt <- liftIO (atomicModifyIORef' attemptsRef (\n -> (n + 1, n)))
+                            if attempt == 0
+                                then throwError (Store.ConnectionLost "injected")
+                                else do
+                                    result <- runQuery Nothing routerTargetsReadModel g
+                                    pure $ case result of
+                                        Right targetIds ->
+                                            [ PMCommand{target = stream targetId, command = Add 1}
+                                            | targetId <- targetIds
+                                            ]
+                                        Left _ -> []
+                        , targetEventStream = counterEventStream
+                        , targetProjections = const []
+                        }
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runRouterWorker defaultRunCommandOptions flakyRouter adapter Just
+            decisions <- readIORef decisionsRef
+            decisions `shouldSatisfy` \case
+                [AckRetry{}, AckOk] -> True
+                _ -> False
+
+        it "finalizes AckHalt for a deterministic thrown resolver error" $ \storeHandle -> do
+            decisionsRef <- newIORef []
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+                messages = [(sourceEvent, RouteGroup "g1")]
+                adapter = inMemoryAdapter decisionsRef messages
+                failingResolveRouter ::
+                    (Error Store.StoreError :> es) =>
+                    Router RouteGroup (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent es
+                failingResolveRouter =
+                    Router
+                        { name = "failing-resolve-router"
+                        , key = \(RouteGroup g) -> g
+                        , resolve = \_ -> throwError (Store.UnexpectedServerError "XX000" "boom")
+                        , targetEventStream = counterEventStream
+                        , targetProjections = const []
+                        }
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runRouterWorker defaultRunCommandOptions failingResolveRouter adapter Just
+            decisions <- readIORef decisionsRef
+            decisions `shouldSatisfy` \case
+                [AckHalt (HaltFatal _)] -> True
+                _ -> False
+
+        it "folds a concurrent duplicate router dispatch to PMCommandDuplicate" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction initializeRouterTargetsTable
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.statement ("g1", "router-duplicate-target") insertRouterTargetStmt)
+            insertCount <- newIORef (0 :: Int)
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+                commandId = deterministicCommandId "demo-router" "g1" (sourceEvent ^. #eventId) 0
+                targetStreamName = StreamName "router-duplicate-target"
+                insertConcurrentTarget = do
+                    callNo <- atomicModifyIORef' insertCount (\n -> (n + 1, n))
+                    when (callNo == 0) $ appendCounterEventWithId storeHandle targetStreamName commandId (CounterAdded 1)
+                options =
+                    defaultRunCommandOptions
+                        & #beforeAppend
+                        .~ insertConcurrentTarget
+                        & #retryBackoffMicros
+                        .~ 0
+            result <-
+                Store.runStoreIO storeHandle $
+                    runRouterOnce options demoRouter sourceEvent (RouteGroup "g1")
+            case result of
+                Right (RouterResult [PMCommandDuplicate duplicateId]) ->
+                    duplicateId `shouldBe` commandId
+                other -> expectationFailure ("expected duplicate router dispatch fold, got " <> show other)
+            Right targetEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward targetStreamName (StreamVersion 0) 10
+            Vector.length targetEvents `shouldBe` 1
 
     describe "Keiro.Timer" $ around (withFreshStore fixture) $ do
         it "validates worker options before startup" $ \_storeHandle -> do
@@ -6012,6 +6286,16 @@ recordedFromEventId eventId event =
     case encodeForAppend counterCodec event of
         Right encoded -> recordedFrom encoded & #eventId .~ eventId
         Left err -> error ("test fixture failed to encode counter event: " <> show err)
+
+appendCounterEventWithId :: Store.KirokuStore -> StreamName -> EventId -> CounterEvent -> IO ()
+appendCounterEventWithId storeHandle streamName eventId event = do
+    encoded <- shouldBeRight (encodeForAppend counterCodec event)
+    outcome <-
+        Store.runStoreIO storeHandle $
+            Store.appendToStream streamName NoStream [encoded & #eventId ?~ eventId]
+    case outcome of
+        Right _ -> pure ()
+        Left err -> expectationFailure ("failed to insert concurrent duplicate event: " <> show err)
 
 sampleUuid :: UUID
 sampleUuid =

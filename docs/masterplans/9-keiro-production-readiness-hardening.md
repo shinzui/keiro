@@ -45,7 +45,7 @@ Alternatives considered. A severity-ordered decomposition ("blockers plan, highs
 | 2 | Harden keiro-core codec and stream contracts | docs/plans/68-harden-keiro-core-codec-and-stream-contracts.md | None | None | Complete |
 | 3 | Fix event-store command path, snapshot, and read-model correctness | docs/plans/69-fix-event-store-command-path-snapshot-and-read-model-correctness.md | None | EP-2 | Complete |
 | 4 | Make outbox, inbox, timer, and shard workers crash-recoverable | docs/plans/70-make-outbox-inbox-timer-and-shard-workers-crash-recoverable.md | None | None | Complete |
-| 5 | Fix process manager and router delivery correctness | docs/plans/71-fix-process-manager-and-router-delivery-correctness.md | EP-1 | None | Not Started |
+| 5 | Fix process manager and router delivery correctness | docs/plans/71-fix-process-manager-and-router-delivery-correctness.md | EP-1 | None | Complete |
 | 6 | Workflow engine failure handling, instance leasing, and crash-window atomicity | docs/plans/72-workflow-engine-failure-handling-instance-leasing-and-crash-window-atomicity.md | None | None | Not Started |
 | 7 | Workflow sleep, generation, and patch semantics plus journal scale hygiene | docs/plans/73-workflow-sleep-generation-and-patch-semantics-plus-journal-scale-hygiene.md | EP-6 | EP-4 | Not Started |
 | 8 | Expose keiro-pgmq tuning surface and make job workers resilient | docs/plans/74-expose-keiro-pgmq-tuning-surface-and-make-job-workers-resilient.md | None | EP-1, EP-2 | Not Started |
@@ -102,8 +102,8 @@ Milestone-level rollup across child plans; the authoritative per-step state live
 - [x] EP-4: inbox — poison-message path public, backlog count off hot path, index
 - [x] EP-4: timers — stuck `firing` auto-requeue, status-guarded transitions
 - [x] EP-4: shard worker — error visibility, reader supervision, lease relinquish
-- [ ] EP-5: PM/router ack contract fixed (no ack on failed dispatch; thrown errors finalize acks)
-- [ ] EP-5: `eventAlreadyIn` point lookup; concurrent-duplicate test green
+- [x] EP-5: PM/router ack contract fixed (no ack on failed dispatch; thrown errors finalize acks)
+- [x] EP-5: `eventAlreadyIn` point lookup; concurrent-duplicate test green
 - [ ] EP-6: resume worker survives poison workflows; `WorkflowFailed` path live
 - [ ] EP-6: per-instance lease; concurrent workers cannot double-run effects
 - [ ] EP-6: signal/child-completion/cancel crash windows closed
@@ -136,6 +136,15 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
   operator notes are documented. Validation passed with `cabal build all`,
   `keiro-test` 182 examples, `keiro-migrations-test` 2 examples, and `jitsurei-test` 16
   examples, all with 0 failures.
+- EP-5 is complete as of 2026-06-15. EP-1's actual kiroku lookup is stream-scoped
+  `eventExistsInStream`, which let `eventAlreadyIn` preserve its old semantics while
+  becoming a point lookup. The process-manager and router workers now share additive
+  worker options, finalize every ack exactly once, retry transient store failures,
+  halt deterministic failures, expose explicit poison-message policy, and record
+  `keiro.dispatch.*` counters. `just haskell-verify` also exposed website verification
+  assumptions unrelated to EP-5: the builder expected an untracked optional `spikes/`
+  directory and linkcheck treated Markdown source-file references in generated plan pages
+  as navigable site links; both were corrected so verification passes in a clean checkout.
 
 
 ## Decision Log
@@ -188,7 +197,11 @@ EP-1, EP-2, and EP-3 are complete as of 2026-06-15. EP-2 delivered the planned c
 
 EP-4 is complete as of 2026-06-15. Outbox rows stranded in `publishing` are reclaimed, publisher exceptions become per-row failures, sent outbox rows can be pruned, inbox poison messages are accounted and dead-lettered through an opt-in retry wrapper, stale `firing` timers requeue by default, shard workers survive transient lease errors and restart dead readers, graceful shutdown relinquishes shard leases, and the worker/producer configs now have typed construction-time validation. Validation passed with `cabal build all`, `keiro-test` 205 examples, `keiro-migrations-test` 2 examples, and `jitsurei-test` 16 examples, all with 0 failures.
 
+EP-5 is complete as of 2026-06-15. Process-manager and router delivery now has the promised production behavior: no failed dispatch is silently acked, thrown store errors finalize the in-flight message, duplicate races fold through kiroku's `DuplicateEvent`, and operators can see dispatch failures/duplicates/poison counts. Validation passed with `just haskell-verify`: `cabal build all`; `keiro-test` 215 examples, 0 failures; `keiro-pgmq-test` 50 examples, 0 failures, 2 pending; `jitsurei-test` 16 examples, 0 failures; jitsurei diagrams check; website build; and linkcheck across 99 HTML pages.
+
 
 ---
 
 Revision note (2026-06-10): After the eight child plans were authored, this document was reconciled against their research findings: corrected the EP-2 blast-radius description in the Codec integration point (Command.hs unaffected), added the EP-2↔EP-8 job-envelope integration point and EP-8's soft dependency on EP-2, added EP-5 to the KeiroMetrics integration point and switched its naming convention to the shipped dot-separated form, refined the EP-7 dependency note (hard dependency binds milestones 5–6 only) and the EP-7↔EP-4 timer coordination (insert-only `scheduleTimerOnceTx`), amended the keiro-dsl scope exclusion, and populated Surprises & Discoveries with the cross-plan findings (EP-6 needs no EP-1 dependency; the PM worker never finalizes acks at all; codd permits in-place `search_path` pins; seven migrations affected, not four; pgmq-effectful retry intentionally out; keiro-pgmq tests missing from the Justfile gate).
+
+Revision note (2026-06-15): EP-5 was implemented and marked Complete. The registry, progress rollup, Surprises & Discoveries, and Outcomes & Retrospective now record the worker ack fix, stream-scoped kiroku point lookup, duplicate-race coverage, dispatch metrics, and final validation evidence.

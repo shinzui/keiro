@@ -38,6 +38,15 @@ const diagramTheme = {
   thoroughness: 5,
 }
 
+async function exists(filePath) {
+  try {
+    await fs.access(filePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
 const planDiagrams = {
   1: {
     title: 'Command Cycle Contract',
@@ -144,10 +153,13 @@ await fs.cp(path.join(root, 'docs'), path.join(outDir, 'docs'), {
   filter: (source) => !source.endsWith('.DS_Store'),
 })
 await fs.copyFile(path.join(root, 'README.md'), path.join(outDir, 'README.md'))
-await fs.cp(path.join(root, 'spikes'), path.join(outDir, 'spikes'), {
-  recursive: true,
-  filter: (source) => !source.endsWith('.DS_Store') && !source.includes(`${path.sep}dist-newstyle${path.sep}`),
-})
+const spikesDir = path.join(root, 'spikes')
+if (await exists(spikesDir)) {
+  await fs.cp(spikesDir, path.join(outDir, 'spikes'), {
+    recursive: true,
+    filter: (source) => !source.endsWith('.DS_Store') && !source.includes(`${path.sep}dist-newstyle${path.sep}`),
+  })
+}
 await fs.cp(path.join(root, 'jitsurei'), path.join(outDir, 'jitsurei'), {
   recursive: true,
   filter: (source) => !source.endsWith('.DS_Store') && !source.includes(`${path.sep}dist-newstyle${path.sep}`),

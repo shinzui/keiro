@@ -4,6 +4,7 @@ slug: fix-process-manager-and-router-delivery-correctness
 title: "Fix process manager and router delivery correctness"
 kind: exec-plan
 created_at: 2026-06-11T04:45:56Z
+intention: intention_01kv40hzwaenftzem0gxypz4mj
 master_plan: "docs/masterplans/9-keiro-production-readiness-hardening.md"
 ---
 
@@ -30,46 +31,46 @@ This section must always reflect the actual current state of the work.
 
 Milestone 1 — worker ack machinery and the process-manager worker contract (C2, M9):
 
-- [ ] Add `WorkerOptions`, `PoisonPolicy`, and `defaultWorkerOptions` to `keiro/src/Keiro/ProcessManager.hs`
-- [ ] Add the failure classifier (`isTransientStoreError`, `isTransientCommandError`, `ackForCommandError`) and export it for direct testing
-- [ ] Rewrite `runProcessManagerWorker`'s `handleIngested`: finalize the `AckHandle` exactly once, wrap the reaction in `tryError @StoreError`, inspect `commandResults` for `PMCommandFailed`, apply the poison policy on decode failure
-- [ ] Add `runProcessManagerWorkerWith`; keep `runProcessManagerWorker` as a default-options wrapper
-- [ ] Test: PM worker finalizes `AckOk` through the ack handle on success (regression for the never-finalized bug)
-- [ ] Test: PM worker with a rejecting target finalizes `AckHalt (HaltFatal …)`, not `AckOk`, and the target stream stays empty
-- [ ] Test: classifier unit tests (transient store errors map to `AckRetry`, `CommandRejected` maps to `AckHalt`)
-- [ ] Test: undecodable message — default policy halts; `PoisonSkip` finalizes `AckOk` and invokes the callback; `PoisonDeadLetter` finalizes `AckDeadLetter`
-- [ ] `cabal test keiro-test` green
+- [x] Add `WorkerOptions`, `PoisonPolicy`, and `defaultWorkerOptions` to `keiro/src/Keiro/ProcessManager.hs`
+- [x] Add the failure classifier (`isTransientStoreError`, `isTransientCommandError`, `ackForCommandError`) and export it for direct testing
+- [x] Rewrite `runProcessManagerWorker`'s `handleIngested`: finalize the `AckHandle` exactly once, wrap the reaction in `tryError @StoreError`, inspect `commandResults` for `PMCommandFailed`, apply the poison policy on decode failure
+- [x] Add `runProcessManagerWorkerWith`; keep `runProcessManagerWorker` as a default-options wrapper
+- [x] Test: PM worker finalizes `AckOk` through the ack handle on success (regression for the never-finalized bug)
+- [x] Test: PM worker with a rejecting target finalizes `AckHalt (HaltFatal …)`, not `AckOk`, and the target stream stays empty
+- [x] Test: classifier unit tests (transient store errors map to `AckRetry`, `CommandRejected` maps to `AckHalt`)
+- [x] Test: undecodable message — default policy halts; `PoisonSkip` finalizes `AckOk` and invokes the callback; `PoisonDeadLetter` finalizes `AckDeadLetter`
+- [x] `cabal test keiro-test` green
 
 Milestone 2 — router worker thrown-error guard (M6):
 
-- [ ] Add `runRouterWorkerWith` taking `WorkerOptions`; rework `handleIngested` in `keiro/src/Keiro/Router.hs` to wrap decode + dispatch in `tryError @StoreError` so the ack is always finalized exactly once
-- [ ] Route the router's failed-dispatch ack decision through the shared classifier from milestone 1
-- [ ] Apply the poison policy to router decode failures
-- [ ] Test: a router whose `resolve` throws a transient `StoreError` finalizes `AckRetry` and the worker continues to the next message (stream does not die)
-- [ ] Test: a thrown non-transient `StoreError` (`UnexpectedServerError`) finalizes `AckHalt`
-- [ ] `cabal test keiro-test` green
+- [x] Add `runRouterWorkerWith` taking `WorkerOptions`; rework `handleIngested` in `keiro/src/Keiro/Router.hs` to wrap decode + dispatch in `tryError @StoreError` so the ack is always finalized exactly once
+- [x] Route the router's failed-dispatch ack decision through the shared classifier from milestone 1
+- [x] Apply the poison policy to router decode failures
+- [x] Test: a router whose `resolve` throws a transient `StoreError` finalizes `AckRetry` and the worker continues to the next message (stream does not die)
+- [x] Test: a thrown non-transient `StoreError` (`UnexpectedServerError`) finalizes `AckHalt`
+- [x] `cabal test keiro-test` green
 
 Milestone 3 — consume EP-1 kiroku artifacts: point lookup and live duplicate fold (M1/M8, H2):
 
-- [ ] Read the published kiroku event-id lookup name/signature from plan 67's "Interfaces and Dependencies" section; reconcile this plan if it differs from the assumed shape (log in Decision Log)
-- [ ] Bump the kiroku tag in `cabal.project` (both `kiroku-store` and `kiroku-store-migrations` stanzas) to the EP-1 release
-- [ ] Reimplement `eventAlreadyIn` in `keiro/src/Keiro/ProcessManager.hs` as a point lookup; keep its exported signature
-- [ ] Test (H2, process manager): concurrent duplicate via the `beforeAppend` seam — OCC retry re-appends the same deterministic id and must fold to `PMCommandDuplicate`, not `PMCommandFailed`
-- [ ] Test (H2, router): same concurrent-duplicate scenario through `runRouterOnce`
-- [ ] Test (H2, manager state): concurrent duplicate of the manager-state append folds to `PMStateDuplicate`
-- [ ] Confirm the existing sequential-redelivery tests still pass with the point-lookup pre-check
-- [ ] `cabal test keiro-test` green
+- [x] Read the published kiroku event-id lookup name/signature from plan 67's "Interfaces and Dependencies" section; reconcile this plan if it differs from the assumed shape (log in Decision Log)
+- [x] Bump the kiroku tag in `cabal.project` (both `kiroku-store` and `kiroku-store-migrations` stanzas) to the EP-1 release
+- [x] Reimplement `eventAlreadyIn` in `keiro/src/Keiro/ProcessManager.hs` as a point lookup; keep its exported signature
+- [x] Test (H2, process manager): concurrent duplicate via the `beforeAppend` seam — OCC retry re-appends the same deterministic id and must fold to `PMCommandDuplicate`, not `PMCommandFailed`
+- [x] Test (H2, router): same concurrent-duplicate scenario through `runRouterOnce`
+- [x] Test (H2, manager state): concurrent duplicate of the manager-state append folds to `PMStateDuplicate`
+- [x] Confirm the existing sequential-redelivery tests still pass with the point-lookup pre-check
+- [x] `cabal test keiro-test` green
 
 Milestone 4 — documentation reconciliation and dispatch telemetry:
 
-- [ ] Fix the module header and function docs in `keiro/src/Keiro/ProcessManager.hs` (header crash-safety paragraph, `PMCommandResult` doc, `runProcessManagerWorker` doc, `eventAlreadyIn` doc)
-- [ ] Fix the ack-policy doc on `runRouterWorker` in `keiro/src/Keiro/Router.hs`
-- [ ] Audit `docs/user/process-managers-and-timers.md`, `docs/guides/routers-and-effectful-fan-out.md`, and `docs/user/api-reference.md` for the same contradictions; update where they describe worker ack behavior
-- [ ] Add `keiro.dispatch.failed`, `keiro.dispatch.duplicates`, `keiro.dispatch.poison` counters to `KeiroMetrics` in `keiro/src/Keiro/Telemetry.hs` (additive fields, names, record helpers, `newKeiroMetrics` wiring) and record them from both workers via `WorkerOptions`
-- [ ] Test: metrics counters observed through the in-memory exporter pattern already used in `keiro/test/Main.hs`
-- [ ] Update `keiro/CHANGELOG.md`
-- [ ] Tick the EP-5 rollup lines in `docs/masterplans/9-keiro-production-readiness-hardening.md`
-- [ ] Final `cabal test keiro-test` and `just haskell-verify` green
+- [x] Fix the module header and function docs in `keiro/src/Keiro/ProcessManager.hs` (header crash-safety paragraph, `PMCommandResult` doc, `runProcessManagerWorker` doc, `eventAlreadyIn` doc)
+- [x] Fix the ack-policy doc on `runRouterWorker` in `keiro/src/Keiro/Router.hs`
+- [x] Audit `docs/user/process-managers-and-timers.md`, `docs/guides/routers-and-effectful-fan-out.md`, and `docs/user/api-reference.md` for the same contradictions; update where they describe worker ack behavior
+- [x] Add `keiro.dispatch.failed`, `keiro.dispatch.duplicates`, `keiro.dispatch.poison` counters to `KeiroMetrics` in `keiro/src/Keiro/Telemetry.hs` (additive fields, names, record helpers, `newKeiroMetrics` wiring) and record them from both workers via `WorkerOptions`
+- [x] Test: metrics counters observed through the in-memory exporter pattern already used in `keiro/test/Main.hs`
+- [x] Update `keiro/CHANGELOG.md`
+- [x] Tick the EP-5 rollup lines in `docs/masterplans/9-keiro-production-readiness-hardening.md`
+- [x] Final `cabal test keiro-test` and `just haskell-verify` green
 
 
 ## Surprises & Discoveries
@@ -84,6 +85,9 @@ Seeded during plan authoring (2026-06-10 research pass; each re-verified against
 - The thrown-error leak paths are narrower than "any store error". `runCommandWithSqlEvents` already catches thrown `StoreError` around its transaction (`tryError` at `keiro/src/Keiro/Command.hs:461`) and returns it as `Left (StoreFailed …)`. What still *throws* out of `runRouterOnce` / `runProcessManagerOnce` is: (a) the `resolve` read-model query (`Keiro.ReadModel.runQuery` calls the `Store` effect's `RunTransaction`, whose interpreter `throwError`s on pool errors — `kiroku-store/src/Kiroku/Store/Effect.hs:335-348`), (b) every stream read in `eventAlreadyIn` and in hydration (`usePool` throws at `kiroku-store/src/Kiroku/Store/Effect.hs:324-328`), and (c) the timer-only `runTransaction` at `keiro/src/Keiro/ProcessManager.hs:239`. Both workers need the `tryError` guard.
 - The production adapter gives `AckRetry` exactly the semantics this plan needs: `shibuya-kiroku-adapter/src/Shibuya/Adapter/Kiroku/Convert.hs:110-115` documents `AckRetry delay` as "the worker redelivers the same event after delay" with no checkpoint advance, and `AckHalt` as cancelling the subscription. This grounds the transient-vs-fatal classification decision below.
 - The MasterPlan's KeiroMetrics integration point says "snake_case metric names prefixed `keiro_`", but the shipped convention in `keiro/src/Keiro/Telemetry.hs` is dot-separated (`"keiro.outbox.published"`, etc.). This plan follows the shipped code.
+- 2026-06-15: EP-1's published lookup shape is `eventExistsInStream :: (HasCallStack, Store :> es) => StreamName -> EventId -> Eff es Bool`, not the initially assumed global `eventExists :: EventId -> Eff es Bool`. The scoped stream lookup is better for keiro because it preserves `eventAlreadyIn`'s public semantics exactly while still replacing the full stream scan with one indexed query.
+- 2026-06-15: `cabal.project` was already pinned to EP-1's kiroku SHA `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a` when EP-5 implementation began, so no dependency edit was needed for milestone 3.
+- 2026-06-15: `just haskell-verify` exposed two website verification assumptions unrelated to EP-5: `site/build.mjs` unconditionally copied an untracked optional `spikes/` directory, and `site/check-links.mjs` treated Markdown source-file links embedded in generated plan pages as navigable site links. The build now skips absent optional `spikes/`, and linkcheck ignores `.md` source references while continuing to validate generated file links.
 
 
 ## Decision Log
@@ -110,17 +114,17 @@ Record every decision made while working on the plan.
   Rationale: `Keiro.Router` already imports `PMCommand`, `PMCommandResult`, `deterministicCommandId`, and `eventAlreadyIn` from `Keiro.ProcessManager` (`keiro/src/Keiro/Router.hs:35`); following the existing dependency direction avoids a new module for three definitions.
   Date: 2026-06-10
 
-- Decision: `eventAlreadyIn` keeps its exported signature (`RunCommandOptions -> StreamName -> EventId -> Eff es Bool`) even though the new implementation is a by-id existence probe that may not need the stream name or page size.
-  Rationale: it is exported as a public "idempotency primitive"; keeping the shape is additive. Semantically the check widens from "id present in this stream" to "id present in the store", which is equivalent for keiro's usage because every probed id is a v5 UUID deterministically derived from `(manager/router name, correlation, source event id, emit index)` and is only ever written to the one target stream that derivation names. If plan 67's lookup returns stream attribution, the implementation may additionally compare it; reconcile at implementation time.
-  Date: 2026-06-10
+- Decision: `eventAlreadyIn` keeps its exported signature (`RunCommandOptions -> StreamName -> EventId -> Eff es Bool`) and now delegates to EP-1's stream-scoped `eventExistsInStream`.
+  Rationale: it is exported as a public idempotency primitive, so keeping the shape is additive. EP-1's actual API takes both `StreamName` and `EventId`, which preserves the old "id present in this stream" semantics exactly while making the implementation a single indexed point lookup. The `RunCommandOptions` argument remains for API compatibility even though the page size is no longer used.
+  Date: 2026-06-15
 
 - Decision: The worker guard catches only the typed `Error StoreError` channel (`tryError @StoreError`), not arbitrary IO exceptions.
   Rationale: `StoreError` is the only error these code paths throw besides programmer errors; async/IO exception supervision is the shibuya runner's and EP-1's concern (the supervised ingester). Widening the catch here would mask genuine crashes.
   Date: 2026-06-10
 
-- Decision: This plan is written against an *assumed* kiroku point-lookup shape (`eventExists :: EventId -> Eff es Bool` in `Kiroku.Store.Read`, backed by a new `Store` effect constructor doing a `SELECT` against the events primary key). The authoritative name and signature are whatever plan 67 records in its "Interfaces and Dependencies" section; the implementer of milestone 3 must read it from there first and update this plan if it differs.
-  Rationale: plan 67 had not been authored beyond its skeleton when this plan was written; the MasterPlan's integration point ("kiroku store error mapping and event-id lookup") fixes the semantics but not the spelling.
-  Date: 2026-06-10
+- Decision: The implementation consumes EP-1's actual lookup name and signature, `Kiroku.Store.Read.eventExistsInStream :: StreamName -> EventId -> Eff es Bool`.
+  Rationale: plan 67's Interfaces section is authoritative, and using the stream-scoped lookup avoids widening `eventAlreadyIn` from stream-local to global existence.
+  Date: 2026-06-15
 
 - Decision: New metric names are `keiro.dispatch.failed`, `keiro.dispatch.duplicates`, `keiro.dispatch.poison` (dot-separated, matching the shipped `Keiro.Telemetry` convention rather than the MasterPlan's "snake_case" phrasing), covering both the process manager and the router since they share the dispatch machinery and result types.
   Rationale: consistency with the twenty existing instrument names in `keiro/src/Keiro/Telemetry.hs`; a per-component split (`keiro.pm.*` vs `keiro.router.*`) was rejected because the workers share `PMCommandResult` and dashboards want one "commands lost?" signal.
@@ -129,10 +133,9 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
+EP-5 is complete as of 2026-06-15. Process-manager and router workers now finalize every Shibuya `AckHandle` exactly once, classify transient store failures as `AckRetry`, halt deterministic failures, and expose explicit poison-message policies through additive `runProcessManagerWorkerWith` / `runRouterWorkerWith` APIs. `eventAlreadyIn` now uses kiroku's indexed `eventExistsInStream` lookup, and concurrent duplicate races are covered for process-manager target dispatch, router dispatch, and manager-state append. Dispatch failures, duplicates, and poison messages are visible through `keiro.dispatch.failed`, `keiro.dispatch.duplicates`, and `keiro.dispatch.poison`.
 
-(To be filled during and after implementation.)
+Validation passed on 2026-06-15: `cabal test keiro-test` completed with 215 examples and 0 failures. `just haskell-verify` completed end to end: `cabal build all`; `keiro-test` 215 examples, 0 failures; `keiro-pgmq-test` 50 examples, 0 failures, 2 pending; `jitsurei-test` 16 examples, 0 failures; `jitsurei-diagrams --check`; website build; and linkcheck across 99 HTML pages.
 
 
 ## Context and Orientation
@@ -407,8 +410,8 @@ One behavioral-rollout note for operators consuming a release containing milesto
 Upstream artifacts consumed (hard dependency on EP-1, `docs/plans/67-fix-upstream-crash-safety-gaps-in-kiroku-shibuya-and-ephemeral-pg.md`):
 
 - Duplicate surfacing on the transactional path: after EP-1, the `Store` effect's `RunTransaction` interpreter (`runTxOnPool`, `kiroku-store/src/Kiroku/Store/Effect.hs:335-348`) must map an `events_pkey` unique violation to `DuplicateEvent (Maybe EventId)` instead of `ConnectionError`. This plan consumes the behavior only — no keiro code change is needed for it beyond the milestone-3 tests, because the folds in `keiro/src/Keiro/Router.hs:157-158` and `keiro/src/Keiro/ProcessManager.hs:229-233,276-277` already pattern-match `DuplicateEvent`.
-- Event-id point lookup: **the authoritative name and signature must be read from plan 67's "Interfaces and Dependencies" section before implementing milestone 3.** Assumed shape until then (per the MasterPlan's integration point "kiroku store error mapping and event-id lookup"): a new `Store` effect operation surfaced as `Kiroku.Store.Read.eventExists :: (HasCallStack, Store :> es) => EventId -> Eff es Bool`, implemented as a single `SELECT` against the events primary key. Reconcile any difference at implementation time and log it in this plan's Decision Log.
-- Pin mechanics: kiroku enters this repo via two `source-repository-package` git stanzas in `cabal.project` (subdirs `kiroku-store` and `kiroku-store-migrations`, currently tag `ffcf3a143ee58c09f17dc8d5746bad7d8ed4525a`); both must move to EP-1's release commit together. `shibuya-core` (>= 0.5, currently resolving to 0.7.0.0) comes from Hackage and needs no change — `AckRetry`, `AckDeadLetter`, `RetryDelay`, and `DeadLetterReason (InvalidPayload)` all exist in it today (`Shibuya.Core.Ack`).
+- Event-id point lookup: EP-1 publishes `Kiroku.Store.Read.eventExistsInStream :: (HasCallStack, Store :> es) => StreamName -> EventId -> Eff es Bool`, re-exported through `Kiroku.Store`. `eventAlreadyIn` consumes that function directly, preserving its stream-scoped semantics while replacing the old full-stream scan.
+- Pin mechanics: kiroku enters this repo via two `source-repository-package` git stanzas in `cabal.project` (subdirs `kiroku-store` and `kiroku-store-migrations`), both already pinned to EP-1 SHA `4312aa8cc3e4f6ab0d19fc8bb12d0dd9f8cc164a` when this implementation began. `shibuya-core` (>= 0.5, currently resolving to 0.7.0.0 or newer) comes from Hackage and needs no change — `AckRetry`, `AckDeadLetter`, `RetryDelay`, and `DeadLetterReason (InvalidPayload)` all exist in it today (`Shibuya.Core.Ack`).
 
 Modules edited and the interfaces that must exist at each milestone's end:
 
@@ -420,3 +423,7 @@ Modules edited and the interfaces that must exist at each milestone's end:
 - Unchanged but relied upon: `keiro/src/Keiro/Command.hs` (`RunCommandOptions.beforeAppend` test seam, `tryError` precedent, `retryOrFail` OCC semantics), `Effectful.Error.Static` (`tryError`, `throwError`), `Shibuya.Core.Ack` / `Shibuya.Core.AckHandle` / `Shibuya.Core.Ingested` / `Shibuya.Adapter` (ack contract: finalize exactly once), `kiroku-store`'s `Kiroku.Store.Error.StoreError` constructor set (classifier input).
 
 Sibling plans referenced by path only (no artifacts consumed): `docs/plans/70-make-outbox-inbox-timer-and-shard-workers-crash-recoverable.md` (shares the crash-window test pattern and the `KeiroMetrics` convention), `docs/plans/68-harden-keiro-core-codec-and-stream-contracts.md` (its `Codec.decode` break does not touch these modules' call sites, but if it lands first, rebase mechanically).
+
+---
+
+Revision note (2026-06-15): Implemented EP-5 end to end, marked all progress items complete, reconciled the kiroku point-lookup interface to the actual `eventExistsInStream` API, recorded validation evidence, and documented the website verification hygiene fixes needed for `just haskell-verify` to pass in this checkout.

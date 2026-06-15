@@ -18,9 +18,9 @@ crash-safe under at-least-once delivery.
 
 Use 'runProcessManagerOnce' to react to a single event, or
 'runProcessManagerWorker' to run the manager as a live subscription over a
-Shibuya adapter. As with the router, target aggregates should model benign
-rejections as total transitions so they never surface as 'PMCommandFailed'
-and wedge the worker.
+Shibuya adapter. Worker acks are finalized exactly once: successful and duplicate
+dispatches ack 'AckOk', transient store failures retry, deterministic failures
+halt, and undecodable messages follow the configured 'PoisonPolicy'.
 -}
 module Keiro.ProcessManager (
     -- * Definition
@@ -34,7 +34,14 @@ module Keiro.ProcessManager (
     PMStateResult (..),
 
     -- * Running
+    PoisonPolicy (..),
+    WorkerOptions (..),
+    defaultWorkerOptions,
+    isTransientStoreError,
+    isTransientCommandError,
+    ackForCommandError,
     runProcessManagerOnce,
+    runProcessManagerWorkerWith,
     runProcessManagerWorker,
 
     -- * Idempotency primitives
@@ -48,7 +55,7 @@ import Data.Text qualified as Text
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
-import Effectful.Error.Static (Error)
+import Effectful.Error.Static (Error, tryError)
 import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Command (CommandError (..), CommandResult, RunCommandOptions, runCommandWithSql)
@@ -56,20 +63,22 @@ import Keiro.EventStream (EventStream)
 import Keiro.Prelude
 import Keiro.Projection (InlineProjection, runCommandWithProjections)
 import Keiro.Stream (Stream)
+import Keiro.Telemetry (KeiroMetrics, recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison)
 import Keiro.Timer (TimerRequest, scheduleTimerTx)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError (..))
-import Kiroku.Store.Read (readStreamForwardStream)
+import Kiroku.Store.Read (eventExistsInStream)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..), RecordedEvent)
 import Kiroku.Store.Types qualified as StoreTypes
 import Shibuya.Adapter (Adapter (..))
-import Shibuya.Core.Ack (AckDecision (..), HaltReason (..))
+import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..))
+import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
-import Prelude (fromIntegral, length, uncurry, zip)
+import Prelude (any, filter, fromIntegral, length, not, uncurry, zip, (+))
 
 {- | A process manager wiring together a manager state machine and the target
 aggregate it drives.
@@ -129,8 +138,8 @@ data PMCommandResult target
       deterministic id that already existed.
       -}
       PMCommandDuplicate !EventId
-    | {- | The command failed; the worker treats this as fatal so the source
-      event is retried.
+    | {- | The command failed; the worker classifies the error. Transient store
+      failures retry the source event, while deterministic failures halt.
       -}
       PMCommandFailed !CommandError
     deriving stock (Generic, Eq, Show)
@@ -154,6 +163,59 @@ data ProcessManagerResult managerTarget commandTarget = ProcessManagerResult
     , timersScheduled :: !Int
     }
     deriving stock (Generic, Eq, Show)
+
+-- | What a worker does with a message its decoder cannot parse.
+data PoisonPolicy es msg
+    = PoisonHalt
+    | PoisonSkip !(Envelope msg -> Eff es ())
+    | PoisonDeadLetter !(Envelope msg -> Eff es ())
+
+-- | Worker-level knobs shared by the process-manager and router workers.
+data WorkerOptions es msg = WorkerOptions
+    { poisonPolicy :: !(PoisonPolicy es msg)
+    , transientRetryDelay :: !RetryDelay
+    , metrics :: !(Maybe KeiroMetrics)
+    }
+    deriving stock (Generic)
+
+defaultWorkerOptions :: WorkerOptions es msg
+defaultWorkerOptions =
+    WorkerOptions
+        { poisonPolicy = PoisonHalt
+        , transientRetryDelay = RetryDelay 5
+        , metrics = Nothing
+        }
+
+isTransientStoreError :: StoreError -> Bool
+isTransientStoreError = \case
+    ConnectionLost{} -> True
+    PoolAcquisitionTimeout -> True
+    ConnectionError{} -> True
+    WrongExpectedVersion{} -> True
+    StreamAlreadyExists{} -> True
+    EmptyAppendBatch{} -> False
+    StreamNotFound{} -> False
+    ReservedStreamName{} -> False
+    StreamNameTooLong{} -> False
+    DuplicateEvent{} -> False
+    EventAlreadyLinked{} -> False
+    LinkSourceEventMissing{} -> False
+    UnexpectedServerError{} -> False
+
+isTransientCommandError :: CommandError -> Bool
+isTransientCommandError = \case
+    StoreFailed err -> isTransientStoreError err
+    RetryExhausted _ err -> isTransientStoreError err
+    ConflictFixpoint _ err -> isTransientStoreError err
+    HydrationDecodeFailed{} -> False
+    HydrationReplayFailed{} -> False
+    CommandRejected -> False
+    EncodeFailed{} -> False
+
+ackForCommandError :: RetryDelay -> CommandError -> AckDecision
+ackForCommandError delay err
+    | isTransientCommandError err = AckRetry delay
+    | otherwise = AckHalt (HaltFatal (Text.pack (show err)))
 
 {- | Derive a stable, collision-resistant 'EventId' for a manager write from
 @(manager name, correlation id, source event id, emit index)@ via a v5 UUID.
@@ -280,13 +342,14 @@ runProcessManagerOnce options manager sourceEvent input = do
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
 
-{- | Run a process manager as a live subscription draining a Shibuya adapter.
+{- | Run a process manager as a live subscription draining a Shibuya adapter with
+'defaultWorkerOptions'.
 
-Each message is decoded to a @(RecordedEvent, input)@ pair and handed to
-'runProcessManagerOnce'. A message that fails to decode, or a reaction that
-returns @Left@, finalizes @AckHalt (HaltFatal …)@ so the source event is
-retried; deterministic write ids make that retry safe. A successful reaction
-acks @AckOk@.
+Use 'runProcessManagerWorkerWith' to override poison-message handling, transient
+retry delay, or dispatch metrics. Every ingested message's ack handle is
+finalized exactly once. Successful and duplicate dispatches finalize 'AckOk';
+transient store failures finalize 'AckRetry'; deterministic failures finalize
+'AckHalt'; undecodable messages follow the configured 'PoisonPolicy'.
 -}
 runProcessManagerWorker ::
     forall msg input phi rs s ci co targetPhi targetRs targetState targetCi targetCo es.
@@ -304,25 +367,113 @@ runProcessManagerWorker ::
     Adapter es msg ->
     (msg -> Maybe (RecordedEvent, input)) ->
     Eff es ()
-runProcessManagerWorker options manager Adapter{source = adapterSource} decodeMessage =
+runProcessManagerWorker =
+    runProcessManagerWorkerWith defaultWorkerOptions
+
+runProcessManagerWorkerWith ::
+    forall msg input phi rs s ci co targetPhi targetRs targetState targetCi targetCo es.
+    ( HasCallStack
+    , IOE :> es
+    , Store :> es
+    , Error StoreError :> es
+    , BoolAlg phi (RegFile rs, ci)
+    , BoolAlg targetPhi (RegFile targetRs, targetCi)
+    , Eq co
+    , Eq targetCo
+    ) =>
+    WorkerOptions es msg ->
+    RunCommandOptions ->
+    ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo ->
+    Adapter es msg ->
+    (msg -> Maybe (RecordedEvent, input)) ->
+    Eff es ()
+runProcessManagerWorkerWith workerOptions options manager Adapter{source = adapterSource} decodeMessage =
     Streamly.fold Fold.drain
         $ Streamly.mapM handleIngested adapterSource
   where
     handleIngested :: Ingested es msg -> Eff es AckDecision
-    handleIngested Ingested{envelope = Envelope{payload = message}} =
-        case decodeMessage message of
-            Nothing -> pure (AckHalt (HaltFatal "process-manager worker could not decode message"))
+    handleIngested Ingested{envelope = env@Envelope{payload = message}, ack = AckHandle finalizeAck} = do
+        decision <- case decodeMessage message of
+            Nothing -> decideForPoison workerOptions "process-manager worker could not decode message" env
             Just (recorded, input) -> do
-                outcome <- runProcessManagerOnce options manager recorded input
-                pure $ case outcome of
-                    Right _ -> AckOk
-                    Left err -> AckHalt (HaltFatal (Text.pack (show err)))
+                outcome <- tryError @StoreError (runProcessManagerOnce options manager recorded input)
+                case outcome of
+                    Left (_, storeErr) -> do
+                        recordDispatchFailed (workerOptions ^. #metrics) 1
+                        pure (ackForThrownStoreError (workerOptions ^. #transientRetryDelay) storeErr)
+                    Right (Left err) -> do
+                        recordDispatchFailed (workerOptions ^. #metrics) 1
+                        pure (ackForCommandError (workerOptions ^. #transientRetryDelay) err)
+                    Right (Right result) ->
+                        ackForResults workerOptions (result ^. #managerResult) (result ^. #commandResults)
+        finalizeAck decision
+        pure decision
+
+ackForThrownStoreError :: RetryDelay -> StoreError -> AckDecision
+ackForThrownStoreError delay = ackForCommandError delay . StoreFailed
+
+ackForResults ::
+    (IOE :> es) =>
+    WorkerOptions es msg ->
+    PMStateResult managerTarget ->
+    [PMCommandResult commandTarget] ->
+    Eff es AckDecision
+ackForResults workerOptions managerResult commandResults = do
+    let duplicateCount = stateDuplicateCount managerResult + commandDuplicateCount commandResults
+        failures = [err | PMCommandFailed err <- commandResults]
+    recordDispatchDuplicate (workerOptions ^. #metrics) duplicateCount
+    recordDispatchFailed (workerOptions ^. #metrics) (fromIntegral (length failures))
+    pure $ case failures of
+        [] -> AckOk
+        errs
+            | any (not . isTransientCommandError) errs ->
+                AckHalt (HaltFatal (Text.pack (show (headDeterministic errs))))
+            | otherwise ->
+                AckRetry (workerOptions ^. #transientRetryDelay)
+
+stateDuplicateCount :: PMStateResult target -> Int64
+stateDuplicateCount = \case
+    PMStateDuplicate{} -> 1
+    PMStateAppended{} -> 0
+
+commandDuplicateCount :: [PMCommandResult target] -> Int64
+commandDuplicateCount =
+    fromIntegral . length . filter isDuplicateResult
+  where
+    isDuplicateResult = \case
+        PMCommandDuplicate{} -> True
+        _ -> False
+
+headDeterministic :: [CommandError] -> CommandError
+headDeterministic errs =
+    case filter (not . isTransientCommandError) errs of
+        err : _ -> err
+        [] -> case errs of
+            err : _ -> err
+            [] -> CommandRejected
+
+decideForPoison ::
+    (IOE :> es) =>
+    WorkerOptions es msg ->
+    Text ->
+    Envelope msg ->
+    Eff es AckDecision
+decideForPoison workerOptions reason env = do
+    recordDispatchPoison (workerOptions ^. #metrics) 1
+    case workerOptions ^. #poisonPolicy of
+        PoisonHalt -> pure (AckHalt (HaltFatal reason))
+        PoisonSkip callback -> do
+            callback env
+            pure AckOk
+        PoisonDeadLetter callback -> do
+            callback env
+            pure (AckDeadLetter (InvalidPayload reason))
 
 eventIdToUuid :: EventId -> UUID.UUID
 eventIdToUuid (EventId uuid) = uuid
 
-{- | Check whether an event with the given id is already present in a stream,
-by scanning it forward. Used as the pre-dispatch idempotency guard so a
+{- | Check whether an event with the given id is already present in a live stream.
+Used as the pre-dispatch idempotency guard so a
 command that was already applied on a prior (possibly crashed) attempt is
 recognized as a duplicate before re-running it.
 -}
@@ -332,7 +483,5 @@ eventAlreadyIn ::
     StoreTypes.StreamName ->
     EventId ->
     Eff es Bool
-eventAlreadyIn options streamName eventId =
-    Streamly.fold
-        (Fold.any (\recorded -> recorded ^. #eventId == eventId))
-        (readStreamForwardStream streamName (StoreTypes.StreamVersion 0) (options ^. #pageSize))
+eventAlreadyIn _options streamName eventId =
+    eventExistsInStream streamName eventId

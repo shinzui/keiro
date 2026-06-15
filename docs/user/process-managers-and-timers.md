@@ -67,9 +67,11 @@ The id is derived from manager name, correlation id, source event id, and emit
 index. Index `-1` is used for the manager state event; `0..` are used for target
 commands.
 
-Before appending, Keiro checks whether the deterministic event id is already in
-the manager or target stream. Duplicate delivery returns duplicate results
-rather than appending again.
+Before appending, Keiro uses a point lookup to check whether the deterministic
+event id is already in the manager or target stream. Duplicate delivery returns
+duplicate results rather than appending again. If a concurrent worker wins the
+race after the pre-check, the store's duplicate-id rejection is folded into the
+same duplicate result.
 
 ## Running Once
 
@@ -108,8 +110,16 @@ runProcessManagerWorker
 
 `decodeMessage` must turn adapter messages into `(RecordedEvent, input)`.
 
-If decoding fails, the worker returns `AckHalt`. If manager execution fails, it
-also halts with the rendered command error.
+`runProcessManagerWorker` uses `defaultWorkerOptions`. Use
+`runProcessManagerWorkerWith` to override poison-message handling, transient
+retry delay, or dispatch metrics. The worker finalizes each message's
+`AckHandle` exactly once:
+
+- successful and duplicate dispatches finalize `AckOk`;
+- transient store failures finalize `AckRetry`;
+- deterministic command failures finalize `AckHalt`;
+- undecodable messages follow the configured `PoisonPolicy` (default:
+  `PoisonHalt`).
 
 ## Snapshotting Manager State
 
