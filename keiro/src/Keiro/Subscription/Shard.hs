@@ -36,6 +36,7 @@ module Keiro.Subscription.Shard (
 
     -- * Lease descriptor
     ShardLease (..),
+    ShardCountMismatch (..),
 
     -- * Ownership operations
     ensureShards,
@@ -54,17 +55,19 @@ import Data.Set qualified as Set
 import Data.Time (NominalDiffTime)
 import Data.UUID.V4 qualified as UUIDv4
 import Effectful (Eff, IOE, (:>))
+import Effectful.Exception (Exception, throwIO)
 import Keiro.Prelude
 import Keiro.Subscription.Shard.Schema (
     WorkerId (..),
     claimShardsTx,
     ensureShardRows,
+    listShardCounts,
     listShardOwnership,
     releaseShardsTx,
     renewLeaseTx,
  )
 import Kiroku.Store.Effect (Store)
-import Kiroku.Store.Subscription.Types (SubscriptionName)
+import Kiroku.Store.Subscription.Types (SubscriptionName (..))
 import Kiroku.Store.Transaction (runTransaction)
 
 -- | Mint a fresh per-process 'WorkerId' (a random UUID).
@@ -85,6 +88,14 @@ data ShardLease = ShardLease
     }
     deriving stock (Generic)
 
+data ShardCountMismatch = ShardCountMismatch
+    { mismatchSubscriptionName :: !Text
+    , mismatchConfigured :: !Int
+    , mismatchFound :: ![Int]
+    }
+    deriving stock (Generic, Eq, Show)
+    deriving anyclass (Exception)
+
 {- | The fair-share claim target: @ceil(N / liveWorkers)@. When @k@ workers are
 live they collectively claim all @N@ buckets and no single worker hogs them. A
 non-positive @liveWorkers@ is treated as one (claim everything).
@@ -98,8 +109,20 @@ fairShareTarget shardCount liveWorkers =
 on every worker startup ('ensureShardRows' uses @ON CONFLICT DO NOTHING@).
 -}
 ensureShards :: (Store :> es) => ShardLease -> Eff es ()
-ensureShards lease =
-    runTransaction (ensureShardRows (subscriptionName lease) (shardCount lease))
+ensureShards lease = do
+    counts <- runTransaction $ do
+        ensureShardRows (subscriptionName lease) (shardCount lease)
+        listShardCounts (subscriptionName lease)
+    let configured = shardCount lease
+        found = [n | (n, _) <- counts, n /= configured]
+    unless (null found) $
+        throwIO
+            ShardCountMismatch
+                { mismatchSubscriptionName = case subscriptionName lease of
+                    SubscriptionName name -> name
+                , mismatchConfigured = configured
+                , mismatchFound = found
+                }
 
 {- | One ownership-reconcile pass: in a single transaction, renew the leases this
 worker still holds, then — if it holds fewer than its fair share — claim __one__

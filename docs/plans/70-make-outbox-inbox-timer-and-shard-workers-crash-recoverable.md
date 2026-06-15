@@ -53,12 +53,12 @@ After this plan is implemented, every documented recovery guarantee in these fou
 - [x] M5: make `statusFromText` loud (unknown timer status must not decode as `Cancelled`) (completed 2026-06-15)
 - [x] M5: add the `keiro.timer.requeued` counter; fix the module and function docs (completed 2026-06-15)
 - [x] M5: write the timer crash-window tests (completed 2026-06-15; focused `Keiro.Timer` run passed with 10 examples, 0 failures; full `keiro-test` passed with 197 examples, 0 failures)
-- [ ] M6: stop mapping shard snapshot/acquire errors to empty sets; keep the previous owned set and report through the new `onShardError` hook
-- [ ] M6: supervise reader threads with `forkFinally` + intentional-stop flag; restart dead readers on the next reconcile
-- [ ] M6: relinquish all held buckets in the shutdown `finally` of `runShardedSubscriptionGroup`
-- [ ] M6: make `ensureShards` fail loudly on a `shard_count` mismatch against existing rows
-- [ ] M6: document the zombie-worker / checkpoint-regression edge (M5 finding, documentation-only)
-- [ ] M6: write the shard tests (immediate relinquish on shutdown, dead-reader restart, pure error-path unit test)
+- [x] M6: stop mapping shard snapshot/acquire errors to empty sets; keep the previous owned set and report through the new `onShardError` hook (completed 2026-06-15)
+- [x] M6: supervise reader threads with `forkFinally` + intentional-stop flag; restart dead readers on the next reconcile (completed 2026-06-15)
+- [x] M6: relinquish all held buckets in the shutdown `finally` of `runShardedSubscriptionGroup` (completed 2026-06-15)
+- [x] M6: make `ensureShards` fail loudly on a `shard_count` mismatch against existing rows (completed 2026-06-15)
+- [x] M6: document the zombie-worker / checkpoint-regression edge (M5 finding, documentation-only) (completed 2026-06-15)
+- [x] M6: write the shard tests (immediate relinquish on shutdown, dead-reader restart, pure error-path unit test) (completed 2026-06-15; focused shard lease/failover runs passed with 8 + 3 examples, 0 failures; full `keiro-test` passed with 201 examples, 0 failures)
 - [ ] M7: add `mkOutboxPublishOptions`, `mkTimerWorkerOptions`, `mkShardedWorkerOptions`, `mkIntegrationProducer` smart constructors with `<Thing>ConfigError` types, with tests
 - [ ] Final: full `cabal build all` and `cabal test keiro-test` green; update masterplan rollup checkboxes for EP-4
 
@@ -76,6 +76,7 @@ Authoring-time findings that correct or extend the June 2026 audit notes (re-ver
 - The M2 head-of-line reclaim test needs two publisher passes for two same-key rows, not one. `publishClaimedOutbox` is intentionally a one-batch worker: after the sweeper moves the stranded first row from `publishing` to `failed`, the claim query can claim that first row, but the second row remains blocked by the non-terminal first row until the first reaches `sent`. This preserves the one-shot worker contract and still proves the key is unwedgeable.
 - M4 verified the retry wrapper boundary: `Kiroku.Store.runTransaction` maps SQL failures and `Tx.condemn` through the Store error/rollback path, while `runInboxTransactionWithRetries` catches only synchronous handler exceptions with `trySync`. This preserves the original wrapper's rollback semantics and keeps poison-message accounting opt-in for thrown handler failures.
 - M5's first attempt at a loud-status regression test used `claimDueTimer` after corrupting a row to `status = 'garbage'`, but the claim query filters `status = 'scheduled'` before decoding rows, so the row is correctly invisible rather than decoded. The production decoder is still loud through `D.refine statusFromText`; the behavioral M5 tests focus on reachable recovery paths.
+- M6's reader-restart regression should kill one reader once, not fail every event once. Throwing before the sink for every event can advance subscription progress depending on the lower-level subscription checkpoint semantics, so the stable regression is: one unintentional reader death is reported, the next reconcile restarts it, and the category still drains.
 
 
 ## Decision Log
@@ -144,6 +145,8 @@ Milestone 3 completed on 2026-06-15. The outbox now exposes `garbageCollectSent`
 Milestone 4 completed on 2026-06-15. The inbox hot path now skips the backlog count when metrics are disabled, `InboxRow` exposes `attemptCount`, unknown inbox statuses fail decode loudly, `defaultEpoch` no longer uses a partial `read`, `markFailedTx` is available from the public inbox module, and the new opt-in retry wrapper records thrown handler failures as failed attempts with a terminal dead-letter ceiling plus `keiro.inbox.poisoned`. Validation passed with focused `cabal test keiro-test --test-show-details=direct --test-options='--match "Keiro.Inbox"'` (17 examples, 0 failures) and full `cabal test keiro-test --test-show-details=direct` (193 examples, 0 failures).
 
 Milestone 5 completed on 2026-06-15. Timer workers now requeue stale `firing` rows by default before claiming due timers, expose `requeueStuckAfter` for opt-out/custom TTLs, guard `markTimerFired` so dead/cancelled/requeued rows are not resurrected, decode unknown timer statuses loudly, and record `keiro.timer.requeued`. Validation passed with focused `cabal test keiro-test --test-show-details=direct --test-options='--match "Keiro.Timer"'` (10 examples, 0 failures) and full `cabal test keiro-test --test-show-details=direct` (197 examples, 0 failures).
+
+Milestone 6 completed on 2026-06-15. Shard workers now report snapshot/acquire/reader/ensure errors through `onShardError`, keep their previous readers when acquire fails, supervise reader threads and restart a dead reader on the next reconcile, relinquish leases during graceful shutdown, reject shard-count mismatches through `ShardCountMismatch`, and document the at-least-once zombie-worker checkpoint-regression edge. Validation passed with focused `Shard lease` tests (8 examples, 0 failures), focused `Sharded subscription drain and failover` tests (3 examples, 0 failures), and full `cabal test keiro-test --test-show-details=direct` (201 examples, 0 failures).
 
 
 ## Context and Orientation

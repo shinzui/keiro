@@ -112,7 +112,10 @@ import Keiro.ReadModel.Rebuild qualified as Rebuild
 import Keiro.Snapshot.Policy (shouldSnapshot, shouldSnapshotSpan)
 import Keiro.Stream qualified as Stream
 import Keiro.Subscription.Shard (
+    ShardCountMismatch (..),
+    ShardLease (..),
     WorkerId (..),
+    ensureShards,
     fairShareTarget,
  )
 import Keiro.Subscription.Shard.Schema (
@@ -123,7 +126,9 @@ import Keiro.Subscription.Shard.Schema (
     renewLeaseTx,
  )
 import Keiro.Subscription.Shard.Worker (
+    ShardWorkerError (..),
     ShardedWorkerOptions (..),
+    acquireOutcome,
     defaultShardedWorkerOptions,
     runShardedSubscriptionGroup,
  )
@@ -4048,6 +4053,34 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             fairShareTarget 6 4 `shouldBe` 2
             fairShareTarget 7 3 `shouldBe` 3
             fairShareTarget 4 0 `shouldBe` 4 -- a non-positive estimate claims everything
+        it "acquireOutcome keeps previous ownership on acquire failure" $ \_store -> do
+            let previous = Set.fromList [0, 2]
+            acquireOutcome previous (Left "database unavailable")
+                `shouldBe` (previous, Just (ShardAcquireFailed "database unavailable"))
+            acquireOutcome previous (Right (Set.fromList [1, 3]))
+                `shouldBe` (Set.fromList [1, 3], Nothing)
+
+        it "ensureShards rejects a shardCount mismatch" $ \store -> do
+            let lease4 =
+                    ShardLease
+                        { subscriptionName = subName
+                        , workerId = wA
+                        , shardCount = 4
+                        , leaseTtl = ttl
+                        }
+                lease6 =
+                    ShardLease
+                        { subscriptionName = subName
+                        , workerId = wA
+                        , shardCount = 6
+                        , leaseTtl = ttl
+                        }
+            Right () <- Store.runStoreIO store (ensureShards lease4)
+            Store.runStoreIO store (ensureShards lease6)
+                `shouldThrow` \case
+                    ShardCountMismatch name configured found ->
+                        name == "orders-shard" && configured == 6 && found == [4]
+
     describe "Sharded subscription single worker" $ around (withFreshStore fixture) $ do
         -- EP-51 M3: one process owning all N buckets drains a seeded category exactly
         -- once. The sink is idempotent on event_id, so "count == total" proves every
@@ -4114,6 +4147,52 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             ok2 `shouldBe` True
             c2 <- shardSinkCount store
             c2 `shouldBe` (total1 + total2)
+
+        it "a killed worker relinquishes its leases immediately" $ \store -> do
+            let subImmediate = SubscriptionName "orders-immediate-release"
+                longTtlOpts =
+                    (defaultShardedWorkerOptions (Category (CategoryName "orders")) 4)
+                        { leaseTtl = 30
+                        , renewInterval = 0.2
+                        }
+            w <- forkIO (runShardedSubscriptionGroup store subImmediate longTtlOpts (sinkHandler store 1))
+            owned <- waitShardsBalanced store subImmediate 4 1 10_000_000
+            owned `shouldBe` True
+            killThread w
+            released <- waitShardsUnowned store subImmediate 4 3_000_000
+            released `shouldBe` True
+
+        it "a reader killed by a handler exception is restarted and drains" $ \store -> do
+            Right () <- Store.runStoreIO store $ Store.runTransaction (Tx.sql createShardSinkSql)
+            thrown <- newIORef False
+            errors <- newIORef []
+            let subRestart = SubscriptionName "orders-reader-restart"
+                opts =
+                    (defaultShardedWorkerOptions (Category (CategoryName "orders")) 2)
+                        { leaseTtl = 3
+                        , renewInterval = 0.2
+                        , onShardError = Just (\err -> modifyIORef' errors (err :))
+                        }
+                handler ev = do
+                    firstTime <-
+                        atomicModifyIORef'
+                            thrown
+                            ( \seen ->
+                                if seen
+                                    then (seen, False)
+                                    else (True, True)
+                            )
+                    when firstTime (throwIO (userError "reader boom"))
+                    sinkHandler store 1 ev
+            w <- forkIO (runShardedSubscriptionGroup store subRestart opts handler)
+            balanced <- waitShardsBalanced store subRestart 2 1 10_000_000
+            balanced `shouldBe` True
+            total <- seedOrders store 4 2
+            drained <- waitUntilSinkCount store total 20_000_000
+            killThread w
+            drained `shouldBe` True
+            seenErrors <- readIORef errors
+            seenErrors `shouldSatisfy` any (\case ShardReaderDied _ _ -> True; _ -> False)
 
     describe "Keiro.Workflow observability" $ around (withFreshStore fixture) $ do
         -- The headline operability signal: executed (real work) vs replayed
@@ -6501,3 +6580,15 @@ waitShardsBalanced store sub n minWorkers timeoutMicros = go (max 1 (timeoutMicr
         pure (length rows == n && length owners == n && distinct >= minWorkers && all (<= fairShare) perOwner)
     groupByOwner ws = [filter (== w) ws | w <- nubOrd ws]
     nubOrd = Set.toList . Set.fromList
+
+waitShardsUnowned :: Store.KirokuStore -> SubscriptionName -> Int -> Int -> IO Bool
+waitShardsUnowned store sub n timeoutMicros = go (max 1 (timeoutMicros `div` step))
+  where
+    step = 100_000
+    go 0 = isUnowned
+    go k = do
+        ok <- isUnowned
+        if ok then pure True else threadDelay step >> go (k - 1)
+    isUnowned = do
+        rows <- either (const []) id <$> Store.runStoreIO store (Store.runTransaction (listShardOwnership sub))
+        pure (length rows == n && all (\(_, owner, _) -> isNothing owner) rows)

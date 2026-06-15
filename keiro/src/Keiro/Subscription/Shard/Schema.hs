@@ -31,6 +31,7 @@ module Keiro.Subscription.Shard.Schema (
     renewLeaseTx,
     releaseShardsTx,
     listShardOwnership,
+    listShardCounts,
 )
 where
 
@@ -102,6 +103,11 @@ subscription, ordered by bucket.
 listShardOwnership :: SubscriptionName -> Tx.Transaction [(Int, Maybe WorkerId, Maybe UTCTime)]
 listShardOwnership (SubscriptionName name) =
     Tx.statement name listShardOwnershipStmt
+
+-- | Read existing shard-count groups for a subscription as @(shard_count, rows)@.
+listShardCounts :: SubscriptionName -> Tx.Transaction [(Int, Int)]
+listShardCounts (SubscriptionName name) =
+    Tx.statement name listShardCountsStmt
 
 ensureShardRowsStmt :: Statement (Text, Int32) ()
 ensureShardRowsStmt =
@@ -199,6 +205,19 @@ listShardOwnershipStmt =
         """
         (E.param (E.nonNullable E.text))
         (D.rowList ownershipRowDecoder)
+
+listShardCountsStmt :: Statement Text [(Int, Int)]
+listShardCountsStmt =
+    preparable
+        """
+        SELECT shard_count, count(*)::int
+        FROM keiro_subscription_shards
+        WHERE subscription_name = $1
+        GROUP BY shard_count
+        ORDER BY shard_count
+        """
+        (E.param (E.nonNullable E.text))
+        (D.rowList ((,) <$> (fromIntegral <$> D.column (D.nonNullable D.int4)) <*> (fromIntegral <$> D.column (D.nonNullable D.int4))))
 
 ownershipRowDecoder :: D.Row (Int, Maybe WorkerId, Maybe UTCTime)
 ownershipRowDecoder =

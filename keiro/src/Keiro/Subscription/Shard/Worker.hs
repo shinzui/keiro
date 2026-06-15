@@ -27,9 +27,10 @@ worker, none twice, none skipped. No external coordinator (etcd/ZooKeeper/Consul
 
 'runShardedSubscriptionGroup' is the loop driver: mint a 'WorkerId', ensure the
 shard rows exist, then run 'reconcileShardsOnce' every @renewInterval@ forever.
-On shutdown (the loop thread is killed, simulating a crash) a @finally@ stops
-every reader this worker holds; its leases then expire and a surviving worker
-re-claims its buckets (failover).
+On graceful shutdown (the loop thread is killed and can run cleanup) a @finally@
+stops every reader this worker holds and relinquishes its leases so another
+worker can claim immediately. A real process crash still recovers by lease
+expiry.
 
 == Why @IO@, not @Eff@
 
@@ -39,12 +40,19 @@ directly (each lease pass runs through 'Kiroku.Store.Effect.runStoreIO'), so its
 natural home is 'IO'. The handler is an ordinary @'RecordedEvent' -> 'IO' ()@:
 a sharded subscription delivers at-least-once (a brief overlap is possible while
 a bucket changes owners), so the handler must be idempotent — keyed on
-@eventId@ — exactly as keiro's async-projection guidance already requires.
+@eventId@ — exactly as keiro's async-projection guidance already requires. A
+zombie worker that misses renewals past @leaseTtl@ may continue reading briefly
+after another worker claims its bucket; the laggard can then write an older
+kiroku consumer-group checkpoint and enlarge the redelivery window. This is
+still at-least-once, not exactly-once, and a future fencing generation would be
+needed to close that window.
 -}
 module Keiro.Subscription.Shard.Worker (
     -- * Options
+    ShardWorkerError (..),
     ShardedWorkerOptions (..),
     defaultShardedWorkerOptions,
+    acquireOutcome,
 
     -- * Running
     reconcileShardsOnce,
@@ -52,16 +60,18 @@ module Keiro.Subscription.Shard.Worker (
 )
 where
 
-import Control.Concurrent (forkIO, killThread, threadDelay)
-import Control.Exception (finally)
+import Control.Concurrent (forkFinally, killThread, threadDelay)
+import Control.Exception (SomeException, displayException, finally)
 import Control.Monad (forever)
-import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
+import Data.Bifunctor (first)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
 import Data.Int (Int32)
 import Data.List (sort)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
+import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
 import Data.UUID.V4 qualified as UUIDv4
 import Keiro.Prelude
@@ -90,6 +100,13 @@ import Numeric.Natural (Natural)
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Stream
 
+data ShardWorkerError
+    = ShardSnapshotFailed !Text
+    | ShardAcquireFailed !Text
+    | ShardReaderDied !Int !Text
+    | ShardEnsureFailed !Text
+    deriving stock (Generic, Eq, Show)
+
 -- | How a sharded worker pool runs one subscription.
 data ShardedWorkerOptions = ShardedWorkerOptions
     { shardCount :: !Int
@@ -108,6 +125,8 @@ data ShardedWorkerOptions = ShardedWorkerOptions
     -- ^ Events per database fetch per bucket reader (default 100).
     , bufferSize :: !Natural
     -- ^ Per-reader bounded-queue capacity (backpressure; default 256).
+    , onShardError :: !(Maybe (ShardWorkerError -> IO ()))
+    -- ^ Optional error hook. Wire this to the application logger in production.
     }
     deriving stock (Generic)
 
@@ -123,12 +142,22 @@ defaultShardedWorkerOptions target' shardCount' =
         , target = target'
         , batchSize = 100
         , bufferSize = 256
+        , onShardError = Nothing
         }
 
 {- | A live per-bucket reader: the action that stops it (cancels the kiroku
 subscription and kills the drain thread).
 -}
 newtype RunningReader = RunningReader {stopReader :: IO ()}
+
+reportShardError :: ShardedWorkerOptions -> ShardWorkerError -> IO ()
+reportShardError opts err =
+    for_ (opts ^. #onShardError) ($ err)
+
+acquireOutcome :: Set Int -> Either Text (Set Int) -> (Set Int, Maybe ShardWorkerError)
+acquireOutcome previous = \case
+    Right owned -> (owned, Nothing)
+    Left err -> (previous, Just (ShardAcquireFailed err))
 
 {- | Run one ownership-reconcile pass and bring the set of running readers in
 line with the buckets owned afterwards. Returns the buckets this worker owns
@@ -146,13 +175,22 @@ reconcileShardsOnce ::
     IO (Set Int)
 reconcileShardsOnce store lease opts readers handler = do
     now <- getCurrentTime
+    current <- readIORef readers
     -- Estimate live workers: distinct owners with a non-expired lease, plus self.
-    snap <- either (const []) id <$> runStoreIO store (ownershipSnapshot lease)
+    snapResult <- runStoreIO store (ownershipSnapshot lease)
+    snap <- case snapResult of
+        Right rows -> pure rows
+        Left err -> do
+            reportShardError opts (ShardSnapshotFailed (Text.pack (show err)))
+            pure []
     let liveOwners = Set.fromList [w | (_, Just w, Just expiresAt) <- snap, expiresAt > now]
         liveWorkers = Set.size (Set.insert (lease ^. #workerId) liveOwners)
         shareTarget = fairShareTarget (lease ^. #shardCount) liveWorkers
     -- Renew held + claim up to fair share.
-    claimed <- either (const Set.empty) id <$> runStoreIO store (acquireOwnedBuckets lease liveWorkers)
+    claimedResult <- runStoreIO store (acquireOwnedBuckets lease liveWorkers)
+    let previousOwned = Map.keysSet current
+        (claimed, mAcquireError) = acquireOutcome previousOwned (first (Text.pack . show) claimedResult)
+    for_ mAcquireError (reportShardError opts)
     -- Shed any excess above the fair share so a cold-start over-claim self-balances
     -- (never when alone: a lone worker must own everything).
     owned <-
@@ -163,7 +201,6 @@ reconcileShardsOnce store lease opts readers handler = do
                 pure (claimed `Set.difference` excess)
             else pure claimed
     -- Bring readers in line with `owned`: start newly-owned, stop newly-lost.
-    current <- readIORef readers
     let running = Map.keysSet current
         toStart = owned `Set.difference` running
         toStop = running `Set.difference` owned
@@ -171,7 +208,7 @@ reconcileShardsOnce store lease opts readers handler = do
         for_ (Map.lookup bucket current) stopReader
     started <-
         traverse
-            (\bucket -> (,) bucket <$> startReader store lease opts handler bucket)
+            (\bucket -> (,) bucket <$> startReader store lease opts readers handler bucket)
             (Set.toList toStart)
     atomicModifyIORef' readers $ \m ->
         let afterStop = foldr Map.delete m (Set.toList toStop)
@@ -187,10 +224,12 @@ startReader ::
     KirokuStore ->
     ShardLease ->
     ShardedWorkerOptions ->
+    IORef (Map Int RunningReader) ->
     (RecordedEvent -> IO ()) ->
     Int ->
     IO RunningReader
-startReader store lease opts handler bucket = do
+startReader store lease opts readers handler bucket = do
+    stopping <- newIORef False
     let subConfig =
             (defaultSubscriptionConfig (lease ^. #subscriptionName) (opts ^. #target) (\_ -> pure Continue))
                 { Sub.batchSize = opts ^. #batchSize
@@ -198,8 +237,21 @@ startReader store lease opts handler bucket = do
                     Just (ConsumerGroup{member = fromIntegral bucket, size = fromIntegral (opts ^. #shardCount)})
                 }
     (stream, cancelAction) <- subscriptionStream store subConfig (opts ^. #bufferSize)
-    tid <- forkIO (Stream.fold (Fold.drainMapM handler) stream)
-    pure (RunningReader (cancelAction >> killThread tid))
+    tid <-
+        forkFinally (Stream.fold (Fold.drainMapM handler) stream) $ \result -> do
+            intentional <- readIORef stopping
+            unless intentional $ do
+                atomicModifyIORef' readers (\m -> (Map.delete bucket m, ()))
+                let reason = case result of
+                        Left err -> Text.pack (displayException (err :: SomeException))
+                        Right _ -> "reader stream ended"
+                reportShardError opts (ShardReaderDied bucket reason)
+    pure
+        ( RunningReader $ do
+            writeIORef stopping True
+            cancelAction
+            killThread tid
+        )
 
 {- | The loop driver: mint a 'WorkerId', ensure the @N@ shard rows exist, then
 'reconcileShardsOnce' every @renewInterval@ forever. On shutdown (the loop thread
@@ -234,15 +286,20 @@ runShardedSubscriptionGroup store subName opts handler = do
                 , shardCount = opts ^. #shardCount
                 , leaseTtl = opts ^. #leaseTtl
                 }
-    _ <- runStoreIO store (ensureShards lease)
+    ensured <- runStoreIO store (ensureShards lease)
+    case ensured of
+        Right () -> pure ()
+        Left err -> reportShardError opts (ShardEnsureFailed (Text.pack (show err)))
     readers <- newIORef Map.empty
-    loop lease readers `finally` stopAll readers
+    loop lease readers `finally` cleanup lease readers
   where
     delayMicros = max 1 (round (realToFrac (opts ^. #renewInterval) * 1e6 :: Double))
     loop lease readers =
         forever $ do
             _ <- reconcileShardsOnce store lease opts readers handler
             threadDelay delayMicros
-    stopAll readers = do
+    cleanup lease readers = do
         current <- readIORef readers
         for_ (Map.elems current) stopReader
+        _ <- runStoreIO store (relinquish lease (Map.keysSet current))
+        pure ()
