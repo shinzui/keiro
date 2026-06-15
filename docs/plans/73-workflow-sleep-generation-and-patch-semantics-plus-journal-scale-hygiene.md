@@ -45,9 +45,9 @@ This plan is a child of the MasterPlan at `docs/masterplans/9-keiro-production-r
 - [x] Milestone 3: record the active patch set on an instance's first run (journal empty or seed-only) in `runWorkflowWith` (completed 2026-06-15)
 - [x] Milestone 3: rewrite the `Patch` handler to decide from the recorded set; delete `startedInFlight` / `isOrdinaryStepKey` (completed 2026-06-15)
 - [x] Milestone 3: tests — both adverse cases (fresh-but-suspended → new branch; in-flight-on-wake-source-only → old branch) plus the updated favorable test (completed 2026-06-15)
-- [ ] Milestone 4: `Step` miss path returns the JSON round-trip of the result (decode failure throws `WorkflowStepDecodeError` on the first run)
-- [ ] Milestone 4: tests — lossy codec returns identical values on first run and replay; undecodable round-trip fails on the first run
-- [ ] Milestone 4: docs — at-least-once step side effects (module header + `step` haddock, M1), name-keyed-replay trade-off (L4), every-n snapshot cost note (L6)
+- [x] Milestone 4: `Step` miss path returns the JSON round-trip of the result (decode failure throws `WorkflowStepDecodeError` on the first run) (completed 2026-06-15)
+- [x] Milestone 4: tests — lossy codec returns identical values on first run and replay; undecodable round-trip fails on the first run (completed 2026-06-15)
+- [x] Milestone 4: docs — at-least-once step side effects (module header + `step` haddock, M1), name-keyed-replay trade-off (L4), every-n snapshot cost note (L6) (completed 2026-06-15)
 - [ ] Milestone 5 (gated on plan 72): reconcile the `keiro_workflows` DDL against plan 72's Interfaces and Dependencies section
 - [ ] Milestone 5: switch `findUnfinishedWorkflowIds` to the `keiro_workflows` instance table (signature gains `UTCTime`)
 - [ ] Milestone 5: new module `Keiro.Workflow.Gc` — `WorkflowGcPolicy`, `gcWorkflowsOnce`, `runWorkflowGcWorker`; migration adding the GC index
@@ -69,6 +69,7 @@ This plan is a child of the MasterPlan at `docs/masterplans/9-keiro-production-r
 - **Milestone 1 implementation discovery (2026-06-15): EP-4 and EP-6 have landed since this plan was authored.** EP-4's final `Keiro.Timer.Schema` already has stale-`firing` requeue, status-guarded mark/cancel/dead-letter statements, and additive timer worker validation; `scheduleTimerOnceTx` inserts the same row shape and leaves those claim/recovery paths untouched. EP-6's instance table and resume lease are also live, which let the active-resume sleep regression exercise the real production worker path rather than a stubbed rediscovery loop.
 - **Milestone 2 implementation discovery (2026-06-15): child attach semantics were already present from EP-6's crash-window repair.** `awaitChild` already re-appended a completed child's stored result onto the parent's current generation; this milestone added documentation and a `continueAsNew` regression proving the same repair path is the intended attach behavior. Golden compatibility values captured before the arity/signature changes are `sleepTimerId (WorkflowName "wf") (WorkflowId "w-1") 0 "sleep:cool" == a95d5e7f-a43d-5ee2-9243-8206f0d8734a` and `deterministicAwakeableId (WorkflowName "w") (WorkflowId "1") "approval" == ccaeaf74-3ffe-5ea5-a118-a3441a95c279`.
 - **Milestone 3 implementation discovery (2026-06-15): the explicit patch set removes the need for the old reserved-key classifier.** `startedInFlight` and `isOrdinaryStepKey` were deleted entirely; the only compatibility rule left is that absence of `__workflow_patches__` means the recorded active set is empty, so all patch calls take the old branch. A fresh rotated generation records the current active set again because its journal contains only `__workflow_seed__` at start.
+- **Milestone 4 implementation discovery (2026-06-15): first-run step return values now match replay values exactly.** The `Step` miss path decodes the JSON value it just recorded, so lossy codecs are observed on the initial run and an invalid `ToJSON`/`FromJSON` round-trip fails immediately with `WorkflowStepDecodeError` after the journal row has been committed.
 
 
 ## Decision Log
@@ -125,6 +126,8 @@ Milestone 1 is complete as of 2026-06-15. Workflow sleep arming now uses insert-
 Milestone 2 is complete as of 2026-06-15. Sleep timer ids are generation-namespaced after generation 0, awakeable ids are journaled random ids with legacy generation-0 adoption, forged coordinate-derived awakeable ids no longer resolve fresh promises, and completed child rows attach cleanly after `continueAsNew`. Focused validation passed with `cabal test keiro --test-options='--match "Keiro.Workflow.Sleep" --match "Keiro.Workflow.Awakeable" --match "Keiro.Workflow.Child"'` (34 examples, 0 failures), and full validation passed with `cabal test keiro` (244 examples, 0 failures). Milestone 3 remains next for patch classification.
 
 Milestone 3 is complete as of 2026-06-15. Patch decisions now derive from a journaled active patch set recorded at workflow-generation start, not from the shape of whatever steps happened to be present when the run resumed. Focused validation passed with `cabal test keiro --test-options='--match "Keiro.Workflow patch API"'` (4 examples, 0 failures), and full validation passed with `cabal test keiro` (247 examples, 0 failures). Milestone 4 remains next for replay fidelity and at-least-once documentation.
+
+Milestone 4 is complete as of 2026-06-15. Fresh `step` calls now return the decoded stored JSON value rather than the raw action result, so first-run behavior matches replay behavior and an undecodable recorded value surfaces as `WorkflowStepDecodeError` immediately. The workflow Haddocks now document at-least-once step side effects across crashes, step-name replay trade-offs, and the full-map cost of every-n workflow snapshots. Focused validation passed with `cabal test keiro --test-options='--match "Keiro.Workflow"'` (80 examples, 0 failures), and full validation passed with `cabal test keiro` (249 examples, 0 failures). Milestone 5 remains next for discovery via the instance table and pruning.
 
 
 ## Context and Orientation
@@ -763,3 +766,5 @@ Revision note (2026-06-15): Milestone 1 was implemented and validated. The plan 
 Revision note (2026-06-15): Milestone 2 was implemented and validated. The plan now records generation-aware sleep ids, `currentRunGeneration`, journaled random awakeable ids with legacy adoption, child attach documentation/tests, golden UUID evidence, and full `keiro` validation.
 
 Revision note (2026-06-15): Milestone 3 was implemented and validated. The plan now records the `activePatches` option, `patchSetStepName`, deletion of the journal-shape heuristic, adverse patch tests, rotation patch-set coverage, and full `keiro` validation.
+
+Revision note (2026-06-15): Milestone 4 was implemented and validated. The plan now records first-run JSON round-trip returns, immediate decode failure on invalid round-trips, at-least-once and name-keyed replay documentation, workflow snapshot cost documentation, and full `keiro` validation.

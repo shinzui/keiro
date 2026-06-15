@@ -14,6 +14,19 @@ no separate history table. Because a workflow can pause (waiting for a timer,
 an external signal, or a child), 'runWorkflow' returns a 'WorkflowOutcome'
 ('Completed' or 'Suspended').
 
+Step side effects are at-least-once across process crashes. If the process
+crashes after @action@ runs but before the journal append commits, a later
+resume has no record of that step and runs @action@ again. Step bodies that call
+external systems must therefore be idempotent, typically by deriving an
+idempotency key from the workflow identity and step name and passing it to the
+external system.
+
+Replay is keyed by step name, not by source position or code identity. Renaming
+a step intentionally orphans the old journal entry and runs the renamed step as
+new work; changing the meaning of a step while keeping the same name is the
+author's responsibility. Use 'patch' for cross-cutting workflow-body changes
+that need an explicit old/new branch.
+
 == Contract recap for downstream plans (the v2 MasterPlan)
 
 * The authoring surface is the @Workflow@ effect with 'step', 'awaitStep',
@@ -187,9 +200,15 @@ data Workflow :: Effect where
 
 type instance DispatchOf Workflow = Dynamic
 
-{- | Run @action@ under @name@, journaling its encoded result. On a replay
-where @name@ is already journaled, the recorded result is returned and
-@action@ is __not__ run again.
+{- | Run @action@ under @name@, journaling its encoded result. On a replay where
+@name@ is already journaled, the recorded result is returned and @action@ is
+not run. If the process crashed after @action@ ran but before the journal
+commit, the action runs again on resume: workflow step side effects are
+at-least-once at the step boundary.
+
+The returned value is always the JSON round-trip of the recorded result,
+including on the first run. A lossy or rejecting @ToJSON@\/@FromJSON@ pair is
+therefore observed immediately rather than only after a crash and replay.
 
 Requires @'Aeson.ToJSON' a@ (to journal the result) and @'Aeson.FromJSON' a@
 (to decode it on replay).
@@ -554,7 +573,7 @@ runWorkflowWith options name wid action = do
                                     (appendResult ^. #streamVersion)
                                 )
                                 (writeWorkflowSnapshot (appendResult ^. #streamId) (appendResult ^. #streamVersion) newMap)
-                            pure a
+                            decodeStored key encoded
                         JournalAlreadyPresent stored -> do
                             liftIO
                                 ( atomicModifyIORef' journalRef $ \m ->

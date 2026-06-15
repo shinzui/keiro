@@ -26,6 +26,12 @@ A snapshot is an optimization, never a source of truth. 'loadWorkflowSnapshot'
 returns 'Nothing' — meaning "replay from version 0" — when the stream has no
 id yet, no matching snapshot, or an undecodable snapshot. So a stale or corrupt
 snapshot degrades performance at worst, never correctness.
+
+Snapshot writes store the full accumulated step map each time the selected
+policy fires. With an every-n policy that means rewriting the complete map at
+each boundary; the intended way to bound that cost for forever-running
+workflows is 'Keiro.Workflow.continueAsNew', which starts a fresh generation
+with a small carried seed.
 -}
 module Keiro.Workflow.Snapshot (
     workflowStateCodec,

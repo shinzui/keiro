@@ -176,6 +176,12 @@ Findings from the plan-authoring research passes (2026-06-10), recorded here bec
   instances that suspend before their patch call still take the new branch, while
   pre-change instances with only wake-source completions stay on the old branch.
   Full `cabal test keiro` passed with 247 examples, 0 failures.
+- EP-7 Milestone 4 is complete as of 2026-06-15. Fresh workflow steps now decode
+  the just-recorded JSON before returning, which makes first-run results match replay
+  and surfaces invalid JSON round-trips immediately as `WorkflowStepDecodeError`.
+  The workflow docs now spell out at-least-once step side effects, name-keyed replay
+  trade-offs, and full-map snapshot rewrite cost. Full `cabal test keiro` passed
+  with 249 examples, 0 failures.
 
 
 ## Decision Log
@@ -246,6 +252,8 @@ EP-7 Milestone 2 is complete as of 2026-06-15. Wake-source identity is now gener
 
 EP-7 Milestone 3 is complete as of 2026-06-15. Patch classification is now explicit and replayable: application code declares active patch ids in `WorkflowRunOptions`, the runtime records that set once per fresh generation, and each `patch` call journals its branch decision from that recorded set. Milestone 4 remains next for first-run/replay value fidelity and honest side-effect documentation.
 
+EP-7 Milestone 4 is complete as of 2026-06-15. First-run workflow step results now go through the same JSON decode path as replayed step results, so lossy codecs behave consistently and rejecting codecs fail on the initial run after the step row is journaled. The workflow documentation now explicitly describes at-least-once step side effects, step-name replay compatibility, and every-n snapshot rewrite cost. Milestone 5 remains next for discovery via the instance table and pruning.
+
 
 ---
 
@@ -268,3 +276,5 @@ Revision note (2026-06-15): EP-7 was marked In Progress after EP-6 completion bo
 Revision note (2026-06-15): EP-7 Milestone 2 was completed. The first EP-7 progress rollup item is now checked, and Surprises & Discoveries plus Outcomes & Retrospective record generation-namespaced wake-source identity, random journaled awakeable ids, child attach semantics, and validation evidence.
 
 Revision note (2026-06-15): EP-7 Milestone 3 was completed. Surprises & Discoveries and Outcomes & Retrospective now record explicit active-patch-set classification and validation evidence; the second EP-7 progress rollup item remains unchecked until discovery/pruning are complete.
+
+Revision note (2026-06-15): EP-7 Milestone 4 was completed. Surprises & Discoveries and Outcomes & Retrospective now record first-run JSON round-trip fidelity, immediate decode failure semantics, documentation updates, and validation evidence; the second EP-7 progress rollup item remains unchecked until discovery/pruning are complete.

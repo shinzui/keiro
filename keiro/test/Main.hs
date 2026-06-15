@@ -175,6 +175,7 @@ import Keiro.Workflow (
     runWorkflow,
     runWorkflowWith,
     step,
+    stepExists,
     workflowGenerationStreamName,
     workflowJournalCodec,
  )
@@ -3844,6 +3845,26 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Right [StepRecorded "raced" value _, WorkflowCompleted _] -> value == toJSON ("winner" :: Text)
                     _ -> False
 
+        it "returns the JSON round-trip of a fresh step result" $ \storeHandle -> do
+            let name = WorkflowName "roundtrip-step"
+                wid = WorkflowId "rs-1"
+                body = step (StepName "approx") (pure (Approx 1.7))
+            first <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+            first `shouldBe` Right (Completed (Approx 2.0))
+            replay <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+            replay `shouldBe` Right (Completed (Approx 2.0))
+
+        it "throws WorkflowStepDecodeError on the first run when the recorded result cannot decode" $ \storeHandle -> do
+            let name = WorkflowName "bad-roundtrip"
+                wid = WorkflowId "br-1"
+                body = step (StepName "bad") (pure RejectingRoundTrip)
+            Store.runStoreIO storeHandle (runWorkflow name wid body)
+                `shouldThrow` \case
+                    WorkflowStepDecodeError key _ -> key == "bad"
+                    _ -> False
+            Store.runStoreIO storeHandle (stepExists name wid 0 "bad")
+                `shouldReturn` Right True
+
         it "discovers unfinished workflows via the step index" $ \storeHandle -> do
             counter <- newIORef (0 :: Int)
             Right (Completed _) <-
@@ -5880,6 +5901,26 @@ countingSixSteps counter =
     mapM
         (\i -> step (StepName ("s" <> Text.pack (show i))) (liftIO (incrementAndRead counter) >> pure i))
         [1 .. 6]
+
+newtype Approx = Approx Double
+    deriving stock (Eq, Show)
+
+instance ToJSON Approx where
+    toJSON (Approx d) = toJSON (round d :: Int)
+
+instance FromJSON Approx where
+    parseJSON value = do
+        n <- Aeson.parseJSON value
+        pure (Approx (fromIntegral (n :: Int)))
+
+data RejectingRoundTrip = RejectingRoundTrip
+    deriving stock (Eq, Show)
+
+instance ToJSON RejectingRoundTrip where
+    toJSON RejectingRoundTrip = Aeson.String "not-an-object"
+
+instance FromJSON RejectingRoundTrip where
+    parseJSON = Aeson.withObject "RejectingRoundTrip" $ \_ -> pure RejectingRoundTrip
 
 {- | A distinguished exception used to simulate a process crash mid-workflow
 (after a step has committed its journal append but before completion).
