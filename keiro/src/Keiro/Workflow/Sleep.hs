@@ -52,12 +52,13 @@ already journaled and returns immediately, and only @step \"b\"@ runs for real.
   process-manager timers and routes each correctly.
 
 * __Deterministic timer id.__ The timer id is a v5 UUID over
-  @(\"keiro\":\"workflow-sleep\":name:id:sleepStepName)@ ('sleepTimerId'),
-  mirroring 'Keiro.ProcessManager.deterministicCommandId'. The workflow sleep
-  arm uses 'Keiro.Timer.scheduleTimerOnceTx', so the first arm's @fire_at@ wins
-  and every resume that re-enters the not-yet-resolved sleep leaves the row
-  untouched. The sleep duration is measured from the first arm, not from the
-  latest resume pass.
+  @(\"keiro\":\"workflow-sleep\":name:id:generation:sleepStepName)@ for
+  generation 1 and later, while generation 0 keeps the legacy
+  @(\"keiro\":\"workflow-sleep\":name:id:sleepStepName)@ shape. The workflow
+  sleep arm uses 'Keiro.Timer.scheduleTimerOnceTx', so the first arm's
+  @fire_at@ wins and every resume that re-enters the not-yet-resolved sleep
+  leaves the row untouched. The sleep duration is measured from the first arm,
+  not from the latest resume pass.
 
 * __No @keiro_timers@ schema change.__ Routing is entirely a function of the
   caller-supplied fire action and the JSON payload; this module owns no
@@ -114,6 +115,7 @@ import Keiro.Workflow (
     WorkflowName (..),
     appendJournalEntryReturningId,
     awaitStep,
+    currentRunGeneration,
     currentWorkflow,
     freshOrdinal,
     sleepStepPrefix,
@@ -157,25 +159,38 @@ parseSleepPayload = \case
 -- Deterministic ids and step names
 -- ---------------------------------------------------------------------------
 
-{- | The deterministic timer id for a sleep: a v5 UUID over
-@(\"keiro\":\"workflow-sleep\":name:id:fullStep)@. Stable across replays, so
-re-arming the same sleep on every resume is an idempotent upsert. The step name
-is part of the key so two distinct sleeps in one workflow get distinct timers.
+{- | The deterministic timer id for a sleep. Generation 0 keeps the legacy v5
+UUID over @(\"keiro\":\"workflow-sleep\":name:id:fullStep)@ so in-flight
+pre-change timers remain signalable. Generations 1 and later include the
+generation component so a sleep after 'Keiro.Workflow.continueAsNew' never
+collides with a prior generation's terminal timer row.
 -}
-sleepTimerId :: WorkflowName -> WorkflowId -> Text -> TimerId
-sleepTimerId name wid fullStep =
+sleepTimerId :: WorkflowName -> WorkflowId -> Int -> Text -> TimerId
+sleepTimerId name wid gen fullStep =
     TimerId $
         UUID.V5.generateNamed UUID.V5.namespaceURL $
             fmap (fromIntegral . fromEnum) $
                 Text.unpack $
                     Text.intercalate
                         ":"
-                        [ "keiro"
-                        , "workflow-sleep"
-                        , unWorkflowName name
-                        , unWorkflowId wid
-                        , fullStep
-                        ]
+                        components
+  where
+    components
+        | gen <= 0 =
+            [ "keiro"
+            , "workflow-sleep"
+            , unWorkflowName name
+            , unWorkflowId wid
+            , fullStep
+            ]
+        | otherwise =
+            [ "keiro"
+            , "workflow-sleep"
+            , unWorkflowName name
+            , unWorkflowId wid
+            , Text.pack (show gen)
+            , fullStep
+            ]
 
 {- | The durable journal step name for a sleep: the user's suffix prefixed with
 'sleepStepPrefix'. @'sleepStepName' (StepName \"cool\") == \"sleep:cool\"@. The
@@ -213,13 +228,14 @@ sleepNamed ::
     Eff es ()
 sleepNamed userStep delta = do
     (name, wid) <- currentWorkflow
+    gen <- currentRunGeneration
     let full = sleepStepName userStep
         armedStep = StepName full
     void . awaitValue armedStep $ do
         now <- liftIO getCurrentTime
         let request =
                 TimerRequest
-                    { timerId = sleepTimerId name wid full
+                    { timerId = sleepTimerId name wid gen full
                     , processManagerName = unWorkflowName name
                     , correlationId = unWorkflowId wid
                     , fireAt = addUTCTime delta now

@@ -61,6 +61,7 @@ module Keiro.Workflow (
     step,
     awaitStep,
     currentWorkflow,
+    currentRunGeneration,
     freshOrdinal,
     continueAsNew,
     restoreSeed,
@@ -165,6 +166,8 @@ data Workflow :: Effect where
     Await :: (Aeson.FromJSON a) => StepName -> m () -> Workflow m a
     -- | The running workflow's identity (for keying wake sources).
     CurrentWorkflow :: Workflow m (WorkflowName, WorkflowId)
+    -- | The journal generation this run is operating on.
+    CurrentRunGeneration :: Workflow m Int
     -- | A per-run, per-namespace counter for deterministic ordinal step names.
     FreshOrdinal :: Text -> Workflow m Int
     {- | EP-48: snapshot the carried seed, rotate onto a fresh journal generation,
@@ -207,6 +210,13 @@ awaitStep name arm = send (Await name arm)
 -- | The identity of the workflow currently running.
 currentWorkflow :: (Workflow :> es) => Eff es (WorkflowName, WorkflowId)
 currentWorkflow = send CurrentWorkflow
+
+{- | The journal generation this run is operating on. Wake sources include it
+in their durable identities so a generation opened by 'continueAsNew' never
+collides with prior-generation rows.
+-}
+currentRunGeneration :: (Workflow :> es) => Eff es Int
+currentRunGeneration = send CurrentRunGeneration
 
 {- | A per-run, per-namespace counter (starting at 0). Used by convenience
 forms of wake sources (e.g. @sleep@ → @"sleep:0"@) to derive a deterministic,
@@ -552,6 +562,7 @@ runWorkflowWith options name wid action = do
                     localSeqUnlift env (\unlift -> unlift arm)
                     throwIO WorkflowSuspend
         CurrentWorkflow -> pure (name, wid)
+        CurrentRunGeneration -> pure gen
         FreshOrdinal namespace ->
             liftIO . atomicModifyIORef' ordinalRef $ \counters ->
                 let n = Map.findWithDefault 0 namespace counters
@@ -620,7 +631,7 @@ isOrdinaryStepKey :: Text -> Bool
 isOrdinaryStepKey k =
     not
         ( k `elem` [completedStepName, cancelledStepName, failedStepName, continuedAsNewStepName, continueSeedStepName]
-            || any (`Text.isPrefixOf` k) [sleepStepPrefix, awakeableStepPrefix, childStepPrefix, patchStepPrefix]
+            || any (`Text.isPrefixOf` k) [sleepStepPrefix, awakeableStepPrefix, awakeableAllocStepPrefix, childStepPrefix, patchStepPrefix]
         )
 
 {- | Pre-load a workflow's journal stream into a @step name -> result@ map.

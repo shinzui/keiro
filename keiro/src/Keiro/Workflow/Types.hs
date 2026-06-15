@@ -45,6 +45,7 @@ module Keiro.Workflow.Types (
     continueSeedStepName,
     sleepStepPrefix,
     awakeableStepPrefix,
+    awakeableAllocStepPrefix,
     childStepPrefix,
     patchStepPrefix,
     patchStepName,
@@ -328,6 +329,13 @@ completion. Integration contract: EP-40 must use exactly this string.
 -}
 awakeableStepPrefix :: Text
 awakeableStepPrefix = "awk:"
+
+{- | Reserved step-name prefix used to journal the random id allocated for an
+awakeable. The id is random for new allocations but replay-stable because it is
+recorded under @awkid:\<label\>@ before the workflow awaits @awk:\<uuid\>@.
+-}
+awakeableAllocStepPrefix :: Text
+awakeableAllocStepPrefix = "awkid:"
 
 {- | Reserved step-name prefix EP-43 uses to journal a child workflow's
 completion. Integration contract: EP-43 must use exactly this string.

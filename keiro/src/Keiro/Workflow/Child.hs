@@ -32,8 +32,10 @@ parent = do
   body.)
 * __'awaitChild' reuses EP-38's suspension primitive__ — it is
   @'awaitStep' (StepName \"child:\<childId\>:result\") arm@. On the miss path it
-  re-asserts nothing new (the spawn already registered the link) but throws
-  'WorkflowChildCancelled' if the child was cancelled meanwhile. On the hit path
+  re-delivers a completed child's stored result onto the current parent
+  generation (attach semantics), throws 'WorkflowChildCancelled' if the child
+  was cancelled meanwhile, and otherwise re-asserts nothing new (the spawn
+  already registered the link). On the hit path
   it decodes a tagged parent-journal envelope: @{"ok": result}@ returns the
   child result, @{"cancelled": true}@ throws 'WorkflowChildCancelled',
   @{"failed": reason}@ throws 'WorkflowChildFailed', and legacy raw values are
@@ -178,6 +180,11 @@ inserts an idempotent @running@ link row, then returns a 'ChildHandle'. The
 child is driven to completion by the resume worker from the registry, so
 @childNm@ __must be registered there__; @childDef@ is accepted for authoring
 ergonomics but is not run here.
+
+A child id names one execution globally. Spawning an id whose child row already
+completed attaches to that execution: 'awaitChild' re-delivers the stored
+result onto the parent's current generation. To run a fresh child after
+'Keiro.Workflow.continueAsNew', derive a fresh child id from the carried seed.
 -}
 spawnChild ::
     (Workflow :> es, Store :> es) =>

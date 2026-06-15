@@ -24,11 +24,10 @@ journal. The __next__ run replays past the now-resolved @await@ and 'Completed's
 
 == Contract recap for downstream plans (the v2 MasterPlan)
 
-* 'AwakeableId' is a __deterministic__ v5 UUID over
-  @(\"keiro\":\"awakeable\":workflowName:workflowId:label)@
-  ('deterministicAwakeableId'). Determinism is essential: a resumed workflow
-  re-runs from the top and must allocate the /same/ id it already handed out
-  and journaled, so the @await@ hit path matches.
+* 'AwakeableId' is journaled randomness: new allocations generate an opaque v4
+  UUID and record it under @awkid:\<label\>@ before awaiting @awk:\<uuid\>@.
+  Replay reads the journaled id, so a resumed workflow allocates the same id it
+  already handed out without making that id guessable from public coordinates.
 * 'awakeableNamed' (caller-supplied label) is the __stable primitive__;
   'awakeable' is an ordinal convenience whose label is positional (a fragile
   derivation across code edits — see its Haddock).
@@ -72,6 +71,7 @@ import Control.Exception (Exception)
 import Data.Text qualified as Text
 import Data.UUID (UUID)
 import Data.UUID qualified as UUID
+import Data.UUID.V4 qualified as UUID.V4
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
@@ -86,11 +86,14 @@ import Keiro.Workflow (
     WorkflowName (..),
     appendJournalEntry,
     awaitStep,
+    awakeableAllocStepPrefix,
     awakeableStepPrefix,
     currentGeneration,
+    currentRunGeneration,
     currentWorkflow,
     freshOrdinal,
     prepareJournalAppend,
+    step,
  )
 import Keiro.Workflow.Awakeable.Schema (
     AwakeableStatus (..),
@@ -107,11 +110,11 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 -- Awakeable ids
 -- ---------------------------------------------------------------------------
 
-{- | The opaque id of an awakeable: a deterministic v5 UUID derived from the
-owning workflow's name and id plus the awakeable's label (see
-'deterministicAwakeableId'). The @ToJSON@\/@FromJSON@ instances are over the
-inner UUID, so a workflow may journal the id with 'Keiro.Workflow.step' and a
-webhook payload may carry it.
+{- | The opaque id of an awakeable. New allocations are random and journaled by
+'awakeableNamed'; 'deterministicAwakeableId' is retained only as a legacy
+generation-0 adoption helper. The @ToJSON@\/@FromJSON@ instances are over the
+inner UUID, so the workflow journal can replay the id and webhook payloads may
+carry it.
 -}
 newtype AwakeableId = AwakeableId UUID
     deriving stock (Eq, Show, Generic)
@@ -127,12 +130,13 @@ journal step name an awakeable's completion is recorded under.
 awakeableIdText :: AwakeableId -> Text
 awakeableIdText = UUID.toText . awakeableIdToUuid
 
-{- | The deterministic 'AwakeableId' for a @(workflow name, workflow id,
-label)@: a v5 UUID over @(\"keiro\":\"awakeable\":name:id:label)@. Mirrors
-'Keiro.ProcessManager.deterministicCommandId' and
-'Keiro.Workflow.Sleep.sleepTimerId': the same inputs always yield the same id,
-so a re-invoked (resumed) workflow allocates the /same/ id it already handed to
-the external system and journaled.
+{- | The legacy deterministic 'AwakeableId' for a @(workflow name, workflow id,
+label)@: a v5 UUID over @(\"keiro\":\"awakeable\":name:id:label)@.
+
+This is predictable from public coordinates, so new code must not hand-derive
+ids with it. It remains exported for operators and for generation-0 adoption:
+if a pre-change workflow already registered a row under this id, the first
+post-change allocation adopts that row so the in-flight promise keeps working.
 -}
 deterministicAwakeableId :: WorkflowName -> WorkflowId -> Text -> AwakeableId
 deterministicAwakeableId (WorkflowName name) (WorkflowId wid) label =
@@ -178,10 +182,30 @@ awakeableNamed ::
     Eff es (AwakeableId, Eff es a)
 awakeableNamed (StepName label) = do
     (name, wid) <- currentWorkflow
-    let aid = deterministicAwakeableId name wid label
+    gen <- currentRunGeneration
+    aid <-
+        step (StepName (awakeableAllocStepPrefix <> label)) $
+            allocateAwakeableId name wid gen label
+    let
         stepNm = StepName (awakeableStepPrefix <> awakeableIdText aid)
         await = awaitCancellable name wid aid stepNm
     pure (aid, await)
+
+allocateAwakeableId ::
+    (Store :> es, IOE :> es) =>
+    WorkflowName ->
+    WorkflowId ->
+    Int ->
+    Text ->
+    Eff es AwakeableId
+allocateAwakeableId name wid gen label
+    | gen <= 0 = do
+        let legacy = deterministicAwakeableId name wid label
+        existing <- lookupAwakeable (awakeableIdToUuid legacy)
+        case existing of
+            Just _ -> pure legacy
+            Nothing -> AwakeableId <$> liftIO UUID.V4.nextRandom
+    | otherwise = AwakeableId <$> liftIO UUID.V4.nextRandom
 
 {- | Allocate an awakeable under an ordinal label (the @N@th awakeable in a run
 becomes @ord:N@). Convenient, but its determinism is __conditional__: adding or

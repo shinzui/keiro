@@ -162,6 +162,7 @@ import Keiro.Workflow (
     appendJournalEntry,
     appendJournalEntryReturningId,
     awaitStep,
+    awakeableAllocStepPrefix,
     continueAsNew,
     currentGeneration,
     defaultWorkflowRunOptions,
@@ -177,6 +178,7 @@ import Keiro.Workflow (
     workflowJournalCodec,
  )
 import Keiro.Workflow.Awakeable (
+    AwakeableId (..),
     WorkflowAwakeableCancelled (..),
     awakeableIdText,
     awakeableIdToUuid,
@@ -4999,9 +5001,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "derives a deterministic, distinct timer id" $ do
             let name = WorkflowName "wf"
                 wid = WorkflowId "w-1"
-            sleepTimerId name wid "sleep:cool" `shouldBe` sleepTimerId name wid "sleep:cool"
-            (sleepTimerId name wid "sleep:cool" == sleepTimerId name wid "sleep:other")
+                sleepGolden = uuidLiteral "a95d5e7f-a43d-5ee2-9243-8206f0d8734a"
+            sleepTimerId name wid 0 "sleep:cool" `shouldBe` sleepTimerId name wid 0 "sleep:cool"
+            (sleepTimerId name wid 0 "sleep:cool" == sleepTimerId name wid 0 "sleep:other")
                 `shouldBe` False
+            sleepTimerId name wid 0 "sleep:cool"
+                `shouldBe` TimerId sleepGolden
+            sleepTimerId name wid 1 "sleep:cool" `shouldNotBe` sleepTimerId name wid 0 "sleep:cool"
+            sleepTimerId name wid 2 "sleep:cool" `shouldNotBe` sleepTimerId name wid 1 "sleep:cool"
 
         it "round-trips and recognises its timer payload" $ do
             parseSleepPayload (sleepTimerPayload "sleep:cool") `shouldBe` Just "sleep:cool"
@@ -5017,7 +5024,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 let name = WorkflowName "sleepdemo"
                     wid = WorkflowId "sd-1"
                     journalStream = StreamName "wf:sleepdemo-sd-1"
-                    TimerId timerUuid = sleepTimerId name wid "sleep:cool"
+                    TimerId timerUuid = sleepTimerId name wid 0 "sleep:cool"
                 -- First run: 'a' runs, the sleep arms a timer, and the run suspends.
                 outcome1 <-
                     Store.runStoreIO storeHandle $
@@ -5130,7 +5137,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 counter <- newIORef (0 :: Int)
                 let name = WorkflowName "sleeponce"
                     wid = WorkflowId "so-1"
-                    TimerId timerUuid = sleepTimerId name wid "sleep:cool"
+                    TimerId timerUuid = sleepTimerId name wid 0 "sleep:cool"
                     registry = Map.singleton name (WorkflowDef (\_ -> sleepDemoNamed counter (StepName "cool") 300))
                 Right Suspended <-
                     Store.runStoreIO storeHandle $
@@ -5173,14 +5180,37 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 drive (16 :: Int)
                 readIORef counter >>= (`shouldBe` 2)
 
+            it "uses generation-namespaced timer ids after continueAsNew" $ \storeHandle -> do
+                counter <- newIORef (0 :: Int)
+                let name = WorkflowName "sleeproll"
+                    wid = WorkflowId "sr-1"
+                    registry = Map.singleton name (WorkflowDef (\_ -> rollingSleepWorkflow counter))
+                    drive 0 = expectationFailure "rolling sleep did not complete"
+                    drive n = do
+                        Right summary <-
+                            Store.runStoreIO storeHandle $
+                                resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+                        now <- getCurrentTime
+                        _ <-
+                            Store.runStoreIO storeHandle $
+                                runWorkflowTimerWorker Nothing now (\_ -> pure Nothing)
+                        if completed summary == 1
+                            then pure ()
+                            else drive (n - 1)
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (rollingSleepWorkflow counter)
+                drive (12 :: Int)
+                readIORef counter >>= (`shouldBe` 3)
+
     describe "Keiro.Workflow.Awakeable" $ do
         -- Pure (no-DB) check of the deterministic id derivation.
         it "derives a deterministic AwakeableId, stable across calls and label-sensitive" $ do
             let aid1 = deterministicAwakeableId (WorkflowName "w") (WorkflowId "1") "approval"
                 aid2 = deterministicAwakeableId (WorkflowName "w") (WorkflowId "1") "approval"
                 aidOther = deterministicAwakeableId (WorkflowName "w") (WorkflowId "1") "other"
+                awakeableGolden = uuidLiteral "ccaeaf74-3ffe-5ea5-a118-a3441a95c279"
             aid1 `shouldBe` aid2
             (aid1 == aidOther) `shouldBe` False
+            aid1 `shouldBe` AwakeableId awakeableGolden
 
         around (withFreshStore fixture) $ do
             it "schema: registers, completes once (idempotent), cancels, and counts pending rows" $ \storeHandle -> do
@@ -5219,11 +5249,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 pendingAfter `shouldBe` 0
 
             it "suspends on an unsignalled awakeable, recording a pending row and no completion" $ \storeHandle -> do
+                aidRef <- newIORef Nothing
                 let name = WorkflowName "approval"
                     wid = WorkflowId "wf1"
-                    aid = deterministicAwakeableId name wid "approval"
-                outcome1 <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+                outcome1 <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
                 outcome1 `shouldBe` Right Suspended
+                aid <- readRequiredAwakeableId aidRef
                 Right (Just row) <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable (awakeableIdToUuid aid)
                 row ^. #status `shouldBe` Awk.Pending
                 row ^. #payload `shouldBe` Nothing
@@ -5234,15 +5265,17 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         Store.readStreamForward (StreamName "wf:approval-wf1") (StreamVersion 0) 100
                 traverse (decodeRecorded workflowJournalCodec) (Vector.toList recorded)
                     `shouldSatisfy` \case
-                        Right [] -> True
+                        Right [StepRecorded stepName value _] ->
+                            stepName == awakeableAllocStepPrefix <> "approval" && value == toJSON aid
                         _ -> False
 
             it "resumes with the signalled payload after signalAwakeable" $ \storeHandle -> do
+                aidRef <- newIORef Nothing
                 let name = WorkflowName "approval"
                     wid = WorkflowId "wf1"
-                    aid = deterministicAwakeableId name wid "approval"
-                    awkStep = "awk:" <> awakeableIdText aid
-                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+                aid <- readRequiredAwakeableId aidRef
+                let awkStep = "awk:" <> awakeableIdText aid
                 Right signalled <- Store.runStoreIO storeHandle $ signalAwakeable aid ("ok" :: Text)
                 signalled `shouldBe` True
                 Right (Just row) <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable (awakeableIdToUuid aid)
@@ -5253,24 +5286,27 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         Store.readStreamForward (StreamName "wf:approval-wf1") (StreamVersion 0) 100
                 traverse (decodeRecorded workflowJournalCodec) (Vector.toList afterSignal)
                     `shouldSatisfy` \case
-                        Right [StepRecorded s r _] -> s == awkStep && r == toJSON ("ok" :: Text)
+                        Right [StepRecorded allocStep _ _, StepRecorded s r _] ->
+                            allocStep == awakeableAllocStepPrefix <> "approval" && s == awkStep && r == toJSON ("ok" :: Text)
                         _ -> False
-                outcome2 <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+                outcome2 <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
                 outcome2 `shouldBe` Right (Completed "ok!")
                 Right afterResume <-
                     Store.runStoreIO storeHandle $
                         Store.readStreamForward (StreamName "wf:approval-wf1") (StreamVersion 0) 100
                 traverse (decodeRecorded workflowJournalCodec) (Vector.toList afterResume)
                     `shouldSatisfy` \case
-                        Right [StepRecorded s1 _ _, StepRecorded "use" _ _, WorkflowCompleted _] -> s1 == awkStep
+                        Right [StepRecorded allocStep _ _, StepRecorded s1 _ _, StepRecorded "use" _ _, WorkflowCompleted _] ->
+                            allocStep == awakeableAllocStepPrefix <> "approval" && s1 == awkStep
                         _ -> False
 
             it "is idempotent: a second signal returns False and does not change the value" $ \storeHandle -> do
+                aidRef <- newIORef Nothing
                 let name = WorkflowName "idem"
                     wid = WorkflowId "wf-i"
-                    aid = deterministicAwakeableId name wid "approval"
-                    awkStep = "awk:" <> awakeableIdText aid
-                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+                aid <- readRequiredAwakeableId aidRef
+                let awkStep = "awk:" <> awakeableIdText aid
                 Right True <- Store.runStoreIO storeHandle $ signalAwakeable aid ("ok" :: Text)
                 Right again <- Store.runStoreIO storeHandle $ signalAwakeable aid ("later" :: Text)
                 again `shouldBe` False
@@ -5283,15 +5319,16 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 [r | StepRecorded s r _ <- decoded, s == awkStep] `shouldBe` [toJSON ("ok" :: Text)]
 
             it "throws WorkflowAwakeableCancelled after cancelAwakeable" $ \storeHandle -> do
+                aidRef <- newIORef Nothing
                 let name = WorkflowName "cancelwf"
                     wid = WorkflowId "wf2"
-                    aid = deterministicAwakeableId name wid "approval"
-                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+                aid <- readRequiredAwakeableId aidRef
                 Right cancelled <- Store.runStoreIO storeHandle $ cancelAwakeable aid
                 cancelled `shouldBe` True
                 Right (Just row) <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable (awakeableIdToUuid aid)
                 row ^. #status `shouldBe` Awk.Cancelled
-                Store.runStoreIO storeHandle (runWorkflow name wid approvalFlow)
+                Store.runStoreIO storeHandle (runWorkflow name wid (approvalFlowWithId aidRef))
                     `shouldThrow` (== WorkflowAwakeableCancelled aid)
                 Right recorded <-
                     Store.runStoreIO storeHandle $
@@ -5300,11 +5337,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 any (\case WorkflowCompleted{} -> True; _ -> False) decoded `shouldBe` False
 
             it "re-appends a missing journal entry when re-signalled (crash-safe)" $ \storeHandle -> do
+                aidRef <- newIORef Nothing
                 let name = WorkflowName "crash"
                     wid = WorkflowId "wf3"
-                    aid = deterministicAwakeableId name wid "approval"
-                    awkStep = "awk:" <> awakeableIdText aid
-                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+                aid <- readRequiredAwakeableId aidRef
+                let awkStep = "awk:" <> awakeableIdText aid
                 -- Simulate "row completed but the journal append did not happen" by
                 -- completing the row directly, bypassing signalAwakeable's journal write.
                 now <- getCurrentTime
@@ -5329,25 +5367,84 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 [r | StepRecorded s r _ <- afterDecoded, s == awkStep] `shouldBe` [toJSON ("ok" :: Text)]
 
             it "repairs a completed awakeable row from the await arm without a second signal" $ \storeHandle -> do
+                aidRef <- newIORef Nothing
                 let name = WorkflowName "crash-arm"
                     wid = WorkflowId "wf4"
-                    aid = deterministicAwakeableId name wid "approval"
-                    awkStep = "awk:" <> awakeableIdText aid
-                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+                aid <- readRequiredAwakeableId aidRef
+                let awkStep = "awk:" <> awakeableIdText aid
                 now <- getCurrentTime
                 Right True <-
                     Store.runStoreIO storeHandle $
                         Store.runTransaction $
                             Awk.completeAwakeableTx (awakeableIdToUuid aid) (toJSON ("ok" :: Text)) now
-                repairedRun <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+                repairedRun <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
                 repairedRun `shouldBe` Right Suspended
                 Right repairedJournal <-
                     Store.runStoreIO storeHandle $
                         Store.readStreamForward (StreamName "wf:crash-arm-wf4") (StreamVersion 0) 100
                 Right repairedDecoded <- pure (traverse (decodeRecorded workflowJournalCodec) (Vector.toList repairedJournal))
                 [r | StepRecorded s r _ <- repairedDecoded, s == awkStep] `shouldBe` [toJSON ("ok" :: Text)]
-                completed <- Store.runStoreIO storeHandle $ runWorkflow name wid approvalFlow
+                completed <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
                 completed `shouldBe` Right (Completed "ok!")
+
+            it "refuses a forged coordinate-derived id for a fresh awakeable" $ \storeHandle -> do
+                aidRef <- newIORef Nothing
+                let name = WorkflowName "fresh-awake"
+                    wid = WorkflowId "fa-1"
+                    forged = deterministicAwakeableId name wid "approval"
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+                real <- readRequiredAwakeableId aidRef
+                real `shouldNotBe` forged
+                Right forgedSignal <- Store.runStoreIO storeHandle $ signalAwakeable forged ("bad" :: Text)
+                forgedSignal `shouldBe` False
+                Right stillSuspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+                stillSuspended `shouldBe` Suspended
+                Right realSignal <- Store.runStoreIO storeHandle $ signalAwakeable real ("ok" :: Text)
+                realSignal `shouldBe` True
+                completed <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+                completed `shouldBe` Right (Completed "ok!")
+
+            it "adopts a generation-0 legacy deterministic row" $ \storeHandle -> do
+                aidRef <- newIORef Nothing
+                let name = WorkflowName "legacy-awake"
+                    wid = WorkflowId "la-1"
+                    legacy = deterministicAwakeableId name wid "approval"
+                Right () <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction $
+                            Awk.registerAwakeableTx (awakeableIdToUuid legacy) (unWorkflowName name) (unWorkflowId wid)
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+                adopted <- readRequiredAwakeableId aidRef
+                adopted `shouldBe` legacy
+                Right True <- Store.runStoreIO storeHandle $ signalAwakeable legacy ("ok" :: Text)
+                completed <- Store.runStoreIO storeHandle $ runWorkflow name wid (approvalFlowWithId aidRef)
+                completed `shouldBe` Right (Completed "ok!")
+
+            it "allocates a fresh awakeable for the same label after continueAsNew" $ \storeHandle -> do
+                idsRef <- newIORef []
+                let name = WorkflowName "awake-roll"
+                    wid = WorkflowId "ar-1"
+                    body = rollingAwakeableWorkflow idsRef
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+                ids1 <- readIORef idsRef
+                [firstAid] <- pure ids1
+                Right True <- Store.runStoreIO storeHandle $ signalAwakeable firstAid ("first" :: Text)
+                Right ContinuedAsNew <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+                ids2 <- readIORef idsRef
+                case ids2 of
+                    [firstAgain, secondAid] -> do
+                        firstAgain `shouldBe` firstAid
+                        secondAid `shouldNotBe` firstAid
+                        Right staleSignal <- Store.runStoreIO storeHandle $ signalAwakeable firstAid ("stale" :: Text)
+                        staleSignal `shouldBe` False
+                        Right stillSuspended <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+                        stillSuspended `shouldBe` Suspended
+                        Right True <- Store.runStoreIO storeHandle $ signalAwakeable secondAid ("second" :: Text)
+                        completed <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+                        completed `shouldBe` Right (Completed "second")
+                    other -> expectationFailure ("expected two awakeable ids, got " <> show other)
 
     describe "Keiro.Workflow.Child" $ do
         -- M2: the reserved spawn/result step-name derivations are stable.
@@ -5693,6 +5790,22 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Right (Just childRow) <- Store.runStoreIO storeHandle $ Child.lookupChild "ship-3" "ship"
                 childRow ^. #status `shouldBe` Child.ChildCompleted
 
+            it "attaches to a completed child after continueAsNew" $ \storeHandle -> do
+                let childWid = WorkflowId "ship-rotated"
+                    parentName = WorkflowName "parent-rotating"
+                    parentId = WorkflowId "p-rotating"
+                    body = rotatingParentWorkflow childWid
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow parentName parentId body
+                childOutcome <-
+                    Store.runStoreIO storeHandle $
+                        runChildWorkflow defaultWorkflowRunOptions (WorkflowName "ship") childWid shipWorkflow
+                childOutcome `shouldBe` Right (Completed "packed+labelled")
+                Right ContinuedAsNew <- Store.runStoreIO storeHandle $ runWorkflow parentName parentId body
+                repair <- Store.runStoreIO storeHandle $ runWorkflow parentName parentId body
+                repair `shouldBe` Right Suspended
+                completed <- Store.runStoreIO storeHandle $ runWorkflow parentName parentId body
+                completed `shouldBe` Right (Completed "packed+labelled")
+
 {- | Increment a shared counter and return its new value (the step's side
 effect, so replay can be proven by watching the counter).
 -}
@@ -5836,11 +5949,24 @@ neverArmingWorkflow = awaitStep (StepName "awk:test") (pure ())
 {- | The awakeable validation workflow: allocate a durable promise, suspend on
 it, and (once signalled) append "!" to the payload through a recorded step.
 -}
-approvalFlow :: (Workflow :> es, Store :> es, IOE :> es) => Eff es Text
-approvalFlow = do
-    (_, await) <- awakeableNamed (StepName "approval")
+approvalFlowWithId :: (Workflow :> es, Store :> es, IOE :> es) => IORef (Maybe AwakeableId) -> Eff es Text
+approvalFlowWithId ref = do
+    (aid, await) <- awakeableNamed (StepName "approval")
+    liftIO (writeIORef ref (Just aid))
     v <- await
     step (StepName "use") (pure (v <> "!"))
+
+readRequiredAwakeableId :: IORef (Maybe AwakeableId) -> IO AwakeableId
+readRequiredAwakeableId ref =
+    readIORef ref >>= \case
+        Just aid -> pure aid
+        Nothing -> fail "workflow did not allocate an awakeable id"
+
+uuidLiteral :: String -> UUID
+uuidLiteral raw =
+    case fromString raw of
+        Just uuid -> uuid
+        Nothing -> error ("invalid UUID literal in test: " <> raw)
 
 {- | A two-step workflow with a durable sleep between the steps. The sleep's
 name and delay are parameters so one helper drives both the zero-delta and
@@ -5854,6 +5980,39 @@ sleepDemoNamed counter sName delta = do
     sleepNamed sName delta
     b <- step (StepName "b") (liftIO (incrementAndRead counter))
     pure (a, b)
+
+rollingSleepWorkflow ::
+    (Workflow :> es, Store :> es, IOE :> es) =>
+    IORef Int -> Eff es Int
+rollingSleepWorkflow counter = do
+    seed <- restoreSeed (0 :: Int)
+    _ <- step (StepName "work") (liftIO (incrementAndRead counter))
+    if seed < 2
+        then sleepNamed (StepName "cool") 0 >> continueAsNew (seed + 1)
+        else pure seed
+
+rollingAwakeableWorkflow ::
+    (Workflow :> es, Store :> es, IOE :> es) =>
+    IORef [AwakeableId] -> Eff es Text
+rollingAwakeableWorkflow idsRef = do
+    seed <- restoreSeed (0 :: Int)
+    (aid, await) <- awakeableNamed (StepName "gate")
+    liftIO (modifyIORef' idsRef (\ids -> if aid `elem` ids then ids else ids <> [aid]))
+    value <- await
+    if seed < 1
+        then continueAsNew (seed + 1)
+        else step (StepName "use") (pure value)
+
+rotatingParentWorkflow ::
+    (Workflow :> es, Store :> es, IOE :> es) =>
+    WorkflowId -> Eff es Text
+rotatingParentWorkflow childWid = do
+    seed <- restoreSeed (0 :: Int)
+    h <- spawnChild (WorkflowName "ship") childWid shipWorkflow
+    result <- awaitChild h
+    if seed < 1
+        then continueAsNew (seed + 1)
+        else pure result
 
 {- | A workflow that records one step, then suspends on an await — so it has a
 step row but no completion marker (the unfinished-discovery case).
