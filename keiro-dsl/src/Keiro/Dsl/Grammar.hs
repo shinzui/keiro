@@ -96,6 +96,7 @@ module Keiro.Dsl.Grammar (
     OperationNode (..),
 
     -- * Top level
+    Placement (..),
     Node (..),
     Spec (..),
 )
@@ -544,9 +545,10 @@ data ContractEvent = ContractEvent
     }
     deriving stock (Eq, Show, Generic)
 
--- | A @contract@ node: the shared cross-service message schema, declared once
--- and referenced by both producer (@emit@) and consumer (@intake@). EP-5's
--- pgmq @dispatch@ also couples to it.
+{- | A @contract@ node: the shared cross-service message schema, declared once
+and referenced by both producer (@emit@) and consumer (@intake@). EP-5's
+pgmq @dispatch@ also couples to it.
+-}
 data ContractNode = ContractNode
     { ctrName :: !Name
     , ctrSchemaVersion :: !Int
@@ -577,13 +579,14 @@ data BindRow = BindRow
     }
     deriving stock (Eq, Show, Generic)
 
--- | An inbox outcome action. The dangerous defaults the validator guards: a
--- @duplicate@\/@previouslyFailed@ must not be 'IRetry'; @decodeFailed@ must not
--- be an unbounded 'IRetry'.
+{- | An inbox outcome action. The dangerous defaults the validator guards: a
+@duplicate@\/@previouslyFailed@ must not be 'IRetry'; @decodeFailed@ must not
+be an unbounded 'IRetry'.
+-}
 data InboxAction
     = IAckOk
-    | IRetry !Text
-    -- ^ @retry <window>@, e.g. @retry 5s@
+    | -- | @retry <window>@, e.g. @retry 5s@
+      IRetry !Text
     | IDeadLetter !(Maybe Text)
     deriving stock (Eq, Show, Generic)
 
@@ -603,9 +606,10 @@ data DecodeSpec = DecodeSpec
     }
     deriving stock (Eq, Show, Generic)
 
--- | An @intake@ (Kafka consumer / inbox) node. The runtime-config @consumer@
--- block (brokers/groupId/offsetReset) is hole-kind 8, delegated to deployment
--- and not modelled here.
+{- | An @intake@ (Kafka consumer / inbox) node. The runtime-config @consumer@
+block (brokers/groupId/offsetReset) is hole-kind 8, delegated to deployment
+and not modelled here.
+-}
 data IntakeNode = IntakeNode
     { inkName :: !Name
     , inkContract :: !Name
@@ -633,8 +637,9 @@ data EmitMapRow = EmitMapRow
     }
     deriving stock (Eq, Show, Generic)
 
--- | An @emit@ (outbox) node: maps a private status discriminant to contract
--- event types, with a mandatory explicit @_ => skip@ catch-all.
+{- | An @emit@ (outbox) node: maps a private status discriminant to contract
+event types, with a mandatory explicit @_ => skip@ catch-all.
+-}
 data EmitNode = EmitNode
     { emName :: !Name
     , emContract :: !Name
@@ -682,17 +687,19 @@ data WqField = WqField
     }
     deriving stock (Eq, Show, Generic)
 
--- | One row of a workqueue's consumer @JobOutcome@ disposition (reusing
--- 'InboxAction': @retry <window>@ \/ @deadLetter@).
+{- | One row of a workqueue's consumer @JobOutcome@ disposition (reusing
+'InboxAction': @retry <window>@ \/ @deadLetter@).
+-}
 data WqDispRow = WqDispRow
     { wqdOutcome :: !Name
     , wqdAction :: !InboxAction
     }
     deriving stock (Eq, Show, Generic)
 
--- | A pgmq @workqueue@ node. The @derive@ trio (physical\/dlq\/table) is a
--- /captured fixture/ (hole-kind 1): the validator re-derives the physical name
--- from @logical@ and flags any divergence (the drift hazard at the dedup site).
+{- | A pgmq @workqueue@ node. The @derive@ trio (physical\/dlq\/table) is a
+/captured fixture/ (hole-kind 1): the validator re-derives the physical name
+from @logical@ and flags any divergence (the drift hazard at the dedup site).
+-}
 data WorkqueueNode = WorkqueueNode
     { wqName :: !Name
     , wqLogical :: !Text
@@ -709,8 +716,9 @@ data WorkqueueNode = WorkqueueNode
     }
     deriving stock (Eq, Show, Generic)
 
--- | A pgmq @dispatch@ node: a read-model→enqueue coupling with a fan-out hole
--- and a dedup check (one arm of which is a raw-SQL hole).
+{- | A pgmq @dispatch@ node: a read-model→enqueue coupling with a fan-out hole
+and a dedup check (one arm of which is a raw-SQL hole).
+-}
 data PgmqDispatchNode = PgmqDispatchNode
     { pdName :: !Name
     , pdSourceReadModel :: !Name
@@ -728,8 +736,9 @@ data PgmqDispatchNode = PgmqDispatchNode
 
 -- EP-6: the durable @workflow@ + @operation@ nodes.
 
--- | One ordered item of a workflow body. Replay matches on the label, not the
--- position. (Positional constructors avoid partial record fields.)
+{- | One ordered item of a workflow body. Replay matches on the label, not the
+position. (Positional constructors avoid partial record fields.)
+-}
 data WfBodyItem
     = -- | @step <label> -> <ResultType>@
       WfStep !Name !Name
@@ -794,11 +803,29 @@ data Node
     | NOperation OperationNode
     deriving stock (Eq, Show, Generic)
 
-{- | A whole @.keiro@ file: one context name, the shared id/enum/rule
-declarations, and the list of nodes.
+{- | The module-placement style for a scaffolded service. 'GeneratedPrefix' is
+the historical default — @\<root\>.Generated.\<Ctx\>.\<Node\>@ for the generated
+layer, holes at @\<root\>.\<Ctx\>.\<Node\>@. 'CollocatedLeaf' places the
+generated layer as a leaf under the domain — @\<root\>.\<Ctx\>.\<Node\>.Generated@
+— so it sits next to hand-written domain code (holes still at
+@\<root\>.\<Ctx\>.\<Node\>@). Defined here (not in "Keiro.Dsl.Scaffold") so the
+'Spec' AST can carry an author's standing choice; 'Keiro.Dsl.Scaffold'
+re-exports it.
+-}
+data Placement
+    = GeneratedPrefix
+    | CollocatedLeaf
+    deriving stock (Eq, Show, Generic)
+
+{- | A whole @.keiro@ file: one context name, an optional module-placement
+override (the @module@/@layout@ clauses), the shared id/enum/rule declarations,
+and the list of nodes. 'specModuleRoot' and 'specLayout' are 'Nothing' when the
+spec omits the clauses, reproducing the historical default.
 -}
 data Spec = Spec
     { specContext :: !Name
+    , specModuleRoot :: !(Maybe Text)
+    , specLayout :: !(Maybe Placement)
     , specIds :: ![IdDecl]
     , specEnums :: ![EnumDecl]
     , specRules :: ![RuleDecl]

@@ -18,7 +18,7 @@ import Data.Text qualified as T
 import Data.Void (Void)
 import Keiro.Dsl.Grammar
 import Text.Megaparsec hiding (ParseError)
-import Text.Megaparsec.Char (alphaNumChar, char, digitChar, letterChar, space1)
+import Text.Megaparsec.Char (alphaNumChar, char, digitChar, letterChar, space1, upperChar)
 import Text.Megaparsec.Char.Lexer qualified as L
 
 -- | A rendered, line-numbered parse error, ready to print to the user.
@@ -72,6 +72,10 @@ one node and beginning the next).
 reservedWords :: [Text]
 reservedWords =
     [ "context"
+    , "module"
+    , "layout"
+    , "prefixed"
+    , "collocated"
     , "id"
     , "enum"
     , "rule"
@@ -167,15 +171,46 @@ pSpec :: P Spec
 pSpec = do
     keyword "context"
     ctx <- wireWord
+    mroot <- optional pModuleClause
+    mlayout <- optional pLayoutClause
     items <- many pTopItem
     pure
         Spec
             { specContext = ctx
+            , specModuleRoot = mroot
+            , specLayout = mlayout
             , specIds = [d | TIId d <- items]
             , specEnums = [d | TIEnum d <- items]
             , specRules = [d | TIRule d <- items]
             , specNodes = [n | TINode n <- items]
             }
+
+-- | @module Acme.Services@ — the optional namespace-prefix clause.
+pModuleClause :: P Text
+pModuleClause = keyword "module" *> pModulePrefix
+
+-- | @layout (prefixed|collocated)@ — the optional placement-style clause.
+pLayoutClause :: P Placement
+pLayoutClause =
+    keyword "layout"
+        *> choice
+            [ GeneratedPrefix <$ keyword "prefixed"
+            , CollocatedLeaf <$ keyword "collocated"
+            ]
+
+{- | A dotted module prefix: one-or-more PascalCase segments joined by dots,
+e.g. @Acme@ or @Acme.Services@.
+-}
+pModulePrefix :: P Text
+pModulePrefix = lexeme $ do
+    seg0 <- pSeg
+    segs <- many (char '.' *> pSeg)
+    pure (T.intercalate "." (seg0 : segs))
+  where
+    pSeg = do
+        c <- upperChar
+        cs <- many identChar
+        pure (T.pack (c : cs))
 
 pTopItem :: P TopItem
 pTopItem =

@@ -11,7 +11,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate, scaffoldProcess)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), Placement (..), ScaffoldModule (..), defaultContext, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateSpec)
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
@@ -212,6 +212,35 @@ main = hspec $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation.keiro"
             any isBreaking cs `shouldBe` False
 
+    describe "module placement (M1)" $ do
+        it "GeneratedPrefix is today's namespace (Generated.<Ctx>.<Node>, holes at <Ctx>.<Node>)" $ do
+            let ctx = defaultContext "hospital-capacity"
+            genPrefixFor ctx "Reservation" `shouldBe` "Generated.HospitalCapacity.Reservation"
+            holePrefixFor ctx "Reservation" `shouldBe` "HospitalCapacity.Reservation"
+        it "module-root prefixes both layers" $ do
+            let ctx = (defaultContext "hospital-capacity"){moduleRoot = "Acme"}
+            genPrefixFor ctx "Reservation" `shouldBe` "Acme.Generated.HospitalCapacity.Reservation"
+            holePrefixFor ctx "Reservation" `shouldBe` "Acme.HospitalCapacity.Reservation"
+        it "CollocatedLeaf places the generated layer under the domain leaf" $ do
+            let ctx = (defaultContext "hospital-capacity"){moduleRoot = "Acme", placement = CollocatedLeaf}
+            genPrefixFor ctx "Reservation" `shouldBe` "Acme.HospitalCapacity.Reservation.Generated"
+            holePrefixFor ctx "Reservation" `shouldBe` "Acme.HospitalCapacity.Reservation"
+        it "parses and preserves the module/layout clauses through parse . pretty" $ do
+            let src = "context hospital-capacity\nmodule Acme.Services\nlayout collocated\n\naggregate Reservation\n  regs\n  states Open\n"
+            case parseSpec "<m1>" src of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> do
+                    specModuleRoot spec `shouldBe` Just "Acme.Services"
+                    specLayout spec `shouldBe` Just CollocatedLeaf
+                    parseSpec "<m1>" (renderSpec spec) `shouldBe` Right spec
+        it "a spec without the clauses leaves placement at the default" $ do
+            input <- TIO.readFile "test/fixtures/reservation.keiro"
+            case parseSpec "test/fixtures/reservation.keiro" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> do
+                    specModuleRoot spec `shouldBe` Nothing
+                    specLayout spec `shouldBe` Nothing
+
     describe "scaffold" $ do
         it "never emits a keiki symbolic operator into a Generated module (firewall)" $ do
             mods <- scaffoldFixture "test/fixtures/reservation.keiro"
@@ -289,7 +318,7 @@ scaffoldFixture path = do
                     | NAggregate agg <- specNodes spec
                     ]
   where
-    ctx spec = Context{contextName = specContext spec, moduleRoot = ""}
+    ctx spec = defaultContext (specContext spec)
 
 scaffoldProcessFixture :: FilePath -> IO [ScaffoldModule]
 scaffoldProcessFixture path = do
@@ -299,7 +328,7 @@ scaffoldProcessFixture path = do
         Right spec ->
             pure $ concat [scaffoldProcess (ctx spec) p | NProcess p <- specNodes spec]
   where
-    ctx spec = Context{contextName = specContext spec, moduleRoot = ""}
+    ctx spec = defaultContext (specContext spec)
 
 {- | Assert a freshly-scaffolded Generated module matches its committed copy
 under test/conformance/ (whitespace-normalized). The committed copies are the
@@ -444,7 +473,16 @@ genSpec :: Gen Spec
 genSpec =
     Spec
         <$> genWire
+        <*> genMaybe genModuleRoot
+        <*> genMaybe (elements [GeneratedPrefix, CollocatedLeaf])
         <*> smallList genId
         <*> smallList genEnum
         <*> smallList genRule
         <*> smallList (NAggregate <$> genAggregate)
+
+-- | A dotted PascalCase module prefix, e.g. @Acme@ or @Acme.Services@.
+genModuleRoot :: Gen T.Text
+genModuleRoot = do
+    n <- choose (1, 3 :: Int)
+    segs <- vectorOf n (elements ["Acme", "Services", "Hospital", "Domain", "Core"])
+    pure (T.intercalate "." segs)

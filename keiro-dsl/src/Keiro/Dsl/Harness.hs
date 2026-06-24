@@ -58,9 +58,7 @@ harnessProcess ctx p =
         }
     ]
   where
-    ctxPascal = pascalFromKebab' (contextName ctx)
-    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
-    genPrefix = root <> "Generated." <> ctxPascal <> "." <> procId p
+    genPrefix = genPrefixFor ctx (procId p)
 
 emitProcessHarness :: Text -> ProcessNode -> Text
 emitProcessHarness genPrefix p =
@@ -106,14 +104,6 @@ showDisp DAckOk = "AckOk"
 showDisp DRetry = "Retry"
 showDisp (DDeadLetter _) = "DeadLetter"
 
--- A local copy (Scaffold's pascalFromKebab is not exported).
-pascalFromKebab' :: Text -> Text
-pascalFromKebab' = T.concat . map cap . T.splitOn "-"
-  where
-    cap t = case T.uncons t of
-        Just (c, rest) -> T.cons (T.head (T.toUpper (T.singleton c))) rest
-        Nothing -> t
-
 {- | A self-contained, firewall-clean facts harness for a durable workflow,
 pinning the spec's deterministic decisions: the stable name, the WorkflowId
 derivation, the ordered body (step/await/sleep/child by label), and the await
@@ -137,9 +127,7 @@ harnessWorkflow ctx w =
         }
     ]
   where
-    ctxPascal = pascalFromKebab' (contextName ctx)
-    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
-    genPrefix = root <> "Generated." <> ctxPascal <> "." <> wfId w
+    genPrefix = genPrefixFor ctx (wfId w)
 
 emitWorkflowFacts :: Text -> WorkflowNode -> Text
 emitWorkflowFacts genPrefix w =

@@ -21,6 +21,10 @@ module Keiro.Dsl.Scaffold (
     ScaffoldModule (..),
     ModuleKind (..),
     Context (..),
+    Placement (..),
+    defaultContext,
+    genPrefixFor,
+    holePrefixFor,
     scaffoldAggregate,
     scaffoldProcess,
     scaffoldContract,
@@ -39,6 +43,7 @@ module Keiro.Dsl.Scaffold (
     firstEnumCtor,
     lowerFirst,
     pascal,
+    pascalFromKebab,
     generatedBanner,
 ) where
 
@@ -66,14 +71,50 @@ data ModuleKind
       HoleStub
     deriving stock (Eq, Show)
 
-{- | The threading context: the spec's @context@ name and the chosen output
-module-namespace root. Extended additively (never re-shaped) by later verticals.
+{- | The threading context: the spec's @context@ name, the chosen output
+module-namespace root, and the placement style. Extended additively (never
+re-shaped) by later verticals.
 -}
 data Context = Context
     { contextName :: !Text
     , moduleRoot :: !Text
+    -- ^ @""@ means no namespace prefix (the historical default).
+    , placement :: !Placement
+    -- ^ 'GeneratedPrefix' is the historical default.
     }
     deriving stock (Eq, Show)
+
+{- | A context with today's default placement ('GeneratedPrefix', no root prefix)
+for the given @context@ name. Callers that do not care about placement (the
+@parse@ path, tests) build their context with this.
+-}
+defaultContext :: Text -> Context
+defaultContext name = Context{contextName = name, moduleRoot = "", placement = GeneratedPrefix}
+
+{- | The generated-layer namespace for a node, honouring the root prefix and the
+placement style. The 'Text' argument is the already-pascalised node name (e.g.
+@Reservation@, @HospitalSurge@). For 'GeneratedPrefix' this is
+@\<root\>.Generated.\<Ctx\>.\<Node\>@ (identical to the historical layout); for
+'CollocatedLeaf' it is @\<root\>.\<Ctx\>.\<Node\>.Generated@.
+-}
+genPrefixFor :: Context -> Text -> Text
+genPrefixFor ctx node = case placement ctx of
+    GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> "." <> node
+    CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> "." <> node <> ".Generated"
+
+{- | The hand-owned (hole) namespace for a node: @\<root\>.\<Ctx\>.\<Node\>@ —
+the same for both placement styles (holes always sit beside the domain).
+-}
+holePrefixFor :: Context -> Text -> Text
+holePrefixFor ctx node = rootPrefix ctx <> ctxPascalOf ctx <> "." <> node
+
+-- | The root namespace prefix, dot-terminated, or @""@ when no root is set.
+rootPrefix :: Context -> Text
+rootPrefix ctx = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
+
+-- | The context name in PascalCase, e.g. @hospital-capacity@ -> @HospitalCapacity@.
+ctxPascalOf :: Context -> Text
+ctxPascalOf = pascalFromKebab . contextName
 
 --------------------------------------------------------------------------------
 -- Derived naming
@@ -128,14 +169,13 @@ resolveAgg ctx spec agg =
         , aTransitions = aggTransitions agg
         , aWire = fromMaybe defaultWire (aggWire agg)
         , aProjection = aggProjection agg
-        , aGenPrefix = root <> "Generated." <> ctxPascal <> "." <> nm
-        , aHolePrefix = root <> ctxPascal <> "." <> nm
+        , aGenPrefix = genPrefixFor ctx nm
+        , aHolePrefix = holePrefixFor ctx nm
         }
   where
     nm = aggName agg
     ctxPascal = pascalFromKebab (contextName ctx)
     vertexType = nm <> "Vertex"
-    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
     commandFieldTypes = [(cmdName c, cmdFields c) | c <- aggCommands agg]
     resolveCommand c = (mkCtor (cmdName c) (cmdFields c)){rcVersion = 1, rcUpcastFrom = Nothing}
     resolveEvent e =
@@ -225,9 +265,7 @@ scaffoldContract ctx c =
         }
     ]
   where
-    ctxPascal = pascalFromKebab (contextName ctx)
-    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
-    genPrefix = root <> "Generated." <> ctxPascal <> "." <> pascal (ctrName c)
+    genPrefix = genPrefixFor ctx (pascal (ctrName c))
 
 emitContractGen :: Text -> ContractNode -> Text
 emitContractGen genPrefix c =
@@ -343,9 +381,7 @@ scaffoldIntake ctx i =
         }
     ]
   where
-    ctxPascal = pascalFromKebab (contextName ctx)
-    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
-    genPrefix = root <> "Generated." <> ctxPascal <> "." <> pascal (inkName i)
+    genPrefix = genPrefixFor ctx (pascal (inkName i))
 
 emitIntakeGen :: Text -> IntakeNode -> Text
 emitIntakeGen genPrefix i =
@@ -415,9 +451,7 @@ scaffoldPublisher ctx pb =
         }
     ]
   where
-    ctxPascal = pascalFromKebab (contextName ctx)
-    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
-    genPrefix = root <> "Generated." <> ctxPascal <> "." <> pascal (pubName pb)
+    genPrefix = genPrefixFor ctx (pascal (pubName pb))
 
 emitPublisherGen :: Text -> PublisherNode -> Text
 emitPublisherGen genPrefix pb =
@@ -470,9 +504,7 @@ scaffoldWorkqueue ctx w =
         }
     ]
   where
-    ctxPascal = pascalFromKebab (contextName ctx)
-    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
-    genPrefix = root <> "Generated." <> ctxPascal <> "." <> pascal (wqName w)
+    genPrefix = genPrefixFor ctx (pascal (wqName w))
 
 emitWorkqueueGen :: Text -> WorkqueueNode -> Text
 emitWorkqueueGen genPrefix w =
@@ -591,9 +623,8 @@ scaffoldProcess ctx p =
     ]
   where
     ctxPascal = pascalFromKebab (contextName ctx)
-    root = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
-    genPrefix = root <> "Generated." <> ctxPascal <> "." <> procId p
-    holePrefix = root <> ctxPascal <> "." <> procId p
+    genPrefix = genPrefixFor ctx (procId p)
+    holePrefix = holePrefixFor ctx (procId p)
 
 emitProcessGen :: Text -> Text -> Text -> ProcessNode -> Text
 emitProcessGen _ctxPascal genPrefix _holePrefix p =

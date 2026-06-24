@@ -5,10 +5,11 @@ optparse-applicative command tree.
 module Main (main) where
 
 import Control.Monad (forM_, unless)
+import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), diffSpecs, isBreaking)
-import Keiro.Dsl.Grammar (Node (..), Spec (..))
+import Keiro.Dsl.Grammar (Node (..), Placement (..), Spec (..))
 import Keiro.Dsl.Harness (harnessFor, harnessProcess, harnessWorkflow)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
@@ -24,7 +25,7 @@ import System.Process (readProcessWithExitCode)
 data Command
     = Parse FilePath
     | Check FilePath
-    | Scaffold FilePath FilePath
+    | Scaffold FilePath FilePath (Maybe String) Bool
     | Diff FilePath String
 
 main :: IO ()
@@ -46,7 +47,7 @@ commands =
                 (info (Check <$> fileArg <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
             <> command
                 "scaffold"
-                (info (Scaffold <$> fileArg <*> outOpt <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
+                (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
             <> command
                 "diff"
                 (info (Diff <$> fileArg <*> sinceOpt <**> helper) (progDesc "Classify spec changes since a git ref as ADDITIVE/BREAKING; exit non-zero on any breaking change"))
@@ -54,6 +55,12 @@ commands =
 
 outOpt :: Parser FilePath
 outOpt = strOption (long "out" <> metavar "DIR" <> help "Output directory for the scaffolded modules")
+
+moduleRootOpt :: Parser String
+moduleRootOpt = strOption (long "module-root" <> metavar "PREFIX" <> help "Namespace prefix for emitted modules, e.g. Acme or Acme.Services (overrides the spec's module clause)")
+
+collocateSwitch :: Parser Bool
+collocateSwitch = switch (long "collocate" <> help "Place the generated layer as a leaf under the domain (<Ctx>.<Node>.Generated) instead of a parallel Generated.* tree")
 
 sinceOpt :: Parser String
 sinceOpt = strOption (long "since" <> metavar "GIT-REF" <> help "Git ref to diff the spec against (e.g. HEAD, a tag, a branch)")
@@ -81,14 +88,14 @@ run (Check fp) = do
             if any ((== Error) . severity) diags
                 then exitFailure
                 else putStrLn "OK"
-run (Scaffold fp out) = do
+run (Scaffold fp out cliRoot cliCollocate) = do
     input <- TIO.readFile fp
     case parseSpec fp input of
         Left err -> do
             hPutStrLn stderr (T.unpack err)
             exitFailure
         Right spec -> do
-            let ctx = mkContext spec
+            let ctx = mkContext cliRoot cliCollocate spec
                 aggMods =
                     concat
                         [ scaffoldAggregate ctx spec agg <> harnessFor ctx spec agg
@@ -155,5 +162,16 @@ git dir args = do
 trim :: String -> String
 trim = f . f where f = reverse . dropWhile (`elem` (" \t\r\n" :: String))
 
-mkContext :: Spec -> Context
-mkContext spec = Context{contextName = specContext spec, moduleRoot = ""}
+{- | Fold the spec's @module@/@layout@ clauses with the CLI overrides to a
+'Context'. Precedence is CLI flag > spec clause > built-in default.
+-}
+mkContext :: Maybe String -> Bool -> Spec -> Context
+mkContext cliRoot cliCollocate spec =
+    Context
+        { contextName = specContext spec
+        , moduleRoot = maybe (fromMaybe "" (specModuleRoot spec)) T.pack cliRoot
+        , placement =
+            if cliCollocate
+                then CollocatedLeaf
+                else fromMaybe GeneratedPrefix (specLayout spec)
+        }

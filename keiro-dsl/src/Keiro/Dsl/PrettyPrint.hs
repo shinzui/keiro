@@ -25,7 +25,10 @@ renderSpec = renderStrict . layoutPretty opts . docSpec
 docSpec :: Spec -> Doc ann
 docSpec s =
     vsep $
-        ["context" <+> pretty (specContext s), mempty]
+        ["context" <+> pretty (specContext s)]
+            ++ maybe [] (\r -> ["module" <+> pretty r]) (specModuleRoot s)
+            ++ maybe [] (\l -> ["layout" <+> docLayout l]) (specLayout s)
+            ++ [mempty]
             ++ map docId (specIds s)
             ++ blankAfter (specIds s)
             ++ map docEnum (specEnums s)
@@ -35,6 +38,10 @@ docSpec s =
             ++ map docNode (specNodes s)
   where
     blankAfter xs = if null xs then [] else [mempty]
+
+docLayout :: Placement -> Doc ann
+docLayout GeneratedPrefix = "prefixed"
+docLayout CollocatedLeaf = "collocated"
 
 docId :: IdDecl -> Doc ann
 docId d = "id" <+> pretty (idName d) <+> ("prefix=" <> pretty (idPrefix d))
