@@ -13,7 +13,7 @@ import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), Placement (..), ScaffoldModule (..), defaultContext, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), Placement (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateSpec)
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
@@ -268,6 +268,23 @@ main = hspec $ do
             spec <- specOf "test/fixtures/hospital-surge.keiro"
             manifestDependencies spec `shouldContain` ["time", "uuid"]
             manifestDependencies spec `shouldContain` ["keiki", "keiro"]
+
+    describe "firewall self-check (M3)" $ do
+        it "flags a forbidden operator in a Generated module" $ do
+            let m = ScaffoldModule{modulePath = "Gen/Foo.hs", moduleText = "x = a ./= b", kind = Generated}
+            firewallBreaches [m] `shouldBe` [("Gen/Foo.hs", "./=", 1)]
+        it "ignores forbidden operators in a HoleStub module (holes own them)" $ do
+            let m = ScaffoldModule{modulePath = "Foo/Holes.hs", moduleText = "x = lit 1 .== y", kind = HoleStub}
+            firewallBreaches [m] `shouldBe` []
+        it "matches `lit` as a word, not a substring of quality/split" $ do
+            let clean = ScaffoldModule{modulePath = "Gen/Q.hs", moduleText = "quality = split facility", kind = Generated}
+                dirty = ScaffoldModule{modulePath = "Gen/L.hs", moduleText = "v = lit foo", kind = Generated}
+            firewallBreaches [clean] `shouldBe` []
+            firewallBreaches [dirty] `shouldBe` [("Gen/L.hs", "lit", 1)]
+        it "finds no breach in real scaffolder output (aggregate + process fixtures)" $ do
+            aggMods <- scaffoldFixture "test/fixtures/reservation.keiro"
+            procMods <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
+            firewallBreaches (aggMods <> procMods) `shouldBe` []
 
     describe "scaffold" $ do
         it "never emits a keiki symbolic operator into a Generated module (firewall)" $ do

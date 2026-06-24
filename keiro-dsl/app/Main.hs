@@ -4,17 +4,17 @@ optparse-applicative command tree.
 -}
 module Main (main) where
 
-import Control.Monad (forM_, unless)
+import Control.Monad (unless)
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), diffSpecs, isBreaking)
 import Keiro.Dsl.Grammar (Node (..), Placement (..), Spec (..))
 import Keiro.Dsl.Harness (harnessFor, harnessProcess, harnessWorkflow)
-import Keiro.Dsl.Manifest (renderManifest)
+import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate, scaffoldContract, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldWorkqueue)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), firewallBreaches, scaffoldAggregate, scaffoldContract, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldWorkqueue)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
@@ -110,9 +110,12 @@ run (Scaffold fp out cliRoot cliCollocate) = do
                 wfMods = concat [harnessWorkflow ctx wf | NWorkflow wf <- specNodes spec]
                 allMods = aggMods <> procMods <> contractMods <> intakeMods <> pubMods <> wqMods <> wfMods
             createDirectoryIfMissing True out
-            forM_ allMods (writeModule out)
+            dispositions <- mapM (writeModule out) allMods
             let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
             TIO.writeFile manifestPath (renderManifest (T.pack fp) allMods spec)
+            let breaches = firewallBreaches allMods
+            mapM_ (hPutStrLn stderr) (reportLines fp out ctx dispositions breaches manifestPath)
+            unless (null breaches) exitFailure
 run (Diff fp ref) = do
     -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.
     let dir = takeDirectory fp
@@ -135,18 +138,77 @@ run (Diff fp ref) = do
                             mapM_ (putStrLn . renderChange) changes
                             if any isBreaking changes then exitFailure else pure ()
 
+-- | What happened to a module on disk during a scaffold run.
+data WriteDisposition = Overwritten | Created | Skipped
+    deriving stock (Eq, Show)
+
 {- | Write one module honouring the kind discipline: Generated modules are
 overwritten unconditionally; HoleStub modules are written only when absent.
+Returns the module and what happened to it, for the post-scaffold report.
 -}
-writeModule :: FilePath -> ScaffoldModule -> IO ()
+writeModule :: FilePath -> ScaffoldModule -> IO (ScaffoldModule, WriteDisposition)
 writeModule out m = do
     let path = out </> modulePath m
     createDirectoryIfMissing True (takeDirectory path)
     case kind m of
-        Generated -> TIO.writeFile path (moduleText m)
+        Generated -> do
+            TIO.writeFile path (moduleText m)
+            pure (m, Overwritten)
         HoleStub -> do
             exists <- doesFileExist path
-            unless exists (TIO.writeFile path (moduleText m))
+            if exists
+                then pure (m, Skipped)
+                else TIO.writeFile path (moduleText m) >> pure (m, Created)
+
+{- | The post-scaffold report (printed to standard error): every module written
+with its disposition, the firewall verdict, the harness component(s), and the
+manifest path.
+-}
+reportLines ::
+    FilePath ->
+    FilePath ->
+    Context ->
+    [(ScaffoldModule, WriteDisposition)] ->
+    [(FilePath, T.Text, Int)] ->
+    FilePath ->
+    [String]
+reportLines fp out ctx dispositions breaches manifestPath =
+    [ "scaffold: " <> fp <> " -> " <> out <> " (module-root=" <> rootLabel <> ", layout=" <> layoutLabel <> ")"
+    ]
+        ++ map moduleLine dispositions
+        ++ [firewallLine]
+        ++ harnessLines
+        ++ ["manifest: " <> manifestPath]
+  where
+    rootLabel = case T.unpack (moduleRoot ctx) of "" -> "(none)"; r -> r
+    layoutLabel = case placement ctx of GeneratedPrefix -> "prefixed"; CollocatedLeaf -> "collocated"
+    nameOf m = T.unpack (moduleNameOf (modulePath m))
+    nameWidth = maximum (1 : [length (nameOf m) | (m, _) <- dispositions])
+    pad s = s <> replicate (nameWidth - length s) ' '
+    moduleLine (m, disp) =
+        "  " <> kindTag (kind m) <> "  " <> pad (nameOf m) <> "  " <> dispTag disp
+    kindTag Generated = "generated"
+    kindTag HoleStub = "hole     "
+    dispTag Overwritten = "(overwritten)"
+    dispTag Created = "(created)"
+    dispTag Skipped = "(skipped: already present)"
+    genCount = length [() | (m, _) <- dispositions, kind m == Generated]
+    firewallLine = case breaches of
+        [] -> "firewall: OK (" <> show genCount <> " generated modules scanned, 0 forbidden operators)"
+        bs ->
+            "firewall: BREACH ("
+                <> show (length bs)
+                <> " forbidden operator occurrence(s)):\n"
+                <> unlines ["  " <> p <> ":" <> show n <> " contains " <> T.unpack op | (p, op, n) <- bs]
+    harnessModules =
+        [ nameOf m
+        | (m, _) <- dispositions
+        , let nm = T.pack (nameOf m)
+        , any (`T.isSuffixOf` nm) [".Harness", ".ProcessHarness", ".WorkflowFacts"]
+        ]
+    harnessLines = case harnessModules of
+        [] -> ["harness:  (none emitted)"]
+        hs -> ["harness:  run `cabal test <your-component>` over " <> unwords hs]
 
 renderChange :: Change -> String
 renderChange c = case c of

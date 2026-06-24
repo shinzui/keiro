@@ -87,10 +87,15 @@ This section must always reflect the actual current state of the work.
       block (dotted names, sorted) and a node-kind-derived `build-depends:` block. Verified the
       reservation manifest's `other-modules`/`build-depends` match the conformance stanza
       verbatim; tests assert module-list = scaffolder output and the per-kind dep sets.
-- [ ] **M3 — Self-firewall check + post-scaffold report.** `scaffold` scans its own generated
-      output for the forbidden operators, prints a structured report (modules written gen/hole,
-      holes skipped-because-present, firewall verdict, harness test component), and exits
-      non-zero on a firewall breach.
+- [x] **M3 — Self-firewall check + post-scaffold report.** (2026-06-24) Added
+      `forbiddenOperators`/`firewallBreaches` to `Scaffold` (`lit` word-matched, symbolic
+      operators substring-matched, Generated-only). `writeModule` now returns a disposition;
+      `scaffold` prints a stderr report (per-module gen/hole + overwritten/created/skipped,
+      `firewall: OK (N scanned, 0 forbidden)`, harness component(s), manifest path) and exits
+      non-zero on a breach. Tests cover synthetic breach, hole-module exemption, `lit`
+      word-boundary, and clean real output. LOOP.md's manual grep replaced with the built-in
+      check. Mutation/diff scripts (`mutation-test.sh`, `process-`, `workflow-`, `diff-test.sh`)
+      all pass.
 - [ ] **M4 — Per-iteration ergonomics.** `check --emit` pretty-prints on success; a `--scaffold`
       shortcut runs check-then-scaffold; document/install a `keiro-dsl` wrapper.
 - [ ] **M5 — `new <kind>` starter skeletons.** A `new` subcommand prints a minimal valid spec for
@@ -103,7 +108,18 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The mutation-test scripts (`process-mutation-test.sh`, `workflow-mutation-test.sh`)
+  re-scaffold into the tracked `test/conformance-*` dirs. Because the committed Generated
+  fixtures are fourmolu-formatted but the scaffolder emits unformatted text (blank line after
+  pragmas, original import order), running those scripts leaves the tracked `.hs` files showing
+  as modified (formatting-only) — pre-existing behaviour, not a regression. Restore with
+  `git checkout -- keiro-dsl/test/conformance-process/` after running them. M2 also makes those
+  runs drop a `keiro-dsl-manifest.<context>.txt` into the dir; added `keiro-dsl-manifest.*.txt`
+  to `.gitignore` so the informational artifact is never committed.
+- The default scaffold output stays byte-identical for the `.hs` modules, but M2 adds the
+  manifest file to the `--out` directory, so a `diff -r baseline after` now reports the manifest
+  as an extra file. The backwards-compat guarantee is on module *text* (pinned by the
+  scaffold-conformance property), which remains green.
 
 
 ## Decision Log

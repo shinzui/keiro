@@ -32,6 +32,10 @@ module Keiro.Dsl.Scaffold (
     scaffoldPublisher,
     scaffoldWorkqueue,
 
+    -- * Firewall self-check (M3)
+    forbiddenOperators,
+    firewallBreaches,
+
     -- * Internal resolution, shared with "Keiro.Dsl.Harness"
     Agg (..),
     ResolvedCtor (..),
@@ -47,7 +51,7 @@ module Keiro.Dsl.Scaffold (
     generatedBanner,
 ) where
 
-import Data.Char (toLower, toUpper)
+import Data.Char (isAlphaNum, toLower, toUpper)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -115,6 +119,43 @@ rootPrefix ctx = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
 -- | The context name in PascalCase, e.g. @hospital-capacity@ -> @HospitalCapacity@.
 ctxPascalOf :: Context -> Text
 ctxPascalOf = pascalFromKebab . contextName
+
+--------------------------------------------------------------------------------
+-- Firewall self-check (M3)
+--------------------------------------------------------------------------------
+
+{- | The forbidden keiki symbolic operators that must never appear in a
+@-- \@generated@ module (the firewall invariant). These belong only in
+hand-filled hole modules.
+-}
+forbiddenOperators :: [Text]
+forbiddenOperators = ["./=", ".==", ".||", "lit", "B.slot", "B.requireGuard"]
+
+{- | Scan generated modules for firewall breaches, returning every offending
+@(module path, operator, 1-based line number)@. Only modules whose
+'kind' is 'Generated' are scanned. The alphabetic operator @lit@ is matched as a
+whole word (so it never trips on @quality@/@split@); the symbolic operators are
+matched textually.
+-}
+firewallBreaches :: [ScaffoldModule] -> [(FilePath, Text, Int)]
+firewallBreaches mods =
+    [ (modulePath m, op, n)
+    | m <- mods
+    , kind m == Generated
+    , (n, line) <- zip [1 ..] (T.lines (moduleText m))
+    , op <- forbiddenOperators
+    , op `breachesLine` line
+    ]
+
+{- | Whether a forbidden operator occurs in a line (word-matched for @lit@,
+substring-matched for the symbolic operators).
+-}
+breachesLine :: Text -> Text -> Bool
+breachesLine op line
+    | op == "lit" = "lit" `elem` tokens
+    | otherwise = op `T.isInfixOf` line
+  where
+    tokens = T.split (\c -> not (isAlphaNum c || c == '_')) line
 
 --------------------------------------------------------------------------------
 -- Derived naming

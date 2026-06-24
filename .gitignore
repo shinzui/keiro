@@ -17,3 +17,6 @@ result-*
 db/
 .mina/
 .codex/
+
+# keiro-dsl scaffold manifest artifacts (informational; emitted into --out)
+keiro-dsl-manifest.*.txt

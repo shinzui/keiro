@@ -40,11 +40,19 @@ cabal run keiro-dsl -- scaffold service.keiro --out gen/
 
 You get `-- @generated` modules (overwritten every run) and create-if-absent hole modules
 (`Holes.hs`, `ProcessHoles.hs`). **Re-scaffolding never clobbers a filled hole module.**
-Confirm the firewall holds (it always should):
 
-```bash
-grep -RnE './=|\.==|\.\|\||(^| )lit |B\.slot|B\.requireGuard' gen/Generated && echo BREACH || echo "firewall OK"
-```
+`scaffold` now checks its own firewall and prints a report to stderr: every module written
+with its disposition (`overwritten`/`created`/`skipped: already present`), the firewall
+verdict (`firewall: OK (N generated modules scanned, 0 forbidden operators)`), the harness
+component(s) to run, and the manifest path. It **exits non-zero on a firewall breach**, so the
+manual `grep` is no longer needed — a non-zero exit means a `-- @generated` module contains a
+forbidden keiki operator (`./=`, `.==`, `.||`, `lit`, `B.slot`, `B.requireGuard`).
+
+To place the generated layer next to your domain code instead of a parallel `Generated.*`
+tree, pass `--module-root <Prefix>` and/or `--collocate` (or set `module <Prefix>` / `layout
+collocated` in the spec): with both, modules land at `<Prefix>.<Ctx>.<Node>.Generated.*`. The
+emitted `keiro-dsl-manifest.<context>.txt` carries paste-ready `other-modules:`/`build-depends:`
+blocks for the consuming Cabal stanza.
 
 ### 5. Fill the holes
 
