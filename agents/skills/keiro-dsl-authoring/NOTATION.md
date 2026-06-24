@@ -15,6 +15,26 @@ rule lifeCriticalOverride : PatientAcuity -> Bool
   ex RedTag => true ; YellowTag => false ; GreenTag => false
 ```
 
+## module placement (optional)
+
+Two optional clauses may follow `context <name>` to control where the emitted modules land. Both
+are optional; a spec that omits them scaffolds exactly as today.
+
+```text
+context hospital-capacity
+module Acme.Services        # optional PascalCase namespace prefix for every emitted module
+layout collocated          # placement style: `prefixed` (default) or `collocated`
+```
+
+- `prefixed` (default): generated layer at `Generated.<Ctx>.<Node>.*`, holes at `<Ctx>.<Node>.*`
+  (a parallel `Generated.*` tree).
+- `collocated`: generated layer at `<Ctx>.<Node>.Generated.*` (a leaf under the domain, next to
+  hand-written code); holes still at `<Ctx>.<Node>.*`.
+
+With `module Acme` + `layout collocated`: generated → `Acme.<Ctx>.<Node>.Generated.*`, holes →
+`Acme.<Ctx>.<Node>.*`. The CLI flags `--module-root`/`--collocate` set the same per invocation and
+override the spec clauses (precedence: CLI flag > spec clause > default).
+
 ## aggregate (EP-1) + evolution (EP-2)
 
 ```text
@@ -172,3 +192,27 @@ operation RunReservationWorkflow
 Operation shapes: `command on <Agg> …`, `query <ReadModel> …`, `signal <label> of <Wf> …`,
 `run <Wf> …`. Checked: every `signal <label> of <wf>` matches an `await <label>` of that
 workflow (else the awakeable id never matches and the workflow waits forever).
+
+## CLI
+
+Run from the keiro repo root (or use the `keiro-dsl/bin/keiro-dsl` wrapper on your `PATH`).
+
+```text
+keiro-dsl new      <kind>                       # print a minimal valid skeleton for a node kind
+keiro-dsl parse    <file.keiro>                 # parse + pretty-print it back
+keiro-dsl check    <file.keiro> [--emit]        # validate; --emit pretty-prints the spec on success
+keiro-dsl scaffold <file.keiro> --out DIR \     # validate, emit @generated + holes + manifest, self-check firewall
+  [--module-root Acme] [--collocate]            # optional placement (overrides the module/layout clauses)
+keiro-dsl diff     --since <git-ref> <file.keiro>   # classify changes ADDITIVE/BREAKING since a ref
+```
+
+- `new <kind>` — `kind` ∈ aggregate, process, contract, intake, emit, publisher, workqueue,
+  dispatch, workflow, operation. Prints a guaranteed-valid starter spec to stdout
+  (`keiro-dsl new aggregate > service.keiro`).
+- `scaffold` validates first and refuses to emit an invalid spec; it scans its own generated output
+  and exits non-zero on a firewall breach, printing a report (modules written + dispositions,
+  `firewall: OK …`, the harness component, the manifest path). It also writes a
+  `keiro-dsl-manifest.<context>.txt` into `--out` with paste-ready `other-modules:`/`build-depends:`
+  blocks for the consuming Cabal stanza. No manual firewall `grep` needed.
+- Exit codes gate CI: a non-zero `check`/`scaffold`/`diff` is the signal — fix the **spec**, not the
+  generated code. Use `/dev/stdin` as the file to read from stdin.
