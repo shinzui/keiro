@@ -103,9 +103,13 @@ This section must always reflect the actual current state of the work.
       and documented it + `--emit`/`--module-root`/`--collocate` in SKILL.md/LOOP.md. Verified by
       CLI: `check --emit` prints the spec (exit 0); scaffolding `reservation-bad-command.keiro`
       prints the `UndeclaredCommand` diagnostic, exits 1, writes 0 modules.
-- [ ] **M5 — `new <kind>` starter skeletons.** A `new` subcommand prints a minimal valid spec for
-      each node kind (aggregate, process, contract/intake/emit/publisher, workqueue/dispatch,
-      workflow/operation).
+- [x] **M5 — `new <kind>` starter skeletons.** (2026-06-24) New `Keiro.Dsl.Skeleton`
+      (`skeletonFor`/`skeletonKinds`) + a `new` subcommand. Prints a minimal, guaranteed-valid
+      spec for all ten kinds (aggregate, process, contract, intake, emit, publisher, workqueue,
+      dispatch, workflow, operation); coupled kinds (emit/publisher → contract; intake → contract;
+      dispatch → workqueue; operation → workflow) ship the self-contained mini-spec. A test
+      enumerates every kind through `parseSpec`+`validateSpec` asserting zero error diagnostics;
+      unknown kinds error with the valid list. Documented in SKILL.md. 58/58 tests pass.
 
 
 ## Surprises & Discoveries
@@ -180,7 +184,33 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+All five milestones landed, each on its own commit with the `ExecPlan:` trailer. Against the
+original purpose:
+
+1. **Module placement is configurable (the blocker is gone).** `--module-root`/`--collocate`
+   (and spec `module`/`layout` clauses, CLI > spec > default) let a team land generated modules
+   at `Acme.<Ctx>.<Node>.Generated.*` next to their domain code. The dormant `moduleRoot` field
+   was extended (not replaced) into a `Placement` policy with shared `genPrefixFor`/`holePrefixFor`
+   helpers that the six emitters and the harness now all call. **Default output is byte-identical**:
+   the scaffold-conformance property is green with no fixture edits and `diff -r` of the `.hs`
+   modules is clean.
+2. **Build wiring is mechanical.** `scaffold` emits `keiro-dsl-manifest.<context>.txt` whose
+   `other-modules`/`build-depends` match the hand-maintained conformance stanzas verbatim.
+3. **The firewall is self-checked and the run is no longer silent.** `scaffold` scans its own
+   Generated output, prints a structured report (per-module disposition, firewall verdict, harness
+   component, manifest path) and exits non-zero on a breach. The manual `grep` in LOOP.md is gone.
+4. **Per-iteration overhead is down.** `check --emit` folds parse+check; `scaffold` validates
+   first (never emits an invalid spec); a `bin/keiro-dsl` wrapper drops the `cabal run` prefix.
+5. **No blank page.** `new <kind>` prints a guaranteed-valid skeleton for all ten node kinds.
+
+Verification: `cabal test keiro-dsl-test` = 58/58 green; sampled conformance suites build; all
+four mutation/diff scripts pass.
+
+Gaps / follow-ups: the manifest's `build-depends` set is intentionally broad for the integration
+kinds (intake/emit/publisher all map to the full `effectful-core`/`hasql-transaction`/`kiroku-store`
+path) — a consumer on the runtime-only path can trim it. The `new` skeletons for coupled kinds
+reuse the canonical fixture names (e.g. `HospitalSurge`), so they read as worked examples rather
+than blank templates; that was a deliberate choice for guaranteed validity.
 
 
 ## Context and Orientation

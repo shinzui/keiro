@@ -36,6 +36,7 @@ library
     Keiro.Dsl.Parser
     Keiro.Dsl.PrettyPrint
     Keiro.Dsl.Scaffold
+    Keiro.Dsl.Skeleton
     Keiro.Dsl.Validate
 
   build-depends:

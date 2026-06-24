@@ -60,7 +60,13 @@ cabal run keiro-dsl -- check   <file.keiro> [--emit]   # validate; --emit pretty
 cabal run keiro-dsl -- scaffold <file.keiro> --out DIR # validate, then emit @generated + create-if-absent holes
                             [--module-root Acme] [--collocate]  # place modules under Acme.<Ctx>.<Node>(.Generated)
 cabal run keiro-dsl -- diff --since <git-ref> <file.keiro>  # classify changes ADDITIVE/BREAKING; gate a merge
+cabal run keiro-dsl -- new <kind>                      # print a minimal valid skeleton (kinds below)
 ```
+
+`new <kind>` prints a minimal, guaranteed-valid `.keiro` skeleton to stdout for
+any of: `aggregate`, `process`, `contract`, `intake`, `emit`, `publisher`,
+`workqueue`, `dispatch`, `workflow`, `operation`. Pipe it straight into a file
+to start, e.g. `cabal run -v0 keiro-dsl -- new aggregate > service.keiro`.
 
 There is a `keiro-dsl/bin/keiro-dsl` wrapper so you can drop the verbose
 `cabal run -v0 keiro-dsl --` prefix: put `keiro-dsl/bin` on your `PATH` and run

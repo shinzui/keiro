@@ -15,6 +15,7 @@ import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), firewallBreaches, scaffoldAggregate, scaffoldContract, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldWorkqueue)
+import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
@@ -28,6 +29,7 @@ data Command
     | Check FilePath Bool
     | Scaffold FilePath FilePath (Maybe String) Bool
     | Diff FilePath String
+    | New String
 
 main :: IO ()
 main = run =<< execParser opts
@@ -52,6 +54,9 @@ commands =
             <> command
                 "diff"
                 (info (Diff <$> fileArg <*> sinceOpt <**> helper) (progDesc "Classify spec changes since a git ref as ADDITIVE/BREAKING; exit non-zero on any breaking change"))
+            <> command
+                "new"
+                (info (New <$> kindArg <**> helper) (progDesc "Print a minimal valid .keiro skeleton for a node kind (aggregate, process, contract, intake, emit, publisher, workqueue, dispatch, workflow, operation)"))
         )
 
 outOpt :: Parser FilePath
@@ -71,6 +76,9 @@ sinceOpt = strOption (long "since" <> metavar "GIT-REF" <> help "Git ref to diff
 
 fileArg :: Parser FilePath
 fileArg = argument str (metavar "FILE" <> help "Path to a .keiro spec (use /dev/stdin for stdin)")
+
+kindArg :: Parser String
+kindArg = argument str (metavar "KIND" <> help "Node kind to scaffold a starter spec for")
 
 run :: Command -> IO ()
 run (Parse fp) = do
@@ -127,6 +135,10 @@ run (Scaffold fp out cliRoot cliCollocate) = do
             let breaches = firewallBreaches allMods
             mapM_ (hPutStrLn stderr) (reportLines fp out ctx dispositions breaches manifestPath)
             unless (null breaches) exitFailure
+run (New kind) =
+    case skeletonFor (T.pack kind) of
+        Left err -> hPutStrLn stderr (T.unpack err) >> exitFailure
+        Right skel -> TIO.putStr skel
 run (Diff fp ref) = do
     -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.
     let dir = takeDirectory fp

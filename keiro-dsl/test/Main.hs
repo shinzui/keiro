@@ -14,6 +14,7 @@ import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), Placement (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess)
+import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateSpec)
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
@@ -269,6 +270,14 @@ main = hspec $ do
             manifestDependencies spec `shouldContain` ["time", "uuid"]
             manifestDependencies spec `shouldContain` ["keiki", "keiro"]
 
+    describe "new <kind> skeletons (M5)" $ do
+        it "every skeleton parses and validates with zero error diagnostics" $
+            mapM_ assertSkeletonValid skeletonKinds
+        it "rejects an unknown kind with a helpful message" $
+            case skeletonFor "bogus" of
+                Left msg -> ("Valid kinds:" `T.isInfixOf` msg) `shouldBe` True
+                Right _ -> expectationFailure "expected an error for an unknown kind"
+
     describe "firewall self-check (M3)" $ do
         it "flags a forbidden operator in a Generated module" $ do
             let m = ScaffoldModule{modulePath = "Gen/Foo.hs", moduleText = "x = a ./= b", kind = Generated}
@@ -349,6 +358,18 @@ diffFixtures oldP newP = do
 -- | The keiki symbolic operators that must never appear in a Generated module.
 symbolicOperators :: [T.Text]
 symbolicOperators = ["./=", ".==", ".||", ".&&", "lit ", "B.slot", "B.requireGuard"]
+
+{- | Assert a @new \<kind\>@ skeleton parses and validates with zero
+error-severity diagnostics.
+-}
+assertSkeletonValid :: T.Text -> IO ()
+assertSkeletonValid kind = case skeletonFor kind of
+    Left err -> expectationFailure (T.unpack ("skeleton for " <> kind <> ": " <> err))
+    Right src -> case parseSpec ("new:" <> T.unpack kind) src of
+        Left perr -> expectationFailure (T.unpack ("skeleton for " <> kind <> " failed to parse: " <> perr))
+        Right spec ->
+            [code d | d <- validateSpec spec, severity d == Error]
+                `shouldBe` ([] :: [DiagnosticCode])
 
 -- | Parse a fixture into a 'Spec', failing the test on a parse error.
 specOf :: FilePath -> IO Spec
