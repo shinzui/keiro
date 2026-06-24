@@ -96,8 +96,13 @@ This section must always reflect the actual current state of the work.
       word-boundary, and clean real output. LOOP.md's manual grep replaced with the built-in
       check. Mutation/diff scripts (`mutation-test.sh`, `process-`, `workflow-`, `diff-test.sh`)
       all pass.
-- [ ] **M4 — Per-iteration ergonomics.** `check --emit` pretty-prints on success; a `--scaffold`
-      shortcut runs check-then-scaffold; document/install a `keiro-dsl` wrapper.
+- [x] **M4 — Per-iteration ergonomics.** (2026-06-24) `check --emit` pretty-prints the spec on
+      success; `scaffold` now runs `validateSpec` first and aborts on any error-severity
+      diagnostic *without writing modules* (the safer check-then-scaffold, no new flag); added
+      `keiro-dsl/bin/keiro-dsl` wrapper (`cabal --project-dir=<root> run -v0 keiro-dsl -- "$@"`)
+      and documented it + `--emit`/`--module-root`/`--collocate` in SKILL.md/LOOP.md. Verified by
+      CLI: `check --emit` prints the spec (exit 0); scaffolding `reservation-bad-command.keiro`
+      prints the `UndeclaredCommand` diagnostic, exits 1, writes 0 modules.
 - [ ] **M5 — `new <kind>` starter skeletons.** A `new` subcommand prints a minimal valid spec for
       each node kind (aggregate, process, contract/intake/emit/publisher, workqueue/dispatch,
       workflow/operation).

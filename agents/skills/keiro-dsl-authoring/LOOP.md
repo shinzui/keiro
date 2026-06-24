@@ -20,6 +20,7 @@ It echoes the spec pretty-printed. A parse error is line-numbered; fix the notat
 
 ```bash
 cabal run keiro-dsl -- check service.keiro ; echo "exit=$?"
+# add --emit to pretty-print the parsed spec on success (folds parse + check)
 ```
 
 `OK` / exit 0 means every required decision is present and no dangerous inversion is stated

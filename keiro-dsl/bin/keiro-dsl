@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Thin wrapper so you can run `keiro-dsl <subcommand>` instead of the verbose
+# `cabal run -v0 keiro-dsl --`. Put keiro-dsl/bin on your PATH (or symlink this
+# file) and run e.g. `keiro-dsl check service.keiro --emit`.
+#
+# It execs cabal from the keiro repo root so the build plan resolves regardless
+# of your current directory.
+set -euo pipefail
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+exec cabal --project-dir="$repo_root" run -v0 keiro-dsl -- "$@"

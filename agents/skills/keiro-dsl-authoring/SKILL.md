@@ -56,7 +56,14 @@ Run from the repo root (`/Users/shinzui/Keikaku/bokuno/keiro`):
 
 ```bash
 cabal run keiro-dsl -- parse   <file.keiro>            # parse + pretty-print (proves it's a real spec)
-cabal run keiro-dsl -- check   <file.keiro>            # validate; exits non-zero on any error (warnings pass)
-cabal run keiro-dsl -- scaffold <file.keiro> --out DIR # emit @generated modules + create-if-absent holes
+cabal run keiro-dsl -- check   <file.keiro> [--emit]   # validate; --emit pretty-prints the spec on success
+cabal run keiro-dsl -- scaffold <file.keiro> --out DIR # validate, then emit @generated + create-if-absent holes
+                            [--module-root Acme] [--collocate]  # place modules under Acme.<Ctx>.<Node>(.Generated)
 cabal run keiro-dsl -- diff --since <git-ref> <file.keiro>  # classify changes ADDITIVE/BREAKING; gate a merge
 ```
+
+There is a `keiro-dsl/bin/keiro-dsl` wrapper so you can drop the verbose
+`cabal run -v0 keiro-dsl --` prefix: put `keiro-dsl/bin` on your `PATH` and run
+e.g. `keiro-dsl check service.keiro --emit`. `scaffold` validates first (it will
+not emit modules for an invalid spec), self-checks the firewall, and prints a
+report naming every module written and the manifest path.

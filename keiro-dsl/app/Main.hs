@@ -4,7 +4,7 @@ optparse-applicative command tree.
 -}
 module Main (main) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
@@ -25,7 +25,7 @@ import System.Process (readProcessWithExitCode)
 
 data Command
     = Parse FilePath
-    | Check FilePath
+    | Check FilePath Bool
     | Scaffold FilePath FilePath (Maybe String) Bool
     | Diff FilePath String
 
@@ -45,7 +45,7 @@ commands =
             (info (Parse <$> fileArg <**> helper) (progDesc "Parse a .keiro file and pretty-print it back"))
             <> command
                 "check"
-                (info (Check <$> fileArg <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
+                (info (Check <$> fileArg <*> emitSwitch <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
             <> command
                 "scaffold"
                 (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
@@ -63,6 +63,9 @@ moduleRootOpt = strOption (long "module-root" <> metavar "PREFIX" <> help "Names
 collocateSwitch :: Parser Bool
 collocateSwitch = switch (long "collocate" <> help "Place the generated layer as a leaf under the domain (<Ctx>.<Node>.Generated) instead of a parallel Generated.* tree")
 
+emitSwitch :: Parser Bool
+emitSwitch = switch (long "emit" <> help "On success, pretty-print the parsed spec to stdout (folds parse + check into one call)")
+
 sinceOpt :: Parser String
 sinceOpt = strOption (long "since" <> metavar "GIT-REF" <> help "Git ref to diff the spec against (e.g. HEAD, a tag, a branch)")
 
@@ -77,7 +80,7 @@ run (Parse fp) = do
             hPutStrLn stderr (T.unpack err)
             exitFailure
         Right spec -> TIO.putStrLn (renderSpec spec)
-run (Check fp) = do
+run (Check fp emit) = do
     input <- TIO.readFile fp
     case parseSpec fp input of
         Left err -> do
@@ -88,7 +91,10 @@ run (Check fp) = do
             mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
             if any ((== Error) . severity) diags
                 then exitFailure
-                else putStrLn "OK"
+                else
+                    if emit
+                        then TIO.putStrLn (renderSpec spec)
+                        else putStrLn "OK"
 run (Scaffold fp out cliRoot cliCollocate) = do
     input <- TIO.readFile fp
     case parseSpec fp input of
@@ -96,6 +102,11 @@ run (Scaffold fp out cliRoot cliCollocate) = do
             hPutStrLn stderr (T.unpack err)
             exitFailure
         Right spec -> do
+            -- Validation gate: never scaffold an invalid spec. Abort on any
+            -- error-severity diagnostic before writing a single module.
+            let diags = validateSpec spec
+            mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
+            when (any ((== Error) . severity) diags) exitFailure
             let ctx = mkContext cliRoot cliCollocate spec
                 aggMods =
                     concat
