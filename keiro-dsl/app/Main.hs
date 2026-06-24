@@ -11,6 +11,7 @@ import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), diffSpecs, isBreaking)
 import Keiro.Dsl.Grammar (Node (..), Placement (..), Spec (..))
 import Keiro.Dsl.Harness (harnessFor, harnessProcess, harnessWorkflow)
+import Keiro.Dsl.Manifest (renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), scaffoldAggregate, scaffoldContract, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldWorkqueue)
@@ -107,7 +108,11 @@ run (Scaffold fp out cliRoot cliCollocate) = do
                 pubMods = concat [scaffoldPublisher ctx pb | NPublisher pb <- specNodes spec]
                 wqMods = concat [scaffoldWorkqueue ctx wq | NWorkqueue wq <- specNodes spec]
                 wfMods = concat [harnessWorkflow ctx wf | NWorkflow wf <- specNodes spec]
-            forM_ (aggMods <> procMods <> contractMods <> intakeMods <> pubMods <> wqMods <> wfMods) (writeModule out)
+                allMods = aggMods <> procMods <> contractMods <> intakeMods <> pubMods <> wqMods <> wfMods
+            createDirectoryIfMissing True out
+            forM_ allMods (writeModule out)
+            let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
+            TIO.writeFile manifestPath (renderManifest (T.pack fp) allMods spec)
 run (Diff fp ref) = do
     -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.
     let dir = takeDirectory fp

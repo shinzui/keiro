@@ -81,9 +81,12 @@ This section must always reflect the actual current state of the work.
       `module`/`layout` clauses (parser + pretty-printer round-trip). Default output verified
       byte-identical (`diff -r` clean; scaffold-conformance green; 49/49 tests pass; sampled
       conformance suites build).
-- [ ] **M2 — Build-wiring manifest.** `scaffold` emits a `keiro-dsl-manifest.<service>.txt`
-      (and a Cabal `other-modules` fragment) listing every module it wrote, its kind, and the
-      `build-depends` implied by the node kinds present.
+- [x] **M2 — Build-wiring manifest.** (2026-06-24) New `Keiro.Dsl.Manifest`
+      (`renderManifest`/`manifestDependencies`/`moduleNameOf`); `scaffold` writes
+      `keiro-dsl-manifest.<context>.txt` into `--out` with a Cabal-pasteable `other-modules:`
+      block (dotted names, sorted) and a node-kind-derived `build-depends:` block. Verified the
+      reservation manifest's `other-modules`/`build-depends` match the conformance stanza
+      verbatim; tests assert module-list = scaffolder output and the per-kind dep sets.
 - [ ] **M3 — Self-firewall check + post-scaffold report.** `scaffold` scans its own generated
       output for the forbidden operators, prints a structured report (modules written gen/hole,
       holes skipped-because-present, firewall verdict, harness test component), and exits

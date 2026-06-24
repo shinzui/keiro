@@ -4,11 +4,13 @@ of the canonical Reservation fixture.
 -}
 module Main (main) where
 
+import Data.List (sort)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), diffSpecs, isBreaking)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor)
+import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), Placement (..), ScaffoldModule (..), defaultContext, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess)
@@ -241,6 +243,32 @@ main = hspec $ do
                     specModuleRoot spec `shouldBe` Nothing
                     specLayout spec `shouldBe` Nothing
 
+    describe "manifest (M2)" $ do
+        it "lists exactly the modules the scaffolder produced" $ do
+            mods <- scaffoldFixture "test/fixtures/reservation.keiro"
+            spec <- specOf "test/fixtures/reservation.keiro"
+            let manifest = renderManifest "reservation.keiro" mods spec
+                expectedNames = sort (map (moduleNameOf . modulePath) mods)
+            -- every produced module name appears in the manifest…
+            mapM_ (\m -> (m `T.isInfixOf` manifest) `shouldBe` True) expectedNames
+            -- …and the module list is exactly the scaffolder's output set.
+            expectedNames
+                `shouldBe` sort
+                    [ "Generated.HospitalCapacity.Reservation.Codec"
+                    , "Generated.HospitalCapacity.Reservation.Domain"
+                    , "Generated.HospitalCapacity.Reservation.EventStream"
+                    , "Generated.HospitalCapacity.Reservation.Harness"
+                    , "Generated.HospitalCapacity.Reservation.Projection"
+                    , "HospitalCapacity.Reservation.Holes"
+                    ]
+        it "derives the dependency set from the node kinds present (aggregate)" $ do
+            spec <- specOf "test/fixtures/reservation.keiro"
+            manifestDependencies spec `shouldBe` ["aeson", "base", "keiki", "keiro", "text"]
+        it "derives the process dependency set (aeson/keiki/keiro/text/time/uuid)" $ do
+            spec <- specOf "test/fixtures/hospital-surge.keiro"
+            manifestDependencies spec `shouldContain` ["time", "uuid"]
+            manifestDependencies spec `shouldContain` ["keiki", "keiro"]
+
     describe "scaffold" $ do
         it "never emits a keiki symbolic operator into a Generated module (firewall)" $ do
             mods <- scaffoldFixture "test/fixtures/reservation.keiro"
@@ -304,6 +332,14 @@ diffFixtures oldP newP = do
 -- | The keiki symbolic operators that must never appear in a Generated module.
 symbolicOperators :: [T.Text]
 symbolicOperators = ["./=", ".==", ".||", ".&&", "lit ", "B.slot", "B.requireGuard"]
+
+-- | Parse a fixture into a 'Spec', failing the test on a parse error.
+specOf :: FilePath -> IO Spec
+specOf path = do
+    input <- TIO.readFile path
+    case parseSpec path input of
+        Left err -> expectationFailure (T.unpack err) >> error "unreachable"
+        Right spec -> pure spec
 
 -- | Parse a fixture and scaffold every aggregate in it.
 scaffoldFixture :: FilePath -> IO [ScaffoldModule]
