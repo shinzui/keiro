@@ -67,7 +67,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [x] EP-1 M0: tasty-bench `keiro-bench` outbox scenarios + recorded "Before" baseline on unchanged code (completed 2026-07-02T00:02:14Z)
 - [x] EP-1 M1: Contiguous per-key/per-source run claiming in `claimOutboxBatch` with regression tests (completed 2026-07-02T00:11:43Z)
-- [ ] EP-1 M2: Claim-order partial index migration and regenerated expected schema
+- [x] EP-1 M2: Claim-order partial index migration and regenerated expected schema (completed 2026-07-02T00:15:12Z)
 - [ ] EP-1 M3: Batch-shaped publish contract in `publishClaimedOutbox` with bulk sent-marking
 - [ ] EP-1 M4: Maintenance extracted to `outboxMaintenancePass`; gauges/sweep off the hot path
 - [ ] EP-1 Final: "After" benchmark run recorded with before/after ratios; `baseline-outbox.csv` committed; `bench-regression` guard in place

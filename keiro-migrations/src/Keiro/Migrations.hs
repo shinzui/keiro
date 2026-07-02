@@ -100,6 +100,7 @@ runAllKeiroMigrationsNoCheck settings connectTimeout =
 -- 2026-06-15-21-49-37-keiro-projection-dedup.sql, and
 -- 2026-06-15-13-22-31-keiro-messaging-crash-recovery.sql, and
 -- 2026-06-15-22-10-00-keiro-workflow-gc-index.sql, and
--- 2026-06-15-22-20-00-keiro-workflows-wake-after.sql. (EP-7)
+-- 2026-06-15-22-20-00-keiro-workflows-wake-after.sql, and
+-- 2026-07-02-00-12-00-keiro-outbox-claim-order-index.sql. (EP-1/M2)
 embeddedMigrationFiles :: [(FilePath, ByteString)]
 embeddedMigrationFiles = $(embedDir "sql-migrations")

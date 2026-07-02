@@ -33,8 +33,8 @@ This section must always reflect the actual current state of the work.
 - [x] M0: Capture the "Before" measurements (`--csv`), paste the rendered table plus machine notes into Outcomes & Retrospective (completed 2026-07-02T00:02:14Z)
 - [x] M1: Rewrite `claimStmt` SQL in `keiro/src/Keiro/Outbox/Schema.hs` to claim contiguous per-key (and per-source) runs (completed 2026-07-02T00:11:43Z)
 - [x] M1: Update existing outbox claim tests in `keiro/test/Main.hs` that assert one-row-per-key claiming; add run-claiming tests (completed 2026-07-02T00:11:43Z)
-- [ ] M2: Add migration `keiro-migrations/sql-migrations/<timestamp>-keiro-outbox-claim-order-index.sql`
-- [ ] M2: Regenerate expected schema (`cabal run keiro-write-expected-schema`) and pass `cabal test keiro-migrations-test`
+- [x] M2: Add migration `keiro-migrations/sql-migrations/<timestamp>-keiro-outbox-claim-order-index.sql` (completed 2026-07-02T00:15:12Z)
+- [x] M2: Regenerate expected schema (`cabal run keiro-write-expected-schema`) and pass `cabal test keiro-migrations-test` (completed 2026-07-02T00:15:12Z)
 - [ ] M3: Change `publishClaimedOutbox` publish argument to batch shape; add `markOutboxSentBatch` and `markOutboxSkippedTx` to `Keiro.Outbox.Schema`
 - [ ] M3: Implement per-key prefix outcome processing (sent prefix, failed pivot, skipped suffix) and `StopTheLine` sequential mode
 - [ ] M3: Update all `publishClaimedOutbox` call sites and tests
@@ -156,6 +156,27 @@ cabal test keiro-test --test-options="--match Keiro.Outbox"
 
 cabal test keiro-test
 261 examples, 0 failures
+```
+
+### Milestone 2 — Claim-Order Partial Index
+
+Added forward migration `keiro-migrations/sql-migrations/2026-07-02-00-12-00-keiro-outbox-claim-order-index.sql`, which pins `search_path` to `kiroku, pg_catalog` and creates `keiro_outbox_claim_order_idx` on `(created_at, outbox_id)` for rows whose status is `pending` or `failed`. Updated the `Keiro.Migrations` embed comment so the Template Haskell `embedDir` splice recompiles with the new SQL file, then regenerated `keiro-migrations/expected-schema`.
+
+Expected-schema evidence: the new checked-in index representation is `keiro-migrations/expected-schema/v18/schemas/kiroku/tables/keiro_outbox/indexes/keiro_outbox_claim_order_idx`, whose definition is:
+
+```text
+CREATE INDEX keiro_outbox_claim_order_idx ON kiroku.keiro_outbox USING btree (created_at, outbox_id) WHERE (status = ANY (ARRAY['pending'::text, 'failed'::text]))
+```
+
+Validation:
+
+```text
+cabal run keiro-write-expected-schema
+Successfully applied all migrations to postgres
+Wrote expected schema to keiro-migrations/expected-schema
+
+cabal test keiro-migrations-test
+2 examples, 0 failures
 ```
 
 
@@ -507,3 +528,5 @@ Revision note (2026-07-01, later): Added Milestone 0 — a tasty-bench `keiro-be
 Revision note (2026-07-02): Implemented Milestone 0 against unchanged runtime code by adding the `keiro-bench` benchmark component and outbox scenarios, running the baseline with `--time-mode wall`, recording the before table and CSV evidence in Outcomes & Retrospective, and marking the M0 progress items complete. The benchmark commands were revised to include `--time-mode wall` because the simulated broker latency is represented with `threadDelay`, which CPU-time measurement would undercount.
 
 Revision note (2026-07-02, later): Implemented Milestone 1 by replacing heads-only claim predicates with the two-stage candidate/ready run-claiming query, documenting the run invariant on `claimOutboxBatch`, adding Postgres-backed tests for per-key, per-source, null-key, backoff-head, and publishing-predecessor cases, and recording the full `cabal test keiro-test` result. Legacy publish failure/dead-letter tests use one-row batches until Milestone 3 adds same-key suffix skipping for larger batches.
+
+Revision note (2026-07-02, M2): Implemented Milestone 2 by adding the forward SQL migration for `keiro_outbox_claim_order_idx`, touching the embedded migration source comment so the new migration is included by Template Haskell, regenerating `keiro-migrations/expected-schema`, and recording the passing `cabal test keiro-migrations-test` result.
