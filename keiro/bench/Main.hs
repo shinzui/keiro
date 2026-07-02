@@ -14,6 +14,12 @@ import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
+import Keiro.Inbox (
+    InboxDedupePolicy (..),
+    InboxResult (..),
+    KafkaDeliveryRef (..),
+    runInboxTransaction,
+ )
 import Keiro.Integration.Event (IntegrationContentType (..), IntegrationEvent (..))
 import Keiro.Outbox (
     OutboxId (..),
@@ -25,9 +31,13 @@ import Keiro.Outbox (
     publishClaimedOutbox,
  )
 import Keiro.Prelude
+import Keiro.Telemetry qualified as Telemetry
 import Keiro.Test.Postgres (withFreshStore, withMigratedSuite)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
+import OpenTelemetry.MeterProvider (createMeterProvider, defaultSdkMeterProviderOptions)
+import OpenTelemetry.Metric.Core (getMeter)
+import OpenTelemetry.Resource (emptyMaterializedResources)
 import Test.Tasty.Bench (Benchmark, bench, bgroup, defaultMain, nfIO)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
@@ -58,19 +68,36 @@ data OutboxScenario = OutboxScenario
     , messages :: ![(OutboxId, IntegrationEvent)]
     }
 
+data InboxScenario = InboxScenario
+    { inboxScenarioName :: !Text
+    , inboxMetrics :: !(Maybe Telemetry.KeiroMetrics)
+    , inboxMessages :: ![(IntegrationEvent, KafkaDeliveryRef)]
+    }
+
 main :: IO ()
 main =
     withMigratedSuite \fixture ->
-        withFreshStore fixture \store ->
-            defaultMain (benchmarks store)
+        withFreshStore fixture \store -> do
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            metrics <- Telemetry.newKeiroMetrics meter
+            defaultMain (benchmarks store metrics)
 
-benchmarks :: Store.KirokuStore -> [Benchmark]
-benchmarks store =
+benchmarks :: Store.KirokuStore -> Telemetry.KeiroMetrics -> [Benchmark]
+benchmarks store metrics =
     [ bgroup
         "outbox"
         [ scenarioBench store hotKey
         , scenarioBench store hotKeyNoLatency
         , scenarioBench store multiKey
+        ]
+    , bgroup
+        "inbox"
+        [ inboxScenarioBench store (singleFull metrics)
+        , inboxScenarioBench store singleNoMetrics
         ]
     ]
   where
@@ -92,6 +119,18 @@ benchmarks store =
             , brokerModel = BrokerModel{invocationMicros = 1000, perRecordMicros = 10}
             , messages = scenarioMessages \i -> Just ("aggregate-" <> Text.pack (show (i `mod` 200)))
             }
+    singleFull metrics' =
+        InboxScenario
+            { inboxScenarioName = "single-full"
+            , inboxMetrics = Just metrics'
+            , inboxMessages = inboxScenarioMessages
+            }
+    singleNoMetrics =
+        InboxScenario
+            { inboxScenarioName = "single-nometrics"
+            , inboxMetrics = Nothing
+            , inboxMessages = inboxScenarioMessages
+            }
 
 scenarioBench :: Store.KirokuStore -> OutboxScenario -> Benchmark
 scenarioBench store scenario =
@@ -104,6 +143,29 @@ runScenario store scenario = do
         Store.runTransaction (Tx.sql "TRUNCATE keiro_outbox")
     seedOutbox store scenario.messages
     runStoreChecked store (drainOutbox scenario.brokerModel 0)
+
+inboxScenarioBench :: Store.KirokuStore -> InboxScenario -> Benchmark
+inboxScenarioBench store scenario =
+    bench (Text.unpack scenario.inboxScenarioName) $
+        nfIO (runInboxScenario store scenario)
+
+runInboxScenario :: Store.KirokuStore -> InboxScenario -> IO ()
+runInboxScenario store scenario = do
+    runStoreChecked store do
+        Store.runTransaction (Tx.sql "TRUNCATE keiro_inbox")
+    runStoreChecked store $
+        traverse_ (processInboxDelivery scenario.inboxMetrics) scenario.inboxMessages
+
+processInboxDelivery ::
+    (IOE :> es, Store :> es) =>
+    Maybe Telemetry.KeiroMetrics ->
+    (IntegrationEvent, KafkaDeliveryRef) ->
+    Eff es ()
+processInboxDelivery mMetrics (event, kafkaRef) = do
+    result <- runInboxTransaction mMetrics PreferIntegrationMessageId event (Just kafkaRef) (\_ -> pure ())
+    case result of
+        Right (InboxProcessed ()) -> pure ()
+        other -> liftIO (fail ("unexpected inbox benchmark result: " <> show other))
 
 seedOutbox :: Store.KirokuStore -> [(OutboxId, IntegrationEvent)] -> IO ()
 seedOutbox store messages =
@@ -158,6 +220,20 @@ integrationEvent i key =
         , traceContext = Nothing
         , attributes = Nothing
         }
+
+inboxScenarioMessages :: [(IntegrationEvent, KafkaDeliveryRef)]
+inboxScenarioMessages =
+    [ ( integrationEvent i (Just ("inbox-key-" <> Text.pack (show i)))
+            & #messageId
+            .~ ("bench-inbox-msg-" <> Text.pack (show i))
+            & #source
+            .~ "bench.inbox"
+            & #destination
+            .~ "bench.inbox.events.v1"
+      , KafkaDeliveryRef "bench.inbox.events.v1" 0 (fromIntegral i)
+      )
+    | i <- [1 .. workloadSize]
+    ]
 
 chunksOf :: Int -> [a] -> [[a]]
 chunksOf n xs

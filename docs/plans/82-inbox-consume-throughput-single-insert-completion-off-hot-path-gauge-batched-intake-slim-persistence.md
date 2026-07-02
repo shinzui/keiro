@@ -29,8 +29,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0: Create or extend the `keiro-bench` tasty-bench component with the inbox scenarios (`inbox.single-full`, `inbox.single-nometrics`) against the UNCHANGED code
-- [ ] M0: Capture the "Before" measurements (`--csv`), paste the rendered table plus machine notes into Outcomes & Retrospective
+- [x] M0: Create or extend the `keiro-bench` tasty-bench component with the inbox scenarios (`inbox.single-full`, `inbox.single-nometrics`) against the UNCHANGED code (completed 2026-07-02T00:43:56Z)
+- [x] M0: Capture the "Before" measurements (`--csv`), paste the rendered table plus machine notes into Outcomes & Retrospective (completed 2026-07-02T00:43:56Z)
 - [ ] M1: Remove per-message backlog gauge from `runInboxTransactionWithKey` and `runInboxTransactionWithRetriesKey`; add `sampleInboxBacklog`
 - [ ] M1: Update metrics tests; `cabal test keiro-test` green
 - [ ] M2: Replace insert-`processing`-then-update with single insert-as-`completed` on the happy path
@@ -49,7 +49,11 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Discovery: The inbox benchmarks should also use `--time-mode wall`.
+  Evidence:
+  ```text
+  The workload is dominated by Postgres transaction latency and, for metrics-on, an extra backlog COUNT(*) transaction. Wall-clock timing captures the IO wait that CPU-time measurement would undercount.
+  ```
 
 
 ## Decision Log
@@ -94,7 +98,36 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+### Baseline (Before) — Milestone 0
+
+Command:
+
+```bash
+cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --csv bench-before-inbox.csv"
+```
+
+Machine note: Darwin arm64 on Apple M1 Max; the benchmark used the suite-level ephemeral PostgreSQL fixture over a local Unix socket. Cabal runs the benchmark executable from the `keiro` package directory, so the scratch CSV was written at repo path `keiro/bench-before-inbox.csv`; it is intentionally ignored and not committed. Each measured action truncates and reseeds `keiro_inbox`, so absolute times include setup work that is identical before and after and conservatively dilutes ratios.
+
+Rendered output:
+
+```text
+All
+  inbox
+    single-full:      OK
+      436  ms +/- 31 ms
+    single-nometrics: OK
+      313  ms +/- 18 ms
+
+All 2 tests passed (23.49s)
+```
+
+CSV evidence:
+
+```text
+Name,Mean (ps),2*Stdev (ps)
+All.inbox.single-full,435872700005,30830457974
+All.inbox.single-nometrics,313328487494,18217133958
+```
 
 
 ## Context and Orientation
@@ -137,7 +170,7 @@ After-only benches, added in the milestone that creates each capability (they ha
 Baseline protocol: on an idle machine, run
 
 ```bash
-cabal bench keiro-bench --benchmark-options="-p inbox --csv bench-before-inbox.csv"
+cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --csv bench-before-inbox.csv"
 ```
 
 and paste the rendered table (mean time per action, ±stdev) into Outcomes & Retrospective under "Baseline (before)" with a one-line machine note (CPU, storage, local-socket vs networked Postgres — fsync latency dominates this workload). Keep `bench-before-inbox.csv` out of git; it is scratch for the final comparison.
@@ -147,13 +180,13 @@ Final comparison (after Milestone 5): re-run all `inbox.*` benches, record the "
 ```text
 [group('haskell')]
 bench-regression:
-    cabal bench keiro-bench --benchmark-options="-p outbox --baseline keiro/bench/baseline-outbox.csv --fail-if-slower 25"
-    cabal bench keiro-bench --benchmark-options="-p inbox --baseline keiro/bench/baseline-inbox.csv --fail-if-slower 25"
+    cabal bench keiro-bench --benchmark-options="-p outbox --time-mode wall --baseline bench/baseline-outbox.csv --fail-if-slower 25"
+    cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --baseline bench/baseline-inbox.csv --fail-if-slower 25"
 ```
 
 The committed baseline reflects the primary dev machine; `bench-regression` is a local/manual guard, deliberately not wired into `just verify` or CI where shared-runner noise would make a percentage gate flaky.
 
-Acceptance for M0: `cabal bench keiro-bench --benchmark-options="-p inbox"` runs both scenarios to completion against unchanged code and the baseline table is recorded in this plan.
+Acceptance for M0: `cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall"` runs both scenarios to completion against unchanged code and the baseline table is recorded in this plan.
 
 
 ### Milestone 1 — backlog gauge off the per-message path
@@ -272,8 +305,8 @@ cabal test keiro-test                  # Postgres-backed hspec suite
 Milestone 0 (before any behavior change) and again after Milestone 5:
 
 ```bash
-cabal bench keiro-bench --benchmark-options="-p inbox --csv bench-before-inbox.csv"      # M0 baseline
-cabal bench keiro-bench --benchmark-options="-p inbox --csv keiro/bench/baseline-inbox.csv"  # after M5; commit this CSV
+cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --csv bench-before-inbox.csv"      # M0 baseline
+cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --csv bench/baseline-inbox.csv"  # after M5; commit repo path keiro/bench/baseline-inbox.csv
 just bench-regression                  # standing guard: --baseline + --fail-if-slower 25
 ```
 

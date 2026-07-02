@@ -36,7 +36,7 @@ Both plans touch `keiro-migrations/expected-schema` and `keiro/test/Main.hs`, wh
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Outbox publisher throughput: run claiming, batch publish, off-hot-path maintenance | docs/plans/81-outbox-publisher-throughput-run-claiming-batch-publish-off-hot-path-maintenance.md | None | None | Complete |
-| 2 | Inbox consume throughput: single-insert completion, off-hot-path gauge, batched intake, slim persistence | docs/plans/82-inbox-consume-throughput-single-insert-completion-off-hot-path-gauge-batched-intake-slim-persistence.md | None | None | Not Started |
+| 2 | Inbox consume throughput: single-insert completion, off-hot-path gauge, batched intake, slim persistence | docs/plans/82-inbox-consume-throughput-single-insert-completion-off-hot-path-gauge-batched-intake-slim-persistence.md | None | None | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -71,7 +71,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 M3: Batch-shaped publish contract in `publishClaimedOutbox` with bulk sent-marking (completed 2026-07-02T00:25:25Z)
 - [x] EP-1 M4: Maintenance extracted to `outboxMaintenancePass`; gauges/sweep off the hot path (completed 2026-07-02T00:37:38Z)
 - [x] EP-1 Final: "After" benchmark run recorded with before/after ratios; `baseline-outbox.csv` committed; `bench-regression` guard in place (completed 2026-07-02T00:40:12Z)
-- [ ] EP-2 M0: tasty-bench inbox scenarios + recorded "Before" baseline on unchanged code
+- [x] EP-2 M0: tasty-bench inbox scenarios + recorded "Before" baseline on unchanged code (completed 2026-07-02T00:43:56Z)
 - [ ] EP-2 M1: Backlog gauge removed from per-message inbox path; `sampleInboxBacklog` added
 - [ ] EP-2 M2: Single-insert completed rows (drop the unobservable `processing` intermediate write)
 - [ ] EP-2 M3: Inbox migration (drop `keiro_inbox_received_idx`) and regenerated expected schema
@@ -93,6 +93,9 @@ interactions between child plans. Provide concise evidence.
 
 - Discovery: The outbox benchmark CSV path is package-relative when passed through Cabal benchmark options.
   Evidence: `--csv bench/baseline-outbox.csv` writes the committed repo file `keiro/bench/baseline-outbox.csv`; `--csv keiro/bench/baseline-outbox.csv` looks for a nested path from inside the package.
+
+- Discovery: Inbox benchmarks use wall-clock timing for the same reason as outbox benchmarks.
+  Evidence: EP-2 M0 runs with `--time-mode wall` because the workload is dominated by Postgres transaction latency and the metrics-on backlog-count transaction.
 
 
 ## Decision Log
@@ -169,6 +172,21 @@ cabal bench keiro-bench --benchmark-options="-p outbox --time-mode wall --csv be
 just bench-regression
 ```
 
+### EP-2 M0 — Inbox Baseline
+
+Added `inbox.single-full` and `inbox.single-nometrics` to the shared `keiro-bench` component and captured the before baseline against the current inbox implementation:
+
+```text
+All.inbox.single-full      436 ms +/- 31 ms
+All.inbox.single-nometrics 313 ms +/- 18 ms
+```
+
+Command:
+
+```text
+cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --csv bench-before-inbox.csv"
+```
+
 ---
 
 Revision note (2026-07-01): Added the benchmarking stage across the initiative at the user's request: a shared tasty-bench `keiro-bench` component (new integration point, including the shared `bench-regression` Justfile target and per-area committed baseline CSVs), M0/final-comparison milestones in both child plans, corresponding Progress entries, and a Decision Log entry covering methodology and the regression guard. Child plans 81 and 82 were revised in the same pass; see their revision notes.
@@ -178,3 +196,5 @@ Revision note (2026-07-02): Marked EP-1 M3 complete after implementing the batch
 Revision note (2026-07-02, M4): Marked EP-1 M4 complete after extracting outbox maintenance from the publish hot path, updating tests/docs for explicit maintenance scheduling, and recording passing focused/full tests plus `just haskell-build`.
 
 Revision note (2026-07-02, EP-1 Final): Marked EP-1 complete after recording the after benchmark, committing `keiro/bench/baseline-outbox.csv`, adding the manual `bench-regression` target, validating it, and recording before/after ratios.
+
+Revision note (2026-07-02, EP-2 M0): Marked EP-2 in progress after adding inbox benchmark scenarios to `keiro-bench` and recording the wall-clock before baseline for `inbox.single-full` and `inbox.single-nometrics`.
