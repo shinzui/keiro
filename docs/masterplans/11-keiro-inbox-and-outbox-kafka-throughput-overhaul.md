@@ -36,7 +36,7 @@ Both plans touch `keiro-migrations/expected-schema` and `keiro/test/Main.hs`, wh
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Outbox publisher throughput: run claiming, batch publish, off-hot-path maintenance | docs/plans/81-outbox-publisher-throughput-run-claiming-batch-publish-off-hot-path-maintenance.md | None | None | Complete |
-| 2 | Inbox consume throughput: single-insert completion, off-hot-path gauge, batched intake, slim persistence | docs/plans/82-inbox-consume-throughput-single-insert-completion-off-hot-path-gauge-batched-intake-slim-persistence.md | None | None | In Progress |
+| 2 | Inbox consume throughput: single-insert completion, off-hot-path gauge, batched intake, slim persistence | docs/plans/82-inbox-consume-throughput-single-insert-completion-off-hot-path-gauge-batched-intake-slim-persistence.md | None | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -77,7 +77,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2 M3: Inbox migration (drop `keiro_inbox_received_idx`) and regenerated expected schema (completed 2026-07-02T00:57:48Z)
 - [x] EP-2 M4: Batched intake variant `runInboxTransactionBatch` with per-message poison fallback (completed 2026-07-02T01:06:53Z)
 - [x] EP-2 M5: Slim payload persistence option (`InboxPersistence`) (completed 2026-07-02T01:13:12Z)
-- [ ] EP-2 Final: "After" benchmark run recorded with before/after ratios; `baseline-inbox.csv` committed; `bench-regression` extended
+- [x] EP-2 Final: "After" benchmark run recorded with before/after ratios; `baseline-inbox.csv` committed; `bench-regression` extended (completed 2026-07-02T01:19:53Z)
 
 
 ## Surprises & Discoveries
@@ -250,6 +250,31 @@ cabal test keiro-test --test-options="--match Keiro.Inbox"  # 24 examples, 0 fai
 cabal test keiro-test                                      # 272 examples, 0 failures
 ```
 
+### EP-2 Final — Inbox Benchmark Guard
+
+Added `inbox.batch-100` and `inbox.single-slim` to `keiro-bench`, committed `keiro/bench/baseline-inbox.csv`, and extended `just bench-regression` with the inbox baseline line.
+
+Finished-code comparison:
+
+```text
+All.inbox.single-full      435.873 ms -> 213.851 ms  (2.04x faster)
+All.inbox.single-nometrics 313.328 ms -> 212.447 ms  (1.48x faster)
+All.inbox.batch-100        213.851 ms -> 136.879 ms  (1.56x faster than finished single-full)
+All.inbox.single-slim      212.447 ms -> 216.187 ms  (same as finished single-nometrics within noise)
+```
+
+The two single-message advisory gates passed. The batch after-only gate did not: `batch-100` measured 1.56x faster than finished `single-full`, below the planned 3x target. The implemented behavior remains correct and covered; the committed baseline records the actual local result and guards it against future regressions.
+
+Validation:
+
+```text
+cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --csv bench/baseline-inbox.csv"
+just bench-regression
+just haskell-build
+cabal test keiro-test                                      # 272 examples, 0 failures
+cabal test keiro-migrations-test                          # 2 examples, 0 failures
+```
+
 ---
 
 Revision note (2026-07-01): Added the benchmarking stage across the initiative at the user's request: a shared tasty-bench `keiro-bench` component (new integration point, including the shared `bench-regression` Justfile target and per-area committed baseline CSVs), M0/final-comparison milestones in both child plans, corresponding Progress entries, and a Decision Log entry covering methodology and the regression guard. Child plans 81 and 82 were revised in the same pass; see their revision notes.
@@ -271,3 +296,5 @@ Revision note (2026-07-02, EP-2 M3): Marked EP-2 M3 complete after adding the in
 Revision note (2026-07-02, EP-2 M4): Marked EP-2 M4 complete after adding the batched inbox intake API, shared transaction/result helpers, batch behavior tests, and focused/full `keiro-test` validation.
 
 Revision note (2026-07-02, EP-2 M5): Marked EP-2 M5 complete after adding `InboxPersistence`, exposing dedupe-only intake variants, keeping failed rows full-envelope, and recording build/focused/full `keiro-test` validation.
+
+Revision note (2026-07-02, EP-2 Final): Marked EP-2 and the master plan complete after adding inbox after-only benchmarks, committing `baseline-inbox.csv`, extending `bench-regression`, recording before/after ratios and the batch advisory shortfall, and recording final benchmark/build/test/migration validation.

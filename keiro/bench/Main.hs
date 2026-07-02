@@ -16,9 +16,11 @@ import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import Keiro.Inbox (
     InboxDedupePolicy (..),
+    InboxPersistence (..),
     InboxResult (..),
     KafkaDeliveryRef (..),
-    runInboxTransaction,
+    runInboxTransactionBatch,
+    runInboxTransactionWith,
  )
 import Keiro.Integration.Event (IntegrationContentType (..), IntegrationEvent (..))
 import Keiro.Outbox (
@@ -71,6 +73,8 @@ data OutboxScenario = OutboxScenario
 data InboxScenario = InboxScenario
     { inboxScenarioName :: !Text
     , inboxMetrics :: !(Maybe Telemetry.KeiroMetrics)
+    , inboxPersistence :: !InboxPersistence
+    , inboxBatchSize :: !(Maybe Int)
     , inboxMessages :: ![(IntegrationEvent, KafkaDeliveryRef)]
     }
 
@@ -98,6 +102,8 @@ benchmarks store metrics =
         "inbox"
         [ inboxScenarioBench store (singleFull metrics)
         , inboxScenarioBench store singleNoMetrics
+        , inboxScenarioBench store batch100
+        , inboxScenarioBench store singleSlim
         ]
     ]
   where
@@ -123,12 +129,32 @@ benchmarks store metrics =
         InboxScenario
             { inboxScenarioName = "single-full"
             , inboxMetrics = Just metrics'
+            , inboxPersistence = PersistFullEnvelope
+            , inboxBatchSize = Nothing
             , inboxMessages = inboxScenarioMessages
             }
     singleNoMetrics =
         InboxScenario
             { inboxScenarioName = "single-nometrics"
             , inboxMetrics = Nothing
+            , inboxPersistence = PersistFullEnvelope
+            , inboxBatchSize = Nothing
+            , inboxMessages = inboxScenarioMessages
+            }
+    batch100 =
+        InboxScenario
+            { inboxScenarioName = "batch-100"
+            , inboxMetrics = Nothing
+            , inboxPersistence = PersistFullEnvelope
+            , inboxBatchSize = Just 100
+            , inboxMessages = inboxScenarioMessages
+            }
+    singleSlim =
+        InboxScenario
+            { inboxScenarioName = "single-slim"
+            , inboxMetrics = Nothing
+            , inboxPersistence = PersistDedupeOnly
+            , inboxBatchSize = Nothing
             , inboxMessages = inboxScenarioMessages
             }
 
@@ -154,18 +180,46 @@ runInboxScenario store scenario = do
     runStoreChecked store do
         Store.runTransaction (Tx.sql "TRUNCATE keiro_inbox")
     runStoreChecked store $
-        traverse_ (processInboxDelivery scenario.inboxMetrics) scenario.inboxMessages
+        case scenario.inboxBatchSize of
+            Nothing ->
+                traverse_
+                    (processInboxDelivery scenario.inboxMetrics scenario.inboxPersistence)
+                    scenario.inboxMessages
+            Just batchSize ->
+                traverse_
+                    (processInboxBatch scenario.inboxMetrics scenario.inboxPersistence)
+                    (chunksOf batchSize scenario.inboxMessages)
 
 processInboxDelivery ::
     (IOE :> es, Store :> es) =>
     Maybe Telemetry.KeiroMetrics ->
+    InboxPersistence ->
     (IntegrationEvent, KafkaDeliveryRef) ->
     Eff es ()
-processInboxDelivery mMetrics (event, kafkaRef) = do
-    result <- runInboxTransaction mMetrics PreferIntegrationMessageId event (Just kafkaRef) (\_ -> pure ())
+processInboxDelivery mMetrics persistence (event, kafkaRef) = do
+    result <- runInboxTransactionWith mMetrics persistence PreferIntegrationMessageId event (Just kafkaRef) (\_ -> pure ())
     case result of
         Right (InboxProcessed ()) -> pure ()
         other -> liftIO (fail ("unexpected inbox benchmark result: " <> show other))
+
+processInboxBatch ::
+    (IOE :> es, Store :> es) =>
+    Maybe Telemetry.KeiroMetrics ->
+    InboxPersistence ->
+    [(IntegrationEvent, KafkaDeliveryRef)] ->
+    Eff es ()
+processInboxBatch mMetrics persistence chunk = do
+    results <-
+        runInboxTransactionBatch
+            mMetrics
+            3
+            PreferIntegrationMessageId
+            persistence
+            [(event, Just kafkaRef) | (event, kafkaRef) <- chunk]
+            (\_ -> pure ())
+    for_ results \case
+        Right (InboxProcessed ()) -> pure ()
+        other -> liftIO (fail ("unexpected inbox batch benchmark result: " <> show other))
 
 seedOutbox :: Store.KirokuStore -> [(OutboxId, IntegrationEvent)] -> IO ()
 seedOutbox store messages =

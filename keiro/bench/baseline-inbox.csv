@@ -1,0 +1,5 @@
+Name,Mean (ps),2*Stdev (ps)
+All.inbox.single-full,213850974988,14154086590
+All.inbox.single-nometrics,212446549990,18142784734
+All.inbox.batch-100,136879300044,7219592578
+All.inbox.single-slim,216187324979,21430587292
