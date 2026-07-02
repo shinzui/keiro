@@ -28,10 +28,12 @@ module Keiro.Inbox (
     runInboxTransactionWithKey,
     runInboxTransactionWithRetries,
     runInboxTransactionWithRetriesKey,
+    runInboxTransactionBatch,
     sampleInboxBacklog,
 )
 where
 
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (displayException, trySync)
@@ -50,6 +52,11 @@ import Keiro.Telemetry (
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
+
+data BatchPlan
+    = BatchKeyError !InboxError
+    | BatchDuplicate
+    | BatchWork !Text !Text !IntegrationEvent !(Maybe KafkaDeliveryRef)
 
 {- | Run @handler@ at most once for each @(source, dedupe_key)@.
 
@@ -100,25 +107,13 @@ runInboxTransactionWithKey ::
     Eff es (InboxResult a)
 runInboxTransactionWithKey mMetrics src dedupe event kafka handler = do
     now <- liftIO getCurrentTime
-    result <- runTransaction $ do
-        inserted <- tryInsertCompletedTx src dedupe event kafka now
-        case inserted of
-            Right () -> do
-                handled <- handler event
-                pure (InboxProcessed handled)
-            Left row -> case row ^. #status of
-                InboxCompleted -> pure InboxDuplicate
-                InboxProcessing -> pure InboxInProgress
-                InboxFailed -> pure (InboxPreviouslyFailed (row ^. #lastError))
+    result <-
+        runTransaction $
+            attemptOneTx Nothing src dedupe event kafka now handler
     -- Record the classification counter outside the handler transaction.
     -- Backlog gauge sampling is intentionally scheduled separately via
     -- 'sampleInboxBacklog'.
-    case result of
-        InboxProcessed _ -> recordInboxProcessed mMetrics 1
-        InboxDuplicate -> recordInboxDuplicates mMetrics 1
-        InboxPreviouslyFailed _ -> recordInboxFailed mMetrics 1
-        InboxHandlerFailed _ _ -> recordInboxFailed mMetrics 1
-        InboxInProgress -> pure ()
+    recordInboxResult mMetrics Nothing result
     pure result
 
 {- | Run @handler@ with opt-in poison-message accounting.
@@ -171,22 +166,8 @@ runInboxTransactionWithRetriesKey mMetrics attemptCeiling src dedupe event kafka
     now <- liftIO getCurrentTime
     attempted <-
         trySync $
-            runTransaction $ do
-                inserted <- tryInsertCompletedTx src dedupe event kafka now
-                case inserted of
-                    Right () -> do
-                        handled <- handler event
-                        pure (InboxProcessed handled)
-                    Left row -> case row ^. #status of
-                        InboxCompleted -> pure InboxDuplicate
-                        InboxProcessing -> pure InboxInProgress
-                        InboxFailed
-                            | row ^. #attemptCount >= attemptCeiling ->
-                                pure (InboxPreviouslyFailed (row ^. #lastError))
-                            | otherwise -> do
-                                handled <- handler event
-                                markCompletedTx src dedupe now
-                                pure (InboxProcessed handled)
+            runTransaction $
+                attemptOneTx (Just attemptCeiling) src dedupe event kafka now handler
     result <- case attempted of
         Right ok -> pure ok
         Left err -> do
@@ -196,15 +177,110 @@ runInboxTransactionWithRetriesKey mMetrics attemptCeiling src dedupe event kafka
                 runTransaction $
                     recordFailedAttemptTx src dedupe event kafka errMsg failedAt
             pure (InboxHandlerFailed errMsg attempts)
-    case result of
-        InboxProcessed _ -> recordInboxProcessed mMetrics 1
-        InboxDuplicate -> recordInboxDuplicates mMetrics 1
-        InboxPreviouslyFailed _ -> recordInboxFailed mMetrics 1
-        InboxHandlerFailed _ attempts -> do
-            recordInboxFailed mMetrics 1
-            when (attempts >= attemptCeiling) (recordInboxPoisoned mMetrics 1)
-        InboxInProgress -> pure ()
+    recordInboxResult mMetrics (Just attemptCeiling) result
     pure result
+
+{- | Process a batch of inbox deliveries with a single transactional fast path.
+
+The fast path computes each @(source, dedupe_key)@, suppresses repeated
+keys within the batch as duplicates, then runs all remaining deliveries
+in one Postgres transaction. If any handler throws or condemns that
+transaction, the whole batch rolls back and every original delivery is
+retried through 'runInboxTransactionWithRetries'. That fallback preserves
+per-message failure accounting and prevents one poison message from
+discarding unrelated batch mates.
+-}
+runInboxTransactionBatch ::
+    forall a es.
+    (IOE :> es, Store :> es) =>
+    Maybe KeiroMetrics ->
+    Int ->
+    InboxDedupePolicy ->
+    [(IntegrationEvent, Maybe KafkaDeliveryRef)] ->
+    (IntegrationEvent -> Tx.Transaction a) ->
+    Eff es [Either InboxError (InboxResult a)]
+runInboxTransactionBatch mMetrics attemptCeiling policy deliveries handler = do
+    now <- liftIO getCurrentTime
+    let plan = planInboxBatch policy deliveries
+    attempted <-
+        trySync $
+            runTransaction $
+                traverse
+                    ( \case
+                        BatchKeyError err -> pure (Left err)
+                        BatchDuplicate -> pure (Right InboxDuplicate)
+                        BatchWork src dedupe event kafka ->
+                            Right <$> attemptOneTx (Just attemptCeiling) src dedupe event kafka now handler
+                    )
+                    plan
+    case attempted of
+        Right results -> do
+            for_ results $ \case
+                Right result -> recordInboxResult mMetrics (Just attemptCeiling) result
+                Left _ -> pure ()
+            pure results
+        Left _ ->
+            traverse
+                ( \(event, kafka) ->
+                    runInboxTransactionWithRetries mMetrics attemptCeiling policy event kafka handler
+                )
+                deliveries
+
+attemptOneTx ::
+    Maybe Int ->
+    Text ->
+    Text ->
+    IntegrationEvent ->
+    Maybe KafkaDeliveryRef ->
+    UTCTime ->
+    (IntegrationEvent -> Tx.Transaction a) ->
+    Tx.Transaction (InboxResult a)
+attemptOneTx attemptCeiling src dedupe event kafka now handler = do
+    inserted <- tryInsertCompletedTx src dedupe event kafka now
+    case inserted of
+        Right () -> do
+            handled <- handler event
+            pure (InboxProcessed handled)
+        Left row -> case row ^. #status of
+            InboxCompleted -> pure InboxDuplicate
+            InboxProcessing -> pure InboxInProgress
+            InboxFailed -> case attemptCeiling of
+                Nothing -> pure (InboxPreviouslyFailed (row ^. #lastError))
+                Just attemptLimit
+                    | row ^. #attemptCount >= attemptLimit ->
+                        pure (InboxPreviouslyFailed (row ^. #lastError))
+                    | otherwise -> do
+                        handled <- handler event
+                        markCompletedTx src dedupe now
+                        pure (InboxProcessed handled)
+
+recordInboxResult :: (IOE :> es) => Maybe KeiroMetrics -> Maybe Int -> InboxResult a -> Eff es ()
+recordInboxResult mMetrics attemptCeiling = \case
+    InboxProcessed _ -> recordInboxProcessed mMetrics 1
+    InboxDuplicate -> recordInboxDuplicates mMetrics 1
+    InboxPreviouslyFailed _ -> recordInboxFailed mMetrics 1
+    InboxHandlerFailed _ attempts -> do
+        recordInboxFailed mMetrics 1
+        case attemptCeiling of
+            Just attemptLimit | attempts >= attemptLimit -> recordInboxPoisoned mMetrics 1
+            _ -> pure ()
+    InboxInProgress -> pure ()
+
+planInboxBatch ::
+    InboxDedupePolicy ->
+    [(IntegrationEvent, Maybe KafkaDeliveryRef)] ->
+    [BatchPlan]
+planInboxBatch policy = go Map.empty
+  where
+    go _ [] = []
+    go seen ((event, kafka) : rest) =
+        case dedupeKeyFor policy event kafka of
+            Left err -> BatchKeyError err : go seen rest
+            Right dedupe ->
+                let key = (event ^. #source, dedupe)
+                 in if Map.member key seen
+                        then BatchDuplicate : go seen rest
+                        else BatchWork (event ^. #source) dedupe event kafka : go (Map.insert key () seen) rest
 
 {- | Count the inbox backlog and record the gauge when metrics are enabled.
 

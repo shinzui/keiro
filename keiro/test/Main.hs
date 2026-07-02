@@ -63,6 +63,7 @@ import Keiro.Inbox (
     lookupInbox,
     markFailedTx,
     runInboxTransaction,
+    runInboxTransactionBatch,
     runInboxTransactionWithRetries,
     sampleInboxBacklog,
  )
@@ -3557,6 +3558,113 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-msg-poison-dead")
             row ^. #status `shouldBe` InboxFailed
             row ^. #attemptCount `shouldBe` 2
+
+        it "processes a batch of distinct messages in one transaction" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+            let events =
+                    [ sampleIntegrationEnvelope
+                        & #messageId
+                        .~ ("inbox-batch-msg-" <> Text.pack (show n))
+                        & #source
+                        .~ "batch-ordering"
+                    | n <- [1 .. 50 :: Int]
+                    ]
+                handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+            Right results <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId ((,Nothing) <$> events) handler
+            results `shouldBe` replicate 50 (Right (InboxProcessed ()))
+            Right rowCount <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+            rowCount `shouldBe` 50
+            Right inboxRows <- Store.runStoreIO storeHandle (listInbox "batch-ordering")
+            length inboxRows `shouldBe` 50
+            all ((== InboxCompleted) . (^. #status)) inboxRows `shouldBe` True
+
+        it "deduplicates repeated messages within one batch" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+            let event =
+                    sampleIntegrationEnvelope
+                        & #messageId
+                        .~ "inbox-batch-dup"
+                        & #source
+                        .~ "batch-ordering"
+                handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+            Right results <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId [(event, Nothing), (event, Nothing)] handler
+            results `shouldBe` [Right (InboxProcessed ()), Right InboxDuplicate]
+            Right rowCount <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+            rowCount `shouldBe` 1
+
+        it "falls back per message when one batch handler throws" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+            let events =
+                    [ sampleIntegrationEnvelope
+                        & #messageId
+                        .~ ("inbox-batch-poison-" <> Text.pack (show n))
+                        & #source
+                        .~ "batch-ordering"
+                    | n <- [1 .. 5 :: Int]
+                    ]
+                handler ev
+                    | ev ^. #messageId == "inbox-batch-poison-3" =
+                        (pure $! error "batch poison") :: Tx.Transaction ()
+                    | otherwise =
+                        Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+            Right results <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId ((,Nothing) <$> events) handler
+            case results of
+                [ Right (InboxProcessed ())
+                    , Right (InboxProcessed ())
+                    , Right (InboxHandlerFailed err 1)
+                    , Right (InboxProcessed ())
+                    , Right (InboxProcessed ())
+                    ] ->
+                        Text.isInfixOf "batch poison" err `shouldBe` True
+                other -> expectationFailure ("unexpected batch fallback results: " <> show other)
+            Right rowCount <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+            rowCount `shouldBe` 4
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "batch-ordering" "inbox-batch-poison-3")
+            row ^. #status `shouldBe` InboxFailed
+            row ^. #attemptCount `shouldBe` 1
+            row ^. #lastError `shouldSatisfy` maybe False (Text.isInfixOf "batch poison")
+
+        it "reports duplicates across batch calls" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+            let event =
+                    sampleIntegrationEnvelope
+                        & #messageId
+                        .~ "inbox-batch-existing-dup"
+                        & #source
+                        .~ "batch-ordering"
+                handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+            Right first <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId [(event, Nothing)] handler
+            first `shouldBe` [Right (InboxProcessed ())]
+            Right second <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId [(event, Nothing)] handler
+            second `shouldBe` [Right InboxDuplicate]
+            Right rowCount <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+            rowCount `shouldBe` 1
 
         it "garbage-collects completed rows older than the retention window" $ \storeHandle -> do
             let event =

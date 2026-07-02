@@ -75,7 +75,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2 M1: Backlog gauge removed from per-message inbox path; `sampleInboxBacklog` added (completed 2026-07-02T00:48:52Z)
 - [x] EP-2 M2: Single-insert completed rows (drop the unobservable `processing` intermediate write) (completed 2026-07-02T00:54:45Z)
 - [x] EP-2 M3: Inbox migration (drop `keiro_inbox_received_idx`) and regenerated expected schema (completed 2026-07-02T00:57:48Z)
-- [ ] EP-2 M4: Batched intake variant `runInboxTransactionBatch` with per-message poison fallback
+- [x] EP-2 M4: Batched intake variant `runInboxTransactionBatch` with per-message poison fallback (completed 2026-07-02T01:06:53Z)
 - [ ] EP-2 M5: Slim payload persistence option (`InboxPersistence`)
 - [ ] EP-2 Final: "After" benchmark run recorded with before/after ratios; `baseline-inbox.csv` committed; `bench-regression` extended
 
@@ -226,6 +226,18 @@ cabal run keiro-write-expected-schema
 cabal test keiro-migrations-test  # 2 examples, 0 failures
 ```
 
+### EP-2 M4 — Batched Inbox Intake
+
+`runInboxTransactionBatch` now processes unique valid inbox deliveries under one transaction, returns input-order results, treats repeated in-batch dedupe keys as duplicates, and falls back to the existing retrying single-message path if the batch transaction fails. The batch and single retry paths share the same transactional classification helper, and result counter recording is factored through one helper.
+
+Validation:
+
+```text
+cabal build keiro:lib:keiro keiro:test:keiro-test keiro:bench:keiro-bench
+cabal test keiro-test --test-options="--match Keiro.Inbox"  # 22 examples, 0 failures
+cabal test keiro-test                                      # 270 examples, 0 failures
+```
+
 ---
 
 Revision note (2026-07-01): Added the benchmarking stage across the initiative at the user's request: a shared tasty-bench `keiro-bench` component (new integration point, including the shared `bench-regression` Justfile target and per-area committed baseline CSVs), M0/final-comparison milestones in both child plans, corresponding Progress entries, and a Decision Log entry covering methodology and the regression guard. Child plans 81 and 82 were revised in the same pass; see their revision notes.
@@ -243,3 +255,5 @@ Revision note (2026-07-02, EP-2 M1): Marked EP-2 M1 complete after moving inbox 
 Revision note (2026-07-02, EP-2 M2): Marked EP-2 M2 complete after changing fresh inbox intake to insert directly as completed, documenting legacy processing status semantics, and recording focused/full test validation.
 
 Revision note (2026-07-02, EP-2 M3): Marked EP-2 M3 complete after adding the inbox received-index drop migration, regenerating expected schema, restoring unrelated generated newline churn, and recording migration test validation.
+
+Revision note (2026-07-02, EP-2 M4): Marked EP-2 M4 complete after adding the batched inbox intake API, shared transaction/result helpers, batch behavior tests, and focused/full `keiro-test` validation.

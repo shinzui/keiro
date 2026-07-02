@@ -36,8 +36,8 @@ This section must always reflect the actual current state of the work.
 - [x] M2: Replace insert-`processing`-then-update with single insert-as-`completed` on the happy path (completed 2026-07-02T00:54:45Z)
 - [x] M2: Haddock updates for the now-legacy `processing` status and `InboxInProgress` result; tests green (completed 2026-07-02T00:54:45Z)
 - [x] M3: Migration dropping `keiro_inbox_received_idx`; regenerate expected schema; `cabal test keiro-migrations-test` green (completed 2026-07-02T00:57:48Z)
-- [ ] M4: `runInboxTransactionBatch` with within-batch dedupe, shared single transaction, and per-message poison fallback
-- [ ] M4: Batch tests (happy path, in-batch duplicate, poison fallback, cross-batch duplicate)
+- [x] M4: `runInboxTransactionBatch` with within-batch dedupe, shared single transaction, and per-message poison fallback (completed 2026-07-02T01:06:53Z)
+- [x] M4: Batch tests (happy path, in-batch duplicate, poison fallback, cross-batch duplicate) (completed 2026-07-02T01:06:53Z)
 - [ ] M5: `InboxPersistence` (`PersistFullEnvelope` / `PersistDedupeOnly`) threaded through intake; slim-row tests
 - [ ] Final: Add the after-only benches (`inbox.batch-100` after M4, `inbox.single-slim` after M5); re-run all inbox scenarios; record the "After" table and before/after ratios in Outcomes & Retrospective
 - [ ] Final: Commit `keiro/bench/baseline-inbox.csv` from the finished code and extend the `bench-regression` Justfile target with the inbox pattern line
@@ -190,6 +190,26 @@ Wrote expected schema to keiro-migrations/expected-schema
 
 cabal test keiro-migrations-test
 2 examples, 0 failures
+```
+
+### Milestone 4 — Batched Intake
+
+Added `runInboxTransactionBatch` to `Keiro.Inbox`. The fast path computes dedupe keys, suppresses repeated `(source, dedupe_key)` pairs inside the batch as duplicates, and runs all unique valid deliveries in one `runTransaction`. The single-message retry path and batch path now share `attemptOneTx`, and counter recording goes through `recordInboxResult`.
+
+If the batch transaction throws or is condemned, the wrapper falls back to `runInboxTransactionWithRetries` for every original delivery in input order. That keeps poison accounting on the existing single-message path and lets non-poison batch-mates commit individually after the failed batch rolls back.
+
+Added coverage for the 50-message happy path, in-batch duplicate suppression, poison fallback, and cross-batch duplicates.
+
+Validation:
+
+```text
+cabal build keiro:lib:keiro keiro:test:keiro-test keiro:bench:keiro-bench
+
+cabal test keiro-test --test-options="--match Keiro.Inbox"
+22 examples, 0 failures
+
+cabal test keiro-test
+270 examples, 0 failures
 ```
 
 
@@ -452,3 +472,5 @@ runInboxTransactionWithRetriesWith ::
 Revision note (2026-07-01): Added a Decision Log entry recording the residual batch-transaction deadlock risk during consumer-group rebalance overlap (self-healing via the per-message fallback), surfaced during pre-implementation review. No milestone content changed.
 
 Revision note (2026-07-01, later): Added Milestone 0 — inbox scenarios (`inbox.single-full` with metrics enabled, `inbox.single-nometrics`) on the shared tasty-bench `keiro-bench` component, run against unchanged code for a recorded "Before" baseline; after-only benches (`inbox.batch-100`, `inbox.single-slim`) added as their milestones land; final re-run recorded as a before/after comparison, with `keiro/bench/baseline-inbox.csv` committed and the shared `just bench-regression` target extended as a standing regression guard. Progress, Concrete Steps, Validation and Acceptance (advisory ratio gates 1.5×/1.2×/3×), Interfaces (tasty-bench, bench-only), and the Decision Log were updated accordingly. Requested by the user to measure before/after and protect the improvement going forward.
+
+Revision note (2026-07-02, M4): Marked Milestone 4 complete after adding `runInboxTransactionBatch`, factoring shared single-message transaction/result accounting helpers, adding batch behavior tests, and recording focused/full `keiro-test` validation.
