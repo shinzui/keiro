@@ -35,7 +35,7 @@ This section must always reflect the actual current state of the work.
 - [x] M1: Update metrics tests; `cabal test keiro-test` green (completed 2026-07-02T00:48:52Z)
 - [x] M2: Replace insert-`processing`-then-update with single insert-as-`completed` on the happy path (completed 2026-07-02T00:54:45Z)
 - [x] M2: Haddock updates for the now-legacy `processing` status and `InboxInProgress` result; tests green (completed 2026-07-02T00:54:45Z)
-- [ ] M3: Migration dropping `keiro_inbox_received_idx`; regenerate expected schema; `cabal test keiro-migrations-test` green
+- [x] M3: Migration dropping `keiro_inbox_received_idx`; regenerate expected schema; `cabal test keiro-migrations-test` green (completed 2026-07-02T00:57:48Z)
 - [ ] M4: `runInboxTransactionBatch` with within-batch dedupe, shared single transaction, and per-message poison fallback
 - [ ] M4: Batch tests (happy path, in-batch duplicate, poison fallback, cross-batch duplicate)
 - [ ] M5: `InboxPersistence` (`PersistFullEnvelope` / `PersistDedupeOnly`) threaded through intake; slim-row tests
@@ -175,6 +175,21 @@ cabal test keiro-test --test-options="--match Keiro.Inbox"
 
 cabal test keiro-test
 266 examples, 0 failures
+```
+
+### Milestone 3 — Drop Received-At Index
+
+Added forward migration `keiro-migrations/sql-migrations/2026-07-02-00-55-00-keiro-inbox-drop-received-idx.sql`, which pins `search_path` to `kiroku, pg_catalog` and drops `keiro_inbox_received_idx`. Regenerated `keiro-migrations/expected-schema`; the scoped schema diff deletes only `keiro-migrations/expected-schema/v18/schemas/kiroku/tables/keiro_inbox/indexes/keiro_inbox_received_idx`. Newline-only churn in unrelated `keiro_workflows` expected-schema files was restored before validation.
+
+Validation:
+
+```text
+cabal run keiro-write-expected-schema
+Successfully applied all migrations to postgres
+Wrote expected schema to keiro-migrations/expected-schema
+
+cabal test keiro-migrations-test
+2 examples, 0 failures
 ```
 
 

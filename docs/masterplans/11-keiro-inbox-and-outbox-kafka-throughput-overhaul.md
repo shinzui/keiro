@@ -74,7 +74,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2 M0: tasty-bench inbox scenarios + recorded "Before" baseline on unchanged code (completed 2026-07-02T00:43:56Z)
 - [x] EP-2 M1: Backlog gauge removed from per-message inbox path; `sampleInboxBacklog` added (completed 2026-07-02T00:48:52Z)
 - [x] EP-2 M2: Single-insert completed rows (drop the unobservable `processing` intermediate write) (completed 2026-07-02T00:54:45Z)
-- [ ] EP-2 M3: Inbox migration (drop `keiro_inbox_received_idx`) and regenerated expected schema
+- [x] EP-2 M3: Inbox migration (drop `keiro_inbox_received_idx`) and regenerated expected schema (completed 2026-07-02T00:57:48Z)
 - [ ] EP-2 M4: Batched intake variant `runInboxTransactionBatch` with per-message poison fallback
 - [ ] EP-2 M5: Slim payload persistence option (`InboxPersistence`)
 - [ ] EP-2 Final: "After" benchmark run recorded with before/after ratios; `baseline-inbox.csv` committed; `bench-regression` extended
@@ -217,6 +217,15 @@ cabal test keiro-test --test-options="--match Keiro.Inbox"  # 18 examples, 0 fai
 cabal test keiro-test                                      # 266 examples, 0 failures
 ```
 
+### EP-2 M3 — Inbox Received Index Drop
+
+Added migration `2026-07-02-00-55-00-keiro-inbox-drop-received-idx.sql` and regenerated expected schema so `keiro_inbox_received_idx` is no longer present. Validation:
+
+```text
+cabal run keiro-write-expected-schema
+cabal test keiro-migrations-test  # 2 examples, 0 failures
+```
+
 ---
 
 Revision note (2026-07-01): Added the benchmarking stage across the initiative at the user's request: a shared tasty-bench `keiro-bench` component (new integration point, including the shared `bench-regression` Justfile target and per-area committed baseline CSVs), M0/final-comparison milestones in both child plans, corresponding Progress entries, and a Decision Log entry covering methodology and the regression guard. Child plans 81 and 82 were revised in the same pass; see their revision notes.
@@ -232,3 +241,5 @@ Revision note (2026-07-02, EP-2 M0): Marked EP-2 in progress after adding inbox 
 Revision note (2026-07-02, EP-2 M1): Marked EP-2 M1 complete after moving inbox backlog gauge recording behind `sampleInboxBacklog`, updating the metrics test, and recording focused/full test validation.
 
 Revision note (2026-07-02, EP-2 M2): Marked EP-2 M2 complete after changing fresh inbox intake to insert directly as completed, documenting legacy processing status semantics, and recording focused/full test validation.
+
+Revision note (2026-07-02, EP-2 M3): Marked EP-2 M3 complete after adding the inbox received-index drop migration, regenerating expected schema, restoring unrelated generated newline churn, and recording migration test validation.
