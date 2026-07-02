@@ -506,7 +506,8 @@ groupMarks outcomes = go []
                     }
 
 data OutcomeGroupKey
-    = SourceGroup
+    = BatchGroup
+    | SourceGroup !Text
     | RowGroup !OutboxId
     | KeyGroup !Text !Text
     deriving stock (Generic, Eq)
@@ -525,8 +526,12 @@ outcomeGroups policy =
         appendGroup (keyFor row) row groups
     keyFor row =
         case policy of
-            PerSourceStream -> SourceGroup
-            StopTheLine -> SourceGroup
+            -- A claimed batch can hold runs from several independent sources;
+            -- a failure in one source's run must not skip another source's rows.
+            PerSourceStream -> SourceGroup (row ^. #event . #source)
+            -- Deliberately one group: any failure halts the worker, and the
+            -- entire remaining batch is skipped without consuming attempts.
+            StopTheLine -> BatchGroup
             BestEffort -> RowGroup (row ^. #outboxId)
             _ ->
                 case row ^. #event . #key of

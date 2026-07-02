@@ -181,10 +181,11 @@ data OutboxPublishConfigError
 
 {- | Aggregate result of one publisher pass.
 
-@published + retried + dead + halted@ equals the number of rows claimed.
-'retried' includes rows that were skipped because an earlier row in the same
-ordered publish group failed; those rows are returned to @failed@ without
-consuming an attempt. 'haltedOn' is populated only by 'StopTheLine' policy.
+@published + retried + dead@ equals the number of rows claimed. 'retried'
+includes rows that were skipped because an earlier row in the same ordered
+publish group failed; those rows are returned to @failed@ without consuming
+an attempt. 'haltedOn' is populated only by 'StopTheLine' policy and names
+the failed pivot row, which is already counted in 'retried' or 'dead'.
 -}
 data OutboxPublishSummary = OutboxPublishSummary
     { claimed :: !Int
