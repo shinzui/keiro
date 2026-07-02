@@ -103,6 +103,15 @@ interactions between child plans. Provide concise evidence.
 - Discovery: EP-2 M2 removed an accidental overwrite of handler-set inbox failure marks.
   Evidence: With the fresh-path `markCompletedTx` gone, a handler that calls public `markFailedTx` and returns successfully leaves the row `failed` with its last error instead of being overwritten to `completed`.
 
+- Discovery (post-implementation review, 2026-07-02): `runInboxTransactionBatch`'s poison fallback never fires on `Tx.condemn`, contradicting its haddock.
+  Evidence: kiroku's `runTransaction` rolls back a condemned transaction but returns the body's value (`kiroku-store/src/Kiroku/Store/Transaction.hs:93-96`), so the `trySync` at `keiro/src/Keiro/Inbox.hs:290` yields `Right` and the batch reports `InboxProcessed` for every message while nothing committed — a handler that condemns (kiroku's documented idiom for `appendToStreamTx` conflicts) silently loses the whole batch once Kafka offsets commit. The single-message path has the same documented self-inflicted behavior, but the batch extends it to innocent batch-mates and its haddock (`Inbox.hs:270`) promises the opposite.
+
+- Discovery (post-implementation review, 2026-07-02): under `PerSourceStream` the outbox outcome grouping collapses the whole claimed batch into one group, so a failure in one source's run skips and republishes already-delivered rows of unrelated sources.
+  Evidence: `OutcomeGroupKey`'s `SourceGroup` carries no source (`keiro/src/Keiro/Outbox.hs:508-534`) while the PerSourceStream claim predicate admits runs from multiple sources into one batch; a batch [srcA-1, srcB-1, srcA-2 fails, srcB-2] marks the delivered srcB-2 `failed`/skipped and republishes it next pass. Safe under at-least-once, but a guaranteed duplicate with no ordering justification.
+
+- Discovery (post-implementation review, 2026-07-02): the inbox batch benchmark shortfall (1.56x vs 3x target) is explained by the test harness, not the implementation.
+  Evidence: the ephemeral-pg fixture runs with `fsync=off`, `synchronous_commit=off`, `wal_level=minimal` (`ephemeral-pg/src/EphemeralPg/Config.hs:174-183`), so the per-message commit-durability cost the batch amortizes is absent from the measurement; the remaining ~68µs/message floor is the per-message INSERT round trip inside the batch transaction (hasql does not pipeline; multi-row `unnest` was consciously rejected). On a production Postgres with durability on, the batch win should be substantially larger than measured.
+
 
 ## Decision Log
 
@@ -275,6 +284,28 @@ cabal test keiro-test                                      # 272 examples, 0 fai
 cabal test keiro-migrations-test                          # 2 examples, 0 failures
 ```
 
+### Post-Implementation Review (2026-07-02)
+
+An independent review of the full implementation (commits `3f0778a..76aa269`) confirmed both headline bottlenecks are genuinely fixed in code, with independent re-validation on a fresh checkout:
+
+```text
+cabal test keiro-test              # 272 examples, 0 failures
+cabal test keiro-migrations-test   # 2 examples, 0 failures
+just bench-regression              # all 7 scenarios within the 25% gate
+```
+
+Regression-guard reproduction: `outbox.hot-key` 839 ms (+7% vs baseline, i.e. still ~27x faster than the 22.4 s "Before"), `outbox.hot-key-nolatency` +10%, `outbox.multi-key` +11%, `inbox.single-full` +23% (noisy but under the gate), other inbox scenarios at baseline. The outbox claim query was additionally verified live: `EXPLAIN ANALYZE` over a 50k-row backlog uses `keiro_outbox_claim_order_idx` and stops at the LIMIT (~1 ms total); two-session tests confirmed contiguous same-key runs claim in one pass and the post-filter closes the SKIP LOCKED race (second worker claims zero rows while the head's claim is uncommitted). The inbox happy path runs exactly one transaction per message (or per batch), with no residual `COUNT(*)`.
+
+Review verdict: bottleneck gone; ship-blocking defects none; follow-ups identified and resolved 2026-07-02 (commits `894e126..d000871`):
+
+1. Major — `runInboxTransactionBatch` misreported condemned batches as processed (see Surprises & Discoveries). **Fixed** (`070590d`): after the batch transaction returns, the batch re-reads the first row classified `InboxProcessed`; if it is not `completed`, the transaction was condemned and the per-message fallback runs. Verified against hasql-transaction source: `condemn = put False` on the `StateT Bool Session` commit flag, and `commitOrAbort` rolls back while still returning the body's value.
+2. Minor — PerSourceStream batch outcome grouping collapsed all sources into one group, causing cross-source collateral skip/republish. **Fixed** (`5395da0`): `SourceGroup` now carries the source text; `StopTheLine` keeps deliberate whole-batch grouping via a new `BatchGroup` key.
+3. Minor — `markFailedStmt` lacked the `status = 'publishing'` guard that `markSentBatchStmt`/`markSkippedStmt` have. **Fixed** (`894e126`): late failure marks now no-op on rows that already reached `sent`/`dead` or were requeued. Residual accepted race: a row re-claimed into `publishing` by another worker can still receive a late mark; closing it needs claim epochs, out of scope under at-least-once semantics.
+4. Minor — stale `OutboxPublishSummary` haddock (`published + retried + dead + halted = claimed`) **fixed** in `5395da0`. Still open, accepted as classification-only: in-batch duplicate of a dead-lettered key reports `InboxDuplicate` instead of `InboxPreviouslyFailed`; `PersistDedupeOnly` also nulls the event's own `schema_version` (decoder defaults it to 0).
+5. Test gaps — **closed** (`d000871`, six new examples; suite now 278): legacy `processing` rows classify as `InboxInProgress` without running the handler; a two-connection uncommitted claim-hold race claims nothing; a two-worker same-dedupe-key race runs the handler once; condemn-in-batch falls back per message; plus regression tests for findings 2 and 3. Still open, accepted: nothing in code enforces that deployments schedule `outboxMaintenancePass` alongside `publishClaimedOutbox` (docs-only mitigation, per the Decision Log).
+
+The batch-100 advisory shortfall recorded in EP-2 Final is attributed to the benchmark harness, not the code: ephemeral-pg disables commit durability, so the measurement excludes exactly the cost batching amortizes (see Surprises & Discoveries). The committed baseline remains valid as a regression guard for the measured regime.
+
 ---
 
 Revision note (2026-07-01): Added the benchmarking stage across the initiative at the user's request: a shared tasty-bench `keiro-bench` component (new integration point, including the shared `bench-regression` Justfile target and per-area committed baseline CSVs), M0/final-comparison milestones in both child plans, corresponding Progress entries, and a Decision Log entry covering methodology and the regression guard. Child plans 81 and 82 were revised in the same pass; see their revision notes.
@@ -298,3 +329,7 @@ Revision note (2026-07-02, EP-2 M4): Marked EP-2 M4 complete after adding the ba
 Revision note (2026-07-02, EP-2 M5): Marked EP-2 M5 complete after adding `InboxPersistence`, exposing dedupe-only intake variants, keeping failed rows full-envelope, and recording build/focused/full `keiro-test` validation.
 
 Revision note (2026-07-02, EP-2 Final): Marked EP-2 and the master plan complete after adding inbox after-only benchmarks, committing `baseline-inbox.csv`, extending `bench-regression`, recording before/after ratios and the batch advisory shortfall, and recording final benchmark/build/test/migration validation.
+
+Revision note (2026-07-02, post-implementation review): Recorded an independent review of the completed initiative — re-ran tests and the benchmark regression guard, confirmed both headline bottlenecks fixed in code (with live claim-query/EXPLAIN verification), added a Post-Implementation Review section to Outcomes & Retrospective with follow-up findings (batch condemn misreporting, PerSourceStream cross-source skip, `markFailedStmt` guard, test gaps), and added Surprises & Discoveries entries including the ephemeral-pg durability-off explanation for the batch-100 benchmark shortfall.
+
+Revision note (2026-07-02, review follow-up fixes): Implemented all review follow-ups in four commits — `markFailedStmt` publishing guard (`894e126`), per-source outcome grouping with `BatchGroup` for StopTheLine plus the summary-haddock correction (`5395da0`), condemned-batch detection with per-message fallback (`070590d`), and six new tests covering the fixes plus the legacy-processing, claim-hold, and dedupe-race gaps (`d000871`). Full suite 278 examples 0 failures; `just bench-regression` re-validated after the changes. Updated the Post-Implementation Review section with per-finding resolution status and the accepted residual risks.
