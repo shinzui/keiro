@@ -189,6 +189,12 @@ resulting status so the worker can update its summary counters.
 
 Runs inside the caller's transaction to keep "read attempt count → write
 status" atomic with respect to other workers.
+
+Only rows still in @publishing@ are updated (matching 'markSentBatchStmt'
+and 'markSkippedStmt'): if the row outlived 'publishingTimeout' and
+'outboxMaintenancePass' already requeued it — possibly handing it to
+another worker — a late failure mark from the original worker must not
+flip the re-claimed row mid-publish.
 -}
 markOutboxFailedTx ::
     OutboxId ->
@@ -618,6 +624,7 @@ markFailedStmt =
             next_attempt_at = $4,
             updated_at = $5
         WHERE outbox_id = $1
+          AND status = 'publishing'
         """
         ( contrazip5
             (E.param (E.nonNullable E.uuid))
