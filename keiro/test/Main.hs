@@ -22,6 +22,7 @@ import Data.Text.Encoding qualified as TE
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, diffUTCTime, secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID (UUID, fromString, fromWords64)
+import Data.UUID qualified as UUID
 import Data.Vector qualified as Vector
 import Data.Word (Word64)
 import Effectful (Eff, IOE, (:>))
@@ -119,6 +120,7 @@ import Keiro.Outbox (
     sampleOutboxBacklog,
  )
 import Keiro.Outbox.Kafka qualified as OutboxKafka
+import Keiro.Outbox.Schema (markOutboxFailedTx)
 import Keiro.Prelude
 import Keiro.ProcessManager
 import Keiro.Projection
@@ -2926,6 +2928,97 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             row5 ^. #status `shouldBe` OutboxFailed
             row5 ^. #attemptCount `shouldBe` 0
 
+        it "PerSourceStream keeps one source's failure from skipping another source's rows" $ \storeHandle -> do
+            let rowA1 = outboxIdFromOrdinal 1
+                rowB1 = outboxIdFromOrdinal 2
+                rowA2 = outboxIdFromOrdinal 3
+                rowB2 = outboxIdFromOrdinal 4
+                mkRow oid src msgId =
+                    (oid, sampleIntegrationEnvelope & #messageId .~ msgId & #source .~ src & #key .~ Nothing)
+                rows =
+                    [ mkRow rowA1 "per-source-a" "ps-a1"
+                    , mkRow rowB1 "per-source-b" "ps-b1"
+                    , mkRow rowA2 "per-source-a" "ps-a2"
+                    , mkRow rowB2 "per-source-b" "ps-b2"
+                    ]
+                publish claimed =
+                    pure
+                        [ ( row ^. #outboxId
+                          , if row ^. #outboxId == rowA2
+                                then PublishFailed "source-a pivot failed"
+                                else PublishSucceeded
+                          )
+                        | row <- claimed
+                        ]
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        traverse_ (uncurry enqueueIntegrationEventTx) rows
+            Right summary <-
+                Store.runStoreIO storeHandle $
+                    publishClaimedOutbox publish (defaultPublishOptions & #orderingPolicy .~ PerSourceStream & #backoff .~ ConstantBackoff 0) Nothing
+            summary ^. #claimed `shouldBe` 4
+            summary ^. #published `shouldBe` 3
+            summary ^. #retried `shouldBe` 1
+            Right (Just a1) <- Store.runStoreIO storeHandle (lookupOutbox rowA1)
+            Right (Just a2) <- Store.runStoreIO storeHandle (lookupOutbox rowA2)
+            Right (Just b1) <- Store.runStoreIO storeHandle (lookupOutbox rowB1)
+            Right (Just b2) <- Store.runStoreIO storeHandle (lookupOutbox rowB2)
+            a1 ^. #status `shouldBe` OutboxSent
+            a2 ^. #status `shouldBe` OutboxFailed
+            a2 ^. #attemptCount `shouldBe` 1
+            a2 ^. #lastError `shouldBe` Just "source-a pivot failed"
+            b1 ^. #status `shouldBe` OutboxSent
+            b2 ^. #status `shouldBe` OutboxSent
+
+        it "a late failure mark does not clobber a row that already reached a terminal state" $ \storeHandle -> do
+            let oid = OutboxId outboxUuid1
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
+            now <- getCurrentTime
+            Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
+            Right True <- Store.runStoreIO storeHandle (markOutboxSent oid now)
+            Right _ <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (markOutboxFailedTx oid "late failure from a timed-out worker" 5 60 now)
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+            row ^. #status `shouldBe` OutboxSent
+            row ^. #lastError `shouldBe` Nothing
+
+        it "claims nothing while another transaction holds an uncommitted claim on a key's head" $ \storeHandle -> do
+            let headId = outboxIdFromOrdinal 1
+                tailId = outboxIdFromOrdinal 2
+                rows =
+                    [ (headId, sampleIntegrationEnvelope & #messageId .~ "claim-race-1" & #key .~ Just "claim-race-key")
+                    , (tailId, sampleIntegrationEnvelope & #messageId .~ "claim-race-2" & #key .~ Just "claim-race-key")
+                    ]
+                OutboxId headUuid = headId
+                holdClaimSql =
+                    TE.encodeUtf8 $
+                        "UPDATE keiro_outbox SET status = 'publishing', attempt_count = attempt_count + 1, updated_at = now() WHERE outbox_id = '"
+                            <> UUID.toText headUuid
+                            <> "'"
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        traverse_ (uncurry enqueueIntegrationEventTx) rows
+            holderDone <- newEmptyMVar
+            _ <- forkIO $ do
+                holder <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction $ do
+                            Tx.sql holdClaimSql
+                            Tx.sql "SELECT pg_sleep(2)"
+                putMVar holderDone holder
+            -- Let the holder acquire its uncommitted row lock, then race a claim.
+            threadDelay 500000
+            now <- getCurrentTime
+            Right claimed <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
+            fmap (^. #outboxId) claimed `shouldBe` []
+            Right () <- takeMVar holderDone
+            pure ()
+
         it "StopTheLine publishes singleton batches and skips the unattempted suffix" $ \storeHandle -> do
             let row1Id = outboxIdFromOrdinal 1
                 row2Id = outboxIdFromOrdinal 2
@@ -3664,6 +3757,100 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Store.runStoreIO storeHandle $
                     runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId PersistFullEnvelope [(event, Nothing)] handler
             second `shouldBe` [Right InboxDuplicate]
+            Right rowCount <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+            rowCount `shouldBe` 1
+
+        it "falls back per message when one batch handler condemns the transaction" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+            let events =
+                    [ sampleIntegrationEnvelope
+                        & #messageId
+                        .~ ("inbox-batch-condemn-" <> Text.pack (show n))
+                        & #source
+                        .~ "batch-ordering"
+                    | n <- [1 .. 3 :: Int]
+                    ]
+                handler ev
+                    | ev ^. #messageId == "inbox-batch-condemn-2" = Tx.condemn
+                    | otherwise = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+            Right results <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId PersistFullEnvelope ((,Nothing) <$> events) handler
+            -- The condemned single-message retry reports processed by the
+            -- documented single-path contract; what matters is that the
+            -- innocent batch mates actually committed.
+            results `shouldBe` replicate 3 (Right (InboxProcessed ()))
+            Right rowCount <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+            rowCount `shouldBe` 2
+            Right (Just mate1) <- Store.runStoreIO storeHandle (lookupInbox "batch-ordering" "inbox-batch-condemn-1")
+            Right (Just mate3) <- Store.runStoreIO storeHandle (lookupInbox "batch-ordering" "inbox-batch-condemn-3")
+            mate1 ^. #status `shouldBe` InboxCompleted
+            mate3 ^. #status `shouldBe` InboxCompleted
+            Right condemned <- Store.runStoreIO storeHandle (lookupInbox "batch-ordering" "inbox-batch-condemn-2")
+            condemned `shouldBe` Nothing
+
+        it "classifies a legacy processing row as InboxInProgress without running the handler" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+            let event =
+                    sampleIntegrationEnvelope
+                        & #messageId
+                        .~ "inbox-legacy-processing"
+                        & #source
+                        .~ "ordering"
+                handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.sql "INSERT INTO keiro_inbox (source, dedupe_key, content_type, payload_bytes, status) VALUES ('ordering', 'inbox-legacy-processing', 'application/json', ''::bytea, 'processing')"
+            Right result <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransaction Nothing PreferIntegrationMessageId event Nothing handler
+            result `shouldBe` Right InboxInProgress
+            Right rowCount <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
+            rowCount `shouldBe` 0
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-legacy-processing")
+            row ^. #status `shouldBe` InboxProcessing
+
+        it "runs the handler once when two workers race the same dedupe key" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+            let event =
+                    sampleIntegrationEnvelope
+                        & #messageId
+                        .~ "inbox-race-dup"
+                        & #source
+                        .~ "ordering"
+                slowHandler ev = do
+                    Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+                    Tx.sql "SELECT pg_sleep(1.5)"
+                fastHandler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
+            firstDone <- newEmptyMVar
+            _ <- forkIO $ do
+                first <-
+                    Store.runStoreIO storeHandle $
+                        runInboxTransaction Nothing PreferIntegrationMessageId event Nothing slowHandler
+                putMVar firstDone first
+            -- Let the slow worker insert its uncommitted row, then race the
+            -- same dedupe key: the second insert must block on the unique
+            -- constraint until the first commits, then classify as duplicate.
+            threadDelay 400000
+            Right second <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransaction Nothing PreferIntegrationMessageId event Nothing fastHandler
+            Right first <- takeMVar firstDone
+            first `shouldBe` Right (InboxProcessed ())
+            second `shouldBe` Right InboxDuplicate
             Right rowCount <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
