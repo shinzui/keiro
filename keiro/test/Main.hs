@@ -2619,7 +2619,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
                         traverse_ (uncurry enqueueIntegrationEventTx) rows
-            Right failedPass <- Store.runStoreIO storeHandle (publishClaimedOutbox failA1 opts Nothing)
+            Right failedPass <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow failA1) opts Nothing)
             failedPass ^. #retried `shouldBe` 1
             now <- getCurrentTime
             Right claimed <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
@@ -2701,7 +2701,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let publish _ = do
                     liftIO (modifyIORef' publishedRef (+ 1))
                     pure PublishSucceeded
-            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) defaultPublishOptions Nothing)
             summary ^. #published `shouldBe` 1
             published <- readIORef publishedRef
             published `shouldBe` 1
@@ -2728,9 +2728,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let publish row = do
                     liftIO (modifyIORef' publishedRef (<> [row ^. #outboxId]))
                     pure PublishSucceeded
-            Right firstPass <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+            Right firstPass <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) defaultPublishOptions Nothing)
             firstPass ^. #published `shouldBe` 2
-            Right secondPass <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+            Right secondPass <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) defaultPublishOptions Nothing)
             secondPass ^. #published `shouldBe` 0
             published <- readIORef publishedRef
             published `shouldBe` [firstId, secondId]
@@ -2748,14 +2748,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let publish _ = do
                     liftIO (modifyIORef' publishedRef (+ 1))
                     pure PublishSucceeded
-            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) defaultPublishOptions Nothing)
             summary ^. #claimed `shouldBe` 0
             published <- readIORef publishedRef
             published `shouldBe` 0
             Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
             row ^. #status `shouldBe` OutboxPublishing
 
-        it "a throwing publish callback fails one row and continues the batch" $ \storeHandle -> do
+        it "a throwing batch publish callback fails every row in that publish call" $ \storeHandle -> do
             let throwId = OutboxId outboxUuid1
                 okId = OutboxId outboxUuid2
                 throwEvent = sampleIntegrationEnvelope & #messageId .~ "throwing-publish" & #key .~ Just "throw-key"
@@ -2771,14 +2771,15 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     | otherwise = pure PublishSucceeded
             Right summary <-
                 Store.runStoreIO storeHandle $
-                    publishClaimedOutbox publish (defaultPublishOptions & #backoff .~ ConstantBackoff 0) Nothing
-            summary ^. #retried `shouldBe` 1
-            summary ^. #published `shouldBe` 1
+                    publishClaimedOutbox (perRow publish) (defaultPublishOptions & #backoff .~ ConstantBackoff 0) Nothing
+            summary ^. #retried `shouldBe` 2
+            summary ^. #published `shouldBe` 0
             Right (Just throwRow) <- Store.runStoreIO storeHandle (lookupOutbox throwId)
             throwRow ^. #status `shouldBe` OutboxFailed
             throwRow ^. #lastError `shouldSatisfy` maybe False (Text.isInfixOf "kafka exploded")
             Right (Just okRow) <- Store.runStoreIO storeHandle (lookupOutbox okId)
-            okRow ^. #status `shouldBe` OutboxSent
+            okRow ^. #status `shouldBe` OutboxFailed
+            okRow ^. #lastError `shouldSatisfy` maybe False (Text.isInfixOf "kafka exploded")
 
         it "a row that exhausts attempts while crash-looping is dead-lettered by the sweeper" $ \storeHandle -> do
             let oid = OutboxId outboxUuid1
@@ -2794,7 +2795,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let publish _ = do
                     liftIO (modifyIORef' publishedRef (+ 1))
                     pure PublishSucceeded
-            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
+            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) opts Nothing)
             summary ^. #dead `shouldBe` 0
             published <- readIORef publishedRef
             published `shouldBe` 0
@@ -2808,7 +2809,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Store.runStoreIO storeHandle $
                     Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
             let publish _ = pure (PublishFailed "boom")
-            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
+            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) opts Nothing)
             now <- getCurrentTime
             Right marked <- Store.runStoreIO storeHandle (markOutboxSent oid now)
             marked `shouldBe` False
@@ -2835,7 +2836,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     | row ^. #outboxId == okId = pure PublishSucceeded
                     | otherwise = pure (PublishFailed "broker unreachable")
             Right summary <-
-                Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+                Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) defaultPublishOptions Nothing)
             summary ^. #claimed `shouldBe` 2
             summary ^. #published `shouldBe` 1
             summary ^. #retried `shouldBe` 1
@@ -2845,6 +2846,138 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right (Just failRow) <- Store.runStoreIO storeHandle (lookupOutbox failId)
             failRow ^. #status `shouldBe` OutboxFailed
             failRow ^. #lastError `shouldBe` Just "broker unreachable"
+
+        it "publishClaimedOutbox hands a same-key run to one batch publish call" $ \storeHandle -> do
+            let rows =
+                    [ (outboxIdFromOrdinal (fromIntegral i), sampleIntegrationEnvelope & #messageId .~ ("batch-ok-" <> Text.pack (show i)) & #key .~ Just "batch-key")
+                    | i <- [1 .. 10 :: Int]
+                    ]
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        traverse_ (uncurry enqueueIntegrationEventTx) rows
+            invocationRef <- newIORef (0 :: Int)
+            let publish claimed = do
+                    liftIO (modifyIORef' invocationRef (+ 1))
+                    pure [(row ^. #outboxId, PublishSucceeded) | row <- claimed]
+            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+            summary ^. #claimed `shouldBe` 10
+            summary ^. #published `shouldBe` 10
+            invocations <- readIORef invocationRef
+            invocations `shouldBe` 1
+            for_ (fmap fst rows) $ \oid -> do
+                Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+                row ^. #status `shouldBe` OutboxSent
+
+        it "publishClaimedOutbox skips the same-key suffix after a mid-run failure" $ \storeHandle -> do
+            let row1Id = outboxIdFromOrdinal 1
+                row2Id = outboxIdFromOrdinal 2
+                row3Id = outboxIdFromOrdinal 3
+                row4Id = outboxIdFromOrdinal 4
+                row5Id = outboxIdFromOrdinal 5
+                ids = [row1Id, row2Id, row3Id, row4Id, row5Id]
+                rows =
+                    [ (oid, sampleIntegrationEnvelope & #messageId .~ ("batch-fail-" <> Text.pack (show i)) & #key .~ Just "batch-fail-key")
+                    | (i, oid) <- zip [1 .. 5 :: Int] ids
+                    ]
+                publish claimed =
+                    pure
+                        [ ( row ^. #outboxId
+                          , if row ^. #outboxId == row3Id
+                                then PublishFailed "pivot failed"
+                                else PublishSucceeded
+                          )
+                        | row <- claimed
+                        ]
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        traverse_ (uncurry enqueueIntegrationEventTx) rows
+            Right summary <-
+                Store.runStoreIO storeHandle $
+                    publishClaimedOutbox publish (defaultPublishOptions & #backoff .~ ConstantBackoff 0) Nothing
+            summary ^. #published `shouldBe` 2
+            summary ^. #retried `shouldBe` 3
+            Right (Just row1) <- Store.runStoreIO storeHandle (lookupOutbox row1Id)
+            Right (Just row2) <- Store.runStoreIO storeHandle (lookupOutbox row2Id)
+            Right (Just row3) <- Store.runStoreIO storeHandle (lookupOutbox row3Id)
+            Right (Just row4) <- Store.runStoreIO storeHandle (lookupOutbox row4Id)
+            Right (Just row5) <- Store.runStoreIO storeHandle (lookupOutbox row5Id)
+            row1 ^. #status `shouldBe` OutboxSent
+            row2 ^. #status `shouldBe` OutboxSent
+            row3 ^. #status `shouldBe` OutboxFailed
+            row3 ^. #attemptCount `shouldBe` 1
+            row3 ^. #lastError `shouldBe` Just "pivot failed"
+            row4 ^. #status `shouldBe` OutboxFailed
+            row4 ^. #attemptCount `shouldBe` 0
+            row4 ^. #lastError `shouldBe` Just "skipped: earlier record for the same key failed"
+            row5 ^. #status `shouldBe` OutboxFailed
+            row5 ^. #attemptCount `shouldBe` 0
+
+        it "StopTheLine publishes singleton batches and skips the unattempted suffix" $ \storeHandle -> do
+            let row1Id = outboxIdFromOrdinal 1
+                row2Id = outboxIdFromOrdinal 2
+                row3Id = outboxIdFromOrdinal 3
+                row4Id = outboxIdFromOrdinal 4
+                ids = [row1Id, row2Id, row3Id, row4Id]
+                rows =
+                    [ (oid, sampleIntegrationEnvelope & #messageId .~ ("stop-line-" <> Text.pack (show i)) & #key .~ Just "stop-key")
+                    | (i, oid) <- zip [1 .. 4 :: Int] ids
+                    ]
+                publishRef = fmap (^. #outboxId)
+                publish claimed =
+                    pure
+                        [ ( row ^. #outboxId
+                          , if row ^. #outboxId == row2Id
+                                then PublishFailed "stop here"
+                                else PublishSucceeded
+                          )
+                        | row <- claimed
+                        ]
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        traverse_ (uncurry enqueueIntegrationEventTx) rows
+            seenRef <- newIORef []
+            let trackedPublish claimed = do
+                    liftIO (modifyIORef' seenRef (<> publishRef claimed))
+                    publish claimed
+                opts = defaultPublishOptions & #orderingPolicy .~ StopTheLine & #backoff .~ ConstantBackoff 0
+            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox trackedPublish opts Nothing)
+            summary ^. #published `shouldBe` 1
+            summary ^. #retried `shouldBe` 3
+            summary ^. #haltedOn `shouldBe` Just row2Id
+            seen <- readIORef seenRef
+            seen `shouldBe` take 2 ids
+            Right (Just row3) <- Store.runStoreIO storeHandle (lookupOutbox row3Id)
+            Right (Just row4) <- Store.runStoreIO storeHandle (lookupOutbox row4Id)
+            row3 ^. #status `shouldBe` OutboxFailed
+            row3 ^. #attemptCount `shouldBe` 0
+            row4 ^. #status `shouldBe` OutboxFailed
+            row4 ^. #attemptCount `shouldBe` 0
+
+        it "publishClaimedOutbox treats a missing batch outcome as a failed row" $ \storeHandle -> do
+            let okId = outboxIdFromOrdinal 1
+                missingId = outboxIdFromOrdinal 2
+                okEvent = sampleIntegrationEnvelope & #messageId .~ "missing-outcome-ok" & #key .~ Just "ok-key"
+                missingEvent = sampleIntegrationEnvelope & #messageId .~ "missing-outcome-fail" & #key .~ Just "missing-key"
+                publish claimed =
+                    pure
+                        [ (row ^. #outboxId, PublishSucceeded)
+                        | row <- claimed
+                        , row ^. #outboxId == okId
+                        ]
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $ do
+                        enqueueIntegrationEventTx okId okEvent
+                        enqueueIntegrationEventTx missingId missingEvent
+            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+            summary ^. #published `shouldBe` 1
+            summary ^. #retried `shouldBe` 1
+            Right (Just missingRow) <- Store.runStoreIO storeHandle (lookupOutbox missingId)
+            missingRow ^. #status `shouldBe` OutboxFailed
+            missingRow ^. #lastError `shouldBe` Just "publisher returned no outcome"
 
         it "auto-dead-letters a row after maxAttempts consecutive failures" $ \storeHandle -> do
             let oid = OutboxId outboxUuid1
@@ -2864,14 +2997,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Store.runTransaction (enqueueIntegrationEventTx oid event)
             let publish _ = pure (PublishFailed "broker exploded")
             -- First two failures retain Failed status.
-            Right s1 <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
+            Right s1 <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) opts Nothing)
             s1 ^. #retried `shouldBe` 1
             s1 ^. #dead `shouldBe` 0
-            Right s2 <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
+            Right s2 <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) opts Nothing)
             s2 ^. #retried `shouldBe` 1
             s2 ^. #dead `shouldBe` 0
             -- Third failure crosses the threshold.
-            Right s3 <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
+            Right s3 <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) opts Nothing)
             s3 ^. #dead `shouldBe` 1
             Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
             row ^. #status `shouldBe` OutboxDead
@@ -2906,7 +3039,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         .~ BestEffort
                         & #backoff
                         .~ ConstantBackoff 3600
-            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox firstPass firstPassOpts Nothing)
+            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow firstPass) firstPassOpts Nothing)
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction (enqueueIntegrationEventTx deadId (base & #messageId .~ "gc-dead"))
@@ -2921,7 +3054,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         .~ 1
                         & #orderingPolicy
                         .~ BestEffort
-            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox deadPass deadPassOpts Nothing)
+            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow deadPass) deadPassOpts Nothing)
             now <- getCurrentTime
             Right () <- Store.runStoreIO storeHandle (backdateOutboxPublishedAt oldSentId (addUTCTime (-3600) now))
             Right deleted <- Store.runStoreIO storeHandle (garbageCollectSent 300 now)
@@ -2966,7 +3099,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         & #backoff
                         .~ ConstantBackoff 0
             Right summary1 <-
-                Store.runStoreIO storeHandle (publishClaimedOutbox publish firstPassOpts Nothing)
+                Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) firstPassOpts Nothing)
             summary1 ^. #claimed `shouldBe` 1
             claimedIds <- readIORef claimed
             claimedIds `shouldSatisfy` (a2Id `notElem`)
@@ -2991,9 +3124,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         .~ 1
                         & #backoff
                         .~ ConstantBackoff 0
-            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publishOk retryOpts Nothing)
-            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publishOk retryOpts Nothing)
-            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publishOk retryOpts Nothing)
+            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publishOk) retryOpts Nothing)
+            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publishOk) retryOpts Nothing)
+            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publishOk) retryOpts Nothing)
             claimedIds2 <- readIORef claimed
             claimedIds2 `shouldSatisfy` (a1Id `elem`)
             claimedIds2 `shouldSatisfy` (a2Id `elem`)
@@ -3016,7 +3149,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     | otherwise = pure PublishSucceeded
             Right summary <-
                 Store.runStoreIO storeHandle $
-                    publishClaimedOutbox publish (defaultPublishOptions & #backoff .~ ConstantBackoff 0) Nothing
+                    publishClaimedOutbox (perRow publish) (defaultPublishOptions & #backoff .~ ConstantBackoff 0) Nothing
             summary ^. #claimed `shouldBe` 2
             summary ^. #published `shouldBe` 1
             summary ^. #retried `shouldBe` 1
@@ -3071,36 +3204,27 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     | row ^. #outboxId == okId = pure PublishSucceeded
                     | otherwise = pure (PublishFailed "broker unreachable")
                 opts = defaultPublishOptions & #tracer ?~ tracer
-            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
+            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) opts Nothing)
             _ <- shutdownTracerProvider provider Nothing
             spans <- traverse captureSpan =<< readIORef spansRef
-            length spans `shouldBe` 2
-            let findSpan needle = case [sp | sp <- spans, textAttr (csAttributes sp) "messaging.message.id" == Just needle] of
-                    (sp : _) -> sp
-                    [] -> error ("no span captured for message.id=" <> Text.unpack needle)
-                okSpan = findSpan (okEvent ^. #messageId)
-                failSpan = findSpan (failEvent ^. #messageId)
-            -- Successful publish: producer-kind, all messaging attrs, Unset/Ok
-            -- status (the helper does not explicitly set Ok; default is Unset).
-            csName okSpan `shouldBe` ("send " <> (okEvent ^. #destination))
-            show (csKind okSpan) `shouldBe` "Producer"
-            textAttr (csAttributes okSpan) "messaging.system" `shouldBe` Just "kafka"
-            textAttr (csAttributes okSpan) "messaging.operation.type" `shouldBe` Just "publish"
-            textAttr (csAttributes okSpan) "messaging.operation.name" `shouldBe` Just "send"
-            textAttr (csAttributes okSpan) "messaging.destination.name"
-                `shouldBe` Just (okEvent ^. #destination)
-            textAttr (csAttributes okSpan) "messaging.kafka.message.key"
-                `shouldBe` (okEvent ^. #key)
-            case csStatus okSpan of
-                Unset -> pure ()
-                Ok -> pure ()
-                other -> expectationFailure ("expected Unset/Ok, got " <> show other)
-            -- Failed publish: same attrs, plus error.type and Error status with
-            -- the publisher's error message.
-            textAttr (csAttributes failSpan) "error.type" `shouldBe` Just "publish_failed"
-            case csStatus failSpan of
-                Error msg -> msg `shouldBe` "broker unreachable"
-                other -> expectationFailure ("expected Error \"broker unreachable\", got " <> show other)
+            length spans `shouldBe` 1
+            case spans of
+                [batchSpan] -> do
+                    csName batchSpan `shouldBe` ("send " <> (okEvent ^. #destination))
+                    show (csKind batchSpan) `shouldBe` "Producer"
+                    textAttr (csAttributes batchSpan) "messaging.system" `shouldBe` Just "kafka"
+                    textAttr (csAttributes batchSpan) "messaging.operation.type" `shouldBe` Just "publish"
+                    textAttr (csAttributes batchSpan) "messaging.operation.name" `shouldBe` Just "send"
+                    textAttr (csAttributes batchSpan) "messaging.destination.name"
+                        `shouldBe` Just (okEvent ^. #destination)
+                    textAttr (csAttributes batchSpan) "messaging.kafka.message.key"
+                        `shouldBe` (okEvent ^. #key)
+                    intAttr (csAttributes batchSpan) "keiro.outbox.batch.size" `shouldBe` Just 2
+                    textAttr (csAttributes batchSpan) "error.type" `shouldBe` Just "publish_failed"
+                    case csStatus batchSpan of
+                        Error msg -> msg `shouldBe` "broker unreachable"
+                        other -> expectationFailure ("expected Error \"broker unreachable\", got " <> show other)
+                other -> expectationFailure ("expected one batch span, got " <> show (length other))
 
         it "publishClaimedOutbox records outbox metrics under the in-memory exporter" $ \storeHandle -> do
             (exporter, metricsRef) <- inMemoryMetricExporter
@@ -3136,12 +3260,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 deadPassOpts = retryPassOpts & #maxAttempts .~ 1
             -- Pass 1 (maxAttempts = 5): ok publishes, the fail row retries.
             Right summary1 <-
-                Store.runStoreIO storeHandle (publishClaimedOutbox publish retryPassOpts (Just keiroMetrics))
+                Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) retryPassOpts (Just keiroMetrics))
             summary1 ^. #published `shouldBe` 1
             summary1 ^. #retried `shouldBe` 1
             -- Pass 2 (maxAttempts = 1): the failed row crosses the ceiling and dies.
             Right summary2 <-
-                Store.runStoreIO storeHandle (publishClaimedOutbox publish deadPassOpts (Just keiroMetrics))
+                Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) deadPassOpts (Just keiroMetrics))
             summary2 ^. #dead `shouldBe` 1
             -- Flush so the in-memory exporter receives the aggregates.
             _ <- forceFlushMeterProvider provider Nothing
@@ -3574,7 +3698,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             -- Run the publisher worker: push records to the in-process topic.
             Right pubSummary1 <-
                 Store.runStoreIO ordering $
-                    publishClaimedOutbox (kafkaTopicPublish topic) defaultPublishOptions Nothing
+                    publishClaimedOutbox (perRow (kafkaTopicPublish topic)) defaultPublishOptions Nothing
             pubSummary1 ^. #published `shouldBe` 1
             -- Billing side: consume from the topic.
             records1 <- drainKafkaTopic topic
@@ -3625,7 +3749,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             -- Run-claiming lets a same-key contiguous run drain in one pass.
             let drainOnce =
                     publishClaimedOutbox
-                        (kafkaTopicPublish topic)
+                        (perRow (kafkaTopicPublish topic))
                         (defaultPublishOptions & #backoff .~ ConstantBackoff 0)
                         Nothing
             Right s1 <- Store.runStoreIO ordering drainOnce
@@ -3681,16 +3805,16 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             -- same-key runs.
             -- First pass: the first row attempts once and fails; the second is
             -- outside the one-row claim window.
-            Right pass1 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts Nothing)
+            Right pass1 <- Store.runStoreIO ordering (publishClaimedOutbox (perRow publish) deadOpts Nothing)
             pass1 ^. #retried `shouldBe` 1
             pass1 ^. #published `shouldBe` 0
             -- Second pass crosses maxAttempts and dead-letters the first row.
-            Right pass2 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts Nothing)
+            Right pass2 <- Store.runStoreIO ordering (publishClaimedOutbox (perRow publish) deadOpts Nothing)
             pass2 ^. #dead `shouldBe` 1
             Right (Just firstRow) <- Store.runStoreIO ordering (lookupOutbox firstId)
             firstRow ^. #status `shouldBe` OutboxDead
             -- With the first row dead, the second becomes claimable and publishes.
-            Right pass3 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts Nothing)
+            Right pass3 <- Store.runStoreIO ordering (publishClaimedOutbox (perRow publish) deadOpts Nothing)
             pass3 ^. #published `shouldBe` 1
             Right (Just secondRow) <- Store.runStoreIO ordering (lookupOutbox secondId)
             secondRow ^. #status `shouldBe` OutboxSent
@@ -6481,6 +6605,11 @@ textAttr attrs name = case lookupAttribute attrs name of
     Just (AttributeValue (TextAttribute t)) -> Just t
     _ -> Nothing
 
+intAttr :: Attributes -> Text -> Maybe Int64
+intAttr attrs name = case lookupAttribute attrs name of
+    Just (AttributeValue (IntAttribute n)) -> Just n
+    _ -> Nothing
+
 {- | A frozen snapshot of an 'ImmutableSpan'. In hs-opentelemetry 1.0 the
 mutable span fields (name, attributes, status) live behind the
 @spanHot :: IORef SpanHot@ field rather than directly on 'ImmutableSpan',
@@ -6550,6 +6679,17 @@ kafkaTopicPublish ::
 kafkaTopicPublish topic row = do
     kafkaTopicAccept topic row
     pure PublishSucceeded
+
+perRow ::
+    (OutboxRow -> Eff es PublishOutcome) ->
+    [OutboxRow] ->
+    Eff es [(OutboxId, PublishOutcome)]
+perRow publish rows =
+    traverse publishOne rows
+  where
+    publishOne row = do
+        outcome <- publish row
+        pure (row ^. #outboxId, outcome)
 
 drainKafkaTopic :: KafkaTopic -> IO [InboxKafka.KafkaInboundRecord]
 drainKafkaTopic (KafkaTopic ref) = do

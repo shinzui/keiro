@@ -12,6 +12,10 @@ A 'KafkaProducerRecord' carries everything the broker layer needs:
 topic, optional partition key, the raw payload bytes from the EP-19
 envelope, and the canonical header set. Building the record is pure;
 publishing is the caller's responsibility.
+
+The outbox worker opens one producer span around each claimed publish batch.
+Adapters that need per-record broker visibility should add their own spans
+around the actual Kafka produce calls.
 -}
 module Keiro.Outbox.Kafka (
     KafkaProducerRecord (..),

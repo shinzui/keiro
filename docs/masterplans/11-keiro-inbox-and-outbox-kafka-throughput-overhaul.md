@@ -68,7 +68,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 M0: tasty-bench `keiro-bench` outbox scenarios + recorded "Before" baseline on unchanged code (completed 2026-07-02T00:02:14Z)
 - [x] EP-1 M1: Contiguous per-key/per-source run claiming in `claimOutboxBatch` with regression tests (completed 2026-07-02T00:11:43Z)
 - [x] EP-1 M2: Claim-order partial index migration and regenerated expected schema (completed 2026-07-02T00:15:12Z)
-- [ ] EP-1 M3: Batch-shaped publish contract in `publishClaimedOutbox` with bulk sent-marking
+- [x] EP-1 M3: Batch-shaped publish contract in `publishClaimedOutbox` with bulk sent-marking (completed 2026-07-02T00:25:25Z)
 - [ ] EP-1 M4: Maintenance extracted to `outboxMaintenancePass`; gauges/sweep off the hot path
 - [ ] EP-1 Final: "After" benchmark run recorded with before/after ratios; `baseline-outbox.csv` committed; `bench-regression` guard in place
 - [ ] EP-2 M0: tasty-bench inbox scenarios + recorded "Before" baseline on unchanged code
@@ -85,7 +85,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 Document cross-plan insights, dependency changes, scope adjustments, or unexpected
 interactions between child plans. Provide concise evidence.
 
-(None yet.)
+- Discovery: The batch publish contract changes the worker span from per-row to per-publish-call; real per-record visibility now belongs in the Kafka adapter.
+  Evidence: EP-1 M3 updated `Keiro.Outbox.Kafka` module documentation and the outbox span test to expect one producer span around the publish batch, with `error.type = publish_failed` when any row outcome fails.
 
 
 ## Decision Log
@@ -120,8 +121,20 @@ interactions between child plans. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+### EP-1 M3 — Batch Publish Contract
+
+`publishClaimedOutbox` now accepts `[OutboxRow] -> Eff es [(OutboxId, PublishOutcome)]`, marks successful rows with one bulk `UPDATE`, and enforces ordered group outcome processing in the worker: sent prefix, failed pivot, skipped suffix. `StopTheLine` keeps singleton publish calls and halts on the first failure, then skips the rest of the claimed batch without consuming attempts.
+
+Validation:
+
+```text
+cabal build keiro:lib:keiro keiro:bench:keiro-bench keiro:test:keiro-test
+cabal test keiro-test --test-options="--match Keiro.Outbox"  # 32 examples, 0 failures
+cabal test keiro-test                                      # 265 examples, 0 failures
+```
 
 ---
 
 Revision note (2026-07-01): Added the benchmarking stage across the initiative at the user's request: a shared tasty-bench `keiro-bench` component (new integration point, including the shared `bench-regression` Justfile target and per-area committed baseline CSVs), M0/final-comparison milestones in both child plans, corresponding Progress entries, and a Decision Log entry covering methodology and the regression guard. Child plans 81 and 82 were revised in the same pass; see their revision notes.
+
+Revision note (2026-07-02): Marked EP-1 M3 complete after implementing the batch-shaped outbox publish contract, bulk sent marking, ordered suffix skipping, and updated benchmark/test call sites. Recorded focused and full `keiro-test` validation evidence.

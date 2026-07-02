@@ -61,6 +61,7 @@ module Keiro.Outbox (
 where
 
 import Data.ByteString (ByteString)
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.TypeID qualified as TypeID
 import Data.UUID.V7 qualified as V7
@@ -88,10 +89,13 @@ import Keiro.Telemetry (
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId, GlobalPosition, RecordedEvent)
-import OpenTelemetry.Attributes.Key (unkey)
+import OpenTelemetry.Attributes.Key (AttributeKey (..), unkey)
 import OpenTelemetry.SemanticConventions (error_type)
 import OpenTelemetry.Trace.Core (SpanStatus (..), addAttribute, setStatus)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
+
+keiro_outbox_batch_size :: AttributeKey Int64
+keiro_outbox_batch_size = AttributeKey "keiro.outbox.batch.size"
 
 -- | Mint a fresh time-ordered UUIDv7 for use as an 'OutboxId'.
 freshOutboxId :: (IOE :> es) => Eff es OutboxId
@@ -259,14 +263,23 @@ data PublishOutcome
       PublishFailed !Text
     deriving stock (Generic, Eq, Show)
 
-{- | Drain claimed outbox rows by handing each to @publish@ and reflecting
-the outcome back into the row's status.
+{- | Drain claimed outbox rows by handing the claimed batch to @publish@ and
+reflecting the outcomes back into row statuses.
 
 Claims rows in batches of @batchSize@ under the active 'OrderingPolicy',
-calls @publish@ for each, and marks every row sent or — using
-'markOutboxFailedTx' — failed/dead. On 'StopTheLine' policy, the worker
-halts after the first 'PublishFailed' and records the offending
-'OutboxId' in 'haltedOn'.
+calls @publish@ with the claimed rows in claim order, and marks every row
+sent or — using 'markOutboxFailedTx' — failed/dead. The publish result must
+contain one outcome per input row; a missing outcome is treated as
+@PublishFailed "publisher returned no outcome"@. If the publisher throws,
+every row in that call is treated as failed with the exception text.
+
+For ordered policies, if a row fails then later rows in the same ordered group
+are skipped and returned to @failed@ without consuming an attempt; these
+skipped rows count as 'OutboxPublishSummary.retried'. A real Kafka transport
+must not successfully deliver a later same-key record after reporting an
+earlier same-key failure from the same call. On 'StopTheLine', the worker calls
+@publish@ with singleton batches and halts after the first failed row, recording
+the offending 'OutboxId' in 'haltedOn'.
 
 Returns when one of:
 
@@ -279,7 +292,7 @@ schedule it repeatedly (e.g. once per process-compose tick).
 publishClaimedOutbox ::
     forall es.
     (IOE :> es, Store :> es) =>
-    (OutboxRow -> Eff es PublishOutcome) ->
+    ([OutboxRow] -> Eff es [(OutboxId, PublishOutcome)]) ->
     OutboxPublishOptions ->
     Maybe KeiroMetrics ->
     Eff es OutboxPublishSummary
@@ -298,8 +311,7 @@ publishClaimedOutbox publish options mMetrics = do
     for_ mMetrics $ \metrics -> do
         backlog <- countOutboxBacklog
         recordOutboxBacklog (Just metrics) (fromIntegral backlog)
-    summary <-
-        drainBatch rows OutboxPublishSummary{claimed = 0, published = 0, retried = 0, dead = 0, haltedOn = Nothing}
+    summary <- publishBatch rows
     -- Counters from the aggregated pass summary (each a no-op under 'Nothing';
     -- a zero delta is harmless).
     recordOutboxPublished mMetrics (fromIntegral (summary ^. #published))
@@ -307,49 +319,200 @@ publishClaimedOutbox publish options mMetrics = do
     recordOutboxDeadlettered mMetrics (fromIntegral (summary ^. #dead))
     pure summary
   where
-    drainBatch ::
+    publishBatch :: [OutboxRow] -> Eff es OutboxPublishSummary
+    publishBatch [] =
+        pure OutboxPublishSummary{claimed = 0, published = 0, retried = 0, dead = 0, haltedOn = Nothing}
+    publishBatch batch =
+        case options ^. #orderingPolicy of
+            StopTheLine -> publishStopTheLine batch batch [] Nothing
+            policy -> do
+                outcomes <- publishRows batch
+                markProcessedOutcomes policy batch outcomes Nothing
+
+    publishStopTheLine ::
         [OutboxRow] ->
-        OutboxPublishSummary ->
+        [OutboxRow] ->
+        [(OutboxId, PublishOutcome)] ->
+        Maybe OutboxId ->
         Eff es OutboxPublishSummary
-    drainBatch [] acc = pure acc
-    drainBatch (row : rest) acc = do
-        outcome <-
-            withProducerSpan
-                (options ^. #tracer)
-                (row ^. #event)
-                (outboxRowToKafkaRecord row)
-                $ \mSpan -> do
-                    attempted <- trySync (publish row)
-                    let out = case attempted of
-                            Left err -> PublishFailed (Text.pack (displayException err))
-                            Right ok -> ok
-                    case (mSpan, out) of
-                        (Just sp, PublishFailed errMsg) -> do
-                            addAttribute sp (unkey error_type) ("publish_failed" :: Text)
-                            setStatus sp (Error errMsg)
-                        _ -> pure ()
-                    pure out
-        now <- liftIO getCurrentTime
+    publishStopTheLine original [] outcomes halted =
+        markProcessedOutcomes StopTheLine original (Map.fromList outcomes) halted
+    publishStopTheLine original (row : rest) outcomes _ = do
+        result <- publishRows [row]
+        let outcome = outcomeFor result row
+            outcomes' = outcomes <> [(row ^. #outboxId, outcome)]
         case outcome of
-            PublishSucceeded -> do
-                _ <- markOutboxSent (row ^. #outboxId) now
-                drainBatch rest (acc & #claimed +~ 1 & #published +~ 1)
-            PublishFailed errMsg -> do
-                let attempt = row ^. #attemptCount
-                    delay = nextDelay (options ^. #backoff) attempt
-                resultStatus <-
-                    runTransaction $
-                        markOutboxFailedTx
-                            (row ^. #outboxId)
-                            errMsg
-                            (options ^. #maxAttempts)
-                            delay
-                            now
-                let bumped = acc & #claimed +~ 1
-                    acc' = case resultStatus of
-                        OutboxDead -> bumped & #dead +~ 1
-                        _ -> bumped & #retried +~ 1
-                case options ^. #orderingPolicy of
-                    StopTheLine ->
-                        pure (acc' & #haltedOn ?~ row ^. #outboxId)
-                    _ -> drainBatch rest acc'
+            PublishSucceeded -> publishStopTheLine original rest outcomes' Nothing
+            PublishFailed _ -> markProcessedOutcomes StopTheLine original (Map.fromList outcomes') (Just (row ^. #outboxId))
+
+    publishRows :: [OutboxRow] -> Eff es (Map.Map OutboxId PublishOutcome)
+    publishRows [] = pure Map.empty
+    publishRows batch@(firstRow : _) =
+        Map.fromList
+            <$> withBatchSpan
+                batch
+                firstRow
+                ( do
+                    attempted <- trySync (publish batch)
+                    let normalized =
+                            case attempted of
+                                Left err ->
+                                    let errMsg = Text.pack (displayException err)
+                                     in [(row ^. #outboxId, PublishFailed errMsg) | row <- batch]
+                                Right reported ->
+                                    normalizeOutcomes batch reported
+                    pure normalized
+                )
+
+    withBatchSpan ::
+        [OutboxRow] ->
+        OutboxRow ->
+        Eff es [(OutboxId, PublishOutcome)] ->
+        Eff es [(OutboxId, PublishOutcome)]
+    withBatchSpan batch firstRow action =
+        withProducerSpan
+            (options ^. #tracer)
+            (firstRow ^. #event)
+            (outboxRowToKafkaRecord firstRow)
+            $ \mSpan -> do
+                for_ mSpan $ \sp ->
+                    addAttribute sp (unkey keiro_outbox_batch_size) (fromIntegral (length batch) :: Int64)
+                outcomes <- action
+                case (mSpan, firstFailure outcomes) of
+                    (Just sp, Just errMsg) -> do
+                        addAttribute sp (unkey error_type) ("publish_failed" :: Text)
+                        setStatus sp (Error errMsg)
+                    _ -> pure ()
+                pure outcomes
+
+    normalizeOutcomes :: [OutboxRow] -> [(OutboxId, PublishOutcome)] -> [(OutboxId, PublishOutcome)]
+    normalizeOutcomes batch reported =
+        let reportedMap = Map.fromList reported
+         in [ (row ^. #outboxId, outcomeFor reportedMap row)
+            | row <- batch
+            ]
+
+    outcomeFor :: Map.Map OutboxId PublishOutcome -> OutboxRow -> PublishOutcome
+    outcomeFor outcomes row =
+        fromMaybe (PublishFailed "publisher returned no outcome") $
+            Map.lookup (row ^. #outboxId) outcomes
+
+    firstFailure :: [(OutboxId, PublishOutcome)] -> Maybe Text
+    firstFailure [] = Nothing
+    firstFailure ((_, PublishSucceeded) : rest) = firstFailure rest
+    firstFailure ((_, PublishFailed errMsg) : _) = Just errMsg
+
+    markProcessedOutcomes ::
+        OrderingPolicy ->
+        [OutboxRow] ->
+        Map.Map OutboxId PublishOutcome ->
+        Maybe OutboxId ->
+        Eff es OutboxPublishSummary
+    markProcessedOutcomes policy batch outcomes halted = do
+        now <- liftIO getCurrentTime
+        let marks = foldMap (groupMarks outcomes) (outcomeGroups policy batch)
+            sentIds = marks ^. #sentIds
+            failedRows = marks ^. #failedRows
+            skippedRows = marks ^. #skippedRows
+        failedStatuses <-
+            if null failedRows && null skippedRows
+                then pure []
+                else runTransaction $ do
+                    statuses <- traverse (markFailed now) failedRows
+                    traverse_ (markSkipped now) skippedRows
+                    pure statuses
+        _ <- markOutboxSentBatch sentIds now
+        let deadCount = length [() | OutboxDead <- failedStatuses]
+            retriedFailures = length failedStatuses - deadCount
+        pure
+            OutboxPublishSummary
+                { claimed = length batch
+                , published = length sentIds
+                , retried = retriedFailures + length skippedRows
+                , dead = deadCount
+                , haltedOn = halted
+                }
+
+    markFailed :: UTCTime -> (OutboxRow, Text) -> Tx.Transaction OutboxStatus
+    markFailed now (row, errMsg) =
+        markOutboxFailedTx
+            (row ^. #outboxId)
+            errMsg
+            (options ^. #maxAttempts)
+            (nextDelay (options ^. #backoff) (row ^. #attemptCount))
+            now
+
+    markSkipped :: UTCTime -> OutboxRow -> Tx.Transaction ()
+    markSkipped now row =
+        markOutboxSkippedTx
+            (row ^. #outboxId)
+            "skipped: earlier record for the same key failed"
+            now
+
+data OutcomeMarks = OutcomeMarks
+    { sentIds :: ![OutboxId]
+    , failedRows :: ![(OutboxRow, Text)]
+    , skippedRows :: ![OutboxRow]
+    }
+    deriving stock (Generic)
+
+instance Semigroup OutcomeMarks where
+    left <> right =
+        OutcomeMarks
+            { sentIds = (left ^. #sentIds) <> (right ^. #sentIds)
+            , failedRows = (left ^. #failedRows) <> (right ^. #failedRows)
+            , skippedRows = (left ^. #skippedRows) <> (right ^. #skippedRows)
+            }
+
+instance Monoid OutcomeMarks where
+    mempty = OutcomeMarks{sentIds = [], failedRows = [], skippedRows = []}
+
+groupMarks :: Map.Map OutboxId PublishOutcome -> [OutboxRow] -> OutcomeMarks
+groupMarks outcomes = go []
+  where
+    go sent [] = mempty{sentIds = sent}
+    go sent (row : rest) =
+        case fromMaybe (PublishFailed "publisher returned no outcome") (Map.lookup (row ^. #outboxId) outcomes) of
+            PublishSucceeded -> go (sent <> [row ^. #outboxId]) rest
+            PublishFailed errMsg ->
+                OutcomeMarks
+                    { sentIds = sent
+                    , failedRows = [(row, errMsg)]
+                    , skippedRows = rest
+                    }
+
+data OutcomeGroupKey
+    = SourceGroup
+    | RowGroup !OutboxId
+    | KeyGroup !Text !Text
+    deriving stock (Generic, Eq)
+
+data OutcomeGroup = OutcomeGroup
+    { groupKey :: !OutcomeGroupKey
+    , groupRows :: ![OutboxRow]
+    }
+    deriving stock (Generic)
+
+outcomeGroups :: OrderingPolicy -> [OutboxRow] -> [[OutboxRow]]
+outcomeGroups policy =
+    fmap (^. #groupRows) . foldl' addGroup []
+  where
+    addGroup groups row =
+        appendGroup (keyFor row) row groups
+    keyFor row =
+        case policy of
+            PerSourceStream -> SourceGroup
+            StopTheLine -> SourceGroup
+            BestEffort -> RowGroup (row ^. #outboxId)
+            _ ->
+                case row ^. #event . #key of
+                    Nothing -> RowGroup (row ^. #outboxId)
+                    Just key -> KeyGroup (row ^. #event . #source) key
+
+appendGroup :: OutcomeGroupKey -> OutboxRow -> [OutcomeGroup] -> [OutcomeGroup]
+appendGroup key row [] = [OutcomeGroup{groupKey = key, groupRows = [row]}]
+appendGroup key row (group : rest)
+    | group ^. #groupKey == key =
+        (group & #groupRows %~ (<> [row])) : rest
+    | otherwise =
+        group : appendGroup key row rest

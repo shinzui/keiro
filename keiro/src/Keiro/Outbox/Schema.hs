@@ -11,7 +11,9 @@ module Keiro.Outbox.Schema (
     claimOutboxBatch,
     requeueStuckOutbox,
     markOutboxSent,
+    markOutboxSentBatch,
     markOutboxFailedTx,
+    markOutboxSkippedTx,
     lookupOutbox,
     listOutbox,
     countOutboxBacklog,
@@ -163,6 +165,21 @@ markOutboxSent outboxId now =
     runTransaction $
         Tx.statement (unOutboxId outboxId, now) markSentStmt
 
+{- | Mark many rows as successfully published in one statement.
+
+Only rows still in @publishing@ transition. Returns how many rows changed;
+callers treat a shortfall as benign because delivery is already at-least-once.
+-}
+markOutboxSentBatch :: (Store :> es) => [OutboxId] -> UTCTime -> Eff es Int
+markOutboxSentBatch [] _ = pure 0
+markOutboxSentBatch outboxIds now =
+    fromIntegral
+        <$> runTransaction
+            ( Tx.statement
+                (fmap unOutboxId outboxIds, now)
+                markSentBatchStmt
+            )
+
 {- | Mark a row as failed and decide whether it is retryable or dead.
 
 Reads the current @attempt_count@; if it is greater than or equal to
@@ -190,6 +207,15 @@ markOutboxFailedTx outboxId errMsg maxAttempts delay now = do
         (unOutboxId outboxId, statusText nextStatus, errMsg, nextAttempt, now)
         markFailedStmt
     pure nextStatus
+
+{- | Return a claimed row to @failed@ without consuming an attempt.
+
+Used for rows skipped because an earlier row in the same ordered group failed
+inside the same publish batch.
+-}
+markOutboxSkippedTx :: OutboxId -> Text -> UTCTime -> Tx.Transaction ()
+markOutboxSkippedTx outboxId errMsg now =
+    Tx.statement (unOutboxId outboxId, errMsg, now) markSkippedStmt
 
 -- ---------------------------------------------------------------------------
 -- Encoder support
@@ -564,6 +590,24 @@ markSentStmt =
         )
         ((> 0) <$> D.rowsAffected)
 
+markSentBatchStmt :: Statement ([UUID], UTCTime) Int64
+markSentBatchStmt =
+    preparable
+        """
+        UPDATE keiro_outbox
+        SET status = 'sent',
+            published_at = $2,
+            last_error = NULL,
+            updated_at = $2
+        WHERE outbox_id = ANY($1)
+          AND status = 'publishing'
+        """
+        ( contrazip2
+            (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.uuid))))
+            (E.param (E.nonNullable E.timestamptz))
+        )
+        D.rowsAffected
+
 markFailedStmt :: Statement (UUID, Text, Text, UTCTime, UTCTime) ()
 markFailedStmt =
     preparable
@@ -580,6 +624,26 @@ markFailedStmt =
             (E.param (E.nonNullable E.text))
             (E.param (E.nonNullable E.text))
             (E.param (E.nonNullable E.timestamptz))
+            (E.param (E.nonNullable E.timestamptz))
+        )
+        D.noResult
+
+markSkippedStmt :: Statement (UUID, Text, UTCTime) ()
+markSkippedStmt =
+    preparable
+        """
+        UPDATE keiro_outbox
+        SET status = 'failed',
+            attempt_count = GREATEST(attempt_count - 1, 0),
+            last_error = $2,
+            next_attempt_at = $3,
+            updated_at = $3
+        WHERE outbox_id = $1
+          AND status = 'publishing'
+        """
+        ( contrazip3
+            (E.param (E.nonNullable E.uuid))
+            (E.param (E.nonNullable E.text))
             (E.param (E.nonNullable E.timestamptz))
         )
         D.noResult

@@ -35,9 +35,9 @@ This section must always reflect the actual current state of the work.
 - [x] M1: Update existing outbox claim tests in `keiro/test/Main.hs` that assert one-row-per-key claiming; add run-claiming tests (completed 2026-07-02T00:11:43Z)
 - [x] M2: Add migration `keiro-migrations/sql-migrations/<timestamp>-keiro-outbox-claim-order-index.sql` (completed 2026-07-02T00:15:12Z)
 - [x] M2: Regenerate expected schema (`cabal run keiro-write-expected-schema`) and pass `cabal test keiro-migrations-test` (completed 2026-07-02T00:15:12Z)
-- [ ] M3: Change `publishClaimedOutbox` publish argument to batch shape; add `markOutboxSentBatch` and `markOutboxSkippedTx` to `Keiro.Outbox.Schema`
-- [ ] M3: Implement per-key prefix outcome processing (sent prefix, failed pivot, skipped suffix) and `StopTheLine` sequential mode
-- [ ] M3: Update all `publishClaimedOutbox` call sites and tests
+- [x] M3: Change `publishClaimedOutbox` publish argument to batch shape; add `markOutboxSentBatch` and `markOutboxSkippedTx` to `Keiro.Outbox.Schema` (completed 2026-07-02T00:25:25Z)
+- [x] M3: Implement per-key prefix outcome processing (sent prefix, failed pivot, skipped suffix) and `StopTheLine` sequential mode (completed 2026-07-02T00:25:25Z)
+- [x] M3: Update all `publishClaimedOutbox` call sites and tests (completed 2026-07-02T00:25:25Z)
 - [ ] M4: Add `outboxMaintenancePass` + `sampleOutboxBacklog`; remove sweep and backlog gauge from `publishClaimedOutbox`
 - [ ] M4: Update tests that relied on the publish pass doing reclamation; full `just haskell-build` and `cabal test keiro-test` green
 - [ ] Final: Re-run the identical benchmark scenarios on the finished code; record the "After" table and before/after ratios in Outcomes & Retrospective; check the advisory ratio expectations in Validation and Acceptance
@@ -59,6 +59,12 @@ implementation. Provide concise evidence.
   Evidence:
   ```text
   cabal test keiro-test initially failed the cross-context "head-of-line blocks a same-key successor..." example because the unchanged worker published a same-key successor in the same large claimed batch. Setting that legacy failure-path test to one-row batches preserves its pre-M3 purpose; M3 adds the large-batch suffix-skipping behavior.
+  ```
+
+- Discovery: `StopTheLine` uses singleton publish calls, but outcome marking must group the entire original claimed batch, not each key separately.
+  Evidence:
+  ```text
+  The M3 implementation now treats StopTheLine outcome processing as a source-wide group, so rows after the halted failure are returned to failed without consuming attempts even if their keys differ.
   ```
 
 
@@ -177,6 +183,24 @@ Wrote expected schema to keiro-migrations/expected-schema
 
 cabal test keiro-migrations-test
 2 examples, 0 failures
+```
+
+### Milestone 3 — Batch-Shaped Publish Contract
+
+Changed `publishClaimedOutbox` to accept a batch-shaped publisher, hand non-`StopTheLine` policies the whole claimed batch in one call, and run `StopTheLine` as singleton publish calls that halt at the first failed row. Outcome processing now marks each ordered group as a sent prefix, one failed pivot, and a skipped suffix. Skipped suffix rows are returned to `failed` through `markOutboxSkippedTx` without consuming the claim-time attempt, while successful ids are marked through one `markOutboxSentBatch` statement.
+
+Updated the outbox benchmark publisher and all test call sites to the batch signature using a `perRow` adapter where the old tests still model per-row behavior. Added coverage for one-call 10-row same-key publishing, suffix skipping after a mid-run failure, `StopTheLine` halting with skipped unattempted rows, missing publish outcomes, batch exception handling, and worker-level producer span behavior. `Keiro.Outbox.Kafka` now documents that per-record publish spans are the transport adapter's responsibility.
+
+Validation:
+
+```text
+cabal build keiro:lib:keiro keiro:bench:keiro-bench keiro:test:keiro-test
+
+cabal test keiro-test --test-options="--match Keiro.Outbox"
+32 examples, 0 failures
+
+cabal test keiro-test
+265 examples, 0 failures
 ```
 
 
@@ -530,3 +554,5 @@ Revision note (2026-07-02): Implemented Milestone 0 against unchanged runtime co
 Revision note (2026-07-02, later): Implemented Milestone 1 by replacing heads-only claim predicates with the two-stage candidate/ready run-claiming query, documenting the run invariant on `claimOutboxBatch`, adding Postgres-backed tests for per-key, per-source, null-key, backoff-head, and publishing-predecessor cases, and recording the full `cabal test keiro-test` result. Legacy publish failure/dead-letter tests use one-row batches until Milestone 3 adds same-key suffix skipping for larger batches.
 
 Revision note (2026-07-02, M2): Implemented Milestone 2 by adding the forward SQL migration for `keiro_outbox_claim_order_idx`, touching the embedded migration source comment so the new migration is included by Template Haskell, regenerating `keiro-migrations/expected-schema`, and recording the passing `cabal test keiro-migrations-test` result.
+
+Revision note (2026-07-02, M3): Implemented Milestone 3 by changing `publishClaimedOutbox` to the batch publisher contract, adding bulk sent marking and skipped-row marking in `Keiro.Outbox.Schema`, enforcing prefix/pivot/suffix outcome processing for ordered groups, running `StopTheLine` as singleton publish calls with whole-batch suffix skipping, updating benchmark/test call sites, and recording passing focused and full test results.

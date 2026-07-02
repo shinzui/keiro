@@ -125,12 +125,12 @@ drainOutbox broker passes = do
             void (publishClaimedOutbox (simulatedPublish broker) defaultPublishOptions Nothing)
             drainOutbox broker (passes + 1)
 
-simulatedPublish :: (IOE :> es) => BrokerModel -> OutboxRow -> Eff es PublishOutcome
-simulatedPublish broker _row = do
-    let totalMicros = broker.invocationMicros + broker.perRecordMicros
+simulatedPublish :: (IOE :> es) => BrokerModel -> [OutboxRow] -> Eff es [(OutboxId, PublishOutcome)]
+simulatedPublish broker rows = do
+    let totalMicros = broker.invocationMicros + broker.perRecordMicros * length rows
     when (totalMicros > 0) $
         liftIO (threadDelay totalMicros)
-    pure PublishSucceeded
+    pure [(row ^. #outboxId, PublishSucceeded) | row <- rows]
 
 scenarioMessages :: (Int -> Maybe Text) -> [(OutboxId, IntegrationEvent)]
 scenarioMessages keyFor =
