@@ -40,8 +40,8 @@ This section must always reflect the actual current state of the work.
 - [x] M3: Update all `publishClaimedOutbox` call sites and tests (completed 2026-07-02T00:25:25Z)
 - [x] M4: Add `outboxMaintenancePass` + `sampleOutboxBacklog`; remove sweep and backlog gauge from `publishClaimedOutbox` (completed 2026-07-02T00:37:38Z)
 - [x] M4: Update tests that relied on the publish pass doing reclamation; full `just haskell-build` and `cabal test keiro-test` green (completed 2026-07-02T00:37:38Z)
-- [ ] Final: Re-run the identical benchmark scenarios on the finished code; record the "After" table and before/after ratios in Outcomes & Retrospective; check the advisory ratio expectations in Validation and Acceptance
-- [ ] Final: Commit `keiro/bench/baseline-outbox.csv` from the finished code and add the `bench-regression` Justfile target (`--baseline` + `--fail-if-slower`) as the standing regression guard
+- [x] Final: Re-run the identical benchmark scenarios on the finished code; record the "After" table and before/after ratios in Outcomes & Retrospective; check the advisory ratio expectations in Validation and Acceptance (completed 2026-07-02T00:40:12Z)
+- [x] Final: Commit `keiro/bench/baseline-outbox.csv` from the finished code and add the `bench-regression` Justfile target (`--baseline` + `--fail-if-slower`) as the standing regression guard (completed 2026-07-02T00:40:12Z)
 
 
 ## Surprises & Discoveries
@@ -71,6 +71,12 @@ implementation. Provide concise evidence.
   Evidence:
   ```text
   `countOutboxBacklog` only needs `Store`, but `recordOutboxBacklog` performs metric IO; the M4 build failed until `sampleOutboxBacklog :: (IOE :> es, Store :> es) => ...`.
+  ```
+
+- Discovery: Cabal runs the benchmark executable from the `keiro` package directory, so CSV paths passed through `--benchmark-options` are package-relative.
+  Evidence:
+  ```text
+  `--csv keiro/bench/baseline-outbox.csv` failed with openFile: does not exist; `--csv bench/baseline-outbox.csv` wrote the intended repo file at `keiro/bench/baseline-outbox.csv`.
   ```
 
 
@@ -228,6 +234,55 @@ cabal test keiro-test
 
 just haskell-build
 passed
+```
+
+### Final — After Benchmark And Regression Guard
+
+Command:
+
+```bash
+cabal bench keiro-bench --benchmark-options="-p outbox --time-mode wall --csv bench/baseline-outbox.csv"
+```
+
+Note: Cabal runs the benchmark executable from the `keiro` package directory, so the `--csv` path is package-relative. The committed file is still the repo path `keiro/bench/baseline-outbox.csv`.
+
+Rendered output:
+
+```text
+All
+  outbox
+    hot-key:           OK
+      778  ms +/- 33 ms
+    hot-key-nolatency: OK
+      609  ms +/- 57 ms
+    multi-key:         OK
+      454  ms +/- 16 ms
+
+All 3 tests passed (12.21s)
+```
+
+CSV evidence:
+
+```text
+Name,Mean (ps),2*Stdev (ps)
+All.outbox.hot-key,777679300044,33321438100
+All.outbox.hot-key-nolatency,608899199998,57281800878
+All.outbox.multi-key,453767600076,16226250340
+```
+
+Before/after ratios against the M0 baseline:
+
+```text
+All.outbox.hot-key          28.78x faster
+All.outbox.hot-key-nolatency 31.09x faster
+All.outbox.multi-key        10.66x faster
+```
+
+All three exceed the advisory acceptance ratios (`hot-key` >= 5x, `multi-key` >= 3x, `hot-key-nolatency` >= 1.5x). Added `bench-regression` to `Justfile` as a manual/local guard using the committed baseline:
+
+```text
+just bench-regression
+All 3 tests passed (12.30s)
 ```
 
 
@@ -494,7 +549,7 @@ Milestone 0 (before any behavior change) and again after Milestone 4:
 
 ```bash
 cabal bench keiro-bench --benchmark-options="-p outbox --time-mode wall --csv bench-before-outbox.csv"   # M0 baseline
-cabal bench keiro-bench --benchmark-options="-p outbox --time-mode wall --csv keiro/bench/baseline-outbox.csv"  # after M4; commit this CSV
+cabal bench keiro-bench --benchmark-options="-p outbox --time-mode wall --csv bench/baseline-outbox.csv"  # after M4; commit repo path keiro/bench/baseline-outbox.csv
 just bench-regression                  # standing guard: --baseline + --fail-if-slower 25
 ```
 
@@ -585,3 +640,5 @@ Revision note (2026-07-02, M2): Implemented Milestone 2 by adding the forward SQ
 Revision note (2026-07-02, M3): Implemented Milestone 3 by changing `publishClaimedOutbox` to the batch publisher contract, adding bulk sent marking and skipped-row marking in `Keiro.Outbox.Schema`, enforcing prefix/pivot/suffix outcome processing for ordered groups, running `StopTheLine` as singleton publish calls with whole-batch suffix skipping, updating benchmark/test call sites, and recording passing focused and full test results.
 
 Revision note (2026-07-02, M4): Implemented Milestone 4 by adding explicit outbox maintenance options/summary and passes, removing stuck-row sweeping and backlog gauge sampling from `publishClaimedOutbox`, updating tests and docs for the separate maintenance schedule, recording the `IOE` constraint required by `sampleOutboxBacklog`, and validating with focused/full tests plus `just haskell-build`.
+
+Revision note (2026-07-02, Final): Completed EP-1 final benchmark comparison, committed the after baseline CSV at `keiro/bench/baseline-outbox.csv`, added and validated `just bench-regression`, and recorded before/after ratios that exceed every advisory acceptance threshold.

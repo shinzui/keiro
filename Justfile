@@ -50,6 +50,14 @@ haskell-test:
     cabal test jitsurei-test
     cabal run jitsurei:exe:jitsurei-diagrams -- --check
 
+# Manual/local benchmark guard. The committed baseline reflects the primary
+# dev machine; this is deliberately not wired into verify/CI. Cabal runs the
+# benchmark from the keiro package directory, so the baseline path is
+# package-relative.
+[group('haskell')]
+bench-regression:
+    cabal bench keiro-bench --benchmark-options="-p outbox --time-mode wall --baseline bench/baseline-outbox.csv --fail-if-slower 25"
+
 [group('haskell')]
 haskell-verify: haskell-build haskell-test website-verify
 
