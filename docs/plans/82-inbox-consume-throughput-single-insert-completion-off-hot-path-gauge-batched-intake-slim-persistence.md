@@ -33,8 +33,8 @@ This section must always reflect the actual current state of the work.
 - [x] M0: Capture the "Before" measurements (`--csv`), paste the rendered table plus machine notes into Outcomes & Retrospective (completed 2026-07-02T00:43:56Z)
 - [x] M1: Remove per-message backlog gauge from `runInboxTransactionWithKey` and `runInboxTransactionWithRetriesKey`; add `sampleInboxBacklog` (completed 2026-07-02T00:48:52Z)
 - [x] M1: Update metrics tests; `cabal test keiro-test` green (completed 2026-07-02T00:48:52Z)
-- [ ] M2: Replace insert-`processing`-then-update with single insert-as-`completed` on the happy path
-- [ ] M2: Haddock updates for the now-legacy `processing` status and `InboxInProgress` result; tests green
+- [x] M2: Replace insert-`processing`-then-update with single insert-as-`completed` on the happy path (completed 2026-07-02T00:54:45Z)
+- [x] M2: Haddock updates for the now-legacy `processing` status and `InboxInProgress` result; tests green (completed 2026-07-02T00:54:45Z)
 - [ ] M3: Migration dropping `keiro_inbox_received_idx`; regenerate expected schema; `cabal test keiro-migrations-test` green
 - [ ] M4: `runInboxTransactionBatch` with within-batch dedupe, shared single transaction, and per-message poison fallback
 - [ ] M4: Batch tests (happy path, in-batch duplicate, poison fallback, cross-batch duplicate)
@@ -59,6 +59,12 @@ implementation. Provide concise evidence.
   Evidence:
   ```text
   The sampler combines `countInboxBacklog` with `recordInboxBacklog`; the metric recording helper performs IO in the `Eff` stack, so the implemented signature is `(IOE :> es, Store :> es) => ...`.
+  ```
+
+- Discovery: Removing the fresh-path `markCompletedTx` means an explicit `markFailedTx` inside a successful handler is no longer overwritten to `completed`.
+  Evidence:
+  ```text
+  The public `markFailedTx` test now expects a handler-set failed row with last_error "operator failed"; before M2 the redundant completion update masked that explicit failure mark.
   ```
 
 
@@ -151,6 +157,24 @@ cabal test keiro-test --test-options="--match Keiro.Inbox"
 
 cabal test keiro-test
 265 examples, 0 failures
+```
+
+### Milestone 2 — Single-Insert Completion
+
+Renamed the fresh insert helper to `tryInsertCompletedTx` and changed the insert SQL to supply `status = 'completed'` and `completed_at = received_at` directly. Fresh inbox processing now inserts one committed row version; it no longer inserts `processing` and then updates to `completed` inside the same transaction. The retry path for a committed `failed` row still uses `markCompletedTx`, because that is a real state transition.
+
+Updated haddocks in `Keiro.Inbox`, `Keiro.Inbox.Schema`, and `Keiro.Inbox.Types` to describe `processing`/`InboxInProgress` as legacy-visible or future-async state rather than something current single-message intake commits. Added coverage that a plain throwing handler leaves no inbox row and updated the public `markFailedTx` test to prove explicit handler failure marks are preserved.
+
+Validation:
+
+```text
+cabal build keiro:lib:keiro keiro:test:keiro-test keiro:bench:keiro-bench
+
+cabal test keiro-test --test-options="--match Keiro.Inbox"
+18 examples, 0 failures
+
+cabal test keiro-test
+266 examples, 0 failures
 ```
 
 

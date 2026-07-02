@@ -3445,7 +3445,25 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right row <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-msg-rollback")
             row `shouldBe` Nothing
 
-        it "exports markFailedTx from the public inbox module" $ \storeHandle -> do
+        it "leaves no inbox row when the plain handler throws" $ \storeHandle -> do
+            let event =
+                    sampleIntegrationEnvelope
+                        & #messageId
+                        .~ "inbox-msg-throw-plain"
+                        & #source
+                        .~ "ordering"
+                handler _ = (pure $! error "plain inbox handler failed") :: Tx.Transaction ()
+            thrown <-
+                try $
+                    Store.runStoreIO storeHandle $
+                        runInboxTransaction Nothing PreferIntegrationMessageId event Nothing handler
+            case thrown of
+                Left (_ :: SomeException) -> pure ()
+                Right other -> expectationFailure ("expected handler exception, got " <> show (void other))
+            Right row <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-msg-throw-plain")
+            row `shouldBe` Nothing
+
+        it "exports markFailedTx from the public inbox module and preserves explicit failure marks" $ \storeHandle -> do
             let event =
                     sampleIntegrationEnvelope
                         & #messageId
@@ -3459,7 +3477,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Store.runStoreIO storeHandle $
                     runInboxTransaction Nothing PreferIntegrationMessageId event Nothing handler
             Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-msg-public-failed")
-            row ^. #status `shouldBe` InboxCompleted
+            row ^. #status `shouldBe` InboxFailed
+            row ^. #lastError `shouldBe` Just "operator failed"
 
         it "a throwing handler records a failed attempt instead of looping" $ \storeHandle -> do
             let event =

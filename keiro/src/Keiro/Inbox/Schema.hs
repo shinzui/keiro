@@ -7,7 +7,7 @@ This module owns the SQL surface that the inbox wrapper
 ('Keiro.Inbox.Kafka') consume.
 -}
 module Keiro.Inbox.Schema (
-    tryInsertProcessingTx,
+    tryInsertCompletedTx,
     markCompletedTx,
     markFailedTx,
     recordFailedAttemptTx,
@@ -42,27 +42,30 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..), GlobalPosition (..))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
-{- | Attempt to insert a new processing row.
+{- | Attempt to insert a new completed row.
 
 Returns 'Left' carrying the existing row if @(source, dedupe_key)@
 already exists; returns 'Right ()' if the insert created a new row. The
 caller — typically 'Keiro.Inbox.runInboxTransaction' — then either runs
 the handler (new) or branches on the existing row's status (duplicate).
 
+The row is inserted as @completed@ before the handler runs, but remains
+uncommitted until the handler transaction succeeds. On handler failure the
+whole transaction rolls back, so the completed row never becomes visible.
+
 If a concurrent retention job deletes the conflicting row between the
 insert attempt and the lookup, this returns 'Right ()'. The handler then
-runs and the later completed mark may update zero rows, so that delivery
-is not recorded. That edge is acceptable because retention only removes
-rows outside the configured dedupe window.
+runs without recording that delivery. That edge is acceptable because
+retention only removes rows outside the configured dedupe window.
 -}
-tryInsertProcessingTx ::
+tryInsertCompletedTx ::
     Text ->
     Text ->
     IntegrationEvent ->
     Maybe KafkaDeliveryRef ->
     UTCTime ->
     Tx.Transaction (Either InboxRow ())
-tryInsertProcessingTx src dedupe event kafka now = do
+tryInsertCompletedTx src dedupe event kafka now = do
     inserted <-
         Tx.statement (toEncodedInsert src dedupe event kafka now) tryInsertStmt
     if inserted
@@ -310,9 +313,11 @@ tryInsertStmt =
           , attributes
           , occurred_at
           , received_at
+          , status
+          , completed_at
           )
         VALUES
-          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, 'completed', $25)
         ON CONFLICT (source, dedupe_key) DO NOTHING
         RETURNING TRUE
         """

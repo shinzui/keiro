@@ -7,10 +7,10 @@ transaction. Duplicate redeliveries (Kafka offset retry, rebalance,
 producer republish) become observable as duplicates instead of
 re-running the handler.
 
-The wrapper is a single-transaction primitive: the inbox insert, the
-handler's local writes, and the @status = 'completed'@ update all
-commit atomically. If the handler raises or condemns the transaction,
-the inbox row never appears and the next delivery starts fresh.
+The wrapper is a single-transaction primitive: the completed inbox row
+and the handler's local writes commit atomically. If the handler raises
+or condemns the transaction, the inbox row never appears and the next
+delivery starts fresh.
 -}
 module Keiro.Inbox (
     -- * Re-exports
@@ -56,11 +56,11 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 Computes the dedupe key from @policy@ and @kafka@, then in one
 transaction:
 
-* Inserts the inbox row with status @processing@.
+* Inserts the inbox row with status @completed@.
 * If the row already exists, branches on its status: 'InboxCompleted'
   → 'InboxDuplicate'; 'InboxProcessing' → 'InboxInProgress';
   'InboxFailed' → 'InboxPreviouslyFailed'.
-* Otherwise runs @handler@ and updates the row to @completed@.
+* Otherwise runs @handler@; the row commits only if the handler succeeds.
 
 The handler is invoked with the decoded 'IntegrationEvent' so it does
 not need to redecode bytes. On exception or 'Tx.condemn' the whole
@@ -101,11 +101,10 @@ runInboxTransactionWithKey ::
 runInboxTransactionWithKey mMetrics src dedupe event kafka handler = do
     now <- liftIO getCurrentTime
     result <- runTransaction $ do
-        inserted <- tryInsertProcessingTx src dedupe event kafka now
+        inserted <- tryInsertCompletedTx src dedupe event kafka now
         case inserted of
             Right () -> do
                 handled <- handler event
-                markCompletedTx src dedupe now
                 pure (InboxProcessed handled)
             Left row -> case row ^. #status of
                 InboxCompleted -> pure InboxDuplicate
@@ -173,11 +172,10 @@ runInboxTransactionWithRetriesKey mMetrics attemptCeiling src dedupe event kafka
     attempted <-
         trySync $
             runTransaction $ do
-                inserted <- tryInsertProcessingTx src dedupe event kafka now
+                inserted <- tryInsertCompletedTx src dedupe event kafka now
                 case inserted of
                     Right () -> do
                         handled <- handler event
-                        markCompletedTx src dedupe now
                         pure (InboxProcessed handled)
                     Left row -> case row ^. #status of
                         InboxCompleted -> pure InboxDuplicate

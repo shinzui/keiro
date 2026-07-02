@@ -57,9 +57,9 @@ data InboxDedupePolicy
 
 {- | Lifecycle state of an inbox row.
 
-* 'InboxProcessing' — transient state set when the handler starts. In
-  the v1 single-transaction wrapper this state never escapes a
-  transaction; it is reserved for future async paths.
+* 'InboxProcessing' — legacy on-disk state from older wrappers and
+  reserved for future async paths. Current single-transaction intake
+  inserts fresh successful rows directly as 'InboxCompleted'.
 * 'InboxCompleted' — handler ran to completion; terminal.
 * 'InboxFailed' — handler signaled a permanent failure; terminal. The
   caller is responsible for operator action (dead-letter, manual
@@ -76,8 +76,9 @@ data InboxStatus
 * 'InboxProcessed a' — first delivery; handler ran and returned @a@.
 * 'InboxDuplicate' — a previous delivery already completed; handler not
   run.
-* 'InboxInProgress' — a previous attempt is currently in-flight (only
-  observable from a future async path). Treat as transient.
+* 'InboxInProgress' — a previous attempt is currently in-flight, or a
+  legacy @processing@ row was read. Current single-transaction intake
+  does not commit @processing@ rows. Treat as transient.
 * 'InboxPreviouslyFailed' — a previous attempt recorded a permanent
   failure. Operator should review before reprocessing.
 -}
