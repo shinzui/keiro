@@ -36,6 +36,7 @@ module Keiro.Inbox (
 where
 
 import Data.Map.Strict qualified as Map
+import Data.Maybe (listToMaybe, mapMaybe)
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (displayException, trySync)
@@ -272,6 +273,16 @@ transaction, the whole batch rolls back and every original delivery is
 retried through 'runInboxTransactionWithRetries'. That fallback preserves
 per-message failure accounting and prevents one poison message from
 discarding unrelated batch mates.
+
+'Tx.condemn' rolls the transaction back at commit but returns normally,
+so it cannot be observed from the transaction's return value alone.
+The batch detects it by re-reading one row it should have committed:
+every write in the fast path belongs to a delivery classified
+'InboxProcessed' (fresh insert as @completed@ or retry promotion to
+@completed@), so if the first such row is not @completed@ after the
+transaction returns, the whole batch was condemned and the per-message
+fallback runs. A batch with no 'InboxProcessed' rows performed no writes,
+so a condemned transaction loses nothing.
 -}
 runInboxTransactionBatch ::
     forall a es.
@@ -299,16 +310,42 @@ runInboxTransactionBatch mMetrics attemptCeiling policy persistence deliveries h
                     plan
     case attempted of
         Right results -> do
-            for_ results $ \case
-                Right result -> recordInboxResult mMetrics (Just attemptCeiling) result
-                Left _ -> pure ()
-            pure results
-        Left _ ->
-            traverse
-                ( \(event, kafka) ->
-                    runInboxTransactionWithRetriesWith mMetrics attemptCeiling persistence policy event kafka handler
-                )
-                deliveries
+            committed <- verifyBatchCommitted plan results
+            if committed
+                then do
+                    for_ results $ \case
+                        Right result -> recordInboxResult mMetrics (Just attemptCeiling) result
+                        Left _ -> pure ()
+                    pure results
+                else perMessageFallback
+        Left _ -> perMessageFallback
+  where
+    perMessageFallback :: Eff es [Either InboxError (InboxResult a)]
+    perMessageFallback =
+        traverse
+            ( \(event, kafka) ->
+                runInboxTransactionWithRetriesWith mMetrics attemptCeiling persistence policy event kafka handler
+            )
+            deliveries
+
+    -- A condemned transaction returns its results normally but commits
+    -- nothing. Re-read the first row the batch claims to have completed;
+    -- if it is not @completed@, the transaction rolled back at commit.
+    verifyBatchCommitted ::
+        [BatchPlan] ->
+        [Either InboxError (InboxResult a)] ->
+        Eff es Bool
+    verifyBatchCommitted plan results =
+        case listToMaybe (mapMaybe processedKey (zip plan results)) of
+            Nothing -> pure True
+            Just (src, dedupe) -> do
+                row <- lookupInbox src dedupe
+                pure (fmap (^. #status) row == Just InboxCompleted)
+
+    processedKey :: (BatchPlan, Either InboxError (InboxResult a)) -> Maybe (Text, Text)
+    processedKey = \case
+        (BatchWork src dedupe _ _, Right (InboxProcessed _)) -> Just (src, dedupe)
+        _ -> Nothing
 
 attemptOneTx ::
     InboxPersistence ->
