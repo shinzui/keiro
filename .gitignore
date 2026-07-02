@@ -20,3 +20,7 @@ db/
 
 # keiro-dsl scaffold manifest artifacts (informational; emitted into --out)
 keiro-dsl-manifest.*.txt
+
+# Scratch benchmark baselines captured before code changes; committed baselines
+# live under keiro/bench/baseline-*.csv after the implementation is complete.
+keiro/bench-before-*.csv
