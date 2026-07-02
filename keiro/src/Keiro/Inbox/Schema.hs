@@ -59,15 +59,16 @@ runs without recording that delivery. That edge is acceptable because
 retention only removes rows outside the configured dedupe window.
 -}
 tryInsertCompletedTx ::
+    InboxPersistence ->
     Text ->
     Text ->
     IntegrationEvent ->
     Maybe KafkaDeliveryRef ->
     UTCTime ->
     Tx.Transaction (Either InboxRow ())
-tryInsertCompletedTx src dedupe event kafka now = do
+tryInsertCompletedTx persistence src dedupe event kafka now = do
     inserted <-
-        Tx.statement (toEncodedInsert src dedupe event kafka now) tryInsertStmt
+        Tx.statement (toEncodedInsert persistence src dedupe event kafka now) tryInsertStmt
     if inserted
         then pure (Right ())
         else do
@@ -184,13 +185,14 @@ data EncodedFailedInsert = EncodedFailedInsert
     deriving stock (Generic)
 
 toEncodedInsert ::
+    InboxPersistence ->
     Text ->
     Text ->
     IntegrationEvent ->
     Maybe KafkaDeliveryRef ->
     UTCTime ->
     EncodedInsert
-toEncodedInsert src dedupe event kafka now =
+toEncodedInsert persistence src dedupe event kafka now =
     let mref = event ^. #schemaReference
         mtrace = event ^. #traceContext
      in EncodedInsert
@@ -201,25 +203,35 @@ toEncodedInsert src dedupe event kafka now =
             , sourceGlobalPosition = fmap unGlobalPosition (event ^. #sourceGlobalPosition)
             , destination = nullIfEmpty (event ^. #destination)
             , eventType = nullIfEmpty (event ^. #eventType)
-            , schemaVersion = Just (fromIntegral (event ^. #schemaVersion))
+            , schemaVersion = persistedSchema (Just (fromIntegral (event ^. #schemaVersion)))
             , contentType = contentTypeText (event ^. #contentType)
-            , schemaRegistry = mref >>= (^. #registry)
-            , schemaSubject = mref >>= (^. #subject)
-            , schemaVersionRef = fmap fromIntegral (mref >>= (^. #version))
-            , schemaId = mref >>= (^. #schemaId)
-            , schemaFingerprint = mref >>= (^. #fingerprint)
+            , schemaRegistry = persistedSchema (mref >>= (^. #registry))
+            , schemaSubject = persistedSchema (mref >>= (^. #subject))
+            , schemaVersionRef = persistedSchema (fmap fromIntegral (mref >>= (^. #version)))
+            , schemaId = persistedSchema (mref >>= (^. #schemaId))
+            , schemaFingerprint = persistedSchema (mref >>= (^. #fingerprint))
             , causationId = fmap unEventId (event ^. #causationId)
             , correlationId = fmap unEventId (event ^. #correlationId)
-            , traceparent = fmap (^. #traceparent) mtrace
-            , tracestate = mtrace >>= (^. #tracestate)
+            , traceparent = persistedEnvelope (fmap (^. #traceparent) mtrace)
+            , tracestate = persistedEnvelope (mtrace >>= (^. #tracestate))
             , kafkaTopic = fmap (^. #topic) kafka
             , kafkaPartition = fmap (^. #partition) kafka
             , kafkaOffset = fmap (^. #offset) kafka
-            , payloadBytes = event ^. #payloadBytes
-            , attributes = event ^. #attributes
+            , payloadBytes = case persistence of
+                PersistFullEnvelope -> event ^. #payloadBytes
+                PersistDedupeOnly -> mempty
+            , attributes = persistedEnvelope (event ^. #attributes)
             , occurredAt = Just (event ^. #occurredAt)
             , receivedAt = now
             }
+  where
+    persistedEnvelope :: Maybe x -> Maybe x
+    persistedEnvelope value = case persistence of
+        PersistFullEnvelope -> value
+        PersistDedupeOnly -> Nothing
+
+    persistedSchema :: Maybe x -> Maybe x
+    persistedSchema = persistedEnvelope
 
 toEncodedFailedInsert ::
     Text ->
@@ -231,7 +243,7 @@ toEncodedFailedInsert ::
     EncodedFailedInsert
 toEncodedFailedInsert src dedupe event kafka errMsg now =
     EncodedFailedInsert
-        { insert = toEncodedInsert src dedupe event kafka now
+        { insert = toEncodedInsert PersistFullEnvelope src dedupe event kafka now
         , lastError = errMsg
         }
 

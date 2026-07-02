@@ -38,7 +38,7 @@ This section must always reflect the actual current state of the work.
 - [x] M3: Migration dropping `keiro_inbox_received_idx`; regenerate expected schema; `cabal test keiro-migrations-test` green (completed 2026-07-02T00:57:48Z)
 - [x] M4: `runInboxTransactionBatch` with within-batch dedupe, shared single transaction, and per-message poison fallback (completed 2026-07-02T01:06:53Z)
 - [x] M4: Batch tests (happy path, in-batch duplicate, poison fallback, cross-batch duplicate) (completed 2026-07-02T01:06:53Z)
-- [ ] M5: `InboxPersistence` (`PersistFullEnvelope` / `PersistDedupeOnly`) threaded through intake; slim-row tests
+- [x] M5: `InboxPersistence` (`PersistFullEnvelope` / `PersistDedupeOnly`) threaded through intake; slim-row tests (completed 2026-07-02T01:13:12Z)
 - [ ] Final: Add the after-only benches (`inbox.batch-100` after M4, `inbox.single-slim` after M5); re-run all inbox scenarios; record the "After" table and before/after ratios in Outcomes & Retrospective
 - [ ] Final: Commit `keiro/bench/baseline-inbox.csv` from the finished code and extend the `bench-regression` Justfile target with the inbox pattern line
 - [ ] Final: `just haskell-build`, `cabal test keiro-test`, `cabal test keiro-migrations-test` all green; keiro-dsl conformance fixture still compiles
@@ -210,6 +210,26 @@ cabal test keiro-test --test-options="--match Keiro.Inbox"
 
 cabal test keiro-test
 270 examples, 0 failures
+```
+
+### Milestone 5 — Slim Payload Persistence
+
+Added `InboxPersistence` with `PersistFullEnvelope` and `PersistDedupeOnly`. Existing single-message APIs keep their signatures and delegate with `PersistFullEnvelope`; new `runInboxTransactionWith` and `runInboxTransactionWithRetriesWith` variants expose the persistence choice. `runInboxTransactionBatch` now takes the persistence setting directly.
+
+`tryInsertCompletedTx` threads the setting into the success-path insert encoder. `PersistDedupeOnly` stores an empty payload and omits attributes, trace context, and schema columns while retaining dedupe identity, routing, source-event ids, occurrence time, causation/correlation ids, and Kafka delivery metadata. `recordFailedAttemptTx` continues to persist the full envelope unconditionally so failed rows remain useful dead-letter records.
+
+Added coverage that a dedupe-only successful row round-trips with an empty payload and no schema/trace/attributes while preserving identity metadata, still deduplicates redelivery, and that a failed retrying row under `PersistDedupeOnly` keeps the full envelope.
+
+Validation:
+
+```text
+cabal build keiro:lib:keiro keiro:test:keiro-test keiro:bench:keiro-bench
+
+cabal test keiro-test --test-options="--match Keiro.Inbox"
+24 examples, 0 failures
+
+cabal test keiro-test
+272 examples, 0 failures
 ```
 
 
@@ -440,7 +460,7 @@ Code milestones are ordinary edits; rebuild and retest freely. The migration is 
 The library changes need no new packages: `hasql`/`hasql-transaction` (statements, `Tx.Transaction`), `effectful` (`Eff`, `IOE`, `trySync`), `kiroku` (`Store`, `runTransaction`), existing telemetry. The one new package is `tasty-bench`, confined to the shared `keiro-bench` benchmark stanza (see Milestone 0 and the outbox plan's Milestone 0); it never enters the library dependency graph. End-state additions to module `Keiro.Inbox` (full signatures):
 
 ```haskell
-sampleInboxBacklog :: (Store :> es) => Maybe KeiroMetrics -> Eff es ()
+sampleInboxBacklog :: (IOE :> es, Store :> es) => Maybe KeiroMetrics -> Eff es ()
 
 runInboxTransactionBatch ::
     (IOE :> es, Store :> es) =>
@@ -474,3 +494,5 @@ Revision note (2026-07-01): Added a Decision Log entry recording the residual ba
 Revision note (2026-07-01, later): Added Milestone 0 — inbox scenarios (`inbox.single-full` with metrics enabled, `inbox.single-nometrics`) on the shared tasty-bench `keiro-bench` component, run against unchanged code for a recorded "Before" baseline; after-only benches (`inbox.batch-100`, `inbox.single-slim`) added as their milestones land; final re-run recorded as a before/after comparison, with `keiro/bench/baseline-inbox.csv` committed and the shared `just bench-regression` target extended as a standing regression guard. Progress, Concrete Steps, Validation and Acceptance (advisory ratio gates 1.5×/1.2×/3×), Interfaces (tasty-bench, bench-only), and the Decision Log were updated accordingly. Requested by the user to measure before/after and protect the improvement going forward.
 
 Revision note (2026-07-02, M4): Marked Milestone 4 complete after adding `runInboxTransactionBatch`, factoring shared single-message transaction/result accounting helpers, adding batch behavior tests, and recording focused/full `keiro-test` validation.
+
+Revision note (2026-07-02, M5): Marked Milestone 5 complete after adding `InboxPersistence`, threading dedupe-only success persistence through single and batch intake, preserving full failed rows, adding slim-row tests, and recording build/focused/full validation.

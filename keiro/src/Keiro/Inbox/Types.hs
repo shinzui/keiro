@@ -9,6 +9,7 @@ re-running the handler.
 -}
 module Keiro.Inbox.Types (
     InboxDedupePolicy (..),
+    InboxPersistence (..),
     InboxStatus (..),
     InboxResult (..),
     InboxError (..),
@@ -53,6 +54,17 @@ data InboxDedupePolicy
     | PreferSourceEventIdentity
     | KafkaDeliveryIdentity
     | CustomDedupeKey !Text
+    deriving stock (Generic, Eq, Show)
+
+{- | How much of the integration-event envelope the inbox persists on the
+success path.
+
+The failure path always persists the full envelope because a failed
+inbox row is the operator's dead-letter record.
+-}
+data InboxPersistence
+    = PersistFullEnvelope
+    | PersistDedupeOnly
     deriving stock (Generic, Eq, Show)
 
 {- | Lifecycle state of an inbox row.
@@ -111,7 +123,13 @@ data KafkaDeliveryRef = KafkaDeliveryRef
     }
     deriving stock (Generic, Eq, Show)
 
--- | One row read back from @keiro_inbox@. Used by tests and inspection tooling.
+{- | One row read back from @keiro_inbox@.
+
+Rows written with 'PersistDedupeOnly' decode with an empty
+'IntegrationEvent' @payloadBytes@, no attributes, no trace context, and
+no schema reference. Identity, routing, source-event ids, occurrence
+time, and Kafka delivery metadata are still preserved.
+-}
 data InboxRow = InboxRow
     { source :: !Text
     , dedupeKey :: !Text

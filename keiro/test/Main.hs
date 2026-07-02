@@ -55,6 +55,7 @@ import Keiro.EventStream.Validate (EventStreamWarning (..), mkEventStream, valid
 import Keiro.Inbox (
     InboxDedupePolicy (..),
     InboxError (..),
+    InboxPersistence (..),
     InboxResult (..),
     InboxStatus (..),
     KafkaDeliveryRef (..),
@@ -64,7 +65,9 @@ import Keiro.Inbox (
     markFailedTx,
     runInboxTransaction,
     runInboxTransactionBatch,
+    runInboxTransactionWith,
     runInboxTransactionWithRetries,
+    runInboxTransactionWithRetriesWith,
     sampleInboxBacklog,
  )
 import Keiro.Inbox.Kafka qualified as InboxKafka
@@ -3574,7 +3577,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
             Right results <-
                 Store.runStoreIO storeHandle $
-                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId ((,Nothing) <$> events) handler
+                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId PersistFullEnvelope ((,Nothing) <$> events) handler
             results `shouldBe` replicate 50 (Right (InboxProcessed ()))
             Right rowCount <-
                 Store.runStoreIO storeHandle $
@@ -3597,7 +3600,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
             Right results <-
                 Store.runStoreIO storeHandle $
-                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId [(event, Nothing), (event, Nothing)] handler
+                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId PersistFullEnvelope [(event, Nothing), (event, Nothing)] handler
             results `shouldBe` [Right (InboxProcessed ()), Right InboxDuplicate]
             Right rowCount <-
                 Store.runStoreIO storeHandle $
@@ -3623,7 +3626,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
             Right results <-
                 Store.runStoreIO storeHandle $
-                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId ((,Nothing) <$> events) handler
+                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId PersistFullEnvelope ((,Nothing) <$> events) handler
             case results of
                 [ Right (InboxProcessed ())
                     , Right (InboxProcessed ())
@@ -3655,16 +3658,75 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 handler ev = Tx.statement (ev ^. #messageId) inboxTestCounterInsertStmt
             Right first <-
                 Store.runStoreIO storeHandle $
-                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId [(event, Nothing)] handler
+                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId PersistFullEnvelope [(event, Nothing)] handler
             first `shouldBe` [Right (InboxProcessed ())]
             Right second <-
                 Store.runStoreIO storeHandle $
-                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId [(event, Nothing)] handler
+                    runInboxTransactionBatch Nothing 3 PreferIntegrationMessageId PersistFullEnvelope [(event, Nothing)] handler
             second `shouldBe` [Right InboxDuplicate]
             Right rowCount <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
             rowCount `shouldBe` 1
+
+        it "can persist only dedupe columns for successful rows" $ \storeHandle -> do
+            let kafka = KafkaDeliveryRef "billing.orders.v1" 1 42
+                event =
+                    sampleIntegrationEnvelope
+                        & #messageId
+                        .~ "inbox-slim-success"
+                        & #source
+                        .~ "ordering"
+                        & #payloadBytes
+                        .~ "full success payload"
+                        & #attributes
+                        ?~ object ["source" Aeson..= ("slim-test" :: Text)]
+                handler _ = pure ()
+            Right (Right (InboxProcessed ())) <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionWith Nothing PersistDedupeOnly PreferIntegrationMessageId event (Just kafka) handler
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-slim-success")
+            row ^. #event . #payloadBytes `shouldBe` ""
+            row ^. #event . #attributes `shouldBe` Nothing
+            row ^. #event . #traceContext `shouldBe` Nothing
+            row ^. #event . #schemaReference `shouldBe` Nothing
+            row ^. #event . #messageId `shouldBe` "inbox-slim-success"
+            row ^. #event . #sourceEventId `shouldBe` event ^. #sourceEventId
+            row ^. #event . #sourceGlobalPosition `shouldBe` event ^. #sourceGlobalPosition
+            row ^. #event . #causationId `shouldBe` event ^. #causationId
+            row ^. #event . #correlationId `shouldBe` event ^. #correlationId
+            row ^. #event . #occurredAt `shouldBe` event ^. #occurredAt
+            row ^. #kafka `shouldBe` Just kafka
+            Right redelivery <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionWith Nothing PersistDedupeOnly PreferIntegrationMessageId event (Just kafka) handler
+            redelivery `shouldBe` Right InboxDuplicate
+
+        it "keeps full failed rows even when successful rows are dedupe-only" $ \storeHandle -> do
+            let event =
+                    sampleIntegrationEnvelope
+                        & #messageId
+                        .~ "inbox-slim-failed"
+                        & #source
+                        .~ "ordering"
+                        & #payloadBytes
+                        .~ "full failed payload"
+                        & #attributes
+                        ?~ object ["source" Aeson..= ("failed-slim-test" :: Text)]
+                handler _ = (pure $! error "slim failure") :: Tx.Transaction ()
+            Right result <-
+                Store.runStoreIO storeHandle $
+                    runInboxTransactionWithRetriesWith Nothing 3 PersistDedupeOnly PreferIntegrationMessageId event Nothing handler
+            case result of
+                Right (InboxHandlerFailed err 1) ->
+                    Text.isInfixOf "slim failure" err `shouldBe` True
+                other -> expectationFailure ("expected InboxHandlerFailed, got " <> show other)
+            Right (Just row) <- Store.runStoreIO storeHandle (lookupInbox "ordering" "inbox-slim-failed")
+            row ^. #status `shouldBe` InboxFailed
+            row ^. #event . #payloadBytes `shouldBe` event ^. #payloadBytes
+            row ^. #event . #attributes `shouldBe` event ^. #attributes
+            row ^. #event . #traceContext `shouldBe` event ^. #traceContext
+            row ^. #event . #schemaReference `shouldBe` event ^. #schemaReference
 
         it "garbage-collects completed rows older than the retention window" $ \storeHandle -> do
             let event =

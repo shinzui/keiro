@@ -25,8 +25,10 @@ module Keiro.Inbox (
 
     -- * Transactional handler wrapper
     runInboxTransaction,
+    runInboxTransactionWith,
     runInboxTransactionWithKey,
     runInboxTransactionWithRetries,
+    runInboxTransactionWithRetriesWith,
     runInboxTransactionWithRetriesKey,
     runInboxTransactionBatch,
     sampleInboxBacklog,
@@ -84,10 +86,38 @@ runInboxTransaction ::
     (IntegrationEvent -> Tx.Transaction a) ->
     Eff es (Either InboxError (InboxResult a))
 runInboxTransaction mMetrics policy event kafka handler =
+    runInboxTransactionWith mMetrics PersistFullEnvelope policy event kafka handler
+
+{- | Variant of 'runInboxTransaction' that controls success-path
+envelope persistence.
+
+'PersistDedupeOnly' keeps enough columns for dedupe and operator
+correlation but stores an empty payload and omits schema, trace, and
+attribute columns for successfully processed rows.
+-}
+runInboxTransactionWith ::
+    forall a es.
+    (IOE :> es, Store :> es) =>
+    Maybe KeiroMetrics ->
+    InboxPersistence ->
+    InboxDedupePolicy ->
+    IntegrationEvent ->
+    Maybe KafkaDeliveryRef ->
+    (IntegrationEvent -> Tx.Transaction a) ->
+    Eff es (Either InboxError (InboxResult a))
+runInboxTransactionWith mMetrics persistence policy event kafka handler =
     case dedupeKeyFor policy event kafka of
         Left err -> pure (Left err)
         Right dedupe ->
-            Right <$> runInboxTransactionWithKey mMetrics (event ^. #source) dedupe event kafka handler
+            Right
+                <$> runInboxTransactionWithKeyPersist
+                    mMetrics
+                    persistence
+                    (event ^. #source)
+                    dedupe
+                    event
+                    kafka
+                    handler
 
 {- | Lower-level variant that takes the dedupe key directly.
 
@@ -105,11 +135,25 @@ runInboxTransactionWithKey ::
     Maybe KafkaDeliveryRef ->
     (IntegrationEvent -> Tx.Transaction a) ->
     Eff es (InboxResult a)
-runInboxTransactionWithKey mMetrics src dedupe event kafka handler = do
+runInboxTransactionWithKey mMetrics src dedupe event kafka handler =
+    runInboxTransactionWithKeyPersist mMetrics PersistFullEnvelope src dedupe event kafka handler
+
+runInboxTransactionWithKeyPersist ::
+    forall a es.
+    (IOE :> es, Store :> es) =>
+    Maybe KeiroMetrics ->
+    InboxPersistence ->
+    Text ->
+    Text ->
+    IntegrationEvent ->
+    Maybe KafkaDeliveryRef ->
+    (IntegrationEvent -> Tx.Transaction a) ->
+    Eff es (InboxResult a)
+runInboxTransactionWithKeyPersist mMetrics persistence src dedupe event kafka handler = do
     now <- liftIO getCurrentTime
     result <-
         runTransaction $
-            attemptOneTx Nothing src dedupe event kafka now handler
+            attemptOneTx persistence Nothing src dedupe event kafka now handler
     -- Record the classification counter outside the handler transaction.
     -- Backlog gauge sampling is intentionally scheduled separately via
     -- 'sampleInboxBacklog'.
@@ -145,10 +189,34 @@ runInboxTransactionWithRetries ::
     (IntegrationEvent -> Tx.Transaction a) ->
     Eff es (Either InboxError (InboxResult a))
 runInboxTransactionWithRetries mMetrics attemptCeiling policy event kafka handler =
+    runInboxTransactionWithRetriesWith mMetrics attemptCeiling PersistFullEnvelope policy event kafka handler
+
+-- | Variant of 'runInboxTransactionWithRetries' that controls success-path persistence.
+runInboxTransactionWithRetriesWith ::
+    forall a es.
+    (IOE :> es, Store :> es) =>
+    Maybe KeiroMetrics ->
+    Int ->
+    InboxPersistence ->
+    InboxDedupePolicy ->
+    IntegrationEvent ->
+    Maybe KafkaDeliveryRef ->
+    (IntegrationEvent -> Tx.Transaction a) ->
+    Eff es (Either InboxError (InboxResult a))
+runInboxTransactionWithRetriesWith mMetrics attemptCeiling persistence policy event kafka handler =
     case dedupeKeyFor policy event kafka of
         Left err -> pure (Left err)
         Right dedupe ->
-            Right <$> runInboxTransactionWithRetriesKey mMetrics attemptCeiling (event ^. #source) dedupe event kafka handler
+            Right
+                <$> runInboxTransactionWithRetriesKeyPersist
+                    mMetrics
+                    attemptCeiling
+                    persistence
+                    (event ^. #source)
+                    dedupe
+                    event
+                    kafka
+                    handler
 
 -- | Lower-level retrying variant that takes the dedupe key directly.
 runInboxTransactionWithRetriesKey ::
@@ -162,12 +230,27 @@ runInboxTransactionWithRetriesKey ::
     Maybe KafkaDeliveryRef ->
     (IntegrationEvent -> Tx.Transaction a) ->
     Eff es (InboxResult a)
-runInboxTransactionWithRetriesKey mMetrics attemptCeiling src dedupe event kafka handler = do
+runInboxTransactionWithRetriesKey mMetrics attemptCeiling src dedupe event kafka handler =
+    runInboxTransactionWithRetriesKeyPersist mMetrics attemptCeiling PersistFullEnvelope src dedupe event kafka handler
+
+runInboxTransactionWithRetriesKeyPersist ::
+    forall a es.
+    (IOE :> es, Store :> es) =>
+    Maybe KeiroMetrics ->
+    Int ->
+    InboxPersistence ->
+    Text ->
+    Text ->
+    IntegrationEvent ->
+    Maybe KafkaDeliveryRef ->
+    (IntegrationEvent -> Tx.Transaction a) ->
+    Eff es (InboxResult a)
+runInboxTransactionWithRetriesKeyPersist mMetrics attemptCeiling persistence src dedupe event kafka handler = do
     now <- liftIO getCurrentTime
     attempted <-
         trySync $
             runTransaction $
-                attemptOneTx (Just attemptCeiling) src dedupe event kafka now handler
+                attemptOneTx persistence (Just attemptCeiling) src dedupe event kafka now handler
     result <- case attempted of
         Right ok -> pure ok
         Left err -> do
@@ -196,10 +279,11 @@ runInboxTransactionBatch ::
     Maybe KeiroMetrics ->
     Int ->
     InboxDedupePolicy ->
+    InboxPersistence ->
     [(IntegrationEvent, Maybe KafkaDeliveryRef)] ->
     (IntegrationEvent -> Tx.Transaction a) ->
     Eff es [Either InboxError (InboxResult a)]
-runInboxTransactionBatch mMetrics attemptCeiling policy deliveries handler = do
+runInboxTransactionBatch mMetrics attemptCeiling policy persistence deliveries handler = do
     now <- liftIO getCurrentTime
     let plan = planInboxBatch policy deliveries
     attempted <-
@@ -210,7 +294,7 @@ runInboxTransactionBatch mMetrics attemptCeiling policy deliveries handler = do
                         BatchKeyError err -> pure (Left err)
                         BatchDuplicate -> pure (Right InboxDuplicate)
                         BatchWork src dedupe event kafka ->
-                            Right <$> attemptOneTx (Just attemptCeiling) src dedupe event kafka now handler
+                            Right <$> attemptOneTx persistence (Just attemptCeiling) src dedupe event kafka now handler
                     )
                     plan
     case attempted of
@@ -222,11 +306,12 @@ runInboxTransactionBatch mMetrics attemptCeiling policy deliveries handler = do
         Left _ ->
             traverse
                 ( \(event, kafka) ->
-                    runInboxTransactionWithRetries mMetrics attemptCeiling policy event kafka handler
+                    runInboxTransactionWithRetriesWith mMetrics attemptCeiling persistence policy event kafka handler
                 )
                 deliveries
 
 attemptOneTx ::
+    InboxPersistence ->
     Maybe Int ->
     Text ->
     Text ->
@@ -235,8 +320,8 @@ attemptOneTx ::
     UTCTime ->
     (IntegrationEvent -> Tx.Transaction a) ->
     Tx.Transaction (InboxResult a)
-attemptOneTx attemptCeiling src dedupe event kafka now handler = do
-    inserted <- tryInsertCompletedTx src dedupe event kafka now
+attemptOneTx persistence attemptCeiling src dedupe event kafka now handler = do
+    inserted <- tryInsertCompletedTx persistence src dedupe event kafka now
     case inserted of
         Right () -> do
             handled <- handler event
