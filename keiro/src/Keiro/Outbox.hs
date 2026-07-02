@@ -16,9 +16,12 @@ it:
 
 The 'publishClaimedOutbox' worker is transport-neutral. It claims rows
 with @FOR UPDATE SKIP LOCKED@ plus the configured 'OrderingPolicy',
-hands each row to a caller-supplied publish function, and marks the row
+hands claimed batches to a caller-supplied publish function, and marks rows
 sent, retryable, or dead. The Kafka adapter lives in
 'Keiro.Outbox.Kafka'.
+
+Run 'outboxMaintenancePass' on a separate, slower schedule to reclaim rows
+left in @publishing@ by crashed workers and to sample the backlog gauge.
 
 The per-key and per-source ordering policies sort by @created_at@, which
 PostgreSQL fills at transaction start. The canonical 'IntegrationProducer'
@@ -57,6 +60,8 @@ module Keiro.Outbox (
     -- * Publisher worker
     PublishOutcome (..),
     publishClaimedOutbox,
+    outboxMaintenancePass,
+    sampleOutboxBacklog,
 )
 where
 
@@ -298,19 +303,7 @@ publishClaimedOutbox ::
     Eff es OutboxPublishSummary
 publishClaimedOutbox publish options mMetrics = do
     now <- liftIO getCurrentTime
-    (requeued, deadened) <-
-        requeueStuckOutbox
-            (options ^. #maxAttempts)
-            (options ^. #publishingTimeout)
-            now
-    recordOutboxReclaimed mMetrics (fromIntegral requeued)
-    recordOutboxDeadlettered mMetrics (fromIntegral deadened)
     rows <- claimOutboxBatch (options ^. #orderingPolicy) (options ^. #batchSize) now
-    -- Backlog gauge, recorded once per pass after the claim has moved this
-    -- batch to 'publishing': it counts rows still awaiting a publisher.
-    for_ mMetrics $ \metrics -> do
-        backlog <- countOutboxBacklog
-        recordOutboxBacklog (Just metrics) (fromIntegral backlog)
     summary <- publishBatch rows
     -- Counters from the aggregated pass summary (each a no-op under 'Nothing';
     -- a zero delta is harmless).
@@ -448,6 +441,37 @@ publishClaimedOutbox publish options mMetrics = do
             (row ^. #outboxId)
             "skipped: earlier record for the same key failed"
             now
+
+{- | Reclaim crashed publisher rows and record the outbox backlog gauge.
+
+Schedule this pass independently from 'publishClaimedOutbox', typically on a
+slower timer. It is the only library worker path that reclaims rows stranded in
+@publishing@.
+-}
+outboxMaintenancePass ::
+    (IOE :> es, Store :> es) =>
+    OutboxMaintenanceOptions ->
+    Maybe KeiroMetrics ->
+    Eff es OutboxMaintenanceSummary
+outboxMaintenancePass options mMetrics = do
+    now <- liftIO getCurrentTime
+    (requeued, deadLettered) <-
+        requeueStuckOutbox
+            (options ^. #maxAttempts)
+            (options ^. #publishingTimeout)
+            now
+    recordOutboxReclaimed mMetrics (fromIntegral requeued)
+    recordOutboxDeadlettered mMetrics (fromIntegral deadLettered)
+    backlog <- countOutboxBacklog
+    recordOutboxBacklog mMetrics (fromIntegral backlog)
+    pure OutboxMaintenanceSummary{requeued, deadLettered, backlog}
+
+-- | Count publishable rows and record the outbox backlog gauge when metrics are enabled.
+sampleOutboxBacklog :: (IOE :> es, Store :> es) => Maybe KeiroMetrics -> Eff es ()
+sampleOutboxBacklog Nothing = pure ()
+sampleOutboxBacklog (Just metrics) = do
+    backlog <- countOutboxBacklog
+    recordOutboxBacklog (Just metrics) (fromIntegral backlog)
 
 data OutcomeMarks = OutcomeMarks
     { sentIds :: ![OutboxId]

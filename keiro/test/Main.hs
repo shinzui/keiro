@@ -98,6 +98,7 @@ import Keiro.Outbox (
     OutboxStatus (..),
     PublishOutcome (..),
     claimOutboxBatch,
+    defaultMaintenanceOptions,
     defaultPublishOptions,
     draftToEvent,
     enqueueIntegrationEventTx,
@@ -108,7 +109,9 @@ import Keiro.Outbox (
     mintIntegrationEvent,
     mkIntegrationProducer,
     mkOutboxPublishOptions,
+    outboxMaintenancePass,
     publishClaimedOutbox,
+    sampleOutboxBacklog,
  )
 import Keiro.Outbox.Kafka qualified as OutboxKafka
 import Keiro.Prelude
@@ -2686,7 +2689,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             row ^. #publishedAt `shouldSatisfy` isJust
             row ^. #lastError `shouldBe` Nothing
 
-        it "reclaims a row stranded in publishing by a crashed worker" $ \storeHandle -> do
+        it "reclaims a row stranded in publishing by a crashed worker through maintenance" $ \storeHandle -> do
             let oid = OutboxId outboxUuid1
             Right () <-
                 Store.runStoreIO storeHandle $
@@ -2701,6 +2704,13 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let publish _ = do
                     liftIO (modifyIORef' publishedRef (+ 1))
                     pure PublishSucceeded
+            Right noPublish <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) defaultPublishOptions Nothing)
+            noPublish ^. #claimed `shouldBe` 0
+            Right (Just stillStranded) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+            stillStranded ^. #status `shouldBe` OutboxPublishing
+            Right maintenance <- Store.runStoreIO storeHandle (outboxMaintenancePass defaultMaintenanceOptions Nothing)
+            maintenance ^. #requeued `shouldBe` 1
+            maintenance ^. #deadLettered `shouldBe` 0
             Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) defaultPublishOptions Nothing)
             summary ^. #published `shouldBe` 1
             published <- readIORef publishedRef
@@ -2728,6 +2738,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let publish row = do
                     liftIO (modifyIORef' publishedRef (<> [row ^. #outboxId]))
                     pure PublishSucceeded
+            Right maintenance <- Store.runStoreIO storeHandle (outboxMaintenancePass defaultMaintenanceOptions Nothing)
+            maintenance ^. #requeued `shouldBe` 1
             Right firstPass <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) defaultPublishOptions Nothing)
             firstPass ^. #published `shouldBe` 2
             Right secondPass <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) defaultPublishOptions Nothing)
@@ -2781,9 +2793,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             okRow ^. #status `shouldBe` OutboxFailed
             okRow ^. #lastError `shouldSatisfy` maybe False (Text.isInfixOf "kafka exploded")
 
-        it "a row that exhausts attempts while crash-looping is dead-lettered by the sweeper" $ \storeHandle -> do
+        it "a row that exhausts attempts while crash-looping is dead-lettered by maintenance" $ \storeHandle -> do
             let oid = OutboxId outboxUuid1
-                opts = defaultPublishOptions & #maxAttempts .~ 1
+                opts = defaultMaintenanceOptions & #maxAttempts .~ 1
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
@@ -2791,14 +2803,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let pastNow = addUTCTime (-3600) now
             Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
             Right () <- Store.runStoreIO storeHandle (backdateOutboxUpdatedAt oid pastNow)
-            publishedRef <- newIORef (0 :: Int)
-            let publish _ = do
-                    liftIO (modifyIORef' publishedRef (+ 1))
-                    pure PublishSucceeded
-            Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) opts Nothing)
-            summary ^. #dead `shouldBe` 0
-            published <- readIORef publishedRef
-            published `shouldBe` 0
+            Right summary <- Store.runStoreIO storeHandle (outboxMaintenancePass opts Nothing)
+            summary ^. #requeued `shouldBe` 0
+            summary ^. #deadLettered `shouldBe` 1
             Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
             row ^. #status `shouldBe` OutboxDead
 
@@ -3226,7 +3233,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         other -> expectationFailure ("expected Error \"broker unreachable\", got " <> show other)
                 other -> expectationFailure ("expected one batch span, got " <> show (length other))
 
-        it "publishClaimedOutbox records outbox metrics under the in-memory exporter" $ \storeHandle -> do
+        it "publishClaimedOutbox records counters and sampleOutboxBacklog records the gauge" $ \storeHandle -> do
             (exporter, metricsRef) <- inMemoryMetricExporter
             (provider, _env) <-
                 createMeterProvider
@@ -3275,9 +3282,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             lookup "keiro.outbox.published" scalars `shouldBe` Just (IntNumber 1)
             lookup "keiro.outbox.retried" scalars `shouldBe` Just (IntNumber 1)
             lookup "keiro.outbox.deadlettered" scalars `shouldBe` Just (IntNumber 1)
-            -- After both passes the surviving rows are 'sent'/'dead', so nothing is
-            -- left in ('pending','failed'): the backlog gauge's last value is 0.
-            lookup "keiro.outbox.backlog" scalars `shouldBe` Just (IntNumber 0)
+            -- Publish passes no longer run the backlog COUNT(*) on the hot path.
+            lookup "keiro.outbox.backlog" scalars `shouldBe` Nothing
+
+            Store.runStoreIO storeHandle (sampleOutboxBacklog (Just keiroMetrics)) `shouldReturn` Right ()
+            _ <- forceFlushMeterProvider provider Nothing
+            sampled <- readIORef metricsRef
+            let sampledScalars = flattenScalarPoints sampled
+            lookup "keiro.outbox.backlog" sampledScalars `shouldBe` Just (IntNumber 0)
 
     describe "Keiro.Inbox" $ around (withFreshStore fixture) $ do
         it "runs the handler once and records the row as completed" $ \storeHandle -> do

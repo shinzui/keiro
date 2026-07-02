@@ -245,11 +245,13 @@ Transactional outbox. Re-exports `Keiro.Outbox.Types` and exports
 `enqueueOutboxTx`, `claimOutboxBatch`, `markOutboxSent`,
 `lookupOutbox`, `listOutbox`, `freshOutboxId`, `enqueueIntegrationEventTx`,
 `IntegrationProducer (..)`, `IntegrationEventDraft (..)`, `mintIntegrationEvent`,
-`draftToEvent`, `enqueueProducerEventTx`, `PublishOutcome (..)`, and
-`publishClaimedOutbox`. `Keiro.Outbox.Kafka` adds the Kafka producer adapter.
+`draftToEvent`, `enqueueProducerEventTx`, `PublishOutcome (..)`,
+`publishClaimedOutbox`, `outboxMaintenancePass`, and `sampleOutboxBacklog`.
+`Keiro.Outbox.Kafka` adds the Kafka producer adapter.
 
 Use it to commit side-effect intents in the write transaction and publish them
-asynchronously with per-key ordering, backoff, and dead-lettering.
+asynchronously with per-key ordering, backoff, dead-lettering, and a separate
+maintenance pass for crashed-worker reclamation and backlog sampling.
 
 ## `Keiro.Inbox`
 

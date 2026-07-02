@@ -17,7 +17,10 @@ module Keiro.Outbox.Types (
     OutboxPublishOptions (..),
     OutboxPublishConfigError (..),
     OutboxPublishSummary (..),
+    OutboxMaintenanceOptions (..),
+    OutboxMaintenanceSummary (..),
     defaultPublishOptions,
+    defaultMaintenanceOptions,
     mkOutboxPublishOptions,
     statusText,
     parseStatus,
@@ -51,8 +54,8 @@ instance FromJSON OutboxId where
 * 'OutboxPending' — never attempted.
 * 'OutboxPublishing' — currently held by a publisher worker (between
   claim and the call to mark sent/failed/dead). Rows left in this state
-  after a worker crash are reclaimed by the publisher's stale-row
-  sweeper after 'publishingTimeout'.
+  after a worker crash are reclaimed by 'Keiro.Outbox.outboxMaintenancePass'
+  after 'publishingTimeout'.
 * 'OutboxSent' — Kafka acknowledged the publish; terminal.
 * 'OutboxFailed' — last attempt failed; will be retried after
   'next_attempt_at'.
@@ -151,7 +154,7 @@ data OutboxRow = OutboxRow
 
 The optional 'tracer' field opts the publisher into OpenTelemetry
 instrumentation: when present, the publisher opens a @Producer@-kind
-span around each row's publish attempt, attributing the row's
+span around each publish call, attributing the first row's
 'IntegrationEvent.destination' (topic), 'IntegrationEvent.messageId',
 and Kafka key per the messaging semantic conventions. When 'tracer' is
 'Nothing' (the default) the publisher emits no spans.
@@ -192,6 +195,25 @@ data OutboxPublishSummary = OutboxPublishSummary
     }
     deriving stock (Generic, Eq, Show)
 
+{- | Knobs for 'Keiro.Outbox.outboxMaintenancePass'.
+
+Schedule maintenance less frequently than publish passes; it owns crash
+reclamation and backlog gauge sampling.
+-}
+data OutboxMaintenanceOptions = OutboxMaintenanceOptions
+    { maxAttempts :: !Int
+    , publishingTimeout :: !NominalDiffTime
+    }
+    deriving stock (Generic, Eq, Show)
+
+-- | Result of one outbox maintenance pass.
+data OutboxMaintenanceSummary = OutboxMaintenanceSummary
+    { requeued :: !Int
+    , deadLettered :: !Int
+    , backlog :: !Int
+    }
+    deriving stock (Generic, Eq, Show)
+
 {- | Sensible defaults: batch of 32, ten retry attempts, two-second
 constant backoff, per-key head-of-line ordering.
 -}
@@ -204,6 +226,14 @@ defaultPublishOptions =
         , orderingPolicy = PerKeyHeadOfLine
         , publishingTimeout = 300
         , tracer = Nothing
+        }
+
+-- | Maintenance defaults match the publisher's retry ceiling and stale-row timeout.
+defaultMaintenanceOptions :: OutboxMaintenanceOptions
+defaultMaintenanceOptions =
+    OutboxMaintenanceOptions
+        { maxAttempts = defaultPublishOptions ^. #maxAttempts
+        , publishingTimeout = defaultPublishOptions ^. #publishingTimeout
         }
 
 -- | Validate outbox publisher options before starting a worker.

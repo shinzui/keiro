@@ -38,8 +38,8 @@ This section must always reflect the actual current state of the work.
 - [x] M3: Change `publishClaimedOutbox` publish argument to batch shape; add `markOutboxSentBatch` and `markOutboxSkippedTx` to `Keiro.Outbox.Schema` (completed 2026-07-02T00:25:25Z)
 - [x] M3: Implement per-key prefix outcome processing (sent prefix, failed pivot, skipped suffix) and `StopTheLine` sequential mode (completed 2026-07-02T00:25:25Z)
 - [x] M3: Update all `publishClaimedOutbox` call sites and tests (completed 2026-07-02T00:25:25Z)
-- [ ] M4: Add `outboxMaintenancePass` + `sampleOutboxBacklog`; remove sweep and backlog gauge from `publishClaimedOutbox`
-- [ ] M4: Update tests that relied on the publish pass doing reclamation; full `just haskell-build` and `cabal test keiro-test` green
+- [x] M4: Add `outboxMaintenancePass` + `sampleOutboxBacklog`; remove sweep and backlog gauge from `publishClaimedOutbox` (completed 2026-07-02T00:37:38Z)
+- [x] M4: Update tests that relied on the publish pass doing reclamation; full `just haskell-build` and `cabal test keiro-test` green (completed 2026-07-02T00:37:38Z)
 - [ ] Final: Re-run the identical benchmark scenarios on the finished code; record the "After" table and before/after ratios in Outcomes & Retrospective; check the advisory ratio expectations in Validation and Acceptance
 - [ ] Final: Commit `keiro/bench/baseline-outbox.csv` from the finished code and add the `bench-regression` Justfile target (`--baseline` + `--fail-if-slower`) as the standing regression guard
 
@@ -65,6 +65,12 @@ implementation. Provide concise evidence.
   Evidence:
   ```text
   The M3 implementation now treats StopTheLine outcome processing as a source-wide group, so rows after the halted failure are returned to failed without consuming attempts even if their keys differ.
+  ```
+
+- Discovery: `sampleOutboxBacklog` needs an `IOE` constraint in keiro's concrete `Eff` stack.
+  Evidence:
+  ```text
+  `countOutboxBacklog` only needs `Store`, but `recordOutboxBacklog` performs metric IO; the M4 build failed until `sampleOutboxBacklog :: (IOE :> es, Store :> es) => ...`.
   ```
 
 
@@ -201,6 +207,27 @@ cabal test keiro-test --test-options="--match Keiro.Outbox"
 
 cabal test keiro-test
 265 examples, 0 failures
+```
+
+### Milestone 4 — Maintenance Off The Hot Path
+
+Added `OutboxMaintenanceOptions`, `OutboxMaintenanceSummary`, and `defaultMaintenanceOptions` in `Keiro.Outbox.Types`, plus `outboxMaintenancePass` and `sampleOutboxBacklog` in `Keiro.Outbox`. `publishClaimedOutbox` now does only claim, publish, and outcome marking on its hot path; crashed-worker reclamation and backlog gauge sampling are scheduled explicitly through maintenance.
+
+Updated tests that previously relied on publish passes to reclaim old `publishing` rows. The outbox suite now proves a publish pass leaves a stranded row untouched, `outboxMaintenancePass` requeues or dead-letters it, and `sampleOutboxBacklog` records the backlog gauge while publish passes only emit counters. Updated user docs and Kafka integration guide to show the batch publisher callback and separate maintenance worker. A stale `jitsurei-demo` call to `findUnfinishedWorkflowIds` was also updated with the required `UTCTime` argument so the aggregate `just haskell-build` target passes.
+
+Validation:
+
+```text
+cabal build keiro:lib:keiro keiro:test:keiro-test keiro:bench:keiro-bench
+
+cabal test keiro-test --test-options="--match Keiro.Outbox"
+32 examples, 0 failures
+
+cabal test keiro-test
+265 examples, 0 failures
+
+just haskell-build
+passed
 ```
 
 
@@ -440,7 +467,7 @@ outboxMaintenancePass ::
 
 -- | Count the publishable backlog and record the gauge. No-op count avoidance:
 -- does nothing when metrics are Nothing.
-sampleOutboxBacklog :: (Store :> es) => Maybe KeiroMetrics -> Eff es ()
+sampleOutboxBacklog :: (IOE :> es, Store :> es) => Maybe KeiroMetrics -> Eff es ()
 ```
 
 `outboxMaintenancePass` = `requeueStuckOutbox` + `recordOutboxReclaimed`/`recordOutboxDeadlettered` + `sampleOutboxBacklog` (which is `for_ mMetrics $ \m -> countOutboxBacklog >>= recordOutboxBacklog (Just m) . fromIntegral`). Delete the corresponding lines from `publishClaimedOutbox` (currently `Outbox.hs:287-300`). Types live in `Keiro.Outbox.Types` if that matches the module's convention (config types live there today); re-export from `Keiro.Outbox`. The `sampleOutboxBacklog` name and shape are an integration point with the inbox plan, which mirrors it as `sampleInboxBacklog` — keep the naming symmetric.
@@ -556,3 +583,5 @@ Revision note (2026-07-02, later): Implemented Milestone 1 by replacing heads-on
 Revision note (2026-07-02, M2): Implemented Milestone 2 by adding the forward SQL migration for `keiro_outbox_claim_order_idx`, touching the embedded migration source comment so the new migration is included by Template Haskell, regenerating `keiro-migrations/expected-schema`, and recording the passing `cabal test keiro-migrations-test` result.
 
 Revision note (2026-07-02, M3): Implemented Milestone 3 by changing `publishClaimedOutbox` to the batch publisher contract, adding bulk sent marking and skipped-row marking in `Keiro.Outbox.Schema`, enforcing prefix/pivot/suffix outcome processing for ordered groups, running `StopTheLine` as singleton publish calls with whole-batch suffix skipping, updating benchmark/test call sites, and recording passing focused and full test results.
+
+Revision note (2026-07-02, M4): Implemented Milestone 4 by adding explicit outbox maintenance options/summary and passes, removing stuck-row sweeping and backlog gauge sampling from `publishClaimedOutbox`, updating tests and docs for the separate maintenance schedule, recording the `IOE` constraint required by `sampleOutboxBacklog`, and validating with focused/full tests plus `just haskell-build`.

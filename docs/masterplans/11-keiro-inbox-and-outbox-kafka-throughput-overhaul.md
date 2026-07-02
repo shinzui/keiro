@@ -69,7 +69,7 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-1 M1: Contiguous per-key/per-source run claiming in `claimOutboxBatch` with regression tests (completed 2026-07-02T00:11:43Z)
 - [x] EP-1 M2: Claim-order partial index migration and regenerated expected schema (completed 2026-07-02T00:15:12Z)
 - [x] EP-1 M3: Batch-shaped publish contract in `publishClaimedOutbox` with bulk sent-marking (completed 2026-07-02T00:25:25Z)
-- [ ] EP-1 M4: Maintenance extracted to `outboxMaintenancePass`; gauges/sweep off the hot path
+- [x] EP-1 M4: Maintenance extracted to `outboxMaintenancePass`; gauges/sweep off the hot path (completed 2026-07-02T00:37:38Z)
 - [ ] EP-1 Final: "After" benchmark run recorded with before/after ratios; `baseline-outbox.csv` committed; `bench-regression` guard in place
 - [ ] EP-2 M0: tasty-bench inbox scenarios + recorded "Before" baseline on unchanged code
 - [ ] EP-2 M1: Backlog gauge removed from per-message inbox path; `sampleInboxBacklog` added
@@ -87,6 +87,9 @@ interactions between child plans. Provide concise evidence.
 
 - Discovery: The batch publish contract changes the worker span from per-row to per-publish-call; real per-record visibility now belongs in the Kafka adapter.
   Evidence: EP-1 M3 updated `Keiro.Outbox.Kafka` module documentation and the outbox span test to expect one producer span around the publish batch, with `error.type = publish_failed` when any row outcome fails.
+
+- Discovery: The outbox backlog sampler mirrors the inbox plan's naming, but its keiro `Eff` signature needs `IOE` as well as `Store`.
+  Evidence: `sampleOutboxBacklog` records OpenTelemetry metrics after counting rows; `recordOutboxBacklog` performs metric IO in this effect stack.
 
 
 ## Decision Log
@@ -133,8 +136,23 @@ cabal test keiro-test --test-options="--match Keiro.Outbox"  # 32 examples, 0 fa
 cabal test keiro-test                                      # 265 examples, 0 failures
 ```
 
+### EP-1 M4 — Outbox Maintenance Split
+
+`publishClaimedOutbox` no longer runs the stuck-row sweeper or backlog `COUNT(*)`. Applications now schedule `outboxMaintenancePass defaultMaintenanceOptions metrics` separately to reclaim crashed publishers and sample backlog, or call `sampleOutboxBacklog` for gauge-only sampling.
+
+Validation:
+
+```text
+cabal build keiro:lib:keiro keiro:test:keiro-test keiro:bench:keiro-bench
+cabal test keiro-test --test-options="--match Keiro.Outbox"  # 32 examples, 0 failures
+cabal test keiro-test                                      # 265 examples, 0 failures
+just haskell-build                                        # passed
+```
+
 ---
 
 Revision note (2026-07-01): Added the benchmarking stage across the initiative at the user's request: a shared tasty-bench `keiro-bench` component (new integration point, including the shared `bench-regression` Justfile target and per-area committed baseline CSVs), M0/final-comparison milestones in both child plans, corresponding Progress entries, and a Decision Log entry covering methodology and the regression guard. Child plans 81 and 82 were revised in the same pass; see their revision notes.
 
 Revision note (2026-07-02): Marked EP-1 M3 complete after implementing the batch-shaped outbox publish contract, bulk sent marking, ordered suffix skipping, and updated benchmark/test call sites. Recorded focused and full `keiro-test` validation evidence.
+
+Revision note (2026-07-02, M4): Marked EP-1 M4 complete after extracting outbox maintenance from the publish hot path, updating tests/docs for explicit maintenance scheduling, and recording passing focused/full tests plus `just haskell-build`.

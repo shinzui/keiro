@@ -93,8 +93,10 @@ metadata and are **not** the canonical dedupe key.
 A separate worker calls `publishClaimedOutbox` periodically. The
 worker claims pending rows with `FOR UPDATE SKIP LOCKED` and the
 configured `OrderingPolicy` (default `PerKeyHeadOfLine`), calls the
-caller-supplied publish function (`Kafka.Effectful.Producer.produceMessageSync`
-in production), and marks each row sent, retryable, or dead.
+caller-supplied batch publish function, and marks each row sent,
+retryable, or dead. Run `outboxMaintenancePass` on a separate, slower
+schedule to reclaim rows left in `publishing` by crashed workers and
+to record the outbox backlog gauge.
 
 ### 4. The Billing consumer decodes and dedupes
 

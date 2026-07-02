@@ -42,8 +42,10 @@ deduplication.
    that advances its subscription cursor.
 3. The publisher worker (`publishClaimedOutbox`) claims rows with
    `FOR UPDATE SKIP LOCKED` plus a configurable ordering policy,
-   publishes via a caller-supplied function, and marks each row sent
-   or failed.
+   publishes each claimed batch via a caller-supplied function, and
+   marks each row sent or failed. A separate maintenance pass
+   (`outboxMaintenancePass`) reclaims crashed-worker rows and samples
+   the backlog gauge.
 
 The producer subscription never publishes to Kafka directly; the
 outbox row is the durable handoff. This places `attempts`,
@@ -89,6 +91,13 @@ projections would apply updates to non-existent rows, and log-compacted
 topics would record a permanently lossy view. Per-key head-of-line is
 the default because it contains blast radius to one aggregate.
 
+`publishClaimedOutbox` hands a claimed batch to the publish callback in
+claim order. For ordered policies, the callback must not report a later
+same-key record as delivered after reporting an earlier same-key record
+failed. If a row fails, keiro marks the successful prefix sent, marks
+the failed pivot retryable or dead, and returns the suffix to retryable
+state without consuming an attempt.
+
 ## Auto dead-letter
 
 A row that fails `maxAttempts` consecutive times (default 10) is
@@ -117,6 +126,19 @@ ConstantBackoff 2   -- 2 second delay between every retry
 ExponentialBackoff (ExponentialBackoffOptions 1 60 2.0)
   -- 1s, 2s, 4s, 8s, … capped at 60s
 ```
+
+## Maintenance
+
+Schedule `outboxMaintenancePass defaultMaintenanceOptions metrics` on a
+separate, slower interval than publish passes. Maintenance owns two
+tasks that are deliberately off the publish hot path:
+
+- reclaim rows left in `publishing` after a crashed worker, using
+  `publishingTimeout`
+- record the `keiro.outbox.backlog` gauge
+
+Use `sampleOutboxBacklog metrics` when you only want to record the
+backlog gauge without running the crash-reclaim sweep.
 
 ## The Kafka conversion
 
@@ -226,8 +248,20 @@ ordersIntegrationProducer = IntegrationProducer
 runPublisher :: Eff es ()
 runPublisher = void $
   publishClaimedOutbox
-    (\row -> liftIO (kafkaProduce (outboxRowToKafkaRecord row)))
+    (\rows -> traverse publishOne rows)
     defaultPublishOptions
+    Nothing
+  where
+    publishOne row = do
+      outcome <- liftIO (kafkaProduce (outboxRowToKafkaRecord row))
+      pure (row ^. #outboxId, outcome)
+
+-- 3. A slower maintenance worker reclaims crashed publishers and samples backlog.
+runOutboxMaintenance :: Eff es ()
+runOutboxMaintenance = void $
+  outboxMaintenancePass
+    defaultMaintenanceOptions
+    Nothing
 ```
 
 A future schema-registry adapter populates `schemaReference` (and may

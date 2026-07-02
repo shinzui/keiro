@@ -478,7 +478,8 @@ ours this run — the parent and the ship-order child carry distinct ids.
 -}
 ourUnfinishedWorkflows :: Store.KirokuStore -> [Text] -> IO [(Text, Text)]
 ourUnfinishedWorkflows store ourIds = do
-    pairs <- requireEither =<< Store.runStoreIO store findUnfinishedWorkflowIds
+    now <- getCurrentTime
+    pairs <- requireEither =<< Store.runStoreIO store (findUnfinishedWorkflowIds now)
     pure [pair | pair@(wid, _) <- pairs, wid `elem` ourIds]
 
 {- | Fire workflow-sleep timers (with a clock well past the delay) until the
