@@ -103,14 +103,22 @@ garbageCollectSent keepFor now = do
 Rows in @pending@ or @failed@ status whose @next_attempt_at@ has passed
 become candidates. The selection is filtered by 'OrderingPolicy':
 
-* 'PerKeyHeadOfLine' — a row is skipped if a row with the same
-  @(source, message_key)@ and an earlier @created_at@ is non-terminal.
-  Rows with @message_key IS NULL@ bypass the check.
-* 'PerSourceStream' — a row is skipped if any earlier row in the same
-  @source@ is non-terminal, regardless of key.
+* 'PerKeyHeadOfLine' — a row is claimed only if every earlier
+  non-terminal row with the same @(source, message_key)@ is also claimed
+  by the same statement. Rows with @message_key IS NULL@ bypass the
+  per-key check.
+* 'PerSourceStream' — a row is claimed only if every earlier
+  non-terminal row in the same @source@ is also claimed by the same
+  statement, regardless of key.
 * 'StopTheLine' — same as 'PerKeyHeadOfLine' at claim time; the worker
   halts on the first failure (decided at the worker level).
 * 'BestEffort' — no head-of-line predicate.
+
+The returned list preserves @(created_at, outbox_id)@ order. Per-key and
+per-source subsequences are therefore gapless ordered runs. The @LIMIT@
+applies to the locked candidate set before the post-filter; under
+concurrent claimers or a limit cut through the middle of a run, a pass
+can return fewer than @limit@ rows even when more rows are ready.
 
 Claimed rows are transitioned to @publishing@ and have their
 @attempt_count@ incremented atomically.
@@ -322,57 +330,105 @@ enqueueOutboxStmt =
 claimStmt :: OrderingPolicy -> Statement (Int64, UTCTime) [OutboxRow]
 claimStmt policy =
     preparable
-        (claimSql (policyPredicate policy))
+        (claimSql (policyPredicates policy))
         ( contrazip2
             (E.param (E.nonNullable E.int8))
             (E.param (E.nonNullable E.timestamptz))
         )
         (D.rowList claimResultDecoder)
 
-policyPredicate :: OrderingPolicy -> Text
-policyPredicate = \case
-    PerKeyHeadOfLine -> perKeyPredicate
-    PerSourceStream -> perSourcePredicate
-    StopTheLine -> perKeyPredicate
-    BestEffort -> "TRUE"
+data PolicyPredicates = PolicyPredicates
+    { preFilter :: !Text
+    , postFilter :: !Text
+    }
+    deriving stock (Generic)
 
-perKeyPredicate :: Text
-perKeyPredicate =
-    """
-    ( r.message_key IS NULL OR NOT EXISTS (
-        SELECT 1 FROM keiro_outbox earlier
-        WHERE earlier.source = r.source
-          AND earlier.message_key = r.message_key
-          AND (earlier.created_at, earlier.outbox_id) < (r.created_at, r.outbox_id)
-          AND earlier.status NOT IN ('sent', 'dead') ) )
-    """
+policyPredicates :: OrderingPolicy -> PolicyPredicates
+policyPredicates = \case
+    PerKeyHeadOfLine -> perKeyPredicates
+    PerSourceStream -> perSourcePredicates
+    StopTheLine -> perKeyPredicates
+    BestEffort -> PolicyPredicates{preFilter = "TRUE", postFilter = "TRUE"}
 
-perSourcePredicate :: Text
-perSourcePredicate =
-    """
-    NOT EXISTS ( SELECT 1 FROM keiro_outbox earlier
-      WHERE earlier.source = r.source
-        AND (earlier.created_at, earlier.outbox_id) < (r.created_at, r.outbox_id)
-        AND earlier.status NOT IN ('sent', 'dead') )
-    """
+perKeyPredicates :: PolicyPredicates
+perKeyPredicates =
+    PolicyPredicates
+        { preFilter =
+            """
+            ( r.message_key IS NULL OR NOT EXISTS (
+                SELECT 1 FROM keiro_outbox earlier
+                WHERE earlier.source = r.source
+                  AND earlier.message_key = r.message_key
+                  AND (earlier.created_at, earlier.outbox_id) < (r.created_at, r.outbox_id)
+                  AND earlier.status NOT IN ('sent', 'dead')
+                  AND NOT (earlier.status IN ('pending', 'failed') AND earlier.next_attempt_at <= $2) ) )
+            """
+        , postFilter =
+            """
+            ( c.message_key IS NULL OR NOT EXISTS (
+                SELECT 1 FROM keiro_outbox earlier
+                WHERE earlier.source = c.source
+                  AND earlier.message_key = c.message_key
+                  AND (earlier.created_at, earlier.outbox_id) < (c.created_at, c.outbox_id)
+                  AND earlier.status NOT IN ('sent', 'dead')
+                  AND NOT EXISTS (
+                    SELECT 1 FROM candidate c2
+                    WHERE c2.outbox_id = earlier.outbox_id ) ) )
+            """
+        }
 
-claimSql :: Text -> Text
-claimSql predicate =
+perSourcePredicates :: PolicyPredicates
+perSourcePredicates =
+    PolicyPredicates
+        { preFilter =
+            """
+            NOT EXISTS (
+              SELECT 1 FROM keiro_outbox earlier
+              WHERE earlier.source = r.source
+                AND (earlier.created_at, earlier.outbox_id) < (r.created_at, r.outbox_id)
+                AND earlier.status NOT IN ('sent', 'dead')
+                AND NOT (earlier.status IN ('pending', 'failed') AND earlier.next_attempt_at <= $2) )
+            """
+        , postFilter =
+            """
+            NOT EXISTS (
+              SELECT 1 FROM keiro_outbox earlier
+              WHERE earlier.source = c.source
+                AND (earlier.created_at, earlier.outbox_id) < (c.created_at, c.outbox_id)
+                AND earlier.status NOT IN ('sent', 'dead')
+                AND NOT EXISTS (
+                  SELECT 1 FROM candidate c2
+                  WHERE c2.outbox_id = earlier.outbox_id ) )
+            """
+        }
+
+claimSql :: PolicyPredicates -> Text
+claimSql PolicyPredicates{preFilter, postFilter} =
     """
-    WITH ready AS (
-      SELECT r.outbox_id, r.created_at AS claim_created_at
+    WITH candidate AS (
+      SELECT r.outbox_id, r.source, r.message_key, r.created_at
       FROM keiro_outbox r
       WHERE r.status IN ('pending', 'failed')
         AND r.next_attempt_at <= $2
         AND (
     """
-        <> predicate
+        <> preFilter
         <> """
 
            )
              ORDER BY r.created_at, r.outbox_id
              LIMIT $1
              FOR UPDATE SKIP LOCKED
+           ),
+           ready AS (
+           SELECT c.outbox_id, c.created_at AS claim_created_at
+           FROM candidate c
+           WHERE (
+           """
+        <> postFilter
+        <> """
+
+           )
            ),
            updated AS (
            UPDATE keiro_outbox kt

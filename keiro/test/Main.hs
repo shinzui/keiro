@@ -21,7 +21,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as TE
 import Data.Time (NominalDiffTime, UTCTime (..), addUTCTime, diffUTCTime, secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
-import Data.UUID (UUID, fromString)
+import Data.UUID (UUID, fromString, fromWords64)
 import Data.Vector qualified as Vector
 import Data.Word (Word64)
 import Effectful (Eff, IOE, (:>))
@@ -2575,6 +2575,104 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     row ^. #attemptCount `shouldBe` 1
                 other -> expectationFailure ("expected one claimed row, got " <> show other)
 
+        it "claims contiguous per-key runs in one pass" $ \storeHandle -> do
+            let keyedRows =
+                    [ (outboxIdFromOrdinal 1, sampleIntegrationEnvelope & #messageId .~ "run-a1" & #key .~ Just "A")
+                    , (outboxIdFromOrdinal 2, sampleIntegrationEnvelope & #messageId .~ "run-a2" & #key .~ Just "A")
+                    , (outboxIdFromOrdinal 3, sampleIntegrationEnvelope & #messageId .~ "run-a3" & #key .~ Just "A")
+                    , (outboxIdFromOrdinal 4, sampleIntegrationEnvelope & #messageId .~ "run-a4" & #key .~ Just "A")
+                    , (outboxIdFromOrdinal 5, sampleIntegrationEnvelope & #messageId .~ "run-a5" & #key .~ Just "A")
+                    , (outboxIdFromOrdinal 6, sampleIntegrationEnvelope & #messageId .~ "run-b1" & #key .~ Just "B")
+                    , (outboxIdFromOrdinal 7, sampleIntegrationEnvelope & #messageId .~ "run-b2" & #key .~ Just "B")
+                    , (outboxIdFromOrdinal 8, sampleIntegrationEnvelope & #messageId .~ "run-b3" & #key .~ Just "B")
+                    ]
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        traverse_ (uncurry enqueueIntegrationEventTx) keyedRows
+            now <- getCurrentTime
+            Right rows <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
+            fmap (^. #outboxId) rows `shouldBe` fmap fst keyedRows
+            fmap (^. #attemptCount) rows `shouldBe` replicate 8 1
+
+        it "does not let a backoff head starve other keys" $ \storeHandle -> do
+            let a1Id = outboxIdFromOrdinal 1
+                a2Id = outboxIdFromOrdinal 2
+                b1Id = outboxIdFromOrdinal 3
+                b2Id = outboxIdFromOrdinal 4
+                rows =
+                    [ (a1Id, sampleIntegrationEnvelope & #messageId .~ "backoff-a1" & #key .~ Just "A")
+                    , (a2Id, sampleIntegrationEnvelope & #messageId .~ "backoff-a2" & #key .~ Just "A")
+                    , (b1Id, sampleIntegrationEnvelope & #messageId .~ "backoff-b1" & #key .~ Just "B")
+                    , (b2Id, sampleIntegrationEnvelope & #messageId .~ "backoff-b2" & #key .~ Just "B")
+                    ]
+                failA1 row
+                    | row ^. #outboxId == a1Id = pure (PublishFailed "wait")
+                    | otherwise = pure PublishSucceeded
+                opts =
+                    defaultPublishOptions
+                        & #batchSize
+                        .~ 1
+                        & #backoff
+                        .~ ConstantBackoff 3600
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        traverse_ (uncurry enqueueIntegrationEventTx) rows
+            Right failedPass <- Store.runStoreIO storeHandle (publishClaimedOutbox failA1 opts Nothing)
+            failedPass ^. #retried `shouldBe` 1
+            now <- getCurrentTime
+            Right claimed <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
+            fmap (^. #outboxId) claimed `shouldBe` [b1Id, b2Id]
+            Right (Just a2Row) <- Store.runStoreIO storeHandle (lookupOutbox a2Id)
+            a2Row ^. #status `shouldBe` OutboxPending
+
+        it "claims contiguous per-source runs in one pass" $ \storeHandle -> do
+            let rows =
+                    [ (outboxIdFromOrdinal 1, sampleIntegrationEnvelope & #messageId .~ "source-a1" & #key .~ Just "A")
+                    , (outboxIdFromOrdinal 2, sampleIntegrationEnvelope & #messageId .~ "source-b1" & #key .~ Just "B")
+                    , (outboxIdFromOrdinal 3, sampleIntegrationEnvelope & #messageId .~ "source-a2" & #key .~ Just "A")
+                    , (outboxIdFromOrdinal 4, sampleIntegrationEnvelope & #messageId .~ "source-b2" & #key .~ Just "B")
+                    ]
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        traverse_ (uncurry enqueueIntegrationEventTx) rows
+            now <- getCurrentTime
+            Right claimed <- Store.runStoreIO storeHandle (claimOutboxBatch PerSourceStream 10 now)
+            fmap (^. #outboxId) claimed `shouldBe` fmap fst rows
+
+        it "claims null-keyed rows freely alongside keyed runs" $ \storeHandle -> do
+            let rows =
+                    [ (outboxIdFromOrdinal 1, sampleIntegrationEnvelope & #messageId .~ "null-1" & #key .~ Nothing)
+                    , (outboxIdFromOrdinal 2, sampleIntegrationEnvelope & #messageId .~ "keyed-1" & #key .~ Just "A")
+                    , (outboxIdFromOrdinal 3, sampleIntegrationEnvelope & #messageId .~ "null-2" & #key .~ Nothing)
+                    , (outboxIdFromOrdinal 4, sampleIntegrationEnvelope & #messageId .~ "keyed-2" & #key .~ Just "A")
+                    ]
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        traverse_ (uncurry enqueueIntegrationEventTx) rows
+            now <- getCurrentTime
+            Right claimed <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
+            fmap (^. #outboxId) claimed `shouldBe` fmap fst rows
+
+        it "does not claim a tail while the previous run is still publishing" $ \storeHandle -> do
+            let rows =
+                    [ (outboxIdFromOrdinal 1, sampleIntegrationEnvelope & #messageId .~ "publishing-a1" & #key .~ Just "A")
+                    , (outboxIdFromOrdinal 2, sampleIntegrationEnvelope & #messageId .~ "publishing-a2" & #key .~ Just "A")
+                    , (outboxIdFromOrdinal 3, sampleIntegrationEnvelope & #messageId .~ "publishing-a3" & #key .~ Just "A")
+                    ]
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        traverse_ (uncurry enqueueIntegrationEventTx) rows
+            now <- getCurrentTime
+            Right firstClaim <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
+            fmap (^. #outboxId) firstClaim `shouldBe` fmap fst rows
+            Right secondClaim <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
+            secondClaim `shouldBe` []
+
         it "marks a claimed row as sent with published_at set" $ \storeHandle -> do
             let oid = OutboxId outboxUuid1
             Right () <-
@@ -2631,9 +2729,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     liftIO (modifyIORef' publishedRef (<> [row ^. #outboxId]))
                     pure PublishSucceeded
             Right firstPass <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
-            firstPass ^. #published `shouldBe` 1
+            firstPass ^. #published `shouldBe` 2
             Right secondPass <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
-            secondPass ^. #published `shouldBe` 1
+            secondPass ^. #published `shouldBe` 0
             published <- readIORef publishedRef
             published `shouldBe` [firstId, secondId]
             Right (Just secondRow) <- Store.runStoreIO storeHandle (lookupOutbox secondId)
@@ -2860,24 +2958,24 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     if row ^. #outboxId == a1Id
                         then pure (PublishFailed "broker hiccup")
                         else pure PublishSucceeded
-            -- First pass: a1 fails, b1 publishes, a2 is blocked behind a1.
+            -- First pass: with a one-row batch, a1 fails and both later rows remain pending.
             let firstPassOpts =
                     defaultPublishOptions
                         & #batchSize
-                        .~ 10
+                        .~ 1
                         & #backoff
                         .~ ConstantBackoff 0
             Right summary1 <-
                 Store.runStoreIO storeHandle (publishClaimedOutbox publish firstPassOpts Nothing)
-            summary1 ^. #claimed `shouldBe` 2
+            summary1 ^. #claimed `shouldBe` 1
             claimedIds <- readIORef claimed
             claimedIds `shouldSatisfy` (a2Id `notElem`)
             claimedIds `shouldSatisfy` (a1Id `elem`)
-            claimedIds `shouldSatisfy` (b1Id `elem`)
+            claimedIds `shouldSatisfy` (b1Id `notElem`)
             Right (Just a1Row) <- Store.runStoreIO storeHandle (lookupOutbox a1Id)
             a1Row ^. #status `shouldBe` OutboxFailed
             Right (Just b1Row) <- Store.runStoreIO storeHandle (lookupOutbox b1Id)
-            b1Row ^. #status `shouldBe` OutboxSent
+            b1Row ^. #status `shouldBe` OutboxPending
             Right (Just a2Row) <- Store.runStoreIO storeHandle (lookupOutbox a2Id)
             a2Row ^. #status `shouldBe` OutboxPending
             -- Drive a1 to terminal sent state so a2 can move. One pass claims a1
@@ -2890,14 +2988,16 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 retryOpts =
                     defaultPublishOptions
                         & #batchSize
-                        .~ 10
+                        .~ 1
                         & #backoff
                         .~ ConstantBackoff 0
+            Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publishOk retryOpts Nothing)
             Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publishOk retryOpts Nothing)
             Right _ <- Store.runStoreIO storeHandle (publishClaimedOutbox publishOk retryOpts Nothing)
             claimedIds2 <- readIORef claimed
             claimedIds2 `shouldSatisfy` (a1Id `elem`)
             claimedIds2 `shouldSatisfy` (a2Id `elem`)
+            claimedIds2 `shouldSatisfy` (b1Id `elem`)
             Right (Just a2Row') <- Store.runStoreIO storeHandle (lookupOutbox a2Id)
             a2Row' ^. #status `shouldBe` OutboxSent
 
@@ -3522,10 +3622,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right () <-
                 Store.runStoreIO ordering $
                     Store.runTransaction (enqueueIntegrationEventTx cancelledId cancelledEnv)
-            -- Per-key head-of-line means the worker drains at most one row per
-            -- @(source, message_key)@ per pass. Call it twice so the
-            -- successor (cancelled) clears after the predecessor (submitted)
-            -- reaches the terminal @sent@ status.
+            -- Run-claiming lets a same-key contiguous run drain in one pass.
             let drainOnce =
                     publishClaimedOutbox
                         (kafkaTopicPublish topic)
@@ -3574,13 +3671,16 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 deadOpts =
                     defaultPublishOptions
                         & #batchSize
-                        .~ 10
+                        .~ 1
                         & #backoff
                         .~ ConstantBackoff 0
                         & #maxAttempts
                         .~ 2
-            -- First pass: the first row attempts once and fails, the second is
-            -- blocked behind it.
+            -- This test drives the pre-M3 sequential failure/dead-letter path
+            -- with one-row batches. M3 adds suffix skipping for larger claimed
+            -- same-key runs.
+            -- First pass: the first row attempts once and fails; the second is
+            -- outside the one-row claim window.
             Right pass1 <- Store.runStoreIO ordering (publishClaimedOutbox publish deadOpts Nothing)
             pass1 ^. #retried `shouldBe` 1
             pass1 ^. #published `shouldBe` 0
@@ -6668,6 +6768,10 @@ outboxUuid3 = case fromString "018f0f18-0000-7000-8000-000000000a03" of
 outboxUuid4 = case fromString "018f0f18-0000-7000-8000-000000000a04" of
     Just uuid -> uuid
     Nothing -> error "invalid outbox uuid 4"
+
+outboxIdFromOrdinal :: Word64 -> OutboxId
+outboxIdFromOrdinal n =
+    OutboxId (fromWords64 0x018f0f1800007000 (0x8000000000000000 + n))
 
 uniqueIds :: (Eq a) => [a] -> [a]
 uniqueIds = foldr (\x xs -> if x `elem` xs then xs else x : xs) []

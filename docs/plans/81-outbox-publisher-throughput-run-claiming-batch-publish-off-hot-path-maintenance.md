@@ -31,8 +31,8 @@ This section must always reflect the actual current state of the work.
 
 - [x] M0: Add the `keiro-bench` tasty-bench component with the outbox scenarios (`outbox.hot-key`, `outbox.hot-key-nolatency`, `outbox.multi-key`) against the UNCHANGED code (completed 2026-07-02T00:02:14Z)
 - [x] M0: Capture the "Before" measurements (`--csv`), paste the rendered table plus machine notes into Outcomes & Retrospective (completed 2026-07-02T00:02:14Z)
-- [ ] M1: Rewrite `claimStmt` SQL in `keiro/src/Keiro/Outbox/Schema.hs` to claim contiguous per-key (and per-source) runs
-- [ ] M1: Update existing outbox claim tests in `keiro/test/Main.hs` that assert one-row-per-key claiming; add run-claiming tests
+- [x] M1: Rewrite `claimStmt` SQL in `keiro/src/Keiro/Outbox/Schema.hs` to claim contiguous per-key (and per-source) runs (completed 2026-07-02T00:11:43Z)
+- [x] M1: Update existing outbox claim tests in `keiro/test/Main.hs` that assert one-row-per-key claiming; add run-claiming tests (completed 2026-07-02T00:11:43Z)
 - [ ] M2: Add migration `keiro-migrations/sql-migrations/<timestamp>-keiro-outbox-claim-order-index.sql`
 - [ ] M2: Regenerate expected schema (`cabal run keiro-write-expected-schema`) and pass `cabal test keiro-migrations-test`
 - [ ] M3: Change `publishClaimedOutbox` publish argument to batch shape; add `markOutboxSentBatch` and `markOutboxSkippedTx` to `Keiro.Outbox.Schema`
@@ -53,6 +53,12 @@ implementation. Provide concise evidence.
   Evidence:
   ```text
   tasty-bench README: --time-mode controls whether to measure CPU time (default) or wall-clock time.
+  ```
+
+- Discovery: After M1 run-claiming, old tests that exercised repeated same-key failure/dead-letter behavior through `publishClaimedOutbox` must force `batchSize = 1` until M3's prefix/suffix outcome processing lands.
+  Evidence:
+  ```text
+  cabal test keiro-test initially failed the cross-context "head-of-line blocks a same-key successor..." example because the unchanged worker published a same-key successor in the same large claimed batch. Setting that legacy failure-path test to one-row batches preserves its pre-M3 purpose; M3 adds the large-batch suffix-skipping behavior.
   ```
 
 
@@ -92,6 +98,10 @@ Record every decision made while working on the plan.
   Rationale: The simulated broker uses `threadDelay` to model network/broker acknowledgement latency. `tasty-bench` defaults to CPU time, which is useful for pure CPU benchmarks but would under-measure the latency this plan is explicitly trying to amortize.
   Date: 2026-07-01
 
+- Decision: Keep pre-M3 same-key failure/dead-letter publish tests on `batchSize = 1`.
+  Rationale: M1 deliberately changes only claim shape; it does not yet implement the M3 rule that a failed row suppresses later same-key rows from the same claimed batch. One-row batches keep existing failure/dead-letter coverage meaningful while the new M1 claim tests prove run-claiming directly.
+  Date: 2026-07-02
+
 
 ## Outcomes & Retrospective
 
@@ -130,6 +140,22 @@ Name,Mean (ps),2*Stdev (ps)
 All.outbox.hot-key,22383601399807,3146036735370
 All.outbox.hot-key-nolatency,18933346000177,287227403730
 All.outbox.multi-key,4838196799998,332607956520
+```
+
+### Milestone 1 — Contiguous Run Claiming
+
+Implemented the two-stage `claimStmt` rewrite in `keiro/src/Keiro/Outbox/Schema.hs`. The `candidate` CTE now admits ready predecessors into the same locked set, and the `ready` CTE rejects a row unless every earlier non-terminal same-key or same-source predecessor is present in that candidate set. The haddock for `claimOutboxBatch` now states the gapless ordered-run invariant and the `LIMIT`-before-post-filter caveat.
+
+Added outbox tests for contiguous per-key runs, backoff heads not starving other keys, contiguous `PerSourceStream` runs, null-key rows, and a second claim returning nothing while the first claimed run remains `publishing`. Older same-key failure/dead-letter tests that are intentionally pre-M3 now set `batchSize = 1`; M3 will add the large-batch suffix-skipping behavior.
+
+Validation:
+
+```text
+cabal test keiro-test --test-options="--match Keiro.Outbox"
+28 examples, 0 failures
+
+cabal test keiro-test
+261 examples, 0 failures
 ```
 
 
@@ -479,3 +505,5 @@ Revision note (2026-07-01): Added a Decision Log entry recording the two residua
 Revision note (2026-07-01, later): Added Milestone 0 — a tasty-bench `keiro-bench` component with three outbox scenarios, run against unchanged code to capture a recorded "Before" baseline, re-run after Milestone 4 for a recorded before/after comparison, with `keiro/bench/baseline-outbox.csv` committed and a `just bench-regression` target (`--baseline`, `--fail-if-slower 25`) as a standing regression guard. Progress, Concrete Steps, Validation and Acceptance (advisory ratio gates 5×/3×/1.5×), Interfaces (tasty-bench dependency, bench-only), and the Decision Log were updated accordingly. Requested by the user to replace modeled throughput claims with measurements and to protect the improvement going forward.
 
 Revision note (2026-07-02): Implemented Milestone 0 against unchanged runtime code by adding the `keiro-bench` benchmark component and outbox scenarios, running the baseline with `--time-mode wall`, recording the before table and CSV evidence in Outcomes & Retrospective, and marking the M0 progress items complete. The benchmark commands were revised to include `--time-mode wall` because the simulated broker latency is represented with `threadDelay`, which CPU-time measurement would undercount.
+
+Revision note (2026-07-02, later): Implemented Milestone 1 by replacing heads-only claim predicates with the two-stage candidate/ready run-claiming query, documenting the run invariant on `claimOutboxBatch`, adding Postgres-backed tests for per-key, per-source, null-key, backoff-head, and publishing-predecessor cases, and recording the full `cabal test keiro-test` result. Legacy publish failure/dead-letter tests use one-row batches until Milestone 3 adds same-key suffix skipping for larger batches.
