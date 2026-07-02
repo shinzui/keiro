@@ -31,8 +31,8 @@ This section must always reflect the actual current state of the work.
 
 - [x] M0: Create or extend the `keiro-bench` tasty-bench component with the inbox scenarios (`inbox.single-full`, `inbox.single-nometrics`) against the UNCHANGED code (completed 2026-07-02T00:43:56Z)
 - [x] M0: Capture the "Before" measurements (`--csv`), paste the rendered table plus machine notes into Outcomes & Retrospective (completed 2026-07-02T00:43:56Z)
-- [ ] M1: Remove per-message backlog gauge from `runInboxTransactionWithKey` and `runInboxTransactionWithRetriesKey`; add `sampleInboxBacklog`
-- [ ] M1: Update metrics tests; `cabal test keiro-test` green
+- [x] M1: Remove per-message backlog gauge from `runInboxTransactionWithKey` and `runInboxTransactionWithRetriesKey`; add `sampleInboxBacklog` (completed 2026-07-02T00:48:52Z)
+- [x] M1: Update metrics tests; `cabal test keiro-test` green (completed 2026-07-02T00:48:52Z)
 - [ ] M2: Replace insert-`processing`-then-update with single insert-as-`completed` on the happy path
 - [ ] M2: Haddock updates for the now-legacy `processing` status and `InboxInProgress` result; tests green
 - [ ] M3: Migration dropping `keiro_inbox_received_idx`; regenerate expected schema; `cabal test keiro-migrations-test` green
@@ -53,6 +53,12 @@ implementation. Provide concise evidence.
   Evidence:
   ```text
   The workload is dominated by Postgres transaction latency and, for metrics-on, an extra backlog COUNT(*) transaction. Wall-clock timing captures the IO wait that CPU-time measurement would undercount.
+  ```
+
+- Discovery: Like `sampleOutboxBacklog`, `sampleInboxBacklog` needs an `IOE` constraint.
+  Evidence:
+  ```text
+  The sampler combines `countInboxBacklog` with `recordInboxBacklog`; the metric recording helper performs IO in the `Eff` stack, so the implemented signature is `(IOE :> es, Store :> es) => ...`.
   ```
 
 
@@ -129,6 +135,24 @@ All.inbox.single-full,435872700005,30830457974
 All.inbox.single-nometrics,313328487494,18217133958
 ```
 
+### Milestone 1 — Backlog Gauge Off The Per-Message Path
+
+Removed the `countInboxBacklog`/`recordInboxBacklog` blocks from both single-message inbox wrappers. The classification counters remain on the hot path, while the backlog gauge is now recorded only by the exported `sampleInboxBacklog`.
+
+Updated the inbox metrics test to assert that `runInboxTransaction` records processed/duplicate counters but no `keiro.inbox.backlog` point, then calls `sampleInboxBacklog` and observes the gauge value.
+
+Validation:
+
+```text
+cabal build keiro:lib:keiro keiro:test:keiro-test keiro:bench:keiro-bench
+
+cabal test keiro-test --test-options="--match Keiro.Inbox"
+17 examples, 0 failures
+
+cabal test keiro-test
+265 examples, 0 failures
+```
+
 
 ## Context and Orientation
 
@@ -200,7 +224,7 @@ In `keiro/src/Keiro/Inbox.hs`, delete the two `for_ mMetrics …` blocks (lines 
 -- 'failed' rows) and record the gauge. Does nothing when metrics are 'Nothing'.
 -- Schedule this on its own interval; it is intentionally not part of the
 -- per-message intake path.
-sampleInboxBacklog :: (Store :> es) => Maybe KeiroMetrics -> Eff es ()
+sampleInboxBacklog :: (IOE :> es, Store :> es) => Maybe KeiroMetrics -> Eff es ()
 sampleInboxBacklog mMetrics =
     for_ mMetrics $ \metrics -> do
         backlog <- countInboxBacklog

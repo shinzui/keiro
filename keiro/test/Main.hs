@@ -64,6 +64,7 @@ import Keiro.Inbox (
     markFailedTx,
     runInboxTransaction,
     runInboxTransactionWithRetries,
+    sampleInboxBacklog,
  )
 import Keiro.Inbox.Kafka qualified as InboxKafka
 import Keiro.Integration.Event (
@@ -3341,7 +3342,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Store.runTransaction (Tx.statement () inboxTestCounterCountStmt)
             rowCount `shouldBe` 1
 
-        it "records inbox metrics: one processed and one duplicate under the in-memory exporter" $ \storeHandle -> do
+        it "records inbox counters and samples backlog separately under the in-memory exporter" $ \storeHandle -> do
             (exporter, metricsRef) <- inMemoryMetricExporter
             (provider, _env) <-
                 createMeterProvider
@@ -3368,6 +3369,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let scalars = flattenScalarPoints exported
             lookup "keiro.inbox.processed" scalars `shouldBe` Just (IntNumber 1)
             lookup "keiro.inbox.duplicates" scalars `shouldBe` Just (IntNumber 1)
+            lookup "keiro.inbox.backlog" scalars `shouldBe` Nothing
+            Store.runStoreIO storeHandle (sampleInboxBacklog (Just keiroMetrics)) `shouldReturn` Right ()
+            _ <- forceFlushMeterProvider provider Nothing
+            sampled <- readIORef metricsRef
+            let sampledScalars = flattenScalarPoints sampled
+            lookup "keiro.inbox.backlog" sampledScalars `shouldBe` Just (IntNumber 0)
             -- The handler ran exactly once (the duplicate path does not re-run it).
             Right rowCount <-
                 Store.runStoreIO storeHandle $

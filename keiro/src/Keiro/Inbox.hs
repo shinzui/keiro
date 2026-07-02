@@ -28,6 +28,7 @@ module Keiro.Inbox (
     runInboxTransactionWithKey,
     runInboxTransactionWithRetries,
     runInboxTransactionWithRetriesKey,
+    sampleInboxBacklog,
 )
 where
 
@@ -110,17 +111,15 @@ runInboxTransactionWithKey mMetrics src dedupe event kafka handler = do
                 InboxCompleted -> pure InboxDuplicate
                 InboxProcessing -> pure InboxInProgress
                 InboxFailed -> pure (InboxPreviouslyFailed (row ^. #lastError))
-    -- Record the classification counter and the backlog gauge outside the
-    -- handler transaction. The backlog count is only paid when metrics are on.
+    -- Record the classification counter outside the handler transaction.
+    -- Backlog gauge sampling is intentionally scheduled separately via
+    -- 'sampleInboxBacklog'.
     case result of
         InboxProcessed _ -> recordInboxProcessed mMetrics 1
         InboxDuplicate -> recordInboxDuplicates mMetrics 1
         InboxPreviouslyFailed _ -> recordInboxFailed mMetrics 1
         InboxHandlerFailed _ _ -> recordInboxFailed mMetrics 1
         InboxInProgress -> pure ()
-    for_ mMetrics $ \metrics -> do
-        backlog <- countInboxBacklog
-        recordInboxBacklog (Just metrics) (fromIntegral backlog)
     pure result
 
 {- | Run @handler@ with opt-in poison-message accounting.
@@ -207,7 +206,16 @@ runInboxTransactionWithRetriesKey mMetrics attemptCeiling src dedupe event kafka
             recordInboxFailed mMetrics 1
             when (attempts >= attemptCeiling) (recordInboxPoisoned mMetrics 1)
         InboxInProgress -> pure ()
-    for_ mMetrics $ \metrics -> do
-        backlog <- countInboxBacklog
-        recordInboxBacklog (Just metrics) (fromIntegral backlog)
     pure result
+
+{- | Count the inbox backlog and record the gauge when metrics are enabled.
+
+The backlog is non-terminal rows: legacy @processing@ rows plus failed rows.
+Schedule this on its own interval; it is intentionally not part of the
+per-message intake path.
+-}
+sampleInboxBacklog :: (IOE :> es, Store :> es) => Maybe KeiroMetrics -> Eff es ()
+sampleInboxBacklog Nothing = pure ()
+sampleInboxBacklog (Just metrics) = do
+    backlog <- countInboxBacklog
+    recordInboxBacklog (Just metrics) (fromIntegral backlog)
