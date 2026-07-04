@@ -104,11 +104,11 @@ This section must always reflect the actual current state of the work.
   - [x] Regenerate the checked-in EventStream conformance fixtures under the aggregate-bearing `keiro-dsl/test/conformance*/Generated/**` trees.
   - [x] `cabal test keiro-dsl-test` is green.
   - [x] `cabal test keiro-dsl-conformance keiro-dsl-conformance-v2 keiro-dsl-conformance-coldstart keiro-dsl-conformance-process keiro-dsl-conformance-process-runtime keiro-dsl-conformance-process-full` is green.
-- [ ] **M5 — Documentation and changelog.**
-  - [ ] Update the `Keiro.EventStream.Validate` module haddock and the `EventStream` haddock note about `mkEventStream`.
-  - [ ] Add a `### Changed` entry to `CHANGELOG.md`.
-  - [ ] Record the keiki-plan-68 coordination constraint (version bump ordering) in the Decision Log and changelog.
-  - [ ] Cross-reference the consumer migration guide `docs/guides/migrating-to-validated-event-stream.md` (authored 2026-07-03) from the changelog entry; confirm it matches the final API and names the registered downstream projects from `mori registry dependents shinzui/keiro --packages`.
+- [x] **M5 — Documentation and changelog.** Completed 2026-07-04.
+  - [x] Update the `Keiro.EventStream.Validate` module haddock and the `EventStream` haddock note about `mkEventStream`.
+  - [x] Add a `### Changed` entry to `keiro/CHANGELOG.md` (the package changelog; there is no root changelog file).
+  - [x] Record the keiki-plan-68 coordination constraint (version bump ordering) in the Decision Log and changelog.
+  - [x] Cross-reference the consumer migration guide `docs/guides/migrating-to-validated-event-stream.md` from the changelog entry; confirm it matches the final API and names the registered downstream projects from `mori registry dependents shinzui/keiro --packages`.
 
 
 ## Surprises & Discoveries
@@ -205,6 +205,10 @@ implementation. Provide concise evidence.
   with raw formatting. Those formatter-only changes were restored; the committed
   M4 diff is intentionally limited to `emitEventStream` and generated
   `EventStream.hs` files.
+
+- **Discovery (implementation, 2026-07-04): the changelog is package-local.**
+  The repository has no root `CHANGELOG.md`; the release note for this API change
+  belongs in `keiro/CHANGELOG.md`.
 
 
 ## Decision Log
@@ -323,6 +327,11 @@ Compare the result against the original purpose.
   `mkEventStreamOrThrow`. The generated process-manager conformance fixture
   compiles against the validated `ProcessManager` fields without changing its
   hand-owned manager code.
+
+- M5 completed 2026-07-04. Public haddocks describe the validated command
+  boundary, `keiro/CHANGELOG.md` records the breaking source migration and
+  keiki-plan-68 coordination, and the downstream migration guide names the
+  current `mori` dependents and final DSL alias split.
 
 
 ## Context and Orientation

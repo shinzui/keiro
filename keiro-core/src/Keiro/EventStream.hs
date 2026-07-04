@@ -7,7 +7,11 @@ come from, how its emitted events are serialized ('Codec'), which physical
 stream name to read and write, when to snapshot, and how to serialize that
 snapshot. Command handling ("Keiro.Command") hydrates the machine from
 stored events (optionally fast-forwarding from a snapshot), steps it with a
-command, encodes the resulting events, and appends them.
+command, encodes the resulting events, and appends them. Public command
+runners require a 'Keiro.EventStream.Validate.ValidatedEventStream', obtained
+from 'Keiro.EventStream.Validate.mkEventStream' or
+'Keiro.EventStream.Validate.mkEventStreamOrThrow', rather than a bare record
+literal.
 
 The type parameters thread through from the underlying transducer:
 

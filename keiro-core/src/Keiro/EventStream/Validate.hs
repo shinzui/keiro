@@ -11,7 +11,7 @@ assert all of its streams are sound before they are ever hydrated.
 * 'validateEventStream' \/ 'validateEventStreamWith' run the pure check and
   return labelled warnings (empty when the stream is sound).
 * 'mkEventStream' is a fail-fast smart constructor: it returns @Left warnings@
-  for an unsafe stream and @Right stream@ for a sound one. The returned
+  for an unsafe stream and @Right validatedStream@ for a sound one. The returned
   'ValidatedEventStream' is the value command runners accept; the bare
   'EventStream' record literal remains available only for construction,
   validation, and low-level internals.
@@ -52,7 +52,8 @@ data EventStreamWarning = EventStreamWarning
     deriving stock (Eq, Show)
 
 {- | An 'EventStream' that has passed keiki validation and keiro's stream-level
-checks. The constructor is intentionally not exported; use 'mkEventStream',
+checks. Command runners require this wrapper instead of a bare 'EventStream'.
+The constructor is intentionally not exported; use 'mkEventStream',
 'mkEventStreamWith', or 'mkEventStreamOrThrow' to obtain a value.
 -}
 newtype ValidatedEventStream phi rs s ci co

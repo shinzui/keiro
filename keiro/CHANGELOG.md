@@ -11,12 +11,12 @@ consumers of `keiro` can see what changed and what they need to update._
 
 ### Added
 
-- `Keiro.EventStream.Validate`: `validateEventStream` / `validateEventStreamWith` run keiki's
-  pure `validateTransducer` over an `EventStream`'s transducer (replay-safety + determinism +
-  dead-edge), returning labelled `EventStreamWarning`s; `mkEventStream` is a fail-fast smart
-  constructor returning `Left [EventStreamWarning]` for an unsafe stream. The bare `EventStream`
-  record literal remains available. Validation requires the control state to satisfy
-  `(Bounded s, Enum s, Ord s, Show s)`.
+- `Keiro.EventStream.Validate`: `ValidatedEventStream`, `unvalidated`, and the
+  `validateEventStream` / `validateEventStreamWith` / `mkEventStream` /
+  `mkEventStreamWith` / `mkEventStreamOrThrow` constructors. These run keiki's pure
+  `validateTransducer` over an `EventStream`'s transducer (replay-safety + determinism +
+  dead-edge), returning labelled `EventStreamWarning`s or a validated wrapper. Validation
+  requires the control state to satisfy `(Bounded s, Enum s, Ord s, Show s)`.
 - `Keiro.ProcessManager`: `WorkerOptions`, `PoisonPolicy`, `defaultWorkerOptions`,
   `runProcessManagerWorkerWith`, and the dispatch-error classifier helpers. Existing
   `runProcessManagerWorker` keeps its signature and delegates to the default options.
@@ -26,6 +26,20 @@ consumers of `keiro` can see what changed and what they need to update._
 
 ### Changed
 
+- **Breaking API:** command-boundary APIs now require `ValidatedEventStream` instead of a
+  bare `EventStream`: `runCommand`, `runCommandWithSql`, `runCommandWithSqlEvents`,
+  `runCommandWithProjections`, `Router.targetEventStream`, and
+  `ProcessManager.eventStream` / `targetEventStream`. Build stream definitions with
+  `mkEventStream` or `mkEventStreamOrThrow` before wiring them into runners. This is a
+  source migration only; `ValidatedEventStream` is a `newtype`, so persisted events,
+  snapshots, stream names, and wire formats are unchanged.
+- `keiro-dsl` generated aggregate modules now expose `fooEventStreamDef` /
+  `FooEventStreamDef` for the bare record and keep `fooEventStream` / `FooEventStream`
+  as the validated command-boundary value.
+- Added a downstream migration guide:
+  `docs/guides/migrating-to-validated-event-stream.md`. The keiki EP-68 builder
+  tightening is coordinated but independent; land its keiki pin bump separately from this
+  replay-safety boundary change.
 - Bumped the pinned `keiki` dependency to a commit that ships `validateTransducer` and the
   structured `TransducerValidationWarning` (keiki EP-56), which the new validation surface builds
   on. The previously pinned `keiki` predated that work.
