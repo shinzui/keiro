@@ -13,7 +13,13 @@ are adopting:
   shape ("make these cooperate"), it points you to the right primitive
   (`EventStream`, Keiki composition, projection, process manager, or router).
 - [Build The Command Side](build-the-command-side.md) walks through commands,
-  events, the Keiki transducer, the Keiro `EventStream`, and `runCommand`.
+  events, the Keiki transducer, the Keiro `EventStream` /
+  `ValidatedEventStream` boundary, and `runCommand`.
+- [Replayability Safety](../user/replay-safety.md) explains the validation
+  guarantee that keeps unchecked streams out of command runners.
+- [Migrating To `ValidatedEventStream`](migrating-to-validated-event-stream.md)
+  is the compiler-driven source migration for services that still build bare
+  `EventStream` values at runner boundaries.
 - [Evolve Events Safely](evolve-events-safely.md) shows the event codec and the
   version-1-to-version-2 upcaster.
 - [Project Read Models](project-read-models.md) builds the inline order summary

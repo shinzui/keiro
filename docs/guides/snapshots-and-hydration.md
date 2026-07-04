@@ -10,19 +10,25 @@ can replay only the tail.
 [`../../jitsurei/src/Jitsurei/OrderStream.hs`](../../jitsurei/src/Jitsurei/OrderStream.hs):
 
 ```haskell
-orderEventStream :: OrderEventStream
-snapshotOrderEventStream :: OrderEventStream
+orderEventStream :: ValidatedOrderEventStream
+snapshotOrderEventStream :: ValidatedOrderEventStream
 ```
 
 The normal stream has `snapshotPolicy = Never` and `stateCodec = Nothing`. The
-snapshot-enabled stream changes only those fields:
+snapshot-enabled raw definition changes only those fields before being
+validated:
 
 ```haskell
-snapshotOrderEventStream =
-  orderEventStream
+snapshotOrderEventStreamDef :: OrderEventStream
+snapshotOrderEventStreamDef =
+  orderEventStreamDef
     { snapshotPolicy = Every 2
     , stateCodec = Just (defaultStateCodec @OrderRegs @OrderState 1)
     }
+
+snapshotOrderEventStream :: ValidatedOrderEventStream
+snapshotOrderEventStream =
+  mkEventStreamOrThrow "jitsurei-order-snapshot" snapshotOrderEventStreamDef
 ```
 
 `Every 2` writes a snapshot after appends that land on stream versions divisible
@@ -33,7 +39,9 @@ ignored safely.
 
 Snapshots are advisory. If the row is missing, corrupt, or shape-incompatible,
 Keiro falls back to full replay. Stored event decode failures still fail the
-command because the event log is the source of truth.
+command because the event log is the source of truth. `mkEventStreamOrThrow`
+also prevents an incoherent snapshot configuration (`snapshotPolicy` enabled
+with `stateCodec = Nothing`) from becoming a runnable stream.
 
 The snapshot test initializes `keiro_snapshots`, runs `PlaceOrder` and
 `ApprovePayment` through `snapshotOrderEventStream`, then queries the snapshot

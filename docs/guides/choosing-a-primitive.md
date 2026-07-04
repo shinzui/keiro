@@ -26,8 +26,8 @@ note](#a-note-on-transducer-composition-and-alternative) below.
 
 | If your shape is… | Reach for | Guide |
 |---|---|---|
-| Decide commands → events for one entity inside one consistency boundary | one `EventStream` (one transducer) | [Build The Command Side](build-the-command-side.md) |
-| Stage A's events feed stage B as a pipeline, all within one stream | Keiki `compose`, then mount the composite as one `EventStream` | Keiki `Keiki.Composition` |
+| Decide commands → events for one entity inside one consistency boundary | one validated `EventStream` (one transducer) | [Build The Command Side](build-the-command-side.md) |
+| Stage A's events feed stage B as a pipeline, all within one stream | Keiki `compose`, then mount the composite as one validated `EventStream` | Keiki `Keiki.Composition` |
 | One round of automatic policy reaction within one stream (command → event → follow-up event), observed atomically | Keiki `feedback1` | Keiki `Keiki.Composition` |
 | A spanning invariant across two parts of one entity (a decision must read both parts) | one hand-written transducer with product state — **not** `alternative` | [Build The Command Side](build-the-command-side.md) |
 | A queryable view derived from one stream, updated in the command's transaction | inline `Projection` + `ReadModel` | [Project Read Models](project-read-models.md) |
@@ -43,6 +43,10 @@ Keiki ships three composition combinators — `compose`, `alternative`, and
 `feedback1` — that combine transducers into one transducer. Composition is a
 Keiki-layer concern: the result is a single `SymTransducer` that you drop into a
 single `EventStream`. Keiro adds nothing on top of it.
+
+Before a composed stream reaches a command runner, validate the resulting
+`EventStream` with `mkEventStream` or `mkEventStreamOrThrow`; see
+[Replayability Safety](../user/replay-safety.md).
 
 `alternative` deserves a specific warning. Keiki's composition guide advertises
 it for "two sibling aggregates sharing one runtime channel" with examples like

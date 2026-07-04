@@ -32,6 +32,8 @@ Keiro owns framework tables like `keiro_snapshots`, `keiro_read_models`, and
 
 For command handlers, keep these operational rules:
 
+- Validate every command-side `EventStream` before startup and pass only
+  `ValidatedEventStream` values to runners.
 - Generate idempotency ids before calling `runCommand` when requests can be
   retried externally.
 - Keep command decisions deterministic with respect to stored event history.

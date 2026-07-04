@@ -44,10 +44,10 @@ The only shared state is the Kafka topic.
 
 ### 1. Command commits a private domain event
 
-The ordering service handles `SubmitOrder` through `runCommand`. The
-command appends a private `OrderSubmittedLocal` event to a kiroku
-stream in the ordering Postgres database. Nothing public has happened
-yet.
+The ordering service handles `SubmitOrder` through `runCommand` with a
+validated event stream. The command appends a private `OrderSubmittedLocal`
+event to a kiroku stream in the ordering Postgres database. Nothing public has
+happened yet.
 
 ### 2. IntegrationProducer maps it to a public envelope
 

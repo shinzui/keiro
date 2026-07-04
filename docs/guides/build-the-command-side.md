@@ -1,9 +1,9 @@
 # Build The Command Side
 
-The command side starts with a typed stream and an `EventStream`. A typed stream
-is a `Stream a`, where the type parameter prevents accidental reuse of a stream
-name with the wrong aggregate contract. In `jitsurei`, order streams are named
-from the order id:
+The command side starts with a typed stream, a raw `EventStream` definition, and
+a validated stream value. A typed stream is a `Stream a`, where the type
+parameter prevents accidental reuse of a stream name with the wrong aggregate
+contract. In `jitsurei`, order streams are named from the order id:
 
 ```haskell
 orderStream :: OrderId -> Stream OrderEventStream
@@ -20,7 +20,35 @@ event codec, and the stream-name function.
 ```haskell
 type OrderEventStream =
   EventStream (HsPred OrderRegs OrderCommand) OrderRegs OrderState OrderCommand OrderEvent
+
+type ValidatedOrderEventStream =
+  ValidatedEventStream (HsPred OrderRegs OrderCommand) OrderRegs OrderState OrderCommand OrderEvent
 ```
+
+The raw record lives under `orderEventStreamDef`; the runnable value keeps the
+public `orderEventStream` name and is built with `mkEventStreamOrThrow`:
+
+```haskell
+orderEventStreamDef :: OrderEventStream
+orderEventStreamDef =
+  EventStream
+    { transducer = orderTransducer
+    , initialState = NotStarted
+    , initialRegisters = RNil
+    , eventCodec = orderCodec
+    , resolveStreamName = Stream.streamName
+    , snapshotPolicy = Never
+    , stateCodec = Nothing
+    }
+
+orderEventStream :: ValidatedOrderEventStream
+orderEventStream =
+  mkEventStreamOrThrow "jitsurei-order" orderEventStreamDef
+```
+
+That validation step runs Keiki's replayability checks before the stream can be
+used by `runCommand`. A bare `EventStream` record cannot reach the command
+boundary; see [Replayability Safety](../user/replay-safety.md).
 
 The transducer is authored with Keiki's Template Haskell helpers and builder
 DSL. The full module enables `TemplateHaskell`, `QualifiedDo`,
@@ -165,11 +193,11 @@ runCommand
   )
 ```
 
-At runtime Keiro loads the stream, decodes stored events, replays them through
-the Keiki transducer, evaluates the new command, encodes the emitted events, and
-appends them with optimistic concurrency. A successful append returns a
-`CommandResult` with the final stream version, global position, and number of
-events appended.
+At runtime Keiro accepts the validated stream value, unwraps the raw stream
+internally, decodes stored events, replays them through the Keiki transducer,
+evaluates the new command, encodes the emitted events, and appends them with
+optimistic concurrency. A successful append returns a `CommandResult` with the
+final stream version, global position, and number of events appended.
 
 The example deliberately keeps command ids outside the command data. For normal
 API requests, generate idempotency ids before calling `runCommand` and pass them

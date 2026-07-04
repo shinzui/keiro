@@ -40,7 +40,7 @@ Run the command and projection together with:
 ```haskell
 runCommandWithProjections
   defaultRunCommandOptions
-  orderEventStream
+  orderEventStream  -- ValidatedOrderEventStream
   (orderStream orderId)
   command
   [orderSummaryInlineProjection]

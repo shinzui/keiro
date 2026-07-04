@@ -57,7 +57,7 @@ data Router input targetPhi targetRs targetState targetCi targetCo es = Router
     -- correlation string for the source event (e.g. the transaction id)
   , resolve :: !(input -> Eff es [PMCommand targetCi])
     -- THE seam: effectfully compute the data-dependent target set
-  , targetEventStream :: !(EventStream targetPhi targetRs targetState targetCi targetCo)
+  , targetEventStream :: !(ValidatedEventStream targetPhi targetRs targetState targetCi targetCo)
   , targetProjections :: ![InlineProjection targetCo]
   }
 ```
@@ -104,7 +104,7 @@ Each chapter is a tiny event-sourced aggregate: one command,
 `RecordTransaction`, that emits one event, `TransactionRecorded`, and stays in a
 single `ChapterOpen` state. It is deliberately minimal — the demonstration is the
 fan-out, not the chapter's domain. The aggregate is an ordinary Keiro
-`EventStream` built exactly as in [Build The Command Side](build-the-command-side.md).
+`EventStream` definition validated exactly as in [Build The Command Side](build-the-command-side.md).
 Its stream name is derived from the `(member, chapter)` pair:
 
 ```haskell

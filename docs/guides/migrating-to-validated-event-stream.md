@@ -11,6 +11,9 @@ The registered downstream projects at the time this guide was written are
 `keiro-runtime-patterns`, `kikan`, `kioku`, `kizashi`, `kotei`, `mori-app`, and
 `shikigami`; `mori-app` also has a package-level dependency on keiro.
 
+For the conceptual guarantee behind the migration, see
+[Replayability Safety](../user/replay-safety.md).
+
 
 ## What changed, in one paragraph
 

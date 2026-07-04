@@ -93,8 +93,9 @@ stateDiagram-v2
 ```
 <!-- jitsurei-diagram: page-stream end -->
 
-Both are ordinary keiro `EventStream`s built with the keiki Builder DSL, exactly
-as in [Build The Command Side](build-the-command-side.md).
+Both are ordinary keiro `EventStream` definitions built with the keiki Builder
+DSL and validated before they reach routers, process managers, or command
+runners, exactly as in [Build The Command Side](build-the-command-side.md).
 
 ## The read model the router queries
 
@@ -210,6 +211,10 @@ runEscalationTimerWorker options now =
            (EscalateIncident (EscalateIncidentData { incidentId = incidentId }))
     pure (Just firedEventId)
 ```
+
+`incidentEventStream` is the validated stream value. The raw
+`incidentEventStreamDef` remains available only for construction and validation;
+the command runner will not accept it directly.
 
 What about the ack-vs-escalate race? The worker does **not** check whether the
 incident was already acknowledged. It does not need to: the incident aggregate

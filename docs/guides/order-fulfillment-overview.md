@@ -41,7 +41,8 @@ as `OrderPlacedData`. `OrderState` is the replayed aggregate state:
 The guide code is split by responsibility:
 
 - [`Jitsurei.OrderStream`](../../jitsurei/src/Jitsurei/OrderStream.hs) defines
-  the Keiki transducer, Keiro `EventStream`, stream naming, and event codec.
+  the Keiki transducer, raw Keiro `EventStream` definition, validated stream
+  value, stream naming, and event codec.
 - [`Jitsurei.ReadModels`](../../jitsurei/src/Jitsurei/ReadModels.hs) defines
   the `jitsurei_order_summary` table projection and query.
 - [`Jitsurei.FulfillmentProcess`](../../jitsurei/src/Jitsurei/FulfillmentProcess.hs)
@@ -62,6 +63,6 @@ Run the example tests from the repository root:
 cabal test jitsurei-test
 ```
 
-You should see fifteen examples pass. If a guide claim is not backed by one of
+You should see sixteen examples pass. If a guide claim is not backed by one of
 those tests or by a linked `jitsurei/src/` module, treat that as a documentation
 bug.
