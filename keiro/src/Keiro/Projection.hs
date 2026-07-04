@@ -41,6 +41,7 @@ import Hasql.Statement (Statement, preparable)
 import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Command (CommandError, CommandResult, RunCommandOptions, runCommandWithSqlEvents)
 import Keiro.EventStream (EventStream)
+import Keiro.EventStream.Validate (ValidatedEventStream)
 import Keiro.Prelude
 import Keiro.ReadModel (readSubscriptionPosition, storeHeadPosition)
 import Keiro.Stream (Stream)
@@ -90,7 +91,7 @@ runCommandWithProjections ::
     forall phi rs s ci co es.
     (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
     RunCommandOptions ->
-    EventStream phi rs s ci co ->
+    ValidatedEventStream phi rs s ci co ->
     Stream (EventStream phi rs s ci co) ->
     ci ->
     [InlineProjection co] ->

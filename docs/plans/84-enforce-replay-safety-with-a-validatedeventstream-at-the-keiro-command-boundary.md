@@ -83,13 +83,13 @@ This section must always reflect the actual current state of the work.
   - [x] Export the new names from `Keiro.EventStream.Validate` and re-export from `Keiro` (`keiro/src/Keiro.hs`).
   - [x] `cabal build keiro-core` succeeds.
   - [x] `cabal build all` succeeds after M1.
-- [ ] **M2 — Thread `ValidatedEventStream` through the command runners.**
-  - [ ] Change the three public runners in `keiro/src/Keiro/Command.hs` to accept `ValidatedEventStream`, unwrapping once at the top with `unvalidated`.
-  - [ ] Keep internal helpers (`hydrate`, `hydrateFull`, `planCommand`, append helpers) on the bare `EventStream`.
-  - [ ] Change the Router config field `targetEventStream` and ProcessManager config fields `eventStream` / `targetEventStream` to `ValidatedEventStream`.
-  - [ ] Change the Projection runner signature to `ValidatedEventStream`.
-  - [ ] Migrate every in-repo construction site (test fixtures) to build via `mkEventStreamOrThrow`, keeping the *validated* value under the original name so runner call sites are untouched.
-  - [ ] `cabal test keiro-test` is green.
+- [x] **M2 — Thread `ValidatedEventStream` through the command runners.** Completed 2026-07-04.
+  - [x] Change the three public runners in `keiro/src/Keiro/Command.hs` to accept `ValidatedEventStream`, unwrapping once at the top with `unvalidated`.
+  - [x] Keep internal helpers (`hydrate`, `hydrateFull`, `planCommand`, append helpers) on the bare `EventStream`.
+  - [x] Change the Router config field `targetEventStream` and ProcessManager config fields `eventStream` / `targetEventStream` to `ValidatedEventStream`.
+  - [x] Change the Projection runner signature to `ValidatedEventStream`.
+  - [x] Migrate every in-repo construction site (test fixtures) to build via `mkEventStreamOrThrow`, keeping the *validated* value under the original name so runner call sites are untouched.
+  - [x] `cabal test keiro-test` is green.
 - [ ] **M3 — Prove the guarantee with tests.**
   - [ ] Positive: `mkEventStream` accepts every production-intent fixture (extends the existing clean-validation test).
   - [ ] Negative: `mkEventStream brokenHiddenInputEventStream` returns `Left` with a hidden-input warning (extends the existing test).

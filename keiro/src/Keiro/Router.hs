@@ -32,6 +32,7 @@ import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Command (CommandError (..), RunCommandOptions)
 import Keiro.EventStream (EventStream)
+import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
 import Keiro.ProcessManager (
     PMCommand (..),
@@ -89,7 +90,7 @@ data Router input targetPhi targetRs targetState targetCi targetCo es = Router
     {- ^ The effectful seam: compute the data-dependent target set, typically
     @runQuery readModel q@.
     -}
-    , targetEventStream :: !(EventStream targetPhi targetRs targetState targetCi targetCo)
+    , targetEventStream :: !(ValidatedEventStream targetPhi targetRs targetState targetCi targetCo)
     -- ^ The aggregate every resolved command is dispatched to.
     , targetProjections :: !(Stream targetCi -> [InlineProjection targetCo])
     {- ^ Inline projections for the target aggregate, run in the same transaction
@@ -152,7 +153,7 @@ runRouterOnce options router sourceEvent input = do
             targetOptions = options & #eventIds .~ [commandId]
             targetEventStream = router ^. #targetEventStream
             targetStream = retarget (command ^. #target)
-            targetStreamName = (targetEventStream ^. #resolveStreamName) targetStream
+            targetStreamName = ((unvalidated targetEventStream) ^. #resolveStreamName) targetStream
         commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
         if commandAlreadyProcessed
             then pure (PMCommandDuplicate commandId)

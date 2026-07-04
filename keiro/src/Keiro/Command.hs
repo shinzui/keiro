@@ -56,6 +56,7 @@ import Keiki.Core (BoolAlg, RegFile)
 import Keiki.Core qualified as Keiki
 import Keiro.Codec (Codec, CodecError, decodeRecorded, encodeForAppendWithMetadata)
 import Keiro.EventStream (EventStream, Terminality (..))
+import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
 import Keiro.Snapshot (hydrateWithSnapshot, writeSnapshot)
 import Keiro.Snapshot.Policy (shouldSnapshotSpan)
@@ -384,16 +385,18 @@ runCommand ::
     forall phi rs s ci co es.
     (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
     RunCommandOptions ->
-    EventStream phi rs s ci co ->
+    ValidatedEventStream phi rs s ci co ->
     Stream (EventStream phi rs s ci co) ->
     ci ->
     Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co)))
-runCommand options eventStream targetStream command =
+runCommand options validatedEventStream targetStream command =
     withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> do
         (result, attemptNo) <- attempt 1 Nothing
         recordCommandOutcome mSpan (^. #eventsAppended) attemptNo result
         pure result
   where
+    eventStream = unvalidated validatedEventStream
+
     attempt attemptNo lastConflict = do
         hydrated <- hydrate options eventStream targetStream
         either (\err -> pure (Left err, attemptNo)) (runPlan attemptNo lastConflict) hydrated
@@ -432,7 +435,7 @@ runCommandWithSql ::
     forall phi rs s ci co a es.
     (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
     RunCommandOptions ->
-    EventStream phi rs s ci co ->
+    ValidatedEventStream phi rs s ci co ->
     Stream (EventStream phi rs s ci co) ->
     ci ->
     (AppendResult -> Tx.Transaction a) ->
@@ -452,17 +455,19 @@ runCommandWithSqlEvents ::
     forall phi rs s ci co a es.
     (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
     RunCommandOptions ->
-    EventStream phi rs s ci co ->
+    ValidatedEventStream phi rs s ci co ->
     Stream (EventStream phi rs s ci co) ->
     ci ->
     ([(co, RecordedEvent)] -> AppendResult -> Tx.Transaction a) ->
     Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co), Maybe a))
-runCommandWithSqlEvents options eventStream targetStream command afterAppend =
+runCommandWithSqlEvents options validatedEventStream targetStream command afterAppend =
     withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> do
         (result, attemptNo) <- attempt 1 Nothing
         recordCommandOutcome mSpan (\(r, _) -> r ^. #eventsAppended) attemptNo result
         pure result
   where
+    eventStream = unvalidated validatedEventStream
+
     attempt attemptNo lastConflict = do
         hydrated <- hydrate options eventStream targetStream
         either (\err -> pure (Left err, attemptNo)) (runPlan attemptNo lastConflict) hydrated

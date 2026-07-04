@@ -60,6 +60,7 @@ import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Command (CommandError (..), CommandResult, RunCommandOptions, runCommandWithSql)
 import Keiro.EventStream (EventStream)
+import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
 import Keiro.Projection (InlineProjection, runCommandWithProjections)
 import Keiro.Stream (Stream)
@@ -100,9 +101,9 @@ aggregate it drives.
 data ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo = ProcessManager
     { name :: !Text
     , correlate :: !(input -> Text)
-    , eventStream :: !(EventStream phi rs s ci co)
+    , eventStream :: !(ValidatedEventStream phi rs s ci co)
     , streamFor :: !(Text -> Stream (EventStream phi rs s ci co))
-    , targetEventStream :: !(EventStream targetPhi targetRs targetState targetCi targetCo)
+    , targetEventStream :: !(ValidatedEventStream targetPhi targetRs targetState targetCi targetCo)
     , targetProjections :: !(Stream targetCi -> [InlineProjection targetCo])
     {- ^ Inline projections for the target aggregate, run in the same transaction
     as each dispatched command's append. Return @[]@ for append-only dispatch.
@@ -275,7 +276,7 @@ runProcessManagerOnce options manager sourceEvent input = do
         managerStream = (manager ^. #streamFor) correlationId
         managerEventId = deterministicCommandId (manager ^. #name) correlationId (sourceEvent ^. #eventId) (-1)
         managerOptions = options & #eventIds .~ [managerEventId]
-        managerStreamName = ((manager ^. #eventStream) ^. #resolveStreamName) managerStream
+        managerStreamName = ((unvalidated (manager ^. #eventStream)) ^. #resolveStreamName) managerStream
     managerAlreadyProcessed <- eventAlreadyIn options managerStreamName managerEventId
     if managerAlreadyProcessed
         then finish correlationId (PMStateDuplicate managerEventId) action
@@ -321,7 +322,7 @@ runProcessManagerOnce options manager sourceEvent input = do
         let commandId = deterministicCommandId (manager ^. #name) correlationId sourceEventId emitIndex
             targetOptions = options & #eventIds .~ [commandId]
             targetStream = retarget (command ^. #target)
-            targetStreamName = ((manager ^. #targetEventStream) ^. #resolveStreamName) targetStream
+            targetStreamName = ((unvalidated (manager ^. #targetEventStream)) ^. #resolveStreamName) targetStream
         commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
         if commandAlreadyProcessed
             then pure (PMCommandDuplicate commandId)

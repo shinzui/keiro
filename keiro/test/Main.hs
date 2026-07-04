@@ -52,7 +52,7 @@ import Keiki.Core qualified as Keiki
 import Keiro
 import Keiro qualified as KeiroRoot
 import Keiro.EventStream (Terminality (..))
-import Keiro.EventStream.Validate (EventStreamWarning (..), mkEventStream, validateEventStream)
+import Keiro.EventStream.Validate (EventStreamWarning (..), ValidatedEventStream, mkEventStream, mkEventStreamOrThrow, validateEventStream)
 import Keiro.Inbox (
     InboxDedupePolicy (..),
     InboxError (..),
@@ -525,15 +525,15 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
         it "rejects snapshot policies without a state codec" $ do
             let contract :: CounterEventStream
-                contract = counterEventStream{snapshotPolicy = Every 10, stateCodec = Nothing}
+                contract = counterEventStreamDef{snapshotPolicy = Every 10, stateCodec = Nothing}
             fmap (const ()) (mkEventStream "snapshotless" contract)
                 `shouldBe` Left [EventStreamWarning "snapshotless" "snapshotPolicy is set but stateCodec is Nothing; snapshots would never be written"]
 
     describe "EventStream replay-safety (validateEventStream)" $ do
         it "every production-intent stream validates clean" $
             concat
-                [ validateEventStream "counter" counterEventStream
-                , validateEventStream "snapshot-counter" snapshotCounterEventStream
+                [ validateEventStream "counter" counterEventStreamDef
+                , validateEventStream "snapshot-counter" snapshotCounterEventStreamDef
                 ]
                 `shouldBe` []
 
@@ -547,7 +547,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Right _ -> expectationFailure "expected mkEventStream to reject the hidden-input stream"
 
         it "accepts a replay-safe stream" $
-            case mkEventStream "counter" counterEventStream of
+            case mkEventStream "counter" counterEventStreamDef of
                 Right _ -> pure ()
                 Left ws -> expectationFailure ("expected mkEventStream to accept the stream, got " <> show ws)
 
@@ -1159,14 +1159,15 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let target = stream "snapshot-multi-event-crosses-boundary" :: Stream SnapshotCounterEventStream
                 boundaryEventStream :: SnapshotCounterEventStream
                 boundaryEventStream =
-                    snapshotCounterEventStream
+                    snapshotCounterEventStreamDef
                         & #transducer
                         .~ multiSnapshotCounterTransducer
                         & #snapshotPolicy
                         .~ Every 3
+                validatedBoundaryEventStream = mkEventStreamOrThrow "snapshot-multi-event-crosses-boundary" boundaryEventStream
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions boundaryEventStream target (Add 2)
+                    runCommand defaultRunCommandOptions validatedBoundaryEventStream target (Add 2)
             Right firstSnapshotVersion <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
@@ -1174,7 +1175,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             firstSnapshotVersion `shouldBe` Nothing
             result <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions boundaryEventStream target (Add 3)
+                    runCommand defaultRunCommandOptions validatedBoundaryEventStream target (Add 3)
             case result of
                 Right (Right commandResult) ->
                     commandResult ^. #streamVersion `shouldBe` StreamVersion 4
@@ -7452,9 +7453,13 @@ emptyTransducer =
 
 type CounterEventStream = EventStream (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
 
+type ValidatedCounterEventStream = ValidatedEventStream (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
+
 type SnapshotCounterRegs = '[ '("lastAmount", Int)]
 
 type SnapshotCounterEventStream = EventStream (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
+
+type ValidatedSnapshotCounterEventStream = ValidatedEventStream (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
 
 data CounterCommand
     = Add !Int
@@ -7470,8 +7475,8 @@ data CounterState
     deriving stock (Generic, Eq, Show, Enum, Bounded, Ord)
     deriving anyclass (FromJSON, ToJSON)
 
-counterEventStream :: CounterEventStream
-counterEventStream =
+counterEventStreamDef :: CounterEventStream
+counterEventStreamDef =
     EventStream
         { transducer = counterTransducer
         , initialState = Counting
@@ -7482,9 +7487,15 @@ counterEventStream =
         , stateCodec = Nothing
         }
 
-noOpCounterEventStream :: CounterEventStream
-noOpCounterEventStream =
-    counterEventStream & #transducer .~ noOpCounterTransducer
+counterEventStream :: ValidatedCounterEventStream
+counterEventStream = mkEventStreamOrThrow "counter" counterEventStreamDef
+
+noOpCounterEventStreamDef :: CounterEventStream
+noOpCounterEventStreamDef =
+    counterEventStreamDef & #transducer .~ noOpCounterTransducer
+
+noOpCounterEventStream :: ValidatedCounterEventStream
+noOpCounterEventStream = mkEventStreamOrThrow "counter-no-op" noOpCounterEventStreamDef
 
 counterTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
 counterTransducer =
@@ -7520,9 +7531,12 @@ noOpCounterTransducer =
         , isFinal = \_ -> False
         }
 
-multiCounterEventStream :: CounterEventStream
-multiCounterEventStream =
-    counterEventStream & #transducer .~ multiCounterTransducer
+multiCounterEventStreamDef :: CounterEventStream
+multiCounterEventStreamDef =
+    counterEventStreamDef & #transducer .~ multiCounterTransducer
+
+multiCounterEventStream :: ValidatedCounterEventStream
+multiCounterEventStream = mkEventStreamOrThrow "counter-multi" multiCounterEventStreamDef
 
 multiCounterTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
 multiCounterTransducer =
@@ -7544,8 +7558,8 @@ multiCounterTransducer =
         , isFinal = \_ -> False
         }
 
-snapshotCounterEventStream :: SnapshotCounterEventStream
-snapshotCounterEventStream =
+snapshotCounterEventStreamDef :: SnapshotCounterEventStream
+snapshotCounterEventStreamDef =
     EventStream
         { transducer = snapshotCounterTransducer
         , initialState = Counting
@@ -7555,6 +7569,9 @@ snapshotCounterEventStream =
         , snapshotPolicy = Every 2
         , stateCodec = Just (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
         }
+
+snapshotCounterEventStream :: ValidatedSnapshotCounterEventStream
+snapshotCounterEventStream = mkEventStreamOrThrow "snapshot-counter" snapshotCounterEventStreamDef
 
 snapshotCounterTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
 snapshotCounterTransducer =
@@ -7576,13 +7593,16 @@ snapshotCounterTransducer =
         , isFinal = \_ -> False
         }
 
-multiSnapshotCounterEventStream :: SnapshotCounterEventStream
-multiSnapshotCounterEventStream =
-    snapshotCounterEventStream
+multiSnapshotCounterEventStreamDef :: SnapshotCounterEventStream
+multiSnapshotCounterEventStreamDef =
+    snapshotCounterEventStreamDef
         & #transducer
         .~ multiSnapshotCounterTransducer
         & #snapshotPolicy
         .~ Every 1
+
+multiSnapshotCounterEventStream :: ValidatedSnapshotCounterEventStream
+multiSnapshotCounterEventStream = mkEventStreamOrThrow "snapshot-counter-multi" multiSnapshotCounterEventStreamDef
 
 multiSnapshotCounterTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
 multiSnapshotCounterTransducer =
@@ -7607,9 +7627,12 @@ multiSnapshotCounterTransducer =
         , isFinal = \_ -> False
         }
 
-guardedSnapshotCounterEventStream :: SnapshotCounterEventStream
-guardedSnapshotCounterEventStream =
-    snapshotCounterEventStream & #transducer .~ guardedSnapshotCounterTransducer
+guardedSnapshotCounterEventStreamDef :: SnapshotCounterEventStream
+guardedSnapshotCounterEventStreamDef =
+    snapshotCounterEventStreamDef & #transducer .~ guardedSnapshotCounterTransducer
+
+guardedSnapshotCounterEventStream :: ValidatedSnapshotCounterEventStream
+guardedSnapshotCounterEventStream = mkEventStreamOrThrow "snapshot-counter-guarded" guardedSnapshotCounterEventStreamDef
 
 guardedSnapshotCounterTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
 guardedSnapshotCounterTransducer =
@@ -7642,7 +7665,7 @@ replay, so keiki's hidden-input check flags it. Used to prove
 -}
 brokenHiddenInputEventStream :: SnapshotCounterEventStream
 brokenHiddenInputEventStream =
-    snapshotCounterEventStream & #transducer .~ brokenHiddenInputTransducer
+    snapshotCounterEventStreamDef & #transducer .~ brokenHiddenInputTransducer
 
 brokenHiddenInputTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
 brokenHiddenInputTransducer =
@@ -7815,8 +7838,11 @@ timerOnlyProcessManager =
 -- runCommandWithSql) writes and reuses snapshots. The manager registers are
 -- SnapshotCounterRegs because the eventStream is a SnapshotCounterEventStream;
 -- the target side stays '[]/counterEventStream exactly as counterProcessManager.
-pmSnapshotCounterEventStream :: SnapshotCounterEventStream
-pmSnapshotCounterEventStream = snapshotCounterEventStream
+pmSnapshotCounterEventStreamDef :: SnapshotCounterEventStream
+pmSnapshotCounterEventStreamDef = snapshotCounterEventStreamDef
+
+pmSnapshotCounterEventStream :: ValidatedSnapshotCounterEventStream
+pmSnapshotCounterEventStream = mkEventStreamOrThrow "pm-snapshot-counter" pmSnapshotCounterEventStreamDef
 
 pmSnapshotProcessManager ::
     ProcessManager
@@ -8440,9 +8466,12 @@ routerTestEnvelope message =
 (CommandRejected), so a dispatch through it surfaces as PMCommandFailed,
 driving the worker's AckHalt branch.
 -}
-rejectingEventStream :: CounterEventStream
-rejectingEventStream =
-    counterEventStream & #transducer .~ rejectingTransducer
+rejectingEventStreamDef :: CounterEventStream
+rejectingEventStreamDef =
+    counterEventStreamDef & #transducer .~ rejectingTransducer
+
+rejectingEventStream :: ValidatedCounterEventStream
+rejectingEventStream = mkEventStreamOrThrow "rejecting-counter" rejectingEventStreamDef
 
 rejectingTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
 rejectingTransducer =
