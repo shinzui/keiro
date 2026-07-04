@@ -1065,7 +1065,9 @@ emitEventStream a =
         [ generatedBanner
         , "module " <> aGenPrefix a <> ".EventStream"
         , "  ( " <> lowerFirst (aName a) <> "EventStream"
+        , "  , " <> lowerFirst (aName a) <> "EventStreamDef"
         , "  , " <> aName a <> "EventStream"
+        , "  , " <> aName a <> "EventStreamDef"
         , "  ) where"
         , ""
         , "import " <> aGenPrefix a <> ".Domain"
@@ -1073,13 +1075,17 @@ emitEventStream a =
         , "import " <> aHolePrefix a <> ".Holes (" <> lowerFirst (aName a) <> "Transducer)"
         , "import Keiki.Core (HsPred)"
         , "import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))"
+        , "import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)"
         , "import qualified Keiro.Stream as Stream"
         , ""
-        , "type " <> aName a <> "EventStream ="
+        , "type " <> aName a <> "EventStreamDef ="
         , "  EventStream (HsPred " <> aName a <> "Regs " <> aName a <> "Command) " <> aName a <> "Regs " <> aVertexType a <> " " <> aName a <> "Command " <> aName a <> "Event"
         , ""
-        , lowerFirst (aName a) <> "EventStream :: " <> aName a <> "EventStream"
-        , lowerFirst (aName a) <> "EventStream ="
+        , "type " <> aName a <> "EventStream ="
+        , "  ValidatedEventStream (HsPred " <> aName a <> "Regs " <> aName a <> "Command) " <> aName a <> "Regs " <> aVertexType a <> " " <> aName a <> "Command " <> aName a <> "Event"
+        , ""
+        , lowerFirst (aName a) <> "EventStreamDef :: " <> aName a <> "EventStreamDef"
+        , lowerFirst (aName a) <> "EventStreamDef ="
         , "  EventStream"
         , "    { transducer = " <> lowerFirst (aName a) <> "Transducer"
         , "    , initialState = " <> initialVertex a
@@ -1089,6 +1095,10 @@ emitEventStream a =
         , "    , snapshotPolicy = Never"
         , "    , stateCodec = Nothing"
         , "    }"
+        , ""
+        , lowerFirst (aName a) <> "EventStream :: " <> aName a <> "EventStream"
+        , lowerFirst (aName a) <> "EventStream ="
+        , "  mkEventStreamOrThrow " <> tshow (aName a) <> " " <> lowerFirst (aName a) <> "EventStreamDef"
         ]
 
 --------------------------------------------------------------------------------

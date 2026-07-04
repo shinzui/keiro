@@ -98,11 +98,12 @@ This section must always reflect the actual current state of the work.
   - [x] Add an hspec example in `keiro/test/Main.hs` that shells out to `cabal exec ghc -- -fno-code -package keiro test/ReplaySafetyTypeProbe.hs` and asserts a non-zero exit plus `ValidatedEventStream` in stderr.
   - [x] Do **not** add `ReplaySafetyTypeProbe` to `other-modules`; it must stay outside the normal build graph or `keiro-test` will fail to compile by design.
   - [x] `cabal test keiro-test` green.
-- [ ] **M4 — Update the keiro-dsl code generator and conformance goldens.**
-  - [ ] Change `emitEventStream` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` to emit a `ValidatedEventStream` binding (via `mkEventStreamOrThrow`) alongside the bare record.
-  - [ ] Update any generated harness / runtime wiring that passes the stream to a runner to pass the validated binding.
-  - [ ] Regenerate the checked-in conformance fixtures under `keiro-dsl/test/conformance*/Generated/**`.
-  - [ ] `cabal test` for the keiro-dsl conformance suites is green.
+- [x] **M4 — Update the keiro-dsl code generator and conformance goldens.** Completed 2026-07-04.
+  - [x] Change `emitEventStream` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` to emit a `ValidatedEventStream` binding (via `mkEventStreamOrThrow`) alongside the bare record.
+  - [x] Update generated process-manager wiring by keeping the public `fooEventStream` binding name as the validated value; generated callers that pass it to `ProcessManager` fields continue to compile unchanged.
+  - [x] Regenerate the checked-in EventStream conformance fixtures under the aggregate-bearing `keiro-dsl/test/conformance*/Generated/**` trees.
+  - [x] `cabal test keiro-dsl-test` is green.
+  - [x] `cabal test keiro-dsl-conformance keiro-dsl-conformance-v2 keiro-dsl-conformance-coldstart keiro-dsl-conformance-process keiro-dsl-conformance-process-runtime keiro-dsl-conformance-process-full` is green.
 - [ ] **M5 — Documentation and changelog.**
   - [ ] Update the `Keiro.EventStream.Validate` module haddock and the `EventStream` haddock note about `mkEventStream`.
   - [ ] Add a `### Changed` entry to `CHANGELOG.md`.
@@ -188,6 +189,22 @@ implementation. Provide concise evidence.
 
   It fails for the intended reason: GHC reports that the actual bare
   `EventStream ...` does not match the expected `ValidatedEventStream ...`.
+
+- **Discovery (implementation, 2026-07-04): the DSL generated stream alias needs
+  a raw companion alias.** Generated modules now expose `FooEventStreamDef` for
+  the bare `EventStream …` record and `FooEventStream` for the
+  `ValidatedEventStream …` value. This preserves a name for stream phantom tags or
+  low-level validation tests while keeping the original `fooEventStream` binding
+  suitable for command-boundary APIs. A repo search showed the current generated
+  process wiring imports and passes the value binding, not `Stream FooEventStream`,
+  and the conformance suites confirmed the split compiles.
+
+- **Discovery (implementation, 2026-07-04): checked-in DSL fixtures are
+  formatter-normalized while `scaffold` writes raw text.** Regenerating the
+  conformance directories rewrote unrelated generated Codec/Harness/Domain files
+  with raw formatting. Those formatter-only changes were restored; the committed
+  M4 diff is intentionally limited to `emitEventStream` and generated
+  `EventStream.hs` files.
 
 
 ## Decision Log
@@ -284,6 +301,15 @@ Record every decision made while working on the plan.
   time.
   Date: 2026-07-03
 
+- Decision: In generated DSL modules, keep `FooEventStream` as the validated
+  public binding/type and introduce `FooEventStreamDef` for the bare record.
+  Rationale: This mirrors the in-repo fixture migration from M2: existing runner
+  wiring keeps passing `fooEventStream`, now validated, while code that needs the
+  raw event-stream shape can opt into `fooEventStreamDef` / `FooEventStreamDef`.
+  It also avoids changing `Stream`/`CommandResult` phantom tags to the validated
+  wrapper.
+  Date: 2026-07-04
+
 
 ## Outcomes & Retrospective
 
@@ -291,6 +317,12 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original purpose.
 
 (To be filled during and after implementation.)
+
+- M4 completed 2026-07-04. `keiro-dsl` now emits `...EventStreamDef` as the bare
+  record and `...EventStream` as a `ValidatedEventStream` built with
+  `mkEventStreamOrThrow`. The generated process-manager conformance fixture
+  compiles against the validated `ProcessManager` fields without changing its
+  hand-owned manager code.
 
 
 ## Context and Orientation
