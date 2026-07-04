@@ -34,6 +34,7 @@ module Keiro (
     Terminality (..),
     SnapshotPolicy (..),
     StateCodec (..),
+    module Keiro.EventStream.Validate,
     module Keiro.Stream,
 
     -- * Routing and snapshots
@@ -45,6 +46,7 @@ where
 import Keiro.Codec
 import Keiro.Command
 import Keiro.EventStream
+import Keiro.EventStream.Validate
 import Keiro.Prelude
 import Keiro.Router
 import Keiro.Snapshot

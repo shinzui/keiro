@@ -11,19 +11,25 @@ assert all of its streams are sound before they are ever hydrated.
 * 'validateEventStream' \/ 'validateEventStreamWith' run the pure check and
   return labelled warnings (empty when the stream is sound).
 * 'mkEventStream' is a fail-fast smart constructor: it returns @Left warnings@
-  for an unsafe stream and @Right stream@ for a sound one. The bare
-  'EventStream' record literal stays available for low-level callers who do not
-  want the check.
+  for an unsafe stream and @Right stream@ for a sound one. The returned
+  'ValidatedEventStream' is the value command runners accept; the bare
+  'EventStream' record literal remains available only for construction,
+  validation, and low-level internals.
 -}
 module Keiro.EventStream.Validate (
     EventStreamWarning (..),
+    ValidatedEventStream,
+    unvalidated,
     validateEventStream,
     validateEventStreamWith,
     mkEventStream,
+    mkEventStreamWith,
+    mkEventStreamOrThrow,
 ) where
 
 import Data.Text (Text)
 import Data.Text qualified as Text
+import GHC.Stack (HasCallStack)
 import Keiki.Core (
     EdgeRef (..),
     HsPred,
@@ -44,6 +50,17 @@ data EventStreamWarning = EventStreamWarning
     -- ^ rendered from the keiki warning
     }
     deriving stock (Eq, Show)
+
+{- | An 'EventStream' that has passed keiki validation and keiro's stream-level
+checks. The constructor is intentionally not exported; use 'mkEventStream',
+'mkEventStreamWith', or 'mkEventStreamOrThrow' to obtain a value.
+-}
+newtype ValidatedEventStream phi rs s ci co
+    = ValidatedEventStream (EventStream phi rs s ci co)
+
+-- | Recover the underlying stream for internal runners and low-level helpers.
+unvalidated :: ValidatedEventStream phi rs s ci co -> EventStream phi rs s ci co
+unvalidated (ValidatedEventStream es) = es
 
 {- | Run keiki's pure umbrella check (hidden-input + determinism + dead-edge)
 over a stream's transducer with the default options. An empty list means the
@@ -73,21 +90,53 @@ validateEventStreamWith opts label es =
            | w <- validateTransducer opts (transducer es)
            ]
 
-{- | Build a validated 'EventStream'. Returns the warnings (@Left@) for an
-unsafe stream, or the stream itself (@Right@) when it passes. The bare record
-literal @EventStream { … }@ remains available for low-level callers who do not
-want the check.
+{- | Build a validated event stream with the default validation options.
+Returns the warnings (@Left@) for an unsafe stream, or a
+'ValidatedEventStream' (@Right@) when it passes.
 -}
 mkEventStream ::
     (Bounded s, Enum s, Ord s, Show s) =>
     -- | caller-supplied stream label
     Text ->
     EventStream (HsPred rs ci) rs s ci co ->
-    Either [EventStreamWarning] (EventStream (HsPred rs ci) rs s ci co)
-mkEventStream label es =
-    case validateEventStream label es of
-        [] -> Right es
+    Either [EventStreamWarning] (ValidatedEventStream (HsPred rs ci) rs s ci co)
+mkEventStream = mkEventStreamWith defaultValidationOptions
+
+{- | Build a validated event stream with caller-chosen validation options.
+Only narrow options for documented, benign non-hidden-input warnings; disabling
+the hidden-input check weakens replay safety.
+-}
+mkEventStreamWith ::
+    (Bounded s, Enum s, Ord s, Show s) =>
+    ValidationOptions ->
+    -- | caller-supplied stream label
+    Text ->
+    EventStream (HsPred rs ci) rs s ci co ->
+    Either [EventStreamWarning] (ValidatedEventStream (HsPred rs ci) rs s ci co)
+mkEventStreamWith opts label es =
+    case validateEventStreamWith opts label es of
+        [] -> Right (ValidatedEventStream es)
         warns -> Left warns
+
+{- | Partial constructor for generated code and test fixtures that have a
+sibling validation proof. Hand-authored application wiring should prefer
+'mkEventStream' and handle @Left@ explicitly.
+-}
+mkEventStreamOrThrow ::
+    (HasCallStack, Bounded s, Enum s, Ord s, Show s) =>
+    -- | caller-supplied stream label
+    Text ->
+    EventStream (HsPred rs ci) rs s ci co ->
+    ValidatedEventStream (HsPred rs ci) rs s ci co
+mkEventStreamOrThrow label es =
+    case mkEventStream label es of
+        Right validated -> validated
+        Left warns ->
+            error $
+                "Keiro.EventStream.Validate.mkEventStreamOrThrow: "
+                    <> Text.unpack label
+                    <> " is not replay-safe: "
+                    <> show warns
 
 {- | Render a keiki warning to a human-readable reason. All four constructors
 carry @tvwDetail@; the source vertex is @edgeSource . tvwEdge@ (or @tvwSource@

@@ -45,7 +45,8 @@ import Kiroku.Store.Types (StreamName, StreamVersion)
   the @(state, registers)@ pair.
 * 'stateCodec' — how to serialize that snapshot. Set 'snapshotPolicy' and
   'stateCodec' coherently; 'Keiro.EventStream.Validate.mkEventStream' rejects
-  a snapshotting policy without a state codec.
+  a snapshotting policy without a state codec and returns the
+  'Keiro.EventStream.Validate.ValidatedEventStream' that command runners accept.
 -}
 data EventStream phi rs s ci co = EventStream
     { transducer :: !(SymTransducer phi rs s ci co)
