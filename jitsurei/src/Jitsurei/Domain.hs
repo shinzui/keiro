@@ -143,7 +143,7 @@ data OrderState
     | Packed
     | Shipped
     | Cancelled
-    deriving stock (Generic, Eq, Show, Enum, Bounded)
+    deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
     deriving anyclass (FromJSON, ToJSON)
 
 orderIdText :: OrderId -> Text

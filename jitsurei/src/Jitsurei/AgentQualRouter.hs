@@ -72,6 +72,7 @@ import Keiki.Core (HsPred, RegFile (..), SymTransducer)
 import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
+import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
 import Keiro.ProcessManager (PMCommand (..))
 import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), runQuery)
 import Keiro.Router (Router (..))
@@ -143,12 +144,15 @@ data TransactionRecordedData = TransactionRecordedData
 
 data ChapterState
     = ChapterOpen
-    deriving stock (Generic, Eq, Show, Enum, Bounded)
+    deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 type ChapterRegs = '[]
 
 type ChapterEventStream =
     EventStream (HsPred ChapterRegs ChapterCommand) ChapterRegs ChapterState ChapterCommand ChapterEvent
+
+type ValidatedChapterEventStream =
+    ValidatedEventStream (HsPred ChapterRegs ChapterCommand) ChapterRegs ChapterState ChapterCommand ChapterEvent
 
 $( deriveAggregate
     ''ChapterCommand
@@ -156,8 +160,8 @@ $( deriveAggregate
     ''ChapterEvent
  )
 
-chapterEventStream :: ChapterEventStream
-chapterEventStream =
+chapterEventStreamDef :: ChapterEventStream
+chapterEventStreamDef =
     EventStream
         { transducer = chapterTransducer
         , initialState = ChapterOpen
@@ -167,6 +171,10 @@ chapterEventStream =
         , snapshotPolicy = Never
         , stateCodec = Nothing
         }
+
+chapterEventStream :: ValidatedChapterEventStream
+chapterEventStream =
+    mkEventStreamOrThrow "jitsurei-chapter" chapterEventStreamDef
 
 {- | The chapter stream a @(member, chapter)@ pair records into: category
 @chapter@ with a composite id segment @\<member\>-\<chapter\>@.

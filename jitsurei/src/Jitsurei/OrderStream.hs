@@ -24,6 +24,7 @@ import Keiki.Core (HsPred, RegFile (..), SymTransducer)
 import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
+import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
 import Keiro.Snapshot (defaultStateCodec)
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
@@ -33,14 +34,16 @@ type OrderRegs = '[]
 
 type OrderEventStream = EventStream (HsPred OrderRegs OrderCommand) OrderRegs OrderState OrderCommand OrderEvent
 
+type ValidatedOrderEventStream = ValidatedEventStream (HsPred OrderRegs OrderCommand) OrderRegs OrderState OrderCommand OrderEvent
+
 $( deriveAggregate
     ''OrderCommand
     ''OrderRegs
     ''OrderEvent
  )
 
-orderEventStream :: OrderEventStream
-orderEventStream =
+orderEventStreamDef :: OrderEventStream
+orderEventStreamDef =
     EventStream
         { transducer = orderTransducer
         , initialState = NotStarted
@@ -51,12 +54,20 @@ orderEventStream =
         , stateCodec = Nothing
         }
 
-snapshotOrderEventStream :: OrderEventStream
-snapshotOrderEventStream =
-    orderEventStream
+orderEventStream :: ValidatedOrderEventStream
+orderEventStream =
+    mkEventStreamOrThrow "jitsurei-order" orderEventStreamDef
+
+snapshotOrderEventStreamDef :: OrderEventStream
+snapshotOrderEventStreamDef =
+    orderEventStreamDef
         { snapshotPolicy = Every 2
         , stateCodec = Just (defaultStateCodec @OrderRegs @OrderState 1)
         }
+
+snapshotOrderEventStream :: ValidatedOrderEventStream
+snapshotOrderEventStream =
+    mkEventStreamOrThrow "jitsurei-order-snapshot" snapshotOrderEventStreamDef
 
 orderCategory :: Stream.StreamCategory a
 orderCategory = Stream.categoryUnsafe "order"

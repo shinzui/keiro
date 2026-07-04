@@ -84,6 +84,7 @@ import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.Command (CommandError, RunCommandOptions, runCommand)
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
+import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
 import Keiro.ProcessManager (
     PMCommand (..),
     ProcessManager (..),
@@ -132,12 +133,15 @@ data EscalationState
     = EscalationIdle
     | Awaiting
     | Settled
-    deriving stock (Generic, Eq, Show, Enum, Bounded)
+    deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 type EscalationRegs = '[]
 
 type EscalationEventStream =
     EventStream (HsPred EscalationRegs EscalationCommand) EscalationRegs EscalationState EscalationCommand EscalationEvent
+
+type ValidatedEscalationEventStream =
+    ValidatedEventStream (HsPred EscalationRegs EscalationCommand) EscalationRegs EscalationState EscalationCommand EscalationEvent
 
 $( deriveAggregate
     ''EscalationCommand
@@ -145,8 +149,8 @@ $( deriveAggregate
     ''EscalationEvent
  )
 
-escalationEventStream :: EscalationEventStream
-escalationEventStream =
+escalationEventStreamDef :: EscalationEventStream
+escalationEventStreamDef =
     EventStream
         { transducer = escalationTransducer
         , initialState = EscalationIdle
@@ -156,6 +160,10 @@ escalationEventStream =
         , snapshotPolicy = Never
         , stateCodec = Nothing
         }
+
+escalationEventStream :: ValidatedEscalationEventStream
+escalationEventStream =
+    mkEventStreamOrThrow "jitsurei-escalation" escalationEventStreamDef
 
 escalationCategory :: Stream.StreamCategory a
 escalationCategory = Stream.categoryUnsafe "esc"

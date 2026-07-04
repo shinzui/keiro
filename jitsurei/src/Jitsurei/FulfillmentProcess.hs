@@ -33,6 +33,7 @@ import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.Command (CommandError, RunCommandOptions)
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
+import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
 import Keiro.ProcessManager (
     PMCommand (..),
     ProcessManager (..),
@@ -68,11 +69,13 @@ data FulfillmentObservedData = FulfillmentObservedData
 
 data FulfillmentState
     = FulfillmentIdle
-    deriving stock (Generic, Eq, Show, Enum, Bounded)
+    deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 type FulfillmentRegs = '[]
 
 type FulfillmentEventStream = EventStream (HsPred FulfillmentRegs FulfillmentCommand) FulfillmentRegs FulfillmentState FulfillmentCommand FulfillmentEvent
+
+type ValidatedFulfillmentEventStream = ValidatedEventStream (HsPred FulfillmentRegs FulfillmentCommand) FulfillmentRegs FulfillmentState FulfillmentCommand FulfillmentEvent
 
 type FulfillmentProcessManager =
     ProcessManager
@@ -94,8 +97,8 @@ $( deriveAggregate
     ''FulfillmentEvent
  )
 
-fulfillmentEventStream :: FulfillmentEventStream
-fulfillmentEventStream =
+fulfillmentEventStreamDef :: FulfillmentEventStream
+fulfillmentEventStreamDef =
     EventStream
         { transducer = fulfillmentTransducer
         , initialState = FulfillmentIdle
@@ -105,6 +108,10 @@ fulfillmentEventStream =
         , snapshotPolicy = Never
         , stateCodec = Nothing
         }
+
+fulfillmentEventStream :: ValidatedFulfillmentEventStream
+fulfillmentEventStream =
+    mkEventStreamOrThrow "jitsurei-fulfillment" fulfillmentEventStreamDef
 
 fulfillmentCategory :: Stream.StreamCategory a
 fulfillmentCategory = Stream.categoryUnsafe "fulfillment"

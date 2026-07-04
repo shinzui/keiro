@@ -57,6 +57,7 @@ import Keiki.Core (HsPred, RegFile (..), SymTransducer)
 import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
+import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 import Kiroku.Store.Types (EventType (..))
@@ -158,12 +159,15 @@ data IncidentState
     | Acknowledged
     | Escalated
     | Resolved
-    deriving stock (Generic, Eq, Show, Enum, Bounded)
+    deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 type IncidentRegs = '[]
 
 type IncidentEventStream =
     EventStream (HsPred IncidentRegs IncidentCommand) IncidentRegs IncidentState IncidentCommand IncidentEvent
+
+type ValidatedIncidentEventStream =
+    ValidatedEventStream (HsPred IncidentRegs IncidentCommand) IncidentRegs IncidentState IncidentCommand IncidentEvent
 
 $( deriveAggregate
     ''IncidentCommand
@@ -171,8 +175,8 @@ $( deriveAggregate
     ''IncidentEvent
  )
 
-incidentEventStream :: IncidentEventStream
-incidentEventStream =
+incidentEventStreamDef :: IncidentEventStream
+incidentEventStreamDef =
     EventStream
         { transducer = incidentTransducer
         , initialState = Unreported
@@ -182,6 +186,10 @@ incidentEventStream =
         , snapshotPolicy = Never
         , stateCodec = Nothing
         }
+
+incidentEventStream :: ValidatedIncidentEventStream
+incidentEventStream =
+    mkEventStreamOrThrow "jitsurei-incident" incidentEventStreamDef
 
 incidentCategory :: Stream.StreamCategory a
 incidentCategory = Stream.categoryUnsafe "incident"

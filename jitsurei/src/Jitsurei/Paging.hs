@@ -43,6 +43,7 @@ import Keiki.Core (HsPred, RegFile (..), SymTransducer)
 import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
+import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
 import Keiro.ProcessManager (PMCommand (..))
 import Keiro.ReadModel (runQuery)
 import Keiro.Router (Router (..))
@@ -89,12 +90,15 @@ data PageState
     = AwaitingSend
     | Pending
     | Acked
-    deriving stock (Generic, Eq, Show, Enum, Bounded)
+    deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 type PageRegs = '[]
 
 type PageEventStream =
     EventStream (HsPred PageRegs PageCommand) PageRegs PageState PageCommand PageEvent
+
+type ValidatedPageEventStream =
+    ValidatedEventStream (HsPred PageRegs PageCommand) PageRegs PageState PageCommand PageEvent
 
 $( deriveAggregate
     ''PageCommand
@@ -102,8 +106,8 @@ $( deriveAggregate
     ''PageEvent
  )
 
-pageEventStream :: PageEventStream
-pageEventStream =
+pageEventStreamDef :: PageEventStream
+pageEventStreamDef =
     EventStream
         { transducer = pageTransducer
         , initialState = AwaitingSend
@@ -113,6 +117,10 @@ pageEventStream =
         , snapshotPolicy = Never
         , stateCodec = Nothing
         }
+
+pageEventStream :: ValidatedPageEventStream
+pageEventStream =
+    mkEventStreamOrThrow "jitsurei-page" pageEventStreamDef
 
 {- | A page stream is keyed by @(incident, responder)@: category @page@ with a
 composite id segment @\<incident\>-\<responder\>@ (the @-@ after the category

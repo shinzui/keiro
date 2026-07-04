@@ -109,6 +109,13 @@ This section must always reflect the actual current state of the work.
   - [x] Add a `### Changed` entry to `keiro/CHANGELOG.md` (the package changelog; there is no root changelog file).
   - [x] Record the keiki-plan-68 coordination constraint (version bump ordering) in the Decision Log and changelog.
   - [x] Cross-reference the consumer migration guide `docs/guides/migrating-to-validated-event-stream.md` from the changelog entry; confirm it matches the final API and names the registered downstream projects from `mori registry dependents shinzui/keiro --packages`.
+- [x] **M6 — Migrate the in-workspace `jitsurei` worked examples.** Completed 2026-07-04.
+  - [x] Rename each bare worked-example stream record to `...EventStreamDef` and keep the public `...EventStream` binding as a `ValidatedEventStream` built with `mkEventStreamOrThrow`.
+  - [x] Keep existing raw `...EventStream` type aliases for `Stream` handles and `ProcessManagerResult` phantom tags; add internal `Validated...EventStream` aliases for value signatures.
+  - [x] Add missing `Ord` derivations to the worked-example state enums required by validation.
+  - [x] `cabal build all` is green.
+  - [x] `cabal test jitsurei-test` and `cabal run jitsurei:exe:jitsurei-diagrams -- --check` are green.
+  - [x] `cabal test keiro-test keiro-pgmq-test` is green.
 
 
 ## Surprises & Discoveries
@@ -209,6 +216,13 @@ implementation. Provide concise evidence.
 - **Discovery (implementation, 2026-07-04): the changelog is package-local.**
   The repository has no root `CHANGELOG.md`; the release note for this API change
   belongs in `keiro/CHANGELOG.md`.
+
+- **Discovery (implementation, 2026-07-04): the full workspace gate required
+  migrating `jitsurei`.** Although external downstream repositories remain
+  follow-up work, `jitsurei` is in this Cabal workspace and `just haskell-build`
+  runs `cabal build all`. The validated runner API therefore required migrating
+  its worked-example streams in this plan. The migration also surfaced missing
+  `Ord` derivations on several state enums.
 
 
 ## Decision Log
@@ -332,6 +346,12 @@ Compare the result against the original purpose.
   boundary, `keiro/CHANGELOG.md` records the breaking source migration and
   keiki-plan-68 coordination, and the downstream migration guide names the
   current `mori` dependents and final DSL alias split.
+
+- M6 completed 2026-07-04. The in-workspace `jitsurei` examples now use
+  validated stream values while preserving raw stream aliases for handles and
+  result phantom types. The full Haskell gate passed: `cabal build all`,
+  `cabal test keiro-test keiro-pgmq-test`, `cabal test jitsurei-test`, and
+  `cabal run jitsurei:exe:jitsurei-diagrams -- --check`.
 
 
 ## Context and Orientation
