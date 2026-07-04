@@ -116,6 +116,10 @@ This section must always reflect the actual current state of the work.
   - [x] `cabal build all` is green.
   - [x] `cabal test jitsurei-test` and `cabal run jitsurei:exe:jitsurei-diagrams -- --check` are green.
   - [x] `cabal test keiro-test keiro-pgmq-test` is green.
+- [x] **M7 — Make scaffold conformance robust to formatter-only export-list comma style.** Completed 2026-07-04.
+  - [x] Update `keiro-dsl/test/Main.hs` so the generated-vs-committed comparison normalizes comma spacing and a trailing comma before `)`, while still failing on missing or reordered exported names.
+  - [x] `cabal test keiro-dsl-test keiro-dsl-conformance keiro-dsl-conformance-v2 keiro-dsl-conformance-coldstart keiro-dsl-conformance-process keiro-dsl-conformance-process-runtime keiro-dsl-conformance-process-full` is green.
+  - [x] Re-run `just haskell-build` and `just haskell-test` after the final conformance-test fix.
 
 
 ## Surprises & Discoveries
@@ -224,6 +228,24 @@ implementation. Provide concise evidence.
   its worked-example streams in this plan. The migration also surfaced missing
   `Ord` derivations on several state enums.
 
+- **Discovery (final validation, 2026-07-04): the scaffold conformance comparison
+  must tolerate formatter-owned export-list comma placement.**
+  `keiro-dsl-test` compares freshly-scaffolded generated modules to the committed
+  conformance fixtures after whitespace normalization and import-line removal, but
+  it still treated export-list comma placement as meaningful. The live scaffolder
+  emits leading-comma export lists, while fourmolu formats the committed
+  EventStream fixtures with trailing commas. Evidence:
+
+  ```text
+  scaffold matches the committed compiling Generated conformance modules (modulo whitespace) [✘]
+  expected: ... ( reservationEventStream , reservationEventStreamDef , ReservationEventStream , ReservationEventStreamDef ) where ...
+  but got:  ... ( reservationEventStream, reservationEventStreamDef, ReservationEventStream, ReservationEventStreamDef, ) where ...
+  ```
+
+  Normalizing comma spacing and a final `, )` to `)` in the comparison made
+  `keiro-dsl-test` and every DSL conformance target pass without fighting the
+  formatter.
+
 
 ## Decision Log
 
@@ -328,13 +350,21 @@ Record every decision made while working on the plan.
   wrapper.
   Date: 2026-07-04
 
+- Decision: Normalize formatter-only comma placement in the scaffold conformance
+  comparison instead of committing unformatted generated fixtures.
+  Rationale: The pre-commit tree formatter owns the checked-in generated fixture
+  style and rewrites leading-comma export lists back to trailing-comma form. The
+  scaffold conformance test's purpose is to catch semantic generated-text drift,
+  not to fail on formatter punctuation. The normalizer now spaces commas and
+  removes a trailing comma before `)`, so leading-comma and trailing-comma export
+  lists compare the same while missing or reordered exported names still fail.
+  Date: 2026-07-04
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
-
-(To be filled during and after implementation.)
 
 - M4 completed 2026-07-04. `keiro-dsl` now emits `...EventStreamDef` as the bare
   record and `...EventStream` as a `ValidatedEventStream` built with
@@ -352,6 +382,21 @@ Compare the result against the original purpose.
   result phantom types. The full Haskell gate passed: `cabal build all`,
   `cabal test keiro-test keiro-pgmq-test`, `cabal test jitsurei-test`, and
   `cabal run jitsurei:exe:jitsurei-diagrams -- --check`.
+
+- M7 completed 2026-07-04. Final validation found and fixed a formatter-only
+  mismatch in DSL EventStream export-list punctuation. After making the scaffold
+  conformance comparison normalize comma placement, the DSL unit/conformance
+  suite passed: `keiro-dsl-test` reported 58 examples and 0 failures, and all six
+  conformance targets passed. The full workspace gates also passed sequentially:
+  `just haskell-build` and `just haskell-test`.
+
+- Final outcome: the command boundary now requires `ValidatedEventStream`, safe
+  streams validate and continue to run, the known hidden-input fixture cannot be
+  wrapped, DSL-generated streams are validated by construction, and the
+  in-workspace examples compile and test against the new API. Downstream
+  registered consumers remain intentionally out of scope for this ExecPlan and
+  should use `docs/guides/migrating-to-validated-event-stream.md` when they bump
+  to this keiro revision.
 
 
 ## Context and Orientation
@@ -1096,3 +1141,11 @@ Signatures and shapes that must exist at the end of each milestone:
   changes after this API and generator work lands, while this plan owns the keiro
   API, keiro-dsl generation, changelog, and migration guide. Updated Progress,
   Surprises, Decision Log, and M5 documentation guidance.
+
+- **2026-07-04 — Normalize formatter-only EventStream export-list punctuation in
+  scaffold conformance.** Final validation found that `keiro-dsl-test` still
+  failed because the live scaffolder emitted leading-comma EventStream export
+  lists while the checked-in conformance fixtures used formatter-style trailing
+  commas. Updated the conformance comparison normalizer, added M7 progress,
+  recorded the discovery and decision, and filled the final retrospective with
+  validation evidence.

@@ -415,12 +415,20 @@ assertMatchesCommitted m = do
     committed <- TIO.readFile committedPath
     normalize committed `shouldBe` normalize (moduleText m)
   where
-    -- Compare the deterministic body, robust to formatting. Import lines are
-    -- dropped because the autoformatter (fourmolu) may reorder import-list items
-    -- and move `qualified`; correctness of the imports is already proven by the
-    -- keiro-dsl-conformance suite compiling. Everything else (types, codec,
-    -- wiring) is whitespace-normalized.
-    normalize = T.unwords . T.words . T.unlines . filter (not . isImport) . T.lines
+    -- Compare the deterministic body, robust to formatter-only changes. Import
+    -- lines are dropped because fourmolu may reorder import-list items and move
+    -- `qualified`; correctness of the imports is already proven by the
+    -- keiro-dsl-conformance suite compiling. Commas are spaced before word
+    -- normalization so leading-comma and trailing-comma export lists compare the
+    -- same, while missing or reordered exported names still fail.
+    normalize =
+        T.replace " , )" " )"
+            . T.unwords
+            . T.words
+            . T.replace "," " , "
+            . T.unlines
+            . filter (not . isImport)
+            . T.lines
     isImport l = case T.words l of
         ("import" : _) -> True
         _ -> False
