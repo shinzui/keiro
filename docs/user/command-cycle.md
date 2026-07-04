@@ -45,13 +45,16 @@ codec always adds the `schemaVersion` key, and these keys are merged on top.
 runCommand
   :: (IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co)
   => RunCommandOptions
-  -> EventStream phi rs s ci co
+  -> ValidatedEventStream phi rs s ci co
   -> Stream (EventStream phi rs s ci co)
   -> ci
   -> Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co)))
 ```
 
-Use `runCommand` when the only write you need is the event append.
+Use `runCommand` when the only write you need is the event append. The stream
+argument must be a `ValidatedEventStream`, built with `mkEventStream` or
+`mkEventStreamOrThrow`; a bare `EventStream` record does not type-check at the
+command boundary. See [Replayability Safety](replay-safety.md).
 
 Use `runCommandWithSql` when you need one SQL continuation in the same
 transaction as the append.

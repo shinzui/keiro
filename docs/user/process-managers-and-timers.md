@@ -16,9 +16,10 @@ data ProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi
   ProcessManager
     { name :: Text
     , correlate :: input -> Text
-    , eventStream :: EventStream phi rs s ci co
+    , eventStream :: ValidatedEventStream phi rs s ci co
     , streamFor :: Text -> Stream (EventStream phi rs s ci co)
-    , targetEventStream :: EventStream targetPhi targetRs targetState targetCi targetCo
+    , targetEventStream :: ValidatedEventStream targetPhi targetRs targetState targetCi targetCo
+    , targetProjections :: Stream targetCi -> [InlineProjection targetCo]
     , handle :: input -> ProcessManagerAction ci targetCi
     }
 ```
@@ -124,15 +125,19 @@ retry delay, or dispatch metrics. The worker finalizes each message's
 ## Snapshotting Manager State
 
 A long-running process manager accumulates events on its own `pm:<name>-<correlation>`
-state stream. To keep hydration fast, give the manager's `eventStream` a snapshot policy
-and a state codec — the same two fields you set on any aggregate `EventStream`:
+state stream. To keep hydration fast, give the manager's raw event-stream
+definition a snapshot policy and a state codec before validating it — the same
+two fields you set on any aggregate `EventStream`:
 
 ```haskell
-managerEventStream =
-  baseManagerEventStream
+managerEventStreamDef =
+  baseManagerEventStreamDef
     { snapshotPolicy = Every 100
     , stateCodec = Just (defaultStateCodec @ManagerRegs @ManagerState 1)
     }
+
+managerEventStream =
+  mkEventStreamOrThrow "fulfillment-manager" managerEventStreamDef
 ```
 
 `runProcessManagerOnce` advances manager state through the ordinary command path, so it

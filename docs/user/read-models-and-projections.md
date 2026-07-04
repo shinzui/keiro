@@ -95,7 +95,7 @@ Use `runCommandWithProjections`:
 ```haskell
 runCommandWithProjections
   defaultRunCommandOptions
-  orderEventStream
+  orderEventStream  -- ValidatedEventStream
   orderStream
   command
   [orderSummaryProjection]

@@ -18,15 +18,19 @@ Snapshots are enabled by setting both:
 - `stateCodec`.
 
 ```haskell
-eventStream = EventStream
+eventStreamDef = EventStream
   { ...
   , snapshotPolicy = Every 100
   , stateCodec = Just stateCodec
   }
+
+eventStream =
+  mkEventStreamOrThrow "orders" eventStreamDef
 ```
 
 If `stateCodec = Nothing`, hydration ignores snapshots even when the policy is
-not `Never`.
+not `Never`; `mkEventStream` also reports that incoherent configuration as a
+validation warning instead of producing a `ValidatedEventStream`.
 
 See [Snapshots And Hydration](../guides/snapshots-and-hydration.md) for the
 `jitsurei` snapshot-enabled order stream and its PostgreSQL-backed snapshot

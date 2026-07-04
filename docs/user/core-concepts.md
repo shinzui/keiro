@@ -58,8 +58,14 @@ The contract includes:
 - `resolveStreamName`, a typed stream-to-Kiroku-name function;
 - snapshot policy and optional state codec.
 
-Applications usually define one `EventStream` per aggregate type and reuse it
-everywhere commands are submitted.
+Applications usually define one raw `EventStream` record per aggregate type,
+then validate it with `mkEventStream` or `mkEventStreamOrThrow`. Public command
+runners accept the resulting `ValidatedEventStream`, not the bare record. The
+typed `Stream` handle still uses the raw `EventStream` type as its phantom tag,
+so storage names and command results keep the aggregate's stream identity.
+
+See [Replayability Safety](replay-safety.md) for the supported guarantee and the
+recommended `...EventStreamDef` / `...EventStream` wiring pattern.
 
 ## Command Cycle
 

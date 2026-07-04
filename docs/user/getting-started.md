@@ -32,6 +32,7 @@ Import the broad core module for command-side code:
 ```haskell
 import Keiro
 import Keiro.Prelude
+import Keiki.Core (HsPred)
 ```
 
 Import these modules explicitly when you use their surface:
@@ -54,7 +55,9 @@ orderStream = stream "order-123"
 ```
 
 For ordinary aggregates, the type parameter is usually the aggregate's
-`EventStream` type.
+raw `EventStream` type. The value passed to command runners is a
+`ValidatedEventStream`; the stream handle's phantom tag remains the raw
+`EventStream`.
 
 ## Define An Event Codec
 
@@ -81,11 +84,18 @@ rejects unknown event types before decoding the payload.
 ## Define An Event Stream Contract
 
 An `EventStream` combines your pure Keiki transducer, initial state, event
-codec, stream naming function, and optional snapshot codec.
+codec, stream naming function, and optional snapshot codec. Keep the raw record
+under a `...Def` name, then expose a validated value for command execution:
 
 ```haskell
-orderEventStream :: EventStream phi rs OrderState OrderCommand OrderEvent
-orderEventStream = EventStream
+type OrderEventStream =
+  EventStream (HsPred OrderRegs OrderCommand) OrderRegs OrderState OrderCommand OrderEvent
+
+type ValidatedOrderEventStream =
+  ValidatedEventStream (HsPred OrderRegs OrderCommand) OrderRegs OrderState OrderCommand OrderEvent
+
+orderEventStreamDef :: OrderEventStream
+orderEventStreamDef = EventStream
   { transducer = orderTransducer
   , initialState = initialOrderState
   , initialRegisters = initialOrderRegisters
@@ -94,10 +104,16 @@ orderEventStream = EventStream
   , snapshotPolicy = Never
   , stateCodec = Nothing
   }
+
+orderEventStream :: ValidatedOrderEventStream
+orderEventStream =
+  mkEventStreamOrThrow "order" orderEventStreamDef
 ```
 
 When snapshots are enabled, set `snapshotPolicy` and `stateCodec`; see
-[Snapshots](snapshots.md).
+[Snapshots](snapshots.md). For hand-written application startup code, prefer
+`mkEventStream` when you want to handle validation warnings explicitly instead
+of throwing. See [Replayability Safety](replay-safety.md).
 
 ## Run A Command
 

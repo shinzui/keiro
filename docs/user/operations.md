@@ -55,6 +55,18 @@ Keep command handlers deterministic with respect to stored history. Generate
 external ids before calling `runCommand` and pass them through command data or
 `RunCommandOptions.eventIds`.
 
+## Replayability Safety
+
+Every command-side stream should be validated before it reaches a runner. Public
+write APIs require `ValidatedEventStream`, which is produced by `mkEventStream`
+or `mkEventStreamOrThrow` after Keiki checks the transducer for hidden inputs,
+nondeterministic guards, and dead edges. Treat validation failures as deploy-time
+incidents: a replay-unsafe aggregate can make live state diverge from rebuilt
+state after restart or snapshot fallback.
+
+See [Replayability Safety](replay-safety.md) for the exact guarantee and the
+application responsibilities that remain outside the type-level boundary.
+
 ## Idempotency
 
 Use explicit idempotency whenever work may be delivered more than once:

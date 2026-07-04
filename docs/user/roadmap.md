@@ -26,7 +26,7 @@ exact released surface and `docs/user/production-status.md` for adoption posture
 | Capability | Status | Notes |
 |---|---|---|
 | Typed streams, codecs, upcasters | Available now | Public v1 authoring surface. |
-| Command cycle | Available now | `runCommand`, optimistic retry, caller-supplied event ids, same-transaction SQL continuations, and ambient command metadata. |
+| Command cycle | Available now | `runCommand`, `ValidatedEventStream` replayability checks, optimistic retry, caller-supplied event ids, same-transaction SQL continuations, and ambient command metadata. |
 | Multi-event command output | Available now | One command appends zero, one, or many events in one optimistic-concurrency batch. |
 | Snapshots | Available now | Default codec uses `keiki-codec-json` and `regFileShapeHash`; snapshot hydration plus tail replay is tested. |
 | Read models and projections | Available now | Inline is transactional and receives `RecordedEvent` metadata; async is at-least-once today. |
@@ -53,7 +53,8 @@ Implemented today:
 - typed stream names through `Keiro.Stream`;
 - event codecs, schema versions, known event-type validation, and upcasters
   through `Keiro.Codec`;
-- the author-facing `EventStream` contract around Keiki `SymTransducer`;
+- the author-facing `EventStream` contract around Keiki `SymTransducer`, plus
+  the `ValidatedEventStream` command boundary for replayability safety;
 - `runCommand` with optimistic concurrency retry, caller-supplied event ids,
   ambient metadata, multi-event command output, and same-transaction SQL
   continuations;

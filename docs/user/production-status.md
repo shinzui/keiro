@@ -9,7 +9,8 @@ The current library includes:
 
 - typed stream names;
 - event codecs with schema versions and upcasters;
-- the `EventStream` aggregate contract;
+- the `EventStream` aggregate contract and `ValidatedEventStream` command
+  boundary for replayability safety;
 - command execution with hydration, replay, decision, optimistic append, and
   retry;
 - multi-event command output (one command appends zero, one, or many events in

@@ -59,7 +59,7 @@ without an intermediate domain event can call `enqueueIntegrationEventTx`
 inside the transaction passed to `runCommandWithSqlEvents`:
 
 ```haskell
-runCommandWithSqlEvents options eventStream targetStream cmd $ \_events _appendResult -> do
+runCommandWithSqlEvents options validatedEventStream targetStream cmd $ \_events _appendResult -> do
   outboxId <- liftIO V7.genUUID
   enqueueIntegrationEventTx (OutboxId outboxId) integrationEvent
 ```

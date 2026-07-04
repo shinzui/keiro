@@ -10,6 +10,7 @@ Top-level convenience module. Re-exports:
 - `Keiro.Command`;
 - `Keiro.Codec`;
 - `EventStream`;
+- `Keiro.EventStream.Validate`;
 - `SnapshotPolicy`;
 - `StateCodec`;
 - `Keiro.Router`;
@@ -61,6 +62,25 @@ Types:
 
 Use it to define an aggregate stream contract around a Keiki transducer.
 
+## `Keiro.EventStream.Validate`
+
+Types and functions:
+
+- `EventStreamWarning (..)`
+- `ValidatedEventStream`
+- `unvalidated`
+- `validateEventStream`
+- `validateEventStreamWith`
+- `mkEventStream`
+- `mkEventStreamWith`
+- `mkEventStreamOrThrow`
+
+Use it to turn a raw `EventStream` definition into the `ValidatedEventStream`
+required by command runners, projections, routers, and process managers. Prefer
+`mkEventStream` in application startup code when you want to handle warnings
+explicitly; use `mkEventStreamOrThrow` for generated code and fixtures that have
+a sibling validation proof.
+
 ## `Keiro.Command`
 
 Types and functions:
@@ -75,6 +95,7 @@ Types and functions:
 
 Use it for the canonical load, streaming replay, decide, append command cycle.
 Commands may append zero, one, or many produced events as one store batch.
+All three runners require `ValidatedEventStream` as their stream argument.
 
 ## `Keiro.Snapshot`
 

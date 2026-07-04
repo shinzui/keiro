@@ -16,6 +16,8 @@ pieces those modules import.
   and the first command path.
 - [Core Concepts](core-concepts.md): streams, codecs, event streams, commands,
   projections, process managers, and timers.
+- [Replayability Safety](replay-safety.md): the `ValidatedEventStream` boundary,
+  hidden-input rejection, and what replay safety does and does not guarantee.
 - [Choosing A Primitive](../guides/choosing-a-primitive.md): the routing map for
   deciding between an `EventStream`, Keiki composition, a projection, a process
   manager, or a router.
@@ -63,6 +65,8 @@ The v1 library includes:
 - event codecs, schema-version metadata, event type validation, and upcasters
   through `Keiro.Codec`;
 - the author-facing `EventStream` contract through `Keiro.EventStream`;
+- replayability validation and the `ValidatedEventStream` command boundary
+  through `Keiro.EventStream.Validate`;
 - `runCommand`, `runCommandWithSql`, and `runCommandWithSqlEvents` through
   `Keiro.Command`;
 - advisory snapshots through `Keiro.Snapshot`;
