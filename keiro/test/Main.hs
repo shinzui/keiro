@@ -14,6 +14,7 @@ import Data.Aeson.Types (parseEither)
 import Data.ByteString (ByteString)
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Int (Int32)
+import Data.List (isInfixOf)
 import Data.Map.Strict qualified as Map
 import Data.Monoid (mempty)
 import Data.Set qualified as Set
@@ -305,6 +306,8 @@ import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Streamly.Data.Stream qualified as Streamly
+import System.Exit (ExitCode (..))
+import System.Process (readProcessWithExitCode)
 import System.Timeout (timeout)
 import Test.Hspec
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -533,7 +536,13 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "every production-intent stream validates clean" $
             concat
                 [ validateEventStream "counter" counterEventStreamDef
+                , validateEventStream "counter-no-op" noOpCounterEventStreamDef
+                , validateEventStream "counter-multi" multiCounterEventStreamDef
                 , validateEventStream "snapshot-counter" snapshotCounterEventStreamDef
+                , validateEventStream "snapshot-counter-multi" multiSnapshotCounterEventStreamDef
+                , validateEventStream "snapshot-counter-guarded" guardedSnapshotCounterEventStreamDef
+                , validateEventStream "pm-snapshot-counter" pmSnapshotCounterEventStreamDef
+                , validateEventStream "rejecting-counter" rejectingEventStreamDef
                 ]
                 `shouldBe` []
 
@@ -542,14 +551,42 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let warns = validateEventStream "broken" brokenHiddenInputEventStream
             warns `shouldNotBe` []
             map eswStreamLabel warns `shouldSatisfy` all (== "broken")
+            map eswReason warns `shouldSatisfy` any (Text.isInfixOf "hidden-input")
             case mkEventStream "broken" brokenHiddenInputEventStream of
-                Left ws -> map eswStreamLabel ws `shouldSatisfy` all (== "broken")
+                Left ws -> do
+                    map eswStreamLabel ws `shouldSatisfy` all (== "broken")
+                    map eswReason ws `shouldSatisfy` any (Text.isInfixOf "hidden-input")
                 Right _ -> expectationFailure "expected mkEventStream to reject the hidden-input stream"
 
-        it "accepts a replay-safe stream" $
-            case mkEventStream "counter" counterEventStreamDef of
-                Right _ -> pure ()
-                Left ws -> expectationFailure ("expected mkEventStream to accept the stream, got " <> show ws)
+        it "accepts every production-intent stream" $ do
+            let expectAccepted label eventStream =
+                    case mkEventStream label eventStream of
+                        Right _ -> pure ()
+                        Left ws -> expectationFailure ("expected mkEventStream to accept " <> Text.unpack label <> ", got " <> show ws)
+            expectAccepted "counter" counterEventStreamDef
+            expectAccepted "counter-no-op" noOpCounterEventStreamDef
+            expectAccepted "counter-multi" multiCounterEventStreamDef
+            expectAccepted "snapshot-counter" snapshotCounterEventStreamDef
+            expectAccepted "snapshot-counter-multi" multiSnapshotCounterEventStreamDef
+            expectAccepted "snapshot-counter-guarded" guardedSnapshotCounterEventStreamDef
+            expectAccepted "pm-snapshot-counter" pmSnapshotCounterEventStreamDef
+            expectAccepted "rejecting-counter" rejectingEventStreamDef
+
+        it "rejects a bare EventStream at runCommand (compile-time)" $ do
+            (exitCode, _stdout, stderr) <-
+                readProcessWithExitCode
+                    "cabal"
+                    [ "exec"
+                    , "ghc"
+                    , "--"
+                    , "-fno-code"
+                    , "-package"
+                    , "keiro"
+                    , "test/ReplaySafetyTypeProbe.hs"
+                    ]
+                    ""
+            exitCode `shouldSatisfy` (/= ExitSuccess)
+            stderr `shouldSatisfy` ("ValidatedEventStream" `isInfixOf`)
 
     describe "Keiro.Command" $ around (withFreshStore fixture) $ do
         it "creates a stream and appends the first command event" $ \storeHandle -> do

@@ -152,6 +152,7 @@ test-suite keiro-test
     , keiro
     , keiro-test-support
     , kiroku-store
+    , process                                >=1.6
     , shibuya-core                           >=0.5
     , streamly-core                          >=0.3
     , text                                   >=2.1

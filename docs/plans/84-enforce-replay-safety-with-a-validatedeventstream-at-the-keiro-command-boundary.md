@@ -90,13 +90,14 @@ This section must always reflect the actual current state of the work.
   - [x] Change the Projection runner signature to `ValidatedEventStream`.
   - [x] Migrate every in-repo construction site (test fixtures) to build via `mkEventStreamOrThrow`, keeping the *validated* value under the original name so runner call sites are untouched.
   - [x] `cabal test keiro-test` is green.
-- [ ] **M3 — Prove the guarantee with tests.**
-  - [ ] Positive: `mkEventStream` accepts every production-intent fixture (extends the existing clean-validation test).
-  - [ ] Negative: `mkEventStream brokenHiddenInputEventStream` returns `Left` with a hidden-input warning (extends the existing test).
-  - [ ] Add the out-of-build-graph compile probe `keiro/test/ReplaySafetyTypeProbe.hs`, a small self-contained module that passes a bare `EventStream` to `runCommand`.
-  - [ ] Add an hspec example in `keiro/test/Main.hs` that shells out to `cabal exec ghc -- -fno-code test/ReplaySafetyTypeProbe.hs` and asserts a non-zero exit plus `ValidatedEventStream` in stderr.
-  - [ ] Do **not** add `ReplaySafetyTypeProbe` to `other-modules`; it must stay outside the normal build graph or `keiro-test` will fail to compile by design.
-  - [ ] `cabal test keiro-test` green.
+- [x] **M3 — Prove the guarantee with tests.** Completed 2026-07-04.
+  - [x] Positive: `mkEventStream` accepts every production-intent fixture (extends the existing clean-validation test).
+  - [x] Negative: `mkEventStream brokenHiddenInputEventStream` returns `Left` with a hidden-input warning (extends the existing test).
+  - [x] Add the out-of-build-graph compile probe `keiro/test/ReplaySafetyTypeProbe.hs`, a small self-contained module that passes a bare `EventStream` to `runCommand`.
+  - [x] Add the GHC boot-package `process` to `keiro-test` `build-depends` for `readProcessWithExitCode`.
+  - [x] Add an hspec example in `keiro/test/Main.hs` that shells out to `cabal exec ghc -- -fno-code -package keiro test/ReplaySafetyTypeProbe.hs` and asserts a non-zero exit plus `ValidatedEventStream` in stderr.
+  - [x] Do **not** add `ReplaySafetyTypeProbe` to `other-modules`; it must stay outside the normal build graph or `keiro-test` will fail to compile by design.
+  - [x] `cabal test keiro-test` green.
 - [ ] **M4 — Update the keiro-dsl code generator and conformance goldens.**
   - [ ] Change `emitEventStream` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` to emit a `ValidatedEventStream` binding (via `mkEventStreamOrThrow`) alongside the bare record.
   - [ ] Update any generated harness / runtime wiring that passes the stream to a runner to pass the validated binding.
@@ -174,6 +175,19 @@ implementation. Provide concise evidence.
   `mori-app` also has a package-level dependency. Because `ValidatedEventStream`
   is a `newtype`, those projects need source migrations but no event-store,
   snapshot, or wire-format migration.
+
+- **Discovery (implementation, 2026-07-04): the compile probe needs `-package
+  keiro`, but not explicit transitive package flags.** Running `cabal exec ghc --
+  -fno-code test/ReplaySafetyTypeProbe.hs` from the test executable left `Keiro`
+  hidden, while adding all imported packages with `-package` duplicated package
+  entries in Cabal's generated environment. The stable invocation is:
+
+  ```text
+  cabal exec ghc -- -fno-code -package keiro test/ReplaySafetyTypeProbe.hs
+  ```
+
+  It fails for the intended reason: GHC reports that the actual bare
+  `EventStream ...` does not match the expected `ValidatedEventStream ...`.
 
 
 ## Decision Log
@@ -255,8 +269,8 @@ Record every decision made while working on the plan.
   that file and asserts both non-zero exit and `ValidatedEventStream` in stderr.
   Cost/risks accepted: the test starts GHC once and the probe file is not checked
   by the normal build graph, so the guard is live only when `keiro-test` runs.
-  Benefit: no new dependency, no deferred type errors under `-Werror`, no fixture
-  extraction from `Main`, and an exact diagnostic assertion.
+  Benefit: no new third-party test dependency, no deferred type errors under
+  `-Werror`, no fixture extraction from `Main`, and an exact diagnostic assertion.
   Date: 2026-07-03
 
 - Decision: Keep downstream consumer migrations out of this keiro ExecPlan.
@@ -669,14 +683,6 @@ Edits in `keiro/test/Main.hs`:
                   , "-fno-code"
                   , "-package"
                   , "keiro"
-                  , "-package"
-                  , "keiki"
-                  , "-package"
-                  , "effectful"
-                  , "-package"
-                  , "effectful-core"
-                  , "-package"
-                  , "kiroku-store"
                   , "test/ReplaySafetyTypeProbe.hs"
                   ]
                   ""
@@ -839,7 +845,7 @@ Expected: a type error mentioning `ValidatedEventStream`. Revert the edit.
 **M3 — run the extended validation tests and the type-level guard:**
 
 ```bash
-cabal exec ghc -- -fno-code -package keiro -package keiki -package effectful -package effectful-core -package kiroku-store test/ReplaySafetyTypeProbe.hs
+cabal exec ghc -- -fno-code -package keiro test/ReplaySafetyTypeProbe.hs
 cabal test keiro-test 2>&1 | grep -iE "replay-safety|mkEventStream|hidden-input|compile-time"
 ```
 
@@ -944,11 +950,13 @@ snapshot or event payload is affected.
 
 ## Interfaces and Dependencies
 
-No new runtime, library, or test dependency is required. The automated compile-time
-rejection test in M3 shells out to the already-available Cabal/GHC toolchain
-instead of adding a package. All other work is inside the existing `keiro-core`,
-`keiro`, and `keiro-dsl` packages plus documentation. keiki is used only through
-its existing `validateTransducer` / `defaultValidationOptions` API (already
+No new runtime or library dependency is required. M3 adds one test-only dependency
+on the GHC boot package `process` so `keiro-test` can call
+`readProcessWithExitCode`; it does not add a third-party test library. The
+automated compile-time rejection test shells out to the already-available
+Cabal/GHC toolchain. All other work is inside the existing `keiro-core`, `keiro`,
+and `keiro-dsl` packages plus documentation. keiki is used only through its
+existing `validateTransducer` / `defaultValidationOptions` API (already
 re-exported through `Keiro.EventStream.Validate`); no keiki change is required by
 this plan.
 
@@ -983,12 +991,11 @@ Signatures and shapes that must exist at the end of each milestone:
 
 - **After M3:** `keiro/test/Main.hs` contains extended replay-safety / mkEventStream
   assertions plus a compile-probe spec that runs `cabal exec ghc -- -fno-code
-  -package keiro -package keiki -package effectful -package effectful-core -package
-  kiroku-store test/ReplaySafetyTypeProbe.hs` and asserts non-zero exit with
+  -package keiro test/ReplaySafetyTypeProbe.hs` and asserts non-zero exit with
   `ValidatedEventStream` in stderr. The probe module exists at
   `keiro/test/ReplaySafetyTypeProbe.hs`, is self-contained, passes a bare
   `EventStream` to `runCommand`, and is **not** listed in `keiro-test`
-  `other-modules`.
+  `other-modules`. The `keiro-test` suite depends on `process` for the shell-out.
 
 - **After M4:** `keiro-dsl` generator `emitEventStream` renders a `…Def` bare record
   plus a validated `…EventStream` binding; conformance goldens regenerated and
