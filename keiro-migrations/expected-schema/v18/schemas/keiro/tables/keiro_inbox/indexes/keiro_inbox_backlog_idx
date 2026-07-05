@@ -1,0 +1,21 @@
+{
+    "accessmethod": "btree",
+    "amoptions": null,
+    "compositetype": null,
+    "definition": "CREATE INDEX keiro_inbox_backlog_idx ON keiro.keiro_inbox USING btree (status) WHERE (status = ANY (ARRAY['processing'::text, 'failed'::text]))",
+    "exclusion": false,
+    "forcerowsecurity": false,
+    "immediate": true,
+    "kind": "i",
+    "nullsnotdistinct": false,
+    "owner": "keiro",
+    "partition": false,
+    "persistence": "p",
+    "primary": false,
+    "replident": "n",
+    "rowsecurity": false,
+    "rowtype": null,
+    "shared": false,
+    "unique": false,
+    "valid": true
+}

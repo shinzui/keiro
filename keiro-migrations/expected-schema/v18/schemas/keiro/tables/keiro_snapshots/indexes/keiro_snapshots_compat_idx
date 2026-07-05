@@ -1,0 +1,21 @@
+{
+    "accessmethod": "btree",
+    "amoptions": null,
+    "compositetype": null,
+    "definition": "CREATE INDEX keiro_snapshots_compat_idx ON keiro.keiro_snapshots USING btree (stream_id, state_codec_version, regfile_shape_hash, stream_version DESC)",
+    "exclusion": false,
+    "forcerowsecurity": false,
+    "immediate": true,
+    "kind": "i",
+    "nullsnotdistinct": false,
+    "owner": "keiro",
+    "partition": false,
+    "persistence": "p",
+    "primary": false,
+    "replident": "n",
+    "rowsecurity": false,
+    "rowtype": null,
+    "shared": false,
+    "unique": false,
+    "valid": true
+}

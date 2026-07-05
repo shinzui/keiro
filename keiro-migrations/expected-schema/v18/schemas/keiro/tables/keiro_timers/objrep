@@ -1,0 +1,35 @@
+{
+    "accessmethod": "heap",
+    "amoptions": null,
+    "columns_in_order": [
+        "timer_id",
+        "process_manager_name",
+        "correlation_id",
+        "fire_at",
+        "payload",
+        "status",
+        "attempts",
+        "fired_event_id",
+        "created_at",
+        "updated_at",
+        "last_error"
+    ],
+    "compositetype": null,
+    "forcerowsecurity": false,
+    "kind": "r",
+    "owner": "keiro",
+    "partition": false,
+    "persistence": "p",
+    "privileges": {
+        "keiro": [
+            [
+                "damxrtDw",
+                "keiro"
+            ]
+        ]
+    },
+    "replident": "d",
+    "rowsecurity": false,
+    "rowtype": "keiro_timers",
+    "shared": false
+}

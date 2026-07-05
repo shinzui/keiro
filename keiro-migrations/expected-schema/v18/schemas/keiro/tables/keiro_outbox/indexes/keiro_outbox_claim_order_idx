@@ -1,0 +1,21 @@
+{
+    "accessmethod": "btree",
+    "amoptions": null,
+    "compositetype": null,
+    "definition": "CREATE INDEX keiro_outbox_claim_order_idx ON keiro.keiro_outbox USING btree (created_at, outbox_id) WHERE (status = ANY (ARRAY['pending'::text, 'failed'::text]))",
+    "exclusion": false,
+    "forcerowsecurity": false,
+    "immediate": true,
+    "kind": "i",
+    "nullsnotdistinct": false,
+    "owner": "keiro",
+    "partition": false,
+    "persistence": "p",
+    "primary": false,
+    "replident": "n",
+    "rowsecurity": false,
+    "rowtype": null,
+    "shared": false,
+    "unique": false,
+    "valid": true
+}

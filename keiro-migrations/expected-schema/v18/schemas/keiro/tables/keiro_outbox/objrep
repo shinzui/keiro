@@ -1,0 +1,53 @@
+{
+    "accessmethod": "heap",
+    "amoptions": null,
+    "columns_in_order": [
+        "outbox_id",
+        "message_id",
+        "source",
+        "destination",
+        "message_key",
+        "event_type",
+        "schema_version",
+        "content_type",
+        "schema_registry",
+        "schema_subject",
+        "schema_version_ref",
+        "schema_id",
+        "schema_fingerprint",
+        "source_event_id",
+        "source_global_position",
+        "causation_id",
+        "correlation_id",
+        "traceparent",
+        "tracestate",
+        "payload_bytes",
+        "attributes",
+        "occurred_at",
+        "status",
+        "attempt_count",
+        "next_attempt_at",
+        "last_error",
+        "published_at",
+        "created_at",
+        "updated_at"
+    ],
+    "compositetype": null,
+    "forcerowsecurity": false,
+    "kind": "r",
+    "owner": "keiro",
+    "partition": false,
+    "persistence": "p",
+    "privileges": {
+        "keiro": [
+            [
+                "damxrtDw",
+                "keiro"
+            ]
+        ]
+    },
+    "replident": "d",
+    "rowsecurity": false,
+    "rowtype": "keiro_outbox",
+    "shared": false
+}

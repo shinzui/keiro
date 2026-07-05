@@ -149,11 +149,14 @@ migrateTemplate connStr = do
     settings <- templateCoddSettings connStr
     runAllKeiroMigrationsNoCheck settings (secondsToDiffTime 5)
 
-{- | Codd settings for the template database. Kiroku and Keiro migrations both
-target the @kiroku@ schema, matching the default search path configured by
-'Store.defaultConnectionSettings'. Template setup intentionally skips schema
-verification; @keiro-migrations-test@ owns checked-in expected-schema drift
-checking.
+{- | Codd settings for the template database. Kiroku's event-store tables live
+in the @kiroku@ schema; Keiro's framework tables live in the dedicated @keiro@
+schema and its migrations create them schema-qualified there.
+'namespacesToCheck' is set to @keiro@ for consistency with the
+@keiro-migrations-test@ drift gate, but template setup intentionally skips
+schema verification (it uses the no-check runner), so this field is not
+load-bearing here; @keiro-migrations-test@ owns checked-in expected-schema
+drift checking.
 -}
 templateCoddSettings :: Text -> IO CoddSettings
 templateCoddSettings connStr = do
@@ -163,7 +166,7 @@ templateCoddSettings connStr = do
             { migsConnString
             , sqlMigrations = []
             , onDiskReps = Left "keiro-migrations/expected-schema"
-            , namespacesToCheck = IncludeSchemas [SqlSchema "kiroku"]
+            , namespacesToCheck = IncludeSchemas [SqlSchema "keiro"]
             , extraRolesToCheck = []
             , retryPolicy = singleTryPolicy
             , txnIsolationLvl = DbDefault

@@ -1,0 +1,31 @@
+{
+    "accessmethod": "heap",
+    "amoptions": null,
+    "columns_in_order": [
+        "subscription_name",
+        "bucket",
+        "shard_count",
+        "owner_worker_id",
+        "lease_expires_at",
+        "heartbeat_at",
+        "updated_at"
+    ],
+    "compositetype": null,
+    "forcerowsecurity": false,
+    "kind": "r",
+    "owner": "keiro",
+    "partition": false,
+    "persistence": "p",
+    "privileges": {
+        "keiro": [
+            [
+                "damxrtDw",
+                "keiro"
+            ]
+        ]
+    },
+    "replident": "d",
+    "rowsecurity": false,
+    "rowtype": "keiro_subscription_shards",
+    "shared": false
+}

@@ -1,0 +1,21 @@
+{
+    "accessmethod": "btree",
+    "amoptions": null,
+    "compositetype": null,
+    "definition": "CREATE INDEX keiro_workflow_steps_workflow_idx ON keiro.keiro_workflow_steps USING btree (workflow_id, workflow_name, generation)",
+    "exclusion": false,
+    "forcerowsecurity": false,
+    "immediate": true,
+    "kind": "i",
+    "nullsnotdistinct": false,
+    "owner": "keiro",
+    "partition": false,
+    "persistence": "p",
+    "primary": false,
+    "replident": "n",
+    "rowsecurity": false,
+    "rowtype": null,
+    "shared": false,
+    "unique": false,
+    "valid": true
+}

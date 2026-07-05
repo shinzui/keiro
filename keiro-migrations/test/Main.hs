@@ -7,6 +7,7 @@ import Codd (ApplyResult (..), CoddSettings (..), VerifySchemas (StrictCheck))
 import Codd.Parsing (connStringParser)
 import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
 import Contravariant.Extras (contrazip3)
+import Control.Exception (finally)
 import Control.Monad (filterM)
 import Data.Attoparsec.Text (endOfInput, parseOnly)
 import Data.Char (isDigit)
@@ -25,13 +26,32 @@ import Keiro.Migrations (runAllKeiroMigrations, runAllKeiroMigrationsNoCheck)
 import System.Directory (doesDirectoryExist, listDirectory)
 import Test.Hspec
 
+{- | Pin the ephemeral PostgreSQL superuser to the fixed name @keiro@ so the
+captured snapshot identity (roles, database owner, per-object owners) is
+deterministic across machines and CI rather than the local OS username. This is
+the portability fix for the strict drift gate.
+-}
+keiroPgConfig :: Pg.Config
+keiroPgConfig = Pg.defaultConfig{Pg.user = "keiro"}
+
+{- | Start a cached ephemeral server whose PostgreSQL superuser is the fixed
+name @keiro@. Mirrors 'Pg.withCached' but pins the user; 'Pg.withCachedConfig'
+is not exported, so we use 'Pg.startCached' + 'finally'.
+-}
+withKeiroPg :: (Pg.Database -> IO a) -> IO (Either Pg.StartError a)
+withKeiroPg action = do
+    started <- Pg.startCached keiroPgConfig Pg.defaultCacheConfig
+    case started of
+        Left err -> pure (Left err)
+        Right db -> Right <$> (action db `finally` Pg.stop db)
+
 main :: IO ()
 main =
     hspec $ do
         migrationFileNameSpec
         describe "Keiro codd migrations" $ do
             it "applies Kiroku and Keiro migrations to a fresh database and is repeatable" $ do
-                result <- Pg.withCached $ \db -> do
+                result <- withKeiroPg $ \db -> do
                     let connStr = Pg.connectionString db
                         coddSettings = testCoddSettings connStr "keiro-migrations/expected-schema"
 
@@ -55,7 +75,7 @@ main =
 
             it "matches the checked-in expected schema" $ do
                 expectedSchemaDir <- findExpectedSchemaDir
-                result <- Pg.withCached $ \db -> do
+                result <- withKeiroPg $ \db -> do
                     let coddSettings = testCoddSettings (Pg.connectionString db) expectedSchemaDir
                     runAllKeiroMigrations coddSettings (secondsToDiffTime 5) StrictCheck
 
@@ -168,7 +188,7 @@ testCoddSettings connStr expectedSchemaDir =
         { migsConnString = parseConnString connStr
         , sqlMigrations = []
         , onDiskReps = Left expectedSchemaDir
-        , namespacesToCheck = IncludeSchemas [SqlSchema "kiroku"]
+        , namespacesToCheck = IncludeSchemas [SqlSchema "keiro"]
         , extraRolesToCheck = []
         , retryPolicy = singleTryPolicy
         , txnIsolationLvl = DbDefault

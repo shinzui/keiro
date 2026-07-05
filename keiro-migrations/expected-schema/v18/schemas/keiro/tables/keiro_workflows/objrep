@@ -1,0 +1,37 @@
+{
+    "accessmethod": "heap",
+    "amoptions": null,
+    "columns_in_order": [
+        "workflow_id",
+        "workflow_name",
+        "generation",
+        "status",
+        "attempts",
+        "last_error",
+        "next_attempt_at",
+        "leased_by",
+        "lease_expires_at",
+        "created_at",
+        "updated_at",
+        "completed_at",
+        "wake_after"
+    ],
+    "compositetype": null,
+    "forcerowsecurity": false,
+    "kind": "r",
+    "owner": "keiro",
+    "partition": false,
+    "persistence": "p",
+    "privileges": {
+        "keiro": [
+            [
+                "damxrtDw",
+                "keiro"
+            ]
+        ]
+    },
+    "replident": "d",
+    "rowsecurity": false,
+    "rowtype": "keiro_workflows",
+    "shared": false
+}

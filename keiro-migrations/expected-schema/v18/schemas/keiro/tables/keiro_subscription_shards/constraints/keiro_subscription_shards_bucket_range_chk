@@ -1,0 +1,16 @@
+{
+    "deferrable": false,
+    "deferred": false,
+    "definition": "CHECK (bucket >= 0 AND bucket < shard_count)",
+    "fk_deltype": " ",
+    "fk_matchtype": " ",
+    "fk_ref_table": null,
+    "fk_updtype": " ",
+    "inhcount": 0,
+    "local": true,
+    "noinherit": false,
+    "parent_constraint": null,
+    "supporting_index": null,
+    "type": "c",
+    "validated": true
+}

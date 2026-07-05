@@ -1,0 +1,31 @@
+{
+    "accessmethod": "heap",
+    "amoptions": null,
+    "columns_in_order": [
+        "stream_id",
+        "stream_version",
+        "state",
+        "state_codec_version",
+        "regfile_shape_hash",
+        "created_at",
+        "updated_at"
+    ],
+    "compositetype": null,
+    "forcerowsecurity": false,
+    "kind": "r",
+    "owner": "keiro",
+    "partition": false,
+    "persistence": "p",
+    "privileges": {
+        "keiro": [
+            [
+                "damxrtDw",
+                "keiro"
+            ]
+        ]
+    },
+    "replident": "d",
+    "rowsecurity": false,
+    "rowtype": "keiro_snapshots",
+    "shared": false
+}
