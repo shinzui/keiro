@@ -32,9 +32,8 @@ source-repository-package
 
 source-repository-package
   type: git
-  location: https://github.com/shinzui/codd-project.git
-  tag: d176b3088f23ef2218c7a1f31835e8ee0c0601aa
-  subdir: codd
+  location: https://github.com/mzabani/codd.git
+  tag: v0.1.8
 
 -- The keiro-pgmq test suite installs the PGMQ schema with pgmq-migration, which
 -- depends on hasql-migration. The Hackage hasql-migration 0.3.1 does not build
