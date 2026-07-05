@@ -1,10 +1,11 @@
--- Pin the session search_path so unqualified names resolve into the kiroku
--- schema when this migration is applied incrementally to an existing database
--- (search_path is session-scoped; see
--- docs/plans/46-keiro-framework-migrations-self-set-search-path-for-incremental-upgrades.md).
-SET search_path TO kiroku, pg_catalog;
+-- Keiro framework bootstrap migration (codd).
+--
+-- Keiro owns the dedicated `keiro` schema. codd applies this file in its own
+-- session, so the schema is created here and every object is written fully
+-- qualified as keiro.<name> — no session search_path pin is used anywhere.
+CREATE SCHEMA IF NOT EXISTS keiro;
 
-CREATE TABLE IF NOT EXISTS keiro_snapshots (
+CREATE TABLE IF NOT EXISTS keiro.keiro_snapshots (
   stream_id BIGINT PRIMARY KEY,
   stream_version BIGINT NOT NULL,
   state JSONB NOT NULL,
@@ -15,9 +16,9 @@ CREATE TABLE IF NOT EXISTS keiro_snapshots (
 );
 
 CREATE INDEX IF NOT EXISTS keiro_snapshots_compat_idx
-  ON keiro_snapshots (stream_id, state_codec_version, regfile_shape_hash, stream_version DESC);
+  ON keiro.keiro_snapshots (stream_id, state_codec_version, regfile_shape_hash, stream_version DESC);
 
-CREATE TABLE IF NOT EXISTS keiro_read_models (
+CREATE TABLE IF NOT EXISTS keiro.keiro_read_models (
   name TEXT PRIMARY KEY,
   version BIGINT NOT NULL,
   shape_hash TEXT NOT NULL,
@@ -26,7 +27,7 @@ CREATE TABLE IF NOT EXISTS keiro_read_models (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS keiro_timers (
+CREATE TABLE IF NOT EXISTS keiro.keiro_timers (
   timer_id UUID PRIMARY KEY,
   process_manager_name TEXT NOT NULL,
   correlation_id TEXT NOT NULL,
@@ -40,4 +41,4 @@ CREATE TABLE IF NOT EXISTS keiro_timers (
 );
 
 CREATE INDEX IF NOT EXISTS keiro_timers_due_idx
-  ON keiro_timers (status, fire_at, process_manager_name);
+  ON keiro.keiro_timers (status, fire_at, process_manager_name);
