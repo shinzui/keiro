@@ -117,7 +117,7 @@ Each instance journals to `wf:<name>-<id>` (generation 0; a rotated generation
 completions as `StepRecorded` under reserved prefixes — `sleep:`, `awk:`,
 `child:` — never as new event types; the `patch` decision (EP-49) is likewise a
 `StepRecorded` under the `patch:` prefix, and `continueAsNew` (EP-48) adds the
-one terminal `WorkflowContinuedAsNew` rotation marker. The runtime keeps two tables in the `kiroku`
+one terminal `WorkflowContinuedAsNew` rotation marker. The runtime keeps two tables in the `keiro`
 schema: `keiro_workflow_steps` (the step-lookup index that backs replay and
 unfinished-workflow discovery) and `keiro_awakeables` (pending external
 completions); child links live in `keiro_workflow_children`.

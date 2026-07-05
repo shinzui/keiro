@@ -7,20 +7,26 @@ status, and the last global event position it observed.
 
 The code is in
 [`../../jitsurei/src/Jitsurei/ReadModels.hs`](../../jitsurei/src/Jitsurei/ReadModels.hs).
-The table initializer is plain Hasql transaction code:
+The table lives in the example's own `jitsurei` schema (chosen via the
+`ReadModel` `schema` field and `Keiro.Connection.qualifyTable`), not in the
+`kiroku` event-store schema. The table initializer is plain Hasql transaction
+code that creates the schema and the schema-qualified table:
 
 ```haskell
 initializeOrderSummaryTable :: Tx.Transaction ()
 ```
 
-The read model value describes metadata and query behavior:
+The read model value describes metadata, its data schema, and query behavior:
 
 ```haskell
 orderSummaryReadModel :: ReadModel OrderSummaryQuery (Maybe OrderSummary)
+-- with schema = "jitsurei"; every DDL/DML is qualified jitsurei.jitsurei_order_summary
 ```
 
 `ReadModel.version` and `shapeHash` let Keiro fail reads when the code and
-stored metadata disagree. `defaultConsistency = Strong` is appropriate here
+stored metadata disagree. `ReadModel.schema` names the PostgreSQL schema the
+read-model *data* table lives in — see
+[Choosing Your Projection Schema](../user/read-models-and-projections.md#choosing-your-projection-schema). `defaultConsistency = Strong` is appropriate here
 because this model is updated inline in the same transaction as the command
 append.
 

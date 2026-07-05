@@ -4,15 +4,22 @@ Keiro uses PostgreSQL tables from two layers:
 
 - Kiroku owns the event-store tables in the `kiroku` PostgreSQL schema:
   `streams`, `events`, `stream_events`, and `subscriptions`.
-- Keiro owns framework metadata tables in the same `kiroku` schema:
-  `keiro_snapshots`, `keiro_read_models`, `keiro_timers`, `keiro_outbox`, and
-  `keiro_inbox`.
+- Keiro owns its framework metadata tables — `keiro_snapshots`,
+  `keiro_read_models`, `keiro_timers`, `keiro_outbox`, `keiro_inbox`, and the
+  workflow tables — in a **dedicated `keiro` PostgreSQL schema that Keiro's
+  bootstrap migration creates and owns** (with `CREATE SCHEMA IF NOT EXISTS
+  keiro`). `kiroku` and `keiro` are two separate namespaces in the same database.
+
+A PostgreSQL *schema* is a named table namespace inside one database. Every Keiro
+migration now creates its objects **schema-qualified** as `keiro.<table>` and
+does **not** set `search_path`, so framework tables can never accidentally land
+in `public` or `kiroku` on an incremental upgrade.
 
 Production deployments should create and evolve these tables with the
 `keiro-migrate` executable from the `keiro-migrations` package. The executable
-uses codd and applies Kiroku's embedded migrations first, then Keiro's embedded
-migrations (the bootstrap, outbox, and inbox migrations), in one ordered
-migration ledger.
+uses codd and applies Kiroku's embedded migrations first (creating the `kiroku`
+schema and event-store tables), then Keiro's embedded migrations (creating the
+`keiro` schema and framework tables), in one ordered migration ledger.
 
 ## Migrations Are The Only Source Of Schema
 
@@ -42,20 +49,32 @@ From the Keiro repository or a workspace that includes `keiro-migrations`, run:
 CODD_CONNECTION='host=/tmp port=5432 dbname=keiro user=keiro_admin' \
 CODD_MIGRATION_DIRS=unused-for-embedded-migrations \
 CODD_EXPECTED_SCHEMA_DIR=keiro-migrations/expected-schema \
-CODD_SCHEMAS=kiroku \
+CODD_SCHEMAS=keiro \
 cabal run keiro-migrate
 ```
 
 `CODD_CONNECTION` is the PostgreSQL connection string for the target database.
-`CODD_SCHEMAS=kiroku` tells codd to check the schema used by Kiroku and Keiro
-framework tables. codd currently
-requires `CODD_MIGRATION_DIRS` and `CODD_EXPECTED_SCHEMA_DIR` in its settings
-environment even though Keiro passes embedded migrations directly from Haskell.
+`CODD_SCHEMAS=keiro` tells codd to scope its drift check to the dedicated `keiro`
+schema that Keiro's framework tables live in. (Kiroku drift-gates its own
+`kiroku` schema in its own package, so Keiro's gate need only see `keiro`.) codd
+currently requires `CODD_MIGRATION_DIRS` and `CODD_EXPECTED_SCHEMA_DIR` in its
+settings environment even though Keiro passes embedded migrations directly from
+Haskell.
 
-After a successful run, the database has Kiroku's event-store tables, Keiro's
-framework tables, and codd's internal migration ledger. Application-owned
-tables remain outside this schema unless your service migrations place them
-there deliberately.
+After a successful run, the database has Kiroku's event-store tables (in
+`kiroku`), Keiro's framework tables (in `keiro`), and codd's internal migration
+ledger. Application-owned tables live wherever your service migrations place
+them — see [Application Tables](#application-tables) below for how to choose the
+schema your read-model and projection tables live in.
+
+## Upgrading An Existing Alpha Database
+
+Databases first migrated by `keiro-migrations 0.1.0.0` have their `keiro_*`
+tables in the `kiroku` schema (the old layout). **Before** running the current
+migrations against such a database, follow the one-time
+[Upgrading To The Keiro Schema](./upgrading-to-the-keiro-schema.md) runbook once
+to relocate the tables into `keiro` — no data is lost. Fresh databases and
+ephemeral test databases do not need it; they land in `keiro` from the start.
 
 ## Start The Application Afterward
 
@@ -74,13 +93,20 @@ application instance happens to start first.
 
 ## Application Tables
 
-Keiro migrations only cover Keiro-owned framework tables. They do not create
-your application read-model tables, indexes, materialized views, or reporting
-schemas.
+Keiro migrations only cover Keiro-owned framework tables (in `keiro`). They do
+not create your application read-model tables, indexes, materialized views, or
+reporting schemas.
+
+Applications can now declare the schema their read-model and projection tables
+live in as a first-class choice, so application data need not co-mingle with
+either `kiroku` or `keiro`. See
+[Read Models And Projections](./read-models-and-projections.md#choosing-your-projection-schema)
+for the `ReadModel` `schema` field and the `Keiro.Connection` helpers.
 
 See [Run And Operate Jitsurei](../guides/run-and-operate-jitsurei.md) for how
 the guide package separates Keiro framework initialization from the
-application-owned `jitsurei_order_summary` table.
+application-owned `jitsurei_order_summary` table, which the worked example places
+in its own `jitsurei` schema.
 
 Keep application-owned migrations in your service. If your service also uses
 codd, compose the service migrations after `Keiro.Migrations.allKeiroMigrations`

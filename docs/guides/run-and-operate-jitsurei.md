@@ -16,9 +16,11 @@ The tests use `EphemeralPg` through
 [`../../jitsurei/test/Main.hs`](../../jitsurei/test/Main.hs), so they create a
 temporary PostgreSQL instance instead of mutating a developer database.
 
-For local demos and tests, `initializeJitsureiTables` creates the Keiro feature
-tables used by the examples and the application-owned `jitsurei_order_summary`
-table:
+For local demos and tests, `initializeJitsureiTables` creates the
+application-owned `jitsurei_order_summary` read-model table in the example's own
+`jitsurei` schema (via an opt-in `CREATE SCHEMA IF NOT EXISTS "jitsurei"` and a
+schema-qualified `CREATE TABLE`), keeping it out of both the `kiroku` event-store
+schema and Keiro's `keiro` framework schema:
 
 ```haskell
 initializeJitsureiTables :: (Store :> es) => Eff es ()
@@ -28,7 +30,10 @@ Production services should not depend on those compatibility initializers.
 Instead, run `keiro-migrate` before the application starts, then apply your
 service migrations for application tables such as `jitsurei_order_summary`.
 Keiro owns framework tables like `keiro_snapshots`, `keiro_read_models`, and
-`keiro_timers`; your service owns query tables, indexes, and reporting views.
+`keiro_timers` in the dedicated `keiro` schema; your service owns its query
+tables, indexes, and reporting views in a schema you choose (the example uses
+`jitsurei`) — see
+[Read Models And Projections](../user/read-models-and-projections.md#choosing-your-projection-schema).
 
 For command handlers, keep these operational rules:
 

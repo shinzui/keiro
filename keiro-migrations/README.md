@@ -2,9 +2,12 @@
 
 Keiro ships embedded codd migrations in the `keiro-migrations` package. Run
 the `keiro-migrate` executable before starting an application that opens a
-Kiroku store. The executable applies Kiroku's event-store migrations first and
-then Keiro's framework migrations for snapshots, read-model metadata, and
-timers.
+Kiroku store. The executable applies Kiroku's event-store migrations first
+(creating the `kiroku` schema) and then Keiro's framework migrations for
+snapshots, read-model metadata, timers, and the workflow tables. Keiro's
+migrations create their objects **schema-qualified** as `keiro.<table>` inside a
+dedicated `keiro` schema that Keiro creates and owns, and they never pin
+`search_path`.
 
 codd is forward-only. If a migration has already reached a shared database, do
 not rename or edit it in place; add a new forward migration that repairs the
@@ -16,14 +19,22 @@ For a local database, run:
 CODD_CONNECTION='host=/tmp port=5432 dbname=keiro user=keiro_admin' \
 CODD_MIGRATION_DIRS=unused-for-embedded-migrations \
 CODD_EXPECTED_SCHEMA_DIR=keiro-migrations/expected-schema \
-CODD_SCHEMAS=kiroku \
+CODD_SCHEMAS=keiro \
 cabal run keiro-migrate
 ```
 
-`CODD_SCHEMAS=kiroku` matches the dedicated schema that latest Kiroku uses for
-its event-store tables and that Keiro uses for framework tables created by
-these embedded migrations. `CODD_MIGRATION_DIRS` is still required by codd's
-settings parser, but Keiro passes embedded migrations directly to codd.
+`CODD_SCHEMAS=keiro` matches the dedicated `keiro` schema that Keiro creates and
+owns for its framework tables, distinct from kiroku's `kiroku` event-store
+schema. The checked-in expected-schema snapshot is scoped to `keiro` and is
+portable — it records no machine-specific database role or owner — so
+`keiro-migrations-test` passes on any machine and in CI. `CODD_MIGRATION_DIRS` is
+still required by codd's settings parser, but Keiro passes embedded migrations
+directly to codd.
+
+Databases first migrated by `keiro-migrations 0.1.0.0` have their `keiro_*`
+tables in `kiroku`; before applying these migrations to such a database, follow
+the [Upgrading To The Keiro Schema](../docs/user/upgrading-to-the-keiro-schema.md)
+runbook once.
 Production applications should run the migration executable before startup and
 then open Kiroku with schema initialization disabled:
 

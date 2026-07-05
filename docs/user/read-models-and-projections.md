@@ -17,6 +17,7 @@ database (the `keiro-test-support` `withMigratedSuite` fixture).
 data ReadModel q r = ReadModel
   { name :: Text
   , tableName :: Text
+  , schema :: Text
   , subscriptionName :: Text
   , version :: Int
   , shapeHash :: Text
@@ -25,10 +26,79 @@ data ReadModel q r = ReadModel
   }
 ```
 
-`q` is your query input type. `r` is your result type.
+`q` is your query input type. `r` is your result type. `schema` is the
+PostgreSQL schema your read-model *data* table lives in (see
+[Choosing Your Projection Schema](#choosing-your-projection-schema)); it is
+entirely separate from Keiro's own `keiro` schema, where the `keiro_read_models`
+registry lives.
 
-Keiro does not create your application read-model tables. Your migrations own
-those tables, indexes, and row codecs.
+Keiro still does not create your application read-model tables — your migrations
+(or an opt-in helper) own the table *definitions*, indexes, and row codecs. What
+Keiro now gives you is a first-class way to say *which schema* those tables live
+in, and helpers to target it, instead of implicitly inheriting the store
+connection's `search_path`.
+
+## Choosing Your Projection Schema
+
+By default an unqualified `CREATE TABLE my_read_model (...)` lands in the store
+connection's first `search_path` schema — which is kiroku's `kiroku` event-store
+schema — co-mingling your application data with the event store. To place your
+read-model and projection tables in a schema you choose, use the `schema` field
+on `ReadModel` together with the helpers in the `Keiro.Connection` module:
+
+```haskell
+import Keiro.Connection
+  ( qualifyTable          -- schema -> table -> "schema"."table"
+  , qualifiedTableName    -- imported from Keiro.ReadModel: a ReadModel's "schema"."table"
+  , withProjectionSchema  -- add a projection schema to a store connection's extraSearchPath
+  , keiroConnectionSettings  -- kiroku defaults + a projection schema on extraSearchPath
+  , ensureProjectionSchema   -- opt-in CREATE SCHEMA IF NOT EXISTS, for dev/tests/examples
+  )
+import Keiro.ReadModel (ReadModel (..), qualifiedTableName)
+
+orderSummary :: ReadModel OrderId (Maybe OrderSummary)
+orderSummary =
+  ReadModel
+    { name = "order-summary"
+    , tableName = "order_summary"
+    , schema = "app_reads"          -- your chosen schema, NOT kiroku
+    , subscriptionName = "order-summary-inline"
+    , version = 1
+    , shapeHash = "order-summary-v1"
+    , defaultConsistency = Eventual
+    , query = \oid -> Tx.statement (orderIdText oid) selectOrderSummaryStmt
+    }
+```
+
+Qualify every DDL and DML statement for that table against the schema. The
+canonical reference is `qualifiedTableName orderSummary` (equal to
+`qualifyTable "app_reads" "order_summary"`, i.e. `"app_reads"."order_summary"`),
+interpolated into your SQL, so reads and writes resolve correctly regardless of
+`search_path`:
+
+```haskell
+selectOrderSummaryStmt =
+  preparable
+    ("SELECT ... FROM " <> qualifiedTableName orderSummary <> " WHERE order_id = $1")
+    encoder
+    decoder
+```
+
+Open the store so the schema also resolves on the pool, and create it (in
+development, tests, or worked examples — production DDL belongs in your
+migrations):
+
+```haskell
+-- kiroku defaults with your projection schema on extraSearchPath;
+-- the store `schema` stays "kiroku" (it also drives the NOTIFY channel).
+Store.withStore (keiroConnectionSettings connString "app_reads") $ \store ->
+  Store.runStoreIO store $ do
+    ensureProjectionSchema "app_reads"           -- opt-in CREATE SCHEMA
+    Store.runTransaction createOrderSummaryTable  -- your qualified CREATE TABLE
+```
+
+Keiro's own framework metadata (`keiro_read_models`, `keiro_projection_dedup`)
+stays in the `keiro` schema and is unaffected by your choice.
 
 ## Consistency Modes
 
