@@ -123,9 +123,10 @@ validateNode spec (NPgmqDispatch d) = validatePgmqDispatch spec d
 validateNode _spec (NWorkflow _) = []
 validateNode spec (NOperation o) = validateOperation spec o
 
--- | EP-6 operation rules: a @signal <label> of <wf>@ must match an @await@ of
--- that workflow (else the deterministic awakeable id never matches and the
--- workflow waits forever); a @run <wf>@ must resolve to a declared workflow.
+{- | EP-6 operation rules: a @signal <label> of <wf>@ must match an @await@ of
+that workflow (else the deterministic awakeable id never matches and the
+workflow waits forever); a @run <wf>@ must resolve to a declared workflow.
+-}
 validateOperation :: Spec -> OperationNode -> [Diagnostic]
 validateOperation spec o = case opShape o of
     SignalOp lbl wf _ _ _ ->
@@ -149,9 +150,10 @@ validateOperation spec o = case opShape o of
     lookupWorkflow n = case [w | w <- workflows, wfId w == n] of (w : _) -> Just w; [] -> Nothing
     awaitLabels w = [l | WfAwait l _ <- wfBody w]
 
--- | EP-5 workqueue rules: the captured physical name must match the queueRef
--- derivation; the disposition inversions (storeFailure transient => must retry;
--- decodeFailure poison => must dead-letter); and dlq=on requires a retry ceiling.
+{- | EP-5 workqueue rules: the captured physical name must match the queueRef
+derivation; the disposition inversions (storeFailure transient => must retry;
+decodeFailure poison => must dead-letter); and dlq=on requires a retry ceiling.
+-}
 validateWorkqueue :: WorkqueueNode -> [Diagnostic]
 validateWorkqueue w = concat [divergence, inversions, ceiling]
   where
@@ -231,8 +233,9 @@ validatePublisher spec p =
     | pubEmit p `notElem` [emName e | NEmit e <- specNodes spec]
     ]
 
--- | EP-4 inbox disposition rules: the table must be complete over the seven
--- outcomes, and the three dangerous inversions must be stated the safe way.
+{- | EP-4 inbox disposition rules: the table must be complete over the seven
+outcomes, and the three dangerous inversions must be stated the safe way.
+-}
 validateIntake :: IntakeNode -> [Diagnostic]
 validateIntake i = concat [completeness, inversions]
   where
@@ -255,11 +258,11 @@ validateIntake i = concat [completeness, inversions]
         | retriesOn "duplicate"
         ]
             ++ [ mkErr il DispositionPreviouslyFailedRetry $
-                "intake '" <> inkName i <> "': 'previouslyFailed' must dead-letter, not retry (a prior failure won't succeed on replay)"
+                    "intake '" <> inkName i <> "': 'previouslyFailed' must dead-letter, not retry (a prior failure won't succeed on replay)"
                | retriesOn "previouslyFailed"
                ]
             ++ [ mkErr il DispositionDecodeUnboundedRetry $
-                "intake '" <> inkName i <> "': 'decodeFailed' must dead-letter (terminal), not retry unboundedly"
+                    "intake '" <> inkName i <> "': 'decodeFailed' must dead-letter (terminal), not retry unboundedly"
                | retriesOn "decodeFailed"
                ]
 

@@ -22,7 +22,7 @@
         # It must stay byte-stable: the scaffold-conformance test pins the live
         # `keiro-dsl scaffold` output against these files, and reformatting them
         # (e.g. reordering imports) would spuriously break that pin.
-        settings.global.excludes = [ "keiro-dsl/test/conformance/**" ];
+        settings.global.excludes = [ "keiro-dsl/test/conformance*/*" ];
       };
     };
 }

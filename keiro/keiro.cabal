@@ -94,7 +94,7 @@ library
   build-depends:
     , aeson                                  >=2.2
     , aeson-casing                           >=0.2
-    , base                                   >=4.21    && <5
+    , base                                   >=4.21     && <5
     , bytestring                             >=0.11
     , containers                             >=0.6
     , contravariant-extras                   >=0.3
@@ -104,17 +104,17 @@ library
     , hasql                                  >=1.10
     , hasql-pool                             >=1.2
     , hasql-transaction                      >=1.1
-    , hs-opentelemetry-api                   >=1.0     && <1.1
-    , hs-opentelemetry-propagator-w3c        >=1.0     && <1.1
-    , hs-opentelemetry-semantic-conventions  >=1.40    && <2
+    , hs-opentelemetry-api                   >=1.0      && <1.1
+    , hs-opentelemetry-propagator-w3c        >=1.0      && <1.1
+    , hs-opentelemetry-semantic-conventions  >=1.40     && <2
     , keiki                                  >=0.1
     , keiki-codec-json                       >=0.1
-    , keiro-core
+    , keiro-core                             ^>=0.1.0.0
     , kiroku-store                           >=0.1
     , lens                                   >=5.2
     , mmzk-typeid                            >=0.7
     , scientific                             >=0.3
-    , shibuya-core                           >=0.8.0.1 && <0.9
+    , shibuya-core                           >=0.8.0.1  && <0.9
     , stm                                    >=2.5
     , streamly                               >=0.11
     , streamly-core                          >=0.3
@@ -168,14 +168,14 @@ benchmark keiro-bench
   main-is:        Main.hs
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-    , base                  >=4.21 && <5
+    , base                  >=4.21     && <5
     , bytestring            >=0.11
     , effectful             >=2.6
     , hasql-transaction     >=1.1
-    , hs-opentelemetry-api  >=1.0  && <1.1
-    , hs-opentelemetry-sdk  >=1.0  && <1.1
+    , hs-opentelemetry-api  >=1.0      && <1.1
+    , hs-opentelemetry-sdk  >=1.0      && <1.1
     , keiro
-    , keiro-core
+    , keiro-core            ^>=0.1.0.0
     , keiro-test-support
     , kiroku-store          >=0.1
     , tasty-bench           >=0.4

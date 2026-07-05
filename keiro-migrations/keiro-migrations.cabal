@@ -13,9 +13,11 @@ copyright:          2026 Nadeem Bitar
 category:           Database
 build-type:         Simple
 tested-with:        GHC >=9.12 && <9.13
-extra-source-files:
+extra-doc-files:
+  CHANGELOG.md
   README.md
-  sql-migrations/*.sql
+
+extra-source-files: sql-migrations/*.sql
 
 source-repository head
   type:     git

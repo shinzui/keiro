@@ -1,20 +1,21 @@
-cabal-version: 3.0
-name:          keiro-dsl
-version:       0.1.0.0
-synopsis:      Typed specification toolchain for keiro services
+cabal-version:   3.0
+name:            keiro-dsl
+version:         0.1.0.0
+synopsis:        Typed specification toolchain for keiro services
 description:
   keiro-dsl is the toolchain over a typed `.keiro` specification of a keiro
   service: a parser + checker + scaffolder + harness emitter. It emits the
   symbol-free deterministic layer plus typed holes, never a keiki symbolic
   operator (the firewall invariant).
 
-license:       BSD-3-Clause
-author:        Nadeem Bitar
-maintainer:    nadeem@gmail.com
-copyright:     2026 Nadeem Bitar
-category:      Development
-build-type:    Simple
-tested-with:   GHC >=9.12 && <9.13
+license:         BSD-3-Clause
+author:          Nadeem Bitar
+maintainer:      nadeem@gmail.com
+copyright:       2026 Nadeem Bitar
+category:        Development
+build-type:      Simple
+tested-with:     GHC >=9.12 && <9.13
+extra-doc-files: CHANGELOG.md
 
 common warnings
   ghc-options: -Wall
