@@ -90,10 +90,15 @@ This section must always reflect the actual current state of the work.
   `git status` = 263 deletions, all under `schemas/kiroku/tables/keiro_*`, no new
   `schemas/keiro/`, kiroku event tables intact. `cabal test keiro-migrations-test`: 4 examples,
   0 failures (incl. "matches the checked-in expected schema").
-- [ ] M5: Remediation script `keiro-migrations/remediation/2026-07-05-relocate-keiro-tables-to-keiro-schema.sql`
+- [x] M5 (2026-07-05): Remediation script `keiro-migrations/remediation/2026-07-05-relocate-keiro-tables-to-keiro-schema.sql`
   written (create schema + guarded `ALTER TABLE ... SET SCHEMA` per table).
-- [ ] M5: Remediation verified against a simulated 0.1.0.0 database (tables relocated, second
-  run a no-op, `keiro-migrate` reports nothing to apply).
+- [x] M5 (2026-07-05): Remediation verified against a simulated 0.1.0.0 database on a throwaway
+  PostgreSQL 18 cluster (`initdb`/`pg_ctl`). First run moved `keiro_snapshots`/`keiro_timers`
+  into `keiro` (`to_regclass('keiro.keiro_snapshots')` non-null, `kiroku.keiro_snapshots` NULL),
+  data intact (`stream_version = 7`), and `keiro_timers_due_idx` moved with its table
+  (`pg_indexes.schemaname = 'keiro'`). Second run was a no-op (only a "schema already exists"
+  NOTICE, no error). The 9 absent tables were skipped by the `to_regclass` guard. Ledger no-op
+  is by construction (script never touches `codd_schema.sql_migrations`).
 
 
 ## Surprises & Discoveries
@@ -180,7 +185,28 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+- 2026-07-05 (completion): All five milestones landed. Keiro now owns a dedicated `keiro`
+  PostgreSQL schema: the bootstrap migration runs `CREATE SCHEMA IF NOT EXISTS keiro` and all
+  16 migration bodies are fully qualified `keiro.<table>` with zero `SET search_path` pins
+  (`grep -rn 'search_path' keiro-migrations/sql-migrations/` returns nothing;
+  `grep -rn 'CREATE SCHEMA'` shows exactly one match, in the bootstrap). The `keiroSchema`
+  constant lives in the new `Keiro.Schema` module in `keiro-core` for EP-2/EP-4 to import.
+  The `keiro-migrate new` scaffolder emits a qualified, comment-free template. The
+  `keiro-migrations-test` suite passes (4 examples, 0 failures), proving `keiro_*` tables land
+  in `keiro`, are absent from `kiroku`/`public`, kiroku's event tables stay in `kiroku`, and
+  the migrated database matches the regenerated codd expected-schema snapshot (still scoped to
+  `kiroku` — EP-3 rescopes it). The alpha-database remediation script was verified end to end on
+  a real throwaway PostgreSQL 18 cluster: it relocates the tables with data/indexes intact and
+  is idempotent.
+- Gaps / handoffs (intentional, per plan boundaries): the codd `namespacesToCheck` is still
+  `IncludeSchemas [SqlSchema "kiroku"]` and the snapshot still carries the machine-specific
+  `roles/shinzui` + `owner: shinzui` portability leak — EP-3 (`docs/plans/87-...`) rescopes to
+  `keiro` and pins a deterministic identity. Runtime query strings in the `keiro` package are
+  not yet qualified — EP-2 (`docs/plans/86-...`) does that, and until it lands the relocated
+  tables resolve only via the store pool's `search_path`. No runtime module was touched here.
+- Lesson: the M1 bootstrap comment text given verbatim in the spec contained the literal token
+  `search_path`, which collided with the M2/Validation grep gate; rewording to "search-path"
+  kept the gate meaningful. Recorded in Surprises & Discoveries and Decision Log.
 
 
 ## Context and Orientation
