@@ -121,7 +121,7 @@ registerAwakeableStmt :: Statement (UUID, Text, Text) ()
 registerAwakeableStmt =
     preparable
         """
-        INSERT INTO keiro_awakeables
+        INSERT INTO keiro.keiro_awakeables
           (awakeable_id, owner_workflow_name, owner_workflow_id, status)
         VALUES ($1, $2, $3, 'pending')
         ON CONFLICT (awakeable_id) DO NOTHING
@@ -137,7 +137,7 @@ completeAwakeableStmt :: Statement (UUID, Value, UTCTime) Bool
 completeAwakeableStmt =
     preparable
         """
-        UPDATE keiro_awakeables
+        UPDATE keiro.keiro_awakeables
         SET status = 'completed',
             payload = $2,
             completed_at = $3,
@@ -156,7 +156,7 @@ cancelAwakeableStmt :: Statement UUID Bool
 cancelAwakeableStmt =
     preparable
         """
-        UPDATE keiro_awakeables
+        UPDATE keiro.keiro_awakeables
         SET status = 'cancelled',
             updated_at = now()
         WHERE awakeable_id = $1
@@ -171,7 +171,7 @@ lookupAwakeableStmt =
         """
         SELECT awakeable_id, owner_workflow_name, owner_workflow_id, status,
           payload, created_at, updated_at, completed_at
-        FROM keiro_awakeables
+        FROM keiro.keiro_awakeables
         WHERE awakeable_id = $1
         """
         (E.param (E.nonNullable E.uuid))
@@ -182,7 +182,7 @@ countPendingAwakeablesStmt =
     preparable
         """
         SELECT count(*)
-        FROM keiro_awakeables
+        FROM keiro.keiro_awakeables
         WHERE status = 'pending'
         """
         E.noParams

@@ -161,7 +161,7 @@ registerChildStmt :: Statement (Text, Text, Text, Text, Text) ()
 registerChildStmt =
     preparable
         """
-        INSERT INTO keiro_workflow_children
+        INSERT INTO keiro.keiro_workflow_children
           (child_id, child_name, parent_id, parent_name, await_step, status)
         VALUES ($1, $2, $3, $4, $5, 'running')
         ON CONFLICT (child_id, child_name) DO NOTHING
@@ -179,7 +179,7 @@ markChildResultStmt :: Statement (Text, Text, Value, UTCTime) Bool
 markChildResultStmt =
     preparable
         """
-        UPDATE keiro_workflow_children
+        UPDATE keiro.keiro_workflow_children
         SET status = 'completed',
             result = $3,
             completed_at = $4,
@@ -200,7 +200,7 @@ markChildCancelledStmt :: Statement (Text, Text) Bool
 markChildCancelledStmt =
     preparable
         """
-        UPDATE keiro_workflow_children
+        UPDATE keiro.keiro_workflow_children
         SET status = 'cancelled',
             updated_at = now()
         WHERE child_id = $1
@@ -217,7 +217,7 @@ markChildFailedStmt :: Statement (Text, Text) Bool
 markChildFailedStmt =
     preparable
         """
-        UPDATE keiro_workflow_children
+        UPDATE keiro.keiro_workflow_children
         SET status = 'failed',
             updated_at = now()
         WHERE child_id = $1
@@ -236,7 +236,7 @@ lookupChildStmt =
         """
         SELECT child_id, child_name, parent_id, parent_name, await_step,
           status, result, created_at, updated_at, completed_at
-        FROM keiro_workflow_children
+        FROM keiro.keiro_workflow_children
         WHERE child_id = $1
           AND child_name = $2
         """
@@ -252,7 +252,7 @@ lookupChildrenOfParentStmt =
         """
         SELECT child_id, child_name, parent_id, parent_name, await_step,
           status, result, created_at, updated_at, completed_at
-        FROM keiro_workflow_children
+        FROM keiro.keiro_workflow_children
         WHERE parent_id = $1
           AND parent_name = $2
         ORDER BY created_at, child_id
@@ -268,7 +268,7 @@ countActiveChildrenStmt =
     preparable
         """
         SELECT count(*)
-        FROM keiro_workflow_children
+        FROM keiro.keiro_workflow_children
         WHERE status = 'running'
         """
         E.noParams
@@ -279,7 +279,7 @@ findRunningChildIdsStmt =
     preparable
         """
         SELECT child_id, child_name
-        FROM keiro_workflow_children
+        FROM keiro.keiro_workflow_children
         WHERE status = 'running'
         """
         E.noParams

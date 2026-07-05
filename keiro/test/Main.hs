@@ -1053,7 +1053,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
-                        Tx.sql "ALTER TABLE keiro_snapshots ADD CONSTRAINT keiro_snapshots_no_writes CHECK (false) NOT VALID"
+                        Tx.sql "ALTER TABLE keiro.keiro_snapshots ADD CONSTRAINT keiro_snapshots_no_writes CHECK (false) NOT VALID"
             result <-
                 Store.runStoreIO storeHandle $
                     runCommand options snapshotCounterEventStream target (Add 3)
@@ -1078,7 +1078,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
-                        Tx.sql "ALTER TABLE keiro_snapshots DROP CONSTRAINT keiro_snapshots_no_writes"
+                        Tx.sql "ALTER TABLE keiro.keiro_snapshots DROP CONSTRAINT keiro_snapshots_no_writes"
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
                     runCommand options snapshotCounterEventStream target (Add 4)
@@ -1167,7 +1167,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
-                        Tx.sql "TRUNCATE keiro_snapshots"
+                        Tx.sql "TRUNCATE keiro.keiro_snapshots"
             result <-
                 Store.runStoreIO storeHandle $
                     runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 4)
@@ -3034,7 +3034,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 OutboxId headUuid = headId
                 holdClaimSql =
                     TE.encodeUtf8 $
-                        "UPDATE keiro_outbox SET status = 'publishing', attempt_count = attempt_count + 1, updated_at = now() WHERE outbox_id = '"
+                        "UPDATE keiro.keiro_outbox SET status = 'publishing', attempt_count = attempt_count + 1, updated_at = now() WHERE outbox_id = '"
                             <> UUID.toText headUuid
                             <> "'"
             Right () <-
@@ -3847,7 +3847,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
-                        Tx.sql "INSERT INTO keiro_inbox (source, dedupe_key, content_type, payload_bytes, status) VALUES ('ordering', 'inbox-legacy-processing', 'application/json', ''::bytea, 'processing')"
+                        Tx.sql "INSERT INTO keiro.keiro_inbox (source, dedupe_key, content_type, payload_bytes, status) VALUES ('ordering', 'inbox-legacy-processing', 'application/json', ''::bytea, 'processing')"
             Right result <-
                 Store.runStoreIO storeHandle $
                     runInboxTransaction Nothing PreferIntegrationMessageId event Nothing handler
@@ -3969,7 +3969,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
                         Tx.sql
-                            "UPDATE keiro_inbox SET completed_at = now() - interval '40 days' WHERE message_id = 'inbox-msg-gc'"
+                            "UPDATE keiro.keiro_inbox SET completed_at = now() - interval '40 days' WHERE message_id = 'inbox-msg-gc'"
             now <- getCurrentTime
             Right deleted <- Store.runStoreIO storeHandle (garbageCollectCompleted (nominalDays 30) now)
             deleted `shouldBe` 1
@@ -5054,7 +5054,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
-                        Tx.sql "UPDATE keiro_workflows SET lease_expires_at = now() - interval '1 second', next_attempt_at = now() - interval '1 second' WHERE workflow_id = 'le-1' AND workflow_name = 'lease-expire'"
+                        Tx.sql "UPDATE keiro.keiro_workflows SET lease_expires_at = now() - interval '1 second', next_attempt_at = now() - interval '1 second' WHERE workflow_id = 'le-1' AND workflow_name = 'lease-expire'"
             Right claimedB <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-b" 30 name wid
             claimedB `shouldBe` True
             Right () <- Store.runStoreIO storeHandle $ Instance.releaseInstance "owner-b" True name wid
@@ -5393,14 +5393,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right () <-
                 Store.runStoreIO store $
                     Store.runTransaction $
-                        Tx.sql "ALTER TABLE keiro_workflow_steps RENAME TO keiro_workflow_steps_hidden"
+                        Tx.sql "ALTER TABLE keiro.keiro_workflow_steps RENAME TO keiro_workflow_steps_hidden"
             worker <- forkIO (runWorkflowResumeWorkerPush store opts registry)
             logged <- waitForPassFailure
             logged `shouldBe` Just ()
             Right () <-
                 Store.runStoreIO store $
                     Store.runTransaction $
-                        Tx.sql "ALTER TABLE keiro_workflow_steps_hidden RENAME TO keiro_workflow_steps"
+                        Tx.sql "ALTER TABLE keiro.keiro_workflow_steps_hidden RENAME TO keiro_workflow_steps"
             now <- getCurrentTime
             Right () <-
                 Store.runStoreIO store $
@@ -7306,7 +7306,7 @@ backdateOutboxUpdatedAt oid timestamp =
 backdateOutboxUpdatedAtStmt :: Statement (UUID, UTCTime) ()
 backdateOutboxUpdatedAtStmt =
     preparable
-        "UPDATE keiro_outbox SET updated_at = $2 WHERE outbox_id = $1"
+        "UPDATE keiro.keiro_outbox SET updated_at = $2 WHERE outbox_id = $1"
         ( contrazip2
             (E.param (E.nonNullable E.uuid))
             (E.param (E.nonNullable E.timestamptz))
@@ -7321,7 +7321,7 @@ backdateOutboxPublishedAt oid timestamp =
 backdateOutboxPublishedAtStmt :: Statement (UUID, UTCTime) ()
 backdateOutboxPublishedAtStmt =
     preparable
-        "UPDATE keiro_outbox SET published_at = $2 WHERE outbox_id = $1"
+        "UPDATE keiro.keiro_outbox SET published_at = $2 WHERE outbox_id = $1"
         ( contrazip2
             (E.param (E.nonNullable E.uuid))
             (E.param (E.nonNullable E.timestamptz))
@@ -7993,7 +7993,7 @@ timerStatusAndErrorStmt =
     preparable
         """
         SELECT status, last_error
-        FROM keiro_timers
+        FROM keiro.keiro_timers
         WHERE timer_id = $1
         """
         (E.param (E.nonNullable E.uuid))
@@ -8005,7 +8005,7 @@ sleepTimerStatusStmt =
     preparable
         """
         SELECT status, payload
-        FROM keiro_timers
+        FROM keiro.keiro_timers
         WHERE timer_id = $1
         """
         (E.param (E.nonNullable E.uuid))
@@ -8017,7 +8017,7 @@ sleepTimerFireAtStmt =
     preparable
         """
         SELECT fire_at
-        FROM keiro_timers
+        FROM keiro.keiro_timers
         WHERE timer_id = $1
         """
         (E.param (E.nonNullable E.uuid))
@@ -8097,7 +8097,7 @@ snapshotVersionForStreamStmt =
     preparable
         """
         SELECT ks.stream_version
-        FROM keiro_snapshots ks
+        FROM keiro.keiro_snapshots ks
         JOIN streams s ON s.stream_id = ks.stream_id
         WHERE s.stream_name = $1
         """
@@ -8108,7 +8108,7 @@ corruptSnapshotStateStmt :: Statement (Text, Value) ()
 corruptSnapshotStateStmt =
     preparable
         """
-        UPDATE keiro_snapshots ks
+        UPDATE keiro.keiro_snapshots ks
         SET state = $2
         FROM streams s
         WHERE s.stream_id = ks.stream_id
@@ -8124,7 +8124,7 @@ corruptSnapshotShapeStmt :: Statement (Text, Text) ()
 corruptSnapshotShapeStmt =
     preparable
         """
-        UPDATE keiro_snapshots ks
+        UPDATE keiro.keiro_snapshots ks
         SET regfile_shape_hash = $2
         FROM streams s
         WHERE s.stream_id = ks.stream_id
@@ -8324,7 +8324,7 @@ updateReadModelVersionStmt :: Statement (Text, Int64) ()
 updateReadModelVersionStmt =
     preparable
         """
-        UPDATE keiro_read_models
+        UPDATE keiro.keiro_read_models
         SET version = $2
         WHERE name = $1
         """
@@ -8338,7 +8338,7 @@ updateReadModelStatusStmt :: Statement (Text, Text) ()
 updateReadModelStatusStmt =
     preparable
         """
-        UPDATE keiro_read_models
+        UPDATE keiro.keiro_read_models
         SET status = $2
         WHERE name = $1
         """
@@ -8353,7 +8353,7 @@ readModelXminStmt =
     preparable
         """
         SELECT xmin::text
-        FROM keiro_read_models
+        FROM keiro.keiro_read_models
         WHERE name = $1
         """
         (E.param (E.nonNullable E.text))
@@ -8729,7 +8729,7 @@ insertGcTimerStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text) ()
 insertGcTimerStmt =
     preparable
         """
-        INSERT INTO keiro_timers
+        INSERT INTO keiro.keiro_timers
           (timer_id, process_manager_name, correlation_id, fire_at, payload, status)
         VALUES ($1, $2, $3, $4, $5, $6)
         """
@@ -8747,7 +8747,7 @@ deleteGcStepsStmt :: Statement (Text, Text) ()
 deleteGcStepsStmt =
     preparable
         """
-        DELETE FROM keiro_workflow_steps
+        DELETE FROM keiro.keiro_workflow_steps
         WHERE workflow_id = $1 AND workflow_name = $2
         """
         ( contrazip2
@@ -8760,7 +8760,7 @@ deleteWorkflowInstanceStmt :: Statement (Text, Text) ()
 deleteWorkflowInstanceStmt =
     preparable
         """
-        DELETE FROM keiro_workflows
+        DELETE FROM keiro.keiro_workflows
         WHERE workflow_id = $1 AND workflow_name = $2
         """
         ( contrazip2
@@ -8774,7 +8774,7 @@ workflowWakeAfterStmt =
     preparable
         """
         SELECT wake_after
-        FROM keiro_workflows
+        FROM keiro.keiro_workflows
         WHERE workflow_id = $1 AND workflow_name = $2
         """
         ( contrazip2
@@ -8788,15 +8788,15 @@ workflowOwnedRowCountsStmt =
     preparable
         """
         SELECT
-          (SELECT count(*) FROM keiro_workflows WHERE workflow_id = $1 AND workflow_name = $2),
-          (SELECT count(*) FROM keiro_workflow_steps WHERE workflow_id = $1 AND workflow_name = $2),
-          (SELECT count(*) FROM keiro_awakeables WHERE owner_workflow_id = $1 AND owner_workflow_name = $2),
-          (SELECT count(*) FROM keiro_workflow_children
+          (SELECT count(*) FROM keiro.keiro_workflows WHERE workflow_id = $1 AND workflow_name = $2),
+          (SELECT count(*) FROM keiro.keiro_workflow_steps WHERE workflow_id = $1 AND workflow_name = $2),
+          (SELECT count(*) FROM keiro.keiro_awakeables WHERE owner_workflow_id = $1 AND owner_workflow_name = $2),
+          (SELECT count(*) FROM keiro.keiro_workflow_children
             WHERE (parent_id = $1 AND parent_name = $2) OR (child_id = $1 AND child_name = $2)),
-          (SELECT count(*) FROM keiro_timers
+          (SELECT count(*) FROM keiro.keiro_timers
             WHERE correlation_id = $1 AND process_manager_name = $2 AND payload->>'kind' = 'keiro.workflow.sleep'),
           (SELECT count(*)
-             FROM keiro_snapshots s
+             FROM keiro.keiro_snapshots s
              JOIN streams st ON st.stream_id = s.stream_id
             WHERE st.stream_name = 'wf:' || $2 || '-' || $1)
         """
@@ -8819,7 +8819,7 @@ workflowOwnedChildCountStmt =
     preparable
         """
         SELECT count(*)
-        FROM keiro_workflow_children
+        FROM keiro.keiro_workflow_children
         WHERE (parent_id = $1 AND parent_name = $2)
            OR (child_id = $3 AND child_name = $4)
         """

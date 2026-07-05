@@ -171,7 +171,7 @@ insertProjectionDedupStmt :: Statement (Text, UUID) Bool
 insertProjectionDedupStmt =
     preparable
         """
-        INSERT INTO keiro_projection_dedup (projection_name, event_id)
+        INSERT INTO keiro.keiro_projection_dedup (projection_name, event_id)
         VALUES ($1, $2)
         ON CONFLICT (projection_name, event_id) DO NOTHING
         """
@@ -185,7 +185,7 @@ pruneProjectionDedupBeforeStmt :: Statement UTCTime Int64
 pruneProjectionDedupBeforeStmt =
     preparable
         """
-        DELETE FROM keiro_projection_dedup
+        DELETE FROM keiro.keiro_projection_dedup
         WHERE applied_at < $1
         """
         (E.param (E.nonNullable E.timestamptz))

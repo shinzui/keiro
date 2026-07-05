@@ -117,7 +117,7 @@ upsertInstanceStmt :: Statement (Text, Text, Int32, Text, Maybe Text) ()
 upsertInstanceStmt =
     preparable
         """
-        INSERT INTO keiro_workflows
+        INSERT INTO keiro.keiro_workflows
           (workflow_id, workflow_name, generation, status, last_error, completed_at)
         VALUES ($1, $2, $3, $4, $5,
                 CASE WHEN $4 IN ('completed', 'cancelled', 'failed') THEN now() ELSE NULL END)
@@ -149,7 +149,7 @@ lookupInstanceStmt =
         SELECT workflow_id, workflow_name, generation, status, attempts,
                last_error, next_attempt_at, leased_by, lease_expires_at,
                created_at, updated_at, completed_at
-        FROM keiro_workflows
+        FROM keiro.keiro_workflows
         WHERE workflow_id = $1 AND workflow_name = $2
         """
         ( contrazip2
@@ -162,7 +162,7 @@ ensureInstanceStmt :: Statement (Text, Text, Int32) ()
 ensureInstanceStmt =
     preparable
         """
-        INSERT INTO keiro_workflows
+        INSERT INTO keiro.keiro_workflows
           (workflow_id, workflow_name, generation, status)
         VALUES ($1, $2, $3, 'running')
         ON CONFLICT (workflow_id, workflow_name) DO NOTHING
@@ -178,7 +178,7 @@ claimInstanceStmt :: Statement (Text, Text, Text, UTCTime, UTCTime) (Maybe Bool)
 claimInstanceStmt =
     preparable
         """
-        UPDATE keiro_workflows
+        UPDATE keiro.keiro_workflows
         SET leased_by = $3,
             lease_expires_at = $5,
             updated_at = $4
@@ -202,7 +202,7 @@ releaseInstanceStmt :: Statement (Text, Text, Text, Bool) ()
 releaseInstanceStmt =
     preparable
         """
-        UPDATE keiro_workflows
+        UPDATE keiro.keiro_workflows
         SET leased_by = NULL,
             lease_expires_at = NULL,
             attempts = CASE WHEN $4 THEN 0 ELSE attempts END,
@@ -225,7 +225,7 @@ recordCrashStmt :: Statement (Text, Text, Text) Int32
 recordCrashStmt =
     preparable
         """
-        UPDATE keiro_workflows
+        UPDATE keiro.keiro_workflows
         SET attempts = attempts + 1,
             last_error = $3,
             next_attempt_at = now() + (LEAST(power(2, attempts + 1), 64) * interval '1 second'),
@@ -246,7 +246,7 @@ resetInstanceAttemptsStmt :: Statement (Text, Text) ()
 resetInstanceAttemptsStmt =
     preparable
         """
-        UPDATE keiro_workflows
+        UPDATE keiro.keiro_workflows
         SET attempts = 0,
             last_error = NULL,
             next_attempt_at = NULL,

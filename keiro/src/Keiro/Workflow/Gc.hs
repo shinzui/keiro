@@ -87,14 +87,14 @@ eligibleWorkflowsStmt =
     preparable
         """
         SELECT w.workflow_id, w.workflow_name
-        FROM keiro_workflows w
+        FROM keiro.keiro_workflows w
         WHERE w.status IN ('completed', 'cancelled', 'failed')
           AND w.completed_at IS NOT NULL
           AND w.completed_at <= $1
           AND NOT EXISTS (
             SELECT 1
-            FROM keiro_workflow_children c
-            JOIN keiro_workflows p
+            FROM keiro.keiro_workflow_children c
+            JOIN keiro.keiro_workflows p
               ON p.workflow_id = c.parent_id
              AND p.workflow_name = c.parent_name
             WHERE c.child_id = w.workflow_id
@@ -114,7 +114,7 @@ deleteSnapshotStmt :: Statement Int64 ()
 deleteSnapshotStmt =
     preparable
         """
-        DELETE FROM keiro_snapshots
+        DELETE FROM keiro.keiro_snapshots
         WHERE stream_id = $1
         """
         (E.param (E.nonNullable E.int8))
@@ -124,7 +124,7 @@ deleteStepsStmt :: Statement (Text, Text) ()
 deleteStepsStmt =
     preparable
         """
-        DELETE FROM keiro_workflow_steps
+        DELETE FROM keiro.keiro_workflow_steps
         WHERE workflow_id = $1 AND workflow_name = $2
         """
         ( contrazip2
@@ -137,7 +137,7 @@ deleteAwakeablesStmt :: Statement (Text, Text) ()
 deleteAwakeablesStmt =
     preparable
         """
-        DELETE FROM keiro_awakeables
+        DELETE FROM keiro.keiro_awakeables
         WHERE owner_workflow_name = $1 AND owner_workflow_id = $2
         """
         ( contrazip2
@@ -150,7 +150,7 @@ deleteChildrenStmt :: Statement (Text, Text, Text, Text) ()
 deleteChildrenStmt =
     preparable
         """
-        DELETE FROM keiro_workflow_children
+        DELETE FROM keiro.keiro_workflow_children
         WHERE (parent_id = $1 AND parent_name = $2)
            OR (child_id = $3 AND child_name = $4)
         """
@@ -166,7 +166,7 @@ deleteTerminalSleepTimersStmt :: Statement (Text, Text, Text) ()
 deleteTerminalSleepTimersStmt =
     preparable
         """
-        DELETE FROM keiro_timers
+        DELETE FROM keiro.keiro_timers
         WHERE correlation_id = $1
           AND process_manager_name = $2
           AND payload->>'kind' = $3
@@ -183,7 +183,7 @@ deleteWorkflowStmt :: Statement (Text, Text) ()
 deleteWorkflowStmt =
     preparable
         """
-        DELETE FROM keiro_workflows
+        DELETE FROM keiro.keiro_workflows
         WHERE workflow_id = $1 AND workflow_name = $2
         """
         ( contrazip2

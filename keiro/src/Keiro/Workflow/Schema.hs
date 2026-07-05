@@ -133,7 +133,7 @@ recordStepStmt :: Statement (Text, Text, Int32, Text, Value, UTCTime) ()
 recordStepStmt =
     preparable
         """
-        INSERT INTO keiro_workflow_steps
+        INSERT INTO keiro.keiro_workflow_steps
           (workflow_id, workflow_name, generation, step_name, result, recorded_at)
         VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (workflow_id, workflow_name, generation, step_name) DO NOTHING
@@ -153,7 +153,7 @@ lookupStepResultStmt =
     preparable
         """
         SELECT result
-        FROM keiro_workflow_steps
+        FROM keiro.keiro_workflow_steps
         WHERE workflow_id = $1 AND workflow_name = $2 AND generation = $3 AND step_name = $4
         """
         ( contrazip4
@@ -178,7 +178,7 @@ loadStepIndexStmt =
     preparable
         """
         SELECT step_name, result
-        FROM keiro_workflow_steps
+        FROM keiro.keiro_workflow_steps
         WHERE workflow_id = $1 AND workflow_name = $2 AND generation = $3
         """
         ( contrazip3
@@ -193,7 +193,7 @@ stepExistsStmt =
     preparable
         """
         SELECT EXISTS (
-          SELECT 1 FROM keiro_workflow_steps
+          SELECT 1 FROM keiro.keiro_workflow_steps
           WHERE workflow_id = $1 AND workflow_name = $2 AND generation = $3 AND step_name = $4
         )
         """
@@ -212,7 +212,7 @@ currentGenerationStmt =
     preparable
         """
         SELECT COALESCE(MAX(generation), 0)::int4
-        FROM keiro_workflow_steps
+        FROM keiro.keiro_workflow_steps
         WHERE workflow_id = $1 AND workflow_name = $2
         """
         ( contrazip2
@@ -230,7 +230,7 @@ findUnfinishedWorkflowIdsStmt =
     preparable
         """
         SELECT workflow_id, workflow_name
-        FROM keiro_workflows
+        FROM keiro.keiro_workflows
         WHERE status NOT IN ('completed', 'cancelled', 'failed')
           AND (wake_after IS NULL OR wake_after <= $1)
         ORDER BY workflow_name, workflow_id
@@ -242,7 +242,7 @@ setWorkflowWakeAfterStmt :: Statement (Text, Text, UTCTime) ()
 setWorkflowWakeAfterStmt =
     preparable
         """
-        UPDATE keiro_workflows
+        UPDATE keiro.keiro_workflows
         SET wake_after = $3,
             updated_at = now()
         WHERE workflow_id = $1 AND workflow_name = $2

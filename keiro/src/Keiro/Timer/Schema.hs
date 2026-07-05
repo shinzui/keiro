@@ -234,7 +234,7 @@ scheduleTimerStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text) ()
 scheduleTimerStmt =
     preparable
         """
-        INSERT INTO keiro_timers
+        INSERT INTO keiro.keiro_timers
           (timer_id, process_manager_name, correlation_id, fire_at, payload, status)
         VALUES
           ($1, $2, $3, $4, $5, $6)
@@ -261,7 +261,7 @@ scheduleTimerOnceStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text) ()
 scheduleTimerOnceStmt =
     preparable
         """
-        INSERT INTO keiro_timers
+        INSERT INTO keiro.keiro_timers
           (timer_id, process_manager_name, correlation_id, fire_at, payload, status)
         VALUES
           ($1, $2, $3, $4, $5, $6)
@@ -283,14 +283,14 @@ claimDueTimerStmt =
         """
         WITH due AS (
           SELECT timer_id
-          FROM keiro_timers
+          FROM keiro.keiro_timers
           WHERE status = 'scheduled'
             AND fire_at <= $1
           ORDER BY fire_at, timer_id
           LIMIT 1
           FOR UPDATE SKIP LOCKED
         )
-        UPDATE keiro_timers kt
+        UPDATE keiro.keiro_timers kt
         SET status = 'firing',
             attempts = kt.attempts + 1,
             updated_at = now()
@@ -306,7 +306,7 @@ markTimerFiredStmt :: Statement (UUID, UUID) Bool
 markTimerFiredStmt =
     preparable
         """
-        UPDATE keiro_timers
+        UPDATE keiro.keiro_timers
         SET status = 'fired',
             fired_event_id = $2,
             updated_at = now()
@@ -324,7 +324,7 @@ countDueTimersStmt =
     preparable
         """
         SELECT count(*)
-        FROM keiro_timers
+        FROM keiro.keiro_timers
         WHERE status = 'scheduled'
           AND fire_at <= $1
         """
@@ -336,7 +336,7 @@ countStuckTimersStmt =
     preparable
         """
         SELECT count(*)
-        FROM keiro_timers
+        FROM keiro.keiro_timers
         WHERE status = 'firing'
           AND ($1::timestamptz IS NULL OR updated_at <= $1)
           AND ($2::bigint IS NULL OR attempts >= $2)
@@ -353,7 +353,7 @@ findStuckTimersStmt =
         """
         SELECT timer_id, process_manager_name, correlation_id, fire_at,
           payload, status, attempts, fired_event_id
-        FROM keiro_timers
+        FROM keiro.keiro_timers
         WHERE status = 'firing'
           AND ($1::timestamptz IS NULL OR updated_at <= $1)
           AND ($2::bigint IS NULL OR attempts >= $2)
@@ -369,7 +369,7 @@ requeueStuckTimersStmt :: Statement UTCTime Int
 requeueStuckTimersStmt =
     preparable
         """
-        UPDATE keiro_timers
+        UPDATE keiro.keiro_timers
         SET status = 'scheduled',
             updated_at = now()
         WHERE status = 'firing'
@@ -382,7 +382,7 @@ requeueStuckTimerStmt :: Statement UUID Bool
 requeueStuckTimerStmt =
     preparable
         """
-        UPDATE keiro_timers
+        UPDATE keiro.keiro_timers
         SET status = 'scheduled',
             updated_at = now()
         WHERE timer_id = $1
@@ -395,7 +395,7 @@ cancelTimerStmt :: Statement UUID Bool
 cancelTimerStmt =
     preparable
         """
-        UPDATE keiro_timers
+        UPDATE keiro.keiro_timers
         SET status = 'cancelled',
             updated_at = now()
         WHERE timer_id = $1
@@ -408,7 +408,7 @@ deadLetterTimerStmt :: Statement (UUID, Text) Bool
 deadLetterTimerStmt =
     preparable
         """
-        UPDATE keiro_timers
+        UPDATE keiro.keiro_timers
         SET status = 'dead',
             last_error = $2,
             updated_at = now()

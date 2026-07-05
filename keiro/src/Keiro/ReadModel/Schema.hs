@@ -121,7 +121,7 @@ registerReadModelStmt :: Statement (Text, Int64, Text) ReadModelMetadata
 registerReadModelStmt =
     preparable
         """
-        INSERT INTO keiro_read_models (name, version, shape_hash, status, last_built_at)
+        INSERT INTO keiro.keiro_read_models (name, version, shape_hash, status, last_built_at)
         VALUES ($1, $2, $3, 'live', now())
         ON CONFLICT (name) DO UPDATE
           SET name = EXCLUDED.name
@@ -139,7 +139,7 @@ lookupReadModelStmt =
     preparable
         """
         SELECT name, version, shape_hash, last_built_at, status
-        FROM keiro_read_models
+        FROM keiro.keiro_read_models
         WHERE name = $1
         """
         (E.param (E.nonNullable E.text))
@@ -149,7 +149,7 @@ transitionReadModelStmt :: Statement (Text, Int64, Text, Text) ReadModelMetadata
 transitionReadModelStmt =
     preparable
         """
-        INSERT INTO keiro_read_models (name, version, shape_hash, status, last_built_at, updated_at)
+        INSERT INTO keiro.keiro_read_models (name, version, shape_hash, status, last_built_at, updated_at)
         VALUES ($1, $2, $3, $4, now(), now())
         ON CONFLICT (name) DO UPDATE
           SET version = EXCLUDED.version,

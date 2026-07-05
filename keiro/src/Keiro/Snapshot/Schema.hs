@@ -95,7 +95,7 @@ lookupSnapshotStmt =
     preparable
         """
         SELECT stream_id, stream_version, state, state_codec_version, regfile_shape_hash, created_at, updated_at
-        FROM keiro_snapshots
+        FROM keiro.keiro_snapshots
         WHERE stream_id = $1
           AND state_codec_version = $2
           AND regfile_shape_hash = $3
@@ -113,7 +113,7 @@ writeSnapshotStmt :: Statement (Int64, Int64, Value, Int64, Text) ()
 writeSnapshotStmt =
     preparable
         """
-        INSERT INTO keiro_snapshots
+        INSERT INTO keiro.keiro_snapshots
           (stream_id, stream_version, state, state_codec_version, regfile_shape_hash)
         VALUES
           ($1, $2, $3, $4, $5)

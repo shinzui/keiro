@@ -328,7 +328,7 @@ enqueueOutboxStmt :: Statement EncodedRow ()
 enqueueOutboxStmt =
     preparable
         """
-        INSERT INTO keiro_outbox
+        INSERT INTO keiro.keiro_outbox
           ( outbox_id
           , message_id
           , source
@@ -388,7 +388,7 @@ perKeyPredicates =
         { preFilter =
             """
             ( r.message_key IS NULL OR NOT EXISTS (
-                SELECT 1 FROM keiro_outbox earlier
+                SELECT 1 FROM keiro.keiro_outbox earlier
                 WHERE earlier.source = r.source
                   AND earlier.message_key = r.message_key
                   AND (earlier.created_at, earlier.outbox_id) < (r.created_at, r.outbox_id)
@@ -398,7 +398,7 @@ perKeyPredicates =
         , postFilter =
             """
             ( c.message_key IS NULL OR NOT EXISTS (
-                SELECT 1 FROM keiro_outbox earlier
+                SELECT 1 FROM keiro.keiro_outbox earlier
                 WHERE earlier.source = c.source
                   AND earlier.message_key = c.message_key
                   AND (earlier.created_at, earlier.outbox_id) < (c.created_at, c.outbox_id)
@@ -415,7 +415,7 @@ perSourcePredicates =
         { preFilter =
             """
             NOT EXISTS (
-              SELECT 1 FROM keiro_outbox earlier
+              SELECT 1 FROM keiro.keiro_outbox earlier
               WHERE earlier.source = r.source
                 AND (earlier.created_at, earlier.outbox_id) < (r.created_at, r.outbox_id)
                 AND earlier.status NOT IN ('sent', 'dead')
@@ -424,7 +424,7 @@ perSourcePredicates =
         , postFilter =
             """
             NOT EXISTS (
-              SELECT 1 FROM keiro_outbox earlier
+              SELECT 1 FROM keiro.keiro_outbox earlier
               WHERE earlier.source = c.source
                 AND (earlier.created_at, earlier.outbox_id) < (c.created_at, c.outbox_id)
                 AND earlier.status NOT IN ('sent', 'dead')
@@ -439,7 +439,7 @@ claimSql PolicyPredicates{preFilter, postFilter} =
     """
     WITH candidate AS (
       SELECT r.outbox_id, r.source, r.message_key, r.created_at
-      FROM keiro_outbox r
+      FROM keiro.keiro_outbox r
       WHERE r.status IN ('pending', 'failed')
         AND r.next_attempt_at <= $2
         AND (
@@ -463,7 +463,7 @@ claimSql PolicyPredicates{preFilter, postFilter} =
            )
            ),
            updated AS (
-           UPDATE keiro_outbox kt
+           UPDATE keiro.keiro_outbox kt
            SET status = 'publishing', attempt_count = kt.attempt_count + 1, updated_at = $2
            FROM ready
            WHERE kt.outbox_id = ready.outbox_id
@@ -516,7 +516,7 @@ claimResultDecoder = outboxRowDecoder
 countBacklogStmt :: Statement () Int
 countBacklogStmt =
     preparable
-        "SELECT COUNT(*)::bigint FROM keiro_outbox WHERE status IN ('pending', 'failed')"
+        "SELECT COUNT(*)::bigint FROM keiro.keiro_outbox WHERE status IN ('pending', 'failed')"
         E.noParams
         (fmap fromIntegral (D.singleRow (D.column (D.nonNullable D.int8))))
 
@@ -525,7 +525,7 @@ gcSentStmt =
     preparable
         """
         WITH deleted AS (
-          DELETE FROM keiro_outbox
+          DELETE FROM keiro.keiro_outbox
           WHERE status = 'sent' AND published_at < $1
           RETURNING 1
         )
@@ -537,7 +537,7 @@ gcSentStmt =
 readAttemptCountStmt :: Statement UUID (Maybe Int)
 readAttemptCountStmt =
     preparable
-        "SELECT attempt_count FROM keiro_outbox WHERE outbox_id = $1"
+        "SELECT attempt_count FROM keiro.keiro_outbox WHERE outbox_id = $1"
         (E.param (E.nonNullable E.uuid))
         (D.rowMaybe (fromIntegral <$> D.column (D.nonNullable D.int8)))
 
@@ -545,7 +545,7 @@ deadLetterStuckStmt :: Statement (UTCTime, Int64, UTCTime) Int64
 deadLetterStuckStmt =
     preparable
         """
-        UPDATE keiro_outbox
+        UPDATE keiro.keiro_outbox
         SET status = 'dead',
             last_error = COALESCE(last_error, 'reclaimed: publisher crashed mid-publish'),
             updated_at = $3
@@ -564,7 +564,7 @@ requeueStuckStmt :: Statement (UTCTime, Int64, UTCTime) Int64
 requeueStuckStmt =
     preparable
         """
-        UPDATE keiro_outbox
+        UPDATE keiro.keiro_outbox
         SET status = 'failed',
             updated_at = $3
         WHERE status = 'publishing'
@@ -582,7 +582,7 @@ markSentStmt :: Statement (UUID, UTCTime) Bool
 markSentStmt =
     preparable
         """
-        UPDATE keiro_outbox
+        UPDATE keiro.keiro_outbox
         SET status = 'sent',
             published_at = $2,
             last_error = NULL,
@@ -600,7 +600,7 @@ markSentBatchStmt :: Statement ([UUID], UTCTime) Int64
 markSentBatchStmt =
     preparable
         """
-        UPDATE keiro_outbox
+        UPDATE keiro.keiro_outbox
         SET status = 'sent',
             published_at = $2,
             last_error = NULL,
@@ -618,7 +618,7 @@ markFailedStmt :: Statement (UUID, Text, Text, UTCTime, UTCTime) ()
 markFailedStmt =
     preparable
         """
-        UPDATE keiro_outbox
+        UPDATE keiro.keiro_outbox
         SET status = $2,
             last_error = $3,
             next_attempt_at = $4,
@@ -639,7 +639,7 @@ markSkippedStmt :: Statement (UUID, Text, UTCTime) ()
 markSkippedStmt =
     preparable
         """
-        UPDATE keiro_outbox
+        UPDATE keiro.keiro_outbox
         SET status = 'failed',
             attempt_count = GREATEST(attempt_count - 1, 0),
             last_error = $2,
@@ -679,7 +679,7 @@ selectAllSql =
            tracestate, payload_bytes, attributes, occurred_at, status,
            attempt_count, next_attempt_at, last_error, published_at, created_at,
            updated_at
-    FROM keiro_outbox
+    FROM keiro.keiro_outbox
     """
 
 outboxRowDecoder :: D.Row OutboxRow

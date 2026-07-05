@@ -299,7 +299,7 @@ tryInsertStmt :: Statement EncodedInsert Bool
 tryInsertStmt =
     preparable
         """
-        INSERT INTO keiro_inbox
+        INSERT INTO keiro.keiro_inbox
           ( source
           , dedupe_key
           , message_id
@@ -340,7 +340,7 @@ markCompletedStmt :: Statement (Text, Text, UTCTime) ()
 markCompletedStmt =
     preparable
         """
-        UPDATE keiro_inbox
+        UPDATE keiro.keiro_inbox
         SET status = 'completed',
             completed_at = $3,
             last_error = NULL
@@ -357,7 +357,7 @@ markFailedStmt :: Statement (Text, Text, Text, UTCTime) ()
 markFailedStmt =
     preparable
         """
-        UPDATE keiro_inbox
+        UPDATE keiro.keiro_inbox
         SET status = 'failed',
             failed_at = $4,
             last_error = $3
@@ -375,7 +375,7 @@ recordFailedAttemptStmt :: Statement EncodedFailedInsert Int
 recordFailedAttemptStmt =
     preparable
         """
-        INSERT INTO keiro_inbox
+        INSERT INTO keiro.keiro_inbox
           ( source
           , dedupe_key
           , message_id
@@ -438,7 +438,7 @@ listBySourceStmt =
 countInboxBacklogStmt :: Statement () Int
 countInboxBacklogStmt =
     preparable
-        "SELECT COUNT(*)::bigint FROM keiro_inbox WHERE status IN ('processing', 'failed')"
+        "SELECT COUNT(*)::bigint FROM keiro.keiro_inbox WHERE status IN ('processing', 'failed')"
         E.noParams
         (fmap fromIntegral (D.singleRow (D.column (D.nonNullable D.int8))))
 
@@ -447,7 +447,7 @@ gcStmt =
     preparable
         """
         WITH deleted AS (
-          DELETE FROM keiro_inbox
+          DELETE FROM keiro.keiro_inbox
           WHERE status = 'completed' AND completed_at < $1
           RETURNING 1
         )
@@ -465,7 +465,7 @@ selectAllSql =
            causation_id, correlation_id, traceparent, tracestate, kafka_topic,
            kafka_partition, kafka_offset, payload_bytes, attributes, occurred_at,
            status, attempt_count, received_at, completed_at, failed_at, last_error
-    FROM keiro_inbox
+    FROM keiro.keiro_inbox
     """
 
 inboxRowDecoder :: D.Row InboxRow

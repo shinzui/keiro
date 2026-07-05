@@ -113,7 +113,7 @@ ensureShardRowsStmt :: Statement (Text, Int32) ()
 ensureShardRowsStmt =
     preparable
         """
-        INSERT INTO keiro_subscription_shards (subscription_name, bucket, shard_count)
+        INSERT INTO keiro.keiro_subscription_shards (subscription_name, bucket, shard_count)
         SELECT $1, g, $2
         FROM generate_series(0, $2 - 1) AS g
         ON CONFLICT (subscription_name, bucket) DO NOTHING
@@ -130,14 +130,14 @@ claimShardsStmt =
         """
         WITH claimable AS (
           SELECT bucket
-          FROM keiro_subscription_shards
+          FROM keiro.keiro_subscription_shards
           WHERE subscription_name = $1
             AND (owner_worker_id IS NULL OR lease_expires_at < $2)
           ORDER BY bucket
           LIMIT $5
           FOR UPDATE SKIP LOCKED
         )
-        UPDATE keiro_subscription_shards s
+        UPDATE keiro.keiro_subscription_shards s
         SET owner_worker_id = $4,
             lease_expires_at = $3,
             heartbeat_at = $2,
@@ -159,7 +159,7 @@ renewLeaseStmt :: Statement (Text, UTCTime, UTCTime, UUID) [Int32]
 renewLeaseStmt =
     preparable
         """
-        UPDATE keiro_subscription_shards
+        UPDATE keiro.keiro_subscription_shards
         SET lease_expires_at = $3,
             heartbeat_at = $2,
             updated_at = $2
@@ -179,7 +179,7 @@ releaseShardsStmt :: Statement (Text, UUID, [Int32]) ()
 releaseShardsStmt =
     preparable
         """
-        UPDATE keiro_subscription_shards
+        UPDATE keiro.keiro_subscription_shards
         SET owner_worker_id = NULL,
             lease_expires_at = NULL,
             updated_at = now()
@@ -199,7 +199,7 @@ listShardOwnershipStmt =
     preparable
         """
         SELECT bucket, owner_worker_id, lease_expires_at
-        FROM keiro_subscription_shards
+        FROM keiro.keiro_subscription_shards
         WHERE subscription_name = $1
         ORDER BY bucket
         """
@@ -211,7 +211,7 @@ listShardCountsStmt =
     preparable
         """
         SELECT shard_count, count(*)::int
-        FROM keiro_subscription_shards
+        FROM keiro.keiro_subscription_shards
         WHERE subscription_name = $1
         GROUP BY shard_count
         ORDER BY shard_count
