@@ -107,5 +107,6 @@ runAllKeiroMigrationsNoCheck settings connectTimeout =
 -- 2026-06-15-18-01-33-keiro-workflows-wake-after.sql, and
 -- 2026-07-02-00-15-48-keiro-outbox-claim-order-index.sql, and
 -- 2026-07-02-00-58-54-keiro-inbox-drop-received-idx.sql. (EP-2/M3)
+-- EP-1 (MasterPlan 12): bodies rewritten to create/qualify the keiro schema.
 embeddedMigrationFiles :: [(FilePath, ByteString)]
 embeddedMigrationFiles = $(embedDir "sql-migrations")

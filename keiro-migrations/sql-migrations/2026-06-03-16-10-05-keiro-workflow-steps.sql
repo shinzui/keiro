@@ -8,13 +8,7 @@
 -- finishes (see Keiro.Workflow.Types.completedStepName); its absence is how
 -- findUnfinishedWorkflowIds distinguishes an in-flight workflow from a
 -- completed one.
--- Pin the session search_path so unqualified names resolve into the kiroku
--- schema when this migration is applied incrementally to an existing database
--- (search_path is session-scoped; see
--- docs/plans/46-keiro-framework-migrations-self-set-search-path-for-incremental-upgrades.md).
-SET search_path TO kiroku, pg_catalog;
-
-CREATE TABLE IF NOT EXISTS keiro_workflow_steps (
+CREATE TABLE IF NOT EXISTS keiro.keiro_workflow_steps (
   workflow_id    text        NOT NULL,
   workflow_name  text        NOT NULL,
   step_name      text        NOT NULL,
@@ -24,4 +18,4 @@ CREATE TABLE IF NOT EXISTS keiro_workflow_steps (
 );
 
 CREATE INDEX IF NOT EXISTS keiro_workflow_steps_workflow_idx
-  ON keiro_workflow_steps (workflow_id);
+  ON keiro.keiro_workflow_steps (workflow_id);

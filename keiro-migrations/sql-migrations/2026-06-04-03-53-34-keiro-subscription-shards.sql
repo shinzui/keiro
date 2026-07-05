@@ -13,9 +13,7 @@
 -- (free to claim). The journal/checkpoints stay in kiroku's `subscriptions` table
 -- keyed (subscription_name, consumer_group_member); this table only governs
 -- assignment, never event position.
-SET search_path TO kiroku, pg_catalog;
-
-CREATE TABLE IF NOT EXISTS keiro_subscription_shards (
+CREATE TABLE IF NOT EXISTS keiro.keiro_subscription_shards (
   subscription_name  TEXT        NOT NULL,
   bucket             INT         NOT NULL,        -- kiroku consumer-group member index
   shard_count        INT         NOT NULL,        -- N; fixed per subscription_name
@@ -33,8 +31,8 @@ CREATE TABLE IF NOT EXISTS keiro_subscription_shards (
 -- Fast lookup of an owner's currently-held buckets (renew path) and of
 -- claimable buckets (claim path filters on lease_expires_at).
 CREATE INDEX IF NOT EXISTS keiro_subscription_shards_owner_idx
-  ON keiro_subscription_shards (subscription_name, owner_worker_id);
+  ON keiro.keiro_subscription_shards (subscription_name, owner_worker_id);
 
 -- Find expired/unowned buckets cheaply during a claim sweep.
 CREATE INDEX IF NOT EXISTS keiro_subscription_shards_lease_idx
-  ON keiro_subscription_shards (subscription_name, lease_expires_at);
+  ON keiro.keiro_subscription_shards (subscription_name, lease_expires_at);

@@ -1,6 +1,4 @@
-SET search_path TO kiroku, pg_catalog;
-
-CREATE TABLE IF NOT EXISTS keiro_projection_dedup (
+CREATE TABLE IF NOT EXISTS keiro.keiro_projection_dedup (
   projection_name TEXT        NOT NULL,
   event_id        UUID        NOT NULL,
   applied_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -8,4 +6,4 @@ CREATE TABLE IF NOT EXISTS keiro_projection_dedup (
 );
 
 CREATE INDEX IF NOT EXISTS keiro_projection_dedup_applied_at_idx
-  ON keiro_projection_dedup (applied_at);
+  ON keiro.keiro_projection_dedup (applied_at);

@@ -13,13 +13,7 @@
 -- The journal streams (wf:<name>-<id>) remain the source of truth for replay;
 -- this table is the parent<->child relation plus operator-visible state and
 -- the discovery seed that lets the resume worker drive a zero-step child.
--- Pin the session search_path so unqualified names resolve into the kiroku
--- schema when this migration is applied incrementally to an existing database
--- (search_path is session-scoped; see
--- docs/plans/46-keiro-framework-migrations-self-set-search-path-for-incremental-upgrades.md).
-SET search_path TO kiroku, pg_catalog;
-
-CREATE TABLE IF NOT EXISTS keiro_workflow_children (
+CREATE TABLE IF NOT EXISTS keiro.keiro_workflow_children (
   child_id      TEXT        NOT NULL,
   child_name    TEXT        NOT NULL,
   parent_id     TEXT        NOT NULL,
@@ -37,9 +31,9 @@ CREATE TABLE IF NOT EXISTS keiro_workflow_children (
 
 -- List all children of one parent (operator inspection, awaitChild arm re-assertion).
 CREATE INDEX IF NOT EXISTS keiro_workflow_children_parent_idx
-  ON keiro_workflow_children (parent_id, parent_name);
+  ON keiro.keiro_workflow_children (parent_id, parent_name);
 
 -- Discovery for the resume worker: children still running (zero-step children too).
 CREATE INDEX IF NOT EXISTS keiro_workflow_children_running_idx
-  ON keiro_workflow_children (status)
+  ON keiro.keiro_workflow_children (status)
   WHERE status = 'running';

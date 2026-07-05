@@ -1,10 +1,4 @@
--- Pin the session search_path so unqualified names resolve into the kiroku
--- schema when this migration is applied incrementally to an existing database
--- (search_path is session-scoped; see
--- docs/plans/46-keiro-framework-migrations-self-set-search-path-for-incremental-upgrades.md).
-SET search_path TO kiroku, pg_catalog;
-
-CREATE TABLE IF NOT EXISTS keiro_outbox (
+CREATE TABLE IF NOT EXISTS keiro.keiro_outbox (
   outbox_id UUID PRIMARY KEY,
   message_id TEXT NOT NULL,
   source TEXT NOT NULL,
@@ -38,8 +32,8 @@ CREATE TABLE IF NOT EXISTS keiro_outbox (
 );
 
 CREATE INDEX IF NOT EXISTS keiro_outbox_pending_idx
-  ON keiro_outbox (status, next_attempt_at, created_at);
+  ON keiro.keiro_outbox (status, next_attempt_at, created_at);
 
 CREATE INDEX IF NOT EXISTS keiro_outbox_head_of_line_idx
-  ON keiro_outbox (source, message_key, created_at)
+  ON keiro.keiro_outbox (source, message_key, created_at)
   WHERE status NOT IN ('sent', 'dead') AND message_key IS NOT NULL;

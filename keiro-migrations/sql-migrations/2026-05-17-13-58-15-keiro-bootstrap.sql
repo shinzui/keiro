@@ -2,7 +2,7 @@
 --
 -- Keiro owns the dedicated `keiro` schema. codd applies this file in its own
 -- session, so the schema is created here and every object is written fully
--- qualified as keiro.<name> — no session search_path pin is used anywhere.
+-- qualified as keiro.<name> — no session search-path pin is used anywhere.
 CREATE SCHEMA IF NOT EXISTS keiro;
 
 CREATE TABLE IF NOT EXISTS keiro.keiro_snapshots (
