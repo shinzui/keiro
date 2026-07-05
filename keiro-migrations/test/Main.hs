@@ -36,13 +36,18 @@ main =
                         coddSettings = testCoddSettings connStr "keiro-migrations/expected-schema"
 
                     runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                    assertTablesExist connStr "kiroku" expectedTables
-                    assertTablesAbsent connStr "public" expectedTables
+                    assertTablesExist connStr "kiroku" kirokuTables
+                    assertTablesExist connStr "keiro" keiroTables
+                    assertTablesAbsent connStr "kiroku" keiroTables
+                    assertTablesAbsent connStr "public" keiroTables
+                    assertTablesAbsent connStr "public" kirokuTables
 
                     runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                    assertTablesExist connStr "kiroku" expectedTables
-                    assertTablesAbsent connStr "public" expectedTables
-                    assertColumnExists connStr "kiroku" "keiro_timers" "last_error"
+                    assertTablesExist connStr "kiroku" kirokuTables
+                    assertTablesExist connStr "keiro" keiroTables
+                    assertTablesAbsent connStr "kiroku" keiroTables
+                    assertTablesAbsent connStr "public" keiroTables
+                    assertColumnExists connStr "keiro" "keiro_timers" "last_error"
 
                 case result of
                     Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
@@ -137,18 +142,24 @@ isTimestampShaped s =
     matches 'd' c = isDigit c
     matches _ c = c == '-'
 
-expectedTables :: [Text]
-expectedTables =
+-- | kiroku's own event-store tables, which remain in the kiroku schema.
+kirokuTables :: [Text]
+kirokuTables =
     [ "events"
-    , "keiro_inbox"
+    , "stream_events"
+    , "streams"
+    , "subscriptions"
+    ]
+
+-- | Keiro's framework tables, which now live in the dedicated keiro schema.
+keiroTables :: [Text]
+keiroTables =
+    [ "keiro_inbox"
     , "keiro_outbox"
     , "keiro_read_models"
     , "keiro_snapshots"
     , "keiro_timers"
     , "keiro_workflows"
-    , "stream_events"
-    , "streams"
-    , "subscriptions"
     ]
 
 testCoddSettings :: Text -> FilePath -> CoddSettings

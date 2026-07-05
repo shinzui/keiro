@@ -81,11 +81,15 @@ This section must always reflect the actual current state of the work.
 - [x] M3 (2026-07-05): `keiro-migrate new` template in `keiro-migrations/src/Keiro/Migrations/New.hs`
   emits a qualified, comment-free `keiro.` example; Haddock updated. Smoke test: generated file
   shows `keiro.keiro_example` and no `SET search_path`.
-- [ ] M4: `keiro-migrations/test/Main.hs` table-location assertions flipped to expect
+- [x] M4 (2026-07-05): `keiro-migrations/test/Main.hs` table-location assertions flipped to expect
   `keiro_*` in `keiro` and absent from `kiroku` + `public`; kiroku event tables still in
-  `kiroku`.
-- [ ] M4: Expected-schema snapshot regenerated (`cabal run keiro-write-expected-schema`) so
+  `kiroku`. Split `expectedTables` into `kirokuTables`/`keiroTables`; `assertColumnExists`
+  for `keiro_timers.last_error` now targets `keiro`.
+- [x] M4 (2026-07-05): Expected-schema snapshot regenerated (`cabal run keiro-write-expected-schema`) so
   the strict drift-gate test stays green under the still-`kiroku` scope; suite green.
+  `git status` = 263 deletions, all under `schemas/kiroku/tables/keiro_*`, no new
+  `schemas/keiro/`, kiroku event tables intact. `cabal test keiro-migrations-test`: 4 examples,
+  0 failures (incl. "matches the checked-in expected schema").
 - [ ] M5: Remediation script `keiro-migrations/remediation/2026-07-05-relocate-keiro-tables-to-keiro-schema.sql`
   written (create schema + guarded `ALTER TABLE ... SET SCHEMA` per table).
 - [ ] M5: Remediation verified against a simulated 0.1.0.0 database (tables relocated, second
