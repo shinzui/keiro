@@ -153,7 +153,7 @@ runbook and references EP-1's script.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Rewrite keiro migrations to own a dedicated keiro schema with qualified DDL | docs/plans/85-rewrite-keiro-migrations-to-own-a-dedicated-keiro-schema-with-qualified-ddl.md | None | None | Complete |
 | 2 | Qualify all keiro framework runtime queries with the keiro schema | docs/plans/86-qualify-all-keiro-framework-runtime-queries-with-the-keiro-schema.md | EP-1 | None | Complete |
-| 3 | Scope codd expected-schema to the keiro namespace and remove the role and owner leak | docs/plans/87-scope-codd-expected-schema-to-the-keiro-namespace-and-remove-the-role-and-owner-leak.md | EP-1 | EP-2 | Not Started |
+| 3 | Scope codd expected-schema to the keiro namespace and remove the role and owner leak | docs/plans/87-scope-codd-expected-schema-to-the-keiro-namespace-and-remove-the-role-and-owner-leak.md | EP-1 | EP-2 | Complete |
 | 4 | Add first-class configurable projection and read-model schema support | docs/plans/88-add-first-class-configurable-projection-and-read-model-schema-support.md | EP-1 | EP-2 | Not Started |
 | 5 | Document keiro schema separation and ship the alpha database remediation guide | docs/plans/89-document-keiro-schema-separation-and-ship-the-alpha-database-remediation-guide.md | EP-1 | EP-2, EP-3, EP-4 | Not Started |
 
@@ -294,8 +294,8 @@ will be reconciled against the child plans' Progress sections during implementat
 - [x] EP-1 (2026-07-05): Alpha-database remediation script written and tested (`CREATE SCHEMA` + `ALTER TABLE ... SET SCHEMA`; no ledger rename needed)
 - [x] EP-2 (2026-07-05): Every `keiro_*` runtime query qualified `keiro.<table>`; cross-library reference convention documented (subscriptions stays bare)
 - [x] EP-2 (2026-07-05): Keiro test suites pass against the `keiro`-schema database (279 examples, 0 failures)
-- [ ] EP-3: codd `namespacesToCheck` scoped to `keiro`; authoritative snapshot contains only `keiro_*` objects under `schemas/keiro/`
-- [ ] EP-3: Captured identity made deterministic (pinned `keiro` role/owner, no local OS user); snapshot portable; drift gate passes on a non-`shinzui` machine (with a negative-drift check)
+- [x] EP-3 (2026-07-05): codd `namespacesToCheck` scoped to `keiro`; authoritative snapshot contains only `keiro_*` objects under `schemas/keiro/`
+- [x] EP-3 (2026-07-05): Captured identity made deterministic (pinned `keiro` role/owner, no local OS user); snapshot portable; drift gate passes on a non-`shinzui` machine (`USER=notshinzui`) with a negative-drift check
 - [ ] EP-4: `schema` field added to `ReadModel`; `Keiro.Connection` helper module added and wired (Haskell-level config, no DB column)
 - [ ] EP-4: jitsurei read-model table lives in a user-configured schema, example runs end to end
 - [ ] EP-5: All user docs, README, and CHANGELOG updated for the `keiro` schema
@@ -376,6 +376,16 @@ interactions between child plans. Provide concise evidence.
   EP-2's mechanical qualification idiom (qualify only the relation position; leave
   `<table>.<column>` self-refs, constraint names, and `RENAME TO` targets bare) is the pattern
   EP-4 reuses.
+- 2026-07-05 (EP-3 implementation, complete): The two-step snapshot sequencing worked exactly as
+  designed — EP-1's interim `kiroku`-scoped snapshot kept the gate green, and EP-3 re-scoped to
+  `keiro` and pinned the ephemeral-pg superuser to `keiro`, producing the authoritative portable
+  snapshot. The regenerated tree has `schemas/keiro/` (11 `keiro_*` tables only), `roles/keiro`,
+  and `db-settings owner: keiro`; `grep -R shinzui keiro-migrations/expected-schema` is empty.
+  **For EP-4/EP-5:** the drift gate is now portable and `keiro`-scoped; because EP-4 adds no DB
+  column, no snapshot regeneration is triggered by it. Should any future change persist state in
+  the database, re-run EP-3's Milestone-4 regeneration + Milestone-5 validation. The
+  `keiro-test-support` fixture keeps the default OS user (it never strict-checks); only the write
+  exe and the strict test pin `keiro`.
 
 
 ## Decision Log
