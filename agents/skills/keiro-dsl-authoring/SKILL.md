@@ -38,7 +38,14 @@ edit a `-- @generated` module.
    correctly, not the safe-looking-but-wrong way.
 5. **The harness — not the scaffold — pins behaviour.** Two agents can fill the holes
    differently but correctly and both pass; one wrong guard/mapping/disposition fails a
-   specific named harness test. Run it.
+   specific named harness test. Run it. The harness also proves **replay-safety**: the
+   generated `EventStream` module now emits two bindings — a raw `xEventStreamDef ::
+   XEventStreamDef` and a validated `xEventStream :: XEventStream` (a `ValidatedEventStream`,
+   which the command runners now require) produced by wrapping the def in
+   `mkEventStreamOrThrow`. That wrapper throws at startup unless the transducer is
+   replay-safe, and the generated harness's `validateTransducer defaultValidationOptions … ==
+   []` assertion is exactly what guarantees it won't. Both bindings live in the `-- @generated`
+   module — you never write them; a green harness is what lets them stay green.
 
 ## What to read next
 
