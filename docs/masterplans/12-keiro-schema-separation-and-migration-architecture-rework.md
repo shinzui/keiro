@@ -152,7 +152,7 @@ runbook and references EP-1's script.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Rewrite keiro migrations to own a dedicated keiro schema with qualified DDL | docs/plans/85-rewrite-keiro-migrations-to-own-a-dedicated-keiro-schema-with-qualified-ddl.md | None | None | Complete |
-| 2 | Qualify all keiro framework runtime queries with the keiro schema | docs/plans/86-qualify-all-keiro-framework-runtime-queries-with-the-keiro-schema.md | EP-1 | None | Not Started |
+| 2 | Qualify all keiro framework runtime queries with the keiro schema | docs/plans/86-qualify-all-keiro-framework-runtime-queries-with-the-keiro-schema.md | EP-1 | None | Complete |
 | 3 | Scope codd expected-schema to the keiro namespace and remove the role and owner leak | docs/plans/87-scope-codd-expected-schema-to-the-keiro-namespace-and-remove-the-role-and-owner-leak.md | EP-1 | EP-2 | Not Started |
 | 4 | Add first-class configurable projection and read-model schema support | docs/plans/88-add-first-class-configurable-projection-and-read-model-schema-support.md | EP-1 | EP-2 | Not Started |
 | 5 | Document keiro schema separation and ship the alpha database remediation guide | docs/plans/89-document-keiro-schema-separation-and-ship-the-alpha-database-remediation-guide.md | EP-1 | EP-2, EP-3, EP-4 | Not Started |
@@ -292,8 +292,8 @@ will be reconciled against the child plans' Progress sections during implementat
 - [x] EP-1 (2026-07-05): `keiro-migrate new` scaffolder emits qualified, comment-free templates
 - [x] EP-1 (2026-07-05): Table-location assertions flipped; interim expected-schema snapshot regenerated to keep the strict gate green (`keiro-migrations-test`: 4 examples, 0 failures)
 - [x] EP-1 (2026-07-05): Alpha-database remediation script written and tested (`CREATE SCHEMA` + `ALTER TABLE ... SET SCHEMA`; no ledger rename needed)
-- [ ] EP-2: Every `keiro_*` runtime query qualified `keiro.<table>`; cross-library reference convention documented
-- [ ] EP-2: Keiro test suites pass against the `keiro`-schema database
+- [x] EP-2 (2026-07-05): Every `keiro_*` runtime query qualified `keiro.<table>`; cross-library reference convention documented (subscriptions stays bare)
+- [x] EP-2 (2026-07-05): Keiro test suites pass against the `keiro`-schema database (279 examples, 0 failures)
 - [ ] EP-3: codd `namespacesToCheck` scoped to `keiro`; authoritative snapshot contains only `keiro_*` objects under `schemas/keiro/`
 - [ ] EP-3: Captured identity made deterministic (pinned `keiro` role/owner, no local OS user); snapshot portable; drift gate passes on a non-`shinzui` machine (with a negative-drift check)
 - [ ] EP-4: `schema` field added to `ReadModel`; `Keiro.Connection` helper module added and wired (Haskell-level config, no DB column)
@@ -364,6 +364,18 @@ interactions between child plans. Provide concise evidence.
   left untouched for EP-3. (4) The M1 bootstrap comment's literal `search_path` token was
   reworded to `search-path` to keep the M2 grep gate meaningful — a one-line non-functional
   deviation from the verbatim spec text, recorded in EP-1's Surprises/Decision Log.
+- 2026-07-05 (EP-2 implementation, complete): The qualification pass had to extend beyond the
+  plan's `keiro/src`-only inventory to `keiro/test/Main.hs`, which issues its own direct SQL
+  against the framework tables (26 DML refs + 5 DDL fault-injection refs). Missing them first
+  produced `279 examples, 38 failures`; qualifying the test DML → 3 failures; qualifying the
+  test's `ALTER TABLE`/`TRUNCATE` DDL → 0 failures. **Relevance to EP-4/EP-5:** the full
+  relation-introducing keyword set is `INSERT INTO | UPDATE | DELETE FROM | FROM | JOIN | ALTER
+  TABLE | TRUNCATE`, and any test or example that touches keiro tables directly must qualify
+  them too. The cross-library convention is confirmed working end to end: `FROM subscriptions`
+  (kiroku-owned) resolves bare via the store pool's `search_path = kiroku`; EP-4 must follow it.
+  EP-2's mechanical qualification idiom (qualify only the relation position; leave
+  `<table>.<column>` self-refs, constraint names, and `RENAME TO` targets bare) is the pattern
+  EP-4 reuses.
 
 
 ## Decision Log
