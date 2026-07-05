@@ -10,12 +10,12 @@ packages:
 source-repository-package
   type: git
   location: https://github.com/shinzui/keiki.git
-  tag: 344c4cadd55e0b997cc2c6ce0ab687851d66fa31
+  tag: bc987f46393b604c335f034385b4c3c1ad118074
 
 source-repository-package
   type: git
   location: https://github.com/shinzui/keiki.git
-  tag: 344c4cadd55e0b997cc2c6ce0ab687851d66fa31
+  tag: bc987f46393b604c335f034385b4c3c1ad118074
   subdir: keiki-codec-json
 
 source-repository-package

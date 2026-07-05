@@ -94,7 +94,7 @@ library
   build-depends:
     , aeson                                  >=2.2
     , aeson-casing                           >=0.2
-    , base                                   >=4.21 && <5
+    , base                                   >=4.21    && <5
     , bytestring                             >=0.11
     , containers                             >=0.6
     , contravariant-extras                   >=0.3
@@ -104,9 +104,9 @@ library
     , hasql                                  >=1.10
     , hasql-pool                             >=1.2
     , hasql-transaction                      >=1.1
-    , hs-opentelemetry-api                   >=1.0  && <1.1
-    , hs-opentelemetry-propagator-w3c        >=1.0  && <1.1
-    , hs-opentelemetry-semantic-conventions  >=1.40 && <2
+    , hs-opentelemetry-api                   >=1.0     && <1.1
+    , hs-opentelemetry-propagator-w3c        >=1.0     && <1.1
+    , hs-opentelemetry-semantic-conventions  >=1.40    && <2
     , keiki                                  >=0.1
     , keiki-codec-json                       >=0.1
     , keiro-core
@@ -114,7 +114,7 @@ library
     , lens                                   >=5.2
     , mmzk-typeid                            >=0.7
     , scientific                             >=0.3
-    , shibuya-core                           >=0.5
+    , shibuya-core                           >=0.8.0.1 && <0.9
     , stm                                    >=2.5
     , streamly                               >=0.11
     , streamly-core                          >=0.3
@@ -132,7 +132,7 @@ test-suite keiro-test
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson                                  >=2.2
-    , base                                   >=4.21 && <5
+    , base                                   >=4.21    && <5
     , bytestring                             >=0.11
     , containers                             >=0.6
     , contravariant-extras                   >=0.3
@@ -141,11 +141,11 @@ test-suite keiro-test
     , hasql                                  >=1.10
     , hasql-pool                             >=1.2
     , hasql-transaction                      >=1.1
-    , hs-opentelemetry-api                   >=1.0  && <1.1
-    , hs-opentelemetry-exporter-in-memory    >=1.0  && <1.1
-    , hs-opentelemetry-propagator-w3c        >=1.0  && <1.1
-    , hs-opentelemetry-sdk                   >=1.0  && <1.1
-    , hs-opentelemetry-semantic-conventions  >=1.40 && <2
+    , hs-opentelemetry-api                   >=1.0     && <1.1
+    , hs-opentelemetry-exporter-in-memory    >=1.0     && <1.1
+    , hs-opentelemetry-propagator-w3c        >=1.0     && <1.1
+    , hs-opentelemetry-sdk                   >=1.0     && <1.1
+    , hs-opentelemetry-semantic-conventions  >=1.40    && <2
     , hspec                                  >=2.11
     , keiki
     , keiki-codec-json
@@ -153,7 +153,7 @@ test-suite keiro-test
     , keiro-test-support
     , kiroku-store
     , process                                >=1.6
-    , shibuya-core                           >=0.5
+    , shibuya-core                           >=0.8.0.1 && <0.9
     , streamly-core                          >=0.3
     , text                                   >=2.1
     , time                                   >=1.12

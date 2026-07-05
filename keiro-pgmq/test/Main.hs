@@ -34,6 +34,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, liftIO, (:>))
 import Effectful.Error.Static (Error)
+import Effectful.Reader.Static (Reader)
 import GHC.Generics (Generic)
 import Hasql.Connection.Settings qualified as Conn
 import Hasql.Decoders qualified as Decoders
@@ -57,6 +58,7 @@ import Pgmq.Effectful (Message (..), MessageBody (..), Pgmq, QueueMetrics (..), 
 import Pgmq.Effectful qualified as Pgmq
 import Pgmq.Migration qualified as Migration
 import Pgmq.Types (QueueName, parseQueueName, queueNameToText)
+import Shibuya.Adapter.Pgmq (PgmqAdapterEnv)
 import Shibuya.App (AppHandle, ShutdownConfig (..), SupervisionStrategy (IgnoreFailures), stopAppGracefully)
 import Shibuya.Telemetry.Effect (Tracing)
 import System.Timeout (timeout)
@@ -71,7 +73,7 @@ data Ping = Ping
     deriving anyclass (ToJSON, FromJSON)
 
 -- | The effect stack 'runJobEff' interprets.
-type Stack = '[Pgmq, Tracing, Error PgmqRuntimeError, IOE]
+type Stack = '[Reader PgmqAdapterEnv, Pgmq, Tracing, Error PgmqRuntimeError, IOE]
 
 main :: IO ()
 main =

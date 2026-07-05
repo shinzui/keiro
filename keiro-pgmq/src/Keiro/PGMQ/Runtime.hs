@@ -35,6 +35,7 @@ import "base" Data.Word (Word64)
 import "base" Numeric (showHex)
 import "effectful-core" Effectful (Eff, IOE, runEff)
 import "effectful-core" Effectful.Error.Static (Error, runErrorNoCallStack)
+import "effectful-core" Effectful.Reader.Static (Reader, runReader)
 import "hasql" Hasql.Connection.Settings qualified as Conn
 import "hasql-pool" Hasql.Pool (Pool)
 import "hasql-pool" Hasql.Pool qualified as Pool
@@ -43,6 +44,7 @@ import "pgmq-core" Pgmq.Types (QueueName)
 import "pgmq-core" Pgmq.Types qualified as Pgmq
 import "pgmq-effectful" Pgmq.Effectful (Pgmq, PgmqRuntimeError, runPgmq, runPgmqTraced)
 import "shibuya-core" Shibuya.Telemetry.Effect (Tracer, Tracing, runTracing, runTracingNoop)
+import "shibuya-pgmq-adapter" Shibuya.Adapter.Pgmq (PgmqAdapterEnv, mkPgmqAdapterEnv)
 import "text" Data.Text (Text)
 import "text" Data.Text qualified as Text
 
@@ -201,24 +203,30 @@ withJobRuntime connStr tracer action =
                 [ Pool.Config.staticConnectionSettings (Conn.connectionString connStr)
                 ]
 
-{- | Run a @Pgmq : Tracing : Error PgmqRuntimeError : IOE@ effect action against
-the runtime, surfacing PGMQ errors as a @Left@. The tracer (if any) is threaded
-into both the shibuya 'Tracing' effect and the @pgmq@ interpreter:
+{- | Run a @Reader PgmqAdapterEnv : Pgmq : Tracing : Error PgmqRuntimeError : IOE@
+effect action against the runtime, surfacing PGMQ errors as a @Left@. The
+'Reader' supplies the 'PgmqAdapterEnv' (built from the pool) that the
+shibuya-pgmq adapter needs for its transactional ack/dead-letter path, so job
+processors can construct their adapter without the pool being threaded by hand.
+The tracer (if any) is threaded into both the shibuya 'Tracing' effect and the
+@pgmq@ interpreter:
 
   * @Nothing@ → 'runTracingNoop' + 'runPgmq'
   * @Just tr@ → 'runTracing' + 'runPgmqTraced'
 
 The interpreter order matters: @runPgmq@/@runPgmqTraced@ require
-@Error PgmqRuntimeError :> es@ and @IOE :> es@, so we peel @Pgmq@ first, then
-@Tracing@, then @Error@, then @IOE@.
+@Error PgmqRuntimeError :> es@ and @IOE :> es@, so we peel @Reader@ first (it is
+pure), then @Pgmq@, then @Tracing@, then @Error@, then @IOE@.
 -}
 runJobEff ::
     JobRuntime ->
-    Eff '[Pgmq, Tracing, Error PgmqRuntimeError, IOE] a ->
+    Eff '[Reader PgmqAdapterEnv, Pgmq, Tracing, Error PgmqRuntimeError, IOE] a ->
     IO (Either PgmqRuntimeError a)
 runJobEff rt act =
     runEff $
         runErrorNoCallStack @PgmqRuntimeError $
             case rt.runtimeTracer of
-                Nothing -> runTracingNoop (runPgmq rt.runtimePool act)
-                Just tr -> runTracing tr (runPgmqTraced rt.runtimePool tr act)
+                Nothing -> runTracingNoop (runPgmq rt.runtimePool (runReader env act))
+                Just tr -> runTracing tr (runPgmqTraced rt.runtimePool tr (runReader env act))
+  where
+    env = mkPgmqAdapterEnv rt.runtimePool

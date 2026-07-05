@@ -102,12 +102,13 @@ module Keiro.PGMQ.Job (
 import Keiro.PGMQ.Codec (JobCodec, JobDecodeError (..), decodeJob, encodeJob)
 import Keiro.PGMQ.Runtime (QueueRef (..))
 import "aeson" Data.Aeson (Value, object, (.=))
-import "base" Control.Exception (SomeException)
+import "base" Control.Exception (Exception, SomeException, throwIO)
 import "base" Control.Monad (foldM, void)
 import "base" Data.Int (Int32, Int64)
 import "effectful-core" Effectful (Eff, IOE, liftIO, (:>))
 import "effectful-core" Effectful.Error.Static (Error)
 import "effectful-core" Effectful.Exception qualified as EffException
+import "effectful-core" Effectful.Reader.Static (Reader, ask)
 import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal (getContext)
 import "hs-opentelemetry-api" OpenTelemetry.Trace.Core (TracerProvider)
 import "pgmq-config" Pgmq.Config.Effectful (ensureQueuesEff)
@@ -133,6 +134,7 @@ import "pgmq-effectful" Pgmq.Effectful qualified as Pgmq
 import "pgmq-effectful" Pgmq.Effectful.Effect (readGrouped, readGroupedRoundRobin)
 import "pgmq-hasql" Pgmq.Hasql.Statements.Types (ReadGrouped (..))
 import "shibuya-core" Shibuya.App (
+    AppConfig (..),
     AppError,
     AppHandle,
     ProcessorId (..),
@@ -142,7 +144,7 @@ import "shibuya-core" Shibuya.App (
     runApp,
  )
 import "shibuya-core" Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), RetryDelay (..))
-import "shibuya-core" Shibuya.Core.Ingested (Ingested (..))
+import "shibuya-core" Shibuya.Core.Ingested qualified as Shibuya
 import "shibuya-core" Shibuya.Core.Lease (Lease (..))
 import "shibuya-core" Shibuya.Core.Types (Attempt (..), Envelope (..))
 import "shibuya-core" Shibuya.Telemetry.Effect (Tracing)
@@ -150,6 +152,8 @@ import "shibuya-pgmq-adapter" Shibuya.Adapter.Pgmq (
     FifoConfig (..),
     FifoReadStrategy (..),
     PgmqAdapterConfig (..),
+    PgmqAdapterEnv,
+    PgmqConfigError,
     PollingConfig (..),
     defaultConfig,
     directDeadLetter,
@@ -620,6 +624,15 @@ ensureOrderedJobQueue job = do
     ensureJobQueue job
     ensureFifoIndex job
 
+{- | The PGMQ adapter rejected the config derived from a job's tuning. Job tuning
+is validated at construction ('mkJobTuning') and 'adapterConfigFor' derives the
+adapter config deterministically, so this indicates an internal inconsistency
+rather than a recoverable condition; it is surfaced as an exception.
+-}
+newtype JobAdapterConfigInvalid = JobAdapterConfigInvalid PgmqConfigError
+    deriving stock (Show)
+    deriving anyclass (Exception)
+
 {- | Build the shibuya PGMQ adapter config from a job's queue and policy: route
 to the DLQ via the adapter's @directDeadLetter@ path when the policy enables it.
 -}
@@ -644,7 +657,7 @@ shibuya 'AckDecision'. A payload the codec rejects is dead-lettered.
 wrapHandler ::
     Job p ->
     (JobContext es -> p -> Eff es JobOutcome) ->
-    (Ingested es Value -> Eff es AckDecision)
+    (Shibuya.Message es Value -> Eff es AckDecision)
 wrapHandler job handle ingested =
     case decodeJob job.jobCodec ingested.envelope.payload of
         Left (JobPayloadFromFuture _payloadVersion _workerVersion) ->
@@ -673,13 +686,21 @@ crash, redelivery happens when the visibility timeout expires; the 'RetryPolicy'
 delay only governs explicit 'Retry' and 'RetryDefault' outcomes.
 -}
 jobProcessorWithContext ::
-    (Pgmq :> es, Error PgmqRuntimeError :> es, IOE :> es, Tracing :> es) =>
+    ( Pgmq :> es
+    , Error PgmqRuntimeError :> es
+    , Reader PgmqAdapterEnv :> es
+    , IOE :> es
+    , Tracing :> es
+    ) =>
     JobTuning ->
     Job p ->
     (JobContext es -> p -> Eff es JobOutcome) ->
     Eff es (ProcessorId, QueueProcessor es)
 jobProcessorWithContext tuning job handle = do
-    adapter <- pgmqAdapter (adapterConfigFor tuning job)
+    env <- ask
+    adapter <-
+        pgmqAdapter env (adapterConfigFor tuning job)
+            >>= either (liftIO . throwIO . JobAdapterConfigInvalid) pure
     pure (ProcessorId job.jobName, mkProcessor adapter (wrapHandler job handle))
 
 {- | Build a shibuya processor for a job using 'defaultJobTuning': a PGMQ adapter
@@ -688,7 +709,12 @@ result to 'runJobWorkers'. The same visibility-timeout and crash-redelivery
 rules documented on 'jobProcessorWithContext' apply here.
 -}
 jobProcessor ::
-    (Pgmq :> es, Error PgmqRuntimeError :> es, IOE :> es, Tracing :> es) =>
+    ( Pgmq :> es
+    , Error PgmqRuntimeError :> es
+    , Reader PgmqAdapterEnv :> es
+    , IOE :> es
+    , Tracing :> es
+    ) =>
     Job p ->
     (p -> Eff es JobOutcome) ->
     Eff es (ProcessorId, QueueProcessor es)
@@ -700,14 +726,14 @@ over several processors built with 'jobProcessor'. Returns the app handle; the
 caller decides whether to block on it. The inbox size is clamped to at least 1.
 -}
 runJobWorkers ::
-    (Pgmq :> es, IOE :> es, Tracing :> es) =>
+    (Pgmq :> es, Reader PgmqAdapterEnv :> es, IOE :> es, Tracing :> es) =>
     SupervisionStrategy ->
     Int ->
     [Eff es (ProcessorId, QueueProcessor es)] ->
     Eff es (Either AppError (AppHandle es))
 runJobWorkers strategy inboxSize procs = do
     ps <- sequence procs
-    runApp strategy (max 1 inboxSize) ps
+    runApp AppConfig{strategy = strategy, inboxSize = max 1 inboxSize} ps
 
 {- | One-shot drain of up to @n@ messages with explicit tuning and a
 context-aware handler. This reads directly from PGMQ and returns when the queue

@@ -86,13 +86,13 @@ executable jitsurei-demo
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson              >=2.2
-    , base               >=4.21 && <5
+    , base               >=4.21    && <5
     , hasql              >=1.10
     , hasql-transaction  >=1.1
     , jitsurei
     , keiro
     , kiroku-store
-    , shibuya-core
+    , shibuya-core       >=0.8.0.1 && <0.9
     , streamly
     , streamly-core
     , text               >=2.1
