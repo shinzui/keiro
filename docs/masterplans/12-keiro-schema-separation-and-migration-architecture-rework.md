@@ -155,7 +155,7 @@ runbook and references EP-1's script.
 | 2 | Qualify all keiro framework runtime queries with the keiro schema | docs/plans/86-qualify-all-keiro-framework-runtime-queries-with-the-keiro-schema.md | EP-1 | None | Complete |
 | 3 | Scope codd expected-schema to the keiro namespace and remove the role and owner leak | docs/plans/87-scope-codd-expected-schema-to-the-keiro-namespace-and-remove-the-role-and-owner-leak.md | EP-1 | EP-2 | Complete |
 | 4 | Add first-class configurable projection and read-model schema support | docs/plans/88-add-first-class-configurable-projection-and-read-model-schema-support.md | EP-1 | EP-2 | Complete |
-| 5 | Document keiro schema separation and ship the alpha database remediation guide | docs/plans/89-document-keiro-schema-separation-and-ship-the-alpha-database-remediation-guide.md | EP-1 | EP-2, EP-3, EP-4 | Not Started |
+| 5 | Document keiro schema separation and ship the alpha database remediation guide | docs/plans/89-document-keiro-schema-separation-and-ship-the-alpha-database-remediation-guide.md | EP-1 | EP-2, EP-3, EP-4 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -298,8 +298,8 @@ will be reconciled against the child plans' Progress sections during implementat
 - [x] EP-3 (2026-07-05): Captured identity made deterministic (pinned `keiro` role/owner, no local OS user); snapshot portable; drift gate passes on a non-`shinzui` machine (`USER=notshinzui`) with a negative-drift check
 - [x] EP-4 (2026-07-05): `schema` field added to `ReadModel`; `Keiro.Connection` helper module added and wired (Haskell-level config, no DB column; `keiro-migrations-test` unchanged, snapshot clean)
 - [x] EP-4 (2026-07-05): jitsurei read-model table lives in a user-configured `jitsurei` schema, example runs end to end (`jitsurei-test` 16/16); keiro-test proves placement + separation from `keiro` metadata
-- [ ] EP-5: All user docs, README, and CHANGELOG updated for the `keiro` schema
-- [ ] EP-5: Alpha-to-new upgrade runbook published and validated against a 0.1.0.0-seeded database
+- [x] EP-5 (2026-07-05): All user docs, README, and CHANGELOG updated for the `keiro` schema (`CODD_SCHEMAS=keiro`, configurable projection schema documented, breaking-change entry + `0.2.0.0` recommendation)
+- [x] EP-5 (2026-07-05): Alpha-to-new upgrade runbook published (`docs/user/upgrading-to-the-keiro-schema.md`), wrapping EP-1's remediation script (which EP-1 already validated against a 0.1.0.0-seeded database); no ledger realignment (filenames unchanged)
 
 
 ## Surprises & Discoveries
@@ -481,4 +481,50 @@ plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision.
 
-(To be filled during and after implementation.)
+**Completion (2026-07-05).** All five ExecPlans landed; the initiative matches the Vision &
+Scope. Keiro now owns a dedicated `keiro` PostgreSQL schema, distinct from kiroku's `kiroku`:
+
+- **EP-1** rewrote the bootstrap to `CREATE SCHEMA IF NOT EXISTS keiro` and every migration to
+  qualified `keiro.<table>` DDL with no `SET search_path`; added `Keiro.Schema.keiroSchema` in
+  `keiro-core`; taught `keiro-migrate new` to emit a qualified, comment-free template; and
+  shipped a tested, idempotent remediation script (`keiro-migrations/remediation/…`) verified on
+  a real throwaway PostgreSQL 18 cluster.
+- **EP-2** qualified every framework runtime query `keiro.<table>` across 12 modules; the full
+  `keiro-test` suite (279 examples) passes and reverting one query to bare fails with
+  `relation "…" does not exist`, proving `search_path`-independence.
+- **EP-3** rescoped codd's `namespacesToCheck` to `keiro` and pinned the ephemeral-pg superuser
+  to a deterministic `keiro` identity, making the snapshot portable — `grep -R shinzui
+  keiro-migrations/expected-schema` is empty and `keiro-migrations-test` passes under
+  `USER=notshinzui`, with a negative-drift check confirming the gate is still meaningful.
+- **EP-4** added the first-class configurable projection schema (`ReadModel.schema` +
+  `Keiro.Connection` helpers, Haskell-level config with no DB column); the jitsurei example
+  places `jitsurei.jitsurei_order_summary` in a user-chosen schema and a keiro-test proves an
+  arbitrary schema holds the app table while `keiro_read_models` stays in `keiro`.
+- **EP-5** rewrote all user docs/README/CHANGELOG and published the alpha upgrade runbook.
+
+**How to see it working (from the Vision):** `cabal run keiro-write-expected-schema` +
+`git status` shows the snapshot under `schemas/keiro/` with `roles/keiro` and `owner: keiro` and
+no `shinzui`; `keiro-migrations-test` passes on a non-`shinzui` identity; a fresh migrated
+database has every `keiro_*` table in `keiro` and none in `kiroku`/`public`; jitsurei runs end
+to end with its read-model table in `jitsurei`; and the remediation moves a 0.1.0.0 database's
+tables leaving a subsequent `keiro-migrate` a no-op. All verified.
+
+**Cross-plan lessons / gaps.**
+- The clean-rewrite kept every migration filename, so codd (which keys applied status by
+  filename with no body checksum) re-runs nothing and the remediation needs **no** ledger
+  realignment — only table relocation. This simplified EP-1's remediation and corrected EP-5's
+  authoring assumption about a ledger step.
+- The qualification pass had to reach **beyond each plan's stated file scope**: EP-2 also had to
+  qualify `keiro/test/Main.hs` (26 DML + 5 `ALTER TABLE`/`TRUNCATE` DDL sites), and EP-4 had to
+  qualify bare `keiro_snapshots`/`keiro_timers` inspection queries in the jitsurei app/test that
+  EP-1 relocated and EP-2's package scope didn't cover. Lesson: a "move tables to a new schema"
+  initiative must sweep **every** module that issues SQL against those tables — tests, examples,
+  and app inspection helpers included — using the full relation-introducing keyword set
+  (`INSERT INTO | UPDATE | DELETE FROM | FROM | JOIN | ALTER TABLE | TRUNCATE`), while leaving
+  `ON CONFLICT` `<table>.<column>` self-references, constraint names, and `RENAME TO` targets
+  bare.
+- The two-step snapshot sequencing (EP-1 interim `kiroku`-scoped → EP-3 authoritative
+  `keiro`-scoped) kept the strict drift gate green throughout, exactly as designed.
+- No gaps block the initiative. A deliberate, documented residual: two secondary jitsurei read
+  models remain unqualified in `kiroku` (scope-limited to the order-summary worked example); a
+  future change can migrate them with the same idiom if desired.
