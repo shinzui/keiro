@@ -78,8 +78,9 @@ This section must always reflect the actual current state of the work.
   `CREATE SCHEMA` (bootstrap, `keiro`).
 - [x] M2 (2026-07-05): Embed-comment in `keiro-migrations/src/Keiro/Migrations.hs` touched to force a
   Template Haskell recompile of the rewritten bodies.
-- [ ] M3: `keiro-migrate new` template in `keiro-migrations/src/Keiro/Migrations/New.hs`
-  emits a qualified, comment-free `keiro.` example; Haddock updated.
+- [x] M3 (2026-07-05): `keiro-migrate new` template in `keiro-migrations/src/Keiro/Migrations/New.hs`
+  emits a qualified, comment-free `keiro.` example; Haddock updated. Smoke test: generated file
+  shows `keiro.keiro_example` and no `SET search_path`.
 - [ ] M4: `keiro-migrations/test/Main.hs` table-location assertions flipped to expect
   `keiro_*` in `keiro` and absent from `kiroku` + `public`; kiroku event tables still in
   `kiroku`.
