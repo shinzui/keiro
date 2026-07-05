@@ -154,7 +154,7 @@ runbook and references EP-1's script.
 | 1 | Rewrite keiro migrations to own a dedicated keiro schema with qualified DDL | docs/plans/85-rewrite-keiro-migrations-to-own-a-dedicated-keiro-schema-with-qualified-ddl.md | None | None | Complete |
 | 2 | Qualify all keiro framework runtime queries with the keiro schema | docs/plans/86-qualify-all-keiro-framework-runtime-queries-with-the-keiro-schema.md | EP-1 | None | Complete |
 | 3 | Scope codd expected-schema to the keiro namespace and remove the role and owner leak | docs/plans/87-scope-codd-expected-schema-to-the-keiro-namespace-and-remove-the-role-and-owner-leak.md | EP-1 | EP-2 | Complete |
-| 4 | Add first-class configurable projection and read-model schema support | docs/plans/88-add-first-class-configurable-projection-and-read-model-schema-support.md | EP-1 | EP-2 | Not Started |
+| 4 | Add first-class configurable projection and read-model schema support | docs/plans/88-add-first-class-configurable-projection-and-read-model-schema-support.md | EP-1 | EP-2 | Complete |
 | 5 | Document keiro schema separation and ship the alpha database remediation guide | docs/plans/89-document-keiro-schema-separation-and-ship-the-alpha-database-remediation-guide.md | EP-1 | EP-2, EP-3, EP-4 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -296,8 +296,8 @@ will be reconciled against the child plans' Progress sections during implementat
 - [x] EP-2 (2026-07-05): Keiro test suites pass against the `keiro`-schema database (279 examples, 0 failures)
 - [x] EP-3 (2026-07-05): codd `namespacesToCheck` scoped to `keiro`; authoritative snapshot contains only `keiro_*` objects under `schemas/keiro/`
 - [x] EP-3 (2026-07-05): Captured identity made deterministic (pinned `keiro` role/owner, no local OS user); snapshot portable; drift gate passes on a non-`shinzui` machine (`USER=notshinzui`) with a negative-drift check
-- [ ] EP-4: `schema` field added to `ReadModel`; `Keiro.Connection` helper module added and wired (Haskell-level config, no DB column)
-- [ ] EP-4: jitsurei read-model table lives in a user-configured schema, example runs end to end
+- [x] EP-4 (2026-07-05): `schema` field added to `ReadModel`; `Keiro.Connection` helper module added and wired (Haskell-level config, no DB column; `keiro-migrations-test` unchanged, snapshot clean)
+- [x] EP-4 (2026-07-05): jitsurei read-model table lives in a user-configured `jitsurei` schema, example runs end to end (`jitsurei-test` 16/16); keiro-test proves placement + separation from `keiro` metadata
 - [ ] EP-5: All user docs, README, and CHANGELOG updated for the `keiro` schema
 - [ ] EP-5: Alpha-to-new upgrade runbook published and validated against a 0.1.0.0-seeded database
 
@@ -386,6 +386,20 @@ interactions between child plans. Provide concise evidence.
   the database, re-run EP-3's Milestone-4 regeneration + Milestone-5 validation. The
   `keiro-test-support` fixture keeps the default OS user (it never strict-checks); only the write
   exe and the strict test pin `keiro`.
+- 2026-07-05 (EP-4 implementation, complete): Delivered the configurable projection schema as
+  Haskell-level config only — a `ReadModel.schema` field plus a new `Keiro.Connection` helper
+  module (`qualifyTable`, `quoteIdentifier`, `withProjectionSchema`, `keiroConnectionSettings`,
+  `ensureProjectionSchema`), `qualifiedTableName` on `ReadModel`, and `withFreshStoreWith` in
+  `keiro-test-support`. **No migration and no expected-schema regeneration** were triggered
+  (confirmed: `keiro-migrations/expected-schema` is git-clean, `keiro-migrations-test` still
+  passes), exactly as the Integration Points anticipated. Two discoveries worth flagging for
+  EP-5: (1) the jitsurei example (both app and test) had **bare** `keiro_snapshots`/`keiro_timers`
+  inspection queries that EP-1 broke and EP-2 didn't cover (it scoped to the `keiro` package);
+  EP-4 qualified them `keiro.<table>`. Any EP-5 doc/example touching Keiro framework tables must
+  qualify them. (2) Only `jitsurei_order_summary` was migrated to the `jitsurei` schema (matching
+  the vision's explicit callout); the two other jitsurei read models stay unqualified in `kiroku`
+  by a recorded scope decision. **Stable public names for EP-5 to document:** `Keiro.Connection`'s
+  five helpers, `ReadModel.schema`/`qualifiedTableName`, and `withFreshStoreWith`.
 
 
 ## Decision Log
