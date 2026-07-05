@@ -10,6 +10,11 @@ database. There is no separate workflow server, no second replicated log, and no
 parallel storage path for "workflow state" versus "domain events": everything is
 journaled into one kiroku event log.
 
+> [!WARNING]
+> **keiro is under active development.** It is already used in production, but
+> the public API is not yet stable and may change in breaking ways between
+> releases.
+
 **経路** (*keiro*) means *route* or *path* — the way something travels from an
 origin to a destination. The name is literal: an event stream is the route an
 aggregate's history has taken, a subscription follows the route through the
