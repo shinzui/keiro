@@ -151,7 +151,7 @@ runbook and references EP-1's script.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Rewrite keiro migrations to own a dedicated keiro schema with qualified DDL | docs/plans/85-rewrite-keiro-migrations-to-own-a-dedicated-keiro-schema-with-qualified-ddl.md | None | None | In Progress |
+| 1 | Rewrite keiro migrations to own a dedicated keiro schema with qualified DDL | docs/plans/85-rewrite-keiro-migrations-to-own-a-dedicated-keiro-schema-with-qualified-ddl.md | None | None | Complete |
 | 2 | Qualify all keiro framework runtime queries with the keiro schema | docs/plans/86-qualify-all-keiro-framework-runtime-queries-with-the-keiro-schema.md | EP-1 | None | Not Started |
 | 3 | Scope codd expected-schema to the keiro namespace and remove the role and owner leak | docs/plans/87-scope-codd-expected-schema-to-the-keiro-namespace-and-remove-the-role-and-owner-leak.md | EP-1 | EP-2 | Not Started |
 | 4 | Add first-class configurable projection and read-model schema support | docs/plans/88-add-first-class-configurable-projection-and-read-model-schema-support.md | EP-1 | EP-2 | Not Started |
@@ -286,12 +286,12 @@ and the milestone. This section is populated with each child plan's actual miles
 they are authored and refined; the entries below are the initial expected milestones and
 will be reconciled against the child plans' Progress sections during implementation.
 
-- [ ] EP-1: `keiroSchema` constant added to a new `Keiro.Schema` module in `keiro-core`
-- [ ] EP-1: New `keiro` schema created and owned by a rewritten bootstrap migration
-- [ ] EP-1: All framework migrations rewritten to qualified `keiro.<table>` DDL, no `SET search_path`
-- [ ] EP-1: `keiro-migrate new` scaffolder emits qualified, comment-free templates
-- [ ] EP-1: Table-location assertions flipped; interim expected-schema snapshot regenerated to keep the strict gate green
-- [ ] EP-1: Alpha-database remediation script written and tested (`CREATE SCHEMA` + `ALTER TABLE ... SET SCHEMA`; no ledger rename needed)
+- [x] EP-1 (2026-07-05): `keiroSchema` constant added to a new `Keiro.Schema` module in `keiro-core`
+- [x] EP-1 (2026-07-05): New `keiro` schema created and owned by a rewritten bootstrap migration
+- [x] EP-1 (2026-07-05): All framework migrations rewritten to qualified `keiro.<table>` DDL, no `SET search_path`
+- [x] EP-1 (2026-07-05): `keiro-migrate new` scaffolder emits qualified, comment-free templates
+- [x] EP-1 (2026-07-05): Table-location assertions flipped; interim expected-schema snapshot regenerated to keep the strict gate green (`keiro-migrations-test`: 4 examples, 0 failures)
+- [x] EP-1 (2026-07-05): Alpha-database remediation script written and tested (`CREATE SCHEMA` + `ALTER TABLE ... SET SCHEMA`; no ledger rename needed)
 - [ ] EP-2: Every `keiro_*` runtime query qualified `keiro.<table>`; cross-library reference convention documented
 - [ ] EP-2: Keiro test suites pass against the `keiro`-schema database
 - [ ] EP-3: codd `namespacesToCheck` scoped to `keiro`; authoritative snapshot contains only `keiro_*` objects under `schemas/keiro/`
@@ -351,6 +351,19 @@ interactions between child plans. Provide concise evidence.
   feature is Haskell-level config with **no database column**, so it needs no migration and
   no expected-schema regeneration. A new `Keiro.Connection` helper module carries the
   qualification/`extraSearchPath` wiring.
+- 2026-07-05 (EP-1 implementation, complete): EP-1 landed all five milestones. Confirmations
+  for downstream plans: (1) `Keiro.Schema.keiroSchema :: Text = "keiro"` is exported from
+  `keiro-core` and available for EP-2/EP-4 to import (no new dependency edge — the `keiro`
+  runtime package already depends on `keiro-core`). (2) The interim expected-schema snapshot is
+  regenerated and **still scoped to `kiroku`**; the regeneration was purely 263 deletions of
+  `keiro_*` entries under `schemas/kiroku/tables/`, with kiroku's event tables (incl.
+  `dead_letters`) intact and **no** `schemas/keiro/` directory yet — that is EP-3's to add. The
+  `roles/shinzui` + `owner: shinzui` portability leak is **still present** as expected, for EP-3
+  to fix. (3) `keiro-migrations/test/Main.hs` now exposes `kirokuTables`/`keiroTables` and the
+  `assertColumnExists` for `keiro_timers.last_error` targets `keiro`; `testCoddSettings` was
+  left untouched for EP-3. (4) The M1 bootstrap comment's literal `search_path` token was
+  reworded to `search-path` to keep the M2 grep gate meaningful — a one-line non-functional
+  deviation from the verbatim spec text, recorded in EP-1's Surprises/Decision Log.
 
 
 ## Decision Log
