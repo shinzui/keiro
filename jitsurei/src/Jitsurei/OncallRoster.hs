@@ -45,6 +45,10 @@ serviceOncallReadModel =
     ReadModel
         { name = "jitsurei-service-oncall"
         , tableName = "jitsurei_service_oncall"
+        , -- This paging demo keeps its unqualified DDL/DML, so its table resolves
+          -- in the store search_path's first schema (kiroku). Only the order-summary
+          -- read model is migrated to a user-configured schema (EP-4 / MasterPlan 12).
+          schema = "kiroku"
         , subscriptionName = "jitsurei-service-oncall-sub"
         , version = 1
         , shapeHash = "jitsurei-service-oncall-v1"

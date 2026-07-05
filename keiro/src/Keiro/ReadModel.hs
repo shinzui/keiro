@@ -24,6 +24,7 @@ Schema lifecycle (registration, status transitions) lives in
 module Keiro.ReadModel (
     -- * Definition
     ReadModel (..),
+    qualifiedTableName,
 
     -- * Consistency
     ConsistencyMode (..),
@@ -52,6 +53,7 @@ import Effectful (Eff, IOE, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
+import Keiro.Connection (qualifyTable)
 import Keiro.Prelude
 import Keiro.ReadModel.Schema
 import Keiro.Telemetry (KeiroMetrics, recordProjectionWaitTimeouts)
@@ -67,6 +69,12 @@ import Prelude qualified
 * 'name' — logical identity, also the key in the @keiro_read_models@
   registry.
 * 'tableName' — the underlying projection table.
+* 'schema' — the PostgreSQL schema the read-model /data/ table lives in. The
+  application qualifies its 'query' SQL against this schema (typically via
+  'Keiro.Connection.qualifyTable' or 'qualifiedTableName'); Keiro does not
+  rewrite 'query'. This is the application's data schema and is entirely
+  separate from Keiro's own @keiro@ schema, where the @keiro_read_models@
+  registry lives. It is deliberately not persisted (see 'ensureReadModel').
 * 'subscriptionName' — the cursor that tracks how far the projection worker
   has consumed the event log; consulted by 'PositionWait'.
 * 'version' \/ 'shapeHash' — schema identity; a query fails with
@@ -77,6 +85,7 @@ import Prelude qualified
 data ReadModel q r = ReadModel
     { name :: !Text
     , tableName :: !Text
+    , schema :: !Text
     , subscriptionName :: !Text
     , version :: !Int
     , shapeHash :: !Text
@@ -84,6 +93,14 @@ data ReadModel q r = ReadModel
     , query :: !(q -> Tx.Transaction r)
     }
     deriving stock (Generic)
+
+{- | The read model's fully-qualified, double-quoted table reference
+@"schema"."table"@, for interpolation into the application's projection SQL.
+Equal to @'Keiro.Connection.qualifyTable' ('schema' rm) ('tableName' rm)@.
+-}
+qualifiedTableName :: ReadModel q r -> Text
+qualifiedTableName readModel =
+    qualifyTable (readModel ^. #schema) (readModel ^. #tableName)
 
 {- | How fresh a read must be before the query runs.
 
@@ -211,6 +228,10 @@ waitFor metrics options readModel targetPosition = do
                         liftIO (threadDelay (options ^. #pollMicros))
                         poll started observed'
 
+-- Note: the read model's 'schema' field is deliberately NOT persisted here. The
+-- registry keys on name/version/shapeHash/status (the model's schema identity);
+-- where the application's data table physically lives is a deployment/wiring
+-- concern, not part of that identity. See EP-4's Decision Log.
 ensureReadModel ::
     (Store :> es) =>
     ReadModel q r ->

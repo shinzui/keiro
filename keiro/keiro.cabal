@@ -43,6 +43,7 @@ library
   exposed-modules:
     Keiro
     Keiro.Command
+    Keiro.Connection
     Keiro.Inbox
     Keiro.Inbox.Kafka
     Keiro.Inbox.Schema

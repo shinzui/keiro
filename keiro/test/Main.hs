@@ -52,6 +52,7 @@ import Keiki.Core (
 import Keiki.Core qualified as Keiki
 import Keiro
 import Keiro qualified as KeiroRoot
+import Keiro.Connection (ensureProjectionSchema, qualifyTable, withProjectionSchema)
 import Keiro.EventStream (Terminality (..))
 import Keiro.EventStream.Validate (EventStreamWarning (..), ValidatedEventStream, mkEventStream, mkEventStreamOrThrow, validateEventStream)
 import Keiro.Inbox (
@@ -153,7 +154,7 @@ import Keiro.Subscription.Shard.Worker (
     runShardedSubscriptionGroup,
  )
 import Keiro.Telemetry qualified as Telemetry
-import Keiro.Test.Postgres (withFreshStore, withFreshStores2, withMigratedSuite)
+import Keiro.Test.Postgres (withFreshStore, withFreshStoreWith, withFreshStores2, withMigratedSuite)
 import Keiro.Timer
 import Keiro.Wake (
     WakeReason (..),
@@ -1262,6 +1263,51 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Store.runTransaction $
                         Tx.statement "snapshot-codec-rollback-overwrite" snapshotVersionForStreamStmt
             snapshotVersionAfter `shouldBe` Just (StreamVersion 2)
+
+    describe "Keiro.Connection projection schema" $
+        around (withFreshStoreWith fixture (withProjectionSchema "app_reads")) $ do
+            it "places a read-model table in a configured schema, separate from keiro metadata" $ \storeHandle -> do
+                -- qualifiedTableName builds the app's fully-qualified data table ref.
+                qualifiedTableName placedReadModel `shouldBe` "\"app_reads\".\"placed_counter\""
+
+                -- Create the app schema (opt-in) and the qualified read-model table.
+                Right () <-
+                    Store.runStoreIO storeHandle $ do
+                        ensureProjectionSchema "app_reads"
+                        Store.runTransaction initializePlacedTable
+
+                -- Drive a command with the inline projection that writes the app table.
+                let target = stream "placed-in-app-reads" :: Stream CounterEventStream
+                result <-
+                    Store.runStoreIO storeHandle $
+                        runCommandWithProjections
+                            defaultRunCommandOptions
+                            counterEventStream
+                            target
+                            (Add 7)
+                            [placedInlineProjection]
+                case result of
+                    Right (Right _) -> pure ()
+                    other -> expectationFailure ("expected placed inline projection command, got " <> show other)
+
+                -- Read it back through the configured-schema read model.
+                queryResult <-
+                    Store.runStoreIO storeHandle $
+                        runQuery Nothing placedReadModel "placed"
+                queryResult `shouldBe` Right (Right 7)
+
+                -- Prove placement: the app table is in app_reads, NOT in kiroku, and
+                -- Keiro's own metadata (keiro_read_models) is in the keiro schema.
+                Right (inApp, inKiroku, keiroMeta) <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction $
+                            (,,)
+                                <$> Tx.statement ("app_reads", "placed_counter") pgTableCountStmt
+                                <*> Tx.statement ("kiroku", "placed_counter") pgTableCountStmt
+                                <*> Tx.statement ("keiro", "keiro_read_models") pgTableCountStmt
+                inApp `shouldBe` (1 :: Int)
+                inKiroku `shouldBe` (0 :: Int)
+                keiroMeta `shouldBe` (1 :: Int)
 
     describe "Keiro.ReadModel" $ around (withFreshStore fixture) $ do
         it "queries inline projection with Eventual consistency" $ \storeHandle -> do
@@ -8141,6 +8187,7 @@ counterReadModel =
     ReadModel
         { name = "counter-read-model"
         , tableName = "counter_read_model"
+        , schema = "kiroku"
         , subscriptionName = "counter-read-model-sub"
         , version = 1
         , shapeHash = "counter-read-model-v1"
@@ -8207,6 +8254,88 @@ initializeCounterReadModelTable =
           actor TEXT
         )
         """
+
+-- A read model whose data table lives in an application-configured schema
+-- (@app_reads@), demonstrating EP-4's configurable projection schema. Its SQL is
+-- fully qualified via 'placedTable'; Keiro's own metadata stays in @keiro@.
+placedTable :: Text
+placedTable = qualifyTable "app_reads" "placed_counter"
+
+placedReadModel :: ReadModel Text Int
+placedReadModel =
+    ReadModel
+        { name = "placed-counter-read-model"
+        , tableName = "placed_counter"
+        , schema = "app_reads"
+        , subscriptionName = "placed-counter-sub"
+        , version = 1
+        , shapeHash = "placed-counter-v1"
+        , defaultConsistency = Eventual
+        , query = \modelId -> Tx.statement modelId selectPlacedStmt
+        }
+
+placedInlineProjection :: InlineProjection CounterEvent
+placedInlineProjection =
+    InlineProjection
+        { name = "placed-inline-projection"
+        , apply = \event recorded ->
+            case event of
+                CounterAdded amount ->
+                    Tx.statement
+                        ( "placed"
+                        , Prelude.fromIntegral amount
+                        , globalPositionToInt (recorded ^. #globalPosition)
+                        )
+                        upsertPlacedStmt
+                CounterAudited{} -> pure ()
+        }
+
+initializePlacedTable :: Tx.Transaction ()
+initializePlacedTable =
+    Tx.sql $
+        TE.encodeUtf8 $
+            "CREATE TABLE IF NOT EXISTS "
+                <> placedTable
+                <> " (\n"
+                <> "  model_id TEXT PRIMARY KEY,\n"
+                <> "  amount BIGINT NOT NULL,\n"
+                <> "  last_seen BIGINT NOT NULL\n"
+                <> ")"
+
+upsertPlacedStmt :: Statement (Text, Int64, Int64) ()
+upsertPlacedStmt =
+    preparable
+        ( "INSERT INTO "
+            <> placedTable
+            <> " (model_id, amount, last_seen)\n"
+            <> "VALUES ($1, $2, $3)\n"
+            <> "ON CONFLICT (model_id) DO UPDATE\n"
+            <> "  SET amount = EXCLUDED.amount, last_seen = EXCLUDED.last_seen"
+        )
+        ( contrazip3
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.int8))
+            (E.param (E.nonNullable E.int8))
+        )
+        D.noResult
+
+selectPlacedStmt :: Statement Text Int
+selectPlacedStmt =
+    preparable
+        ("SELECT COALESCE((SELECT amount FROM " <> placedTable <> " WHERE model_id = $1), 0)")
+        (E.param (E.nonNullable E.text))
+        (D.singleRow (Prelude.fromIntegral <$> D.column (D.nonNullable D.int8)))
+
+-- Count matching base tables in a given schema; proves table placement.
+pgTableCountStmt :: Statement (Text, Text) Int
+pgTableCountStmt =
+    preparable
+        "SELECT count(*)::int FROM pg_tables WHERE schemaname = $1 AND tablename = $2"
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        (D.singleRow (Prelude.fromIntegral <$> D.column (D.nonNullable D.int4)))
 
 initializeProjectionDedupCounterTable :: Tx.Transaction ()
 initializeProjectionDedupCounterTable =
@@ -8385,6 +8514,7 @@ routerTargetsReadModel =
     ReadModel
         { name = "router-targets-read-model"
         , tableName = "router_targets"
+        , schema = "kiroku"
         , subscriptionName = "router-targets-sub"
         , version = 1
         , shapeHash = "router-targets-v1"

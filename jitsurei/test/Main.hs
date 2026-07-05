@@ -17,10 +17,11 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Jitsurei
 import Keiro
+import Keiro.Connection (withProjectionSchema)
 import Keiro.ProcessManager
 import Keiro.Projection
 import Keiro.ReadModel
-import Keiro.Test.Postgres (withFreshStore, withMigratedSuite)
+import Keiro.Test.Postgres (withFreshStore, withFreshStoreWith, withMigratedSuite)
 import Keiro.Timer
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types (
@@ -102,7 +103,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         )
             result `shouldBe` Right (Left CommandRejected)
 
-    describe "Jitsurei read model" $ around (withFreshStore fixture) $ do
+    describe "Jitsurei read model" $ around (withFreshStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
         it "updates and queries the inline order summary in the append transaction" $ \store -> do
             Right () <- Store.runStoreIO store initializeJitsureiTables
             Right (Right _) <-
@@ -158,7 +159,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         Tx.statement "order-snapshot-100" snapshotVersionForStreamStmt
             snapshotVersion `shouldBe` Just (StreamVersion 2)
 
-    describe "Jitsurei process manager" $ around (withFreshStore fixture) $ do
+    describe "Jitsurei process manager" $ around (withFreshStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
         it "dispatches a packing command once for a payment event" $ \store -> do
             -- Dispatching the fulfillment process manager now runs the target's
             -- inline order-summary projection (see commit "run target inline
@@ -719,7 +720,7 @@ snapshotVersionForStreamStmt =
     preparable
         """
         SELECT ks.stream_version
-        FROM keiro_snapshots ks
+        FROM keiro.keiro_snapshots ks
         JOIN streams s ON s.stream_id = ks.stream_id
         WHERE s.stream_name = $1
         """

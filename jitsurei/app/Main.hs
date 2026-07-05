@@ -18,6 +18,7 @@ import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Jitsurei
 import Keiro
+import Keiro.Connection (keiroConnectionSettings)
 import Keiro.ProcessManager (runProcessManagerWorker)
 import Keiro.Projection (runCommandWithProjections)
 import Keiro.ReadModel (runQuery)
@@ -538,7 +539,7 @@ withJitsureiStore :: (Store.KirokuStore -> IO ()) -> IO ()
 withJitsureiStore action = do
     connString <- getConnectionString
     putStrLn ("[jitsurei] connecting to " <> Text.unpack connString)
-    Store.withStore (Store.defaultConnectionSettings connString) action
+    Store.withStore (keiroConnectionSettings connString jitsureiProjectionSchema) action
 
 getConnectionString :: IO Text
 getConnectionString = do
@@ -667,7 +668,7 @@ selectTimerRowsStmt =
     preparable
         """
         SELECT process_manager_name, correlation_id, status, attempts, fired_event_id IS NOT NULL
-        FROM keiro_timers
+        FROM keiro.keiro_timers
         WHERE correlation_id = $1
         ORDER BY fire_at, timer_id
         """
@@ -687,7 +688,7 @@ selectSnapshotRowsStmt =
     preparable
         """
         SELECT s.stream_name, ks.stream_version, ks.state, ks.state_codec_version, ks.regfile_shape_hash
-        FROM keiro_snapshots ks
+        FROM keiro.keiro_snapshots ks
         JOIN streams s ON s.stream_id = ks.stream_id
         WHERE s.stream_name = $1
         ORDER BY ks.stream_version DESC

@@ -29,6 +29,7 @@ module Keiro.Test.Postgres (
     withMigratedSuiteWith,
     withFreshDatabase,
     withFreshStore,
+    withFreshStoreWith,
     withFreshStores2,
 )
 where
@@ -106,9 +107,22 @@ withMigratedSuiteWith extraTemplateMigration action = do
 database is dropped.
 -}
 withFreshStore :: Fixture -> (Store.KirokuStore -> IO ()) -> IO ()
-withFreshStore fixture action =
+withFreshStore fixture = withFreshStoreWith fixture id
+
+{- | Like 'withFreshStore' but applies @modify@ to the default connection
+settings before opening the store — for example to add an application projection
+schema to @extraSearchPath@ so a read-model table in that schema resolves on the
+store pool (see 'Keiro.Connection.withProjectionSchema'). The store @schema@
+field itself is left at kiroku's default.
+-}
+withFreshStoreWith ::
+    Fixture ->
+    (Store.ConnectionSettings -> Store.ConnectionSettings) ->
+    (Store.KirokuStore -> IO ()) ->
+    IO ()
+withFreshStoreWith fixture modify action =
     withFreshDatabase fixture \connStr ->
-        Store.withStore (Store.defaultConnectionSettings connStr) action
+        Store.withStore (modify (Store.defaultConnectionSettings connStr)) action
 
 {- | Like 'withFreshStore' but provides two independent migrated databases (and
 two stores) cloned from the same template — used by cross-context

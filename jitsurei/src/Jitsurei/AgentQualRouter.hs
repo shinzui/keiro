@@ -237,6 +237,10 @@ areaChaptersReadModel =
     ReadModel
         { name = "jitsurei-area-chapters"
         , tableName = "jitsurei_area_chapters"
+        , -- Unqualified DDL/DML, so this table resolves in the store search_path's
+          -- first schema (kiroku). Only the order-summary read model is migrated to
+          -- a user-configured schema (EP-4 / MasterPlan 12).
+          schema = "kiroku"
         , subscriptionName = "jitsurei-area-chapters-sub"
         , version = 1
         , shapeHash = "jitsurei-area-chapters-v1"
