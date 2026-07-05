@@ -9,6 +9,8 @@ import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlS
 import Contravariant.Extras (contrazip3)
 import Control.Monad (filterM)
 import Data.Attoparsec.Text (endOfInput, parseOnly)
+import Data.Char (isDigit)
+import Data.List (isSuffixOf, nub, sort)
 import Data.Text (Text)
 import Data.Time (secondsToDiffTime)
 import EphemeralPg qualified as Pg
@@ -20,12 +22,13 @@ import Hasql.Pool.Config qualified as Pool.Config
 import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Keiro.Migrations (runAllKeiroMigrations, runAllKeiroMigrationsNoCheck)
-import System.Directory (doesDirectoryExist)
+import System.Directory (doesDirectoryExist, listDirectory)
 import Test.Hspec
 
 main :: IO ()
 main =
-    hspec $
+    hspec $ do
+        migrationFileNameSpec
         describe "Keiro codd migrations" $ do
             it "applies Kiroku and Keiro migrations to a fresh database and is repeatable" $ do
                 result <- Pg.withCached $ \db -> do
@@ -56,6 +59,83 @@ main =
                     Right (SchemasMatch _) -> pure ()
                     Right SchemasNotVerified -> expectationFailure "StrictCheck did not verify schemas"
                     Right (SchemasDiffer _) -> expectationFailure "StrictCheck returned a schema mismatch without throwing"
+
+{- | Guard against the recurring mistake of hand-assigning rounded, sentinel
+migration timestamps (e.g. @2026-05-17-00-00-00-…@, @…-01-00-00-…@). Migrations
+must be created with @keiro-migrate new@ ("Keiro.Migrations.New"), which stamps
+the real current UTC time to the second, so filenames sort in true authoring
+order and never collide in codd's timestamp-keyed ledger. A migration whose
+seconds field is @00@, or which is stamped at exactly UTC midnight, is almost
+certainly a hand-assigned slot rather than a wall-clock reading and is rejected
+here. (If you legitimately authored one on such a boundary, re-run the generator
+or nudge the seconds by one.)
+-}
+migrationFileNameSpec :: Spec
+migrationFileNameSpec =
+    describe "migration file names" $ do
+        it "carry real UTC authoring timestamps, not hand-assigned sentinels" $ do
+            files <- migrationFiles
+            files `shouldNotBe` []
+            case filter handAssignedTimestamp files of
+                [] -> pure ()
+                offenders ->
+                    expectationFailure
+                        ( "these migrations have hand-assigned sentinel timestamps; "
+                            <> "create migrations with `keiro-migrate new` (real UTC to the second): "
+                            <> show offenders
+                        )
+
+        it "have unique, strictly increasing timestamps" $ do
+            files <- migrationFiles
+            let stamps = map (take timestampWidth) (sort files)
+            length (nub stamps) `shouldBe` length stamps
+
+-- | The migration @.sql@ files, wherever the suite is run from.
+migrationFiles :: IO [FilePath]
+migrationFiles = do
+    dir <- findMigrationsDir
+    filter (".sql" `isSuffixOf`) <$> listDirectory dir
+
+findMigrationsDir :: IO FilePath
+findMigrationsDir = do
+    let candidates = ["keiro-migrations/sql-migrations", "sql-migrations"]
+    existing <- filterM doesDirectoryExist candidates
+    case existing of
+        dir : _ -> pure dir
+        [] ->
+            expectationFailure "Could not find keiro-migrations/sql-migrations"
+                >> pure "keiro-migrations/sql-migrations"
+
+-- | Width of the @YYYY-MM-DD-HH-MM-SS@ timestamp prefix on a migration filename.
+timestampWidth :: Int
+timestampWidth = 19
+
+{- | True when a filename's timestamp looks hand-assigned rather than sampled
+from the wall clock: a malformed prefix, a @00@ seconds field, or exactly UTC
+midnight (@HH-MM == 00-00@). See 'migrationFileNameSpec'.
+-}
+handAssignedTimestamp :: FilePath -> Bool
+handAssignedTimestamp name =
+    case timestampFields name of
+        Nothing -> True
+        Just (hh, mm, ss) -> ss == "00" || (hh == "00" && mm == "00")
+
+-- | Extract @(HH, MM, SS)@ from a well-formed @YYYY-MM-DD-HH-MM-SS-…@ filename.
+timestampFields :: FilePath -> Maybe (String, String, String)
+timestampFields name
+    | isTimestampShaped stamp =
+        Just (take 2 (drop 11 stamp), take 2 (drop 14 stamp), take 2 (drop 17 stamp))
+    | otherwise = Nothing
+  where
+    stamp = take timestampWidth name
+
+-- | Does the string match the fixed-width @dddd-dd-dd-dd-dd-dd@ shape?
+isTimestampShaped :: String -> Bool
+isTimestampShaped s =
+    length s == timestampWidth && and (zipWith matches "dddd-dd-dd-dd-dd-dd" s)
+  where
+    matches 'd' c = isDigit c
+    matches _ c = c == '-'
 
 expectedTables :: [Text]
 expectedTables =

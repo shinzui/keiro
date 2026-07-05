@@ -92,16 +92,20 @@ runAllKeiroMigrationsNoCheck settings connectTimeout =
 
 -- Embedded migrations (touch this comment to force a TH recompile when adding
 -- a new .sql file; embedDir is not tracked per-file by GHC's recompilation
--- checker). Current set includes 2026-06-03-00-00-00-keiro-workflow-steps.sql,
--- 2026-06-03-01-00-00-keiro-awakeables.sql,
--- 2026-06-03-02-00-00-keiro-workflow-children.sql, 2026-06-11-00-00-04-keiro-workflows-instances.sql, (EP-48/EP-6)
--- 2026-06-05-00-00-00-keiro-workflow-generation.sql, and (EP-51)
--- 2026-06-05-01-00-00-keiro-subscription-shards.sql,
+-- checker). Every file name carries the real UTC authoring timestamp emitted
+-- by `keiro-migrate new` (see "Keiro.Migrations.New"); never hand-assign a
+-- rounded sentinel like -00-00-00. The migration-filename guard in the test
+-- suite rejects such timestamps. Current set includes
+-- 2026-06-03-16-10-05-keiro-workflow-steps.sql,
+-- 2026-06-03-18-19-41-keiro-awakeables.sql,
+-- 2026-06-03-19-49-23-keiro-workflow-children.sql, 2026-06-15-15-07-25-keiro-workflows-instances.sql, (EP-48/EP-6)
+-- 2026-06-04-02-12-28-keiro-workflow-generation.sql, and (EP-51)
+-- 2026-06-04-03-53-34-keiro-subscription-shards.sql,
 -- 2026-06-15-21-49-37-keiro-projection-dedup.sql, and
 -- 2026-06-15-13-22-31-keiro-messaging-crash-recovery.sql, and
--- 2026-06-15-22-10-00-keiro-workflow-gc-index.sql, and
--- 2026-06-15-22-20-00-keiro-workflows-wake-after.sql, and
--- 2026-07-02-00-12-00-keiro-outbox-claim-order-index.sql, and
--- 2026-07-02-00-55-00-keiro-inbox-drop-received-idx.sql. (EP-2/M3)
+-- 2026-06-15-17-53-48-keiro-workflow-gc-index.sql, and
+-- 2026-06-15-18-01-33-keiro-workflows-wake-after.sql, and
+-- 2026-07-02-00-15-48-keiro-outbox-claim-order-index.sql, and
+-- 2026-07-02-00-58-54-keiro-inbox-drop-received-idx.sql. (EP-2/M3)
 embeddedMigrationFiles :: [(FilePath, ByteString)]
 embeddedMigrationFiles = $(embedDir "sql-migrations")
