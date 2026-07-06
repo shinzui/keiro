@@ -297,7 +297,8 @@ Process-manager and router workers can record `keiro.dispatch.failed`,
 Embedded codd migrations and the `keiro-migrate` executable. Exports
 `keiroFrameworkMigrations`, `keiroMigrations`, `allKeiroMigrations`,
 `runKeiroMigrations`, `runKeiroMigrationsNoCheck`, `runAllKeiroMigrations`, and
-`runAllKeiroMigrationsNoCheck`.
+`runAllKeiroMigrationsNoCheck`, plus read-only operator helpers
+`migrationStatus`, `missingMigrations`, and `verifySchema`.
 
 Use it to apply the Kiroku and Keiro framework tables.
 

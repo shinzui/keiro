@@ -42,6 +42,8 @@ pieces those modules import.
   transactional handler wrapper.
 - [Database Migrations](migrations.md): running `keiro-migrate`, disabling
   runtime schema initialization, and owning application table migrations.
+- [Migration Ownership](migration-ownership.md): framework-owned vs
+  application-owned migrations, combined-ledger composition, and operator checks.
 - [Operations](operations.md): database requirements, schema initialization,
   workers, retries, idempotency, and production checklist.
 - [Roadmap](roadmap.md): capability matrix, v1.x workflow substrate, read-side

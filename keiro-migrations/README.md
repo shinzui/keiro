@@ -9,6 +9,10 @@ migrations create their objects **schema-qualified** as `keiro.<table>` inside a
 dedicated `keiro` schema that Keiro creates and owns, and they never pin
 `search_path`.
 
+For the framework-vs-application ownership contract and how to compose service
+migrations with these framework migrations, see
+[Migration Ownership](../docs/user/migration-ownership.md).
+
 codd is forward-only. If a migration has already reached a shared database, do
 not rename or edit it in place; add a new forward migration that repairs the
 schema, or restore the database from backup.

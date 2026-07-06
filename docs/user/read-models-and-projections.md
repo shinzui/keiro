@@ -36,7 +36,9 @@ Keiro still does not create your application read-model tables — your migratio
 (or an opt-in helper) own the table *definitions*, indexes, and row codecs. What
 Keiro now gives you is a first-class way to say *which schema* those tables live
 in, and helpers to target it, instead of implicitly inheriting the store
-connection's `search_path`.
+connection's `search_path`. See [Migration Ownership](migration-ownership.md)
+for where those migrations live and how to compose them with the framework
+ledger.
 
 ## Choosing Your Projection Schema
 

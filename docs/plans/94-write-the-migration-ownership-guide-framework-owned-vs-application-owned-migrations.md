@@ -55,19 +55,28 @@ recovery, and where codd's ledger actually lives).
 
 ## Progress
 
-- [ ] M1: Guide outline agreed against the final shipped surface (re-read plans 90–93
+- [x] M1: Guide outline agreed against the final shipped surface (re-read plans 90–93
       Outcomes and the merged code; list every name the guide will reference).
-- [ ] M2: `docs/user/migration-ownership.md` written in full.
-- [ ] M3: Existing docs reconciled — `docs/user/migrations.md` slimmed to running the
+- [x] M2: `docs/user/migration-ownership.md` written in full.
+- [x] M3: Existing docs reconciled — `docs/user/migrations.md` slimmed to running the
       framework migrations and linking out; `docs/user/read-models-and-projections.md`
       and `docs/user/README.md` cross-linked; both package READMEs link the guide.
-- [ ] M4: Stale-reference sweep — `codd_schema` and "migrate is unchecked" claims
+- [x] M4: Stale-reference sweep — `codd_schema` and "migrate is unchecked" claims
       across docs and the `.claude/skills/cohort-migrate` skill; CHANGELOG entry.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-07-06: The combined-ledger sample needed to mirror the real migration modules:
+  `parseAddedSqlMigration` requires `EnvVars m`, and the local `PureStream m`
+  annotation needs `ScopedTypeVariables` when written as a reusable helper. The guide
+  includes those constraints, and both guide snippets passed `ghc -fno-code` from the
+  project environment.
+- 2026-07-06: `.claude` exists, but the stale-reference sweep found no
+  `.claude/skills/cohort-migrate` `codd_schema` hit in this repository. Remaining
+  `codd_schema` hits under `docs/user` and `keiro-migrations` are dual-aware
+  operator wording, tests, executable status rendering, or SQL fixup/remediation
+  comments.
 
 
 ## Decision Log
@@ -90,7 +99,25 @@ recovery, and where codd's ledger actually lives).
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-5 is complete. `docs/user/migration-ownership.md` is now the canonical ownership
+guide covering the three schema owners, framework immutability, application authoring
+rules, guard snippets, combined-ledger composition, runtime grants, operating commands,
+and PostgreSQL-version framing. `docs/user/README.md`, `docs/user/migrations.md`,
+`docs/user/read-models-and-projections.md`, `docs/user/api-reference.md`, and
+`keiro-migrations/README.md` now link or point to it, and the changelog announces it.
+
+Validation:
+
+```text
+git grep -n "migration-ownership" docs keiro-migrations
+# guide and cross-links present
+
+git grep -n "codd_schema" docs/user keiro-migrations .claude
+# remaining hits are dual-aware docs, tests, executable rendering, or SQL comments
+
+cabal exec ghc -- -fno-code /tmp/keiro-guide-guards.hs /tmp/keiro-guide-compose.hs
+# both guide snippets compile
+```
 
 
 ## Context and Orientation

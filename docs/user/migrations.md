@@ -153,21 +153,11 @@ Keiro migrations only cover Keiro-owned framework tables (in `keiro`). They do
 not create your application read-model tables, indexes, materialized views, or
 reporting schemas.
 
-Applications can now declare the schema their read-model and projection tables
-live in as a first-class choice, so application data need not co-mingle with
-either `kiroku` or `keiro`. See
-[Read Models And Projections](./read-models-and-projections.md#choosing-your-projection-schema)
-for the `ReadModel` `schema` field and the `Keiro.Connection` helpers.
-
-See [Run And Operate Jitsurei](../guides/run-and-operate-jitsurei.md) for how
-the guide package separates Keiro framework initialization from the
-application-owned `jitsurei_order_summary` table, which the worked example places
-in its own `jitsurei` schema.
-
-Keep application-owned migrations in your service. If your service also uses
-codd, compose the service migrations after `Keiro.Migrations.allKeiroMigrations`
-and call `Codd.applyMigrations` once with the combined list. A single codd run
-keeps all migration names in one ledger and one timestamp order.
+For the full ownership contract, application authoring rules, guard snippets,
+combined-ledger composition, and grants guidance, see
+[Migration Ownership](./migration-ownership.md). For the `ReadModel` `schema`
+field and `Keiro.Connection` helpers, see
+[Read Models And Projections](./read-models-and-projections.md#choosing-your-projection-schema).
 
 ## Forward-Only Recovery
 

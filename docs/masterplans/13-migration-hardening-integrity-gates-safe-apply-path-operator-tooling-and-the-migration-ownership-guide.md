@@ -185,7 +185,7 @@ can be extracted later.
 | 2 | Integrity gates for keiro-migrations: shared guards, combined-ledger uniqueness, and upgrade-path regression tests | docs/plans/91-integrity-gates-for-keiro-migrations-shared-guards-combined-ledger-uniqueness-and-upgrade-path-regression-tests.md | EP-1 | None | Complete |
 | 3 | Harden the migration apply path: strict CLI, drift exit codes, single-try retries, and advisory-lock serialization | docs/plans/92-harden-the-migration-apply-path-strict-cli-drift-exit-codes-single-try-retries-and-advisory-lock-serialization.md | None | EP-1, EP-2 | Complete |
 | 4 | Operator tooling: embedded expected-schema verify, ledger status, and a startup migration handshake | docs/plans/93-operator-tooling-embedded-expected-schema-verify-ledger-status-and-a-startup-migration-handshake.md | EP-3 | EP-1, EP-2 | Complete |
-| 5 | Write the migration ownership guide: framework-owned vs application-owned migrations | docs/plans/94-write-the-migration-ownership-guide-framework-owned-vs-application-owned-migrations.md | EP-4 | EP-1, EP-2 | Not Started |
+| 5 | Write the migration ownership guide: framework-owned vs application-owned migrations | docs/plans/94-write-the-migration-ownership-guide-framework-owned-vs-application-owned-migrations.md | EP-4 | EP-1, EP-2 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -306,7 +306,7 @@ implementation proceeds.
 - [x] EP-4: Expected-schema trees embedded in both executables; `verify` subcommand strict-checks a live database without applying
 - [x] EP-4: `status` subcommand lists applied vs pending from the ledger (dual-schema aware)
 - [x] EP-4: `missingMigrations` startup handshake exported from both packages; grants convention documented
-- [ ] EP-5: `docs/user/migration-ownership.md` published; `docs/user/migrations.md`, READMEs, and cross-links updated; stale `codd_schema` references swept
+- [x] EP-5: `docs/user/migration-ownership.md` published; `docs/user/migrations.md`, READMEs, and cross-links updated; stale `codd_schema` references swept
 
 ## Surprises & Discoveries
 
@@ -358,6 +358,10 @@ interactions between child plans. Provide concise evidence.
   as `expected-schema/v18/**/*`. Both migration packages now list every codd
   expected-schema representation file explicitly in `extra-source-files`; the final
   kiroku pin for EP-4 is `27bfa2780272f86a98180a96e161c54b83b12b6a`.
+- 2026-07-06 (from EP-5 implementation): the guide's combined-ledger sample needs the
+  same parser constraints as the shipped modules: `parseAddedSqlMigration` requires
+  `EnvVars m`, and the local `PureStream m` annotation needs `ScopedTypeVariables`.
+  Both guide snippets were checked with `ghc -fno-code`.
 
 ## Decision Log
 
@@ -509,6 +513,23 @@ Compare the result against the original vision.
   19 examples, 0 failures
   ```
 
+- 2026-07-06: EP-5 is complete. `docs/user/migration-ownership.md` is published and
+  cross-linked from the user guide index, migration reference, read-model/projection
+  docs, API reference, and `keiro-migrations/README.md`; `docs/user/migrations.md` now
+  points to the guide instead of duplicating application-migration ownership content.
+  The guide documents framework-owned vs application-owned schemas, combined-ledger
+  composition, application migration guards, runtime grants, `status`/`verify`,
+  `missingMigrations`, forward-only recovery, and tested PostgreSQL-version framing.
+  Validation:
+
+  ```text
+  cabal exec ghc -- -fno-code /tmp/keiro-guide-guards.hs /tmp/keiro-guide-compose.hs
+  Exit: 0
+
+  git grep -n "codd_schema" docs/user keiro-migrations .claude
+  # remaining hits are dual-aware docs, tests, executable rendering, or SQL comments
+  ```
+
 
 ## Revision Notes
 
@@ -524,3 +545,6 @@ Compare the result against the original vision.
 - 2026-07-06: Updated after EP-4 implementation to mark EP-4 complete, check off its
   aggregate milestones, record the explicit expected-schema source-list packaging
   discovery, and capture validation evidence.
+- 2026-07-06: Updated after EP-5 implementation to mark EP-5 and the master plan
+  complete, add the ownership-guide outcome, record snippet validation, and document
+  the stale-reference sweep.

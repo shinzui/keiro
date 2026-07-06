@@ -42,6 +42,9 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
   `keiro-migrate status` reports applied and pending combined-ledger entries,
   and `Keiro.Migrations.missingMigrations` lets applications fail fast at
   startup when Kiroku or Keiro framework migrations have not been applied.
+- Added `docs/user/migration-ownership.md`, the canonical guide for
+  framework-owned vs application-owned migrations, combined-ledger composition,
+  application migration guards, runtime grants, and operator checks.
 - A database first migrated by `0.1.0.0` has its `keiro_*` tables in `kiroku`. It
   requires a **one-time remediation** before running these migrations: follow
   [Upgrading To The Keiro Schema](../docs/user/upgrading-to-the-keiro-schema.md),
