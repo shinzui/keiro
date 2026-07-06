@@ -21,9 +21,11 @@ module Keiro.Migrations (
 )
 where
 
-import Codd (ApplyResult, CoddSettings, VerifySchemas, applyMigrations, applyMigrationsNoCheck)
+import Codd (ApplyResult, CoddSettings (..), VerifySchemas, applyMigrations, applyMigrationsNoCheck)
 import Codd.Logging (runCoddLogger)
 import Codd.Parsing (AddedSqlMigration, EnvVars, PureStream (..), parseAddedSqlMigration)
+import Codd.Types (singleTryPolicy)
+import Control.Monad (when)
 import Data.ByteString (ByteString)
 import Data.FileEmbed (embedDir)
 import Data.List (sort)
@@ -59,10 +61,13 @@ allKeiroMigrations = do
 
 -- | Run only Keiro-owned embedded migrations through codd.
 runKeiroMigrations :: CoddSettings -> DiffTime -> VerifySchemas -> IO ApplyResult
-runKeiroMigrations settings connectTimeout verifySchemas =
-    runCoddLogger $ do
-        migrations <- keiroFrameworkMigrations
-        applyMigrations settings (Just migrations) connectTimeout verifySchemas
+runKeiroMigrations settings connectTimeout verifySchemas = do
+    let settings' = forceSingleTryPolicy settings
+    warnRetryPolicyOverride settings
+    Kiroku.withMigrationLock (migsConnString settings') connectTimeout $
+        runCoddLogger $ do
+            migrations <- keiroFrameworkMigrations
+            applyMigrations settings' (Just migrations) connectTimeout verifySchemas
 
 {- | Run only Keiro-owned embedded migrations without schema verification.
 
@@ -70,17 +75,23 @@ This is useful for local development databases that do not keep a checked-in
 codd expected-schema representation.
 -}
 runKeiroMigrationsNoCheck :: CoddSettings -> DiffTime -> IO ()
-runKeiroMigrationsNoCheck settings connectTimeout =
-    runCoddLogger $ do
-        migrations <- keiroFrameworkMigrations
-        applyMigrationsNoCheck settings (Just migrations) connectTimeout (\_ -> pure ())
+runKeiroMigrationsNoCheck settings connectTimeout = do
+    let settings' = forceSingleTryPolicy settings
+    warnRetryPolicyOverride settings
+    Kiroku.withMigrationLock (migsConnString settings') connectTimeout $
+        runCoddLogger $ do
+            migrations <- keiroFrameworkMigrations
+            applyMigrationsNoCheck settings' (Just migrations) connectTimeout (\_ -> pure ())
 
 -- | Run Kiroku and Keiro embedded migrations through codd in one ledger.
 runAllKeiroMigrations :: CoddSettings -> DiffTime -> VerifySchemas -> IO ApplyResult
-runAllKeiroMigrations settings connectTimeout verifySchemas =
-    runCoddLogger $ do
-        migrations <- allKeiroMigrations
-        applyMigrations settings (Just migrations) connectTimeout verifySchemas
+runAllKeiroMigrations settings connectTimeout verifySchemas = do
+    let settings' = forceSingleTryPolicy settings
+    warnRetryPolicyOverride settings
+    Kiroku.withMigrationLock (migsConnString settings') connectTimeout $
+        runCoddLogger $ do
+            migrations <- allKeiroMigrations
+            applyMigrations settings' (Just migrations) connectTimeout verifySchemas
 
 {- | Run Kiroku and Keiro embedded migrations without schema verification.
 
@@ -88,10 +99,24 @@ This preserves codd's migration ledger and locking behavior while skipping
 expected-schema comparison for local development databases.
 -}
 runAllKeiroMigrationsNoCheck :: CoddSettings -> DiffTime -> IO ()
-runAllKeiroMigrationsNoCheck settings connectTimeout =
-    runCoddLogger $ do
-        migrations <- allKeiroMigrations
-        applyMigrationsNoCheck settings (Just migrations) connectTimeout (\_ -> pure ())
+runAllKeiroMigrationsNoCheck settings connectTimeout = do
+    let settings' = forceSingleTryPolicy settings
+    warnRetryPolicyOverride settings
+    Kiroku.withMigrationLock (migsConnString settings') connectTimeout $
+        runCoddLogger $ do
+            migrations <- allKeiroMigrations
+            applyMigrationsNoCheck settings' (Just migrations) connectTimeout (\_ -> pure ())
+
+forceSingleTryPolicy :: CoddSettings -> CoddSettings
+forceSingleTryPolicy settings =
+    -- codd v0.1.8 retries re-read migration streams, but embedded in-memory
+    -- streams fail with "Re-reading in-memory streams is not yet implemented".
+    settings{retryPolicy = singleTryPolicy}
+
+warnRetryPolicyOverride :: CoddSettings -> IO ()
+warnRetryPolicyOverride settings =
+    when (retryPolicy settings /= singleTryPolicy) $
+        putStrLn "Ignoring CODD_RETRY_POLICY for embedded migrations; codd v0.1.8 cannot retry in-memory migration streams."
 
 -- Embedded migrations (touch this comment to force a TH recompile when adding
 -- a new .sql file; embedDir is not tracked per-file by GHC's recompilation

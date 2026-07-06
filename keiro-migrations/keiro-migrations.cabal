@@ -88,6 +88,7 @@ test-suite keiro-migrations-test
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , aeson
+    , async
     , attoparsec
     , base                     >=4.18 && <5
     , codd

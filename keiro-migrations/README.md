@@ -51,6 +51,22 @@ databases and auto-renames older `codd_schema.sql_migrations` ledgers during
 apply. Keiro's tests and fixup scripts detect both locations, preferring
 `codd.sql_migrations`.
 
+`keiro-migrate` accepts bare invocation and `up` as apply commands. Unknown
+arguments fail with usage and exit code 2 before reading `CODD_CONNECTION`, so a
+typo cannot accidentally apply migrations. Set `KEIRO_MIGRATE_NO_CHECK=1`,
+`true`, or `yes` only for local no-check applies; unset or any other value means
+the normal checked path runs.
+
+The executable serializes migration applies with the same PostgreSQL
+session-level advisory lock used by `kiroku-store-migrate`, because
+`keiro-migrate` applies Kiroku and Keiro migrations through one ledger. This
+protects multi-replica deploys where two processes start migration at the same
+time: the second process waits for the first to finish, then observes zero
+pending migrations. The embedded runner also forces codd's retry policy to a
+single try, ignoring `CODD_RETRY_POLICY`; codd 0.1.8 cannot re-read in-memory
+embedded migrations during a retry, so retrying would mask the original database
+error with an unrelated crash.
+
 Production applications should run the migration executable before startup and
 then open Kiroku with schema initialization disabled:
 

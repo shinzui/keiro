@@ -3,10 +3,11 @@ module Main (
 )
 where
 
-import Codd (ApplyResult (..), CoddSettings (..), VerifySchemas (StrictCheck))
+import Codd (ApplyResult (..), CoddSettings (..), VerifySchemas (LaxCheck, StrictCheck))
 import Codd.Parsing (connStringParser)
 import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
 import Contravariant.Extras (contrazip3)
+import Control.Concurrent.Async (concurrently)
 import Control.Exception (finally)
 import Control.Monad (filterM)
 import Data.Attoparsec.Text (endOfInput, parseOnly)
@@ -95,6 +96,24 @@ main =
                     Right SchemasNotVerified -> expectationFailure "StrictCheck did not verify schemas"
                     Right (SchemasDiffer _) -> expectationFailure "StrictCheck returned a schema mismatch without throwing"
 
+            it "reports schema drift under LaxCheck" $ do
+                expectedSchemaDir <- findExpectedSchemaDir
+                result <- withKeiroPg $ \db -> do
+                    let connStr = Pg.connectionString db
+                        coddSettings = testCoddSettings connStr expectedSchemaDir
+                    runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
+                    runDb
+                        connStr
+                        "drift drill"
+                        (Session.script "ALTER TABLE keiro.keiro_timers ALTER COLUMN last_error SET NOT NULL;")
+                    runAllKeiroMigrations coddSettings (secondsToDiffTime 5) LaxCheck
+
+                case result of
+                    Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
+                    Right (SchemasDiffer _) -> pure ()
+                    Right SchemasNotVerified -> expectationFailure "LaxCheck did not verify schemas"
+                    Right (SchemasMatch _) -> expectationFailure "LaxCheck did not report schema drift"
+
 {- | Guard against the recurring mistake of hand-assigning rounded, sentinel
 migration timestamps (e.g. @2026-05-17-00-00-00-...@, @...-01-00-00-...@).
 Migrations must be created with @keiro-migrate new@ ("Keiro.Migrations.New"),
@@ -151,6 +170,22 @@ migrationIntegritySpec =
                 schema `shouldBe` "codd"
                 names <- ledgerNames connStr schema
                 names `shouldBe` map T.pack expectedLedgerNames
+            case result of
+                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
+                Right () -> pure ()
+
+        it "serializes concurrent combined applies with the shared advisory lock" $ do
+            result <- withKeiroPg $ \db -> do
+                let connStr = Pg.connectionString db
+                    coddSettings = testCoddSettings connStr "keiro-migrations/expected-schema"
+                concurrently
+                    (runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5))
+                    (runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5))
+                schema <- detectLedgerSchema connStr
+                names <- ledgerNames connStr schema
+                names `shouldBe` map T.pack expectedLedgerNames
+                count <- ledgerRowCount connStr schema
+                count `shouldBe` fromIntegral (length expectedLedgerNames)
             case result of
                 Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
                 Right () -> pure ()

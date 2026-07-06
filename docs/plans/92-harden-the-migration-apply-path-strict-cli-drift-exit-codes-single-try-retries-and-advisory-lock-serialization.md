@@ -74,23 +74,68 @@ test proves two simultaneous applies against one fresh database both succeed.
 
 ## Progress
 
-- [ ] M1 (kiroku): strict CLI dispatcher (`new`, `lock`, `up`, bare = apply; anything
-      else = usage + exit 2).
-- [ ] M2 (kiroku): `withMigrationLock` + `migrationAdvisoryLockKey` exported;
+- [x] M1 (kiroku): strict CLI dispatcher (`new`, `lock`, `up`, bare = apply; anything
+      else = usage + exit 2). Completed 2026-07-06 in kiroku commit `7489159`.
+- [x] M2 (kiroku): `withMigrationLock` + `migrationAdvisoryLockKey` exported;
       `runKirokuMigrations*` take the lock and force `singleTryPolicy`;
-      concurrent-apply test green.
-- [ ] M3 (kiroku): README notes (lock semantics, single-try rationale); CHANGELOG.
-- [ ] M4 (keiro): pin bumped; strict CLI dispatcher; drift exits nonzero;
-      `KEIRO_MIGRATE_NO_CHECK` value parsing.
-- [ ] M5 (keiro): `runKeiroMigrations*`/`runAllKeiroMigrations*` wrapped with the
-      shared lock and `singleTryPolicy`; concurrent-apply test green.
-- [ ] M6 (keiro): README/docs notes; CHANGELOG; upstream codd issue for the in-memory
-      re-read error filed or noted.
+      concurrent-apply test green. Completed 2026-07-06 in kiroku commit `7489159`.
+- [x] M3 (kiroku): README notes (lock semantics, single-try rationale); CHANGELOG.
+      Completed 2026-07-06 in kiroku commit `7489159`.
+- [x] M4 (keiro): pin bumped; strict CLI dispatcher; drift exits nonzero;
+      `KEIRO_MIGRATE_NO_CHECK` value parsing. Completed 2026-07-06.
+- [x] M5 (keiro): `runKeiroMigrations*`/`runAllKeiroMigrations*` wrapped with the
+      shared lock and `singleTryPolicy`; concurrent-apply test green. Completed
+      2026-07-06.
+- [x] M6 (keiro): README/docs notes; CHANGELOG; upstream codd issue for the in-memory
+      re-read error filed or noted. Completed 2026-07-06.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-07-06: The kiroku concurrent-apply spec passed in the full suite and in three
+  focused reruns after adding the shared advisory lock:
+
+  ```text
+  cabal test kiroku-store-migrations-test
+  12 examples, 0 failures
+
+  cabal test kiroku-store-migrations-test --test-options=--match=serializes
+  1 example, 0 failures
+  ```
+
+- 2026-07-06: The strict kiroku CLI rejects a misspelled command before reading codd
+  settings:
+
+  ```text
+  cabal run kiroku-store-migrate -- nwe "typo"
+  unknown kiroku-store-migrate arguments: nwe typo
+  usage: kiroku-store-migrate [up | new <description> | lock]
+  exit code: 2
+  ```
+
+- 2026-07-06: The keiro suite now covers concurrent combined applies and LaxCheck
+  drift reporting. Final validation:
+
+  ```text
+  cabal test keiro-migrations-test
+  15 examples, 0 failures
+  ```
+
+- 2026-07-06: The strict keiro CLI rejects a misspelled command before reading codd
+  settings:
+
+  ```text
+  cabal run keiro-migrations:exe:keiro-migrate -- frobnicate
+  unknown keiro-migrate arguments: frobnicate
+  usage: keiro-migrate [up | new <description> | lock]
+  exit code: 2
+  ```
+
+- 2026-07-06: Upstream codd issue not filed in this implementation session; the exact
+  reproduction is recorded here for filing: run an embedded in-memory migration with a
+  retrying `CoddSettings.retryPolicy`, force a transient failure that reaches codd's
+  retry path, and codd v0.1.8 raises `Re-reading in-memory streams is not yet
+  implemented` from `src/Codd/Internal.hs` while re-reading the in-memory stream.
 
 
 ## Decision Log
@@ -125,7 +170,21 @@ test proves two simultaneous applies against one fresh database both succeed.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+- 2026-07-06: EP-3 completed. Kiroku commits `7489159` and `8536701` added strict CLI
+  dispatch, the shared advisory-lock key and wrapper, locked single-try runners, a
+  concurrent-apply regression, and README/CHANGELOG notes. Keiro now pins
+  `8536701fa3654bece274717fefcca2a7cb09b52d`, mirrors strict dispatch, treats
+  `KEIRO_MIGRATE_NO_CHECK=false` as checked, exits nonzero when `LaxCheck` reports
+  drift, wraps all Keiro and combined runners in the shared lock with
+  `singleTryPolicy`, and documents the hardened apply behavior. Validation:
+
+  ```text
+  cabal test kiroku-store-migrations-test
+  12 examples, 0 failures
+
+  cabal test keiro-migrations-test
+  15 examples, 0 failures
+  ```
 
 
 ## Context and Orientation
@@ -297,3 +356,9 @@ codes; locked single-try runners.
 Consumes: codd `v0.1.8` (`Codd.Types.singleTryPolicy`, `libpqConnString`,
 `CoddSettings.retryPolicy`, `ApplyResult`); plan 90's `lock` dispatcher case and
 canary helper where present.
+
+## Revision Notes
+
+- 2026-07-06: Updated after implementation to mark all EP-3 milestones complete,
+  record the kiroku and keiro validation evidence, capture the strict CLI checks, and
+  note the upstream codd in-memory retry reproduction for later filing.

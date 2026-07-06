@@ -32,6 +32,11 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
   Kiroku+Keiro ledger timestamp uniqueness, a codd v5 ledger canary, and
   regression tests for both the ledger realignment fixup and the alpha
   remediation runbook.
+- Hardened the apply path: unknown `keiro-migrate` arguments now exit 2 with
+  usage, `up` is an explicit apply synonym, `KEIRO_MIGRATE_NO_CHECK=false`
+  remains checked, schema drift under the checked path exits nonzero, embedded
+  migrations force codd's single-try retry policy, and concurrent applies
+  serialize with the shared Kiroku advisory lock.
 - A database first migrated by `0.1.0.0` has its `keiro_*` tables in `kiroku`. It
   requires a **one-time remediation** before running these migrations: follow
   [Upgrading To The Keiro Schema](../docs/user/upgrading-to-the-keiro-schema.md),

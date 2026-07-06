@@ -67,6 +67,10 @@ currently requires `CODD_MIGRATION_DIRS` and `CODD_EXPECTED_SCHEMA_DIR` in its
 settings environment even though Keiro passes embedded migrations directly from
 Haskell.
 
+For local development only, `KEIRO_MIGRATE_NO_CHECK=1`, `true`, or `yes` skips
+the expected-schema check. Unset means checked. Other values, including
+`false`, are treated as checked and produce a warning.
+
 After a successful run, the database has Kiroku's event-store tables (in
 `kiroku`), Keiro's framework tables (in `keiro`), and codd's internal migration
 ledger. With codd v0.1.8, fresh databases use `codd.sql_migrations`; older
@@ -74,6 +78,14 @@ databases may briefly show `codd_schema.sql_migrations` until codd's internal
 upgrade renames it. Application-owned tables live wherever your service
 migrations place them — see [Application Tables](#application-tables) below for
 how to choose the schema your read-model and projection tables live in.
+
+`keiro-migrate` uses strict command dispatch: bare invocation and `up` apply
+migrations, while unknown arguments exit 2 with usage before reading database
+settings. The apply path also takes a PostgreSQL advisory lock shared with
+`kiroku-store-migrate`, so concurrent migration processes against one database
+serialize instead of racing on codd's ledger. Embedded migrations run with
+codd's retry policy forced to a single try because codd 0.1.8 cannot retry
+in-memory migration streams without masking the original failure.
 
 ## Upgrading An Existing Alpha Database
 

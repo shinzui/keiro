@@ -183,7 +183,7 @@ can be extracted later.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Integrity gates for kiroku-store-migrations: checksum manifest, embed parity, body lint, and ledger canary | docs/plans/90-integrity-gates-for-kiroku-store-migrations-checksum-manifest-embed-parity-body-lint-and-ledger-canary.md | None | None | Complete |
 | 2 | Integrity gates for keiro-migrations: shared guards, combined-ledger uniqueness, and upgrade-path regression tests | docs/plans/91-integrity-gates-for-keiro-migrations-shared-guards-combined-ledger-uniqueness-and-upgrade-path-regression-tests.md | EP-1 | None | Complete |
-| 3 | Harden the migration apply path: strict CLI, drift exit codes, single-try retries, and advisory-lock serialization | docs/plans/92-harden-the-migration-apply-path-strict-cli-drift-exit-codes-single-try-retries-and-advisory-lock-serialization.md | None | EP-1, EP-2 | Not Started |
+| 3 | Harden the migration apply path: strict CLI, drift exit codes, single-try retries, and advisory-lock serialization | docs/plans/92-harden-the-migration-apply-path-strict-cli-drift-exit-codes-single-try-retries-and-advisory-lock-serialization.md | None | EP-1, EP-2 | Complete |
 | 4 | Operator tooling: embedded expected-schema verify, ledger status, and a startup migration handshake | docs/plans/93-operator-tooling-embedded-expected-schema-verify-ledger-status-and-a-startup-migration-handshake.md | EP-3 | EP-1, EP-2 | Not Started |
 | 5 | Write the migration ownership guide: framework-owned vs application-owned migrations | docs/plans/94-write-the-migration-ownership-guide-framework-owned-vs-application-owned-migrations.md | EP-4 | EP-1, EP-2 | Not Started |
 
@@ -301,8 +301,8 @@ implementation proceeds.
 - [x] EP-2: Combined-ledger timestamp-uniqueness test across `allKeiroMigrations` (kiroku ∪ keiro)
 - [x] EP-2: Ledger canary for the combined ledger; keiro ledger-fixup and alpha-remediation regression tests with row-survival assertions
 - [x] EP-2: keiro README/docs `codd_schema` corrections
-- [ ] EP-3: kiroku strict CLI dispatch; `singleTryPolicy` override in embedded runners; shared advisory-lock constant + lock wrapper; concurrent-apply test
-- [ ] EP-3: keiro strict CLI dispatch; drift exits nonzero (LaxCheck result inspected); `KEIRO_MIGRATE_NO_CHECK` value parsed; pin bumped; lock reused
+- [x] EP-3: kiroku strict CLI dispatch; `singleTryPolicy` override in embedded runners; shared advisory-lock constant + lock wrapper; concurrent-apply test
+- [x] EP-3: keiro strict CLI dispatch; drift exits nonzero (LaxCheck result inspected); `KEIRO_MIGRATE_NO_CHECK` value parsed; pin bumped; lock reused
 - [ ] EP-4: Expected-schema trees embedded in both executables; `verify` subcommand strict-checks a live database without applying
 - [ ] EP-4: `status` subcommand lists applied vs pending from the ledger (dual-schema aware)
 - [ ] EP-4: `missingMigrations` startup handshake exported from both packages; grants convention documented
@@ -349,6 +349,10 @@ interactions between child plans. Provide concise evidence.
   already-built test executable directly after adding a temporary SQL file; `cabal test`
   quite reasonably rebuilds the Template-Haskell embed first and therefore does not
   simulate staleness.
+- 2026-07-06 (from EP-3 implementation): the shared advisory-lock implementation lives
+  in kiroku commit `8536701fa3654bece274717fefcca2a7cb09b52d`, and keiro pins that SHA.
+  The codd in-memory retry bug was not filed upstream during this session; the exact
+  reproduction is recorded in EP-3 for later filing.
 
 ## Decision Log
 
@@ -464,6 +468,21 @@ Compare the result against the original vision.
   13 examples, 0 failures
   ```
 
+- 2026-07-06: EP-3 is complete across both repositories. Kiroku strict dispatch,
+  single-try embedded runners, shared advisory-lock wrapper, concurrent-apply coverage,
+  and docs landed in kiroku commits `7489159` and `8536701`; keiro now pins
+  `8536701fa3654bece274717fefcca2a7cb09b52d`, mirrors strict dispatch, exits nonzero
+  on LaxCheck drift, parses `KEIRO_MIGRATE_NO_CHECK` values, reuses the shared lock for
+  Keiro-only and combined runners, and documents the behavior. Validation:
+
+  ```text
+  cabal test kiroku-store-migrations-test
+  12 examples, 0 failures
+
+  cabal test keiro-migrations-test
+  15 examples, 0 failures
+  ```
+
 
 ## Revision Notes
 
@@ -472,4 +491,7 @@ Compare the result against the original vision.
   `Session.script` implementation discoveries, and capture validation evidence.
 - 2026-07-06: Updated after EP-2 implementation to mark EP-2 complete, check off its
   aggregate milestones, record the pushed kiroku pin and stale-embed drill discovery,
+  and capture validation evidence.
+- 2026-07-06: Updated after EP-3 implementation to mark EP-3 complete, check off its
+  aggregate milestones, record the shared advisory-lock pin and codd retry issue note,
   and capture validation evidence.

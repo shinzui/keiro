@@ -3,9 +3,10 @@ module Main (
 )
 where
 
-import Codd (VerifySchemas (LaxCheck))
+import Codd (ApplyResult (..), VerifySchemas (LaxCheck))
 import Codd.Environment (getCoddSettings)
 import Data.ByteString qualified as BS
+import Data.Char (toLower)
 import Data.List (isSuffixOf, sort)
 import Data.Maybe (fromMaybe)
 import Data.Text.IO qualified as TIO
@@ -15,14 +16,18 @@ import Keiro.Migrations.New (defaultMigrationsDir, newMigrationFile)
 import Kiroku.Store.Migrations.Guards (renderChecksumManifest)
 import System.Directory (listDirectory)
 import System.Environment (getArgs, lookupEnv)
+import System.Exit (ExitCode (ExitFailure), exitWith)
+import System.IO (hPutStrLn, stderr)
 
 main :: IO ()
 main = do
     args <- getArgs
     case args of
+        [] -> migrate
+        ["up"] -> migrate
         ("new" : rest) -> generate (unwords rest)
         ("lock" : _) -> writeLock
-        _ -> migrate
+        other -> usage other
 
 {- | @keiro-migrate new <description>@: write a timestamped migration skeleton.
 The target directory defaults to the package's @sql-migrations@ (run from the
@@ -42,13 +47,18 @@ generate description
 migrate :: IO ()
 migrate = do
     settings <- getCoddSettings
-    noCheck <- lookupEnv "KEIRO_MIGRATE_NO_CHECK"
+    noCheck <- parseNoCheckEnv =<< lookupEnv "KEIRO_MIGRATE_NO_CHECK"
     case noCheck of
-        Just _ ->
+        NoCheck ->
             runAllKeiroMigrationsNoCheck settings (secondsToDiffTime 5)
-        Nothing -> do
-            _ <- runAllKeiroMigrations settings (secondsToDiffTime 5) LaxCheck
-            pure ()
+        Checked -> do
+            result <- runAllKeiroMigrations settings (secondsToDiffTime 5) LaxCheck
+            case result of
+                SchemasMatch _ -> pure ()
+                SchemasNotVerified -> pure ()
+                SchemasDiffer _ -> do
+                    hPutStrLn stderr "schema drift detected; see the codd diff above"
+                    exitWith (ExitFailure 1)
 
 writeLock :: IO ()
 writeLock = do
@@ -57,3 +67,22 @@ writeLock = do
     sources <- traverse (\name -> (\bytes -> (name, bytes)) <$> BS.readFile (dir <> "/" <> name)) (sort names)
     TIO.writeFile "migrations.lock" (renderChecksumManifest sources)
     putStrLn ("Wrote migrations.lock (" <> show (length sources) <> " migrations)")
+
+data CheckMode = Checked | NoCheck
+
+parseNoCheckEnv :: Maybe String -> IO CheckMode
+parseNoCheckEnv Nothing = pure Checked
+parseNoCheckEnv (Just raw)
+    | lowered `elem` ["1", "true", "yes"] = pure NoCheck
+    | null raw = pure Checked
+    | otherwise = do
+        hPutStrLn stderr "Ignoring KEIRO_MIGRATE_NO_CHECK; accepted values are 1, true, yes"
+        pure Checked
+  where
+    lowered = map toLower raw
+
+usage :: [String] -> IO ()
+usage args = do
+    hPutStrLn stderr ("unknown keiro-migrate arguments: " <> unwords args)
+    hPutStrLn stderr "usage: keiro-migrate [up | new <description> | lock]"
+    exitWith (ExitFailure 2)
