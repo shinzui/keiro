@@ -7,11 +7,13 @@
 -- in a dedicated `keiro` schema. This script moves an already-migrated 0.1.0.0
 -- database to the new layout WITHOUT re-running migrations and without data loss.
 --
--- codd identifies applied migrations by FILENAME (the `name` column in
--- codd_schema.sql_migrations). EP-1 KEEPS every migration filename unchanged and
--- rewrote only the file bodies, so codd still sees all migrations as applied and
--- re-runs nothing. This script therefore does NOT rename any ledger row; it only
--- (1) creates the keiro schema and (2) moves each keiro_* table into it.
+-- codd identifies applied migrations by FILENAME (the `name` column in the
+-- ledger table). codd v0.1.8 stores that ledger at `codd.sql_migrations` and
+-- auto-renames older `codd_schema.sql_migrations` ledgers during apply. EP-1
+-- KEEPS every migration filename unchanged and rewrote only the file bodies, so
+-- codd still sees all migrations as applied and re-runs nothing. This script
+-- therefore does NOT rename any ledger row; it only (1) creates the keiro schema
+-- and (2) moves each keiro_* table into it.
 --
 -- SAFETY / IDEMPOTENCE: each move is guarded by to_regclass, so a second run is a
 -- no-op (the table is already in keiro and no longer visible as kiroku.<table>).
@@ -24,8 +26,9 @@
 -- bodies. Ephemeral / template-per-suite test databases apply the new bodies
 -- from scratch and never need this.
 --
--- NOTE: this codd builds its ledger as `codd_schema.sql_migrations`. If your codd
--- version uses the `codd` schema instead, adjust the verification query below.
+-- LEDGER LOCATION: use `codd.sql_migrations` when present. Older databases may
+-- still have `codd_schema.sql_migrations` until their first codd v0.1.8 apply
+-- auto-renames it.
 
 BEGIN;
 
@@ -76,5 +79,12 @@ COMMIT;
 --     ('2026-07-02-00-58-54-keiro-inbox-drop-received-idx.sql')
 --   ) AS f(name)
 --   WHERE NOT EXISTS (
---     SELECT 1 FROM codd_schema.sql_migrations m WHERE m.name = f.name
+--     SELECT 1
+--     FROM codd.sql_migrations m
+--     WHERE m.name = f.name
 --   );
+--
+-- If `to_regclass('codd.sql_migrations')` is NULL but
+-- `to_regclass('codd_schema.sql_migrations')` is not, run the same query
+-- against `codd_schema.sql_migrations`; codd v0.1.8 will rename it to `codd`
+-- during the next apply.

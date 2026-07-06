@@ -182,7 +182,7 @@ can be extracted later.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Integrity gates for kiroku-store-migrations: checksum manifest, embed parity, body lint, and ledger canary | docs/plans/90-integrity-gates-for-kiroku-store-migrations-checksum-manifest-embed-parity-body-lint-and-ledger-canary.md | None | None | Complete |
-| 2 | Integrity gates for keiro-migrations: shared guards, combined-ledger uniqueness, and upgrade-path regression tests | docs/plans/91-integrity-gates-for-keiro-migrations-shared-guards-combined-ledger-uniqueness-and-upgrade-path-regression-tests.md | EP-1 | None | Not Started |
+| 2 | Integrity gates for keiro-migrations: shared guards, combined-ledger uniqueness, and upgrade-path regression tests | docs/plans/91-integrity-gates-for-keiro-migrations-shared-guards-combined-ledger-uniqueness-and-upgrade-path-regression-tests.md | EP-1 | None | Complete |
 | 3 | Harden the migration apply path: strict CLI, drift exit codes, single-try retries, and advisory-lock serialization | docs/plans/92-harden-the-migration-apply-path-strict-cli-drift-exit-codes-single-try-retries-and-advisory-lock-serialization.md | None | EP-1, EP-2 | Not Started |
 | 4 | Operator tooling: embedded expected-schema verify, ledger status, and a startup migration handshake | docs/plans/93-operator-tooling-embedded-expected-schema-verify-ledger-status-and-a-startup-migration-handshake.md | EP-3 | EP-1, EP-2 | Not Started |
 | 5 | Write the migration ownership guide: framework-owned vs application-owned migrations | docs/plans/94-write-the-migration-ownership-guide-framework-owned-vs-application-owned-migrations.md | EP-4 | EP-1, EP-2 | Not Started |
@@ -296,11 +296,11 @@ implementation proceeds.
 - [x] EP-1: Body lint wired for the `kiroku.` qualifier (bootstrap grandfathered), `search_path` ban, `CONCURRENTLY` ⇒ `-- codd: no-txn`
 - [x] EP-1: Post-apply ledger canary (dual `codd`/`codd_schema` detection) and ledger-fixup regression test (sentinel-ledger fixture → fixup → migrate is a no-op)
 - [x] EP-1: kiroku README/CHANGELOG updated, including the `codd` vs `codd_schema` ledger-location correction
-- [ ] EP-2: kiroku pin bumped; keiro guards rewired through `Kiroku.Store.Migrations.Guards`; `scaffolderSpec` ported
-- [ ] EP-2: keiro `migrations.lock` + `keiro-migrate lock`; embed-parity test; body lint for the `keiro.` qualifier
-- [ ] EP-2: Combined-ledger timestamp-uniqueness test across `allKeiroMigrations` (kiroku ∪ keiro)
-- [ ] EP-2: Ledger canary for the combined ledger; keiro ledger-fixup and alpha-remediation regression tests with row-survival assertions
-- [ ] EP-2: keiro README/docs `codd_schema` corrections
+- [x] EP-2: kiroku pin bumped; keiro guards rewired through `Kiroku.Store.Migrations.Guards`; `scaffolderSpec` ported
+- [x] EP-2: keiro `migrations.lock` + `keiro-migrate lock`; embed-parity test; body lint for the `keiro.` qualifier
+- [x] EP-2: Combined-ledger timestamp-uniqueness test across `allKeiroMigrations` (kiroku ∪ keiro)
+- [x] EP-2: Ledger canary for the combined ledger; keiro ledger-fixup and alpha-remediation regression tests with row-survival assertions
+- [x] EP-2: keiro README/docs `codd_schema` corrections
 - [ ] EP-3: kiroku strict CLI dispatch; `singleTryPolicy` override in embedded runners; shared advisory-lock constant + lock wrapper; concurrent-apply test
 - [ ] EP-3: keiro strict CLI dispatch; drift exits nonzero (LaxCheck result inspected); `KEIRO_MIGRATE_NO_CHECK` value parsed; pin bumped; lock reused
 - [ ] EP-4: Expected-schema trees embedded in both executables; `verify` subcommand strict-checks a live database without applying
@@ -340,6 +340,15 @@ interactions between child plans. Provide concise evidence.
 - 2026-07-06 (from EP-1 implementation): this hasql version executes multi-statement
   scripts with `Session.script :: Text -> Session ()`; it does not use the
   `Session.sql` name present in older plan prose.
+- 2026-07-06 (from EP-2 implementation): the completed kiroku EP-1/plan-90 commit
+  had to be pushed before keiro could pin it. Cabal failed with
+  `fatal: remote error: upload-pack: not our ref d26e0dd5c0810b0277ffc03346fb0e084a4f9da3`
+  until `d26e0dd5c0810b0277ffc03346fb0e084a4f9da3` was available on
+  `origin/master`.
+- 2026-07-06 (from EP-2 implementation): the stale-embed parity drill should run the
+  already-built test executable directly after adding a temporary SQL file; `cabal test`
+  quite reasonably rebuilds the Template-Haskell embed first and therefore does not
+  simulate staleness.
 
 ## Decision Log
 
@@ -441,9 +450,26 @@ Compare the result against the original vision.
   11 examples, 0 failures
   ```
 
+- 2026-07-06: EP-2 is complete in this repository. It bumped the kiroku pin to
+  `d26e0dd5c0810b0277ffc03346fb0e084a4f9da3`, consumed
+  `Kiroku.Store.Migrations.Guards`, exported keiro embedded migration names and
+  sources, added `keiro-migrate lock` plus `keiro-migrations/migrations.lock`, ported
+  the scaffolder spec, added embed parity, checksum, body-lint, combined-ledger
+  uniqueness, codd v5 ledger canary, ledger-fixup regression, and alpha-remediation
+  regression coverage, and updated keiro migration docs for the lockfile and dual
+  ledger location. Validation in this repository:
+
+  ```text
+  cabal test keiro-migrations-test
+  13 examples, 0 failures
+  ```
+
 
 ## Revision Notes
 
 - 2026-07-06: Updated after EP-1 implementation to mark EP-1 complete, check off its
   aggregate milestones, record the seven-migration count, document the `crypton` and
   `Session.script` implementation discoveries, and capture validation evidence.
+- 2026-07-06: Updated after EP-2 implementation to mark EP-2 complete, check off its
+  aggregate milestones, record the pushed kiroku pin and stale-embed drill discovery,
+  and capture validation evidence.

@@ -5,10 +5,15 @@ where
 
 import Codd (VerifySchemas (LaxCheck))
 import Codd.Environment (getCoddSettings)
+import Data.ByteString qualified as BS
+import Data.List (isSuffixOf, sort)
 import Data.Maybe (fromMaybe)
+import Data.Text.IO qualified as TIO
 import Data.Time (secondsToDiffTime)
 import Keiro.Migrations (runAllKeiroMigrations, runAllKeiroMigrationsNoCheck)
 import Keiro.Migrations.New (defaultMigrationsDir, newMigrationFile)
+import Kiroku.Store.Migrations.Guards (renderChecksumManifest)
+import System.Directory (listDirectory)
 import System.Environment (getArgs, lookupEnv)
 
 main :: IO ()
@@ -16,6 +21,7 @@ main = do
     args <- getArgs
     case args of
         ("new" : rest) -> generate (unwords rest)
+        ("lock" : _) -> writeLock
         _ -> migrate
 
 {- | @keiro-migrate new <description>@: write a timestamped migration skeleton.
@@ -43,3 +49,11 @@ migrate = do
         Nothing -> do
             _ <- runAllKeiroMigrations settings (secondsToDiffTime 5) LaxCheck
             pure ()
+
+writeLock :: IO ()
+writeLock = do
+    dir <- fromMaybe defaultMigrationsDir <$> lookupEnv "KEIRO_MIGRATIONS_DIR"
+    names <- filter (".sql" `isSuffixOf`) <$> listDirectory dir
+    sources <- traverse (\name -> (\bytes -> (name, bytes)) <$> BS.readFile (dir <> "/" <> name)) (sort names)
+    TIO.writeFile "migrations.lock" (renderChecksumManifest sources)
+    putStrLn ("Wrote migrations.lock (" <> show (length sources) <> " migrations)")

@@ -58,8 +58,12 @@ executable keiro-migrate
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , base
+    , bytestring
     , codd
+    , directory
     , keiro-migrations
+    , kiroku-store-migrations
+    , text
     , time
 
 executable keiro-write-expected-schema
@@ -91,6 +95,7 @@ test-suite keiro-migrations-test
     , contravariant-extras
     , directory
     , ephemeral-pg             >=0.2
+    , filepath
     , generic-lens             >=2.2
     , hasql                    >=1.10
     , hasql-pool               >=1.2
@@ -99,6 +104,7 @@ test-suite keiro-migrations-test
     , kiroku-store
     , kiroku-store-migrations
     , lens                     >=5.2
+    , temporary
     , text                     >=2.0
     , time                     >=1.12
     , vector                   >=0.13

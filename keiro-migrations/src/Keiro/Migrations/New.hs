@@ -75,7 +75,7 @@ migrationSlug raw =
 
 {- | The skeleton body for a new migration. Keiro owns the dedicated @keiro@
 schema (created by the bootstrap migration), and every migration writes its
-objects fully qualified as @keiro.<name>@ with no session @search_path@ pin.
+objects fully qualified as @keiro.<name>@ with no session path pin.
 The template therefore emits a header comment and a qualified example only.
 -}
 migrationTemplate :: String -> String
@@ -83,7 +83,7 @@ migrationTemplate description =
     unlines
         [ "-- " <> description
         , "--"
-        , "-- Create objects fully qualified in the keiro schema (no search_path pin)."
+        , "-- Create objects fully qualified in the keiro schema (no session path pin)."
         , "-- Example:"
         , "--   CREATE TABLE IF NOT EXISTS keiro.keiro_example ("
         , "--     id UUID PRIMARY KEY"

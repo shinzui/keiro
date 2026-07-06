@@ -9,6 +9,8 @@ service's own migrations. Use 'allKeiroMigrations' or
 Keiro's framework schema applied together in the required order.
 -}
 module Keiro.Migrations (
+    embeddedMigrationNames,
+    embeddedMigrationSources,
     keiroFrameworkMigrations,
     keiroMigrations,
     allKeiroMigrations,
@@ -24,6 +26,7 @@ import Codd.Logging (runCoddLogger)
 import Codd.Parsing (AddedSqlMigration, EnvVars, PureStream (..), parseAddedSqlMigration)
 import Data.ByteString (ByteString)
 import Data.FileEmbed (embedDir)
+import Data.List (sort)
 import Data.Text.Encoding qualified as TE
 import Data.Time (DiffTime)
 import Kiroku.Store.Migrations qualified as Kiroku
@@ -108,5 +111,12 @@ runAllKeiroMigrationsNoCheck settings connectTimeout =
 -- 2026-07-02-00-15-48-keiro-outbox-claim-order-index.sql, and
 -- 2026-07-02-00-58-54-keiro-inbox-drop-received-idx.sql. (EP-2/M3)
 -- EP-1 (MasterPlan 12): bodies rewritten to create/qualify the keiro schema.
+-- 2026-07-06: integrity guard embed refresh.
 embeddedMigrationFiles :: [(FilePath, ByteString)]
 embeddedMigrationFiles = $(embedDir "sql-migrations")
+
+embeddedMigrationSources :: [(FilePath, ByteString)]
+embeddedMigrationSources = embeddedMigrationFiles
+
+embeddedMigrationNames :: [FilePath]
+embeddedMigrationNames = sort (map fst embeddedMigrationFiles)

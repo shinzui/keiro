@@ -41,6 +41,12 @@ codd records which migrations have run, provides a reviewed forward history, and
 verifies database shape — guarantees an in-application `CREATE TABLE IF NOT
 EXISTS` cannot give you.
 
+Keiro also checks `keiro-migrations/migrations.lock`, a SHA-256 manifest for the
+embedded SQL files. Editing a shipped migration body after it has been reviewed
+is a test failure; add a new forward migration instead. When you intentionally
+add a SQL file, regenerate the lockfile with `keiro-migrate lock` and review it
+with the SQL diff.
+
 ## Run The Migration
 
 From the Keiro repository or a workspace that includes `keiro-migrations`, run:
@@ -63,9 +69,11 @@ Haskell.
 
 After a successful run, the database has Kiroku's event-store tables (in
 `kiroku`), Keiro's framework tables (in `keiro`), and codd's internal migration
-ledger. Application-owned tables live wherever your service migrations place
-them — see [Application Tables](#application-tables) below for how to choose the
-schema your read-model and projection tables live in.
+ledger. With codd v0.1.8, fresh databases use `codd.sql_migrations`; older
+databases may briefly show `codd_schema.sql_migrations` until codd's internal
+upgrade renames it. Application-owned tables live wherever your service
+migrations place them — see [Application Tables](#application-tables) below for
+how to choose the schema your read-model and projection tables live in.
 
 ## Upgrading An Existing Alpha Database
 
@@ -133,10 +141,13 @@ by `cabal test keiro-migrations-test` to prove the migrated database still
 matches the schema Keiro intends to ship.
 
 When a real schema change is required, add a new forward SQL migration under
-`keiro-migrations/sql-migrations/`. Then regenerate the expected schema from a
-fresh ephemeral PostgreSQL database:
+`keiro-migrations/sql-migrations/`. Then regenerate the lockfile and the
+expected schema from a fresh ephemeral PostgreSQL database:
 
 ```bash
+cd keiro-migrations
+cabal --project-dir=.. run keiro-migrations:exe:keiro-migrate -- lock
+cd ..
 cabal run keiro-write-expected-schema
 ```
 
@@ -147,7 +158,7 @@ git diff -- keiro-migrations/sql-migrations keiro-migrations/expected-schema
 cabal test keiro-migrations-test
 ```
 
-Commit the SQL migration and `keiro-migrations/expected-schema` changes
-together. Ordinary fixture-based suites intentionally skip expected-schema
-comparison during setup so they remain quiet and fast; `keiro-migrations-test`
-is the strict schema drift gate.
+Commit the SQL migration, `keiro-migrations/migrations.lock`, and
+`keiro-migrations/expected-schema` changes together. Ordinary fixture-based
+suites intentionally skip expected-schema comparison during setup so they remain
+quiet and fast; `keiro-migrations-test` is the strict schema drift gate.

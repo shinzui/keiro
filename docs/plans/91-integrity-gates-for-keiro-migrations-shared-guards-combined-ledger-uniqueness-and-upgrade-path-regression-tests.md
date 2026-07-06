@@ -54,27 +54,54 @@ no-op migrate, and 0.1.0.0-layout → remediation → no-op migrate with zero ro
 
 ## Progress
 
-- [ ] M1: kiroku pin bumped in `cabal.project` to the SHA containing plan 90's work;
+- [x] M1: kiroku pin bumped in `cabal.project` to the SHA containing plan 90's work;
       keiro test guards rewired through `Kiroku.Store.Migrations.Guards`;
-      `scaffolderSpec` ported.
-- [ ] M2: `embeddedMigrationNames`/`embeddedMigrationSources` exported from
-      `Keiro.Migrations`; embed-parity test added.
-- [ ] M3: `keiro-migrations/migrations.lock` checked in; `keiro-migrate lock`
-      subcommand; checksum test; tamper drill performed and reverted.
-- [ ] M4: Body lint (`keiro.` qualifier, no exemptions expected) and the
-      combined-ledger timestamp-uniqueness test added.
-- [ ] M5: Combined-ledger canary; keiro ledger fixup rewritten dual-schema; fixup
-      regression test added.
-- [ ] M6: Alpha-remediation regression test (0.1.0.0 layout, seeded rows, zero loss,
-      strict check) added.
-- [ ] M7: README, `docs/user/migrations.md`, and
+      `scaffolderSpec` ported. Completed 2026-07-06.
+- [x] M2: `embeddedMigrationNames`/`embeddedMigrationSources` exported from
+      `Keiro.Migrations`; embed-parity test added. Completed 2026-07-06.
+- [x] M3: `keiro-migrations/migrations.lock` checked in; `keiro-migrate lock`
+      subcommand; checksum test; tamper drill performed and reverted. Completed
+      2026-07-06.
+- [x] M4: Body lint (`keiro.` qualifier, no exemptions expected) and the
+      combined-ledger timestamp-uniqueness test added. Completed 2026-07-06.
+- [x] M5: Combined-ledger canary; keiro ledger fixup rewritten dual-schema; fixup
+      regression test added. Completed 2026-07-06.
+- [x] M6: Alpha-remediation regression test (0.1.0.0 layout, seeded rows, zero loss,
+      strict check) added. Completed 2026-07-06.
+- [x] M7: README, `docs/user/migrations.md`, and
       `docs/user/upgrading-to-the-keiro-schema.md` ledger-location corrections;
-      CHANGELOG entry.
+      CHANGELOG entry. Completed 2026-07-06.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-07-06: The completed kiroku plan-90 commit existed only locally at first.
+  Cabal could not fetch the new pin until `d26e0dd5c0810b0277ffc03346fb0e084a4f9da3`
+  was pushed to `origin/master`:
+
+  ```text
+  fatal: remote error: upload-pack: not our ref d26e0dd5c0810b0277ffc03346fb0e084a4f9da3
+  ```
+
+  After pushing the already-complete kiroku commit, `cabal build
+  keiro-migrations:exe:keiro-migrate` fetched and built the dependency.
+
+- 2026-07-06: The current hasql API for multi-statement SQL is
+  `Hasql.Session.script :: Text -> Session ()`, matching plan 90's implementation.
+  The EP-2 prose mentioned `Session.sql`; the implementation uses `Session.script`
+  for both the ledger fixup and remediation scripts.
+
+- 2026-07-06: The keiro scaffolder template contained the literal word
+  `search_path` in an explanatory comment. The new body lint treats that as an
+  unsafe migration-body mention, so the template now says "session path pin"
+  instead.
+
+- 2026-07-06: The stale-embed parity drill must run the already-built test
+  binary directly. Invoking `cabal test` after adding a temporary SQL file causes
+  Cabal to rebuild `Keiro.Migrations` and refresh the `embedDir` payload, which
+  correctly makes the parity test pass. Running the compiled binary after adding
+  the file produced the expected mismatch naming
+  `2099-01-01-12-34-56-keiro-parity-drill.sql`.
 
 
 ## Decision Log
@@ -103,10 +130,29 @@ no-op migrate, and 0.1.0.0-layout → remediation → no-op migrate with zero ro
   maintenance burden.
   Date: 2026-07-06
 
+- Decision: Use the existing test executable directly for the stale-embed parity
+  drill, rather than `cabal test`.
+  Rationale: `cabal test` correctly notices the new SQL file and rebuilds the
+  Template-Haskell embed. Directly invoking the already-built binary is the
+  observable stale-embed scenario the guard is meant to catch.
+  Date: 2026-07-06
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+- 2026-07-06: EP-2 completed. The keiro package now consumes
+  `Kiroku.Store.Migrations.Guards` from pinned kiroku commit
+  `d26e0dd5c0810b0277ffc03346fb0e084a4f9da3`; exports
+  `embeddedMigrationNames` and `embeddedMigrationSources`; ships
+  `migrations.lock` and `keiro-migrate lock`; verifies embed parity, checksums,
+  body lint, combined Kiroku+Keiro timestamp uniqueness, codd v5 ledger contents,
+  the dual-schema ledger fixup, and the alpha remediation runbook; and documents
+  the lockfile plus the `codd`/`codd_schema` ledger transition. Final validation:
+
+  ```text
+  cabal test keiro-migrations-test
+  13 examples, 0 failures
+  ```
 
 
 ## Context and Orientation
@@ -232,7 +278,9 @@ Working directory `/Users/shinzui/Keikaku/bokuno/keiro` throughout.
 git -C /Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku rev-parse HEAD   # SHA for the pin bump
 cabal build keiro-migrations
 cabal test keiro-migrations-test
-cd keiro-migrations && cabal run keiro-migrate -- lock && cd ..
+cd keiro-migrations
+cabal --project-dir=.. run keiro-migrations:exe:keiro-migrate -- lock
+cd ..
 ```
 
 Expected `lock` transcript:
@@ -244,10 +292,11 @@ Wrote migrations.lock (16 migrations)
 Tamper drill:
 
 ```bash
-printf ' ' >> keiro-migrations/sql-migrations/2026-06-15-21-49-37-keiro-projection-dedup.sql
-# touch the embed comment in src/Keiro/Migrations.hs to force the re-embed, then:
-cabal test keiro-migrations-test        # expect a checksum failure naming the file
-git checkout -- keiro-migrations
+# Temporarily edit one shipped SQL file and touch the embed comment in
+# src/Keiro/Migrations.hs to force the re-embed, then:
+cabal test keiro-migrations-test --test-options=--match=SHA-256
+# Expect a checksum failure naming the edited file. Remove the temporary edit
+# before continuing.
 ```
 
 Commit per milestone with the trailers from the plan header.
@@ -271,10 +320,11 @@ Commit per milestone with the trailers from the plan header.
 
 All milestones are additive tests/tooling/docs plus two shipped-template rewrites (the
 fixup's dual-schema `DO` block — idempotence proven by its regression test — and the
-remediation's comments only). Drills are reverted via `git checkout --`. The pin bump
-is a one-line change; if the pinned SHA lacks plan 90's exports, `cabal build` fails
-immediately and the fix is to re-check plan 90's completion and re-bump. Regenerate
-`migrations.lock` only via the `lock` subcommand after reviewing
+remediation's comments only). Drills are reverted by removing the deliberate temporary
+edits/files before continuing. The pin bump is a one-line change; if the pinned SHA
+lacks plan 90's exports, `cabal build` fails immediately and the fix is to re-check plan
+90's completion and re-bump. Regenerate `migrations.lock` only via the `lock` subcommand
+after reviewing
 `git diff -- keiro-migrations/sql-migrations`.
 
 
@@ -289,3 +339,10 @@ Provides at completion: `Keiro.Migrations.embeddedMigrationNames :: [FilePath]` 
 `keiro-migrations/migrations.lock`; the `lock` subcommand; the dual-schema keiro ledger
 fixup; and the two regression suites that plan 94 will cite as the tested upgrade
 paths.
+
+## Revision Notes
+
+- 2026-07-06: Updated after implementation to mark every EP-2 milestone
+  complete, record the pushed kiroku pin, capture the `Session.script` and
+  scaffold-template discoveries, document the negative-drill evidence, and add
+  final validation output.

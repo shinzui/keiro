@@ -27,6 +27,11 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ### Upgrade
 
+- Added integrity gates for shipped migrations: `migrations.lock`,
+  `keiro-migrate lock`, embed-parity checks, body linting, combined
+  Kiroku+Keiro ledger timestamp uniqueness, a codd v5 ledger canary, and
+  regression tests for both the ledger realignment fixup and the alpha
+  remediation runbook.
 - A database first migrated by `0.1.0.0` has its `keiro_*` tables in `kiroku`. It
   requires a **one-time remediation** before running these migrations: follow
   [Upgrading To The Keiro Schema](../docs/user/upgrading-to-the-keiro-schema.md),

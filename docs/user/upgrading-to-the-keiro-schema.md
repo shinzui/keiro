@@ -35,11 +35,13 @@ runs, in a single transaction:
    `to_regclass`, so a table already in `keiro` (or absent) is skipped.
 
 **It does not touch codd's migration ledger.** codd identifies an applied
-migration purely by its file *name* (`codd_schema.sql_migrations.name`), and the
-new release keeps every migration filename unchanged — only the file bodies were
-rewritten. So a `0.1.0.0` database already records every migration as applied and
-codd re-runs nothing; there is no ledger row to rename or realign. The script
-therefore only creates the schema and moves the tables.
+migration purely by its file *name* in its ledger table. codd v0.1.8 stores that
+ledger at `codd.sql_migrations` on fresh databases and auto-renames older
+`codd_schema.sql_migrations` ledgers during apply. The new release keeps every
+migration filename unchanged — only the file bodies were rewritten. So a
+`0.1.0.0` database already records every migration as applied and codd re-runs
+nothing; there is no ledger row to rename or realign. The script therefore only
+creates the schema and moves the tables.
 
 The `keiro_*` framework tables use no `SERIAL` columns and no foreign keys, so
 there is no dependent sequence to orphan and no cross-schema reference to break —

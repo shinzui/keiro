@@ -13,6 +13,16 @@ codd is forward-only. If a migration has already reached a shared database, do
 not rename or edit it in place; add a new forward migration that repairs the
 schema, or restore the database from backup.
 
+The package also checks a `migrations.lock` manifest. Each line records the
+SHA-256 of one embedded SQL file, so an accidental edit to a shipped migration
+fails `cabal test keiro-migrations-test` with the filename. Regenerate the
+manifest only when intentionally adding or reviewing migration files:
+
+```bash
+cd keiro-migrations
+cabal --project-dir=.. run keiro-migrations:exe:keiro-migrate -- lock
+```
+
 For a local database, run:
 
 ```bash
@@ -35,6 +45,12 @@ Databases first migrated by `keiro-migrations 0.1.0.0` have their `keiro_*`
 tables in `kiroku`; before applying these migrations to such a database, follow
 the [Upgrading To The Keiro Schema](../docs/user/upgrading-to-the-keiro-schema.md)
 runbook once.
+
+codd v0.1.8 stores its migration ledger at `codd.sql_migrations` on fresh
+databases and auto-renames older `codd_schema.sql_migrations` ledgers during
+apply. Keiro's tests and fixup scripts detect both locations, preferring
+`codd.sql_migrations`.
+
 Production applications should run the migration executable before startup and
 then open Kiroku with schema initialization disabled:
 
@@ -50,11 +66,14 @@ withStore
 Keiro checks migration drift with codd's on-disk expected-schema representation
 in `keiro-migrations/expected-schema`. When a legitimate framework schema
 change is needed, add a new forward SQL file under
-`keiro-migrations/sql-migrations/`, regenerate the representation from a fresh
-ephemeral database, inspect the git diff, and commit the SQL migration and
-expected-schema files together:
+`keiro-migrations/sql-migrations/`, regenerate `migrations.lock`, regenerate the
+representation from a fresh ephemeral database, inspect the git diff, and commit
+the SQL migration, lockfile, and expected-schema files together:
 
 ```bash
+cd keiro-migrations
+cabal --project-dir=.. run keiro-migrations:exe:keiro-migrate -- lock
+cd ..
 cabal run keiro-write-expected-schema
 git diff -- keiro-migrations/sql-migrations keiro-migrations/expected-schema
 cabal test keiro-migrations-test
