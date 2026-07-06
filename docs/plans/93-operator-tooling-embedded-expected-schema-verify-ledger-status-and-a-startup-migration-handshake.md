@@ -54,21 +54,35 @@ is closed documentation-first with copy-paste `GRANT` statements.
 
 ## Progress
 
-- [ ] M0: API research spike — pin the exact codd `v0.1.8` names for reading live and
+- [x] M0: API research spike — pin the exact codd `v0.1.8` names for reading live and
       on-disk schema representations; record findings here.
-- [ ] M1 (kiroku): expected-schema tree embedded; `verify` subcommand; drift and
+- [x] M1 (kiroku): expected-schema tree embedded; `verify` subcommand; drift and
       pending-migrations drills recorded.
-- [ ] M2 (kiroku): `status` subcommand (dual-schema ledger detection);
+- [x] M2 (kiroku): `status` subcommand (dual-schema ledger detection);
       `missingMigrations` exported; README/CHANGELOG.
-- [ ] M3 (keiro): pin bumped; expected-schema embedded; `verify` + `status` on the
+- [x] M3 (keiro): pin bumped; expected-schema embedded; `verify` + `status` on the
       combined ledger; `missingMigrations` (kiroku ∪ keiro) exported.
-- [ ] M4: grants documentation in both READMEs; optional jitsurei handshake wiring;
+- [x] M4: grants documentation in both READMEs; optional jitsurei handshake wiring;
       keiro CHANGELOG and doc updates.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-07-06: codd `v0.1.8` exposes the needed representation API without a
+  fallback apply trick. The implementation uses
+  `Codd.Representations.Disk.readRepsFromDisk :: PgMajorVersion -> FilePath -> m DbRep`,
+  `Codd.Representations.Database.readRepsFromDbWithNewTxn :: CoddSettings -> Connection -> m DbRep`,
+  `Codd.Query.queryServerMajorAndFullVersion`, and
+  `Codd.Representations.logSchemasComparison` for the operator-facing diff.
+- 2026-07-06: embedding `expected-schema/` in a source-repository-package requires
+  listing the extensionless codd representation files in `extra-source-files`. Cabal
+  rejected `expected-schema/v18/**/*` with "If a wildcard '*' is used it must be with
+  an file extension", and an unlisted tree built locally but failed when keiro fetched
+  kiroku from Git.
+- 2026-07-06: The optional jitsurei startup-handshake demo was not wired in this
+  plan. The exported `missingMigrations` functions and README snippets are in place;
+  the worked example can adopt them with application-specific exit-message wording in
+  a later docs/example pass.
 
 
 ## Decision Log
@@ -103,7 +117,33 @@ is closed documentation-first with copy-paste `GRANT` statements.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-4 is complete across both repositories. Kiroku landed the expected-schema embed,
+`verify`, `status`, dual-ledger status helpers, and `missingMigrations` in commits
+`56d561d`, `dd0afa7`, and `27bfa27`; the final keiro pin is
+`27bfa2780272f86a98180a96e161c54b83b12b6a`. Keiro embeds its expected-schema snapshot,
+reuses kiroku's ledger/status types, exposes combined-ledger `migrationStatus`,
+`missingMigrations`, and `verifySchema`, and wires `keiro-migrate verify/status`.
+
+Validation:
+
+```text
+cabal test kiroku-store-migrations-test --test-show-details=direct
+15 examples, 0 failures
+
+nix build .#kiroku-store-migrations
+Exit: 0
+
+cabal build keiro-migrations:exe:keiro-migrate keiro-migrations:lib:keiro-migrations
+Exit: 0
+
+cabal test keiro-migrations-test --test-show-details=direct
+19 examples, 0 failures
+```
+
+The specs cover empty databases (all embedded names pending), Kiroku-only databases
+(only Keiro names pending), fully migrated databases (`VerifySucceeded` and no
+missing migrations), and drifted databases (`VerifyFailed` with unchanged ledger row
+count).
 
 
 ## Context and Orientation
@@ -211,8 +251,9 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA kiroku TO your_app_role;
 
 Optionally (small, high-value demo): wire `missingMigrations` into
 `jitsurei/app/Main.hs` before `withStore`, exiting with a "run keiro-migrate first"
-message listing the missing names; note it in the jitsurei guide if done. keiro
-CHANGELOG entry.
+message listing the missing names; note it in the jitsurei guide if done. This was
+left for a later example/docs pass; keiro README, user docs, and CHANGELOG now show the
+library handshake.
 
 
 ## Concrete Steps

@@ -37,6 +37,11 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
   remains checked, schema drift under the checked path exits nonzero, embedded
   migrations force codd's single-try retry policy, and concurrent applies
   serialize with the shared Kiroku advisory lock.
+- Added operator tooling: `keiro-migrate verify` strict-checks a live database
+  against the expected-schema snapshot embedded in the binary,
+  `keiro-migrate status` reports applied and pending combined-ledger entries,
+  and `Keiro.Migrations.missingMigrations` lets applications fail fast at
+  startup when Kiroku or Keiro framework migrations have not been applied.
 - A database first migrated by `0.1.0.0` has its `keiro_*` tables in `kiroku`. It
   requires a **one-time remediation** before running these migrations: follow
   [Upgrading To The Keiro Schema](../docs/user/upgrading-to-the-keiro-schema.md),

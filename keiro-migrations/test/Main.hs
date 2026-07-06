@@ -25,7 +25,17 @@ import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool.Config
 import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
-import Keiro.Migrations (embeddedMigrationNames, embeddedMigrationSources, runAllKeiroMigrations, runAllKeiroMigrationsNoCheck)
+import Keiro.Migrations (
+    MigrationStatus (..),
+    VerifyOutcome (..),
+    embeddedMigrationNames,
+    embeddedMigrationSources,
+    migrationStatus,
+    missingMigrations,
+    runAllKeiroMigrations,
+    runAllKeiroMigrationsNoCheck,
+    verifySchema,
+ )
 import Keiro.Migrations.New (migrationFileName, migrationSlug, newMigrationFile)
 import Kiroku.Store.Migrations qualified as Kiroku
 import Kiroku.Store.Migrations.Guards
@@ -186,6 +196,58 @@ migrationIntegritySpec =
                 names `shouldBe` map T.pack expectedLedgerNames
                 count <- ledgerRowCount connStr schema
                 count `shouldBe` fromIntegral (length expectedLedgerNames)
+            case result of
+                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
+                Right () -> pure ()
+
+        it "reports every embedded migration as pending on an empty database" $ do
+            result <- withKeiroPg $ \db -> do
+                let coddSettings = testCoddSettings (Pg.connectionString db) "keiro-migrations/expected-schema"
+                verifySchema coddSettings (secondsToDiffTime 5) `shouldReturn` VerifyPending expectedLedgerNames
+                status <- migrationStatus coddSettings (secondsToDiffTime 5)
+                statusApplied status `shouldBe` []
+                statusPending status `shouldBe` expectedLedgerNames
+                missingMigrations coddSettings (secondsToDiffTime 5) `shouldReturn` expectedLedgerNames
+            case result of
+                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
+                Right () -> pure ()
+
+        it "reports only Keiro migrations as pending after Kiroku-only apply" $ do
+            result <- withKeiroPg $ \db -> do
+                let coddSettings = testCoddSettings (Pg.connectionString db) "keiro-migrations/expected-schema"
+                _ <- Kiroku.runKirokuMigrationsNoCheck coddSettings (secondsToDiffTime 5)
+                verifySchema coddSettings (secondsToDiffTime 5) `shouldReturn` VerifyPending embeddedMigrationNames
+                status <- migrationStatus coddSettings (secondsToDiffTime 5)
+                map fst (statusApplied status) `shouldBe` Kiroku.embeddedMigrationNames
+                statusPending status `shouldBe` embeddedMigrationNames
+                missingMigrations coddSettings (secondsToDiffTime 5) `shouldReturn` embeddedMigrationNames
+            case result of
+                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
+                Right () -> pure ()
+
+        it "verifies the embedded Keiro expected schema after combined apply" $ do
+            result <- withKeiroPg $ \db -> do
+                let coddSettings = testCoddSettings (Pg.connectionString db) "keiro-migrations/expected-schema"
+                runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
+                verifySchema coddSettings (secondsToDiffTime 5) `shouldReturn` VerifySucceeded
+                status <- migrationStatus coddSettings (secondsToDiffTime 5)
+                map fst (statusApplied status) `shouldBe` expectedLedgerNames
+                statusPending status `shouldBe` []
+                missingMigrations coddSettings (secondsToDiffTime 5) `shouldReturn` []
+            case result of
+                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
+                Right () -> pure ()
+
+        it "reports Keiro schema drift without applying migrations" $ do
+            result <- withKeiroPg $ \db -> do
+                let connStr = Pg.connectionString db
+                    coddSettings = testCoddSettings connStr "keiro-migrations/expected-schema"
+                runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
+                beforeCount <- ledgerRowCount connStr "codd"
+                runDb connStr "verify drift mutation" (Session.script "CREATE TABLE keiro.verify_drift (id int);")
+                verifySchema coddSettings (secondsToDiffTime 5) `shouldReturn` VerifyFailed
+                afterCount <- ledgerRowCount connStr "codd"
+                afterCount `shouldBe` beforeCount
             case result of
                 Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
                 Right () -> pure ()

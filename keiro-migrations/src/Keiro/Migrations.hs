@@ -9,28 +9,41 @@ service's own migrations. Use 'allKeiroMigrations' or
 Keiro's framework schema applied together in the required order.
 -}
 module Keiro.Migrations (
+    LedgerSchema (..),
+    MigrationStatus (..),
+    VerifyOutcome (..),
     embeddedMigrationNames,
     embeddedMigrationSources,
     keiroFrameworkMigrations,
     keiroMigrations,
     allKeiroMigrations,
+    migrationStatus,
+    missingMigrations,
     runKeiroMigrations,
     runKeiroMigrationsNoCheck,
     runAllKeiroMigrations,
     runAllKeiroMigrationsNoCheck,
+    verifySchema,
 )
 where
 
 import Codd (ApplyResult, CoddSettings (..), VerifySchemas, applyMigrations, applyMigrationsNoCheck)
 import Codd.Logging (runCoddLogger)
 import Codd.Parsing (AddedSqlMigration, EnvVars, PureStream (..), parseAddedSqlMigration)
-import Codd.Types (singleTryPolicy)
+import Codd.Query (queryServerMajorAndFullVersion)
+import Codd.Representations (logSchemasComparison, readRepsFromDisk)
+import Codd.Representations.Database (readRepsFromDbWithNewTxn)
+import Codd.Types (libpqConnString, singleTryPolicy)
+import Control.Exception (bracket)
 import Control.Monad (when)
 import Data.ByteString (ByteString)
 import Data.FileEmbed (embedDir)
 import Data.List (sort)
 import Data.Text.Encoding qualified as TE
 import Data.Time (DiffTime)
+import Database.PostgreSQL.Simple qualified as DB
+import Keiro.Migrations.ExpectedSchema (withMaterializedExpectedSchema)
+import Kiroku.Store.Migrations (LedgerSchema (..), MigrationStatus (..), VerifyOutcome (..))
 import Kiroku.Store.Migrations qualified as Kiroku
 import Streaming.Prelude qualified as Streaming
 
@@ -106,6 +119,40 @@ runAllKeiroMigrationsNoCheck settings connectTimeout = do
         runCoddLogger $ do
             migrations <- allKeiroMigrations
             applyMigrationsNoCheck settings' (Just migrations) connectTimeout (\_ -> pure ())
+
+verifySchema :: CoddSettings -> DiffTime -> IO Kiroku.VerifyOutcome
+verifySchema settings connectTimeout =
+    bracket (DB.connectPostgreSQL (migsConnStringBytes settings)) DB.close $ \conn -> do
+        pending <- Kiroku.statusPending <$> Kiroku.migrationStatusFor expectedLedgerNames (migsConnString settings) connectTimeout
+        if null pending
+            then verifyRepresentations conn
+            else pure (Kiroku.VerifyPending pending)
+  where
+    verifyRepresentations conn =
+        withMaterializedExpectedSchema $ \expectedSchemaDir ->
+            runCoddLogger $ do
+                (pgMajor, _) <- queryServerMajorAndFullVersion conn
+                live <- readRepsFromDbWithNewTxn settings conn
+                expected <- readRepsFromDisk pgMajor expectedSchemaDir
+                logSchemasComparison live expected
+                pure $
+                    if live == expected
+                        then Kiroku.VerifySucceeded
+                        else Kiroku.VerifyFailed
+
+missingMigrations :: CoddSettings -> DiffTime -> IO [FilePath]
+missingMigrations settings connectTimeout =
+    Kiroku.statusPending <$> migrationStatus settings connectTimeout
+
+migrationStatus :: CoddSettings -> DiffTime -> IO Kiroku.MigrationStatus
+migrationStatus settings connectTimeout =
+    Kiroku.migrationStatusFor expectedLedgerNames (migsConnString settings) connectTimeout
+
+expectedLedgerNames :: [FilePath]
+expectedLedgerNames = sort (Kiroku.embeddedMigrationNames <> embeddedMigrationNames)
+
+migsConnStringBytes :: CoddSettings -> ByteString
+migsConnStringBytes = libpqConnString . migsConnString
 
 forceSingleTryPolicy :: CoddSettings -> CoddSettings
 forceSingleTryPolicy settings =

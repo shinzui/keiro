@@ -3,15 +3,24 @@ module Main (
 )
 where
 
-import Codd (ApplyResult (..), VerifySchemas (LaxCheck))
+import Codd (ApplyResult (..), CoddSettings (..), VerifySchemas (LaxCheck))
 import Codd.Environment (getCoddSettings)
 import Data.ByteString qualified as BS
 import Data.Char (toLower)
+import Data.Foldable (traverse_)
 import Data.List (isSuffixOf, sort)
 import Data.Maybe (fromMaybe)
 import Data.Text.IO qualified as TIO
-import Data.Time (secondsToDiffTime)
-import Keiro.Migrations (runAllKeiroMigrations, runAllKeiroMigrationsNoCheck)
+import Data.Time (UTCTime, secondsToDiffTime)
+import Keiro.Migrations (
+    LedgerSchema (..),
+    MigrationStatus (..),
+    VerifyOutcome (..),
+    migrationStatus,
+    runAllKeiroMigrations,
+    runAllKeiroMigrationsNoCheck,
+    verifySchema,
+ )
 import Keiro.Migrations.New (defaultMigrationsDir, newMigrationFile)
 import Kiroku.Store.Migrations.Guards (renderChecksumManifest)
 import System.Directory (listDirectory)
@@ -25,6 +34,8 @@ main = do
     case args of
         [] -> migrate
         ["up"] -> migrate
+        ["verify"] -> verify
+        ["status"] -> status
         ("new" : rest) -> generate (unwords rest)
         ("lock" : _) -> writeLock
         other -> usage other
@@ -68,6 +79,40 @@ writeLock = do
     TIO.writeFile "migrations.lock" (renderChecksumManifest sources)
     putStrLn ("Wrote migrations.lock (" <> show (length sources) <> " migrations)")
 
+status :: IO ()
+status = do
+    settings <- getCoddSettings
+    migrationStatus settings (secondsToDiffTime 5) >>= printStatus
+
+verify :: IO ()
+verify = do
+    settings <- getCoddSettings
+    outcome <- verifySchema settings (secondsToDiffTime 5)
+    case outcome of
+        VerifySucceeded -> putStrLn "Schema matches expected snapshot."
+        VerifyFailed -> exitWith (ExitFailure 1)
+        VerifyPending pending -> do
+            hPutStrLn stderr "Cannot verify while migrations are pending:"
+            traverse_ (hPutStrLn stderr . ("  " <>)) pending
+            exitWith (ExitFailure 2)
+
+printStatus :: MigrationStatus -> IO ()
+printStatus MigrationStatus{statusLedgerSchema, statusApplied, statusPending} = do
+    putStrLn ("Ledger: " <> maybe "not found" renderLedgerSchema statusLedgerSchema)
+    putStrLn ("Applied (" <> show (length statusApplied) <> "):")
+    traverse_ printApplied statusApplied
+    putStrLn ("Pending (" <> show (length statusPending) <> "):")
+    traverse_ (putStrLn . ("  " <>)) statusPending
+    putStrLn ("applied " <> show (length statusApplied) <> ", pending " <> show (length statusPending))
+
+renderLedgerSchema :: LedgerSchema -> String
+renderLedgerSchema CoddLedger = "codd.sql_migrations"
+renderLedgerSchema CoddSchemaLedger = "codd_schema.sql_migrations"
+
+printApplied :: (FilePath, UTCTime) -> IO ()
+printApplied (name, timestamp) =
+    putStrLn ("  " <> name <> "   " <> show timestamp)
+
 data CheckMode = Checked | NoCheck
 
 parseNoCheckEnv :: Maybe String -> IO CheckMode
@@ -84,5 +129,5 @@ parseNoCheckEnv (Just raw)
 usage :: [String] -> IO ()
 usage args = do
     hPutStrLn stderr ("unknown keiro-migrate arguments: " <> unwords args)
-    hPutStrLn stderr "usage: keiro-migrate [up | new <description> | lock]"
+    hPutStrLn stderr "usage: keiro-migrate [up | verify | status | new <description> | lock]"
     exitWith (ExitFailure 2)

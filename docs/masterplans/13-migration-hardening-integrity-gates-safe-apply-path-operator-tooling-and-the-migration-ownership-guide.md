@@ -184,7 +184,7 @@ can be extracted later.
 | 1 | Integrity gates for kiroku-store-migrations: checksum manifest, embed parity, body lint, and ledger canary | docs/plans/90-integrity-gates-for-kiroku-store-migrations-checksum-manifest-embed-parity-body-lint-and-ledger-canary.md | None | None | Complete |
 | 2 | Integrity gates for keiro-migrations: shared guards, combined-ledger uniqueness, and upgrade-path regression tests | docs/plans/91-integrity-gates-for-keiro-migrations-shared-guards-combined-ledger-uniqueness-and-upgrade-path-regression-tests.md | EP-1 | None | Complete |
 | 3 | Harden the migration apply path: strict CLI, drift exit codes, single-try retries, and advisory-lock serialization | docs/plans/92-harden-the-migration-apply-path-strict-cli-drift-exit-codes-single-try-retries-and-advisory-lock-serialization.md | None | EP-1, EP-2 | Complete |
-| 4 | Operator tooling: embedded expected-schema verify, ledger status, and a startup migration handshake | docs/plans/93-operator-tooling-embedded-expected-schema-verify-ledger-status-and-a-startup-migration-handshake.md | EP-3 | EP-1, EP-2 | Not Started |
+| 4 | Operator tooling: embedded expected-schema verify, ledger status, and a startup migration handshake | docs/plans/93-operator-tooling-embedded-expected-schema-verify-ledger-status-and-a-startup-migration-handshake.md | EP-3 | EP-1, EP-2 | Complete |
 | 5 | Write the migration ownership guide: framework-owned vs application-owned migrations | docs/plans/94-write-the-migration-ownership-guide-framework-owned-vs-application-owned-migrations.md | EP-4 | EP-1, EP-2 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -303,9 +303,9 @@ implementation proceeds.
 - [x] EP-2: keiro README/docs `codd_schema` corrections
 - [x] EP-3: kiroku strict CLI dispatch; `singleTryPolicy` override in embedded runners; shared advisory-lock constant + lock wrapper; concurrent-apply test
 - [x] EP-3: keiro strict CLI dispatch; drift exits nonzero (LaxCheck result inspected); `KEIRO_MIGRATE_NO_CHECK` value parsed; pin bumped; lock reused
-- [ ] EP-4: Expected-schema trees embedded in both executables; `verify` subcommand strict-checks a live database without applying
-- [ ] EP-4: `status` subcommand lists applied vs pending from the ledger (dual-schema aware)
-- [ ] EP-4: `missingMigrations` startup handshake exported from both packages; grants convention documented
+- [x] EP-4: Expected-schema trees embedded in both executables; `verify` subcommand strict-checks a live database without applying
+- [x] EP-4: `status` subcommand lists applied vs pending from the ledger (dual-schema aware)
+- [x] EP-4: `missingMigrations` startup handshake exported from both packages; grants convention documented
 - [ ] EP-5: `docs/user/migration-ownership.md` published; `docs/user/migrations.md`, READMEs, and cross-links updated; stale `codd_schema` references swept
 
 ## Surprises & Discoveries
@@ -353,6 +353,11 @@ interactions between child plans. Provide concise evidence.
   in kiroku commit `8536701fa3654bece274717fefcca2a7cb09b52d`, and keiro pins that SHA.
   The codd in-memory retry bug was not filed upstream during this session; the exact
   reproduction is recorded in EP-3 for later filing.
+- 2026-07-06 (from EP-4 implementation): source-repository-package builds do not include
+  unlisted expected-schema files, and cabal rejects recursive extensionless globs such
+  as `expected-schema/v18/**/*`. Both migration packages now list every codd
+  expected-schema representation file explicitly in `extra-source-files`; the final
+  kiroku pin for EP-4 is `27bfa2780272f86a98180a96e161c54b83b12b6a`.
 
 ## Decision Log
 
@@ -483,6 +488,27 @@ Compare the result against the original vision.
   15 examples, 0 failures
   ```
 
+- 2026-07-06: EP-4 is complete across both repositories. Kiroku embeds its
+  expected-schema snapshot, ships `kiroku-store-migrate verify/status`, exports
+  dual-ledger status helpers and `missingMigrations`, and documents runtime grants in
+  commits `56d561d`, `dd0afa7`, and `27bfa27`. Keiro now pins
+  `27bfa2780272f86a98180a96e161c54b83b12b6a`, embeds its expected-schema snapshot,
+  ships `keiro-migrate verify/status`, exposes combined-ledger `migrationStatus`,
+  `missingMigrations`, and `verifySchema`, documents grants and the startup handshake,
+  and covers empty, half-migrated, fully migrated, and drifted databases in tests.
+  Validation:
+
+  ```text
+  cabal test kiroku-store-migrations-test
+  15 examples, 0 failures
+
+  nix build .#kiroku-store-migrations
+  Exit: 0
+
+  cabal test keiro-migrations-test
+  19 examples, 0 failures
+  ```
+
 
 ## Revision Notes
 
@@ -495,3 +521,6 @@ Compare the result against the original vision.
 - 2026-07-06: Updated after EP-3 implementation to mark EP-3 complete, check off its
   aggregate milestones, record the shared advisory-lock pin and codd retry issue note,
   and capture validation evidence.
+- 2026-07-06: Updated after EP-4 implementation to mark EP-4 complete, check off its
+  aggregate milestones, record the explicit expected-schema source-list packaging
+  discovery, and capture validation evidence.

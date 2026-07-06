@@ -51,11 +51,12 @@ databases and auto-renames older `codd_schema.sql_migrations` ledgers during
 apply. Keiro's tests and fixup scripts detect both locations, preferring
 `codd.sql_migrations`.
 
-`keiro-migrate` accepts bare invocation and `up` as apply commands. Unknown
-arguments fail with usage and exit code 2 before reading `CODD_CONNECTION`, so a
-typo cannot accidentally apply migrations. Set `KEIRO_MIGRATE_NO_CHECK=1`,
-`true`, or `yes` only for local no-check applies; unset or any other value means
-the normal checked path runs.
+`keiro-migrate` accepts bare invocation and `up` as apply commands. It also
+accepts `verify`, `status`, `new`, and `lock`. Unknown arguments fail with usage
+and exit code 2 before reading `CODD_CONNECTION`, so a typo cannot accidentally
+apply migrations. Set `KEIRO_MIGRATE_NO_CHECK=1`, `true`, or `yes` only for
+local no-check applies; unset or any other value means the normal checked path
+runs.
 
 The executable serializes migration applies with the same PostgreSQL
 session-level advisory lock used by `kiroku-store-migrate`, because
@@ -67,6 +68,21 @@ single try, ignoring `CODD_RETRY_POLICY`; codd 0.1.8 cannot re-read in-memory
 embedded migrations during a retry, so retrying would mask the original database
 error with an unrelated crash.
 
+## Verifying and inspecting a database
+
+`keiro-migrate verify` is read-only. It first checks the combined codd ledger
+for every embedded Kiroku and Keiro migration name. If any are pending, it
+prints them and exits 2 without comparing schema objects or applying anything.
+If none are pending, it strict-compares the live `keiro` schema with the
+expected-schema snapshot embedded in the binary, exits 0 on a match, and exits 1
+with codd's differing objects on drift.
+
+`keiro-migrate status` is also read-only. It prints the ledger table in use
+(`codd.sql_migrations`, or `codd_schema.sql_migrations` on older databases), the
+applied migration names and timestamps, the pending embedded migration names
+from the combined Kiroku+Keiro set, and a summary line. Pending migrations do
+not make `status` fail; use `verify` as the gate.
+
 Production applications should run the migration executable before startup and
 then open Kiroku with schema initialization disabled:
 
@@ -75,6 +91,28 @@ withStore
   (defaultConnectionSettings connString
     & #schemaInitialization .~ SkipSchemaInitialization)
   app
+```
+
+Applications can fail fast before opening the store by calling the exported
+startup handshake:
+
+```haskell
+missing <- Keiro.Migrations.missingMigrations coddSettings (secondsToDiffTime 5)
+unless (null missing) $
+  fail ("Run keiro-migrate before starting; pending migrations: " <> show missing)
+```
+
+## Runtime role privileges
+
+Run migrations with an owner/admin role, then grant the application runtime role
+only the privileges it needs on framework-owned objects:
+
+```sql
+GRANT USAGE ON SCHEMA kiroku, keiro TO your_app_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA kiroku, keiro TO your_app_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA kiroku, keiro TO your_app_role;
+-- Re-run after any framework upgrade whose migrations add tables or sequences:
+-- new objects are NOT covered by past GRANT ... ON ALL TABLES statements.
 ```
 
 ## Updating expected schema
@@ -96,5 +134,6 @@ cabal test keiro-migrations-test
 ```
 
 Fixture-only test suites use `runAllKeiroMigrationsNoCheck` by design: they only
-need a freshly migrated database. `keiro-migrations-test` is the canonical drift
-gate and runs a strict comparison against the checked-in expected schema.
+need a freshly migrated database. `keiro-migrations-test` and
+`keiro-migrate verify` are the canonical drift gates and run strict comparisons
+against the checked-in expected schema.

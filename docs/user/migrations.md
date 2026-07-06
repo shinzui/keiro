@@ -80,12 +80,26 @@ migrations place them — see [Application Tables](#application-tables) below fo
 how to choose the schema your read-model and projection tables live in.
 
 `keiro-migrate` uses strict command dispatch: bare invocation and `up` apply
-migrations, while unknown arguments exit 2 with usage before reading database
-settings. The apply path also takes a PostgreSQL advisory lock shared with
+migrations; `verify`, `status`, `new`, and `lock` are explicit non-apply
+commands; unknown arguments exit 2 with usage before reading database settings.
+The apply path also takes a PostgreSQL advisory lock shared with
 `kiroku-store-migrate`, so concurrent migration processes against one database
-serialize instead of racing on codd's ledger. Embedded migrations run with
-codd's retry policy forced to a single try because codd 0.1.8 cannot retry
-in-memory migration streams without masking the original failure.
+serialize instead of racing on codd's ledger. Embedded migrations run with codd's
+retry policy forced to a single try because codd 0.1.8 cannot retry in-memory
+migration streams without masking the original failure.
+
+## Verify And Inspect
+
+`keiro-migrate verify` is read-only. It first checks the combined Kiroku+Keiro
+ledger for pending embedded migration names. Pending migrations are printed and
+exit 2. When the ledger is complete, `verify` strict-compares the live `keiro`
+schema against the expected-schema snapshot embedded in the executable, exits 0
+on a match, and exits 1 with codd's differing objects on drift.
+
+`keiro-migrate status` is read-only and exits 0 whenever it can reach the
+database. It prints the ledger location, applied migration names and timestamps,
+pending embedded names, and a summary line. Use `status` for inspection and
+`verify` for deployment gates.
 
 ## Upgrading An Existing Alpha Database
 
@@ -110,6 +124,28 @@ withStore
 This keeps application startup focused on opening the store, not changing the
 database. It also prevents production rollouts from depending on whichever
 application instance happens to start first.
+
+To fail fast with a clear error before opening the store, call the startup
+handshake exported by `keiro-migrations`:
+
+```haskell
+missing <- Keiro.Migrations.missingMigrations coddSettings (secondsToDiffTime 5)
+unless (null missing) $
+  fail ("Run keiro-migrate before starting; pending migrations: " <> show missing)
+```
+
+## Runtime Role Privileges
+
+Run migrations with an owner/admin role. Grant the application runtime role only
+the privileges it needs on framework-owned objects:
+
+```sql
+GRANT USAGE ON SCHEMA kiroku, keiro TO your_app_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA kiroku, keiro TO your_app_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA kiroku, keiro TO your_app_role;
+-- Re-run after any framework upgrade whose migrations add tables or sequences:
+-- new objects are NOT covered by past GRANT ... ON ALL TABLES statements.
+```
 
 ## Application Tables
 
@@ -173,4 +209,5 @@ cabal test keiro-migrations-test
 Commit the SQL migration, `keiro-migrations/migrations.lock`, and
 `keiro-migrations/expected-schema` changes together. Ordinary fixture-based
 suites intentionally skip expected-schema comparison during setup so they remain
-quiet and fast; `keiro-migrations-test` is the strict schema drift gate.
+quiet and fast; `keiro-migrations-test` and `keiro-migrate verify` are the
+strict schema drift gates.
