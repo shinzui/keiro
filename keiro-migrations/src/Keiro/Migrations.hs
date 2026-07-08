@@ -15,6 +15,8 @@ module Keiro.Migrations (
     embeddedMigrationNames,
     embeddedMigrationSources,
     frameworkMigrationGroups,
+    frameworkMigrationSets,
+    keiroFrameworkMigrationSet,
     keiroFrameworkMigrations,
     keiroMigrations,
     allKeiroMigrations,
@@ -29,23 +31,21 @@ module Keiro.Migrations (
 where
 
 import Codd (ApplyResult, CoddSettings (..), VerifySchemas)
-import Codd.Extras.Apply (applyEmbeddedMigrations, applyEmbeddedMigrationsNoCheck)
-import Codd.Extras.Embedded qualified as Embedded
 import Codd.Extras.Ledger (LedgerSchema (..), MigrationStatus (..), VerifyOutcome (..))
-import Codd.Extras.Ledger qualified as Ledger
-import Codd.Extras.Verify (verifySchemaWith)
+import Codd.Extras.MigrationSet (MigrationSet)
+import Codd.Extras.MigrationSet qualified as MigrationSet
 import Codd.Parsing (AddedSqlMigration, EnvVars)
 import Control.Monad (void)
 import Data.ByteString (ByteString)
 import Data.FileEmbed (embedDir)
-import Data.List (sort)
 import Data.Time (DiffTime)
 import Keiro.Migrations.ExpectedSchema (expectedSchemaFiles)
 import Kiroku.Store.Migrations qualified as Kiroku
 
 -- | Keiro-owned embedded SQL migrations, ordered by timestamped filename.
 keiroFrameworkMigrations :: (MonadFail m, EnvVars m) => m [AddedSqlMigration m]
-keiroFrameworkMigrations = Embedded.parseEmbeddedMigrations "Keiro" embeddedMigrationFiles
+keiroFrameworkMigrations =
+    MigrationSet.parseMigrationSet keiroFrameworkMigrationSet
 
 -- | Compatibility alias for Keiro-owned framework migrations only.
 keiroMigrations :: (MonadFail m, EnvVars m) => m [AddedSqlMigration m]
@@ -53,15 +53,13 @@ keiroMigrations = keiroFrameworkMigrations
 
 -- | Kiroku event-store migrations followed by Keiro framework migrations.
 allKeiroMigrations :: (MonadFail m, EnvVars m) => m [AddedSqlMigration m]
-allKeiroMigrations = do
-    kiroku <- Kiroku.kirokuMigrations
-    keiro <- keiroFrameworkMigrations
-    pure (kiroku <> keiro)
+allKeiroMigrations =
+    MigrationSet.parseMigrationSets frameworkMigrationSets
 
 -- | Run only Keiro-owned embedded migrations through codd.
 runKeiroMigrations :: CoddSettings -> DiffTime -> VerifySchemas -> IO ApplyResult
 runKeiroMigrations settings connectTimeout verifySchemas =
-    applyEmbeddedMigrations settings connectTimeout verifySchemas [("Keiro", embeddedMigrationFiles)]
+    MigrationSet.applyMigrationSet settings connectTimeout verifySchemas keiroFrameworkMigrationSet
 
 {- | Run only Keiro-owned embedded migrations without schema verification.
 
@@ -70,18 +68,29 @@ codd expected-schema representation.
 -}
 runKeiroMigrationsNoCheck :: CoddSettings -> DiffTime -> IO ()
 runKeiroMigrationsNoCheck settings connectTimeout =
-    void $ applyEmbeddedMigrationsNoCheck settings connectTimeout [("Keiro", embeddedMigrationFiles)]
+    void $ MigrationSet.applyMigrationSetNoCheck settings connectTimeout keiroFrameworkMigrationSet
 
 frameworkMigrationGroups :: [(String, [(FilePath, ByteString)])]
 frameworkMigrationGroups =
-    [ ("Kiroku", Kiroku.embeddedMigrationSources)
-    , ("Keiro", embeddedMigrationSources)
+    MigrationSet.migrationGroups frameworkMigrationSets
+
+frameworkMigrationSets :: [MigrationSet]
+frameworkMigrationSets =
+    [ kirokuMigrationSet
+    , keiroFrameworkMigrationSet
     ]
+
+kirokuMigrationSet :: MigrationSet
+kirokuMigrationSet =
+    MigrationSet.MigrationSet
+        { MigrationSet.label = "Kiroku"
+        , MigrationSet.files = Kiroku.embeddedMigrationSources
+        }
 
 -- | Run Kiroku and Keiro embedded migrations through codd in one ledger.
 runAllKeiroMigrations :: CoddSettings -> DiffTime -> VerifySchemas -> IO ApplyResult
 runAllKeiroMigrations settings connectTimeout verifySchemas =
-    applyEmbeddedMigrations settings connectTimeout verifySchemas frameworkMigrationGroups
+    MigrationSet.applyMigrationSets settings connectTimeout verifySchemas frameworkMigrationSets
 
 {- | Run Kiroku and Keiro embedded migrations without schema verification.
 
@@ -90,22 +99,28 @@ expected-schema comparison for local development databases.
 -}
 runAllKeiroMigrationsNoCheck :: CoddSettings -> DiffTime -> IO ()
 runAllKeiroMigrationsNoCheck settings connectTimeout =
-    void $ applyEmbeddedMigrationsNoCheck settings connectTimeout frameworkMigrationGroups
+    void $ MigrationSet.applyMigrationSetsNoCheck settings connectTimeout frameworkMigrationSets
 
 verifySchema :: CoddSettings -> DiffTime -> IO VerifyOutcome
 verifySchema =
-    verifySchemaWith expectedLedgerNames expectedSchemaFiles "keiro-expected-schema"
+    MigrationSet.verifyExpectedSchema
+        expectedLedgerNames
+        MigrationSet.ExpectedSchema
+            { MigrationSet.label = "keiro-expected-schema"
+            , MigrationSet.files = expectedSchemaFiles
+            }
 
 missingMigrations :: CoddSettings -> DiffTime -> IO [FilePath]
 missingMigrations settings connectTimeout =
-    Ledger.missingMigrations expectedLedgerNames (migsConnString settings) connectTimeout
+    MigrationSet.missingMigrationsForNames expectedLedgerNames (migsConnString settings) connectTimeout
 
 migrationStatus :: CoddSettings -> DiffTime -> IO MigrationStatus
 migrationStatus settings connectTimeout =
-    Ledger.migrationStatusFor expectedLedgerNames (migsConnString settings) connectTimeout
+    MigrationSet.migrationStatusForNames expectedLedgerNames (migsConnString settings) connectTimeout
 
 expectedLedgerNames :: [FilePath]
-expectedLedgerNames = sort (Kiroku.embeddedMigrationNames <> embeddedMigrationNames)
+expectedLedgerNames =
+    MigrationSet.migrationNamesForSets frameworkMigrationSets
 
 -- Embedded migrations (touch this comment to force a TH recompile when adding
 -- a new .sql file; embedDir is not tracked per-file by GHC's recompilation
@@ -129,8 +144,16 @@ expectedLedgerNames = sort (Kiroku.embeddedMigrationNames <> embeddedMigrationNa
 embeddedMigrationFiles :: [(FilePath, ByteString)]
 embeddedMigrationFiles = $(embedDir "sql-migrations")
 
+keiroFrameworkMigrationSet :: MigrationSet
+keiroFrameworkMigrationSet =
+    MigrationSet.MigrationSet
+        { MigrationSet.label = "Keiro"
+        , MigrationSet.files = embeddedMigrationFiles
+        }
+
 embeddedMigrationSources :: [(FilePath, ByteString)]
 embeddedMigrationSources = embeddedMigrationFiles
 
 embeddedMigrationNames :: [FilePath]
-embeddedMigrationNames = Embedded.embeddedMigrationNames embeddedMigrationFiles
+embeddedMigrationNames =
+    MigrationSet.migrationNames keiroFrameworkMigrationSet
