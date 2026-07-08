@@ -5,6 +5,7 @@ where
 
 import Codd (ApplyResult (..), CoddSettings (..), VerifySchemas (LaxCheck))
 import Codd.Environment (getCoddSettings)
+import Codd.Extras.Guards (renderChecksumManifest)
 import Data.ByteString qualified as BS
 import Data.Char (toLower)
 import Data.Foldable (traverse_)
@@ -22,7 +23,6 @@ import Keiro.Migrations (
     verifySchema,
  )
 import Keiro.Migrations.New (defaultMigrationsDir, newMigrationFile)
-import Kiroku.Store.Migrations.Guards (renderChecksumManifest)
 import System.Directory (listDirectory)
 import System.Environment (getArgs, lookupEnv)
 import System.Exit (ExitCode (ExitFailure), exitWith)

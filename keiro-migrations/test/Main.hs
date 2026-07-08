@@ -4,6 +4,7 @@ module Main (
 where
 
 import Codd (ApplyResult (..), CoddSettings (..), VerifySchemas (LaxCheck, StrictCheck))
+import Codd.Extras.Guards
 import Codd.Parsing (connStringParser)
 import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
 import Contravariant.Extras (contrazip3)
@@ -38,7 +39,6 @@ import Keiro.Migrations (
  )
 import Keiro.Migrations.New (migrationFileName, migrationSlug, newMigrationFile)
 import Kiroku.Store.Migrations qualified as Kiroku
-import Kiroku.Store.Migrations.Guards
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.FilePath (takeFileName)
 import System.IO.Temp (withSystemTempDirectory)

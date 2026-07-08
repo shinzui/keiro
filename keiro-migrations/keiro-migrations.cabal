@@ -329,6 +329,7 @@ executable keiro-migrate
     , base
     , bytestring
     , codd
+    , codd-extras
     , directory
     , keiro-migrations
     , kiroku-store-migrations
@@ -358,6 +359,7 @@ test-suite keiro-migrations-test
     , attoparsec
     , base                     >=4.18 && <5
     , codd
+    , codd-extras
     , containers
     , contravariant-extras
     , directory
