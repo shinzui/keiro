@@ -14,6 +14,7 @@ module Keiro.Migrations (
     VerifyOutcome (..),
     embeddedMigrationNames,
     embeddedMigrationSources,
+    frameworkMigrationGroups,
     keiroFrameworkMigrations,
     keiroMigrations,
     allKeiroMigrations,
@@ -27,39 +28,24 @@ module Keiro.Migrations (
 )
 where
 
-import Codd (ApplyResult, CoddSettings (..), VerifySchemas, applyMigrations, applyMigrationsNoCheck)
-import Codd.Logging (runCoddLogger)
-import Codd.Parsing (AddedSqlMigration, EnvVars, PureStream (..), parseAddedSqlMigration)
-import Codd.Query (queryServerMajorAndFullVersion)
-import Codd.Representations (logSchemasComparison, readRepsFromDisk)
-import Codd.Representations.Database (readRepsFromDbWithNewTxn)
-import Codd.Types (libpqConnString, singleTryPolicy)
-import Control.Exception (bracket)
-import Control.Monad (when)
+import Codd (ApplyResult, CoddSettings (..), VerifySchemas)
+import Codd.Extras.Apply (applyEmbeddedMigrations, applyEmbeddedMigrationsNoCheck)
+import Codd.Extras.Embedded qualified as Embedded
+import Codd.Extras.Ledger (LedgerSchema (..), MigrationStatus (..), VerifyOutcome (..))
+import Codd.Extras.Ledger qualified as Ledger
+import Codd.Extras.Verify (verifySchemaWith)
+import Codd.Parsing (AddedSqlMigration, EnvVars)
+import Control.Monad (void)
 import Data.ByteString (ByteString)
 import Data.FileEmbed (embedDir)
 import Data.List (sort)
-import Data.Text.Encoding qualified as TE
 import Data.Time (DiffTime)
-import Database.PostgreSQL.Simple qualified as DB
-import Keiro.Migrations.ExpectedSchema (withMaterializedExpectedSchema)
-import Kiroku.Store.Migrations (LedgerSchema (..), MigrationStatus (..), VerifyOutcome (..))
+import Keiro.Migrations.ExpectedSchema (expectedSchemaFiles)
 import Kiroku.Store.Migrations qualified as Kiroku
-import Streaming.Prelude qualified as Streaming
 
 -- | Keiro-owned embedded SQL migrations, ordered by timestamped filename.
 keiroFrameworkMigrations :: (MonadFail m, EnvVars m) => m [AddedSqlMigration m]
-keiroFrameworkMigrations =
-    traverse parseEmbeddedMigration embeddedMigrationFiles
-  where
-    parseEmbeddedMigration :: forall m. (MonadFail m, EnvVars m) => (FilePath, ByteString) -> m (AddedSqlMigration m)
-    parseEmbeddedMigration (name, bytes) = do
-        let stream :: PureStream m
-            stream = PureStream $ Streaming.yield (TE.decodeUtf8 bytes)
-        result <- parseAddedSqlMigration name stream
-        case result of
-            Left err -> fail ("Invalid Keiro migration " <> name <> ": " <> err)
-            Right migration -> pure migration
+keiroFrameworkMigrations = Embedded.parseEmbeddedMigrations "Keiro" embeddedMigrationFiles
 
 -- | Compatibility alias for Keiro-owned framework migrations only.
 keiroMigrations :: (MonadFail m, EnvVars m) => m [AddedSqlMigration m]
@@ -74,13 +60,8 @@ allKeiroMigrations = do
 
 -- | Run only Keiro-owned embedded migrations through codd.
 runKeiroMigrations :: CoddSettings -> DiffTime -> VerifySchemas -> IO ApplyResult
-runKeiroMigrations settings connectTimeout verifySchemas = do
-    let settings' = forceSingleTryPolicy settings
-    warnRetryPolicyOverride settings
-    Kiroku.withMigrationLock (migsConnString settings') connectTimeout $
-        runCoddLogger $ do
-            migrations <- keiroFrameworkMigrations
-            applyMigrations settings' (Just migrations) connectTimeout verifySchemas
+runKeiroMigrations settings connectTimeout verifySchemas =
+    applyEmbeddedMigrations settings connectTimeout verifySchemas [("Keiro", embeddedMigrationFiles)]
 
 {- | Run only Keiro-owned embedded migrations without schema verification.
 
@@ -88,23 +69,19 @@ This is useful for local development databases that do not keep a checked-in
 codd expected-schema representation.
 -}
 runKeiroMigrationsNoCheck :: CoddSettings -> DiffTime -> IO ()
-runKeiroMigrationsNoCheck settings connectTimeout = do
-    let settings' = forceSingleTryPolicy settings
-    warnRetryPolicyOverride settings
-    Kiroku.withMigrationLock (migsConnString settings') connectTimeout $
-        runCoddLogger $ do
-            migrations <- keiroFrameworkMigrations
-            applyMigrationsNoCheck settings' (Just migrations) connectTimeout (\_ -> pure ())
+runKeiroMigrationsNoCheck settings connectTimeout =
+    void $ applyEmbeddedMigrationsNoCheck settings connectTimeout [("Keiro", embeddedMigrationFiles)]
+
+frameworkMigrationGroups :: [(String, [(FilePath, ByteString)])]
+frameworkMigrationGroups =
+    [ ("Kiroku", Kiroku.embeddedMigrationSources)
+    , ("Keiro", embeddedMigrationSources)
+    ]
 
 -- | Run Kiroku and Keiro embedded migrations through codd in one ledger.
 runAllKeiroMigrations :: CoddSettings -> DiffTime -> VerifySchemas -> IO ApplyResult
-runAllKeiroMigrations settings connectTimeout verifySchemas = do
-    let settings' = forceSingleTryPolicy settings
-    warnRetryPolicyOverride settings
-    Kiroku.withMigrationLock (migsConnString settings') connectTimeout $
-        runCoddLogger $ do
-            migrations <- allKeiroMigrations
-            applyMigrations settings' (Just migrations) connectTimeout verifySchemas
+runAllKeiroMigrations settings connectTimeout verifySchemas =
+    applyEmbeddedMigrations settings connectTimeout verifySchemas frameworkMigrationGroups
 
 {- | Run Kiroku and Keiro embedded migrations without schema verification.
 
@@ -112,58 +89,23 @@ This preserves codd's migration ledger and locking behavior while skipping
 expected-schema comparison for local development databases.
 -}
 runAllKeiroMigrationsNoCheck :: CoddSettings -> DiffTime -> IO ()
-runAllKeiroMigrationsNoCheck settings connectTimeout = do
-    let settings' = forceSingleTryPolicy settings
-    warnRetryPolicyOverride settings
-    Kiroku.withMigrationLock (migsConnString settings') connectTimeout $
-        runCoddLogger $ do
-            migrations <- allKeiroMigrations
-            applyMigrationsNoCheck settings' (Just migrations) connectTimeout (\_ -> pure ())
+runAllKeiroMigrationsNoCheck settings connectTimeout =
+    void $ applyEmbeddedMigrationsNoCheck settings connectTimeout frameworkMigrationGroups
 
-verifySchema :: CoddSettings -> DiffTime -> IO Kiroku.VerifyOutcome
-verifySchema settings connectTimeout =
-    bracket (DB.connectPostgreSQL (migsConnStringBytes settings)) DB.close $ \conn -> do
-        pending <- Kiroku.statusPending <$> Kiroku.migrationStatusFor expectedLedgerNames (migsConnString settings) connectTimeout
-        if null pending
-            then verifyRepresentations conn
-            else pure (Kiroku.VerifyPending pending)
-  where
-    verifyRepresentations conn =
-        withMaterializedExpectedSchema $ \expectedSchemaDir ->
-            runCoddLogger $ do
-                (pgMajor, _) <- queryServerMajorAndFullVersion conn
-                live <- readRepsFromDbWithNewTxn settings conn
-                expected <- readRepsFromDisk pgMajor expectedSchemaDir
-                logSchemasComparison live expected
-                pure $
-                    if live == expected
-                        then Kiroku.VerifySucceeded
-                        else Kiroku.VerifyFailed
+verifySchema :: CoddSettings -> DiffTime -> IO VerifyOutcome
+verifySchema =
+    verifySchemaWith expectedLedgerNames expectedSchemaFiles "keiro-expected-schema"
 
 missingMigrations :: CoddSettings -> DiffTime -> IO [FilePath]
 missingMigrations settings connectTimeout =
-    Kiroku.statusPending <$> migrationStatus settings connectTimeout
+    Ledger.missingMigrations expectedLedgerNames (migsConnString settings) connectTimeout
 
-migrationStatus :: CoddSettings -> DiffTime -> IO Kiroku.MigrationStatus
+migrationStatus :: CoddSettings -> DiffTime -> IO MigrationStatus
 migrationStatus settings connectTimeout =
-    Kiroku.migrationStatusFor expectedLedgerNames (migsConnString settings) connectTimeout
+    Ledger.migrationStatusFor expectedLedgerNames (migsConnString settings) connectTimeout
 
 expectedLedgerNames :: [FilePath]
 expectedLedgerNames = sort (Kiroku.embeddedMigrationNames <> embeddedMigrationNames)
-
-migsConnStringBytes :: CoddSettings -> ByteString
-migsConnStringBytes = libpqConnString . migsConnString
-
-forceSingleTryPolicy :: CoddSettings -> CoddSettings
-forceSingleTryPolicy settings =
-    -- codd v0.1.8 retries re-read migration streams, but embedded in-memory
-    -- streams fail with "Re-reading in-memory streams is not yet implemented".
-    settings{retryPolicy = singleTryPolicy}
-
-warnRetryPolicyOverride :: CoddSettings -> IO ()
-warnRetryPolicyOverride settings =
-    when (retryPolicy settings /= singleTryPolicy) $
-        putStrLn "Ignoring CODD_RETRY_POLICY for embedded migrations; codd v0.1.8 cannot retry in-memory migration streams."
 
 -- Embedded migrations (touch this comment to force a TH recompile when adding
 -- a new .sql file; embedDir is not tracked per-file by GHC's recompilation
@@ -191,4 +133,4 @@ embeddedMigrationSources :: [(FilePath, ByteString)]
 embeddedMigrationSources = embeddedMigrationFiles
 
 embeddedMigrationNames :: [FilePath]
-embeddedMigrationNames = sort (map fst embeddedMigrationFiles)
+embeddedMigrationNames = Embedded.embeddedMigrationNames embeddedMigrationFiles
