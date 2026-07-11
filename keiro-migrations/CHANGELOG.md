@@ -6,6 +6,12 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Appended `0017-schema-management-comment`, an observable non-destructive
+  native-runner canary. The combined-history fixture proves Kiroku `0008`
+  completes before Keiro `0017`, then strict verification and reruns succeed.
+
 ### Breaking Changes
 
 - Replaced the public Codd runner surface with native `pg-migrate` APIs.
