@@ -1,206 +1,130 @@
 # Migration Ownership
 
-Keiro applications usually run one PostgreSQL database with three different table
-owners:
+Keiro applications usually have three PostgreSQL schema owners:
 
-- Kiroku owns the event-store tables in the `kiroku` schema.
-- Keiro owns framework metadata in the `keiro` schema.
-- Your application owns projection, read-model, reporting, and integration tables in
-  schemas you choose.
+- Kiroku owns the event store in `kiroku`.
+- Keiro owns framework tables in `keiro`.
+- The application owns projections, read models, reporting tables, and
+  integration state in explicitly named application schemas.
 
-Those ownership boundaries are operational boundaries. Framework schemas are changed
-only by the shipped migration executables. Application schemas are changed only by
-your application migrations. Neither side should issue DDL against the other's
-objects.
+Those are operational boundaries. A component changes only the objects it owns,
+and runtime code does not create framework schema.
 
-The `jitsurei` worked example is the model: Keiro framework tables live in `keiro`,
-Kiroku's event store lives in `kiroku`, and the application read model
-`jitsurei_order_summary` lives in a separate `jitsurei` schema.
+## Framework Components
 
-## Framework Migrations
+`Kiroku.Store.Migrations.kirokuMigrations` returns the Kiroku
+`MigrationComponent`. `Keiro.Migrations.keiroMigrations` returns the Keiro
+component, whose dependency set contains exactly `kiroku`.
 
-`keiro-migrate` applies Kiroku's embedded event-store migrations first and Keiro's
-embedded framework migrations second, in one codd ledger. The SQL files are
-timestamped, embedded at compile time, protected by `migrations.lock`, and treated as
-forward-only history.
+Compose concrete components in dependency order:
 
-Do not edit, rename, or copy framework migration files. codd decides whether a
-migration has run by its filename, not by a body checksum. Editing a shipped file means
-old databases skip the new body while fresh databases run it. The framework test
-suites catch this with checksum manifests; application teams should adopt the same
-discipline for their own migration directories.
+```haskell
+import Keiro.Migrations (frameworkMigrationPlan, keiroMigrations)
+import Kiroku.Store.Migrations qualified as Kiroku
 
-Review `migrations.lock` changes during framework upgrades. A new framework migration
-should add a lockfile entry. A checksum change for an old filename means a shipped body
-changed and needs investigation.
+frameworkPlan = do
+  kiroku <- Kiroku.kirokuMigrations
+  keiro <- keiroMigrations
+  frameworkMigrationPlan kiroku keiro
+```
 
-## Application Migrations
+The planner rejects a missing Kiroku component or reversed ordering with a
+structured `PlanError`. Keiro does not copy Kiroku SQL or wrap both libraries in
+an untyped migration set.
 
-Application migrations create your tables: projection tables, read-model tables,
-materialized views, reporting schemas, and service-local integration state. Put them
-outside `kiroku` and `keiro`.
+The manifest `keiro-migrations/migrations/manifest` is the source of migration
+order. Each immutable SQL file has a stable component-local identifier. Do not
+edit or reorder shipped entries; append a new migration for every correction.
 
-Choose a schema explicitly. `ReadModel.schema`, `qualifiedTableName`,
-`Keiro.Connection.qualifyTable`, `withProjectionSchema`,
-`keiroConnectionSettings`, and `ensureProjectionSchema` are documented in
-[Read Models And Projections](read-models-and-projections.md#choosing-your-projection-schema).
-Production schema creation belongs in your migrations; `ensureProjectionSchema` is
-for development, tests, and examples.
+## Application Components
 
-Author application SQL with the same safety rules as framework SQL:
+Application migrations create only application-owned objects. Put them outside
+`kiroku` and `keiro`, qualify every object name, and do not rely on
+`search_path`.
 
-- Use real UTC timestamp filenames: `YYYY-MM-DD-HH-MM-SS-description.sql`.
-- Keep statements idempotent where possible: `CREATE TABLE IF NOT EXISTS`,
-  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, and similar.
-- Hard-qualify every object as `<your_schema>.<object>`.
-- Do not rely on `search_path`.
-- Use `CREATE INDEX CONCURRENTLY` only in a codd no-transaction migration with
-  `-- codd: no-txn`.
+An application that wants one database plan should define its own component and
+place it after Kiroku and Keiro. Declare dependencies that reflect the SQL it
+actually consumes. `migrationPlan` validates the explicit order before any
+database connection is opened.
 
-You can reuse Keiro's scaffolder for application files:
+```haskell
+plan = migrationPlan (kiroku :| [keiro, application])
+```
+
+An application may instead run its existing migration tool after
+`keiro-migrate`. That keeps ownership clear but splits status and verification
+across two ledgers.
+
+## Authoring
+
+Use the standard CLI to create and check append-only files:
 
 ```bash
-KEIRO_MIGRATIONS_DIR=db/migrations keiro-migrate new "add order summary"
+cabal run keiro-migrate -- new \
+  --manifest keiro-migrations/migrations/manifest \
+  --description "add workflow lookup index"
+
+cabal run keiro-migrate -- check keiro-migrations/migrations/manifest
 ```
 
-Then replace the generated `keiro.keiro_example` placeholder with your application
-schema and DDL.
+Review the new SQL and manifest append together. Prefer idempotent DDL where it
+does not weaken correctness, qualify every object as `<schema>.<object>`, and
+use a nontransactional migration only when PostgreSQL forbids the operation in
+a transaction.
 
-### CI Guards
+## Importing Existing Codd History
 
-Use `Kiroku.Store.Migrations.Guards` over your application migration directory. This
-example checks names, body lint, checksums, and timestamp uniqueness across the
-combined framework-plus-application ledger:
+Kiroku and Keiro historically shared one Codd ledger. During cutover,
+`Keiro.Migrations.History.Codd` combines all seven Kiroku and sixteen Keiro
+mappings into one `HistoryImport`. The adapter verifies the old
+`migrations.lock` checksums and exact source payloads before recording either
+target prefix.
 
 ```haskell
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedStrings #-}
+config <-
+  either (fail . show) pure $
+    frameworkCoddSourceConfig provider True reason Confirmed
 
-import Data.ByteString qualified as BS
-import Data.List (isSuffixOf, sort)
-import Data.Text qualified as T
-import Data.Text.IO qualified as TIO
-import Keiro.Migrations qualified as Keiro
-import Kiroku.Store.Migrations qualified as Kiroku
-import Kiroku.Store.Migrations.Guards
-import System.Directory (listDirectory)
-import Test.Hspec
-
-appMigrationDir :: FilePath
-appMigrationDir = "db/migrations"
-
-appMigrationFiles :: IO [FilePath]
-appMigrationFiles =
-  sort . filter (".sql" `isSuffixOf`) <$> listDirectory appMigrationDir
-
-appMigrationSources :: IO [(FilePath, BS.ByteString)]
-appMigrationSources = do
-  names <- appMigrationFiles
-  traverse
-    (\name -> do
-      bytes <- BS.readFile (appMigrationDir <> "/" <> name)
-      pure (name, bytes))
-    names
-
-spec :: Spec
-spec =
-  describe "application migrations" $ do
-    it "use real UTC timestamps" $ do
-      names <- appMigrationFiles
-      sentinelViolations names `shouldBe` []
-
-    it "are unique across the combined ledger" $ do
-      names <- appMigrationFiles
-      duplicateTimestampViolations
-        (Kiroku.embeddedMigrationNames <> Keiro.embeddedMigrationNames <> names)
-        `shouldBe` []
-
-    it "are schema-qualified and codd-safe" $ do
-      sources <- appMigrationSources
-      lintViolations (LintConfig "jitsurei." []) sources `shouldBe` []
-
-    it "match the application lockfile" $ do
-      manifest <- parseChecksumManifest <$> TIO.readFile "db/migrations.lock"
-      sources <- appMigrationSources
-      case manifest of
-        Left err -> expectationFailure (T.unpack err)
-        Right parsed -> checksumViolations parsed sources `shouldBe` []
+report <-
+  importCoddHistory
+    defaultImportOptions
+    config
+    provider
+    frameworkPlan
+    frameworkCoddHistoryMappings
 ```
 
-Adjust `"jitsurei."`, `db/migrations`, and `db/migrations.lock` to your service.
+Run this only while legacy writers are quiescent. Strict source mode rejects
+unselected rows; partial or changed history leaves neither component imported.
+After import, run `keiro-migrate verify`. A subsequent `up` must report every
+historical entry as already applied and execute no legacy SQL.
 
-## Ledger Choices
+The timestamped `sql-migrations/` directory, `migrations.lock`, expected-schema
+snapshot, remediation script, and sentinel-ledger fixup remain transition
+evidence. Their Codd test target is opt-in:
 
-If your service uses codd, prefer one combined ledger: framework migrations first,
-application migrations after them, and one `applyMigrations` call. This gives one
-timestamp order and one place to answer "what has this database applied?"
-
-```haskell
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
-import Codd (CoddSettings, VerifySchemas (StrictCheck), applyMigrations)
-import Codd.Logging (runCoddLogger)
-import Codd.Parsing (AddedSqlMigration, EnvVars, PureStream (..), parseAddedSqlMigration)
-import Data.ByteString qualified as BS
-import Data.List (isSuffixOf, sort)
-import Data.Text.Encoding qualified as TE
-import Data.Time (DiffTime)
-import Keiro.Migrations (allKeiroMigrations)
-import Streaming.Prelude qualified as Streaming
-import System.Directory (listDirectory)
-import UnliftIO (MonadIO (liftIO))
-
-loadAppMigrations :: (EnvVars m, MonadFail m, MonadIO m) => FilePath -> m [AddedSqlMigration m]
-loadAppMigrations dir = do
-  names <- liftIO $ sort . filter (".sql" `isSuffixOf`) <$> listDirectory dir
-  traverse (loadOne dir) names
-
-loadOne :: forall m. (EnvVars m, MonadFail m, MonadIO m) => FilePath -> FilePath -> m (AddedSqlMigration m)
-loadOne dir name = do
-  bytes <- liftIO $ BS.readFile (dir <> "/" <> name)
-  let stream :: PureStream m
-      stream = PureStream $ Streaming.yield (TE.decodeUtf8 bytes)
-  either fail pure =<< parseAddedSqlMigration name stream
-
-runServiceMigrations :: CoddSettings -> DiffTime -> IO ()
-runServiceMigrations settings timeout =
-  runCoddLogger $ do
-    framework <- allKeiroMigrations
-    app <- loadAppMigrations "db/migrations"
-    _ <- applyMigrations settings (Just (framework <> app)) timeout StrictCheck
-    pure ()
+```bash
+cabal test -flegacy-codd-tools \
+  keiro-migrations:keiro-migrations-legacy-test
 ```
-
-The combined ledger means codd's `UNIQUE (name)` and
-`UNIQUE (migration_timestamp)` constraints apply to framework and application files
-together. That is why the CI guard checks the union.
-
-A separate application ledger is also valid when your team already has migration
-tooling. In that model, run `keiro-migrate` first, then run your service migrations
-with your tool and your ledger. The tradeoff is that status and drift are split across
-two systems.
-
-## Privileges
-
-Run migrations with an owner or admin role. Grant the runtime role only the privileges
-the application needs:
-
-```sql
-GRANT USAGE ON SCHEMA kiroku, keiro TO your_app_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA kiroku, keiro TO your_app_role;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA kiroku, keiro TO your_app_role;
--- Re-run after any framework upgrade whose migrations add tables or sequences:
--- new objects are NOT covered by past GRANT ... ON ALL TABLES statements.
-```
-
-Grant your application schemas separately, according to your service's read/write
-model.
 
 ## Operating
 
-Run `keiro-migrate` before application startup, then open Kiroku with schema
-initialization disabled:
+Run migrations with an owner or administrator role before application startup:
+
+```bash
+export DATABASE_URL='host=/tmp port=5432 dbname=service user=service_owner'
+cabal run keiro-migrate -- status
+cabal run keiro-migrate -- verify
+cabal run keiro-migrate -- up
+```
+
+`status` and `verify` are read-only. `verify` compares the complete declared plan
+with the `pgmigrate` ledger and fails on pending, changed, reordered, repaired,
+or unknown entries. `up` uses the shared advisory lock, so concurrent migrators
+serialize; deployments should still designate one migrator.
+
+Then open Kiroku with runtime schema initialization disabled:
 
 ```haskell
 withStore
@@ -209,48 +133,18 @@ withStore
   app
 ```
 
-Use `keiro-migrate status` for inspection:
+Grant runtime roles only the privileges they need:
 
-```text
-Ledger: codd.sql_migrations
-Applied (23):
-  2026-05-16-12-17-14-kiroku-bootstrap.sql   2026-05-16 12:17:14 UTC
-Pending (0):
-applied 23, pending 0
+```sql
+GRANT USAGE ON SCHEMA kiroku, keiro TO your_app_role;
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON ALL TABLES IN SCHEMA kiroku, keiro TO your_app_role;
+GRANT USAGE, SELECT
+  ON ALL SEQUENCES IN SCHEMA kiroku, keiro TO your_app_role;
 ```
 
-Use `keiro-migrate verify` as the gate. It is read-only: pending migrations exit 2,
-schema drift exits 1 with codd's differing objects, and a match exits 0.
-
-Applications can also fail fast at startup:
-
-```haskell
-missing <- Keiro.Migrations.missingMigrations coddSettings (secondsToDiffTime 5)
-unless (null missing) $
-  fail ("Run keiro-migrate before starting; pending migrations: " <> show missing)
-```
-
-`keiro-migrate` and `kiroku-store-migrate` share a PostgreSQL advisory lock around
-apply, so two migrators against one database serialize. Still prefer one migrator per
-deploy; the lock is a safety net.
-
-codd `v0.1.8` stores the ledger at `codd.sql_migrations`. Older databases may still
-have `codd_schema.sql_migrations` until first contact with codd `v0.1.8` renames it.
-Operator SQL should check `codd.sql_migrations` first and only fall back to
-`codd_schema.sql_migrations` for pre-upgrade databases.
-
-Back up persistent databases before framework upgrades. codd is forward-only:
-recovery is a backup restore or a new forward migration. For alpha databases with
-old `keiro_*` tables in `kiroku`, run
-[Upgrading To The Keiro Schema](upgrading-to-the-keiro-schema.md) before applying
-current migrations.
-
-## Version Support
-
-The checked expected-schema snapshots are under `expected-schema/v18/`, and the
-drift gates run against PostgreSQL 18 in the current test setup. The bootstrap SQL has
-PostgreSQL 17 compatibility paths where needed, but this repository's portable
-expected-schema verification is currently captured and tested on PostgreSQL 18.
-
-When a future change adds another PostgreSQL major to CI, update this guide together
-with the migration test documentation.
+Back up persistent databases before framework upgrades. Databases from
+`keiro-migrations 0.1.0.0` may first require
+[Upgrading To The Keiro Schema](upgrading-to-the-keiro-schema.md). Never repair
+schema drift by editing a shipped payload; append a migration or restore the
+reviewed backup.

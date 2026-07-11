@@ -18,17 +18,52 @@ source-repository-package
   tag: bc987f46393b604c335f034385b4c3c1ad118074
   subdir: keiki-codec-json
 
+-- This revision is the native pg-migrate conversion coordinated by EP-12.
+-- Keep the ignored cabal.project.local override while the revision is pending
+-- publication to the remote repository.
 source-repository-package
   type: git
   location: https://github.com/shinzui/kiroku.git
-  tag: 27bfa2780272f86a98180a96e161c54b83b12b6a
+  tag: 15e6fe27c18f6fe6e7eaa72470611dda9dd36821
   subdir: kiroku-store
 
 source-repository-package
   type: git
   location: https://github.com/shinzui/kiroku.git
-  tag: 27bfa2780272f86a98180a96e161c54b83b12b6a
+  tag: 15e6fe27c18f6fe6e7eaa72470611dda9dd36821
   subdir: kiroku-store-migrations
+
+-- pg-migrate's six-package v1 release is tagged but intentionally not yet
+-- published to Hackage. Pin the released tag until Hackage publication.
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/pg-migrate.git
+  tag: v1.0.0.0
+  subdir: pg-migrate
+
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/pg-migrate.git
+  tag: v1.0.0.0
+  subdir: pg-migrate-embed
+
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/pg-migrate.git
+  tag: v1.0.0.0
+  subdir: pg-migrate-cli
+
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/pg-migrate.git
+  tag: v1.0.0.0
+  subdir: pg-migrate-import-codd
+
+source-repository-package
+  type: git
+  location: https://github.com/shinzui/pg-migrate.git
+  tag: v1.0.0.0
+  subdir: pg-migrate-test-support
 
 source-repository-package
   type: git

@@ -6,7 +6,17 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Breaking Changes
+
+- `keiro-migrations` now exports a native `pg-migrate` component and composes
+  Kiroku through an explicit component dependency instead of a combined Codd
+  migration-set API.
+
+### Other Changes
+
+- The shared PostgreSQL test fixture now provisions templates through the
+  native Kiroku/Keiro migration plan. Codd transition and remediation tests are
+  retained behind the manual `legacy-codd-tools` flag.
 
 ## 0.1.0.0 — 2026-07-05
 

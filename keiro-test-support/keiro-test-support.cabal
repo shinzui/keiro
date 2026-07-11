@@ -38,16 +38,15 @@ library
   exposed-modules:    Keiro.Test.Postgres
   hs-source-dirs:     src
   build-depends:
-    , aeson             >=2.2
-    , attoparsec        >=0.14
-    , base              >=4.21 && <5
-    , codd
-    , containers        >=0.6
-    , ephemeral-pg      >=0.2
-    , hasql             >=1.10
-    , hasql-pool        >=1.2
+    , aeson                    >=2.2
+    , base                     >=4.21     && <5
+    , containers               >=0.6
+    , ephemeral-pg             >=0.2
+    , hasql                    >=1.10
+    , hasql-pool               >=1.2
     , keiro-migrations
-    , kiroku-store      >=0.1
-    , stm               >=2.5
-    , text              >=2.1
-    , time              >=1.12
+    , kiroku-store             >=0.1
+    , kiroku-store-migrations
+    , pg-migrate               ^>=1.0.0.0
+    , stm                      >=2.5
+    , text                     >=2.1

@@ -34,22 +34,19 @@ module Keiro.Test.Postgres (
 )
 where
 
-import Codd (CoddSettings (..))
-import Codd.Parsing (connStringParser)
-import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
 import Control.Concurrent.STM (TVar, atomically, newTVarIO, stateTVar)
 import Control.Exception (bracket, onException)
-import Data.Attoparsec.Text (endOfInput, parseOnly)
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.Time (secondsToDiffTime)
+import Database.PostgreSQL.Migrate (defaultRunOptions, runMigrationPlan)
 import EphemeralPg qualified as Pg
 import Hasql.Connection.Settings qualified as Conn
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool.Config
 import Hasql.Session qualified as Session
-import Keiro.Migrations (runAllKeiroMigrationsNoCheck)
+import Keiro.Migrations (frameworkMigrationPlan, keiroMigrations)
 import Kiroku.Store qualified as Store
+import Kiroku.Store.Migrations qualified as Kiroku
 
 {- | A running, migrated suite fixture: one cached PostgreSQL server owning a
 single migrated template database, plus a counter for unique clone names.
@@ -94,7 +91,7 @@ withMigratedSuiteWith extraTemplateMigration action = do
         counter <- newTVarIO 0
         runSql server ("CREATE DATABASE " <> quoteIdentifier templateDbName)
         let templateConnStr = connectionStringFor server templateDbName
-        -- Apply migrations through short-lived codd connections, all of which are
+        -- Apply migrations through short-lived pg-migrate connections, all of which are
         -- released before any clone, so the template has no active sessions when
         -- PostgreSQL copies it.
         migrateTemplate templateConnStr
@@ -160,43 +157,15 @@ withFreshDatabase fixture action =
 
 migrateTemplate :: Text -> IO ()
 migrateTemplate connStr = do
-    settings <- templateCoddSettings connStr
-    runAllKeiroMigrationsNoCheck settings (secondsToDiffTime 5)
-
-{- | Codd settings for the template database. Kiroku's event-store tables live
-in the @kiroku@ schema; Keiro's framework tables live in the dedicated @keiro@
-schema and its migrations create them schema-qualified there.
-'namespacesToCheck' is set to @keiro@ for consistency with the
-@keiro-migrations-test@ drift gate, but template setup intentionally skips
-schema verification (it uses the no-check runner), so this field is not
-load-bearing here; @keiro-migrations-test@ owns checked-in expected-schema
-drift checking.
--}
-templateCoddSettings :: Text -> IO CoddSettings
-templateCoddSettings connStr = do
-    migsConnString <- parseConnString connStr
-    pure
-        CoddSettings
-            { migsConnString
-            , sqlMigrations = []
-            , onDiskReps = Left "keiro-migrations/expected-schema"
-            , namespacesToCheck = IncludeSchemas [SqlSchema "keiro"]
-            , extraRolesToCheck = []
-            , retryPolicy = singleTryPolicy
-            , txnIsolationLvl = DbDefault
-            , schemaAlgoOpts = SchemaAlgo False False False
-            }
-
-parseConnString :: Text -> IO ConnectionString
-parseConnString connStr =
-    case parseOnly (connStringParser <* endOfInput) connStr of
-        Left err ->
-            fail $
-                "Keiro.Test.Postgres: could not parse ephemeral PostgreSQL connection string "
-                    <> show connStr
-                    <> ": "
-                    <> err
-        Right parsed -> pure parsed
+    kiroku <- either (fail . show) pure Kiroku.kirokuMigrations
+    keiro <- either (fail . show) pure keiroMigrations
+    plan <- either (fail . show) pure (frameworkMigrationPlan kiroku keiro)
+    result <-
+        runMigrationPlan
+            defaultRunOptions
+            (Conn.connectionString connStr)
+            plan
+    either (fail . show) (const (pure ())) result
 
 {- | Build a libpq connection string for a named database on the fixture's
 server, addressing it over the server's Unix socket.

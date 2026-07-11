@@ -8,6 +8,14 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ### Breaking Changes
 
+- Replaced the public Codd runner surface with native `pg-migrate` APIs.
+  `keiroMigrations` now returns the `keiro` `MigrationComponent`, and
+  `frameworkMigrationPlan` composes concrete Kiroku and Keiro components in
+  dependency order. The standard `keiro-migrate` CLI now uses the `pgmigrate`
+  ledger.
+- Renamed the sixteen embedded migrations to stable component-local identifiers
+  under `migrations/manifest` while preserving every legacy SQL payload byte.
+  Timestamped filenames and `migrations.lock` remain import evidence only.
 - **Keiro's framework tables moved out of the `kiroku` schema into a new,
   dedicated `keiro` PostgreSQL schema that Keiro creates and owns.** The
   bootstrap migration now issues `CREATE SCHEMA IF NOT EXISTS keiro`, and every
@@ -27,6 +35,13 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ### Upgrade
 
+- Added atomic Codd history import for the shared Kiroku/Keiro ledger. Both
+  components' exact payload maps, manifests, and 23 mappings are validated in
+  one adapter call; strict verification succeeds without replaying target SQL.
+- Moved Codd expected-schema, remediation, and ledger-fixup behavior behind the
+  manual `legacy-codd-tools` flag. The normal library, executable, and shared
+  test fixture no longer depend on `codd`, `codd-extras`, `file-embed`, or
+  `postgresql-simple` for migration execution.
 - Added integrity gates for shipped migrations: `migrations.lock`,
   `keiro-migrate lock`, embed-parity checks, body linting, combined
   Kiroku+Keiro ledger timestamp uniqueness, a codd v5 ledger canary, and
@@ -56,13 +71,10 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ### Recommended Version Bump
 
-- Cut the next release as **`0.2.0.0`**. This is a breaking change; the package
+- The next release is **`0.2.0.0`**. This is a breaking change; the package
   follows the Haskell PVP, where the leading `A.B` components form the "major"
   version and must increment on any breaking change, so `0.1` → `0.2` is the
-  minimal PVP-correct major bump for a pre-1.0 package (the README already warns
-  the API is unstable/alpha, so a pre-1.0 major bump is appropriate). The actual
-  `version:` edit in `keiro-migrations/keiro-migrations.cabal` is a release action
-  to perform when the release is cut, not part of these changes.
+  minimal PVP-correct major bump for a pre-1.0 package.
 
 ## 0.1.0.0 — 2026-07-05
 

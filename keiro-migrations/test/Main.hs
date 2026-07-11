@@ -1,688 +1,405 @@
-module Main (
-    main,
-)
-where
+{-# LANGUAGE MultilineStrings #-}
 
-import Codd (ApplyResult (..), CoddSettings (..), VerifySchemas (LaxCheck, StrictCheck))
-import Codd.Extras.Guards
-import Codd.Parsing (connStringParser)
-import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
-import Contravariant.Extras (contrazip3)
+module Main (main) where
+
 import Control.Concurrent.Async (concurrently)
 import Control.Exception (finally)
-import Control.Monad (filterM)
-import Data.Attoparsec.Text (endOfInput, parseOnly)
-import Data.Int (Int32)
-import Data.List (isSuffixOf, sort)
+import Control.Monad (forM_)
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as ByteString
+import Data.Either (isLeft)
+import Data.Foldable (toList)
+import Data.Int (Int64)
+import Data.List (sort)
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text (Text)
-import Data.Text qualified as T
-import Data.Text.IO qualified as TIO
-import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
-import EphemeralPg qualified as Pg
-import Hasql.Connection.Settings qualified as Conn
-import Hasql.Decoders qualified as D
-import Hasql.Encoders qualified as E
-import Hasql.Pool qualified as Pool
-import Hasql.Pool.Config qualified as Pool.Config
-import Hasql.Session qualified as Session
-import Hasql.Statement (Statement, preparable)
-import Keiro.Migrations (
-    MigrationStatus (..),
-    VerifyOutcome (..),
-    embeddedMigrationNames,
-    embeddedMigrationSources,
-    migrationStatus,
-    missingMigrations,
-    runAllKeiroMigrations,
-    runAllKeiroMigrationsNoCheck,
-    verifySchema,
+import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text.Encoding
+import Data.Text.IO qualified as Text.IO
+import Database.PostgreSQL.Migrate
+import Database.PostgreSQL.Migrate.History.Codd
+import Database.PostgreSQL.Migrate.Internal (
+    ComponentDescription (..),
+    PlanDescription (..),
+    componentNameText,
+    migrationChecksumBytes,
+    planDescription,
  )
-import Keiro.Migrations.New (migrationFileName, migrationSlug, newMigrationFile)
+import Database.PostgreSQL.Migrate.Test (withMigratedDatabase)
+import EphemeralPg qualified as Pg
+import Hasql.Connection qualified as Connection
+import Hasql.Connection.Settings qualified as Settings
+import Hasql.Decoders qualified as Decoders
+import Hasql.Encoders qualified as Encoders
+import Hasql.Session qualified as Session
+import Hasql.Statement (Statement)
+import Hasql.Statement qualified as Statement
+import Keiro.Migrations
+import Keiro.Migrations.History.Codd
 import Kiroku.Store.Migrations qualified as Kiroku
-import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
-import System.FilePath (takeFileName)
-import System.IO.Temp (withSystemTempDirectory)
+import Kiroku.Store.Migrations.History.Codd qualified as Kiroku.Codd
+import Numeric qualified
+import System.Directory (doesDirectoryExist, doesFileExist)
+import System.FilePath ((</>))
 import Test.Hspec
 
-{- | Pin the ephemeral PostgreSQL superuser to the fixed name @keiro@ so the
-captured snapshot identity (roles, database owner, per-object owners) is
-deterministic across machines and CI rather than the local OS username. This is
-the portability fix for the strict drift gate.
--}
-keiroPgConfig :: Pg.Config
-keiroPgConfig = Pg.defaultConfig{Pg.user = "keiro"}
-
-{- | Start a cached ephemeral server whose PostgreSQL superuser is the fixed
-name @keiro@. Mirrors 'Pg.withCached' but pins the user; 'Pg.withCachedConfig'
-is not exported, so we use 'Pg.startCached' + 'finally'.
--}
-withKeiroPg :: (Pg.Database -> IO a) -> IO (Either Pg.StartError a)
-withKeiroPg action = do
-    started <- Pg.startCached keiroPgConfig Pg.defaultCacheConfig
-    case started of
-        Left err -> pure (Left err)
-        Right db -> Right <$> (action db `finally` Pg.stop db)
-
 main :: IO ()
-main =
-    hspec $ do
-        migrationFileNameSpec
-        migrationIntegritySpec
-        scaffolderSpec
-        migrationUpgradeSpec
-        describe "Keiro codd migrations" $ do
-            it "applies Kiroku and Keiro migrations to a fresh database and is repeatable" $ do
-                result <- withKeiroPg $ \db -> do
-                    let connStr = Pg.connectionString db
-                        coddSettings = testCoddSettings connStr "keiro-migrations/expected-schema"
+main = hspec $ do
+    describe "native Keiro migration definition" $ do
+        it "tracks sixteen native files in manifest order" $ do
+            directory <- findMigrationsDirectory
+            manifest <- Text.lines <$> Text.IO.readFile (directory </> "manifest")
+            manifest `shouldBe` Text.pack <$> nativeMigrationFiles
 
-                    runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                    assertTablesExist connStr "kiroku" kirokuTables
-                    assertTablesExist connStr "keiro" keiroTables
-                    assertTablesAbsent connStr "kiroku" keiroTables
-                    assertTablesAbsent connStr "public" keiroTables
-                    assertTablesAbsent connStr "public" kirokuTables
+        it "preserves every legacy payload byte recorded by migrations.lock" $ do
+            directory <- findMigrationsDirectory
+            lockPath <- findLockfile
+            lockEntries <- parseLockfile <$> Text.IO.readFile lockPath
+            forM_ (zip (toList keiroLegacyMigrationNames) nativeMigrationFiles) $ \(legacyName, nativeName) -> do
+                bytes <- ByteString.readFile (directory </> nativeName)
+                lookup legacyName lockEntries `shouldBe` Just (checksumText bytes)
 
-                    runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                    assertTablesExist connStr "kiroku" kirokuTables
-                    assertTablesExist connStr "keiro" keiroTables
-                    assertTablesAbsent connStr "kiroku" keiroTables
-                    assertTablesAbsent connStr "public" keiroTables
-                    assertColumnExists connStr "keiro" "keiro_timers" "last_error"
+        it "builds component keiro with dependency kiroku and sixteen migrations" $ do
+            plan <- requirePlan
+            let PlanDescription components = planDescription plan
+            case toList components of
+                [ ComponentDescription{name = kirokuName, dependencies = kirokuDependencies, migrations = kirokuEntries}
+                    , ComponentDescription{name = keiroName, dependencies = keiroDependencies, migrations = keiroEntries}
+                    ] -> do
+                        componentNameText kirokuName `shouldBe` "kiroku"
+                        kirokuDependencies `shouldBe` mempty
+                        length kirokuEntries `shouldBe` 7
+                        componentNameText keiroName `shouldBe` "keiro"
+                        dependencyName <- requireRight (componentName "kiroku")
+                        keiroDependencies `shouldBe` Set.singleton dependencyName
+                        length keiroEntries `shouldBe` 16
+                actual -> expectationFailure ("unexpected plan description: " <> show actual)
+            validateHistoryMappingTargets plan frameworkCoddHistoryMappings `shouldBe` Right ()
 
-                case result of
-                    Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
-                    Right () -> pure ()
+        it "rejects missing and reversed Kiroku dependencies" $ do
+            kiroku <- requireRight Kiroku.kirokuMigrations
+            keiro <- requireRight keiroMigrations
+            migrationPlan (keiro :| []) `shouldSatisfy` isLeft
+            frameworkMigrationPlan keiro kiroku `shouldSatisfy` isLeft
 
-            it "matches the checked-in expected schema" $ do
-                expectedSchemaDir <- findExpectedSchemaDir
-                result <- withKeiroPg $ \db -> do
-                    let coddSettings = testCoddSettings (Pg.connectionString db) expectedSchemaDir
-                    runAllKeiroMigrations coddSettings (secondsToDiffTime 5) StrictCheck
+    describe "fresh native databases" $ do
+        it "applies Kiroku then Keiro, verifies strictly, and is repeatable" $ do
+            plan <- requirePlan
+            result <- withMigratedDatabase plan $ \connection -> do
+                assertSchema connection
+                let provider = providerFor connection
+                rerun <- runMigrationPlanWith defaultRunOptions provider plan >>= requireRight
+                reportOutcomes rerun `shouldBe` replicate 23 AlreadyApplied
+                verified <- verifyMigrationPlanWith defaultRunOptions provider plan >>= requireRight
+                case verified of
+                    VerificationReport verificationIssues applied pending unknown -> do
+                        verificationIssues `shouldBe` []
+                        length applied `shouldBe` 23
+                        pending `shouldBe` []
+                        unknown `shouldBe` []
+            either (expectationFailure . show) pure result
 
-                case result of
-                    Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
-                    Right (SchemasMatch _) -> pure ()
-                    Right SchemasNotVerified -> expectationFailure "StrictCheck did not verify schemas"
-                    Right (SchemasDiffer _) -> expectationFailure "StrictCheck returned a schema mismatch without throwing"
+        it "serializes concurrent composed applies" $ do
+            plan <- requirePlan
+            withKeiroPg $ \database -> do
+                let settings = Pg.connectionSettings database
+                (first, second) <-
+                    concurrently
+                        (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
+                        (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
+                sort [reportOutcomes first, reportOutcomes second]
+                    `shouldBe` sort [replicate 23 AppliedNow, replicate 23 AlreadyApplied]
 
-            it "reports schema drift under LaxCheck" $ do
-                expectedSchemaDir <- findExpectedSchemaDir
-                result <- withKeiroPg $ \db -> do
-                    let connStr = Pg.connectionString db
-                        coddSettings = testCoddSettings connStr expectedSchemaDir
-                    runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                    runDb
-                        connStr
-                        "drift drill"
-                        (Session.script "ALTER TABLE keiro.keiro_timers ALTER COLUMN last_error SET NOT NULL;")
-                    runAllKeiroMigrations coddSettings (secondsToDiffTime 5) LaxCheck
+    describe "combined Codd history import" $ do
+        it "imports a shared Codd V5 ledger atomically without replaying target SQL" $
+            importFixture "codd"
 
-                case result of
-                    Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
-                    Right (SchemasDiffer _) -> pure ()
-                    Right SchemasNotVerified -> expectationFailure "LaxCheck did not verify schemas"
-                    Right (SchemasMatch _) -> expectationFailure "LaxCheck did not report schema drift"
+        it "imports the legacy codd_schema ledger shape" $
+            importFixture "codd_schema"
 
-{- | Guard against the recurring mistake of hand-assigning rounded, sentinel
-migration timestamps (e.g. @2026-05-17-00-00-00-...@, @...-01-00-00-...@).
-Migrations must be created with @keiro-migrate new@ ("Keiro.Migrations.New"),
-which stamps the real current UTC time to the second, so filenames sort in true
-authoring order and never collide in codd's timestamp-keyed ledger.
--}
-migrationFileNameSpec :: Spec
-migrationFileNameSpec =
-    describe "migration file names" $ do
-        it "carry real UTC authoring timestamps, not hand-assigned sentinels" $ do
-            files <- migrationFiles
-            files `shouldNotBe` []
-            sentinelViolations files `shouldHaveNoViolations` "sentinel timestamp violations"
+        it "rejects one partial source row before creating the target ledger" $ do
+            plan <- requirePlan
+            withKeiroPg $ \database -> do
+                let settings = Pg.connectionSettings database
+                    provider = connectionProviderFromSettings settings
+                withConnection settings $ \connection -> do
+                    applyLegacyPayloads connection
+                    installCoddLedger connection "codd" True False
+                config <-
+                    requireRight
+                        (frameworkCoddSourceConfig provider True "partial fixture must fail" Confirmed)
+                imported <-
+                    importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
+                imported `shouldSatisfy` \case
+                    Left CoddPartialMigration{} -> True
+                    _ -> False
+                withConnection settings $ \connection -> do
+                    targetExists <- useSession connection (Session.statement "pgmigrate" schemaExistsStatement)
+                    targetExists `shouldBe` False
 
-        it "have unique, strictly increasing timestamps" $ do
-            files <- migrationFiles
-            duplicateTimestampViolations files `shouldHaveNoViolations` "duplicate timestamp violations"
+        it "rejects unselected shared-ledger rows in strict mode" $ do
+            plan <- requirePlan
+            withKeiroPg $ \database -> do
+                let settings = Pg.connectionSettings database
+                    provider = connectionProviderFromSettings settings
+                withConnection settings $ \connection -> do
+                    applyLegacyPayloads connection
+                    installCoddLedger connection "codd" False True
+                config <-
+                    requireRight
+                        (frameworkCoddSourceConfig provider True "strict source fixture" Confirmed)
+                imported <-
+                    importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
+                imported `shouldSatisfy` \case
+                    Left CoddStrictSourceHasUnselected{} -> True
+                    _ -> False
 
-migrationIntegritySpec :: Spec
-migrationIntegritySpec =
-    describe "migration integrity guards" $ do
-        it "embeds exactly the checked-in sql-migrations directory" $ do
-            diskNames <- sort <$> migrationFiles
-            embeddedMigrationNames `shouldBe` diskNames
+importFixture :: Text -> Expectation
+importFixture sourceSchema = do
+    plan <- requirePlan
+    withKeiroPg $ \database -> do
+        let settings = Pg.connectionSettings database
+            provider = connectionProviderFromSettings settings
+        withConnection settings $ \connection -> do
+            applyLegacyPayloads connection
+            installCoddLedger connection sourceSchema False False
+        config <-
+            requireRight
+                (frameworkCoddSourceConfig provider True "verified Keiro shared-ledger cutover" Confirmed)
+        first <-
+            importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
+                >>= requireRight
+        importOutcomes first `shouldBe` replicate 23 Imported
+        verified <- verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
+        case verified of
+            VerificationReport verificationIssues _ _ _ -> verificationIssues `shouldBe` []
+        up <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
+        reportOutcomes up `shouldBe` replicate 23 AlreadyApplied
+        second <-
+            importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
+                >>= requireRight
+        importOutcomes second `shouldBe` replicate 23 AlreadyImported
+        withConnection settings $ \connection -> do
+            assertSchema connection
+            sourceRows <- useSession connection (Session.statement () (sourceRowCountStatement sourceSchema))
+            sourceRows `shouldBe` 23
+            facts <- useSession connection (Session.statement () importFactsStatement)
+            facts `shouldBe` (23, 23, True)
 
-        it "matches the checked-in SHA-256 manifest" $ do
-            manifestPath <- findLockfile
-            parsed <- parseChecksumManifest <$> TIO.readFile manifestPath
-            case parsed of
-                Left err -> expectationFailure (T.unpack err)
-                Right manifest ->
-                    checksumViolations manifest embeddedMigrationSources
-                        `shouldHaveNoViolations` "checksum manifest violations"
+nativeMigrationFiles :: [FilePath]
+nativeMigrationFiles =
+    [ "0001-keiro-bootstrap.sql"
+    , "0002-keiro-outbox.sql"
+    , "0003-keiro-inbox.sql"
+    , "0004-keiro-timer-recovery.sql"
+    , "0005-keiro-workflow-steps.sql"
+    , "0006-keiro-awakeables.sql"
+    , "0007-keiro-workflow-children.sql"
+    , "0008-keiro-workflow-generation.sql"
+    , "0009-keiro-subscription-shards.sql"
+    , "0010-keiro-messaging-crash-recovery.sql"
+    , "0011-keiro-workflows-instances.sql"
+    , "0012-keiro-workflow-gc-index.sql"
+    , "0013-keiro-workflows-wake-after.sql"
+    , "0014-keiro-projection-dedup.sql"
+    , "0015-keiro-outbox-claim-order-index.sql"
+    , "0016-keiro-inbox-drop-received-idx.sql"
+    ]
 
-        it "keeps future migration bodies schema-qualified and codd-safe" $ do
-            lintViolations
-                LintConfig
-                    { requiredQualifier = "keiro."
-                    , exemptFiles = []
-                    }
-                embeddedMigrationSources
-                `shouldHaveNoViolations` "migration body lint violations"
-
-        it "keeps timestamps unique across the combined Kiroku and Keiro ledger" $ do
-            duplicateTimestampViolations expectedLedgerNames
-                `shouldHaveNoViolations` "combined-ledger duplicate timestamp violations"
-
-        it "records every embedded Kiroku and Keiro migration in the codd v5 ledger" $ do
-            result <- withKeiroPg $ \db -> do
-                let connStr = Pg.connectionString db
-                    coddSettings = testCoddSettings connStr "keiro-migrations/expected-schema"
-                runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                schema <- detectLedgerSchema connStr
-                schema `shouldBe` "codd"
-                names <- ledgerNames connStr schema
-                names `shouldBe` map T.pack expectedLedgerNames
-            case result of
-                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
-                Right () -> pure ()
-
-        it "serializes concurrent combined applies with the shared advisory lock" $ do
-            result <- withKeiroPg $ \db -> do
-                let connStr = Pg.connectionString db
-                    coddSettings = testCoddSettings connStr "keiro-migrations/expected-schema"
-                concurrently
-                    (runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5))
-                    (runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5))
-                schema <- detectLedgerSchema connStr
-                names <- ledgerNames connStr schema
-                names `shouldBe` map T.pack expectedLedgerNames
-                count <- ledgerRowCount connStr schema
-                count `shouldBe` fromIntegral (length expectedLedgerNames)
-            case result of
-                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
-                Right () -> pure ()
-
-        it "reports every embedded migration as pending on an empty database" $ do
-            result <- withKeiroPg $ \db -> do
-                let coddSettings = testCoddSettings (Pg.connectionString db) "keiro-migrations/expected-schema"
-                verifySchema coddSettings (secondsToDiffTime 5) `shouldReturn` VerifyPending expectedLedgerNames
-                status <- migrationStatus coddSettings (secondsToDiffTime 5)
-                statusApplied status `shouldBe` []
-                statusPending status `shouldBe` expectedLedgerNames
-                missingMigrations coddSettings (secondsToDiffTime 5) `shouldReturn` expectedLedgerNames
-            case result of
-                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
-                Right () -> pure ()
-
-        it "reports only Keiro migrations as pending after Kiroku-only apply" $ do
-            result <- withKeiroPg $ \db -> do
-                let coddSettings = testCoddSettings (Pg.connectionString db) "keiro-migrations/expected-schema"
-                _ <- Kiroku.runKirokuMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                verifySchema coddSettings (secondsToDiffTime 5) `shouldReturn` VerifyPending embeddedMigrationNames
-                status <- migrationStatus coddSettings (secondsToDiffTime 5)
-                map fst (statusApplied status) `shouldBe` Kiroku.embeddedMigrationNames
-                statusPending status `shouldBe` embeddedMigrationNames
-                missingMigrations coddSettings (secondsToDiffTime 5) `shouldReturn` embeddedMigrationNames
-            case result of
-                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
-                Right () -> pure ()
-
-        it "verifies the embedded Keiro expected schema after combined apply" $ do
-            result <- withKeiroPg $ \db -> do
-                let coddSettings = testCoddSettings (Pg.connectionString db) "keiro-migrations/expected-schema"
-                runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                verifySchema coddSettings (secondsToDiffTime 5) `shouldReturn` VerifySucceeded
-                status <- migrationStatus coddSettings (secondsToDiffTime 5)
-                map fst (statusApplied status) `shouldBe` expectedLedgerNames
-                statusPending status `shouldBe` []
-                missingMigrations coddSettings (secondsToDiffTime 5) `shouldReturn` []
-            case result of
-                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
-                Right () -> pure ()
-
-        it "reports Keiro schema drift without applying migrations" $ do
-            result <- withKeiroPg $ \db -> do
-                let connStr = Pg.connectionString db
-                    coddSettings = testCoddSettings connStr "keiro-migrations/expected-schema"
-                runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                beforeCount <- ledgerRowCount connStr "codd"
-                runDb connStr "verify drift mutation" (Session.script "CREATE TABLE keiro.verify_drift (id int);")
-                verifySchema coddSettings (secondsToDiffTime 5) `shouldReturn` VerifyFailed
-                afterCount <- ledgerRowCount connStr "codd"
-                afterCount `shouldBe` beforeCount
-            case result of
-                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
-                Right () -> pure ()
-
-        it "realigns historical sentinel ledger rows before a repeat migrate" $ do
-            fixupPath <- findLedgerFixup
-            fixupScript <- TIO.readFile fixupPath
-            result <- withKeiroPg $ \db -> do
-                let connStr = Pg.connectionString db
-                    coddSettings = testCoddSettings connStr "keiro-migrations/expected-schema"
-                runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                schema <- detectLedgerSchema connStr
-                rewindKeiroLedgerToSentinelNames connStr schema
-                sentinelNames <- ledgerNames connStr schema
-                sentinelNames `shouldSatisfy` any (`elem` map oldLedgerName keiroLedgerRemaps)
-                runDb connStr "keiro ledger fixup script" (Session.script fixupScript)
-                fixedNames <- ledgerNames connStr schema
-                fixedNames `shouldBe` map T.pack expectedLedgerNames
-                beforeCount <- ledgerRowCount connStr schema
-                runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                afterCount <- ledgerRowCount connStr schema
-                afterCount `shouldBe` beforeCount
-            case result of
-                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
-                Right () -> pure ()
-
-{- | Prove the scaffolder (`Keiro.Migrations.New`) is the producer that satisfies
-the reactive filename guard. The deterministic check proves the slug convention;
-the temp-dir check proves the live writer creates a schema-qualified template.
--}
-scaffolderSpec :: Spec
-scaffolderSpec =
-    describe "migration scaffolder" $ do
-        it "stamps a real, non-sentinel UTC timestamp and a keiro-prefixed slug" $ do
-            let sampled = UTCTime (fromGregorian 2026 7 5) (secondsToDiffTime (19 * 3600 + 9 * 60 + 18))
-                name = migrationFileName sampled "Add widget index"
-            takeFileName name `shouldBe` name
-            isTimestampShaped (take timestampWidth name) `shouldBe` True
-            handAssignedTimestamp name `shouldBe` False
-            migrationSlug "Add widget index" `shouldBe` "keiro-add-widget-index"
-
-        it "writes a well-named file into a temp dir with a qualified template" $
-            withSystemTempDirectory "keiro-scaffolder" $ \dir -> do
-                path <- newMigrationFile dir "add widget index"
-                let base = takeFileName path
-                isTimestampShaped (take timestampWidth base) `shouldBe` True
-                length base `shouldSatisfy` (> timestampWidth)
-                body <- TIO.readFile path
-                (".sql" `isSuffixOf` path) `shouldBe` True
-                ("keiro.keiro_example" `T.isInfixOf` body) `shouldBe` True
-                ("search_path" `T.isInfixOf` body) `shouldBe` False
-
-migrationUpgradeSpec :: Spec
-migrationUpgradeSpec =
-    describe "keiro migration upgrade artifacts" $ do
-        it "remediates a 0.1.0.0-style kiroku-schema layout without losing rows" $ do
-            remediationPath <- findRemediationScript
-            remediationScript <- TIO.readFile remediationPath
-            expectedSchemaDir <- findExpectedSchemaDir
-            result <- withKeiroPg $ \db -> do
-                let connStr = Pg.connectionString db
-                    coddSettings = testCoddSettings connStr expectedSchemaDir
-                runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                schema <- detectLedgerSchema connStr
-                moveKeiroTablesBackToKiroku connStr
-                seedRemediationRows connStr
-                runDb connStr "keiro schema remediation script" (Session.script remediationScript)
-
-                assertTablesExist connStr "keiro" keiroTables
-                assertTablesAbsent connStr "kiroku" keiroTables
-                assertSnapshotRowSurvived connStr
-                assertTimerRowSurvived connStr
-
-                beforeCount <- ledgerRowCount connStr schema
-                runAllKeiroMigrationsNoCheck coddSettings (secondsToDiffTime 5)
-                afterCount <- ledgerRowCount connStr schema
-                afterCount `shouldBe` beforeCount
-
-                strictResult <- runAllKeiroMigrations coddSettings (secondsToDiffTime 5) StrictCheck
-                case strictResult of
-                    SchemasMatch _ -> pure ()
-                    SchemasNotVerified -> expectationFailure "StrictCheck did not verify remediated schemas"
-                    SchemasDiffer _ -> expectationFailure "StrictCheck returned a schema mismatch after remediation"
-
-                runDb connStr "idempotent keiro schema remediation script" (Session.script remediationScript)
-                assertTablesExist connStr "keiro" keiroTables
-                assertTablesAbsent connStr "kiroku" keiroTables
-                assertSnapshotRowSurvived connStr
-                assertTimerRowSurvived connStr
-            case result of
-                Left err -> expectationFailure ("Failed to start ephemeral PostgreSQL: " <> show err)
-                Right () -> pure ()
-
--- | The migration @.sql@ files, wherever the suite is run from.
-migrationFiles :: IO [FilePath]
-migrationFiles = do
-    dir <- findMigrationsDir
-    filter (".sql" `isSuffixOf`) <$> listDirectory dir
-
-findMigrationsDir :: IO FilePath
-findMigrationsDir = do
-    let candidates = ["keiro-migrations/sql-migrations", "sql-migrations"]
-    existing <- filterM doesDirectoryExist candidates
-    case existing of
-        dir : _ -> pure dir
-        [] ->
-            expectationFailure "Could not find keiro-migrations/sql-migrations"
-                >> pure "keiro-migrations/sql-migrations"
-
-findExpectedSchemaDir :: IO FilePath
-findExpectedSchemaDir = do
-    let candidates =
-            [ "keiro-migrations/expected-schema"
-            , "expected-schema"
-            ]
-    existing <- filterM doesDirectoryExist candidates
-    case existing of
-        dir : _ -> pure dir
-        [] ->
-            expectationFailure "Could not find keiro-migrations/expected-schema"
-                >> pure "keiro-migrations/expected-schema"
+findMigrationsDirectory :: IO FilePath
+findMigrationsDirectory =
+    findDirectory ["keiro-migrations/migrations", "migrations"]
 
 findLockfile :: IO FilePath
-findLockfile = findExistingFile ["keiro-migrations/migrations.lock", "migrations.lock"]
+findLockfile =
+    findFile ["keiro-migrations/migrations.lock", "migrations.lock"]
 
-findLedgerFixup :: IO FilePath
-findLedgerFixup =
-    findExistingFile
-        [ "keiro-migrations/ledger-fixups/2026-07-05-realign-keiro-migration-timestamps.sql"
-        , "ledger-fixups/2026-07-05-realign-keiro-migration-timestamps.sql"
-        ]
+findDirectory :: [FilePath] -> IO FilePath
+findDirectory candidates = do
+    existing <- filterM doesDirectoryExist candidates
+    case existing of
+        directory : _ -> pure directory
+        [] -> expectationFailure ("could not find directory: " <> show candidates) >> pure "."
 
-findRemediationScript :: IO FilePath
-findRemediationScript =
-    findExistingFile
-        [ "keiro-migrations/remediation/2026-07-05-relocate-keiro-tables-to-keiro-schema.sql"
-        , "remediation/2026-07-05-relocate-keiro-tables-to-keiro-schema.sql"
-        ]
-
-findExistingFile :: [FilePath] -> IO FilePath
-findExistingFile candidates = do
+findFile :: [FilePath] -> IO FilePath
+findFile candidates = do
     existing <- filterM doesFileExist candidates
     case existing of
         path : _ -> pure path
-        [] -> expectationFailure ("Could not find any of: " <> show candidates) >> pure fallback
+        [] -> expectationFailure ("could not find file: " <> show candidates) >> pure "."
+
+filterM :: (value -> IO Bool) -> [value] -> IO [value]
+filterM predicate = foldr step (pure [])
   where
-    fallback =
-        case candidates of
-            path : _ -> path
-            [] -> "."
+    step value remaining = do
+        matches <- predicate value
+        values <- remaining
+        pure (if matches then value : values else values)
 
-expectedLedgerNames :: [FilePath]
-expectedLedgerNames = sort (Kiroku.embeddedMigrationNames <> embeddedMigrationNames)
-
--- | Kiroku's own event-store tables, which remain in the kiroku schema.
-kirokuTables :: [Text]
-kirokuTables =
-    [ "events"
-    , "stream_events"
-    , "streams"
-    , "subscriptions"
+parseLockfile :: Text -> [(FilePath, Text)]
+parseLockfile contents =
+    [ (Text.unpack filename, checksum)
+    | line <- Text.lines contents
+    , [checksum, filename] <- [Text.words line]
     ]
 
--- | Keiro's framework tables, which live in the dedicated keiro schema.
-keiroTables :: [Text]
-keiroTables =
-    [ "keiro_awakeables"
-    , "keiro_inbox"
-    , "keiro_outbox"
-    , "keiro_projection_dedup"
-    , "keiro_read_models"
-    , "keiro_snapshots"
-    , "keiro_subscription_shards"
-    , "keiro_timers"
-    , "keiro_workflow_children"
-    , "keiro_workflow_steps"
-    , "keiro_workflows"
-    ]
-
-testCoddSettings :: Text -> FilePath -> CoddSettings
-testCoddSettings connStr expectedSchemaDir =
-    CoddSettings
-        { migsConnString = parseConnString connStr
-        , sqlMigrations = []
-        , onDiskReps = Left expectedSchemaDir
-        , namespacesToCheck = IncludeSchemas [SqlSchema "keiro"]
-        , extraRolesToCheck = []
-        , retryPolicy = singleTryPolicy
-        , txnIsolationLvl = DbDefault
-        , schemaAlgoOpts = SchemaAlgo False False False
-        }
-
-parseConnString :: Text -> ConnectionString
-parseConnString connStr =
-    case parseOnly (connStringParser <* endOfInput) connStr of
-        Left err -> error ("Could not parse ephemeral PostgreSQL connection string for codd: " <> err)
-        Right parsed -> parsed
-
-shouldHaveNoViolations :: [Text] -> String -> Expectation
-shouldHaveNoViolations [] _ = pure ()
-shouldHaveNoViolations violations label =
-    expectationFailure (label <> ":\n" <> T.unpack (T.unlines violations))
-
-runDb :: Text -> String -> Session.Session a -> IO a
-runDb connStr label session = do
-    pool <- Pool.acquire poolConfig
-    result <- Pool.use pool session
-    Pool.release pool
-    case result of
-        Left err -> expectationFailure (label <> " failed: " <> show err) >> fail label
-        Right value -> pure value
+checksumText :: ByteString -> Text
+checksumText =
+    Text.pack
+        . concatMap renderByte
+        . ByteString.unpack
+        . migrationChecksumBytes
+        . migrationFingerprint
   where
-    poolConfig =
-        Pool.Config.settings
-            [ Pool.Config.staticConnectionSettings (Conn.connectionString connStr)
-            , Pool.Config.size 1
-            ]
+    renderByte byte =
+        case Numeric.showHex byte "" of
+            [digit] -> ['0', digit]
+            digits -> digits
 
-detectLedgerSchema :: Text -> IO Text
-detectLedgerSchema connStr = do
-    (hasCodd, hasCoddSchema) <- runDb connStr "ledger schema detection" (Session.statement () ledgerSchemaStmt)
-    case (hasCodd, hasCoddSchema) of
-        (True, False) -> pure "codd"
-        (False, True) -> pure "codd_schema"
-        (False, False) -> expectationFailure "codd ledger table was not found" >> pure "codd"
-        (True, True) -> expectationFailure "both codd and codd_schema ledger tables exist" >> pure "codd"
+requirePlan :: IO MigrationPlan
+requirePlan = do
+    kiroku <- requireRight Kiroku.kirokuMigrations
+    keiro <- requireRight keiroMigrations
+    requireRight (frameworkMigrationPlan kiroku keiro)
 
-ledgerSchemaStmt :: Statement () (Bool, Bool)
-ledgerSchemaStmt =
-    preparable
-        "SELECT to_regclass('codd.sql_migrations') IS NOT NULL, to_regclass('codd_schema.sql_migrations') IS NOT NULL"
-        E.noParams
-        (D.singleRow ((,) <$> D.column (D.nonNullable D.bool) <*> D.column (D.nonNullable D.bool)))
+requireRight :: (Show error) => Either error value -> IO value
+requireRight = either failure pure
 
-ledgerNames :: Text -> Text -> IO [Text]
-ledgerNames connStr "codd" = runDb connStr "codd ledger names" (Session.statement () ledgerNamesCoddStmt)
-ledgerNames connStr "codd_schema" = runDb connStr "codd_schema ledger names" (Session.statement () ledgerNamesCoddSchemaStmt)
-ledgerNames _ schema = expectationFailure ("unknown ledger schema " <> T.unpack schema) >> pure []
+failure :: (Show value) => value -> IO result
+failure value = expectationFailure (show value) >> fail (show value)
 
-ledgerNamesCoddStmt :: Statement () [Text]
-ledgerNamesCoddStmt =
-    preparable
-        "SELECT name::text FROM codd.sql_migrations ORDER BY name"
-        E.noParams
-        (D.rowList (D.column (D.nonNullable D.text)))
+providerFor :: Connection.Connection -> ConnectionProvider
+providerFor connection = connectionProvider (\action -> Right <$> action connection)
 
-ledgerNamesCoddSchemaStmt :: Statement () [Text]
-ledgerNamesCoddSchemaStmt =
-    preparable
-        "SELECT name::text FROM codd_schema.sql_migrations ORDER BY name"
-        E.noParams
-        (D.rowList (D.column (D.nonNullable D.text)))
+reportOutcomes :: MigrationReport -> [MigrationOutcome]
+reportOutcomes MigrationReport{results} = outcome <$> toList results
 
-ledgerRowCount :: Text -> Text -> IO Int32
-ledgerRowCount connStr "codd" = runDb connStr "codd ledger row count" (Session.statement () ledgerCountCoddStmt)
-ledgerRowCount connStr "codd_schema" = runDb connStr "codd_schema ledger row count" (Session.statement () ledgerCountCoddSchemaStmt)
-ledgerRowCount _ schema = expectationFailure ("unknown ledger schema " <> T.unpack schema) >> pure 0
+importOutcomes :: HistoryImportReport -> [HistoryImportOutcome]
+importOutcomes HistoryImportReport{importResults} = importOutcome <$> toList importResults
 
-ledgerCountCoddStmt :: Statement () Int32
-ledgerCountCoddStmt =
-    preparable
-        "SELECT count(*)::int FROM codd.sql_migrations"
-        E.noParams
-        (D.singleRow (D.column (D.nonNullable D.int4)))
+keiroPgConfig :: Pg.Config
+keiroPgConfig = Pg.defaultConfig{Pg.user = "keiro"}
 
-ledgerCountCoddSchemaStmt :: Statement () Int32
-ledgerCountCoddSchemaStmt =
-    preparable
-        "SELECT count(*)::int FROM codd_schema.sql_migrations"
-        E.noParams
-        (D.singleRow (D.column (D.nonNullable D.int4)))
+withKeiroPg :: (Pg.Database -> IO ()) -> IO ()
+withKeiroPg action = do
+    started <- Pg.startCached keiroPgConfig Pg.defaultCacheConfig
+    case started of
+        Left startError -> expectationFailure (show startError)
+        Right database -> action database `finally` Pg.stop database
 
-data KeiroLedgerRemap = KeiroLedgerRemap
-    { newLedgerName :: Text
-    , oldLedgerName :: Text
-    , oldLedgerTimestamp :: Text
-    }
-    deriving stock (Eq, Show)
+withConnection :: Settings.Settings -> (Connection.Connection -> IO value) -> IO value
+withConnection settings action = do
+    acquired <- Connection.acquire settings
+    connection <- requireRight acquired
+    action connection `finally` Connection.release connection
 
-keiroLedgerRemaps :: [KeiroLedgerRemap]
-keiroLedgerRemaps =
-    [ KeiroLedgerRemap "2026-05-17-13-58-15-keiro-bootstrap.sql" "2026-05-17-00-00-00-keiro-bootstrap.sql" "2026-05-17 00:00:00+00"
-    , KeiroLedgerRemap "2026-05-19-12-55-02-keiro-outbox.sql" "2026-05-17-01-00-00-keiro-outbox.sql" "2026-05-17 01:00:00+00"
-    , KeiroLedgerRemap "2026-05-19-13-05-23-keiro-inbox.sql" "2026-05-17-02-00-00-keiro-inbox.sql" "2026-05-17 02:00:00+00"
-    , KeiroLedgerRemap "2026-06-03-05-14-28-keiro-timer-recovery.sql" "2026-05-17-03-00-00-keiro-timer-recovery.sql" "2026-05-17 03:00:00+00"
-    , KeiroLedgerRemap "2026-06-03-16-10-05-keiro-workflow-steps.sql" "2026-06-03-00-00-00-keiro-workflow-steps.sql" "2026-06-03 00:00:00+00"
-    , KeiroLedgerRemap "2026-06-03-18-19-41-keiro-awakeables.sql" "2026-06-03-01-00-00-keiro-awakeables.sql" "2026-06-03 01:00:00+00"
-    , KeiroLedgerRemap "2026-06-03-19-49-23-keiro-workflow-children.sql" "2026-06-03-02-00-00-keiro-workflow-children.sql" "2026-06-03 02:00:00+00"
-    , KeiroLedgerRemap "2026-06-04-02-12-28-keiro-workflow-generation.sql" "2026-06-05-00-00-00-keiro-workflow-generation.sql" "2026-06-05 00:00:00+00"
-    , KeiroLedgerRemap "2026-06-04-03-53-34-keiro-subscription-shards.sql" "2026-06-05-01-00-00-keiro-subscription-shards.sql" "2026-06-05 01:00:00+00"
-    , KeiroLedgerRemap "2026-06-15-15-07-25-keiro-workflows-instances.sql" "2026-06-11-00-00-04-keiro-workflows-instances.sql" "2026-06-11 00:00:04+00"
-    , KeiroLedgerRemap "2026-06-15-17-53-48-keiro-workflow-gc-index.sql" "2026-06-15-22-10-00-keiro-workflow-gc-index.sql" "2026-06-15 22:10:00+00"
-    , KeiroLedgerRemap "2026-06-15-18-01-33-keiro-workflows-wake-after.sql" "2026-06-15-22-20-00-keiro-workflows-wake-after.sql" "2026-06-15 22:20:00+00"
-    , KeiroLedgerRemap "2026-07-02-00-15-48-keiro-outbox-claim-order-index.sql" "2026-07-02-00-12-00-keiro-outbox-claim-order-index.sql" "2026-07-02 00:12:00+00"
-    , KeiroLedgerRemap "2026-07-02-00-58-54-keiro-inbox-drop-received-idx.sql" "2026-07-02-00-55-00-keiro-inbox-drop-received-idx.sql" "2026-07-02 00:55:00+00"
-    ]
+useSession :: Connection.Connection -> Session.Session value -> IO value
+useSession connection session =
+    Connection.use connection session >>= requireRight
 
-rewindKeiroLedgerToSentinelNames :: Text -> Text -> IO ()
-rewindKeiroLedgerToSentinelNames connStr schema =
-    runDb connStr "keiro ledger rewind to sentinel names" (Session.script script)
+assertSchema :: Connection.Connection -> Expectation
+assertSchema connection = do
+    healthy <- useSession connection (Session.statement () schemaFactsStatement)
+    healthy `shouldBe` True
+
+schemaFactsStatement :: Statement () Bool
+schemaFactsStatement =
+    Statement.preparable
+        """
+        SELECT bool_and(ok)
+        FROM (VALUES
+          (to_regnamespace('kiroku') IS NOT NULL),
+          (to_regclass('kiroku.events') IS NOT NULL),
+          (to_regnamespace('keiro') IS NOT NULL),
+          (to_regclass('keiro.keiro_inbox') IS NOT NULL),
+          (to_regclass('keiro.keiro_outbox') IS NOT NULL),
+          (to_regclass('keiro.keiro_timers') IS NOT NULL),
+          (to_regclass('keiro.keiro_workflows') IS NOT NULL)
+        ) AS checks(ok)
+        """
+        Encoders.noParams
+        (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.bool)))
+
+applyLegacyPayloads :: Connection.Connection -> IO ()
+applyLegacyPayloads connection = do
+    apply Kiroku.Codd.kirokuLegacyMigrationNames Kiroku.Codd.kirokuCoddSourcePayloads
+    apply keiroLegacyMigrationNames keiroCoddSourcePayloads
   where
-    qname = schema <> ".sql_migrations"
-    -- Kept in sync with ledger-fixups/2026-07-05-realign-keiro-migration-timestamps.sql.
-    script =
-        T.unlines
-            [ "UPDATE " <> qname <> " SET name = '" <> oldName <> "', migration_timestamp = '" <> oldTimestamp <> "' WHERE name = '" <> newName <> "';"
-            | KeiroLedgerRemap newName oldName oldTimestamp <- keiroLedgerRemaps
-            ]
+    apply names payloads =
+        forM_ names $ \name ->
+            case Map.lookup name payloads of
+                Nothing -> failure ("missing source payload " <> name)
+                Just bytes -> useSession connection (Session.script (Text.Encoding.decodeUtf8 bytes))
 
-moveKeiroTablesBackToKiroku :: Text -> IO ()
-moveKeiroTablesBackToKiroku connStr =
-    runDb connStr "move keiro tables back to kiroku schema" (Session.script script)
+installCoddLedger :: Connection.Connection -> Text -> Bool -> Bool -> IO ()
+installCoddLedger connection sourceSchema partial includeExtra =
+    useSession connection (Session.script (coddFixtureSql sourceSchema partial includeExtra))
+
+coddFixtureSql :: Text -> Bool -> Bool -> Text
+coddFixtureSql sourceSchema partial includeExtra =
+    Text.unlines
+        [ "CREATE SCHEMA " <> sourceSchema <> ";"
+        , "CREATE TABLE " <> sourceSchema <> ".sql_migrations ("
+        , "  id serial NOT NULL, migration_timestamp timestamptz NOT NULL,"
+        , "  applied_at timestamptz, name text NOT NULL, application_duration interval,"
+        , "  num_applied_statements int, no_txn_failed_at timestamptz, txnid bigint, connid int"
+        , ");"
+        , "INSERT INTO " <> sourceSchema <> ".sql_migrations"
+        , "  (migration_timestamp, applied_at, name, application_duration, num_applied_statements, no_txn_failed_at, txnid, connid) VALUES"
+        , Text.intercalate ",\n" (zipWith renderRow [1 :: Int ..] filenames) <> ";"
+        ]
   where
-    tableArray = T.intercalate ", " ["'" <> table <> "'" | table <- keiroTables]
-    script =
-        T.unlines
-            [ "DO $$"
-            , "DECLARE"
-            , "  t text;"
-            , "  tables text[] := ARRAY[" <> tableArray <> "];"
-            , "BEGIN"
-            , "  FOREACH t IN ARRAY tables LOOP"
-            , "    IF to_regclass('keiro.' || t) IS NOT NULL THEN"
-            , "      EXECUTE format('ALTER TABLE keiro.%I SET SCHEMA kiroku', t);"
-            , "    END IF;"
-            , "  END LOOP;"
-            , "END"
-            , "$$;"
-            , "DROP SCHEMA IF EXISTS keiro;"
-            ]
+    selected = toList Kiroku.Codd.kirokuLegacyMigrationNames <> toList keiroLegacyMigrationNames
+    filenames = selected <> ["application-owned-extra.sql" | includeExtra]
+    renderRow index filename =
+        "('2026-01-01 00:00:00+00'::timestamptz + interval '"
+            <> Text.pack (show index)
+            <> " seconds', "
+            <> appliedAt index
+            <> ", '"
+            <> Text.pack filename
+            <> "', interval '1 second', 1, "
+            <> failureAt index
+            <> ", 1, 1)"
+    appliedAt index
+        | partial && index == 11 = "NULL"
+        | otherwise = "'2026-01-01 00:01:00+00'::timestamptz + interval '" <> Text.pack (show index) <> " seconds'"
+    failureAt index
+        | partial && index == 11 = "'2026-01-01 00:02:00+00'::timestamptz"
+        | otherwise = "NULL"
 
-seedRemediationRows :: Text -> IO ()
-seedRemediationRows connStr =
-    runDb connStr "seed 0.1.0.0-layout keiro rows" (Session.script script)
+schemaExistsStatement :: Statement Text Bool
+schemaExistsStatement =
+    Statement.preparable
+        "SELECT to_regnamespace($1) IS NOT NULL"
+        (Encoders.param (Encoders.nonNullable Encoders.text))
+        (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.bool)))
+
+sourceRowCountStatement :: Text -> Statement () Int64
+sourceRowCountStatement sourceSchema =
+    Statement.unpreparable
+        ("SELECT count(*) FROM " <> sourceSchema <> ".sql_migrations")
+        Encoders.noParams
+        (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.int8)))
+
+importFactsStatement :: Statement () (Int64, Int64, Bool)
+importFactsStatement =
+    Statement.preparable
+        """
+        SELECT
+          (SELECT count(*) FROM pgmigrate.migrations),
+          (SELECT count(*) FROM pgmigrate.history_imports),
+          (SELECT bool_and(source_evidence #>> '{satisfying_evidence,0,details,adapter}' = 'codd') FROM pgmigrate.history_imports)
+        """
+        Encoders.noParams
+        ( Decoders.singleRow
+            ( (,,)
+                <$> column Decoders.int8
+                <*> column Decoders.int8
+                <*> column Decoders.bool
+            )
+        )
   where
-    script =
-        """
-        INSERT INTO kiroku.keiro_snapshots
-          (stream_id, stream_version, state, state_codec_version, regfile_shape_hash)
-        VALUES
-          (4242, 7, '{"ok": true}'::jsonb, 3, 'shape-abc');
-
-        INSERT INTO kiroku.keiro_timers
-          (timer_id, process_manager_name, correlation_id, fire_at, payload, status)
-        VALUES
-          ('00000000-0000-4000-8000-000000000001', 'remediation-test', 'corr-1',
-           '2026-07-06 00:00:00+00', '{"wake": true}'::jsonb, 'scheduled');
-        """
-
-assertSnapshotRowSurvived :: Text -> IO ()
-assertSnapshotRowSurvived connStr = do
-    present <- runDb connStr "snapshot survival query" (Session.statement () snapshotSurvivedStmt)
-    present `shouldBe` True
-
-snapshotSurvivedStmt :: Statement () Bool
-snapshotSurvivedStmt =
-    preparable
-        """
-        SELECT EXISTS (
-          SELECT 1
-          FROM keiro.keiro_snapshots
-          WHERE stream_id = 4242
-            AND stream_version = 7
-            AND state = '{"ok": true}'::jsonb
-            AND state_codec_version = 3
-            AND regfile_shape_hash = 'shape-abc'
-        )
-        """
-        E.noParams
-        (D.singleRow (D.column (D.nonNullable D.bool)))
-
-assertTimerRowSurvived :: Text -> IO ()
-assertTimerRowSurvived connStr = do
-    present <- runDb connStr "timer survival query" (Session.statement () timerSurvivedStmt)
-    present `shouldBe` True
-
-timerSurvivedStmt :: Statement () Bool
-timerSurvivedStmt =
-    preparable
-        """
-        SELECT EXISTS (
-          SELECT 1
-          FROM keiro.keiro_timers
-          WHERE timer_id = '00000000-0000-4000-8000-000000000001'
-            AND process_manager_name = 'remediation-test'
-            AND correlation_id = 'corr-1'
-            AND payload = '{"wake": true}'::jsonb
-            AND status = 'scheduled'
-        )
-        """
-        E.noParams
-        (D.singleRow (D.column (D.nonNullable D.bool)))
-
-assertTablesExist :: Text -> Text -> [Text] -> IO ()
-assertTablesExist connStr schema tables = do
-    actualTables <- runDb connStr "table verification query" (Session.statement schema schemaTablesStmt)
-    let missing = filter (`notElem` actualTables) tables
-    missing `shouldBe` []
-
-assertTablesAbsent :: Text -> Text -> [Text] -> IO ()
-assertTablesAbsent connStr schema tables = do
-    actualTables <- runDb connStr "table verification query" (Session.statement schema schemaTablesStmt)
-    let present = filter (`elem` actualTables) tables
-    present `shouldBe` []
-
-assertColumnExists :: Text -> Text -> Text -> Text -> IO ()
-assertColumnExists connStr schema table column = do
-    present <- runDb connStr "column verification query" (Session.statement (schema, table, column) columnExistsStmt)
-    present `shouldBe` True
-
-columnExistsStmt :: Statement (Text, Text, Text) Bool
-columnExistsStmt =
-    preparable
-        """
-        SELECT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
-        )
-        """
-        ( contrazip3
-            (E.param (E.nonNullable E.text))
-            (E.param (E.nonNullable E.text))
-            (E.param (E.nonNullable E.text))
-        )
-        (D.singleRow (D.column (D.nonNullable D.bool)))
-
-schemaTablesStmt :: Statement Text [Text]
-schemaTablesStmt =
-    preparable
-        """
-        SELECT table_name::text
-        FROM information_schema.tables
-        WHERE table_schema = $1
-          AND table_type = 'BASE TABLE'
-        ORDER BY table_name
-        """
-        (E.param (E.nonNullable E.text))
-        (D.rowList (D.column (D.nonNullable D.text)))
+    column = Decoders.column . Decoders.nonNullable

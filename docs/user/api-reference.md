@@ -294,13 +294,13 @@ Process-manager and router workers can record `keiro.dispatch.failed`,
 
 ## `Keiro.Migrations` (package `keiro-migrations`)
 
-Embedded codd migrations and the `keiro-migrate` executable. Exports
-`keiroFrameworkMigrations`, `keiroMigrations`, `allKeiroMigrations`,
-`runKeiroMigrations`, `runKeiroMigrationsNoCheck`, `runAllKeiroMigrations`, and
-`runAllKeiroMigrationsNoCheck`, plus read-only operator helpers
-`migrationStatus`, `missingMigrations`, and `verifySchema`.
+Native `pg-migrate` component and the standard `keiro-migrate` executable.
+Exports `keiroMigrations` and `frameworkMigrationPlan`.
+`Keiro.Migrations.History.Codd` exports the exact legacy evidence and combined
+Kiroku/Keiro import mapping used during cutover.
 
-Use it to apply the Kiroku and Keiro framework tables.
+Use it to compose Kiroku first and Keiro second, apply or strictly verify the
+plan, and import an existing shared Codd ledger without replaying SQL.
 
 ## `Keiro.Prelude`
 

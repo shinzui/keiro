@@ -5,7 +5,7 @@ where
 
 import Codd.Extras.WriteSchema (writeExpectedSchemaMain)
 import Data.Time (secondsToDiffTime)
-import Keiro.Migrations (runAllKeiroMigrationsNoCheck)
+import Keiro.Migrations.LegacyCodd (runAllKeiroMigrationsNoCheck)
 
 main :: IO ()
 main =

@@ -71,7 +71,7 @@ Implemented today:
 - the cross-context integration-event envelope (`Keiro.Integration.Event`);
 - OpenTelemetry command/producer/consumer spans and opt-in worker metrics
   (`Keiro.Telemetry`);
-- embedded codd migrations for Kiroku and Keiro framework tables;
+- native `pg-migrate` components for Kiroku and Keiro framework tables;
 - the `jitsurei` worked-examples package and long-form guides under
   `docs/guides/`.
 
@@ -113,16 +113,17 @@ forcing artificial one-event commands.
 
 ### Migration validation
 
-`keiro-migrate` applies Kiroku and Keiro framework migrations through codd,
+`keiro-migrate` applies Kiroku and Keiro framework migrations through
+`pg-migrate`,
 including the `keiro_outbox` and `keiro_inbox` tables.
 
 Production path:
 
-- Run codd migrations before application startup.
+- Run the composed native migration plan before application startup.
 - Start Kiroku with runtime schema initialization disabled.
 - Keep application read-model tables in the application's own migration set.
-- Compose service migrations after `Keiro.Migrations.allKeiroMigrations` when a
-  service also uses codd.
+- Compose application-owned `MigrationComponent` values after the Kiroku and
+  Keiro components when one executable owns the whole database plan.
 
 User impact: teams get one explicit migration entry point for the event store
 plus Keiro framework tables.
