@@ -48,7 +48,7 @@ import Test.Hspec
 main :: IO ()
 main = hspec $ do
     describe "native Keiro migration definition" $ do
-        it "tracks sixteen native files in manifest order" $ do
+        it "tracks seventeen native files in manifest order" $ do
             directory <- findMigrationsDirectory
             manifest <- Text.lines <$> Text.IO.readFile (directory </> "manifest")
             manifest `shouldBe` Text.pack <$> nativeMigrationFiles
@@ -61,7 +61,7 @@ main = hspec $ do
                 bytes <- ByteString.readFile (directory </> nativeName)
                 lookup legacyName lockEntries `shouldBe` Just (checksumText bytes)
 
-        it "builds component keiro with dependency kiroku and sixteen migrations" $ do
+        it "builds component keiro with dependency kiroku and seventeen migrations" $ do
             plan <- requirePlan
             let PlanDescription components = planDescription plan
             case toList components of
@@ -70,11 +70,11 @@ main = hspec $ do
                     ] -> do
                         componentNameText kirokuName `shouldBe` "kiroku"
                         kirokuDependencies `shouldBe` mempty
-                        length kirokuEntries `shouldBe` 7
+                        length kirokuEntries `shouldBe` 8
                         componentNameText keiroName `shouldBe` "keiro"
                         dependencyName <- requireRight (componentName "kiroku")
                         keiroDependencies `shouldBe` Set.singleton dependencyName
-                        length keiroEntries `shouldBe` 16
+                        length keiroEntries `shouldBe` 17
                 actual -> expectationFailure ("unexpected plan description: " <> show actual)
             validateHistoryMappingTargets plan frameworkCoddHistoryMappings `shouldBe` Right ()
 
@@ -91,12 +91,12 @@ main = hspec $ do
                 assertSchema connection
                 let provider = providerFor connection
                 rerun <- runMigrationPlanWith defaultRunOptions provider plan >>= requireRight
-                reportOutcomes rerun `shouldBe` replicate 23 AlreadyApplied
+                reportOutcomes rerun `shouldBe` replicate 25 AlreadyApplied
                 verified <- verifyMigrationPlanWith defaultRunOptions provider plan >>= requireRight
                 case verified of
                     VerificationReport verificationIssues applied pending unknown -> do
                         verificationIssues `shouldBe` []
-                        length applied `shouldBe` 23
+                        length applied `shouldBe` 25
                         pending `shouldBe` []
                         unknown `shouldBe` []
             either (expectationFailure . show) pure result
@@ -110,7 +110,7 @@ main = hspec $ do
                         (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
                         (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
                 sort [reportOutcomes first, reportOutcomes second]
-                    `shouldBe` sort [replicate 23 AppliedNow, replicate 23 AlreadyApplied]
+                    `shouldBe` sort [replicate 25 AppliedNow, replicate 25 AlreadyApplied]
 
     describe "combined Codd history import" $ do
         it "imports a shared Codd V5 ledger atomically without replaying target SQL" $
@@ -172,11 +172,23 @@ importFixture sourceSchema = do
             importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
                 >>= requireRight
         importOutcomes first `shouldBe` replicate 23 Imported
-        verified <- verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
-        case verified of
-            VerificationReport verificationIssues _ _ _ -> verificationIssues `shouldBe` []
+        kirokuCanaryId <- requireRight (migrationId "kiroku" "0008-schema-management-comment")
+        keiroCanaryId <- requireRight (migrationId "keiro" "0017-schema-management-comment")
+        verifiedBeforeCanaries <- verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
+        case verifiedBeforeCanaries of
+            VerificationReport verificationIssues _ _ _ ->
+                verificationIssues `shouldBe` [PendingMigration kirokuCanaryId, PendingMigration keiroCanaryId]
         up <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
-        reportOutcomes up `shouldBe` replicate 23 AlreadyApplied
+        reportOutcomes up
+            `shouldBe` replicate 7 AlreadyApplied
+                <> [AppliedNow]
+                <> replicate 16 AlreadyApplied
+                <> [AppliedNow]
+        verifiedAfterCanaries <- verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
+        case verifiedAfterCanaries of
+            VerificationReport verificationIssues _ _ _ -> verificationIssues `shouldBe` []
+        rerun <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
+        reportOutcomes rerun `shouldBe` replicate 25 AlreadyApplied
         second <-
             importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
                 >>= requireRight
@@ -186,7 +198,7 @@ importFixture sourceSchema = do
             sourceRows <- useSession connection (Session.statement () (sourceRowCountStatement sourceSchema))
             sourceRows `shouldBe` 23
             facts <- useSession connection (Session.statement () importFactsStatement)
-            facts `shouldBe` (23, 23, True)
+            facts `shouldBe` (25, 23, True)
 
 nativeMigrationFiles :: [FilePath]
 nativeMigrationFiles =
@@ -206,6 +218,7 @@ nativeMigrationFiles =
     , "0014-keiro-projection-dedup.sql"
     , "0015-keiro-outbox-claim-order-index.sql"
     , "0016-keiro-inbox-drop-received-idx.sql"
+    , "0017-schema-management-comment.sql"
     ]
 
 findMigrationsDirectory :: IO FilePath
@@ -316,7 +329,9 @@ schemaFactsStatement =
           (to_regclass('keiro.keiro_inbox') IS NOT NULL),
           (to_regclass('keiro.keiro_outbox') IS NOT NULL),
           (to_regclass('keiro.keiro_timers') IS NOT NULL),
-          (to_regclass('keiro.keiro_workflows') IS NOT NULL)
+          (to_regclass('keiro.keiro_workflows') IS NOT NULL),
+          (obj_description(to_regnamespace('kiroku'), 'pg_namespace') = 'Managed by pg-migrate component kiroku through 0008-schema-management-comment'),
+          (obj_description(to_regnamespace('keiro'), 'pg_namespace') = 'Managed by pg-migrate component keiro through 0017-schema-management-comment')
         ) AS checks(ok)
         """
         Encoders.noParams

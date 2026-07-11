@@ -14,3 +14,4 @@
 0014-keiro-projection-dedup.sql
 0015-keiro-outbox-claim-order-index.sql
 0016-keiro-inbox-drop-received-idx.sql
+0017-schema-management-comment.sql
