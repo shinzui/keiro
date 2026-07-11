@@ -18,19 +18,18 @@ source-repository-package
   tag: bc987f46393b604c335f034385b4c3c1ad118074
   subdir: keiki-codec-json
 
--- This revision is the native pg-migrate conversion coordinated by EP-12.
--- Keep the ignored cabal.project.local override while the revision is pending
--- publication to the remote repository.
+-- This revision includes the native pg-migrate conversion from EP-12 and the
+-- append-only Kiroku canary required by the EP-15 composed-plan proof.
 source-repository-package
   type: git
   location: https://github.com/shinzui/kiroku.git
-  tag: 15e6fe27c18f6fe6e7eaa72470611dda9dd36821
+  tag: 6399844a507a3ea5a3974181b4d8c1380f2f7b5b
   subdir: kiroku-store
 
 source-repository-package
   type: git
   location: https://github.com/shinzui/kiroku.git
-  tag: 15e6fe27c18f6fe6e7eaa72470611dda9dd36821
+  tag: 6399844a507a3ea5a3974181b4d8c1380f2f7b5b
   subdir: kiroku-store-migrations
 
 -- pg-migrate's six-package v1 release is tagged but intentionally not yet
