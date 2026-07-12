@@ -288,6 +288,7 @@ extra-source-files:
   expected-schema/v18/schemas/keiro/tables/keiro_workflows/objrep
   migrations/*.sql
   migrations/manifest
+  migrations.lock
   sql-migrations/*.sql
 
 source-repository head
