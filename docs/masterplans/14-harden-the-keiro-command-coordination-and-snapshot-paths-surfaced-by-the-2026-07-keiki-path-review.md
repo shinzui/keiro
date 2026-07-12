@@ -34,8 +34,9 @@ ack-coupled everywhere); router idempotency survives resolver drift; a snapshot 
 can never crash a command that already committed (the uninitialized-register-slot
 thunk is caught at stream construction and again at encode time); every keiki failure
 witness is either surfaced as a typed error or counted by a metric — never discarded;
-a state-changing silent edge is rejected at stream-validation time because keiro's
-persistence model makes such transitions un-happen; rejected process-manager commands
+a state-changing silent edge is rejected at stream-validation time (keiki EP-71's
+default-on `StateChangingEpsilon` check, force-enabled at keiro's boundary) because
+keiro's persistence model makes such transitions un-happen; rejected process-manager commands
 have a dead-letter path instead of a permanent halt loop; retry exhaustion is
 documented and replayable rather than a silent checkpoint advance; read-model rebuild
 actually rebuilds; and `Strong` read-model queries are usable in a store with more
@@ -48,13 +49,15 @@ is implemented FIRST. Every child plan here may rely on its outputs — most
 importantly keiki EP-71's new `TransducerValidationWarning` constructors and keiki
 EP-72's structured replay API (`applyEventsEither`, the seedable `replayEvents`
 fold, `ReplayStepFailure`) — and must NOT duplicate work MP-16 already delivers. The
-division of labor is explicit: keiki owns validator/replay agreement,
-head-recoverability, the structured failure vocabulary, codec evolution, and the
-authoring-time emit/noEmit intent check; keiro owns everything that exists because
-events-in-a-store are the only persistence — the ε-edge rejection rule, the
-operational enforcement of the uninitialized-slot precondition (keiki EP-78
-deliberately only documents it), delivery/checkpoint coupling, dead-lettering, and
-telemetry.
+division of labor is explicit (revised 2026-07-12 with keiki MP-16): keiki owns
+validator/replay agreement, head-recoverability, state-changing-epsilon *detection*
+(EP-71's default-on `StateChangingEpsilon` warning), the structured failure
+vocabulary, codec evolution, and the authoring-time emit/noEmit intent check; keiro
+owns everything that exists because events-in-a-store are the only persistence —
+*enforcement* of the replay-contract checks at the `ValidatedEventStream` boundary
+(force-enabled, never weakenable by caller options), the operational enforcement of
+the uninitialized-slot precondition (keiki EP-78 deliberately only documents it),
+delivery/checkpoint coupling, dead-lettering, and telemetry.
 
 In scope: the `keiro` and `keiro-core` packages, their tests, and documentation.
 Out of scope: changes to keiki (MP-16 owns those); changes to kiroku beyond consuming
@@ -72,7 +75,7 @@ Phase 1 is the keiki alignment foundation (EP-95). Because the standing assumpti
 is that keiki MP-16 lands first, the cheapest way to fix keiro's witness-discarding
 theme is to consume keiki's new structured APIs directly rather than reconstruct
 diagnostics around bare `Maybe`s: `Keiro.EventStream.Validate` must render keiki
-EP-71's three new warning constructors (a compile-breaking exhaustive match), and the
+EP-71's four new warning constructors (a compile-breaking exhaustive match), and the
 duplicated `hydrate`/`hydrateFull` folds collapse into keiki EP-72's `replayEvents`
 with typed failure reasons. Nearly every other plan that touches the command path
 builds on the taxonomy this migration introduces, so it goes first.
@@ -83,10 +86,11 @@ positional idempotency key (EP-97), and the snapshot subsystem's post-commit cra
 and observability holes (EP-98). These are the highest-consequence items and can all
 start immediately — they are grouped as a phase for review focus, not blocking.
 
-Phase 3 makes keiro's own semantics honest about keiki's model: EP-99 adds the
-silent-edge validation rule and turns the remaining discarded witnesses (snapshot
-divergence, ambiguous guards, the bogus no-op global position) into typed errors and
-counters — it hard-depends on EP-95's taxonomy. EP-100 gives process managers a
+Phase 3 makes keiro's own semantics honest about keiki's model: EP-99 force-enables
+and pins keiki's state-changing-epsilon rejection at the stream boundary and turns
+the remaining discarded witnesses (snapshot divergence, ambiguous guards, the bogus
+no-op global position) into typed errors and counters — it hard-depends on EP-95's
+taxonomy. EP-100 gives process managers a
 dead-letter path for rejected commands and makes kiroku's silent retry-exhaustion
 dead-lettering visible and replayable; it soft-depends on EP-99's error taxonomy.
 
@@ -155,14 +159,18 @@ where its truncation guard reports failures through the migrated hydration error
    `error.type` span attribute, Command.hs:570-578) gets one new class per
    constructor — no reuse of `"command_rejected"` for ambiguity.
 
-2. `Keiro.EventStream.Validate` warning vocabulary (EP-95 and EP-99 both extend).
-   EP-95 adds the exhaustive-match render arms for keiki EP-71's three new
-   constructors (the compile-breaking migration that keiki MP-16's plan 71
-   documents, with suggested rendering text to reuse). EP-99 adds keiro's own
-   silent-edge rule as a keiro-side warning alongside — do NOT extend keiki's
-   `TransducerValidationWarning` (that type is keiki-owned); follow the precedent of
-   `snapshotWarnings` at Validate.hs:159-169. The two plans touch the same module;
-   EP-95 lands first, so EP-99 rebases on its arms.
+2. `Keiro.EventStream.Validate` warning vocabulary (EP-95 renders, EP-99 hardens).
+   EP-95 adds the exhaustive-match render arms for keiki EP-71's four new
+   constructors, including `StateChangingEpsilon` (the compile-breaking migration
+   that keiki MP-16's plan 71 documents, with suggested rendering text to reuse).
+   EP-99 does NOT implement a keiro-side silent-edge scan and does NOT extend
+   keiki's `TransducerValidationWarning` — detection is keiki EP-71's (revised
+   division, 2026-07-12); EP-99 instead force-enables the replay-contract checks
+   (`checkStateChangingEpsilon`, `checkHeadRecoverability`) against caller-supplied
+   options and adds the loudly named unchecked-constructor escape hatch. Genuinely
+   keiro-only stream rules keep following the `snapshotWarnings` precedent at
+   Validate.hs:159-169. The two plans touch the same module; EP-95 lands first, so
+   EP-99 rebases on its arms.
 
 3. Telemetry counter names in `keiro/src/Keiro/Telemetry.hs` (EP-98 and EP-99 both
    add counters). Convention: follow the existing `keiro.snapshot.write.failures`
@@ -193,15 +201,17 @@ where its truncation guard reports failures through the migrated hydration error
    benign miss; EP-98 notes the one-time full-replay cost at the keiki upgrade
    rather than fixing it); event-codec versioning (keiki EP-77 — irrelevant to
    keiro, which uses its own `Keiro.Codec`). What keiro owns because keiki cannot
-   know the runtime model: the ε-edge rejection rule (keiki EP-73 documents the
-   replay boundary; only keiro knows events are the sole persistence), operational
+   know the runtime model: *enforcement* of the ε-edge rejection (keiki EP-71
+   detects state-changing epsilon with its default-on warning; keiro force-enables
+   the check and fails `mkEventStream` — only keiro knows events are the sole
+   persistence, so only keiro may refuse to offer an opt-out), operational
    enforcement of the uninitialized-slot precondition (keiki EP-78 deliberately
    chose documentation over a total encode), and everything in Phases 2–4.
 
 
 ## Progress
 
-- [ ] EP-95: keiro compiles against post-MP-16 keiki; Validate.hs renders the three new keiki warning constructors
+- [ ] EP-95: keiro compiles against post-MP-16 keiki; Validate.hs renders the four new keiki warning constructors
 - [ ] EP-95: hydrate/hydrateFull folds replaced by keiki's seedable structured fold; hydration failures carry event index and typed reason
 - [ ] EP-95: command evaluation distinguishes ambiguous guards from business rejection in `CommandError` and `error.type`
 - [ ] EP-96: sharded worker acks after the handler returns; batch-tail crash/rebalance loses nothing
@@ -209,7 +219,7 @@ where its truncation guard reports failures through the migrated hydration error
 - [ ] EP-97: router event ids derived from target stream names; unstable-resolve redelivery test passes; dropped-target semantics decided and documented
 - [ ] EP-98: uninit-register encode caught at mkEventStream and degraded to the counted advisory path at write time
 - [ ] EP-98: snapshot read-side telemetry (decode failures at minimum); workflow snapshot writes swallowed-and-counted like the command path
-- [ ] EP-99: state-changing silent edges rejected at stream validation (opt-out flag); the every-append replay-divergence check counts witnesses, never discards them
+- [ ] EP-99: keiki's `StateChangingEpsilon` and `checkHeadRecoverability` force-enabled at stream validation (no caller opt-out; bypass only via the named unchecked constructor); the every-append replay-divergence check counts witnesses, never discards them
 - [ ] EP-99: no-op `CommandResult.globalPosition` normalized to `Nothing`
 - [ ] EP-100: rejected PM commands dead-letter instead of halt-looping; saga-state/dispatch divergence documented or closed
 - [ ] EP-100: retry exhaustion documented; kiroku dead-letter replay path exists
@@ -241,15 +251,20 @@ where its truncation guard reports failures through the migrated hydration error
     exactly those, and the fold tightening must land after the id fix.
   - EP-99 found the feared register-only blind spot does not exist: keiki exports
     `Update (..)` with all constructors, so the full silent-edge rule (empty output
-    with a vertex change OR any syntactic register write) is implementable
-    keiro-side today — no keiki accessor gap.
+    with a vertex change OR any syntactic register write) was implementable
+    keiro-side. Superseded 2026-07-12: keiki MP-16's revision moved detection into
+    keiki EP-71 (`StateChangingEpsilon`, default-on) to keep a single AST traversal
+    next to the types it walks; EP-99 now force-enables and pins that check instead
+    of implementing its own scan.
   - EP-98 found that keiki's write-path strictness means the validation-time
     force-encode of the INITIAL state covers the entire `emptyRegFile` hazard class
     for validated streams, and that `rotateGeneration`'s unconditional seed write
     is already documented as deliberate (kept).
   - EP-95 resolved the fail-vs-warn question for keiki EP-71's new warnings without
     new code: `mkEventStreamWith` already rejects ANY warning, so the
-    replay-breaking warnings are automatically fail-fast at keiro's boundary.
+    replay-breaking warnings are automatically fail-fast at keiro's boundary. EP-99
+    additionally force-enables the replay-contract flags so caller-supplied options
+    cannot weaken them.
   - EP-100 found kiroku already emits `KirokuEventSubscriptionDeadLettered` through
     its store-level `eventHandler` (exhaustion surfacing is a bridge, not new
     plumbing), that `KirokuAdapterConfig` never exposes `retryPolicy` (documented
@@ -276,14 +291,25 @@ where its truncation guard reports failures through the migrated hydration error
   gives every downstream plan a typed vocabulary for free.
   Date: 2026-07-12
 
-- Decision: the ε-edge (silent-edge) rejection rule lives in keiro's `Validate.hs`,
-  not in keiki's `validateTransducer`.
-  Rationale: keiki cannot know that events are the only persistence — ε-edges are
-  legal in the pure model, and keiki EP-73/plan 68 already handle the
-  authoring-time and documentation sides. Only keiro knows a state-changing silent
-  edge is a durable no-op in its runtime model. Explicit non-duplication boundary
-  per user directive 2026-07-12.
-  Date: 2026-07-12
+- Decision: state-changing silent edges are DETECTED by keiki (EP-71's default-on
+  `StateChangingEpsilon` warning) and ENFORCED by keiro: `mkEventStream` fails on
+  the warning; keiro force-enables `checkStateChangingEpsilon` and
+  `checkHeadRecoverability` regardless of caller-supplied `ValidationOptions`
+  (caller options may only strengthen validation at the durable boundary); and the
+  only bypass is a separately named unchecked constructor, never an options field.
+  This applies to aggregates and process managers alike.
+  Rationale: agreed division with keiki MP-16 (2026-07-12, superseding this plan's
+  original keiro-side-scan decision). The check is a structural traversal of keiki's
+  own edge/update AST, and a downstream copy would drift when keiki EP-74/EP-75
+  reshape that AST. ε-edges stay legal in keiki's pure model via keiki's opt-out,
+  which keiro's boundary must not expose: under the zero-silent-divergence
+  principle, a config knob that can reach durable streams is itself a bug vector.
+  Keiro's runtime divergence witnesses (EP-99 M2) are retained as defense in depth
+  behind the static checks. The non-contract checks (`checkInversionAmbiguity`,
+  `checkGuardImpliesInputRead`) stay caller-narrowable — they have a documented
+  legitimate-override story, and the divergence witness is the net for a wrong
+  override.
+  Date: 2026-07-12 (supersedes the earlier keiro-side-rule entry of the same date)
 
 - Decision: keiro enforces the uninitialized-register-slot precondition itself
   (validation-time force-encode plus a runtime force inside the advisory swallow),
@@ -312,6 +338,16 @@ where its truncation guard reports failures through the migrated hydration error
 (To be filled during and after implementation.)
 
 ## Revision Notes
+
+- 2026-07-12: Aligned with keiki MP-16's revised division of labor for
+  state-changing silent edges: detection moved to keiki EP-71 (a fourth warning
+  constructor, `StateChangingEpsilon`, default-on), so EP-95 renders four arms (not
+  three) and EP-99 no longer implements a keiro-side scan — it force-enables the
+  replay-contract checks (`checkStateChangingEpsilon`, `checkHeadRecoverability`)
+  against caller-supplied options, adds the loudly named unchecked-constructor
+  escape hatch, and keeps its runtime divergence witnesses as defense in depth.
+  Superseded the ε-edge Decision Log entry and the EP-99 `Update (..)` discovery
+  note accordingly.
 
 - 2026-07-12: Initial creation — eight child plans (95–102) across four phases,
   grounded in the 2026-07 keiki-path review of keiro, with the standing assumptions

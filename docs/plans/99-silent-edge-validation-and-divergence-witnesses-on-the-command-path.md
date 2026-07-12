@@ -35,11 +35,17 @@ plan closes three holes where keiro's command path quietly contradicts that mode
 First, a transition that changes state but emits no events — legal in keiki's pure
 model — is a lie under keiro: the state change is never persisted, the command
 reports success, and the change silently un-happens the next time the aggregate is
-loaded. Today nothing rejects such a transducer. After this plan,
-`Keiro.EventStream.Validate.mkEventStream` refuses to construct a stream containing a
-state-changing silent edge, with a warning message that names the vertex and edge and
-explains why keiro cannot honor it. A deliberate no-op self-loop (same vertex, no
-register writes) still validates, because it is genuinely harmless.
+loaded. Post-MP-16 keiki detects this shape (EP-71's default-on
+`StateChangingEpsilon` warning), but detection alone leaves two holes at keiro's
+boundary: a caller-supplied `ValidationOptions` could switch the check off, and
+nothing in keiro's own suite pins the rejection. After this plan,
+`Keiro.EventStream.Validate.mkEventStream` can never admit a state-changing silent
+edge: the replay-contract checks (`checkStateChangingEpsilon`,
+`checkHeadRecoverability`) are force-enabled regardless of caller options, the sole
+bypass is a new, loudly named unchecked constructor, and keiro fixtures pin the
+rejection end to end. A deliberate no-op self-loop (same vertex, no register writes)
+still validates, because it is genuinely harmless and keiki's check deliberately
+admits it.
 
 Second, after every append keiro (when snapshotting) replays the just-emitted events
 through the transducer — and when that replay fails, which proves the just-committed
@@ -60,7 +66,8 @@ reports `globalPosition = Nothing`.
 
 To see it working: from the repository root, `cabal test keiro-test` runs new specs
 that (a) show `mkEventStream` rejecting a silent-move fixture and a silent
-register-write fixture while the existing benign no-op fixture still validates,
+register-write fixture even when the caller's options disable the check, while the
+existing benign no-op fixture still validates,
 (b) show the divergence counter incrementing through a real SDK meter when a
 split-coverage transducer appends events that cannot replay, followed by the
 predicted `HydrationReplayFailed` on the next command, and (c) show a no-op command
@@ -69,9 +76,8 @@ reporting `globalPosition = Nothing` where it previously fabricated `Just 0`.
 
 ## Progress
 
-- [ ] M1: `edgeWritesRegisters` helper and `silentEdgeWarnings` added to `keiro-core/src/Keiro/EventStream/Validate.hs`
-- [ ] M1: `StreamValidationOptions` record (keiki options + `checkSilentStateChange`) threaded through `validateEventStreamWith` / `mkEventStreamWith`
-- [ ] M1: silent-move fixture, silent register-write fixture, opt-out spec, and keiki-does-not-flag-it spec added to `keiro/test/Main.hs`; existing no-op fixture still validates clean
+- [ ] M1: replay-contract checks force-enabled in `validateEventStreamWith` / `mkEventStreamWith` (caller options may only strengthen); `mkEventStreamUnchecked` escape hatch added with a loud haddock
+- [ ] M1: silent-move fixture, silent register-write fixture, weakened-options-still-rejected specs, and keiki-flags-it spec added to `keiro/test/Main.hs`; existing no-op fixture still validates clean
 - [ ] M2: `verifyReplayOnAppend` flag added to `RunCommandOptions` (default `True`)
 - [ ] M2: post-append replay check extracted, runs on both append paths, witnesses divergence via counter + span attribute; snapshot write consumes the same fold
 - [ ] M2: `keiro.snapshot.apply.divergence` counter and `keiro_replay_divergence` attribute key added to `keiro/src/Keiro/Telemetry.hs`
@@ -96,6 +102,10 @@ implementation-time discoveries as they occur.
   five-line `edgeWritesRegisters` by pattern matching — the existential `w` never
   escapes. The full rule (vertex change OR register write) is therefore
   implementable keiro-side with no keiki change and no scoped-down fallback.
+  (Superseded 2026-07-12: keiki MP-16's revision moved detection into keiki EP-71's
+  `StateChangingEpsilon` check, so keiro implements no scan; the finding stands as
+  evidence the rule was implementable and as the shared predicate's provenance —
+  see the Decision Log.)
 - `noOpCounterEventStream` (the benign silent self-loop fixture at
   `keiro/test/Main.hs:7600-7615`) is load-bearing beyond validation specs: it is the
   `eventStream` of `timerOnlyProcessManager` (`keiro/test/Main.hs:7893`), whose
@@ -121,49 +131,58 @@ implementation-time discoveries as they occur.
 
 ## Decision Log
 
-- Decision: the silent-edge rule is a keiro-side stream-validation failure in
-  `keiro-core/src/Keiro/EventStream/Validate.hs`, NOT an extension of keiki's
-  `TransducerValidationWarning`.
-  Rationale: restated from the master plan's Decision Log (2026-07-12): ε-edges are
-  legal in keiki's pure model — keiki plan 68 makes silent edges an explicit
-  authoring choice (`noEmit`) and keiki EP-73 documents the ε-replay boundary, but
-  neither can reject them, because only keiro knows events are the sole persistence.
-  The keiro-owned `snapshotWarnings` check (`keiro-core/src/Keiro/EventStream/Validate.hs:159-169`)
-  is the precedent: a keiro-semantics rule expressed as an `EventStreamWarning`,
-  composed alongside (never inside) keiki's validator output.
-  Date: 2026-07-11
+- Decision: keiro implements no silent-edge scan of its own. Detection is keiki
+  EP-71's default-on `StateChangingEpsilon` warning; this plan's Milestone 1
+  force-enables the replay-contract checks (`checkStateChangingEpsilon`,
+  `checkHeadRecoverability`) in `validateEventStreamWith`/`mkEventStreamWith`
+  regardless of caller-supplied `ValidationOptions`, pins the rejection with
+  keiro-side fixtures, and adds `mkEventStreamUnchecked` as the only bypass.
+  Rationale: supersedes (2026-07-12) the original keiro-side-scan decision, per the
+  agreed division with keiki MP-16. The scan is a structural traversal of keiki's
+  edge/update AST, and a keiro copy would drift when keiki EP-74/EP-75 reshape that
+  AST. keiki's opt-out exists for pure non-persisted transducers and must be
+  unreachable from keiro's durable boundary, because under keiro's model a
+  state-changing silent edge is never right (zero-silent-divergence principle, user
+  directive 2026-07-12). The keiro-owned `snapshotWarnings` precedent
+  (`keiro-core/src/Keiro/EventStream/Validate.hs:159-169`) still governs genuinely
+  keiro-only rules.
+  Date: 2026-07-12 (supersedes the 2026-07-11 keiro-side-rule decision)
 
-- Decision: the rule covers the full predicate — flag every edge with `output == []`
-  whose `target` differs from its source vertex OR whose update is not syntactically
-  `UKeep` (recursively: a `UCombine` tree containing any `USet`). Detection is
-  syntactic: a `USet` that happens to write the value already present is still
-  flagged.
-  Rationale: `Update (..)` is exported by keiki so the write check is a local
-  pattern match (see Surprises & Discoveries); no scoped-down "vertex-change-only"
-  rule is needed. Syntactic conservatism is correct here: a register write on an
-  edge that emits nothing is at best pointless and at worst a durable no-op, and an
-  author who genuinely wants it can opt out (below) or restructure. Semantic
-  identity ("writes the same value") is undecidable without evaluating terms against
-  runtime state.
-  Date: 2026-07-11
+- Decision: the rule's predicate — flag every edge with `output == []` whose
+  `target` differs from its source vertex OR whose update is not syntactically
+  `UKeep` (recursively: a `UCombine` tree containing any `USet`), with deliberate
+  syntactic conservatism — is specified in keiki EP-71 Milestone 5, not here. This
+  plan's fixtures assert keiro observes exactly that predicate through the rendered
+  warning, including the no-op `UKeep` self-loop staying clean.
+  Rationale: one definition, owned next to the AST it walks; keiro's job is to
+  verify the boundary behavior it depends on. The predicate itself is unchanged
+  from this plan's original design — it was adopted upstream.
+  Date: 2026-07-12 (supersedes the 2026-07-11 keiro-side predicate decision)
 
-- Decision: the rule is a `mkEventStream` *failure* (any warning makes
-  `mkEventStream` return `Left`), with an explicit opt-out flag
-  `checkSilentStateChange :: Bool` in a new keiro-side `StreamValidationOptions`
-  record, default `True`. `validateEventStreamWith` and `mkEventStreamWith` change
-  their first parameter from keiki's `ValidationOptions` to
-  `StreamValidationOptions` (which embeds it); the no-options entry points
+- Decision: no keiro-side `StreamValidationOptions` record and no
+  `checkSilentStateChange` opt-out. `validateEventStreamWith` and
+  `mkEventStreamWith` keep taking keiki's `ValidationOptions` but force the
+  replay-contract flags back on (`checkStateChangingEpsilon = True`,
+  `checkHeadRecoverability = True`) on whatever the caller passes, before invoking
+  `validateTransducer`; the haddock states that caller options may only strengthen
+  validation at this boundary. The only bypass is `mkEventStreamUnchecked` — a
+  separate, loudly named constructor function whose haddock restricts it to tests
+  and emergency forensics, never production streams. The no-options entry points
   `validateEventStream` / `mkEventStream` / `mkEventStreamOrThrow` keep their exact
   signatures.
   Rationale: under keiro's runtime model a state-changing silent edge is never
-  right — it validates, reports success, and un-happens — so fail-fast at stream
-  construction is the honest default, matching `mkEventStream`'s existing
-  fail-on-any-warning posture (`keiro-core/src/Keiro/EventStream/Validate.hs:117-120`).
-  The opt-out exists for parity with keiki's narrowing posture and to unblock an
-  emergency, not as an endorsement. Signature impact is nil outside the module: no
-  caller of the `*With` variants exists anywhere in the repository (verified by
-  grep, 2026-07-11).
-  Date: 2026-07-11
+  right — it validates, reports success, and un-happens — and an opt-out field
+  reachable from the durable boundary is itself a bug vector
+  (zero-silent-divergence principle, user directive 2026-07-12). Fail-fast matches
+  `mkEventStream`'s existing fail-on-any-warning posture
+  (`keiro-core/src/Keiro/EventStream/Validate.hs:117-120`). The non-contract checks
+  (`checkInversionAmbiguity`, `checkGuardImpliesInputRead`) stay caller-narrowable:
+  they have a documented legitimate-override story (manually proven semantic
+  disjointness), and Milestone 2's runtime divergence witness is the net for a
+  wrong override. Signature impact is nil outside the module: no caller of the
+  `*With` variants exists anywhere in the repository (verified by grep,
+  2026-07-11).
+  Date: 2026-07-12 (supersedes the 2026-07-11 `StreamValidationOptions` decision)
 
 - Decision: the post-append replay check runs on every append, not only when
   `stateCodec` is `Just`, gated by a new `RunCommandOptions` field
@@ -306,14 +325,16 @@ If `events` is `[]`, `prepareCommandPlan` returns `CommandNoOp`
 semantics say the machine DID transition — but since events are keiro's only
 persistence and replay skips ε-edges, a silent edge that changes vertex or writes
 registers reports success and un-happens at the next hydration. Nothing rejects
-such a transducer today: keiki's own validator flags only ε-edges whose update
-*reads the command* (`HirEpsilonReadsInput`, keiki `src/Keiki/Core.hs:1371-1374` —
-a replay-safety concern, not a durability one), and keiro's `Validate.hs` adds only
-the snapshot-policy check. The division of labor is fixed by the master plan's
-Decision Log: keiki plan 68 makes silent edges an explicit authoring choice
-(builder authors must write `noEmit`) and keiki EP-73 documents the ε-replay
-boundary, but the *rejection* rule is keiro's because only keiro knows events are
-the sole persistence.
+such a transducer in the pre-MP-16 world: keiki's validator flagged only ε-edges
+whose update *reads the command* (`HirEpsilonReadsInput`, keiki
+`src/Keiki/Core.hs:1371-1374` — a replay-safety concern, not a durability one), and
+keiro's `Validate.hs` adds only the snapshot-policy check. Post-MP-16 keiki EP-71
+adds the default-on `StateChangingEpsilon` check that flags exactly this shape. The
+division of labor is fixed by the master plan's revised Decision Log (2026-07-12):
+keiki *detects* (plan 68 makes silent edges an explicit authoring choice via
+`noEmit`; EP-71 warns on the state-changing ones); keiro *enforces* —
+force-enabling the check so no caller-supplied options can weaken the durable
+boundary — because only keiro knows events are the sole persistence.
 
 Note the deliberate carve-out: a silent edge whose target equals its source and
 whose update is `UKeep` is a true no-op — nothing to persist, nothing lost. The
@@ -398,11 +419,12 @@ by the time Milestone 2 here starts:
   `docs/plans/72-structured-replay-diagnostics-reconstituteeither-strict-evolve-policy-and-multi-event-outputacceptor.md`,
   Interfaces and Dependencies). The `Maybe`-returning `applyEvents` keeps its exact
   signature as a thin wrapper.
-- keiki's `validateTransducer` has three new checks ON by default (keiki EP-71):
-  head-recoverability, inversion ambiguity, and guard-implies-input-read, gated by
-  new `ValidationOptions` fields (`checkHeadRecoverability`,
-  `checkInversionAmbiguity`, and the guard-read flag). EP-95 has added the
-  exhaustive `renderWarning` arms for the new constructors in
+- keiki's `validateTransducer` has four new checks ON by default (keiki EP-71):
+  head-recoverability, inversion ambiguity, guard-implies-input-read, and
+  state-changing epsilon, gated by new `ValidationOptions` fields
+  (`checkHeadRecoverability`, `checkInversionAmbiguity`, the guard-read flag, and
+  `checkStateChangingEpsilon`). EP-95 has added the exhaustive `renderWarning` arms
+  for the new constructors (including `state-changing-epsilon`) in
   `keiro-core/src/Keiro/EventStream/Validate.hs` — Milestone 1 here edits the same
   module and must rebase on those arms (master plan Integration Point 2).
 - EP-95 has replaced the duplicated `hydrate`/`hydrateFull` folds
@@ -412,9 +434,10 @@ by the time Milestone 2 here starts:
   Integration Point 1). Milestone 3's bookkeeping deletion adapts to whatever
   accumulator shape EP-95 left.
 
-Milestone 1 does not need any of this and may be implemented before EP-95 if
-scheduling demands it (its only interaction is a textual rebase in
-`renderWarning`'s vicinity); Milestones 2 and 3 assume the post-EP-95 tree.
+Milestone 1 requires the post-MP-16 keiki pin (the `checkStateChangingEpsilon` and
+`checkHeadRecoverability` fields must exist) and rebases on EP-95's rendered arms;
+Milestones 2 and 3 additionally assume the post-EP-95 hydration shape. Only
+Milestone 3 is pin-independent and may land first if scheduling demands it.
 
 ### Telemetry conventions
 
@@ -450,120 +473,65 @@ Commit style: Conventional Commits.
 
 ## Plan of Work
 
-Four milestones. M1 is the validation rule (keiro-core), M2 the divergence witness
-(keiro runtime + telemetry), M3 the no-op position fix (small, independent), M4 the
+Four milestones. M1 is the boundary hardening (keiro-core: force-enable +
+unchecked escape hatch + pinning specs), M2 the divergence witness (keiro runtime +
+telemetry), M3 the no-op position fix (small, independent), M4 the
 documentation/changelog sweep. Each leaves `cabal build all && cabal test keiro-test`
 green.
 
-### Milestone 1 — reject state-changing silent edges at stream validation
+### Milestone 1 — force-enable the replay-contract checks and pin keiki's rejection
 
 Scope: `keiro-core/src/Keiro/EventStream/Validate.hs` plus specs in
-`keiro/test/Main.hs`. At the end, `mkEventStream` refuses a transducer containing a
-silent edge that changes the vertex or writes a register, with an opt-out; the
-benign no-op self-loop still validates; keiki's validator is untouched.
+`keiro/test/Main.hs`. At the end, no public construction path can admit a
+transducer containing a silent edge that changes the vertex or writes a register —
+not even with caller-weakened options; the benign no-op self-loop still validates;
+the only bypass is a new, loudly named unchecked constructor. Detection itself is
+keiki EP-71's (`StateChangingEpsilon`, rendered by EP-95's `renderWarning` arm);
+this milestone adds no scan of its own.
 
 In `keiro-core/src/Keiro/EventStream/Validate.hs`:
 
-First, extend the `Keiki.Core` import list (currently lines 33-40) with
-`Edge (..)`, `Update (..)`, and `SymTransducer (..)` (the last for the `edgesOut`
-field; if EP-95's arms already import more, merge).
-
-Add a module-private helper that answers "does this edge write any register",
-hiding the `Edge`'s existential write-set exactly the way keiki's own
-`applyEdgeUpdate` does:
+Add a module-private normalizer and apply it in `validateEventStreamWith`
+(lines 88-92) before calling `validateTransducer`:
 
 ```haskell
--- | Does this edge's update write any register slot? Syntactic: a 'USet'
--- counts even if it happens to write the value already present. Companion
--- to keiki's 'edgeReadsInput'; lives here because keiki has no reason to
--- ask the question (see EP-99's Decision Log).
-edgeWritesRegisters :: Edge phi rs ci co s -> Bool
-edgeWritesRegisters Edge{update = u} = updateWrites u
-  where
-    updateWrites :: Update rs w ci -> Bool
-    updateWrites UKeep = False
-    updateWrites USet{} = True
-    updateWrites (UCombine a b) = updateWrites a || updateWrites b
-```
-
-Add `silentEdgeWarnings`, mirroring the shape of `snapshotWarnings`
-(lines 159-169) and the vertex-enumeration idiom of keiki's `checkHiddenInputs`
-(keiki `src/Keiki/Core.hs:1337-1345`: `s <- [minBound .. maxBound]`, edges indexed
-with `zip [0 ..]`):
-
-```haskell
-silentEdgeWarnings ::
-    (Bounded s, Enum s, Eq s, Show s) =>
-    Text ->
-    EventStream phi rs s ci co ->
-    [EventStreamWarning]
-silentEdgeWarnings label es =
-    [ EventStreamWarning{eswStreamLabel = label, eswReason = reason}
-    | s <- [minBound .. maxBound]
-    , (n, e@Edge{output = [], target = tgt}) <-
-        zip [(0 :: Int) ..] (edgesOut (transducer es) s)
-    , reason <- silentEdgeReasons s n tgt (edgeWritesRegisters e)
-    ]
-```
-
-with `silentEdgeReasons` producing at most one reason per defect so a doubly-bad
-edge names both problems. Suggested rendered text (keep the `@vertex` prefix style
-of `renderWarning`, lines 146-157):
-
-- vertex change: `silent-state-change @Draining: edge #0 emits no events but
-  targets Drained; keiro persists only events, so this transition cannot be
-  rehydrated and un-happens at the next load. Emit an event or make the edge a
-  pure no-op (same target, no register writes).`
-- register write: `silent-state-change @Counting: edge #1 emits no events but
-  writes registers; keiro persists only events, so the written registers
-  un-happen at the next load.`
-
-Note the comprehension only *binds* the edge and passes it whole to
-`edgeWritesRegisters` — do not try to project the `update` field directly (the
-existential forbids it). Non-silent edges (`output` non-empty) fall through the
-pattern and are never examined. The `Eq s` needed for `tgt /= s` is implied by the
-module's existing `Ord s` constraints, so no signature gains a constraint.
-
-Introduce the options record and thread it:
-
-```haskell
--- | keiro-side validation options: keiki's transducer options plus the
--- keiro-only silent-state-change check (EP-99). 'checkSilentStateChange'
--- defaults to True; disable it only for a documented, deliberate exception —
--- under keiro's model a state-changing silent edge is never replayable.
-data StreamValidationOptions = StreamValidationOptions
-    { transducerOptions :: !ValidationOptions
-    , checkSilentStateChange :: !Bool
-    }
-
-defaultStreamValidationOptions :: StreamValidationOptions
-defaultStreamValidationOptions =
-    StreamValidationOptions
-        { transducerOptions = defaultValidationOptions
-        , checkSilentStateChange = True
+-- | keiro's durable boundary: events are the only persistence, so the
+-- replay-contract checks are not negotiable. Caller-supplied options may
+-- only strengthen validation; these flags are forced back on (EP-99).
+forceReplayContract :: ValidationOptions -> ValidationOptions
+forceReplayContract opts =
+    opts
+        { checkStateChangingEpsilon = True
+        , checkHeadRecoverability = True
         }
 ```
 
-Change `validateEventStreamWith` and `mkEventStreamWith` to take
-`StreamValidationOptions` instead of keiki's `ValidationOptions` (their only
-callers are the module's own default entry points — verified). In
-`validateEventStreamWith` (lines 88-92), pass `transducerOptions opts` to
-`validateTransducer` and prepend the new check:
+(Field names per keiki EP-71; re-verify against the shipped pin.) The non-contract
+checks (`checkInversionAmbiguity`, `checkGuardImpliesInputRead`) remain
+caller-narrowable: they have a documented legitimate-override story, and
+Milestone 2's divergence witness is the runtime net for a wrong override.
+`validateEventStreamWith` and `mkEventStreamWith` keep their signatures (keiki's
+`ValidationOptions` first parameter); update the `mkEventStreamWith` haddock so its
+"narrow options" sentence states that narrowing cannot reach the replay-contract
+checks and why, and update the module haddock's bullet list to name the
+force-enabled pair.
+
+Add the escape hatch, exported and loud:
 
 ```haskell
-validateEventStreamWith opts label es =
-    snapshotWarnings label es
-        <> (if checkSilentStateChange opts then silentEdgeWarnings label es else [])
-        <> [ EventStreamWarning{eswStreamLabel = label, eswReason = renderWarning w}
-           | w <- validateTransducer (transducerOptions opts) (transducer es)
-           ]
+-- | Wrap an 'EventStream' WITHOUT validation. This skips every keiki and
+-- keiro check, including the replay-contract checks that 'mkEventStream'
+-- force-enables. A stream admitted through this function can silently lose
+-- state changes and fail hydration. Tests and emergency forensics only —
+-- never production streams. Prefer 'mkEventStream'.
+mkEventStreamUnchecked ::
+    EventStream phi rs s ci co -> ValidatedEventStream phi rs s ci co
+mkEventStreamUnchecked = ValidatedEventStream
 ```
 
-`validateEventStream`, `mkEventStream`, and `mkEventStreamOrThrow` keep their
-signatures, now delegating with `defaultStreamValidationOptions`. Export
-`StreamValidationOptions (..)` and `defaultStreamValidationOptions`; update the
-module haddock's bullet list and the `mkEventStreamWith` haddock (its "narrow
-options" warning now also covers the silent-edge opt-out).
+Export it in its own export-list section with a comment matching the haddock's
+severity. (Milestone 2's divergence spec is its first consumer — the public path
+now rejects the divergent fixture, which is the point.)
 
 Tests, in `keiro/test/Main.hs` next to the existing validation fixtures
 (around lines 7576-7615) and specs (lines 536-574):
@@ -598,29 +566,36 @@ Tests, in `keiro/test/Main.hs` next to the existing validation fixtures
   ```
 
   wrapped in an `EventStream` reusing `counterCodec`, `snapshotPolicy = Never`,
-  `stateCodec = Nothing`. Spec: `validateEventStream "silent-move" ...` yields
-  exactly one warning whose reason contains `"silent-state-change"` and
-  `"Drained"`; `mkEventStream` returns `Left`; and — the keiki-boundary proof —
-  `Keiki.validateTransducer defaultValidationOptions silentMoveTransducer` is `[]`
-  (keiki legitimately accepts what keiro must reject).
+  `stateCodec = Nothing`. Spec: the keiki-flags-it proof —
+  `Keiki.validateTransducer defaultValidationOptions silentMoveTransducer` is
+  non-empty and contains a `StateChangingEpsilon` (detection is upstream);
+  `validateEventStream "silent-move" ...` yields a warning whose rendered reason
+  contains `"state-changing-epsilon"`; `mkEventStream` returns `Left`.
 - A silent register-write self-loop fixture over `SnapshotCounterRegs` (the
   existing one-slot register schema, `keiro/test/Main.hs:7541`): copy
   `snapshotCounterTransducer` (`keiro/test/Main.hs:7659-7677`) but set
   `output = []` and change the `USet`'s right-hand side from
-  `inpCtor addCtor #amount` to `lit 0` — the literal matters, because an
-  input-reading silent update would also trip keiki's own `HirEpsilonReadsInput`
-  and the spec must show *keiro's* rule firing alone. Spec: one warning containing
-  `"writes registers"`; `Keiki.validateTransducer` clean on the same transducer.
-- Opt-out: `mkEventStreamWith defaultStreamValidationOptions{checkSilentStateChange = False} "silent-move" ...`
-  returns `Right`.
+  `inpCtor addCtor #amount` to `lit 0` — the literal matters, so the spec shows
+  `StateChangingEpsilon` firing alone rather than keiki's `HirEpsilonReadsInput`.
+  Spec: rejected with a reason containing `"state-changing-epsilon"`.
+- The force-enable proof:
+  `mkEventStreamWith defaultValidationOptions{checkStateChangingEpsilon = False} "silent-move" ...`
+  STILL returns `Left` — the weakened options are overridden at the boundary. A
+  sibling assertion does the same for `checkHeadRecoverability = False` against a
+  head-unrecoverable fixture (reuse EP-95's M1 fixture).
+- The bypass is loud and works: `mkEventStreamUnchecked` on the silent-move stream
+  produces a `ValidatedEventStream` (compile-level proof suffices here —
+  Milestone 2 exercises it for real).
 - Regression by existing assertion: the specs at `keiro/test/Main.hs:540` and
   `:568` already pin `noOpCounterEventStreamDef` (identity self-loop) as clean and
-  accepted — they must keep passing untouched, and the
-  `timerOnlyProcessManager` spec (line 1732) keeps exercising it end to end.
+  accepted — they must keep passing untouched (keiki's `UKeep` self-loop
+  carve-out), and the `timerOnlyProcessManager` spec (line 1732) keeps exercising
+  it end to end.
 
-Acceptance: `cabal test keiro-test` green; the two new fixtures are rejected with
-the exact reason substrings, the opt-out accepts, keiki's validator is shown clean
-on both, and every pre-existing validation spec is unchanged.
+Acceptance: `cabal test keiro-test` green; both fixtures are rejected with the
+`state-changing-epsilon` reason through the default AND the weakened-options
+paths; keiki's validator is shown non-clean on both (detection is upstream); every
+pre-existing validation spec is unchanged.
 
 ### Milestone 2 — witness append/replay divergence on every append
 
@@ -710,13 +685,14 @@ the second field, and fails. Concretely, following the `addCtor` /
   pack pairCtor pairSecondCtor (inpCtor pairCtor #second *: oNil)]`,
   `target = Pairing`. Note it passes Milestone 1's rule (it emits) and passes
   today's hidden-input check (the union across the chain covers both fields), but
-  post-MP-16 keiki's head-recoverability check rightly flags it — so build the
-  stream with
-  `mkEventStreamWith defaultStreamValidationOptions{transducerOptions = defaultValidationOptions{checkHeadRecoverability = False}} ...`
-  (field name per keiki EP-71; adjust to the shipped name). That narrowed-options
-  construction is not a cheat: it is precisely the realistic path by which a
-  divergent transducer reaches production post-MP-16, and the spec should say so
-  in a comment. `stateCodec = Nothing`, `snapshotPolicy = Never` — proving the
+  post-MP-16 keiki's head-recoverability check rightly flags it, and Milestone 1
+  force-enables that check — so mount the stream with `mkEventStreamUnchecked`,
+  with a comment stating why: the public path now rejects this transducer (that is
+  Milestone 1's point), and the unchecked mount stands in for the residual ways a
+  divergent stream can exist in production — a validator blind spot (keiki EP-71
+  documents the `TLit` limits of its inversion-ambiguity criterion), a wrongly
+  narrowed non-contract check, or a legacy stream validated before the checks
+  existed. `stateCodec = Nothing`, `snapshotPolicy = Never` — proving the
   coverage-hole fix (pre-plan code would never have run the check on this stream).
 
 Then the spec, combining the metrics harness (`keiro/test/Main.hs:322-350`) with
@@ -800,10 +776,11 @@ checkpoint-consuming specs (`:1368-1453`) pass untouched.
 ### Milestone 4 — documentation, changelog, sweep
 
 Scope: close the loop. Add to the root `CHANGELOG.md` under `[Unreleased]`:
-breaking — `mkEventStream`/`validateEventStream` now reject state-changing silent
-edges (opt-out via `StreamValidationOptions.checkSilentStateChange`);
-`validateEventStreamWith`/`mkEventStreamWith` take `StreamValidationOptions`
-instead of keiki's `ValidationOptions`; changed — no-op `CommandResult` reports
+breaking — `validateEventStreamWith`/`mkEventStreamWith` force-enable the
+replay-contract checks (`checkStateChangingEpsilon`, `checkHeadRecoverability`);
+caller options may only strengthen validation, so state-changing silent edges are
+rejected on every public construction path; added — `mkEventStreamUnchecked`
+(loud, tests/forensics only); changed — no-op `CommandResult` reports
 `globalPosition = Nothing` instead of a fabricated position 0; added —
 `RunCommandOptions.verifyReplayOnAppend` (default on) and the
 `keiro.snapshot.apply.divergence` counter / `keiro.replay.divergence` span
@@ -811,10 +788,10 @@ attribute. Add the counter and attribute rows to
 `docs/research/opentelemetry-semconv-audit.md` following its existing per-instrument
 format. Update the master plan
 (`docs/masterplans/14-harden-the-keiro-command-coordination-and-snapshot-paths-surfaced-by-the-2026-07-keiki-path-review.md`):
-tick EP-99's two Progress lines, set the registry Status to Complete, and note in
-its Surprises section that the "register-only silent edge gap" feared by the review
-did not materialize (keiki exports `Update (..)`). Run the full sweep and `nix fmt`;
-fill this plan's living sections and write the Outcomes & Retrospective entry.
+tick EP-99's two Progress lines, set the registry Status to Complete, and confirm
+its Surprises entry about the silent-edge division (detection in keiki EP-71,
+enforcement here) matches what shipped. Run the full sweep and `nix fmt`; fill
+this plan's living sections and write the Outcomes & Retrospective entry.
 
 
 ## Concrete Steps
@@ -843,9 +820,9 @@ zero failures and the new groups appearing):
 
 ```text
 Keiro.EventStream.Validate silent edges
-  rejects a silent edge that changes vertex [✔]
-  rejects a silent edge that writes registers (keiki accepts it) [✔]
-  checkSilentStateChange = False opts out [✔]
+  rejects a silent edge that changes vertex (keiki StateChangingEpsilon) [✔]
+  rejects a silent edge that writes registers [✔]
+  weakened caller options are overridden at the boundary [✔]
 Keiro.Command
   counts keiro.snapshot.apply.divergence when an appended batch cannot replay [✔]
   a divergent append still succeeds and poisons the next hydration [✔]
@@ -858,7 +835,7 @@ N examples, 0 failures
 Commit per milestone with conventional-commit messages, for example:
 
 ```text
-feat(keiro-core)!: reject state-changing silent edges at stream validation (EP-99 M1)
+feat(keiro-core)!: force-enable replay-contract validation; add mkEventStreamUnchecked (EP-99 M1)
 feat(keiro): count and trace append/replay divergence on every append (EP-99 M2)
 fix(keiro): no-op commands report globalPosition Nothing, not the kiroku 0 sentinel (EP-99 M3)
 docs(keiro): changelog, semconv audit rows, master plan bookkeeping (EP-99 M4)
@@ -870,13 +847,15 @@ docs(keiro): changelog, semconv audit rows, master plan bookkeeping (EP-99 M4)
 Acceptance is behavior, each encoded as a spec named in the milestones:
 
 1. Silent-edge rejection. `mkEventStream "silent-move" silentMoveEventStreamDef`
-   returns `Left [w]` where `eswReason w` contains `silent-state-change` and
-   `Drained`; the register-write fixture likewise with `writes registers`; for both
-   fixtures `Keiki.validateTransducer defaultValidationOptions` returns `[]`,
-   demonstrating the rule is keiro's and not duplicated keiki behavior. The
-   documented opt-out accepts, and the pre-existing assertions that
-   `noOpCounterEventStreamDef` validates clean (`keiro/test/Main.hs:540`, `:568`)
-   pass unmodified — the identity self-loop is deliberately not flagged.
+   returns `Left [w]` where `eswReason w` contains `state-changing-epsilon`; the
+   register-write fixture is likewise rejected; for both fixtures
+   `Keiki.validateTransducer defaultValidationOptions` is non-empty with a
+   `StateChangingEpsilon`, demonstrating detection is keiki's and keiro adds no
+   second scan. Weakened caller options (`checkStateChangingEpsilon = False`,
+   `checkHeadRecoverability = False`) are overridden and still reject; only
+   `mkEventStreamUnchecked` admits the fixture; and the pre-existing assertions
+   that `noOpCounterEventStreamDef` validates clean (`keiro/test/Main.hs:540`,
+   `:568`) pass unmodified — the identity self-loop is deliberately not flagged.
 2. Divergence witnessed, command unharmed, prophecy fulfilled. On the split-pair
    stream, `runCommand` returns `Right` with `eventsAppended = 2`; the flushed
    in-memory meter shows `keiro.snapshot.apply.divergence` at `IntNumber 1`; a
@@ -901,14 +880,15 @@ Final gate: `cabal build all`, `cabal test keiro-test` (zero failures), `nix fmt
 ## Idempotence and Recovery
 
 Every step is a source edit plus a test run; all are safe to repeat. The changes
-are additive or narrowly breaking with zero external callers (the `*With` signature
-change and the `Hydrated` field deletion are compiler-enforced: GHC lists every
-site to fix). No migrations, no persisted data formats, no destructive operations.
-Milestones are committed separately, each leaving the suite green, so `git revert`
-of a single milestone restores a releasable tree. If Milestone 2 must land before
-EP-95 for scheduling reasons, it cannot: it consumes `applyEventsEither` from the
-post-MP-16 keiki pin — implement M1/M3 first (both are pin-independent) and record
-the reordering in Progress. The divergence spec intentionally poisons a stream;
+are additive or narrowly breaking with zero external callers (the force-enable
+behavior change has no `*With` callers in the repository, and the `Hydrated` field
+deletion is compiler-enforced: GHC lists every site to fix). No migrations, no
+persisted data formats, no destructive operations. Milestones are committed
+separately, each leaving the suite green, so `git revert` of a single milestone
+restores a releasable tree. If Milestone 2 must land before EP-95 for scheduling
+reasons, it cannot: it consumes `applyEventsEither` from the post-MP-16 keiki pin —
+and Milestone 1 needs the pin's `ValidationOptions` fields; implement M3 first
+(the only pin-independent milestone) and record the reordering in Progress. The divergence spec intentionally poisons a stream;
 each spec runs against a fresh per-example database clone (`withFreshStore`), so
 poisoned fixtures never leak between examples or runs.
 
@@ -918,45 +898,29 @@ poisoned fixtures never leak between examples or runs.
 No new package dependencies. keiki and kiroku stay at whatever pins EP-95
 establishes (`cabal.project` `source-repository-package` stanzas); this plan
 requires the post-MP-16 keiki exports `applyEventsEither`, `ReplayFailure` (with
-`Eq`/`Show`), and the keiki EP-71 `ValidationOptions` fields, plus the existing
-exports `Edge (..)`, `Update (..)`, `SymTransducer (..)`, and
-`defaultValidationOptions` from `Keiki.Core`.
+`Eq`/`Show`), and the keiki EP-71 `ValidationOptions` fields
+(`checkStateChangingEpsilon` and `checkHeadRecoverability` among them), plus the
+existing export `defaultValidationOptions` from `Keiki.Core`.
 
 At the end of the plan these exist exactly as written:
 
 ```haskell
 -- keiro-core/src/Keiro/EventStream/Validate.hs (module Keiro.EventStream.Validate)
 
-data StreamValidationOptions = StreamValidationOptions
-    { transducerOptions :: !ValidationOptions -- keiki's, from Keiki.Core
-    , checkSilentStateChange :: !Bool         -- default True
-    }
+-- validateEventStreamWith / mkEventStreamWith keep their existing signatures
+-- (keiki's ValidationOptions first parameter) but force the replay-contract
+-- flags back on before validating. Module-private:
+forceReplayContract :: ValidationOptions -> ValidationOptions
 
-defaultStreamValidationOptions :: StreamValidationOptions
-
-validateEventStreamWith ::
-    (Bounded s, Enum s, Ord s, Show s) =>
-    StreamValidationOptions ->
-    Text ->
-    EventStream (HsPred rs ci) rs s ci co ->
-    [EventStreamWarning]
-
-mkEventStreamWith ::
-    (Bounded s, Enum s, Ord s, Show s) =>
-    StreamValidationOptions ->
-    Text ->
-    EventStream (HsPred rs ci) rs s ci co ->
-    Either [EventStreamWarning] (ValidatedEventStream (HsPred rs ci) rs s ci co)
-
--- module-private:
-edgeWritesRegisters :: Edge phi rs ci co s -> Bool
-silentEdgeWarnings ::
-    (Bounded s, Enum s, Eq s, Show s) =>
-    Text -> EventStream phi rs s ci co -> [EventStreamWarning]
+-- Exported, loud haddock, tests and emergency forensics only:
+mkEventStreamUnchecked ::
+    EventStream phi rs s ci co -> ValidatedEventStream phi rs s ci co
 ```
 
-`validateEventStream`, `mkEventStream`, and `mkEventStreamOrThrow` keep their
-current signatures verbatim.
+`validateEventStream`, `validateEventStreamWith`, `mkEventStream`,
+`mkEventStreamWith`, and `mkEventStreamOrThrow` keep their current signatures
+verbatim; only `*With` behavior changes (weakened replay-contract flags are
+overridden).
 
 ```haskell
 -- keiro/src/Keiro/Command.hs (module Keiro.Command)
@@ -988,12 +952,10 @@ Downstream coordination (master plan Integration Points): EP-98 owns
 `keiro.snapshot.decode.failures` and any hit/miss counters — untouched here; EP-100
 may serialize `CommandError` values (including EP-95's ambiguity constructor) into
 dead-letter records — this plan adds no `CommandError` constructors, so EP-100 is
-unaffected; keiki owns `TransducerValidationWarning` — this plan adds nothing to
-it. One follow-up noted for keiki (not done here — out of scope per the master
-plan): exporting an official `edgeWritesRegisters`-style accessor would let keiro
-delete its module-private copy; until then the private helper is three total
-patterns over an exported GADT and cannot drift silently (a new `Update`
-constructor breaks the compile).
+unaffected; keiki owns `TransducerValidationWarning` and the silent-edge detection
+itself (EP-71's `StateChangingEpsilon`) — this plan adds nothing to either; keiro's
+contribution is the force-enable boundary, the pinning fixtures, and the unchecked
+escape hatch.
 
 ---
 
@@ -1008,3 +970,15 @@ keiki sources (`src/Keiki/Core.hs` exports, `Edge`/`Update` GADTs,
 authoring finding: keiki's exported `Update (..)` makes the full silent-edge rule
 (vertex change OR register write) implementable keiro-side, eliminating the
 review's anticipated register-only gap.
+
+Revision note (2026-07-12): rescoped Milestone 1 per the revised division of labor
+with keiki MP-16 — detection moved into keiki EP-71's default-on
+`StateChangingEpsilon` check, so this plan no longer implements
+`silentEdgeWarnings`/`edgeWritesRegisters` or a `StreamValidationOptions` record.
+Milestone 1 now force-enables the replay-contract checks
+(`checkStateChangingEpsilon`, `checkHeadRecoverability`) against caller-supplied
+options, adds the loudly named `mkEventStreamUnchecked` escape hatch (which
+Milestone 2's divergence spec uses to mount its deliberately divergent fixture,
+since the public path now rejects it), and pins the rejection with the original
+fixture set. Milestones 2–4 are otherwise unchanged; the runtime divergence
+witness is retained as defense in depth behind the static checks.

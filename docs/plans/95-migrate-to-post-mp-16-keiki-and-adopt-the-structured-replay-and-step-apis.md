@@ -83,9 +83,9 @@ Use this checklist to track granular steps; split partially-done items into "don
 
 - [ ] M1: keiki pin re-verified against shipped MP-16 code; any signature drift recorded in Surprises & Discoveries
 - [ ] M1: `cabal.project` keiki pin bumped (both stanzas) to the post-MP-16 commit; workspace builds
-- [ ] M1: three new render arms added to `renderWarning` in `keiro-core/src/Keiro/EventStream/Validate.hs`; haddock count fixed
+- [ ] M1: four new render arms added to `renderWarning` in `keiro-core/src/Keiro/EventStream/Validate.hs`; haddock count fixed
 - [ ] M1: fail-fast posture for the new warnings confirmed and documented (no code change needed — see Decision Log); module haddock updated
-- [ ] M1: validation specs extended (head-unrecoverable, inversion-ambiguity, unguarded-input-read all rejected by `mkEventStream` with the expected rendered prefixes); existing fixture-audit spec green
+- [ ] M1: validation specs extended (head-unrecoverable, inversion-ambiguity, unguarded-input-read, state-changing-epsilon all rejected by `mkEventStream` with the expected rendered prefixes); existing fixture-audit spec green
 - [ ] M2: `HydrationReplayReason` added; `HydrationReplayFailed` extended to carry it
 - [ ] M2: `hydrate`/`hydrateFull` collapsed into one seeded fold over keiki's `replayEvents`; duplicated fold deleted
 - [ ] M2: `commandErrorClass` refined for the four hydration reasons
@@ -104,7 +104,7 @@ Document unexpected behaviors, bugs, optimizations, or insights discovered durin
 implementation, with concise evidence.
 
 - (from plan authoring, 2026-07-12) The fail-fast question this plan was asked to
-  decide — should keiro treat keiki's three new replay-breaking warnings as validation
+  decide — should keiro treat keiki's four new replay-breaking warnings as validation
   *failures* rather than rendered advisories? — turns out to be already answered by
   keiro's existing structure: `mkEventStreamWith`
   (`keiro-core/src/Keiro/EventStream/Validate.hs:117-120`) returns `Left warns` for
@@ -125,18 +125,22 @@ implementation, with concise evidence.
 
 ## Decision Log
 
-- Decision: keiro keeps its existing all-warnings-fail posture for the three new keiki
-  warning constructors — `HeadUnrecoverable`, `InversionAmbiguity`, and
-  `UnguardedInputRead` cause `mkEventStream`/`mkEventStreamOrThrow` to reject the
-  stream, with no keiro-side severity tiering.
+- Decision: keiro keeps its existing all-warnings-fail posture for the four new keiki
+  warning constructors — `HeadUnrecoverable`, `InversionAmbiguity`,
+  `UnguardedInputRead`, and `StateChangingEpsilon` cause
+  `mkEventStream`/`mkEventStreamOrThrow` to reject the stream, with no keiro-side
+  severity tiering.
   Rationale: keiro's entire persistence model rests on replay (events are the only
-  state), and all three new warnings mark shapes that break replay or crash the step
-  function at runtime. keiro's boundary already fails on any warning
-  (`mkEventStreamWith`, `keiro-core/src/Keiro/EventStream/Validate.hs:117-120`), so
-  fail-fast comes for free; a caller who has manually proven a flagged shape safe (for
-  example semantically disjoint guards behind an `InversionAmbiguity` pair) can narrow
-  the checks per stream via `mkEventStreamWith` with a record update on
-  `defaultValidationOptions` — the escape hatch keiki EP-71 documents.
+  state), and all four new warnings mark shapes that break replay, silently lose
+  state, or crash the step function at runtime. keiro's boundary already fails on any
+  warning (`mkEventStreamWith`, `keiro-core/src/Keiro/EventStream/Validate.hs:117-120`),
+  so fail-fast comes for free; a caller who has manually proven a flagged shape safe
+  (for example semantically disjoint guards behind an `InversionAmbiguity` pair) can
+  narrow the non-contract checks per stream via `mkEventStreamWith` with a record
+  update on `defaultValidationOptions` — the escape hatch keiki EP-71 documents.
+  EP-99 subsequently force-enables the replay-contract pair
+  (`checkStateChangingEpsilon`, `checkHeadRecoverability`), so narrowing remains
+  possible only for `checkInversionAmbiguity` and `checkGuardImpliesInputRead`.
   Date: 2026-07-12
 
 - Decision: `CommandError` stays monomorphic (no vertex/event type parameters, no new
@@ -205,15 +209,16 @@ implementation, with concise evidence.
   called out in the changelog (Milestone 4).
   Date: 2026-07-12
 
-- Decision: no keiro change for keiki EP-71's three new `ValidationOptions` fields.
+- Decision: no keiro change for keiki EP-71's four new `ValidationOptions` fields.
   Rationale: verified during authoring (and independently by keiki EP-71's own
   Milestone 6 audit): no code in this repository constructs `ValidationOptions`
   literally. `keiro-core/src/Keiro/EventStream/Validate.hs` imports the type
   abstractly and threads `defaultValidationOptions` or a caller-supplied value
   (lines 37-38, 76, 104); `keiro-dsl`'s generated harnesses pass
   `defaultValidationOptions` (`keiro-dsl/src/Keiro/Dsl/Harness.hs:202,211`). Since the
-  three new flags default to `True`, keiro's validation automatically becomes
-  stricter, which is the point.
+  four new flags default to `True`, keiro's validation automatically becomes
+  stricter, which is the point. (EP-99 later adds the force-enable normalizer for
+  the replay-contract pair; that is deliberately its scope, not this migration's.)
   Date: 2026-07-12
 
 - Decision: the in-repo `jitsurei` package is recompiled and its tests re-run but not
@@ -288,14 +293,17 @@ mid-chain, so a page boundary can fall inside a multi-event chain. The strict fa
 end-of-stream. The old `Maybe` surface (`step`, `applyEventStreaming`, `applyEvents`)
 survives unchanged as thin wrappers — keiro code that keeps using it still compiles.
 
-Post-MP-16, keiki's validator (keiki EP-71) also gains three warning constructors on
+Post-MP-16, keiki's validator (keiki EP-71) also gains four warning constructors on
 `TransducerValidationWarning` — `HeadUnrecoverable` (a multi-event edge whose first
 event cannot alone reconstruct the command: such an edge produces logs the transducer
 *cannot replay*), `InversionAmbiguity` (two same-vertex edges whose first emitted
 events share a wire constructor, so replay may not attribute an observed event to a
-unique edge), and `UnguardedInputRead` (an edge that reads a command field without a
+unique edge), `UnguardedInputRead` (an edge that reads a command field without a
 guard establishing the command's constructor first, so evaluation crashes via `error`
-instead of rejecting) — and three matching `ValidationOptions` flags, all default-on.
+instead of rejecting), and `StateChangingEpsilon` (an edge that emits no events but
+changes the vertex or writes a register — a transition an event log cannot
+reconstruct, so it silently un-happens at the next hydration) — and four matching
+`ValidationOptions` flags, all default-on.
 
 ### keiro's command path, and the five defects this plan fixes
 
@@ -429,14 +437,15 @@ green.
 ### Milestone 1 — bump keiki and migrate the warning match
 
 Scope: after this milestone, the workspace compiles against post-MP-16 keiki, and
-`mkEventStream` rejects (with readable reasons) every transducer shape the three new
+`mkEventStream` rejects (with readable reasons) every transducer shape the four new
 keiki checks flag. This is the compile-breaking part of the migration, so it is one
 commit.
 
 First, re-verify the specification (see the caveat at the top): open the pinned keiki
 checkout and confirm the names and shapes quoted in Interfaces and Dependencies —
-the three new warning constructors and their fields (`tvwEdge`, `tvwSource`,
-`tvwDetail`), the three `ValidationOptions` flags, `ReplayStepFailure`/
+the four new warning constructors and their fields (`tvwEdge`, `tvwSource`,
+`tvwChangesVertex`, `tvwWritesRegisters`, `tvwDetail`), the four
+`ValidationOptions` flags, `ReplayStepFailure`/
 `ReplayFailure`/`replayEvents`, and `stepEither`/`StepFailure` (the last pair exists
 today and cannot drift). Check keiki's `CHANGELOG.md` and the two keiki plans'
 Decision Logs for recorded deviations. Record any drift in Surprises & Discoveries and
@@ -460,10 +469,10 @@ uncommitted developer overlay, as its existing kiroku/pg-migrate entries show).
 
 Then `cabal build all` and let the compiler drive: the only expected keiro breakage is
 the exhaustive match in `renderWarning`
-(`keiro-core/src/Keiro/EventStream/Validate.hs:147-155`). Add the three arms exactly as
+(`keiro-core/src/Keiro/EventStream/Validate.hs:147-155`). Add the four arms exactly as
 keiki EP-71's migration section prescribes (matching the existing kebab-case-tag
 rendering style), and change the haddock sentence above the function from "All four
-constructors carry @tvwDetail@" to "All seven constructors carry @tvwDetail@":
+constructors carry @tvwDetail@" to "All eight constructors carry @tvwDetail@":
 
 ```haskell
     HeadUnrecoverable{tvwEdge = e, tvwDetail = d} ->
@@ -472,27 +481,30 @@ constructors carry @tvwDetail@" to "All seven constructors carry @tvwDetail@":
         "inversion-ambiguity @" <> showT s <> ": " <> Text.pack d
     UnguardedInputRead{tvwEdge = e, tvwDetail = d} ->
         "unguarded-input-read @" <> showT (edgeSource e) <> ": " <> Text.pack d
+    StateChangingEpsilon{tvwEdge = e, tvwDetail = d} ->
+        "state-changing-epsilon @" <> showT (edgeSource e) <> ": " <> Text.pack d
 ```
 
 Update the module haddock (`keiro-core/src/Keiro/EventStream/Validate.hs:1-18`), which
 currently describes the umbrella as "hidden-input + determinism + dead-edge": name the
-three new checks and state the posture plainly — a stream flagged by any of them fails
+four new checks and state the posture plainly — a stream flagged by any of them fails
 `mkEventStream` at startup because keiro's persistence model makes an unreplayable
 shape unacceptable, and per-stream narrowing goes through `mkEventStreamWith` with a
-record update on `defaultValidationOptions`. State explicitly (it is this plan's
-required record): keiro constructs `ValidationOptions` nowhere — it only threads
-`defaultValidationOptions` or a caller's value — so keiki's three new default-on flags
+record update on `defaultValidationOptions` (EP-99 subsequently restricts narrowing
+to the non-contract checks). State explicitly (it is this plan's required record):
+keiro constructs `ValidationOptions` nowhere — it only threads
+`defaultValidationOptions` or a caller's value — so keiki's four new default-on flags
 required no keiro change and simply made `mkEventStream` stricter.
 
 Tests, in `keiro/test/Main.hs`. The existing replay-safety block at lines 536-566 is
 the audit gate: the "every production-intent stream validates clean" spec (lines
-537-549) now runs the three new checks over every fixture. If any fixture fails, that
+537-549) now runs the four new checks over every fixture. If any fixture fails, that
 fixture has a latent replay bug — fix the fixture (never the assertion), following
 keiki EP-71's Milestone 5 classification, and record it in Surprises & Discoveries.
 (Expected: all pass. Every fixture's guards are `matchInCtor`-conjoined, the
 multi-event fixtures' head events carry the single command slot — e.g.
 `multiCounterTransducer` at `keiro/test/Main.hs:7624-7639` — and no vertex has two
-edges sharing a head wire constructor.) Then add three rejection specs alongside the
+edges sharing a head wire constructor.) Then add four rejection specs alongside the
 existing `brokenHiddenInputEventStream` spec (lines 551-560), one per new check, each
 asserting `mkEventStream` returns `Left` and the rendered reason contains the new
 kebab-case prefix:
@@ -511,9 +523,15 @@ kebab-case prefix:
   fixture — Milestone 2's ambiguous-inversion hydration test reuses it.
 - *unguarded-input-read*: one edge guarded `PTop` whose output reads
   `inpCtor addCtor #amount`. Rendered `unguarded-input-read @Counting: …`.
+- *state-changing-epsilon*: a variant of `counterTransducer` whose single edge has
+  `output = []` and targets a second vertex (add a two-constructor state type, or
+  keep the self-loop and give the update a `USet` with a `lit 0` right-hand side —
+  the literal avoids also tripping keiki's ε-reads-input check). Rendered
+  `state-changing-epsilon @Counting: …`. Keep it top-level — EP-99's Milestone 1
+  reuses the shape for its force-enable specs.
 
 Acceptance for M1: `cabal build all` succeeds against the new pin; `cabal test
-keiro-test` is green including the three new rejection specs; the fixture-audit spec
+keiro-test` is green including the four new rejection specs; the fixture-audit spec
 still returns `[]`.
 
 ### Milestone 2 — one seeded hydration fold over keiki's structured replay
@@ -774,10 +792,11 @@ Keep-a-Changelog structure (see the current file for the format):
 ```text
 ### Breaking Changes
 
-- keiro now requires post-MP-16 keiki. Stream validation runs keiki's three new
+- keiro now requires post-MP-16 keiki. Stream validation runs keiki's four new
   replay-alignment checks (head-recoverability, inversion ambiguity, unguarded
-  input reads); a stream flagged by any of them now fails mkEventStream at
-  startup instead of failing hydration in production.
+  input reads, state-changing silent edges); a stream flagged by any of them now
+  fails mkEventStream at startup instead of failing hydration (or silently losing
+  state) in production.
 - CommandError: HydrationReplayFailed now carries a typed HydrationReplayReason
   (no-inverting-edge / ambiguous-inversion / queue-mismatch / truncated-chain)
   alongside the failing stream version; new constructor CommandAmbiguous carries
@@ -963,8 +982,10 @@ replayEvents ::
 -- TransducerValidationWarning gains HeadUnrecoverable{tvwEdge, tvwInCtor,
 -- tvwTailOnlySlots, tvwDetail}, InversionAmbiguity{tvwSource, tvwEdgeA,
 -- tvwEdgeB, tvwWireCtor, tvwDetail}, UnguardedInputRead{tvwEdge, tvwInCtor,
--- tvwDetail}; ValidationOptions gains checkHeadRecoverability,
--- checkInversionAmbiguity, checkGuardImpliesInputRead (all default True).
+-- tvwDetail}, StateChangingEpsilon{tvwEdge, tvwChangesVertex,
+-- tvwWritesRegisters, tvwDetail}; ValidationOptions gains
+-- checkHeadRecoverability, checkInversionAmbiguity,
+-- checkGuardImpliesInputRead, checkStateChangingEpsilon (all default True).
 ```
 
 Unchanged keiki surfaces this plan relies on keiki MP-16 preserving (its EP-72
@@ -1007,6 +1028,14 @@ keiro-side silent-edge warning *alongside* — never inside — keiki's
 `TransducerValidationWarning`, and rebases on this plan's render arms.
 
 ---
+
+Revision note (2026-07-12, later): aligned with keiki MP-16's revised EP-71 scope —
+the warning migration is four constructors, not three (`StateChangingEpsilon`
+joins), so the render arms, haddock count ("All eight constructors"), rejection
+specs, changelog text, and quoted keiki interfaces were updated, and a fourth
+rejection-spec fixture added. The fail-fast Decision now also records that EP-99
+force-enables the replay-contract pair, leaving only the non-contract checks
+caller-narrowable.
 
 Revision note (2026-07-12): replaced the generated skeleton with the full plan.
 Authored from a fresh read of keiro's `Command.hs`, `EventStream/Validate.hs`,
