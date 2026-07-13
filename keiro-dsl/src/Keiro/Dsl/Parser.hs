@@ -340,10 +340,11 @@ pStatesLine = do
     -- between them. The @try@ backtracks so the identifier is left for
     -- 'pTransition'.
     pStateDecl = try $ do
+        loc <- getLoc
         n <- ident
         term <- option False (True <$ symbol "!")
         notFollowedBy (symbol "--")
-        pure StateDecl{stName = n, stTerminal = term}
+        pure StateDecl{stName = n, stTerminal = term, stLoc = loc}
 
 pBodyItem :: P BodyItem
 pBodyItem =
@@ -579,10 +580,11 @@ pIntake = do
         rows <- braces (many pDispositionRow)
         pure rows
     pDispositionRow = do
+        loc <- getLoc
         o <- ident
         _ <- symbol "=>"
         act <- pInboxAction
-        pure DispositionRow{drOutcome = o, drAction = act}
+        pure DispositionRow{drOutcome = o, drAction = act, drLoc = loc}
     pInboxAction =
         choice
             [ IAckOk <$ keyword "ackOk"
@@ -632,10 +634,11 @@ pEmit = do
         skip <- option False (True <$ try (symbol "_" *> symbol "=>" *> keyword "skip"))
         pure (rows, skip)
     pMapRow = try $ do
+        loc <- getLoc
         v <- stringLit
         _ <- symbol "=>"
         ev <- ident
-        pure EmitMapRow{emrValue = v, emrEvent = ev}
+        pure EmitMapRow{emrValue = v, emrEvent = ev, emrLoc = loc}
     pDerive = do
         keyword "derive"
         pfx <- optional stringLit
@@ -726,10 +729,11 @@ pWorkqueue = do
         req <- option False (True <$ keyword "required")
         pure WqField{wqfName = n, wqfWire = w, wqfType = ty, wqfRequired = req}
     pWqDispRow = do
+        loc <- getLoc
         o <- ident
         _ <- symbol "->"
         act <- choice [IAckOk <$ keyword "ackOk", IRetry <$> (keyword "retry" *> pWindow), IDeadLetter <$> (keyword "deadLetter" *> optional stringLit)]
-        pure WqDispRow{wqdOutcome = o, wqdAction = act}
+        pure WqDispRow{wqdOutcome = o, wqdAction = act, wqdLoc = loc}
 
 pPgmqDispatch :: P PgmqDispatchNode
 pPgmqDispatch = do
@@ -810,13 +814,22 @@ pWorkflow = do
   where
     pWfBodyItem =
         choice
-            [ WfStep <$> (keyword "step" *> wireWord) <*> (symbol "->" *> ident)
-            , WfAwait <$> (keyword "await" *> wireWord) <*> (symbol "->" *> ident)
-            , WfSleep <$> (keyword "sleep" *> wireWord) <*> (keyword "after" *> ident)
-            , WfChild
-                <$> (keyword "child" *> wireWord)
-                <*> (keyword "id" *> keyword "input" *> keyword "via" *> ident)
-                <*> (symbol "->" *> ident)
+            [ do
+                loc <- getLoc
+                WfStep <$> (keyword "step" *> wireWord) <*> (symbol "->" *> ident) <*> pure loc
+            , do
+                loc <- getLoc
+                WfAwait <$> (keyword "await" *> wireWord) <*> (symbol "->" *> ident) <*> pure loc
+            , do
+                loc <- getLoc
+                WfSleep <$> (keyword "sleep" *> wireWord) <*> (keyword "after" *> ident) <*> pure loc
+            , do
+                loc <- getLoc
+                WfChild
+                    <$> (keyword "child" *> wireWord)
+                    <*> (keyword "id" *> keyword "input" *> keyword "via" *> ident)
+                    <*> (symbol "->" *> ident)
+                    <*> pure loc
             ]
 
 pOperation :: P OperationNode
@@ -957,6 +970,7 @@ pAdvance = do
 
 pDispatch :: P DispatchNode
 pDispatch = do
+    loc <- getLoc
     keyword "dispatch"
     tgt <- ident
     _ <- symbol "@"
@@ -968,7 +982,7 @@ pDispatch = do
             <$> (keyword "on-appended" *> pDisp)
             <*> (symbol ";" *> keyword "on-duplicate" *> pDisp)
             <*> (symbol ";" *> keyword "on-failed" *> pDisp)
-    pure DispatchNode{dispTarget = tgt, dispKey = key, dispCommand = cmd, dispFields = fs, dispDisposition = disp}
+    pure DispatchNode{dispTarget = tgt, dispKey = key, dispCommand = cmd, dispFields = fs, dispDisposition = disp, dispLoc = loc}
 
 pDisp :: P Disp
 pDisp =

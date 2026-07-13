@@ -145,15 +145,15 @@ emitWorkflowFacts genPrefix w =
         , "  , (\"idVia\", " <> hs (wfIdVia w) <> ")"
         , "  , (\"idField\", " <> hs (maybe "input" id (wfIdField w)) <> ")"
         , "  , (\"body\", " <> hs (T.intercalate "," (map bodyTag (wfBody w))) <> ")"
-        , "  , (\"awaits\", " <> hs (T.intercalate "," [l | WfAwait l _ <- wfBody w]) <> ")"
+        , "  , (\"awaits\", " <> hs (T.intercalate "," [l | WfAwait l _ _ <- wfBody w]) <> ")"
         , "  ]"
         ]
   where
     hs = tshow
-    bodyTag (WfStep l _) = "step:" <> l
-    bodyTag (WfAwait l _) = "await:" <> l
-    bodyTag (WfSleep l _) = "sleep:" <> l
-    bodyTag (WfChild l _ _) = "child:" <> l
+    bodyTag (WfStep l _ _) = "step:" <> l
+    bodyTag (WfAwait l _ _) = "await:" <> l
+    bodyTag (WfSleep l _ _) = "sleep:" <> l
+    bodyTag (WfChild l _ _ _) = "child:" <> l
 
 {- | Emit the workflow's deterministic id derivation compiled against the LIVE
 @Keiro.Workflow@: the 'WorkflowName' and the awakeable-id function (the actual
@@ -186,7 +186,7 @@ emitWorkflowRuntime genPrefix w =
         , "awaitAwakeableId wid label = deterministicAwakeableId workflowName wid label"
         , ""
         , "awaitLabels :: [Text]"
-        , "awaitLabels = [" <> T.intercalate ", " [tshow l | WfAwait l _ <- wfBody w] <> "]"
+        , "awaitLabels = [" <> T.intercalate ", " [tshow l | WfAwait l _ _ <- wfBody w] <> "]"
         ]
 
 emitHarness :: Agg -> Text

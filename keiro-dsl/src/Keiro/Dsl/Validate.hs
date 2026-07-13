@@ -177,7 +177,7 @@ validateOperation spec o = case opShape o of
     ol = locLine (opLoc o)
     workflows = [w | NWorkflow w <- specNodes spec]
     lookupWorkflow n = case [w | w <- workflows, wfId w == n] of (w : _) -> Just w; [] -> Nothing
-    awaitLabels w = [l | WfAwait l _ <- wfBody w]
+    awaitLabels w = [l | WfAwait l _ _ <- wfBody w]
 
 {- | EP-5 workqueue rules: the captured physical name must match the queueRef
 derivation; the disposition inversions (storeFailure transient => must retry;
@@ -311,19 +311,21 @@ validateProcess spec p =
     -- field-resolution + typed-as-Time check.)
     noWallClock =
         let f = faField (tmFireAt timer)
-         in [ mkErr (locLine (tmLoc timer)) ProcessFireAtNotInjected $
-                "timer '" <> tmName timer <> "' fireAt references '" <> f <> "', which is not a declared :Time field of input '" <> inName (procInput p) <> "'"
-            | f `notElem` timeFields
-            ]
-                ++ [ mkErr (locLine (tmLoc timer)) ProcessFireAtNotInjected $
+         in if f `notElem` inputFields
+                then
+                    [ mkErr (locLine (tmLoc timer)) ProcessFireAtNotInjected $
                         "timer '" <> tmName timer <> "' fireAt field '" <> f <> "' is not a field of input '" <> inName (procInput p) <> "'"
-                   | f `notElem` inputFields
-                   ]
+                    ]
+                else
+                    [ mkErr (locLine (tmLoc timer)) ProcessFireAtNotInjected $
+                        "timer '" <> tmName timer <> "' fireAt references '" <> f <> "', which is not a declared :Time field of input '" <> inName (procInput p) <> "'"
+                    | f `notElem` timeFields
+                    ]
 
     -- Dispatched (and fired) command ids are runtime-owned; no field binding may
     -- supply a commandId/id.
     runtimeOwnedDispatchId =
-        [ mkErr pl ProcessDispatchIdSupplied $
+        [ mkErr (locLine (dispLoc d)) ProcessDispatchIdSupplied $
             "dispatch to '" <> dispTarget d <> "' supplies a runtime-owned id field '" <> fbName b <> "'; remove it"
         | d <- hDispatch (procHandle p)
         , b <- dispFields d
@@ -353,7 +355,7 @@ validateProcess spec p =
             "timer '" <> tmName timer <> "' maps on-reject => Fired (a CommandRejected is treated as benign success)"
         | onReject (fireDisposition (tmFire timer)) == OFired
         ]
-            ++ [ Diagnostic pl Warning ProcessBenignInversion $
+            ++ [ Diagnostic (locLine (dispLoc d)) Warning ProcessBenignInversion $
                     "dispatch to '" <> dispTarget d <> "' maps on-duplicate => AckOk (a duplicate is treated as benign success)"
                | d <- hDispatch (procHandle p)
                , onDuplicate (dispDisposition d) == DAckOk
@@ -409,7 +411,7 @@ validateAggregate spec agg =
         [] -> []
         (initial : _) ->
             let reached = bfs (Set.singleton initial) [initial]
-             in [ mkErr (locLine (aggLoc agg)) UnreachableState $
+             in [ mkErr (locLine (stLoc s)) UnreachableState $
                     "state '" <> stName s <> "' is not reachable from the initial state '" <> initial <> "'"
                 | s <- aggStates agg
                 , not (stTerminal s)

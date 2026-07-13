@@ -43,10 +43,10 @@ passing counterpart, wired into `keiro-dsl/test/Main.hs` in the existing per-rul
 Use a checklist to summarize granular steps. Every stopping point must be documented here,
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 
-- [ ] M1: add `Loc` to `StateDecl`, `DispositionRow`, `WqDispRow`, `DispatchNode`, `EmitMapRow`, and the four `WfBodyItem` constructors in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`.
-- [ ] M1: populate the new locations in `keiro-dsl/src/Keiro/Dsl/Parser.hs`; update pattern matches in `PrettyPrint.hs`, `Validate.hs`, `Harness.hs`; update `genState` in `test/Main.hs`.
-- [ ] M1: fix the `ProcessFireAtNotInjected` double-fire in `Validate.hs` and re-anchor `UnreachableState`, dispatch, and disposition diagnostics to their rows; add unit tests.
-- [ ] M1: round-trip property, full unit suite, and conformance pin all green.
+- [x] (2026-07-13 20:29Z) M1: add `Loc` to `StateDecl`, `DispositionRow`, `WqDispRow`, `DispatchNode`, `EmitMapRow`, and the four `WfBodyItem` constructors in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`.
+- [x] (2026-07-13 20:29Z) M1: populate the new locations in `keiro-dsl/src/Keiro/Dsl/Parser.hs`; update pattern matches in `PrettyPrint.hs`, `Validate.hs`, `Harness.hs`; update `genState` in `test/Main.hs`.
+- [x] (2026-07-13 20:29Z) M1: fix the `ProcessFireAtNotInjected` double-fire in `Validate.hs` and re-anchor `UnreachableState` and per-dispatch diagnostics to their rows; disposition-row anchoring will be exercised when M5 adds duplicate-row diagnostics.
+- [x] (2026-07-13 20:29Z) M1: round-trip property, 94-example unit suite, aggregate conformance pin, and workflow conformance pin all green.
 - [ ] M2: spec-level duplicate detection (nodes, enum ctors/wires, id prefixes, command/event names) with fixture `duplicate-names.keiro`.
 - [ ] M2: aggregate-local reference soundness (write targets, `fields(Cmd)` resolution, `regInitial` scope) with fixture `aggregate-bad-refs.keiro`.
 - [ ] M3: `validateWorkflow` (duplicate labels, sleep-delay resolution, `id from input.<field>` resolution) with fixtures `workflow-dup-label.keiro`, `workflow-unresolved-fields.keiro`.
@@ -87,6 +87,11 @@ implementation. Provide concise evidence.
   scaffolder's current suffix lowering produces byte-identical output once the fixture
   keys are spelled in full. The validator and the fixtures can move first; the scaffold
   lowering moves in plan 106 with zero conformance churn.
+- (Implementation, 2026-07-13) `cabal build keiro-dsl` is ambiguous because the
+  package exposes both a library and an executable with that name. The milestone build
+  command is therefore `cabal build lib:keiro-dsl`; the unit and conformance target
+  names remain unambiguous. Evidence: Cabal reported `exe:keiro-dsl` and
+  `lib:keiro-dsl` as the two candidates, while `cabal build lib:keiro-dsl` completed.
 
 
 ## Decision Log
@@ -964,7 +969,7 @@ Build and unit-test loop, after every milestone:
 
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/keiro/keiro-dsl
-cabal build keiro-dsl
+cabal build lib:keiro-dsl
 cabal test keiro-dsl-test
 ```
 

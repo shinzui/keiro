@@ -88,10 +88,10 @@ docWorkflow w =
     inFieldsDoc = case wfInputFields w of
         [] -> mempty
         fs -> " " <> braced (map docField fs)
-    bodyItem (WfStep l r) = "step" <+> pretty l <+> "->" <+> pretty r
-    bodyItem (WfAwait l r) = "await" <+> pretty l <+> "->" <+> pretty r
-    bodyItem (WfSleep l a) = "sleep" <+> pretty l <+> "after" <+> pretty a
-    bodyItem (WfChild l v r) = "child" <+> pretty l <+> "id input via" <+> pretty v <+> "->" <+> pretty r
+    bodyItem (WfStep l r _) = "step" <+> pretty l <+> "->" <+> pretty r
+    bodyItem (WfAwait l r _) = "await" <+> pretty l <+> "->" <+> pretty r
+    bodyItem (WfSleep l a _) = "sleep" <+> pretty l <+> "after" <+> pretty a
+    bodyItem (WfChild l v r _) = "child" <+> pretty l <+> "id input via" <+> pretty v <+> "->" <+> pretty r
 
 docOperation :: OperationNode -> Doc ann
 docOperation o =

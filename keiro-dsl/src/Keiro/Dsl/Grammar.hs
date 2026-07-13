@@ -256,6 +256,7 @@ aggregate's list is its initial state.
 data StateDecl = StateDecl
     { stName :: !Name
     , stTerminal :: !Bool
+    , stLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
 
@@ -433,6 +434,7 @@ data DispatchNode = DispatchNode
     , dispCommand :: !Name
     , dispFields :: ![FieldBinding]
     , dispDisposition :: !DispatchDisposition
+    , dispLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
 
@@ -594,6 +596,7 @@ data InboxAction
 data DispositionRow = DispositionRow
     { drOutcome :: !Name
     , drAction :: !InboxAction
+    , drLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
 
@@ -634,6 +637,7 @@ newtype DeriveSpec = DeriveSpec {dsPrefix :: Maybe Text}
 data EmitMapRow = EmitMapRow
     { emrValue :: !Text
     , emrEvent :: !Name
+    , emrLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
 
@@ -693,6 +697,7 @@ data WqField = WqField
 data WqDispRow = WqDispRow
     { wqdOutcome :: !Name
     , wqdAction :: !InboxAction
+    , wqdLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
 
@@ -741,13 +746,13 @@ position. (Positional constructors avoid partial record fields.)
 -}
 data WfBodyItem
     = -- | @step <label> -> <ResultType>@
-      WfStep !Name !Name
+      WfStep !Name !Name !Loc
     | -- | @await <label> -> <ResultType>@
-      WfAwait !Name !Name
+      WfAwait !Name !Name !Loc
     | -- | @sleep <label> after <injected-delay-field>@ (TIME INJECTED)
-      WfSleep !Name !Name
+      WfSleep !Name !Name !Loc
     | -- | @child <label> id input via <childIdFn> -> <ResultType>@
-      WfChild !Name !Name !Name
+      WfChild !Name !Name !Name !Loc
     deriving stock (Eq, Show, Generic)
 
 -- | A durable @workflow@ node.

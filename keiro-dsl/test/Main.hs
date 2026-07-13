@@ -65,6 +65,22 @@ main = hspec $ do
         it "rejects a v2 event with no upcaster as EvtVersionMissingUpcaster" $ do
             codes <- diagnosticCodesOf "test/fixtures/reservation-v2-noupcast.keiro"
             codes `shouldContain` [EvtVersionMissingUpcaster]
+        it "anchors UnreachableState on the state row" $ do
+            let src =
+                    T.unlines
+                        [ "context repro"
+                        , ""
+                        , "aggregate Thing"
+                        , "  regs"
+                        , "  states"
+                        , "    Initial"
+                        , "    Unreachable"
+                        ]
+            case parseSpec "<unreachable-row>" src of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec ->
+                    [line d | d <- validateSpec spec, code d == UnreachableState]
+                        `shouldBe` [7]
 
     describe "evolution parsing" $
         it "parses event version and upcaster from reservation-v2.keiro" $ do
@@ -101,6 +117,9 @@ main = hspec $ do
         it "rejects a wall-clock fireAt as ProcessFireAtNotInjected" $ do
             codes <- errorCodesOf "test/fixtures/hospital-surge-clock.keiro"
             codes `shouldContain` [ProcessFireAtNotInjected]
+        it "reports one ProcessFireAtNotInjected for a wholly unknown fireAt field" $ do
+            codes <- errorCodesOf "test/fixtures/hospital-surge-clock.keiro"
+            length (filter (== ProcessFireAtNotInjected) codes) `shouldBe` 1
         it "rejects a user-supplied dispatch id as ProcessDispatchIdSupplied" $ do
             codes <- errorCodesOf "test/fixtures/hospital-surge-dispatchid.keiro"
             codes `shouldContain` [ProcessDispatchIdSupplied]
@@ -620,7 +639,7 @@ genReg :: Gen RegDecl
 genReg = RegDecl <$> genName <*> genName <*> genName <*> pure noLoc
 
 genState :: Gen StateDecl
-genState = StateDecl <$> genName <*> arbitrary
+genState = StateDecl <$> genName <*> arbitrary <*> pure noLoc
 
 genCommand :: Gen Command
 genCommand = Command <$> genName <*> smallList genField <*> pure noLoc
