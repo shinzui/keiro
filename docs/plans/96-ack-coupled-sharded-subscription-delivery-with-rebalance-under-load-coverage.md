@@ -34,7 +34,7 @@ After this change, the sharded worker acknowledges each event to the underlying 
 - [x] (2026-07-13 05:39Z) M2: stale zombie docstring (Worker.hs:44-48) rewritten; module contract prose updated; all shard tests green; committed together with the M1 tests
 - [x] (2026-07-13 05:44Z) M3: zombie-overlap duplicate test written and passing (duplicates observed, zero loss)
 - [x] (2026-07-13 05:44Z) M3: poison-event dead-letter test written and passing (bounded retries, row in kiroku's dead-letter table, drain continues)
-- [ ] M4: master plan EP-96 checkboxes ticked; Outcomes & Retrospective written; revision note appended
+- [x] (2026-07-13 05:52Z) M4: master plan EP-96 checkboxes ticked; Outcomes & Retrospective written; revision note appended
 
 
 ## Surprises & Discoveries
@@ -95,6 +95,17 @@ implementation. Provide concise evidence.
   `ShardReaderDied`. Together the four ack-coupling examples passed in 8.5129
   seconds with zero failures.
 
+- Validation: the full `keiro-test` suite passed with 284 examples and zero
+  failures. The ignored developer override `cabal.project.local` selects kiroku
+  0.3.0.0 and conflicts with the repository's pinned 0.2.1.0 constraint, so the
+  checked-in-pin gate was run through a temporary project that imported only
+  `cabal.project`. Under that project, `cabal build all`, `keiro-pgmq-test` (50
+  examples, zero failures, two pending), `jitsurei-test` (16 examples, zero
+  failures), and the jitsurei diagram check all passed. `just website-verify`
+  also passed, building 120 site pages plus the source-document index and finding
+  no broken file links across 122 HTML pages. The developer override was restored
+  byte-for-byte and the temporary project was removed.
+
 
 ## Decision Log
 
@@ -129,7 +140,21 @@ implementation. Provide concise evidence.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-96 is complete. The shard worker now couples each kiroku acknowledgement to the
+handler's actual outcome through `subscriptionAckStream`: success advances the
+checkpoint, synchronous failure retries within a configurable bound, explicit
+dead-lettering records and advances, and asynchronous cancellation during a shed
+leaves the event unacknowledged for its next owner. Existing callers retain the
+original `runShardedSubscriptionGroup` signature, while EP-100 can use
+`runShardedSubscriptionGroupAck`, `ShardDelivery`, and `ShardAck` to choose a
+per-event disposition.
+
+The two pre-fix loss witnesses failed for the predicted reason and pass after the
+change. The committed suite also proves that forced rebalance and batch-tail
+cancellation have no gaps, zombie overlap produces duplicates rather than loss,
+and a poison event is delivered exactly to its retry budget, dead-lettered, and
+does not kill the bucket reader. No schema, kiroku pin, or downstream-call-site
+change was needed.
 
 
 ## Context and Orientation
@@ -343,3 +368,11 @@ reconcileShardsOnce ::
 ```
 
 with `ShardedWorkerOptions` extended by `handlerRetryDelay :: !RetryDelay` and `retryPolicy :: !RetryPolicy`, and `ShardedWorkerConfigError` extended by `InvalidShardHandlerRetryDelay` and `InvalidShardRetryMaxAttempts`. `ShardAck`, `ShardDelivery`, `ShardEventHandler`, and `runShardedSubscriptionGroupAck` together are the contract this plan owes EP-100 (`docs/plans/100-process-manager-failure-paths-dead-lettering-rejected-commands-and-surfacing-retry-exhaustion.md`): EP-100's shard-path dead-letter posture is expressed as a `ShardEventHandler` returning `ShardAckDeadLetter`/`ShardAckRetry` per event, and must not need any further hook from this module.
+
+
+## Revision Notes
+
+- 2026-07-13: Implemented and closed EP-96. Added the ack-coupled shard delivery
+  surface, bounded handler retries, dead-letter propagation, and four executable
+  loss/duplicate/poison-event witnesses; recorded the checked-in-pin validation
+  results and the EP-100 integration contract.

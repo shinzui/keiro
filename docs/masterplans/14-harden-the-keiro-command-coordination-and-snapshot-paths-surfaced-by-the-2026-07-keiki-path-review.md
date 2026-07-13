@@ -113,7 +113,7 @@ a kiroku-side child plan for the subscription bridge (rejected: kiroku already s
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 95 | Migrate to post-MP-16 keiki and adopt the structured replay and step APIs | docs/plans/95-migrate-to-post-mp-16-keiki-and-adopt-the-structured-replay-and-step-apis.md | keiki MP-16 (external) | None | Not Started |
-| 96 | Ack-coupled sharded subscription delivery with rebalance-under-load coverage | docs/plans/96-ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-coverage.md | None | None | In Progress |
+| 96 | Ack-coupled sharded subscription delivery with rebalance-under-load coverage | docs/plans/96-ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-coverage.md | None | None | Complete |
 | 97 | Stable router idempotency keys derived from target stream names | docs/plans/97-stable-router-idempotency-keys-derived-from-target-stream-names.md | None | None | Not Started |
 | 98 | Snapshot subsystem hardening: uninit-register guards, read-side telemetry, and workflow write alignment | docs/plans/98-snapshot-subsystem-hardening-uninit-register-guards-read-side-telemetry-and-workflow-write-alignment.md | None | EP-95 | Not Started |
 | 99 | Silent-edge validation and divergence witnesses on the command path | docs/plans/99-silent-edge-validation-and-divergence-witnesses-on-the-command-path.md | EP-95 | None | Not Started |
@@ -215,8 +215,8 @@ where its truncation guard reports failures through the migrated hydration error
 - [ ] EP-95: keiro compiles against post-MP-16 keiki; Validate.hs renders the four new keiki warning constructors
 - [ ] EP-95: hydrate/hydrateFull folds replaced by keiki's seedable structured fold; hydration failures carry event index and typed reason
 - [ ] EP-95: command evaluation distinguishes ambiguous guards from business rejection in `CommandError` and `error.type`
-- [ ] EP-96: sharded worker acks after the handler returns; batch-tail crash/rebalance loses nothing
-- [ ] EP-96: rebalance-under-load and zombie-overlap tests exist and pass
+- [x] EP-96: sharded worker acks after the handler returns; batch-tail crash/rebalance loses nothing
+- [x] EP-96: rebalance-under-load and zombie-overlap tests exist and pass
 - [ ] EP-97: router event ids derived from target stream names; unstable-resolve redelivery test passes; dropped-target semantics decided and documented
 - [ ] EP-98: uninit-register encode caught at mkEventStream and degraded to the counted advisory path at write time
 - [ ] EP-98: snapshot read-side telemetry (decode failures at minimum); workflow snapshot writes swallowed-and-counted like the command path
@@ -239,6 +239,12 @@ where its truncation guard reports failures through the migrated hydration error
 - kiroku's checkpoint upsert already uses `GREATEST(last_seen, EXCLUDED.last_seen)`,
   so the Worker.hs docstring's zombie-regression warning is stale (doc fix in
   EP-96's scope, not a behavior change).
+- EP-96 delivered the Integration Point 4 surface as `ShardDelivery`, `ShardAck`,
+  `ShardEventHandler`, and `runShardedSubscriptionGroupAck`. EP-100 can implement
+  its shard-path rejection policy by returning `ShardAckDeadLetter` or
+  `ShardAckRetry`; no further shard-worker hook is required. Synchronous handler
+  exceptions are already bounded by the configured kiroku retry policy, and
+  exhaustion is observable in `kiroku.dead_letters`.
 - The jitsurei example repos are outdated (user directive, 2026-07-12): no plan may
   use them as evidence or include migrating them in scope. (The in-repo `jitsurei`
   package still must compile; EP-95 and EP-102 record compile-verification-only
@@ -339,6 +345,12 @@ where its truncation guard reports failures through the migrated hydration error
 (To be filled during and after implementation.)
 
 ## Revision Notes
+
+- 2026-07-13: Completed EP-96. The sharded worker now acknowledges only after the
+  handler returns, retries synchronous failures within a configurable bound, and
+  exposes the per-event acknowledgement surface EP-100 consumes. Added passing
+  batch-tail cancellation, forced-rebalance, zombie-overlap, and poison-event
+  coverage; marked both EP-96 progress outcomes complete.
 
 - 2026-07-12: Aligned with keiki MP-16's revised division of labor for
   state-changing silent edges: detection moved to keiki EP-71 (a fourth warning
