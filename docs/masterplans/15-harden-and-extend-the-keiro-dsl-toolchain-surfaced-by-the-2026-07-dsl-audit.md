@@ -140,7 +140,7 @@ three plans register with it).
 | 105 | Fix keiro-dsl notation integrity: string escaping, duplicate clauses, numeric bounds, and identifier hygiene | docs/plans/105-fix-keiro-dsl-notation-integrity-string-escaping-duplicate-clauses-numeric-bounds-and-identifier-hygiene.md | None | None | Complete |
 | 106 | Harden the keiro-dsl scaffolder: template injection, firewall completeness, collision and stale-module detection, and faithful policy lowering | docs/plans/106-harden-the-keiro-dsl-scaffolder-template-injection-firewall-completeness-collision-and-stale-module-detection-and-faithful-policy-lowering.md | None | EP-104, EP-105 | Complete |
 | 107 | Add a first-class read-model node with registration, schema, and consistency to keiro-dsl | docs/plans/107-add-a-first-class-read-model-node-with-registration-schema-and-consistency-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Complete |
-| 108 | Add a router node and rejection and poison policy surfaces to keiro-dsl | docs/plans/108-add-a-router-node-and-rejection-and-poison-policy-surfaces-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | In Progress |
+| 108 | Add a router node and rejection and poison policy surfaces to keiro-dsl | docs/plans/108-add-a-router-node-and-rejection-and-poison-policy-surfaces-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Complete |
 | 109 | Extend keiro-dsl node coverage: pgmq ordering and provisioning, snapshot policy, and workflow patch and continue-as-new | docs/plans/109-extend-keiro-dsl-node-coverage-pgmq-ordering-and-provisioning-snapshot-policy-and-workflow-patch-and-continue-as-new.md | EP-103 | EP-104, EP-105, EP-106 | Not Started |
 | 110 | Align keiro-dsl with the safe APIs and refresh the authoring skill and corpus | docs/plans/110-align-keiro-dsl-with-the-safe-apis-and-refresh-the-authoring-skill-and-corpus.md | EP-107, EP-108, EP-109 | EP-103, EP-104, EP-105, EP-106 | Not Started |
 
@@ -289,8 +289,8 @@ EP-106 in parallel alongside the front of that path.
 - [x] EP-106: path-collision/stale-module/banner detection; every `new` skeleton scaffolds compiling code; backoff and duration lowering faithful; harness handles Int; conformance pin includes imports
 - [x] EP-107: `readmodel` node parses, validates, round-trips; Strong-on-inline-only impossible; schema clause threads into projection holes
 - [x] EP-107: scaffold emits ReadModel value + registration; QueryOp and PgmqDispatch read-model resolution completed; conformance against live Keiro.ReadModel
-- [ ] EP-108: `router` node full vertical with conformance against live Keiro.Router
-- [ ] EP-108: `rejected`/`poison` clauses on process and router lowered to WorkerOptions; per-dispatch consistency rule; ambiguity vocabulary decided and pinned
+- [x] EP-108: `router` node full vertical with conformance against live Keiro.Router
+- [x] EP-108: `rejected`/`poison` clauses on process and router lowered to WorkerOptions; per-dispatch consistency rule; ambiguity vocabulary decided and pinned
 - [ ] EP-109: workqueue ordering/provision/group clauses lowered against live keiro-pgmq (unlogged warned)
 - [ ] EP-109: aggregate snapshot policy clause lowered and accepted by mkEventStreamOrThrow; workflow patch/continueAsNew with patch-aware diff classification
 - [ ] EP-110: category-stream notation replaces raw concatenation in grammar, scaffold, and reference fills; confirmBenignDuplicate woven into fills and hole guidance
@@ -379,6 +379,18 @@ EP-106 in parallel alongside the front of that path.
     generated `ReadModelTable` leaf now owns the constant and is imported by both layers.
     It also confirmed the Kiroku package name is `kiroku-store` and used EP-103's delivered
     `DiffEnv` family registry directly, replacing the read-model out-of-scope marker.
+  - EP-108 implementation confirmed through `mori registry search shibuya` that the
+    package owning `Shibuya.Core.Ack` is `shibuya-core`, not the informal `shibuya`
+    name. The process and router manifests now advertise the registered name, and the
+    generated policy construction is pinned against the live package.
+  - EP-108's first router target used state `Sent` beside event `PageSent`; EP-105's
+    identifier-hygiene gate correctly rejected the shared `PageSent` constructor. The
+    delivered fixture uses terminal state `Delivered`, demonstrating that the earlier
+    gate hardening protects new verticals rather than merely legacy fixtures.
+  - EP-108 added a runtime-free router-facts suite for its exact one-assertion mutation
+    pin in addition to the live-runtime and filled-router suites. Together with EP-107's
+    suite, the package battery is now 22 suites; all pass, with 181 unit/property
+    examples and compiled target-keyed router-id and exact-resolver-target proofs.
 
 
 ## Decision Log
@@ -457,6 +469,15 @@ classification. The dedicated live-runtime conformance suite and the full packag
 passed; the unit suite has 169 examples. EP-108 and EP-109 remain independently
 implementable, with EP-108 next by registry order.
 
+EP-108 completed the router and worker-policy vertical. The DSL now parses, validates,
+diffs, scaffolds, and documents first-class routers; router stable names, keys, and
+targets are evolution-sensitive; process and router rejection/poison choices lower to
+explicit live `WorkerOptions`; and timer ambiguity is grammar-mandatory and generated as
+its own `CommandAmbiguous` arm. Runtime-free mutation facts, live policy/id conformance,
+a filled pure resolver over exact target streams, and the compile-all-starters suite are
+green. The full 22-suite package battery passed, including 181 unit/property examples.
+EP-109 is the next implementable child; EP-110 remains blocked on EP-109 as designed.
+
 
 ## Revision Notes
 
@@ -468,3 +489,6 @@ implementable, with EP-108 next by registry order.
 - 2026-07-13: EP-107 completed. Registry/progress, cross-plan discoveries, and outcomes
   now record the first-class read-model grammar, scaffold, runtime conformance, and differ
   vertical; EP-108 is the next implementable child.
+- 2026-07-13: EP-108 completed. Registry/progress, dependency-name and constructor-
+  collision discoveries, policy/router runtime proofs, and the 22-suite package outcome
+  are recorded; EP-109 is the next implementable child.
