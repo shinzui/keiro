@@ -85,7 +85,7 @@ reporting `globalPosition = Nothing` where it previously fabricated `Just 0`.
 - [x] (2026-07-13T16:04:07Z) M2: split-coverage divergence spec (counter increments, command still succeeds, next command fails with `HydrationReplayFailed`)
 - [x] (2026-07-13T16:12:22Z) M3: `noOpResult` reports `globalPosition = Nothing`; dead `Hydrated.globalPosition` bookkeeping removed
 - [x] (2026-07-13T16:12:22Z) M3: no-op globalPosition normalization spec (fails before the fix)
-- [ ] M4: CHANGELOG entries, semconv audit doc row, module haddock updates, master plan registry/progress update, `nix fmt`, full sweep
+- [x] (2026-07-13T16:22:16Z) M4: CHANGELOG entries, semconv audit doc row, module haddock updates, master plan registry/progress update, `nix fmt`, full sweep (`cabal haddock all`, `cabal build all`, and 316 `keiro-test` examples with zero failures)
 
 
 ## Surprises & Discoveries
@@ -304,7 +304,22 @@ implementation-time discoveries as they occur.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-99 closed all three command-path honesty gaps. Production stream construction
+now force-enables Keiki's state-changing-epsilon and head-recoverability checks,
+with the explicitly named `mkEventStreamUnchecked` reserved for tests and emergency
+forensics. Both append paths run one shared, default-on replay epilogue; a
+just-committed divergent batch remains a successful command but immediately emits
+the `keiro.snapshot.apply.divergence` counter and a bounded
+`keiro.replay.divergence` span witness. Snapshotting consumes that same successful
+fold rather than replaying independently. No-op commands now report no global
+position, while appended commands retain their real store-assigned position.
+
+The implementation stayed within the authored public surface apart from the planned
+breaking validation hardening and the new defaulted runner option. Reusing EP-95's
+head-unrecoverable fixture kept the runtime witness focused, and classifying replay
+failures by index and reason avoided new `Show` constraints and telemetry payload
+leaks. Final evidence is a clean `nix fmt`, successful `cabal haddock all` and
+`cabal build all`, and all 316 PostgreSQL-backed `keiro-test` examples passing.
 
 
 ## Context and Orientation
@@ -1035,3 +1050,8 @@ red test showing `Just (GlobalPosition 0)`. No-op results now report `Nothing`,
 appended results still expose the store-assigned position, and the obsolete
 `Hydrated.globalPosition` field is gone while EP-95's version/failure-location
 accumulator remains intact.
+
+Revision note (2026-07-13): completed Milestone 4 and EP-99. Documented the
+validation compatibility break, replay-divergence telemetry, and no-op result
+semantics; marked the parent registry and outcomes complete; and passed formatting,
+whole-workspace Haddock/build, and the 316-example Keiro test suite.

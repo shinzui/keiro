@@ -116,7 +116,7 @@ a kiroku-side child plan for the subscription bridge (rejected: kiroku already s
 | 96 | Ack-coupled sharded subscription delivery with rebalance-under-load coverage | docs/plans/96-ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-coverage.md | None | None | Complete |
 | 97 | Stable router idempotency keys derived from target stream names | docs/plans/97-stable-router-idempotency-keys-derived-from-target-stream-names.md | None | None | Complete |
 | 98 | Snapshot subsystem hardening: uninit-register guards, read-side telemetry, and workflow write alignment | docs/plans/98-snapshot-subsystem-hardening-uninit-register-guards-read-side-telemetry-and-workflow-write-alignment.md | None | EP-95 | Complete |
-| 99 | Silent-edge validation and divergence witnesses on the command path | docs/plans/99-silent-edge-validation-and-divergence-witnesses-on-the-command-path.md | EP-95 | None | In Progress |
+| 99 | Silent-edge validation and divergence witnesses on the command path | docs/plans/99-silent-edge-validation-and-divergence-witnesses-on-the-command-path.md | EP-95 | None | Complete |
 | 100 | Process-manager failure paths: dead-lettering rejected commands and surfacing retry exhaustion | docs/plans/100-process-manager-failure-paths-dead-lettering-rejected-commands-and-surfacing-retry-exhaustion.md | None | EP-99 | Not Started |
 | 101 | Read-model rebuild correctness: dedup reset, writer fencing, and Strong cursor semantics | docs/plans/101-read-model-rebuild-correctness-dedup-reset-writer-fencing-and-strong-cursor-semantics.md | None | None | Not Started |
 | 102 | Persistence polish: truncation guards, enrichment parity, and messaging caveat documentation | docs/plans/102-persistence-polish-truncation-guards-enrichment-parity-and-messaging-caveat-documentation.md | None | EP-95 | Not Started |
@@ -220,8 +220,8 @@ where its truncation guard reports failures through the migrated hydration error
 - [x] EP-97: router event ids derived from target stream names; unstable-resolve redelivery test passes; dropped-target semantics decided and documented
 - [x] EP-98: uninit-register encode caught at mkEventStream and degraded to the counted advisory path at write time
 - [x] EP-98: snapshot read-side telemetry (decode failures at minimum); workflow snapshot writes swallowed-and-counted like the command path
-- [ ] EP-99: keiki's `StateChangingEpsilon` and `checkHeadRecoverability` force-enabled at stream validation (no caller opt-out; bypass only via the named unchecked constructor); the every-append replay-divergence check counts witnesses, never discards them
-- [ ] EP-99: no-op `CommandResult.globalPosition` normalized to `Nothing`
+- [x] EP-99: keiki's `StateChangingEpsilon` and `checkHeadRecoverability` force-enabled at stream validation (no caller opt-out; bypass only via the named unchecked constructor); the every-append replay-divergence check counts witnesses, never discards them
+- [x] EP-99: no-op `CommandResult.globalPosition` normalized to `Nothing`
 - [ ] EP-100: rejected PM commands dead-letter instead of halt-looping; saga-state/dispatch divergence documented or closed
 - [ ] EP-100: retry exhaustion documented; kiroku dead-letter replay path exists
 - [ ] EP-101: rebuild resets projection dedup; writers fenced during rebuild; `Strong` usable with multiple active categories
@@ -308,6 +308,12 @@ where its truncation guard reports failures through the migrated hydration error
   still spoke the retired bare/Codd CLI. The recipe now uses native pg-migrate's
   explicit `up --database-url` form. Verification passed against a fresh task-scoped
   database; the existing legacy developer database was intentionally left untouched.
+- EP-99 reused EP-95's head-unrecoverable stream as the runtime divergence witness:
+  it has the same split-coverage defect the authored duplicate fixture was meant to
+  model. The delivered span attribute records only event index and typed reason
+  class, preserving EP-100's failure vocabulary without adding `Show` constraints
+  or leaking command/event payloads. This does not alter any later plan dependency
+  or integration point.
 
 
 ## Decision Log
@@ -391,7 +397,21 @@ overlay are gone. Final evidence is `cabal build all`, 309 Keiro examples, the P
 and Jitsurei suites, formatting, and a fresh-database repository-wide verification
 including migration and site checks.
 
+EP-99 completed Phase 3's command-path hardening. Durable stream validation cannot
+disable Keiki's two replay-contract checks; every append path detects and observes a
+poisoned just-committed batch without misreporting the commit as failed; and no-op
+command results no longer expose Kiroku's per-stream-read position sentinel. The
+operator-facing changelog and telemetry audit now describe the compatibility break,
+the default-on verification option, and the divergence counter/attribute contract.
+Final evidence is formatting, whole-workspace Haddock and build success, and 316
+Keiro examples with zero failures.
+
 ## Revision Notes
+
+- 2026-07-13: Completed EP-99. Force-enabled durable replay validation, added
+  default-on divergence witnesses to both append paths, normalized no-op global
+  positions, documented the telemetry and compatibility contracts, and passed
+  formatting, whole-workspace Haddock/build, and all 316 Keiro examples.
 
 - 2026-07-13: Completed EP-95. Marked its registry row and three outcomes complete;
   adopted structured replay/step diagnostics and reason-specific telemetry, recorded

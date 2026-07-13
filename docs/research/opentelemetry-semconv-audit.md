@@ -25,10 +25,10 @@ Every typed `AttributeKey` this document cites is imported directly from
 `OpenTelemetry.SemanticConventions`; the prior vendoring workaround in
 `Keiro.Telemetry` (which copied keys absent from the old `0.1.0.0` Hackage
 release) has been removed. Only the bespoke `keiro.*` keys
-(`keiro_stream_name`, `keiro_retry_attempt`, `keiro_events_appended`) are
-defined locally, as they have no upstream equivalent. The citations below
-were already pinned to the canonical v1.40 module and now match the linked
-release exactly.
+(`keiro_stream_name`, `keiro_retry_attempt`, `keiro_events_appended`,
+`keiro_replay_divergence`) are defined locally, as they have no upstream
+equivalent. The citations below were already pinned to the canonical v1.40
+module and now match the linked release exactly.
 
 Citation legend (anchor → line):
 
@@ -283,6 +283,12 @@ command targeting stream `counter-7` produces a span named `counter-7`.
   remaining + 1`. Recorded on the span at each `attempt` call.
 - `keiro.events.appended` — bespoke key; value: `Prelude.length encoded`
   on success.
+- `keiro.replay.divergence` — bespoke key; present only when the
+  just-appended batch cannot replay from the pre-command state. The bounded
+  text value is `event_index=<n>;reason=<class>`, where the reason class is one
+  of `no_inverting_edge`, `ambiguous_inversions`, `queue_mismatch`, or
+  `log_truncated`. It is a post-commit advisory and does not change the
+  command's successful span status.
 
 **Database sub-span (citation: `-- $span_db_client`, line 19833;
 `-- $trace_db_common_minimal`, line 19710):**
@@ -589,6 +595,17 @@ generated module
   catches up (`recordProjectionWaitTimeouts`). Description: "Position-wait calls
   that timed out before the projection caught up." Semconv alignment: none.
 
+### Command and snapshot
+
+- **`keiro.snapshot.apply.divergence`** — unit `{failure}`, **Counter**
+  (`Int64`). Recorded by both command append paths
+  (`recordSnapshotApplyDivergence`) when `applyEventsEither` cannot replay a
+  just-committed event batch from the pre-command state. Description:
+  "Just-appended event batches that failed to replay from the pre-command
+  state; the stream is poisoned and its next hydration will fail." Semconv
+  alignment: none (event-sourcing replay correctness has no OpenTelemetry
+  semantic-convention equivalent).
+
 ### Workflow
 
 Added by `docs/plans/44-workflow-observability-spans-and-metrics.md` (EP-44).
@@ -647,6 +664,7 @@ options.
 | keiro.timer.stuck                | {timer}    | Gauge     | timer worker, per poll pass (after EP-34) | none                                                |
 | keiro.projection.lag             | {event}    | Gauge     | async projection drain, per pass          | none                                                |
 | keiro.projection.wait.timeouts   | {timeout}  | Counter   | position-wait path, on timeout            | none                                                |
+| keiro.snapshot.apply.divergence  | {failure}  | Counter   | command epilogue, on replay divergence    | none                                                |
 | keiro.workflow.steps.executed    | {step}     | Counter   | workflow handler, on step miss            | none                                                |
 | keiro.workflow.steps.replayed    | {step}     | Counter   | workflow handler, on step hit             | none                                                |
 | keiro.workflow.resumed           | {workflow} | Counter   | resume worker, per re-invocation          | none                                                |

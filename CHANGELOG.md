@@ -38,6 +38,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 - The `hydration_replay_failed` telemetry class is replaced by four
   reason-specific `error.type` values, and `command_ambiguous` is new.
   Dashboards keyed on the old hydration class must be updated.
+- `validateEventStreamWith` and `mkEventStreamWith` now force-enable Keiki's
+  head-recoverability and state-changing-epsilon checks. Caller-supplied
+  options may only strengthen validation at Keiro's durable boundary; use the
+  explicitly unsafe `mkEventStreamUnchecked` only for tests and emergency
+  forensics, never production streams.
 
 ### Other Changes
 
@@ -64,6 +69,14 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   Keiki EP-78's stable shape hash.
 - Kiroku 0.3/0.2, Keiki 0.2, and pg-migrate 1.0 now resolve from Hackage; their
   obsolete Git package overrides and local Cabal overlay are no longer needed.
+- `RunCommandOptions.verifyReplayOnAppend` defaults on. Both command append
+  paths replay each just-committed batch from the pre-command state, count an
+  unreplayable batch through `keiro.snapshot.apply.divergence`, and attach a
+  bounded typed reason to `keiro.replay.divergence` without turning an already
+  committed command into a reported failure.
+- No-op commands now report `CommandResult.globalPosition = Nothing` instead
+  of exposing Kiroku's per-stream-read sentinel `GlobalPosition 0`. Appended
+  commands continue to report the real store-assigned position.
 
 ## 0.1.0.0 — 2026-07-05
 
