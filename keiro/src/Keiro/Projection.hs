@@ -24,7 +24,9 @@ module Keiro.Projection (
 
     -- * Asynchronous projections
     AsyncProjection (..),
+    AsyncApplyOutcome (..),
     applyAsyncProjection,
+    applyAsyncProjectionUnfenced,
     pruneAsyncProjectionDedupBefore,
     recordProjectionLag,
 )
@@ -68,6 +70,7 @@ data InlineProjection co = InlineProjection
 {- | A read-model update applied asynchronously by a subscription worker.
 
 * 'name' — identifies the projection for diagnostics.
+* 'readModelName' — names the registry row for the model this projection writes.
 * 'subscriptionName' — the cursor under which the worker checkpoints its
   progress through the event log.
 * 'applyRecorded' — folds one 'RecordedEvent' into the read model.
@@ -76,11 +79,19 @@ data InlineProjection co = InlineProjection
 -}
 data AsyncProjection = AsyncProjection
     { name :: !Text
+    , readModelName :: !Text
     , subscriptionName :: !Text
     , applyRecorded :: !(RecordedEvent -> Tx.Transaction ())
     , idempotencyKey :: !(RecordedEvent -> EventId)
     }
     deriving stock (Generic)
+
+-- | The database-visible result of one asynchronous projection attempt.
+data AsyncApplyOutcome
+    = AsyncApplied
+    | AsyncDuplicate
+    | AsyncFenced
+    deriving stock (Generic, Eq, Show)
 
 {- | Run a command and apply every supplied 'InlineProjection' to the events
 it emits, all inside the command's append transaction. A projection failure
@@ -114,8 +125,15 @@ runCommandWithProjections options eventStream targetStream command projections =
             )
     pure (fmap Prelude.fst result)
 
-{- | Apply one event to an 'AsyncProjection', returning the read-model update
-as a 'Hasql.Transaction.Transaction' for the subscription worker to run.
+{- | Apply one event to a live 'AsyncProjection', returning a distinct outcome
+for a successful application, a retained dedup key, or a rebuild fence.
+
+The registry row is read with @FOR SHARE@ inside the same transaction as the
+dedup insert and application. A missing row or any status other than @live@
+returns 'AsyncFenced' without touching either table. A worker that receives
+'AsyncFenced' must not checkpoint past the event: fail or park the delivery and
+retry after promotion. Ack-coupled Kiroku delivery preserves the checkpoint
+when its handler does not acknowledge success.
 
 The projection's 'idempotencyKey' is inserted into @keiro_projection_dedup@
 inside the same transaction as 'applyRecorded'. When that insert conflicts,
@@ -124,14 +142,33 @@ is skipped. Use 'pruneAsyncProjectionDedupBefore' only for events older than
 the subscription system can redeliver; pruning intentionally re-opens those
 events for application if they are replayed later.
 -}
-applyAsyncProjection :: AsyncProjection -> RecordedEvent -> Tx.Transaction ()
+applyAsyncProjection :: AsyncProjection -> RecordedEvent -> Tx.Transaction AsyncApplyOutcome
 applyAsyncProjection projection recorded = do
+    status <-
+        Tx.statement
+            (projection ^. #readModelName)
+            lockReadModelStatusStmt
+    case status of
+        Just "live" -> applyAsyncProjectionUnfenced projection recorded
+        _ -> pure AsyncFenced
+
+{- | Apply one event without consulting the read-model registry fence.
+
+This is exclusively the rebuild replay entry point: it retains normal dedup
+semantics while permitting the designated rebuilder to write while the model is
+@rebuilding@. Live workers must use 'applyAsyncProjection'.
+-}
+applyAsyncProjectionUnfenced :: AsyncProjection -> RecordedEvent -> Tx.Transaction AsyncApplyOutcome
+applyAsyncProjectionUnfenced projection recorded = do
     inserted <-
         Tx.statement
             (projection ^. #name, eventIdToUuid ((projection ^. #idempotencyKey) recorded))
             insertProjectionDedupStmt
-    when inserted
-        $ (projection ^. #applyRecorded) recorded
+    if inserted
+        then do
+            (projection ^. #applyRecorded) recorded
+            pure AsyncApplied
+        else pure AsyncDuplicate
 
 {- | Delete async-projection dedup rows older than the supplied timestamp.
 Returns the number of rows pruned.
@@ -180,6 +217,18 @@ insertProjectionDedupStmt =
             (E.param (E.nonNullable E.uuid))
         )
         ((> 0) <$> D.rowsAffected)
+
+lockReadModelStatusStmt :: Statement Text (Maybe Text)
+lockReadModelStatusStmt =
+    preparable
+        """
+        SELECT status
+        FROM keiro.keiro_read_models
+        WHERE name = $1
+        FOR SHARE
+        """
+        (E.param (E.nonNullable E.text))
+        (D.rowMaybe (D.column (D.nonNullable D.text)))
 
 pruneProjectionDedupBeforeStmt :: Statement UTCTime Int64
 pruneProjectionDedupBeforeStmt =

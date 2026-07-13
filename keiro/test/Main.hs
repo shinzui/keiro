@@ -2065,10 +2065,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             event <- case Vector.toList recorded of
                 [onlyEvent] -> pure onlyEvent
                 other -> expectationFailure ("expected one event, got " <> show other) *> error "unreachable"
-            Right () <- Store.runStoreIO storeHandle $
+            Right outcomes <- Store.runStoreIO storeHandle $
                 Store.runTransaction $ do
-                    applyAsyncProjection counterAsyncProjection event
-                    applyAsyncProjection counterAsyncProjection event
+                    first <- applyAsyncProjection counterAsyncProjection event
+                    second <- applyAsyncProjection counterAsyncProjection event
+                    pure (first, second)
+            outcomes `shouldBe` (AsyncApplied, AsyncDuplicate)
             queryResult <-
                 Store.runStoreIO storeHandle $
                     runQuery Nothing counterReadModel "async-idempotent"
@@ -2078,6 +2080,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction initializeProjectionDedupCounterTable
+            Right _ <-
+                Store.runStoreIO storeHandle $
+                    registerReadModel "projection-dedup-counter-model" 1 "projection-dedup-counter-v1"
             let target = stream "read-model-async-dedup-window" :: Stream CounterEventStream
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
@@ -2091,15 +2096,16 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let incrementingProjection =
                     AsyncProjection
                         { name = "incrementing-async-projection"
+                        , readModelName = "projection-dedup-counter-model"
                         , subscriptionName = "incrementing-async-projection-sub"
                         , applyRecorded = \_ -> Tx.statement () incrementProjectionDedupCounterStmt
                         , idempotencyKey = \recordedEvent -> recordedEvent ^. #eventId
                         }
-            Right () <-
+            Right AsyncApplied <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
                         applyAsyncProjection incrementingProjection event
-            Right () <-
+            Right AsyncDuplicate <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
                         applyAsyncProjection incrementingProjection event
@@ -2111,7 +2117,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             cutoff <- addUTCTime 1 <$> getCurrentTime
             pruned <- Store.runStoreIO storeHandle $ pruneAsyncProjectionDedupBefore cutoff
             pruned `shouldBe` Right 1
-            Right () <-
+            Right AsyncApplied <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
                         applyAsyncProjection incrementingProjection event
@@ -2135,7 +2141,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             event <- case Vector.toList recorded of
                 [onlyEvent] -> pure onlyEvent
                 other -> expectationFailure ("expected one event, got " <> show other) *> error "unreachable"
-            Right () <-
+            Right AsyncApplied <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
                         applyAsyncProjection counterAsyncProjection event
@@ -2163,10 +2169,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Store.runStoreIO storeHandle $
                     readSubscriptionPosition "counter-read-model-sub"
             checkpointAfterReset `shouldBe` Right (Just (GlobalPosition 0))
-            Right () <-
+            Right AsyncApplied <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
-                        applyAsyncProjection counterAsyncProjection event
+                        applyAsyncProjectionUnfenced counterAsyncProjection event
             Right (Right live) <-
                 Store.runStoreIO storeHandle $
                     Rebuild.finishRebuild
@@ -2211,6 +2217,97 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             queryResult
                 `shouldBe` Right
                     (Left (ReadModelNotLive "counter-read-model" Rebuilding))
+
+        it "fences live async application while a model is rebuilding" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+            let target = stream "read-model-fenced-apply" :: Stream CounterEventStream
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions counterEventStream target (Add 7)
+            Right recorded <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "read-model-fenced-apply") (StreamVersion 0) 10
+            event <- case Vector.toList recorded of
+                [onlyEvent] -> pure onlyEvent
+                other -> expectationFailure ("expected one event, got " <> show other) *> error "unreachable"
+            Right _ <-
+                Store.runStoreIO storeHandle $
+                    Rebuild.startRebuild
+                        counterReadModel
+                        [counterAsyncProjection ^. #name]
+                        (GlobalPosition 0)
+            outcome <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        applyAsyncProjection counterAsyncProjection event
+            outcome `shouldBe` Right AsyncFenced
+            Right dedupCount <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement (counterAsyncProjection ^. #name) projectionDedupCountStmt
+            dedupCount `shouldBe` 0
+            Right amount <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement "async-idempotent" selectCounterReadModelStmt
+            amount `shouldBe` 0
+
+        it "keeps a live applier out of the rebuild window and reopens it after promotion" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+            let target = stream "read-model-fence-race" :: Stream CounterEventStream
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions counterEventStream target (Add 7)
+            Right recorded <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "read-model-fence-race") (StreamVersion 0) 10
+            event <- case Vector.toList recorded of
+                [onlyEvent] -> pure onlyEvent
+                other -> expectationFailure ("expected one event, got " <> show other) *> error "unreachable"
+            enterRebuildWindow <- newEmptyMVar
+            liveApplyResult <- newEmptyMVar
+            _ <-
+                forkIO $ do
+                    takeMVar enterRebuildWindow
+                    Store.runStoreIO
+                        storeHandle
+                        (Store.runTransaction (applyAsyncProjection counterAsyncProjection event))
+                        >>= putMVar liveApplyResult
+            Right _ <-
+                Store.runStoreIO storeHandle $
+                    Rebuild.startRebuild
+                        counterReadModel
+                        [counterAsyncProjection ^. #name]
+                        (GlobalPosition 0)
+            putMVar enterRebuildWindow ()
+            takeMVar liveApplyResult `shouldReturn` Right AsyncFenced
+
+            Right AsyncApplied <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        applyAsyncProjectionUnfenced counterAsyncProjection event
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    Rebuild.finishRebuild
+                        counterReadModel
+                        [counterAsyncProjection ^. #name]
+                        (GlobalPosition 0)
+            cutoff <- addUTCTime 1 <$> getCurrentTime
+            pruned <- Store.runStoreIO storeHandle $ pruneAsyncProjectionDedupBefore cutoff
+            pruned `shouldBe` Right 1
+            reapplied <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        applyAsyncProjection counterAsyncProjection event
+            reapplied `shouldBe` Right AsyncApplied
+            queryResult <-
+                Store.runStoreIO storeHandle $
+                    runQuery Nothing counterReadModel "async-idempotent"
+            queryResult `shouldBe` Right (Right 7)
 
         it "tracks rebuild state transitions" $ \storeHandle -> do
             Right () <-
@@ -9956,6 +10053,7 @@ counterAsyncProjection :: AsyncProjection
 counterAsyncProjection =
     AsyncProjection
         { name = "counter-async-projection"
+        , readModelName = "counter-read-model"
         , subscriptionName = "counter-read-model-sub"
         , applyRecorded = \recorded ->
             case decodeRecorded counterCodec recorded of
@@ -10128,6 +10226,17 @@ selectProjectionDedupCounterStmt =
         """
         E.noParams
         (D.singleRow (Prelude.fromIntegral <$> D.column (D.nonNullable D.int8)))
+
+projectionDedupCountStmt :: Statement Text Int64
+projectionDedupCountStmt =
+    preparable
+        """
+        SELECT count(*)
+        FROM keiro.keiro_projection_dedup
+        WHERE projection_name = $1
+        """
+        (E.param (E.nonNullable E.text))
+        (D.singleRow (D.column (D.nonNullable D.int8)))
 
 selectCounterMetaStmt :: Statement Text (Int64, Maybe Text, Maybe UUID)
 selectCounterMetaStmt =

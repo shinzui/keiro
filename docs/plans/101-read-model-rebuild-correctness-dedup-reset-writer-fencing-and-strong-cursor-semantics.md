@@ -72,9 +72,9 @@ shows a live applier being fenced during a rebuild, and a two-category test show
 - [x] (2026-07-13 18:32Z) M2: `finishRebuild` helper with the zero-apply promotion guard exists.
 - [x] (2026-07-13 18:32Z) M2: red rebuild-per-current-runbook test written and observed failing (empty table).
 - [x] (2026-07-13 18:32Z) M2: green end-to-end rebuild test passes through the new helpers.
-- [ ] M3: `AsyncProjection` carries `readModelName`; `applyAsyncProjection` returns `AsyncApplyOutcome` and fences on non-`Live` status.
-- [ ] M3: `applyAsyncProjectionUnfenced` rebuild-path variant exists; all call sites updated.
-- [ ] M3: writer-fence race test (live applier vs. rebuild) passes.
+- [x] (2026-07-13 18:39Z) M3: `AsyncProjection` carries `readModelName`; `applyAsyncProjection` returns `AsyncApplyOutcome` and fences on non-`Live` status.
+- [x] (2026-07-13 18:39Z) M3: `applyAsyncProjectionUnfenced` rebuild-path variant exists; all call sites updated.
+- [x] (2026-07-13 18:39Z) M3: writer-fence race test (live applier vs. rebuild) passes.
 - [ ] M4: `StrongScope` field on `ReadModel`; `categoryHeadPosition` query implemented.
 - [ ] M4: red cross-category `Strong` timeout test observed failing; green with `CategoryHead` scope.
 - [ ] M5: `Rebuild.hs` runbook rewritten as a helper-enforced checklist; docs swept.
@@ -107,6 +107,10 @@ Findings from authoring-time verification (2026-07-11); implementation entries g
   the value 7 after clearing exactly the named projection's dedup rows, observes
   the subscription checkpoint reset to `GlobalPosition 0`, and returns
   `RebuildProducedNoApplies` while leaving a no-op replay in `Rebuilding`.
+- M3's `FOR SHARE` fence and explicit outcome API pass 330 examples. The focused
+  tests prove that `AsyncFenced` inserts no dedup key and performs no model write,
+  that the named unfenced path repopulates during `Rebuilding`, and that normal
+  application returns `AsyncApplied` again after promotion.
 
 - The dedup table is keyed per projection (`PRIMARY KEY (projection_name, event_id)`,
   `keiro-migrations/sql-migrations/2026-06-15-21-49-37-keiro-projection-dedup.sql:1-6`),
@@ -251,6 +255,12 @@ The reset is now one transaction over the registry row, application table,
 projection dedup rows, and subscription checkpoint; promotion is conditional on
 observable async applications whenever the log has events past the replay point.
 The red/green rebuild pair and zero-apply guard pass in the 328-example suite.
+
+M3 made the database registry the common writer fence. Live workers take a shared
+row lock and report `AsyncApplied`, `AsyncDuplicate`, or `AsyncFenced`; the rebuild
+transition's row update therefore waits out in-flight writers and excludes later
+ones. Only `applyAsyncProjectionUnfenced` may replay while the model is rebuilding.
+The complete suite passed with 330 examples.
 
 
 ## Context and Orientation
