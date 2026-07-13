@@ -43,6 +43,26 @@ drive it from 'Keiro.DeadLetter.listDispatchDeadLetters' through an operator
 runbook or automation. Otherwise, the dead-letter row is the durable witness.
 Manager-state rejection itself has no such split because no manager event was
 appended; its record uses emit index @-1@.
+
+=== Bounded retries and source-event dead letters
+
+On a Kiroku-backed Shibuya adapter, a transient failure finalizes 'AckRetry',
+but retries are bounded by the Kiroku subscription's @RetryPolicy@. Its
+@retryMaxAttempts@ counts total deliveries and defaults to five. When the bound
+is exhausted, Kiroku records the /source event/ in @kiroku.dead_letters@ with
+structured reason kind @max_attempts_exceeded@ and atomically advances the
+checkpoint. The manager will not see that event again unless an operator
+replays it through @Keiro.DeadLetter.Replay@. Install
+'Keiro.Telemetry.kirokuEventBridge' on Kiroku's @eventHandler@ to observe the
+terminal transition.
+
+The adapter's @KirokuAdapterConfig@ does not currently expose @retryPolicy@, so
+that path uses Kiroku's default bound. The sharded path is configurable:
+'Keiro.Subscription.Shard.Worker.runShardedSubscriptionGroupAck' forwards
+'Keiro.Subscription.Shard.Worker.ShardedWorkerOptions.retryPolicy' into the
+same Kiroku acknowledgement ladder. A shard handler that dispatches commands
+can use 'decideForFailures' and 'isRejectionClass' to classify outcomes, then
+map the decision to its existing @ShardAck@ reply.
 -}
 module Keiro.ProcessManager (
     -- * Definition
@@ -483,7 +503,12 @@ transient store failures finalize 'AckRetry'; rejection-class failures follow
 'RejectedCommandPolicy'; other deterministic failures finalize 'AckHalt';
 undecodable messages follow the configured 'PoisonPolicy'. Under
 'RejectedDeadLetter', see the module-level saga-history contract before opting
-in.
+in. On a Kiroku-backed adapter, each 'AckRetry' redelivery is bounded by the
+subscription @RetryPolicy@ (five total deliveries by default). Exhaustion
+dead-letters the source event in @kiroku.dead_letters@ and advances the
+checkpoint; @KirokuAdapterConfig@ does not currently expose that bound. Observe
+the terminal event with 'Keiro.Telemetry.kirokuEventBridge' and replay it with
+@Keiro.DeadLetter.Replay@ when appropriate.
 -}
 runProcessManagerWorker ::
     forall msg input phi rs s ci co targetPhi targetRs targetState targetCi targetCo es.

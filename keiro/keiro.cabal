@@ -158,6 +158,7 @@ test-suite keiro-test
     , kiroku-store                           >=0.3     && <0.4
     , process                                >=1.6
     , shibuya-core                           >=0.8.0.1 && <0.9
+    , stm                                    >=2.5
     , streamly-core                          >=0.3
     , text                                   >=2.1
     , time                                   >=1.12

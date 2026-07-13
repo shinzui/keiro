@@ -6,6 +6,7 @@ where
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, contrazip6)
 import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar, tryPutMVar)
+import Control.Concurrent.STM (atomically, putTMVar)
 import Control.Exception (Exception, SomeException, displayException, evaluate, finally, throwIO, try)
 import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
@@ -264,6 +265,8 @@ import Keiro.Workflow.Snapshot (
  )
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.SQL qualified as KirokuSQL
+import Kiroku.Store.Subscription.Stream (AckItem (..), subscriptionAckStream)
 import Kiroku.Store.Subscription.Types (
     SubscriptionName (..),
     SubscriptionTarget (..),
@@ -385,6 +388,97 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             exported <- readIORef ref
             flattenScalarPoints exported `shouldBe` []
             flattenHistogramPoints exported `shouldBe` []
+
+    describe "Kiroku retry exhaustion observability" $ do
+        it "dead-letters after the configured delivery bound, emits the metric, and advances" $ do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            metrics <- Telemetry.newKeiroMetrics meter
+            forwarded <- newIORef (0 :: Int)
+            let observe _ = modifyIORef' forwarded (+ 1)
+                installBridge settings =
+                    settings
+                        & #eventHandler
+                        .~ Just (Telemetry.kirokuEventBridge (Just metrics) observe)
+            withFreshStoreWith fixture installBridge $ \store -> do
+                total <- seedOrders store 1 2
+                total `shouldBe` 2
+                let subName = SubscriptionName "orders-retry-exhaustion"
+                    subConfig =
+                        ( KirokuSub.defaultSubscriptionConfig
+                            subName
+                            (Category (CategoryName "orders"))
+                            (\_ -> pure KirokuSub.Continue)
+                        )
+                            { KirokuSub.retryPolicy = KirokuSub.RetryPolicy 2
+                            }
+                    pull label source = do
+                        result <- timeout 5_000_000 (Streamly.uncons source)
+                        case result of
+                            Just (Just itemAndRest) -> pure itemAndRest
+                            Just Nothing -> fail (label <> ": subscription ended early")
+                            Nothing -> fail (label <> ": timed out waiting for delivery")
+                    number item =
+                        parseEither
+                            (withObject "OrderPlaced" (.: "n"))
+                            (ackEvent item ^. #payload)
+                (stream0, cancelStream) <- subscriptionAckStream store subConfig 4
+                ( do
+                        (first, stream1) <- pull "initial poison delivery" stream0
+                        ackAttempt first `shouldBe` 0
+                        number first `shouldBe` Right (0 :: Int)
+                        atomically $
+                            putTMVar
+                                (ackReply first)
+                                (KirokuSub.Retry (KirokuSub.RetryDelay 0))
+
+                        (retry, stream2) <- pull "poison redelivery" stream1
+                        ackAttempt retry `shouldBe` 1
+                        ackEvent retry ^. #eventId `shouldBe` ackEvent first ^. #eventId
+                        atomically $
+                            putTMVar
+                                (ackReply retry)
+                                (KirokuSub.Retry (KirokuSub.RetryDelay 0))
+
+                        (next, stream3) <- pull "event after exhausted poison" stream2
+                        ackAttempt next `shouldBe` 0
+                        number next `shouldBe` Right (1 :: Int)
+                        ackEvent next ^. #eventId `shouldNotBe` ackEvent first ^. #eventId
+                        atomically (putTMVar (ackReply next) KirokuSub.Stop)
+                        ended <- timeout 5_000_000 (Streamly.uncons stream3)
+                        case ended of
+                            Just Nothing -> pure ()
+                            Just (Just _) -> expectationFailure "subscription delivered after Stop"
+                            Nothing -> expectationFailure "subscription did not stop after the final acknowledgement"
+                    )
+                    `finally` cancelStream
+
+                Right rows <-
+                    Store.runStoreIO store $
+                        Store.runTransaction $
+                            Tx.statement
+                                ("orders-retry-exhaustion", 0)
+                                KirokuSQL.readDeadLettersStmt
+                case Vector.toList rows of
+                    [row] -> do
+                        row ^. #deadLetterReason
+                            `shouldBe` object
+                                [ "kind" Aeson..= ("max_attempts_exceeded" :: Text)
+                                , "attempts" Aeson..= (2 :: Int)
+                                ]
+                        row ^. #deadLetterReasonSummary `shouldBe` "max retry attempts exceeded (2)"
+                        row ^. #deadLetterAttemptCount `shouldBe` 2
+                    other -> expectationFailure ("expected one Kiroku dead letter, got " <> show (Vector.length rows) <> ": " <> show other)
+
+                _ <- forceFlushMeterProvider provider Nothing
+                exported <- readIORef metricsRef
+                lookup "keiro.subscription.deadlettered" (flattenScalarPoints exported)
+                    `shouldBe` Just (IntNumber 1)
+                readIORef forwarded >>= (`shouldSatisfy` (> 1))
 
     describe "Keiro.Stream" $ do
         it "wraps and unwraps kiroku stream names" $ do

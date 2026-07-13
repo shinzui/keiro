@@ -61,10 +61,10 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-07-13 17:35Z) M2: `keiro.dispatch.deadlettered` counter added to `Keiro.Telemetry`
 - [x] (2026-07-13 17:35Z) M2: end-to-end tests cover row + ack + subsequent processing, default halt, skip, router parity, manager-state rejection, and redelivery idempotency; `keiro-test` passes 322 examples
 - [x] (2026-07-13 17:35Z) M2: saga-history divergence documented in `Keiro.ProcessManager` haddock
-- [ ] M3: retry-bound documentation corrected in `Keiro.ProcessManager` and `Keiro.Router` haddocks (bound, knob, consequence, per-path behavior)
-- [ ] M3: `Keiro.Telemetry.kirokuEventBridge` helper + `keiro.subscription.deadlettered` counter
-- [ ] M3: retry-exhaustion visibility test (RetryPolicy 2 through the ack bridge; dead-letter row, metric, checkpoint advance, next event delivered)
-- [ ] M3: adapter `retryPolicy` gap and EP-96 shard-path integration expectations recorded
+- [x] (2026-07-13 17:47Z) M3: retry-bound documentation corrected in `Keiro.ProcessManager` and `Keiro.Router` haddocks (bound, knob, consequence, per-path behavior)
+- [x] (2026-07-13 17:47Z) M3: `Keiro.Telemetry.kirokuEventBridge` helper + `keiro.subscription.deadlettered` counter
+- [x] (2026-07-13 17:47Z) M3: retry-exhaustion visibility test (RetryPolicy 2 through the ack bridge; dead-letter row, metric, checkpoint advance, next event delivered)
+- [x] (2026-07-13 17:47Z) M3: adapter `retryPolicy` gap and EP-96 shard-path integration expectations recorded; `cabal build all` and the 323-example Keiro suite pass
 - [ ] M4: `Keiro.DeadLetter.Replay` (`listSubscriptionDeadLetters`, `replaySubscriptionDeadLetters`) implemented
 - [ ] M4: replay idempotency test (already-processed replay yields duplicates only; unprocessed replay applies)
 - [ ] M5: cross-stream correlation-ordering footgun documented in `Keiro.ProcessManager` haddock with a worked example
@@ -119,6 +119,11 @@ Findings from plan-authoring research (2026-07-12), each verified against source
   private to `Keiro.Command`. EP-100 exports that existing function and uses it
   for dead-letter rows; duplicating the pattern match in the coordination layer
   would let span and dead-letter classifications drift.
+- The exported `subscriptionAckStream` is the common retry primitive beneath
+  both the Shibuya adapter and EP-96's shard worker. Exercising it directly let
+  the M3 test set `RetryPolicy 2` without reproducing the adapter's envelope
+  conversion, while still covering the exact checkpoint, retry, dead-letter,
+  and `eventHandler` path used in production.
 
 
 ## Decision Log
@@ -264,13 +269,20 @@ Record every decision made while working on the plan.
   contract.
   Date: 2026-07-13
 
+- Decision: exercise Kiroku's exported `subscriptionAckStream` directly in the
+  retry-exhaustion integration test instead of hand-rebuilding a Shibuya
+  `Adapter`.
+  Rationale: this is the public ack-coupled primitive used by both the adapter
+  and the shard worker, and it exposes the otherwise-hidden `retryPolicy`
+  configuration. The test can therefore prove the exact bounded-delivery and
+  checkpoint behavior without duplicating unrelated envelope conversion code.
+  Date: 2026-07-13
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
-
-(To be filled during and after implementation.)
 
 Milestone 2 delivered the opt-in rejected-command escape paths without changing
 the safe default. Process-manager and router workers share one classifier:
@@ -279,6 +291,16 @@ rejection/ambiguity reaches `RejectedHalt`, `RejectedDeadLetter`, or
 `RejectedSkip`. The dead-letter path records target identity and typed error
 class before acknowledging, including manager-state rejection at emit index
 `-1`; redelivery produces one row. The full suite passes 322 examples.
+
+Milestone 3 makes retry exhaustion explicit and observable without changing
+Kiroku's delivery ladder. Process-manager and router Haddocks now distinguish
+the adapter's fixed default of five total deliveries from the shard worker's
+configurable `retryPolicy`. `kirokuEventBridge` counts terminal source-event
+dead letters while preserving an application's existing event handler. The
+integration test drives `subscriptionAckStream` through a two-delivery
+exhaustion, verifies the structured Kiroku dead-letter and attempt count,
+observes the metric, and proves checkpoint advance by receiving the next event.
+`cabal build all` and all 323 Keiro examples pass.
 
 
 ## Context and Orientation
@@ -700,17 +722,14 @@ The test ("force N failures through the ack path"). kiroku's retry ladder is
 configurable per subscription — its own test sets
 `retryPolicy = RetryPolicy{retryMaxAttempts = 3}`
 (`kiroku-store/test/Test/SubscriptionRetryDeadLetter.hs:149`). The adapter hides the
-knob, so build the adapter's composition by hand, which the exports allow: construct a
+knob. The delivered test exercises the exported common primitive directly: construct a
 `SubscriptionConfig` with `retryMaxAttempts = 2`, open
-`subscriptionAckStream store subConfig bufferSize`, and wrap it into a Shibuya `Adapter`
-with `fmap (toIngestedAck (kirokuEnvelopeAttrs name Nothing) cancel) (Stream.morphInner
-liftIO ioStream)` — exactly what `kirokuAdapter` does at
-`shibuya-kiroku-adapter/src/Shibuya/Adapter/Kiroku.hs:306-341`. Use
-`withFreshStoreWith` to install `eventHandler = Just (kirokuEventBridge metrics …)` on
-the store. Append two events to a watched stream; run a handler that finalizes
-`AckRetry (RetryDelay 0)` for the first event always (this is precisely what a
-process-manager worker finalizes during a store outage, via `ackForCommandError`) and
-`AckOk` for the second. Assert: the first event lands in `kiroku.dead_letters` with
+`subscriptionAckStream store subConfig bufferSize`, and answer each `AckItem` reply
+with `Retry (RetryDelay 0)` for the first event and `Stop` after accepting the second.
+This is the same stream used by both `kirokuAdapter` and EP-96's shard reader, without
+duplicating Shibuya envelope conversion (Decision Log). Use `withFreshStoreWith` to
+install `eventHandler = Just (kirokuEventBridge metrics …)` on the store. Append two
+events to a watched stream. Assert: the first event lands in `kiroku.dead_letters` with
 reason kind `max_attempts_exceeded` and `attempt_count = 2` (read it with kiroku's
 exported `readDeadLettersStmt` through a transaction); the second event was delivered
 and acked (checkpoint advanced — the subscription did not stall); the
@@ -984,3 +1003,7 @@ Telemetry names respect Integration Point 3's reservations.
   classification, target-aware failure results, process-manager/router
   dead-letter and skip paths, telemetry, saga-divergence documentation, and
   end-to-end coverage; the full Keiro suite passes 322 examples.
+- 2026-07-13: Completed Milestone 3. Documented Kiroku's bounded retry and
+  per-path configuration posture, added the composable Kiroku event-to-metric
+  bridge, and covered two-delivery exhaustion, atomic checkpoint advance, and
+  metric emission through `subscriptionAckStream`; all 323 examples pass.

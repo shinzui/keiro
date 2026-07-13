@@ -14,7 +14,10 @@ attempts, so callers that require one exact set must keep resolution stable for
 a source event.
 
 Use 'runRouterOnce' to dispatch a single event, or 'runRouterWorker' to run
-the router as a live subscription draining a Shibuya adapter.
+the router as a live subscription draining a Shibuya adapter. Its retry and
+source-event dead-letter contract is the same bounded Kiroku contract described
+by "Keiro.ProcessManager": five total deliveries by default, followed by a
+@kiroku.dead_letters@ write and atomic checkpoint advance.
 -}
 module Keiro.Router (
     -- * Definition
@@ -303,7 +306,15 @@ the default.
 The worker invokes each ingested message's 'Shibuya.Core.AckHandle.AckHandle'
 @finalize@ exactly once with the decision, so the decision reaches the adapter.
 Use 'runRouterWorkerWith' to override poison-message handling, rejected-command
-handling, transient retry delay, or dispatch metrics.
+handling, transient retry delay, or dispatch metrics. On a Kiroku-backed
+adapter, 'AckRetry' remains bounded by the subscription @RetryPolicy@ (five
+total deliveries by default). Exhaustion records the source event in
+@kiroku.dead_letters@ with reason kind @max_attempts_exceeded@ and advances the
+checkpoint. @KirokuAdapterConfig@ does not currently expose @retryPolicy@;
+install 'Keiro.Telemetry.kirokuEventBridge' on Kiroku's @eventHandler@ to observe
+the terminal event. The configurable sharded path forwards
+@ShardedWorkerOptions.retryPolicy@ through the same Kiroku ladder; see
+"Keiro.Subscription.Shard.Worker".
 -}
 runRouterWorker ::
     forall msg input targetPhi targetRs targetState targetCi targetCo es.

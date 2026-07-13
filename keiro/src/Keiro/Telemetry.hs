@@ -96,6 +96,7 @@ module Keiro.Telemetry (
     keiroSnapshotApplyDivergenceName,
     keiroDispatchFailedName,
     keiroDispatchDeadletteredName,
+    keiroSubscriptionDeadletteredName,
     keiroDispatchDuplicatesName,
     keiroDispatchPoisonName,
     keiroWorkflowStepsExecutedName,
@@ -137,6 +138,7 @@ module Keiro.Telemetry (
     recordSnapshotApplyDivergence,
     recordDispatchFailed,
     recordDispatchDeadLettered,
+    recordSubscriptionDeadLettered,
     recordDispatchDuplicate,
     recordDispatchPoison,
     recordWorkflowStepExecuted,
@@ -148,6 +150,9 @@ module Keiro.Telemetry (
     recordWorkflowActive,
     recordWorkflowJournalLength,
     recordWorkflowAwakeablesPending,
+
+    -- * Kiroku observability bridge
+    kirokuEventBridge,
 )
 where
 
@@ -216,6 +221,7 @@ import Keiro.Integration.Event (
 import Keiro.Outbox.Kafka (KafkaProducerRecord)
 import Keiro.Prelude
 import Keiro.Workflow.Types (StepName (..), WorkflowId (..), WorkflowName (..))
+import Kiroku.Store.Observability (KirokuEvent (..))
 
 import "hs-opentelemetry-propagator-w3c" OpenTelemetry.Propagator.W3CTraceContext (
     decodeSpanContext,
@@ -591,6 +597,8 @@ keiroDispatchFailedName :: Text
 keiroDispatchFailedName = "keiro.dispatch.failed"
 keiroDispatchDeadletteredName :: Text
 keiroDispatchDeadletteredName = "keiro.dispatch.deadlettered"
+keiroSubscriptionDeadletteredName :: Text
+keiroSubscriptionDeadletteredName = "keiro.subscription.deadlettered"
 keiroDispatchDuplicatesName :: Text
 keiroDispatchDuplicatesName = "keiro.dispatch.duplicates"
 keiroDispatchPoisonName :: Text
@@ -654,6 +662,7 @@ data KeiroMetrics = KeiroMetrics
     , snapshotApplyDivergence :: Counter Int64
     , dispatchFailed :: Counter Int64
     , dispatchDeadlettered :: Counter Int64
+    , subscriptionDeadlettered :: Counter Int64
     , dispatchDuplicates :: Counter Int64
     , dispatchPoison :: Counter Int64
     , workflowStepsExecuted :: Counter Int64
@@ -704,6 +713,7 @@ newKeiroMetrics meter = liftIO $ do
     snapshotApplyDivergence' <- counterI64 keiroSnapshotApplyDivergenceName "{failure}" "Just-appended event batches that failed to replay from the pre-command state; the stream is poisoned and its next hydration will fail."
     dispatchFailed' <- counterI64 keiroDispatchFailedName "{command}" "Process-manager/router dispatch commands that failed."
     dispatchDeadlettered' <- counterI64 keiroDispatchDeadletteredName "{command}" "Rejected process-manager/router dispatch commands handled by dead-letter or skip policy."
+    subscriptionDeadlettered' <- counterI64 keiroSubscriptionDeadletteredName "{event}" "Kiroku source events dead-lettered by an explicit disposition or retry exhaustion."
     dispatchDuplicates' <- counterI64 keiroDispatchDuplicatesName "{command}" "Process-manager/router dispatch commands skipped as duplicate deterministic event ids."
     dispatchPoison' <- counterI64 keiroDispatchPoisonName "{message}" "Process-manager/router worker messages classified as poison."
     workflowStepsExecuted' <- counterI64 keiroWorkflowStepsExecutedName "{step}" "Workflow steps that ran their action (a journal miss)."
@@ -745,6 +755,7 @@ newKeiroMetrics meter = liftIO $ do
             , snapshotApplyDivergence = snapshotApplyDivergence'
             , dispatchFailed = dispatchFailed'
             , dispatchDeadlettered = dispatchDeadlettered'
+            , subscriptionDeadlettered = subscriptionDeadlettered'
             , dispatchDuplicates = dispatchDuplicates'
             , dispatchPoison = dispatchPoison'
             , workflowStepsExecuted = workflowStepsExecuted'
@@ -842,6 +853,8 @@ recordDispatchFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordDispatchFailed = recordCounter dispatchFailed
 recordDispatchDeadLettered :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordDispatchDeadLettered = recordCounter dispatchDeadlettered
+recordSubscriptionDeadLettered :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordSubscriptionDeadLettered = recordCounter subscriptionDeadlettered
 recordDispatchDuplicate :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordDispatchDuplicate = recordCounter dispatchDuplicates
 recordDispatchPoison :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
@@ -864,3 +877,26 @@ recordWorkflowJournalLength :: (MonadIO m) => Maybe KeiroMetrics -> Double -> m 
 recordWorkflowJournalLength = recordHistogram workflowJournalLength
 recordWorkflowAwakeablesPending :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowAwakeablesPending = recordGaugeI64 workflowAwakeablesPending
+
+{- | Feed Kiroku store events into Keiro metrics, then delegate every event to
+the application's existing event handler. Install this as (or inside) the
+@eventHandler@ on Kiroku's @ConnectionSettings@ at store construction; pass
+@const (pure ())@ when there is no other handler.
+
+'KirokuEventSubscriptionDeadLettered' is the terminal retry-exhaustion signal:
+the acknowledgement bridge exposes the current delivery attempt, but does not
+tell a handler that its retry reply consumed the final attempt. For current
+dead-letter depth, query Kiroku's durable table rather than treating this
+monotonic counter as a gauge:
+
+> SELECT count(*) FROM kiroku.dead_letters WHERE subscription_name = $1
+
+The delegate runs synchronously, matching Kiroku's event-handler contract, so
+it should remain fast and non-blocking.
+-}
+kirokuEventBridge :: Maybe KeiroMetrics -> (KirokuEvent -> IO ()) -> KirokuEvent -> IO ()
+kirokuEventBridge metrics delegate event = do
+    case event of
+        KirokuEventSubscriptionDeadLettered{} -> recordSubscriptionDeadLettered metrics 1
+        _ -> pure ()
+    delegate event
