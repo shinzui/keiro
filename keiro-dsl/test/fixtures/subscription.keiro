@@ -26,4 +26,4 @@ aggregate Subscription
 
   wire kind=ctorName fields=camelCase schemaVersion=1
   projection subscriptions consistency=Strong key=subscriptionId
-    status-map { Activated=>active Cancelled=>cancelled }
+    status-map { SubscriptionActivated=>active SubscriptionCancelled=>cancelled }

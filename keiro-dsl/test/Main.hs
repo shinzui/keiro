@@ -15,7 +15,7 @@ import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), Placement (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
-import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateSpec)
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, validateSpec)
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
 
@@ -65,6 +65,11 @@ main = hspec $ do
         it "rejects a v2 event with no upcaster as EvtVersionMissingUpcaster" $ do
             codes <- diagnosticCodesOf "test/fixtures/reservation-v2-noupcast.keiro"
             codes `shouldContain` [EvtVersionMissingUpcaster]
+        it "requires exact, unique status-map event keys" $ do
+            dangling <- errorCodesOf "test/fixtures/statusmap-dangling.keiro"
+            mapM_ (\expected -> dangling `shouldContain` [expected]) [StatusMapDanglingKey, StatusMapNotTotal]
+            duplicate <- errorCodesOf "test/fixtures/statusmap-dup-key.keiro"
+            duplicate `shouldContain` [StatusMapDuplicateKey]
         it "rejects duplicate spec and aggregate names" $ do
             codes <- errorCodesOf "test/fixtures/duplicate-names.keiro"
             mapM_
@@ -200,6 +205,12 @@ main = hspec $ do
         it "rejects an incomplete disposition table" $ do
             codes <- errorCodesOf "test/fixtures/intake-incomplete.keiro"
             codes `shouldContain` [DispositionIncomplete]
+        it "rejects a shadowing duplicate intake disposition row" $ do
+            codes <- errorCodesOf "test/fixtures/intake-dup-row.keiro"
+            codes `shouldContain` [DispositionDuplicateOutcome]
+        it "rejects intake events declared on another topic" $ do
+            codes <- errorCodesOf "test/fixtures/intake-topic-mismatch.keiro"
+            codes `shouldContain` [TopicAffinityMismatch]
         it "round-trips the emit/publisher spec through parse . pretty" $ do
             input <- TIO.readFile "test/fixtures/emit.keiro"
             case parseSpec "in" input of
@@ -214,6 +225,9 @@ main = hspec $ do
         it "rejects mapping to an undeclared contract event as EmitUnresolvedContract" $ do
             codes <- errorCodesOf "test/fixtures/emit-badevent.keiro"
             codes `shouldContain` [EmitUnresolvedContract]
+        it "rejects emit events declared on another topic" $ do
+            codes <- errorCodesOf "test/fixtures/emit-topic-mismatch.keiro"
+            codes `shouldContain` [TopicAffinityMismatch]
 
     describe "pgmq workqueue/dispatch (EP-5)" $ do
         it "round-trips the reservation-work spec through parse . pretty" $ do
@@ -233,6 +247,32 @@ main = hspec $ do
         it "rejects decodeFailure => retry as WqDecodeFailureNotDeadLetter" $ do
             codes <- errorCodesOf "test/fixtures/reservation-work-df-retry.keiro"
             codes `shouldContain` [WqDecodeFailureNotDeadLetter]
+        it "requires complete, unique workqueue disposition rows" $ do
+            incomplete <- errorCodesOf "test/fixtures/workqueue-incomplete.keiro"
+            incomplete `shouldContain` [WqDispositionIncomplete]
+            duplicateSpec <- specOf "test/fixtures/workqueue-dup-row.keiro"
+            let duplicateDiagnostics = [d | d <- validateSpec duplicateSpec, code d == DispositionDuplicateOutcome]
+            map line duplicateDiagnostics `shouldBe` [17]
+        it "checks the captured queueRef dlq and table fixtures" $ do
+            dlqCodes <- errorCodesOf "test/fixtures/workqueue-dlq-divergent.keiro"
+            dlqCodes `shouldContain` [WqDlqDivergence]
+            tableCodes <- errorCodesOf "test/fixtures/workqueue-table-divergent.keiro"
+            tableCodes `shouldContain` [WqTableDivergence]
+        it "matches queueRef for upper-case, punctuation, and hashed logical names" $ do
+            upper <- errorCodesOf "test/fixtures/workqueue-uppercase-logical.keiro"
+            upper `shouldBe` []
+            hashed <- errorCodesOf "test/fixtures/workqueue-hashed-logical.keiro"
+            hashed `shouldBe` []
+            derivedQueueTrio "hospital_capacity.reservation_work.per_hospital_fifo_lane_assignments"
+                `shouldBe` ( "hospital_capacity_reservat_757040df00976c33"
+                           , "hospital_capacity_reservat_757040df00976c33_dlq"
+                           , "pgmq.q_hospital_capacity_reservat_757040df00976c33"
+                           )
+        it "resolves dispatch dedup queues and payload wire fields" $ do
+            ghost <- errorCodesOf "test/fixtures/dispatch-dedup-ghost-queue.keiro"
+            ghost `shouldContain` [DispatchDedupQueueUnresolved]
+            field <- errorCodesOf "test/fixtures/dispatch-dedup-bad-field.keiro"
+            field `shouldContain` [DispatchDedupFieldUnresolved]
 
     describe "workflow/operation (EP-6)" $ do
         it "round-trips the workflow spec through parse . pretty" $ do

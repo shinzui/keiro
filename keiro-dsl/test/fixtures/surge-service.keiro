@@ -43,7 +43,7 @@ aggregate Surge
 
   wire kind=ctorName fields=camelCase schemaVersion=1
   projection surge consistency=Strong key=hospitalId
-    status-map { Noted=>noted Fired=>fired }
+    status-map { SurgeThresholdNoted=>noted SurgeTimerFired=>fired }
 
 aggregate Hospital
   regs
@@ -57,4 +57,4 @@ aggregate Hospital
 
   wire kind=ctorName fields=camelCase schemaVersion=1
   projection hospital consistency=Strong key=hospitalId
-    status-map { Activated=>surging }
+    status-map { SurgeActivated=>surging }

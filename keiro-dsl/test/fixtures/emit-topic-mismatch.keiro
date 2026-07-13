@@ -1,0 +1,24 @@
+context repro
+
+contract twoTopics {
+  schemaVersion 1
+  discriminator messageType
+  topic aEvents "repro.a.events"
+  topic bEvents "repro.b.events"
+  event ThingHappened on bEvents {
+    thingId: typeid "thing"
+  }
+}
+
+emit thingEmit {
+  contract twoTopics
+  topic aEvents
+  source "repro"
+  key thingId
+  map status {
+    "happened" => ThingHappened
+    _ => skip
+  }
+  messageId derive "msg" hole
+  idempotencyKey derive hole
+}

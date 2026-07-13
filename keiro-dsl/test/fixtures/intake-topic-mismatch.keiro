@@ -1,0 +1,35 @@
+context repro
+
+contract twoTopics {
+  schemaVersion 1
+  discriminator messageType
+  topic aEvents "repro.a.events"
+  topic bEvents "repro.b.events"
+  event ThingHappened on bEvents {
+    thingId: typeid "thing"
+  }
+}
+
+intake thingInbox {
+  contract twoTopics
+  topic aEvents
+  accept ThingHappened
+
+  bind messageId from header "keiro-message-id" required cross-check body
+  dedupe key messageId policy PreferIntegrationMessageId
+
+  decode {
+    envelope strict-required lenient-optional
+    body strict schemaVersion == 1
+  }
+
+  disposition {
+    processed => ackOk
+    duplicate => ackOk
+    inProgress => retry 5s
+    previouslyFailed => deadLetter "prior failure"
+    decodeFailed => deadLetter
+    dedupeFailed => deadLetter
+    storeFailed => retry 5s
+  }
+}

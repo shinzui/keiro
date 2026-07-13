@@ -1,0 +1,30 @@
+context repro
+
+workqueue reservation_work {
+  queue logical = "hospital_capacity.reservation_work"
+  derive physical = "hospital_capacity_reservation_work"
+         dlq = "hospital_capacity_reservation_work_dlq"
+         table = "pgmq.q_hospital_capacity_reservation_work"
+
+  payload ReservationWorkItem {
+    reservationId -> "reservation_id" text required
+  }
+
+  retry maxRetries = 3 delay = 5s dlq = on
+
+  disposition {
+    storeFailure -> retry 5s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+
+dispatch reservation_work_dispatch {
+  source readModel = accepted_transfer_needs key = reservationId
+  fanout body = resolveTransferCandidates
+  dedup key = reservationId
+        seenIn readModel = transfer_decisions field = reservation_id
+        seenIn queue = ghost_queue field = reservation_id
+  enqueue to = reservation_work
+}

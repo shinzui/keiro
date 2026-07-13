@@ -34,4 +34,4 @@ aggregate Reservation
 
   wire kind=ctorName fields=camelCase schemaVersion=1
   projection transfer_decisions consistency=Strong key=reservationId
-    status-map { Created=>held Confirmed=>done }
+    status-map { TransferReservationCreated=>held TransferReservationConfirmed=>done }

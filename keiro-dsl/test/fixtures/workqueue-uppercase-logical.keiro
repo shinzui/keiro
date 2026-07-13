@@ -1,0 +1,21 @@
+context repro
+
+workqueue repro_work {
+  queue logical = "Repro.Work"
+  derive physical = "repro_work"
+         dlq = "repro_work_dlq"
+         table = "pgmq.q_repro_work"
+
+  payload ReproWorkItem {
+    itemId -> "item_id" text required
+  }
+
+  retry maxRetries = 3 delay = 5s dlq = on
+
+  disposition {
+    storeFailure -> retry 5s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}

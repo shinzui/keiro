@@ -1,0 +1,21 @@
+context repro
+
+workqueue long_work {
+  queue logical = "hospital_capacity.reservation_work.per_hospital_fifo_lane_assignments"
+  derive physical = "hospital_capacity_reservat_757040df00976c33"
+         dlq = "hospital_capacity_reservat_757040df00976c33_dlq"
+         table = "pgmq.q_hospital_capacity_reservat_757040df00976c33"
+
+  payload LongWorkItem {
+    itemId -> "item_id" text required
+  }
+
+  retry maxRetries = 3 delay = 5s dlq = on
+
+  disposition {
+    storeFailure -> retry 5s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}

@@ -1,0 +1,18 @@
+context repro
+
+aggregate Reservation
+  regs
+    reservationState ReservationVertex = Open
+  states Open Held UnHeld
+
+  command HoldIt { reservationId }
+  command UnholdIt { reservationId }
+  event ReservationHeld = fields(HoldIt)
+  event ReservationUnHeld = fields(UnholdIt)
+
+  Open -- HoldIt --> write reservationState := Held ; emit ReservationHeld ; goto Held
+  Held -- UnholdIt --> write reservationState := UnHeld ; emit ReservationUnHeld ; goto UnHeld
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection reservations consistency=Eventual key=reservationId
+    status-map { Held=>held UnHeld=>available }

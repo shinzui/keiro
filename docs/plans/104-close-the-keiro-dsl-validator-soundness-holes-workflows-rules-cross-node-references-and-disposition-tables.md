@@ -54,11 +54,11 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] (2026-07-13 20:35Z) M3: operation validation (CommandOp aggregate/stream-field/projections, SignalOp value type, QueryOp deferral stub) with fixtures `operation-ghost-aggregate.keiro`, `operation-signal-value.keiro`; updated workflow fixtures; 101-example unit suite and workflow conformance suite green.
 - [x] (2026-07-13 20:42Z) M4: process cross-node resolution (advance/dispatch/fire commands, target-side field bindings, `schedule` = timer name, projections, advance-arm dispatch-id, `max-attempts >= 1`) with fixtures `process-ghost-refs.keiro`, `process-bad-timer.keiro`.
 - [x] (2026-07-13 20:42Z) M4: update `hospital-surge.keiro` and its diff/error variants, `surge-service.keiro`, and the `process` skeleton in `Skeleton.hs` so the canonical corpus resolves; 104-example unit suite and all three process conformance suites green.
-- [ ] M5: workqueue disposition completeness + duplicate-row detection in both intake and workqueue tables, with fixtures `workqueue-incomplete.keiro`, `workqueue-dup-row.keiro`, `intake-dup-row.keiro`.
-- [ ] M5: topic affinity both directions with fixtures `intake-topic-mismatch.keiro`, `emit-topic-mismatch.keiro`.
-- [ ] M5: exact status-map matching + dangling-key + duplicate-key diagnostics; update all fixture status-maps to full event names; fixtures `statusmap-dangling.keiro`, `statusmap-dup-key.keiro`; conformance pin still byte-stable.
-- [ ] M5: faithful queueRef re-derivation (sanitize/collapse/hash) + dlq + table checks with fixtures `workqueue-dlq-divergent.keiro`, `workqueue-table-divergent.keiro`, `workqueue-uppercase-logical.keiro` (false-positive removal), `workqueue-hashed-logical.keiro`; live cross-check added to the `keiro-dsl-conformance-queue-runtime` suite.
-- [ ] M5: PgmqDispatch dedup-queue and dedup-queue-field resolution with fixtures `dispatch-dedup-ghost-queue.keiro`, `dispatch-dedup-bad-field.keiro`; read-model arms deferred via the documented stub.
+- [x] (2026-07-13 20:50Z) M5: workqueue disposition completeness + duplicate-row detection in both intake and workqueue tables, with fixtures `workqueue-incomplete.keiro`, `workqueue-dup-row.keiro`, `intake-dup-row.keiro`; duplicate row pinned to line 17.
+- [x] (2026-07-13 20:50Z) M5: topic affinity both directions with fixtures `intake-topic-mismatch.keiro`, `emit-topic-mismatch.keiro`.
+- [x] (2026-07-13 20:50Z) M5: exact status-map matching + dangling-key + duplicate-key diagnostics; updated all fixture status-maps to full event names; fixtures `statusmap-dangling.keiro`, `statusmap-dup-key.keiro`; scaffold conformance pin byte-stable.
+- [x] (2026-07-13 20:50Z) M5: faithful queueRef re-derivation (sanitize/collapse/hash) + dlq + table checks with fixtures `workqueue-dlq-divergent.keiro`, `workqueue-table-divergent.keiro`, `workqueue-uppercase-logical.keiro` (false-positive removal), `workqueue-hashed-logical.keiro`; live cross-check green across six vectors in `keiro-dsl-conformance-queue-runtime`.
+- [x] (2026-07-13 20:50Z) M5: PgmqDispatch dedup-queue and dedup-queue-field resolution with fixtures `dispatch-dedup-ghost-queue.keiro`, `dispatch-dedup-bad-field.keiro`; read-model arms deferred via the documented stub; 112-example unit suite plus queue and full-dispatch conformance suites green.
 - [ ] M6: true-up the two false claims in `agents/skills/keiro-dsl-authoring/NOTATION.md`; final full-suite run (unit + all 17 conformance suites); living sections updated.
 
 
@@ -92,6 +92,12 @@ implementation. Provide concise evidence.
   command is therefore `cabal build lib:keiro-dsl`; the unit and conformance target
   names remain unambiguous. Evidence: Cabal reported `exe:keiro-dsl` and
   `lib:keiro-dsl` as the two candidates, while `cabal build lib:keiro-dsl` completed.
+- (Implementation, 2026-07-13) The drafted long-name fixture was correct:
+  `queueRef "hospital_capacity.reservation_work.per_hospital_fifo_lane_assignments"`
+  produces `hospital_capacity_reservat_757040df00976c33`. The new pure validator
+  implementation matched the live runtime for that value and five additional vectors,
+  including uppercase input, repeated punctuation, a leading digit, and an `_dlq`
+  suffix.
 
 
 ## Decision Log

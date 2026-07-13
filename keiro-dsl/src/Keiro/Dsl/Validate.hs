@@ -14,8 +14,11 @@ module Keiro.Dsl.Validate (
     Diagnostic (..),
     renderDiagnostic,
     validateSpec,
+    derivedQueueTrio,
 ) where
 
+import Data.Bits (xor)
+import Data.Char (ord)
 import Data.List (sortOn)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -23,7 +26,9 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Word (Word64)
 import Keiro.Dsl.Grammar
+import Numeric (showHex)
 
 data Severity = Error | Warning
     deriving stock (Eq, Show)
@@ -360,38 +365,78 @@ derivation; the disposition inversions (storeFailure transient => must retry;
 decodeFailure poison => must dead-letter); and dlq=on requires a retry ceiling.
 -}
 validateWorkqueue :: WorkqueueNode -> [Diagnostic]
-validateWorkqueue w = concat [divergence, inversions, ceiling]
+validateWorkqueue w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling]
   where
     wl = locLine (wqLoc w)
-    -- queueRef: the physical name sanitizes the logical name (non-[a-z0-9_] => _).
-    derivedPhysical = T.map (\c -> if isSafe c then c else '_') (wqLogical w)
-    isSafe c = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
+    rows = wqDisposition w
+    (derivedPhysical, derivedDlq, derivedTable) = derivedQueueTrio (wqLogical w)
     divergence =
         [ mkErr wl WqPhysicalDivergence $
             "workqueue '" <> wqName w <> "': captured physical \"" <> wqPhysical w <> "\" diverges from queueRef(\"" <> wqLogical w <> "\") = \"" <> derivedPhysical <> "\""
         | wqPhysical w /= derivedPhysical
         ]
-    act o = lookup o [(wqdOutcome r, wqdAction r) | r <- wqDisposition w]
-    isRetry a = case a of Just (IRetry _) -> True; _ -> False
-    isDeadLetter a = case a of Just (IDeadLetter _) -> True; _ -> False
-    inversions =
-        [ mkErr wl WqStoreFailureNotRetry ("workqueue '" <> wqName w <> "': 'storeFailure' is transient and MUST retry, not dead-letter")
-        | isDeadLetter (act "storeFailure")
-        ]
-            ++ [ mkErr wl WqDecodeFailureNotDeadLetter ("workqueue '" <> wqName w <> "': 'decodeFailure' is poison and MUST dead-letter, not retry")
-               | isRetry (act "decodeFailure")
+            ++ [ mkErr wl WqDlqDivergence $
+                    "workqueue '" <> wqName w <> "': captured dlq \"" <> wqDlq w <> "\" diverges from queueRef = \"" <> derivedDlq <> "\""
+               | wqDlq w /= derivedDlq
                ]
-    ceiling =
+            ++ [ mkErr wl WqTableDivergence $
+                    "workqueue '" <> wqName w <> "': captured table \"" <> wqTable w <> "\" diverges from queueRef table = \"" <> derivedTable <> "\""
+               | wqTable w /= derivedTable
+               ]
+    requiredOutcomes = ["storeFailure", "commandRejected", "decodeFailure", "onCodecReject"]
+    completeness =
+        [ mkErr wl WqDispositionIncomplete $
+            "workqueue '" <> wqName w <> "' disposition table is missing outcome '" <> outcome <> "'"
+        | outcome <- requiredOutcomes
+        , outcome `notElem` map wqdOutcome rows
+        ]
+    duplicateRows =
+        [ mkErr (locLine (wqdLoc row)) DispositionDuplicateOutcome $
+            "workqueue '" <> wqName w <> "' repeats disposition outcome '" <> wqdOutcome row <> "'; the first row would shadow this row"
+        | row <- duplicatesBy wqdOutcome rows
+        ]
+    firstRow outcome = case [row | row <- rows, wqdOutcome row == outcome] of
+        (row : _) -> Just row
+        [] -> Nothing
+    isRetry row = case wqdAction row of IRetry _ -> True; _ -> False
+    isDeadLetter row = case wqdAction row of IDeadLetter _ -> True; _ -> False
+    inversions =
+        [ mkErr (locLine (wqdLoc row)) WqStoreFailureNotRetry ("workqueue '" <> wqName w <> "': 'storeFailure' is transient and MUST retry, not dead-letter")
+        | Just row <- [firstRow "storeFailure"]
+        , isDeadLetter row
+        ]
+            ++ [ mkErr (locLine (wqdLoc row)) WqDecodeFailureNotDeadLetter ("workqueue '" <> wqName w <> "': 'decodeFailure' is poison and MUST dead-letter, not retry")
+               | Just row <- [firstRow "decodeFailure"]
+               , isRetry row
+               ]
+    retryCeiling =
         [ mkErr wl WqDlqWithoutCeiling ("workqueue '" <> wqName w <> "': dlq=on requires maxRetries >= 1 (an absent ceiling never dead-letters)")
         | wqDlqOn w && wqMaxRetries w < 1
         ]
 
 -- | EP-5 dispatch rule: the @enqueue to@ target must resolve to a declared workqueue.
 validatePgmqDispatch :: Spec -> PgmqDispatchNode -> [Diagnostic]
-validatePgmqDispatch spec d =
-    [ mkErr (locLine (pdLoc d)) DispatchEnqueueUnresolved ("dispatch '" <> pdName d <> "' enqueues to undeclared workqueue '" <> pdEnqueueTo d <> "'")
-    | pdEnqueueTo d `notElem` [wqName w | NWorkqueue w <- specNodes spec]
-    ]
+validatePgmqDispatch spec d = enqueueRef ++ dedupQueueRef ++ deferredReadModels
+  where
+    dl = locLine (pdLoc d)
+    workqueues = [w | NWorkqueue w <- specNodes spec]
+    enqueueRef =
+        [ mkErr dl DispatchEnqueueUnresolved ("dispatch '" <> pdName d <> "' enqueues to undeclared workqueue '" <> pdEnqueueTo d <> "'")
+        | pdEnqueueTo d `notElem` map wqName workqueues
+        ]
+    dedupQueueRef = case [w | w <- workqueues, wqName w == pdDedupQueue d] of
+        [] ->
+            [ mkErr dl DispatchDedupQueueUnresolved $
+                "dispatch '" <> pdName d <> "' checks an undeclared dedup queue '" <> pdDedupQueue d <> "'"
+            ]
+        (queue : _) ->
+            [ mkErr dl DispatchDedupFieldUnresolved $
+                "dispatch '" <> pdName d <> "' dedup field '" <> pdDedupQueueField d <> "' is not a payload wire field of queue '" <> pdDedupQueue d <> "'"
+            | pdDedupQueueField d `notElem` map wqfWire (wqPayload queue)
+            ]
+    deferredReadModels =
+        resolveReadModelRef spec (pdLoc d) ("dispatch '" <> pdName d <> "' source") (pdSourceReadModel d)
+            ++ resolveReadModelRef spec (pdLoc d) ("dispatch '" <> pdName d <> "' dedup") (pdDedupReadModel d)
 
 -- | The declared contracts in a spec, by name.
 specContracts :: Spec -> [ContractNode]
@@ -410,6 +455,12 @@ intakeCoupling spec i = case lookupContract (inkContract i) of
                | ev <- inkAccept i
                , ev `notElem` map ceName (ctrEvents c)
                ]
+            ++ [ mkErr (locLine (inkLoc i)) TopicAffinityMismatch $
+                    "intake '" <> inkName i <> "' subscribes to topic '" <> inkTopic i <> "' but accepted event '" <> ceName event <> "' is declared on topic '" <> ceTopic event <> "'"
+               | event <- ctrEvents c
+               , ceName event `elem` inkAccept i
+               , ceTopic event /= inkTopic i
+               ]
   where
     lookupContract n = case [c | c <- specContracts spec, ctrName c == n] of (c : _) -> Just c; [] -> Nothing
 
@@ -427,9 +478,16 @@ validateEmit spec e = skipRule ++ coupling
             [ mkErr el EmitUnresolvedContract ("emit '" <> emName e <> "' topic '" <> emTopic e <> "' is not a topic of contract '" <> emContract e <> "'")
             | emTopic e `notElem` map fst (ctrTopics c)
             ]
-                ++ [ mkErr el EmitUnresolvedContract ("emit '" <> emName e <> "' maps to event '" <> emrEvent r <> "' not declared in contract '" <> emContract e <> "'")
+                ++ [ mkErr (locLine (emrLoc r)) EmitUnresolvedContract ("emit '" <> emName e <> "' maps to event '" <> emrEvent r <> "' not declared in contract '" <> emContract e <> "'")
                    | r <- emMap e
                    , emrEvent r `notElem` map ceName (ctrEvents c)
+                   ]
+                ++ [ mkErr (locLine (emrLoc row)) TopicAffinityMismatch $
+                        "emit '" <> emName e <> "' publishes on topic '" <> emTopic e <> "' but mapped event '" <> emrEvent row <> "' is declared on topic '" <> ceTopic event <> "'"
+                   | row <- emMap e
+                   , event <- ctrEvents c
+                   , ceName event == emrEvent row
+                   , ceTopic event /= emTopic e
                    ]
 
 validatePublisher :: Spec -> PublisherNode -> [Diagnostic]
@@ -442,11 +500,10 @@ validatePublisher spec p =
 outcomes, and the three dangerous inversions must be stated the safe way.
 -}
 validateIntake :: IntakeNode -> [Diagnostic]
-validateIntake i = concat [completeness, inversions]
+validateIntake i = concat [completeness, duplicateRows, inversions]
   where
     il = locLine (inkLoc i)
     rows = inkDisposition i
-    action o = lookup o [(drOutcome r, drAction r) | r <- rows]
     requiredOutcomes =
         ["processed", "duplicate", "inProgress", "previouslyFailed", "decodeFailed", "dedupeFailed", "storeFailed"]
     completeness =
@@ -455,20 +512,30 @@ validateIntake i = concat [completeness, inversions]
         | o <- requiredOutcomes
         , o `notElem` map drOutcome rows
         ]
-    isRetry a = case a of IRetry _ -> True; _ -> False
-    retriesOn o = maybe False isRetry (action o)
-    inversions =
-        [ mkErr il DispositionDuplicateRetry $
-            "intake '" <> inkName i <> "': a 'duplicate' redelivery must be ackOk (success), not retry"
-        | retriesOn "duplicate"
+    duplicateRows =
+        [ mkErr (locLine (drLoc row)) DispositionDuplicateOutcome $
+            "intake '" <> inkName i <> "' repeats disposition outcome '" <> drOutcome row <> "'; the first row would shadow this row"
+        | row <- duplicatesBy drOutcome rows
         ]
-            ++ [ mkErr il DispositionPreviouslyFailedRetry $
+    firstRow outcome = case [row | row <- rows, drOutcome row == outcome] of
+        (row : _) -> Just row
+        [] -> Nothing
+    isRetry row = case drAction row of IRetry _ -> True; _ -> False
+    inversions =
+        [ mkErr (locLine (drLoc row)) DispositionDuplicateRetry $
+            "intake '" <> inkName i <> "': a 'duplicate' redelivery must be ackOk (success), not retry"
+        | Just row <- [firstRow "duplicate"]
+        , isRetry row
+        ]
+            ++ [ mkErr (locLine (drLoc row)) DispositionPreviouslyFailedRetry $
                     "intake '" <> inkName i <> "': 'previouslyFailed' must dead-letter, not retry (a prior failure won't succeed on replay)"
-               | retriesOn "previouslyFailed"
+               | Just row <- [firstRow "previouslyFailed"]
+               , isRetry row
                ]
-            ++ [ mkErr il DispositionDecodeUnboundedRetry $
+            ++ [ mkErr (locLine (drLoc row)) DispositionDecodeUnboundedRetry $
                     "intake '" <> inkName i <> "': 'decodeFailed' must dead-letter (terminal), not retry unboundedly"
-               | retriesOn "decodeFailed"
+               | Just row <- [firstRow "decodeFailed"]
+               , isRetry row
                ]
 
 -- | EP-3 rules for a process manager + its nested timer.
@@ -740,23 +807,32 @@ validateAggregate spec agg =
             | n <- dedup sampled
             ]
 
-    -- Rule 6 (hole-kind 3, mapping): the projection's status-map must be total
-    -- over the event set, unless explicitly marked partial.
+    -- Rule 6 (hole-kind 3, mapping): keys are exact event names, never suffixes;
+    -- duplicates and dangling keys are errors, and non-partial maps are total.
     statusMapTotality = case aggProjection agg of
         Nothing -> []
         Just p ->
             let evs = map evName (aggEvents agg)
-                covered ev = case projStatusMap p of
-                    Nothing -> False
-                    Just m
-                        | mapPartial m -> True
-                        | otherwise -> any (\(k, _) -> not (T.null k) && k `T.isSuffixOf` ev) (mapPairs m)
-                uncovered = filter (not . covered) evs
-             in [ mkErr (locLine (projLoc p)) StatusMapNotTotal $
-                    "projection '" <> projTable p <> "' status-map is not total over events {" <> T.intercalate ", " uncovered <> "}"
-                | not (null evs)
-                , not (null uncovered)
+                pairs = maybe [] mapPairs (projStatusMap p)
+                keys = map fst pairs
+                partial = maybe False mapPartial (projStatusMap p)
+                uncovered = [event | event <- evs, event `notElem` keys]
+                dangling = [key | key <- keys, key `notElem` evs]
+                duplicateKeys = map fst (duplicatesBy fst pairs)
+             in [ mkErr (locLine (projLoc p)) StatusMapDanglingKey $
+                    "projection '" <> projTable p <> "' status-map key '" <> key <> "' is not an event name of aggregate '" <> aggName agg <> "'"
+                | key <- dangling
                 ]
+                    ++ [ mkErr (locLine (projLoc p)) StatusMapDuplicateKey $
+                            "projection '" <> projTable p <> "' repeats status-map key '" <> key <> "'"
+                       | key <- duplicateKeys
+                       ]
+                    ++ [ mkErr (locLine (projLoc p)) StatusMapNotTotal $
+                            "projection '" <> projTable p <> "' status-map is not total over events {" <> T.intercalate ", " uncovered <> "}"
+                       | not partial
+                       , not (null evs)
+                       , not (null uncovered)
+                       ]
 
     -- EP-2 evolution rules (single-spec; the diff path adds the cross-spec ones).
     evolutionRules = versionUpcasterRule ++ deprecatedEmitRule ++ wireVersionRule
@@ -794,6 +870,58 @@ validateAggregate spec agg =
                     }
                 ]
         _ -> []
+
+{- | The validator's re-derivation of the live
+'Keiro.PGMQ.Runtime.queueRef' trio: physical queue, dead-letter queue, and
+PGMQ backing table. Parity is pinned by the queue-runtime conformance suite.
+-}
+derivedQueueTrio :: Text -> (Text, Text, Text)
+derivedQueueTrio logical = (physical, physical <> "_dlq", "pgmq.q_" <> physical)
+  where
+    physical = physicalBase logical
+
+physicalBase :: Text -> Text
+physicalBase logical
+    | T.length base <= 43 && not ("_dlq" `T.isSuffixOf` base) = base
+    | otherwise = hashedBase logical base
+  where
+    base = sanitizeQueueName logical
+
+sanitizeQueueName :: Text -> Text
+sanitizeQueueName =
+    ensureLeadingLetter
+        . T.intercalate "_"
+        . filter (not . T.null)
+        . T.splitOn "_"
+        . T.map toLegal
+        . T.toLower
+  where
+    toLegal c
+        | (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' = c
+        | otherwise = '_'
+    ensureLeadingLetter value = case T.uncons value of
+        Nothing -> "q"
+        Just (c, _)
+            | c >= 'a' && c <= 'z' -> value
+            | otherwise -> T.cons 'q' value
+
+hashedBase :: Text -> Text -> Text
+hashedBase logical base = prefix <> "_" <> fnv1a64Hex logical
+  where
+    trimmedPrefix = T.dropWhileEnd (== '_') (T.take 26 base)
+    prefix
+        | T.null trimmedPrefix = "q"
+        | otherwise = trimmedPrefix
+
+fnv1a64Hex :: Text -> Text
+fnv1a64Hex logical = T.pack (replicate (16 - length rendered) '0' <> rendered)
+  where
+    rendered = showHex (T.foldl' step offset logical) ""
+    offset :: Word64
+    offset = 0xcbf29ce484222325
+    prime :: Word64
+    prime = 0x100000001b3
+    step hash character = (hash `xor` fromIntegral (ord character)) * prime
 
 tInt :: Int -> Text
 tInt = T.pack . show

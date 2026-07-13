@@ -201,7 +201,9 @@ test-suite keiro-dsl-conformance-queue-runtime
   other-modules:  Generated.HospitalCapacity.Reservation_work.QueuePolicy
   build-depends:
     , base        >=4.21 && <5
+    , keiro-dsl
     , keiro-pgmq
+    , pgmq-core
     , text        >=2.1
 
 -- EP-5 M5 full-service conformance: a complete pgmq dispatch service — scaffolded
