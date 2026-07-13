@@ -88,6 +88,7 @@ Use this checklist to track granular steps; split partially-done items into "don
 - [x] (2026-07-13 15:13Z) M1: four new render arms added to `renderWarning` in `keiro-core/src/Keiro/EventStream/Validate.hs`; haddock count fixed
 - [x] (2026-07-13 15:13Z) M1: fail-fast posture for the new warnings confirmed and documented (no code change needed — see Decision Log); module haddock updated
 - [x] (2026-07-13 15:13Z) M1: validation specs extended (head-unrecoverable, inversion-ambiguity, unguarded-input-read, state-changing-epsilon all rejected by `mkEventStream` with the expected rendered prefixes); existing fixture-audit spec green
+- [x] (2026-07-13 15:30Z) M1 follow-up: obsolete kiroku and pg-migrate Git pins plus `cabal.project.local` removed; default Cabal resolves `kiroku-store-0.3.0.0`, `kiroku-store-migrations-0.2.0.0`, and pg-migrate 1.0 from Hackage
 - [x] (2026-07-13 15:22Z) M2: `HydrationReplayReason` added; `HydrationReplayFailed` extended to carry it
 - [x] (2026-07-13 15:22Z) M2: `hydrate`/`hydrateFull` collapsed into one seeded fold over keiki's `replayEvents`; duplicated fold deleted
 - [x] (2026-07-13 15:22Z) M2: `commandErrorClass` refined for the four hydration reasons
@@ -130,7 +131,7 @@ implementation, with concise evidence.
   `PAnd (matchInCtor addCtor) (PNot PBot)` instead: the guard is true at runtime but
   intentionally outside the pure proof fragment, so a validated runtime ambiguity
   remains possible and testable.
-- (2026-07-13) The ignored, user-owned `cabal.project.local` still combines local
+- (2026-07-13; resolved below) The ignored, user-owned `cabal.project.local` combined local
   kiroku 0.3 packages with `cabal.project`'s kiroku 0.2.1 source pins, so default
   dependency solving fails before compilation. Validation uses a temporary project
   file that imports only `cabal.project`; through it Cabal downloaded both keiki
@@ -143,6 +144,12 @@ implementation, with concise evidence.
   later decode error, and retains snapshot fallback behavior. Full `keiro-test`
   validation passed 308 examples with zero failures, including the nested compile-time
   API probe through the temporary Cabal wrapper.
+- (2026-07-13) Hackage now carries the complete dependency set previously overlaid
+  locally: `kiroku-store-0.3.0.0`, `kiroku-store-migrations-0.2.0.0`, and every
+  pg-migrate package Keiro consumes at 1.0.0.0. After deleting their seven Git source
+  stanzas and the ignored `cabal.project.local`, ordinary `cabal build all` and
+  `cabal test keiro-test` succeeded; the latter passed all 308 examples, including
+  the nested compile-time API probe without a wrapper.
 
 (Add implementation-time entries here.)
 
@@ -156,6 +163,16 @@ implementation, with concise evidence.
   Rationale: the user explicitly requested the latest Hackage release now that
   0.2.0.0 unblocks EP-95. PVP upper bounds keep later breaking releases from being
   selected silently while allowing compatible 0.2 bugfix releases.
+  Date: 2026-07-13
+
+- Decision: resolve Kiroku and pg-migrate from Hackage and remove
+  `cabal.project.local`; constrain direct `kiroku-store` dependencies to
+  `>=0.3 && <0.4`, retain `kiroku-store-migrations ^>=0.2.0.0`, and retain the
+  pg-migrate 1.0 bounds.
+  Rationale: the user confirmed pg-migrate is published and asked whether the local
+  overlay can go. The Hackage index contains every consumed package, and a clean
+  build plus the complete Keiro test suite prove the published graph is sufficient.
+  PVP upper bounds preserve deliberate upgrade boundaries.
   Date: 2026-07-13
 
 - Decision: use `PAnd (matchInCtor addCtor) (PNot PBot)` for the deliberately
@@ -298,7 +315,10 @@ Hackage: `keiro`, `keiro-core`, `keiro-dsl`, and `jitsurei` constrain `keiki` to
 same range. `cabal.project` deliberately has no keiki source override. The sibling
 repository `/Users/shinzui/Keikaku/bokuno/keiki`, located through `mori registry show
 shinzui/keiki --full`, is the release-tagged source used to inspect APIs; release tag
-`v0.2.0.0` and Hackage's package index both identify version 0.2.0.0.
+`v0.2.0.0` and Hackage's package index both identify version 0.2.0.0. Keiro also
+resolves `kiroku-store >=0.3 && <0.4`, `kiroku-store-migrations ^>=0.2.0.0`, and the
+pg-migrate 1.0 package family from Hackage; `cabal.project` contains no source
+overrides for those projects and the workspace needs no `cabal.project.local`.
 
 ### What a keiki transducer is, and what replay means
 
@@ -972,6 +992,9 @@ changes, and no destructive operations are involved anywhere in this plan.
 No new package names: keiro already depends on keiki, streamly, and hspec. This plan
 raises the direct keiki and keiki-codec-json bounds from 0.1 to `>=0.2 && <0.3` and
 removes their Git source overrides so Cabal resolves release 0.2.0.0 from Hackage.
+The implementation-time dependency cleanup also raises direct `kiroku-store` bounds
+to `>=0.3 && <0.4`, leaves `kiroku-store-migrations` on the compatible 0.2 line and
+pg-migrate on 1.0, and removes their superseded Git overrides and local package file.
 GHC 9.12.4 comes from `nix develop`.
 
 The keiki surface this plan consumes is shipped by `Keiki.Core` in Hackage release
@@ -1059,6 +1082,11 @@ keiki's `StateChangingEpsilon` and `HeadUnrecoverable` checks at the durable bou
 and rebases on this plan's render arms; it does not add a duplicate silent-edge scan.
 
 ---
+
+Revision note (2026-07-13): followed the user's dependency-cleanup directive after
+pg-migrate and the latest Kiroku packages reached Hackage. Removed the Kiroku and
+pg-migrate Git source stanzas plus `cabal.project.local`, tightened direct Kiroku
+bounds, and verified the default `cabal build all` and 308-example `keiro-test` path.
 
 Revision note (2026-07-13): unblocked implementation after keiki MP-16 completed and
 keiki 0.2.0.0 reached Hackage. Replaced the authored Git-pin migration with ordinary

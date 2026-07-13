@@ -430,7 +430,7 @@ test-suite keiro-migrations-legacy-test
     , hasql-pool               >=1.2
     , hspec                    >=2.10
     , keiro-migrations
-    , kiroku-store
+    , kiroku-store             >=0.3      && <0.4
     , kiroku-store-migrations  ^>=0.2.0.0
     , lens                     >=5.2
     , temporary

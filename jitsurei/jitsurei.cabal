@@ -71,7 +71,7 @@ library
     , keiki                 >=0.2  && <0.3
     , keiki-codec-json      >=0.2  && <0.3
     , keiro
-    , kiroku-store          >=0.1
+    , kiroku-store          >=0.3  && <0.4
     , lens                  >=5.2
     , mmzk-typeid           >=0.1
     , text                  >=2.1
@@ -91,7 +91,7 @@ executable jitsurei-demo
     , hasql-transaction  >=1.1
     , jitsurei
     , keiro
-    , kiroku-store
+    , kiroku-store       >=0.3     && <0.4
     , shibuya-core       >=0.8.0.1 && <0.9
     , streamly
     , streamly-core
@@ -127,7 +127,7 @@ test-suite jitsurei-test
     , jitsurei
     , keiro
     , keiro-test-support
-    , kiroku-store
+    , kiroku-store          >=0.3  && <0.4
     , lens                  >=5.2
     , mmzk-typeid           >=0.1
     , text                  >=2.1

@@ -298,11 +298,12 @@ where its truncation guard reports failures through the migrated hydration error
   recognizes the originally authored `PAnd ... PTop` ambiguity fixture, so EP-95 uses
   runtime-true `PAnd ... (PNot PBot)` guards outside the proof fragment to retain a
   validated runtime-ambiguity witness for the command taxonomy tests.
-- The user-owned `cabal.project.local` currently overlays kiroku 0.3.0.0 packages on
-  top of `cabal.project`'s pinned kiroku 0.2.1.0 source packages, so default Cabal
-  dependency resolution fails before compilation. EP-97 validated through a temporary
-  clean project/shim without modifying that file; later child plans should do the same
-  or reconcile the overlay explicitly if their scope updates dependency pins.
+- The user-owned `cabal.project.local` overlaid kiroku 0.3.0.0 on the older pinned
+  source revision and initially broke default dependency solving. During EP-95 the
+  user confirmed pg-migrate and the latest Kiroku releases were on Hackage. Removing
+  both projects' source pins and the local overlay now resolves
+  `kiroku-store-0.3.0.0`, `kiroku-store-migrations-0.2.0.0`, and pg-migrate 1.0 from
+  Hackage; default `cabal build all` and all 308 `keiro-test` examples pass.
 
 
 ## Decision Log
@@ -313,6 +314,13 @@ where its truncation guard reports failures through the migrated hydration error
   Rationale: keiki MP-16 is Complete and the user confirmed its 0.2.0.0 release is
   now on Hackage, satisfying EP-95's external hard dependency and explicitly asking
   keiro to consume the latest published release.
+  Date: 2026-07-13
+
+- Decision: replace the Kiroku and pg-migrate source pins with Hackage releases and
+  remove `cabal.project.local` as part of EP-95's dependency migration.
+  Rationale: every directly consumed package is now published, the user explicitly
+  requested the cleanup, and the default build and full Keiro test suite demonstrate
+  that the local source graph is no longer required.
   Date: 2026-07-13
 
 - Decision: assume keiki MP-16 is implemented before this initiative; make EP-95 the
@@ -370,6 +378,10 @@ where its truncation guard reports failures through the migrated hydration error
 (To be filled during and after implementation.)
 
 ## Revision Notes
+
+- 2026-07-13: Removed the now-obsolete Kiroku and pg-migrate Git pins plus the local
+  Cabal overlay, constrained Kiroku to its published 0.3/0.2 package lines, and proved
+  the ordinary Hackage workflow with `cabal build all` and all 308 Keiro tests.
 
 - 2026-07-13: Unblocked EP-95 after keiki MP-16 completed and keiki 0.2.0.0 reached
   Hackage. Marked EP-95 In Progress, replaced its authored Git-pin step with Hackage

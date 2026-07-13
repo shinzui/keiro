@@ -57,7 +57,7 @@ library
     , deepseq       >=1.5
     , generic-lens  >=2.2
     , keiki         >=0.2  && <0.3
-    , kiroku-store  >=0.2
+    , kiroku-store  >=0.3  && <0.4
     , lens          >=5.2
     , scientific    >=0.3
     , text          >=2.1

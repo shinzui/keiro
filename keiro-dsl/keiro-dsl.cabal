@@ -164,7 +164,7 @@ test-suite keiro-dsl-conformance-intake-full
     , effectful-core
     , hasql-transaction
     , keiro
-    , kiroku-store
+    , kiroku-store       >=0.3  && <0.4
 
 -- EP-4 publisher runtime conformance: the scaffolded Publisher config compiled
 -- against the LIVE Keiro.Outbox.Types (OrderingPolicy / BackoffSchedule).
