@@ -5028,6 +5028,56 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                            ]
 
     describe "Keiro.Workflow snapshots" $ around (withFreshStore fixture) $ do
+        it "does not fail committed workflow steps when snapshot writes fail" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            let opts =
+                    defaultWorkflowRunOptions
+                        & #snapshotPolicy
+                        .~ Every 2
+                        & #metrics
+                        ?~ keiroMetrics
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.sql "ALTER TABLE keiro.keiro_snapshots ADD CONSTRAINT keiro_snapshots_no_writes CHECK (false) NOT VALID"
+            counter <- newIORef (0 :: Int)
+            result <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith opts (WorkflowName "snap-write-failure") (WorkflowId "wf1") (countingSixSteps counter)
+            result `shouldBe` Right (Completed [1, 2, 3, 4, 5, 6])
+            Right journal <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "wf:snap-write-failure-wf1") (StreamVersion 0) 100
+            Vector.length journal `shouldBe` 7
+            Right snapshotVersionDuringFailure <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement "wf:snap-write-failure-wf1" snapshotVersionForStreamStmt
+            snapshotVersionDuringFailure `shouldBe` Nothing
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            lookup "keiro.snapshot.write.failures" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 3)
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.sql "ALTER TABLE keiro.keiro_snapshots DROP CONSTRAINT keiro_snapshots_no_writes"
+            recoveryCounter <- newIORef (0 :: Int)
+            recovery <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith opts (WorkflowName "snap-write-recovery") (WorkflowId "wf2") (countingSixSteps recoveryCounter)
+            recovery `shouldBe` Right (Completed [1, 2, 3, 4, 5, 6])
+            Right snapshotVersionAfterRecovery <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement "wf:snap-write-recovery-wf2" snapshotVersionForStreamStmt
+            snapshotVersionAfterRecovery `shouldBe` Just (StreamVersion 6)
+
         -- Validation (a): a snapshot row appears at the expected version and
         -- decodes to the full accumulated step map.
         it "writes a snapshot of the accumulated step map after Every 2 fires" $ \storeHandle -> do

@@ -124,6 +124,7 @@ import Data.Text qualified as Text
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Dispatch (..), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (EffectHandler, interpret, localSeqUnlift, send)
+import Effectful.Error.Static (Error, tryError)
 import Effectful.Exception (bracket_, catch, throwIO)
 import Keiro.Codec (decodeRecorded, encodeForAppendWithMetadata)
 import Keiro.EventStream (SnapshotPolicy (..), Terminality (..))
@@ -136,6 +137,7 @@ import Keiro.Telemetry (
     recordSnapshotDecodeFailures,
     recordSnapshotReadHits,
     recordSnapshotReadMisses,
+    recordSnapshotWriteFailures,
     recordWorkflowActive,
     recordWorkflowJournalLength,
     recordWorkflowStepExecuted,
@@ -151,9 +153,10 @@ import Keiro.Workflow.Schema (WorkflowStepRow (..), currentGeneration, findUnfin
 import Keiro.Workflow.Snapshot (lookupWorkflowSnapshot, writeWorkflowSnapshot)
 import Keiro.Workflow.Types
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Read (readStreamForwardStream)
 import Kiroku.Store.Transaction (AppendConflict, appendToStreamTx, prepareEventsIO, runTransaction)
-import Kiroku.Store.Types (AppendResult (..), EventData, EventId (..), ExpectedVersion (..), StreamVersion (..))
+import Kiroku.Store.Types (AppendResult (..), EventData, EventId (..), ExpectedVersion (..), StreamId, StreamVersion (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
 import System.IO.Unsafe (unsafePerformIO)
@@ -410,7 +413,7 @@ an unresolved 'awaitStep'.
 Equivalent to @'runWorkflowWith' 'defaultWorkflowRunOptions'@.
 -}
 runWorkflow ::
-    (IOE :> es, Store :> es) =>
+    (IOE :> es, Store :> es, Error StoreError :> es) =>
     WorkflowName ->
     WorkflowId ->
     Eff (Workflow : es) a ->
@@ -435,7 +438,7 @@ directly.
 -}
 runWorkflowWith ::
     forall a es.
-    (IOE :> es, Store :> es) =>
+    (IOE :> es, Store :> es, Error StoreError :> es) =>
     WorkflowRunOptions ->
     WorkflowName ->
     WorkflowId ->
@@ -485,7 +488,7 @@ runWorkflowWith options name wid action = do
                 (Completed <$> runHandler)
                     `catch` (\WorkflowSuspend -> pure Suspended)
                     `catch` (\WorkflowCancelPending -> pure Cancelled)
-                    `catch` (\(WorkflowRotate seedJson) -> rotateGeneration name wid gen seedJson)
+                    `catch` (\(WorkflowRotate seedJson) -> rotateGeneration mMetrics name wid gen seedJson)
             case outcome of
                 Completed result -> do
                     now <- liftIO getCurrentTime
@@ -503,7 +506,7 @@ runWorkflowWith options name wid action = do
                                 finalMap
                                 (appendResult ^. #streamVersion)
                             )
-                            (writeWorkflowSnapshot (appendResult ^. #streamId) (appendResult ^. #streamVersion) finalMap)
+                            (writeWorkflowSnapshotAdvisory mMetrics (appendResult ^. #streamId) (appendResult ^. #streamVersion) finalMap)
                     -- EP-44: record one @keiro.workflow.journal.length@ observation per
                     -- completing run (the 'Completed' path only, never 'Suspended'),
                     -- including a replay that completes again. Length is the recorded
@@ -568,7 +571,7 @@ runWorkflowWith options name wid action = do
                                     newMap
                                     (appendResult ^. #streamVersion)
                                 )
-                                (writeWorkflowSnapshot (appendResult ^. #streamId) (appendResult ^. #streamVersion) newMap)
+                                (writeWorkflowSnapshotAdvisory mMetrics (appendResult ^. #streamId) (appendResult ^. #streamVersion) newMap)
                             decodeStored key encoded
                         JournalAlreadyPresent stored -> do
                             liftIO
@@ -813,19 +816,21 @@ keep.
 -}
 rotateGeneration ::
     forall a es.
-    (IOE :> es, Store :> es) =>
+    (IOE :> es, Store :> es, Error StoreError :> es) =>
+    Maybe KeiroMetrics ->
     WorkflowName ->
     WorkflowId ->
     Int ->
     Aeson.Value ->
     Eff es (WorkflowOutcome a)
-rotateGeneration name wid gen seedJson = do
+rotateGeneration mMetrics name wid gen seedJson = do
     let nextGen = gen + 1
     now <- liftIO getCurrentTime
     -- 1. Seed step on the NEXT generation first (advances the current generation).
     appendJournal name wid nextGen (StepRecorded continueSeedStepName seedJson now) >>= \case
         JournalAppended appendResult ->
-            writeWorkflowSnapshot
+            writeWorkflowSnapshotAdvisory
+                mMetrics
                 (appendResult ^. #streamId)
                 (appendResult ^. #streamVersion)
                 (Map.singleton continueSeedStepName seedJson)
@@ -837,6 +842,23 @@ rotateGeneration name wid gen seedJson = do
         JournalAlreadyPresent{} -> pure ()
         JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
     pure ContinuedAsNew
+
+{- | Snapshot a workflow state after its journal append has committed. The
+snapshot is advisory: a store failure is counted and cannot turn the
+already-durable workflow transition into a failed run.
+-}
+writeWorkflowSnapshotAdvisory ::
+    (IOE :> es, Store :> es, Error StoreError :> es) =>
+    Maybe KeiroMetrics ->
+    StreamId ->
+    StreamVersion ->
+    WorkflowState ->
+    Eff es ()
+writeWorkflowSnapshotAdvisory mMetrics streamId version state = do
+    outcome <- tryError @StoreError (writeWorkflowSnapshot streamId version state)
+    case outcome of
+        Right () -> pure ()
+        Left _ -> recordSnapshotWriteFailures mMetrics 1
 
 instanceStatusForEvent :: WorkflowJournalEvent -> (WorkflowStatus, Maybe Text)
 instanceStatusForEvent = \case

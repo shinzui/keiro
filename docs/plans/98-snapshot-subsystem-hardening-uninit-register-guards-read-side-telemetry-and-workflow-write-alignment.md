@@ -48,9 +48,9 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] M3: `hydrate` in `keiro/src/Keiro/Command.hs` records hit/miss/decode-failure via the new lookup
 - [x] M3: workflow read side (`loadWorkflowSnapshot` callers in `keiro/src/Keiro/Workflow.hs`) records the same counters
 - [x] M3: decode-failure counter asserted on the existing corrupt-snapshot fixtures; hit/miss asserted on the tail-hydration fixture
-- [ ] M4: `Error StoreError :> es` constraint added to `runWorkflow` / `runWorkflowWith` / `rotateGeneration` in `keiro/src/Keiro/Workflow.hs`
-- [ ] M4: all three `writeWorkflowSnapshot` call sites swallow-and-count (`keiro.snapshot.write.failures`)
-- [ ] M4: workflow snapshot write-failure test (constraint-block pattern) asserts the run succeeds with a counted failure
+- [x] M4: `Error StoreError :> es` constraint added to `runWorkflow` / `runWorkflowWith` / `rotateGeneration` in `keiro/src/Keiro/Workflow.hs`
+- [x] M4: all three `writeWorkflowSnapshot` call sites swallow-and-count (`keiro.snapshot.write.failures`)
+- [x] M4: workflow snapshot write-failure test (constraint-block pattern) asserts the run succeeds with a counted failure
 - [ ] M5: `keiro/src/Keiro/Snapshot/Schema.hs` and `keiro/src/Keiro/Snapshot.hs` module docs document the codec-mismatch clobber escape hatch and mixed-deploy caveat
 - [ ] M5: `keiro/src/Keiro/Workflow/Snapshot.hs` "Advisory semantics" section updated for swallowed writes
 - [ ] M5: `docs/guides/snapshots-and-hydration.md` gains the clobber caveat and the keiki EP-78 one-time-replay upgrade note
@@ -90,6 +90,11 @@ implementation. Provide concise evidence.
   four examples after excluding the pre-existing compile-time test whose nested
   `cabal` process still observes the local overlay. The final full-suite run will
   put the same clean project selection in front of nested `cabal` calls as well.
+- (Implementation, 2026-07-13) Propagating the planned `Error StoreError`
+  constraint through `runWorkflowWith` also requires `runChildWorkflow` to state
+  the constraint because it is the typed child-runtime wrapper. The resume worker
+  already carried the error effect, so this was the only library signature beyond
+  the three named in the milestone that needed the mechanical propagation.
 
 
 ## Decision Log
@@ -536,3 +541,5 @@ Revision note (2026-07-13): completed M1. Added the strict initial snapshot enco
 Revision note (2026-07-13): completed M2. Split strict encoding from the store upsert, routed command snapshots through the pre-store encode guard, registered the dedicated encode-failure counter, and added direct plus PostgreSQL-backed regressions. The focused `Keiro.Snapshot` run passed 11 examples, including proof that an event remains committed while the snapshot row is absent and encode failures count separately from write failures.
 
 Revision note (2026-07-13): completed M3. Added reason-preserving aggregate and workflow snapshot lookups while retaining the erasing compatibility wrappers, registered hit/miss/decode-failure counters, and recorded them at the command/workflow option-owning call sites. Focused validation passed 11 aggregate snapshot examples and 6 workflow snapshot examples; corrupt JSON counts decode failures, mismatches/truncation count only misses, and tail hydration counts a hit.
+
+Revision note (2026-07-13): completed M4. Routed step-boundary, terminal, and rotation-seed writes through one `StoreError`-catching advisory helper, propagated the required error constraint through the public workflow and child-runtime signatures, and added a constraint-block integration regression. The focused workflow snapshot run passed 7 examples; the new case commits all seven journal events, writes no snapshot, counts exactly three failed Every-2 boundaries, then proves snapshot recovery after the constraint is removed.

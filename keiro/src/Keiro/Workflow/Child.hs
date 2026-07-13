@@ -84,6 +84,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
+import Effectful.Error.Static (Error)
 import Effectful.Exception (throwIO)
 import Keiro.Prelude
 import Keiro.Workflow (
@@ -115,6 +116,7 @@ import Keiro.Workflow.Child.Schema (
  )
 import Keiro.Workflow.Instance (WorkflowStatus (..), upsertInstanceTx)
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
@@ -296,7 +298,7 @@ is repaired by ensuring the child cancellation marker and parent sentinel, then
 returns 'Cancelled'; a 'ChildFailed' row returns 'Failed'.
 -}
 runChildWorkflow ::
-    (IOE :> es, Store :> es, ToJSON a) =>
+    (IOE :> es, Store :> es, Error StoreError :> es, ToJSON a) =>
     WorkflowRunOptions ->
     WorkflowName ->
     WorkflowId ->
