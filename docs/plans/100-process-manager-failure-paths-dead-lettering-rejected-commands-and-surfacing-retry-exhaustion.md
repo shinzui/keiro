@@ -67,7 +67,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-07-13 17:47Z) M3: adapter `retryPolicy` gap and EP-96 shard-path integration expectations recorded; `cabal build all` and the 323-example Keiro suite pass
 - [x] (2026-07-13 17:57Z) M4: `Keiro.DeadLetter.Replay` (`listSubscriptionDeadLetters`, `replaySubscriptionDeadLetters`) implemented with opaque-cursor-safe source lookup
 - [x] (2026-07-13 17:57Z) M4: replay idempotency tests pass (already-processed replay yields duplicates only; unprocessed replay applies once and deduplicates on rerun); full suite passes 325 examples
-- [ ] M5: cross-stream correlation-ordering footgun documented in `Keiro.ProcessManager` haddock with a worked example
+- [x] (2026-07-13 18:01Z) M5: cross-stream correlation ordering and per-write transaction boundaries documented in `Keiro.ProcessManager`, with router cross-reference and passing Haddock build
 - [ ] Final: `just verify` green; Outcomes & Retrospective written; masterplan Progress updated
 
 
@@ -130,6 +130,12 @@ Findings from plan-authoring research (2026-07-12), each verified against source
   dependency API. Kiroku also has no exported exact event-id/position point
   read, so replay now scans `$all` backward once per batch, advancing only with
   positions returned by Kiroku and matching both stored id and position.
+- The authored M5 sketch said a retry could let another event overtake it even
+  on an unsharded subscription. Kiroku's live `processEvents` loop instead
+  retries one event in place before advancing the batch, so an unsharded worker
+  remains serial. Cross-stream nondeterminism still exists because independent
+  appends race for global order, and sharded members process different source
+  streams concurrently; the delivered Haddock makes that distinction.
 
 
 ## Decision Log
@@ -294,6 +300,14 @@ Record every decision made while working on the plan.
   independent full-log scan for every dead-letter row.
   Date: 2026-07-13
 
+- Decision: distinguish Kiroku's observed global order from a cross-stream
+  domain ordering guarantee in the process-manager and router contracts.
+  Rationale: an unsharded subscription is serial and retries in place, while
+  sharded members may advance independently. In both cases, independent source
+  streams acquire global positions according to append timing, not a business
+  prerequisite, so a correlation join must accept either arrival order.
+  Date: 2026-07-13
+
 
 ## Outcomes & Retrospective
 
@@ -327,6 +341,16 @@ appends once and becomes duplicate on the second pass, while an event processed
 before replay is duplicate immediately and does not grow either stream. Rows
 remain available for later audits or reruns. `cabal build all` and all 325 Keiro
 examples pass.
+
+Milestone 5 closes the coordination contract in prose. The process-manager
+Haddock now gives a concrete payment/shipment join, distinguishes same-stream
+ordering from cross-stream append races and shard concurrency, and requires
+order-insensitive correlation state machines. It also names the actual
+transaction boundaries: manager event plus timers when an event is appended,
+timer-only no-ops separately, and each target dispatch with its projections
+separately. Router documentation cross-references the same rule and states that
+fan-out is idempotent rather than all-target atomic. `cabal haddock keiro`
+renders successfully.
 
 
 ## Context and Orientation
@@ -839,14 +863,19 @@ buckets by a stable hash of the originating stream id — cite
 to the same manager instance have no relative ordering guarantee. Include a worked
 example in approximately this shape: an order saga correlates `payment-ORD1`'s
 `PaymentCaptured` and `shipment-ORD1`'s `ShipmentAllocated` by order id; under
-consumer-group sharding the two streams may land on different members, and even
-unsharded, a retry ladder on one event lets the other overtake it — so the manager's
-transducer must accept both `PaymentCaptured → ShipmentAllocated` and the reverse, e.g.
-by modeling "waiting for the other half" states rather than assuming one arrival order.
-State the rule of thumb: `correlate` may join streams freely, but every join must be
-order-insensitive, and a manager that needs a strict sequence must get it from its *own*
-state machine (ignore-and-timer-retry, or reject into the Milestone 2 dead-letter path),
-never from delivery order.
+consumer-group sharding the two streams may land on different members and a retry on
+one member does not stop the other member from advancing. An unsharded subscription
+processes its observed global order serially, but that order reflects append timing, not
+a domain sequence. The manager's transducer must therefore accept both
+`PaymentCaptured → ShipmentAllocated` and the reverse, e.g. by modeling "waiting for
+the other half" states rather than assuming one arrival order. State the rule of thumb:
+`correlate` may join streams freely, but every join must be order-insensitive, and a
+manager that needs a strict sequence must get it from its *own* state machine
+(ignore-and-timer-retry, or reject into the Milestone 2 dead-letter path), never from
+delivery order. Also state the transaction boundary: manager event + timers commit
+together when an event is appended, timer-only no-ops use their own transaction, and
+each target dispatch plus inline projections commits separately; the reaction is
+idempotent across those boundaries, not globally atomic.
 
 Acceptance: haddock builds; the section is present in `cabal haddock keiro` output (or
 simply verified by reading the source header).
@@ -1040,3 +1069,6 @@ Telemetry names respect Integration Point 3's reservations.
   idempotent handler replay with batched opaque-cursor-safe source resolution;
   fresh and already-processed process-manager replay tests bring the passing
   suite to 325 examples.
+- 2026-07-13: Completed Milestone 5. Documented same-stream versus cross-stream
+  ordering, the payment/shipment correlation example, and manager/router
+  transaction boundaries; the Keiro Haddock build succeeds.

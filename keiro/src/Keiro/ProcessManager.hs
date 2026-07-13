@@ -63,6 +63,39 @@ that path uses Kiroku's default bound. The sharded path is configurable:
 same Kiroku acknowledgement ladder. A shard handler that dispatches commands
 can use 'decideForFailures' and 'isRejectionClass' to classify outcomes, then
 map the decision to its existing @ShardAck@ reply.
+
+=== Correlation, ordering, and transaction boundaries
+
+Events from one originating stream retain that stream's append order. Kiroku
+consumer groups hash the originating stream id to a stable member, so sharding
+does not split one stream across readers. Events from /different/ streams that
+'correlate' to the same manager instance have no business-order guarantee,
+however. Their append transactions race for global positions and, under
+sharding, the streams may be processed concurrently by different members. A
+retry on one member does not stop another member from advancing.
+
+For example, both @payment-ORD1@'s @PaymentCaptured@ and @shipment-ORD1@'s
+@ShipmentAllocated@ may correlate to order @ORD1@. The manager must accept
+@PaymentCaptured@ then @ShipmentAllocated@ /and/ the reverse, normally with
+states that record one fact while waiting for the other. An unsharded Kiroku
+subscription processes its observed global order serially, including retries,
+but that order still reflects append timing rather than a domain sequence.
+
+Rule of thumb: 'correlate' may join streams freely, but every such join must be
+order-insensitive. When a strict sequence is required, enforce it in the
+manager's own state machine — for example with an explicit no-op/waiting state
+and a timer-driven retry, or a modeled rejection handled by the dead-letter
+policy — never by assuming delivery order.
+
+The persistence boundary is also intentionally smaller than one whole saga
+reaction. A manager event and its timers commit together when the manager
+command appends; a timer-only no-op reaction schedules its timers in a separate
+transaction. Each target command and its inline projections then commit in
+their own transaction. A crash or rejected target can therefore leave durable
+manager history without every target write. Deterministic ids make source-event
+replay fill the missing writes without duplicating completed ones; the rejected
+command section above describes the case that is deliberately acknowledged
+instead.
 -}
 module Keiro.ProcessManager (
     -- * Definition

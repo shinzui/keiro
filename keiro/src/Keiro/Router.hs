@@ -18,6 +18,14 @@ the router as a live subscription draining a Shibuya adapter. Its retry and
 source-event dead-letter contract is the same bounded Kiroku contract described
 by "Keiro.ProcessManager": five total deliveries by default, followed by a
 @kiroku.dead_letters@ write and atomic checkpoint advance.
+
+A router's 'key' can join events from different source streams just as a
+process manager's @correlate@ function can. The same ordering rule applies:
+same-stream order is preserved, but different streams have no relative
+business-order guarantee and may run concurrently under sharding. Keep routed
+logic order-insensitive; see "Keiro.ProcessManager" for the worked example.
+Each resolved target command (with its inline projections) commits in its own
+transaction, so fan-out is idempotent rather than all-target atomic.
 -}
 module Keiro.Router (
     -- * Definition
