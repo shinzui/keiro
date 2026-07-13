@@ -69,6 +69,28 @@ identChar = alphaNumChar <|> char '_'
 failAt :: Int -> String -> P a
 failAt offset message = region (setErrorOffset offset) (fail message)
 
+{- | Parse a decimal as an unbounded Integer, then reject values that cannot be
+represented as Int. Parsing L.decimal directly at Int silently wraps.
+-}
+boundedDecimal :: P Int
+boundedDecimal = do
+    offset <- getOffset
+    value <- lexeme (L.decimal :: P Integer)
+    checkedDecimal offset value
+
+checkedDecimal :: Int -> Integer -> P Int
+checkedDecimal offset value
+    | value > fromIntegral (maxBound :: Int) =
+        failAt
+            offset
+            ( "decimal literal "
+                <> show value
+                <> " is out of range (maximum "
+                <> show (maxBound :: Int)
+                <> ")"
+            )
+    | otherwise = pure (fromIntegral value)
+
 {- | Words that may not be used as bare identifiers, because they introduce a
 different construct and would otherwise be swallowed (e.g. @aggregate@ ending
 one node and beginning the next).
@@ -420,7 +442,10 @@ pEvent = do
 that is not @v@ immediately followed by digits.
 -}
 pVersion :: P Int
-pVersion = lexeme (try (char 'v' *> L.decimal <* notFollowedBy identChar))
+pVersion = do
+    offset <- getOffset
+    value <- lexeme (try (char 'v' *> (L.decimal :: P Integer) <* notFollowedBy identChar))
+    checkedDecimal offset value
 
 pWire :: P WireSpec
 pWire = do
@@ -433,7 +458,7 @@ pWire = do
     f <- wireWord
     _ <- symbol "schemaVersion"
     _ <- symbol "="
-    v <- lexeme L.decimal
+    v <- boundedDecimal
     pure WireSpec{wireKind = k, wireFields = f, wireSchemaVersion = v}
 
 pProjection :: P ProjectionSpec
@@ -484,7 +509,7 @@ pContract = do
     nm <- ident
     _ <- symbol "{"
     keyword "schemaVersion"
-    sv <- lexeme L.decimal
+    sv <- boundedDecimal
     keyword "discriminator"
     disc <- ident
     topics <- many pTopic
@@ -584,7 +609,7 @@ pIntake = do
         strict <- (True <$ keyword "strict") <|> (False <$ keyword "lenient")
         keyword "schemaVersion"
         _ <- symbol "=="
-        v <- lexeme L.decimal
+        v <- boundedDecimal
         _ <- symbol "}"
         pure DecodeSpec{decEnvelope = env, decBodyStrict = strict, decBodySchemaVersion = v}
     pEnvelopePolicy = do
@@ -672,7 +697,7 @@ pPublisher = do
     keyword "ordering"
     ord <- ident
     keyword "maxAttempts"
-    ma <- lexeme L.decimal
+    ma <- boundedDecimal
     keyword "backoff"
     bk <- ident
     bw <- pWindow
@@ -713,7 +738,7 @@ pWorkqueue = do
     fields <- braces (many pWqField)
     keyword "retry"
     _ <- symbol "maxRetries" *> symbol "="
-    mr <- lexeme L.decimal
+    mr <- boundedDecimal
     _ <- symbol "delay" *> symbol "="
     dl <- pWindow
     _ <- symbol "dlq" *> symbol "="
@@ -1028,7 +1053,7 @@ pTimerNode = do
     _ <- keyword "decode" *> keyword "unknown-status" *> symbol "=>"
     unk <- ident
     keyword "max-attempts"
-    ma <- lexeme L.decimal
+    ma <- boundedDecimal
     keyword "dead-letter"
     dl <- stringLit
     pure

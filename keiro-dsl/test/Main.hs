@@ -4,7 +4,7 @@ of the canonical Reservation fixture.
 -}
 module Main (main) where
 
-import Control.Monad (filterM)
+import Control.Monad (filterM, forM_)
 import Data.List (sort)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
@@ -105,6 +105,16 @@ main = hspec $ do
         it "keeps a malformed register declaration's equals error" $ do
             err <- parseErrorOf "<malformed-register>" malformedRegisterSpec
             err `shouldSatisfy` T.isInfixOf "expecting '='"
+
+    describe "bounded decimal literals" $ do
+        forM_ decimalOverflowSpecs $ \(site, src) ->
+            it ("rejects overflow at " <> site) $ do
+                err <- parseErrorOf ("<overflow-" <> site <> ">") src
+                err `shouldSatisfy` T.isInfixOf ("decimal literal " <> decimalOverflow <> " is out of range")
+        it "accepts maxBound without changing its value" $ do
+            spec <- parseInlineSpec "<max-bound>" (wireDecimalSpec (T.pack (show (maxBound :: Int))))
+            [wireSchemaVersion wire | NAggregate aggregate <- specNodes spec, Just wire <- [aggWire aggregate]]
+                `shouldBe` [maxBound]
 
     describe "canonical reservation.keiro" $
         it "parses into the expected aggregate shape" $ do
@@ -888,6 +898,107 @@ lineNumberContaining needle = go 1 . T.lines
         lineText : rest
             | needle `T.isInfixOf` lineText -> current
             | otherwise -> go (current + 1) rest
+
+decimalOverflow :: T.Text
+decimalOverflow = "18446744073709551617"
+
+decimalOverflowSpecs :: [(String, T.Text)]
+decimalOverflowSpecs =
+    [ ("event-version", eventVersionDecimalSpec decimalOverflow)
+    , ("wire-schema", wireDecimalSpec decimalOverflow)
+    , ("contract-schema", contractDecimalSpec decimalOverflow)
+    , ("decode-schema", decodeDecimalSpec decimalOverflow)
+    , ("publisher-attempts", publisherDecimalSpec decimalOverflow)
+    , ("workqueue-retries", workqueueDecimalSpec decimalOverflow)
+    , ("timer-attempts", timerDecimalSpec decimalOverflow)
+    ]
+
+eventVersionDecimalSpec :: T.Text -> T.Text
+eventVersionDecimalSpec value =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate Thing"
+        , "  regs"
+        , "  states Open"
+        , ""
+        , "  event Changed v" <> value <> " { }"
+        ]
+
+wireDecimalSpec :: T.Text -> T.Text
+wireDecimalSpec value =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate Thing"
+        , "  regs"
+        , "  states Open"
+        , ""
+        , "  wire kind=ctorName fields=camelCase schemaVersion=" <> value
+        ]
+
+contractDecimalSpec :: T.Text -> T.Text
+contractDecimalSpec value =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "contract Contract {"
+        , "  schemaVersion " <> value
+        , "  discriminator kind"
+        , "}"
+        ]
+
+decodeDecimalSpec :: T.Text -> T.Text
+decodeDecimalSpec value =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "intake Inbox {"
+        , "  contract Contract"
+        , "  topic events"
+        , "  accept Event"
+        , "  dedupe key messageId policy PreferIntegrationMessageId"
+        , "  decode { envelope strict-required lenient-optional body strict schemaVersion == " <> value <> " }"
+        , "  disposition { }"
+        , "}"
+        ]
+
+publisherDecimalSpec :: T.Text -> T.Text
+publisherDecimalSpec value =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "publisher Publisher {"
+        , "  emit Emit"
+        , "  ordering PerKeyHeadOfLine"
+        , "  maxAttempts " <> value
+        , "  backoff constant 2s"
+        , "  outboxId stable from messageId"
+        , "}"
+        ]
+
+workqueueDecimalSpec :: T.Text -> T.Text
+workqueueDecimalSpec value =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "workqueue Queue {"
+        , "  queue logical = \"queue\""
+        , "  derive physical = \"queue\""
+        , "    dlq = \"queue_dlq\""
+        , "    table = \"pgmq.q_queue\""
+        , "  payload Job { }"
+        , "  retry maxRetries = " <> value <> " delay = 5s dlq = on"
+        , "  disposition { }"
+        , "}"
+        ]
+
+timerDecimalSpec :: T.Text -> T.Text
+timerDecimalSpec value =
+    T.replace
+        "max-attempts 5"
+        ("max-attempts " <> value)
+        (renderSpec (Spec "svc" Nothing Nothing [] [] [] [NProcess (processWithLiteral "literal")]))
 
 --------------------------------------------------------------------------------
 -- Generators (bounded; restricted to valid, non-reserved identifiers)
