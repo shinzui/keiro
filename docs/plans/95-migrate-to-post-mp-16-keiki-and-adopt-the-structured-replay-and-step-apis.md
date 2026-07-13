@@ -88,10 +88,10 @@ Use this checklist to track granular steps; split partially-done items into "don
 - [x] (2026-07-13 15:13Z) M1: four new render arms added to `renderWarning` in `keiro-core/src/Keiro/EventStream/Validate.hs`; haddock count fixed
 - [x] (2026-07-13 15:13Z) M1: fail-fast posture for the new warnings confirmed and documented (no code change needed — see Decision Log); module haddock updated
 - [x] (2026-07-13 15:13Z) M1: validation specs extended (head-unrecoverable, inversion-ambiguity, unguarded-input-read, state-changing-epsilon all rejected by `mkEventStream` with the expected rendered prefixes); existing fixture-audit spec green
-- [ ] M2: `HydrationReplayReason` added; `HydrationReplayFailed` extended to carry it
-- [ ] M2: `hydrate`/`hydrateFull` collapsed into one seeded fold over keiki's `replayEvents`; duplicated fold deleted
-- [ ] M2: `commandErrorClass` refined for the four hydration reasons
-- [ ] M2: corrupted-stream tests added (no-inverting-edge, queue-mismatch, truncated-chain, ambiguous-inversion) — the first runtime assertions ever on `HydrationReplayFailed`
+- [x] (2026-07-13 15:22Z) M2: `HydrationReplayReason` added; `HydrationReplayFailed` extended to carry it
+- [x] (2026-07-13 15:22Z) M2: `hydrate`/`hydrateFull` collapsed into one seeded fold over keiki's `replayEvents`; duplicated fold deleted
+- [x] (2026-07-13 15:22Z) M2: `commandErrorClass` refined for the four hydration reasons
+- [x] (2026-07-13 15:22Z) M2: corrupted-stream tests added (no-inverting-edge, queue-mismatch, truncated-chain, ambiguous-inversion) — the first runtime assertions ever on `HydrationReplayFailed`
 - [ ] M3: `evaluateCommand` rewritten over `Keiki.stepEither`; `CommandAmbiguous` constructor added
 - [ ] M3: `commandErrorClass` and `isTransientCommandError` updated for `CommandAmbiguous`; all `CommandError` match sites audited (list in Context)
 - [ ] M3: ambiguity tests added (`CommandAmbiguous [0,1]` end-to-end; `ackForCommandError` halts on it)
@@ -137,6 +137,12 @@ implementation, with concise evidence.
   0.2.0.0 packages from Hackage, `cabal build all` passed, all four focused warning
   specs passed, and the production-stream audit remained clean. The local overlay is
   untouched.
+- (2026-07-13) The shipped `replayEvents` signature and index semantics matched the
+  plan exactly. The replacement fold groups the store stream with Streamly's public
+  `foldMany (Fold.take n Fold.toList)`, replays each decoded prefix before surfacing a
+  later decode error, and retains snapshot fallback behavior. Full `keiro-test`
+  validation passed 308 examples with zero failures, including the nested compile-time
+  API probe through the temporary Cabal wrapper.
 
 (Add implementation-time entries here.)
 

@@ -881,6 +881,50 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 `shouldBe` Right
                     (Left (HydrationDecodeFailed (UnknownEventType (EventType "OtherEvent") [EventType "CounterAdded", EventType "CounterAudited"])))
 
+        it "surfaces a typed no-inverting-edge hydration failure" $ \storeHandle -> do
+            let targetStreamName = StreamName "counter-command-no-inverting-edge"
+                target = stream "counter-command-no-inverting-edge" :: Stream CounterEventStream
+            appendCounterEvents storeHandle targetStreamName [CounterAudited 7]
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions counterEventStream target (Add 1)
+            result
+                `shouldBe` Right
+                    (Left (HydrationReplayFailed (StreamVersion 1) HydrationNoInvertingEdge))
+
+        it "surfaces a typed queue-mismatch hydration failure with the failing version" $ \storeHandle -> do
+            let targetStreamName = StreamName "counter-command-queue-mismatch"
+                target = stream "counter-command-queue-mismatch" :: Stream CounterEventStream
+            appendCounterEvents storeHandle targetStreamName [CounterAdded 5, CounterAudited 6]
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions multiCounterEventStream target (Add 1)
+            result
+                `shouldBe` Right
+                    (Left (HydrationReplayFailed (StreamVersion 2) HydrationQueueMismatch))
+
+        it "surfaces a truncated multi-event chain as HydrationTruncatedChain" $ \storeHandle -> do
+            let targetStreamName = StreamName "counter-command-truncated-chain"
+                target = stream "counter-command-truncated-chain" :: Stream CounterEventStream
+            appendCounterEvents storeHandle targetStreamName [CounterAdded 5]
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions multiCounterEventStream target (Add 1)
+            result
+                `shouldBe` Right
+                    (Left (HydrationReplayFailed (StreamVersion 1) HydrationTruncatedChain))
+
+        it "surfaces ambiguous inversion during hydration" $ \storeHandle -> do
+            let targetStreamName = StreamName "counter-command-ambiguous-inversion"
+                target = stream "counter-command-ambiguous-inversion" :: Stream CounterEventStream
+            appendCounterEvents storeHandle targetStreamName [CounterAdded 3]
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions inversionAmbiguousEventStream target (Add 1)
+            result
+                `shouldBe` Right
+                    (Left (HydrationReplayFailed (StreamVersion 1) HydrationAmbiguousInversion))
+
         it "truncates command span error status descriptions" $ \storeHandle -> do
             (processor, spansRef) <- inMemoryListExporter
             provider <- createTracerProvider [processor] emptyTracerProviderOptions
@@ -8487,6 +8531,15 @@ inversionAmbiguousEventStreamDef :: CounterEventStream
 inversionAmbiguousEventStreamDef =
     counterEventStreamDef & #transducer .~ inversionAmbiguousTransducer
 
+inversionAmbiguousEventStream :: ValidatedCounterEventStream
+inversionAmbiguousEventStream =
+    case mkEventStreamWith
+        Keiki.defaultValidationOptions{Keiki.checkInversionAmbiguity = False}
+        "counter-inversion-ambiguous"
+        inversionAmbiguousEventStreamDef of
+        Right validated -> validated
+        Left warnings -> error ("expected inversion-ambiguity override to validate: " <> show warnings)
+
 inversionAmbiguousTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
 inversionAmbiguousTransducer =
     counterTransducer
@@ -8900,6 +8953,16 @@ appendCounterEventWithId storeHandle streamName eventId event = do
     case outcome of
         Right _ -> pure ()
         Left err -> expectationFailure ("failed to insert concurrent duplicate event: " <> show err)
+
+appendCounterEvents :: Store.KirokuStore -> StreamName -> [CounterEvent] -> IO ()
+appendCounterEvents storeHandle destinationStreamName events = do
+    encoded <- traverse (shouldBeRight . encodeForAppend counterCodec) events
+    outcome <-
+        Store.runStoreIO storeHandle $
+            Store.appendToStream destinationStreamName NoStream encoded
+    case outcome of
+        Right _ -> pure ()
+        Left err -> expectationFailure ("failed to insert counter events: " <> show err)
 
 sampleUuid :: UUID
 sampleUuid =

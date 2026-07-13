@@ -32,6 +32,7 @@ module Keiro.Command (
     -- * Results and errors
     CommandResult (..),
     CommandError (..),
+    HydrationReplayReason (..),
 
     -- * Options
     RunCommandOptions (..),
@@ -128,10 +129,12 @@ data CommandResult target = CommandResult
 data CommandError
     = -- | A stored event could not be decoded while rehydrating the aggregate.
       HydrationDecodeFailed !CodecError
-    | {- | Replay of the stored events through the transducer stalled at this
-      version (the machine rejected an event that was already committed).
+    | {- | Replay of the stored events through the transducer stalled. The
+      version identifies the failing stored event; for
+      'HydrationTruncatedChain' it identifies the last stored event, after
+      which the expected multi-event chain remained incomplete.
       -}
-      HydrationReplayFailed !StreamVersion
+      HydrationReplayFailed !StreamVersion !HydrationReplayReason
     | -- | The transducer rejected the command in the hydrated state.
       CommandRejected
     | -- | An emitted event could not be encoded for append.
@@ -149,6 +152,20 @@ data CommandError
       conflict.
       -}
       ConflictFixpoint !StreamVersion !StoreError
+    deriving stock (Generic, Eq, Show)
+
+{- | Why replay of stored events stalled, projected from keiki's structured
+failure types onto a monomorphic vocabulary suitable for 'CommandError'.
+-}
+data HydrationReplayReason
+    = -- | No edge's first output template could have produced the event.
+      HydrationNoInvertingEdge
+    | -- | More than one edge could have produced the event.
+      HydrationAmbiguousInversion
+    | -- | An event did not match the next expected event in a chain.
+      HydrationQueueMismatch
+    | -- | The stream ended in the middle of a multi-event chain.
+      HydrationTruncatedChain
     deriving stock (Generic, Eq, Show)
 
 {- | Knobs controlling a single command invocation.
@@ -216,13 +233,6 @@ data Hydrated rs s = Hydrated
     }
     deriving stock (Generic)
 
-data Replay rs s co = Replay
-    { replayHydrated :: !(Hydrated rs s)
-    , replayState :: !(Keiki.InFlight s co)
-    , lastObservedStreamVersion :: !StreamVersion
-    }
-    deriving stock (Generic)
-
 data CommandPlan target rs s co
     = CommandNoOp !(CommandResult target)
     | CommandAppend !(Hydrated rs s) ![co] ![EventData]
@@ -239,7 +249,14 @@ hydrate options eventStream targetStream =
     snapshotSeed >>= \case
         Nothing -> hydrateFull options eventStream targetStream
         Just seed -> do
-            replayed <- replayFrom seed
+            replayed <-
+                hydrateSeeded
+                    options
+                    eventStream
+                    targetStream
+                    (seed ^. #state)
+                    (seed ^. #registers)
+                    (seed ^. #streamVersion)
             case replayed of
                 Left _ -> hydrateFull options eventStream targetStream
                 Right hydrated -> pure (Right hydrated)
@@ -259,71 +276,6 @@ hydrate options eventStream targetStream =
                             _ -> pure ()
                         pure Nothing
 
-    replayFrom seed =
-        finishReplay
-            <$> replay
-                Replay
-                    { replayHydrated =
-                        Hydrated
-                            { state = seed ^. #state
-                            , registers = seed ^. #registers
-                            , streamVersion = seed ^. #streamVersion
-                            , globalPosition = Nothing
-                            }
-                    , replayState = Keiki.Settled (seed ^. #state)
-                    , lastObservedStreamVersion = seed ^. #streamVersion
-                    }
-                (seed ^. #streamVersion)
-
-    finishReplay = \case
-        Left err -> Left err
-        Right replayed ->
-            case replayState replayed of
-                Keiki.Settled{} -> Right (replayHydrated replayed)
-                Keiki.InFlight{} -> Left (HydrationReplayFailed (lastObservedStreamVersion replayed))
-
-    replay start cursor =
-        Streamly.fold
-            (Fold.foldlM' applyRecorded (pure (Right start)))
-            (readStreamForwardStream ((eventStream ^. #resolveStreamName) targetStream) cursor (options ^. #pageSize))
-
-    applyRecorded ::
-        Either CommandError (Replay rs s co) ->
-        RecordedEvent ->
-        Eff es (Either CommandError (Replay rs s co))
-    applyRecorded (Left err) _ = pure (Left err)
-    applyRecorded (Right current) recorded =
-        case decodeRecorded (eventStream ^. #eventCodec) recorded of
-            Left err -> pure (Left (HydrationDecodeFailed err))
-            Right event -> pure (applyEvent current recorded event)
-
-    applyEvent current recorded event =
-        case Keiki.applyEventStreaming
-            (eventStream ^. #transducer)
-            (replayState current)
-            (registers (replayHydrated current))
-            event of
-            Nothing -> Left (HydrationReplayFailed (recorded ^. #streamVersion))
-            Just (nextReplayState, nextRegisters) ->
-                Right
-                    current
-                        { replayHydrated = updateHydrated nextReplayState nextRegisters
-                        , replayState = nextReplayState
-                        , lastObservedStreamVersion = recorded ^. #streamVersion
-                        }
-      where
-        updateHydrated nextReplayState nextRegisters =
-            case nextReplayState of
-                Keiki.Settled nextState ->
-                    Hydrated
-                        { state = nextState
-                        , registers = nextRegisters
-                        , streamVersion = recorded ^. #streamVersion
-                        , globalPosition = Just (recorded ^. #globalPosition)
-                        }
-                Keiki.InFlight{} ->
-                    (replayHydrated current){registers = nextRegisters}
-
 hydrateFull ::
     forall phi rs s ci co es.
     (HasCallStack, Store :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
@@ -332,69 +284,136 @@ hydrateFull ::
     Stream (EventStream phi rs s ci co) ->
     Eff es (Either CommandError (Hydrated rs s))
 hydrateFull options eventStream targetStream =
-    finishReplay
-        <$> Streamly.fold
-            (Fold.foldlM' applyRecorded (pure (Right initialReplay)))
-            (readStreamForwardStream ((eventStream ^. #resolveStreamName) targetStream) (StreamVersion 0) (options ^. #pageSize))
-  where
-    initialHydrated =
-        Hydrated
-            { state = eventStream ^. #initialState
-            , registers = eventStream ^. #initialRegisters
-            , streamVersion = StreamVersion 0
-            , globalPosition = Nothing
-            }
+    hydrateSeeded
+        options
+        eventStream
+        targetStream
+        (eventStream ^. #initialState)
+        (eventStream ^. #initialRegisters)
+        (StreamVersion 0)
 
-    initialReplay =
-        Replay
-            { replayHydrated = initialHydrated
-            , replayState = Keiki.Settled (eventStream ^. #initialState)
-            , lastObservedStreamVersion = StreamVersion 0
-            }
+{- | Replay a stored stream from an arbitrary snapshot or initial-state seed.
+
+The store stream is grouped into bounded lists and each decoded prefix is
+handed to keiki's 'Keiki.replayEvents'. Decoding stops at the first bad event in
+a group, but the valid prefix is replayed first so an earlier replay failure
+retains precedence over a later codec failure.
+-}
+hydrateSeeded ::
+    forall phi rs s ci co es.
+    (HasCallStack, Store :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+    RunCommandOptions ->
+    EventStream phi rs s ci co ->
+    Stream (EventStream phi rs s ci co) ->
+    s ->
+    RegFile rs ->
+    StreamVersion ->
+    Eff es (Either CommandError (Hydrated rs s))
+hydrateSeeded options eventStream targetStream seedState seedRegisters seedVersion = do
+    replayed <-
+        Streamly.fold
+            (Fold.foldlM' replayPage (pure (Right initialReplay)))
+            recordedPages
+    pure (finishReplay replayed)
+  where
+    readPageSize = Prelude.max 1 (options ^. #pageSize)
+    groupSize = Prelude.fromIntegral readPageSize
+    recordedPages =
+        Streamly.foldMany
+            (Fold.take groupSize Fold.toList)
+            (readStreamForwardStream resolvedName seedVersion readPageSize)
+    resolvedName = (eventStream ^. #resolveStreamName) targetStream
+    initialReplay = (Keiki.Settled seedState, seedRegisters, Nothing)
+
+    replayPage ::
+        Either CommandError (Keiki.InFlight s co, RegFile rs, Maybe RecordedEvent) ->
+        [RecordedEvent] ->
+        Eff es (Either CommandError (Keiki.InFlight s co, RegFile rs, Maybe RecordedEvent))
+    replayPage (Left err) _ = pure (Left err)
+    replayPage (Right (wrapper, registers, previousRecorded)) page =
+        pure $ case Keiki.replayEvents (eventStream ^. #transducer) (wrapper, registers) decodedEvents of
+            Left replayFailure ->
+                Left (hydrationReplayError previousRecorded decodedRecorded replayFailure)
+            Right (nextWrapper, nextRegisters) ->
+                case pendingDecodeFailure of
+                    Just err -> Left (HydrationDecodeFailed err)
+                    Nothing ->
+                        Right
+                            ( nextWrapper
+                            , nextRegisters
+                            , latestRecorded decodedRecorded previousRecorded
+                            )
+      where
+        (decodedRecorded, decodedEvents, pendingDecodeFailure) = decodePrefix page
+
+    decodePrefix :: [RecordedEvent] -> ([RecordedEvent], [co], Maybe CodecError)
+    decodePrefix = go [] []
+      where
+        go recordedAcc eventAcc = \case
+            [] -> (Prelude.reverse recordedAcc, Prelude.reverse eventAcc, Nothing)
+            recorded : rest ->
+                case decodeRecorded (eventStream ^. #eventCodec) recorded of
+                    Left err ->
+                        (Prelude.reverse recordedAcc, Prelude.reverse eventAcc, Just err)
+                    Right event -> go (recorded : recordedAcc) (event : eventAcc) rest
+
+    hydrationReplayError ::
+        Maybe RecordedEvent ->
+        [RecordedEvent] ->
+        Keiki.ReplayFailure s co ->
+        CommandError
+    hydrationReplayError previousRecorded decodedRecorded replayFailure =
+        HydrationReplayFailed failureVersion (toHydrationReason (Keiki.replayFailureReason replayFailure))
+      where
+        failureVersion =
+            maybe seedVersion (^. #streamVersion) failureRecorded
+        failureRecorded =
+            case Keiki.replayFailureReason replayFailure of
+                Keiki.ReplayLogTruncated{} -> latestRecorded decodedRecorded previousRecorded
+                Keiki.ReplayEventFailed{} ->
+                    case recordedAt (Keiki.replayFailedIndex replayFailure) decodedRecorded of
+                        Just recorded -> Just recorded
+                        Nothing -> latestRecorded decodedRecorded previousRecorded
 
     finishReplay = \case
         Left err -> Left err
-        Right replayed ->
-            case replayState replayed of
-                Keiki.Settled{} -> Right (replayHydrated replayed)
-                Keiki.InFlight{} -> Left (HydrationReplayFailed (lastObservedStreamVersion replayed))
-
-    applyRecorded ::
-        Either CommandError (Replay rs s co) ->
-        RecordedEvent ->
-        Eff es (Either CommandError (Replay rs s co))
-    applyRecorded (Left err) _ = pure (Left err)
-    applyRecorded (Right current) recorded =
-        case decodeRecorded (eventStream ^. #eventCodec) recorded of
-            Left err -> pure (Left (HydrationDecodeFailed err))
-            Right event -> pure (applyEvent current recorded event)
-
-    applyEvent current recorded event =
-        case Keiki.applyEventStreaming
-            (eventStream ^. #transducer)
-            (replayState current)
-            (registers (replayHydrated current))
-            event of
-            Nothing -> Left (HydrationReplayFailed (recorded ^. #streamVersion))
-            Just (nextReplayState, nextRegisters) ->
-                Right
-                    current
-                        { replayHydrated = updateHydrated nextReplayState nextRegisters
-                        , replayState = nextReplayState
-                        , lastObservedStreamVersion = recorded ^. #streamVersion
-                        }
-      where
-        updateHydrated nextReplayState nextRegisters =
-            case nextReplayState of
-                Keiki.Settled nextState ->
-                    Hydrated
-                        { state = nextState
-                        , registers = nextRegisters
-                        , streamVersion = recorded ^. #streamVersion
-                        , globalPosition = Just (recorded ^. #globalPosition)
-                        }
+        Right (wrapper, finalRegisters, lastRecorded) ->
+            case wrapper of
+                Keiki.Settled finalState ->
+                    Right
+                        Hydrated
+                            { state = finalState
+                            , registers = finalRegisters
+                            , streamVersion = maybe seedVersion (^. #streamVersion) lastRecorded
+                            , globalPosition = fmap (^. #globalPosition) lastRecorded
+                            }
                 Keiki.InFlight{} ->
-                    (replayHydrated current){registers = nextRegisters}
+                    Left
+                        ( HydrationReplayFailed
+                            (maybe seedVersion (^. #streamVersion) lastRecorded)
+                            HydrationTruncatedChain
+                        )
+
+    toHydrationReason = \case
+        Keiki.ReplayEventFailed stepFailure -> case stepFailure of
+            Keiki.ReplayNoInvertingEdge{} -> HydrationNoInvertingEdge
+            Keiki.ReplayAmbiguousInversions{} -> HydrationAmbiguousInversion
+            Keiki.ReplayQueueMismatch{} -> HydrationQueueMismatch
+        Keiki.ReplayLogTruncated{} -> HydrationTruncatedChain
+
+    latestRecorded recorded fallback =
+        case lastMaybe recorded of
+            Just latest -> Just latest
+            Nothing -> fallback
+
+    lastMaybe = \case
+        [] -> Nothing
+        first : rest -> Just (Prelude.foldl (\_ current -> current) first rest)
+
+    recordedAt eventIndex recorded =
+        case Prelude.drop eventIndex recorded of
+            found : _ -> Just found
+            [] -> Nothing
 
 {- | Hydrate the target stream, transduce the command, and append any emitted
 events. Retries optimistic-concurrency conflicts up to 'retryLimit'. This
@@ -589,7 +608,10 @@ recordCommandOutcome (Just sp) eventsOf attemptNo result = do
 commandErrorClass :: CommandError -> Text
 commandErrorClass = \case
     HydrationDecodeFailed{} -> "hydration_decode_failed"
-    HydrationReplayFailed{} -> "hydration_replay_failed"
+    HydrationReplayFailed _ HydrationNoInvertingEdge -> "hydration_replay_no_inverting_edge"
+    HydrationReplayFailed _ HydrationAmbiguousInversion -> "hydration_replay_ambiguous_inversion"
+    HydrationReplayFailed _ HydrationQueueMismatch -> "hydration_replay_queue_mismatch"
+    HydrationReplayFailed _ HydrationTruncatedChain -> "hydration_replay_truncated_chain"
     CommandRejected -> "command_rejected"
     EncodeFailed{} -> "encode_failed"
     StoreFailed{} -> "store_failed"
