@@ -90,6 +90,12 @@ module Keiro.Dsl.Grammar (
     WorkqueueNode (..),
     PgmqDispatchNode (..),
 
+    -- * Read-model nodes (EP-107)
+    RmColumn (..),
+    RmFeed (..),
+    RmScope (..),
+    ReadModelNode (..),
+
     -- * The workflow/operation nodes (EP-6)
     WfBodyItem (..),
     WorkflowNode (..),
@@ -346,7 +352,7 @@ projection and its event→status 'Mapping' (hole-kind 3).
 -}
 data ProjectionSpec = ProjectionSpec
     { projTable :: !Name
-    , projConsistency :: !Consistency
+    , projConsistency :: !(Maybe Consistency)
     , projKey :: !Name
     , projStatusMap :: !(Maybe Mapping)
     , projLoc :: !Loc
@@ -747,6 +753,42 @@ data PgmqDispatchNode = PgmqDispatchNode
     }
     deriving stock (Eq, Show, Generic)
 
+-- EP-107: first-class read-model declarations.
+
+-- | One declared SQL column. The validator owns the closed type vocabulary.
+data RmColumn = RmColumn
+    { rmcName :: !Text
+    , rmcType :: !Text
+    , rmcRequired :: !Bool
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | Whether the model is fed in a command transaction or by a subscription.
+data RmFeed = RmInline | RmSubscription
+    deriving stock (Eq, Show, Generic)
+
+-- | Which event-log head a strong read waits for.
+data RmScope = RmEntireLog | RmCategory !Text
+    deriving stock (Eq, Show, Generic)
+
+{- | A registered, versioned SQL read model. Columns define its shape identity;
+the runtime table remains owned by codd migrations rather than the DSL.
+-}
+data ReadModelNode = ReadModelNode
+    { rmName :: !Name
+    , rmTable :: !Text
+    , rmSchema :: !Text
+    , rmColumns :: ![RmColumn]
+    , rmVersion :: !Int
+    , rmShape :: !Text
+    , rmConsistency :: !Consistency
+    , rmScope :: !(Maybe RmScope)
+    , rmFeed :: !RmFeed
+    , rmSubscription :: !(Maybe Text)
+    , rmLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
 -- EP-6: the durable @workflow@ + @operation@ nodes.
 
 {- | One ordered item of a workflow body. Replay matches on the label, not the
@@ -801,7 +843,8 @@ data OperationNode = OperationNode
 
 {- | A top-level node. EP-1 defines 'NAggregate'; EP-3 adds 'NProcess'; EP-4 adds
 'NContract'\/'NIntake'\/'NEmit'\/'NPublisher'; EP-5 adds 'NWorkqueue'\/
-'NPgmqDispatch'; EP-6 adds 'NWorkflow'\/'NOperation'.
+'NPgmqDispatch'; EP-6 adds 'NWorkflow'\/'NOperation'; EP-107 adds
+'NReadModel'.
 -}
 data Node
     = NAggregate Aggregate
@@ -812,6 +855,7 @@ data Node
     | NPublisher PublisherNode
     | NWorkqueue WorkqueueNode
     | NPgmqDispatch PgmqDispatchNode
+    | NReadModel ReadModelNode
     | NWorkflow WorkflowNode
     | NOperation OperationNode
     deriving stock (Eq, Show, Generic)

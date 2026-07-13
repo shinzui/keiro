@@ -68,6 +68,7 @@ scaffoldModules ctx spec =
             NIntake intake -> scaffoldIntake ctx intake
             NPublisher publisher -> scaffoldPublisher ctx publisher
             NWorkqueue workqueue -> scaffoldWorkqueue ctx workqueue
+            NReadModel _ -> []
             NWorkflow workflow -> harnessWorkflow ctx workflow
             NEmit _ -> []
             NPgmqDispatch _ -> []

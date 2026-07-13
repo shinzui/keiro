@@ -78,6 +78,7 @@ data NodeFamily
     | FamPublisher
     | FamWorkqueue
     | FamPgmqDispatch
+    | FamReadModel
     | FamWorkflow
     | FamOperation
     deriving stock (Eq, Ord, Show, Enum, Bounded)
@@ -92,6 +93,7 @@ familyOf (NEmit _) = FamEmit
 familyOf (NPublisher _) = FamPublisher
 familyOf (NWorkqueue _) = FamWorkqueue
 familyOf (NPgmqDispatch _) = FamPgmqDispatch
+familyOf (NReadModel _) = FamReadModel
 familyOf (NWorkflow _) = FamWorkflow
 familyOf (NOperation _) = FamOperation
 
@@ -145,6 +147,7 @@ familyRegistry =
     , (FamPublisher, DiffFamily publisherDiff)
     , (FamWorkqueue, DiffFamily workqueueDiff)
     , (FamPgmqDispatch, DiffFamily pgmqDispatchDiff)
+    , (FamReadModel, OutOfDiffScope "read-model evolution is implemented by EP-107 Milestone 5 after the node grammar lands")
     , (FamWorkflow, DiffFamily workflowDiff)
     , (FamOperation, OutOfDiffScope "operations own no persisted decode or identity surface; their references and workflow signal/await pairing are single-spec validation concerns")
     ]
@@ -358,7 +361,7 @@ projectionDiff oldAggregate newAggregate
             "projection table, consistency, key, or status mapping changed; coordinate the read-model migration"
         ]
 
-projectionSurface :: Maybe ProjectionSpec -> Maybe (Name, Consistency, Name, Maybe Mapping)
+projectionSurface :: Maybe ProjectionSpec -> Maybe (Name, Maybe Consistency, Name, Maybe Mapping)
 projectionSurface projection = do
     value <- projection
     pure (projTable value, projConsistency value, projKey value, projStatusMap value)

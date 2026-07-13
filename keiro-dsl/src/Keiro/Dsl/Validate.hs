@@ -214,6 +214,7 @@ validateNames spec =
                 ++ constructorName "workqueue payload name" (wqPayloadName workqueue) (wqLoc workqueue)
                 ++ concatMap (\field -> fieldNameRule "workqueue payload field" (wqfName field) (wqLoc workqueue)) (wqPayload workqueue)
         NPgmqDispatch dispatch -> pascalizedNodeName "dispatch" (pdName dispatch) (pdLoc dispatch)
+        NReadModel readModel -> pascalizedNodeName "readmodel" (rmName readModel) (rmLoc readModel)
         NWorkflow workflow -> constructorName "workflow name" (wfId workflow) (wfLoc workflow)
         NOperation _ -> []
 
@@ -388,6 +389,7 @@ nodeIdentity (NEmit e) = ("emit", emName e, emLoc e)
 nodeIdentity (NPublisher p) = ("publisher", pubName p, pubLoc p)
 nodeIdentity (NWorkqueue w) = ("workqueue", wqName w, wqLoc w)
 nodeIdentity (NPgmqDispatch d) = ("dispatch", pdName d, pdLoc d)
+nodeIdentity (NReadModel r) = ("readmodel", rmName r, rmLoc r)
 nodeIdentity (NWorkflow w) = ("workflow", wfId w, wfLoc w)
 nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
 
@@ -400,6 +402,7 @@ validateNode spec (NEmit e) = validateEmit spec e
 validateNode spec (NPublisher p) = validatePublisher spec p
 validateNode _spec (NWorkqueue w) = validateWorkqueue w
 validateNode spec (NPgmqDispatch d) = validatePgmqDispatch spec d
+validateNode _spec (NReadModel _) = []
 validateNode _spec (NWorkflow w) = validateWorkflow w
 validateNode spec (NOperation o) = validateOperation spec o
 

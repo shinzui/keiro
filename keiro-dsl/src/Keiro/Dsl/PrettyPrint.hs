@@ -71,6 +71,7 @@ docNode (NEmit e) = docEmit e
 docNode (NPublisher p) = docPublisher p
 docNode (NWorkqueue w) = docWorkqueue w
 docNode (NPgmqDispatch d) = docPgmqDispatch d
+docNode (NReadModel r) = docReadModel r
 docNode (NWorkflow w) = docWorkflow w
 docNode (NOperation o) = docOperation o
 
@@ -157,6 +158,34 @@ docPgmqDispatch d =
         , indent 2 ("enqueue to =" <+> pretty (pdEnqueueTo d))
         , "}"
         ]
+
+docReadModel :: ReadModelNode -> Doc ann
+docReadModel readModel =
+    vsep $
+        [ "readmodel" <+> pretty (rmName readModel) <+> "{"
+        , indent 2 ("table =" <+> dquoted (rmTable readModel))
+        , indent 2 ("schema =" <+> dquoted (rmSchema readModel))
+        , indent 2 "columns {"
+        ]
+            ++ map (indent 4 . docColumn) (rmColumns readModel)
+            ++ [ indent 2 "}"
+               , indent 2 ("version =" <+> pretty (rmVersion readModel))
+               , indent 2 ("shape =" <+> dquoted (rmShape readModel))
+               , indent 2 ("consistency =" <+> docConsistency (rmConsistency readModel))
+               ]
+            ++ maybe [] (pure . indent 2 . ("scope =" <+>) . docScope) (rmScope readModel)
+            ++ [indent 2 ("feed =" <+> docFeed (rmFeed readModel))]
+            ++ maybe [] (pure . indent 2 . ("subscription =" <+>) . dquoted) (rmSubscription readModel)
+            ++ ["}"]
+  where
+    docColumn columnDecl =
+        pretty (rmcName columnDecl)
+            <+> pretty (rmcType columnDecl)
+            <> if rmcRequired columnDecl then " required" else mempty
+    docScope RmEntireLog = "entire-log"
+    docScope (RmCategory categoryName) = "category" <+> dquoted categoryName
+    docFeed RmInline = "inline"
+    docFeed RmSubscription = "subscription"
 
 docEmit :: EmitNode -> Doc ann
 docEmit e =
@@ -465,10 +494,10 @@ docWire w =
 docProjection :: ProjectionSpec -> Doc ann
 docProjection p =
     vsep $
-        [ "projection"
-            <+> pretty (projTable p)
-            <+> ("consistency=" <> docConsistency (projConsistency p))
-            <+> ("key=" <> pretty (projKey p))
+        [ hsep $
+            ["projection", pretty (projTable p)]
+                ++ maybe [] (pure . ("consistency=" <>) . docConsistency) (projConsistency p)
+                ++ ["key=" <> pretty (projKey p)]
         ]
             ++ maybe [] (\m -> [indent 2 (statusMapHead m <+> braced (map pair (mapPairs m)))]) (projStatusMap p)
   where

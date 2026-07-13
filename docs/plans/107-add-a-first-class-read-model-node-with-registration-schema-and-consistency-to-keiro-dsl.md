@@ -62,15 +62,15 @@ This section must always reflect the actual current state of the work.
 
 Milestone 1 — Grammar, parser, pretty-printer, round-trip:
 
-- [ ] `ReadModelNode` (+ `RmColumn`, `RmFeed`, `RmScope`) and the `NReadModel` constructor
+- [x] (2026-07-13 22:30Z) `ReadModelNode` (+ `RmColumn`, `RmFeed`, `RmScope`) and the `NReadModel` constructor
       added to `keiro-dsl/src/Keiro/Dsl/Grammar.hs`; `ProjectionSpec.projConsistency`
       loosened to `Maybe Consistency`.
-- [ ] `pReadModel` block parser wired into `pTopItem` in `keiro-dsl/src/Keiro/Dsl/Parser.hs`;
+- [x] (2026-07-13 22:30Z) `pReadModel` block parser wired into `pTopItem` in `keiro-dsl/src/Keiro/Dsl/Parser.hs`;
       new reserved words added; `consistency=` on the aggregate projection clause made
       optional.
-- [ ] Pretty-printer arm in `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`; parse→print→parse
+- [x] (2026-07-13 22:30Z) Pretty-printer arm in `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`; parse→print→parse
       round-trips.
-- [ ] `genReadModel` arm added to the round-trip property generator in
+- [x] (2026-07-13 22:30Z) `genReadModel` arm added to the round-trip property generator in
       `keiro-dsl/test/Main.hs`; unit tests parse `test/fixtures/readmodel.keiro` into the
       expected AST.
 
@@ -233,7 +233,10 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Milestone 1 is complete. The grammar, parser, printer, all-family generator, and canonical
+fixture now carry first-class read-model nodes, while aggregate projection consistency is
+optional. `cabal test keiro-dsl-test` passed 154 examples, including 100 generated
+round-trips with 14% read-model coverage.
 
 
 ## Context and Orientation

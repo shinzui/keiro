@@ -171,6 +171,14 @@ reservedWords =
     , "await"
     , "sleep"
     , "child"
+    , -- EP-107 read-model structural words. Clause labels such as table and
+      -- schema remain usable identifiers because their block parser consumes
+      -- them with symbol-style matching.
+      "readmodel"
+    , "columns"
+    , "feed"
+    , "scope"
+    , "shape"
     ]
 
 {- | A CamelCase / snake_case identifier (no dashes): type names, register
@@ -266,6 +274,7 @@ pTopItem =
         , TINode . NPublisher <$> pPublisher
         , TINode . NWorkqueue <$> pWorkqueue
         , TINode . NPgmqDispatch <$> pPgmqDispatch
+        , TINode . NReadModel <$> pReadModel
         , TINode . NWorkflow <$> pWorkflow
         , TINode . NOperation <$> pOperation
         , TINode . NAggregate <$> pAggregate
@@ -481,9 +490,7 @@ pProjection = do
     loc <- getLoc
     keyword "projection"
     table <- ident
-    _ <- symbol "consistency"
-    _ <- symbol "="
-    cons <- pConsistency
+    cons <- optional (symbol "consistency" *> symbol "=" *> pConsistency)
     _ <- symbol "key"
     _ <- symbol "="
     k <- ident
@@ -792,6 +799,57 @@ pWorkqueue = do
         _ <- symbol "->"
         act <- choice [IAckOk <$ keyword "ackOk", IRetry <$> (keyword "retry" *> pWindow), IDeadLetter <$> (keyword "deadLetter" *> optional stringLit)]
         pure WqDispRow{wqdOutcome = o, wqdAction = act, wqdLoc = loc}
+
+pReadModel :: P ReadModelNode
+pReadModel = do
+    loc <- getLoc
+    keyword "readmodel"
+    name <- ident
+    _ <- symbol "{"
+    _ <- symbol "table" *> symbol "="
+    table <- stringLit
+    _ <- symbol "schema" *> symbol "="
+    schema <- stringLit
+    _ <- symbol "columns"
+    columns <- braces (many pColumn)
+    _ <- symbol "version" *> symbol "="
+    version <- boundedDecimal
+    _ <- symbol "shape" *> symbol "="
+    shape <- stringLit
+    _ <- symbol "consistency" *> symbol "="
+    consistency <- pConsistency
+    scope <- optional (symbol "scope" *> symbol "=" *> pScope)
+    _ <- symbol "feed" *> symbol "="
+    feed <- pFeed
+    subscription <- optional (symbol "subscription" *> symbol "=" *> stringLit)
+    _ <- symbol "}"
+    pure
+        ReadModelNode
+            { rmName = name
+            , rmTable = table
+            , rmSchema = schema
+            , rmColumns = columns
+            , rmVersion = version
+            , rmShape = shape
+            , rmConsistency = consistency
+            , rmScope = scope
+            , rmFeed = feed
+            , rmSubscription = subscription
+            , rmLoc = loc
+            }
+  where
+    pColumn =
+        RmColumn
+            <$> wireWord
+            <*> ident
+            <*> option False (True <$ keyword "required")
+    pConsistency = choice [Strong <$ keyword "Strong", Eventual <$ keyword "Eventual"]
+    pScope =
+        choice
+            [ RmEntireLog <$ keyword "entire-log"
+            , RmCategory <$> (keyword "category" *> stringLit)
+            ]
+    pFeed = choice [RmInline <$ keyword "inline", RmSubscription <$ keyword "subscription"]
 
 pPgmqDispatch :: P PgmqDispatchNode
 pPgmqDispatch = do

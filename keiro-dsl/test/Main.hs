@@ -397,6 +397,32 @@ main = hspec $ do
             field <- errorCodesOf "test/fixtures/dispatch-dedup-bad-field.keiro"
             field `shouldContain` [DispatchDedupFieldUnresolved]
 
+    describe "readmodel (EP-107)" $ do
+        it "parses and round-trips first-class read models" $ do
+            spec <- specOf "test/fixtures/readmodel.keiro"
+            case [readModel | NReadModel readModel <- specNodes spec] of
+                [subscriptionModel, inlineModel] -> do
+                    rmName subscriptionModel `shouldBe` "transfer_decisions"
+                    rmColumns subscriptionModel
+                        `shouldBe` [ RmColumn "reservation_id" "text" True
+                                   , RmColumn "hospital_id" "text" True
+                                   , RmColumn "status" "text" True
+                                   , RmColumn "decided_at" "timestamptz" False
+                                   ]
+                    rmScope subscriptionModel `shouldBe` Just (RmCategory "reservation")
+                    rmFeed subscriptionModel `shouldBe` RmSubscription
+                    rmSubscription subscriptionModel `shouldBe` Just "hospital-capacity-transfer-decisions-sub"
+                    rmName inlineModel `shouldBe` "subscriptions"
+                    rmScope inlineModel `shouldBe` Nothing
+                    rmFeed inlineModel `shouldBe` RmInline
+                nodes -> expectationFailure ("expected two readmodel nodes, got " <> show (length nodes))
+            parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+        it "accepts an aggregate projection without a consistency clause" $ do
+            spec <- parseInlineSpec "<projection-without-consistency>" projectionWithoutConsistencySpec
+            case [projection | NAggregate aggregate <- specNodes spec, Just projection <- [aggProjection aggregate]] of
+                [projection] -> projConsistency projection `shouldBe` Nothing
+                projections -> expectationFailure ("expected one projection, got " <> show (length projections))
+
     describe "workflow/operation (EP-6)" $ do
         it "round-trips the workflow spec through parse . pretty" $ do
             input <- readTestText "test/fixtures/workflow.keiro"
@@ -1197,6 +1223,18 @@ duplicateProjectionSpec =
         , "  projection second consistency=Eventual key=thingId"
         ]
 
+projectionWithoutConsistencySpec :: T.Text
+projectionWithoutConsistencySpec =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate Thing"
+        , "  regs"
+        , "  states Open"
+        , ""
+        , "  projection things key=thingId"
+        ]
+
 malformedRegisterSpec :: T.Text
 malformedRegisterSpec =
     T.unlines
@@ -1605,7 +1643,7 @@ genProjection :: Gen ProjectionSpec
 genProjection =
     ProjectionSpec
         <$> genName
-        <*> elements [Strong, Eventual]
+        <*> genMaybe (elements [Strong, Eventual])
         <*> genName
         <*> genMaybe (Mapping <$> smallList ((,) <$> genName <*> genWire) <*> arbitrary)
         <*> pure noLoc
@@ -1799,6 +1837,21 @@ genWorkqueue =
         <*> smallList genWqDispRow
         <*> pure noLoc
 
+genReadModel :: Gen ReadModelNode
+genReadModel =
+    ReadModelNode
+        <$> genName
+        <*> genAdversarialText
+        <*> genAdversarialText
+        <*> smallList (RmColumn <$> genWireWord <*> genName <*> arbitrary)
+        <*> choose (0, 5)
+        <*> genAdversarialText
+        <*> elements [Strong, Eventual]
+        <*> genMaybe (oneof [pure RmEntireLog, RmCategory <$> genAdversarialText])
+        <*> elements [RmInline, RmSubscription]
+        <*> genMaybe genAdversarialText
+        <*> pure noLoc
+
 genPgmqDispatch :: Gen PgmqDispatchNode
 genPgmqDispatch =
     PgmqDispatchNode
@@ -1849,7 +1902,7 @@ genOperation :: Gen OperationNode
 genOperation = OperationNode <$> genName <*> genOperationShape <*> pure noLoc
 
 allNodeTags :: [String]
-allNodeTags = ["aggregate", "process", "contract", "intake", "emit", "publisher", "workqueue", "pgmq-dispatch", "workflow", "operation"]
+allNodeTags = ["aggregate", "process", "contract", "intake", "emit", "publisher", "workqueue", "pgmq-dispatch", "readmodel", "workflow", "operation"]
 
 nodeTag :: Node -> String
 nodeTag = \case
@@ -1861,6 +1914,7 @@ nodeTag = \case
     NPublisher _ -> "publisher"
     NWorkqueue _ -> "workqueue"
     NPgmqDispatch _ -> "pgmq-dispatch"
+    NReadModel _ -> "readmodel"
     NWorkflow _ -> "workflow"
     NOperation _ -> "operation"
 
@@ -1900,6 +1954,7 @@ genSpec =
             , NPublisher <$> genPublisher
             , NWorkqueue <$> genWorkqueue
             , NPgmqDispatch <$> genPgmqDispatch
+            , NReadModel <$> genReadModel
             , NWorkflow <$> genWorkflow
             , NOperation <$> genOperation
             ]
