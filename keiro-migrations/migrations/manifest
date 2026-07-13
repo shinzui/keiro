@@ -15,3 +15,4 @@
 0015-keiro-outbox-claim-order-index.sql
 0016-keiro-inbox-drop-received-idx.sql
 0017-schema-management-comment.sql
+0018.sql

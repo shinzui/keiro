@@ -44,6 +44,8 @@ library
     Keiro
     Keiro.Command
     Keiro.Connection
+    Keiro.DeadLetter
+    Keiro.DeadLetter.Schema
     Keiro.Inbox
     Keiro.Inbox.Kafka
     Keiro.Inbox.Schema

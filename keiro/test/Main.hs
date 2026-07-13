@@ -54,6 +54,12 @@ import Keiki.Generics (emptyRegFile)
 import Keiro
 import Keiro qualified as KeiroRoot
 import Keiro.Connection (ensureProjectionSchema, qualifyTable, withProjectionSchema)
+import Keiro.DeadLetter (
+    DispatchDeadLetter (..),
+    DispatcherKind (..),
+    listDispatchDeadLetters,
+    recordDispatchDeadLetter,
+ )
 import Keiro.EventStream (Terminality (..))
 import Keiro.EventStream.Validate (
     EventStreamWarning (..),
@@ -424,6 +430,40 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let cat = Stream.categoryUnsafe "orders" :: Stream.StreamCategory OrderStream
             evaluate (Stream.streamName (Stream.entityStream cat "")) `shouldThrow` anyErrorCall
             evaluate (Stream.streamName (Stream.entityStream cat "   ")) `shouldThrow` anyErrorCall
+
+    describe "Keiro.DeadLetter" $ around (withFreshStore fixture) $ do
+        it "records a dispatch dead letter idempotently" $ \storeHandle -> do
+            let deadLetter =
+                    DispatchDeadLetter
+                        { dispatcherKind = DispatcherProcessManager
+                        , dispatcherName = "orders-pm"
+                        , correlationId = "order-42"
+                        , sourceEventId = EventId sampleUuid
+                        , sourceGlobalPosition = GlobalPosition 17
+                        , emitIndex = 0
+                        , targetStreamName = StreamName "orders-42"
+                        , errorClass = "command_rejected"
+                        , errorDetail = Text.replicate 1100 "x"
+                        , attemptCount = 2
+                        }
+            Right rows <-
+                Store.runStoreIO storeHandle $ do
+                    recordDispatchDeadLetter deadLetter
+                    recordDispatchDeadLetter deadLetter
+                    listDispatchDeadLetters "orders-pm"
+            case rows of
+                [row] -> do
+                    row ^. #dispatcherKind `shouldBe` DispatcherProcessManager
+                    row ^. #dispatcherName `shouldBe` "orders-pm"
+                    row ^. #correlationId `shouldBe` "order-42"
+                    row ^. #sourceEventId `shouldBe` EventId sampleUuid
+                    row ^. #sourceGlobalPosition `shouldBe` GlobalPosition 17
+                    row ^. #emitIndex `shouldBe` 0
+                    row ^. #targetStreamName `shouldBe` StreamName "orders-42"
+                    row ^. #errorClass `shouldBe` "command_rejected"
+                    Text.length (row ^. #errorDetail) `shouldBe` 1024
+                    row ^. #attemptCount `shouldBe` 2
+                other -> expectationFailure ("expected one idempotent dead-letter row, got " <> show other)
 
     describe "Keiro.Codec" $ do
         it "encodes current events with type tags and schema-version metadata" $ do

@@ -4,6 +4,7 @@ slug: process-manager-failure-paths-dead-lettering-rejected-commands-and-surfaci
 title: "Process-manager failure paths: dead-lettering rejected commands and surfacing retry exhaustion"
 kind: exec-plan
 created_at: 2026-07-12T05:07:53Z
+intention: intention_01kxcz37ave9t8d6amvvxnemr6
 master_plan: "docs/masterplans/14-harden-the-keiro-command-coordination-and-snapshot-paths-surfaced-by-the-2026-07-keiki-path-review.md"
 ---
 
@@ -49,9 +50,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `keiro_dead_letters` migration authored via `keiro-migrate -- new`, manifest checked, `keiro-migrations-test` green
-- [ ] M1: `Keiro.DeadLetter.Schema` statements (insert idempotent, list) written and unit-tested
-- [ ] M1: `Keiro.DeadLetter` typed API (`DispatchDeadLetter`, `recordDispatchDeadLetter`, `listDispatchDeadLetters`) exported
+- [x] (2026-07-13 17:15Z) Baseline: `cabal build all` and `cabal test keiro-test` passed (316 examples, 0 failures)
+- [x] (2026-07-13 17:22Z) M1: `keiro_dead_letters` migration authored via `keiro-migrate -- new`, manifest checked, `keiro-migrations-test` green (10 examples, 0 failures)
+- [x] (2026-07-13 17:22Z) M1: `Keiro.DeadLetter.Schema` statements (insert idempotent, list) written and unit-tested
+- [x] (2026-07-13 17:22Z) M1: `Keiro.DeadLetter` typed API (`DispatchDeadLetter`, `recordDispatchDeadLetter`, `listDispatchDeadLetters`) exported; `keiro-test` green (317 examples, 0 failures)
 - [ ] M2: `PMCommandFailed` carries the target stream name; call sites and existing tests updated
 - [ ] M2: `RejectedCommandPolicy` added to `WorkerOptions` (default `RejectedHalt`); shared `decideForFailures` classification extracted
 - [ ] M2: process-manager worker wired: dead-letter write + `AckOk` under `RejectedDeadLetter`; manager-state rejection covered (emit index -1)
@@ -102,7 +104,17 @@ Findings from plan-authoring research (2026-07-12), each verified against source
   unhydratable saga. Documentation plus the dead-letter record is the only honest v1
   (Decision Log).
 
-(Implementation discoveries go here as work proceeds.)
+- The migration manifest already contained the schema-management canary as
+  migration 0017, so the authoring CLI allocated `0018.sql` rather than the
+  plan's authoring-time 0017 estimate. The native migration suite correctly
+  required its manifest/count and post-Codd-import pending-migration assertions
+  to advance from 17/25 to 18/26. Evidence: `keiro-migrations-test` passes all
+  10 examples with the new migration applied and verified.
+- EP-96 is already complete in the live tree. `ShardedWorkerOptions` contains
+  `retryPolicy`, `runShardedSubscriptionGroupAck` consumes a per-event
+  `ShardDelivery`, and `ShardAckRetry` / `ShardAckDeadLetter` map to Kiroku's
+  bounded `SubscriptionResult`. EP-100 therefore consumes this delivered
+  surface; it does not need the plan's old conditional integration fallback.
 
 
 ## Decision Log
@@ -231,6 +243,14 @@ Record every decision made while working on the plan.
   (`keiro.snapshot.apply.divergence`).
   Date: 2026-07-12
 
+- Decision: implement the shard-path integration against EP-96's delivered
+  `ShardDelivery` / `ShardAck` / `runShardedSubscriptionGroupAck` surface and
+  retain its existing `ShardedWorkerOptions.retryPolicy` field unchanged.
+  Rationale: those artifacts are present and covered by the live 316-example
+  baseline, so adding an opportunistic retry-policy field or an alternate ack
+  abstraction would duplicate completed work.
+  Date: 2026-07-13
+
 
 ## Outcomes & Retrospective
 
@@ -286,11 +306,12 @@ delivery paths (masterplan 14, Integration Point 4):
    an adapter.
 
 2. The **sharded path**: `keiro/src/Keiro/Subscription/Shard/Worker.hs` runs a leased
-   pool of kiroku consumer-group readers. Today it uses the plain, non-acking
-   `subscriptionStream` (Shard/Worker.hs:91, :262) with a fire-and-forget
-   `RecordedEvent -> IO ()` handler — sibling plan
+   pool of kiroku consumer-group readers. Completed sibling plan
    `docs/plans/96-ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-coverage.md`
-   (EP-96, currently an unfilled skeleton) converts it to `subscriptionAckStream`.
+   converted it to `subscriptionAckStream`. The live surface is
+   `runShardedSubscriptionGroupAck` with a per-event `ShardDelivery` and a
+   `ShardAck` reply; `ShardedWorkerOptions.retryPolicy` controls the bounded
+   Kiroku retry ladder.
 
 ### Finding 1 — the rejected-command wedge (MEDIUM)
 
@@ -366,11 +387,10 @@ store-level hook is the observation surface.
 
 Per-path behavior today: the adapter path has the bounded ladder above, with the bound
 frozen at 5 (see Surprises & Discoveries — `KirokuAdapterConfig` does not expose
-`retryPolicy`). The sharded path has no ladder at all: its handler returns `()`, an
-exception kills the bucket reader (`ShardReaderDied`, Shard/Worker.hs:264-271), and the
-next reconcile pass restarts it from the checkpoint — an unbounded crash-loop rather
-than retry-then-dead-letter. EP-96 changes that path to the ack bridge; this plan states
-the interface expectation (Milestone 3) and the posture that must hold on both paths.
+`retryPolicy`). The sharded path now uses the same Kiroku ack bridge: its
+`retryPolicy` is configurable through `ShardedWorkerOptions`, synchronous handler
+exceptions become `ShardAckRetry`, and retry exhaustion lands in
+`kiroku.dead_letters`. Milestone 3 documents and tests this delivered posture.
 
 ### Finding 3 — cross-stream correlation ordering (LOW, document only)
 
@@ -388,15 +408,11 @@ which kiroku deliberately does not provide.
 ### Relationship to sibling plans
 
 `docs/plans/99-silent-edge-validation-and-divergence-witnesses-on-the-command-path.md`
-(EP-99, soft dependency, currently an unfilled skeleton) will split `CommandRejected`
-into distinct rejection and ambiguity constructors with distinct `commandErrorClass`
-values (masterplan 14, Integration Point 1; the classifier is at
+(EP-99, complete) split `CommandRejected` from `CommandAmbiguous` with distinct
+`commandErrorClass` values (masterplan 14, Integration Point 1; the classifier is at
 `keiro/src/Keiro/Command.hs:570-578`). This plan stores the error class as a plain
-`TEXT` column, so EP-99's taxonomy flows into dead-letter rows with zero schema change;
-the policy scope decision (Decision Log) already states how the new constructors are
-treated. Nothing here blocks on EP-99. EP-96 (also a skeleton) owns the shard path's ack
-surface; Milestone 3 defines what this plan needs from it and everything else lands
-independently on the adapter path.
+`TEXT` column, so EP-99's taxonomy flows into dead-letter rows with zero schema change.
+EP-96 is also complete and owns the shard path's ack surface described above.
 
 ### Locating dependency sources
 
@@ -430,7 +446,7 @@ cabal run keiro-migrate -- new \
 cabal run keiro-migrate -- check keiro-migrations/migrations/manifest
 ```
 
-The CLI picks the next number (0017 at authoring time), appends to the ordered manifest,
+The CLI picked `0018.sql` in the live tree, appended it to the ordered manifest,
 and creates the SQL file under `keiro-migrations/migrations/`. Never edit a shipped
 migration. Framework tables are created in the `keiro` schema with a `keiro_` name
 prefix and fully qualified DDL — copy the style of
@@ -650,21 +666,14 @@ polling gauge was considered and rejected; the counter plus the query is the hon
 
 Per-path posture (masterplan 14, Integration Point 4 — state it in the
 `Keiro.ProcessManager` haddock and here): on the **adapter path**, everything above
-holds today. On the **sharded path**, EP-96
-(`docs/plans/96-ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-coverage.md`,
-an unfilled skeleton at authoring time) must deliver a per-event ack surface over
-`subscriptionAckStream`; this plan's interface expectation, which EP-96 must satisfy or
-renegotiate here, is: (i) the shard handler's outcome is expressed as (or mapped to) a
-kiroku `SubscriptionResult` per event, so `Retry` engages the same bounded ladder and
-exhaustion lands in the same `kiroku.dead_letters`; (ii) `ShardedWorkerOptions`
-(`keiro/src/Keiro/Subscription/Shard/Worker.hs:113-133`) gains a
-`retryPolicy :: RetryPolicy` field forwarded into the `subConfig` built at :256-261 —
-unlike the adapter path, this config is keiro-owned, so the knob is deliverable; (iii)
-handlers that dispatch commands classify outcomes with the exported
-`decideForFailures`/`isRejectionClass` from Milestone 2, so the rejected-command policy
-means the same thing on both paths. If EP-96 has not landed when this milestone is
-implemented, add the `retryPolicy` field opportunistically only if trivial; otherwise
-leave the integration point marked here and in EP-96's plan file.
+holds today. On the **sharded path**, completed EP-96
+(`docs/plans/96-ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-coverage.md`)
+delivers the same bounded Kiroku ladder through `subscriptionAckStream`.
+`runShardedSubscriptionGroupAck` maps each handler's `ShardAck` to a Kiroku
+`SubscriptionResult`, and `ShardedWorkerOptions.retryPolicy` is forwarded into the
+subscription configuration. Handlers that dispatch commands can therefore classify
+outcomes with Milestone 2's exported `decideForFailures` / `isRejectionClass` and map
+the decision to the existing `ShardAck` reply without adding another worker surface.
 
 The test ("force N failures through the ack path"). kiroku's retry ladder is
 configurable per subscription — its own test sets
@@ -790,7 +799,7 @@ trailer `ExecPlan: docs/plans/100-process-manager-failure-paths-dead-lettering-r
     cabal run keiro-migrate -- new \
       --manifest keiro-migrations/migrations/manifest \
       --description "keiro dead letters"
-    # edit the generated keiro-migrations/migrations/0017-*.sql with the DDL above
+    # edit the generated keiro-migrations/migrations/0018.sql with the DDL above
     cabal run keiro-migrate -- check keiro-migrations/migrations/manifest
     cabal test keiro-migrations-test
     # create keiro/src/Keiro/DeadLetter.hs and keiro/src/Keiro/DeadLetter/Schema.hs,
@@ -919,8 +928,8 @@ At the end of each milestone these must exist, with full module paths:
   `DispatchDeadLetterRecord(..)`, `recordDispatchDeadLetter :: (Store :> es) =>
   DispatchDeadLetter -> Eff es ()`, `listDispatchDeadLetters :: (Store :> es) => Text ->
   Eff es [DispatchDeadLetterRecord]`; `Keiro.DeadLetter.Schema` with the hasql
-  statements; migration `keiro-migrations/migrations/0017-keiro-dead-letters.sql` (number
-  as assigned by the CLI).
+  statements; migration `keiro-migrations/migrations/0018.sql` (the number assigned by
+  the CLI).
 - M2: `Keiro.ProcessManager` exporting `RejectedCommandPolicy(..)`,
   `isRejectionClass :: CommandError -> Bool`, the effectful `decideForFailures` (exact
   signature settled at implementation; it must take the policy, the source event,
@@ -939,8 +948,14 @@ At the end of each milestone these must exist, with full module paths:
 Integration contracts with sibling plans (masterplan 14): EP-99 consumes the
 `error_class` column via `commandErrorClass` — one new class per new constructor, no
 reuse of `"command_rejected"` for ambiguity (Integration Point 1), and
-`isRejectionClass` is the single function it must extend. EP-96 consumes
-`decideForFailures`/`isRejectionClass` for the shard path and owes this plan the
-per-event `SubscriptionResult` surface and the `ShardedWorkerOptions.retryPolicy` field
-(Integration Point 4, expectation stated in Milestone 3). Telemetry names respect
-Integration Point 3's reservations.
+`isRejectionClass` is the single classifier for both constructors. EP-96 has delivered
+the per-event shard acknowledgement and `ShardedWorkerOptions.retryPolicy` surface;
+EP-100 consumes those artifacts without extending them (Integration Point 4).
+Telemetry names respect Integration Point 3's reservations.
+
+## Revision Notes
+
+- 2026-07-13: Began implementation, copied the MasterPlan intention into this
+  child plan, refreshed the completed EP-96/EP-99 integration context, and
+  completed Milestone 1 with CLI-generated migration 0018, typed storage APIs,
+  and passing migration plus 317-example Keiro test suites.
