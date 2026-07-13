@@ -142,7 +142,7 @@ topic/event coupling resolves; publisher→emit resolves.
 ```text
 workqueue reservation_work {
   queue logical = "hospital_capacity.reservation_work"
-  derive physical = "hospital_capacity_reservation_work"   # captured fixture; validator re-derives + checks drift
+  derive physical = "hospital_capacity_reservation_work"   # captured fixture trio; validator re-derives physical/dlq/table and checks drift
          dlq = "hospital_capacity_reservation_work_dlq"
          table = "pgmq.q_hospital_capacity_reservation_work"
   payload ReservationWorkItem { reservationId -> "reservation_id" text required }
@@ -170,14 +170,14 @@ dispatch reservation_work_dispatch {
 ```text
 workflow HospitalTransferReservation
   name "hospital-transfer-reservation"
-  in ReservationWorkflowInput { reservationId:Id hospitalId:Id }
+  in ReservationWorkflowInput { reservationId:Id hospitalId:Id coolingOffDelay:Duration }
   out ReservationWorkflowSummary
   id from input.reservationId via idText
   body                                                     # ORDERED; replay matches on label
     step  create-transfer-hold      -> ReservationHold
     await reservation-confirmation  -> ReservationConfirmation
     sleep cooling-off after coolingOffDelay               # TIME INJECTED
-    child ship-order id input via shipChildId -> Text     # child id MUST differ from parent's
+    child ship-order id input via shipChildId -> Text     # child id derived by the via-function hole (see generated hole docs)
 
 operation SignalReservationConfirmation
   signal reservation-confirmation of HospitalTransferReservation   # MUST match an await label

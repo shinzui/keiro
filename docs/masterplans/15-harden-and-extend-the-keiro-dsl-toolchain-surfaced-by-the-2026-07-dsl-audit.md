@@ -21,7 +21,7 @@ In July 2026, after MasterPlan 14's runtime hardening was underway, a full audit
 `check`, `diff`, `scaffold` — and its fidelity to the current keiro architecture. The
 audit confirmed the foundations are right (the generated/hole overwrite discipline is
 safe for repeated agent regeneration, the emitted runtime API surface compiles green
-against post-MP-14 keiro across all seventeen conformance suites, and the firewall and
+against post-MP-14 keiro across all sixteen conformance suites, and the firewall and
 conformance-suite mechanisms are the correct architecture) and surfaced defects in two
 themes. First, the gates over-promise: the differ is blind to field-type, enum, wire,
 contract, and identity-bearing changes (several confirmed exit-0 on breaking edits);
@@ -136,7 +136,7 @@ three plans register with it).
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 103 | Make keiro-dsl diff sound over the full decode and identity surface | docs/plans/103-make-keiro-dsl-diff-sound-over-the-full-decode-and-identity-surface.md | None | None | Complete |
-| 104 | Close the keiro-dsl validator soundness holes: workflows, rules, cross-node references, and disposition tables | docs/plans/104-close-the-keiro-dsl-validator-soundness-holes-workflows-rules-cross-node-references-and-disposition-tables.md | None | None | In Progress |
+| 104 | Close the keiro-dsl validator soundness holes: workflows, rules, cross-node references, and disposition tables | docs/plans/104-close-the-keiro-dsl-validator-soundness-holes-workflows-rules-cross-node-references-and-disposition-tables.md | None | None | Complete |
 | 105 | Fix keiro-dsl notation integrity: string escaping, duplicate clauses, numeric bounds, and identifier hygiene | docs/plans/105-fix-keiro-dsl-notation-integrity-string-escaping-duplicate-clauses-numeric-bounds-and-identifier-hygiene.md | None | None | Not Started |
 | 106 | Harden the keiro-dsl scaffolder: template injection, firewall completeness, collision and stale-module detection, and faithful policy lowering | docs/plans/106-harden-the-keiro-dsl-scaffolder-template-injection-firewall-completeness-collision-and-stale-module-detection-and-faithful-policy-lowering.md | None | EP-104, EP-105 | Not Started |
 | 107 | Add a first-class read-model node with registration, schema, and consistency to keiro-dsl | docs/plans/107-add-a-first-class-read-model-node-with-registration-schema-and-consistency-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Not Started |
@@ -281,8 +281,8 @@ EP-106 in parallel alongside the front of that path.
 
 - [x] EP-103: every node family diffed or explicitly out-of-scope; field-type, enum, wire, and contract changes classify Breaking with red/green fixtures
 - [x] EP-103: version-chain contiguity checked against the old spec; identity-bearing renames (workflow stable name, id prefixes) Breaking; corrected diagnostic codes
-- [ ] EP-104: workflows and rules validated (duplicate labels rejected, rule-body clock/scope bypass closed, rule totality)
-- [ ] EP-104: process/operation cross-refs resolved; disposition completeness and duplicate-row shadowing; topic affinity; duplicate-name rules; workqueue fixture trio fully checked
+- [x] EP-104: workflows and rules validated (duplicate labels rejected, rule-body clock/scope bypass closed, rule totality)
+- [x] EP-104: process/operation cross-refs resolved; disposition completeness and duplicate-row shadowing; topic affinity; duplicate-name rules; workqueue fixture trio fully checked
 - [ ] EP-105: string escaping round-trips adversarial input; mapPartial has concrete syntax; duplicate wire/projection/goto rejected
 - [ ] EP-105: numeric bounds enforced; identifier-hygiene diagnostics; round-trip generator covers all node families; unit suite cwd-independent
 - [ ] EP-106: payload splice escaped (injection closed); canonical firewall list shared by CLI and test with token-aware scan; breach handling decided
@@ -300,7 +300,7 @@ EP-106 in parallel alongside the front of that path.
 ## Surprises & Discoveries
 
 - The audit found the emitted runtime API surface in good sync with post-MP-14 keiro
-  (all seventeen conformance suites compile and pass) — the drift is coverage drift,
+  (all sixteen conformance suites compile and pass) — the drift is coverage drift,
   not bit-rot. The conformance-suite architecture is why; the plans strengthen it (the
   pin's import-stripping hole, EP-106) rather than replace it.
 - Two documented features turned out to be unimplemented stubs rather than weak
@@ -345,6 +345,18 @@ EP-106 in parallel alongside the front of that path.
     (BREAKING). The committed retarget fixture adds a second valid workqueue while
     retaining the original dedupe arm, so plans extending dispatch/workqueue notation
     must preserve this separation.
+  - EP-104 implementation landed exact, case-sensitive full-event-name status-map
+    validation and converted every committed fixture key without changing generated
+    conformance output. EP-106 now has a concrete delivered validator behavior to mirror
+    in scaffold lowering; suffix matching remains only on that not-yet-implemented side.
+  - EP-104's pure `derivedQueueTrio` matched the live `keiro-pgmq` `queueRef` over all
+    six edge-case vectors, including the drafted long-name hash. The read-model
+    resolution seam also landed as the documented no-op stub for EP-107 to complete;
+    QueryOp and read-model-backed pgmq dispatch references remain intentionally deferred.
+  - EP-104's full-package run corrected the audit's suite count: the package has 16
+    `keiro-dsl-conformance-*` suites plus the unit suite, 17 test suites total. All 17
+    passed; later plans should use the package target rather than a hand-maintained
+    numeric list.
 
 
 ## Decision Log
@@ -394,10 +406,12 @@ EP-106 in parallel alongside the front of that path.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original vision.
-
-(To be filled during and after implementation.)
+EP-104 completed the validator-soundness work stream. It added row-precise diagnostics,
+workflow/rule/operation/process reference validation, collision detection, disposition
+and topic safety, exact status maps, faithful queue fixture validation, and dispatch
+dedup resolution. Its full package battery passed all 17 test suites. The initiative is
+not complete: EP-105 through EP-110 remain, with EP-106 and EP-107 carrying the two
+explicit handoffs recorded in Surprises & Discoveries.
 
 
 ## Revision Notes

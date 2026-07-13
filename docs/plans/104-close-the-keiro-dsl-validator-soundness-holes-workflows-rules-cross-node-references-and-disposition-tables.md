@@ -45,7 +45,7 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 
 - [x] (2026-07-13 20:29Z) M1: add `Loc` to `StateDecl`, `DispositionRow`, `WqDispRow`, `DispatchNode`, `EmitMapRow`, and the four `WfBodyItem` constructors in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`.
 - [x] (2026-07-13 20:29Z) M1: populate the new locations in `keiro-dsl/src/Keiro/Dsl/Parser.hs`; update pattern matches in `PrettyPrint.hs`, `Validate.hs`, `Harness.hs`; update `genState` in `test/Main.hs`.
-- [x] (2026-07-13 20:29Z) M1: fix the `ProcessFireAtNotInjected` double-fire in `Validate.hs` and re-anchor `UnreachableState` and per-dispatch diagnostics to their rows; disposition-row anchoring will be exercised when M5 adds duplicate-row diagnostics.
+- [x] (2026-07-13 20:29Z) M1: fix the `ProcessFireAtNotInjected` double-fire in `Validate.hs` and re-anchor `UnreachableState` and per-dispatch diagnostics to their rows; M5's duplicate-row test now exercises disposition-row anchoring too.
 - [x] (2026-07-13 20:29Z) M1: round-trip property, 94-example unit suite, aggregate conformance pin, and workflow conformance pin all green.
 - [x] (2026-07-13 20:32Z) M2: spec-level duplicate detection (nodes, enum ctors/wires, id prefixes, command/event names) with fixture `duplicate-names.keiro`.
 - [x] (2026-07-13 20:32Z) M2: aggregate-local reference soundness (write targets, `fields(Cmd)` resolution, `regInitial` scope) with fixture `aggregate-bad-refs.keiro`; 96-example unit suite green.
@@ -59,7 +59,7 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] (2026-07-13 20:50Z) M5: exact status-map matching + dangling-key + duplicate-key diagnostics; updated all fixture status-maps to full event names; fixtures `statusmap-dangling.keiro`, `statusmap-dup-key.keiro`; scaffold conformance pin byte-stable.
 - [x] (2026-07-13 20:50Z) M5: faithful queueRef re-derivation (sanitize/collapse/hash) + dlq + table checks with fixtures `workqueue-dlq-divergent.keiro`, `workqueue-table-divergent.keiro`, `workqueue-uppercase-logical.keiro` (false-positive removal), `workqueue-hashed-logical.keiro`; live cross-check green across six vectors in `keiro-dsl-conformance-queue-runtime`.
 - [x] (2026-07-13 20:50Z) M5: PgmqDispatch dedup-queue and dedup-queue-field resolution with fixtures `dispatch-dedup-ghost-queue.keiro`, `dispatch-dedup-bad-field.keiro`; read-model arms deferred via the documented stub; 112-example unit suite plus queue and full-dispatch conformance suites green.
-- [ ] M6: true-up the two false claims in `agents/skills/keiro-dsl-authoring/NOTATION.md`; final full-suite run (unit + all 17 conformance suites); living sections updated.
+- [x] (2026-07-13 20:52Z) M6: true-up the scoped claims in `agents/skills/keiro-dsl-authoring/NOTATION.md`; `cabal test keiro-dsl` green (112 unit examples plus all 16 conformance suites, 17 test suites total); CLI duplicate-label proof exits 1 on line 10; living sections updated.
 
 
 ## Surprises & Discoveries
@@ -98,6 +98,10 @@ implementation. Provide concise evidence.
   implementation matched the live runtime for that value and five additional vectors,
   including uppercase input, repeated punctuation, a leading digit, and an `_dlq`
   suffix.
+- (Implementation, 2026-07-13) The plan's phrase "all 17 conformance suites" was
+  off by one: `keiro-dsl.cabal` declares 16 `keiro-dsl-conformance-*` suites plus
+  `keiro-dsl-test`, for 17 test suites total. `cabal test keiro-dsl` ran and passed
+  that complete 17-suite package battery; no conformance target was omitted.
 
 
 ## Decision Log
@@ -247,10 +251,30 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
+EP-104 is complete. `keiro-dsl check` now validates every previously unvisited workflow
+and rule body, resolves command-bearing operation and process references, rejects exact-
+name collisions and aggregate-local dangling references, makes intake and workqueue
+disposition tables resistant to missing or shadowing rows, enforces Kafka topic affinity
+and exact projection status-map keys, and mirrors the live `queueRef` physical/dlq/table
+derivation. The 27 new diagnostic codes remain one appended registry block, and the new
+row locations make replay-label, dispatch, emit-map, state, and disposition errors point
+at the offending declaration.
 
-(To be filled during and after implementation.)
+The behavioral proof is green: `cabal test keiro-dsl` passed all 17 test suites, the unit
+suite passed 112 examples including the round-trip property, and the queue-runtime suite
+matched `derivedQueueTrio` against live `Keiro.PGMQ.Runtime.queueRef` for six edge-case
+vectors. Running `keiro-dsl check test/fixtures/workflow-dup-label.keiro` now exits 1 with
+`WorkflowDuplicateLabel` at line 10 and explains the deterministic-replay hazard.
+
+The deliberately deferred work remains where the MasterPlan assigned it. The internal
+`resolveReadModelRef` stub still returns no diagnostics until
+`docs/plans/107-add-a-first-class-read-model-node-with-registration-schema-and-consistency-to-keiro-dsl.md`
+adds a declarable read-model namespace. The validator now owns exact status-map matching,
+while `docs/plans/106-harden-the-keiro-dsl-scaffolder-template-injection-firewall-completeness-collision-and-stale-module-detection-and-faithful-policy-lowering.md`
+must make scaffold lowering use the same exact semantics. The holistic authoring-skill
+refresh remains in
+`docs/plans/110-align-keiro-dsl-with-the-safe-apis-and-refresh-the-authoring-skill-and-corpus.md`;
+this plan changed only its three scoped NOTATION examples.
 
 
 ## Context and Orientation
@@ -1041,7 +1065,7 @@ root, since these are separate cabal test-suites of the keiro-dsl package):
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/keiro
 cabal test keiro-dsl-conformance keiro-dsl-conformance-queue-runtime keiro-dsl-conformance-workflow
-cabal test keiro-dsl    # M6: the full battery — the unit suite plus all 17 conformance suites green
+cabal test keiro-dsl    # M6: the full battery — the unit suite plus all 16 conformance suites green
 ```
 
 The M5 anti-drift cross-check lives in
