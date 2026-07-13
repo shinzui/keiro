@@ -54,7 +54,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-07-13) Milestone 1: passing characterization tests added (full-completion order swap, dropped target, same-target-twice) and observed passing.
 - [x] (2026-07-13) Milestone 2: `deterministicRouterCommandId`, occurrence annotation, and the transition legacy-id pre-check implemented in `keiro/src/Keiro/Router.hs`.
 - [x] (2026-07-13) Milestone 2: existing "folds a concurrent duplicate router dispatch" test updated to the new id scheme; upgrade-transition test added; all `Keiro.Router` tests green (including Milestone 1's red tests).
-- [ ] Milestone 3: `confirmBenignDuplicate` added to `keiro/src/Keiro/ProcessManager.hs`, exported, and used at all three duplicate-fold sites (router dispatch, PM dispatch, PM manager-state); helper tests green.
+- [x] (2026-07-13) Milestone 3: `confirmBenignDuplicate` added to `keiro/src/Keiro/ProcessManager.hs`, exported, and used at all three duplicate-fold sites (router dispatch, PM dispatch, PM manager-state); helper tests green.
 - [ ] Milestone 4: module haddocks, `docs/guides/routers-and-effectful-fan-out.md`, and `CHANGELOG.md` updated; `nix fmt` run; full `keiro-test` suite green.
 
 
@@ -229,12 +229,12 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-Milestones 1 and 2 are complete. The fail-before suite demonstrated both positional-id
+Milestones 1 through 3 are complete. The fail-before suite demonstrated both positional-id
 loss modes, and the name-keyed implementation makes all 14 router examples green while
 preserving repeated same-stream commands and pre-upgrade positional deduplication. The
-remaining work is to make duplicate rejection folding honest at all router and process-
-manager append sites, then align the public documentation and run the full validation
-matrix.
+shared confirmation helper now rejects mismatched, cross-stream, and non-duplicate
+failures while preserving all three concurrent true-duplicate race folds. The remaining
+work is to align the public documentation and run the full validation matrix.
 
 
 ## Context and Orientation
@@ -834,3 +834,8 @@ the legacy positional transition probe, and 14 green router examples. Replaced t
 authored colon-delimited v5 name with length-prefixed UTF-8 after implementation review
 found delimiter and Unicode collisions; updated the Decision Log, milestone prose, and
 interface contract to match.
+
+Revision note (2026-07-13): completed Milestone 3 by routing all three append-race folds
+through `confirmBenignDuplicate`. Four focused helper cases, three pre-existing
+concurrent duplicate integrations, and all 14 router examples pass, proving honest
+cross-stream rejection without regressing genuine duplicate recovery.

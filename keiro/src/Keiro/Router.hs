@@ -50,6 +50,7 @@ import Keiro.ProcessManager (
     PoisonPolicy (..),
     WorkerOptions (..),
     ackForCommandError,
+    confirmBenignDuplicate,
     defaultWorkerOptions,
     deterministicCommandId,
     eventAlreadyIn,
@@ -252,11 +253,11 @@ runRouterOnce options router sourceEvent input = do
                                 targetStream
                                 (command ^. #command)
                                 ((router ^. #targetProjections) (command ^. #target))
-                        pure $ case outcome of
-                            Right result -> PMCommandAppended result
-                            Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == commandId -> PMCommandDuplicate commandId
-                            Left (StoreFailed (DuplicateEvent Nothing)) -> PMCommandDuplicate commandId
-                            Left err -> PMCommandFailed err
+                        case outcome of
+                            Right result -> pure (PMCommandAppended result)
+                            Left err -> do
+                                benign <- confirmBenignDuplicate targetStreamName commandId err
+                                pure $ if benign then PMCommandDuplicate commandId else PMCommandFailed err
 
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce

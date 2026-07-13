@@ -47,6 +47,7 @@ module Keiro.ProcessManager (
     -- * Idempotency primitives
     deterministicCommandId,
     eventAlreadyIn,
+    confirmBenignDuplicate,
 )
 where
 
@@ -289,12 +290,11 @@ runProcessManagerOnce options manager sourceEvent input = do
                     (action ^. #command)
                     (\_ -> traverse_ scheduleTimerTx (action ^. #timers))
             case managerOutcome of
-                Left (StoreFailed (DuplicateEvent (Just duplicateId)))
-                    | duplicateId == managerEventId ->
-                        finish correlationId (PMStateDuplicate managerEventId) action
-                Left (StoreFailed (DuplicateEvent Nothing)) ->
-                    finish correlationId (PMStateDuplicate managerEventId) action
-                Left err -> pure (Left err)
+                Left err -> do
+                    benign <- confirmBenignDuplicate managerStreamName managerEventId err
+                    if benign
+                        then finish correlationId (PMStateDuplicate managerEventId) action
+                        else pure (Left err)
                 Right (managerResult, scheduledInAppend) -> do
                     -- No-op manager commands do not execute runCommandWithSql's callback,
                     -- so schedule timer-only reactions explicitly.
@@ -334,11 +334,11 @@ runProcessManagerOnce options manager sourceEvent input = do
                         targetStream
                         (command ^. #command)
                         ((manager ^. #targetProjections) (command ^. #target))
-                pure $ case outcome of
-                    Right result -> PMCommandAppended result
-                    Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == commandId -> PMCommandDuplicate commandId
-                    Left (StoreFailed (DuplicateEvent Nothing)) -> PMCommandDuplicate commandId
-                    Left err -> PMCommandFailed err
+                case outcome of
+                    Right result -> pure (PMCommandAppended result)
+                    Left err -> do
+                        benign <- confirmBenignDuplicate targetStreamName commandId err
+                        pure $ if benign then PMCommandDuplicate commandId else PMCommandFailed err
 
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
@@ -486,3 +486,26 @@ eventAlreadyIn ::
     Eff es Bool
 eventAlreadyIn _options streamName eventId =
     eventExistsInStream streamName eventId
+
+{- | Decide whether a failed append is a benign duplicate of the write just
+attempted: whether @ourId@ is genuinely present in @streamName@.
+
+Kiroku's @DuplicateEvent@ carries 'Just' the colliding id only when
+PostgreSQL's detail string parses ('Nothing' otherwise), and because the
+store's event-id uniqueness is global, even a matching id does not prove the
+event landed in our stream. A mismatched id is never ours; a matching or
+missing id is confirmed against the target stream with a point lookup. Callers
+fold 'True' into their duplicate result and surface 'False' as the original
+failure.
+-}
+confirmBenignDuplicate ::
+    (Store :> es) =>
+    StoreTypes.StreamName ->
+    EventId ->
+    CommandError ->
+    Eff es Bool
+confirmBenignDuplicate streamName ourId = \case
+    StoreFailed (DuplicateEvent (Just duplicateId))
+        | duplicateId == ourId -> eventExistsInStream streamName ourId
+    StoreFailed (DuplicateEvent Nothing) -> eventExistsInStream streamName ourId
+    _ -> pure False

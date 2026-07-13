@@ -2016,6 +2016,66 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         _ -> False
                 other -> expectationFailure ("expected duplicate manager-state fold, got " <> show other)
 
+    describe "Keiro.ProcessManager duplicate confirmation" $ around (withFreshStore fixture) $ do
+        it "rejects a duplicate report carrying a different id" $ \storeHandle -> do
+            let targetStreamName = StreamName "duplicate-confirmation-mismatch"
+                ourId = EventId sampleUuid
+                otherId = EventId sampleUuid2
+            appendCounterEventWithId storeHandle targetStreamName otherId (CounterAdded 1)
+            outcome <-
+                Store.runStoreIO storeHandle $
+                    confirmBenignDuplicate
+                        targetStreamName
+                        ourId
+                        (StoreFailed (Store.DuplicateEvent (Just otherId)))
+            outcome `shouldBe` Right False
+
+        it "rejects a matching id that exists only in another stream" $ \storeHandle -> do
+            let targetStreamName = StreamName "duplicate-confirmation-target"
+                otherStreamName = StreamName "duplicate-confirmation-other"
+                ourId = EventId sampleUuid
+                targetEventId = EventId sampleUuid2
+            appendCounterEventWithId storeHandle targetStreamName targetEventId (CounterAdded 1)
+            appendCounterEventWithId storeHandle otherStreamName ourId (CounterAdded 1)
+            outcome <-
+                Store.runStoreIO storeHandle $
+                    confirmBenignDuplicate
+                        targetStreamName
+                        ourId
+                        (StoreFailed (Store.DuplicateEvent (Just ourId)))
+            outcome `shouldBe` Right False
+
+        it "confirms matching and id-less duplicate reports when the id is in the target stream" $ \storeHandle -> do
+            let targetStreamName = StreamName "duplicate-confirmation-present"
+                ourId = EventId sampleUuid
+            appendCounterEventWithId storeHandle targetStreamName ourId (CounterAdded 1)
+            matchingOutcome <-
+                Store.runStoreIO storeHandle $
+                    confirmBenignDuplicate
+                        targetStreamName
+                        ourId
+                        (StoreFailed (Store.DuplicateEvent (Just ourId)))
+            missingDetailOutcome <-
+                Store.runStoreIO storeHandle $
+                    confirmBenignDuplicate
+                        targetStreamName
+                        ourId
+                        (StoreFailed (Store.DuplicateEvent Nothing))
+            matchingOutcome `shouldBe` Right True
+            missingDetailOutcome `shouldBe` Right True
+
+        it "rejects non-duplicate command failures" $ \storeHandle -> do
+            let targetStreamName = StreamName "duplicate-confirmation-non-duplicate"
+                ourId = EventId sampleUuid
+            appendCounterEventWithId storeHandle targetStreamName ourId (CounterAdded 1)
+            outcome <-
+                Store.runStoreIO storeHandle $
+                    confirmBenignDuplicate
+                        targetStreamName
+                        ourId
+                        (StoreFailed (Store.ConnectionLost "boom"))
+            outcome `shouldBe` Right False
+
     describe "Keiro.ProcessManager snapshots" $ around (withFreshStore fixture) $ do
         it "writes a snapshot of the manager state stream after the policy threshold" $ \storeHandle -> do
             -- Two distinct source events, both correlating to "order-1", drive the one
