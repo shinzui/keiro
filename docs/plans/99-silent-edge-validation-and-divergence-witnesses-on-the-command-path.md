@@ -4,6 +4,7 @@ slug: silent-edge-validation-and-divergence-witnesses-on-the-command-path
 title: "Silent-edge validation and divergence witnesses on the command path"
 kind: exec-plan
 created_at: 2026-07-12T05:07:53Z
+intention: intention_01kxcz37ave9t8d6amvvxnemr6
 master_plan: "docs/masterplans/14-harden-the-keiro-command-coordination-and-snapshot-paths-surfaced-by-the-2026-07-keiki-path-review.md"
 ---
 
@@ -76,8 +77,8 @@ reporting `globalPosition = Nothing` where it previously fabricated `Just 0`.
 
 ## Progress
 
-- [ ] M1: replay-contract checks force-enabled in `validateEventStreamWith` / `mkEventStreamWith` (caller options may only strengthen); `mkEventStreamUnchecked` escape hatch added with a loud haddock
-- [ ] M1: silent-move fixture, silent register-write fixture, weakened-options-still-rejected specs, and keiki-flags-it spec added to `keiro/test/Main.hs`; existing no-op fixture still validates clean
+- [x] (2026-07-13T15:52:56Z) M1: replay-contract checks force-enabled in `validateEventStreamWith` / `mkEventStreamWith` (caller options may only strengthen); `mkEventStreamUnchecked` escape hatch added with a loud haddock
+- [x] (2026-07-13T15:52:56Z) M1: silent-move fixture, silent register-write fixture, weakened-options-still-rejected specs, and keiki-flags-it spec added to `keiro/test/Main.hs`; existing no-op fixture still validates clean
 - [ ] M2: `verifyReplayOnAppend` flag added to `RunCommandOptions` (default `True`)
 - [ ] M2: post-append replay check extracted, runs on both append paths, witnesses divergence via counter + span attribute; snapshot write consumes the same fold
 - [ ] M2: `keiro.snapshot.apply.divergence` counter and `keiro_replay_divergence` attribute key added to `keiro/src/Keiro/Telemetry.hs`
@@ -127,6 +128,14 @@ implementation-time discoveries as they occur.
   is on an *appended* result, which keeps reporting `Just`. `Keiro.ReadModel` and
   `Keiro.Integration.Event` read `globalPosition` from other types
   (`RecordedEvent` / integration events), not from `CommandResult`.
+- Milestone 1 confirmed the published Keiki API matches the authored contract:
+  `ValidationOptions` exposes `checkStateChangingEpsilon` and
+  `checkHeadRecoverability`, and `StateChangingEpsilon` is directly matchable in
+  the Keiro test suite. The focused `mkEventStream` run reported 12 examples and
+  zero failures, including both forced-on checks and the unchecked escape hatch.
+  Evidence: `cabal test keiro-test --test-options='--match "mkEventStream"'`;
+  the milestone gate also passed `cabal build all` and the full 312-example
+  `cabal test keiro-test` suite.
 
 
 ## Decision Log
@@ -982,3 +991,8 @@ Milestone 2's divergence spec uses to mount its deliberately divergent fixture,
 since the public path now rejects it), and pins the rejection with the original
 fixture set. Milestones 2–4 are otherwise unchanged; the runtime divergence
 witness is retained as defense in depth behind the static checks.
+
+Revision note (2026-07-13): implemented Milestone 1 and associated this child plan
+with the MasterPlan's existing intention. Keiro now force-enables both durable
+replay-contract checks, exposes only a loudly named wholly unchecked bypass, and
+pins the boundary behavior with silent vertex-change and caller-weakening specs.

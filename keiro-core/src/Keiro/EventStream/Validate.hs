@@ -13,8 +13,9 @@ Every warning enabled by the selected 'ValidationOptions' makes construction
 fail. This is intentionally stricter than a pure keiki use: events are keiro's
 only durable state, so accepting an unreplayable shape would lose state or defer
 the failure to production. Build custom options by updating
-'defaultValidationOptions'; EP-99 subsequently pins the replay-contract checks
-on at the durable boundary while leaving documented non-contract overrides.
+'defaultValidationOptions'. The replay-contract checks for head recoverability
+and state-changing output-free edges are always forced on at this durable
+boundary; caller-supplied options may only strengthen that contract.
 
 * 'validateEventStream' \/ 'validateEventStreamWith' run the pure check and
   return labelled warnings (empty when the stream is sound).
@@ -33,6 +34,9 @@ module Keiro.EventStream.Validate (
     mkEventStream,
     mkEventStreamWith,
     mkEventStreamOrThrow,
+
+    -- * Unchecked escape hatch (tests and emergency forensics only)
+    mkEventStreamUnchecked,
 ) where
 
 import Control.DeepSeq (force)
@@ -44,7 +48,7 @@ import Keiki.Core (
     EdgeRef (..),
     HsPred,
     TransducerValidationWarning (..),
-    ValidationOptions,
+    ValidationOptions (..),
     defaultValidationOptions,
     validateTransducer,
  )
@@ -65,7 +69,8 @@ data EventStreamWarning = EventStreamWarning
 {- | An 'EventStream' that has passed keiki validation and keiro's stream-level
 checks. Command runners require this wrapper instead of a bare 'EventStream'.
 The constructor is intentionally not exported; use 'mkEventStream',
-'mkEventStreamWith', or 'mkEventStreamOrThrow' to obtain a value.
+'mkEventStreamWith', or 'mkEventStreamOrThrow' to obtain a validated value.
+'mkEventStreamUnchecked' exists only for tests and emergency forensics.
 -}
 newtype ValidatedEventStream phi rs s ci co
     = ValidatedEventStream (EventStream phi rs s ci co)
@@ -88,8 +93,10 @@ validateEventStream ::
     [EventStreamWarning]
 validateEventStream = validateEventStreamWith defaultValidationOptions
 
-{- | As 'validateEventStream', but with caller-chosen 'ValidationOptions' (e.g.
-to narrow the checks for a stream with a known-benign warning).
+{- | As 'validateEventStream', but with caller-chosen 'ValidationOptions'.
+The head-recoverability and state-changing-epsilon checks are always forced on:
+events are keiro's only durable state, so callers may narrow only checks with a
+documented benign override.
 -}
 validateEventStreamWith ::
     (Bounded s, Enum s, Ord s, Show s) =>
@@ -102,8 +109,16 @@ validateEventStreamWith opts label es =
     snapshotWarnings label es
         <> initialSnapshotEncodeWarnings label es
         <> [ EventStreamWarning{eswStreamLabel = label, eswReason = renderWarning w}
-           | w <- validateTransducer opts (transducer es)
+           | w <- validateTransducer (forceReplayContract opts) (transducer es)
            ]
+
+-- | Force the replay-contract checks required at keiro's durable boundary.
+forceReplayContract :: ValidationOptions -> ValidationOptions
+forceReplayContract opts =
+    opts
+        { checkStateChangingEpsilon = True
+        , checkHeadRecoverability = True
+        }
 
 {- | Build a validated event stream with the default validation options.
 Returns the warnings (@Left@) for an unsafe stream, or a
@@ -118,8 +133,9 @@ mkEventStream ::
 mkEventStream = mkEventStreamWith defaultValidationOptions
 
 {- | Build a validated event stream with caller-chosen validation options.
-Only narrow options for documented, benign non-hidden-input warnings; disabling
-the hidden-input check weakens replay safety.
+The replay-contract checks for head recoverability and state-changing epsilon
+edges cannot be disabled here: caller options may only strengthen the durable
+boundary. Only narrow other checks for a documented benign warning.
 -}
 mkEventStreamWith ::
     (Bounded s, Enum s, Ord s, Show s) =>
@@ -152,6 +168,17 @@ mkEventStreamOrThrow label es =
                     <> Text.unpack label
                     <> " is not replay-safe: "
                     <> show warns
+
+{- | Wrap an 'EventStream' /without validation/. This skips every keiki and
+keiro check, including the replay-contract checks that 'mkEventStream'
+force-enables. A stream admitted through this function can silently lose state
+changes and fail hydration. Tests and emergency forensics only; never use it
+for production streams. Prefer 'mkEventStream'.
+-}
+mkEventStreamUnchecked ::
+    EventStream phi rs s ci co ->
+    ValidatedEventStream phi rs s ci co
+mkEventStreamUnchecked = ValidatedEventStream
 
 {- | Render a keiki warning to a human-readable reason. All eight constructors
 carry @tvwDetail@; the source vertex is @edgeSource . tvwEdge@ (or @tvwSource@

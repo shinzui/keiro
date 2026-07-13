@@ -55,7 +55,15 @@ import Keiro
 import Keiro qualified as KeiroRoot
 import Keiro.Connection (ensureProjectionSchema, qualifyTable, withProjectionSchema)
 import Keiro.EventStream (Terminality (..))
-import Keiro.EventStream.Validate (EventStreamWarning (..), ValidatedEventStream, mkEventStream, mkEventStreamOrThrow, validateEventStream)
+import Keiro.EventStream.Validate (
+    EventStreamWarning (..),
+    ValidatedEventStream,
+    mkEventStream,
+    mkEventStreamOrThrow,
+    mkEventStreamUnchecked,
+    mkEventStreamWith,
+    validateEventStream,
+ )
 import Keiro.Inbox (
     InboxDedupePolicy (..),
     InboxError (..),
@@ -583,11 +591,43 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 "unguarded-input-read"
                 unguardedInputReadEventStreamDef
 
-        it "rejects a state-changing silent edge" $
+        it "rejects a silent edge that writes registers" $ do
+            Keiki.validateTransducer Keiki.defaultValidationOptions stateChangingEpsilonTransducer
+                `shouldSatisfy` any isStateChangingEpsilon
             expectValidationWarning
                 "state-changing-epsilon"
                 "state-changing-epsilon"
                 stateChangingEpsilonEventStreamDef
+
+        it "rejects a silent edge that changes vertex" $ do
+            Keiki.validateTransducer Keiki.defaultValidationOptions silentMoveTransducer
+                `shouldSatisfy` any isStateChangingEpsilon
+            expectValidationWarning
+                "silent-move"
+                "state-changing-epsilon"
+                silentMoveEventStreamDef
+
+        it "keeps replay-contract checks enabled when caller options weaken them" $ do
+            case mkEventStreamWith
+                Keiki.defaultValidationOptions{Keiki.checkStateChangingEpsilon = False}
+                "silent-move-weakened"
+                silentMoveEventStreamDef of
+                Left warnings ->
+                    map eswReason warnings
+                        `shouldSatisfy` any (Text.isInfixOf "state-changing-epsilon")
+                Right _ -> expectationFailure "expected the durable boundary to restore the state-changing-epsilon check"
+            case mkEventStreamWith
+                Keiki.defaultValidationOptions{Keiki.checkHeadRecoverability = False}
+                "head-unrecoverable-weakened"
+                headUnrecoverableEventStreamDef of
+                Left warnings ->
+                    map eswReason warnings
+                        `shouldSatisfy` any (Text.isInfixOf "head-unrecoverable")
+                Right _ -> expectationFailure "expected the durable boundary to restore the head-recoverability check"
+
+        it "provides a loudly named unchecked escape hatch" $ do
+            _ <- evaluate (mkEventStreamUnchecked silentMoveEventStreamDef)
+            pure ()
 
         it "accepts every production-intent stream" $ do
             let expectAccepted label eventStream =
@@ -8240,6 +8280,11 @@ data CounterState
     deriving stock (Generic, Eq, Show, Enum, Bounded, Ord)
     deriving anyclass (FromJSON, ToJSON)
 
+data DrainState
+    = Draining
+    | Drained
+    deriving stock (Generic, Eq, Show, Enum, Bounded, Ord)
+
 data PartialSnapshotState
     = SnapshotEncodable
     | SnapshotEncodeBomb
@@ -8662,6 +8707,43 @@ stateChangingEpsilonTransducer =
                     }
                 ]
         }
+
+type SilentMoveEventStream = EventStream (HsPred '[] CounterCommand) '[] DrainState CounterCommand CounterEvent
+
+silentMoveEventStreamDef :: SilentMoveEventStream
+silentMoveEventStreamDef =
+    EventStream
+        { transducer = silentMoveTransducer
+        , initialState = Draining
+        , initialRegisters = RNil
+        , eventCodec = counterCodec
+        , resolveStreamName = Stream.streamName
+        , snapshotPolicy = Never
+        , stateCodec = Nothing
+        }
+
+silentMoveTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] DrainState CounterCommand CounterEvent
+silentMoveTransducer =
+    SymTransducer
+        { edgesOut = \case
+            Draining ->
+                [ Edge
+                    { guard = matchInCtor addCtor
+                    , update = UKeep
+                    , output = []
+                    , target = Drained
+                    }
+                ]
+            Drained -> []
+        , initial = Draining
+        , initialRegs = RNil
+        , isFinal = (== Drained)
+        }
+
+isStateChangingEpsilon :: Keiki.TransducerValidationWarning s -> Bool
+isStateChangingEpsilon = \case
+    Keiki.StateChangingEpsilon{} -> True
+    _ -> False
 
 expectValidationWarning ::
     (Bounded s, Enum s, Ord s, Show s) =>
