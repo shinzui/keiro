@@ -137,9 +137,10 @@ the snapshot contract.
 ## Timers
 
 Timer workers claim one due timer at a time. Multiple workers can run concurrently
-because claims use row locking with `SKIP LOCKED` (`claimDueTimer`). A worker that
-crashes after claiming but before firing leaves a row in `Firing`; that row is
-re-claimable in principle but will not advance on its own.
+because claims use row locking with `SKIP LOCKED` (`claimDueTimer`). The default
+worker policy requeues a row left in `Firing` for five minutes; configure that
+timeout explicitly with `requeueStuckAfter` when the handler's normal runtime is
+longer, or set it to `Nothing` when a separate recovery job owns requeueing.
 
 ### Stuck-row recovery runbook
 
@@ -159,10 +160,11 @@ signatures). Run this as a periodic operational job:
 4. **Cancel.** Call `cancelTimer` to move the row to `Cancelled` (terminal). Use this for
    timers whose workflow has already advanced past the deadline.
 5. **Dead-letter after the ceiling.** Call `deadLetterTimer timerId reason` to move a row
-   to the terminal `Dead` state with an explanatory `last_error`. To automate this, run
-   the worker with `runTimerWorkerWith (TimerWorkerOptions { maxAttempts = Just n })`: a
-   claimed timer whose post-claim `attempts` exceeds `n` is dead-lettered instead of fired.
-   Dead rows should page an operator.
+   to the terminal `Dead` state with an explanatory `last_error`. To automate this, build
+   validated options with `mkTimerWorkerOptions TimerWorkerOptions { maxAttempts = Just n,
+   requeueStuckAfter = Just ttl }` and pass them to `runTimerWorkerWith metrics options`:
+   a claimed timer whose post-claim `attempts` exceeds `n` is dead-lettered instead of
+   fired. Dead rows should page an operator.
 
 Monitor the `keiro.timer.stuck` gauge (rows still in `Firing` past the threshold; see
 Observability) before and after a run to confirm the job is draining the backlog rather

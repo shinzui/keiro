@@ -166,8 +166,9 @@ runTimerWorkerWith metrics options now fire = do
 
 {- | Claim and fire at most one timer due at @now@ using
 'defaultTimerWorkerOptions' (no attempt ceiling). Equivalent to
-@'runTimerWorkerWith' 'defaultTimerWorkerOptions'@; see 'runTimerWorkerWith' for
-the full semantics.
+@'runTimerWorkerWith' 'defaultTimerWorkerOptions'@; the default has no attempt
+ceiling and requeues claims left @Firing@ for five minutes. See
+'runTimerWorkerWith' for the full semantics.
 -}
 runTimerWorker ::
     (IOE :> es, Store :> es) =>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="1536"
+     height="1024"
+     viewBox="0 0 1536 1024"
+     role="img"
+     aria-labelledby="title desc">
+  <title id="title">Original Keiro logo with two missing kanji strokes restored</title>
+  <desc id="desc">The original artwork with only the missing horizontal stroke in 経 and the missing horizontal stroke in 路 added.</desc>
+  <image width="1536" height="1024" xlink:href="keiro-logo-two-strokes.png"/>
+</svg>

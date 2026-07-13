@@ -182,9 +182,26 @@ runTimerWorker Nothing now $ \timer -> do
   pure (Just firedEventId)
 ```
 
-To cap retries, use `runTimerWorkerWith (TimerWorkerOptions { maxAttempts = Just n })`:
-a claimed timer whose post-claim `attempts` exceeds `n` is dead-lettered to the terminal
-`Dead` state instead of fired.
+For a production worker, validate a bounded retry and stale-claim policy once at
+startup, then pass it together with the metrics handle:
+
+```haskell
+timerOptions =
+  either (error . show) id $
+    mkTimerWorkerOptions TimerWorkerOptions
+      { maxAttempts = Just 5
+      , requeueStuckAfter = Just 300
+      }
+
+runTimerWorkerWith (Just metrics) timerOptions now $ \timer -> do
+  -- append or submit the idempotent timer command here
+  pure (Just firedEventId)
+```
+
+A claimed timer whose post-claim `attempts` exceeds the ceiling is
+dead-lettered to the terminal `Dead` state. Each pass also returns `Firing`
+claims older than `requeueStuckAfter` to `Scheduled`; because that can repeat
+the fire action, the handler must remain idempotent.
 
 The low-level pieces are also available:
 

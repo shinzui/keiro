@@ -11,6 +11,7 @@ module Jitsurei.OncallRoster (
     responderIdText,
     Responder (..),
     serviceOncallReadModel,
+    initializeOncallRoster,
     initializeOncallRosterTable,
     insertOncallStmt,
     selectOncallStmt,
@@ -20,12 +21,15 @@ where
 import Contravariant.Extras (contrazip3)
 import Data.Int (Int32)
 import Data.Text (Text)
+import Effectful (Eff, (:>))
 import GHC.Generics (Generic)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Jitsurei.Incident (Service (..))
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
+import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..), registerReadModel)
+import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 newtype ResponderId = ResponderId Text
@@ -56,6 +60,17 @@ serviceOncallReadModel =
         , strongScope = EntireLog
         , query = \(Service service) -> Tx.statement service selectOncallStmt
         }
+
+-- | Create and register the on-call read model at application startup.
+initializeOncallRoster :: (Store :> es) => Eff es ()
+initializeOncallRoster = do
+    runTransaction initializeOncallRosterTable
+    _ <-
+        registerReadModel
+            serviceOncallReadModel.name
+            serviceOncallReadModel.version
+            serviceOncallReadModel.shapeHash
+    pure ()
 
 initializeOncallRosterTable :: Tx.Transaction ()
 initializeOncallRosterTable =

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="1536"
+     height="1024"
+     viewBox="0 0 1536 1024"
+     role="img"
+     aria-labelledby="title desc">
+  <title id="title">Keiro logo with two restored kanji strokes</title>
+  <desc id="desc">The original Keiro logo, unchanged except for one restored horizontal stroke in each kanji.</desc>
+  <!-- The PNG is retained verbatim so the original generated texture and custom forms are not redrawn. -->
+  <image width="1536" height="1024" xlink:href="keiro-logo-minimal-fix.png"/>
+</svg>

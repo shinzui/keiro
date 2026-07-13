@@ -48,7 +48,7 @@ module Jitsurei.EscalationProcess (
 where
 
 import Control.Lens ((^.))
-import Data.Aeson (Value, object, withObject, (.:))
+import Data.Aeson (FromJSON, ToJSON, Value, object, withObject, (.:))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Types (parseEither)
 import Data.Generics.Labels ()
@@ -78,6 +78,7 @@ import Jitsurei.Incident (
     incidentStream,
  )
 import Jitsurei.Paging (PageAcknowledgedData (..))
+import Jitsurei.Timers (jitsureiTimerWorkerOptions)
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, RegFile (..), SymTransducer)
 import Keiki.Generics.TH (deriveAggregate)
@@ -92,9 +93,11 @@ import Keiro.ProcessManager (
     ProcessManagerResult,
     runProcessManagerOnce,
  )
+import Keiro.Snapshot (defaultStateCodec)
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
-import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow, runTimerWorker)
+import Keiro.Telemetry (KeiroMetrics)
+import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow, runTimerWorkerWith)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
@@ -135,6 +138,7 @@ data EscalationState
     | Awaiting
     | Settled
     deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
+    deriving anyclass (FromJSON, ToJSON)
 
 type EscalationRegs = '[]
 
@@ -158,8 +162,8 @@ escalationEventStreamDef =
         , initialRegisters = RNil
         , eventCodec = escalationCodec
         , resolveStreamName = Stream.streamName
-        , snapshotPolicy = Never
-        , stateCodec = Nothing
+        , snapshotPolicy = OnTerminal
+        , stateCodec = Just (defaultStateCodec @EscalationRegs @EscalationState 1)
         }
 
 escalationEventStream :: ValidatedEscalationEventStream
@@ -175,7 +179,7 @@ escalationStream = Stream.entityStream escalationCategory . incidentIdText
 escalationTransducer ::
     SymTransducer (HsPred EscalationRegs EscalationCommand) EscalationRegs EscalationState EscalationCommand EscalationEvent
 escalationTransducer =
-    B.buildTransducer EscalationIdle RNil (const False) do
+    B.buildTransducer EscalationIdle RNil (== Settled) do
         B.from EscalationIdle do
             B.onCmd inCtorNoteRaised $ \d -> B.do
                 B.emit
@@ -340,11 +344,12 @@ runEscalationTimerWorker ::
     , Store :> es
     , Error StoreError :> es
     ) =>
+    Maybe KeiroMetrics ->
     RunCommandOptions ->
     UTCTime ->
     Eff es (Maybe TimerRow)
-runEscalationTimerWorker options now =
-    runTimerWorker Nothing now $ \timer ->
+runEscalationTimerWorker metrics options now =
+    runTimerWorkerWith metrics jitsureiTimerWorkerOptions now $ \timer ->
         case incidentIdFromTimer timer of
             Nothing -> pure Nothing
             Just incidentId -> do

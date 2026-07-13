@@ -34,7 +34,7 @@ import Data.Aeson.Types (parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Effectful (IOE, (:>))
+import Effectful (IOE, liftIO, (:>))
 import GHC.Generics (Generic)
 import Jitsurei.Incident (IncidentId (..), IncidentRaisedData (..), incidentIdText)
 import Jitsurei.OncallRoster (Responder (..), ResponderId (..), responderIdText, serviceOncallReadModel)
@@ -49,6 +49,7 @@ import Keiro.ReadModel (runQuery)
 import Keiro.Router (Router (..))
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
+import Keiro.Telemetry (KeiroMetrics)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Types (EventType (..))
 
@@ -209,14 +210,22 @@ read model, and each dispatch is idempotent (deterministic command id).
 -}
 pagingRouter ::
     (IOE :> es, Store :> es) =>
+    Maybe KeiroMetrics ->
     Router IncidentRaisedData (HsPred PageRegs PageCommand) PageRegs PageState PageCommand PageEvent es
-pagingRouter =
+pagingRouter metrics =
     Router
         { name = "jitsurei-paging"
         , key = \raised -> incidentIdText raised.incidentId
         , resolve = \raised -> do
-            result <- runQuery Nothing serviceOncallReadModel raised.service
-            let responders = either (const []) id result
+            result <- runQuery metrics serviceOncallReadModel raised.service
+            responders <-
+                case result of
+                    Left err ->
+                        liftIO
+                            ( ioError
+                                (userError ("jitsurei paging read model is unavailable: " <> show err))
+                            )
+                    Right rows -> pure rows
             pure
                 [ PMCommand
                     { target = pageCommandStream raised.incidentId responder.responderId

@@ -48,6 +48,7 @@ module Jitsurei.AgentQualRouter (
     agentQualRouter,
 
     -- * Schema helpers (for tests / setup)
+    initializeAreaChapters,
     initializeAreaChaptersTable,
     insertAreaChapterStmt,
     selectAreaChaptersStmt,
@@ -62,7 +63,7 @@ import Data.List (nub)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Effectful (Eff, IOE, (:>))
+import Effectful (Eff, IOE, liftIO, (:>))
 import GHC.Generics (Generic)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -74,11 +75,13 @@ import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
 import Keiro.ProcessManager (PMCommand (..))
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..), runQuery)
+import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..), registerReadModel, runQuery)
 import Keiro.Router (Router (..))
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
+import Keiro.Telemetry (KeiroMetrics)
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventType (..))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
@@ -249,12 +252,24 @@ areaChaptersReadModel =
         , query = \(AreaId area) -> Tx.statement area selectAreaChaptersStmt
         }
 
+-- | Create and register the area-to-chapter read model at application startup.
+initializeAreaChapters :: (Store :> es) => Eff es ()
+initializeAreaChapters = do
+    runTransaction initializeAreaChaptersTable
+    _ <-
+        registerReadModel
+            areaChaptersReadModel.name
+            areaChaptersReadModel.version
+            areaChaptersReadModel.shapeHash
+    pure ()
+
 {- | The router: for each incoming transaction, look up every chapter whose
 service areas overlap the transaction's areas (de-duplicated across areas)
 and dispatch one @RecordTransaction@ command per chapter stream.
 -}
 agentQualRouter ::
     (IOE :> es, Store :> es) =>
+    Maybe KeiroMetrics ->
     Router
         Transaction
         (HsPred ChapterRegs ChapterCommand)
@@ -263,13 +278,24 @@ agentQualRouter ::
         ChapterCommand
         ChapterEvent
         es
-agentQualRouter =
+agentQualRouter metrics =
     Router
         { name = "agent-qual-router"
         , key = \transaction -> txnIdText transaction.txnId
         , resolve = \transaction -> do
-            resolved <- traverse (runQuery Nothing areaChaptersReadModel) transaction.areas
-            let targets = nub (concat [chapters | Right chapters <- resolved])
+            resolved <- traverse (runQuery metrics areaChaptersReadModel) transaction.areas
+            chaptersByArea <-
+                traverse
+                    ( \case
+                        Left err ->
+                            liftIO
+                                ( ioError
+                                    (userError ("jitsurei area-chapters read model is unavailable: " <> show err))
+                                )
+                        Right chapters -> pure chapters
+                    )
+                    resolved
+            let targets = nub (concat chaptersByArea)
             pure
                 [ PMCommand
                     { target = chapterStream target.member target.chapter

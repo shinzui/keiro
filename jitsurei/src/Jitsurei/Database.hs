@@ -5,7 +5,8 @@ module Jitsurei.Database (
 where
 
 import Effectful (Eff, (:>))
-import Jitsurei.ReadModels (initializeOrderSummaryTable)
+import Jitsurei.ReadModels (initializeOrderSummaryTable, orderSummaryReadModel)
+import Keiro.ReadModel (ReadModel (..), registerReadModel)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 
@@ -17,5 +18,11 @@ production and by the migrated template database in tests. This helper
 creates only the application-owned read-model tables.
 -}
 initializeJitsureiTables :: (Store :> es) => Eff es ()
-initializeJitsureiTables =
+initializeJitsureiTables = do
     runTransaction initializeOrderSummaryTable
+    _ <-
+        registerReadModel
+            orderSummaryReadModel.name
+            orderSummaryReadModel.version
+            orderSummaryReadModel.shapeHash
+    pure ()

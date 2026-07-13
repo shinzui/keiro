@@ -26,7 +26,6 @@ import Keiro.Timer
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types (
     EventId (..),
-    EventType (..),
     GlobalPosition (..),
     RecordedEvent (..),
     StreamId (..),
@@ -278,14 +277,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         scheduleTimerTx (paymentTimeoutRequest sampleOrderId dueTime)
             Right claimed <-
                 runner $
-                    runPaymentTimeoutWorker dueTime
+                    runPaymentTimeoutWorker Nothing dueTime
             claimed `shouldSatisfy` isJust
 
     describe "Jitsurei agent-qualification router" $ around (withFreshResourceStore fixture) $ do
         it "routes a transaction to every chapter resolved from its areas, idempotently" $ \(_store, StoreRunner runner) -> do
             Right () <-
                 runner $
-                    Store.runTransaction initializeAreaChaptersTable
+                    initializeAreaChapters
             Right () <- runner $
                 Store.runTransaction $ do
                     -- area-north and area-south overlap on (m2, c2).
@@ -302,7 +301,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             -- across the two overlapping areas), one command appended to each.
             Right (RouterResult rs1) <-
                 runner $
-                    runRouterOnce defaultRunCommandOptions agentQualRouter sourceTransactionEvent transaction
+                    runRouterOnce defaultRunCommandOptions (agentQualRouter Nothing) sourceTransactionEvent transaction
             length rs1 `shouldBe` 3
             rs1 `shouldSatisfy` all isAppended
             Right c1 <-
@@ -323,14 +322,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 runner $
                     runRouterOnce
                         defaultRunCommandOptions
-                        agentQualRouter
+                        (agentQualRouter Nothing)
                         sourceTransactionEvent
                         (Transaction{txnId = TxnId "txn-1", areas = [AreaId "area-empty"]})
             length rsEmpty `shouldBe` 0
             -- Replay: the same source event re-dispatches as duplicates, no new events.
             Right (RouterResult rs2) <-
                 runner $
-                    runRouterOnce defaultRunCommandOptions agentQualRouter sourceTransactionEvent transaction
+                    runRouterOnce defaultRunCommandOptions (agentQualRouter Nothing) sourceTransactionEvent transaction
             length rs2 `shouldBe` 3
             rs2 `shouldSatisfy` all isDuplicate
             Right c1' <-
@@ -423,7 +422,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "fans IncidentRaised out to one page per rostered responder, idempotently" $ \(_store, StoreRunner runner) -> do
             Right () <-
                 runner $
-                    Store.runTransaction initializeOncallRosterTable
+                    initializeOncallRoster
             Right () <- runner $
                 Store.runTransaction $ do
                     Tx.statement ("checkout", "alice", 1) insertOncallStmt
@@ -438,7 +437,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         }
             Right (RouterResult rs1) <-
                 runner $
-                    runRouterOnce defaultRunCommandOptions pagingRouter incidentRaisedSource raised
+                    runRouterOnce defaultRunCommandOptions (pagingRouter Nothing) incidentRaisedSource raised
             length rs1 `shouldBe` 3
             rs1 `shouldSatisfy` all isAppended
             Right pa <-
@@ -458,14 +457,19 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 runner $
                     runRouterOnce
                         defaultRunCommandOptions
-                        pagingRouter
+                        (pagingRouter Nothing)
                         incidentRaisedSource
-                        (raised{service = Service "unstaffed"})
+                        IncidentRaisedData
+                            { incidentId = raised.incidentId
+                            , service = Service "unstaffed"
+                            , severity = raised.severity
+                            , raisedAt = raised.raisedAt
+                            }
             length rsNone `shouldBe` 0
             -- Replay the same source event: every dispatch is a duplicate, no new pages.
             Right (RouterResult rs2) <-
                 runner $
-                    runRouterOnce defaultRunCommandOptions pagingRouter incidentRaisedSource raised
+                    runRouterOnce defaultRunCommandOptions (pagingRouter Nothing) incidentRaisedSource raised
             length rs2 `shouldBe` 3
             rs2 `shouldSatisfy` all isDuplicate
             Right paAgain <-
@@ -523,6 +527,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         [PMCommandAppended{}] -> True
                         _ -> False
                 _ -> False
+            Right managerSnapshotVersion <-
+                runner $
+                    Store.runTransaction $
+                        Tx.statement "esc-inc-2" snapshotVersionForStreamStmt
+            managerSnapshotVersion `shouldBe` Just (StreamVersion 2)
             Right recorded <-
                 runner $
                     Store.readStreamForward (StreamName "incident-inc-2") (StreamVersion 0) 10
@@ -552,7 +561,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     runEscalationOnce defaultRunCommandOptions incidentRaisedSource (IncidentReported (sampleRaised incidentId Sev1))
             _ <-
                 runner $
-                    runEscalationTimerWorker defaultRunCommandOptions (addUTCTime 600 incidentRaisedAt)
+                    runEscalationTimerWorker Nothing defaultRunCommandOptions (addUTCTime 600 incidentRaisedAt)
             Right recorded <-
                 runner $
                     Store.readStreamForward (StreamName "incident-inc-3") (StreamVersion 0) 10
@@ -577,7 +586,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     runEscalationOnce defaultRunCommandOptions incidentRaisedSource (IncidentReported (sampleRaised incidentId Sev1))
             fired <-
                 runner $
-                    runEscalationTimerWorker defaultRunCommandOptions (addUTCTime 600 incidentRaisedAt)
+                    runEscalationTimerWorker Nothing defaultRunCommandOptions (addUTCTime 600 incidentRaisedAt)
             fired `shouldSatisfy` \case
                 Right (Just _) -> True
                 _ -> False

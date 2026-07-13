@@ -19,12 +19,19 @@ temporary PostgreSQL instance instead of mutating a developer database.
 For local demos and tests, `initializeJitsureiTables` creates the
 application-owned `jitsurei_order_summary` read-model table in the example's own
 `jitsurei` schema (via an opt-in `CREATE SCHEMA IF NOT EXISTS "jitsurei"` and a
-schema-qualified `CREATE TABLE`), keeping it out of both the `kiroku` event-store
-schema and Keiro's `keiro` framework schema:
+schema-qualified `CREATE TABLE`) and explicitly registers the model as `Live`.
+That keeps the data out of both the `kiroku` event-store schema and Keiro's
+`keiro` framework schema while satisfying `runQuery`'s fail-closed startup
+contract:
 
 ```haskell
 initializeJitsureiTables :: (Store :> es) => Eff es ()
 ```
+
+The router examples follow the same rule through `initializeOncallRoster` and
+`initializeAreaChapters`: each helper creates its application table and calls
+`registerReadModel` before any query is served. Production startup should do
+the registration after service migrations have succeeded.
 
 Production services should not depend on those compatibility initializers.
 Instead, run `keiro-migrate` before the application starts, then apply your
@@ -54,6 +61,35 @@ For process managers and timers, treat duplicate delivery as normal. The
 fulfillment process manager demonstrates deterministic command ids. The timer
 guide demonstrates v7-compatible UUID fixtures through TypeID; production timer
 ids should likewise be generated or derived through a UUIDv7-capable path.
+
+`jitsurei-demo` also demonstrates application-level OpenTelemetry ownership. At
+startup it creates one SDK `MeterProvider`, attaches the handle exporter to
+stdout, constructs one `KeiroMetrics` value with `newKeiroMetrics`, and threads
+that same handle through command options, process-manager worker options,
+read-model queries (including queries nested inside routers), timer workers,
+and durable-workflow run/resume options. The provider is shut down after the
+selected demo, which performs a final collection and prints the recorded
+`keiro.*` instruments. For example:
+
+```bash
+cabal run jitsurei-demo -- escalation
+```
+
+Production applications should keep the same ownership and threading shape but
+replace the stdout exporter with their OTLP exporter.
+
+The timer examples use `jitsureiTimerWorkerOptions`, constructed through
+`mkTimerWorkerOptions`, instead of the unbounded historical default. It caps
+firing at five attempts and requeues claims stranded in `Firing` after five
+minutes. Timer ids and fired event ids remain deterministic because recovery is
+at-least-once: a worker can repeat the fire action after a crash.
+
+The escalation manager demonstrates the recommended terminal-manager snapshot
+shape. `Settled` is terminal, the manager event stream uses `OnTerminal`, and
+`defaultStateCodec` persists its state at codec version 1. The jitsurei test
+suite proves that the second reaction writes a version-2 snapshot for the
+manager's `esc-<incident>` stream. Use `Every n` instead for a manager that
+keeps reacting for a long time rather than reaching a terminal state.
 
 The broad local verification path is:
 
