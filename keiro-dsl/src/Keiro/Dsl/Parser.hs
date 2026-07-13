@@ -58,12 +58,16 @@ symbol = L.symbol sc
 character (so @goto@ matches @goto@ but not @gotoX@).
 -}
 keyword :: Text -> P ()
-keyword w = (lexeme . try) (string' w *> notFollowedBy identChar)
+keyword w = (lexeme . try) (string' w *> notFollowedBy (identChar <|> (char '-' *> identChar)))
   where
     string' = chunk
 
 identChar :: P Char
 identChar = alphaNumChar <|> char '_'
+
+-- | Fail with the diagnostic caret placed at a previously captured offset.
+failAt :: Int -> String -> P a
+failAt offset message = region (setErrorOffset offset) (fail message)
 
 {- | Words that may not be used as bare identifiers, because they introduce a
 different construct and would otherwise be swallowed (e.g. @aggregate@ ending
@@ -298,7 +302,18 @@ pAggregate = do
     name <- ident
     regs <- pRegsBlock
     states <- pStatesLine
-    items <- many pBodyItem
+    positionedItems <- many ((,) <$> getOffset <*> pBodyItem)
+    let items = map snd positionedItems
+        wireOffsets = [offset | (offset, BIWire _) <- positionedItems]
+        projectionOffsets = [offset | (offset, BIProjection _) <- positionedItems]
+    case wireOffsets of
+        _ : duplicateOffset : _ ->
+            failAt duplicateOffset ("duplicate wire block in aggregate " <> T.unpack name <> " (only one is allowed)")
+        _ -> pure ()
+    case projectionOffsets of
+        _ : duplicateOffset : _ ->
+            failAt duplicateOffset ("duplicate projection block in aggregate " <> T.unpack name <> " (only one is allowed)")
+        _ -> pure ()
     pure
         Aggregate
             { aggName = name
@@ -317,7 +332,7 @@ pAggregate = do
 pRegsBlock :: P [RegDecl]
 pRegsBlock = do
     keyword "regs"
-    many (try pRegDecl)
+    many pRegDecl
 
 pRegDecl :: P RegDecl
 pRegDecl = do
@@ -1137,23 +1152,31 @@ data Clause
 
 pTransition :: P Transition
 pTransition = do
+    startOffset <- getOffset
     loc <- getLoc
     src <- ident
     _ <- symbol "--"
     cmd <- ident
     _ <- symbol "-->"
-    cs <- many (pClause <* optional (symbol ";"))
-    gt <- case [n | CGoto n <- cs] of
-        (n : _) -> pure n
-        [] -> fail ("transition " <> T.unpack src <> " -- " <> T.unpack cmd <> " is missing a goto clause")
-    let guards = [e | CGuard e <- cs]
+    positionedClauses <- many ((,) <$> getOffset <*> (pClause <* optional (symbol ";")))
+    let clauses = map snd positionedClauses
+        gotos = [(offset, target) | (offset, CGoto target) <- positionedClauses]
+        transitionName = T.unpack src <> " -- " <> T.unpack cmd
+    gt <- case gotos of
+        [] -> failAt startOffset ("transition " <> transitionName <> " is missing a goto clause")
+        [(_, target)] -> pure target
+        (_, firstTarget) : (duplicateOffset, _) : _ ->
+            failAt
+                duplicateOffset
+                ("duplicate goto clause (transition " <> transitionName <> " already declared goto " <> T.unpack firstTarget <> ")")
+    let guards = [e | CGuard e <- clauses]
     pure
         Transition
             { tSource = src
             , tCommand = cmd
             , tGuard = case guards of [] -> Nothing; es -> Just (foldr1 EAnd es)
-            , tWrites = [(r, e) | CWrite r e <- cs]
-            , tEmits = [n | CEmit n <- cs]
+            , tWrites = [(r, e) | CWrite r e <- clauses]
+            , tEmits = [n | CEmit n <- clauses]
             , tGoto = gt
             , tLoc = loc
             }

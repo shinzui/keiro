@@ -77,6 +77,35 @@ main = hspec $ do
             map code (validateSpec totalSpec) `shouldContain` [StatusMapNotTotal]
             parseSpec "<partial-round-trip>" (renderSpec partial) `shouldBe` Right partial
 
+    describe "positioned parser diagnostics" $ do
+        it "rejects a duplicate goto at the second clause" $ do
+            err <- parseErrorOf "<duplicate-goto>" duplicateGotoSpec
+            err `shouldSatisfy` T.isInfixOf "duplicate goto"
+            err `shouldSatisfy` T.isInfixOf "<duplicate-goto>:10:"
+        it "rejects duplicate wire and projection blocks at their second occurrences" $ do
+            wireErr <- parseErrorOf "<duplicate-wire>" duplicateWireSpec
+            wireErr `shouldSatisfy` T.isInfixOf "duplicate wire block"
+            wireErr `shouldSatisfy` T.isInfixOf "<duplicate-wire>:8:"
+            projectionErr <- parseErrorOf "<duplicate-projection>" duplicateProjectionSpec
+            projectionErr `shouldSatisfy` T.isInfixOf "duplicate projection block"
+            projectionErr `shouldSatisfy` T.isInfixOf "<duplicate-projection>:9:"
+        it "anchors a missing goto on the transition line" $ do
+            err <- parseErrorOf "<missing-goto>" missingGotoSpec
+            err `shouldSatisfy` T.isInfixOf "missing a goto clause"
+            err `shouldSatisfy` T.isInfixOf "<missing-goto>:8:"
+        it "stops before a misplaced dispatch-id and expects schedule at its start" $ do
+            let src = misplacedDispatchIdSpec
+                expectedPosition =
+                    "<misplaced-dispatch-id>:"
+                        <> T.pack (show (lineNumberContaining "dispatch-id" src))
+                        <> ":5:"
+            err <- parseErrorOf "<misplaced-dispatch-id>" src
+            err `shouldSatisfy` T.isInfixOf "schedule"
+            err `shouldSatisfy` T.isInfixOf expectedPosition
+        it "keeps a malformed register declaration's equals error" $ do
+            err <- parseErrorOf "<malformed-register>" malformedRegisterSpec
+            err `shouldSatisfy` T.isInfixOf "expecting '='"
+
     describe "canonical reservation.keiro" $
         it "parses into the expected aggregate shape" $ do
             input <- readTestText "test/fixtures/reservation.keiro"
@@ -771,6 +800,94 @@ statusMapSpec marker =
         , "  projection things consistency=Eventual key=thingId"
         , "    status-map" <> marker <> " { Created=>held }"
         ]
+
+parseErrorOf :: FilePath -> T.Text -> IO T.Text
+parseErrorOf sourceName src = case parseSpec sourceName src of
+    Left err -> pure err
+    Right _ -> expectationFailure ("expected parse failure for " <> sourceName) >> error "unreachable"
+
+duplicateGotoSpec :: T.Text
+duplicateGotoSpec =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate Thing"
+        , "  regs"
+        , "  states A B C"
+        , ""
+        , "  command Go { }"
+        , "  A -- Go -->"
+        , "    goto B"
+        , "    goto C"
+        ]
+
+missingGotoSpec :: T.Text
+missingGotoSpec =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate Thing"
+        , "  regs"
+        , "  states A B"
+        , ""
+        , "  command Go { }"
+        , "  A -- Go -->"
+        , "    emit Changed"
+        ]
+
+duplicateWireSpec :: T.Text
+duplicateWireSpec =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate Thing"
+        , "  regs"
+        , "  states Open"
+        , ""
+        , "  wire kind=ctorName fields=camelCase schemaVersion=1"
+        , "  wire kind=typeName fields=snakeCase schemaVersion=2"
+        ]
+
+duplicateProjectionSpec :: T.Text
+duplicateProjectionSpec =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate Thing"
+        , "  regs"
+        , "  states Open"
+        , ""
+        , "  projection first consistency=Strong key=thingId"
+        , "    status-map partial { }"
+        , "  projection second consistency=Eventual key=thingId"
+        ]
+
+malformedRegisterSpec :: T.Text
+malformedRegisterSpec =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate Thing"
+        , "  regs"
+        , "    status Status"
+        , "  states Open"
+        ]
+
+misplacedDispatchIdSpec :: T.Text
+misplacedDispatchIdSpec =
+    T.replace
+        "    schedule timer\n\n  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)\n"
+        "    dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)\n    schedule timer\n"
+        (renderSpec (Spec "svc" Nothing Nothing [] [] [] [NProcess (processWithLiteral "literal")]))
+
+lineNumberContaining :: T.Text -> T.Text -> Int
+lineNumberContaining needle = go 1 . T.lines
+  where
+    go current = \case
+        [] -> current
+        lineText : rest
+            | needle `T.isInfixOf` lineText -> current
+            | otherwise -> go (current + 1) rest
 
 --------------------------------------------------------------------------------
 -- Generators (bounded; restricted to valid, non-reserved identifiers)
