@@ -104,6 +104,56 @@ test-suite keiro-dsl-conformance
     , keiro
     , text   >=2.1
 
+-- EP-106 M6: every distinct `new <kind>` skeleton is scaffolded into this
+-- committed tree. Compiling the union proves a starter that passes `check`
+-- cannot emit syntactically or type-invalid Haskell.
+test-suite keiro-dsl-conformance-skeletons
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-skeletons
+  main-is:        Main.hs
+  other-modules:
+    SkelAggregate.Generated.MyService.Thing.Codec
+    SkelAggregate.Generated.MyService.Thing.Domain
+    SkelAggregate.Generated.MyService.Thing.EventStream
+    SkelAggregate.Generated.MyService.Thing.Harness
+    SkelAggregate.Generated.MyService.Thing.Projection
+    SkelAggregate.MyService.Thing.Holes
+    SkelContract.Generated.MyService.MyContract.Contract
+    SkelEmit.Generated.MyService.MyContract.Contract
+    SkelEmit.Generated.MyService.ThingPublisher.Publisher
+    SkelIntake.Generated.MyService.MyContract.Contract
+    SkelIntake.Generated.MyService.ThingInbox.Inbox
+    SkelProcess.Generated.MyService.Hospital.Codec
+    SkelProcess.Generated.MyService.Hospital.Domain
+    SkelProcess.Generated.MyService.Hospital.EventStream
+    SkelProcess.Generated.MyService.Hospital.Harness
+    SkelProcess.Generated.MyService.Hospital.Projection
+    SkelProcess.Generated.MyService.HospitalSurge.Process
+    SkelProcess.Generated.MyService.HospitalSurge.ProcessHarness
+    SkelProcess.Generated.MyService.Surge.Codec
+    SkelProcess.Generated.MyService.Surge.Domain
+    SkelProcess.Generated.MyService.Surge.EventStream
+    SkelProcess.Generated.MyService.Surge.Harness
+    SkelProcess.Generated.MyService.Surge.Projection
+    SkelProcess.MyService.Hospital.Holes
+    SkelProcess.MyService.HospitalSurge.ProcessHoles
+    SkelProcess.MyService.Surge.Holes
+    SkelQueue.Generated.MyService.Reservation_work.Queue
+    SkelQueue.Generated.MyService.Reservation_work.QueuePolicy
+    SkelWorkflow.Generated.MyService.HospitalTransferReservation.WorkflowFacts
+    SkelWorkflow.Generated.MyService.HospitalTransferReservation.WorkflowRuntime
+
+  build-depends:
+    , aeson       >=2.2
+    , base        >=4.21 && <5
+    , keiki       >=0.2  && <0.3
+    , keiro
+    , keiro-pgmq
+    , text        >=2.1
+    , time
+    , uuid
+
 -- EP-7 cold-start: a fresh `subscription` aggregate authored from only the skill
 -- notation, scaffolded + hand-filled, compiling against keiki/keiro with a green
 -- spec-derived harness — proof the authoring loop closes on a non-corpus spec.

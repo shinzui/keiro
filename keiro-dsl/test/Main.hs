@@ -6,7 +6,7 @@ module Main (main) where
 
 import Control.Exception (bracket)
 import Control.Monad (filterM, forM_)
-import Data.List (sort)
+import Data.List (partition, sort)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), FamilyDiff (..), NodeFamily, diffSpecs, familyRegistry, isAdvisory, isBreaking)
@@ -16,7 +16,7 @@ import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess, scaffoldPublisher, scaffoldRefusals, scaffoldWorkqueue, windowSeconds)
-import Keiro.Dsl.ScaffoldRun (Refusal (..), executeScaffold, planScaffold)
+import Keiro.Dsl.ScaffoldRun (Refusal (..), executeScaffold, planScaffold, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, validateSpec)
 import System.Directory (createDirectory, createDirectoryIfMissing, doesFileExist, getTemporaryDirectory, removeFile, removePathForcibly)
@@ -636,6 +636,10 @@ main = hspec $ do
     describe "new <kind> skeletons (M5)" $ do
         it "every skeleton parses and validates with zero error diagnostics" $
             mapM_ assertSkeletonValid skeletonKinds
+        it "every skeleton passes the scaffold refusal gates" $
+            mapM_ assertSkeletonScaffoldable skeletonKinds
+        it "fresh skeleton scaffolds match the committed compiling modules" $
+            mapM_ (uncurry assertSkeletonMatchesCommitted) skeletonModuleRoots
         it "rejects an unknown kind with a helpful message" $
             case skeletonFor "bogus" of
                 Left msg -> ("Valid kinds:" `T.isInfixOf` msg) `shouldBe` True
@@ -899,6 +903,37 @@ assertSkeletonValid kind = case skeletonFor kind of
             [code d | d <- validateSpec spec, severity d == Error]
                 `shouldBe` ([] :: [DiagnosticCode])
 
+assertSkeletonScaffoldable :: T.Text -> IO ()
+assertSkeletonScaffoldable kind = case skeletonFor kind of
+    Left err -> expectationFailure (T.unpack ("skeleton for " <> kind <> ": " <> err))
+    Right src -> case parseSpec ("new:" <> T.unpack kind) src of
+        Left perr -> expectationFailure (T.unpack perr)
+        Right spec -> planScaffold (defaultContext (specContext spec)) spec `shouldSatisfy` isSuccessfulScaffold
+
+skeletonModuleRoots :: [(T.Text, T.Text)]
+skeletonModuleRoots =
+    [ ("aggregate", "SkelAggregate")
+    , ("process", "SkelProcess")
+    , ("contract", "SkelContract")
+    , ("intake", "SkelIntake")
+    , ("emit", "SkelEmit")
+    , ("workqueue", "SkelQueue")
+    , ("workflow", "SkelWorkflow")
+    ]
+
+assertSkeletonMatchesCommitted :: T.Text -> T.Text -> IO ()
+assertSkeletonMatchesCommitted kind root = case skeletonFor kind of
+    Left err -> expectationFailure (T.unpack err)
+    Right source -> case parseSpec ("new:" <> T.unpack kind) source of
+        Left err -> expectationFailure (T.unpack err)
+        Right spec -> do
+            let ctx = (defaultContext (specContext spec)){moduleRoot = root}
+            forM_ [m | m <- scaffoldModules ctx spec, kindOf m == Generated] $ \m -> do
+                committed <- readTestText ("test/conformance-skeletons/" <> modulePath m)
+                normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText m)
+  where
+    kindOf = Keiro.Dsl.Scaffold.kind
+
 -- | Parse a fixture into a 'Spec', failing the test on a parse error.
 specOf :: FilePath -> IO Spec
 specOf path = do
@@ -941,24 +976,43 @@ assertMatchesCommitted :: ScaffoldModule -> IO ()
 assertMatchesCommitted m = do
     let committedPath = "test/conformance/" <> modulePath m
     committed <- readTestText committedPath
-    normalize committed `shouldBe` normalize (moduleText m)
+    normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText m)
+
+normalizeGenerated :: T.Text -> (T.Text, [T.Text])
+normalizeGenerated text =
+    let (imports, body) = partition isImport (T.lines text)
+     in (normalizeBody body, sort (map normalizeImport imports))
   where
-    -- Compare the deterministic body, robust to formatter-only changes. Import
-    -- lines are dropped because fourmolu may reorder import-list items and move
-    -- `qualified`; correctness of the imports is already proven by the
-    -- keiro-dsl-conformance suite compiling. Commas are spaced before word
-    -- normalization so leading-comma and trailing-comma export lists compare the
-    -- same, while missing or reordered exported names still fail.
-    normalize =
+    -- Compare the deterministic body exactly as before and imports as a sorted,
+    -- whitespace-normalized list. Sorting tolerates formatter reordering while
+    -- additions, removals, and renamed imports now fail the pin.
+    normalizeBody =
         T.replace " , )" " )"
             . T.unwords
             . T.words
+            . T.replace "}" " } "
+            . T.replace "{" " { "
+            . T.replace "]" " ] "
+            . T.replace "[" " [ "
             . T.replace "," " , "
             . T.unlines
-            . filter (not . isImport)
-            . T.lines
-    isImport l = case T.words l of
-        ("import" : _) -> True
+    normalizeImport line =
+        let reordered = case T.words line of
+                "import" : "qualified" : moduleName : rest -> T.unwords ("import" : moduleName : "qualified" : rest)
+                wordsInImport -> T.unwords wordsInImport
+            (prefix, explicit) = T.breakOn " (" reordered
+         in if T.null explicit
+                then prefix
+                else
+                    let members =
+                            sort
+                                . map (T.unwords . T.words)
+                                . T.splitOn ","
+                                . T.dropEnd 1
+                                $ T.drop 2 explicit
+                     in prefix <> " (" <> T.intercalate "," members <> ")"
+    isImport line = case T.words line of
+        "import" : _ -> True
         _ -> False
 
 {- | Locate and read a test fixture or committed conformance source regardless

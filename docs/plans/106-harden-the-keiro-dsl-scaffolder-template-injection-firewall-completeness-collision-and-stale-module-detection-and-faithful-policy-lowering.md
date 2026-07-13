@@ -59,10 +59,10 @@ commands in "Validation and Acceptance".
       `BackoffSchedule`, refusal of unknown kinds.
 - [x] (2026-07-13 22:00Z) M5: D9 exact status-map lowering (fixtures were already updated by EP-104) and D6 harness
       `sampleValue` completeness (Int, vertex; refusal for non-representable types).
-- [ ] M6: D4 skeletons scaffold compiling code — fixed `process` skeleton, new
+- [x] (2026-07-13 22:06Z) M6: D4 skeletons scaffold compiling code — fixed `process` skeleton, new
       `keiro-dsl-conformance-skeletons` suite compiling every skeleton's scaffold, unit
       pin that fresh skeleton scaffolds match the committed suite.
-- [ ] M7: D7 conformance pin includes import lines (sorted-set comparison); committed
+- [x] (2026-07-13 22:06Z) M7: D7 conformance pin includes import lines (sorted-set comparison); committed
       conformance modules regenerated if drift is exposed.
 - [ ] M8: D3 scaffold-run record sidecar + stale-module report across layout/module-root
       flips.
@@ -97,6 +97,12 @@ Plan of Work):
   names before EP-106 began. M5 therefore required only the scaffold-side lookup change;
   no fixture or committed Projection output changed. The exact `ReservationHeld` versus
   `ReservationUnHeld` regression and the aggregate conformance suite are green.
+- Strengthening the import pin immediately exposed the formatter-only distinction between
+  `import qualified Data.Text as T` and GHC2024's postpositive
+  `import Data.Text qualified as T`. Import normalization now canonicalizes those two
+  spellings while still comparing the imported module and explicit import list. The new
+  skeleton suite compiled 31 modules and ran the aggregate harness and workflow-facts
+  checks; the unit suite passed 148 examples.
 
 (To be extended during implementation.)
 

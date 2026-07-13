@@ -856,9 +856,9 @@ emitProcessHoles _genPrefix holePrefix p =
         , "-- keiro-dsl creates it once and never overwrites it."
         , "module " <> holePrefix <> ".ProcessHoles () where"
         , ""
-        , "-- HOLE handle: build the ProcessManagerAction (the self-advance "
+        , "-- HOLE handle: build the ProcessManagerAction (the self-advance"
         , "--   '" <> advCommand (hAdvance (procHandle p)) <> "', the dispatch(es), and the timer) from the input."
-        , "-- HOLE window: the deadline policy, e.g. surgeWindow :: NominalDiffTime; "
+        , "-- HOLE window: the deadline policy, e.g. surgeWindow :: NominalDiffTime;"
         , "--   surgeDeadline observedAt = addUTCTime surgeWindow observedAt  (TIME INJECTED)."
         , "-- HOLE fire command: construct " <> fireCommand (tmFire (procTimer p)) <> " for the timer fire,"
         , "--   keyed by correlationId; the fired-event-id is the deterministic uuidv5 of"
@@ -1433,9 +1433,11 @@ list is extended alongside the policy and type lowering milestones.
 scaffoldRefusals :: Spec -> [Text]
 scaffoldRefusals spec =
     concatMap aggregateRefusals aggregates
+        <> concatMap contractRefusals contracts
         <> concatMap publisherRefusals publishers
   where
     aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+    contracts = [contract | NContract contract <- specNodes spec]
     publishers = [publisher | NPublisher publisher <- specNodes spec]
     idTypes = map idName (specIds spec)
     enumTypes = map enumName (specEnums spec)
@@ -1443,7 +1445,10 @@ scaffoldRefusals spec =
         ctors : _ -> ctors
         [] -> []
     aggregateRefusals aggregate =
-        concatMap (registerRefusals aggregate) (aggRegs aggregate)
+        [ "AggregateEmpty: aggregate '" <> aggName aggregate <> "' must declare at least one command, event, and transition"
+        | null (aggCommands aggregate) || null (aggEvents aggregate) || null (aggTransitions aggregate)
+        ]
+            <> concatMap (registerRefusals aggregate) (aggRegs aggregate)
             <> [ "FieldTypeUnrepresentable: aggregate '" <> aggName aggregate <> "' field '" <> fieldName field <> "' has unsupported explicit type '" <> ty <> "'"
                | field <- aggregateFields aggregate
                , Just ty <- [fieldType field]
@@ -1476,6 +1481,10 @@ scaffoldRefusals spec =
             <> concat [fields | event <- aggEvents aggregate, EventFields fields <- [evBody event]]
     supportedType aggregate ty =
         ty `elem` (["Text", "Int", "Bool", aggName aggregate <> "Vertex"] <> idTypes <> enumTypes)
+    contractRefusals contract =
+        [ "ContractEmpty: contract '" <> ctrName contract <> "' must declare at least one event"
+        | null (ctrEvents contract)
+        ]
     publisherRefusals publisher =
         let backoff = pubBackoff publisher
             label message = message <> ": publisher '" <> pubName publisher <> "'"
