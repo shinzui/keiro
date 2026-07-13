@@ -28,6 +28,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word64)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.ReadModelShape (deriveShapeHash)
 import Numeric (showHex)
 
 data Severity = Error | Warning
@@ -136,6 +137,18 @@ data DiagnosticCode
       IdentHaskellKeyword
     | IdentNotConstructorSafe
     | VertexCtorCollision
+    | -- EP-107 (first-class read models).
+      RmShapeHashDrift
+    | RmStrongInlineOnly
+    | RmScopeWithoutStrong
+    | RmUnknownColumnType
+    | RmInlineFeedUnreferenced
+    | RmConsistencyConflict
+    | RmProjectionWithoutNode
+    | QueryUnresolvedReadModel
+    | QueryConsistencyInvalid
+    | DispatchReadModelUnresolved
+    | DispatchReadModelFieldUnknown
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -402,7 +415,7 @@ validateNode spec (NEmit e) = validateEmit spec e
 validateNode spec (NPublisher p) = validatePublisher spec p
 validateNode _spec (NWorkqueue w) = validateWorkqueue w
 validateNode spec (NPgmqDispatch d) = validatePgmqDispatch spec d
-validateNode _spec (NReadModel _) = []
+validateNode spec (NReadModel readModel) = validateReadModel spec readModel
 validateNode _spec (NWorkflow w) = validateWorkflow w
 validateNode spec (NOperation o) = validateOperation spec o
 
@@ -481,15 +494,18 @@ validateRule spec rule = case [e | e <- specEnums spec, enumName e == ruleDomain
                ]
 
 {- | Operation rules resolve command aggregates, stream fields, projections,
-workflow signal labels and value types, and run targets. Query read-model
-resolution remains explicitly deferred until the grammar can declare one.
+read models, workflow signal labels and value types, and run targets.
 -}
 validateOperation :: Spec -> OperationNode -> [Diagnostic]
 validateOperation spec o = case opShape o of
     CommandOp aggregate streamField _ projections ->
         aggregateRef aggregate streamField ++ projectionRefs projections
-    QueryOp readModel _ _ _ ->
-        resolveReadModelRef spec (opLoc o) ("query operation '" <> opName o <> "'") readModel
+    QueryOp readModel _ _ consistency ->
+        resolveReadModelRef QueryUnresolvedReadModel spec (opLoc o) ("query operation '" <> opName o <> "'") readModel
+            ++ [ mkErr ol QueryConsistencyInvalid $
+                    "query operation '" <> opName o <> "' has unknown consistency '" <> consistency <> "'; expected Strong, Eventual, or PositionWait"
+               | consistency `notElem` (["Strong", "Eventual", "PositionWait"] :: [Name])
+               ]
     SignalOp lbl wf _ _ valueType ->
         case lookupWorkflow wf of
             Nothing ->
@@ -533,13 +549,59 @@ validateOperation spec o = case opShape o of
         , projection `notElem` projectionTables
         ]
 
-{- | Read-model reference resolution is DEFERRED: the grammar has no readmodel
-node to resolve against (2026-07 audit, finding E1). Returns no diagnostics
-today. docs/plans/107-add-a-first-class-read-model-node-with-registration-schema-and-consistency-to-keiro-dsl.md
-replaces this body with real resolution once the node exists.
--}
-resolveReadModelRef :: Spec -> Loc -> Text -> Name -> [Diagnostic]
-resolveReadModelRef _spec _loc _context _name = []
+-- | Resolve a named read-model node using the caller's diagnostic code.
+resolveReadModelRef :: DiagnosticCode -> Spec -> Loc -> Text -> Name -> [Diagnostic]
+resolveReadModelRef diagnosticCode spec diagnosticLoc context name =
+    [ mkErr (locLine diagnosticLoc) diagnosticCode $
+        context <> " references undeclared readmodel '" <> name <> "'"
+    | name `notElem` [rmName readModel | NReadModel readModel <- specNodes spec]
+    ]
+
+-- | Validate captured identity, feed semantics, and the declared column surface.
+validateReadModel :: Spec -> ReadModelNode -> [Diagnostic]
+validateReadModel spec readModel =
+    shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineReference
+  where
+    readModelLine = locLine (rmLoc readModel)
+    expectedShape = deriveShapeHash readModel
+    shapeFixture =
+        [ mkErr readModelLine RmShapeHashDrift $
+            "readmodel '"
+                <> rmName readModel
+                <> "': captured shape \""
+                <> rmShape readModel
+                <> "\" does not match the declared columns (expected \""
+                <> expectedShape
+                <> "\"); update the fixture AND bump version if the table shape really changed"
+        | rmShape readModel /= expectedShape
+        ]
+    allowedColumnTypes = Set.fromList ["text", "int", "bigint", "bool", "timestamptz", "jsonb", "numeric"]
+    columnTypes =
+        [ mkErr readModelLine RmUnknownColumnType $
+            "readmodel '" <> rmName readModel <> "' column '" <> rmcName columnDecl <> "' has unknown type '" <> rmcType columnDecl <> "'"
+        | columnDecl <- rmColumns readModel
+        , rmcType columnDecl `Set.notMember` allowedColumnTypes
+        ]
+    strongFeed =
+        [ mkErr readModelLine RmStrongInlineOnly $
+            "readmodel '"
+                <> rmName readModel
+                <> "': consistency = Strong with feed = inline; an inline-only model has no subscription worker to advance the cursor a Strong read waits on. Use consistency = Eventual, or feed = subscription"
+        | rmFeed readModel == RmInline
+        , rmConsistency readModel == Strong
+        ]
+    scopeMode =
+        [ mkErr readModelLine RmScopeWithoutStrong $
+            "readmodel '" <> rmName readModel <> "': scope is meaningful only with consistency = Strong"
+        | rmScope readModel /= Nothing
+        , rmConsistency readModel /= Strong
+        ]
+    inlineReference =
+        [ mkErr readModelLine RmInlineFeedUnreferenced $
+            "readmodel '" <> rmName readModel <> "' declares feed = inline but no aggregate projection references it"
+        | rmFeed readModel == RmInline
+        , rmName readModel `notElem` [projTable projection | NAggregate aggregate <- specNodes spec, Just projection <- [aggProjection aggregate]]
+        ]
 
 {- | EP-5 workqueue rules: the captured physical name must match the queueRef
 derivation; the disposition inversions (storeFailure transient => must retry;
@@ -597,7 +659,7 @@ validateWorkqueue w = concat [divergence, completeness, duplicateRows, inversion
 
 -- | EP-5 dispatch rule: the @enqueue to@ target must resolve to a declared workqueue.
 validatePgmqDispatch :: Spec -> PgmqDispatchNode -> [Diagnostic]
-validatePgmqDispatch spec d = enqueueRef ++ dedupQueueRef ++ deferredReadModels
+validatePgmqDispatch spec d = enqueueRef ++ dedupQueueRef ++ sourceReadModelRef ++ dedupReadModelRef ++ dedupReadModelField
   where
     dl = locLine (pdLoc d)
     workqueues = [w | NWorkqueue w <- specNodes spec]
@@ -615,9 +677,17 @@ validatePgmqDispatch spec d = enqueueRef ++ dedupQueueRef ++ deferredReadModels
                 "dispatch '" <> pdName d <> "' dedup field '" <> pdDedupQueueField d <> "' is not a payload wire field of queue '" <> pdDedupQueue d <> "'"
             | pdDedupQueueField d `notElem` map wqfWire (wqPayload queue)
             ]
-    deferredReadModels =
-        resolveReadModelRef spec (pdLoc d) ("dispatch '" <> pdName d <> "' source") (pdSourceReadModel d)
-            ++ resolveReadModelRef spec (pdLoc d) ("dispatch '" <> pdName d <> "' dedup") (pdDedupReadModel d)
+    sourceReadModelRef =
+        resolveReadModelRef DispatchReadModelUnresolved spec (pdLoc d) ("dispatch '" <> pdName d <> "' source") (pdSourceReadModel d)
+    dedupReadModelRef =
+        resolveReadModelRef DispatchReadModelUnresolved spec (pdLoc d) ("dispatch '" <> pdName d <> "' dedup") (pdDedupReadModel d)
+    dedupReadModelField = case [readModel | NReadModel readModel <- specNodes spec, rmName readModel == pdDedupReadModel d] of
+        [] -> []
+        (readModel : _) ->
+            [ mkErr dl DispatchReadModelFieldUnknown $
+                "dispatch '" <> pdName d <> "' dedup field '" <> pdDedupReadModelField d <> "' is not a declared column of readmodel '" <> pdDedupReadModel d <> "'"
+            | pdDedupReadModelField d `notElem` map rmcName (rmColumns readModel)
+            ]
 
 -- | The declared contracts in a spec, by name.
 specContracts :: Spec -> [ContractNode]
@@ -848,6 +918,7 @@ validateAggregate spec agg =
         , terminalNoOutgoing
         , guardScope
         , clockFree
+        , projectionSafety
         , statusMapTotality
         , evolutionRules
         ]
@@ -993,6 +1064,30 @@ validateAggregate spec agg =
                 "transition '" <> tSource t <> " -- " <> tCommand t <> "' samples the wall clock via '" <> n <> "'; time must be an injected input field, not sampled"
             | n <- dedup sampled
             ]
+
+    -- EP-107: a projection references a first-class read model when one exists.
+    -- Legacy standalone projections remain legal, but are surfaced as warnings.
+    projectionSafety = case aggProjection agg of
+        Nothing -> []
+        Just projection -> case [readModel | NReadModel readModel <- specNodes spec, rmName readModel == projTable projection] of
+            [] ->
+                [ mkErr (locLine (projLoc projection)) RmStrongInlineOnly $
+                    "projection '" <> projTable projection <> "' declares consistency = Strong but has no readmodel node; a standalone projection is inline-only and has no subscription cursor"
+                | projConsistency projection == Just Strong
+                ]
+                    ++ [ Diagnostic
+                            { line = locLine (projLoc projection)
+                            , severity = Warning
+                            , code = RmProjectionWithoutNode
+                            , message = "projection '" <> projTable projection <> "' has no readmodel node; registration, schema identity, consistency, and rebuild helpers are unavailable"
+                            }
+                       ]
+            (readModel : _) ->
+                [ mkErr (locLine (projLoc projection)) RmConsistencyConflict $
+                    "projection '" <> projTable projection <> "' declares consistency " <> T.pack (show projectionConsistency) <> " but its readmodel node declares " <> T.pack (show (rmConsistency readModel))
+                | Just projectionConsistency <- [projConsistency projection]
+                , projectionConsistency /= rmConsistency readModel
+                ]
 
     -- Rule 6 (hole-kind 3, mapping): keys are exact event names, never suffixes;
     -- duplicates and dangling keys are errors, and non-partial maps are total.

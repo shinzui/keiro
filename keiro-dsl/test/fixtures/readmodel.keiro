@@ -10,7 +10,7 @@ readmodel transfer_decisions {
     decided_at timestamptz
   }
   version = 1
-  shape = "fnv1a:placeholder"
+  shape = "fnv1a:3717f6d9e3c44bd6"
   consistency = Strong
   scope = category "reservation"
   feed = subscription
@@ -25,7 +25,54 @@ readmodel subscriptions {
     status text required
   }
   version = 1
-  shape = "fnv1a:placeholder"
+  shape = "fnv1a:f54d9bb2f40a6738"
   consistency = Eventual
   feed = inline
+}
+
+aggregate Subscription
+  regs
+  states Active
+
+  command Activate { subscriptionId }
+  event Activated = fields(Activate)
+
+  Active -- Activate --> emit Activated ; goto Active
+
+  projection subscriptions key=subscriptionId
+    status-map { Activated=>active }
+
+operation QueryTransferDecisions
+  query transfer_decisions
+    input TransferDecisionQuery
+    result Maybe TransferDecision
+    consistency Strong
+
+workqueue readmodel_jobs {
+  queue logical = "hospital_capacity.readmodel_jobs"
+  derive physical = "hospital_capacity_readmodel_jobs"
+         dlq = "hospital_capacity_readmodel_jobs_dlq"
+         table = "pgmq.q_hospital_capacity_readmodel_jobs"
+
+  payload ReadModelJob {
+    reservationId -> "reservation_id" text required
+  }
+
+  retry maxRetries = 3 delay = 5s dlq = on
+
+  disposition {
+    storeFailure -> retry 5s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+
+dispatch readmodel_dispatch {
+  source readModel = transfer_decisions key = reservationId
+  fanout body = resolveReadModelJobs
+  dedup key = reservationId
+        seenIn readModel = transfer_decisions field = reservation_id
+        seenIn queue = readmodel_jobs field = reservation_id
+  enqueue to = readmodel_jobs
 }

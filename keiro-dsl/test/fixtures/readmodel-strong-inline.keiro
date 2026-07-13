@@ -1,0 +1,26 @@
+context billing
+
+readmodel subscriptions {
+  table = "subscriptions"
+  schema = "billing"
+  columns {
+    subscription_id text required
+    status text required
+  }
+  version = 1
+  shape = "fnv1a:f54d9bb2f40a6738"
+  consistency = Strong
+  feed = inline
+}
+
+aggregate Subscription
+  regs
+  states Active
+
+  command Activate { subscriptionId }
+  event Activated = fields(Activate)
+
+  Active -- Activate --> emit Activated ; goto Active
+
+  projection subscriptions key=subscriptionId
+    status-map { Activated=>active }

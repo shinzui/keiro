@@ -33,5 +33,5 @@ aggregate Reservation
   Held -- CancelReservation --> write reservationState := Confirmed ; emit TransferReservationConfirmed ; goto Confirmed
 
   wire kind=ctorName fields=camelCase schemaVersion=1
-  projection transfer_decisions consistency=Strong key=reservationId
+  projection transfer_decisions key=reservationId
     status-map { TransferReservationCreated=>held TransferReservationConfirmed=>confirmed }

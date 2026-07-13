@@ -1,0 +1,13 @@
+context billing
+
+aggregate Subscription
+  regs
+  states Active
+
+  command Activate { subscriptionId }
+  event Activated = fields(Activate)
+
+  Active -- Activate --> emit Activated ; goto Active
+
+  projection subscriptions consistency=Strong key=subscriptionId
+    status-map { Activated=>active }

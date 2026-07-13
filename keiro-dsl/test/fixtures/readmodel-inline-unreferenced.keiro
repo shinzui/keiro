@@ -1,0 +1,14 @@
+context billing
+
+readmodel subscriptions {
+  table = "subscriptions"
+  schema = "billing"
+  columns {
+    subscription_id text required
+    status text required
+  }
+  version = 1
+  shape = "fnv1a:f54d9bb2f40a6738"
+  consistency = Eventual
+  feed = inline
+}

@@ -42,7 +42,7 @@ aggregate Surge
   Noted -- MarkSurgeTimerFired --> emit SurgeTimerFired ; goto Fired
 
   wire kind=ctorName fields=camelCase schemaVersion=1
-  projection surge consistency=Strong key=hospitalId
+  projection surge key=hospitalId
     status-map { SurgeThresholdNoted=>noted SurgeTimerFired=>fired }
 
 aggregate Hospital
@@ -56,5 +56,5 @@ aggregate Hospital
   Idle -- ActivateSurge --> emit SurgeActivated ; goto Surging
 
   wire kind=ctorName fields=camelCase schemaVersion=1
-  projection hospital consistency=Strong key=hospitalId
+  projection hospital key=hospitalId
     status-map { SurgeActivated=>surging }

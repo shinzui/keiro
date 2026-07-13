@@ -15,6 +15,7 @@ import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
+import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess, scaffoldPublisher, scaffoldRefusals, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
 import Keiro.Dsl.ScaffoldRun (Refusal (..), ScaffoldReport (..), StaleModule (..), executeScaffold, planScaffold, renderScaffoldReport, scaffoldModules)
@@ -171,7 +172,7 @@ main = hspec $ do
 
     describe "validator" $ do
         it "accepts the canonical reservation.keiro" $ do
-            codes <- diagnosticCodesOf "test/fixtures/reservation.keiro"
+            codes <- errorCodesOf "test/fixtures/reservation.keiro"
             codes `shouldBe` []
         it "rejects a missing status-map as StatusMapNotTotal" $ do
             codes <- diagnosticCodesOf "test/fixtures/reservation-no-statusmap.keiro"
@@ -183,7 +184,7 @@ main = hspec $ do
             codes <- diagnosticCodesOf "test/fixtures/reservation-clock.keiro"
             codes `shouldContain` [ClockSampled]
         it "accepts a v2 event with a contiguous upcaster hole" $ do
-            codes <- diagnosticCodesOf "test/fixtures/reservation-v2.keiro"
+            codes <- errorCodesOf "test/fixtures/reservation-v2.keiro"
             codes `shouldBe` []
         it "rejects a v2 event with no upcaster as EvtVersionMissingUpcaster" $ do
             codes <- diagnosticCodesOf "test/fixtures/reservation-v2-noupcast.keiro"
@@ -422,6 +423,46 @@ main = hspec $ do
             case [projection | NAggregate aggregate <- specNodes spec, Just projection <- [aggProjection aggregate]] of
                 [projection] -> projConsistency projection `shouldBe` Nothing
                 projections -> expectationFailure ("expected one projection, got " <> show (length projections))
+        it "pins the canonical UTF-8 shape digest and runtime identities" $ do
+            spec <- specOf "test/fixtures/readmodel.keiro"
+            case [readModel | NReadModel readModel <- specNodes spec] of
+                (subscriptionModel : inlineModel : _) -> do
+                    canonicalShape subscriptionModel
+                        `shouldBe` "transfer_decisions|reservation_id:text:req|hospital_id:text:req|status:text:req|decided_at:timestamptz:null"
+                    deriveShapeHash subscriptionModel `shouldBe` "fnv1a:3717f6d9e3c44bd6"
+                    deriveShapeHash inlineModel `shouldBe` "fnv1a:f54d9bb2f40a6738"
+                    registryNameFor (specContext spec) subscriptionModel `shouldBe` "hospital-capacity-transfer-decisions"
+                    subscriptionNameFor (specContext spec) subscriptionModel `shouldBe` "hospital-capacity-transfer-decisions-sub"
+                    subscriptionNameFor "billing" inlineModel `shouldBe` "billing-subscriptions-sub"
+                nodes -> expectationFailure ("expected readmodel nodes, got " <> show (length nodes))
+        it "accepts the positive readmodel fixture with all references resolved" $ do
+            spec <- specOf "test/fixtures/readmodel.keiro"
+            validateSpec spec `shouldBe` []
+        it "rejects shape drift and unknown SQL column types" $ do
+            codes <- errorCodesOf "test/fixtures/readmodel-shape-drift.keiro"
+            codes `shouldContain` [RmShapeHashDrift, RmUnknownColumnType]
+        it "rejects Strong on inline and standalone projections" $ do
+            inlineCodes <- errorCodesOf "test/fixtures/readmodel-strong-inline.keiro"
+            inlineCodes `shouldContain` [RmStrongInlineOnly]
+            standalone <- specOf "test/fixtures/readmodel-strong-standalone.keiro"
+            let diagnostics = validateSpec standalone
+            map code diagnostics `shouldContain` [RmStrongInlineOnly, RmProjectionWithoutNode]
+            [severity diagnostic | diagnostic <- diagnostics, code diagnostic == RmProjectionWithoutNode]
+                `shouldBe` [Warning]
+        it "rejects scope without Strong and an unreferenced inline feed" $ do
+            scopeCodes <- errorCodesOf "test/fixtures/readmodel-scope-eventual.keiro"
+            scopeCodes `shouldContain` [RmScopeWithoutStrong]
+            inlineCodes <- errorCodesOf "test/fixtures/readmodel-inline-unreferenced.keiro"
+            inlineCodes `shouldContain` [RmInlineFeedUnreferenced]
+        it "rejects projection consistency conflicts" $ do
+            codes <- errorCodesOf "test/fixtures/readmodel-consistency-conflict.keiro"
+            codes `shouldContain` [RmConsistencyConflict]
+        it "resolves query read models and validates query consistency" $ do
+            codes <- errorCodesOf "test/fixtures/readmodel-query-unresolved.keiro"
+            codes `shouldContain` [QueryUnresolvedReadModel, QueryConsistencyInvalid]
+        it "resolves dispatch read models and declared dedup columns" $ do
+            codes <- errorCodesOf "test/fixtures/readmodel-dispatch-unresolved.keiro"
+            codes `shouldContain` [DispatchReadModelUnresolved, DispatchReadModelFieldUnknown]
 
     describe "workflow/operation (EP-6)" $ do
         it "round-trips the workflow spec through parse . pretty" $ do

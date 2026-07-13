@@ -1,0 +1,7 @@
+context hospital-capacity
+
+operation QueryTransferDecisions
+  query missing_model
+    input TransferDecisionQuery
+    result Maybe TransferDecision
+    consistency Strongg

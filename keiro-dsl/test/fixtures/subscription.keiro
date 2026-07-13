@@ -25,5 +25,5 @@ aggregate Subscription
   Active -- CancelSubscription --> write subscriptionState := Closed ; emit SubscriptionCancelled ; goto Closed
 
   wire kind=ctorName fields=camelCase schemaVersion=1
-  projection subscriptions consistency=Strong key=subscriptionId
+  projection subscriptions key=subscriptionId
     status-map { SubscriptionActivated=>active SubscriptionCancelled=>cancelled }

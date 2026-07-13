@@ -1,5 +1,30 @@
 context hospital-capacity
 
+readmodel accepted_transfer_needs {
+  table = "accepted_transfer_needs"
+  schema = "hospital_capacity"
+  columns {
+    reservation_id text required
+    hospital_id text required
+  }
+  version = 1
+  shape = "fnv1a:fec517dae7760b8a"
+  consistency = Eventual
+  feed = subscription
+}
+
+readmodel transfer_decisions {
+  table = "transfer_decisions"
+  schema = "hospital_capacity"
+  columns {
+    reservation_id text required
+  }
+  version = 1
+  shape = "fnv1a:d44d218822582783"
+  consistency = Eventual
+  feed = subscription
+}
+
 workqueue reservation_work {
   queue logical = "hospital_capacity.reservation_work"
   derive physical = "hospital_capacity_reservation_work"

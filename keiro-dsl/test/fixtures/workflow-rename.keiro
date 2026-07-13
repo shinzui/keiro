@@ -1,5 +1,17 @@
 context hospital-capacity
 
+readmodel transferDecision {
+  table = "transfer_decision"
+  schema = "hospital_capacity"
+  columns {
+    reservation_id text required
+  }
+  version = 1
+  shape = "fnv1a:a61bd2c21d54fa64"
+  consistency = Strong
+  feed = subscription
+}
+
 workflow HospitalTransferReservation
   name "hospital-transfer-reservation-v2"
   in ReservationWorkflowInput { reservationId:Id hospitalId:Id }

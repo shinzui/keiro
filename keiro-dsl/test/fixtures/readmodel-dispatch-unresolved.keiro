@@ -1,0 +1,42 @@
+context hospital-capacity
+
+readmodel transfer_decisions {
+  table = "transfer_decisions"
+  schema = "hospital_capacity"
+  columns {
+    reservation_id text required
+  }
+  version = 1
+  shape = "fnv1a:d44d218822582783"
+  consistency = Eventual
+  feed = subscription
+}
+
+workqueue readmodel_jobs {
+  queue logical = "hospital_capacity.readmodel_jobs"
+  derive physical = "hospital_capacity_readmodel_jobs"
+         dlq = "hospital_capacity_readmodel_jobs_dlq"
+         table = "pgmq.q_hospital_capacity_readmodel_jobs"
+
+  payload ReadModelJob {
+    reservationId -> "reservation_id" text required
+  }
+
+  retry maxRetries = 3 delay = 5s dlq = on
+
+  disposition {
+    storeFailure -> retry 5s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+
+dispatch readmodel_dispatch {
+  source readModel = missing_model key = reservationId
+  fanout body = resolveReadModelJobs
+  dedup key = reservationId
+        seenIn readModel = transfer_decisions field = missing_column
+        seenIn queue = readmodel_jobs field = reservation_id
+  enqueue to = readmodel_jobs
+}
