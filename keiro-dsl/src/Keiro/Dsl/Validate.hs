@@ -70,6 +70,35 @@ data DiagnosticCode
     | -- EP-6 (workflow/operation).
       AwaitSignalMismatch
     | RunWorkflowUnresolved
+    | -- Diff-only (cross-spec) decode and identity evolution rules.
+      EvtFieldTypeChanged
+    | EvtFieldRemovedSameVersion
+    | EvtVersionDecreased
+    | EnumCtorRemoved
+    | EnumWireSpellingChanged
+    | WireSpecChanged
+    | ContractEventRemoved
+    | ContractFieldChanged
+    | ContractDiscriminatorChanged
+    | ContractTopicChanged
+    | ContractSchemaVersionDecreased
+    | WqPayloadFieldChanged
+    | ProcessInputChanged
+    | WorkflowShapeChanged
+    | WorkflowBodyChanged
+    | WorkflowStableNameChanged
+    | IdPrefixChanged
+    | DedupeIdentityChanged
+    | DerivedIdentityChanged
+    | QueueIdentityChanged
+    | TimerWindowChanged
+    | EmitMappingChanged
+    | DecodePostureChanged
+    | ProjectionChanged
+    | PublisherPolicyChanged
+    | DispatchRetargeted
+    | ContractSchemaVersionBumped
+    | EventUndeprecated
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

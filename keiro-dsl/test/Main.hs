@@ -7,7 +7,7 @@ module Main (main) where
 import Data.List (sort)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Keiro.Dsl.Diff (Change (..), ChangeKind (..), diffSpecs, isBreaking)
+import Keiro.Dsl.Diff (Change (..), ChangeKind (..), FamilyDiff (..), NodeFamily, diffSpecs, familyRegistry, isBreaking)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
@@ -203,6 +203,9 @@ main = hspec $ do
             codes `shouldContain` [AwaitSignalMismatch]
 
     describe "diff (evolution classification)" $ do
+        it "covers every node family exactly once and explains exclusions" $ do
+            sort (map fst familyRegistry) `shouldBe` ([minBound .. maxBound] :: [NodeFamily])
+            [reason | (_, OutOfDiffScope reason) <- familyRegistry, T.null reason] `shouldBe` []
         it "classifies a field added without a version bump as BREAKING" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-fieldadd.keiro"
             any isBreaking cs `shouldBe` True

@@ -65,14 +65,14 @@ tagged `[EvtFieldTypeChanged]` and exit 1.
 
 Milestone 1 (registry restructure, parity):
 
-- [ ] Add the new `DiagnosticCode` constructors to `keiro-dsl/src/Keiro/Dsl/Validate.hs`.
-- [ ] Add `Advisory` to `Change`, add `ckFacet` to `ChangeKind` in `keiro-dsl/src/Keiro/Dsl/Diff.hs`.
-- [ ] Introduce `DiffEnv`, `NodeFamily`, `familyOf`, `FamilyDiff`, `familyRegistry`, `Paired`, `pairByName`.
-- [ ] Port the existing aggregate event differ onto the registry with unchanged classifications.
-- [ ] Write out-of-scope rationales for `NOperation` and for `specRules` (code comments + registry entries).
-- [ ] Generalize `renderChange` in `keiro-dsl/app/Main.hs` (facet-aware, `WARNING:` tier); exit non-zero only on `Breaking`.
-- [ ] Unit tests: registry completeness over `[minBound .. maxBound]`, non-empty rationales, parity of the two existing diff-classification tests.
-- [ ] `cabal build keiro-dsl`, unit suite, and `bash keiro-dsl/test/diff-test.sh` all green.
+- [x] (2026-07-13 19:59Z) Add the new `DiagnosticCode` constructors to `keiro-dsl/src/Keiro/Dsl/Validate.hs`.
+- [x] (2026-07-13 19:59Z) Add `Advisory` to `Change`, add `ckFacet` to `ChangeKind` in `keiro-dsl/src/Keiro/Dsl/Diff.hs`.
+- [x] (2026-07-13 19:59Z) Introduce `DiffEnv`, `NodeFamily`, `familyOf`, `FamilyDiff`, `familyRegistry`, `Paired`, `pairByName`.
+- [x] (2026-07-13 19:59Z) Port the existing aggregate event differ onto the registry with unchanged classifications.
+- [x] (2026-07-13 19:59Z) Write out-of-scope rationales for `NOperation` and for `specRules` (code comments + registry entries).
+- [x] (2026-07-13 19:59Z) Generalize `renderChange` in `keiro-dsl/app/Main.hs` (facet-aware, `WARNING:` tier); exit non-zero only on `Breaking`.
+- [x] (2026-07-13 19:59Z) Unit tests: registry completeness over `[minBound .. maxBound]`, non-empty rationales, parity of the two existing diff-classification tests.
+- [x] (2026-07-13 19:59Z) `cabal build keiro-dsl`, unit suite, and `bash keiro-dsl/test/diff-test.sh` all green (59 examples, 0 failures; shell cases 1–2 passed).
 
 Milestone 2 (aggregate-family decode soundness — A1, A2, A3, A5, A7):
 
@@ -126,6 +126,12 @@ exit=1
 ADDITIVE: Reservation event TransferReservationCreated: new version v2 with upcaster from v1
 exit=0
 ```
+
+- Milestone 1 validation (2026-07-13 19:59Z) preserved both baseline CLI lines
+  byte-for-byte after moving aggregate evolution onto the exhaustive family registry.
+  The unit suite increased from 58 to 59 examples and remained green; the new example
+  proves every `NodeFamily` appears exactly once and every exclusion has a non-empty
+  rationale.
 
 (Add new entries here as implementation proceeds.)
 

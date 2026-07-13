@@ -236,9 +236,10 @@ reportLines fp out ctx dispositions breaches manifestPath =
 renderChange :: Change -> String
 renderChange c = case c of
     Additive k -> "ADDITIVE: " <> body k
+    Advisory k -> "WARNING: " <> body k <> codeSuffix k
     Breaking k -> "BREAKING: " <> body k <> codeSuffix k
   where
-    body k = T.unpack (ckNode k) <> " event " <> T.unpack (ckSubject k) <> ": " <> T.unpack (ckDetail k)
+    body k = T.unpack (ckNode k) <> " " <> T.unpack (ckFacet k) <> " " <> T.unpack (ckSubject k) <> ": " <> T.unpack (ckDetail k)
     codeSuffix k = maybe "" (\dc -> " [" <> show dc <> "]") (ckCode k)
 
 -- | Run git in a directory, returning trimmed stdout or stderr.
