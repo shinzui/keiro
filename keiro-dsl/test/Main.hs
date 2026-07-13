@@ -16,7 +16,7 @@ import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess, scaffoldPublisher, scaffoldRefusals, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
 import Keiro.Dsl.ScaffoldRun (Refusal (..), ScaffoldReport (..), StaleModule (..), executeScaffold, planScaffold, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
@@ -463,6 +463,36 @@ main = hspec $ do
         it "resolves dispatch read models and declared dedup columns" $ do
             codes <- errorCodesOf "test/fixtures/readmodel-dispatch-unresolved.keiro"
             codes `shouldContain` [DispatchReadModelUnresolved, DispatchReadModelFieldUnknown]
+        it "scaffolds runtime records, rebuild helpers, async wiring, and typed holes" $ do
+            spec <- specOf "test/fixtures/readmodel.keiro"
+            let ctx = defaultContext (specContext spec)
+                readModels = [readModel | NReadModel readModel <- specNodes spec]
+                modules = concatMap (scaffoldReadModel ctx) readModels
+                transfer = generatedTextEndingIn "Transfer_decisions/ReadModel.hs" modules
+                inline = generatedTextEndingIn "Subscriptions/ReadModel.hs" modules
+                transferHoles = [moduleText m | m <- modules, "Transfer_decisions/ReadModelHoles.hs" `T.isSuffixOf` T.pack (modulePath m)]
+            length modules `shouldBe` 6
+            length [m | m <- modules, kind m == Generated] `shouldBe` 4
+            length [m | m <- modules, kind m == HoleStub] `shouldBe` 2
+            firewallBreaches modules `shouldBe` []
+            transfer `shouldSatisfy` T.isInfixOf "registerTransferDecisions"
+            transfer `shouldSatisfy` T.isInfixOf "Rebuild.startRebuild transferDecisionsReadModel [\"hospital-capacity-transfer-decisions-async\"]"
+            transfer `shouldSatisfy` T.isInfixOf "strongScope = CategoryHead \"reservation\""
+            transfer `shouldSatisfy` T.isInfixOf "transferDecisionsAsyncProjection"
+            inline `shouldSatisfy` T.isInfixOf "Rebuild.startRebuild subscriptionsReadModel []"
+            inline `shouldNotSatisfy` T.isInfixOf "AsyncProjection"
+            transferHoles `shouldSatisfy` any (T.isInfixOf "RecordedEvent -> Tx.Transaction ()")
+        it "threads qualified table and column guidance into aggregate projection holes" $ do
+            spec <- specOf "test/fixtures/readmodel.keiro"
+            case [aggregate | NAggregate aggregate <- specNodes spec] of
+                [aggregate] -> do
+                    let modules = scaffoldAggregate (defaultContext (specContext spec)) spec aggregate
+                        holes = [moduleText m | m <- modules, kind m == HoleStub]
+                        projection = generatedTextEndingIn "Projection.hs" modules
+                    holes `shouldSatisfy` any (T.isInfixOf "subscriptionsQualifiedTable")
+                    holes `shouldSatisfy` any (T.isInfixOf "Table: \"billing\".\"subscriptions\"")
+                    projection `shouldSatisfy` T.isInfixOf "ReadModelTable.subscriptionsQualifiedTable"
+                aggregates -> expectationFailure ("expected one aggregate, got " <> show (length aggregates))
 
     describe "workflow/operation (EP-6)" $ do
         it "round-trips the workflow spec through parse . pretty" $ do

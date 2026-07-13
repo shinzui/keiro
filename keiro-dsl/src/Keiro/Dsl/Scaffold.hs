@@ -31,6 +31,7 @@ module Keiro.Dsl.Scaffold (
     scaffoldIntake,
     scaffoldPublisher,
     scaffoldWorkqueue,
+    scaffoldReadModel,
     scaffoldRefusals,
     windowSeconds,
 
@@ -60,6 +61,7 @@ import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Text.Read (readMaybe)
 
 {- | One emitted module: its on-disk path (relative to the scaffold @--out@
@@ -249,7 +251,8 @@ hasAllowedExplicitImportList allowed line =
 
 -- | Resolved, denormalized view of an aggregate used by every emitter.
 data Agg = Agg
-    { aCtxPascal :: !Text
+    { aContext :: !Context
+    , aCtxPascal :: !Text
     , aName :: !Text
     , aLoc :: !Loc
     , aVertexType :: !Text
@@ -262,6 +265,7 @@ data Agg = Agg
     , aTransitions :: ![Transition]
     , aWire :: !WireSpec
     , aProjection :: !(Maybe ProjectionSpec)
+    , aReadModels :: ![ReadModelNode]
     , aGenPrefix :: !Text
     -- ^ e.g. @Generated.HospitalCapacity.Reservation@
     , aHolePrefix :: !Text
@@ -285,7 +289,8 @@ defaultWire = WireSpec{wireKind = "ctorName", wireFields = "camelCase", wireSche
 resolveAgg :: Context -> Spec -> Aggregate -> Agg
 resolveAgg ctx spec agg =
     Agg
-        { aCtxPascal = ctxPascal
+        { aContext = ctx
+        , aCtxPascal = ctxPascal
         , aName = nm
         , aLoc = aggLoc agg
         , aVertexType = vertexType
@@ -298,6 +303,7 @@ resolveAgg ctx spec agg =
         , aTransitions = aggTransitions agg
         , aWire = fromMaybe defaultWire (aggWire agg)
         , aProjection = aggProjection agg
+        , aReadModels = [readModel | NReadModel readModel <- specNodes spec]
         , aGenPrefix = genPrefixFor ctx nm
         , aHolePrefix = holePrefixFor ctx nm
         }
@@ -737,6 +743,223 @@ emitQueuePolicy genPrefix w =
     outcome IAckOk = "Done"
     outcome (IRetry win) = "Retry (RetryDelay " <> windowText win <> ")"
     outcome (IDeadLetter mr) = "Dead " <> tshow (fromMaybe "dead-lettered" mr)
+
+--------------------------------------------------------------------------------
+-- First-class read models (EP-107)
+--------------------------------------------------------------------------------
+
+{- | Emit an acyclic three-module read-model vertical. @ReadModelTable@ owns the
+qualified-table constant shared by the hand-owned query and the generated
+runtime record; @ReadModel@ re-exports it as part of the public surface.
+-}
+scaffoldReadModel :: Context -> ReadModelNode -> [ScaffoldModule]
+scaffoldReadModel ctx readModel =
+    [ generated "ReadModelTable" (emitReadModelTable tableModule stem readModel)
+    , generated "ReadModel" (emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readModel)
+    , ScaffoldModule
+        { modulePath = modulePathFor readModelHolePrefix "ReadModelHoles"
+        , moduleText = emitReadModelHoles tableModule readModelHolePrefix stem readModel
+        , kind = HoleStub
+        , origin = readModelOrigin
+        }
+    ]
+  where
+    nodeSegment = pascal (rmName readModel)
+    stem = readModelStem readModel
+    readModelModule = genPrefixFor ctx nodeSegment
+    tableModule = readModelModule <> ".ReadModelTable"
+    readModelHolePrefix = holePrefixFor ctx nodeSegment
+    readModelOrigin = nodeOrigin "readmodel" (rmName readModel) (rmLoc readModel)
+    generated leaf body =
+        ScaffoldModule
+            { modulePath = modulePathFor readModelModule leaf
+            , moduleText = body
+            , kind = Generated
+            , origin = readModelOrigin
+            }
+
+modulePathFor :: Text -> Text -> FilePath
+modulePathFor prefix leaf = T.unpack (T.replace "." "/" prefix <> "/" <> leaf <> ".hs")
+
+readModelStem :: ReadModelNode -> Text
+readModelStem = lowerFirst . T.concat . map pascal . T.splitOn "_" . rmName
+
+emitReadModelTable :: Text -> Text -> ReadModelNode -> Text
+emitReadModelTable tableModule stem readModel =
+    nl
+        [ "{-# LANGUAGE OverloadedStrings #-}"
+        , generatedBanner
+        , "module " <> tableModule <> " (" <> qualifiedName <> ") where"
+        , ""
+        , "import Data.Text (Text)"
+        , "import Keiro.Connection (qualifyTable)"
+        , ""
+        , "-- The fully-qualified, double-quoted data-table reference."
+        , qualifiedName <> " :: Text"
+        , qualifiedName <> " = qualifyTable " <> tshow (rmSchema readModel) <> " " <> tshow (rmTable readModel)
+        ]
+  where
+    qualifiedName = stem <> "QualifiedTable"
+
+emitReadModelGen :: Context -> Text -> Text -> Text -> Text -> ReadModelNode -> Text
+emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readModel =
+    nl $
+        [ "{-# LANGUAGE OverloadedRecordDot #-}"
+        , "{-# LANGUAGE OverloadedStrings #-}"
+        , generatedBanner
+        , "module " <> readModelModule <> ".ReadModel"
+        , "  ( " <> T.intercalate "\n  , " exports
+        , "  ) where"
+        , ""
+        , "import Data.Functor (void)"
+        , "import Effectful (Eff, (:>))"
+        , "import " <> tableModule <> " (" <> qualifiedName <> ")"
+        , "import " <> readModelHolePrefix <> ".ReadModelHoles (" <> T.intercalate ", " holeImports <> ")"
+        ]
+            ++ asyncImports
+            ++ [ "import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), ReadModelMetadata, StrongScope (..), registerReadModel)"
+               , "import Keiro.ReadModel.Rebuild qualified as Rebuild"
+               , "import Kiroku.Store.Effect (Store)"
+               , "import Kiroku.Store.Types (GlobalPosition)"
+               , ""
+               , readModelName <> " :: ReadModel " <> queryInputType <> " " <> queryResultType
+               , readModelName <> " ="
+               , "  ReadModel"
+               , "    { name = " <> tshow registryName
+               , "    , tableName = " <> tshow (rmTable readModel)
+               , "    , schema = " <> tshow (rmSchema readModel)
+               , "    , subscriptionName = " <> tshow subscriptionName
+               , "    , version = " <> tshow' (rmVersion readModel)
+               , "    , shapeHash = " <> tshow (rmShape readModel)
+               , "    , defaultConsistency = " <> consistencyExpr (rmConsistency readModel)
+               , "    , strongScope = " <> scopeExpr (rmScope readModel)
+               , "    , query = " <> queryName
+               , "    }"
+               , ""
+               , "-- Call once at projection startup before serving queries."
+               , registerName <> " :: (Store :> es) => Eff es ()"
+               , registerName <> " ="
+               , "  void (registerReadModel " <> tshow registryName <> " " <> tshow' (rmVersion readModel) <> " " <> tshow (rmShape readModel) <> ")"
+               , ""
+               , startName <> " :: (Store :> es) => GlobalPosition -> Eff es ReadModelMetadata"
+               , startName <> " ="
+               , "  Rebuild.startRebuild " <> readModelName <> " " <> projectionNames
+               , ""
+               , finishName <> " :: (Store :> es) => GlobalPosition -> Eff es (Either Rebuild.RebuildError ReadModelMetadata)"
+               , finishName <> " ="
+               , "  Rebuild.finishRebuild " <> readModelName <> " " <> projectionNames
+               , ""
+               , abandonName <> " :: (Store :> es) => Eff es ReadModelMetadata"
+               , abandonName <> " = Rebuild.abandonRebuild " <> readModelName
+               ]
+            ++ asyncDefinition
+  where
+    registryName = registryNameFor (contextName ctx) readModel
+    subscriptionName = subscriptionNameFor (contextName ctx) readModel
+    asyncName = registryName <> "-async"
+    readModelName = stem <> "ReadModel"
+    qualifiedName = stem <> "QualifiedTable"
+    registerName = "register" <> pascal stem
+    startName = "start" <> pascal stem <> "Rebuild"
+    finishName = "finish" <> pascal stem <> "Rebuild"
+    abandonName = "abandon" <> pascal stem <> "Rebuild"
+    asyncValueName = stem <> "AsyncProjection"
+    queryInputType = pascal stem <> "QueryInput"
+    queryResultType = pascal stem <> "QueryResult"
+    queryName = stem <> "Query"
+    applyName = "apply" <> pascal stem
+    exports =
+        [ readModelName
+        , qualifiedName
+        , registerName
+        , startName
+        , finishName
+        , abandonName
+        ]
+            ++ [asyncValueName | rmFeed readModel == RmSubscription]
+    holeImports = [queryInputType, queryResultType, queryName] ++ [applyName | rmFeed readModel == RmSubscription]
+    asyncImports = case rmFeed readModel of
+        RmInline -> []
+        RmSubscription ->
+            [ "import Keiro.Projection (AsyncProjection (..))"
+            , "import Kiroku.Store.Types (RecordedEvent (..))"
+            ]
+    projectionNames = case rmFeed readModel of
+        RmInline -> "[]"
+        RmSubscription -> "[" <> tshow asyncName <> "]"
+    asyncDefinition = case rmFeed readModel of
+        RmInline -> []
+        RmSubscription ->
+            [ ""
+            , asyncValueName <> " :: AsyncProjection"
+            , asyncValueName <> " ="
+            , "  AsyncProjection"
+            , "    { name = " <> tshow asyncName
+            , "    , readModelName = " <> tshow registryName
+            , "    , subscriptionName = " <> tshow subscriptionName
+            , "    , applyRecorded = " <> applyName
+            , "    , idempotencyKey = \\recorded -> recorded.eventId"
+            , "    }"
+            ]
+    consistencyExpr Strong = "Strong"
+    consistencyExpr Eventual = "Eventual"
+    scopeExpr Nothing = "EntireLog"
+    scopeExpr (Just RmEntireLog) = "EntireLog"
+    scopeExpr (Just (RmCategory categoryName)) = "CategoryHead " <> tshow categoryName
+
+emitReadModelHoles :: Text -> Text -> Text -> ReadModelNode -> Text
+emitReadModelHoles tableModule readModelHolePrefix stem readModel =
+    nl $
+        [ "-- This is a HAND-OWNED hole module. keiro-dsl creates it once and never overwrites it."
+        , "module " <> readModelHolePrefix <> ".ReadModelHoles"
+        , "  ( " <> T.intercalate "\n  , " exports
+        , "  ) where"
+        , ""
+        , "import " <> tableModule <> " (" <> qualifiedName <> ")"
+        , "import Hasql.Transaction qualified as Tx"
+        ]
+            ++ ["import Kiroku.Store.Types (RecordedEvent(..))" | rmFeed readModel == RmSubscription]
+            ++ [ ""
+               , "-- HOLE: replace these aliases with the real query input and result types."
+               , "type " <> queryInputType <> " = ()"
+               , "type " <> queryResultType <> " = ()"
+               , ""
+               , "-- HOLE: query " <> qualifiedTableLiteral readModel <> " via " <> qualifiedName <> "; never rely on search_path."
+               , "-- Declared columns:"
+               ]
+            ++ map (("--   " <>) . readModelColumnDoc) (rmColumns readModel)
+            ++ [ queryName <> " :: " <> queryInputType <> " -> Tx.Transaction " <> queryResultType
+               , queryName <> " _input = " <> qualifiedName <> " `seq` error " <> tshow ("HOLE: fill " <> rmName readModel <> " query")
+               ]
+            ++ applyStub
+  where
+    qualifiedName = stem <> "QualifiedTable"
+    queryInputType = pascal stem <> "QueryInput"
+    queryResultType = pascal stem <> "QueryResult"
+    queryName = stem <> "Query"
+    applyName = "apply" <> pascal stem
+    exports = [queryInputType, queryResultType, queryName] ++ [applyName | rmFeed readModel == RmSubscription]
+    applyStub = case rmFeed readModel of
+        RmInline -> []
+        RmSubscription ->
+            [ ""
+            , "-- HOLE: apply one recorded event; runtime deduplication makes redelivery safe."
+            , applyName <> " :: RecordedEvent -> Tx.Transaction ()"
+            , applyName <> " _recorded = error " <> tshow ("HOLE: fill " <> rmName readModel <> " async apply")
+            ]
+
+qualifiedTableLiteral :: ReadModelNode -> Text
+qualifiedTableLiteral readModel = quoteSqlIdentifier (rmSchema readModel) <> "." <> quoteSqlIdentifier (rmTable readModel)
+
+quoteSqlIdentifier :: Text -> Text
+quoteSqlIdentifier identifier = "\"" <> T.replace "\"" "\"\"" identifier <> "\""
+
+readModelColumnDoc :: RmColumn -> Text
+readModelColumnDoc columnDecl =
+    rmcName columnDecl
+        <> " "
+        <> rmcType columnDecl
+        <> if rmcRequired columnDecl then " NOT NULL" else ""
 
 --------------------------------------------------------------------------------
 -- Process manager + durable timer (EP-3)
@@ -1236,6 +1459,7 @@ emitProjection a = case aProjection a of
             , "-- The deterministic event->status mapping (hole-kind 3, /mapping/), derived"
             , "-- from the spec's status-map. The read-model SQL that consumes it lives in"
             , "-- the hand-owned Holes module (a DB-coupled hole, delegated to codd)."
+            , projectionTableComment a p
             , lowerFirst (projTable p) <> "StatusFor :: " <> aName a <> "Event -> Maybe Text"
             , lowerFirst (projTable p) <> "StatusFor = \\case"
             , nl (statusArms a p)
@@ -1269,6 +1493,26 @@ contextNameToProjName a p = contextKebab a <> "-" <> projTable p <> "-inline"
 contextKebab :: Agg -> Text
 contextKebab = kebabFromPascal . aCtxPascal
 
+projectionReadModel :: Agg -> Maybe ReadModelNode
+projectionReadModel aggregate = do
+    projection <- aProjection aggregate
+    find ((== projTable projection) . rmName) (aReadModels aggregate)
+
+projectionTableComment :: Agg -> ProjectionSpec -> Text
+projectionTableComment aggregate projection = case projectionReadModel aggregate of
+    Nothing ->
+        "-- WARNING: no readmodel node declares '"
+            <> projTable projection
+            <> "'; unqualified SQL depends on search_path."
+    Just readModel ->
+        "-- Qualified table "
+            <> qualifiedTableLiteral readModel
+            <> "; use "
+            <> genPrefixFor (aContext aggregate) (pascal (rmName readModel))
+            <> ".ReadModelTable."
+            <> readModelStem readModel
+            <> "QualifiedTable."
+
 --------------------------------------------------------------------------------
 -- Holes module (create-if-absent)
 --------------------------------------------------------------------------------
@@ -1295,6 +1539,7 @@ emitHoles a =
         , "import qualified Keiki.Builder as B"
         , "import Keiki.Core (HsPred, RegFile, SymTransducer, lit, (.==), (./=), (.||))"
         , holeUpcasterImports a
+        , holeProjectionImports a
         , ""
         , "-- HOLE: the transducer body. Reproduce the structure below, replacing each"
         , "-- `-- HOLE` line with the keiki symbolic operators it describes."
@@ -1347,18 +1592,42 @@ holeProjectionExport a = case aProjection a of
     Nothing -> "  -- (no projection)"
     Just p -> "  , apply" <> pascal (projTable p)
 
+holeProjectionImports :: Agg -> Text
+holeProjectionImports aggregate = case projectionReadModel aggregate of
+    Nothing -> ""
+    Just readModel ->
+        "import "
+            <> genPrefixFor (aContext aggregate) (pascal (rmName readModel))
+            <> ".ReadModelTable ("
+            <> readModelStem readModel
+            <> "QualifiedTable)"
+
 holeProjectionStub :: Agg -> Text
 holeProjectionStub a = case aProjection a of
     Nothing -> ""
     Just p ->
         nl
-            [ ""
-            , "-- HOLE: the read-model SQL for the projection (a DB-coupled hole; the"
-            , "-- pure event->status mapping is generated as " <> lowerFirst (projTable p) <> "StatusFor)."
-            , "-- Fill against your codd-managed read-model table."
-            , "apply" <> pascal (projTable p) <> " :: " <> aName a <> "Event -> recorded -> txn ()"
-            , "apply" <> pascal (projTable p) <> " _event _recorded = error \"HOLE: fill " <> projTable p <> " projection apply\""
-            ]
+            ( [ ""
+              , "-- HOLE: the read-model SQL for the projection (a DB-coupled hole; the"
+              , "-- pure event->status mapping is generated as " <> lowerFirst (projTable p) <> "StatusFor)."
+              ]
+                ++ projectionGuidance
+                ++ [ "apply" <> pascal (projTable p) <> " :: " <> aName a <> "Event -> recorded -> txn ()"
+                   , "apply" <> pascal (projTable p) <> " _event _recorded = " <> projectionTableUse <> "error \"HOLE: fill " <> projTable p <> " projection apply\""
+                   ]
+            )
+      where
+        projectionGuidance = case projectionReadModel a of
+            Nothing ->
+                ["-- WARNING: no readmodel node declares this table's schema; unqualified SQL depends on search_path."]
+            Just readModel ->
+                [ "-- Table: " <> qualifiedTableLiteral readModel <> ". Use " <> readModelStem readModel <> "QualifiedTable; never rely on search_path."
+                , "-- Declared columns:"
+                ]
+                    ++ map (("--   " <>) . readModelColumnDoc) (rmColumns readModel)
+        projectionTableUse = case projectionReadModel a of
+            Nothing -> ""
+            Just readModel -> readModelStem readModel <> "QualifiedTable `seq` "
 
 -- Group transitions by source state, preserving order, for the B.from blocks.
 groupBySource :: Agg -> [(Text, [Transition])]

@@ -38,11 +38,12 @@ fixture), the default consistency mode, the strong-wait scope, how the model is 
 by an aggregate's projection, or asynchronously by a subscription worker), and — derived
 from the feed — the rebuild helpers. `keiro-dsl check` rejects `Strong` on an inline-only
 model, rejects shape-hash drift, and resolves every `query`/`dispatch` read-model reference.
-`keiro-dsl scaffold` emits a `-- @generated` module containing the live
+`keiro-dsl scaffold` emits a `-- @generated` runtime module containing the live
 `Keiro.ReadModel.ReadModel` record value, a `register<Model>` startup helper, rebuild
-helpers with the correct feeding-projection names baked in, an `AsyncProjection` value for
-subscription-fed models, and a qualified-table constant — plus a hand-owned hole module
-carrying the typed query hole whose comments name the fully qualified
+helpers with the correct feeding-projection names baked in, and an `AsyncProjection` value
+for subscription-fed models; a small generated table module owns the qualified-table
+constant shared without an import cycle; and a hand-owned hole module carries the typed
+query hole whose comments name the fully qualified
 `"schema"."table"` so agent-written SQL never silently depends on `search_path`. A new
 conformance suite compiles the generated module against the live `Keiro.ReadModel` API.
 
@@ -89,15 +90,16 @@ Milestone 2 — Shape-hash derivation, validator rules, reference resolution:
 
 Milestone 3 — Scaffold emitters:
 
-- [ ] `scaffoldReadModel` emits the `Generated.<Ctx>.<Node>.ReadModel` module (ReadModel
-      value, `register<Model>`, rebuild helpers, qualified-table constant, AsyncProjection
-      for subscription-fed) and the create-if-absent `<Ctx>.<Node>.ReadModelHoles` module
-      with the typed query hole.
-- [ ] E5 threading: aggregate projection hole stub comments name the qualified table +
+- [x] (2026-07-13 22:52Z) `scaffoldReadModel` emits generated `ReadModelTable` and `ReadModel` modules
+      (qualified-table constant, runtime value, registration/rebuild helpers, and
+      subscription `AsyncProjection`) plus the create-if-absent
+      `<Ctx>.<Node>.ReadModelHoles` typed query/apply module.
+- [x] (2026-07-13 22:52Z) E5 threading: aggregate projection hole stub comments name the qualified table +
       columns when the projection references a node; legacy standalone stubs warn about
       `search_path`.
-- [ ] app/Main wiring + firewall clean on all new `Generated` modules; manifest lists the
-      new modules.
+- [x] (2026-07-13 22:52Z) Central `ScaffoldRun.scaffoldModules` wiring, firewall checks, and manifests cover all
+      new modules; the committed workqueue skeleton outputs compile against live runtime
+      packages.
 
 Milestone 4 — Harness + conformance suite:
 
@@ -139,6 +141,14 @@ implementation. Provide concise evidence.
   two real nodes because both source and dedup references are checked. Evidence: the unit
   suite passed 162 examples after the migration, and the positive `readmodel.keiro`
   fixture produced no diagnostics.
+
+- The query hole needs the qualified-table constant, while the generated runtime module
+  needs the query hole. Keeping the originally planned constant in the runtime module
+  would therefore create an import cycle. A third, generated `ReadModelTable` module now
+  owns the constant; both layers import it, and the runtime module re-exports it. The live
+  skeleton compile also showed that `RecordedEvent (..)` must be imported for GHC 9.12's
+  record-dot field selection. Evidence: `keiro-dsl-conformance-skeletons` compiled both
+  subscription-fed read-model verticals after regeneration.
 
 
 ## Decision Log
@@ -243,6 +253,20 @@ Record every decision made while working on the plan.
   fixture exercises the new resolution gate instead of carrying unrelated errors.
   Date: 2026-07-13
 
+- Decision: Emit a generated `ReadModelTable` module in addition to the generated runtime
+  module and hand-owned hole module; both import the table module, and the runtime module
+  re-exports the qualified-table constant.
+  Rationale: this preserves the public surface promised by the plan while making the
+  generated/hole dependency graph acyclic and giving hand-written SQL a single live
+  `Keiro.Connection.qualifyTable` value. Date: 2026-07-13
+
+- Decision: Register read-model modules through the centralized
+  `Keiro.Dsl.ScaffoldRun.scaffoldModules` dispatch rather than adding node-specific wiring
+  to `app/Main.hs`.
+  Rationale: EP-106 moved all node-family dispatch behind this registry so CLI scaffolding,
+  manifests, stale detection, and firewall checks consume the same module set.
+  Date: 2026-07-13
+
 
 ## Outcomes & Retrospective
 
@@ -259,6 +283,13 @@ UTF-8 FNV-1a-64 implementation, all eleven read-model diagnostics are active, an
 plus dispatch references resolve against declared nodes and columns. The unit suite passed
 162 examples; the positive fixture checked clean, while the CLI returned exit 1 with
 `RmStrongInlineOnly` for the inline-Strong fixture.
+
+Milestone 3 is complete. Each read-model node scaffolds an acyclic three-module vertical,
+subscription feeds lower to live `AsyncProjection` records and rebuild identities, and
+aggregate projection holes receive schema-qualified table guidance. The unit suite passed
+164 examples, a repeated CLI scaffold preserved both hand-owned holes, the firewall
+reported zero breaches, and `keiro-dsl-conformance-skeletons` compiled the generated
+records against the current Keiro/Kiroku APIs.
 
 
 ## Context and Orientation
@@ -682,10 +713,15 @@ module per node plus a hand-owned hole module, threads schema qualification into
 projection-SQL hole (E5), and the firewall holds.
 
 In `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, add
-`scaffoldReadModel :: Context -> ReadModelNode -> [ScaffoldModule]` emitting two modules
+`scaffoldReadModel :: Context -> ReadModelNode -> [ScaffoldModule]` emitting three modules
 (module segment = the node name with its first letter capitalized, matching the existing
 workqueue convention `Generated.HospitalCapacity.Reservation_work.*`; identifier hygiene
 generally is `docs/plans/105-…`'s concern).
+
+**`Generated.<Ctx>.<Node>.ReadModelTable`** (kind `Generated`, banner-marked, overwritten
+every run) owns the `Keiro.Connection.qualifyTable`-derived constant. Both remaining
+modules import it, avoiding a runtime-module ↔ hole-module cycle; the runtime module
+re-exports the constant.
 
 **`Generated.<Ctx>.<Node>.ReadModel`** (kind `Generated`, banner-marked, overwritten every
 run) — for the `transfer_decisions` example, shaped like:
@@ -819,10 +855,10 @@ node declares this table's schema; unqualified SQL depends on search_path`. The 
 itself stays as-is (hole modules are hand-owned; only newly created stubs pick up the new
 text — note this in the scaffold report reading).
 
-Wire into `keiro-dsl/app/Main.hs` (`run (Scaffold …)`):
-`rmMods = concat [scaffoldReadModel ctx rm <> harnessReadModel ctx rm | NReadModel rm <- specNodes spec]`
-appended to `allMods`, so the manifest, firewall scan, and write-discipline reporting all
-apply unchanged.
+Wire through `Keiro.Dsl.ScaffoldRun.scaffoldModules`'s node-family dispatch:
+`NReadModel rm -> scaffoldReadModel ctx rm <> harnessReadModel ctx rm`, so the CLI,
+manifest, firewall scan, stale detection, and write-discipline reporting consume one
+canonical module set.
 
 Acceptance: from `keiro-dsl/`,
 `cabal run keiro-dsl -- scaffold test/fixtures/readmodel.keiro --out /tmp/rm-demo` writes
@@ -1069,10 +1105,11 @@ source of every derivation the parser does not capture. `Keiro.Dsl.Parser`,
 `Keiro.Dsl.PrettyPrint`, `Keiro.Dsl.Validate` (eleven new `DiagnosticCode` constructors,
 appended), `Keiro.Dsl.Scaffold` (`scaffoldReadModel :: Context -> ReadModelNode ->
 [ScaffoldModule]`), `Keiro.Dsl.Harness` (`harnessReadModel`), `Keiro.Dsl.Diff`
-(`readModelDiff`), and `keiro-dsl/app/Main.hs` (scaffold wiring) are extended in place.
+(`readModelDiff`), and `Keiro.Dsl.ScaffoldRun` (central scaffold wiring) are extended in
+place.
 End state per milestone: after M1 the Grammar/Parser/PrettyPrint symbols exist and
 round-trip; after M2 `validateSpec` covers the node and both resolution sites; after M3
-`scaffoldReadModel` exists with the two-module contract above; after M4 `harnessReadModel`
+`scaffoldReadModel` exists with the three-module contract above; after M4 `harnessReadModel`
 and the cabal suite exist; after M5 `readModelDiff` exists and NOTATION.md documents it all.
 
 **Sibling-plan integration points (paths only; each plan is independently readable).**
@@ -1109,5 +1146,14 @@ and the cabal suite exist; after M5 `readModelDiff` exists and NOTATION.md docum
 
 **Packages.** The `keiro-dsl` library itself gains no new dependency (FNV-1a is
 hand-rolled; everything else is `text`/`megaparsec` already in use). The new conformance
-suite depends on `keiro`, `kiroku`, `effectful-core`, `hasql-transaction`, `text`, `base` —
+suite depends on `keiro`, `kiroku-store`, `effectful-core`, `hasql-transaction`, `text`, `base` —
 the same closure the existing runtime suites draw on.
+
+
+## Revision Notes
+
+- 2026-07-13: Milestone 3 changed the read-model scaffold from two modules to an acyclic
+  three-module vertical. `ReadModelTable` owns the qualified-table constant shared by the
+  generated runtime module and the hand-owned SQL hole; `ScaffoldRun` owns family dispatch
+  after EP-106's centralization. Progress, design prose, decisions, interfaces, and
+  acceptance evidence were updated to match the implemented structure.

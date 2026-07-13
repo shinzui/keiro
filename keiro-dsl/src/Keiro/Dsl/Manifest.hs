@@ -79,7 +79,7 @@ depsForNode n = case n of
     NPublisher{} -> integration
     NWorkqueue{} -> ["aeson", "keiro-pgmq", "text"]
     NPgmqDispatch{} -> ["aeson", "effectful-core", "keiro-pgmq", "text"]
-    NReadModel{} -> ["effectful-core", "hasql-transaction", "keiro", "kiroku", "text"]
+    NReadModel{} -> ["effectful-core", "hasql-transaction", "keiro", "kiroku-store", "text"]
     NWorkflow{} -> ["effectful-core", "keiro", "text"]
     NOperation{} -> ["effectful-core", "keiro", "text"]
   where
