@@ -65,6 +65,7 @@ docRule d =
 docNode :: Node -> Doc ann
 docNode (NAggregate a) = docAggregate a
 docNode (NProcess p) = docProcess p
+docNode (NRouter r) = docRouter r
 docNode (NContract c) = docContract c
 docNode (NIntake i) = docIntake i
 docNode (NEmit e) = docEmit e
@@ -304,9 +305,53 @@ docProcess p =
         , indent 2 (docHandle (procHandle p))
         , mempty
         , indent 2 "dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)"
+        , indent 2 ("rejected =>" <+> docPolicyChoice (procRejected p))
+        , indent 2 ("poison =>" <+> docPolicyChoice (procPoison p))
         , mempty
         , indent 2 (docTimer (procTimer p))
         ]
+
+docRouter :: RouterNode -> Doc ann
+docRouter r =
+    vsep
+        [ "router" <+> pretty (rtId r)
+        , indent 2 ("name" <+> dquoted (rtName r))
+        , indent 2 (docInput (rtInput r))
+        , indent 2 (docRouterKey (rtKey r))
+        , indent 2 (docResolve (rtResolve r))
+        , indent 2 ("target" <+> pretty (rtTarget r))
+        , indent 2 ("projections" <+> bracketed (map pretty (rtProjections r)))
+        , indent 2 (docRouterDispatch (rtDispatch r))
+        , indent 2 "dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)"
+        , indent 2 ("rejected =>" <+> docPolicyChoice (rtRejected r))
+        , indent 2 ("poison =>" <+> docPolicyChoice (rtPoison r))
+        ]
+
+docRouterKey :: CorrelateDecl -> Doc ann
+docRouterKey key = "key" <+> ("input." <> pretty (corrField key)) <+> "via" <+> pretty (corrVia key)
+
+docResolve :: ResolveDecl -> Doc ann
+docResolve resolve =
+    "resolve stable via"
+        <+> source
+        <+> "row"
+        <+> braced (map pretty (rvRow resolve))
+  where
+    source = case rvSource resolve of
+        ResolveReadModel name -> "read-model" <+> pretty name
+        ResolveHole -> "hole"
+
+docRouterDispatch :: RouterDispatchNode -> Doc ann
+docRouterDispatch dispatch =
+    vsep
+        [ "dispatch-each" <+> pretty (rdCommand dispatch) <+> braced (map docFieldBinding (rdFields dispatch))
+        , indent 2 (docDispDisposition (rdDisposition dispatch))
+        ]
+
+docPolicyChoice :: PolicyChoice -> Doc ann
+docPolicyChoice PolHalt = "halt"
+docPolicyChoice PolDeadLetter = "deadLetter"
+docPolicyChoice PolSkip = "skip"
 
 docInput :: InputDecl -> Doc ann
 docInput i = "input" <+> pretty (inName i) <+> braced (map docField (inFields i))
@@ -377,6 +422,9 @@ docFireDisposition x =
         <+> ";"
         <+> "on-reject"
         <+> docFireOutcome (onReject x)
+        <+> ";"
+        <+> "on-ambiguous"
+        <+> docFireOutcome (onAmbiguous x)
         <+> ";"
         <+> "on-error"
         <+> docFireOutcome (onError x)

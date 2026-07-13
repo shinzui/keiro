@@ -17,6 +17,8 @@ process SurgeFlow
     schedule surgeFollowUp
 
   dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)
+  rejected => halt
+  poison => halt
 
   timer surgeFollowUp
     id uuidv5 "surge-timer:" <> correlationId
@@ -24,7 +26,7 @@ process SurgeFlow
     payload { kind="surge-follow-up" }
     fire dispatch Surge@correlationId MarkSurgeTimerFired { hospitalId }
       fired-event-id uuidv5 "surge-fired:" <> correlationId
-      on-ok Fired ; on-reject Fired ; on-error Retry ; not-mine Retry
+      on-ok Fired ; on-reject Fired ; on-ambiguous Retry ; on-error Retry ; not-mine Retry
     decode unknown-status => Cancelled
     max-attempts 5 dead-letter "ceiling"
 

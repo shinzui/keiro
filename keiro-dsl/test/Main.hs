@@ -6,6 +6,7 @@ module Main (main) where
 
 import Control.Exception (bracket)
 import Control.Monad (filterM, forM_)
+import Data.Either (isLeft)
 import Data.List (partition, sort)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
@@ -245,8 +246,11 @@ main = hspec $ do
                     (p : _) -> do
                         procId p `shouldBe` "HospitalSurge"
                         procName p `shouldBe` "hospital-surge"
+                        procRejected p `shouldBe` PolHalt
+                        procPoison p `shouldBe` PolHalt
                         tmName (procTimer p) `shouldBe` "surgeFollowUp"
                         onReject (fireDisposition (tmFire (procTimer p))) `shouldBe` OFired
+                        onAmbiguous (fireDisposition (tmFire (procTimer p))) `shouldBe` ORetry
                         tmMaxAttempts (procTimer p) `shouldBe` 5
                     [] -> expectationFailure "no process node parsed"
         it "round-trips the hospital-surge spec through parse . pretty" $ do
@@ -273,6 +277,80 @@ main = hspec $ do
             codes <- errorCodesOf "test/fixtures/process-ghost-refs.keiro"
             length (filter (== ProcessUnresolvedRef) codes) `shouldBe` 5
             codes `shouldContain` [ProcessDispatchIdSupplied]
+
+    describe "router (EP-108)" $ do
+        it "parses the incident-paging router shape" $ do
+            input <- readTestText "test/fixtures/incident-paging/incident-paging.keiro"
+            case parseSpec "test/fixtures/incident-paging/incident-paging.keiro" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> case [router | NRouter router <- specNodes spec] of
+                    [router] -> do
+                        rtId router `shouldBe` "PagingRouter"
+                        rtName router `shouldBe` "jitsurei-paging"
+                        corrField (rtKey router) `shouldBe` "incidentId"
+                        rvSource (rtResolve router) `shouldBe` ResolveReadModel "service_oncall"
+                        rvRow (rtResolve router) `shouldBe` ["responderId"]
+                        rdCommand (rtDispatch router) `shouldBe` "SendPage"
+                        rtRejected router `shouldBe` PolDeadLetter
+                        rtPoison router `shouldBe` PolHalt
+                    routers -> expectationFailure ("expected one router, got " <> show (length routers))
+        it "round-trips the incident-paging spec through parse . pretty" $ do
+            input <- readTestText "test/fixtures/incident-paging/incident-paging.keiro"
+            case parseSpec "in" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+        it "accepts the incident-paging router with warnings only" $ do
+            codes <- errorCodesOf "test/fixtures/incident-paging/incident-paging.keiro"
+            codes `shouldBe` []
+            diagnostics <- diagnosticCodesOf "test/fixtures/incident-paging/incident-paging.keiro"
+            diagnostics `shouldContain` [PolicyDeadLetterUnused, AmbiguousFollowsRejectedPolicy]
+        it "rejects unresolved targets, keys, commands, and binding scopes" $ do
+            spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
+            routerErrorCodes (\router -> router{rtTarget = "Pge"}) spec `shouldContain` [RouterUnresolvedRef]
+            routerErrorCodes (\router -> router{rtKey = (rtKey router){corrField = "incidntId"}}) spec `shouldContain` [RouterKeyFieldUnknown]
+            routerErrorCodes (\router -> router{rtDispatch = (rtDispatch router){rdCommand = "SendPag"}}) spec `shouldContain` [RouterCommandUnknown]
+            routerErrorCodes
+                ( \router ->
+                    let dispatch = rtDispatch router
+                     in router{rtDispatch = dispatch{rdFields = [FieldBinding "responderId" (Just "resolved.responder")]}}
+                )
+                spec
+                `shouldContain` [RouterBindingUnscoped]
+        it "rejects unresolved read models and contradictory rejection policies" $ do
+            spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
+            let withoutReadModel = removeReadModel "service_oncall" spec
+            errorCodes withoutReadModel `shouldContain` [RouterUnresolvedRef]
+            routerErrorCodes
+                ( \router ->
+                    let dispatch = rtDispatch router
+                        disposition = rdDisposition dispatch
+                     in router
+                            { rtRejected = PolHalt
+                            , rtDispatch = dispatch{rdDisposition = disposition{onFailed = DDeadLetter "page rejected"}}
+                            }
+                )
+                spec
+                `shouldContain` [PolicyContradiction]
+        it "rejects on-ambiguous Fired for process timers" $ do
+            spec <- specOf "test/fixtures/hospital-surge.keiro"
+            let changed =
+                    spec
+                        { specNodes =
+                            [ case node of
+                                NProcess process ->
+                                    let timer = procTimer process
+                                        fire = tmFire timer
+                                        disposition = fireDisposition fire
+                                     in NProcess process{procTimer = timer{tmFire = fire{fireDisposition = disposition{onAmbiguous = OFired}}}}
+                                _ -> node
+                            | node <- specNodes spec
+                            ]
+                        }
+            errorCodes changed `shouldContain` [AmbiguousMarkedBenign]
+        it "requires explicit policy and ambiguity clauses in the grammar" $ do
+            source <- readTestText "test/fixtures/hospital-surge.keiro"
+            parseSpec "<missing-poison>" (T.replace "  poison => halt\n" "" source) `shouldSatisfy` isLeft
+            parseSpec "<missing-ambiguous>" (T.replace " ; on-ambiguous Retry" "" source) `shouldSatisfy` isLeft
         it "rejects invalid timer ceilings and target field bindings" $ do
             codes <- errorCodesOf "test/fixtures/process-bad-timer.keiro"
             mapM_
@@ -1127,6 +1205,23 @@ removeReadModel target spec =
     isTarget (NReadModel readModel) = rmName readModel == target
     isTarget _ = False
 
+modifyRouter :: Name -> (RouterNode -> RouterNode) -> Spec -> Spec
+modifyRouter target update spec =
+    spec
+        { specNodes =
+            [ case node of
+                NRouter router | rtId router == target -> NRouter (update router)
+                _ -> node
+            | node <- specNodes spec
+            ]
+        }
+
+routerErrorCodes :: (RouterNode -> RouterNode) -> Spec -> [DiagnosticCode]
+routerErrorCodes update = errorCodes . modifyRouter "PagingRouter" update
+
+errorCodes :: Spec -> [DiagnosticCode]
+errorCodes spec = [code diagnostic | diagnostic <- validateSpec spec, severity diagnostic == Error]
+
 changeReadModelShape :: ReadModelNode -> ReadModelNode
 changeReadModelShape readModel =
     readModel
@@ -1669,6 +1764,8 @@ processWithLiteral value =
                 , hDispatch = []
                 , hSchedule = "timer"
                 }
+        , procRejected = PolHalt
+        , procPoison = PolHalt
         , procTimer =
             TimerNode
                 { tmName = "timer"
@@ -1682,7 +1779,7 @@ processWithLiteral value =
                         , fireCommand = "Fire"
                         , fireFields = []
                         , fireFiredEventId = IdExpr UuidV5Id "fired:"
-                        , fireDisposition = FireDisposition OFired OFired ORetry ORetry
+                        , fireDisposition = FireDisposition OFired OFired ORetry ORetry ORetry
                         }
                 , tmDecodeUnknown = "Cancelled"
                 , tmMaxAttempts = 5
@@ -1842,6 +1939,7 @@ genFireDisposition =
         <*> elements [OFired, ORetry]
         <*> elements [OFired, ORetry]
         <*> elements [OFired, ORetry]
+        <*> elements [OFired, ORetry]
 
 genIdExpr :: Gen IdExpr
 genIdExpr = IdExpr UuidV5Id <$> genAdversarialText
@@ -1880,7 +1978,27 @@ genProcess =
         <*> genName
         <*> smallList genName
         <*> (HandleNode <$> genName <*> (AdvanceNode <$> genName <*> smallList genFieldBinding) <*> smallList genDispatchNode <*> genName)
+        <*> elements [PolHalt, PolDeadLetter, PolSkip]
+        <*> elements [PolHalt, PolDeadLetter, PolSkip]
         <*> genTimerNode
+        <*> pure noLoc
+
+genResolveSource :: Gen ResolveSource
+genResolveSource = oneof [ResolveReadModel <$> genName, pure ResolveHole]
+
+genRouter :: Gen RouterNode
+genRouter =
+    RouterNode
+        <$> genName
+        <*> genAdversarialText
+        <*> (InputDecl <$> genName <*> smallList genField)
+        <*> (CorrelateDecl <$> genName <*> genName)
+        <*> (ResolveDecl <$> genResolveSource <*> smallList genName <*> pure noLoc)
+        <*> genName
+        <*> smallList genName
+        <*> (RouterDispatchNode <$> genName <*> smallList genFieldBinding <*> genDispatchDisposition <*> pure noLoc)
+        <*> elements [PolHalt, PolDeadLetter, PolSkip]
+        <*> elements [PolHalt, PolDeadLetter, PolSkip]
         <*> pure noLoc
 
 genContractField :: Gen ContractField
@@ -2045,12 +2163,13 @@ genOperation :: Gen OperationNode
 genOperation = OperationNode <$> genName <*> genOperationShape <*> pure noLoc
 
 allNodeTags :: [String]
-allNodeTags = ["aggregate", "process", "contract", "intake", "emit", "publisher", "workqueue", "pgmq-dispatch", "readmodel", "workflow", "operation"]
+allNodeTags = ["aggregate", "process", "router", "contract", "intake", "emit", "publisher", "workqueue", "pgmq-dispatch", "readmodel", "workflow", "operation"]
 
 nodeTag :: Node -> String
 nodeTag = \case
     NAggregate _ -> "aggregate"
     NProcess _ -> "process"
+    NRouter _ -> "router"
     NContract _ -> "contract"
     NIntake _ -> "intake"
     NEmit _ -> "emit"
@@ -2091,6 +2210,7 @@ genSpec =
         oneof
             [ NAggregate <$> genAggregate
             , NProcess <$> genProcess
+            , NRouter <$> genRouter
             , NContract <$> genContract
             , NIntake <$> genIntake
             , NEmit <$> genEmit

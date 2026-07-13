@@ -70,17 +70,17 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: `Keiro.Dsl.Grammar` — add `RouterNode` (+ `ResolveDecl`, `RouterDispatchNode`,
+- [x] (2026-07-13 23:20Z) M1: `Keiro.Dsl.Grammar` — add `RouterNode` (+ `ResolveDecl`, `RouterDispatchNode`,
   `PolicyChoice`), `NRouter` in the node sum, `procRejected`/`procPoison` on
   `ProcessNode`, `onAmbiguous` on `FireDisposition`.
-- [ ] M1: `Keiro.Dsl.Parser` — `pRouter` registered in the node parser; mandatory
+- [x] (2026-07-13 23:20Z) M1: `Keiro.Dsl.Parser` — `pRouter` registered in the node parser; mandatory
   `rejected =>`/`poison =>` clauses in `pProcess`; mandatory `on-ambiguous` fire arm;
   mandatory `stable` keyword in `resolve`.
-- [ ] M1: `Keiro.Dsl.PrettyPrint` — `docRouter`; render the new process clauses and the
+- [x] (2026-07-13 23:20Z) M1: `Keiro.Dsl.PrettyPrint` — `docRouter`; render the new process clauses and the
   `on-ambiguous` arm; round-trip property arm for router specs in `test/Main.hs`.
-- [ ] M1: update every process-bearing fixture, skeleton, and unit-test source text for
+- [x] (2026-07-13 23:20Z) M1: update every process-bearing fixture, skeleton, and unit-test source text for
   the new mandatory clauses; author `keiro-dsl/test/fixtures/incident-paging/incident-paging.keiro`.
-- [ ] M2: validator rules + new `DiagnosticCode`s (`RouterUnresolvedRef`,
+- [x] (2026-07-13 23:20Z) M2: validator rules + new `DiagnosticCode`s (`RouterUnresolvedRef`,
   `RouterKeyFieldUnknown`, `RouterBindingUnscoped`, `RouterCommandUnknown`,
   `RouterReadModelUnverified`, `PolicyContradiction`, `PolicyDeadLetterUnused`,
   `AmbiguousMarkedBenign`, `AmbiguousFollowsRejectedPolicy`) with unit tests via
@@ -106,7 +106,13 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The first `incident-paging.keiro` target shape used state `Sent` with event
+  `PageSent`; identifier hygiene correctly rejected the shared generated constructor
+  `PageSent`. The fixture now uses terminal state `Delivered`, preserving event
+  `PageSent` while keeping the generated constructor namespaces disjoint.
+- EP-107 is already complete, so an unresolved `resolve ... via read-model` reference is
+  now an Error (`RouterUnresolvedRef`) rather than the temporary
+  `RouterReadModelUnverified` warning described for a pre-EP-107 implementation.
 
 
 ## Decision Log
@@ -192,6 +198,14 @@ Record every decision made while working on the plan.
   belong to docs/plans/110-align-keiro-dsl-with-the-safe-apis-and-refresh-the-authoring-skill-and-corpus.md.
   Rationale: MasterPlan 15 scope rule; per-vertical NOTATION.md additions are part of
   MP-8's per-vertical template, but the cross-cutting documentation pass is 110's job.
+  Date: 2026-07-13
+
+- Decision: Because EP-107 is complete, router read-model references participate in the
+  ordinary cross-node resolution gate immediately; the transitional
+  `RouterReadModelUnverified` constructor remains in the diagnostic registry for API
+  compatibility but no delivered valid path emits it.
+  Rationale: warning about an unverifiable read model would weaken the now-available
+  first-class `readmodel` contract and contradict the MasterPlan dependency order.
   Date: 2026-07-13
 
 

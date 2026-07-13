@@ -74,6 +74,7 @@ data DiffEnv = DiffEnv
 data NodeFamily
     = FamAggregate
     | FamProcess
+    | FamRouter
     | FamContract
     | FamIntake
     | FamEmit
@@ -89,6 +90,7 @@ data NodeFamily
 familyOf :: Node -> NodeFamily
 familyOf (NAggregate _) = FamAggregate
 familyOf (NProcess _) = FamProcess
+familyOf (NRouter _) = FamRouter
 familyOf (NContract _) = FamContract
 familyOf (NIntake _) = FamIntake
 familyOf (NEmit _) = FamEmit
@@ -143,6 +145,7 @@ familyRegistry :: [(NodeFamily, FamilyDiff)]
 familyRegistry =
     [ (FamAggregate, DiffFamily aggregateDiff)
     , (FamProcess, DiffFamily processDiff)
+    , (FamRouter, OutOfDiffScope "EP-108 M6 registers the router stable-name, key derivation, and target identity surface")
     , (FamContract, DiffFamily contractDiff)
     , (FamIntake, DiffFamily intakeDiff)
     , (FamEmit, DiffFamily emitDiff)

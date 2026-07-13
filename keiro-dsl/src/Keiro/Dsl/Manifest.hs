@@ -73,6 +73,7 @@ depsForNode :: Node -> [Text]
 depsForNode n = case n of
     NAggregate{} -> ["aeson", "keiki", "keiro", "text"]
     NProcess{} -> ["aeson", "keiki", "keiro", "text", "time", "uuid"]
+    NRouter{} -> ["effectful-core", "keiro", "shibuya", "text"]
     NContract{} -> ["aeson", "text"]
     NIntake{} -> integration
     NEmit{} -> integration

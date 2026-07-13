@@ -61,7 +61,14 @@ module Keiro.Dsl.Grammar (
     FireDisposition (..),
     FireNode (..),
     TimerNode (..),
+    PolicyChoice (..),
     ProcessNode (..),
+
+    -- * The router node (EP-108)
+    ResolveSource (..),
+    ResolveDecl (..),
+    RouterDispatchNode (..),
+    RouterNode (..),
 
     -- * The integration contract node (EP-4)
     ContractType (..),
@@ -490,6 +497,7 @@ inversion (a CommandRejected means \"already applied\" = success).
 data FireDisposition = FireDisposition
     { onOk :: !FireOutcome
     , onReject :: !FireOutcome
+    , onAmbiguous :: !FireOutcome
     , onError :: !FireOutcome
     , notMine :: !FireOutcome
     }
@@ -520,6 +528,10 @@ data TimerNode = TimerNode
     }
     deriving stock (Eq, Show, Generic)
 
+-- | A node-level worker policy lowered to the runtime worker options.
+data PolicyChoice = PolHalt | PolDeadLetter | PolSkip
+    deriving stock (Eq, Show, Generic)
+
 {- | A @process@ (process manager / saga) node. The dispatch-id strategy is fixed
 (runtime-owned uuidv5), so it is implicit in the AST and always rendered.
 -}
@@ -534,8 +546,49 @@ data ProcessNode = ProcessNode
     , procTarget :: !Name
     , procProjections :: ![Name]
     , procHandle :: !HandleNode
+    , procRejected :: !PolicyChoice
+    , procPoison :: !PolicyChoice
     , procTimer :: !TimerNode
     , procLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- EP-108: stateless, effectful content-based routing.
+
+data ResolveSource = ResolveReadModel !Name | ResolveHole
+    deriving stock (Eq, Show, Generic)
+
+data ResolveDecl = ResolveDecl
+    { rvSource :: !ResolveSource
+    , rvRow :: ![Name]
+    , rvLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+data RouterDispatchNode = RouterDispatchNode
+    { rdCommand :: !Name
+    , rdFields :: ![FieldBinding]
+    , rdDisposition :: !DispatchDisposition
+    , rdLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+{- | A stateless router. Its fixed dispatch-id strategy is runtime-owned, and
+the mandatory @stable@ token on the resolve clause is an author acknowledgement
+that retry attempts accumulate the union of resolved target identities.
+-}
+data RouterNode = RouterNode
+    { rtId :: !Name
+    , rtName :: !Text
+    , rtInput :: !InputDecl
+    , rtKey :: !CorrelateDecl
+    , rtResolve :: !ResolveDecl
+    , rtTarget :: !Name
+    , rtProjections :: ![Name]
+    , rtDispatch :: !RouterDispatchNode
+    , rtRejected :: !PolicyChoice
+    , rtPoison :: !PolicyChoice
+    , rtLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
 
@@ -849,6 +902,7 @@ data OperationNode = OperationNode
 data Node
     = NAggregate Aggregate
     | NProcess ProcessNode
+    | NRouter RouterNode
     | NContract ContractNode
     | NIntake IntakeNode
     | NEmit EmitNode

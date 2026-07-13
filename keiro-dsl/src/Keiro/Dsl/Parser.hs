@@ -139,6 +139,10 @@ reservedWords =
     , "from"
     , "HOLE"
     , "process"
+    , "router"
+    , "dispatch-each"
+    , "resolve"
+    , "read-model"
     , "dispatch"
     , -- EP-4 integration: structural keywords never used as identifiers, so a
       -- list like @accept A B C@ stops at the next block keyword.
@@ -267,6 +271,7 @@ pTopItem =
         [ TIId <$> pIdDecl
         , TIEnum <$> pEnumDecl
         , TIRule <$> pRuleDecl
+        , TINode . NRouter <$> pRouter
         , TINode . NProcess <$> pProcess
         , TINode . NContract <$> pContract
         , TINode . NIntake <$> pIntake
@@ -1025,6 +1030,8 @@ pProcess = do
     projs <- keyword "projections" *> brackets (many ident)
     handle <- pHandle
     _ <- optional pDispatchIdLine
+    rejected <- pPolicyLine "rejected"
+    poison <- pPolicyLine "poison"
     timer <- pTimerNode
     pure
         ProcessNode
@@ -1036,9 +1043,105 @@ pProcess = do
             , procTarget = tgt
             , procProjections = projs
             , procHandle = handle
+            , procRejected = rejected
+            , procPoison = poison
             , procTimer = timer
             , procLoc = loc
             }
+
+pRouter :: P RouterNode
+pRouter = do
+    loc <- getLoc
+    keyword "router"
+    rid <- ident
+    keyword "name"
+    nm <- stringLit
+    inp <- pInputDecl
+    key <- pRouterKey
+    resolved <- pResolveDecl
+    keyword "target"
+    target <- ident
+    projections <- keyword "projections" *> brackets (many ident)
+    dispatch <- pRouterDispatch
+    pRouterDispatchIdLine
+    rejected <- pPolicyLine "rejected"
+    poison <- pPolicyLine "poison"
+    pure
+        RouterNode
+            { rtId = rid
+            , rtName = nm
+            , rtInput = inp
+            , rtKey = key
+            , rtResolve = resolved
+            , rtTarget = target
+            , rtProjections = projections
+            , rtDispatch = dispatch
+            , rtRejected = rejected
+            , rtPoison = poison
+            , rtLoc = loc
+            }
+
+pRouterKey :: P CorrelateDecl
+pRouterKey = do
+    keyword "key"
+    _ <- keyword "input" *> symbol "."
+    field <- ident
+    keyword "via"
+    via <- ident
+    pure CorrelateDecl{corrField = field, corrVia = via}
+
+pResolveDecl :: P ResolveDecl
+pResolveDecl = do
+    loc <- getLoc
+    keyword "resolve"
+    keyword "stable"
+    keyword "via"
+    source <- choice [ResolveReadModel <$> (keyword "read-model" *> ident), ResolveHole <$ keyword "hole"]
+    keyword "row"
+    row <- braces (many ident)
+    pure ResolveDecl{rvSource = source, rvRow = row, rvLoc = loc}
+
+pRouterDispatch :: P RouterDispatchNode
+pRouterDispatch = do
+    loc <- getLoc
+    keyword "dispatch-each"
+    command <- ident
+    fields <- braces (many pFieldBinding)
+    disposition <-
+        DispatchDisposition
+            <$> (keyword "on-appended" *> pDisp)
+            <*> (symbol ";" *> keyword "on-duplicate" *> pDisp)
+            <*> (symbol ";" *> keyword "on-failed" *> pDisp)
+    pure RouterDispatchNode{rdCommand = command, rdFields = fields, rdDisposition = disposition, rdLoc = loc}
+
+pRouterDispatchIdLine :: P ()
+pRouterDispatchIdLine = do
+    keyword "dispatch-id"
+    _ <- symbol "strategy" *> symbol "=" *> keyword "uuidv5"
+    _ <- symbol "from" *> symbol "=" *> parens fixedInputs
+    pure ()
+  where
+    fixedInputs = do
+        keyword "name"
+        _ <- symbol ","
+        keyword "key"
+        _ <- symbol ","
+        keyword "sourceEventId"
+        _ <- symbol ","
+        keyword "targetStreamName"
+        _ <- symbol ","
+        keyword "occurrence"
+
+pPolicyLine :: Text -> P PolicyChoice
+pPolicyLine clause = keyword clause *> symbol "=>" *> pPolicyChoice
+
+pPolicyChoice :: P PolicyChoice
+pPolicyChoice =
+    choice
+        [ PolHalt <$ keyword "halt"
+        , PolDeadLetter <$ keyword "deadLetter"
+        , PolSkip <$ keyword "skip"
+        ]
 
 pInputDecl :: P InputDecl
 pInputDecl = do
@@ -1193,6 +1296,7 @@ pFire = do
         FireDisposition
             <$> (keyword "on-ok" *> pFireOutcome)
             <*> (symbol ";" *> keyword "on-reject" *> pFireOutcome)
+            <*> (symbol ";" *> keyword "on-ambiguous" *> pFireOutcome)
             <*> (symbol ";" *> keyword "on-error" *> pFireOutcome)
             <*> (symbol ";" *> keyword "not-mine" *> pFireOutcome)
     pure FireNode{fireTarget = tgt, fireKey = key, fireCommand = cmd, fireFields = fs, fireFiredEventId = fid, fireDisposition = disp}

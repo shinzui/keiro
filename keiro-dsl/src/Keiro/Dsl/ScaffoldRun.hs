@@ -64,6 +64,7 @@ scaffoldModules ctx spec =
         [ case node of
             NAggregate agg -> scaffoldAggregate ctx spec agg <> harnessFor ctx spec agg
             NProcess process -> scaffoldProcess ctx process <> harnessProcess ctx process
+            NRouter _ -> [] -- EP-108 M3 installs the router scaffold and harness here.
             NContract contract -> scaffoldContract ctx contract
             NIntake intake -> scaffoldIntake ctx intake
             NPublisher publisher -> scaffoldPublisher ctx publisher

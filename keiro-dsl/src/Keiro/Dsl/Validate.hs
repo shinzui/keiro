@@ -154,6 +154,16 @@ data DiagnosticCode
     | ReadModelShapeChangedWithoutBump
     | ReadModelFeedChanged
     | ReadModelConsistencyWeakened
+    | -- EP-108 (router and worker-policy surfaces).
+      RouterUnresolvedRef
+    | RouterKeyFieldUnknown
+    | RouterBindingUnscoped
+    | RouterCommandUnknown
+    | RouterReadModelUnverified
+    | PolicyContradiction
+    | PolicyDeadLetterUnused
+    | AmbiguousMarkedBenign
+    | AmbiguousFollowsRejectedPolicy
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -219,6 +229,7 @@ validateNames spec =
     nodeNames = \case
         NAggregate aggregate -> aggregateNames aggregate
         NProcess process -> processNames process
+        NRouter router -> routerNames router
         NContract contract ->
             pascalizedNodeName "contract" (ctrName contract) (ctrLoc contract)
                 ++ concatMap
@@ -268,6 +279,17 @@ validateNames spec =
         handle = procHandle process
         timer = procTimer process
         dispatchBindings dispatch = concatMap (bindingName "dispatch field binding" (dispLoc dispatch)) (dispFields dispatch)
+
+    routerNames router =
+        constructorName "router name" (rtId router) (rtLoc router)
+            ++ constructorName "router input name" (inName input) (rtLoc router)
+            ++ concatMap (\field -> fieldNameRule "router input field" (fieldName field) (rtLoc router)) (inFields input)
+            ++ concatMap (\field -> fieldNameRule "router resolve-row field" field (rvLoc resolve)) (rvRow resolve)
+            ++ concatMap (bindingName "router dispatch field binding" (rdLoc dispatch)) (rdFields dispatch)
+      where
+        input = rtInput router
+        resolve = rtResolve router
+        dispatch = rtDispatch router
 
     bindingName category anchor binding = fieldNameRule category (fbName binding) anchor
     contractFieldName contract field = fieldNameRule "contract field" (cfName field) (ctrLoc contract)
@@ -401,6 +423,7 @@ specLevelRules spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefi
 nodeIdentity :: Node -> (Text, Name, Loc)
 nodeIdentity (NAggregate a) = ("aggregate", aggName a, aggLoc a)
 nodeIdentity (NProcess p) = ("process", procId p, procLoc p)
+nodeIdentity (NRouter r) = ("router", rtId r, rtLoc r)
 nodeIdentity (NContract c) = ("contract", ctrName c, ctrLoc c)
 nodeIdentity (NIntake i) = ("intake", inkName i, inkLoc i)
 nodeIdentity (NEmit e) = ("emit", emName e, emLoc e)
@@ -414,6 +437,7 @@ nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
 validateNode :: Spec -> Node -> [Diagnostic]
 validateNode spec (NAggregate agg) = validateAggregate spec agg
 validateNode spec (NProcess p) = validateProcess spec p
+validateNode spec (NRouter router) = validateRouter spec router
 validateNode _spec (NContract _) = [] -- a contract is a declaration; coupling is checked at the referrers
 validateNode spec (NIntake i) = validateIntake i ++ intakeCoupling spec i
 validateNode spec (NEmit e) = validateEmit spec e
@@ -797,7 +821,7 @@ validateIntake i = concat [completeness, duplicateRows, inversions]
 -- | EP-3 rules for a process manager + its nested timer.
 validateProcess :: Spec -> ProcessNode -> [Diagnostic]
 validateProcess spec p =
-    concat [noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, timerCeiling, benignInversions]
+    concat [noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, timerCeiling, policyRules, ambiguityRule, benignInversions]
   where
     aggregates = [a | NAggregate a <- specNodes spec]
     aggNames = map aggName aggregates
@@ -900,6 +924,21 @@ validateProcess spec p =
         | tmMaxAttempts timer < 1
         ]
 
+    policyRules =
+        policyConsistency
+            (procId p)
+            (procLoc p)
+            (procRejected p)
+            [ (dispCommand dispatch, dispLoc dispatch, dispDisposition dispatch)
+            | dispatch <- hDispatch (procHandle p)
+            ]
+
+    ambiguityRule =
+        [ mkErr (locLine (tmLoc timer)) AmbiguousMarkedBenign $
+            "timer '" <> tmName timer <> "' maps on-ambiguous => Fired; CommandAmbiguous means multiple aggregate edges matched and is never a benign success. Use on-ambiguous Retry so the attempts ceiling dead-letters the definition bug"
+        | onAmbiguous (fireDisposition (tmFire timer)) == OFired
+        ]
+
     -- Surface the dangerous benign inversions the author confirmed (warnings).
     benignInversions =
         [ Diagnostic (locLine (tmLoc timer)) Warning ProcessBenignInversion $
@@ -911,6 +950,141 @@ validateProcess spec p =
                | d <- hDispatch (procHandle p)
                , onDuplicate (dispDisposition d) == DAckOk
                ]
+
+-- | EP-108 rules for a stateless content-based router.
+validateRouter :: Spec -> RouterNode -> [Diagnostic]
+validateRouter spec router =
+    concat
+        [ references
+        , keyField
+        , bindingScope
+        , commandReference
+        , readModelReference
+        , policyRules
+        , duplicateNotice
+        ]
+  where
+    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+    readModels = [readModel | NReadModel readModel <- specNodes spec]
+    inputFields = map fieldName (inFields (rtInput router))
+    resolvedFields = rvRow (rtResolve router)
+    dispatch = rtDispatch router
+    routerLine = locLine (rtLoc router)
+    dispatchLine = locLine (rdLoc dispatch)
+
+    targetAggregate = case [aggregate | aggregate <- aggregates, aggName aggregate == rtTarget router] of
+        aggregate : _ -> Just aggregate
+        [] -> Nothing
+
+    projectionTables = [projTable projection | aggregate <- aggregates, Just projection <- [aggProjection aggregate]]
+
+    references =
+        [ mkErr routerLine RouterUnresolvedRef $
+            "router '" <> rtId router <> "' targets aggregate '" <> rtTarget router <> "' but no such aggregate is declared"
+        | targetAggregate == Nothing
+        ]
+            ++ [ mkErr routerLine RouterUnresolvedRef $
+                    "router '" <> rtId router <> "' references undeclared projection table '" <> projection <> "'"
+               | projection <- rtProjections router
+               , projection `notElem` projectionTables
+               ]
+
+    keyField =
+        [ mkErr routerLine RouterKeyFieldUnknown $
+            "key references 'input." <> corrField (rtKey router) <> "' but input '" <> inName (rtInput router) <> "' does not declare that field"
+        | corrField (rtKey router) `notElem` inputFields
+        ]
+
+    bindingScope =
+        [ mkErr dispatchLine RouterBindingUnscoped $
+            "dispatch binding '" <> fbName binding <> maybe "" ("=" <>) (fbValue binding) <> "' is outside the router input and resolve-row scopes"
+        | binding <- rdFields dispatch
+        , not (bindingInScope binding)
+        ]
+      where
+        bindingInScope binding = case fbValue binding of
+            Nothing -> fbName binding `elem` inputFields
+            Just value
+                | isQuoted value -> True
+                | Just field <- T.stripPrefix "input." value -> field `elem` inputFields
+                | Just field <- T.stripPrefix "resolved." value -> field `elem` resolvedFields
+                | otherwise -> False
+        isQuoted value = T.length value >= 2 && T.head value == '"' && T.last value == '"'
+
+    commandReference = case targetAggregate of
+        Nothing -> []
+        Just aggregate -> case [command | command <- aggCommands aggregate, cmdName command == rdCommand dispatch] of
+            [] ->
+                [ mkErr dispatchLine RouterCommandUnknown $
+                    "dispatch command '" <> rdCommand dispatch <> "' is not declared by aggregate '" <> aggName aggregate <> "'"
+                ]
+            command : _ ->
+                [ mkErr dispatchLine RouterCommandUnknown $
+                    "dispatch command '" <> rdCommand dispatch <> "' binds undeclared target field '" <> fbName binding <> "'"
+                | binding <- rdFields dispatch
+                , fbName binding `notElem` map fieldName (cmdFields command)
+                ]
+
+    readModelReference = case rvSource (rtResolve router) of
+        ResolveHole -> []
+        ResolveReadModel name ->
+            [ mkErr (locLine (rvLoc (rtResolve router))) RouterUnresolvedRef $
+                "router '" <> rtId router <> "' resolve names readmodel '" <> name <> "' but no such readmodel node is declared"
+            | name `notElem` map rmName readModels
+            ]
+
+    policyRules =
+        policyConsistency
+            (rtId router)
+            (rtLoc router)
+            (rtRejected router)
+            [(rdCommand dispatch, rdLoc dispatch, rdDisposition dispatch)]
+
+    duplicateNotice =
+        [ Diagnostic dispatchLine Warning ProcessBenignInversion $
+            "router dispatch '" <> rdCommand dispatch <> "' maps on-duplicate => AckOk; Keiro.Router confirms the event id against the target stream before treating the duplicate as benign"
+        | onDuplicate (rdDisposition dispatch) == DAckOk
+        ]
+
+{- | Reconcile per-dispatch prose with the one node-level policy the runtime
+actually applies to a rejection-class failure group.
+-}
+policyConsistency :: Name -> Loc -> PolicyChoice -> [(Name, Loc, DispatchDisposition)] -> [Diagnostic]
+policyConsistency nodeName nodeLoc rejectedPolicy dispatches = contradictions ++ divergent ++ unused ++ ambiguityWarning
+  where
+    contradictions =
+        [ mkErr (locLine dispatchLoc) PolicyContradiction $
+            "dispatch '" <> command <> "' declares on-failed DeadLetter, but node '" <> nodeName <> "' does not declare rejected => deadLetter; align the dispatch story with the node-level RejectedCommandPolicy"
+        | (command, dispatchLoc, disposition) <- dispatches
+        , DDeadLetter _ <- [onFailed disposition]
+        , rejectedPolicy /= PolDeadLetter
+        ]
+
+    divergent = case dispatches of
+        [] -> []
+        (_, _, firstDisposition) : rest ->
+            [ mkErr (locLine dispatchLoc) PolicyContradiction $
+                "dispatch '" <> command <> "' has a different on-failed action from another dispatch in node '" <> nodeName <> "'; the runtime applies one RejectedCommandPolicy to the whole failure group"
+            | (command, dispatchLoc, disposition) <- rest
+            , onFailed disposition /= onFailed firstDisposition
+            ]
+
+    unused =
+        [ Diagnostic (locLine nodeLoc) Warning PolicyDeadLetterUnused $
+            "node '" <> nodeName <> "' declares rejected => deadLetter but no dispatch on-failed arm says DeadLetter; the runtime policy is live, but the per-dispatch notation does not acknowledge it"
+        | rejectedPolicy == PolDeadLetter
+        , all (not . isDeadLetter . onFailed . third) dispatches
+        ]
+
+    ambiguityWarning =
+        [ Diagnostic (locLine nodeLoc) Warning AmbiguousFollowsRejectedPolicy $
+            "node '" <> nodeName <> "' acknowledges rejection-class failures; CommandAmbiguous follows the same rejected policy, and a dead-letter errorClass is the durable witness of that definition bug"
+        | rejectedPolicy `elem` [PolDeadLetter, PolSkip]
+        ]
+
+    third (_, _, value) = value
+    isDeadLetter DDeadLetter{} = True
+    isDeadLetter _ = False
 
 validateAggregate :: Spec -> Aggregate -> [Diagnostic]
 validateAggregate spec agg =
