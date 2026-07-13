@@ -46,10 +46,10 @@ commands in "Validation and Acceptance".
 
 ## Progress
 
-- [ ] M1: `Keiro.Dsl.ScaffoldRun` gated pipeline — all-or-nothing writes, provenance on
+- [x] (2026-07-13 21:50Z) M1: `Keiro.Dsl.ScaffoldRun` gated pipeline — all-or-nothing writes, provenance on
       `ScaffoldModule`, collision gate, generated-banner gate, firewall verdict moved
       before any write, `--force-generated-overwrite` flag.
-- [ ] M2: canonical firewall surface derived from keiki 0.2's real exports; token-aware
+- [x] (2026-07-13 21:50Z) M2: canonical firewall surface derived from keiki 0.2's real exports; token-aware
       scanner (string-literal/comment-skipping, maximal-munch symbols, qualified-name
       awareness); import guard; one list shared by CLI and test.
 - [ ] M3: D1 template-injection fix in `payloadExpr` + D8 `Text` register initials
@@ -87,6 +87,12 @@ Plan of Work):
   function over in-memory `ScaffoldModule` values, yet `keiro-dsl/app/Main.hs:131-137`
   writes every module *and* the manifest first and only then scans. The fix is a
   reordering, not new machinery.
+- Implementation found three legitimate `Keiki.Core` imports omitted from the authored
+  firewall allowlist: generated harness modules import `defaultValidationOptions`, `step`,
+  and `validateTransducer` to check filled holes. The canonical restricted-import
+  allowlist now includes those names alongside `RegFile` and `HsPred`; all other
+  `Keiki.Core` names still breach. Evidence: the strengthened unit suite passed 140
+  examples with real aggregate and process scaffolds firewall-clean.
 
 (To be extended during implementation.)
 
@@ -132,6 +138,14 @@ Plan of Work):
   Rationale: GHC has no supported stop-after-parse mode; resolving generated imports
   requires the package environment a cabal stanza already provides; this repo already
   proves 17 suites this way.
+  Date: 2026-07-13.
+- Decision: permit the five `Keiki.Core` names already emitted by generated aggregate and
+  harness modules: `RegFile`, `HsPred`, `defaultValidationOptions`, `step`, and
+  `validateTransducer`.
+  Rationale: the authored plan listed only Domain and EventStream imports, but the existing
+  generated Harness is also part of the deterministic layer and legitimately validates and
+  steps hand-filled transducers. Restricting it would make every real aggregate scaffold a
+  firewall breach; allowing only the observed explicit names preserves the firewall.
   Date: 2026-07-13.
 
 
@@ -404,9 +418,10 @@ enumerated in Context — are:
 - `forbiddenImports`: `Keiki.Builder`, `Keiki.Operators`, `Keiki.Symbolic` — any import of
   these in a Generated module is a breach.
 - `restrictedImports`: `Keiki.Core` may be imported only with an explicit import list
-  whose names are within `{RegFile, HsPred}` (today's two legitimate uses:
-  Scaffold.hs:783 in Domain, :1076 in EventStream). `Keiki.Generics.TH` stays freely
-  importable (the Domain module's TH derives).
+  whose names are within `{RegFile, HsPred, defaultValidationOptions, step,
+  validateTransducer}`. Domain and EventStream use the first two; the generated Harness
+  uses the final three to validate and step hand-filled transducers. `Keiki.Generics.TH`
+  stays freely importable (the Domain module's TH derives).
 
 The scanner (`firewallBreaches`, same name and result shape `[(FilePath, Text, Int)]` so
 the CLI report code is unchanged) tokenizes each line: a `"` opens a string literal
@@ -886,7 +901,7 @@ data FirewallSurface = FirewallSurface
     , forbiddenIdents     :: [Text]           -- "lit", "pnot", "tadd", "tsub", "tmul"
     , forbiddenQualifiers :: [Text]           -- ["B"]
     , forbiddenImports    :: [Text]           -- Keiki.Builder, Keiki.Operators, Keiki.Symbolic
-    , restrictedImports   :: [(Text, [Text])] -- [("Keiki.Core", ["RegFile", "HsPred"])]
+    , restrictedImports   :: [(Text, [Text])] -- Keiki.Core: RegFile, HsPred, harness validation names
     }
 
 firewallSurface  :: FirewallSurface

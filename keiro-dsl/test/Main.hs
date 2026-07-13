@@ -4,6 +4,7 @@ of the canonical Reservation fixture.
 -}
 module Main (main) where
 
+import Control.Exception (bracket)
 import Control.Monad (filterM, forM_)
 import Data.List (sort)
 import Data.Text qualified as T
@@ -14,12 +15,14 @@ import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), Placement (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess)
+import Keiro.Dsl.ScaffoldRun (Refusal (..), executeScaffold, planScaffold)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, validateSpec)
-import System.Directory (doesFileExist)
+import System.Directory (createDirectory, createDirectoryIfMissing, doesFileExist, getTemporaryDirectory, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
-import System.FilePath ((</>))
+import System.FilePath (takeDirectory, (</>))
+import System.IO (hClose, openTempFile)
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
 
@@ -282,7 +285,7 @@ main = hspec $ do
                 holes = [m | m <- mods, kind m == HoleStub]
             length gens `shouldBe` 1
             length holes `shouldBe` 1
-            [() | m <- gens, op <- symbolicOperators, op `T.isInfixOf` moduleText m] `shouldBe` []
+            firewallBreaches gens `shouldBe` []
             -- the worker uses the spec's ceiling, never the dangerous default
             ("max-attempts = 5" `T.isInfixOf` moduleText (head gens)) `shouldBe` True
         it "process scaffold is deterministic" $ do
@@ -640,32 +643,66 @@ main = hspec $ do
 
     describe "firewall self-check (M3)" $ do
         it "flags a forbidden operator in a Generated module" $ do
-            let m = ScaffoldModule{modulePath = "Gen/Foo.hs", moduleText = "x = a ./= b", kind = Generated}
+            let m = ScaffoldModule{modulePath = "Gen/Foo.hs", moduleText = "x = a ./= b", kind = Generated, origin = "test"}
             firewallBreaches [m] `shouldBe` [("Gen/Foo.hs", "./=", 1)]
         it "ignores forbidden operators in a HoleStub module (holes own them)" $ do
-            let m = ScaffoldModule{modulePath = "Foo/Holes.hs", moduleText = "x = lit 1 .== y", kind = HoleStub}
+            let m = ScaffoldModule{modulePath = "Foo/Holes.hs", moduleText = "x = lit 1 .== y", kind = HoleStub, origin = "test"}
             firewallBreaches [m] `shouldBe` []
         it "matches `lit` as a word, not a substring of quality/split" $ do
-            let clean = ScaffoldModule{modulePath = "Gen/Q.hs", moduleText = "quality = split facility", kind = Generated}
-                dirty = ScaffoldModule{modulePath = "Gen/L.hs", moduleText = "v = lit foo", kind = Generated}
+            let clean = ScaffoldModule{modulePath = "Gen/Q.hs", moduleText = "quality = split facility", kind = Generated, origin = "test"}
+                dirty = ScaffoldModule{modulePath = "Gen/L.hs", moduleText = "v = lit foo", kind = Generated, origin = "test"}
             firewallBreaches [clean] `shouldBe` []
             firewallBreaches [dirty] `shouldBe` [("Gen/L.hs", "lit", 1)]
+        it "skips strings and comments and maximal-munches symbolic tokens" $ do
+            let clean = syntheticGenerated "Gen/Clean.hs" "wire = \"lit .== B.slot\"\n-- x =: y\nx = a .<= b"
+                dirty = syntheticGenerated "Gen/Dirty.hs" "x = a .< b\ny = c =: d"
+            firewallBreaches [clean] `shouldBe` [("Gen/Clean.hs", ".<=", 3)]
+            firewallBreaches [dirty] `shouldBe` [("Gen/Dirty.hs", ".<", 1), ("Gen/Dirty.hs", "=:", 2)]
+        it "guards keiki imports while allowing the generated Core allowlist" $ do
+            let forbidden = syntheticGenerated "Gen/Builder.hs" "import Keiki.Builder"
+                restricted = syntheticGenerated "Gen/CoreBad.hs" "import Keiki.Core (lit)"
+                allowed = syntheticGenerated "Gen/CoreGood.hs" "import Keiki.Core (RegFile (..), HsPred, step)"
+            firewallBreaches [forbidden] `shouldBe` [("Gen/Builder.hs", "import:Keiki.Builder", 1)]
+            firewallBreaches [restricted] `shouldBe` [("Gen/CoreBad.hs", "import:Keiki.Core", 1)]
+            firewallBreaches [allowed] `shouldBe` []
         it "finds no breach in real scaffolder output (aggregate + process fixtures)" $ do
             aggMods <- scaffoldFixture "test/fixtures/reservation.keiro"
             procMods <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
             firewallBreaches (aggMods <> procMods) `shouldBe` []
 
+    describe "scaffold gates" $ do
+        it "refuses duplicate and case-folded module paths with both origins" $ do
+            spec <- specOf "test/fixtures/reservation.keiro"
+            case [aggregate | NAggregate aggregate <- specNodes spec] of
+                aggregate : _ -> do
+                    let duplicate = spec{specNodes = [NAggregate aggregate, NAggregate aggregate]}
+                        caseVariant = spec{specNodes = [NAggregate aggregate, NAggregate aggregate{aggName = T.toUpper (aggName aggregate)}]}
+                    planScaffold (defaultContext (specContext spec)) duplicate `shouldSatisfy` hasPathCollisionWithTwoOrigins
+                    planScaffold (defaultContext (specContext spec)) caseVariant `shouldSatisfy` hasPathCollisionWithTwoOrigins
+                [] -> expectationFailure "reservation fixture has no aggregate"
+        it "refuses a bannerless Generated target without changing its bytes" $
+            withTempDirectory "keiro-dsl-banner" $ \out -> do
+                spec <- specOf "test/fixtures/reservation.keiro"
+                let ctx = defaultContext (specContext spec)
+                case planScaffold ctx spec of
+                    Left refusals -> expectationFailure ("unexpected planning refusal: " <> show refusals)
+                    Right modules -> case [m | m <- modules, kind m == Generated] of
+                        generated : _ -> do
+                            let target = out </> modulePath generated
+                            createDirectoryIfMissing True (takeDirectory target)
+                            TIO.writeFile target "hand owned\n"
+                            result <- executeScaffold out False "test/fixtures/reservation.keiro" ctx spec modules
+                            result `shouldSatisfy` isMissingBannerRefusal
+                            TIO.readFile target `shouldReturn` "hand owned\n"
+                            forced <- executeScaffold out True "test/fixtures/reservation.keiro" ctx spec modules
+                            forced `shouldSatisfy` isSuccessfulScaffold
+                            TIO.readFile target `shouldReturn` moduleText generated
+                        [] -> expectationFailure "reservation scaffold has no Generated module"
+
     describe "scaffold" $ do
         it "never emits a keiki symbolic operator into a Generated module (firewall)" $ do
             mods <- scaffoldFixture "test/fixtures/reservation.keiro"
-            let breaches =
-                    [ (modulePath m, op)
-                    | m <- mods
-                    , kind m == Generated
-                    , op <- symbolicOperators
-                    , op `T.isInfixOf` moduleText m
-                    ]
-            breaches `shouldBe` []
+            firewallBreaches mods `shouldBe` []
         it "marks the Holes module HoleStub and the rest Generated" $ do
             mods <- scaffoldFixture "test/fixtures/reservation.keiro"
             let holes = [m | m <- mods, "Holes.hs" `T.isSuffixOf` T.pack (modulePath m)]
@@ -683,8 +720,40 @@ main = hspec $ do
             mods <- scaffoldFixture "test/fixtures/order.keiro"
             -- 5 Generated (Domain/Codec/EventStream/Projection/Harness) + 1 Holes.
             length mods `shouldBe` 6
-            let breaches = [() | m <- mods, kind m == Generated, op <- symbolicOperators, op `T.isInfixOf` moduleText m]
-            breaches `shouldBe` []
+            firewallBreaches mods `shouldBe` []
+
+syntheticGenerated :: FilePath -> T.Text -> ScaffoldModule
+syntheticGenerated path contents =
+    ScaffoldModule{modulePath = path, moduleText = contents, kind = Generated, origin = "test"}
+
+hasPathCollisionWithTwoOrigins :: Either [Refusal] [ScaffoldModule] -> Bool
+hasPathCollisionWithTwoOrigins = \case
+    Left refusals -> any hasTwo refusals
+    Right _ -> False
+  where
+    hasTwo (PathCollision _ origins) = length origins == 2
+    hasTwo _ = False
+
+isMissingBannerRefusal :: Either [Refusal] a -> Bool
+isMissingBannerRefusal = \case
+    Left [MissingGeneratedBanner paths] -> not (null paths)
+    _ -> False
+
+isSuccessfulScaffold :: Either [Refusal] a -> Bool
+isSuccessfulScaffold = \case
+    Right _ -> True
+    Left _ -> False
+
+withTempDirectory :: String -> (FilePath -> IO a) -> IO a
+withTempDirectory template = bracket acquire removePathForcibly
+  where
+    acquire = do
+        base <- getTemporaryDirectory
+        (path, handle) <- openTempFile base template
+        hClose handle
+        removeFile path
+        createDirectory path
+        pure path
 
 {- | Parse a fixture and return the validator's diagnostic codes (failing the
 test on a parse error).
@@ -714,10 +783,6 @@ diffFixtures oldP newP = do
     case (,) <$> parseSpec oldP old <*> parseSpec newP new of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right (o, n) -> pure (diffSpecs o n)
-
--- | The keiki symbolic operators that must never appear in a Generated module.
-symbolicOperators :: [T.Text]
-symbolicOperators = ["./=", ".==", ".||", ".&&", "lit ", "B.slot", "B.requireGuard"]
 
 {- | Assert a @new \<kind\>@ skeleton parses and validates with zero
 error-severity diagnostics.

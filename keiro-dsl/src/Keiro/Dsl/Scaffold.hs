@@ -31,9 +31,11 @@ module Keiro.Dsl.Scaffold (
     scaffoldIntake,
     scaffoldPublisher,
     scaffoldWorkqueue,
+    scaffoldRefusals,
 
     -- * Firewall self-check (M3)
-    forbiddenOperators,
+    FirewallSurface (..),
+    firewallSurface,
     firewallBreaches,
 
     -- * Internal resolution, shared with "Keiro.Dsl.Harness"
@@ -51,8 +53,9 @@ module Keiro.Dsl.Scaffold (
     generatedBanner,
 ) where
 
-import Data.Char (isAlphaNum, toLower, toUpper)
-import Data.Maybe (fromMaybe)
+import Data.Char (isAlpha, isAlphaNum, isUpper, toLower, toUpper)
+import Data.List (find)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
@@ -65,6 +68,7 @@ data ScaffoldModule = ScaffoldModule
     { modulePath :: !FilePath
     , moduleText :: !Text
     , kind :: !ModuleKind
+    , origin :: !Text
     }
     deriving stock (Eq, Show)
 
@@ -124,38 +128,118 @@ ctxPascalOf = pascalFromKebab . contextName
 -- Firewall self-check (M3)
 --------------------------------------------------------------------------------
 
-{- | The forbidden keiki symbolic operators that must never appear in a
-@-- \@generated@ module (the firewall invariant). These belong only in
-hand-filled hole modules.
+{- | The canonical keiki surface forbidden in generated modules. Symbolic
+operators are matched as maximal Haskell symbol tokens, identifiers as complete
+tokens, qualifiers by their leading module alias, and imports structurally.
 -}
-forbiddenOperators :: [Text]
-forbiddenOperators = ["./=", ".==", ".||", "lit", "B.slot", "B.requireGuard"]
+data FirewallSurface = FirewallSurface
+    { forbiddenSymbolic :: ![Text]
+    , forbiddenIdents :: ![Text]
+    , forbiddenQualifiers :: ![Text]
+    , forbiddenImports :: ![Text]
+    , restrictedImports :: ![(Text, [Text])]
+    }
+    deriving stock (Eq, Show)
+
+firewallSurface :: FirewallSurface
+firewallSurface =
+    FirewallSurface
+        { forbiddenSymbolic = [".==", "./=", ".<", ".<=", ".>", ".>=", ".&&", ".||", ".+", ".-", ".*", "=:", "*:"]
+        , forbiddenIdents = ["lit", "pnot", "tadd", "tsub", "tmul"]
+        , forbiddenQualifiers = ["B"]
+        , forbiddenImports = ["Keiki.Builder", "Keiki.Operators", "Keiki.Symbolic"]
+        , -- Generated aggregate modules use the first two names; generated
+          -- harnesses use the final three to validate and step filled holes.
+          restrictedImports = [("Keiki.Core", ["RegFile", "HsPred", "defaultValidationOptions", "step", "validateTransducer"])]
+        }
 
 {- | Scan generated modules for firewall breaches, returning every offending
-@(module path, operator, 1-based line number)@. Only modules whose
-'kind' is 'Generated' are scanned. The alphabetic operator @lit@ is matched as a
-whole word (so it never trips on @quality@/@split@); the symbolic operators are
-matched textually.
+@(module path, token, 1-based line number)@. Only modules whose 'kind' is
+'Generated' are scanned. Strings and comments are skipped, symbol runs use
+maximal munch, and keiki imports are checked independently of token spelling.
 -}
 firewallBreaches :: [ScaffoldModule] -> [(FilePath, Text, Int)]
 firewallBreaches mods =
-    [ (modulePath m, op, n)
+    [ (modulePath m, breach, n)
     | m <- mods
     , kind m == Generated
     , (n, line) <- zip [1 ..] (T.lines (moduleText m))
-    , op <- forbiddenOperators
-    , op `breachesLine` line
+    , breach <- lineBreaches line
     ]
 
-{- | Whether a forbidden operator occurs in a line (word-matched for @lit@,
-substring-matched for the symbolic operators).
--}
-breachesLine :: Text -> Text -> Bool
-breachesLine op line
-    | op == "lit" = "lit" `elem` tokens
-    | otherwise = op `T.isInfixOf` line
+lineBreaches :: Text -> [Text]
+lineBreaches line = case importModule line of
+    Just _ -> importBreaches line
+    Nothing -> tokenBreaches (codeTokens line)
   where
-    tokens = T.split (\c -> not (isAlphaNum c || c == '_')) line
+    tokenBreaches = mapMaybe breachFor
+    breachFor (IdentToken ident)
+        | ident `elem` forbiddenIdents firewallSurface = Just ident
+    breachFor (QualifiedToken qualifier)
+        | qualifier `elem` forbiddenQualifiers firewallSurface = Just (qualifier <> ".*")
+    breachFor (SymbolToken symbol)
+        | symbol `elem` forbiddenSymbolic firewallSurface = Just symbol
+    breachFor _ = Nothing
+
+data CodeToken = IdentToken !Text | QualifiedToken !Text | SymbolToken !Text
+
+codeTokens :: Text -> [CodeToken]
+codeTokens = go . T.unpack
+  where
+    go [] = []
+    go ('-' : '-' : _) = []
+    go ('"' : rest) = go (dropString rest)
+    go ('\'' : rest) = go (dropChar rest)
+    go (c : rest)
+        | isIdentStart c =
+            let (identTail, afterIdent) = span isIdentContinue rest
+                ident = T.pack (c : identTail)
+             in case afterIdent of
+                    '.' : next : more
+                        | isUpper c && isIdentStart next ->
+                            let (_member, afterMember) = span isIdentContinue more
+                             in QualifiedToken ident : go afterMember
+                    _ -> IdentToken ident : go afterIdent
+        | isSymbolChar c =
+            let (symbolTail, afterSymbol) = span isSymbolChar rest
+             in SymbolToken (T.pack (c : symbolTail)) : go afterSymbol
+        | otherwise = go rest
+    isIdentStart c = isAlpha c || c == '_'
+    isIdentContinue c = isAlphaNum c || c == '_' || c == '\''
+    isSymbolChar c = c `elem` ("!#$%&*+./<=>?@\\^|-~:" :: String)
+    dropString [] = []
+    dropString ('\\' : _escaped : rest) = dropString rest
+    dropString ('"' : rest) = rest
+    dropString (_ : rest) = dropString rest
+    dropChar [] = []
+    dropChar ('\\' : _escaped : rest) = dropChar rest
+    dropChar ('\'' : rest) = rest
+    dropChar (_ : rest) = dropChar rest
+
+importBreaches :: Text -> [Text]
+importBreaches line = case importModule line of
+    Nothing -> []
+    Just imported
+        | imported `elem` forbiddenImports firewallSurface -> ["import:" <> imported]
+        | Just allowed <- lookup imported (restrictedImports firewallSurface)
+        , not (hasAllowedExplicitImportList allowed line) ->
+            ["import:" <> imported]
+        | otherwise -> []
+
+importModule :: Text -> Maybe Text
+importModule line = case T.words (T.strip line) of
+    "import" : rest -> find (T.isPrefixOf "Keiki.") rest
+    _ -> Nothing
+
+hasAllowedExplicitImportList :: [Text] -> Text -> Bool
+hasAllowedExplicitImportList allowed line =
+    case (T.breakOn "(" line, T.breakOnEnd ")" line) of
+        ((_, open), (close, _))
+            | not (T.null open) && not (T.null close) ->
+                let inside = T.takeWhile (/= ')') (T.drop 1 open)
+                    names = filter (not . T.null) (T.split (not . isAlphaNum) inside)
+                 in all (`elem` allowed) names
+        _ -> False
 
 --------------------------------------------------------------------------------
 -- Derived naming
@@ -165,6 +249,7 @@ breachesLine op line
 data Agg = Agg
     { aCtxPascal :: !Text
     , aName :: !Text
+    , aLoc :: !Loc
     , aVertexType :: !Text
     , aIds :: ![IdDecl]
     , aEnums :: ![EnumDecl]
@@ -200,6 +285,7 @@ resolveAgg ctx spec agg =
     Agg
         { aCtxPascal = ctxPascal
         , aName = nm
+        , aLoc = aggLoc agg
         , aVertexType = vertexType
         , aIds = specIds spec
         , aEnums = specEnums spec
@@ -277,6 +363,7 @@ genModule a name body =
         { modulePath = T.unpack (T.replace "." "/" (aGenPrefix a) <> "/" <> name <> ".hs")
         , moduleText = body
         , kind = Generated
+        , origin = nodeOrigin "aggregate" (aName a) (aLoc a)
         }
 
 holeModule :: Agg -> Text -> ScaffoldModule
@@ -285,6 +372,7 @@ holeModule a body =
         { modulePath = T.unpack (T.replace "." "/" (aHolePrefix a) <> "/" <> "Holes.hs")
         , moduleText = body
         , kind = HoleStub
+        , origin = nodeOrigin "aggregate" (aName a) (aLoc a)
         }
 
 --------------------------------------------------------------------------------
@@ -303,6 +391,7 @@ scaffoldContract ctx c =
         { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Contract.hs")
         , moduleText = emitContractGen genPrefix c
         , kind = Generated
+        , origin = nodeOrigin "contract" (ctrName c) (ctrLoc c)
         }
     ]
   where
@@ -419,6 +508,7 @@ scaffoldIntake ctx i =
         { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Inbox.hs")
         , moduleText = emitIntakeGen genPrefix i
         , kind = Generated
+        , origin = nodeOrigin "intake" (inkName i) (inkLoc i)
         }
     ]
   where
@@ -489,6 +579,7 @@ scaffoldPublisher ctx pb =
         { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Publisher.hs")
         , moduleText = emitPublisherGen genPrefix pb
         , kind = Generated
+        , origin = nodeOrigin "publisher" (pubName pb) (pubLoc pb)
         }
     ]
   where
@@ -537,11 +628,13 @@ scaffoldWorkqueue ctx w =
         { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Queue.hs")
         , moduleText = emitWorkqueueGen genPrefix w
         , kind = Generated
+        , origin = nodeOrigin "workqueue" (wqName w) (wqLoc w)
         }
     , ScaffoldModule
         { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/QueuePolicy.hs")
         , moduleText = emitQueuePolicy genPrefix w
         , kind = Generated
+        , origin = nodeOrigin "workqueue" (wqName w) (wqLoc w)
         }
     ]
   where
@@ -655,11 +748,13 @@ scaffoldProcess ctx p =
         { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Process.hs")
         , moduleText = emitProcessGen ctxPascal genPrefix holePrefix p
         , kind = Generated
+        , origin = nodeOrigin "process" (procId p) (procLoc p)
         }
     , ScaffoldModule
         { modulePath = T.unpack (T.replace "." "/" holePrefix <> "/ProcessHoles.hs")
         , moduleText = emitProcessHoles genPrefix holePrefix p
         , kind = HoleStub
+        , origin = nodeOrigin "process" (procId p) (procLoc p)
         }
     ]
   where
@@ -1309,6 +1404,19 @@ initialVertex a = case aStates a of
 
 generatedBanner :: Text
 generatedBanner = "-- @generated by keiro-dsl; do not edit. Regenerated from the .keiro spec."
+
+nodeOrigin :: Text -> Text -> Loc -> Text
+nodeOrigin nodeKind nodeName loc =
+    nodeKind <> " " <> nodeName <> case unLoc loc of
+        0 -> ""
+        line -> " (line " <> tshow' line <> ")"
+
+{- | Conditions that the deterministic emitters cannot lower faithfully. The
+pre-write scaffold pipeline treats each returned message as a refusal. The
+list is extended alongside the policy and type lowering milestones.
+-}
+scaffoldRefusals :: Spec -> [Text]
+scaffoldRefusals _ = []
 
 -- | Render an Expr back to source-ish text for a hole annotation.
 renderGuard :: Expr -> Text

@@ -35,6 +35,7 @@ harnessFor ctx spec agg =
         { modulePath = T.unpack (T.replace "." "/" (aGenPrefix a) <> "/Harness.hs")
         , moduleText = emitHarness a
         , kind = Generated
+        , origin = "aggregate " <> aggName agg <> locSuffix (aggLoc agg)
         }
     ]
   where
@@ -55,6 +56,7 @@ harnessProcess ctx p =
         { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/ProcessHarness.hs")
         , moduleText = emitProcessHarness genPrefix p
         , kind = Generated
+        , origin = "process " <> procId p <> locSuffix (procLoc p)
         }
     ]
   where
@@ -119,15 +121,22 @@ harnessWorkflow ctx w =
         { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/WorkflowFacts.hs")
         , moduleText = emitWorkflowFacts genPrefix w
         , kind = Generated
+        , origin = "workflow " <> wfId w <> locSuffix (wfLoc w)
         }
     , ScaffoldModule
         { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/WorkflowRuntime.hs")
         , moduleText = emitWorkflowRuntime genPrefix w
         , kind = Generated
+        , origin = "workflow " <> wfId w <> locSuffix (wfLoc w)
         }
     ]
   where
     genPrefix = genPrefixFor ctx (wfId w)
+
+locSuffix :: Loc -> Text
+locSuffix loc = case unLoc loc of
+    0 -> ""
+    line -> " (line " <> tInt line <> ")"
 
 emitWorkflowFacts :: Text -> WorkflowNode -> Text
 emitWorkflowFacts genPrefix w =
