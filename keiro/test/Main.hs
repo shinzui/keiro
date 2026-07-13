@@ -564,6 +564,30 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     map eswReason ws `shouldSatisfy` any (Text.isInfixOf "hidden-input")
                 Right _ -> expectationFailure "expected mkEventStream to reject the hidden-input stream"
 
+        it "rejects a head-unrecoverable multi-event stream" $
+            expectValidationWarning
+                "head-unrecoverable"
+                "head-unrecoverable"
+                headUnrecoverableEventStreamDef
+
+        it "rejects replay inversion ambiguity" $
+            expectValidationWarning
+                "inversion-ambiguity"
+                "inversion-ambiguity"
+                inversionAmbiguousEventStreamDef
+
+        it "rejects an unguarded command-field read" $
+            expectValidationWarning
+                "unguarded-input-read"
+                "unguarded-input-read"
+                unguardedInputReadEventStreamDef
+
+        it "rejects a state-changing silent edge" $
+            expectValidationWarning
+                "state-changing-epsilon"
+                "state-changing-epsilon"
+                stateChangingEpsilonEventStreamDef
+
         it "accepts every production-intent stream" $ do
             let expectAccepted label eventStream =
                     case mkEventStream label eventStream of
@@ -8428,6 +8452,123 @@ brokenHiddenInputTransducer =
         , initialRegs = RCons (Proxy @"lastAmount") 0 RNil
         , isFinal = \_ -> False
         }
+
+{- | A multi-event edge whose tail carries the command field omitted from its
+head. The union of the outputs covers @amount@, but replay commits to an edge
+by inverting only the head, so the stored chain cannot reconstruct @Add@.
+-}
+headUnrecoverableEventStreamDef :: CounterEventStream
+headUnrecoverableEventStreamDef =
+    counterEventStreamDef & #transducer .~ headUnrecoverableTransducer
+
+headUnrecoverableTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
+headUnrecoverableTransducer =
+    counterTransducer
+        { edgesOut = \case
+            Counting ->
+                [ Edge
+                    { guard = matchInCtor addCtor
+                    , update = UKeep
+                    , output =
+                        [ pack addCtor counterAddedCtor (Keiki.lit 0 *: oNil)
+                        , pack addCtor counterAuditedCtor (inpCtor addCtor #amount *: oNil)
+                        ]
+                    , target = Counting
+                    }
+                ]
+        }
+
+{- | Two edges share a head wire constructor, so one stored event can invert
+through both. The double-negated guard is true at runtime but deliberately
+outside keiki's pure overlap fragment, isolating the inversion warning from
+the separate conservative determinism check.
+-}
+inversionAmbiguousEventStreamDef :: CounterEventStream
+inversionAmbiguousEventStreamDef =
+    counterEventStreamDef & #transducer .~ inversionAmbiguousTransducer
+
+inversionAmbiguousTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
+inversionAmbiguousTransducer =
+    counterTransducer
+        { edgesOut = \case
+            Counting ->
+                [ ambiguousEdge
+                , ambiguousEdge
+                ]
+        }
+  where
+    ambiguousEdge =
+        Edge
+            { guard = PAnd (matchInCtor addCtor) (PNot PBot)
+            , update = UKeep
+            , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
+            , target = Counting
+            }
+
+{- | This edge reads @Add.amount@ while guarded only by @PTop@. A different
+command constructor would reach the partial projection and crash instead of
+being rejected.
+-}
+unguardedInputReadEventStreamDef :: CounterEventStream
+unguardedInputReadEventStreamDef =
+    counterEventStreamDef & #transducer .~ unguardedInputReadTransducer
+
+unguardedInputReadTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
+unguardedInputReadTransducer =
+    counterTransducer
+        { edgesOut = \case
+            Counting ->
+                [ Edge
+                    { guard = PTop
+                    , update = UKeep
+                    , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
+                    , target = Counting
+                    }
+                ]
+        }
+
+{- | A silent self-loop that writes a register. With no emitted event the
+write cannot be reconstructed from the durable log.
+-}
+stateChangingEpsilonEventStreamDef :: SnapshotCounterEventStream
+stateChangingEpsilonEventStreamDef =
+    snapshotCounterEventStreamDef & #transducer .~ stateChangingEpsilonTransducer
+
+stateChangingEpsilonTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
+stateChangingEpsilonTransducer =
+    snapshotCounterTransducer
+        { edgesOut = \case
+            Counting ->
+                [ Edge
+                    { guard = matchInCtor addCtor
+                    , update =
+                        USet
+                            (#lastAmount :: IndexN "lastAmount" SnapshotCounterRegs Int)
+                            (Keiki.lit 0)
+                    , output = []
+                    , target = Counting
+                    }
+                ]
+        }
+
+expectValidationWarning ::
+    (Bounded s, Enum s, Ord s, Show s) =>
+    Text ->
+    Text ->
+    EventStream (HsPred rs ci) rs s ci co ->
+    Expectation
+expectValidationWarning label prefix eventStream =
+    case mkEventStream label eventStream of
+        Left warnings -> do
+            map eswStreamLabel warnings `shouldSatisfy` all (== label)
+            map eswReason warnings `shouldSatisfy` any (Text.isInfixOf prefix)
+        Right _ ->
+            expectationFailure
+                ( "expected mkEventStream to reject "
+                    <> Text.unpack label
+                    <> " with warning prefix "
+                    <> Text.unpack prefix
+                )
 
 type AddFields = '[ '("amount", Int)]
 

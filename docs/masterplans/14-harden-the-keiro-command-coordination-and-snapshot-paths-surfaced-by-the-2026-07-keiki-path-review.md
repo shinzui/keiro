@@ -112,7 +112,7 @@ a kiroku-side child plan for the subscription bridge (rejected: kiroku already s
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 95 | Migrate to post-MP-16 keiki and adopt the structured replay and step APIs | docs/plans/95-migrate-to-post-mp-16-keiki-and-adopt-the-structured-replay-and-step-apis.md | keiki MP-16 (external) | None | Not Started |
+| 95 | Migrate to post-MP-16 keiki and adopt the structured replay and step APIs | docs/plans/95-migrate-to-post-mp-16-keiki-and-adopt-the-structured-replay-and-step-apis.md | keiki MP-16 (external) | None | In Progress |
 | 96 | Ack-coupled sharded subscription delivery with rebalance-under-load coverage | docs/plans/96-ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-coverage.md | None | None | Complete |
 | 97 | Stable router idempotency keys derived from target stream names | docs/plans/97-stable-router-idempotency-keys-derived-from-target-stream-names.md | None | None | Complete |
 | 98 | Snapshot subsystem hardening: uninit-register guards, read-side telemetry, and workflow write alignment | docs/plans/98-snapshot-subsystem-hardening-uninit-register-guards-read-side-telemetry-and-workflow-write-alignment.md | None | EP-95 | Complete |
@@ -292,6 +292,12 @@ where its truncation guard reports failures through the migrated hydration error
   also exported `confirmBenignDuplicate` from `Keiro.ProcessManager`; EP-100 must
   preserve this per-target confirmation when it converts rejected or failed dispatches
   into dead-letter outcomes.
+- EP-95 implementation started after keiki MP-16 completed and release 0.2.0.0 was
+  published to Hackage. Keiro now consumes the ordinary Hackage packages with PVP
+  0.2 bounds rather than Git pins. Keiki EP-76's strengthened pure overlap proof
+  recognizes the originally authored `PAnd ... PTop` ambiguity fixture, so EP-95 uses
+  runtime-true `PAnd ... (PNot PBot)` guards outside the proof fragment to retain a
+  validated runtime-ambiguity witness for the command taxonomy tests.
 - The user-owned `cabal.project.local` currently overlays kiroku 0.3.0.0 packages on
   top of `cabal.project`'s pinned kiroku 0.2.1.0 source packages, so default Cabal
   dependency resolution fails before compilation. EP-97 validated through a temporary
@@ -300,6 +306,14 @@ where its truncation guard reports failures through the migrated hydration error
 
 
 ## Decision Log
+
+- Decision: start EP-95 against Hackage `keiki-0.2.0.0` and
+  `keiki-codec-json-0.2.0.0`, removing the old Git source overrides and constraining
+  direct dependencies to the PVP-compatible 0.2 series.
+  Rationale: keiki MP-16 is Complete and the user confirmed its 0.2.0.0 release is
+  now on Hackage, satisfying EP-95's external hard dependency and explicitly asking
+  keiro to consume the latest published release.
+  Date: 2026-07-13
 
 - Decision: assume keiki MP-16 is implemented before this initiative; make EP-95 the
   Phase 1 foundation and let later plans consume MP-16's structured APIs instead of
@@ -356,6 +370,11 @@ where its truncation guard reports failures through the migrated hydration error
 (To be filled during and after implementation.)
 
 ## Revision Notes
+
+- 2026-07-13: Unblocked EP-95 after keiki MP-16 completed and keiki 0.2.0.0 reached
+  Hackage. Marked EP-95 In Progress, replaced its authored Git-pin step with Hackage
+  0.2 bounds, and recorded the ambiguity-fixture adjustment required by keiki EP-76's
+  stronger pure overlap proof.
 
 - 2026-07-13: Completed EP-97. Router ids are keyed by target stream and same-stream
   occurrence with a legacy positional transition probe; all duplicate-rejection folds

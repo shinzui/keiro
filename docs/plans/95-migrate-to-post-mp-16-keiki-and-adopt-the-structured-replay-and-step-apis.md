@@ -4,6 +4,7 @@ slug: migrate-to-post-mp-16-keiki-and-adopt-the-structured-replay-and-step-apis
 title: "Migrate to post-MP-16 keiki and adopt the structured replay and step APIs"
 kind: exec-plan
 created_at: 2026-07-12T05:07:53Z
+intention: intention_01kxcz37ave9t8d6amvvxnemr6
 master_plan: "docs/masterplans/14-harden-the-keiro-command-coordination-and-snapshot-paths-surfaced-by-the-2026-07-keiki-path-review.md"
 ---
 
@@ -17,9 +18,10 @@ This is Phase 1 (EP-95) of the master plan at
 Its hard dependency is external: keiki MasterPlan 16 (in the sibling keiki repository at
 `/Users/shinzui/Keikaku/bokuno/keiki`, plan file
 `docs/masterplans/16-harden-keiki-correctness-and-api-surfaces-surfaced-by-the-2026-07-architecture-review.md`)
-must be implemented before this plan runs. The standing assumption (user directive,
-2026-07-12) is that it is. Do not start this plan until the keiki repository's MP-16
-registry marks its EP-71 and EP-72 rows Complete.
+must be implemented before this plan runs. On 2026-07-13 the user confirmed that
+keiki 0.2.0.0 is published to Hackage. The keiki repository's MP-16 registry marks
+EP-71, EP-72, and every other child Complete, and release tag `v0.2.0.0` points at
+the completed implementation, so this dependency is satisfied.
 
 **Specification caveat, read first.** This plan was written against the keiki APIs as
 *specified* in two keiki ExecPlans — EP-71
@@ -28,7 +30,7 @@ and EP-72
 (`/Users/shinzui/Keikaku/bokuno/keiki/docs/plans/72-structured-replay-diagnostics-reconstituteeither-strict-evolve-policy-and-multi-event-outputacceptor.md`)
 — not against shipped code. Every keiki signature quoted here is subject to those plans'
 own Decision Logs. The first concrete step of Milestone 1 is therefore to re-verify each
-quoted keiki name and signature against the keiki commit actually pinned, and to record
+quoted keiki name and signature against the released keiki source, and to record
 any drift in this plan's Surprises & Discoveries before editing keiro. (One keiki API
 this plan adopts exists today and needs no such caution: `stepEither` and its
 `StepFailure` vocabulary, at `/Users/shinzui/Keikaku/bokuno/keiki/src/Keiki/Core.hs:959-1009`.)
@@ -81,11 +83,11 @@ assert `CommandAmbiguous` against an aggregate the validator provably cannot fla
 Use this checklist to track granular steps; split partially-done items into "done" and
 "remaining" parts at every stopping point.
 
-- [ ] M1: keiki pin re-verified against shipped MP-16 code; any signature drift recorded in Surprises & Discoveries
-- [ ] M1: `cabal.project` keiki pin bumped (both stanzas) to the post-MP-16 commit; workspace builds
-- [ ] M1: four new render arms added to `renderWarning` in `keiro-core/src/Keiro/EventStream/Validate.hs`; haddock count fixed
-- [ ] M1: fail-fast posture for the new warnings confirmed and documented (no code change needed — see Decision Log); module haddock updated
-- [ ] M1: validation specs extended (head-unrecoverable, inversion-ambiguity, unguarded-input-read, state-changing-epsilon all rejected by `mkEventStream` with the expected rendered prefixes); existing fixture-audit spec green
+- [x] (2026-07-13 15:09Z) M1: keiki 0.2.0.0 re-verified against shipped MP-16 code; the specified warning/replay/step APIs match the release
+- [x] (2026-07-13 15:13Z) M1: Git source overrides removed; package bounds require Hackage `keiki` and `keiki-codec-json` 0.2; workspace builds
+- [x] (2026-07-13 15:13Z) M1: four new render arms added to `renderWarning` in `keiro-core/src/Keiro/EventStream/Validate.hs`; haddock count fixed
+- [x] (2026-07-13 15:13Z) M1: fail-fast posture for the new warnings confirmed and documented (no code change needed — see Decision Log); module haddock updated
+- [x] (2026-07-13 15:13Z) M1: validation specs extended (head-unrecoverable, inversion-ambiguity, unguarded-input-read, state-changing-epsilon all rejected by `mkEventStream` with the expected rendered prefixes); existing fixture-audit spec green
 - [ ] M2: `HydrationReplayReason` added; `HydrationReplayFailed` extended to carry it
 - [ ] M2: `hydrate`/`hydrateFull` collapsed into one seeded fold over keiki's `replayEvents`; duplicated fold deleted
 - [ ] M2: `commandErrorClass` refined for the four hydration reasons
@@ -111,19 +113,52 @@ implementation, with concise evidence.
   **any** non-empty warning list. There is no severity tiering to extend; every keiki
   warning is already a stream-construction failure at keiro's boundary. The decision
   reduces to affirming this posture (see Decision Log) rather than writing code.
-- (from plan authoring, 2026-07-12) keiro's pure determinism validator cannot flag the
-  ambiguity that Milestone 3 makes visible: keiki's `provablyOverlap`
-  (`/Users/shinzui/Keikaku/bokuno/keiki/src/Keiki/Core.hs`, near line 1800) proves
-  overlap only for two bare `PTop` guards or two bare `PInCtor` guards; any guard that
-  is a conjunction (`PAnd`) is unprovable and passes. So a validated stream can still
-  hit `AmbiguousEdges` at runtime — which is exactly why conflating it with
-  `CommandRejected` was dangerous, and exactly how the Milestone 3 test constructs a
-  validated-yet-ambiguous fixture.
+- (from plan authoring, 2026-07-12; superseded below) keiki's pure determinism
+  validator was expected to prove overlap only for bare `PTop` and `PInCtor` guards,
+  so the authored ambiguity fixture used a `PAnd` wrapper to remain unproven.
+- (2026-07-13) Keiki MP-16 is fully Complete and release tag `v0.2.0.0`
+  (`755a01d`) is published on Hackage as both `keiki-0.2.0.0` and
+  `keiki-codec-json-0.2.0.0`. The shipped warning constructors, default-on option
+  fields, replay failures, `replayEvents`, and `stepEither` match this plan's
+  specified names and fields. The migration therefore needs no API adaptation, but
+  the dependency step changes from a Git commit pin to ordinary Hackage bounds per
+  the user's 2026-07-13 directive.
+- (2026-07-13) Keiki EP-76 strengthened `provablyOverlap` before 0.2.0.0: it now
+  proves compatible conjunction spines containing constructor tests and supported
+  literal comparisons. The authored `PAnd (matchInCtor addCtor) PTop` ambiguity
+  fixtures would therefore fail the determinism check. The migrated fixtures use
+  `PAnd (matchInCtor addCtor) (PNot PBot)` instead: the guard is true at runtime but
+  intentionally outside the pure proof fragment, so a validated runtime ambiguity
+  remains possible and testable.
+- (2026-07-13) The ignored, user-owned `cabal.project.local` still combines local
+  kiroku 0.3 packages with `cabal.project`'s kiroku 0.2.1 source pins, so default
+  dependency solving fails before compilation. Validation uses a temporary project
+  file that imports only `cabal.project`; through it Cabal downloaded both keiki
+  0.2.0.0 packages from Hackage, `cabal build all` passed, all four focused warning
+  specs passed, and the production-stream audit remained clean. The local overlay is
+  untouched.
 
 (Add implementation-time entries here.)
 
 
 ## Decision Log
+
+- Decision: consume `keiki >=0.2 && <0.3` and `keiki-codec-json >=0.2 && <0.3`
+  from Hackage, removing both keiki `source-repository-package` stanzas from
+  `cabal.project`, instead of replacing their old Git tags with release commit
+  `755a01d`.
+  Rationale: the user explicitly requested the latest Hackage release now that
+  0.2.0.0 unblocks EP-95. PVP upper bounds keep later breaking releases from being
+  selected silently while allowing compatible 0.2 bugfix releases.
+  Date: 2026-07-13
+
+- Decision: use `PAnd (matchInCtor addCtor) (PNot PBot)` for the deliberately
+  ambiguous validation and command fixtures.
+  Rationale: keiki 0.2's strengthened pure overlap proof now recognizes the
+  originally authored `PAnd ... PTop` shape. `PNot` is deliberately outside that
+  sound-but-incomplete fragment while evaluating to true here, preserving the
+  required validated-yet-ambiguous runtime witness without disabling determinism.
+  Date: 2026-07-13
 
 - Decision: keiro keeps its existing all-warnings-fail posture for the four new keiki
   warning constructors — `HeadUnrecoverable`, `InversionAmbiguity`,
@@ -251,14 +286,13 @@ of 2026-07-12.
 ### The two repositories
 
 This plan edits the **keiro** repository (`/Users/shinzui/Keikaku/bokuno/keiro`; all
-bare relative paths below are relative to it). keiro consumes the **keiki** library
-from the sibling repository `/Users/shinzui/Keikaku/bokuno/keiki`, pinned in
-`cabal.project` as a `source-repository-package` (two stanzas — the `keiki` package and
-the `keiki-codec-json` subdir — both currently at tag
-`bc987f46393b604c335f034385b4c3c1ad118074`). `cabal.project.local` overlays local
-checkouts of kiroku and pg-migrate but *not* keiki, so bumping keiki means editing the
-`cabal.project` tags (or temporarily adding `../keiki` and `../keiki/keiki-codec-json`
-to `cabal.project.local`'s `packages` for development against the local checkout).
+bare relative paths below are relative to it). keiro consumes **keiki** 0.2 from
+Hackage: `keiro`, `keiro-core`, `keiro-dsl`, and `jitsurei` constrain `keiki` to
+`>=0.2 && <0.3`, while `keiro` and `jitsurei` constrain `keiki-codec-json` to the
+same range. `cabal.project` deliberately has no keiki source override. The sibling
+repository `/Users/shinzui/Keikaku/bokuno/keiki`, located through `mori registry show
+shinzui/keiki --full`, is the release-tagged source used to inspect APIs; release tag
+`v0.2.0.0` and Hackage's package index both identify version 0.2.0.0.
 
 ### What a keiki transducer is, and what replay means
 
@@ -441,7 +475,7 @@ Scope: after this milestone, the workspace compiles against post-MP-16 keiki, an
 keiki checks flag. This is the compile-breaking part of the migration, so it is one
 commit.
 
-First, re-verify the specification (see the caveat at the top): open the pinned keiki
+First, re-verify the specification (see the caveat at the top): open the released keiki
 checkout and confirm the names and shapes quoted in Interfaces and Dependencies —
 the four new warning constructors and their fields (`tvwEdge`, `tvwSource`,
 `tvwChangesVertex`, `tvwWritesRegisters`, `tvwDetail`), the four
@@ -451,21 +485,12 @@ today and cannot drift). Check keiki's `CHANGELOG.md` and the two keiki plans'
 Decision Logs for recorded deviations. Record any drift in Surprises & Discoveries and
 adapt the affected edits below before making them.
 
-Bump the pin: edit `cabal.project`, replacing the tag
-`bc987f46393b604c335f034385b4c3c1ad118074` in **both** keiki stanzas (the base package
-and the `keiki-codec-json` subdir stanza — they must stay on the same commit) with the
-post-MP-16 keiki commit hash (read it off the keiki repository's `master`). For local
-iteration you may instead add the local checkout to `cabal.project.local`:
-
-```text
-packages:
-  ../keiki
-  ../keiki/keiki-codec-json
-  ...existing entries...
-```
-
-but the committed state must be the `cabal.project` tag bump (the local file is
-uncommitted developer overlay, as its existing kiroku/pg-migrate entries show).
+Switch to the Hackage release: remove both keiki `source-repository-package` stanzas
+from `cabal.project`, and require `keiki >=0.2 && <0.3` plus
+`keiki-codec-json >=0.2 && <0.3` in every component that directly depends on them.
+Run `cabal update` if the local package index predates the 0.2.0.0 upload. The
+committed state must resolve the ordinary Hackage packages without a local or Git
+keiki override.
 
 Then `cabal build all` and let the compiler drive: the only expected keiro breakage is
 the exhaustive match in `renderWarning`
@@ -516,8 +541,8 @@ kebab-case prefix:
   `inpCtor addCtor #amount`. Head coverage misses `amount`, union covers it →
   `HeadUnrecoverable`, rendered `head-unrecoverable @Counting: …`.
 - *inversion-ambiguity*: two edges out of `Counting`, both guarded
-  `PAnd (matchInCtor addCtor) PTop` (the `PAnd` wrapper dodges the pure determinism
-  check's `provablyOverlap`, which only proves bare-`PInCtor` pairs — see Surprises &
+  `PAnd (matchInCtor addCtor) (PNot PBot)` (the `PNot` keeps the runtime-true guard
+  outside keiki 0.2's strengthened pure overlap fragment — see Surprises &
   Discoveries), both emitting `CounterAdded` as their head event. Rendered
   `inversion-ambiguity @Counting: …`. Keep this transducer as a named top-level
   fixture — Milestone 2's ambiguous-inversion hydration test reuses it.
@@ -530,7 +555,7 @@ kebab-case prefix:
   `state-changing-epsilon @Counting: …`. Keep it top-level — EP-99's Milestone 1
   reuses the shape for its force-enable specs.
 
-Acceptance for M1: `cabal build all` succeeds against the new pin; `cabal test
+Acceptance for M1: `cabal build all` succeeds against Hackage keiki 0.2; `cabal test
 keiro-test` is green including the four new rejection specs; the fixture-audit spec
 still returns `[]`.
 
@@ -749,7 +774,7 @@ and `keiro/src/Keiro/Router.hs:261` treat it as deterministic, and
 Tests, in `keiro/test/Main.hs`:
 
 - *End-to-end ambiguity*: a top-level `ambiguousCounterTransducer` — two edges out of
-  `Counting`, guards `PAnd (matchInCtor addCtor) PTop` (see Surprises & Discoveries
+  `Counting`, guards `PAnd (matchInCtor addCtor) (PNot PBot)` (see Surprises & Discoveries
   for why this passes the pure determinism check), edge 0 emitting a `CounterAdded`
   head and edge 1 a `CounterAudited` head (distinct head wire constructors, so keiki's
   new `InversionAmbiguity` check stays quiet and `mkEventStreamOrThrow
@@ -923,28 +948,28 @@ Acceptance is behavior, verified in this order with no knowledge beyond this doc
 Every step is an ordinary source edit plus a build/test run, safe to repeat; re-running
 `cabal build`, `cabal test`, and `nix fmt -- --no-cache` is idempotent, and the test
 suite provisions and drops its own ephemeral databases per run (nothing persists
-between runs). The keiki pin bump is trivially reversible (`git checkout --
-cabal.project`), which rolls the whole workspace back to the pre-migration world —
+between runs). The keiki dependency change is trivially reversible by restoring
+`cabal.project` and the package bounds, which rolls the whole workspace back to the pre-migration world —
 that is the recovery path if the shipped keiki API diverges so far from the
 specification that Milestone 1's re-verification fails: stop, record the divergence in
 Surprises & Discoveries and in the master plan, and coordinate with the keiki plans'
 Decision Logs rather than improvising signatures. Within the migration, milestones are
 committed separately and each leaves the suite green, so `git revert` of the latest
 milestone commit is always a safe fallback. The one ordering hazard: Milestone 1's
-`renderWarning` arms and the pin bump must land in the same commit (the workspace does
+`renderWarning` arms and the Hackage dependency change must land in the same commit (the workspace does
 not compile with one but not the other). No database migrations, no persisted-data
 changes, and no destructive operations are involved anywhere in this plan.
 
 
 ## Interfaces and Dependencies
 
-No new package dependencies: keiro already depends on `keiki >= 0.1`
-(`keiro/keiro.cabal:111`, `keiro-core/keiro-core.cabal:58`), streamly, and hspec; only
-the `cabal.project` pin moves. GHC 9.12.4 via `nix develop`.
+No new package names: keiro already depends on keiki, streamly, and hspec. This plan
+raises the direct keiki and keiki-codec-json bounds from 0.1 to `>=0.2 && <0.3` and
+removes their Git source overrides so Cabal resolves release 0.2.0.0 from Hackage.
+GHC 9.12.4 comes from `nix develop`.
 
-The keiki surface this plan consumes, quoted from the keiki EP-71/EP-72 specifications
-(module `Keiki.Core`; re-verify in Milestone 1 — see the caveat at the top; only
-`stepEither` and friends are shipped today):
+The keiki surface this plan consumes is shipped by `Keiki.Core` in Hackage release
+0.2.0.0 and was re-verified against release tag `v0.2.0.0` during Milestone 1:
 
 ```haskell
 -- Shipped today (src/Keiki/Core.hs:923-1009): adopted in Milestone 3.
@@ -1023,11 +1048,16 @@ the refined `commandErrorClass` values. Downstream within the master plan: EP-99
 consumes `HydrationReplayReason` and the ambiguity/rejection split; EP-100 serializes
 these constructors into dead-letter records; EP-102's truncation guard reports through
 `HydrationTruncatedChain`. The `Keiro.EventStream.Validate` warning vocabulary edited
-in Milestone 1 is shared ground with EP-99 (integration point 2): EP-99 adds its
-keiro-side silent-edge warning *alongside* — never inside — keiki's
-`TransducerValidationWarning`, and rebases on this plan's render arms.
+in Milestone 1 is shared ground with EP-99 (integration point 2): EP-99 force-enables
+keiki's `StateChangingEpsilon` and `HeadUnrecoverable` checks at the durable boundary
+and rebases on this plan's render arms; it does not add a duplicate silent-edge scan.
 
 ---
+
+Revision note (2026-07-13): unblocked implementation after keiki MP-16 completed and
+keiki 0.2.0.0 reached Hackage. Replaced the authored Git-pin migration with ordinary
+Hackage package resolution and PVP 0.2 bounds, recorded the shipped API verification,
+and associated EP-95 with its MasterPlan's existing Intention.
 
 Revision note (2026-07-12, later): aligned with keiki MP-16's revised EP-71 scope —
 the warning migration is four constructors, not three (`StateChangingEpsilon`

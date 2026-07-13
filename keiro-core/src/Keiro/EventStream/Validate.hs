@@ -2,11 +2,19 @@
 
 An 'EventStream' pairs a pure keiki 'SymTransducer' with the durable plumbing
 needed to replay it. keiki can prove, with no SMT solver, that a transducer is
-/replay-safe/ — every command field an edge consumes is recoverable from the
-event(s) it emits — and additionally that its guards are deterministic and that
-no edge is statically dead. This module lifts keiki's umbrella check
-('Keiki.validateTransducer') to the 'EventStream' boundary so a service can
-assert all of its streams are sound before they are ever hydrated.
+/replay-safe/ — each emitted chain is recoverable from its first event, observed
+events invert to one edge, input reads are guarded by the matching command
+constructor, and output-free edges do not change durable state. The umbrella
+also checks guard determinism and structural reachability. This module lifts
+keiki's umbrella check ('Keiki.validateTransducer') to the 'EventStream'
+boundary so a service can assert all of its streams are sound before hydration.
+
+Every warning enabled by the selected 'ValidationOptions' makes construction
+fail. This is intentionally stricter than a pure keiki use: events are keiro's
+only durable state, so accepting an unreplayable shape would lose state or defer
+the failure to production. Build custom options by updating
+'defaultValidationOptions'; EP-99 subsequently pins the replay-contract checks
+on at the durable boundary while leaving documented non-contract overrides.
 
 * 'validateEventStream' \/ 'validateEventStreamWith' run the pure check and
   return labelled warnings (empty when the stream is sound).
@@ -66,9 +74,11 @@ newtype ValidatedEventStream phi rs s ci co
 unvalidated :: ValidatedEventStream phi rs s ci co -> EventStream phi rs s ci co
 unvalidated (ValidatedEventStream es) = es
 
-{- | Run keiki's pure umbrella check (hidden-input + determinism + dead-edge)
-over a stream's transducer with the default options. An empty list means the
-stream passed every enabled check. Pure; no solver.
+{- | Run keiki's pure umbrella check over a stream's transducer with the default
+options. This includes hidden-input, head recoverability, inversion ambiguity,
+guarded input reads, state-changing epsilon edges, determinism, and dead-edge
+checks. An empty list means the stream passed every enabled check. Pure; no
+solver.
 -}
 validateEventStream ::
     (Bounded s, Enum s, Ord s, Show s) =>
@@ -143,14 +153,22 @@ mkEventStreamOrThrow label es =
                     <> " is not replay-safe: "
                     <> show warns
 
-{- | Render a keiki warning to a human-readable reason. All four constructors
+{- | Render a keiki warning to a human-readable reason. All eight constructors
 carry @tvwDetail@; the source vertex is @edgeSource . tvwEdge@ (or @tvwSource@
-for the nondeterministic pair).
+for pair warnings).
 -}
 renderWarning :: (Show s) => TransducerValidationWarning s -> Text
 renderWarning w = case w of
     HiddenInput{tvwEdge = e, tvwDetail = d} ->
         "hidden-input @" <> showT (edgeSource e) <> ": " <> Text.pack d
+    HeadUnrecoverable{tvwEdge = e, tvwDetail = d} ->
+        "head-unrecoverable @" <> showT (edgeSource e) <> ": " <> Text.pack d
+    InversionAmbiguity{tvwSource = s, tvwDetail = d} ->
+        "inversion-ambiguity @" <> showT s <> ": " <> Text.pack d
+    UnguardedInputRead{tvwEdge = e, tvwDetail = d} ->
+        "unguarded-input-read @" <> showT (edgeSource e) <> ": " <> Text.pack d
+    StateChangingEpsilon{tvwEdge = e, tvwDetail = d} ->
+        "state-changing-epsilon @" <> showT (edgeSource e) <> ": " <> Text.pack d
     NondeterministicPair{tvwSource = s, tvwDetail = d} ->
         "nondeterministic @" <> showT s <> ": " <> Text.pack d
     PossiblyDeadEdge{tvwEdge = e, tvwDetail = d} ->

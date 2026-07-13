@@ -95,7 +95,7 @@ test-suite keiro-dsl-conformance
   build-depends:
     , aeson  >=2.2
     , base   >=4.21 && <5
-    , keiki  >=0.1
+    , keiki  >=0.2  && <0.3
     , keiro
     , text   >=2.1
 
@@ -118,7 +118,7 @@ test-suite keiro-dsl-conformance-coldstart
   build-depends:
     , aeson  >=2.2
     , base   >=4.21 && <5
-    , keiki  >=0.1
+    , keiki  >=0.2  && <0.3
     , keiro
     , text   >=2.1
 
@@ -277,7 +277,7 @@ test-suite keiro-dsl-conformance-process-full
   build-depends:
     , aeson  >=2.2
     , base   >=4.21 && <5
-    , keiki  >=0.1
+    , keiki  >=0.2  && <0.3
     , keiro
     , text   >=2.1
     , time   >=1.12
@@ -354,6 +354,6 @@ test-suite keiro-dsl-conformance-v2
   build-depends:
     , aeson  >=2.2
     , base   >=4.21 && <5
-    , keiki  >=0.1
+    , keiki  >=0.2  && <0.3
     , keiro
     , text   >=2.1
