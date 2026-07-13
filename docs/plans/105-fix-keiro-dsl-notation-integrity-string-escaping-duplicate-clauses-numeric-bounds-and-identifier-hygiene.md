@@ -51,14 +51,14 @@ a line-numbered error.
 
 - [x] M1: unit suite runs from any cwd (fixture-resolution helper, C8). Completed 2026-07-13T20:57:16Z; 112 examples passed from both the repository root and `keiro-dsl/`.
 - [x] M2: string escaping in `stringLit` + `dquoted`, quoted-binding re-escape, unit tests, adversarial round-trip test (C1). Completed 2026-07-13T21:01:17Z; 116 examples passed and the CLI smoke printed exactly one escaped map row.
-- [ ] M3: `status-map partial { … }` concrete syntax for `mapPartial` (parser, printer, generator, NOTATION.md snippet) (C2).
+- [x] M3: `status-map partial { … }` concrete syntax for `mapPartial` (parser, printer, generator, NOTATION.md snippet) (C2). Completed 2026-07-13T21:03:28Z; 117 examples passed with totality suppression and round-trip coverage.
 - [ ] M4: duplicate `wire`/`projection`/`goto` rejected with positioned errors; missing-goto reported at the transition line; dash-aware keyword boundary; `try pRegDecl` removed (C3 + C6).
 - [ ] M5: bounded decimals at all seven `L.decimal` sites (C4).
 - [ ] M6: identifier hygiene validator rules + parser ASCII alphabet (C5).
 - [ ] M7: round-trip property extended to all node families with adversarial generators and empty-list edges; `states` accepts zero names; NOTATION.md touch-ups (C7).
 - [ ] Full keiro-dsl test matrix green (unit + all conformance suites); Outcomes written.
 
-Implementation started 2026-07-13; M1 and M2 are complete and M3 is next.
+Implementation started 2026-07-13; M1 through M3 are complete and M4 is next.
 
 
 ## Surprises & Discoveries

@@ -458,8 +458,9 @@ docProjection p =
             <+> ("consistency=" <> docConsistency (projConsistency p))
             <+> ("key=" <> pretty (projKey p))
         ]
-            ++ maybe [] (\m -> [indent 2 ("status-map" <+> braced (map pair (mapPairs m)))]) (projStatusMap p)
+            ++ maybe [] (\m -> [indent 2 (statusMapHead m <+> braced (map pair (mapPairs m)))]) (projStatusMap p)
   where
+    statusMapHead m = if mapPartial m then "status-map partial" else "status-map"
     pair (l, r) = pretty l <> "=>" <> pretty r
 
 docConsistency :: Consistency -> Doc ann

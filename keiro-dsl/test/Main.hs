@@ -69,6 +69,14 @@ main = hspec $ do
                         rendered = renderSpec spec
                      in counterexample (T.unpack rendered) (parseSpec "<escaped-round-trip>" rendered === Right spec)
 
+    describe "partial status maps" $ do
+        it "suppresses totality only when the partial marker is present" $ do
+            partial <- parseInlineSpec "<partial-status-map>" (statusMapSpec " partial")
+            totalSpec <- parseInlineSpec "<total-status-map>" (statusMapSpec "")
+            map code (validateSpec partial) `shouldNotContain` [StatusMapNotTotal]
+            map code (validateSpec totalSpec) `shouldContain` [StatusMapNotTotal]
+            parseSpec "<partial-round-trip>" (renderSpec partial) `shouldBe` Right partial
+
     describe "canonical reservation.keiro" $
         it "parses into the expected aggregate shape" $ do
             input <- readTestText "test/fixtures/reservation.keiro"
@@ -743,6 +751,27 @@ leftContains needle = \case
     Left err -> needle `T.isInfixOf` err
     Right _ -> False
 
+parseInlineSpec :: FilePath -> T.Text -> IO Spec
+parseInlineSpec sourceName src = case parseSpec sourceName src of
+    Left err -> expectationFailure (T.unpack err) >> error "unreachable"
+    Right spec -> pure spec
+
+statusMapSpec :: T.Text -> T.Text
+statusMapSpec marker =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate Thing"
+        , "  regs"
+        , "  states Open"
+        , ""
+        , "  event Created { }"
+        , "  event Changed { }"
+        , ""
+        , "  projection things consistency=Eventual key=thingId"
+        , "    status-map" <> marker <> " { Created=>held }"
+        ]
+
 --------------------------------------------------------------------------------
 -- Generators (bounded; restricted to valid, non-reserved identifiers)
 --------------------------------------------------------------------------------
@@ -919,7 +948,7 @@ genProjection =
         <$> genName
         <*> elements [Strong, Eventual]
         <*> genName
-        <*> genMaybe (Mapping <$> smallList ((,) <$> genName <*> genWire) <*> pure False)
+        <*> genMaybe (Mapping <$> smallList ((,) <$> genName <*> genWire) <*> arbitrary)
         <*> pure noLoc
 
 genAggregate :: Gen Aggregate

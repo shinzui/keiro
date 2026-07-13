@@ -448,8 +448,9 @@ pProjection = do
 pStatusMap :: P Mapping
 pStatusMap = do
     keyword "status-map"
+    partial <- option False (True <$ keyword "partial")
     pairs <- braces (many pPair)
-    pure Mapping{mapPairs = pairs, mapPartial = False}
+    pure Mapping{mapPairs = pairs, mapPartial = partial}
   where
     pPair = do
         l <- ident

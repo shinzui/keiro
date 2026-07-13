@@ -58,10 +58,13 @@ aggregate Reservation
   wire kind=ctorName fields=camelCase schemaVersion=1
   projection transfer_decisions consistency=Strong key=reservationId
     status-map { Created=>held Confirmed=>confirmed }    # event-suffix => status; must be total
+    # Or: status-map partial { Created=>held }
 ```
 
 Holes (you fill): the transducer body (guards/writes/emits via keiki operators), the
 projection SQL `apply`, any `upcast<Event>V<n>` upcaster body.
+`status-map partial { … }` opts out of the totality check for events that do not change
+the projected status.
 
 ## process + timer (EP-3)
 
