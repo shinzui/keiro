@@ -62,4 +62,20 @@ else
   echo "FAIL: dangling upcaster jump used the wrong diagnostic code"; exit 1
 fi
 
+echo "== 5) contract event removal must be BREAKING =="
+cp "$FIX/contract.keiro" "$DEMO/svc.keiro"
+git -C "$DEMO" add svc.keiro
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "contract baseline"
+cp "$FIX/contract-eventdrop.keiro" "$DEMO/svc.keiro"
+if output="$("$EXE" diff --since HEAD "$DEMO/svc.keiro" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: contract event removal was not flagged breaking"; exit 1
+elif [[ "$output" == *"[ContractEventRemoved]"* ]]; then
+  echo "$output"
+  echo "ok: contract event removal blocks the merge"
+else
+  echo "$output"
+  echo "FAIL: contract event removal used the wrong diagnostic code"; exit 1
+fi
+
 echo "PASS: diff --since gates breaking event changes"

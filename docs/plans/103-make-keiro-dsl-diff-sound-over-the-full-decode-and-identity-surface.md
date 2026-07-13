@@ -86,11 +86,11 @@ Milestone 2 (aggregate-family decode soundness — A1, A2, A3, A5, A7):
 
 Milestone 3 (cross-node decode surface — A4):
 
-- [ ] Contract family differ (event/field/discriminator/topic/schemaVersion rules).
-- [ ] Workqueue payload differ (`WqPayloadFieldChanged`, optional-field addition additive).
-- [ ] Process input differ (`ProcessInputChanged`).
-- [ ] Workflow input/output/id and body differs (`WorkflowShapeChanged`, `WorkflowBodyChanged`, exported `classifyWorkflowBody` hook).
-- [ ] Fixtures + unit tests per code; `diff-test.sh` contract case added.
+- [x] (2026-07-13 20:10Z) Contract family differ (event/field/discriminator/topic/schemaVersion rules).
+- [x] (2026-07-13 20:10Z) Workqueue payload differ (`WqPayloadFieldChanged`, optional-field addition additive).
+- [x] (2026-07-13 20:10Z) Process input differ (`ProcessInputChanged`).
+- [x] (2026-07-13 20:10Z) Workflow input/output/id and body differs (`WorkflowShapeChanged`, `WorkflowBodyChanged`, exported `classifyWorkflowBody` hook).
+- [x] (2026-07-13 20:10Z) Fixtures + unit tests per code; `diff-test.sh` contract case added (80 examples, 0 failures; all 16 new mutation fixtures pass single-spec checking).
 
 Milestone 4 (identity surface — A6 — plus CLI/doc truth):
 
@@ -137,6 +137,11 @@ exit=0
   the CLI now reports `EvtVersionMissingUpcaster` and exits 1. Direct fields and
   `fields(Command)` both report `EvtFieldTypeChanged`; all nine mutation fixtures remain
   valid single specs, separating evolution failures from validator failures.
+- Milestone 3 validation (2026-07-13 20:10Z) confirmed the same registry shape works
+  without family-specific fall-through: contracts, workqueue payloads, process inputs,
+  and workflows each use `pairByName` and emit their own facet/code. The contract
+  schema-bump case is visibly `WARNING`/exit 0 while the same field addition at the old
+  version is `BREAKING`, pinning the coordinated-rollout distinction.
 
 (Add new entries here as implementation proceeds.)
 

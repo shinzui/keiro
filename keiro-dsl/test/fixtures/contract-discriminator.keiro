@@ -1,0 +1,22 @@
+context hospital-capacity
+
+contract emergency {
+  schemaVersion 1
+  discriminator eventType
+
+  topic incidentEvents "emergency.incident.events"
+  topic hospitalEvents "emergency.hospital.events"
+
+  event IncidentTransferNeedDeclared on incidentEvents {
+    incidentId: typeid "inc"
+    triageRecordId: text
+    region: text
+    redCount: int
+  }
+  event TransferReservationAccepted on hospitalEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+    hospitalId: typeid "hsp"
+    expirationDeadline: text
+  }
+}

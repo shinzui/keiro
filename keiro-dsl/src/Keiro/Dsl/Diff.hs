@@ -138,14 +138,14 @@ suite enforces registry coverage and non-empty out-of-scope rationales.
 familyRegistry :: [(NodeFamily, FamilyDiff)]
 familyRegistry =
     [ (FamAggregate, DiffFamily aggregateDiff)
-    , (FamProcess, OutOfDiffScope "not yet diffed; Milestones 3 and 4 of docs/plans/103 cover process decode and identity surfaces")
-    , (FamContract, OutOfDiffScope "not yet diffed; Milestone 3 of docs/plans/103 covers contract decode surfaces")
+    , (FamProcess, DiffFamily processDiff)
+    , (FamContract, DiffFamily contractDiff)
     , (FamIntake, OutOfDiffScope "not yet diffed; Milestone 4 of docs/plans/103 covers intake dedupe identity and decode posture")
     , (FamEmit, OutOfDiffScope "not yet diffed; Milestone 4 of docs/plans/103 covers emit derivations and mappings")
     , (FamPublisher, OutOfDiffScope "not yet diffed; Milestone 4 of docs/plans/103 covers publisher identity and ordering")
-    , (FamWorkqueue, OutOfDiffScope "not yet diffed; Milestones 3 and 4 of docs/plans/103 cover workqueue payload and queue identity")
+    , (FamWorkqueue, DiffFamily workqueueDiff)
     , (FamPgmqDispatch, OutOfDiffScope "not yet diffed; Milestone 4 of docs/plans/103 covers dispatch dedupe identity and retargeting")
-    , (FamWorkflow, OutOfDiffScope "not yet diffed; Milestones 3 and 4 of docs/plans/103 cover workflow shape, body, and identity")
+    , (FamWorkflow, DiffFamily workflowDiff)
     , (FamOperation, OutOfDiffScope "operations own no persisted decode or identity surface; their references and workflow signal/await pairing are single-spec validation concerns")
     ]
 
@@ -169,6 +169,22 @@ sharedDeclarationDiff = enumDiff
 nodeAggregate :: Node -> Maybe Aggregate
 nodeAggregate (NAggregate a) = Just a
 nodeAggregate _ = Nothing
+
+nodeProcess :: Node -> Maybe ProcessNode
+nodeProcess (NProcess process) = Just process
+nodeProcess _ = Nothing
+
+nodeContract :: Node -> Maybe ContractNode
+nodeContract (NContract contract) = Just contract
+nodeContract _ = Nothing
+
+nodeWorkqueue :: Node -> Maybe WorkqueueNode
+nodeWorkqueue (NWorkqueue workqueue) = Just workqueue
+nodeWorkqueue _ = Nothing
+
+nodeWorkflow :: Node -> Maybe WorkflowNode
+nodeWorkflow (NWorkflow workflow) = Just workflow
+nodeWorkflow _ = Nothing
 
 aggregateDiff :: DiffEnv -> [Change]
 aggregateDiff env =
@@ -376,11 +392,241 @@ pairDeclarations nameOf oldNodes newNodes =
         , prRemoved = [oldNode | oldNode <- oldNodes, isNothing (find ((== nameOf oldNode) . nameOf) newNodes)]
         }
 
-{- | Extension seam used by the workflow-evolution plan. Milestone 3 replaces
-this temporary no-op with the conservative workflow-body classifier.
--}
+contractDiff :: DiffEnv -> [Change]
+contractDiff env =
+    concatMap (uncurry contractPairDiff) (prMatched paired)
+        ++ concatMap addedContractDiff (prAdded paired)
+        ++ concatMap removedContractDiff (prRemoved paired)
+  where
+    paired = pairByName nodeContract ctrName env
+
+contractPairDiff :: ContractNode -> ContractNode -> [Change]
+contractPairDiff oldContract newContract =
+    schemaChanges
+        ++ discriminatorChanges
+        ++ topicChanges
+        ++ concatMap eventPairChanges matchedEvents
+        ++ concatMap addedEventChanges addedEvents
+        ++ concatMap removedEventChanges removedEvents'
+  where
+    schemaChanges =
+        [ breaking
+            (ctrName newContract)
+            "schema-version"
+            (ctrName newContract)
+            ContractSchemaVersionDecreased
+            ("schemaVersion decreased from " <> tInt (ctrSchemaVersion oldContract) <> " to " <> tInt (ctrSchemaVersion newContract))
+        | ctrSchemaVersion newContract < ctrSchemaVersion oldContract
+        ]
+    discriminatorChanges =
+        [ breaking
+            (ctrName newContract)
+            "discriminator"
+            (ctrName newContract)
+            ContractDiscriminatorChanged
+            ("discriminator changed " <> ctrDiscriminator oldContract <> " -> " <> ctrDiscriminator newContract)
+        | ctrDiscriminator oldContract /= ctrDiscriminator newContract
+        ]
+    topicChanges = contractTopicDiff oldContract newContract
+    eventPairs = pairDeclarations ceName (ctrEvents oldContract) (ctrEvents newContract)
+    matchedEvents = prMatched eventPairs
+    addedEvents = prAdded eventPairs
+    removedEvents' = prRemoved eventPairs
+    eventPairChanges (oldEvent, newEvent) = contractEventDiff oldContract newContract oldEvent newEvent
+    addedEventChanges event =
+        [additive (ctrName newContract) "contract-event" (ceName event) "new contract event"]
+    removedEventChanges event =
+        [breaking (ctrName newContract) "contract-event" (ceName event) ContractEventRemoved "contract event removed; existing cross-service payloads no longer have a declared decoder"]
+
+addedContractDiff :: ContractNode -> [Change]
+addedContractDiff contract =
+    [additive (ctrName contract) "contract-event" (ceName event) "new event in a new contract" | event <- ctrEvents contract]
+
+removedContractDiff :: ContractNode -> [Change]
+removedContractDiff contract =
+    [breaking (ctrName contract) "contract-event" (ceName event) ContractEventRemoved "contract removed; its cross-service event decoder is no longer declared" | event <- ctrEvents contract]
+
+contractTopicDiff :: ContractNode -> ContractNode -> [Change]
+contractTopicDiff oldContract newContract =
+    [ breaking
+        (ctrName newContract)
+        "contract-topic"
+        alias
+        ContractTopicChanged
+        ("topic alias removed; previous topic was '" <> oldTopic <> "'")
+    | (alias, oldTopic) <- ctrTopics oldContract
+    , isNothing (lookup alias (ctrTopics newContract))
+    ]
+        ++ [ breaking
+                (ctrName newContract)
+                "contract-topic"
+                alias
+                ContractTopicChanged
+                ("real topic changed '" <> oldTopic <> "' -> '" <> newTopic <> "'")
+           | (alias, oldTopic) <- ctrTopics oldContract
+           , Just newTopic <- [lookup alias (ctrTopics newContract)]
+           , oldTopic /= newTopic
+           ]
+        ++ [ additive (ctrName newContract) "contract-topic" alias ("new topic alias for '" <> topic <> "'")
+           | (alias, topic) <- ctrTopics newContract
+           , isNothing (lookup alias (ctrTopics oldContract))
+           ]
+
+contractEventDiff :: ContractNode -> ContractNode -> ContractEvent -> ContractEvent -> [Change]
+contractEventDiff oldContract newContract oldEvent newEvent =
+    topicAliasChange
+        ++ removedFieldChanges
+        ++ changedFieldChanges
+        ++ addedFieldChanges
+  where
+    fieldPairs = pairDeclarations cfName (ceFields oldEvent) (ceFields newEvent)
+    topicAliasChange =
+        [ breaking
+            (ctrName newContract)
+            "contract-topic"
+            (ceName newEvent)
+            ContractTopicChanged
+            ("event topic alias changed " <> ceTopic oldEvent <> " -> " <> ceTopic newEvent)
+        | ceTopic oldEvent /= ceTopic newEvent
+        ]
+    removedFieldChanges =
+        [ breaking (ctrName newContract) "contract-field" (ceName newEvent <> "." <> cfName field) ContractFieldChanged "field removed; existing messages still carry the old contract shape"
+        | field <- prRemoved fieldPairs
+        ]
+    changedFieldChanges =
+        [ breaking
+            (ctrName newContract)
+            "contract-field"
+            (ceName newEvent <> "." <> cfName newField)
+            ContractFieldChanged
+            ("field type changed " <> renderContractType (cfType oldField) <> " -> " <> renderContractType (cfType newField))
+        | (oldField, newField) <- prMatched fieldPairs
+        , cfType oldField /= cfType newField
+        ]
+    addedFieldChanges =
+        [ if ctrSchemaVersion newContract > ctrSchemaVersion oldContract
+            then advisory (ctrName newContract) "contract-field" subject ContractSchemaVersionBumped ("field added with schemaVersion bump " <> tInt (ctrSchemaVersion oldContract) <> " -> " <> tInt (ctrSchemaVersion newContract) <> "; coordinate the cross-service rollout")
+            else breaking (ctrName newContract) "contract-field" subject ContractFieldChanged "field added without a schemaVersion bump; older in-flight messages do not contain it"
+        | field <- prAdded fieldPairs
+        , let subject = ceName newEvent <> "." <> cfName field
+        ]
+
+renderContractType :: ContractType -> Text
+renderContractType (CTypeId prefix) = "typeid '" <> prefix <> "'"
+renderContractType CText = "text"
+renderContractType CInt = "int"
+
+workqueueDiff :: DiffEnv -> [Change]
+workqueueDiff env =
+    concatMap (uncurry workqueuePairDiff) (prMatched paired)
+        ++ concatMap addedWorkqueueDiff (prAdded paired)
+        ++ concatMap removedWorkqueueDiff (prRemoved paired)
+  where
+    paired = pairByName nodeWorkqueue wqName env
+
+workqueuePairDiff :: WorkqueueNode -> WorkqueueNode -> [Change]
+workqueuePairDiff oldQueue newQueue =
+    concatMap pairedFieldDiff (prMatched fields)
+        ++ concatMap addedFieldDiff (prAdded fields)
+        ++ concatMap removedFieldDiff (prRemoved fields)
+  where
+    -- wqPayloadName is a generated Haskell type name, not a wire-visible name.
+    fields = pairDeclarations wqfName (wqPayload oldQueue) (wqPayload newQueue)
+    pairedFieldDiff (oldField, newField)
+        | wqfWire oldField /= wqfWire newField = [payloadBreaking newField ("wire name changed '" <> wqfWire oldField <> "' -> '" <> wqfWire newField <> "'")]
+        | wqfType oldField /= wqfType newField = [payloadBreaking newField ("type changed " <> wqfType oldField <> " -> " <> wqfType newField)]
+        | not (wqfRequired oldField) && wqfRequired newField = [payloadBreaking newField "field changed from optional to required; queued jobs may omit it"]
+        | wqfRequired oldField && not (wqfRequired newField) = [additive (wqName newQueue) "payload-field" (wqfName newField) "field changed from required to optional"]
+        | otherwise = []
+    addedFieldDiff field
+        | wqfRequired field = [payloadBreaking field "new required field; queued jobs do not contain it"]
+        | otherwise = [additive (wqName newQueue) "payload-field" (wqfName field) "new optional field"]
+    removedFieldDiff field = [payloadBreaking field "field removed; queued jobs still contain the old payload shape"]
+    payloadBreaking field detail = breaking (wqName newQueue) "payload-field" (wqfName field) WqPayloadFieldChanged detail
+
+addedWorkqueueDiff :: WorkqueueNode -> [Change]
+addedWorkqueueDiff queue =
+    [additive (wqName queue) "payload-field" (wqfName field) "field belongs to a new workqueue payload" | field <- wqPayload queue]
+
+removedWorkqueueDiff :: WorkqueueNode -> [Change]
+removedWorkqueueDiff queue =
+    [breaking (wqName queue) "payload-field" (wqfName field) WqPayloadFieldChanged "workqueue removed while persisted jobs may still carry this payload" | field <- wqPayload queue]
+
+processDiff :: DiffEnv -> [Change]
+processDiff env =
+    concatMap (uncurry processPairDiff) (prMatched paired)
+        ++ concatMap addedProcessDiff (prAdded paired)
+        ++ concatMap removedProcessDiff (prRemoved paired)
+  where
+    paired = pairByName nodeProcess procId env
+
+processPairDiff :: ProcessNode -> ProcessNode -> [Change]
+processPairDiff oldProcess newProcess =
+    concatMap pairedFieldDiff (prMatched fields)
+        ++ map (fieldChange "field added; source events at the old shape cannot populate it") (prAdded fields)
+        ++ map (fieldChange "field removed; the generated process input decoder changed") (prRemoved fields)
+  where
+    -- inName is a generated Haskell type name; the wire shape is inFields.
+    fields = pairDeclarations fieldName (inFields (procInput oldProcess)) (inFields (procInput newProcess))
+    pairedFieldDiff (oldField, newField)
+        | fieldType oldField /= fieldType newField = [fieldChange ("type changed " <> renderFieldType (fieldType oldField) <> " -> " <> renderFieldType (fieldType newField)) newField]
+        | otherwise = []
+    fieldChange detail field = breaking (procId newProcess) "input-field" (fieldName field) ProcessInputChanged (detail <> "; version the source event before changing process input")
+
+addedProcessDiff :: ProcessNode -> [Change]
+addedProcessDiff process =
+    [additive (procId process) "input-field" (fieldName field) "field belongs to a new process input" | field <- inFields (procInput process)]
+
+removedProcessDiff :: ProcessNode -> [Change]
+removedProcessDiff process =
+    [breaking (procId process) "input-field" (fieldName field) ProcessInputChanged "process removed while persisted source events may still require this input decoder" | field <- inFields (procInput process)]
+
+workflowDiff :: DiffEnv -> [Change]
+workflowDiff env =
+    concatMap (uncurry workflowPairDiff) (prMatched paired)
+        ++ concatMap addedWorkflowDiff (prAdded paired)
+        ++ concatMap removedWorkflowDiff (prRemoved paired)
+  where
+    paired = pairByName nodeWorkflow wfId env
+
+workflowPairDiff :: WorkflowNode -> WorkflowNode -> [Change]
+workflowPairDiff oldWorkflow newWorkflow =
+    inputChanges
+        ++ outputChanges
+        ++ classifyWorkflowBody oldWorkflow newWorkflow
+  where
+    fields = pairDeclarations fieldName (wfInputFields oldWorkflow) (wfInputFields newWorkflow)
+    inputChanges =
+        [workflowShape field "input field added; journaled inputs at the old shape do not contain it" | field <- prAdded fields]
+            ++ [workflowShape field "input field removed; journaled inputs still contain the old shape" | field <- prRemoved fields]
+            ++ [ workflowShape newField ("input field type changed " <> renderFieldType (fieldType oldField) <> " -> " <> renderFieldType (fieldType newField))
+               | (oldField, newField) <- prMatched fields
+               , fieldType oldField /= fieldType newField
+               ]
+    outputChanges =
+        [ breaking (wfId newWorkflow) "workflow-output" (wfOutput newWorkflow) WorkflowShapeChanged ("output type changed " <> wfOutput oldWorkflow <> " -> " <> wfOutput newWorkflow <> "; persisted outcomes may no longer decode")
+        | wfOutput oldWorkflow /= wfOutput newWorkflow
+        ]
+    workflowShape field detail = breaking (wfId newWorkflow) "workflow-input" (fieldName field) WorkflowShapeChanged detail
+
+addedWorkflowDiff :: WorkflowNode -> [Change]
+addedWorkflowDiff workflow = [additive (wfId workflow) "workflow" (wfId workflow) "new workflow"]
+
+removedWorkflowDiff :: WorkflowNode -> [Change]
+removedWorkflowDiff workflow = [breaking (wfId workflow) "workflow" (wfId workflow) WorkflowShapeChanged "workflow removed while in-flight journals and outcomes may still require its decoder"]
+
+-- | Conservative extension seam used by the workflow-evolution plan.
 classifyWorkflowBody :: WorkflowNode -> WorkflowNode -> [Change]
-classifyWorkflowBody _ _ = []
+classifyWorkflowBody oldWorkflow newWorkflow
+    | wfBody oldWorkflow == wfBody newWorkflow = []
+    | otherwise =
+        [ breaking
+            (wfId newWorkflow)
+            "workflow-body"
+            (wfId newWorkflow)
+            WorkflowBodyChanged
+            "workflow body labels, kinds, result types, or order changed; existing journals require patch guards (added by docs/plans/109) before such evolution is safe"
+        ]
 
 additive :: Name -> Text -> Text -> Text -> Change
 additive n facet subj detail = Additive (ChangeKind n facet subj Nothing detail)

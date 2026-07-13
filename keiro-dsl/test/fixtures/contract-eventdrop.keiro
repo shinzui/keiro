@@ -1,0 +1,16 @@
+context hospital-capacity
+
+contract emergency {
+  schemaVersion 1
+  discriminator messageType
+
+  topic incidentEvents "emergency.incident.events"
+  topic hospitalEvents "emergency.hospital.events"
+
+  event IncidentTransferNeedDeclared on incidentEvents {
+    incidentId: typeid "inc"
+    triageRecordId: text
+    region: text
+    redCount: int
+  }
+}

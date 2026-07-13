@@ -251,6 +251,54 @@ main = hspec $ do
             restored <- diffFixtures "test/fixtures/reservation-deprecated.keiro" "test/fixtures/reservation.keiro"
             any isAdvisory restored `shouldBe` True
             [ckCode k | Advisory k <- restored] `shouldContain` [Just EventUndeprecated]
+        it "classifies a removed contract event as ContractEventRemoved" $ do
+            cs <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-eventdrop.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just ContractEventRemoved]
+        it "classifies contract field type changes and unversioned additions as ContractFieldChanged" $ do
+            changed <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-fieldtype.keiro"
+            [ckCode k | Breaking k <- changed] `shouldContain` [Just ContractFieldChanged]
+            added <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-fieldadd.keiro"
+            [ckCode k | Breaking k <- added] `shouldContain` [Just ContractFieldChanged]
+        it "reports a field addition with a contract version bump as an advisory" $ do
+            cs <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-bump-fieldadd.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckCode k | Advisory k <- cs] `shouldContain` [Just ContractSchemaVersionBumped]
+        it "classifies a contract schema version decrease separately" $ do
+            cs <- diffFixtures "test/fixtures/contract-bump-fieldadd.keiro" "test/fixtures/contract.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just ContractSchemaVersionDecreased]
+        it "classifies contract topic and discriminator changes separately" $ do
+            topic <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-topic.keiro"
+            [ckCode k | Breaking k <- topic] `shouldContain` [Just ContractTopicChanged]
+            discriminator <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-discriminator.keiro"
+            [ckCode k | Breaking k <- discriminator] `shouldContain` [Just ContractDiscriminatorChanged]
+        it "classifies a new contract event as additive" $ do
+            cs <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-eventadd.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckSubject k | Additive k <- cs] `shouldContain` ["IncidentTransferNeedCancelled"]
+        it "classifies workqueue wire names, types, and required additions as WqPayloadFieldChanged" $ do
+            wire <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-wirename.keiro"
+            [ckCode k | Breaking k <- wire] `shouldContain` [Just WqPayloadFieldChanged]
+            fieldTypeChange <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-fieldtype.keiro"
+            [ckCode k | Breaking k <- fieldTypeChange] `shouldContain` [Just WqPayloadFieldChanged]
+            required <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-reqfield.keiro"
+            [ckCode k | Breaking k <- required] `shouldContain` [Just WqPayloadFieldChanged]
+        it "classifies a new optional workqueue payload field as additive" $ do
+            cs <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-optfield.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckSubject k | Additive k <- cs] `shouldContain` ["note"]
+        it "classifies a process input type change as ProcessInputChanged" $ do
+            cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-inputtype.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just ProcessInputChanged]
+        it "classifies workflow input and output changes as WorkflowShapeChanged" $ do
+            input <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-inputfield.keiro"
+            [ckCode k | Breaking k <- input] `shouldContain` [Just WorkflowShapeChanged]
+            output <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-output.keiro"
+            [ckCode k | Breaking k <- output] `shouldContain` [Just WorkflowShapeChanged]
+        it "classifies workflow relabeling and appends as WorkflowBodyChanged" $ do
+            relabeled <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-body.keiro"
+            [ckCode k | Breaking k <- relabeled] `shouldContain` [Just WorkflowBodyChanged]
+            appended <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-stepadd.keiro"
+            [ckCode k | Breaking k <- appended] `shouldContain` [Just WorkflowBodyChanged]
 
     describe "module placement (M1)" $ do
         it "GeneratedPrefix is today's namespace (Generated.<Ctx>.<Node>, holes at <Ctx>.<Node>)" $ do
