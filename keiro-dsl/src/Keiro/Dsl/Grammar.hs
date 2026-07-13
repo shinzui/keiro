@@ -30,6 +30,7 @@ module Keiro.Dsl.Grammar (
     Atom (..),
 
     -- * The aggregate node
+    RegInitial (..),
     RegDecl (..),
     StateDecl (..),
     Field (..),
@@ -241,10 +242,15 @@ data Atom
 initial value (an identifier: a literal like @placeholder@, an enum
 constructor, or a state name).
 -}
+data RegInitial
+    = RegInitBare !Text
+    | RegInitText !Text
+    deriving stock (Eq, Show, Generic)
+
 data RegDecl = RegDecl
     { regName :: !Name
     , regType :: !Name
-    , regInitial :: !Name
+    , regInitial :: !RegInitial
     , regLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
@@ -664,6 +670,8 @@ data EmitNode = EmitNode
 data BackoffSpec = BackoffSpec
     { boKind :: !Name
     , boWindow :: !Text
+    , boMax :: !(Maybe Text)
+    , boMultiplier :: !(Maybe Text)
     }
     deriving stock (Eq, Show, Generic)
 

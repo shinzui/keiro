@@ -334,5 +334,7 @@ sampleValue a ty = case fieldCat a ty of
     EnumCat -> maybe ("(error \"no enum ctor\")") id (firstEnumCtor a ty)
     OtherCat
         | ty == "Bool" -> "False"
+        | ty == "Int" -> "0"
         | ty == "Text" -> "\"sample\""
+        | ty == aVertexType a -> initialVertex a
         | otherwise -> "(error \"sample: unsupported type " <> ty <> "\")"

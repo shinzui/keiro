@@ -52,12 +52,12 @@ commands in "Validation and Acceptance".
 - [x] (2026-07-13 21:50Z) M2: canonical firewall surface derived from keiki 0.2's real exports; token-aware
       scanner (string-literal/comment-skipping, maximal-munch symbols, qualified-name
       awareness); import guard; one list shared by CLI and test.
-- [ ] M3: D1 template-injection fix in `payloadExpr` + D8 `Text` register initials
+- [x] (2026-07-13 22:00Z) M3: D1 template-injection fix in `payloadExpr` + D8 `Text` register initials
       (quoted-initial grammar, escaped splice, refusal for unsupported register types).
-- [ ] M4: D5 faithful policy lowering — strict `s|m|h` window grammar, shared
+- [x] (2026-07-13 22:00Z) M4: D5 faithful policy lowering — strict `s|m|h` window grammar, shared
       `windowSeconds`, `constant`/`exponential` backoff lowered to the live
       `BackoffSchedule`, refusal of unknown kinds.
-- [ ] M5: D9 exact status-map lowering (+ fixture key updates) and D6 harness
+- [x] (2026-07-13 22:00Z) M5: D9 exact status-map lowering (fixtures were already updated by EP-104) and D6 harness
       `sampleValue` completeness (Int, vertex; refusal for non-representable types).
 - [ ] M6: D4 skeletons scaffold compiling code — fixed `process` skeleton, new
       `keiro-dsl-conformance-skeletons` suite compiling every skeleton's scaffold, unit
@@ -93,6 +93,10 @@ Plan of Work):
   allowlist now includes those names alongside `RegFile` and `HsPred`; all other
   `Keiki.Core` names still breach. Evidence: the strengthened unit suite passed 140
   examples with real aggregate and process scaffolds firewall-clean.
+- EP-104 had already converted every canonical status-map fixture to exact constructor
+  names before EP-106 began. M5 therefore required only the scaffold-side lookup change;
+  no fixture or committed Projection output changed. The exact `ReservationHeld` versus
+  `ReservationUnHeld` regression and the aggregate conformance suite are green.
 
 (To be extended during implementation.)
 
@@ -146,6 +150,13 @@ Plan of Work):
   generated Harness is also part of the deterministic layer and legitimately validates and
   steps hand-filled transducers. Restricting it would make every real aggregate scaffold a
   firewall breach; allowing only the observed explicit names preserves the firewall.
+  Date: 2026-07-13.
+- Decision: model register initials as `RegInitBare Text | RegInitText Text`, where the
+  bare form also accepts signed decimal text.
+  Rationale: the authored `RegInitIdent` sketch could not represent an `Int` register's
+  initial value even though `Int` is explicitly in the supported register set. Keeping one
+  bare source token variant covers enum/state/Bool/id placeholders and integer literals;
+  the quoted variant preserves the semantic distinction needed to escape `Text` safely.
   Date: 2026-07-13.
 
 
@@ -456,8 +467,9 @@ in a backslash now renders as `"follow-up\\"` and the module parses. If
 docs/plans/105-fix-keiro-dsl-notation-integrity-string-escaping-duplicate-clauses-numeric-bounds-and-identifier-hygiene.md lands first and changes `FieldBinding` storage to unquoted-with-marker,
 the same splice-site `tshow` call is the contract; only the strip step drops out.
 
-`pRegDecl` (Parser.hs:322-329): accept `initial <- (RegInitIdent <$> ident) <|>
-(RegInitText <$> stringLit)` — extend `RegDecl` (Grammar.hs:244-248) so a quoted initial
+`pRegDecl` (Parser.hs:322-329): accept `initial <- (RegInitBare <$> (ident <|>
+signedDecimalText)) <|> (RegInitText <$> stringLit)` — extend `RegDecl`
+(Grammar.hs:244-248) so a quoted initial
 is distinguishable from a bare identifier (store the *inner* text; `PrettyPrint` re-quotes
 via its `dquoted`, which docs/plans/105-fix-keiro-dsl-notation-integrity-string-escaping-duplicate-clauses-numeric-bounds-and-identifier-hygiene.md makes escaping-aware — coordinate but do not
 duplicate). `regInitialValue` (Scaffold.hs:900-908): the `Text` arm emits
@@ -949,8 +961,9 @@ recordFileName :: Text -> FilePath             -- context -> "keiro-dsl-scaffold
 ```
 
 Grammar/Parser extensions: `BackoffSpec` gains `boMax :: !(Maybe Text)` and
-`boMultiplier :: !(Maybe Text)`; `RegDecl`'s initial distinguishes bare-identifier from
-quoted-text; `pWindow` accepts only `s|m|h`. Runtime types consumed (read-only, never
+`boMultiplier :: !(Maybe Text)`; `RegDecl`'s initial distinguishes a bare source token
+(`RegInitBare`, including signed integer literals) from quoted text (`RegInitText`);
+`pWindow` accepts only `s|m|h`. Runtime types consumed (read-only, never
 edited): `Keiro.Outbox.Types.BackoffSchedule`/`ExponentialBackoffOptions`
 (keiro/src/Keiro/Outbox/Types.hs:100-115), `Keiro.PGMQ.Job.RetryPolicy`/`RetryDelay`
 (keiro-pgmq/src/Keiro/PGMQ/Job.hs:190-214; delay unit is seconds). keiki 0.2's operator

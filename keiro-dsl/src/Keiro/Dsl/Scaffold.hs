@@ -32,6 +32,7 @@ module Keiro.Dsl.Scaffold (
     scaffoldPublisher,
     scaffoldWorkqueue,
     scaffoldRefusals,
+    windowSeconds,
 
     -- * Firewall self-check (M3)
     FirewallSurface (..),
@@ -59,6 +60,7 @@ import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Text.Read (readMaybe)
 
 {- | One emitted module: its on-disk path (relative to the scaffold @--out@
 directory), its full text, and whether it is overwritten every run
@@ -596,7 +598,7 @@ emitPublisherGen genPrefix pb =
         , "  , publisherMaxAttempts"
         , "  ) where"
         , ""
-        , "import Keiro.Outbox.Types (BackoffSchedule (..), OrderingPolicy (..))"
+        , "import Keiro.Outbox.Types (BackoffSchedule (..), ExponentialBackoffOptions (..), OrderingPolicy (..))"
         , ""
         , "publisherOrdering :: OrderingPolicy"
         , "publisherOrdering = " <> pubOrdering pb
@@ -608,10 +610,17 @@ emitPublisherGen genPrefix pb =
         , "publisherMaxAttempts = " <> tshow' (pubMaxAttempts pb)
         ]
   where
-    secondsOf t = let ds = T.takeWhile (`elem` ("0123456789" :: String)) t in if T.null ds then "0" else ds
     backoffExpr b = case boKind b of
-        "constant" -> "ConstantBackoff " <> secondsOf (boWindow b)
-        _ -> "ConstantBackoff " <> secondsOf (boWindow b)
+        "constant" -> "ConstantBackoff " <> windowText (boWindow b)
+        "exponential" ->
+            "ExponentialBackoff ExponentialBackoffOptions { initial = "
+                <> windowText (boWindow b)
+                <> ", maxDelay = "
+                <> maybe "0" windowText (boMax b)
+                <> ", multiplier = "
+                <> fromMaybe "0" (boMultiplier b)
+                <> " }"
+        _ -> "error \"keiro-dsl: unlowerable backoff kind\""
 
 --------------------------------------------------------------------------------
 -- pgmq workqueue (EP-5): a self-contained Job payload record + codec
@@ -713,7 +722,7 @@ emitQueuePolicy genPrefix w =
         , "retryPolicy ="
         , "  RetryPolicy"
         , "    { maxRetries = " <> tshow' (wqMaxRetries w)
-        , "    , defaultRetryDelay = RetryDelay " <> secondsOf (wqDelay w)
+        , "    , defaultRetryDelay = RetryDelay " <> windowText (wqDelay w)
         , "    , useDeadLetter = " <> (if wqDlqOn w then "True" else "False")
         , "    }"
         , ""
@@ -723,11 +732,10 @@ emitQueuePolicy genPrefix w =
         , "jobOutcomeFor o = case o of"
         ]
             ++ ["  " <> tshow (wqdOutcome r) <> " -> " <> outcome (wqdAction r) | r <- wqDisposition w]
-            ++ ["  _ -> Retry (RetryDelay " <> secondsOf (wqDelay w) <> ")"]
+            ++ ["  _ -> Retry (RetryDelay " <> windowText (wqDelay w) <> ")"]
   where
-    secondsOf t = let ds = T.takeWhile (`elem` ("0123456789" :: String)) t in if T.null ds then "0" else ds
     outcome IAckOk = "Done"
-    outcome (IRetry win) = "Retry (RetryDelay " <> secondsOf win <> ")"
+    outcome (IRetry win) = "Retry (RetryDelay " <> windowText win <> ")"
     outcome (IDeadLetter mr) = "Dead " <> tshow (fromMaybe "dead-lettered" mr)
 
 --------------------------------------------------------------------------------
@@ -829,8 +837,9 @@ payloadExpr fs = case [b | b <- fs, isLiteral b] of
     [] -> "object []"
     lits -> "object [ " <> T.intercalate ", " (map kv lits) <> " ]"
   where
-    isLiteral b = case fbValue b of Just v -> "\"" `T.isPrefixOf` v; Nothing -> False
-    kv b = tshow (fbName b) <> " .= (" <> maybe "\"\"" id (fbValue b) <> " :: Value)"
+    isLiteral b = maybe False (const True) (fbValue b >>= stripWrappingQuotes)
+    kv b = tshow (fbName b) <> " .= (" <> maybe "\"\"" tshow (fbValue b >>= stripWrappingQuotes) <> " :: Value)"
+    stripWrappingQuotes value = T.stripPrefix "\"" value >>= T.stripSuffix "\""
 
 showOutcome :: FireOutcome -> Text
 showOutcome OFired = "Fired"
@@ -996,11 +1005,17 @@ emitInitialRegs a =
 regInitialValue :: Agg -> RegDecl -> Text
 regInitialValue a r
     | regType r `elem` idNames = "(" <> regType r <> " \"\")"
-    | regType r == aVertexType a = vertexCtor a (regInitial r)
-    | regType r == "Text" = "\"\""
-    | otherwise = regInitial r
+    | regType r == aVertexType a = maybe "(error \"invalid vertex initial\")" (vertexCtor a) (bareInitial r)
+    | regType r == "Text" = maybe "(error \"Text initial must be quoted\")" tshow (textInitial r)
+    | otherwise = maybe "(error \"invalid register initial\")" id (bareInitial r)
   where
     idNames = map idName (aIds a)
+    bareInitial reg = case regInitial reg of
+        RegInitBare value -> Just value
+        RegInitText _ -> Nothing
+    textInitial reg = case regInitial reg of
+        RegInitText value -> Just value
+        RegInitBare _ -> Nothing
 
 --------------------------------------------------------------------------------
 -- Codec module
@@ -1241,9 +1256,9 @@ statusArms a p =
         ++ ["  _ -> Nothing" | hasWildcard]
   where
     pairs = maybe [] mapPairs (projStatusMap p)
-    statusFor e = case [v | (k, v) <- pairs, not (T.null k) && k `T.isSuffixOf` rcName e] of
-        (v : _) -> "Just " <> tshow v
-        [] -> "Nothing"
+    statusFor e = case lookup (rcName e) pairs of
+        Just value -> "Just " <> tshow value
+        Nothing -> "Nothing"
     -- A wildcard is only needed if some event is uncovered; otherwise every arm
     -- is explicit and a wildcard would be redundant (and -Wall would warn).
     hasWildcard = False
@@ -1416,7 +1431,80 @@ pre-write scaffold pipeline treats each returned message as a refusal. The
 list is extended alongside the policy and type lowering milestones.
 -}
 scaffoldRefusals :: Spec -> [Text]
-scaffoldRefusals _ = []
+scaffoldRefusals spec =
+    concatMap aggregateRefusals aggregates
+        <> concatMap publisherRefusals publishers
+  where
+    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+    publishers = [publisher | NPublisher publisher <- specNodes spec]
+    idTypes = map idName (specIds spec)
+    enumTypes = map enumName (specEnums spec)
+    enumCtorsFor ty = case [map fst (enumCtors enum) | enum <- specEnums spec, enumName enum == ty] of
+        ctors : _ -> ctors
+        [] -> []
+    aggregateRefusals aggregate =
+        concatMap (registerRefusals aggregate) (aggRegs aggregate)
+            <> [ "FieldTypeUnrepresentable: aggregate '" <> aggName aggregate <> "' field '" <> fieldName field <> "' has unsupported explicit type '" <> ty <> "'"
+               | field <- aggregateFields aggregate
+               , Just ty <- [fieldType field]
+               , not (supportedType aggregate ty)
+               ]
+    registerRefusals aggregate reg =
+        [ "RegTypeUnsupported: aggregate '" <> aggName aggregate <> "' register '" <> regName reg <> "' has unsupported type '" <> regType reg <> "'"
+        | not (supportedType aggregate (regType reg))
+        ]
+            <> [ "RegTextInitialNotQuoted: aggregate '" <> aggName aggregate <> "' Text register '" <> regName reg <> "' must use a quoted initial"
+               | regType reg == "Text"
+               , RegInitBare _ <- [regInitial reg]
+               ]
+            <> [ "RegInitialNotEnumCtor: aggregate '" <> aggName aggregate <> "' register '" <> regName reg <> "' must start at a constructor of enum '" <> regType reg <> "'"
+               | regType reg `elem` enumTypes
+               , case regInitial reg of
+                    RegInitBare value -> value `notElem` enumCtorsFor (regType reg)
+                    RegInitText _ -> True
+               ]
+            <> [ "RegInitialInvalidLiteral: aggregate '" <> aggName aggregate <> "' Bool register '" <> regName reg <> "' must start at True or False"
+               | regType reg == "Bool"
+               , case regInitial reg of RegInitBare value -> value `notElem` ["True", "False"]; RegInitText _ -> True
+               ]
+            <> [ "RegInitialInvalidLiteral: aggregate '" <> aggName aggregate <> "' Int register '" <> regName reg <> "' must start at an integer literal"
+               | regType reg == "Int"
+               , case regInitial reg of RegInitBare value -> (readMaybe (T.unpack value) :: Maybe Int) == Nothing; RegInitText _ -> True
+               ]
+    aggregateFields aggregate =
+        concatMap cmdFields (aggCommands aggregate)
+            <> concat [fields | event <- aggEvents aggregate, EventFields fields <- [evBody event]]
+    supportedType aggregate ty =
+        ty `elem` (["Text", "Int", "Bool", aggName aggregate <> "Vertex"] <> idTypes <> enumTypes)
+    publisherRefusals publisher =
+        let backoff = pubBackoff publisher
+            label message = message <> ": publisher '" <> pubName publisher <> "'"
+         in case boKind backoff of
+                "constant" -> []
+                "exponential" -> case (boMax backoff, boMultiplier backoff) of
+                    (Just maximumWindow, Just multiplierText) ->
+                        case (windowSeconds (boWindow backoff), windowSeconds maximumWindow, readMaybe (T.unpack multiplierText) :: Maybe Double) of
+                            (Right initialSeconds, Right maximumSeconds, Just multiplier)
+                                | initialSeconds > 0 && maximumSeconds >= initialSeconds && multiplier >= 1 -> []
+                            _ -> [label "BackoffInvalidExponential"]
+                    _ -> [label "BackoffExponentialIncomplete"]
+                other -> [label ("BackoffUnknownKind '" <> other <> "'")]
+
+windowSeconds :: Text -> Either Text Int
+windowSeconds window = case T.unsnoc window of
+    Just (digits, unit)
+        | not (T.null digits)
+        , Just amount <- readMaybe (T.unpack digits) -> case unit of
+            's' -> Right amount
+            'm' -> Right (amount * 60)
+            'h' -> Right (amount * 3600)
+            _ -> Left invalid
+    _ -> Left invalid
+  where
+    invalid = "invalid window '" <> window <> "' (expected digits followed by s, m, or h)"
+
+windowText :: Text -> Text
+windowText = either (const "0") tshow' . windowSeconds
 
 -- | Render an Expr back to source-ish text for a hole annotation.
 renderGuard :: Expr -> Text

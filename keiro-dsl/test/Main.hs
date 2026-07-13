@@ -15,7 +15,7 @@ import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess, scaffoldPublisher, scaffoldRefusals, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRun (Refusal (..), executeScaffold, planScaffold)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, validateSpec)
@@ -699,6 +699,70 @@ main = hspec $ do
                             TIO.readFile target `shouldReturn` moduleText generated
                         [] -> expectationFailure "reservation scaffold has no Generated module"
 
+    describe "faithful scaffold lowering" $ do
+        it "escapes a trailing-backslash payload literal exactly once" $ do
+            spec <- specOf "test/fixtures/hospital-surge.keiro"
+            case [process | NProcess process <- specNodes spec] of
+                process : _ -> do
+                    let timer = (procTimer process){tmPayload = [FieldBinding "kind" (Just "\"follow-up\\\"")]}
+                        modules = scaffoldProcess (defaultContext (specContext spec)) process{procTimer = timer}
+                    generatedTextEndingIn "Process.hs" modules
+                        `shouldSatisfy` T.isInfixOf "\"kind\" .= (\"follow-up\\\\\" :: Value)"
+                [] -> expectationFailure "hospital-surge fixture has no process"
+        it "preserves quoted Text register initials and refuses unsafe register shapes" $ do
+            spec <- parseInlineSpec "<register-initials>" loweringAggregateSpec
+            let modules = scaffoldAggregate (defaultContext (specContext spec)) spec =<< [aggregate | NAggregate aggregate <- specNodes spec]
+                domain = generatedTextEndingIn "Domain.hs" modules
+            domain `shouldSatisfy` T.isInfixOf "RCons (Proxy @\"note\") \"hello world\""
+            scaffoldRefusals spec `shouldBe` []
+            bare <- parseInlineSpec "<bare-text-initial>" (T.replace "\"hello world\"" "hello" loweringAggregateSpec)
+            scaffoldRefusals bare `shouldSatisfy` any (T.isInfixOf "RegTextInitialNotQuoted")
+            unsupported <- parseInlineSpec "<unsupported-field>" (T.replace "count:Int" "count:Time" loweringAggregateSpec)
+            scaffoldRefusals unsupported `shouldSatisfy` any (T.isInfixOf "FieldTypeUnrepresentable")
+        it "lowers seconds, minutes, hours, and both backoff constructors faithfully" $ do
+            windowSeconds "90s" `shouldBe` Right 90
+            windowSeconds "5m" `shouldBe` Right 300
+            windowSeconds "2h" `shouldBe` Right 7200
+            emitSource <- readTestText "test/fixtures/emit.keiro"
+            let exponentialSource = T.replace "backoff constant 2s" "backoff exponential 2s max=60s multiplier=2.0" emitSource
+            exponential <- parseInlineSpec "<exponential-backoff>" exponentialSource
+            case [publisher | NPublisher publisher <- specNodes exponential] of
+                publisher : _ -> do
+                    let generated = generatedTextEndingIn "Publisher.hs" (scaffoldPublisher (defaultContext (specContext exponential)) publisher)
+                    generated `shouldSatisfy` T.isInfixOf "ExponentialBackoff ExponentialBackoffOptions { initial = 2, maxDelay = 60, multiplier = 2.0 }"
+                    parseSpec "<exponential-round-trip>" (renderSpec exponential) `shouldBe` Right exponential
+                [] -> expectationFailure "emit fixture has no publisher"
+            constant <- parseInlineSpec "<constant-backoff>" (T.replace "backoff constant 2s" "backoff constant 2m" emitSource)
+            case [publisher | NPublisher publisher <- specNodes constant] of
+                publisher : _ -> generatedTextEndingIn "Publisher.hs" (scaffoldPublisher (defaultContext (specContext constant)) publisher) `shouldSatisfy` T.isInfixOf "ConstantBackoff 120"
+                [] -> expectationFailure "emit fixture has no publisher"
+        it "refuses incomplete exponential backoff and rejects unknown window units" $ do
+            emitSource <- readTestText "test/fixtures/emit.keiro"
+            incomplete <- parseInlineSpec "<incomplete-backoff>" (T.replace "backoff constant 2s" "backoff exponential 2s" emitSource)
+            scaffoldRefusals incomplete `shouldSatisfy` any (T.isInfixOf "BackoffExponentialIncomplete")
+            parseSpec "<bad-window>" (T.replace "backoff constant 2s" "backoff constant 2x" emitSource)
+                `shouldSatisfy` leftContains "time unit: s, m, or h"
+        it "lowers workqueue retry windows in minutes to seconds" $ do
+            queueSource <- readTestText "test/fixtures/reservation-work.keiro"
+            queueSpec <- parseInlineSpec "<minute-queue>" (T.replace "5s" "5m" queueSource)
+            case [workqueue | NWorkqueue workqueue <- specNodes queueSpec] of
+                workqueue : _ -> do
+                    let policy = generatedTextEndingIn "QueuePolicy.hs" (scaffoldWorkqueue (defaultContext (specContext queueSpec)) workqueue)
+                    policy `shouldSatisfy` T.isInfixOf "defaultRetryDelay = RetryDelay 300"
+                    policy `shouldSatisfy` T.isInfixOf "Retry (RetryDelay 300)"
+                [] -> expectationFailure "queue fixture has no workqueue"
+        it "uses exact status-map keys and emits total Int harness samples" $ do
+            statusSpec <- parseInlineSpec "<exact-status>" exactStatusSpec
+            case [aggregate | NAggregate aggregate <- specNodes statusSpec] of
+                aggregate : _ -> do
+                    let ctx = defaultContext (specContext statusSpec)
+                        projection = generatedTextEndingIn "Projection.hs" (scaffoldAggregate ctx statusSpec aggregate)
+                        harness = generatedTextEndingIn "Harness.hs" (harnessFor ctx statusSpec aggregate)
+                    projection `shouldSatisfy` T.isInfixOf "ReservationUnHeld {} -> Just \"available\""
+                    harness `shouldSatisfy` T.isInfixOf "CountBumpedData 0"
+                    harness `shouldNotSatisfy` T.isInfixOf "sample: unsupported"
+                [] -> expectationFailure "exact-status spec has no aggregate"
+
     describe "scaffold" $ do
         it "never emits a keiki symbolic operator into a Generated module (firewall)" $ do
             mods <- scaffoldFixture "test/fixtures/reservation.keiro"
@@ -725,6 +789,45 @@ main = hspec $ do
 syntheticGenerated :: FilePath -> T.Text -> ScaffoldModule
 syntheticGenerated path contents =
     ScaffoldModule{modulePath = path, moduleText = contents, kind = Generated, origin = "test"}
+
+generatedTextEndingIn :: T.Text -> [ScaffoldModule] -> T.Text
+generatedTextEndingIn suffix modules = case [moduleText m | m <- modules, kind m == Generated, suffix `T.isSuffixOf` T.pack (modulePath m)] of
+    contents : _ -> contents
+    [] -> ""
+
+loweringAggregateSpec :: T.Text
+loweringAggregateSpec =
+    T.unlines
+        [ "context samples"
+        , ""
+        , "aggregate Counter"
+        , "  regs"
+        , "    note Text = \"hello world\""
+        , "    count Int = 0"
+        , "    state CounterVertex = Pending"
+        , "  states Pending Done!"
+        , "  command Bump { count:Int }"
+        , "  event CountBumped { count:Int }"
+        , "  Pending -- Bump --> emit CountBumped ; goto Done"
+        ]
+
+exactStatusSpec :: T.Text
+exactStatusSpec =
+    T.unlines
+        [ "context samples"
+        , ""
+        , "aggregate Reservation"
+        , "  regs"
+        , "    state ReservationVertex = Open"
+        , "  states Open Closed!"
+        , "  command Bump { count:Int }"
+        , "  event ReservationHeld { count:Int }"
+        , "  event ReservationUnHeld { count:Int }"
+        , "  event CountBumped { count:Int }"
+        , "  Open -- Bump --> emit CountBumped ; goto Closed"
+        , "  projection reservation_status consistency=Eventual key=count"
+        , "    status-map { ReservationHeld=>held ReservationUnHeld=>available CountBumped=>bumped }"
+        ]
 
 hasPathCollisionWithTwoOrigins :: Either [Refusal] [ScaffoldModule] -> Bool
 hasPathCollisionWithTwoOrigins = \case
@@ -1333,7 +1436,10 @@ genField :: Gen Field
 genField = Field <$> genName <*> oneof [pure Nothing, Just <$> genName]
 
 genReg :: Gen RegDecl
-genReg = RegDecl <$> genName <*> genName <*> genName <*> pure noLoc
+genReg = RegDecl <$> genName <*> genName <*> genRegInitial <*> pure noLoc
+
+genRegInitial :: Gen RegInitial
+genRegInitial = oneof [RegInitBare <$> genName, RegInitText <$> genAdversarialText]
 
 genState :: Gen StateDecl
 genState = StateDecl <$> genName <*> arbitrary <*> pure noLoc
@@ -1393,7 +1499,7 @@ genDottedRef :: Gen T.Text
 genDottedRef = elements ["input.id", "input.hospitalId", "timer.id", "correlationId", "payload.messageId"]
 
 genWindow :: Gen T.Text
-genWindow = elements ["0s", "5s", "2m", "100ms", "1h"]
+genWindow = elements ["0s", "5s", "2m", "1h"]
 
 genFieldBinding :: Gen FieldBinding
 genFieldBinding =
@@ -1539,7 +1645,7 @@ genPublisher =
         <*> genName
         <*> genName
         <*> choose (0, 5)
-        <*> (BackoffSpec <$> genName <*> genWindow)
+        <*> (BackoffSpec <$> genName <*> genWindow <*> genMaybe genWindow <*> genMaybe (elements ["1.0", "2.0", "3"]))
         <*> genName
         <*> pure noLoc
 

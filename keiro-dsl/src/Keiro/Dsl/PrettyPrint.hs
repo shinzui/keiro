@@ -186,7 +186,7 @@ docPublisher p =
         , indent 2 ("emit" <+> pretty (pubEmit p))
         , indent 2 ("ordering" <+> pretty (pubOrdering p))
         , indent 2 ("maxAttempts" <+> pretty (pubMaxAttempts p))
-        , indent 2 ("backoff" <+> pretty (boKind (pubBackoff p)) <+> pretty (boWindow (pubBackoff p)))
+        , indent 2 (docBackoff (pubBackoff p))
         , indent 2 ("outboxId stable from" <+> pretty (pubOutboxField p))
         , "}"
         ]
@@ -403,7 +403,19 @@ docAggregate a =
     blank xs = if null xs then [] else [mempty]
 
 docReg :: RegDecl -> Doc ann
-docReg r = pretty (regName r) <+> pretty (regType r) <+> "=" <+> pretty (regInitial r)
+docReg r = pretty (regName r) <+> pretty (regType r) <+> "=" <+> docRegInitial (regInitial r)
+
+docRegInitial :: RegInitial -> Doc ann
+docRegInitial (RegInitBare value) = pretty value
+docRegInitial (RegInitText value) = dquoted value
+
+docBackoff :: BackoffSpec -> Doc ann
+docBackoff backoff =
+    "backoff"
+        <+> pretty (boKind backoff)
+        <+> pretty (boWindow backoff)
+        <+> maybe mempty (\window -> "max=" <> pretty window) (boMax backoff)
+        <+> maybe mempty (\multiplier -> "multiplier=" <> pretty multiplier) (boMultiplier backoff)
 
 docState :: StateDecl -> Doc ann
 docState s = pretty (stName s) <> (if stTerminal s then "!" else mempty)

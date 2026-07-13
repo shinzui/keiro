@@ -377,7 +377,7 @@ pRegDecl = do
     name <- ident
     ty <- ident
     _ <- symbol "="
-    initial <- ident
+    initial <- (RegInitText <$> stringLit) <|> (RegInitBare <$> (ident <|> signedDecimalText))
     pure RegDecl{regName = name, regType = ty, regInitial = initial, regLoc = loc}
 
 pStatesLine :: P [StateDecl]
@@ -716,6 +716,8 @@ pPublisher = do
     keyword "backoff"
     bk <- ident
     bw <- pWindow
+    bm <- optional (keyword "max" *> symbol "=" *> pWindow)
+    multiplier <- optional (keyword "multiplier" *> symbol "=" *> decimalText)
     keyword "outboxId"
     keyword "stable"
     keyword "from"
@@ -727,7 +729,7 @@ pPublisher = do
             , pubEmit = em
             , pubOrdering = ord
             , pubMaxAttempts = ma
-            , pubBackoff = BackoffSpec{boKind = bk, boWindow = bw}
+            , pubBackoff = BackoffSpec{boKind = bk, boWindow = bw, boMax = bm, boMultiplier = multiplier}
             , pubOutboxField = obf
             , pubLoc = loc
             }
@@ -1103,8 +1105,21 @@ pFireAt = do
 pWindow :: P Text
 pWindow = lexeme $ do
     ds <- some digitChar
-    u <- some letterChar
-    pure (T.pack (ds <> u))
+    u <- choice [char 's', char 'm', char 'h'] <?> "time unit: s, m, or h"
+    notFollowedBy letterChar <?> "time unit: s, m, or h"
+    pure (T.pack (ds <> [u]))
+
+decimalText :: P Text
+decimalText = lexeme $ do
+    whole <- some digitChar
+    fractional <- optional (char '.' *> some digitChar)
+    pure (T.pack (whole <> maybe "" ('.' :) fractional))
+
+signedDecimalText :: P Text
+signedDecimalText = lexeme $ do
+    sign <- optional (char '-')
+    digits <- some digitChar
+    pure (T.pack (maybe "" pure sign <> digits))
 
 pFire :: P FireNode
 pFire = do

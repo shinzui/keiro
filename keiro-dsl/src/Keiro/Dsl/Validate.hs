@@ -881,21 +881,27 @@ validateAggregate spec agg =
     checkRegisterInitial r = case [e | e <- specEnums spec, enumName e == regType r] of
         (e : _) ->
             [ outOfScope r "constructor of enum" (enumName e)
-            | regInitial r `notElem` map fst (enumCtors e)
+            | regInitialBare r `notElem` map (Just . fst) (enumCtors e)
             ]
         []
             | regType r == aggName agg <> "Vertex" ->
                 [ outOfScope r "state of aggregate" (aggName agg)
-                | regInitial r `Set.notMember` states
+                | maybe True (`Set.notMember` states) (regInitialBare r)
                 ]
             | regType r `elem` map idName (specIds spec) ->
                 [ outOfScope r "literal" "placeholder"
-                | regInitial r /= "placeholder"
+                | regInitialBare r /= Just "placeholder"
                 ]
             | otherwise -> []
     outOfScope r expected domain =
         mkErr (locLine (regLoc r)) RegisterInitialOutOfScope $
-            "register '" <> regName r <> "' initial '" <> regInitial r <> "' is not a " <> expected <> " '" <> domain <> "'"
+            "register '" <> regName r <> "' initial '" <> renderRegInitial (regInitial r) <> "' is not a " <> expected <> " '" <> domain <> "'"
+    regInitialBare r = case regInitial r of
+        RegInitBare value -> Just value
+        RegInitText _ -> Nothing
+    renderRegInitial = \case
+        RegInitBare value -> value
+        RegInitText value -> value
 
     -- Rule 1: declared-reference for command / emit / goto / source.
     declaredRefs =
