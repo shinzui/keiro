@@ -8,6 +8,18 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Breaking Changes
 
+- Read-model queries no longer auto-register missing registry rows. Applications
+  must call `registerReadModel` at projection startup; unknown models now return
+  `ReadModelUnregistered` without mutating the registry.
+- `ReadModel` now requires a `strongScope :: StrongScope` field. Use
+  `EntireLog` for all-stream subscriptions or `CategoryHead category` for a
+  category subscription so unrelated traffic cannot hold `Strong` reads behind.
+- `AsyncProjection` now requires `readModelName`, naming the registry row that
+  fences writes during a rebuild.
+- `applyAsyncProjection` now returns `AsyncApplyOutcome` (`AsyncApplied`,
+  `AsyncDuplicate`, or `AsyncFenced`) and live workers must not checkpoint a
+  fenced event. Rebuild replayers use `applyAsyncProjectionUnfenced` between the
+  new atomic `startRebuild` and guarded `finishRebuild` helpers.
 - `keiro-migrations` now exports a native `pg-migrate` component and composes
   Kiroku through an explicit component dependency instead of a combined Codd
   migration-set API.

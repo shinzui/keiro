@@ -2,6 +2,14 @@
 
 This document fixes how applications *query* state derived from events: the typed `ReadModel q r` wrapper exposed by `Keiro.ReadModel`, the read-after-write consistency-mode taxonomy (`Strong` / `Eventual` / `PositionWait`), the schema-evolution and rebuild-from-zero protocol, the multi-stream read-model story, the idempotency-token propagation pattern, and the relationship between read models, snapshots, and projections (three primitives with overlapping mechanisms but distinct purposes). The reader is assumed to have read `docs/research/01-kiroku-read-side.md`, `docs/research/06-command-cycle-design.md` (EP-1's design), `docs/research/08-subscription-and-process-manager-design.md` (EP-3's design — *the* closest neighbour), and `docs/research/09-snapshot-strategy.md` (EP-4's snapshot design — for the read-model-vs-snapshot distinction). Where a key fact from those documents matters here it is repeated; the reader who has not seen them should still be able to follow this design.
 
+> **Historical design note.** This research record predates the hardened runtime
+> lifecycle delivered by EP-101 and is not an operator runbook. The supported API
+> requires explicit `registerReadModel`, declares `ReadModel.strongScope`, fences
+> normal async writers by registry status, and rebuilds through
+> `startRebuild` → `applyAsyncProjectionUnfenced` → `finishRebuild`. See
+> `docs/user/read-models-and-projections.md` and the
+> `Keiro.ReadModel.Rebuild` module Haddock for the current contract.
+
 This is a research document produced by ExecPlan EP-8 of the research-foundation MasterPlan (`docs/masterplans/1-keiro-research-foundation.md`). The accompanying spike at `spikes/read-model/` originally validated the typed API, all three consistency modes, and the position-wait failure mode.
 
 > **Retirement note (2026-05-19).** The spike at `spikes/read-model/` has been removed. Its validation has since been absorbed into the live keiro library — the typed wrapper now lives at `src/Keiro/ReadModel.hs`, the lifecycle metadata table at `src/Keiro/ReadModel/Schema.hs`, and the consistency-mode behaviour is exercised by the `Keiro.ReadModel` group in `test/Main.hs`. References to `spikes/read-model/src/Spike/Command.hs` elsewhere in the research corpus (in the 2026-05-10 corrections notes of docs 06, 08, and 11) point at code that no longer exists — those passages are preserved as historical record of the first in-tree consumer of `runTransactionAppending`, not as live citations.
@@ -573,4 +581,3 @@ For read models declared with `Strong` consistency (and therefore inline project
     waitFor rm _ | rmSubscription rm == "<inline>" = pure ()
 
 The check is a string comparison; no SQL roundtrip. The semantic is: "the read model is consistent at the moment of the calling command's commit; there is nothing to wait for."
-

@@ -1,33 +1,30 @@
-{- | The read-model rebuild lifecycle, expressed over a 'ReadModel'.
+{- | The supported offline read-model rebuild lifecycle.
 
-Thin, type-safe wrappers over the status transitions in
-"Keiro.ReadModel.Schema" that take a whole 'ReadModel' and thread its
-'name', 'version', and 'shapeHash' through for you. The intended sequence
-when reshaping a projection is: 'rebuild' to take it offline, repopulate the
-table from the event log, then 'promote' to serve it again — or
-'abandonRebuild' to back out. While a model is rebuilding,
-'Keiro.ReadModel.runQuery' rejects it with 'ReadModelNotLive'.
+Use this checklist rather than composing the low-level status transitions:
 
-Operator runbook for an offline rebuild:
+1. Call 'Keiro.ReadModel.Schema.registerReadModel' once at projection startup.
+   Explicit registration makes misspelled or never-populated models fail with
+   'ReadModelUnregistered' instead of appearing healthy.
+2. Call 'startRebuild' with every feeding async projection name and the replay
+   position. It atomically fences live writers, takes queries offline, truncates
+   the data table, clears the named dedup keys, and resets the subscription
+   checkpoint, preventing live/replay interleaving and all-deduplicated rebuilds.
+3. Replay through 'Keiro.Projection.applyAsyncProjectionUnfenced'. This is the
+   only apply path allowed to bypass the live-writer fence, while retaining
+   deduplication inside the designated rebuild.
+4. After replay catches up and application-specific verification succeeds, call
+   'finishRebuild' with the same projection names and replay position. Its
+   promotion guard refuses to serve a non-empty-log rebuild that applied no
+   events.
+5. If replay or verification fails, call 'abandonRebuild'. Queries remain
+   unavailable instead of exposing partial data; repair or restore the table
+   before beginning another rebuild.
 
-1. Stop or pause every worker that writes the read model's table. The helpers
-   here do not coordinate workers for you.
-2. Call 'rebuild'. This records the current schema identity with status
-   'Rebuilding', so normal queries fail closed instead of serving a half-built
-   table.
-3. In the database, truncate or otherwise clear the projection table and reset
-   the subscription checkpoint that feeds it to the replay position you intend
-   to rebuild from.
-4. Replay the event log through the projection code until it catches up to the
-   current store head. Verify row counts, spot-check representative queries,
-   and compare the subscription checkpoint with the store head.
-5. Call 'promote' only after verification succeeds, then resume workers. If
-   verification fails, call 'abandonRebuild' and keep the model offline until
-   the data is repaired or restored.
-
-This is deliberately an offline procedure. Keiro does not yet provide a
-shadow-table or online cutover mechanism; applications that need zero-downtime
-rebuilds must build that orchestration above this lifecycle API.
+Normal workers continue to call 'Keiro.Projection.applyAsyncProjection'. Its
+registry lock fences them automatically while the model is rebuilding, but they
+must not checkpoint an 'Keiro.Projection.AsyncFenced' event. Keiro does not yet
+provide a shadow-table or online cutover mechanism; applications that need
+zero-downtime rebuilds must build that orchestration above this lifecycle API.
 -}
 module Keiro.ReadModel.Rebuild (
     RebuildError (..),
@@ -112,8 +109,9 @@ finishRebuild readModel projectionNames replayFrom =
             then Right <$> transitionReadModelTxFor readModel Live
             else pure (Left (RebuildProducedNoApplies (readModel ^. #name) headPosition))
 
-{- | Mark a model 'Rebuilding', taking it out of service while it is
-repopulated from the event log.
+{- | Low-level status transition only. It does not truncate data, reset dedup
+keys or checkpoints, or establish the complete rebuild workflow. Use
+'startRebuild' for supported rebuilds.
 -}
 rebuild :: (Store :> es) => ReadModel q r -> Eff es ReadModelMetadata
 rebuild readModel =
@@ -122,7 +120,9 @@ rebuild readModel =
         (readModel ^. #version)
         (readModel ^. #shapeHash)
 
--- | Mark a rebuilt model 'Live', returning it to service.
+{- | Low-level status transition only. It bypasses the empty-rebuild guard. Use
+'finishRebuild' to promote a supported rebuild.
+-}
 promote :: (Store :> es) => ReadModel q r -> Eff es ReadModelMetadata
 promote readModel =
     markLive

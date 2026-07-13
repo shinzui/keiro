@@ -26,9 +26,10 @@ orderSummaryReadModel :: ReadModel OrderSummaryQuery (Maybe OrderSummary)
 `ReadModel.version` and `shapeHash` let Keiro fail reads when the code and
 stored metadata disagree. `ReadModel.schema` names the PostgreSQL schema the
 read-model *data* table lives in — see
-[Choosing Your Projection Schema](../user/read-models-and-projections.md#choosing-your-projection-schema). `defaultConsistency = Strong` is appropriate here
-because this model is updated inline in the same transaction as the command
-append.
+[Choosing Your Projection Schema](../user/read-models-and-projections.md#choosing-your-projection-schema).
+This model uses `defaultConsistency = Eventual` and `strongScope = EntireLog`:
+its inline projection commits with the command, so there is no asynchronous
+subscription cursor for a `Strong` query to wait on.
 
 The projection is an `InlineProjection OrderEvent`:
 

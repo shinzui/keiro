@@ -170,7 +170,12 @@ applyAsyncProjectionUnfenced projection recorded = do
             pure AsyncApplied
         else pure AsyncDuplicate
 
-{- | Delete async-projection dedup rows older than the supplied timestamp.
+{- | Age out async-projection dedup rows older than the supplied timestamp.
+
+Use this only beyond the subscription system's redelivery window; pruning
+re-opens those events for application. It is not a rebuild reset. Supported
+rebuilds use 'Keiro.ReadModel.Rebuild.startRebuild', which atomically deletes
+only the named projections' keys while fencing writers and resetting the model.
 Returns the number of rows pruned.
 -}
 pruneAsyncProjectionDedupBefore :: (Store :> es) => UTCTime -> Eff es Int64

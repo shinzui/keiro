@@ -89,10 +89,12 @@ areaChaptersReadModel :: ReadModel AreaId [ChapterTarget]
 areaChaptersReadModel = ReadModel
   { name = "jitsurei-area-chapters"
   , tableName = "jitsurei_area_chapters"
+  , schema = "jitsurei"
   , subscriptionName = "jitsurei-area-chapters-sub"
   , version = 1
   , shapeHash = "jitsurei-area-chapters-v1"
-  , defaultConsistency = Strong
+  , defaultConsistency = Eventual
+  , strongScope = EntireLog
   , query = \(AreaId area) -> Tx.statement area selectAreaChaptersStmt
   }
 ```

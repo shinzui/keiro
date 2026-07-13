@@ -22,6 +22,7 @@ data ReadModel q r = ReadModel
   , version :: Int
   , shapeHash :: Text
   , defaultConsistency :: ConsistencyMode
+  , strongScope :: StrongScope
   , query :: q -> Tx.Transaction r
   }
 ```
@@ -68,6 +69,7 @@ orderSummary =
     , version = 1
     , shapeHash = "order-summary-v1"
     , defaultConsistency = Eventual
+    , strongScope = EntireLog
     , query = \oid -> Tx.statement (orderIdText oid) selectOrderSummaryStmt
     }
 ```
@@ -109,15 +111,26 @@ data ConsistencyMode
   = Strong
   | Eventual
   | PositionWait PositionWaitOptions
+
+data StrongScope
+  = EntireLog
+  | CategoryHead Text
 ```
 
 Use:
 
-- `Strong` for read models updated inline in the same transaction as the
-  command append.
+- `Strong` for an async model that should wait for its subscription cursor to
+  reach the log head captured at query start. Set `strongScope = EntireLog` only
+  when the subscription observes the whole log; category subscriptions should
+  use `CategoryHead category` so unrelated categories cannot cause a timeout.
 - `Eventual` for async models where stale reads are acceptable.
 - `PositionWait` when a caller has a target `GlobalPosition` and wants to wait
   until the subscription has processed at least that position.
+
+Inline projections commit with their command and should normally use
+`Eventual`: there is no asynchronous cursor to wait for. A model fed from
+multiple categories should use an explicit `PositionWait` target or an
+all-stream subscription with `EntireLog`.
 
 `PositionWaitOptions`:
 
@@ -138,14 +151,24 @@ runQuery readModel input
 runQueryWith consistency readModel input
 ```
 
-Before running the query transaction, Keiro registers or loads metadata and
-checks:
+Register each model once when its projection starts:
+
+```haskell
+registerReadModel
+  (orderSummary ^. #name)
+  (orderSummary ^. #version)
+  (orderSummary ^. #shapeHash)
+```
+
+Queries never create registry rows. Before running the query transaction, Keiro
+loads the registered metadata and checks:
 
 - stored version equals the read model's version;
 - stored shape hash equals the read model's shape hash;
 - status is `Live`.
 
-Failures are returned as `ReadModelError`.
+Failures are returned as `ReadModelError`; an unknown name returns
+`ReadModelUnregistered` without changing the registry.
 
 ## Inline Projections
 
@@ -185,6 +208,7 @@ by `jitsurei-test`.
 ```haskell
 data AsyncProjection = AsyncProjection
   { name :: Text
+  , readModelName :: Text
   , subscriptionName :: Text
   , applyRecorded :: RecordedEvent -> Tx.Transaction ()
   , idempotencyKey :: RecordedEvent -> EventId
@@ -193,7 +217,10 @@ data AsyncProjection = AsyncProjection
 
 `applyAsyncProjection` runs the projection's transaction body for one recorded
 event. Worker wiring is application-owned and typically comes from a Kiroku /
-Shibuya subscription source.
+Shibuya subscription source. It returns `AsyncApplied`, `AsyncDuplicate`, or
+`AsyncFenced`. The worker must not checkpoint an `AsyncFenced` event; park or
+fail the delivery and retry after the model is promoted. The fence is checked
+inside the same transaction as the dedup insert and model update.
 
 Async projections are at-least-once in v1. Make every async handler idempotent.
 The usual table shape includes a unique `source_event_id` column:
@@ -206,14 +233,22 @@ ON CONFLICT (source_event_id) DO NOTHING;
 
 ## Rebuild Lifecycle
 
-`Keiro.ReadModel.Rebuild` exposes:
+The supported offline workflow in `Keiro.ReadModel.Rebuild` is:
 
-- `rebuild` to mark a model `Rebuilding`;
-- `promote` to mark it `Live`;
-- `abandonRebuild` to mark it `Abandoned`.
+1. Register the model at projection startup.
+2. Call `startRebuild model projectionNames replayFrom`. One transaction marks
+   the model `Rebuilding`, fences normal writers, truncates the model table,
+   clears only those projections' dedup keys, and resets the subscription cursor.
+3. Replay events through `applyAsyncProjectionUnfenced`. Do not use that entry
+   point in normal workers.
+4. After replay and application-specific verification, call
+   `finishRebuild model projectionNames replayFrom`. It refuses to promote a
+   rebuild that applied nothing even though the log contains replayable events.
+5. On failure, call `abandonRebuild` and keep the partial model offline while it
+   is repaired or restored.
 
-Use version and shape-hash changes to force stale readers to fail closed while a
-new model is being rebuilt.
+The low-level `rebuild` and `promote` functions change status only and bypass
+the reset and promotion safeguards; they are not the operator workflow.
 
 ## Errors
 
@@ -222,6 +257,7 @@ new model is being rebuilt.
 - `ReadModelStaleSchema`: code and stored metadata disagree.
 - `ReadModelWaitTimeout`: position wait timed out.
 - `ReadModelNotLive`: metadata status is not `Live`.
+- `ReadModelUnregistered`: startup did not register this model name.
 
 Treat stale schema and non-live errors as deployment/rebuild coordination
 signals, not transient query misses.

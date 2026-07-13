@@ -128,8 +128,11 @@ Types and functions:
 
 - `InlineProjection (..)`
 - `AsyncProjection (..)`
+- `AsyncApplyOutcome (..)`
 - `runCommandWithProjections`
 - `applyAsyncProjection`
+- `applyAsyncProjectionUnfenced`
+- `pruneAsyncProjectionDedupBefore`
 
 Use inline projections for same-transaction read-model writes. Use async
 projection helpers for at-least-once subscription handlers. `Router` and
@@ -147,6 +150,7 @@ Types and functions:
 
 - `ReadModel (..)`
 - `ConsistencyMode (..)`
+- `StrongScope (..)`
 - `PositionWaitOptions (..)`
 - `ReadModelError (..)`
 - `runQuery`
@@ -172,13 +176,17 @@ Use it for metadata initialization and rebuild lifecycle coordination.
 
 ## `Keiro.ReadModel.Rebuild`
 
-Functions:
+Types and functions:
 
+- `RebuildError (..)`
+- `startRebuild`
+- `finishRebuild`
 - `rebuild`
 - `promote`
 - `abandonRebuild`
 
-Use it for read-model lifecycle transitions around rebuild jobs.
+Use `startRebuild`, `applyAsyncProjectionUnfenced`, and `finishRebuild` for
+supported rebuild jobs. `rebuild` and `promote` are low-level status transitions.
 
 ## `Keiro.ProcessManager`
 

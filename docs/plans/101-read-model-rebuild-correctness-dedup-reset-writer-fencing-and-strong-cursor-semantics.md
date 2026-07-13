@@ -77,8 +77,8 @@ shows a live applier being fenced during a rebuild, and a two-category test show
 - [x] (2026-07-13 18:39Z) M3: writer-fence race test (live applier vs. rebuild) passes.
 - [x] (2026-07-13 18:48Z) M4: `StrongScope` field on `ReadModel`; `categoryHeadPosition` query implemented.
 - [x] (2026-07-13 18:48Z) M4: red cross-category `Strong` timeout test observed failing; green with `CategoryHead` scope.
-- [ ] M5: `Rebuild.hs` runbook rewritten as a helper-enforced checklist; docs swept.
-- [ ] M5: full `just haskell-build` and `cabal test keiro-test` pass; retrospective written.
+- [x] (2026-07-13 18:54Z) M5: `Rebuild.hs` runbook rewritten as a helper-enforced checklist; docs swept.
+- [x] (2026-07-13 18:54Z) M5: full `just haskell-build` and `cabal test keiro-test` pass; retrospective written.
 
 
 ## Surprises & Discoveries
@@ -124,6 +124,17 @@ Findings from authoring-time verification (2026-07-11); implementation entries g
   0.184 seconds. The three existing `EntireLog` specifications still pass, the
   in-repository example package compiles with explicit `EntireLog` scopes, and
   the complete suite passes 331 examples.
+- M5's documentation sweep found that the active read-model user guide still
+  described query-time registration and the unsafe low-level
+  `rebuild`/manual-truncate/`promote` sequence. The guide and API reference now
+  present explicit registration, scoped strong reads, fenced apply outcomes,
+  and the helper-enforced rebuild sequence. The historical research document
+  retains its original design but opens with a pointer to the current contract.
+- Final gates pass: `just haskell-build`, `cabal test keiro-test` (331 examples,
+  0 failures), and `cabal haddock keiro`. Haddock retains the repository's
+  pre-existing ambiguity and missing-link warnings; the changed
+  `Keiro.ReadModel.Rebuild` and `Keiro.Projection` modules both report 100%
+  coverage and introduce no new warning class.
 
 - The dedup table is keyed per projection (`PRIMARY KEY (projection_name, event_id)`,
   `keiro-migrations/sql-migrations/2026-06-15-21-49-37-keiro-projection-dedup.sql:1-6`),
@@ -280,6 +291,13 @@ whole-store contract, while `CategoryHead category` targets the latest global
 position originating in that category. The cross-category regression now returns
 promptly without weakening existing whole-log behavior; `cabal build all` and the
 331-example suite pass.
+
+M5 removed the last operator-facing path around the safeguards. The module
+Haddock and active guides now make registration, atomic reset, explicitly
+unfenced replay, guarded promotion, and abandonment one auditable sequence; the
+low-level status helpers are clearly labeled as insufficient for a supported
+rebuild. The changelog records all four breaking surfaces. Repository build,
+Haddock, and the 331-example suite pass, completing EP-101.
 
 
 ## Context and Orientation
@@ -798,3 +816,13 @@ field, and both apply entry points; M4 delivers `StrongScope`,
 documentation. `rebuild`, `promote`, `abandonRebuild`,
 `pruneAsyncProjectionDedupBefore`, `registerReadModel`, `waitFor`,
 `readSubscriptionPosition`, and `storeHeadPosition` keep their signatures.
+
+
+## Revision Notes
+
+- 2026-07-13: Implemented all five milestones. Added explicit registration,
+  atomic rebuild reset and guarded promotion helpers, database-backed async
+  writer fencing, category-scoped strong reads, regression and concurrency
+  coverage, and the current operator documentation. Verified with
+  `just haskell-build`, `cabal test keiro-test` (331 examples, 0 failures), and
+  `cabal haddock keiro`.
