@@ -61,6 +61,12 @@ import Keiro.DeadLetter (
     listDispatchDeadLetters,
     recordDispatchDeadLetter,
  )
+import Keiro.DeadLetter.Replay (
+    ReplayOutcome (..),
+    ReplayResult (..),
+    listSubscriptionDeadLetters,
+    replaySubscriptionDeadLetters,
+ )
 import Keiro.EventStream (Terminality (..))
 import Keiro.EventStream.Validate (
     EventStreamWarning (..),
@@ -2262,6 +2268,90 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Store.readStreamForward (StreamName "counter-target-order-1") (StreamVersion 0) 10
             Vector.length managerEvents `shouldBe` 1
             Vector.length targetEvents `shouldBe` 1
+
+        it "replays a Kiroku dead letter freshly and deduplicates a second replay" $ \storeHandle -> do
+            let subName = SubscriptionName "counter-pm-replay-fresh"
+                replayHandler recorded =
+                    case decodeRecorded counterCodec recorded of
+                        Left err -> pure (Left (Text.pack (show err)))
+                        Right input -> do
+                            outcome <-
+                                runProcessManagerOnce
+                                    defaultRunCommandOptions
+                                    counterProcessManager
+                                    recorded
+                                    input
+                            pure $
+                                case outcome of
+                                    Left err -> Left (Text.pack (show err))
+                                    Right result -> Right (classifyProcessManagerReplay result)
+            source <- deadLetterCounterSource storeHandle subName (CounterAdded 7)
+            Right listed <- Store.runStoreIO storeHandle (listSubscriptionDeadLetters subName 0)
+            Vector.length listed `shouldBe` 1
+
+            Right firstPass <-
+                Store.runStoreIO storeHandle $
+                    replaySubscriptionDeadLetters subName 0 replayHandler
+            firstPass
+                `shouldBe` [ ReplayOutcome
+                                { replayGlobalPosition = source ^. #globalPosition
+                                , replayEventId = source ^. #eventId
+                                , replayResult = ReplayedFresh
+                                }
+                           ]
+            processManagerReplayCounts storeHandle `shouldReturn` (1, 1)
+
+            Right secondPass <-
+                Store.runStoreIO storeHandle $
+                    replaySubscriptionDeadLetters subName 0 replayHandler
+            secondPass
+                `shouldBe` [ ReplayOutcome
+                                { replayGlobalPosition = source ^. #globalPosition
+                                , replayEventId = source ^. #eventId
+                                , replayResult = ReplayedDuplicate
+                                }
+                           ]
+            processManagerReplayCounts storeHandle `shouldReturn` (1, 1)
+            Right retained <- Store.runStoreIO storeHandle (listSubscriptionDeadLetters subName 0)
+            Vector.length retained `shouldBe` 1
+
+        it "reports an already-processed Kiroku dead letter without appending" $ \storeHandle -> do
+            let subName = SubscriptionName "counter-pm-replay-duplicate"
+                replayHandler recorded =
+                    case decodeRecorded counterCodec recorded of
+                        Left err -> pure (Left (Text.pack (show err)))
+                        Right input -> do
+                            outcome <-
+                                runProcessManagerOnce
+                                    defaultRunCommandOptions
+                                    counterProcessManager
+                                    recorded
+                                    input
+                            pure $
+                                case outcome of
+                                    Left err -> Left (Text.pack (show err))
+                                    Right result -> Right (classifyProcessManagerReplay result)
+            source <- deadLetterCounterSource storeHandle subName (CounterAdded 8)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerOnce
+                        defaultRunCommandOptions
+                        counterProcessManager
+                        source
+                        (CounterAdded 8)
+            countsBefore <- processManagerReplayCounts storeHandle
+
+            Right outcomes <-
+                Store.runStoreIO storeHandle $
+                    replaySubscriptionDeadLetters subName 0 replayHandler
+            outcomes
+                `shouldBe` [ ReplayOutcome
+                                { replayGlobalPosition = source ^. #globalPosition
+                                , replayEventId = source ^. #eventId
+                                , replayResult = ReplayedDuplicate
+                                }
+                           ]
+            processManagerReplayCounts storeHandle `shouldReturn` countsBefore
 
         it "keeps multiple workflow process managers isolated by configured streams and categories" $ \storeHandle -> do
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 6)
@@ -9559,6 +9649,69 @@ appendCounterEvents storeHandle destinationStreamName events = do
     case outcome of
         Right _ -> pure ()
         Left err -> expectationFailure ("failed to insert counter events: " <> show err)
+
+-- Insert a real source event and drive Kiroku's acknowledgement bridge to park
+-- it in kiroku.dead_letters. A second event lets the test observe that the
+-- checkpoint advanced after the dead letter before stopping the subscription.
+deadLetterCounterSource :: Store.KirokuStore -> SubscriptionName -> CounterEvent -> IO RecordedEvent
+deadLetterCounterSource storeHandle subName sourceEvent = do
+    appendCounterEvents
+        storeHandle
+        (StreamName "counter-replay-source")
+        [sourceEvent, CounterAdded 0]
+    let subConfig =
+            ( KirokuSub.defaultSubscriptionConfig
+                subName
+                AllStreams
+                (\_ -> pure KirokuSub.Continue)
+            )
+                { KirokuSub.retryPolicy = KirokuSub.RetryPolicy 1
+                }
+        pull label source = do
+            result <- timeout 5_000_000 (Streamly.uncons source)
+            case result of
+                Just (Just itemAndRest) -> pure itemAndRest
+                Just Nothing -> fail (label <> ": subscription ended early")
+                Nothing -> fail (label <> ": timed out waiting for delivery")
+    (stream0, cancelStream) <- subscriptionAckStream storeHandle subConfig 4
+    ( do
+            (first, stream1) <- pull "source delivery" stream0
+            atomically $
+                putTMVar
+                    (ackReply first)
+                    (KirokuSub.Retry (KirokuSub.RetryDelay 0))
+            (next, stream2) <- pull "event after source dead letter" stream1
+            ackEvent next ^. #eventId `shouldNotBe` ackEvent first ^. #eventId
+            atomically (putTMVar (ackReply next) KirokuSub.Stop)
+            ended <- timeout 5_000_000 (Streamly.uncons stream2)
+            case ended of
+                Just Nothing -> pure ()
+                Just (Just _) -> expectationFailure "replay fixture delivered after Stop"
+                Nothing -> expectationFailure "replay fixture did not stop"
+            pure (ackEvent first)
+        )
+        `finally` cancelStream
+
+classifyProcessManagerReplay :: ProcessManagerResult managerTarget commandTarget -> ReplayResult
+classifyProcessManagerReplay result =
+    case result ^. #managerResult of
+        PMStateDuplicate{}
+            | Prelude.all commandIsDuplicate (result ^. #commandResults) -> ReplayedDuplicate
+        _ -> ReplayedFresh
+  where
+    commandIsDuplicate = \case
+        PMCommandDuplicate{} -> True
+        _ -> False
+
+processManagerReplayCounts :: Store.KirokuStore -> IO (Int, Int)
+processManagerReplayCounts storeHandle = do
+    Right managerEvents <-
+        Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "pm:counter-order-1") (StreamVersion 0) 10
+    Right targetEvents <-
+        Store.runStoreIO storeHandle $
+            Store.readStreamForward (StreamName "counter-target-order-1") (StreamVersion 0) 10
+    pure (Vector.length managerEvents, Vector.length targetEvents)
 
 sampleUuid :: UUID
 sampleUuid =

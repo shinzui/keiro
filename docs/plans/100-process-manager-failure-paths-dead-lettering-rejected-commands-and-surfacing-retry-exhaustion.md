@@ -65,8 +65,8 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-07-13 17:47Z) M3: `Keiro.Telemetry.kirokuEventBridge` helper + `keiro.subscription.deadlettered` counter
 - [x] (2026-07-13 17:47Z) M3: retry-exhaustion visibility test (RetryPolicy 2 through the ack bridge; dead-letter row, metric, checkpoint advance, next event delivered)
 - [x] (2026-07-13 17:47Z) M3: adapter `retryPolicy` gap and EP-96 shard-path integration expectations recorded; `cabal build all` and the 323-example Keiro suite pass
-- [ ] M4: `Keiro.DeadLetter.Replay` (`listSubscriptionDeadLetters`, `replaySubscriptionDeadLetters`) implemented
-- [ ] M4: replay idempotency test (already-processed replay yields duplicates only; unprocessed replay applies)
+- [x] (2026-07-13 17:57Z) M4: `Keiro.DeadLetter.Replay` (`listSubscriptionDeadLetters`, `replaySubscriptionDeadLetters`) implemented with opaque-cursor-safe source lookup
+- [x] (2026-07-13 17:57Z) M4: replay idempotency tests pass (already-processed replay yields duplicates only; unprocessed replay applies once and deduplicates on rerun); full suite passes 325 examples
 - [ ] M5: cross-stream correlation-ordering footgun documented in `Keiro.ProcessManager` haddock with a worked example
 - [ ] Final: `just verify` green; Outcomes & Retrospective written; masterplan Progress updated
 
@@ -124,6 +124,12 @@ Findings from plan-authoring research (2026-07-12), each verified against source
   the M3 test set `RetryPolicy 2` without reproducing the adapter's envelope
   conversion, while still covering the exact checkpoint, retry, dead-letter,
   and `eventHandler` path used in production.
+- Kiroku's current `GlobalPosition` contract explicitly forbids cursor
+  arithmetic and does not promise dense positions. The authored replay sketch's
+  `deadLetterGlobalPosition - 1` lookup would therefore have violated the live
+  dependency API. Kiroku also has no exported exact event-id/position point
+  read, so replay now scans `$all` backward once per batch, advancing only with
+  positions returned by Kiroku and matching both stored id and position.
 
 
 ## Decision Log
@@ -278,6 +284,16 @@ Record every decision made while working on the plan.
   checkpoint behavior without duplicating unrelated envelope conversion code.
   Date: 2026-07-13
 
+- Decision: resolve replay sources with one backward `$all` scan per replay
+  batch, keyed by event id and exact stored position, rather than deriving an
+  exclusive cursor with subtraction.
+  Rationale: Kiroku documents `GlobalPosition` as opaque and potentially
+  non-dense, and it exposes no exact point read. Starting at the supported
+  `GlobalPosition 0` sentinel and advancing with each returned page's final
+  cursor is correct under the live contract. One shared scan also avoids an
+  independent full-log scan for every dead-letter row.
+  Date: 2026-07-13
+
 
 ## Outcomes & Retrospective
 
@@ -301,6 +317,16 @@ integration test drives `subscriptionAckStream` through a two-delivery
 exhaustion, verifies the structured Kiroku dead-letter and attempt count,
 observes the metric, and proves checkpoint advance by receiving the next event.
 `cabal build all` and all 323 Keiro examples pass.
+
+Milestone 4 adds a reusable operator replay surface without taking ownership of
+Kiroku's rows. The implementation lists dead letters through Kiroku's exported
+statement, resolves their sources in one opaque-cursor-safe backward scan, and
+records a per-row fresh, duplicate, failed, or missing outcome. Real
+process-manager tests prove both important idempotency cases: a fresh replay
+appends once and becomes duplicate on the second pass, while an event processed
+before replay is duplicate immediately and does not grow either stream. Rows
+remain available for later audits or reruns. `cabal build all` and all 325 Keiro
+examples pass.
 
 
 ## Context and Orientation
@@ -769,14 +795,15 @@ replaySubscriptionDeadLetters ::
 
 `listSubscriptionDeadLetters` runs kiroku's exported `readDeadLettersStmt` through
 `Kiroku.Store.Transaction.runTransaction` (the same pattern
-`Keiro.Subscription.Shard.Schema` uses for its own statements). For each row,
-`replaySubscriptionDeadLetters` fetches the source `RecordedEvent` by global position:
-`Kiroku.Store.Read.readAllForward` is *cursor-exclusive* ("events with
-`globalPosition > startPos`", Read.hs:110-112), so read from
-`GlobalPosition (deadLetterGlobalPosition - 1)` with limit 1 and verify the returned
-event's id equals `deadLetterEventId` (mismatch → `ReplaySourceMissing`; the haddock
-explains a hard-deleted stream as the plausible cause). It then hands the event to the
-caller's handler — for a process manager that is `\ev -> case decode ev of Just (rec,
+`Keiro.Subscription.Shard.Schema` uses for its own statements). The delivered
+`replaySubscriptionDeadLetters` performs one backward `$all` scan for the complete
+batch. It starts at Kiroku's supported `GlobalPosition 0` latest-event sentinel,
+advances each page with the final position Kiroku returned, and matches both
+`deadLetterEventId` and `deadLetterGlobalPosition`. It never subtracts from or otherwise
+derives a cursor: the live Kiroku contract makes positions opaque and potentially
+non-dense. A row whose source is absent or mismatched becomes `ReplaySourceMissing`.
+It then hands each found event to the caller's handler — for a process manager that is
+`\ev -> case decode ev of Just (rec,
 input) -> fmap classify (runProcessManagerOnce opts pm rec input); …`, and the haddock
 shows exactly this recipe, classifying a result whose `managerResult` and every
 `commandResults` element are duplicates as `ReplayedDuplicate`.
@@ -953,14 +980,16 @@ half-wired state to recover from.
 
 Libraries and modules consumed, all already dependencies of the `keiro` package:
 `kiroku-store` (`Kiroku.Store.Effect.Store`, `Kiroku.Store.Transaction.runTransaction`,
-`Kiroku.Store.Read.readAllForward`, `Kiroku.Store.SQL.readDeadLettersStmt` +
+`Kiroku.Store.Read.readAllBackward`, `Kiroku.Store.SQL.readDeadLettersStmt` +
 `DeadLetterRecord`, `Kiroku.Store.Subscription.Types.RetryPolicy`,
 `Kiroku.Store.Subscription.Stream.subscriptionAckStream` (tests),
-`Kiroku.Store.Observability.KirokuEvent`); `shibuya-kiroku-adapter`
-(`Shibuya.Adapter.Kiroku.Convert.toIngestedAck`, `kirokuEnvelopeAttrs` — test-only);
-`shibuya-core` (`AckDecision`, already imported); `hasql`/`hasql-transaction` (statements,
+`Kiroku.Store.Observability.KirokuEvent`); `shibuya-core` (`AckDecision`, already
+imported); `hasql`/`hasql-transaction` (statements,
 following `Keiro.Subscription.Shard.Schema`); `keiro-migrations` (the new migration);
 `keiro-test-support` (`withMigratedSuite`, `withFreshStoreWith`).
+The registered `shibuya-kiroku-adapter` source was inspected through `mori` to verify
+its hidden retry-policy field and use of `subscriptionAckStream`; EP-100 does not add a
+package dependency on it.
 
 At the end of each milestone these must exist, with full module paths:
 
@@ -1007,3 +1036,7 @@ Telemetry names respect Integration Point 3's reservations.
   per-path configuration posture, added the composable Kiroku event-to-metric
   bridge, and covered two-delivery exhaustion, atomic checkpoint advance, and
   metric emission through `subscriptionAckStream`; all 323 examples pass.
+- 2026-07-13: Completed Milestone 4. Added Kiroku dead-letter listing and
+  idempotent handler replay with batched opaque-cursor-safe source resolution;
+  fresh and already-processed process-manager replay tests bring the passing
+  suite to 325 examples.

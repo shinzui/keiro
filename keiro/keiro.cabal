@@ -45,6 +45,7 @@ library
     Keiro.Command
     Keiro.Connection
     Keiro.DeadLetter
+    Keiro.DeadLetter.Replay
     Keiro.DeadLetter.Schema
     Keiro.Inbox
     Keiro.Inbox.Kafka
