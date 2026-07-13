@@ -117,7 +117,7 @@ a kiroku-side child plan for the subscription bridge (rejected: kiroku already s
 | 97 | Stable router idempotency keys derived from target stream names | docs/plans/97-stable-router-idempotency-keys-derived-from-target-stream-names.md | None | None | Complete |
 | 98 | Snapshot subsystem hardening: uninit-register guards, read-side telemetry, and workflow write alignment | docs/plans/98-snapshot-subsystem-hardening-uninit-register-guards-read-side-telemetry-and-workflow-write-alignment.md | None | EP-95 | Complete |
 | 99 | Silent-edge validation and divergence witnesses on the command path | docs/plans/99-silent-edge-validation-and-divergence-witnesses-on-the-command-path.md | EP-95 | None | Complete |
-| 100 | Process-manager failure paths: dead-lettering rejected commands and surfacing retry exhaustion | docs/plans/100-process-manager-failure-paths-dead-lettering-rejected-commands-and-surfacing-retry-exhaustion.md | None | EP-99 | In Progress |
+| 100 | Process-manager failure paths: dead-lettering rejected commands and surfacing retry exhaustion | docs/plans/100-process-manager-failure-paths-dead-lettering-rejected-commands-and-surfacing-retry-exhaustion.md | None | EP-99 | Complete |
 | 101 | Read-model rebuild correctness: dedup reset, writer fencing, and Strong cursor semantics | docs/plans/101-read-model-rebuild-correctness-dedup-reset-writer-fencing-and-strong-cursor-semantics.md | None | None | Not Started |
 | 102 | Persistence polish: truncation guards, enrichment parity, and messaging caveat documentation | docs/plans/102-persistence-polish-truncation-guards-enrichment-parity-and-messaging-caveat-documentation.md | None | EP-95 | Not Started |
 
@@ -222,8 +222,8 @@ where its truncation guard reports failures through the migrated hydration error
 - [x] EP-98: snapshot read-side telemetry (decode failures at minimum); workflow snapshot writes swallowed-and-counted like the command path
 - [x] EP-99: keiki's `StateChangingEpsilon` and `checkHeadRecoverability` force-enabled at stream validation (no caller opt-out; bypass only via the named unchecked constructor); the every-append replay-divergence check counts witnesses, never discards them
 - [x] EP-99: no-op `CommandResult.globalPosition` normalized to `Nothing`
-- [ ] EP-100: rejected PM commands dead-letter instead of halt-looping; saga-state/dispatch divergence documented or closed
-- [ ] EP-100: retry exhaustion documented; kiroku dead-letter replay path exists
+- [x] EP-100: rejected PM commands dead-letter instead of halt-looping; saga-state/dispatch divergence documented or closed
+- [x] EP-100: retry exhaustion documented; kiroku dead-letter replay path exists
 - [ ] EP-101: rebuild resets projection dedup; writers fenced during rebuild; `Strong` usable with multiple active categories
 - [ ] EP-102: truncation contiguity guard; enrichment parity between append paths; messaging caveats documented
 
@@ -314,6 +314,15 @@ where its truncation guard reports failures through the migrated hydration error
   class, preserving EP-100's failure vocabulary without adding `Show` constraints
   or leaking command/event payloads. This does not alter any later plan dependency
   or integration point.
+- EP-100 implementation corrected two authored assumptions against Kiroku's live
+  API and worker semantics. `GlobalPosition` is opaque and forbids arithmetic, so
+  replay resolves sources with one backward `$all` scan per batch; and an unsharded
+  subscription retries the current event in place, so overtaking occurs only through
+  independent append timing or sharded concurrency, not within its serial loop.
+- EP-100's repository gate first exposed migration-ledger drift in the existing
+  developer Jitsurei database: a constraint was present while its migration remained
+  pending. Verification passed against a fresh task-scoped database, and the existing
+  database was deliberately left untouched.
 
 
 ## Decision Log
@@ -406,7 +415,21 @@ the default-on verification option, and the divergence counter/attribute contrac
 Final evidence is formatting, whole-workspace Haddock and build success, and 316
 Keiro examples with zero failures.
 
+EP-100 completed Phase 3's coordination failure-path hardening. Process-manager and
+router workers now share a typed rejection policy whose safe default still halts,
+while opt-in dead-letter and skip outcomes let modeled business rejections advance
+without disguising systemic failures. Durable dispatch records, terminal-subscription
+telemetry, idempotent Kiroku dead-letter replay, and explicit cross-stream ordering
+and transaction contracts provide the operator path the review found missing. Final
+evidence is a fresh-database `just verify`: 325 Keiro examples, all package and
+migration suites, the whole workspace build, and the generated-site link check passed.
+
 ## Revision Notes
+
+- 2026-07-13: Completed EP-100. Added durable rejected-dispatch records and shared
+  process-manager/router policies, surfaced bounded Kiroku retry exhaustion, added
+  idempotent source-event replay, documented ordering and transaction boundaries,
+  and passed the full repository gate against a fresh task-scoped database.
 
 - 2026-07-13: Completed EP-99. Force-enabled durable replay validation, added
   default-on divergence witnesses to both append paths, normalized no-op global

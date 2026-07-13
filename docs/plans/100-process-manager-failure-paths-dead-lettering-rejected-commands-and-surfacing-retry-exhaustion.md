@@ -68,7 +68,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-07-13 17:57Z) M4: `Keiro.DeadLetter.Replay` (`listSubscriptionDeadLetters`, `replaySubscriptionDeadLetters`) implemented with opaque-cursor-safe source lookup
 - [x] (2026-07-13 17:57Z) M4: replay idempotency tests pass (already-processed replay yields duplicates only; unprocessed replay applies once and deduplicates on rerun); full suite passes 325 examples
 - [x] (2026-07-13 18:01Z) M5: cross-stream correlation ordering and per-write transaction boundaries documented in `Keiro.ProcessManager`, with router cross-reference and passing Haddock build
-- [ ] Final: `just verify` green; Outcomes & Retrospective written; masterplan Progress updated
+- [x] (2026-07-13 18:08Z) Final: `JITSUREI_DATABASE=jitsurei_verify_ep100 just verify` passed against a fresh task-scoped database; Outcomes & Retrospective written; masterplan Progress updated
 
 
 ## Surprises & Discoveries
@@ -351,6 +351,19 @@ timer-only no-ops separately, and each target dispatch with its projections
 separately. Router documentation cross-references the same rule and states that
 fan-out is idempotent rather than all-target atomic. `cabal haddock keiro`
 renders successfully.
+
+EP-100 is complete. Rejected dispatches can remain loudly halted, be durably
+dead-lettered before acknowledgement, or be explicitly skipped, while systemic
+failures retain their halt/retry behavior. Retry exhaustion is visible through
+the Kiroku event bridge and replayable through a typed, idempotent operator API;
+the coordination documentation now states the ordering and transaction limits
+that operators and process-manager authors must design around. The final
+repository-wide verification passed from a fresh task-scoped database: 325
+Keiro examples, 50 PGMQ examples with 2 expected pending, 16 Jitsurei examples,
+10 migration examples, the whole workspace build, diagram checks, and the
+122-page documentation link check. The pre-existing developer database was
+left untouched after its migration ledger disagreed with an already-present
+constraint.
 
 
 ## Context and Orientation
@@ -1072,3 +1085,7 @@ Telemetry names respect Integration Point 3's reservations.
 - 2026-07-13: Completed Milestone 5. Documented same-stream versus cross-stream
   ordering, the payment/shipment correlation example, and manager/router
   transaction boundaries; the Keiro Haddock build succeeds.
+- 2026-07-13: Completed EP-100. The full `just verify` gate passed against a
+  fresh task-scoped Jitsurei database; recorded the final outcomes and marked
+  both EP-100 MasterPlan deliverables complete without altering the drifted
+  developer database.
