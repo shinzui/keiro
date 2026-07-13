@@ -118,14 +118,17 @@ import Prelude qualified
 
 {- | The outcome of a successfully handled command.
 
-Reports the target 'Stream', the stream version after the append, the
-global log position (when the store assigned one), and how many events were
-appended — @0@ for a no-op command that decided to emit nothing.
+Reports the target 'Stream', the stream version after the command, the global
+log position only when this command appended and the store assigned a real
+one, and how many events were appended. A no-op reports @0@ events and
+@Nothing@ for its global position because per-stream reads cannot recover a
+true global position.
 -}
 data CommandResult target = CommandResult
     { target :: !(Stream target)
     , streamVersion :: !StreamVersion
     , globalPosition :: !(Maybe GlobalPosition)
+    -- ^ 'Just' only when this command appended; 'Nothing' for a no-op.
     , eventsAppended :: !Int
     }
     deriving stock (Generic, Eq, Show)
@@ -247,7 +250,6 @@ data Hydrated rs s = Hydrated
     { state :: !s
     , registers :: !(RegFile rs)
     , streamVersion :: !StreamVersion
-    , globalPosition :: !(Maybe GlobalPosition)
     }
     deriving stock (Generic)
 
@@ -403,7 +405,6 @@ hydrateSeeded options eventStream targetStream seedState seedRegisters seedVersi
                             { state = finalState
                             , registers = finalRegisters
                             , streamVersion = maybe seedVersion (^. #streamVersion) lastRecorded
-                            , globalPosition = fmap (^. #globalPosition) lastRecorded
                             }
                 Keiki.InFlight{} ->
                     Left
@@ -775,7 +776,7 @@ noOpResult targetStream current =
     CommandResult
         { target = targetStream
         , streamVersion = current ^. #streamVersion
-        , globalPosition = current ^. #globalPosition
+        , globalPosition = Nothing
         , eventsAppended = 0
         }
 

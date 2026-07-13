@@ -83,8 +83,8 @@ reporting `globalPosition = Nothing` where it previously fabricated `Just 0`.
 - [x] (2026-07-13T16:04:07Z) M2: post-append replay check extracted, runs on both append paths, witnesses divergence via counter + span attribute; snapshot write consumes the same fold
 - [x] (2026-07-13T16:04:07Z) M2: `keiro.snapshot.apply.divergence` counter and `keiro_replay_divergence` attribute key added to `keiro/src/Keiro/Telemetry.hs`
 - [x] (2026-07-13T16:04:07Z) M2: split-coverage divergence spec (counter increments, command still succeeds, next command fails with `HydrationReplayFailed`)
-- [ ] M3: `noOpResult` reports `globalPosition = Nothing`; dead `Hydrated.globalPosition` bookkeeping removed
-- [ ] M3: no-op globalPosition normalization spec (fails before the fix)
+- [x] (2026-07-13T16:12:22Z) M3: `noOpResult` reports `globalPosition = Nothing`; dead `Hydrated.globalPosition` bookkeeping removed
+- [x] (2026-07-13T16:12:22Z) M3: no-op globalPosition normalization spec (fails before the fix)
 - [ ] M4: CHANGELOG entries, semconv audit doc row, module haddock updates, master plan registry/progress update, `nix fmt`, full sweep
 
 
@@ -145,6 +145,20 @@ implementation-time discoveries as they occur.
   predicted. Focused plain-runner, opt-out, and transactional-SQL-path specs all
   passed; the milestone gate then passed `cabal build all` and all 315
   `keiro-test` examples.
+- Milestone 3's red test reproduced the fabricated sentinel exactly before the
+  fix:
+
+  ```text
+  expected: Nothing
+   but got: Just (GlobalPosition 0)
+  ```
+
+  After `noOpResult` was normalized and the dead `Hydrated.globalPosition`
+  field removed, the focused spec passed; the milestone gate then passed
+  `cabal build all` and all 316 `keiro-test` examples. EP-95's replay
+  accumulator still retains its last `RecordedEvent`, but that is not dead
+  global-position bookkeeping: it supplies the real stream version and precise
+  hydration failure location.
 
 
 ## Decision Log
@@ -755,10 +769,11 @@ this command appended (the store assigned a real position); `Nothing` for a no-o
 the store's per-stream read cannot report a true global position (kiroku returns a
 `0` sentinel), so keiro refuses to fabricate one. Then delete the now-dead
 bookkeeping that existed only to feed it: the `globalPosition` field of `Hydrated`
-(line 205) and its writes (`Just (recorded ^. #globalPosition)` at line 303 and 375
-today; if EP-95's fold migration already reshaped these, delete the equivalent in
-the migrated accumulator). GHC's `-Wall` (unused fields / incomplete-record-updates
-are on, `keiro/keiro.cabal:25-29`) will point at every remaining reference.
+(line 205) and its write in the migrated replay result. Keep the accumulator's
+last `RecordedEvent`: EP-95 made it responsible for the real stream version and
+precise replay-failure location, not just the discarded global position. GHC's
+`-Wall` (unused fields / incomplete-record-updates are on,
+`keiro/keiro.cabal:25-29`) will point at every remaining reference.
 
 The spec needs a stream that has prior events AND accepts a no-op command — the
 existing no-op fixture can't rehydrate its own history (its only edge is silent, and
@@ -1014,3 +1029,9 @@ one structured `applyEventsEither` epilogue with snapshotting, divergence is
 counted and traced without changing the committed command result, the default-on
 flag has a tested snapshot-less opt-out, and both plain and transactional SQL
 append paths have focused regression coverage.
+
+Revision note (2026-07-13): implemented Milestone 3 after capturing the planned
+red test showing `Just (GlobalPosition 0)`. No-op results now report `Nothing`,
+appended results still expose the store-assigned position, and the obsolete
+`Hydrated.globalPosition` field is gone while EP-95's version/failure-location
+accumulator remains intact.

@@ -692,6 +692,22 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             traverse (decodeRecorded counterCodec) (Vector.toList recorded)
                 `shouldBe` Right [CounterAdded 2]
 
+        it "reports no global position for a no-op after prior events" $ \storeHandle -> do
+            let target = stream "skip-command-no-op-position" :: Stream SkipEventStream
+            Right (Right appended) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions skipEventStream target (SAdd 2)
+            appended ^. #globalPosition `shouldSatisfy` isJust
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions skipEventStream target SSkip
+            case result of
+                Right (Right noOp) -> do
+                    noOp ^. #streamVersion `shouldBe` StreamVersion 1
+                    noOp ^. #eventsAppended `shouldBe` 0
+                    noOp ^. #globalPosition `shouldBe` Nothing
+                other -> expectationFailure ("expected successful no-op command, got " <> show other)
+
         it "surfaces runtime edge ambiguity without appending" $ \storeHandle -> do
             (processor, spansRef) <- inMemoryListExporter
             provider <- createTracerProvider [processor] emptyTracerProviderOptions
@@ -8360,6 +8376,11 @@ data CounterCommand
     = Add !Int
     deriving stock (Generic, Eq, Show)
 
+data SkipCommand
+    = SAdd !Int
+    | SSkip
+    deriving stock (Generic, Eq, Show)
+
 data CounterEvent
     = CounterAdded !Int
     | CounterAudited !Int
@@ -8858,6 +8879,70 @@ expectValidationWarning label prefix eventStream =
                 )
 
 type AddFields = '[ '("amount", Int)]
+
+type SkipEventStream = EventStream (HsPred '[] SkipCommand) '[] CounterState SkipCommand CounterEvent
+
+type ValidatedSkipEventStream = ValidatedEventStream (HsPred '[] SkipCommand) '[] CounterState SkipCommand CounterEvent
+
+skipEventStream :: ValidatedSkipEventStream
+skipEventStream = mkEventStreamOrThrow "skip-command" skipEventStreamDef
+
+skipEventStreamDef :: SkipEventStream
+skipEventStreamDef =
+    EventStream
+        { transducer = skipTransducer
+        , initialState = Counting
+        , initialRegisters = RNil
+        , eventCodec = counterCodec
+        , resolveStreamName = Stream.streamName
+        , snapshotPolicy = Never
+        , stateCodec = Nothing
+        }
+
+skipTransducer :: SymTransducer (HsPred '[] SkipCommand) '[] CounterState SkipCommand CounterEvent
+skipTransducer =
+    SymTransducer
+        { edgesOut = \case
+            Counting ->
+                [ Edge
+                    { guard = matchInCtor sAddCtor
+                    , update = UKeep
+                    , output = [pack sAddCtor counterAddedCtor (inpCtor sAddCtor #amount *: oNil)]
+                    , target = Counting
+                    }
+                , Edge
+                    { guard = matchInCtor sSkipCtor
+                    , update = UKeep
+                    , output = []
+                    , target = Counting
+                    }
+                ]
+        , initial = Counting
+        , initialRegs = RNil
+        , isFinal = \_ -> False
+        }
+
+sAddCtor :: InCtor SkipCommand AddFields
+sAddCtor =
+    InCtor
+        { icName = "SAdd"
+        , icMatch = \case
+            SAdd amount -> Just (RCons Proxy amount RNil)
+            SSkip -> Nothing
+        , icBuild = \case
+            RCons _ amount RNil -> SAdd amount
+        }
+
+sSkipCtor :: InCtor SkipCommand '[]
+sSkipCtor =
+    InCtor
+        { icName = "SSkip"
+        , icMatch = \case
+            SAdd{} -> Nothing
+            SSkip -> Just RNil
+        , icBuild = \case
+            RNil -> SSkip
+        }
 
 addCtor :: InCtor CounterCommand AddFields
 addCtor =
