@@ -42,18 +42,31 @@ cabal run keiro-dsl -- scaffold service.keiro --out gen/
 You get `-- @generated` modules (overwritten every run) and create-if-absent hole modules
 (`Holes.hs`, `ProcessHoles.hs`). **Re-scaffolding never clobbers a filled hole module.**
 
-`scaffold` now checks its own firewall and prints a report to stderr: every module written
-with its disposition (`overwritten`/`created`/`skipped: already present`), the firewall
-verdict (`firewall: OK (N generated modules scanned, 0 forbidden operators)`), the harness
-component(s) to run, and the manifest path. It **exits non-zero on a firewall breach**, so the
-manual `grep` is no longer needed — a non-zero exit means a `-- @generated` module contains a
-forbidden keiki operator (`./=`, `.==`, `.||`, `lit`, `B.slot`, `B.requireGuard`).
+Before writing, `scaffold` refuses module-path collisions (including case-folded collisions),
+unfaithful type/policy lowering, a firewall breach, or an existing Generated target without
+the `-- @generated` banner. Each refusal exits 1 and writes nothing. Fix collision/lowering
+problems in the spec; a firewall breach is a scaffolder bug. For a banner refusal, move or
+rename hand-owned code. Only when replacing that file is deliberate, re-run with
+`--force-generated-overwrite`; the flag bypasses no other gate.
+
+On success the stderr report names every module and disposition
+(`overwritten`/`created`/`skipped: already present`), the firewall verdict
+(`firewall: OK (N generated modules scanned, 0 forbidden operators)`), the harness
+component(s), and the manifest. It also rewrites
+`keiro-dsl-scaffold-record.<context>.txt`. A later run may print an exit-0 `stale:` section
+for recorded paths it no longer emits. Nothing is deleted: a `generated` line is a
+safe-to-delete candidate after review; a `hole` line is hand-owned and must be inspected
+before any deletion. A note about a different previous spec path means two specs share the
+same context and `--out` (and therefore the same manifest/record); separate their output
+directories unless that sharing is intentional. The manual firewall `grep` is no longer
+needed.
 
 To place the generated layer next to your domain code instead of a parallel `Generated.*`
 tree, pass `--module-root <Prefix>` and/or `--collocate` (or set `module <Prefix>` / `layout
 collocated` in the spec): with both, modules land at `<Prefix>.<Ctx>.<Node>.Generated.*`. The
 emitted `keiro-dsl-manifest.<context>.txt` carries paste-ready `other-modules:`/`build-depends:`
-blocks for the consuming Cabal stanza.
+blocks for the consuming Cabal stanza. Re-scaffold after every spec change and resolve the
+stale report before adding the generated tree to a component.
 
 ### 5. Fill the holes
 

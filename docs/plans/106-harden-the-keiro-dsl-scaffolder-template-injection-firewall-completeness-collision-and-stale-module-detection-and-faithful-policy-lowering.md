@@ -67,8 +67,9 @@ commands in "Validation and Acceptance".
 - [x] (2026-07-13 22:16Z) M8: D3 versioned scaffold-run record sidecar + non-deleting
       stale-module report across node renames and layout/module-root flips, with generated
       versus hand-owned guidance and shared-context/spec-path warning.
-- [ ] M9: authoring-docs refresh (NOTATION.md/SKILL.md/LOOP.md for every surface changed
-      here) + full sweep: unit suite green from `keiro-dsl/`, all conformance suites green.
+- [x] (2026-07-13 22:19Z) M9: refreshed NOTATION.md/SKILL.md/LOOP.md for every changed
+      surface; `cabal test keiro-dsl:tests --test-show-details=direct` from `keiro-dsl/`
+      passed all 18 package suites (152 unit examples plus every conformance suite).
 
 
 ## Surprises & Discoveries
@@ -173,7 +174,27 @@ Plan of Work):
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-106 is complete. The scaffold path is now gated before writes for case-folded path
+collisions, canonical token-aware keiki firewall breaches, unfaithful type/policy lowering,
+and bannerless Generated targets. Spec text is escaped once at Haskell splice sites; Text,
+Int, Bool, id, enum, and vertex register/field shapes are either lowered faithfully or
+refused; duration units and constant/exponential backoff reach their live runtime types
+without invented defaults; status maps use exact event names; and harness samples cover
+the representable set.
+
+Every `new <kind>` starter now parses, validates, scaffolds, and is pinned to a committed
+31-module conformance tree that Cabal compiles. The conformance comparison includes
+canonicalized import modules and explicit member lists rather than discarding imports.
+Successful scaffold runs persist a versioned, path-safe per-context record and report stale
+Generated and hand-owned files across node renames, layout changes, and module-root changes
+without deleting them.
+
+The final command, run from `keiro-dsl/`, was
+`cabal test keiro-dsl:tests --test-show-details=direct`. All 18 test suites passed: the unit
+suite finished with 152 examples and 0 failures, and all 17 conformance suites (including
+the new compile-all-skeletons suite) passed. The scoped authoring documentation now states
+the exact notation, refusal, override, and stale-file behavior delivered here. No EP-106
+work remains.
 
 
 ## Context and Orientation

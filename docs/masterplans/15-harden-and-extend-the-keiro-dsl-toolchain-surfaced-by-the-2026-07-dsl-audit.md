@@ -138,7 +138,7 @@ three plans register with it).
 | 103 | Make keiro-dsl diff sound over the full decode and identity surface | docs/plans/103-make-keiro-dsl-diff-sound-over-the-full-decode-and-identity-surface.md | None | None | Complete |
 | 104 | Close the keiro-dsl validator soundness holes: workflows, rules, cross-node references, and disposition tables | docs/plans/104-close-the-keiro-dsl-validator-soundness-holes-workflows-rules-cross-node-references-and-disposition-tables.md | None | None | Complete |
 | 105 | Fix keiro-dsl notation integrity: string escaping, duplicate clauses, numeric bounds, and identifier hygiene | docs/plans/105-fix-keiro-dsl-notation-integrity-string-escaping-duplicate-clauses-numeric-bounds-and-identifier-hygiene.md | None | None | Complete |
-| 106 | Harden the keiro-dsl scaffolder: template injection, firewall completeness, collision and stale-module detection, and faithful policy lowering | docs/plans/106-harden-the-keiro-dsl-scaffolder-template-injection-firewall-completeness-collision-and-stale-module-detection-and-faithful-policy-lowering.md | None | EP-104, EP-105 | In Progress |
+| 106 | Harden the keiro-dsl scaffolder: template injection, firewall completeness, collision and stale-module detection, and faithful policy lowering | docs/plans/106-harden-the-keiro-dsl-scaffolder-template-injection-firewall-completeness-collision-and-stale-module-detection-and-faithful-policy-lowering.md | None | EP-104, EP-105 | Complete |
 | 107 | Add a first-class read-model node with registration, schema, and consistency to keiro-dsl | docs/plans/107-add-a-first-class-read-model-node-with-registration-schema-and-consistency-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Not Started |
 | 108 | Add a router node and rejection and poison policy surfaces to keiro-dsl | docs/plans/108-add-a-router-node-and-rejection-and-poison-policy-surfaces-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Not Started |
 | 109 | Extend keiro-dsl node coverage: pgmq ordering and provisioning, snapshot policy, and workflow patch and continue-as-new | docs/plans/109-extend-keiro-dsl-node-coverage-pgmq-ordering-and-provisioning-snapshot-policy-and-workflow-patch-and-continue-as-new.md | EP-103 | EP-104, EP-105, EP-106 | Not Started |
@@ -285,8 +285,8 @@ EP-106 in parallel alongside the front of that path.
 - [x] EP-104: process/operation cross-refs resolved; disposition completeness and duplicate-row shadowing; topic affinity; duplicate-name rules; workqueue fixture trio fully checked
 - [x] EP-105: string escaping round-trips adversarial input; mapPartial has concrete syntax; duplicate wire/projection/goto rejected
 - [x] EP-105: numeric bounds enforced; identifier-hygiene diagnostics; round-trip generator covers all node families; unit suite cwd-independent
-- [ ] EP-106: payload splice escaped (injection closed); canonical firewall list shared by CLI and test with token-aware scan; breach handling decided
-- [ ] EP-106: path-collision/stale-module/banner detection; every `new` skeleton scaffolds compiling code; backoff and duration lowering faithful; harness handles Int; conformance pin includes imports
+- [x] EP-106: payload splice escaped (injection closed); canonical firewall list shared by CLI and test with token-aware scan; breach handling is pre-write refusal
+- [x] EP-106: path-collision/stale-module/banner detection; every `new` skeleton scaffolds compiling code; backoff and duration lowering faithful; harness handles Int; conformance pin includes imports
 - [ ] EP-107: `readmodel` node parses, validates, round-trips; Strong-on-inline-only impossible; schema clause threads into projection holes
 - [ ] EP-107: scaffold emits ReadModel value + registration; QueryOp and PgmqDispatch read-model resolution completed; conformance against live Keiro.ReadModel
 - [ ] EP-108: `router` node full vertical with conformance against live Keiro.Router
@@ -368,6 +368,12 @@ EP-106 in parallel alongside the front of that path.
     lookahead to distinguish it from a transition emit clause. EP-107/108/109 must add
     every new top-level keyword (`readmodel`, `router`, or otherwise) to `reservedWords`
     in the same vertical that adds its parser arm.
+  - EP-106 implementation found five legitimate `Keiki.Core` names in the generated
+    deterministic layer (`RegFile`, `HsPred`, `defaultValidationOptions`, `step`, and
+    `validateTransducer`) that the authored firewall sketch omitted. The delivered import
+    guard allows only those explicit names and rejects the rest of keiki's authoring
+    surface. Its new compile-all-starters target raises the package battery to 18 suites;
+    all 18 passed, including 152 unit examples and 31 compiled starter modules.
 
 
 ## Decision Log
@@ -429,6 +435,14 @@ Haskell identifier hygiene, portable fixtures, and all-family adversarial round-
 coverage. Its full package battery also passed all 17 suites. EP-106 through EP-110
 remain; EP-106 owns the generated-Haskell side of the escaping contract, and the Phase 3
 verticals must register every new node keyword in the parser's structural-word set.
+
+EP-106 completed the scaffolder-hardening work stream. It delivered pre-write collision,
+firewall, faithful-lowering, and banner gates; exact and escaped lowering for literals,
+registers, status maps, windows, and backoff; compiling/pinned starter scaffolds; and a
+versioned non-deleting stale-file record across namespace/layout changes. The authoring
+docs reflect the delivered behavior, and the full package battery passed all 18 suites.
+EP-107, EP-108, and EP-109 are now independently implementable; by registry order EP-107
+is next.
 
 
 ## Revision Notes

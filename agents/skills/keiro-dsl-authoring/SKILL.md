@@ -65,7 +65,7 @@ Run from the repo root (`/Users/shinzui/Keikaku/bokuno/keiro`):
 cabal run keiro-dsl -- parse   <file.keiro>            # parse + pretty-print (proves it's a real spec)
 cabal run keiro-dsl -- check   <file.keiro> [--emit]   # validate; --emit pretty-prints the spec on success
 cabal run keiro-dsl -- scaffold <file.keiro> --out DIR # validate, then emit @generated + create-if-absent holes
-                            [--module-root Acme] [--collocate]  # place modules under Acme.<Ctx>.<Node>(.Generated)
+                            [--module-root Acme] [--collocate] [--force-generated-overwrite]
 cabal run keiro-dsl -- diff --since <git-ref> <file.keiro>  # classify ADDITIVE/WARNING/BREAKING; BREAKING gates a merge
 cabal run keiro-dsl -- new <kind>                      # print a minimal valid skeleton (kinds below)
 ```
@@ -78,5 +78,10 @@ to start, e.g. `cabal run -v0 keiro-dsl -- new aggregate > service.keiro`.
 There is a `keiro-dsl/bin/keiro-dsl` wrapper so you can drop the verbose
 `cabal run -v0 keiro-dsl --` prefix: put `keiro-dsl/bin` on your `PATH` and run
 e.g. `keiro-dsl check service.keiro --emit`. `scaffold` validates first (it will
-not emit modules for an invalid spec), self-checks the firewall, and prints a
-report naming every module written and the manifest path.
+not emit modules for an invalid spec), then checks path collisions, faithful lowering,
+the firewall, and existing Generated-file banners before any write. A refusal exits 1 and
+writes nothing. `--force-generated-overwrite` bypasses only the missing-banner protection;
+use it only when overwriting an adopted file is intentional. A successful run prints every
+module disposition and the manifest path and writes a per-context scaffold record. If a
+later run no longer produces recorded paths, its exit-0 `stale:` report never deletes them:
+delete `generated` entries only after review, and treat `hole` entries as hand-owned code.

@@ -52,6 +52,9 @@ override the spec clauses (precedence: CLI flag > spec clause > default).
 aggregate Reservation
   regs
     reservationState ReservationVertex = Unrequested      # name Type = initial
+    note Text = "not requested"                            # Text initials are quoted
+    reservationId TransferReservationId = placeholder     # required sentinel for id registers
+    attempts Int = 0                                      # signed integer literals are supported
   states Unrequested Held Confirmed Expired!              # trailing ! = terminal (no outgoing)
 
   command RequestTransferReservation { reservationId hospitalId commandId divertStatus lifeCriticalOverride:Bool }
@@ -68,14 +71,31 @@ aggregate Reservation
 
   wire kind=ctorName fields=camelCase schemaVersion=1
   projection transfer_decisions consistency=Strong key=reservationId
-    status-map { Created=>held Confirmed=>confirmed }    # event-suffix => status; must be total
-    # Or: status-map partial { Created=>held }
+    status-map { TransferReservationCreated=>held TransferReservationConfirmed=>confirmed }
+                                                             # exact event constructor => status; must be total
+    # Or: status-map partial { TransferReservationCreated=>held }
 ```
 
 Holes (you fill): the transducer body (guards/writes/emits via keiki operators), the
 projection SQL `apply`, any `upcast<Event>V<n>` upcaster body.
 `status-map partial { … }` opts out of the totality check for events that do not change
-the projected status.
+the projected status. Every key must still name exactly one declared event constructor;
+suffixes such as `Created` do not match `TransferReservationCreated`, and duplicate or
+dangling keys are errors. These dangling-key, uniqueness, and totality rules are owned by
+the checker; the scaffold's exact lookup is defense-in-depth.
+
+Scaffoldable aggregate register types and explicit command/event field types are `Text`,
+`Int`, `Bool`, the aggregate's generated `<Aggregate>Vertex`, and any `id` or `enum` type
+declared in the spec. `Text` register initials must be quoted; `Bool` uses `True`/`False`,
+`Int` uses a signed integer literal, enum/state registers use an in-domain constructor,
+and an id-typed register uses the bare `placeholder` sentinel (lowered to the id newtype's
+empty-text placeholder). The scaffolder refuses other types or initial shapes before
+writing anything.
+
+All duration windows in the notation are decimal digits followed by exactly one unit:
+`s` (seconds), `m` (minutes), or `h` (hours). Thus `5m` means 300 seconds and `2h` means
+7200 seconds. This grammar applies to retry delays, timer offsets, and publisher backoff;
+unitless values and other suffixes are rejected.
 
 ## process + timer (EP-3)
 
@@ -144,12 +164,15 @@ emit reservationResponse {
 
 publisher hospitalPublisher {
   emit reservationResponse ; ordering PerKeyHeadOfLine ; maxAttempts 10
-  backoff constant 2s ; outboxId stable from messageId
+  backoff exponential 2s max=60s multiplier=2.0 ; outboxId stable from messageId
 }
 ```
 
 Checked: complete disposition table + the three inversions; `_ => skip` present; contract/
-topic/event coupling resolves; publisher→emit resolves.
+topic/event coupling resolves; publisher→emit resolves. Publisher backoff is either
+`backoff constant <window>` or
+`backoff exponential <initial> max=<window> multiplier=<decimal>`. Exponential backoff
+requires both clauses; the scaffolder refuses to invent a maximum or multiplier.
 
 ## workqueue / dispatch (EP-5)
 
@@ -216,17 +239,24 @@ keiro-dsl new      <kind>                       # print a minimal valid skeleton
 keiro-dsl parse    <file.keiro>                 # parse + pretty-print it back
 keiro-dsl check    <file.keiro> [--emit]        # validate; --emit pretty-prints the spec on success
 keiro-dsl scaffold <file.keiro> --out DIR \     # validate, emit @generated + holes + manifest, self-check firewall
-  [--module-root Acme] [--collocate]            # optional placement (overrides the module/layout clauses)
+  [--module-root Acme] [--collocate] [--force-generated-overwrite]
+                                                # placement overrides clauses; force is an explicit adoption override
 keiro-dsl diff     --since <git-ref> <file.keiro>   # classify ADDITIVE/WARNING/BREAKING since a ref
 ```
 
 - `new <kind>` — `kind` ∈ aggregate, process, contract, intake, emit, publisher, workqueue,
   dispatch, workflow, operation. Prints a guaranteed-valid starter spec to stdout
   (`keiro-dsl new aggregate > service.keiro`).
-- `scaffold` validates first and refuses to emit an invalid spec; it scans its own generated output
-  and exits non-zero on a firewall breach, printing a report (modules written + dispositions,
-  `firewall: OK …`, the harness component, the manifest path). It also writes a
+- `scaffold` validates first, then runs collision, firewall, faithful-lowering, and existing-file
+  banner gates before writing. Any refusal exits 1 and writes nothing. A Generated target
+  lacking `-- @generated` is protected unless `--force-generated-overwrite` is explicitly passed;
+  use that override only when replacing the file is intentional. On success it prints modules and
+  dispositions, `firewall: OK …`, the harness component, and the manifest path. It also writes a
   `keiro-dsl-manifest.<context>.txt` into `--out` with paste-ready `other-modules:`/`build-depends:`
-  blocks for the consuming Cabal stanza. No manual firewall `grep` needed.
+  blocks for the consuming Cabal stanza, plus a versioned
+  `keiro-dsl-scaffold-record.<context>.txt` used on the next run to report stale paths. A `stale:`
+  report is informational (exit 0) and never deletes files: Generated entries are safe-to-delete
+  candidates; hole entries are hand-owned and must be reviewed first. No manual firewall `grep`
+  needed.
 - Exit codes gate CI: a non-zero `check`/`scaffold`/`diff` is the signal — fix the **spec**, not the
   generated code. Use `/dev/stdin` as the file to read from stdin.
