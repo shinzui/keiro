@@ -87,7 +87,10 @@ module Keiro.Telemetry (
     keiroCommandConflictsName,
     keiroCommandRetriesName,
     keiroCommandDuplicatesName,
+    keiroSnapshotDecodeFailuresName,
     keiroSnapshotEncodeFailuresName,
+    keiroSnapshotReadHitsName,
+    keiroSnapshotReadMissesName,
     keiroSnapshotWriteFailuresName,
     keiroDispatchFailedName,
     keiroDispatchDuplicatesName,
@@ -123,7 +126,10 @@ module Keiro.Telemetry (
     recordCommandConflicts,
     recordCommandRetries,
     recordCommandDuplicates,
+    recordSnapshotDecodeFailures,
     recordSnapshotEncodeFailures,
+    recordSnapshotReadHits,
+    recordSnapshotReadMisses,
     recordSnapshotWriteFailures,
     recordDispatchFailed,
     recordDispatchDuplicate,
@@ -561,8 +567,14 @@ keiroCommandRetriesName :: Text
 keiroCommandRetriesName = "keiro.command.retries"
 keiroCommandDuplicatesName :: Text
 keiroCommandDuplicatesName = "keiro.command.duplicates"
+keiroSnapshotDecodeFailuresName :: Text
+keiroSnapshotDecodeFailuresName = "keiro.snapshot.decode.failures"
 keiroSnapshotEncodeFailuresName :: Text
 keiroSnapshotEncodeFailuresName = "keiro.snapshot.encode.failures"
+keiroSnapshotReadHitsName :: Text
+keiroSnapshotReadHitsName = "keiro.snapshot.read.hits"
+keiroSnapshotReadMissesName :: Text
+keiroSnapshotReadMissesName = "keiro.snapshot.read.misses"
 keiroSnapshotWriteFailuresName :: Text
 keiroSnapshotWriteFailuresName = "keiro.snapshot.write.failures"
 keiroDispatchFailedName :: Text
@@ -622,7 +634,10 @@ data KeiroMetrics = KeiroMetrics
     , commandConflicts :: Counter Int64
     , commandRetries :: Counter Int64
     , commandDuplicates :: Counter Int64
+    , snapshotDecodeFailures :: Counter Int64
     , snapshotEncodeFailures :: Counter Int64
+    , snapshotReadHits :: Counter Int64
+    , snapshotReadMisses :: Counter Int64
     , snapshotWriteFailures :: Counter Int64
     , dispatchFailed :: Counter Int64
     , dispatchDuplicates :: Counter Int64
@@ -667,7 +682,10 @@ newKeiroMetrics meter = liftIO $ do
     commandConflicts' <- counterI64 keiroCommandConflictsName "{conflict}" "Optimistic-concurrency conflicts observed by command runners."
     commandRetries' <- counterI64 keiroCommandRetriesName "{retry}" "Command retry attempts started after an optimistic-concurrency conflict."
     commandDuplicates' <- counterI64 keiroCommandDuplicatesName "{event}" "Command appends rejected as duplicate deterministic event ids."
+    snapshotDecodeFailures' <- counterI64 keiroSnapshotDecodeFailuresName "{failure}" "Snapshot rows whose bytes failed to decode; hydration fell back to full replay."
     snapshotEncodeFailures' <- counterI64 keiroSnapshotEncodeFailuresName "{failure}" "Post-commit snapshot encodes that failed and were swallowed."
+    snapshotReadHits' <- counterI64 keiroSnapshotReadHitsName "{read}" "Snapshot lookups that yielded a usable hydration seed."
+    snapshotReadMisses' <- counterI64 keiroSnapshotReadMissesName "{read}" "Snapshot lookups that fell back to full replay."
     snapshotWriteFailures' <- counterI64 keiroSnapshotWriteFailuresName "{failure}" "Post-commit snapshot writes that failed and were swallowed."
     dispatchFailed' <- counterI64 keiroDispatchFailedName "{command}" "Process-manager/router dispatch commands that failed."
     dispatchDuplicates' <- counterI64 keiroDispatchDuplicatesName "{command}" "Process-manager/router dispatch commands skipped as duplicate deterministic event ids."
@@ -703,7 +721,10 @@ newKeiroMetrics meter = liftIO $ do
             , commandConflicts = commandConflicts'
             , commandRetries = commandRetries'
             , commandDuplicates = commandDuplicates'
+            , snapshotDecodeFailures = snapshotDecodeFailures'
             , snapshotEncodeFailures = snapshotEncodeFailures'
+            , snapshotReadHits = snapshotReadHits'
+            , snapshotReadMisses = snapshotReadMisses'
             , snapshotWriteFailures = snapshotWriteFailures'
             , dispatchFailed = dispatchFailed'
             , dispatchDuplicates = dispatchDuplicates'
@@ -787,8 +808,14 @@ recordCommandRetries :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordCommandRetries = recordCounter commandRetries
 recordCommandDuplicates :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordCommandDuplicates = recordCounter commandDuplicates
+recordSnapshotDecodeFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordSnapshotDecodeFailures = recordCounter snapshotDecodeFailures
 recordSnapshotEncodeFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotEncodeFailures = recordCounter snapshotEncodeFailures
+recordSnapshotReadHits :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordSnapshotReadHits = recordCounter snapshotReadHits
+recordSnapshotReadMisses :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordSnapshotReadMisses = recordCounter snapshotReadMisses
 recordSnapshotWriteFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotWriteFailures = recordCounter snapshotWriteFailures
 recordDispatchFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()

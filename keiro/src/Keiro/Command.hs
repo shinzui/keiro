@@ -58,7 +58,13 @@ import Keiro.Codec (Codec, CodecError, decodeRecorded, encodeForAppendWithMetada
 import Keiro.EventStream (EventStream, Terminality (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
-import Keiro.Snapshot (encodeSnapshotStrict, hydrateWithSnapshot, writeSnapshotEncoded)
+import Keiro.Snapshot (
+    SnapshotLookup (..),
+    SnapshotMissReason (..),
+    encodeSnapshotStrict,
+    lookupSnapshotSeed,
+    writeSnapshotEncoded,
+ )
 import Keiro.Snapshot.Policy (shouldSnapshotSpan)
 import Keiro.Stream (Stream)
 import Keiro.Telemetry (
@@ -68,7 +74,10 @@ import Keiro.Telemetry (
     recordCommandConflicts,
     recordCommandDuplicates,
     recordCommandRetries,
+    recordSnapshotDecodeFailures,
     recordSnapshotEncodeFailures,
+    recordSnapshotReadHits,
+    recordSnapshotReadMisses,
     recordSnapshotWriteFailures,
     withCommandSpan,
  )
@@ -221,7 +230,7 @@ data CommandPlan target rs s co
 
 hydrate ::
     forall phi rs s ci co es.
-    (HasCallStack, Store :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+    (HasCallStack, IOE :> es, Store :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
     RunCommandOptions ->
     EventStream phi rs s ci co ->
     Stream (EventStream phi rs s ci co) ->
@@ -238,8 +247,17 @@ hydrate options eventStream targetStream =
     snapshotSeed =
         case eventStream ^. #stateCodec of
             Nothing -> pure Nothing
-            Just codec ->
-                hydrateWithSnapshot ((eventStream ^. #resolveStreamName) targetStream) codec
+            Just codec -> do
+                lookupSnapshotSeed ((eventStream ^. #resolveStreamName) targetStream) codec >>= \case
+                    SnapshotHit seed -> do
+                        recordSnapshotReadHits (options ^. #metrics) 1
+                        pure (Just seed)
+                    SnapshotUnavailable reason -> do
+                        recordSnapshotReadMisses (options ^. #metrics) 1
+                        case reason of
+                            SnapshotDecodeFailed _ -> recordSnapshotDecodeFailures (options ^. #metrics) 1
+                            _ -> pure ()
+                        pure Nothing
 
     replayFrom seed =
         finishReplay

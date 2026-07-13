@@ -43,11 +43,11 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] M2: `encodeSnapshotStrict` and `writeSnapshotEncoded` added to `keiro/src/Keiro/Snapshot.hs`
 - [x] M2: `writeSnapshotIfNeeded` in `keiro/src/Keiro/Command.hs` forces the encode before the store call and degrades to a counted swallow on `ErrorCall`
 - [x] M2: runtime degrade integration test (partial `ToJSON` state) and direct unit test of `encodeSnapshotStrict` over an `emptyRegFile` pair pass
-- [ ] M3: `SnapshotLookup` / `SnapshotMissReason` types and `lookupSnapshotSeed` added to `keiro/src/Keiro/Snapshot.hs`; `hydrateWithSnapshot` kept as a compatibility wrapper
-- [ ] M3: `keiro.snapshot.decode.failures`, `keiro.snapshot.read.hits`, `keiro.snapshot.read.misses` counters added to `keiro/src/Keiro/Telemetry.hs`
-- [ ] M3: `hydrate` in `keiro/src/Keiro/Command.hs` records hit/miss/decode-failure via the new lookup
-- [ ] M3: workflow read side (`loadWorkflowSnapshot` callers in `keiro/src/Keiro/Workflow.hs`) records the same counters
-- [ ] M3: decode-failure counter asserted on the existing corrupt-snapshot fixtures; hit/miss asserted on the tail-hydration fixture
+- [x] M3: `SnapshotLookup` / `SnapshotMissReason` types and `lookupSnapshotSeed` added to `keiro/src/Keiro/Snapshot.hs`; `hydrateWithSnapshot` kept as a compatibility wrapper
+- [x] M3: `keiro.snapshot.decode.failures`, `keiro.snapshot.read.hits`, `keiro.snapshot.read.misses` counters added to `keiro/src/Keiro/Telemetry.hs`
+- [x] M3: `hydrate` in `keiro/src/Keiro/Command.hs` records hit/miss/decode-failure via the new lookup
+- [x] M3: workflow read side (`loadWorkflowSnapshot` callers in `keiro/src/Keiro/Workflow.hs`) records the same counters
+- [x] M3: decode-failure counter asserted on the existing corrupt-snapshot fixtures; hit/miss asserted on the tail-hydration fixture
 - [ ] M4: `Error StoreError :> es` constraint added to `runWorkflow` / `runWorkflowWith` / `rotateGeneration` in `keiro/src/Keiro/Workflow.hs`
 - [ ] M4: all three `writeWorkflowSnapshot` call sites swallow-and-count (`keiro.snapshot.write.failures`)
 - [ ] M4: workflow snapshot write-failure test (constraint-block pattern) asserts the run succeeds with a counted failure
@@ -534,3 +534,5 @@ Revision note (2026-07-12): initial authoring. Fleshed out the skeleton after ve
 Revision note (2026-07-13): completed M1. Added the strict initial snapshot encode probe, a two-register `emptyRegFile` regression fixture, and focused acceptance coverage that proves the warning names `uninit: neverWritten`. Recorded the user-local Cabal overlay and clean-project validation procedure under Surprises & Discoveries.
 
 Revision note (2026-07-13): completed M2. Split strict encoding from the store upsert, routed command snapshots through the pre-store encode guard, registered the dedicated encode-failure counter, and added direct plus PostgreSQL-backed regressions. The focused `Keiro.Snapshot` run passed 11 examples, including proof that an event remains committed while the snapshot row is absent and encode failures count separately from write failures.
+
+Revision note (2026-07-13): completed M3. Added reason-preserving aggregate and workflow snapshot lookups while retaining the erasing compatibility wrappers, registered hit/miss/decode-failure counters, and recorded them at the command/workflow option-owning call sites. Focused validation passed 11 aggregate snapshot examples and 6 workflow snapshot examples; corrupt JSON counts decode failures, mismatches/truncation count only misses, and tail hydration counts a hit.

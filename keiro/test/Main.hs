@@ -1154,13 +1154,21 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             lookup "keiro.snapshot.write.failures" scalars `shouldBe` Nothing
 
         it "hydrates from snapshot and replays only the tail" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
             let target = stream "snapshot-tail-hydration" :: Stream SnapshotCounterEventStream
+                options = defaultRunCommandOptions & #metrics ?~ keiroMetrics
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
+                    runCommand options snapshotCounterEventStream target (Add 2)
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
+                    runCommand options snapshotCounterEventStream target (Add 3)
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
@@ -1172,71 +1180,113 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                             corruptSnapshotStateStmt
             result <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions guardedSnapshotCounterEventStream target (Add 4)
+                    runCommand options guardedSnapshotCounterEventStream target (Add 4)
             case result of
                 Right (Right commandResult) ->
                     commandResult ^. #streamVersion `shouldBe` StreamVersion 3
                 other -> expectationFailure ("expected snapshot-assisted command, got " <> show other)
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            lookup "keiro.snapshot.read.hits" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
 
         it "falls back when snapshot JSON is corrupt" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
             let target = stream "snapshot-corrupt-json" :: Stream SnapshotCounterEventStream
+                options = defaultRunCommandOptions & #metrics ?~ keiroMetrics
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
+                    runCommand options snapshotCounterEventStream target (Add 2)
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
+                    runCommand options snapshotCounterEventStream target (Add 3)
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
                         Tx.statement ("snapshot-corrupt-json", Aeson.String "bad") corruptSnapshotStateStmt
             result <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 4)
+                    runCommand options snapshotCounterEventStream target (Add 4)
             case result of
                 Right (Right commandResult) ->
                     commandResult ^. #streamVersion `shouldBe` StreamVersion 3
                 other -> expectationFailure ("expected corrupt snapshot fallback, got " <> show other)
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            let scalars = flattenScalarPoints exported
+            lookup "keiro.snapshot.decode.failures" scalars `shouldBe` Just (IntNumber 1)
+            lookup "keiro.snapshot.read.misses" scalars `shouldBe` Just (IntNumber 3)
 
         it "falls back when shape hash mismatches" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
             let target = stream "snapshot-shape-mismatch" :: Stream SnapshotCounterEventStream
+                options = defaultRunCommandOptions & #metrics ?~ keiroMetrics
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
+                    runCommand options snapshotCounterEventStream target (Add 2)
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
+                    runCommand options snapshotCounterEventStream target (Add 3)
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
                         Tx.statement ("snapshot-shape-mismatch", "stale-shape") corruptSnapshotShapeStmt
             result <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 4)
+                    runCommand options snapshotCounterEventStream target (Add 4)
             case result of
                 Right (Right commandResult) ->
                     commandResult ^. #streamVersion `shouldBe` StreamVersion 3
                 other -> expectationFailure ("expected stale shape fallback, got " <> show other)
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            let scalars = flattenScalarPoints exported
+            lookup "keiro.snapshot.read.misses" scalars `shouldBe` Just (IntNumber 3)
+            lookup "keiro.snapshot.decode.failures" scalars `shouldBe` Nothing
 
         it "falls back after operator truncation" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
             let target = stream "snapshot-operator-truncate" :: Stream SnapshotCounterEventStream
+                options = defaultRunCommandOptions & #metrics ?~ keiroMetrics
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
+                    runCommand options snapshotCounterEventStream target (Add 2)
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
+                    runCommand options snapshotCounterEventStream target (Add 3)
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
                         Tx.sql "TRUNCATE keiro.keiro_snapshots"
             result <-
                 Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 4)
+                    runCommand options snapshotCounterEventStream target (Add 4)
             case result of
                 Right (Right commandResult) ->
                     commandResult ^. #streamVersion `shouldBe` StreamVersion 3
                 other -> expectationFailure ("expected truncation fallback, got " <> show other)
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            let scalars = flattenScalarPoints exported
+            lookup "keiro.snapshot.read.misses" scalars `shouldBe` Just (IntNumber 3)
+            lookup "keiro.snapshot.decode.failures" scalars `shouldBe` Nothing
 
         it "writes snapshots after applying a complete multi-event command batch" $ \storeHandle -> do
             let target = stream "snapshot-multi-event-batch" :: Stream SnapshotCounterEventStream
@@ -5113,10 +5163,22 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
         -- Validation (d), second arm: corrupt snapshot JSON is treated as a miss.
         it "hydrates via full replay when the snapshot JSON is corrupt" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
             counter <- newIORef (0 :: Int)
             let name = WorkflowName "cjson"
                 wid = WorkflowId "d2"
-                opts = defaultWorkflowRunOptions & #snapshotPolicy .~ Every 2
+                opts =
+                    defaultWorkflowRunOptions
+                        & #snapshotPolicy
+                        .~ Every 2
+                        & #metrics
+                        ?~ keiroMetrics
             _ <- Store.runStoreIO storeHandle $ runWorkflowWith opts name wid (countingSixSteps counter)
             Right () <-
                 Store.runStoreIO storeHandle $
@@ -5126,6 +5188,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             mSeed `shouldBe` Nothing
             resumed <- Store.runStoreIO storeHandle $ runWorkflowWith opts name wid (countingSixSteps counter)
             resumed `shouldBe` Right (Completed [1, 2, 3, 4, 5, 6])
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            let scalars = flattenScalarPoints exported
+            lookup "keiro.snapshot.decode.failures" scalars `shouldBe` Just (IntNumber 1)
+            lookup "keiro.snapshot.read.misses" scalars `shouldBe` Just (IntNumber 2)
 
     describe "Keiro.Workflow.Resume" $ around (withFreshStore fixture) $ do
         -- M2: crash mid-run, then a resume pass drives the workflow to Completed

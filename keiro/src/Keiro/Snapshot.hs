@@ -17,6 +17,9 @@ encoding lives in "Keiro.Snapshot.Codec" and the SQL storage in
 module Keiro.Snapshot (
     -- * Hydration seed
     SnapshotSeed (..),
+    SnapshotMissReason (..),
+    SnapshotLookup (..),
+    lookupSnapshotSeed,
     hydrateWithSnapshot,
     encodeSnapshotStrict,
     writeSnapshotEncoded,
@@ -51,6 +54,47 @@ data SnapshotSeed rs s = SnapshotSeed
     }
     deriving stock (Generic)
 
+-- | Why a snapshot lookup produced no usable hydration seed.
+data SnapshotMissReason
+    = SnapshotNoStream
+    | SnapshotNotFound
+    | SnapshotDecodeFailed !Text
+    deriving stock (Eq, Show, Generic)
+
+-- | The observable result of looking up and decoding an aggregate snapshot.
+data SnapshotLookup rs s
+    = SnapshotUnavailable !SnapshotMissReason
+    | SnapshotHit !(SnapshotSeed rs s)
+    deriving stock (Generic)
+
+{- | Look up the latest compatible snapshot and retain the reason when no
+usable seed exists. A matching row that fails to decode is distinguished from
+a missing stream or row so callers can report the persistent fallback.
+-}
+lookupSnapshotSeed ::
+    (Store :> es) =>
+    StreamName ->
+    StateCodec (s, RegFile rs) ->
+    Eff es (SnapshotLookup rs s)
+lookupSnapshotSeed streamName codec = do
+    streamId <- lookupStreamId streamName
+    case streamId of
+        Nothing -> pure (SnapshotUnavailable SnapshotNoStream)
+        Just foundStreamId -> do
+            row <- lookupSnapshot foundStreamId (codec ^. #stateCodecVersion) (codec ^. #shapeHash)
+            pure $ case row of
+                Nothing -> SnapshotUnavailable SnapshotNotFound
+                Just snapshot ->
+                    case (codec ^. #decode) (snapshot ^. #state) of
+                        Left message -> SnapshotUnavailable (SnapshotDecodeFailed message)
+                        Right (state, registers) ->
+                            SnapshotHit
+                                SnapshotSeed
+                                    { state = state
+                                    , registers = registers
+                                    , streamVersion = snapshot ^. #streamVersion
+                                    }
+
 {- | Load the latest snapshot compatible with @codec@ for the named stream.
 
 Returns 'Nothing' — meaning "replay from the beginning" — when the stream
@@ -65,20 +109,9 @@ hydrateWithSnapshot ::
     StateCodec (s, RegFile rs) ->
     Eff es (Maybe (SnapshotSeed rs s))
 hydrateWithSnapshot streamName codec = do
-    streamId <- lookupStreamId streamName
-    case streamId of
-        Nothing -> pure Nothing
-        Just foundStreamId -> do
-            row <- lookupSnapshot foundStreamId (codec ^. #stateCodecVersion) (codec ^. #shapeHash)
-            pure $ do
-                snapshot <- row
-                (state, registers) <- either (const Nothing) Just ((codec ^. #decode) (snapshot ^. #state))
-                pure
-                    SnapshotSeed
-                        { state = state
-                        , registers = registers
-                        , streamVersion = snapshot ^. #streamVersion
-                        }
+    lookupSnapshotSeed streamName codec <&> \case
+        SnapshotUnavailable _ -> Nothing
+        SnapshotHit seed -> Just seed
 
 {- | Strictly encode @state@ with @codec@, forcing the complete JSON value and
 returning an 'ErrorCall' raised by a partial encoder or an uninitialized keiki

@@ -37,6 +37,7 @@ module Keiro.Workflow.Snapshot (
     workflowStateCodec,
     workflowStateCodecVersion,
     workflowStateShapeHash,
+    lookupWorkflowSnapshot,
     loadWorkflowSnapshot,
     writeWorkflowSnapshot,
 )
@@ -47,7 +48,7 @@ import Data.Text qualified as Text
 import Effectful (Eff, (:>))
 import Keiro.EventStream (StateCodec (..))
 import Keiro.Prelude
-import Keiro.Snapshot (writeSnapshot)
+import Keiro.Snapshot (SnapshotMissReason (..), writeSnapshot)
 import Keiro.Snapshot.Schema (lookupSnapshot)
 import Keiro.Workflow.Types (WorkflowState)
 import Kiroku.Store.Effect (Store)
@@ -102,13 +103,23 @@ matching snapshot, or an undecodable snapshot (advisory semantics). Mirrors
 'Keiro.Snapshot.hydrateWithSnapshot''s miss-is-benign contract.
 -}
 loadWorkflowSnapshot :: (Store :> es) => StreamName -> Eff es (Maybe (WorkflowState, StreamVersion))
-loadWorkflowSnapshot journalName = do
+loadWorkflowSnapshot journalName =
+    lookupWorkflowSnapshot journalName <&> either (const Nothing) Just
+
+{- | Resolve and decode a workflow snapshot while retaining the reason a
+usable seed was unavailable. This is the observable counterpart to
+'loadWorkflowSnapshot'.
+-}
+lookupWorkflowSnapshot :: (Store :> es) => StreamName -> Eff es (Either SnapshotMissReason (WorkflowState, StreamVersion))
+lookupWorkflowSnapshot journalName = do
     mStreamId <- lookupStreamId journalName
     case mStreamId of
-        Nothing -> pure Nothing
+        Nothing -> pure (Left SnapshotNoStream)
         Just streamId -> do
             mRow <- lookupSnapshot streamId workflowStateCodecVersion workflowStateShapeHash
-            pure $ do
-                row <- mRow
-                state <- either (const Nothing) Just ((workflowStateCodec ^. #decode) (row ^. #state))
-                pure (state, row ^. #streamVersion)
+            pure $ case mRow of
+                Nothing -> Left SnapshotNotFound
+                Just row ->
+                    case (workflowStateCodec ^. #decode) (row ^. #state) of
+                        Left message -> Left (SnapshotDecodeFailed message)
+                        Right state -> Right (state, row ^. #streamVersion)

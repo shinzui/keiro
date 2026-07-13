@@ -128,10 +128,14 @@ import Effectful.Exception (bracket_, catch, throwIO)
 import Keiro.Codec (decodeRecorded, encodeForAppendWithMetadata)
 import Keiro.EventStream (SnapshotPolicy (..), Terminality (..))
 import Keiro.Prelude
+import Keiro.Snapshot (SnapshotMissReason (..))
 import Keiro.Snapshot.Policy (shouldSnapshot)
 import Keiro.Telemetry (
     KeiroMetrics,
     Tracer,
+    recordSnapshotDecodeFailures,
+    recordSnapshotReadHits,
+    recordSnapshotReadMisses,
     recordWorkflowActive,
     recordWorkflowJournalLength,
     recordWorkflowStepExecuted,
@@ -144,7 +148,7 @@ import Keiro.Workflow.Instance (
     upsertInstanceTx,
  )
 import Keiro.Workflow.Schema (WorkflowStepRow (..), currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lockWorkflowStepTx, lookupStepResultTx, recordStepTx, setWorkflowWakeAfterTx, stepExists)
-import Keiro.Workflow.Snapshot (loadWorkflowSnapshot, writeWorkflowSnapshot)
+import Keiro.Workflow.Snapshot (lookupWorkflowSnapshot, writeWorkflowSnapshot)
 import Keiro.Workflow.Types
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Read (readStreamForwardStream)
@@ -651,11 +655,12 @@ and read only the journal events /after/ the snapshot's version ("tail
 replay"); the resulting map is byte-for-byte the one a full version-0 replay
 would produce, because every 'StepRecorded' at or before the snapshot version
 is already captured in the seed. A missing, mismatched, or undecodable
-snapshot collapses to 'Nothing', and the read falls back to a full replay from
-version 0. 'WorkflowCompleted' contributes nothing to the map.
+snapshot is recorded as a miss (and, for undecodable bytes, a decode failure)
+before the read falls back to a full replay from version 0.
+'WorkflowCompleted' contributes nothing to the map.
 -}
 loadJournal ::
-    (Store :> es) =>
+    (IOE :> es, Store :> es) =>
     WorkflowRunOptions ->
     WorkflowName ->
     WorkflowId ->
@@ -663,10 +668,18 @@ loadJournal ::
     Eff es (Map Text Aeson.Value)
 loadJournal options name wid gen = do
     let journalName = workflowGenerationStreamName name wid gen
-    mSeed <- loadWorkflowSnapshot journalName
-    let (seedMap, fromVersion) = case mSeed of
-            Just (m, v) -> (m, v)
-            Nothing -> (Map.empty, StreamVersion 0)
+    snapshot <- lookupWorkflowSnapshot journalName
+    (seedMap, fromVersion) <- case snapshot of
+        Right (m, v) -> do
+            recordSnapshotReadHits (options ^. #metrics) 1
+            pure (m, v)
+        Left reason -> do
+            recordSnapshotReadMisses (options ^. #metrics) 1
+            case reason of
+                SnapshotDecodeFailed _ -> recordSnapshotDecodeFailures (options ^. #metrics) 1
+                _ -> pure ()
+            pure (Map.empty, StreamVersion 0)
+    let
         events = readStreamForwardStream journalName fromVersion (options ^. #pageSize)
     Streamly.fold (Fold.foldlM' accumulate (pure seedMap)) events
   where
