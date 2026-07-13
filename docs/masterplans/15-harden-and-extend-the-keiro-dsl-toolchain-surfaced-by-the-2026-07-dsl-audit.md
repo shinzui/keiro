@@ -362,6 +362,12 @@ EP-106 in parallel alongside the front of that path.
     `ThingDone`. EP-105 renamed the starter event to `ThingCompleted`; EP-106 can rely on
     `new aggregate` passing the identifier-hygiene gate before its compile-all-skeletons
     milestone.
+  - EP-105's all-family round-trip generator found that top-level node keywords are a
+    load-bearing parser registry: omitted `process`/`dispatch` entries made a preceding
+    aggregate consume them as transition sources, and `emit Name {` needed brace
+    lookahead to distinguish it from a transition emit clause. EP-107/108/109 must add
+    every new top-level keyword (`readmodel`, `router`, or otherwise) to `reservedWords`
+    in the same vertical that adds its parser arm.
 
 
 ## Decision Log

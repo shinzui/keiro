@@ -138,6 +138,8 @@ reservedWords =
     , "upcast"
     , "from"
     , "HOLE"
+    , "process"
+    , "dispatch"
     , -- EP-4 integration: structural keywords never used as identifiers, so a
       -- list like @accept A B C@ stops at the next block keyword.
       "intake"
@@ -381,7 +383,7 @@ pRegDecl = do
 pStatesLine :: P [StateDecl]
 pStatesLine = do
     keyword "states"
-    some pStateDecl
+    many pStateDecl
   where
     -- A state decl is an identifier with an optional terminal @!@. The
     -- @notFollowedBy@ lookahead stops the list before a transition whose source
@@ -1224,7 +1226,11 @@ pClause =
     choice
         [ CGuard <$> (keyword "guard" *> pExpr)
         , (\r e -> CWrite r e) <$> (keyword "write" *> ident) <*> (symbol ":=" *> pExpr)
-        , CEmit <$> (keyword "emit" *> ident)
+        , try $ do
+            keyword "emit"
+            eventName <- ident
+            notFollowedBy (symbol "{")
+            pure (CEmit eventName)
         , CGoto <$> (keyword "goto" *> ident)
         ]
 

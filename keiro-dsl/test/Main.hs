@@ -26,9 +26,22 @@ import Test.QuickCheck
 main :: IO ()
 main = hspec $ do
     describe "parse . pretty round-trip" $
-        it "re-parses any generated spec to an equal AST (modulo source locations)" $
-            forAll genSpec $ \s ->
-                parseSpec "<gen>" (renderSpec s) === Right s
+        do
+            it "re-parses any generated spec to an equal AST (modulo source locations)" $
+                checkCoverage $
+                    forAll genSpec $ \s ->
+                        let families = map nodeTag (specNodes s)
+                            roundTrip = parseSpec "<gen>" (renderSpec s) === Right s
+                         in foldr (\family -> cover 1 (family `elem` families) family) roundTrip allNodeTags
+            it "round-trips an aggregate with no states" $
+                parseSpec "<empty-states>" (renderSpec emptyStatesSpec) `shouldBe` Right emptyStatesSpec
+            it "separates transition emit clauses from following nodes" $ do
+                spec <- parseInlineSpec "<cross-family-boundaries>" crossFamilyBoundarySpec
+                case specNodes spec of
+                    [NAggregate first, NEmit _, NAggregate second, NPgmqDispatch _] -> do
+                        concatMap tEmits (aggTransitions first) `shouldBe` ["Changed"]
+                        aggStates second `shouldBe` []
+                    nodes -> expectationFailure ("unexpected node sequence: " <> show (map nodeTag nodes))
 
     describe "string literal integrity" $ do
         it "parses an escaped emit-map value as exactly one row" $ do
@@ -1061,6 +1074,54 @@ unicodeIdentifierSpec =
         , "  states Open"
         ]
 
+emptyStatesSpec :: Spec
+emptyStatesSpec =
+    Spec
+        "svc"
+        Nothing
+        Nothing
+        []
+        []
+        []
+        [NAggregate (Aggregate "Thing" [] [] [] [] [] Nothing Nothing noLoc)]
+
+crossFamilyBoundarySpec :: T.Text
+crossFamilyBoundarySpec =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate First"
+        , "  regs"
+        , "  states A B"
+        , "  command Go { }"
+        , "  A -- Go -->"
+        , "    emit Changed"
+        , "    goto B"
+        , ""
+        , "emit Output {"
+        , "  contract Contract"
+        , "  topic events"
+        , "  source \"source\""
+        , "  key thingId"
+        , "  map status { _ => skip }"
+        , "  messageId derive hole"
+        , "  idempotencyKey derive hole"
+        , "}"
+        , ""
+        , "aggregate Second"
+        , "  regs"
+        , "  states"
+        , ""
+        , "dispatch QueueDispatch {"
+        , "  source readModel = source key = thingId"
+        , "  fanout body = resolveFanout"
+        , "  dedup key = thingId"
+        , "    seenIn readModel = seen field = thingId"
+        , "    seenIn queue = workQueue field = thingId"
+        , "  enqueue to = workQueue"
+        , "}"
+        ]
+
 --------------------------------------------------------------------------------
 -- Generators (bounded; restricted to valid, non-reserved identifiers)
 --------------------------------------------------------------------------------
@@ -1155,16 +1216,26 @@ processWithLiteral value =
         }
 
 genName :: Gen Name
-genName = do
-    base <- elements ["Aa", "Bb", "Cc", "Dd", "St", "Cmd", "Ev", "Reg", "Fld", "Foo", "Bar", "Qux"]
-    n <- choose (0, 9 :: Int)
-    pure (T.pack (base <> show n))
+genName =
+    frequency
+        [
+            ( 3
+            , do
+                base <- elements ["Aa", "Bb", "Cc", "Dd", "St", "Cmd", "Ev", "Reg", "Fld", "Foo", "Bar", "Qux"]
+                n <- choose (0, 9 :: Int)
+                pure (T.pack (base <> show n))
+            )
+        , (1, elements ["data1", "typeA", "whereX", "gotoX", "guardY", "emitZ", "_lead"])
+        ]
 
 genWire :: Gen T.Text
 genWire = do
-    base <- elements ["red", "blue", "green", "ctorName", "camelCase", "rsv", "hosp", "held"]
+    base <- elements ["red", "blue", "green", "ctorName", "camelCase", "rsv", "hosp", "held", "partial-divert", "1st"]
     n <- choose (0, 9 :: Int)
     pure (T.pack (base <> show n))
+
+genWireWord :: Gen T.Text
+genWireWord = genWire
 
 smallList :: Gen a -> Gen [a]
 smallList g = choose (0, 3 :: Int) >>= \n -> vectorOf n g
@@ -1245,13 +1316,254 @@ genAggregate =
     Aggregate
         <$> genName
         <*> smallList genReg
-        <*> nonEmptyList genState
+        <*> smallList genState
         <*> smallList genCommand
         <*> smallList genEvent
         <*> smallList genTransition
         <*> genMaybe genWireSpec
         <*> genMaybe genProjection
         <*> pure noLoc
+
+genDottedRef :: Gen T.Text
+genDottedRef = elements ["input.id", "input.hospitalId", "timer.id", "correlationId", "payload.messageId"]
+
+genWindow :: Gen T.Text
+genWindow = elements ["0s", "5s", "2m", "100ms", "1h"]
+
+genFieldBinding :: Gen FieldBinding
+genFieldBinding =
+    FieldBinding
+        <$> genName
+        <*> oneof
+            [ pure Nothing
+            , Just <$> genDottedRef
+            , Just . (\raw -> "\"" <> raw <> "\"") <$> genAdversarialText
+            ]
+
+genDispatchDisposition :: Gen DispatchDisposition
+genDispatchDisposition = DispatchDisposition <$> genDisp <*> genDisp <*> genDisp
+  where
+    genDisp = oneof [pure DAckOk, pure DRetry, DDeadLetter <$> genAdversarialText]
+
+genDispatchNode :: Gen DispatchNode
+genDispatchNode =
+    DispatchNode
+        <$> genName
+        <*> genDottedRef
+        <*> genName
+        <*> smallList genFieldBinding
+        <*> genDispatchDisposition
+        <*> pure noLoc
+
+genFireDisposition :: Gen FireDisposition
+genFireDisposition =
+    FireDisposition
+        <$> elements [OFired, ORetry]
+        <*> elements [OFired, ORetry]
+        <*> elements [OFired, ORetry]
+        <*> elements [OFired, ORetry]
+
+genIdExpr :: Gen IdExpr
+genIdExpr = IdExpr UuidV5Id <$> genAdversarialText
+
+genFireNode :: Gen FireNode
+genFireNode =
+    FireNode
+        <$> genName
+        <*> genDottedRef
+        <*> genName
+        <*> smallList genFieldBinding
+        <*> genIdExpr
+        <*> genFireDisposition
+
+genTimerNode :: Gen TimerNode
+genTimerNode =
+    TimerNode
+        <$> genName
+        <*> genIdExpr
+        <*> (FireAtExpr <$> genName <*> genWindow)
+        <*> smallList genFieldBinding
+        <*> genFireNode
+        <*> genName
+        <*> choose (0, 5)
+        <*> genAdversarialText
+        <*> pure noLoc
+
+genProcess :: Gen ProcessNode
+genProcess =
+    ProcessNode
+        <$> genName
+        <*> genAdversarialText
+        <*> (InputDecl <$> genName <*> smallList genField)
+        <*> (CorrelateDecl <$> genName <*> genName)
+        <*> (SagaRef <$> genName <*> genAdversarialText)
+        <*> genName
+        <*> smallList genName
+        <*> (HandleNode <$> genName <*> (AdvanceNode <$> genName <*> smallList genFieldBinding) <*> smallList genDispatchNode <*> genName)
+        <*> genTimerNode
+        <*> pure noLoc
+
+genContractField :: Gen ContractField
+genContractField = ContractField <$> genName <*> oneof [CTypeId <$> genAdversarialText, pure CText, pure CInt]
+
+genContractEvent :: Gen ContractEvent
+genContractEvent = ContractEvent <$> genName <*> genName <*> smallList genContractField
+
+genContract :: Gen ContractNode
+genContract =
+    ContractNode
+        <$> genName
+        <*> choose (0, 5)
+        <*> genName
+        <*> smallList ((,) <$> genName <*> genAdversarialText)
+        <*> smallList genContractEvent
+        <*> pure noLoc
+
+genWireSource :: Gen WireSource
+genWireSource = oneof [SrcHeader <$> genAdversarialText, pure SrcBody, pure SrcKafkaKey, pure SrcKafkaCursor]
+
+genInboxAction :: Gen InboxAction
+genInboxAction = oneof [pure IAckOk, IRetry <$> genWindow, IDeadLetter <$> genMaybe genAdversarialText]
+
+genDispositionRow :: Gen DispositionRow
+genDispositionRow = DispositionRow <$> genName <*> genInboxAction <*> pure noLoc
+
+genDecodeSpec :: Gen DecodeSpec
+genDecodeSpec =
+    DecodeSpec
+        <$> ((\first second -> first <> " " <> second) <$> genWireWord <*> genWireWord)
+        <*> arbitrary
+        <*> choose (0, 5)
+
+genIntake :: Gen IntakeNode
+genIntake =
+    IntakeNode
+        <$> genName
+        <*> genName
+        <*> genName
+        <*> nonEmptyList genName
+        <*> smallList (BindRow <$> genName <*> genWireSource <*> arbitrary <*> arbitrary)
+        <*> genName
+        <*> genName
+        <*> genDecodeSpec
+        <*> smallList genDispositionRow
+        <*> pure noLoc
+
+genDeriveSpec :: Gen DeriveSpec
+genDeriveSpec = DeriveSpec <$> genMaybe genAdversarialText
+
+genEmit :: Gen EmitNode
+genEmit =
+    EmitNode
+        <$> genName
+        <*> genName
+        <*> genName
+        <*> genAdversarialText
+        <*> genName
+        <*> genName
+        <*> smallList (EmitMapRow <$> genAdversarialText <*> genName <*> pure noLoc)
+        <*> arbitrary
+        <*> genDeriveSpec
+        <*> genDeriveSpec
+        <*> pure noLoc
+
+genPublisher :: Gen PublisherNode
+genPublisher =
+    PublisherNode
+        <$> genName
+        <*> genName
+        <*> genName
+        <*> choose (0, 5)
+        <*> (BackoffSpec <$> genName <*> genWindow)
+        <*> genName
+        <*> pure noLoc
+
+genWqField :: Gen WqField
+genWqField = WqField <$> genName <*> genAdversarialText <*> genName <*> arbitrary
+
+genWqDispRow :: Gen WqDispRow
+genWqDispRow = WqDispRow <$> genName <*> genInboxAction <*> pure noLoc
+
+genWorkqueue :: Gen WorkqueueNode
+genWorkqueue =
+    WorkqueueNode
+        <$> genName
+        <*> genAdversarialText
+        <*> genAdversarialText
+        <*> genAdversarialText
+        <*> genAdversarialText
+        <*> genName
+        <*> smallList genWqField
+        <*> choose (0, 5)
+        <*> genWindow
+        <*> arbitrary
+        <*> smallList genWqDispRow
+        <*> pure noLoc
+
+genPgmqDispatch :: Gen PgmqDispatchNode
+genPgmqDispatch =
+    PgmqDispatchNode
+        <$> genName
+        <*> genName
+        <*> genName
+        <*> genName
+        <*> genName
+        <*> genName
+        <*> genName
+        <*> genName
+        <*> genName
+        <*> genName
+        <*> pure noLoc
+
+genWfBodyItem :: Gen WfBodyItem
+genWfBodyItem =
+    oneof
+        [ WfStep <$> genWireWord <*> genName <*> pure noLoc
+        , WfAwait <$> genWireWord <*> genName <*> pure noLoc
+        , WfSleep <$> genWireWord <*> genName <*> pure noLoc
+        , WfChild <$> genWireWord <*> genName <*> genName <*> pure noLoc
+        ]
+
+genWorkflow :: Gen WorkflowNode
+genWorkflow =
+    WorkflowNode
+        <$> genName
+        <*> genAdversarialText
+        <*> genName
+        <*> smallList genField
+        <*> genName
+        <*> genMaybe genName
+        <*> genName
+        <*> smallList genWfBodyItem
+        <*> pure noLoc
+
+genOperationShape :: Gen OperationShape
+genOperationShape =
+    oneof
+        [ CommandOp <$> genName <*> genName <*> genName <*> smallList genName
+        , QueryOp <$> genName <*> genName <*> ((\parts -> T.unwords parts) <$> nonEmptyList genName) <*> genName
+        , SignalOp <$> genWireWord <*> genName <*> genName <*> genName <*> genName
+        , RunOp <$> genName <*> genName <*> genName
+        ]
+
+genOperation :: Gen OperationNode
+genOperation = OperationNode <$> genName <*> genOperationShape <*> pure noLoc
+
+allNodeTags :: [String]
+allNodeTags = ["aggregate", "process", "contract", "intake", "emit", "publisher", "workqueue", "pgmq-dispatch", "workflow", "operation"]
+
+nodeTag :: Node -> String
+nodeTag = \case
+    NAggregate _ -> "aggregate"
+    NProcess _ -> "process"
+    NContract _ -> "contract"
+    NIntake _ -> "intake"
+    NEmit _ -> "emit"
+    NPublisher _ -> "publisher"
+    NWorkqueue _ -> "workqueue"
+    NPgmqDispatch _ -> "pgmq-dispatch"
+    NWorkflow _ -> "workflow"
+    NOperation _ -> "operation"
 
 genId :: Gen IdDecl
 genId = IdDecl <$> genName <*> genWire <*> pure noLoc
@@ -1277,7 +1589,21 @@ genSpec =
         <*> smallList genId
         <*> smallList genEnum
         <*> smallList genRule
-        <*> smallList (NAggregate <$> genAggregate)
+        <*> smallList genNode
+  where
+    genNode =
+        oneof
+            [ NAggregate <$> genAggregate
+            , NProcess <$> genProcess
+            , NContract <$> genContract
+            , NIntake <$> genIntake
+            , NEmit <$> genEmit
+            , NPublisher <$> genPublisher
+            , NWorkqueue <$> genWorkqueue
+            , NPgmqDispatch <$> genPgmqDispatch
+            , NWorkflow <$> genWorkflow
+            , NOperation <$> genOperation
+            ]
 
 -- | A dotted PascalCase module prefix, e.g. @Acme@ or @Acme.Services@.
 genModuleRoot :: Gen T.Text

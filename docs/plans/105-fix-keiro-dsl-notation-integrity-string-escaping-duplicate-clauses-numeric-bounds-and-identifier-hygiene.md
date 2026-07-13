@@ -55,10 +55,10 @@ a line-numbered error.
 - [x] M4: duplicate `wire`/`projection`/`goto` rejected with positioned errors; missing-goto reported at the transition line; dash-aware keyword boundary; `try pRegDecl` removed (C3 + C6). Completed 2026-07-13T21:05:55Z; 122 examples passed and the CLI rejected the duplicate `goto` at line 10, column 5.
 - [x] M5: bounded decimals at all seven `L.decimal` sites (C4). Completed 2026-07-13T21:08:42Z; all seven overflow fixtures and the `maxBound` boundary passed in the 130-example suite, and the CLI rejected the audited wraparound value.
 - [x] M6: identifier hygiene validator rules + parser ASCII alphabet (C5). Completed 2026-07-13T21:15:14Z; 134 examples passed, all skeletons validate, and the CLI emitted the expected line-3/line-7 hygiene diagnostics.
-- [ ] M7: round-trip property extended to all node families with adversarial generators and empty-list edges; `states` accepts zero names; NOTATION.md touch-ups (C7).
+- [x] M7: round-trip property extended to all node families with adversarial generators and empty-list edges; `states` accepts zero names; NOTATION.md touch-ups (C7). Completed 2026-07-13T21:22:23Z; the standard 136-example suite passed and a 1,000-case stress run covered every node family.
 - [ ] Full keiro-dsl test matrix green (unit + all conformance suites); Outcomes written.
 
-Implementation started 2026-07-13; M1 through M6 are complete and M7 is next.
+Implementation started 2026-07-13; M1 through M7 are complete and the full package matrix is next.
 
 
 ## Surprises & Discoveries
@@ -77,6 +77,12 @@ Implementation started 2026-07-13; M1 through M6 are complete and M7 is next.
   the live scaffolder's `vertexCtor` concatenation generates `ThingDone` for that state,
   so the two constructors collide. The skeleton now uses event `ThingCompleted`, keeping
   its state machine behavior while making `new aggregate` pass the new validator rule.
+- M7's all-family property found two cross-node parser ambiguities that the former
+  aggregate-only generator could not reach. `process` and top-level `dispatch` were
+  absent from `reservedWords`, so an immediately preceding aggregate tried to parse them
+  as transition sources. Separately, top-level `emit Name {` after a transition was
+  swallowed as the transition clause `emit Name`, leaving `{` stranded. The parser now
+  reserves both node keywords and makes the clause arm backtrack when `{` follows.
 - (During implementation, record further discoveries here with short evidence snippets.)
 
 
@@ -142,6 +148,14 @@ Implementation started 2026-07-13; M1 through M6 are complete and M7 is next.
   existing starter violated the plan's non-negotiable acceptance criterion that every
   `new <kind>` skeleton validate cleanly. Leaving a built-in invalid skeleton or
   weakening the diagnostic would contradict the purpose of M6.
+  Date: 2026-07-13.
+- Decision: disambiguate a transition `emit EventName` clause from a top-level
+  `emit NodeName {` block by looking ahead for `{` after the name and backtracking only
+  in the block case. Also reserve every current top-level node keyword, including the
+  previously omitted `process` and `dispatch`.
+  Rationale: the DSL is intentionally whitespace-insensitive, so indentation cannot be
+  the boundary. The opening brace is the existing syntactic distinction and preserves
+  every valid transition clause while making mixed-node specs round-trip.
   Date: 2026-07-13.
 - Decision: `pStatesLine` changes from `some pStateDecl` to `many pStateDecl` so an
   aggregate with zero states is *representable* and the printer's output for it re-parses
@@ -890,3 +904,6 @@ holistic NOTATION/skill refresh — docs/plans/110-align-keiro-dsl-with-the-safe
   proved the aggregate starter's `Done` state and `ThingDone` event generated the same
   Haskell constructor. This preserves the original acceptance criterion that every
   built-in skeleton passes `check`.
+- 2026-07-13: Expanded M7's parser work to reserve the omitted `process`/`dispatch`
+  node keywords and distinguish transition emit clauses from top-level emit blocks,
+  after the new all-family property produced minimal cross-node counterexamples.

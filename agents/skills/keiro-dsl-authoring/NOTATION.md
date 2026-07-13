@@ -4,6 +4,11 @@ A `.keiro` file is `context <name>` followed by top-level declarations and nodes
 line comment; whitespace/newlines are insignificant (structure comes from keywords). Every
 node family below is parsed, validated, and round-tripped by the toolchain.
 
+Double-quoted strings support `\"`, `\\`, `\n`, `\t`, and `\r`; write line breaks as
+`\n` because raw newlines inside a quoted string are rejected. An aggregate may contain
+at most one `wire` block and one `projection` block, and each transition must contain
+exactly one `goto`; duplicates are positioned parse errors.
+
 ## Shared declarations
 
 ```text
