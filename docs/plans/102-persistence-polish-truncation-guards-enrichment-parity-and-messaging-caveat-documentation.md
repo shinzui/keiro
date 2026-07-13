@@ -4,6 +4,7 @@ slug: persistence-polish-truncation-guards-enrichment-parity-and-messaging-cavea
 title: "Persistence polish: truncation guards, enrichment parity, and messaging caveat documentation"
 kind: exec-plan
 created_at: 2026-07-12T05:07:53Z
+intention: intention_01kxcz37ave9t8d6amvvxnemr6
 master_plan: "docs/masterplans/14-harden-the-keiro-command-coordination-and-snapshot-paths-surfaced-by-the-2026-07-keiki-path-review.md"
 ---
 
@@ -28,11 +29,11 @@ To see it working after implementation: run `cabal test keiro-test` from the rep
 
 ## Progress
 
-- [ ] Milestone 1: `HydrationGapDetected` constructor added to `CommandError` with a `commandErrorClass` arm.
-- [ ] Milestone 1: contiguity guard implemented in both hydration folds in `keiro/src/Keiro/Command.hs`.
-- [ ] Milestone 1: red-then-green test — truncation without covering snapshot yields `HydrationGapDetected` (full-hydration path).
-- [ ] Milestone 1: red-then-green test — mid-batch truncation (multi-event command) yields `HydrationGapDetected`.
-- [ ] Milestone 1: positive test — truncation with a covering snapshot hydrates and appends normally.
+- [x] (2026-07-13 21:40 PDT) Milestone 1: `HydrationGapDetected` constructor added to `CommandError` with a `commandErrorClass` arm.
+- [x] (2026-07-13 21:48 PDT) Milestone 1: contiguity guard implemented in EP-95's shared page-oriented hydration input pipeline in `keiro/src/Keiro/Command.hs`.
+- [x] (2026-07-13 21:48 PDT) Milestone 1: red-then-green test — truncation without covering snapshot yields `HydrationGapDetected` (full-hydration path).
+- [x] (2026-07-13 21:48 PDT) Milestone 1: red-then-green test — mid-batch truncation (multi-event command) yields `HydrationGapDetected`.
+- [x] (2026-07-13 21:48 PDT) Milestone 1: positive test — truncation with a covering snapshot hydrates and appends normally.
 - [ ] Milestone 2: `KirokuStoreResource` constraint added to `runCommandWithSqlEvents` / `runCommandWithSql` and propagated to `runCommandWithProjections`, `runProcessManagerOnce`, `runRouterOnce`.
 - [ ] Milestone 2: `enrichEventsIO` wired before `prepareEventsIO` in `appendWithSqlOnce`.
 - [ ] Milestone 2: `withFreshResourceStore` fixture added to `keiro-test-support` and affected existing tests migrated.
@@ -49,7 +50,16 @@ To see it working after implementation: run `cabal test keiro-test` from the rep
 
 ## Surprises & Discoveries
 
-(None yet.)
+- EP-95 already replaced the authored duplicate hydration folds with one
+  page-oriented `hydrateSeeded` function around `Keiki.replayEvents`. The
+  contiguity guard therefore belongs in that shared input pipeline, with a
+  pending error after the valid prefix so an earlier replay failure still wins.
+  This is the integration outcome anticipated by the original EP-95 merge note.
+- The red truncation run on 2026-07-13 proved both error shapes. An uncovered
+  counter suffix silently appended version 4, while truncating inside the
+  two-event command batch returned
+  `HydrationReplayFailed (StreamVersion 2) HydrationNoInvertingEdge` instead of
+  identifying the storage gap. The covering-snapshot control passed.
 
 
 ## Decision Log
@@ -81,6 +91,16 @@ To see it working after implementation: run `cabal test keiro-test` from the rep
 - Decision: the in-repo `jitsurei` package receives mechanical build fixes only (rewiring its effect stacks for the new constraint) and is never cited as design evidence.
   Rationale: user directive recorded in MasterPlan 14 — the jitsurei examples are outdated and out of scope — but they live in this repository and `cabal build all` (the `just haskell-build` recipe) must keep succeeding.
   Date: 2026-07-11
+
+- Decision: re-host the truncation guard in EP-95's shared `hydrateSeeded`
+  page pipeline. Scan each recorded event for contiguity before decoding it,
+  but carry the first gap as a pending input error until the already-decoded
+  prefix has replayed.
+  Rationale: EP-95 removed the two authored folds. Treating a gap like the
+  existing pending decode failure preserves event-order semantics: a replay
+  failure in an earlier visible event wins over a later gap, while a gap at
+  the head is reported before attempting to decode or replay the suffix.
+  Date: 2026-07-13
 
 
 ## Outcomes & Retrospective

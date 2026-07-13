@@ -312,6 +312,7 @@ isTransientCommandError = \case
     ConflictFixpoint _ err -> isTransientStoreError err
     HydrationDecodeFailed{} -> False
     HydrationReplayFailed{} -> False
+    HydrationGapDetected{} -> False
     CommandRejected -> False
     CommandAmbiguous{} -> False
     EncodeFailed{} -> False

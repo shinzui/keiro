@@ -886,6 +886,68 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             traverse (decodeRecorded counterCodec) (Vector.toList recorded)
                 `shouldBe` Right [CounterAdded 2, CounterAdded 3]
 
+        it "rejects hydration after truncation without a covering snapshot" $ \storeHandle -> do
+            let target = stream "counter-truncated-uncovered" :: Stream CounterEventStream
+                targetName = StreamName "counter-truncated-uncovered"
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions counterEventStream target (Add 1)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions counterEventStream target (Add 2)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions counterEventStream target (Add 3)
+            Right (Just _) <-
+                Store.runStoreIO storeHandle $
+                    Store.setStreamTruncateBefore targetName (StreamVersion 3)
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions counterEventStream target (Add 4)
+            case result of
+                Right (Left (HydrationGapDetected expected observed)) -> do
+                    expected `shouldBe` StreamVersion 1
+                    observed `shouldBe` StreamVersion 3
+                other -> expectationFailure ("expected HydrationGapDetected, got " <> show other)
+
+        it "rejects hydration when truncation lands inside a command batch" $ \storeHandle -> do
+            let target = stream "counter-truncated-mid-batch" :: Stream CounterEventStream
+                targetName = StreamName "counter-truncated-mid-batch"
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions multiCounterEventStream target (Add 1)
+            Right (Just _) <-
+                Store.runStoreIO storeHandle $
+                    Store.setStreamTruncateBefore targetName (StreamVersion 2)
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions multiCounterEventStream target (Add 2)
+            case result of
+                Right (Left (HydrationGapDetected expected observed)) -> do
+                    expected `shouldBe` StreamVersion 1
+                    observed `shouldBe` StreamVersion 2
+                other -> expectationFailure ("expected HydrationGapDetected, got " <> show other)
+
+        it "hydrates normally after truncation covered by a snapshot" $ \storeHandle -> do
+            let target = stream "counter-truncated-covered" :: Stream SnapshotCounterEventStream
+                targetName = StreamName "counter-truncated-covered"
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 1)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
+            Right (Just _) <-
+                Store.runStoreIO storeHandle $
+                    Store.setStreamTruncateBefore targetName (StreamVersion 2)
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
+            case result of
+                Right (Right commandResult) ->
+                    commandResult ^. #streamVersion `shouldBe` StreamVersion 3
+                other -> expectationFailure ("expected snapshot-covered command success, got " <> show other)
+
         it "uses caller-supplied event ids for idempotent command batches" $ \storeHandle -> do
             let target = stream "counter-command-event-id" :: Stream CounterEventStream
                 supplied = EventId sampleUuid2

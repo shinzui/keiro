@@ -144,6 +144,14 @@ data CommandError
       which the expected multi-event chain remained incomplete.
       -}
       HydrationReplayFailed !StreamVersion !HydrationReplayReason
+    | {- | Hydration observed a non-contiguous stream version. Carries the
+      expected version followed by the observed version. The store writes
+      contiguous versions, so this indicates that stream truncation hid
+      events not covered by the hydration seed. Restore visibility with
+      @clearStreamTruncateBefore@ or provide a covering snapshot before
+      retrying the command.
+      -}
+      HydrationGapDetected !StreamVersion !StreamVersion
     | -- | No transducer edge matched the command in the hydrated state.
       CommandRejected
     | {- | Two or more transducer edges matched the command in the hydrated
@@ -356,8 +364,8 @@ hydrateSeeded options eventStream targetStream seedState seedRegisters seedVersi
             Left replayFailure ->
                 Left (hydrationReplayError previousRecorded decodedRecorded replayFailure)
             Right (nextWrapper, nextRegisters) ->
-                case pendingDecodeFailure of
-                    Just err -> Left (HydrationDecodeFailed err)
+                case pendingInputFailure of
+                    Just err -> Left err
                     Nothing ->
                         Right
                             ( nextWrapper
@@ -365,18 +373,34 @@ hydrateSeeded options eventStream targetStream seedState seedRegisters seedVersi
                             , latestRecorded decodedRecorded previousRecorded
                             )
       where
-        (decodedRecorded, decodedEvents, pendingDecodeFailure) = decodePrefix page
+        (decodedRecorded, decodedEvents, pendingInputFailure) = decodePrefix previousRecorded page
 
-    decodePrefix :: [RecordedEvent] -> ([RecordedEvent], [co], Maybe CodecError)
-    decodePrefix = go [] []
+    decodePrefix :: Maybe RecordedEvent -> [RecordedEvent] -> ([RecordedEvent], [co], Maybe CommandError)
+    decodePrefix previousRecorded = go [] [] startingVersion
       where
-        go recordedAcc eventAcc = \case
+        startingVersion = maybe seedVersion (^. #streamVersion) previousRecorded
+
+        go recordedAcc eventAcc lastSeen = \case
             [] -> (Prelude.reverse recordedAcc, Prelude.reverse eventAcc, Nothing)
             recorded : rest ->
-                case decodeRecorded (eventStream ^. #eventCodec) recorded of
-                    Left err ->
-                        (Prelude.reverse recordedAcc, Prelude.reverse eventAcc, Just err)
-                    Right event -> go (recorded : recordedAcc) (event : eventAcc) rest
+                let observed = recorded ^. #streamVersion
+                    expected = nextStreamVersion lastSeen
+                 in if observed /= expected
+                        then
+                            ( Prelude.reverse recordedAcc
+                            , Prelude.reverse eventAcc
+                            , Just (HydrationGapDetected expected observed)
+                            )
+                        else case decodeRecorded (eventStream ^. #eventCodec) recorded of
+                            Left err ->
+                                ( Prelude.reverse recordedAcc
+                                , Prelude.reverse eventAcc
+                                , Just (HydrationDecodeFailed err)
+                                )
+                            Right event ->
+                                go (recorded : recordedAcc) (event : eventAcc) observed rest
+
+        nextStreamVersion (StreamVersion version) = StreamVersion (version Prelude.+ 1)
 
     hydrationReplayError ::
         Maybe RecordedEvent ->
@@ -632,6 +656,7 @@ commandErrorClass = \case
     HydrationReplayFailed _ HydrationAmbiguousInversion -> "hydration_replay_ambiguous_inversion"
     HydrationReplayFailed _ HydrationQueueMismatch -> "hydration_replay_queue_mismatch"
     HydrationReplayFailed _ HydrationTruncatedChain -> "hydration_replay_truncated_chain"
+    HydrationGapDetected{} -> "hydration_gap_detected"
     CommandRejected -> "command_rejected"
     CommandAmbiguous{} -> "command_ambiguous"
     EncodeFailed{} -> "encode_failed"
