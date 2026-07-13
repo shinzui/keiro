@@ -37,6 +37,7 @@ library
     Keiro.Dsl.Parser
     Keiro.Dsl.PrettyPrint
     Keiro.Dsl.Scaffold
+    Keiro.Dsl.ScaffoldRecord
     Keiro.Dsl.ScaffoldRun
     Keiro.Dsl.Skeleton
     Keiro.Dsl.Validate

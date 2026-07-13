@@ -64,8 +64,9 @@ commands in "Validation and Acceptance".
       pin that fresh skeleton scaffolds match the committed suite.
 - [x] (2026-07-13 22:06Z) M7: D7 conformance pin includes import lines (sorted-set comparison); committed
       conformance modules regenerated if drift is exposed.
-- [ ] M8: D3 scaffold-run record sidecar + stale-module report across layout/module-root
-      flips.
+- [x] (2026-07-13 22:16Z) M8: D3 versioned scaffold-run record sidecar + non-deleting
+      stale-module report across node renames and layout/module-root flips, with generated
+      versus hand-owned guidance and shared-context/spec-path warning.
 - [ ] M9: authoring-docs refresh (NOTATION.md/SKILL.md/LOOP.md for every surface changed
       here) + full sweep: unit suite green from `keiro-dsl/`, all conformance suites green.
 
@@ -103,6 +104,10 @@ Plan of Work):
   spellings while still comparing the imported module and explicit import list. The new
   skeleton suite compiled 31 modules and ran the aggregate harness and workflow-facts
   checks; the unit suite passed 148 examples.
+- The stale-path record is an input to filesystem lookups on the next run, so its parser
+  now rejects absolute paths and `..` path components in addition to rejecting unknown
+  major versions. This keeps a corrupted or hand-edited sidecar from making the stale scan
+  inspect paths outside `--out`; forward-compatible unknown header lines remain ignored.
 
 (To be extended during implementation.)
 

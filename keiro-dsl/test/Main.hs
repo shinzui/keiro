@@ -16,7 +16,8 @@ import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess, scaffoldPublisher, scaffoldRefusals, scaffoldWorkqueue, windowSeconds)
-import Keiro.Dsl.ScaffoldRun (Refusal (..), executeScaffold, planScaffold, scaffoldModules)
+import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
+import Keiro.Dsl.ScaffoldRun (Refusal (..), ScaffoldReport (..), StaleModule (..), executeScaffold, planScaffold, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, validateSpec)
 import System.Directory (createDirectory, createDirectoryIfMissing, doesFileExist, getTemporaryDirectory, removeFile, removePathForcibly)
@@ -702,6 +703,56 @@ main = hspec $ do
                             forced `shouldSatisfy` isSuccessfulScaffold
                             TIO.readFile target `shouldReturn` moduleText generated
                         [] -> expectationFailure "reservation scaffold has no Generated module"
+        it "reports renamed-node modules as stale without deleting them" $
+            withTempDirectory "keiro-dsl-stale-rename" $ \out -> do
+                spec <- parseInlineSpec "<stale-rename>" loweringAggregateSpec
+                first <- executePlannedScaffold out "counter.keiro" (defaultContext (specContext spec)) spec
+                let renamed = spec{specNodes = map renameCounter (specNodes spec)}
+                second <- executePlannedScaffold out "counter.keiro" (defaultContext (specContext renamed)) renamed
+                let oldDomain = onlyPathEndingIn "Counter/Domain.hs" (map fst (reportDispositions first))
+                    oldHoles = onlyPathEndingIn "Counter/Holes.hs" (map fst (reportDispositions first))
+                reportStale second `shouldSatisfy` \stale -> StaleModule Generated oldDomain `elem` stale && StaleModule HoleStub oldHoles `elem` stale
+                doesFileExist (out </> oldDomain) `shouldReturn` True
+                doesFileExist (out </> oldHoles) `shouldReturn` True
+        it "reports the entire old tree across a module-root flip" $
+            withTempDirectory "keiro-dsl-stale-root" $ \out -> do
+                spec <- parseInlineSpec "<stale-root>" loweringAggregateSpec
+                let initialCtx = defaultContext (specContext spec)
+                    rootedCtx = initialCtx{moduleRoot = "Acme"}
+                first <- executePlannedScaffold out "counter.keiro" initialCtx spec
+                second <- executePlannedScaffold out "moved-counter.keiro" rootedCtx spec
+                reportStale second
+                    `shouldMatchList` [StaleModule (kind m) (modulePath m) | (m, _) <- reportDispositions first]
+                forM_ (reportStale second) $ \stale -> doesFileExist (out </> stalePath stale) `shouldReturn` True
+                renderScaffoldReport second `shouldSatisfy` any (T.isInfixOf "previous scaffold record used spec counter.keiro")
+        it "reports moved generated modules across a layout flip" $
+            withTempDirectory "keiro-dsl-stale-layout" $ \out -> do
+                spec <- parseInlineSpec "<stale-layout>" loweringAggregateSpec
+                let initialCtx = defaultContext (specContext spec)
+                    collocatedCtx = initialCtx{placement = CollocatedLeaf}
+                first <- executePlannedScaffold out "counter.keiro" initialCtx spec
+                second <- executePlannedScaffold out "counter.keiro" collocatedCtx spec
+                let oldGenerated = [StaleModule Generated (modulePath m) | (m, _) <- reportDispositions first, kind m == Generated]
+                reportStale second `shouldSatisfy` all (`elem` oldGenerated)
+                length (reportStale second) `shouldBe` length oldGenerated
+        it "writes a parseable record and no stale section for a fresh output" $
+            withTempDirectory "keiro-dsl-record" $ \out -> do
+                spec <- parseInlineSpec "<fresh-record>" loweringAggregateSpec
+                let ctx = defaultContext (specContext spec)
+                report <- executePlannedScaffold out "counter.keiro" ctx spec
+                reportStale report `shouldBe` []
+                renderScaffoldReport report `shouldSatisfy` all (not . T.isPrefixOf "stale:")
+                contents <- TIO.readFile (out </> recordFileName (specContext spec))
+                parseRecord contents
+                    `shouldBe` Just
+                        ScaffoldRecord
+                            { recSpecPath = "counter.keiro"
+                            , recModuleRoot = ""
+                            , recLayout = "prefixed"
+                            , recFiles = [(kind m, modulePath m) | (m, _) <- reportDispositions report]
+                            }
+                parseRecord (T.replace "spec: " "future-field: retained\nspec: " contents) `shouldBe` parseRecord contents
+                parseRecord (T.replace "record v1" "record v2" contents) `shouldBe` Nothing
 
     describe "faithful scaffold lowering" $ do
         it "escapes a trailing-backslash payload literal exactly once" $ do
@@ -850,6 +901,29 @@ isSuccessfulScaffold :: Either [Refusal] a -> Bool
 isSuccessfulScaffold = \case
     Right _ -> True
     Left _ -> False
+
+executePlannedScaffold :: FilePath -> FilePath -> Context -> Spec -> IO ScaffoldReport
+executePlannedScaffold out specPath ctx spec = case planScaffold ctx spec of
+    Left refusals -> expectationFailure ("unexpected scaffold refusal: " <> show refusals) >> error "unreachable"
+    Right modules -> do
+        result <- executeScaffold out False specPath ctx spec modules
+        case result of
+            Left refusals -> expectationFailure ("unexpected execution refusal: " <> show refusals) >> error "unreachable"
+            Right report -> pure report
+
+renameCounter :: Node -> Node
+renameCounter (NAggregate aggregate) =
+    NAggregate
+        aggregate
+            { aggName = "Widget"
+            , aggRegs = [reg{regType = if regType reg == "CounterVertex" then "WidgetVertex" else regType reg} | reg <- aggRegs aggregate]
+            }
+renameCounter node = node
+
+onlyPathEndingIn :: FilePath -> [ScaffoldModule] -> FilePath
+onlyPathEndingIn suffix modules = case [modulePath m | m <- modules, T.pack suffix `T.isSuffixOf` T.pack (modulePath m)] of
+    [path] -> path
+    paths -> error ("expected one path ending in " <> suffix <> ", got " <> show paths)
 
 withTempDirectory :: String -> (FilePath -> IO a) -> IO a
 withTempDirectory template = bracket acquire removePathForcibly

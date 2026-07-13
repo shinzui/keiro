@@ -4,6 +4,7 @@ execution so every refusal is known before the first output byte is written.
 module Keiro.Dsl.ScaffoldRun (
     Refusal (..),
     WriteDisposition (..),
+    StaleModule (..),
     ScaffoldReport (..),
     scaffoldModules,
     planScaffold,
@@ -14,6 +15,7 @@ module Keiro.Dsl.ScaffoldRun (
 
 import Data.List (sortOn)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
@@ -21,6 +23,7 @@ import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessFor, harnessProcess, harnessWorkflow)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.Scaffold
+import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath (takeDirectory, (</>))
 
@@ -34,12 +37,21 @@ data Refusal
 data WriteDisposition = Overwritten | Created | Skipped
     deriving stock (Eq, Show)
 
+data StaleModule = StaleModule
+    { staleKind :: !ModuleKind
+    , stalePath :: !FilePath
+    }
+    deriving stock (Eq, Show)
+
 data ScaffoldReport = ScaffoldReport
     { reportSpecPath :: !FilePath
     , reportOutDir :: !FilePath
     , reportContext :: !Context
     , reportDispositions :: ![(ScaffoldModule, WriteDisposition)]
     , reportManifestPath :: !FilePath
+    , reportRecordPath :: !FilePath
+    , reportPreviousSpecPath :: !(Maybe Text)
+    , reportStale :: ![StaleModule]
     }
     deriving stock (Eq, Show)
 
@@ -98,10 +110,14 @@ executeScaffold out forceGeneratedOverwrite specPath ctx spec modules = do
     if not (null bannerless)
         then pure (Left [MissingGeneratedBanner bannerless])
         else do
+            let recordPath = out </> recordFileName (specContext spec)
+            previousRecord <- readRecord recordPath
+            stale <- maybe (pure []) (existingStale out modules) previousRecord
             createDirectoryIfMissing True out
             dispositions <- mapM (writeModule out) modules
             let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
             TIO.writeFile manifestPath (renderManifest (T.pack specPath) modules spec)
+            TIO.writeFile recordPath (renderRecord (currentRecord specPath ctx modules))
             pure $
                 Right
                     ScaffoldReport
@@ -110,7 +126,33 @@ executeScaffold out forceGeneratedOverwrite specPath ctx spec modules = do
                         , reportContext = ctx
                         , reportDispositions = dispositions
                         , reportManifestPath = manifestPath
+                        , reportRecordPath = recordPath
+                        , reportPreviousSpecPath = recSpecPath <$> previousRecord
+                        , reportStale = stale
                         }
+
+readRecord :: FilePath -> IO (Maybe ScaffoldRecord)
+readRecord path = do
+    exists <- doesFileExist path
+    if exists then parseRecord <$> TIO.readFile path else pure Nothing
+
+existingStale :: FilePath -> [ScaffoldModule] -> ScaffoldRecord -> IO [StaleModule]
+existingStale out modules record = fmap concat $ mapM stillExists removed
+  where
+    currentPaths = Set.fromList (map modulePath modules)
+    removed = [(fileKind, path) | (fileKind, path) <- recFiles record, path `Set.notMember` currentPaths]
+    stillExists (fileKind, path) = do
+        exists <- doesFileExist (out </> path)
+        pure [StaleModule fileKind path | exists]
+
+currentRecord :: FilePath -> Context -> [ScaffoldModule] -> ScaffoldRecord
+currentRecord specPath ctx modules =
+    ScaffoldRecord
+        { recSpecPath = T.pack specPath
+        , recModuleRoot = moduleRoot ctx
+        , recLayout = case placement ctx of GeneratedPrefix -> "prefixed"; CollocatedLeaf -> "collocated"
+        , recFiles = [(kind m, modulePath m) | m <- modules]
+        }
 
 missingGeneratedBanners :: FilePath -> [ScaffoldModule] -> IO [FilePath]
 missingGeneratedBanners out modules = fmap concat $ mapM check generated
@@ -170,6 +212,8 @@ renderScaffoldReport report =
            , harnessLine
            , "manifest: " <> T.pack (reportManifestPath report)
            ]
+        <> previousSpecNote
+        <> staleSection
   where
     ctx = reportContext report
     dispositions = reportDispositions report
@@ -196,6 +240,23 @@ renderScaffoldReport report =
     harnessLine = case harnesses of
         [] -> "harness:  (none emitted)"
         _ -> "harness:  run `cabal test <your-component>` over " <> T.unwords harnesses
+    previousSpecNote = case reportPreviousSpecPath report of
+        Just previous
+            | previous /= T.pack (reportSpecPath report) ->
+                [ "note: the previous scaffold record used spec " <> previous
+                , "      specs sharing context " <> contextName ctx <> " in one --out also share " <> T.pack (reportManifestPath report)
+                ]
+        _ -> []
+    staleSection = case reportStale report of
+        [] -> []
+        stale ->
+            [ "stale: " <> tshow (length stale) <> " file(s) from a previous scaffold of context " <> contextName ctx <> " are no longer produced by this spec:"
+            ]
+                <> map staleLine stale
+                <> ["note: keiro-dsl never deletes files."]
+    staleLine stale = case staleKind stale of
+        Generated -> "  generated " <> T.pack (stalePath stale) <> "  (safe to delete; still on disk)"
+        HoleStub -> "  hole      " <> T.pack (stalePath stale) <> "  (hand-owned — review before deleting)"
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show
