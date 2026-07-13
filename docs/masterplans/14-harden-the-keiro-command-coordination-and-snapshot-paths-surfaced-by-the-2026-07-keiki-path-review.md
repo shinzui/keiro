@@ -119,7 +119,7 @@ a kiroku-side child plan for the subscription bridge (rejected: kiroku already s
 | 99 | Silent-edge validation and divergence witnesses on the command path | docs/plans/99-silent-edge-validation-and-divergence-witnesses-on-the-command-path.md | EP-95 | None | Complete |
 | 100 | Process-manager failure paths: dead-lettering rejected commands and surfacing retry exhaustion | docs/plans/100-process-manager-failure-paths-dead-lettering-rejected-commands-and-surfacing-retry-exhaustion.md | None | EP-99 | Complete |
 | 101 | Read-model rebuild correctness: dedup reset, writer fencing, and Strong cursor semantics | docs/plans/101-read-model-rebuild-correctness-dedup-reset-writer-fencing-and-strong-cursor-semantics.md | None | None | Complete |
-| 102 | Persistence polish: truncation guards, enrichment parity, and messaging caveat documentation | docs/plans/102-persistence-polish-truncation-guards-enrichment-parity-and-messaging-caveat-documentation.md | None | EP-95 | In Progress |
+| 102 | Persistence polish: truncation guards, enrichment parity, and messaging caveat documentation | docs/plans/102-persistence-polish-truncation-guards-enrichment-parity-and-messaging-caveat-documentation.md | None | EP-95 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-95); the
@@ -225,7 +225,7 @@ where its truncation guard reports failures through the migrated hydration error
 - [x] EP-100: rejected PM commands dead-letter instead of halt-looping; saga-state/dispatch divergence documented or closed
 - [x] EP-100: retry exhaustion documented; kiroku dead-letter replay path exists
 - [x] EP-101: rebuild resets projection dedup; writers fenced during rebuild; `Strong` usable with multiple active categories
-- [ ] EP-102: truncation contiguity guard; enrichment parity between append paths; messaging caveats documented
+- [x] EP-102: truncation contiguity guard; enrichment parity between append paths; messaging caveats documented
 
 
 ## Surprises & Discoveries
@@ -257,6 +257,15 @@ where its truncation guard reports failures through the migrated hydration error
 - Kiroku's monotonic checkpoint save cannot reset a subscription for replay. EP-101
   therefore performs the direct checkpoint reset only inside `startRebuild`'s
   transaction, under the same registry lock that excludes live projection writers.
+- EP-102 integrated its truncation guard into EP-95's shared page-oriented replay
+  feed, preserving earlier replay-failure precedence while rejecting a gap before
+  decoding its suffix. Its red run confirmed that the previous full-hydration path
+  could append from silently incomplete state.
+- Kiroku 0.3's resource-aware transactional convenience wrapper exposes only an
+  `AppendResult`, but Keiro's callback contract also needs reconstructed enriched
+  `RecordedEvent`s. EP-102 therefore retained the low-level transaction shape and
+  explicitly enriched before preparation; the parity regression proves both the
+  stored rows and callback records carry the hook metadata.
 - Plan authoring (2026-07-12) surfaced discoveries that reshaped the plans:
   - EP-97's verification sharpened the router defect model: kiroku's GLOBAL primary
     key on `event_id` means a pure order swap cannot double-dispatch after full
@@ -440,7 +449,19 @@ all-stream traffic. The unsafe prose procedure is retired in favor of the helper
 sequence. Final evidence is `just haskell-build`, successful Keiro Haddock generation,
 and 331 Keiro examples with zero failures.
 
+EP-102 completed the persistence-polish half of Phase 4 and the initiative. Command
+hydration now fails closed on stream versions hidden without a covering snapshot;
+plain and transactional command paths apply the same Kiroku enrichment hook; and the
+truncation, inbox retention, outbox ordering, and transactional `$all` lock contracts
+are documented at their operational entry points. Final evidence is `nix fmt`,
+`cabal build all`, and 335 Keiro examples with zero failures. All eight child plans
+are complete.
+
 ## Revision Notes
+
+- 2026-07-13: Completed EP-102 and MasterPlan 14. Added truncation-gap guards,
+  resource-aware transactional enrichment parity, operator-facing messaging and
+  persistence caveats, and passed the workspace build plus all 335 Keiro examples.
 
 - 2026-07-13: Completed EP-101. Added explicit read-model registration, atomic
   rebuild reset and guarded promotion, database-backed async writer fencing,

@@ -50,6 +50,12 @@ The @(source, message_id)@ unique constraint catches duplicate retries
 from a saga/process-manager. Callers that mint a fresh @messageId@ per
 attempt should also mint a fresh @outboxId@; callers that want
 idempotent retries should reuse both.
+
+The row's @created_at@ value is the PostgreSQL transaction-start time. The
+per-key and per-source publisher policies therefore provide only best-effort
+ordering when concurrent transactions enqueue the same key/source and commit
+in the opposite order. Serialize those transactions when strict order matters;
+the canonical producer subscription already does so.
 -}
 enqueueOutboxTx :: OutboxMessage -> Tx.Transaction ()
 enqueueOutboxTx message =

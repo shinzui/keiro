@@ -40,12 +40,12 @@ To see it working after implementation: run `cabal test keiro-test` from the rep
 - [x] (2026-07-13 12:14 PDT) Milestone 2: red-then-green enrichment-parity test proves both runner paths and callback records carry the hook's marker.
 - [x] (2026-07-13 12:14 PDT) Milestone 2: in-repo `jitsurei` worked example compiles again (mechanical wiring only).
 - [x] (2026-07-13 12:14 PDT) Milestone 2: CHANGELOG "Breaking Changes" entry written.
-- [ ] Milestone 3: truncation precondition documented (Command.hs module Haddock, `docs/user/operations.md`, `docs/user/snapshots.md`).
-- [ ] Milestone 3: inbox GC / dedup-window caveats on `Keiro.Inbox` module header and GC/insert Haddocks.
-- [ ] Milestone 3: outbox ordering caveat surfaced on `enqueueOutboxTx` and `enqueueProducerEventTx`.
-- [ ] Milestone 3: `$all` lock-window operational note on `runCommandWithSqlEvents` / `runCommandWithSql` Haddock.
-- [ ] Milestone 3: stale-docstring sweep in scope-owned modules (Command.hs:446-447 detached comment).
-- [ ] Full suite green: `cabal build all` and `cabal test keiro-test` pass.
+- [x] (2026-07-13 12:24 PDT) Milestone 3: truncation precondition documented (Command.hs module Haddock, `docs/user/operations.md`, `docs/user/snapshots.md`).
+- [x] (2026-07-13 12:24 PDT) Milestone 3: inbox GC / dedup-window caveats on `Keiro.Inbox` module header and GC/insert Haddocks.
+- [x] (2026-07-13 12:24 PDT) Milestone 3: outbox ordering caveat surfaced on `enqueueOutboxTx` and `enqueueProducerEventTx`.
+- [x] (2026-07-13 12:24 PDT) Milestone 3: `$all` lock-window operational note on `runCommandWithSqlEvents` / `runCommandWithSql` Haddock.
+- [x] (2026-07-13 12:24 PDT) Milestone 3: stale-docstring sweep in scope-owned modules (Command.hs detached comment removed).
+- [x] (2026-07-13 12:24 PDT) Full required suite green: `cabal build all` and `cabal test keiro-test` pass (335 examples, 0 failures).
 
 
 ## Surprises & Discoveries
@@ -75,6 +75,19 @@ To see it working after implementation: run `cabal test keiro-test` from the rep
   original un-enriched batch. It failed on transactional metadata containing
   only `schemaVersion`; restoring the enriched batch made the same focused run
   pass, including the callback `RecordedEvent` assertion.
+- The documentation sweep confirmed that the outbox module header and
+  `enqueueIntegrationEventTx` already had the ordering warning. The missing
+  public entry points were exactly the authored pair: `enqueueOutboxTx` and
+  `enqueueProducerEventTx`. The inbox race text likewise needed consequence and
+  discoverability edits rather than a new behavioral fix.
+- An optional `cabal test jitsurei-test` run compiled the resource-migrated test
+  suite but reported four existing example-level failures: its three read models
+  are not explicitly registered after EP-101 removed query-time registration.
+  The two direct query failures report `ReadModelUnregistered`; both routers
+  intentionally discard those resolver errors and therefore resolve zero
+  targets. MasterPlan 14 explicitly limits the in-repo Jitsurei work to
+  compile-only mechanical wiring, so this plan records the result without
+  semantically migrating the outdated example.
 
 
 ## Decision Log
@@ -129,7 +142,27 @@ To see it working after implementation: run `cabal test keiro-test` from the rep
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Hydration now rejects every visible stream-version discontinuity before it can
+seed a command decision from a truncated suffix. The guard works in EP-95's
+shared page-oriented replay pipeline, preserves earlier replay-error precedence,
+and is covered by uncovered-prefix, mid-command-batch, and covering-snapshot
+tests. Operators get expected and observed versions through
+`HydrationGapDetected`, while the zero-visible-event edge remains the documented
+`ConflictFixpoint` path.
+
+Transactional appends now run Kiroku's configured `enrichEvent` hook before
+event preparation. The persisted events and the reconstructed `RecordedEvent`s
+handed to inline SQL carry identical enriched metadata. The required
+`KirokuStoreResource` constraint is propagated through projections, process
+managers, routers, workers, test support, and the in-repo Jitsurei build; the
+CHANGELOG contains the breaking migration recipe.
+
+The operator documentation now makes the snapshot-first truncation workflow,
+inbox retention/dedup trade-off, concurrent inbox-GC race, outbox transaction-
+start ordering limitation, and transactional `$all` lock window discoverable at
+the relevant APIs and user-guide pages. Formatting and `cabal build all` pass,
+and the complete required Keiro suite finishes with 335 examples and zero
+failures. This completes EP-102.
 
 
 ## Context and Orientation
@@ -453,3 +486,11 @@ withFreshResourceStoreWith ::
 ```
 
 Coordination contracts with sibling plans: `commandErrorClass` maps `HydrationGapDetected` to the reserved class `"hydration_gap_detected"` (MasterPlan 14, Integration Point 1); when EP-95 (`docs/plans/95-migrate-to-post-mp-16-keiki-and-adopt-the-structured-replay-and-step-apis.md`) replaces the hydration folds with keiki's structured replay API, the contiguity guard must be re-hosted as a keiro-side check on the event feed into that fold — it is a store-visibility property, not a keiki replay failure — and this constructor survives the migration unchanged. EP-96 and EP-98 own the sharded-worker and snapshot-subsystem docstrings respectively; this plan does not touch them.
+
+
+## Revision Notes
+
+- 2026-07-13: Completed EP-102. Added typed truncation-gap detection and
+  red/green coverage, restored enrichment parity with resource-aware
+  transactional runners and fixtures, documented persistence and messaging
+  caveats, and passed the whole workspace build plus all 335 Keiro examples.

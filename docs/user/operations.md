@@ -108,6 +108,32 @@ them widely.
 Snapshot corruption or shape mismatch falls back to full replay. Event-log
 corruption does not.
 
+## Stream Truncation
+
+Keiro never truncates streams itself. Kiroku's per-stream truncation marker is
+an operator-controlled visibility boundary, so take a covering Keiro snapshot
+before moving it:
+
+1. Ensure `keiro_snapshots` contains a valid snapshot at stream version `V` for
+   the event stream's current codec version and shape hash.
+2. Set Kiroku's stream marker with `setStreamTruncateBefore` to a version no
+   greater than `V + 1`.
+3. Run a command against the stream and monitor command errors before applying
+   the same change broadly.
+
+If visible history begins after the hydration seed's next expected version,
+Keiro fails closed with `HydrationGapDetected expected observed`. If the marker
+is above the stream head and the stream appears completely empty, an append can
+repeatedly collide with the still-existing stream and end in `ConflictFixpoint`.
+Both operations are reversible: call `clearStreamTruncateBefore` to restore
+per-stream visibility.
+
+Truncation hides events; it does not delete them. Kiroku's `$all`, category,
+and subscription reads remain unchanged. Keiro snapshots are rows in
+`keiro_snapshots`, not Kiroku's snapshot-event convention; coverage is based on
+the snapshot row's recorded stream version. See [Snapshots](snapshots.md) for
+the snapshot contract.
+
 ## Timers
 
 Timer workers claim one due timer at a time. Multiple workers can run concurrently

@@ -132,3 +132,10 @@ older snapshot write cannot overwrite a newer row.
 - Treat snapshot schema changes as deploy-time compatibility work.
 - Prefer full replay correctness over clever snapshot recovery.
 - Monitor hydration latency before adding snapshot complexity.
+
+Stream truncation is the exception to ordinary advisory fallback: once older
+events are hidden, a valid snapshot must cover the hidden prefix. Before moving
+a Kiroku truncation marker, follow the snapshot-first workflow in
+[Stream Truncation](operations.md#stream-truncation). Keiro uses snapshot table
+rows and their recorded stream versions for this coverage check; it does not
+use Kiroku's snapshot-event convention.

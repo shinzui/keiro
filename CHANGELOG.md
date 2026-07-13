@@ -63,6 +63,13 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Other Changes
 
+- Command hydration now detects stream-version gaps caused by Kiroku
+  per-stream truncation and returns `HydrationGapDetected` unless a snapshot
+  covers the hidden prefix.
+- Transactional command runners now apply Kiroku's configured `enrichEvent`
+  hook before event preparation, so persisted events and the
+  `runCommandWithSqlEvents` callback observe the same enriched metadata as
+  plain `runCommand`.
 - The shared PostgreSQL test fixture now provisions templates through the
   native Kiroku/Keiro migration plan. Codd transition and remediation tests are
   retained behind the manual `legacy-codd-tools` flag.

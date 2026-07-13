@@ -23,6 +23,20 @@ Three runners expose this pipeline at increasing levels of integration:
   emitted events paired with their 'RecordedEvent's. This is the primitive
   the projection, process-manager, and router layers build on.
 
+The transactional runners apply Kiroku's configured @enrichEvent@ hook before
+event preparation, exactly like 'runCommand'. They therefore require a
+'KirokuStoreResource' in the effect stack; install it with @withKirokuStore@
+and interpret 'Store' with @runStoreResource@.
+
+Per-stream hydration honors Kiroku's stream-truncation marker. A retained
+snapshot must cover every hidden event (snapshot version at least marker minus
+one); otherwise hydration fails with 'HydrationGapDetected'. A marker above
+the stream head can instead appear as an empty stream and repeated append
+conflicts end in 'ConflictFixpoint'. Keiro never truncates streams itself.
+Kiroku's @$all@ and category/subscription reads are unaffected by per-stream
+truncation: the marker hides events from stream reads rather than deleting
+them from the global log.
+
 Every successful append is replayed immediately from its pre-command state so
 an unreplayable batch is witnessed at the moment it poisons the stream. The
 post-commit witness is counted and attached to the command span without
@@ -514,6 +528,10 @@ runCommand options validatedEventStream targetStream command =
 as the append, so a read-model write commits atomically with the events.
 The callback's result is returned as @Just@ on append (and 'Nothing' for a
 no-op command that appended nothing).
+
+Requires 'KirokuStoreResource' so the transactional append applies the
+configured @enrichEvent@ hook. See 'runCommandWithSqlEvents' for the callback's
+locking and latency implications.
 -}
 runCommandWithSql ::
     forall phi rs s ci co a es.
@@ -527,13 +545,20 @@ runCommandWithSql ::
 runCommandWithSql options eventStream targetStream command afterAppend =
     runCommandWithSqlEvents options eventStream targetStream command (\_ appendResult -> afterAppend appendResult)
 
--- The ignored first argument now carries @[(co, RecordedEvent)]@; the
--- @\_@ still type-checks unchanged.
-
 {- | The most general runner: like 'runCommandWithSql', but the
 in-transaction callback also receives every emitted event paired with the
 'RecordedEvent' the store persisted for it, in append order. Inline
 projections, process managers, and routers are all built on this.
+
+The runner requires 'KirokuStoreResource' and applies the configured
+@enrichEvent@ hook before preparing the append. The callback therefore sees
+the enriched metadata that was persisted.
+
+The append updates Kiroku's global @$all@ stream and holds its PostgreSQL row
+lock until this transaction commits. Every SQL operation in the callback
+therefore extends the store-wide append serialization window. Keep the
+callback small: precompute outside the transaction where possible, batch
+writes, and minimize database round trips.
 -}
 runCommandWithSqlEvents ::
     forall phi rs s ci co a es.

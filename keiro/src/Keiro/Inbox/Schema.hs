@@ -54,9 +54,11 @@ uncommitted until the handler transaction succeeds. On handler failure the
 whole transaction rolls back, so the completed row never becomes visible.
 
 If a concurrent retention job deletes the conflicting row between the
-insert attempt and the lookup, this returns 'Right ()'. The handler then
-runs without recording that delivery. That edge is acceptable because
-retention only removes rows outside the configured dedupe window.
+insert attempt and the lookup, this returns 'Right ()'. The handler's effects
+then commit without a replacement deduplication row, and a later redelivery
+can run the handler again. This preserves at-least-once delivery but not
+permanent exactly-once processing. Retention must exceed the maximum tolerated
+redelivery delay, and handlers must remain idempotent.
 -}
 tryInsertCompletedTx ::
     InboxPersistence ->
@@ -131,7 +133,8 @@ Returns the number of rows deleted. The retention window defines the
 duplicate-detection window: a redelivery that arrives after retention
 GC has run will be processed again, so the window must exceed the
 maximum delivery delay tolerated by the operator. The user guide
-recommends 30 days as a default.
+recommends 30 days as a default. See 'tryInsertCompletedTx' for the related
+concurrent-GC race and its at-least-once consequence.
 -}
 garbageCollectCompleted ::
     (Store :> es) =>

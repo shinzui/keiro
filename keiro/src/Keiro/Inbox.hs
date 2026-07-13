@@ -11,6 +11,15 @@ The wrapper is a single-transaction primitive: the completed inbox row
 and the handler's local writes commit atomically. If the handler raises
 or condemns the transaction, the inbox row never appears and the next
 delivery starts fresh.
+
+Completed-row retention defines the deduplication window. After
+'garbageCollectCompleted' removes a row, a later delivery of the same key is
+processed again. A concurrent GC can also delete a conflicting completed row
+between the insert attempt and its lookup; the handler then commits without a
+replacement deduplication row, so a later redelivery can run it again. These
+cases preserve at-least-once delivery, not permanent exactly-once processing;
+size retention beyond the maximum redelivery delay and keep handlers
+idempotent.
 -}
 module Keiro.Inbox (
     -- * Re-exports

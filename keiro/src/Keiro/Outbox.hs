@@ -244,6 +244,12 @@ The TypeID is minted before the insert; if the transaction rolls back
 the message id is discarded (no observable effect) and the next attempt
 mints a different id. Idempotency at the row level relies on a stable
 'OutboxId', not the minted message id.
+
+Ordering caveat: @created_at@ records transaction-start time. Under
+'PerKeyHeadOfLine' or 'PerSourceStream', concurrent transactions for the same
+key/source can commit in the opposite order and are therefore best-effort
+unless the caller serializes them. The canonical producer subscription does
+serialize same-key enqueues.
 -}
 enqueueProducerEventTx ::
     forall e es.
