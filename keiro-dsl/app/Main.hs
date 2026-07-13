@@ -55,7 +55,7 @@ commands =
                 (info (Diff <$> fileArg <*> sinceOpt <**> helper) (progDesc "Classify spec changes since a git ref as ADDITIVE/WARNING/BREAKING over the decode and identity surface; exit non-zero on any BREAKING change"))
             <> command
                 "new"
-                (info (New <$> kindArg <**> helper) (progDesc "Print a minimal valid .keiro skeleton for a node kind (aggregate, process, contract, intake, emit, publisher, workqueue, dispatch, workflow, operation)"))
+                (info (New <$> kindArg <**> helper) (progDesc "Print a minimal valid .keiro skeleton for a node kind (aggregate, process, router, contract, intake, emit, publisher, workqueue, dispatch, workflow, operation)"))
         )
 
 outOpt :: Parser FilePath

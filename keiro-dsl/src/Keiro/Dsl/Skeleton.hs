@@ -21,6 +21,7 @@ skeletonKinds :: [Text]
 skeletonKinds =
     [ "aggregate"
     , "process"
+    , "router"
     , "contract"
     , "intake"
     , "emit"
@@ -38,6 +39,7 @@ skeletonFor :: Text -> Either Text Text
 skeletonFor kind = case kind of
     "aggregate" -> Right aggregateSkeleton
     "process" -> Right processSkeleton
+    "router" -> Right routerSkeleton
     "contract" -> Right contractSkeleton
     "intake" -> Right intakeSkeleton
     "emit" -> Right emitSkeleton
@@ -128,6 +130,34 @@ processSkeleton =
         , "  command ActivateSurge { hospitalId }"
         , "  event SurgeActivated = fields(ActivateSurge)"
         , "  Operational -- ActivateSurge --> emit SurgeActivated ; goto Surging"
+        ]
+
+routerSkeleton :: Text
+routerSkeleton =
+    T.unlines
+        [ "context my-service"
+        , ""
+        , "router PagingRouter"
+        , "  name \"paging-router\""
+        , "  input IncidentRaised { incidentId service }"
+        , "  key input.incidentId via idText"
+        , "  resolve stable via hole row { responderId }"
+        , "  target Page"
+        , "  projections [ ]"
+        , "  dispatch-each SendPage { incidentId=input.incidentId responderId=resolved.responderId }"
+        , "    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry"
+        , "  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)"
+        , "  rejected => halt"
+        , "  poison => halt"
+        , ""
+        , "aggregate Page"
+        , "  regs"
+        , "  states Pending Delivered!"
+        , ""
+        , "  command SendPage { incidentId responderId }"
+        , "  event PageSent = fields(SendPage)"
+        , ""
+        , "  Pending -- SendPage --> emit PageSent ; goto Delivered"
         ]
 
 contractSkeleton :: Text

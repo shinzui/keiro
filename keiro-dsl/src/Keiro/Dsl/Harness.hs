@@ -18,6 +18,7 @@ body by construction. The emitted module exposes @harnessAssertions ::
 module Keiro.Dsl.Harness (
     harnessFor,
     harnessProcess,
+    harnessRouter,
     harnessReadModel,
     harnessWorkflow,
 ) where
@@ -63,6 +64,50 @@ harnessProcess ctx p =
     ]
   where
     genPrefix = genPrefixFor ctx (procId p)
+
+{- | Emit runtime-free facts for a router's identity, resolution, dispatch,
+and worker-policy decisions. A hand-written conformance driver owns the
+expected values so a spec mutation turns one focused assertion red.
+-}
+harnessRouter :: Context -> RouterNode -> [ScaffoldModule]
+harnessRouter ctx router =
+    [ ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/RouterHarness.hs")
+        , moduleText = emitRouterHarness genPrefix router
+        , kind = Generated
+        , origin = "router " <> rtId router <> locSuffix (rtLoc router)
+        }
+    ]
+  where
+    genPrefix = genPrefixFor ctx (rtId router)
+
+emitRouterHarness :: Text -> RouterNode -> Text
+emitRouterHarness genPrefix router =
+    nl
+        [ generatedBanner
+        , "module " <> genPrefix <> ".RouterHarness (routerHarnessValues) where"
+        , ""
+        , "routerHarnessValues :: [(String, String)]"
+        , "routerHarnessValues ="
+        , "  [ (\"routerName\", " <> hs (rtName router) <> ")"
+        , "  , (\"keyField\", " <> hs (corrField (rtKey router)) <> ")"
+        , "  , (\"resolveSource\", " <> hs resolveSource <> ")"
+        , "  , (\"resolveRow\", " <> hs (T.intercalate "," (rvRow (rtResolve router))) <> ")"
+        , "  , (\"dispatchCommand\", " <> hs (rdCommand dispatch) <> ")"
+        , "  , (\"dispatchIdInputs\", \"(name, key, sourceEventId, targetStreamName, occurrence)\")"
+        , "  , (\"onDuplicate\", " <> hs (showDisp (onDuplicate disposition)) <> ")"
+        , "  , (\"onFailed\", " <> hs (showDisp (onFailed disposition)) <> ")"
+        , "  , (\"rejectedPolicy\", " <> hs (showPolicy (rtRejected router)) <> ")"
+        , "  , (\"poisonPolicy\", " <> hs (showPolicy (rtPoison router)) <> ")"
+        , "  ]"
+        ]
+  where
+    hs = tshow
+    dispatch = rtDispatch router
+    disposition = rdDisposition dispatch
+    resolveSource = case rvSource (rtResolve router) of
+        ResolveReadModel name -> "read-model " <> name
+        ResolveHole -> "hole"
 
 {- | Emit runtime-free facts for a read-model node. Each row records the value
 expected directly from the notation next to the value produced by the shared
@@ -146,7 +191,10 @@ emitProcessHarness genPrefix p =
         , "  , (\"firedEventIdPrefix\", " <> hs (idePrefix (fireFiredEventId timer')) <> ")"
         , "  , (\"dispatchIdUserField\", \"none\")"
         , "  , (\"onReject\", " <> hs (showFireOutcome (onReject fd)) <> ")"
+        , "  , (\"onAmbiguous\", " <> hs (showFireOutcome (onAmbiguous fd)) <> ")"
         , "  , (\"onFailed\", " <> hs (showDisp (onFailed (firstDispDisposition p))) <> ")"
+        , "  , (\"rejectedPolicy\", " <> hs (showPolicy (procRejected p)) <> ")"
+        , "  , (\"poisonPolicy\", " <> hs (showPolicy (procPoison p)) <> ")"
         , "  , (\"maxAttempts\", " <> hs (tInt (tmMaxAttempts timer)) <> ")"
         , "  ]"
         ]
@@ -169,6 +217,11 @@ showDisp :: Disp -> Text
 showDisp DAckOk = "AckOk"
 showDisp DRetry = "Retry"
 showDisp (DDeadLetter _) = "DeadLetter"
+
+showPolicy :: PolicyChoice -> Text
+showPolicy PolHalt = "halt"
+showPolicy PolDeadLetter = "deadLetter"
+showPolicy PolSkip = "skip"
 
 {- | A self-contained, firewall-clean facts harness for a durable workflow,
 pinning the spec's deterministic decisions: the stable name, the WorkflowId

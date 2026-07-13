@@ -20,7 +20,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
-import Keiro.Dsl.Harness (harnessFor, harnessProcess, harnessReadModel, harnessWorkflow)
+import Keiro.Dsl.Harness (harnessFor, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
@@ -64,7 +64,7 @@ scaffoldModules ctx spec =
         [ case node of
             NAggregate agg -> scaffoldAggregate ctx spec agg <> harnessFor ctx spec agg
             NProcess process -> scaffoldProcess ctx process <> harnessProcess ctx process
-            NRouter _ -> [] -- EP-108 M3 installs the router scaffold and harness here.
+            NRouter router -> scaffoldRouter ctx router <> harnessRouter ctx router
             NContract contract -> scaffoldContract ctx contract
             NIntake intake -> scaffoldIntake ctx intake
             NPublisher publisher -> scaffoldPublisher ctx publisher

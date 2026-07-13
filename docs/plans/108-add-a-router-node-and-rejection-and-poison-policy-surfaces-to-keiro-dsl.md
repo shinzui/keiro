@@ -85,18 +85,18 @@ This section must always reflect the actual current state of the work.
   `RouterReadModelUnverified`, `PolicyContradiction`, `PolicyDeadLetterUnused`,
   `AmbiguousMarkedBenign`, `AmbiguousFollowsRejectedPolicy`) with unit tests via
   `errorCodesOf`.
-- [ ] M3: `scaffoldRouter` (Generated `Router` module + `RouterHoles` stub);
+- [x] (2026-07-13 23:42Z) M3: `scaffoldRouter` (Generated `Router` module + `RouterHoles` stub);
   `emitProcessGen` extended with the lowered `WorkerOptions` and the `CommandAmbiguous`
   fire arm; `confirmBenignDuplicate` guidance in both hole modules; firewall +
   determinism tests green; `app/Main.hs` dispatch wired.
-- [ ] M4: `harnessRouter` facts module; `processHarnessValues` extended with
+- [x] (2026-07-13 23:42Z) M4: `harnessRouter` facts module; `processHarnessValues` extended with
   `rejectedPolicy`/`poisonPolicy`/`onAmbiguous`; hand-written expectations in the
   conformance drivers; `router-mutation-test.sh`.
-- [ ] M5: `keiro-dsl-conformance-router-runtime` and `keiro-dsl-conformance-router-full`
+- [x] (2026-07-13 23:42Z) M5: `keiro-dsl-conformance-router-runtime` and `keiro-dsl-conformance-router-full`
   suites compiling scaffold output against the live runtime;
   `keiro-dsl-conformance-process-runtime` extended to pin the lowered `WorkerOptions`
   and the ambiguous arm.
-- [ ] M6: `Keiro.Dsl.Skeleton` `new router` kind; NOTATION.md router + policy +
+- [x] (2026-07-13 23:42Z) M6: `Keiro.Dsl.Skeleton` `new router` kind; NOTATION.md router + policy +
   ambiguity sections; diff-interface note recorded for
   docs/plans/103-make-keiro-dsl-diff-sound-over-the-full-decode-and-identity-surface.md.
 
@@ -113,6 +113,17 @@ implementation. Provide concise evidence.
 - EP-107 is already complete, so an unresolved `resolve ... via read-model` reference is
   now an Error (`RouterUnresolvedRef`) rather than the temporary
   `RouterReadModelUnverified` warning described for a pre-EP-107 implementation.
+- `mori registry search shibuya` confirmed the Cabal package that owns
+  `Shibuya.Core.Ack` is `shibuya-core`, not the informal `shibuya` name in the authored
+  plan. Both router and process scaffold manifests now advertise the exact registered
+  package, and unit tests pin it.
+- The filled router value can exercise its resolver with `Effectful.runPureEff` and the
+  live `Keiro.Router.Router` type without a store. `runRouterOnce` still requires the
+  `Store` effect, so the full conformance suite intentionally stops at exact resolver
+  targets and correlation-key behavior, as scoped.
+- Adding the router facts, runtime, and full suites raises the package target from 18 to
+  22 test suites (the three router suites plus the previously delivered read-model
+  runtime suite). `cabal test keiro-dsl:tests --test-show-details=direct` passed all 22.
 
 
 ## Decision Log
@@ -208,13 +219,42 @@ Record every decision made while working on the plan.
   first-class `readmodel` contract and contradict the MasterPlan dependency order.
   Date: 2026-07-13
 
+- Decision: Add a small third `keiro-dsl-conformance-router` facts suite in addition to
+  the planned live-runtime and filled-router suites.
+  Rationale: the mutation proof needs an independently hand-written expectation runner
+  whose failure text can prove that changing `rejected =>` reddens exactly the
+  `rejectedPolicy` fact. Keeping that runner runtime-free makes the red/green cycle fast,
+  while the other two suites retain responsibility for live API compilation and the
+  filled resolver. Date: 2026-07-13
+
+- Decision: Treat all `DDeadLetter reason` values as the same policy-consistency action
+  when comparing dispatch rows, while retaining each reason in the notation and emitted
+  guidance.
+  Rationale: the runtime has one node-level `RejectedDeadLetter` action; differing prose
+  reasons do not create different executable policies and therefore must not trigger the
+  per-dispatch-divergence error. Date: 2026-07-13
+
 
 ## Outcomes & Retrospective
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+EP-108 is complete. The DSL now has a first-class `router` node with parser/pretty-print
+round trips, line-numbered reference and policy validation, breaking identity diffs,
+firewall-clean generated wiring, hand-owned resolver guidance, harness facts, a valid
+`new router` starter, and notation documentation. The same vertical makes process and
+router rejection/poison choices mandatory and lowers them to explicit runtime
+`WorkerOptions`; non-halting poison policies require a caller-supplied callback, and
+timer ambiguity has its own generated `CommandAmbiguous` arm.
+
+The observable proofs are green: `new router` checks clean (warnings only), 181
+unit/property examples pass, the exact router-policy mutation fails and restores as
+expected, the generated router and process modules compile against the live runtime, the
+filled resolver returns the exact two target streams, every committed starter scaffold
+compiles, and the complete 22-suite `keiro-dsl:tests` package target passes. No runtime
+package or database was changed. The remaining holistic authoring-skill/corpus refresh
+stays owned by EP-110 as planned.
 
 
 ## Context and Orientation

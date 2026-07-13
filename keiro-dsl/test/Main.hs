@@ -12,12 +12,12 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), FamilyDiff (..), NodeFamily, diffSpecs, familyRegistry, isAdvisory, isBreaking)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.Harness (harnessFor, harnessReadModel)
+import Keiro.Dsl.Harness (harnessFor, harnessReadModel, harnessRouter)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
 import Keiro.Dsl.ScaffoldRun (Refusal (..), ScaffoldReport (..), StaleModule (..), executeScaffold, planScaffold, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
@@ -351,6 +351,50 @@ main = hspec $ do
             source <- readTestText "test/fixtures/hospital-surge.keiro"
             parseSpec "<missing-poison>" (T.replace "  poison => halt\n" "" source) `shouldSatisfy` isLeft
             parseSpec "<missing-ambiguous>" (T.replace " ; on-ambiguous Retry" "" source) `shouldSatisfy` isLeft
+        it "scaffolds firewall-clean router wiring, policies, and typed-hole guidance" $ do
+            spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
+            case [router | NRouter router <- specNodes spec] of
+                [router] -> do
+                    let ctx = defaultContext (specContext spec)
+                        modules = scaffoldRouter ctx router
+                        generated = [m | m <- modules, kind m == Generated]
+                        holes = [m | m <- modules, kind m == HoleStub]
+                    firewallBreaches generated `shouldBe` []
+                    case (generated, holes) of
+                        ([generatedModule], [holeModule]) -> do
+                            moduleText generatedModule `shouldSatisfy` T.isInfixOf "pagingRouterWorkerOptions"
+                            moduleText generatedModule `shouldSatisfy` T.isInfixOf "rejectedCommandPolicy = RejectedDeadLetter"
+                            moduleText holeModule `shouldSatisfy` T.isInfixOf "UNION of resolved target identities"
+                            moduleText holeModule `shouldSatisfy` T.isInfixOf "confirmBenignDuplicate"
+                        _ -> expectationFailure "expected one generated router module and one router hole module"
+                routers -> expectationFailure ("expected one router, got " <> show (length routers))
+        it "requires a caller callback for non-halting poison policies" $ do
+            spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
+            case [router | NRouter router <- specNodes spec] of
+                [router] -> do
+                    let ctx = defaultContext (specContext spec)
+                        generatedFor choice = [moduleText m | m <- scaffoldRouter ctx router{rtPoison = choice}, kind m == Generated]
+                    mapM_
+                        ( \(choice, constructor) -> case generatedFor choice of
+                            [generatedModule] -> do
+                                generatedModule `shouldSatisfy` T.isInfixOf "(Envelope msg -> Eff es ()) -> WorkerOptions es msg"
+                                generatedModule `shouldSatisfy` T.isInfixOf (constructor <> " poisonCallback")
+                            _ -> expectationFailure "expected one generated router module"
+                        )
+                        [(PolDeadLetter, "PoisonDeadLetter"), (PolSkip, "PoisonSkip")]
+                    case [moduleText m | m <- scaffoldRouter ctx router{rtRejected = PolSkip}, kind m == Generated] of
+                        [generatedModule] -> generatedModule `shouldSatisfy` T.isInfixOf "rejectedCommandPolicy = RejectedSkip"
+                        _ -> expectationFailure "expected one generated router module"
+                routers -> expectationFailure ("expected one router, got " <> show (length routers))
+        it "emits router harness facts that pin policy and target-keyed identity" $ do
+            spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
+            case [router | NRouter router <- specNodes spec] of
+                [router] -> case harnessRouter (defaultContext (specContext spec)) router of
+                    [facts] -> do
+                        moduleText facts `shouldSatisfy` T.isInfixOf "(\"rejectedPolicy\", \"deadLetter\")"
+                        moduleText facts `shouldSatisfy` T.isInfixOf "targetStreamName, occurrence"
+                    modules -> expectationFailure ("expected one router harness, got " <> show (length modules))
+                routers -> expectationFailure ("expected one router, got " <> show (length routers))
         it "rejects invalid timer ceilings and target field bindings" $ do
             codes <- errorCodesOf "test/fixtures/process-bad-timer.keiro"
             mapM_
@@ -363,11 +407,15 @@ main = hspec $ do
             mods <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
             let gens = [m | m <- mods, kind m == Generated]
                 holes = [m | m <- mods, kind m == HoleStub]
-            length gens `shouldBe` 1
             length holes `shouldBe` 1
             firewallBreaches gens `shouldBe` []
-            -- the worker uses the spec's ceiling, never the dangerous default
-            ("max-attempts = 5" `T.isInfixOf` moduleText (head gens)) `shouldBe` True
+            case gens of
+                [generatedModule] -> do
+                    -- the worker uses the spec's ceiling, never the dangerous default
+                    moduleText generatedModule `shouldSatisfy` T.isInfixOf "max-attempts = 5"
+                    moduleText generatedModule `shouldSatisfy` T.isInfixOf "hospitalSurgeProcessWorkerOptions"
+                    moduleText generatedModule `shouldSatisfy` T.isInfixOf "Left (CommandAmbiguous _)"
+                _ -> expectationFailure "expected one generated process module"
         it "process scaffold is deterministic" $ do
             a <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
             b <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
@@ -736,6 +784,14 @@ main = hspec $ do
             [ckCode k | Breaking k <- processName] `shouldContain` [Just DerivedIdentityChanged]
             timerId <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-timerid.keiro"
             [ckCode k | Breaking k <- timerId] `shouldContain` [Just DerivedIdentityChanged]
+        it "classifies router stable names, keys, and targets as identity-bearing" $ do
+            base <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
+            let stableName = diffSpecs base (modifyRouter "PagingRouter" (\router -> router{rtName = "paging-v2"}) base)
+                keyDerivation = diffSpecs base (modifyRouter "PagingRouter" (\router -> router{rtKey = (rtKey router){corrVia = "otherIdText"}}) base)
+                target = diffSpecs base (modifyRouter "PagingRouter" (\router -> router{rtTarget = "OtherPage"}) base)
+            [ckCode k | Breaking k <- stableName] `shouldContain` [Just RouterStableNameChanged]
+            [ckCode k | Breaking k <- keyDerivation] `shouldContain` [Just DerivedIdentityChanged]
+            [ckCode k | Breaking k <- target] `shouldContain` [Just DerivedIdentityChanged]
         it "reports a timer window change as a warning" $ do
             cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-window.keiro"
             any isBreaking cs `shouldBe` False
@@ -851,10 +907,15 @@ main = hspec $ do
         it "derives the dependency set from the node kinds present (aggregate)" $ do
             spec <- specOf "test/fixtures/reservation.keiro"
             manifestDependencies spec `shouldBe` ["aeson", "base", "keiki", "keiro", "text"]
-        it "derives the process dependency set (aeson/keiki/keiro/text/time/uuid)" $ do
+        it "derives the process dependency set, including worker-policy runtime imports" $ do
             spec <- specOf "test/fixtures/hospital-surge.keiro"
-            manifestDependencies spec `shouldContain` ["time", "uuid"]
-            manifestDependencies spec `shouldContain` ["keiki", "keiro"]
+            let dependencies = manifestDependencies spec
+            mapM_ (\dependency -> dependencies `shouldContain` [dependency]) ["time", "uuid", "shibuya-core", "keiki", "keiro"]
+        it "uses the registered shibuya-core package name for router scaffolds" $ do
+            spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
+            let dependencies = manifestDependencies spec
+            mapM_ (\dependency -> dependencies `shouldContain` [dependency]) ["effectful-core", "keiro", "shibuya-core"]
+            dependencies `shouldNotContain` ["shibuya"]
 
     describe "new <kind> skeletons (M5)" $ do
         it "every skeleton parses and validates with zero error diagnostics" $
@@ -1252,6 +1313,7 @@ skeletonModuleRoots :: [(T.Text, T.Text)]
 skeletonModuleRoots =
     [ ("aggregate", "SkelAggregate")
     , ("process", "SkelProcess")
+    , ("router", "SkelRouter")
     , ("contract", "SkelContract")
     , ("intake", "SkelIntake")
     , ("emit", "SkelEmit")

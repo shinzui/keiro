@@ -18,8 +18,9 @@ db/
 .mina/
 .codex/
 
-# keiro-dsl scaffold manifest artifacts (informational; emitted into --out)
+# keiro-dsl scaffold metadata artifacts (informational; emitted into --out)
 keiro-dsl-manifest.*.txt
+keiro-dsl-scaffold-record.*.txt
 
 # Scratch benchmark baselines captured before code changes; committed baselines
 # live under keiro/bench/baseline-*.csv after the implementation is complete.

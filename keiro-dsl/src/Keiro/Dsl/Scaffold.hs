@@ -27,6 +27,7 @@ module Keiro.Dsl.Scaffold (
     holePrefixFor,
     scaffoldAggregate,
     scaffoldProcess,
+    scaffoldRouter,
     scaffoldContract,
     scaffoldIntake,
     scaffoldPublisher,
@@ -962,6 +963,122 @@ readModelColumnDoc columnDecl =
         <> if rmcRequired columnDecl then " NOT NULL" else ""
 
 --------------------------------------------------------------------------------
+-- Router + shared worker-policy lowering (EP-108)
+--------------------------------------------------------------------------------
+
+scaffoldRouter :: Context -> RouterNode -> [ScaffoldModule]
+scaffoldRouter ctx router =
+    [ ScaffoldModule
+        { modulePath = modulePathFor genPrefix "Router"
+        , moduleText = emitRouterGen genPrefix router
+        , kind = Generated
+        , origin = routerOrigin
+        }
+    , ScaffoldModule
+        { modulePath = modulePathFor holePrefix "RouterHoles"
+        , moduleText = emitRouterHoles holePrefix router
+        , kind = HoleStub
+        , origin = routerOrigin
+        }
+    ]
+  where
+    genPrefix = genPrefixFor ctx (rtId router)
+    holePrefix = holePrefixFor ctx (rtId router)
+    routerOrigin = nodeOrigin "router" (rtId router) (rtLoc router)
+
+emitRouterGen :: Text -> RouterNode -> Text
+emitRouterGen genPrefix router =
+    nl $
+        [ "{-# LANGUAGE OverloadedStrings #-}"
+        , generatedBanner
+        , "module " <> genPrefix <> ".Router"
+        , "  ( " <> stem <> "Name"
+        , "  , " <> stem <> "WorkerOptions"
+        , "  ) where"
+        , ""
+        , "import Data.Text (Text)"
+        ]
+            ++ workerPolicyImports (rtPoison router)
+            ++ [ ""
+               , "-- The STABLE router name. It participates in every target-keyed"
+               , "-- deterministicRouterCommandId; renaming it re-keys replayed dispatches."
+               , stem <> "Name :: Text"
+               , stem <> "Name = " <> tshow (rtName router)
+               , ""
+               , "-- Runtime-owned dispatch id inputs: (name, key, sourceEventId,"
+               , "-- targetStreamName, occurrence). Target-keyed, not positional."
+               , ""
+               , "-- Node-level worker policy lowered from the spec. Pass this value to"
+               , "-- Keiro.Router.runRouterWorkerWith; do not silently use defaultWorkerOptions."
+               ]
+            ++ workerOptionsLines (stem <> "WorkerOptions") (rtRejected router) (rtPoison router)
+  where
+    stem = lowerFirst (rtId router)
+
+emitRouterHoles :: Text -> RouterNode -> Text
+emitRouterHoles holePrefix router =
+    nl
+        [ "-- HAND-OWNED hole module for the router's behaviour-bearing bodies."
+        , "-- keiro-dsl creates it once and never overwrites it."
+        , "module " <> holePrefix <> ".RouterHoles () where"
+        , ""
+        , "-- HOLE resolve :: " <> inName (rtInput router) <> " -> Eff es [PMCommand targetCommand]"
+        , "--   Spec source: " <> resolveSourceText (rvSource (rtResolve router)) <> "."
+        , "--   The spec's 'stable' keyword acknowledges that retry attempts accumulate"
+        , "--   the UNION of resolved target identities. Keep the recipient set stable"
+        , "--   for a source event whenever an exact recipient set matters."
+        , "-- HOLE router value: assemble Keiro.Router.Router with name = " <> lowerFirst (rtId router) <> "Name,"
+        , "--   key, resolve, targetEventStream, and targetProjections; run it with"
+        , "--   runRouterWorkerWith " <> lowerFirst (rtId router) <> "WorkerOptions."
+        , "-- HOLE targetProjections: spec projections = " <> renderNames (rtProjections router) <> "."
+        , "-- NOTE on-duplicate AckOk is sound because Keiro.Router confirms a duplicate"
+        , "--   event id against the TARGET stream via confirmBenignDuplicate before"
+        , "--   returning PMCommandDuplicate. Hand-rolled dispatch paths must do likewise."
+        ]
+  where
+    renderNames names = "[" <> T.intercalate ", " names <> "]"
+
+resolveSourceText :: ResolveSource -> Text
+resolveSourceText (ResolveReadModel name) = "read-model " <> name <> " (typically Keiro.ReadModel.runQuery)"
+resolveSourceText ResolveHole = "typed resolver hole"
+
+workerPolicyImports :: PolicyChoice -> [Text]
+workerPolicyImports poison =
+    [ "import Keiro.ProcessManager (PoisonPolicy (..), RejectedCommandPolicy (..), WorkerOptions (..))"
+    , "import Shibuya.Core.Ack (RetryDelay (..))"
+    ]
+        ++ if poison == PolHalt
+            then []
+            else ["import Effectful (Eff)", "import Shibuya.Core.Types (Envelope)"]
+
+workerOptionsLines :: Text -> PolicyChoice -> PolicyChoice -> [Text]
+workerOptionsLines valueName rejected poison =
+    [ valueName <> signature
+    , valueName <> argument <> " ="
+    , "  WorkerOptions"
+    , "    { poisonPolicy = " <> poisonExpr
+    , "    , rejectedCommandPolicy = " <> rejectedExpr rejected
+    , "    , transientRetryDelay = RetryDelay 5 -- matches defaultWorkerOptions; runtime tuning"
+    , "    , metrics = Nothing                  -- runtime configuration; install at call site"
+    , "    }"
+    ]
+  where
+    signature = case poison of
+        PolHalt -> " :: WorkerOptions es msg"
+        _ -> " :: (Envelope msg -> Eff es ()) -> WorkerOptions es msg"
+    argument = case poison of
+        PolHalt -> ""
+        _ -> " poisonCallback"
+    poisonExpr = case poison of
+        PolHalt -> "PoisonHalt"
+        PolDeadLetter -> "PoisonDeadLetter poisonCallback"
+        PolSkip -> "PoisonSkip poisonCallback"
+    rejectedExpr = \case
+        PolHalt -> "RejectedHalt"
+        PolDeadLetter -> "RejectedDeadLetter"
+        PolSkip -> "RejectedSkip"
+
+--------------------------------------------------------------------------------
 -- Process manager + durable timer (EP-3)
 --------------------------------------------------------------------------------
 
@@ -995,11 +1112,12 @@ scaffoldProcess ctx p =
 
 emitProcessGen :: Text -> Text -> Text -> ProcessNode -> Text
 emitProcessGen _ctxPascal genPrefix _holePrefix p =
-    nl
+    nl $
         [ "{-# LANGUAGE OverloadedStrings #-}"
         , generatedBanner
         , "module " <> genPrefix <> ".Process"
         , "  ( " <> lo <> "ProcessName"
+        , "  , " <> lo <> "ProcessWorkerOptions"
         , "  , " <> lo <> "TimerRequest"
         , "  , " <> lo <> "FireOutcome"
         , "  ) where"
@@ -1012,40 +1130,48 @@ emitProcessGen _ctxPascal genPrefix _holePrefix p =
         , "import qualified Data.UUID.V5 as UUID.V5"
         , "import Keiro.Command (CommandError (..))"
         , "import Keiro.Timer (TimerId (..), TimerRequest (..))"
-        , ""
-        , "-- The define-once ProcessManager name (hole-kind 5: referenced, never retyped)."
-        , lo <> "ProcessName :: Text"
-        , lo <> "ProcessName = " <> tshow (procName p)
-        , ""
-        , "-- The deterministic timer-request builder: id derived from the correlation"
-        , "-- key (hole-kind 1), processManagerName referenced, payload from the spec."
-        , "-- (timer id derived as uuidv5 of " <> tshow (idePrefix (tmId timer)) <> " <> correlationId)"
-        , lo <> "TimerRequest :: Text -> UTCTime -> TimerRequest"
-        , lo <> "TimerRequest correlationId fireAtTime ="
-        , "  TimerRequest"
-        , "    { timerId = TimerId (namedUuid (" <> tshow (idePrefix (tmId timer)) <> " <> correlationId))"
-        , "    , processManagerName = " <> lo <> "ProcessName"
-        , "    , correlationId = correlationId"
-        , "    , fireAt = fireAtTime"
-        , "    , payload = " <> payloadExpr (tmPayload timer)
-        , "    }"
-        , ""
-        , "-- The timer-fire disposition table (hole-kind 2), derived from the spec."
-        , "-- on-reject => " <> showOutcome (onReject fd) <> " is the benign inversion."
-        , lo <> "FireOutcome :: Either CommandError a -> Maybe ()"
-        , lo <> "FireOutcome result = case result of"
-        , "  Right{} -> " <> outcomeToMaybe (onOk fd)
-        , "  Left CommandRejected -> " <> outcomeToMaybe (onReject fd)
-        , "  Left{} -> " <> outcomeToMaybe (onError fd)
-        , ""
-        , "-- max-attempts = " <> tshow' (tmMaxAttempts timer) <> ", dead-letter = " <> tshow (tmDeadLetter timer)
-        , "-- (the timer worker must pass Just " <> tshow' (tmMaxAttempts timer) <> " to runTimerWorkerWith, never the"
-        , "--  defaultTimerWorkerOptions Nothing ceiling that retries forever)."
-        , ""
-        , "-- deterministic v5 UUID of a correlation-keyed string (hole-kind 1)."
-        , "namedUuid :: Text -> UUID"
-        , "namedUuid v = UUID.V5.generateNamed UUID.V5.namespaceURL (map (fromIntegral . fromEnum) (T.unpack v))"
         ]
+            ++ workerPolicyImports (procPoison p)
+            ++ [ ""
+               , "-- The define-once ProcessManager name (hole-kind 5: referenced, never retyped)."
+               , lo <> "ProcessName :: Text"
+               , lo <> "ProcessName = " <> tshow (procName p)
+               , ""
+               , "-- Node-level worker policy lowered from the spec. Pass this value to"
+               , "-- Keiro.ProcessManager.runProcessManagerWorkerWith."
+               ]
+            ++ workerOptionsLines (lo <> "ProcessWorkerOptions") (procRejected p) (procPoison p)
+            ++ [ ""
+               , "-- The deterministic timer-request builder: id derived from the correlation"
+               , "-- key (hole-kind 1), processManagerName referenced, payload from the spec."
+               , "-- (timer id derived as uuidv5 of " <> tshow (idePrefix (tmId timer)) <> " <> correlationId)"
+               , lo <> "TimerRequest :: Text -> UTCTime -> TimerRequest"
+               , lo <> "TimerRequest correlationId fireAtTime ="
+               , "  TimerRequest"
+               , "    { timerId = TimerId (namedUuid (" <> tshow (idePrefix (tmId timer)) <> " <> correlationId))"
+               , "    , processManagerName = " <> lo <> "ProcessName"
+               , "    , correlationId = correlationId"
+               , "    , fireAt = fireAtTime"
+               , "    , payload = " <> payloadExpr (tmPayload timer)
+               , "    }"
+               , ""
+               , "-- The timer-fire disposition table (hole-kind 2), derived from the spec."
+               , "-- on-reject => " <> showOutcome (onReject fd) <> " is the benign inversion."
+               , lo <> "FireOutcome :: Either CommandError a -> Maybe ()"
+               , lo <> "FireOutcome result = case result of"
+               , "  Right{} -> " <> outcomeToMaybe (onOk fd)
+               , "  Left CommandRejected -> " <> outcomeToMaybe (onReject fd)
+               , "  Left (CommandAmbiguous _) -> " <> outcomeToMaybe (onAmbiguous fd) <> "  -- explicit definition-bug arm"
+               , "  Left{} -> " <> outcomeToMaybe (onError fd)
+               , ""
+               , "-- max-attempts = " <> tshow' (tmMaxAttempts timer) <> ", dead-letter = " <> tshow (tmDeadLetter timer)
+               , "-- (the timer worker must pass Just " <> tshow' (tmMaxAttempts timer) <> " to runTimerWorkerWith, never the"
+               , "--  defaultTimerWorkerOptions Nothing ceiling that retries forever)."
+               , ""
+               , "-- deterministic v5 UUID of a correlation-keyed string (hole-kind 1)."
+               , "namedUuid :: Text -> UUID"
+               , "namedUuid v = UUID.V5.generateNamed UUID.V5.namespaceURL (map (fromIntegral . fromEnum) (T.unpack v))"
+               ]
   where
     lo = lowerFirst (procId p)
     timer = procTimer p
@@ -1086,6 +1212,9 @@ emitProcessHoles _genPrefix holePrefix p =
         , "-- HOLE fire command: construct " <> fireCommand (tmFire (procTimer p)) <> " for the timer fire,"
         , "--   keyed by correlationId; the fired-event-id is the deterministic uuidv5 of"
         , "--   " <> tshow (idePrefix (fireFiredEventId (tmFire (procTimer p)))) <> " <> correlationId."
+        , "-- NOTE on-duplicate AckOk is sound because the runtime confirms a duplicate"
+        , "--   event id against the TARGET stream via confirmBenignDuplicate before"
+        , "--   returning PMCommandDuplicate. Hand-rolled dispatch paths must do likewise."
         ]
 
 --------------------------------------------------------------------------------

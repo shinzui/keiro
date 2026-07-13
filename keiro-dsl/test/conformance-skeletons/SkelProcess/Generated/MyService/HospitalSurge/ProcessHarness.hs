@@ -17,6 +17,9 @@ processHarnessValues =
     , ("firedEventIdPrefix", "hospital-surge-fired:")
     , ("dispatchIdUserField", "none")
     , ("onReject", "Fired")
+    , ("onAmbiguous", "Retry")
     , ("onFailed", "Retry")
+    , ("rejectedPolicy", "halt")
+    , ("poisonPolicy", "halt")
     , ("maxAttempts", "5")
     ]

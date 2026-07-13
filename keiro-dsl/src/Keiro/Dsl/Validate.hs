@@ -164,6 +164,7 @@ data DiagnosticCode
     | PolicyDeadLetterUnused
     | AmbiguousMarkedBenign
     | AmbiguousFollowsRejectedPolicy
+    | RouterStableNameChanged
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -1066,7 +1067,7 @@ policyConsistency nodeName nodeLoc rejectedPolicy dispatches = contradictions ++
             [ mkErr (locLine dispatchLoc) PolicyContradiction $
                 "dispatch '" <> command <> "' has a different on-failed action from another dispatch in node '" <> nodeName <> "'; the runtime applies one RejectedCommandPolicy to the whole failure group"
             | (command, dispatchLoc, disposition) <- rest
-            , onFailed disposition /= onFailed firstDisposition
+            , not (sameFailureAction (onFailed disposition) (onFailed firstDisposition))
             ]
 
     unused =
@@ -1083,6 +1084,8 @@ policyConsistency nodeName nodeLoc rejectedPolicy dispatches = contradictions ++
         ]
 
     third (_, _, value) = value
+    sameFailureAction DDeadLetter{} DDeadLetter{} = True
+    sameFailureAction left right = left == right
     isDeadLetter DDeadLetter{} = True
     isDeadLetter _ = False
 

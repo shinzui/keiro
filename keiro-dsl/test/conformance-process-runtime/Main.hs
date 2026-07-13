@@ -13,9 +13,11 @@ import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Generated.HospitalCapacity.HospitalSurge.Process (
     hospitalSurgeFireOutcome,
     hospitalSurgeProcessName,
+    hospitalSurgeProcessWorkerOptions,
     hospitalSurgeTimerRequest,
  )
 import Keiro.Command (CommandError (..))
+import Keiro.ProcessManager (PoisonPolicy (..), RejectedCommandPolicy (..), WorkerOptions (..))
 import Keiro.Timer (TimerRequest (..))
 import System.Exit (exitFailure)
 
@@ -27,8 +29,19 @@ main = do
         -- the disposition lowered from the spec: on-ok Fired, on-reject Fired.
         okOk = hospitalSurgeFireOutcome (Right () :: Either CommandError ()) == Just ()
         rejectOk = hospitalSurgeFireOutcome (Left CommandRejected :: Either CommandError ()) == Just ()
+        ambiguousOk = hospitalSurgeFireOutcome (Left (CommandAmbiguous [0, 1]) :: Either CommandError ()) == Nothing
+        rejectedPolicyOk = rejectedCommandPolicy hospitalSurgeProcessWorkerOptions == RejectedHalt
+        poisonPolicyOk = poisonIsHalt hospitalSurgeProcessWorkerOptions
     putStrLn ("process name: " <> show nameOk)
     putStrLn ("timer request builds against Keiro.Timer: " <> show reqOk)
     putStrLn ("on-ok => Fired: " <> show okOk)
     putStrLn ("on-reject => Fired (benign inversion): " <> show rejectOk)
-    unless (nameOk && reqOk && okOk && rejectOk) exitFailure
+    putStrLn ("on-ambiguous => Retry: " <> show ambiguousOk)
+    putStrLn ("rejected policy lowered: " <> show rejectedPolicyOk)
+    putStrLn ("poison policy lowered: " <> show poisonPolicyOk)
+    unless (nameOk && reqOk && okOk && rejectOk && ambiguousOk && rejectedPolicyOk && poisonPolicyOk) exitFailure
+
+poisonIsHalt :: WorkerOptions es msg -> Bool
+poisonIsHalt options = case poisonPolicy options of
+    PoisonHalt -> True
+    _ -> False

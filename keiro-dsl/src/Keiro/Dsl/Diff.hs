@@ -145,7 +145,7 @@ familyRegistry :: [(NodeFamily, FamilyDiff)]
 familyRegistry =
     [ (FamAggregate, DiffFamily aggregateDiff)
     , (FamProcess, DiffFamily processDiff)
-    , (FamRouter, OutOfDiffScope "EP-108 M6 registers the router stable-name, key derivation, and target identity surface")
+    , (FamRouter, DiffFamily routerDiff)
     , (FamContract, DiffFamily contractDiff)
     , (FamIntake, DiffFamily intakeDiff)
     , (FamEmit, DiffFamily emitDiff)
@@ -182,6 +182,10 @@ nodeProcess :: Node -> Maybe ProcessNode
 nodeProcess (NProcess process) = Just process
 nodeProcess _ = Nothing
 
+nodeRouter :: Node -> Maybe RouterNode
+nodeRouter (NRouter router) = Just router
+nodeRouter _ = Nothing
+
 nodeContract :: Node -> Maybe ContractNode
 nodeContract (NContract contract) = Just contract
 nodeContract _ = Nothing
@@ -213,6 +217,35 @@ nodeReadModel _ = Nothing
 nodeWorkflow :: Node -> Maybe WorkflowNode
 nodeWorkflow (NWorkflow workflow) = Just workflow
 nodeWorkflow _ = Nothing
+
+{- | Router identity is replay-sensitive: the stable name and key feed every
+target-keyed dispatch id, and the target selects the persisted stream family.
+-}
+routerDiff :: DiffEnv -> [Change]
+routerDiff env =
+    concatMap (uncurry routerPairDiff) (prMatched paired)
+        ++ [additive (rtId router) "router" (rtId router) "new router declaration" | router <- prAdded paired]
+        ++ [breaking (rtId router) "router-identity" (rtId router) RouterStableNameChanged "router removed while replayable source events may still derive target-keyed dispatch ids from its stable identity" | router <- prRemoved paired]
+  where
+    paired = pairByName nodeRouter rtId env
+
+routerPairDiff :: RouterNode -> RouterNode -> [Change]
+routerPairDiff oldRouter newRouter = stableName ++ keyDerivation ++ target
+  where
+    nodeName = rtId newRouter
+    stableName =
+        [ breaking nodeName "router-stable-name" nodeName RouterStableNameChanged $
+            "router stable name changed from '" <> rtName oldRouter <> "' to '" <> rtName newRouter <> "'; every deterministicRouterCommandId is re-keyed, so redelivery can duplicate the full resolved fan-out"
+        | rtName oldRouter /= rtName newRouter
+        ]
+    keyDerivation =
+        [ breaking nodeName "router-key" (corrField (rtKey newRouter)) DerivedIdentityChanged "router key field or derivation changed; replay derives different target dispatch ids"
+        | rtKey oldRouter /= rtKey newRouter
+        ]
+    target =
+        [ breaking nodeName "router-target" (rtTarget newRouter) DerivedIdentityChanged "router target aggregate changed; replay addresses a different persisted stream family"
+        | rtTarget oldRouter /= rtTarget newRouter
+        ]
 
 readModelDiff :: DiffEnv -> [Change]
 readModelDiff env =

@@ -113,19 +113,51 @@ process HospitalSurge
       on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
     schedule surgeFollowUp
   dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)   # runtime-owned; fixed
+  rejected => halt                                      # halt | deadLetter | skip; includes CommandAmbiguous
+  poison => halt                                        # halt | deadLetter | skip; callback supplied at runtime
   timer surgeFollowUp
     id uuidv5 "hospital-surge-timer:" <> correlationId
     fireAt input.observedAt + 5m                          # TIME INJECTED, not sampled
     payload { kind="hospital-surge-follow-up" hospitalId }
     fire dispatch Surge@correlationId MarkSurgeTimerFired { hospitalId timerId }
       fired-event-id uuidv5 "hospital-surge-fired:" <> correlationId
-      on-ok Fired ; on-reject Fired ; on-error Retry ; not-mine Retry   # on-reject Fired = benign inversion
+      on-ok Fired ; on-reject Fired ; on-ambiguous Retry ; on-error Retry ; not-mine Retry
     decode unknown-status => Cancelled
     max-attempts 5 dead-letter "surge timer exceeded ceiling"   # forces the dangerous default OFF
 ```
 
 Checked: fireAt must reference a `:Time` input field; no user dispatch-id; saga/target/fire
-targets resolve. Holes: the `handle` body, the deadline window, the fire command, the SQL.
+targets resolve; worker policies agree with disposition arms; `on-ambiguous Fired` is
+forbidden because ambiguity is an aggregate-definition bug. The generated `WorkerOptions`
+must be passed to `runProcessManagerWorkerWith`; `CommandAmbiguous` follows the node's
+`rejected` policy for ordinary dispatches. Holes: the `handle` body, the deadline window,
+the fire command, and SQL. An `on-duplicate AckOk` hand-written path must use
+`confirmBenignDuplicate` against the target stream before acknowledging the duplicate.
+
+## router (EP-108)
+
+```text
+router PagingRouter
+  name "jitsurei-paging"                       # stable input to every dispatch id
+  input IncidentRaised { incidentId service }
+  key input.incidentId via idText
+  resolve stable via read-model service_oncall row { responderId }
+  target Page
+  projections [ ]
+  dispatch-each SendPage { incidentId=input.incidentId responderId=resolved.responderId }
+    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)
+  rejected => deadLetter
+  poison => halt
+```
+
+`resolve stable` is a required acknowledgement: retry attempts deduplicate targets they
+resolve again, but a drifting resolver accumulates the union of all attempt outputs. Use
+`via read-model <name>` for a declared first-class read model or `via hole` for another
+typed effectful resolver. Bindings may read declared `input.*` and `resolved.*` row fields.
+The target aggregate and command must resolve. Router name, key derivation, and target are
+identity-bearing and therefore Breaking in `diff`. The generated `WorkerOptions` must be
+passed to `runRouterWorkerWith`; dispatch-level `CommandAmbiguous` follows `rejected =>`.
 
 ## contract / intake / emit / publisher (EP-4)
 
@@ -293,7 +325,7 @@ keiro-dsl scaffold <file.keiro> --out DIR \     # validate, emit @generated + ho
 keiro-dsl diff     --since <git-ref> <file.keiro>   # classify ADDITIVE/WARNING/BREAKING since a ref
 ```
 
-- `new <kind>` — `kind` ∈ aggregate, process, contract, intake, emit, publisher, workqueue,
+- `new <kind>` — `kind` ∈ aggregate, process, router, contract, intake, emit, publisher, workqueue,
   dispatch, readmodel, workflow, operation. Prints a guaranteed-valid starter spec to stdout
   (`keiro-dsl new aggregate > service.keiro`).
 - `scaffold` validates first, then runs collision, firewall, faithful-lowering, and existing-file

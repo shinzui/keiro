@@ -10,7 +10,7 @@ spec. The mapping is grounded in the existing per-suite @build-depends@ in
 @keiro-dsl/keiro-dsl.cabal@:
 
   * aggregate           => aeson, keiki, keiro, text     (keiro-dsl-conformance)
-  * process             => aeson, keiki, keiro, text, time, uuid
+  * process             => aeson, keiki, keiro, shibuya-core, text, time, uuid
                                                          (…-process-runtime)
   * contract            => aeson, text                   (…-contract)
   * intake/emit/publisher (full integration path)
@@ -72,8 +72,8 @@ manifestDependencies spec =
 depsForNode :: Node -> [Text]
 depsForNode n = case n of
     NAggregate{} -> ["aeson", "keiki", "keiro", "text"]
-    NProcess{} -> ["aeson", "keiki", "keiro", "text", "time", "uuid"]
-    NRouter{} -> ["effectful-core", "keiro", "shibuya", "text"]
+    NProcess{} -> ["aeson", "keiki", "keiro", "shibuya-core", "text", "time", "uuid"]
+    NRouter{} -> ["effectful-core", "keiro", "shibuya-core", "text"]
     NContract{} -> ["aeson", "text"]
     NIntake{} -> integration
     NEmit{} -> integration
