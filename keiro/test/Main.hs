@@ -250,6 +250,7 @@ import Kiroku.Store.Subscription.Types (
     SubscriptionName (..),
     SubscriptionTarget (..),
  )
+import Kiroku.Store.Subscription.Types qualified as KirokuSub
 import Kiroku.Store.Types (
     CategoryName (..),
     EventData (..),
@@ -5507,6 +5508,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 `shouldBeLeft` InvalidShardBatchSize 0
             mkShardedWorkerOptions (shardOpts & #bufferSize .~ 0)
                 `shouldBeLeft` InvalidShardBufferSize 0
+            mkShardedWorkerOptions (shardOpts & #handlerRetryDelay .~ KirokuSub.RetryDelay (-1))
+                `shouldBeLeft` InvalidShardHandlerRetryDelay (KirokuSub.RetryDelay (-1))
+            mkShardedWorkerOptions (shardOpts & #retryPolicy .~ KirokuSub.RetryPolicy 0)
+                `shouldBeLeft` InvalidShardRetryMaxAttempts 0
 
         it "ensureShardRows populates N rows once (idempotent on re-run)" $ \store -> do
             Right () <- Store.runStoreIO store $ Store.runTransaction $ do
@@ -5665,7 +5670,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             released <- waitShardsUnowned store subImmediate 4 3_000_000
             released `shouldBe` True
 
-        it "a reader killed by a handler exception is restarted and drains" $ \store -> do
+        it "a handler exception is retried in place and drains" $ \store -> do
             Right () <- Store.runStoreIO store $ Store.runTransaction (Tx.sql createShardSinkSql)
             thrown <- newIORef False
             errors <- newIORef []
@@ -5674,6 +5679,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     (defaultShardedWorkerOptions (Category (CategoryName "orders")) 2)
                         { leaseTtl = 3
                         , renewInterval = 0.2
+                        , handlerRetryDelay = KirokuSub.RetryDelay 0.05
                         , onShardError = Just (\err -> modifyIORef' errors (err :))
                         }
                 handler ev = do
@@ -5695,7 +5701,67 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             killThread w
             drained `shouldBe` True
             seenErrors <- readIORef errors
-            seenErrors `shouldSatisfy` any (\case ShardReaderDied _ _ -> True; _ -> False)
+            seenErrors `shouldSatisfy` all (\case ShardReaderDied _ _ -> False; _ -> True)
+
+    describe "Sharded subscription ack coupling" $ around (withFreshStore fixture) $ do
+        it "redelivers a batch-tail event whose handler was killed mid-flight" $ \store -> do
+            Right () <- Store.runStoreIO store $ Store.runTransaction (Tx.sql createShardSinkSql)
+            total <- seedOrders store 1 5
+            enteredTail <- newEmptyMVar
+            holdTail <- newEmptyMVar
+            let sub = SubscriptionName "orders-ack-tail"
+                opts =
+                    (defaultShardedWorkerOptions (Category (CategoryName "orders")) 1)
+                        { leaseTtl = 3
+                        , renewInterval = 0.3
+                        }
+                blockingHandler ev = do
+                    let orderNumber = parseEither (withObject "OrderPlaced" (.: "n")) (ev ^. #payload)
+                    when (orderNumber == Right (4 :: Int)) $ do
+                        putMVar enteredTail ()
+                        takeMVar holdTail
+                    sinkHandler store 1 ev
+            first <- forkIO (runShardedSubscriptionGroup store sub opts blockingHandler)
+            entered <- timeout 10_000_000 (takeMVar enteredTail)
+            entered `shouldBe` Just ()
+            -- The old pull bridge replies Continue before invoking the handler;
+            -- leave enough time for its batch-tail checkpoint to commit while the
+            -- handler remains blocked. The ack-coupled bridge introduced by EP-96
+            -- remains blocked on the unfilled reply instead.
+            threadDelay 200_000
+            killThread first
+            second <- forkIO (runShardedSubscriptionGroup store sub opts (sinkHandler store 2))
+            drained <- waitUntilSinkCount store total 20_000_000
+            killThread second
+            drained `shouldBe` True
+            shardSinkCount store `shouldReturn` total
+
+        it "loses no events when a bucket is shed mid-drain during rebalance" $ \store -> do
+            Right () <- Store.runStoreIO store $ Store.runTransaction (Tx.sql createShardSinkSql)
+            total <- seedOrders store 24 5
+            let sub = SubscriptionName "orders-ack-rebalance"
+                opts =
+                    (defaultShardedWorkerOptions (Category (CategoryName "orders")) 4)
+                        { leaseTtl = 3
+                        , renewInterval = 0.3
+                        , batchSize = 1
+                        }
+                slowHandler tag ev = do
+                    threadDelay 100_000
+                    sinkHandler store tag ev
+            first <- forkIO (runShardedSubscriptionGroup store sub opts (slowHandler 1))
+            -- acquireOwnedBuckets claims one bucket per pass. Starting the joiner
+            -- while A owns three leaves one claimable bucket for B, making B visible;
+            -- A's next pass then sheds its excess third bucket while its handler is
+            -- deliberately slow and in flight.
+            ownsThree <- waitUntilOwnedShardCount store sub 3 10_000_000
+            ownsThree `shouldBe` True
+            second <- forkIO (runShardedSubscriptionGroup store sub opts (slowHandler 2))
+            drained <- waitUntilSinkCount store total 30_000_000
+            killThread first
+            killThread second
+            drained `shouldBe` True
+            shardSinkCount store `shouldReturn` total
 
     describe "Keiro.Workflow observability" $ around (withFreshStore fixture) $ do
         -- The headline operability signal: executed (real work) vs replayed
@@ -8805,6 +8871,20 @@ waitUntilSinkCount store target timeoutMicros = go (max 1 (timeoutMicros `div` s
         if c >= target
             then pure True
             else threadDelay step >> go (n - 1)
+
+-- Poll until at least @target@ shard rows have a live owner. Tests use this to
+-- join a second worker at a precise point in the one-bucket-per-pass ramp-up.
+waitUntilOwnedShardCount :: Store.KirokuStore -> SubscriptionName -> Int -> Int -> IO Bool
+waitUntilOwnedShardCount store sub target timeoutMicros = go (max 1 (timeoutMicros `div` step))
+  where
+    step = 50_000
+    go 0 = hasTarget
+    go n = do
+        reached <- hasTarget
+        if reached then pure True else threadDelay step >> go (n - 1)
+    hasTarget = do
+        rows <- either (const []) id <$> Store.runStoreIO store (Store.runTransaction (listShardOwnership sub))
+        pure (length [() | (_, Just _, _) <- rows] >= target)
 
 -- Poll the lease table until cooperative ownership has converged: every bucket
 -- owned, at least @minWorkers@ distinct owners, and no owner holding more than

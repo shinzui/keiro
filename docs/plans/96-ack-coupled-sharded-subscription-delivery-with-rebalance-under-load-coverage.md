@@ -4,6 +4,7 @@ slug: ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-covera
 title: "Ack-coupled sharded subscription delivery with rebalance-under-load coverage"
 kind: exec-plan
 created_at: 2026-07-12T05:07:53Z
+intention: intention_01kxcz37ave9t8d6amvvxnemr6
 master_plan: "docs/masterplans/14-harden-the-keiro-command-coordination-and-snapshot-paths-surfaced-by-the-2026-07-keiki-path-review.md"
 ---
 
@@ -24,13 +25,13 @@ After this change, the sharded worker acknowledges each event to the underlying 
 
 ## Progress
 
-- [ ] M1: batch-tail kill test written and shown failing (event lost) against the unmodified worker; failure transcript captured in Surprises & Discoveries
-- [ ] M1: rebalance-under-load test written and shown failing (or flaking with `count < total`) against the unmodified worker; transcript captured
-- [ ] M2: `ShardAck` / `ShardDelivery` types and `runShardedSubscriptionGroupAck` added to `keiro/src/Keiro/Subscription/Shard/Worker.hs`
-- [ ] M2: `startReader` converted from `subscriptionStream` to `subscriptionAckStream`; reply written after the handler returns
-- [ ] M2: `ShardedWorkerOptions` gains `handlerRetryDelay` and `retryPolicy` with validation in `mkShardedWorkerOptions`
-- [ ] M2: existing "reader killed by a handler exception is restarted" test rewritten for the new bounded-retry semantics
-- [ ] M2: stale zombie docstring (Worker.hs:44-48) rewritten; module contract prose updated; all shard tests green; committed together with the M1 tests
+- [x] (2026-07-13 05:36Z) M1: batch-tail kill test written and shown failing (event lost) against the unmodified worker; failure transcript captured in Surprises & Discoveries
+- [x] (2026-07-13 05:36Z) M1: rebalance-under-load test written and shown failing (or flaking with `count < total`) against the unmodified worker; transcript captured
+- [x] (2026-07-13 05:39Z) M2: `ShardAck` / `ShardDelivery` types and `runShardedSubscriptionGroupAck` added to `keiro/src/Keiro/Subscription/Shard/Worker.hs`
+- [x] (2026-07-13 05:39Z) M2: `startReader` converted from `subscriptionStream` to `subscriptionAckStream`; reply written after the handler returns
+- [x] (2026-07-13 05:39Z) M2: `ShardedWorkerOptions` gains `handlerRetryDelay` and `retryPolicy` with validation in `mkShardedWorkerOptions`
+- [x] (2026-07-13 05:39Z) M2: existing "reader killed by a handler exception is restarted" test rewritten for the new bounded-retry semantics
+- [x] (2026-07-13 05:39Z) M2: stale zombie docstring (Worker.hs:44-48) rewritten; module contract prose updated; all shard tests green; committed together with the M1 tests
 - [ ] M3: zombie-overlap duplicate test written and passing (duplicates observed, zero loss)
 - [ ] M3: poison-event dead-letter test written and passing (bounded retries, row in kiroku's dead-letter table, drain continues)
 - [ ] M4: master plan EP-96 checkboxes ticked; Outcomes & Retrospective written; revision note appended
@@ -41,7 +42,43 @@ After this change, the sharded worker acknowledges each event to the underlying 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet. M1 must add the captured failing-test transcripts here.)
+- Discovery: both loss witnesses failed deterministically against the unmodified
+  `subscriptionStream` worker. The batch-tail test blocked the final handler,
+  allowed the pull-time `Continue` checkpoint to commit, killed that worker, and
+  observed that its replacement could not reach the seeded total. The rebalance
+  test waited until worker A owned three buckets, started worker B so it claimed
+  the fourth and became visible, then observed A's forced shed leave the sink
+  short. Evidence from the focused run:
+
+  ```text
+  Sharded subscription ack coupling
+    redelivers a batch-tail event whose handler was killed mid-flight [failed]
+    loses no events when a bucket is shed mid-drain during rebalance [failed]
+
+  1) expected: True; got: False
+  2) expected: True; got: False
+  Finished in 52.3585 seconds
+  2 examples, 2 failures
+  ```
+
+- Discovery: the ignored developer file `cabal.project.local` selects the
+  registered kiroku checkout at version 0.3.0.0 while the checked-in
+  `cabal.project` pins kiroku 0.2.1.0, producing mutually exclusive solver
+  constraints before compilation. Implementation validation therefore uses a
+  temporary `cabal.project.ep96` that imports only the checked-in project; the
+  temporary file will be removed before handoff.
+
+- Validation: after switching to `subscriptionAckStream`, all six shard-focused
+  examples passed, including the two red witnesses and the rewritten
+  retry-in-place assertion:
+
+  ```text
+  Sharded subscription single worker ... passed
+  Sharded subscription drain and failover ... 3 passed
+  Sharded subscription ack coupling ... 2 passed
+  Finished in 8.6551 seconds
+  6 examples, 0 failures
+  ```
 
 
 ## Decision Log

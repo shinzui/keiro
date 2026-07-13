@@ -4,6 +4,7 @@ slug: harden-the-keiro-command-coordination-and-snapshot-paths-surfaced-by-the-2
 title: "Harden the keiro command, coordination, and snapshot paths surfaced by the 2026-07 keiki-path review"
 kind: master-plan
 created_at: 2026-07-12T05:07:40Z
+intention: intention_01kxcz37ave9t8d6amvvxnemr6
 ---
 
 # Harden the keiro command, coordination, and snapshot paths surfaced by the 2026-07 keiki-path review
@@ -112,7 +113,7 @@ a kiroku-side child plan for the subscription bridge (rejected: kiroku already s
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 95 | Migrate to post-MP-16 keiki and adopt the structured replay and step APIs | docs/plans/95-migrate-to-post-mp-16-keiki-and-adopt-the-structured-replay-and-step-apis.md | keiki MP-16 (external) | None | Not Started |
-| 96 | Ack-coupled sharded subscription delivery with rebalance-under-load coverage | docs/plans/96-ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-coverage.md | None | None | Not Started |
+| 96 | Ack-coupled sharded subscription delivery with rebalance-under-load coverage | docs/plans/96-ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-coverage.md | None | None | In Progress |
 | 97 | Stable router idempotency keys derived from target stream names | docs/plans/97-stable-router-idempotency-keys-derived-from-target-stream-names.md | None | None | Not Started |
 | 98 | Snapshot subsystem hardening: uninit-register guards, read-side telemetry, and workflow write alignment | docs/plans/98-snapshot-subsystem-hardening-uninit-register-guards-read-side-telemetry-and-workflow-write-alignment.md | None | EP-95 | Not Started |
 | 99 | Silent-edge validation and divergence witnesses on the command path | docs/plans/99-silent-edge-validation-and-divergence-witnesses-on-the-command-path.md | EP-95 | None | Not Started |

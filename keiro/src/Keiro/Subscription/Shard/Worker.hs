@@ -5,9 +5,11 @@ consumer-group readers (EP-51).
 Start the __same__ worker binary @N@ times — on @N@ hosts, in @N@ containers, in
 an autoscaling group — each calling 'runShardedSubscriptionGroup' with the same
 'SubscriptionName' and 'ShardedWorkerOptions', and the workers cooperatively
-partition the category among themselves: every event is processed by exactly one
-worker, none twice, none skipped. No external coordinator (etcd/ZooKeeper/Consul)
-— coordination lives in the @keiro_subscription_shards@ lease table.
+partition the category among themselves: every event is processed at least once
+and none are skipped. A brief ownership overlap can deliver an event more than
+once, so handlers must be idempotent. No external coordinator
+(etcd/ZooKeeper/Consul) — coordination lives in the
+@keiro_subscription_shards@ lease table.
 
 == One pass
 
@@ -23,7 +25,9 @@ worker, none twice, none skipped. No external coordinator (etcd/ZooKeeper/Consul
    even split. A lone worker never sheds — it must own every bucket.
 4. Reconcile readers: open a kiroku consumer-group reader for each newly-owned
    bucket, stop the reader for each newly-lost bucket. A bucket that moves owners
-   resumes at its own kiroku per-member checkpoint, so no event is dropped.
+   resumes at its own kiroku per-member checkpoint. Each event is acknowledged
+   only after its handler returns, so a shed bucket's checkpoint never covers an
+   unprocessed event and no event is dropped.
 
 'runShardedSubscriptionGroup' is the loop driver: mint a 'WorkerId', ensure the
 shard rows exist, then run 'reconcileShardsOnce' every @renewInterval@ forever.
@@ -37,15 +41,26 @@ expiry.
 Like 'Keiro.Workflow.Resume.runWorkflowResumeWorkerPush', this worker manages
 long-lived 'Control.Concurrent' reader threads and takes the 'KirokuStore' handle
 directly (each lease pass runs through 'Kiroku.Store.Effect.runStoreIO'), so its
-natural home is 'IO'. The handler is an ordinary @'RecordedEvent' -> 'IO' ()@:
-a sharded subscription delivers at-least-once (a brief overlap is possible while
-a bucket changes owners), so the handler must be idempotent — keyed on
-@eventId@ — exactly as keiro's async-projection guidance already requires. A
-zombie worker that misses renewals past @leaseTtl@ may continue reading briefly
-after another worker claims its bucket; the laggard can then write an older
-kiroku consumer-group checkpoint and enlarge the redelivery window. This is
-still at-least-once, not exactly-once, and a future fencing generation would be
-needed to close that window.
+natural home is 'IO'. The compatibility handler is an ordinary
+@'RecordedEvent' -> 'IO' ()@; 'runShardedSubscriptionGroupAck' exposes the
+per-event 'ShardAck' surface for handlers that need an explicit retry or
+dead-letter decision. A sharded subscription delivers at-least-once (a brief
+overlap is possible while a bucket changes owners), so the handler must be
+idempotent — keyed on @eventId@ — exactly as keiro's async-projection guidance
+already requires.
+
+A synchronous exception from either handler is retried in place according to
+'retryPolicy', using 'handlerRetryDelay'. Exhausting the bounded delivery budget
+records the event in kiroku's @kiroku.dead_letters@ table and advances to the next
+event. 'ShardReaderDied' therefore reports stream-level failures, not ordinary
+handler exceptions. An asynchronous exception from shedding or shutdown writes
+no acknowledgement, so the event is redelivered by the next owner.
+
+A zombie worker that misses renewals past @leaseTtl@ may continue reading briefly
+after another worker claims its bucket, which can duplicate deliveries. It cannot
+regress the consumer-group checkpoint: kiroku's checkpoint upsert is monotonic
+(@GREATEST@), so a late acknowledgement from the laggard never moves progress
+backward.
 -}
 module Keiro.Subscription.Shard.Worker (
     -- * Options
@@ -56,14 +71,23 @@ module Keiro.Subscription.Shard.Worker (
     mkShardedWorkerOptions,
     acquireOutcome,
 
+    -- * Per-event acknowledgement
+    ShardAck (..),
+    ShardDelivery (..),
+    ShardEventHandler,
+    RetryDelay (..),
+    DeadLetterReason (..),
+
     -- * Running
     reconcileShardsOnce,
     runShardedSubscriptionGroup,
+    runShardedSubscriptionGroupAck,
 )
 where
 
 import Control.Concurrent (forkFinally, killThread, threadDelay)
-import Control.Exception (SomeException, displayException, finally)
+import Control.Concurrent.STM (atomically, putTMVar)
+import Control.Exception (SomeAsyncException, SomeException, catch, displayException, finally, fromException, throwIO)
 import Control.Monad (forever)
 import Data.Bifunctor (first)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
@@ -88,12 +112,16 @@ import Keiro.Subscription.Shard (
  )
 import Kiroku.Store.Connection (KirokuStore)
 import Kiroku.Store.Effect (runStoreIO)
-import Kiroku.Store.Subscription.Stream (subscriptionStream)
+import Kiroku.Store.Subscription.Stream (AckItem (..), subscriptionAckStream)
 import Kiroku.Store.Subscription.Types (
     ConsumerGroup (..),
+    DeadLetterReason (..),
+    RetryDelay (..),
+    RetryPolicy (..),
     SubscriptionName,
     SubscriptionResult (..),
     SubscriptionTarget,
+    defaultRetryPolicy,
     defaultSubscriptionConfig,
  )
 import Kiroku.Store.Subscription.Types qualified as Sub
@@ -108,6 +136,29 @@ data ShardWorkerError
     | ShardReaderDied !Int !Text
     | ShardEnsureFailed !Text
     deriving stock (Generic, Eq, Show)
+
+-- | Per-event disposition returned by an acknowledgement-aware shard handler.
+data ShardAck
+    = -- | Processing completed; the checkpoint may advance past this event.
+      ShardAckOk
+    | -- | Redeliver after the delay, bounded by 'retryPolicy'.
+      ShardAckRetry !RetryDelay
+    | -- | Record the event in kiroku's dead-letter table and advance immediately.
+      ShardAckDeadLetter !DeadLetterReason
+    deriving stock (Generic, Eq, Show)
+
+-- | One delivery to an acknowledgement-aware shard handler.
+data ShardDelivery = ShardDelivery
+    { event :: !RecordedEvent
+    -- ^ The delivered event.
+    , attempt :: !Word
+    -- ^ Zero-based redelivery count: 0 initially, 1 after the first retry, and so on.
+    , bucket :: !Int
+    -- ^ The consumer-group member owned by this reader.
+    }
+    deriving stock (Generic, Eq, Show)
+
+type ShardEventHandler = ShardDelivery -> IO ShardAck
 
 -- | How a sharded worker pool runs one subscription.
 data ShardedWorkerOptions = ShardedWorkerOptions
@@ -126,7 +177,11 @@ data ShardedWorkerOptions = ShardedWorkerOptions
     , batchSize :: !Int32
     -- ^ Events per database fetch per bucket reader (default 100).
     , bufferSize :: !Natural
-    -- ^ Per-reader bounded-queue capacity (backpressure; default 256).
+    -- ^ Per-reader bridge queue capacity (default 256; one item is in flight).
+    , handlerRetryDelay :: !RetryDelay
+    -- ^ Delay before redelivering after a synchronous handler exception (default 1 s).
+    , retryPolicy :: !RetryPolicy
+    -- ^ Maximum total deliveries before retry exhaustion dead-letters the event.
     , onShardError :: !(Maybe (ShardWorkerError -> IO ()))
     -- ^ Optional error hook. Wire this to the application logger in production.
     }
@@ -139,6 +194,8 @@ data ShardedWorkerConfigError
     | InvalidShardLeaseRenewInterval !NominalDiffTime !NominalDiffTime
     | InvalidShardBatchSize !Int32
     | InvalidShardBufferSize !Natural
+    | InvalidShardHandlerRetryDelay !RetryDelay
+    | InvalidShardRetryMaxAttempts !Int
     deriving stock (Generic, Eq, Show)
 
 {- | Sensible defaults for a sharded worker: 30 s lease, 10 s renew, batch 100,
@@ -153,6 +210,8 @@ defaultShardedWorkerOptions target' shardCount' =
         , target = target'
         , batchSize = 100
         , bufferSize = 256
+        , handlerRetryDelay = RetryDelay 1
+        , retryPolicy = defaultRetryPolicy
         , onShardError = Nothing
         }
 
@@ -166,6 +225,12 @@ mkShardedWorkerOptions opts
         Left (InvalidShardLeaseRenewInterval (opts ^. #leaseTtl) (opts ^. #renewInterval))
     | opts ^. #batchSize < 1 = Left (InvalidShardBatchSize (opts ^. #batchSize))
     | opts ^. #bufferSize < 1 = Left (InvalidShardBufferSize (opts ^. #bufferSize))
+    | RetryDelay delay <- opts ^. #handlerRetryDelay
+    , delay < 0 =
+        Left (InvalidShardHandlerRetryDelay (opts ^. #handlerRetryDelay))
+    | RetryPolicy attempts <- opts ^. #retryPolicy
+    , attempts < 1 =
+        Left (InvalidShardRetryMaxAttempts attempts)
     | otherwise = Right opts
 
 {- | A live per-bucket reader: the action that stops it (cancels the kiroku
@@ -194,7 +259,7 @@ reconcileShardsOnce ::
     ShardLease ->
     ShardedWorkerOptions ->
     IORef (Map Int RunningReader) ->
-    (RecordedEvent -> IO ()) ->
+    ShardEventHandler ->
     IO (Set Int)
 reconcileShardsOnce store lease opts readers handler = do
     now <- getCurrentTime
@@ -248,7 +313,7 @@ startReader ::
     ShardLease ->
     ShardedWorkerOptions ->
     IORef (Map Int RunningReader) ->
-    (RecordedEvent -> IO ()) ->
+    ShardEventHandler ->
     Int ->
     IO RunningReader
 startReader store lease opts readers handler bucket = do
@@ -258,10 +323,25 @@ startReader store lease opts readers handler bucket = do
                 { Sub.batchSize = opts ^. #batchSize
                 , Sub.consumerGroup =
                     Just (ConsumerGroup{member = fromIntegral bucket, size = fromIntegral (opts ^. #shardCount)})
+                , Sub.retryPolicy = opts ^. #retryPolicy
                 }
-    (stream, cancelAction) <- subscriptionStream store subConfig (opts ^. #bufferSize)
+        handleItem item = do
+            outcome <-
+                handler
+                    ShardDelivery
+                        { event = ackEvent item
+                        , attempt = ackAttempt item
+                        , bucket = bucket
+                        }
+                    `catch` handlerException
+            atomically (putTMVar (ackReply item) (toSubscriptionResult outcome))
+        handlerException err =
+            case fromException err of
+                Just async -> throwIO (async :: SomeAsyncException)
+                Nothing -> pure (ShardAckRetry (opts ^. #handlerRetryDelay))
+    (stream, cancelAction) <- subscriptionAckStream store subConfig (opts ^. #bufferSize)
     tid <-
-        forkFinally (Stream.fold (Fold.drainMapM handler) stream) $ \result -> do
+        forkFinally (Stream.fold (Fold.drainMapM handleItem) stream) $ \result -> do
             intentional <- readIORef stopping
             unless intentional $ do
                 atomicModifyIORef' readers (\m -> (Map.delete bucket m, ()))
@@ -275,6 +355,12 @@ startReader store lease opts readers handler bucket = do
             cancelAction
             killThread tid
         )
+
+toSubscriptionResult :: ShardAck -> SubscriptionResult
+toSubscriptionResult = \case
+    ShardAckOk -> Continue
+    ShardAckRetry delay -> Retry delay
+    ShardAckDeadLetter reason -> DeadLetter reason
 
 {- | The loop driver: mint a 'WorkerId', ensure the @N@ shard rows exist, then
 'reconcileShardsOnce' every @renewInterval@ forever. On shutdown (the loop thread
@@ -300,7 +386,21 @@ runShardedSubscriptionGroup ::
     ShardedWorkerOptions ->
     (RecordedEvent -> IO ()) ->
     IO ()
-runShardedSubscriptionGroup store subName opts handler = do
+runShardedSubscriptionGroup store subName opts handler =
+    runShardedSubscriptionGroupAck store subName opts $ \delivery -> do
+        handler (delivery ^. #event)
+        pure ShardAckOk
+
+{- | Acknowledgement-aware loop driver. Unlike the compatibility wrapper, the
+handler decides whether each event advances, retries, or dead-letters.
+-}
+runShardedSubscriptionGroupAck ::
+    KirokuStore ->
+    SubscriptionName ->
+    ShardedWorkerOptions ->
+    ShardEventHandler ->
+    IO ()
+runShardedSubscriptionGroupAck store subName opts handler = do
     worker <- WorkerId <$> UUIDv4.nextRandom
     let lease =
             ShardLease
