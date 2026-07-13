@@ -2260,6 +2260,128 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Vector.length targetEvents `shouldBe` 0
             Vector.length managerEvents `shouldBe` 1
 
+        it "dead-letters a rejected dispatch and continues to the next event" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            decisionsRef <- newIORef []
+            let first = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+                second = recordedFromEventId (EventId sampleUuid2) (CounterAdded 1)
+                messages = [(first, CounterAdded 9), (second, CounterAdded 1)]
+                adapter = inMemoryAdapter decisionsRef messages
+                policyPm =
+                    (counterProcessManager :: ProcessManager CounterEvent (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent)
+                        { targetEventStream = rejectNineEventStream
+                        }
+                workerOptions =
+                    defaultWorkerOptions
+                        & #rejectedCommandPolicy
+                        .~ RejectedDeadLetter
+                        & #metrics
+                        ?~ keiroMetrics
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerWorkerWith workerOptions defaultRunCommandOptions policyPm adapter Just
+            readIORef decisionsRef `shouldReturn` [AckOk, AckOk]
+            Right deadLetters <- Store.runStoreIO storeHandle (listDispatchDeadLetters "counter-pm")
+            case deadLetters of
+                [row] -> do
+                    row ^. #dispatcherKind `shouldBe` DispatcherProcessManager
+                    row ^. #correlationId `shouldBe` "order-1"
+                    row ^. #sourceEventId `shouldBe` EventId sampleUuid
+                    row ^. #emitIndex `shouldBe` 0
+                    row ^. #targetStreamName `shouldBe` StreamName "counter-target-order-1"
+                    row ^. #errorClass `shouldBe` "command_rejected"
+                    row ^. #attemptCount `shouldBe` 1
+                other -> expectationFailure ("expected one rejected dispatch dead letter, got " <> show other)
+            Right targetEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "counter-target-order-1") (StreamVersion 0) 10
+            Right managerEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "pm:counter-order-1") (StreamVersion 0) 10
+            Vector.length targetEvents `shouldBe` 1
+            Vector.length managerEvents `shouldBe` 2
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            lookup "keiro.dispatch.deadlettered" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
+
+        it "skips a rejected dispatch without writing a dead-letter row" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            decisionsRef <- newIORef []
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+                adapter = inMemoryAdapter decisionsRef [(sourceEvent, CounterAdded 9)]
+                rejectingPm =
+                    (counterProcessManager :: ProcessManager CounterEvent (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent)
+                        { targetEventStream = rejectingEventStream
+                        }
+                workerOptions =
+                    defaultWorkerOptions
+                        & #rejectedCommandPolicy
+                        .~ RejectedSkip
+                        & #metrics
+                        ?~ keiroMetrics
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerWorkerWith workerOptions defaultRunCommandOptions rejectingPm adapter Just
+            readIORef decisionsRef `shouldReturn` [AckOk]
+            Right deadLetters <- Store.runStoreIO storeHandle (listDispatchDeadLetters "counter-pm")
+            deadLetters `shouldBe` []
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            lookup "keiro.dispatch.deadlettered" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
+
+        it "dead-letters a manager-state rejection at emit index minus one" $ \storeHandle -> do
+            decisionsRef <- newIORef []
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+                adapter = inMemoryAdapter decisionsRef [(sourceEvent, CounterAdded 9)]
+                rejectingManager =
+                    (counterProcessManager :: ProcessManager CounterEvent (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent)
+                        { eventStream = rejectingEventStream
+                        }
+                workerOptions = defaultWorkerOptions & #rejectedCommandPolicy .~ RejectedDeadLetter
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerWorkerWith workerOptions defaultRunCommandOptions rejectingManager adapter Just
+            readIORef decisionsRef `shouldReturn` [AckOk]
+            Right deadLetters <- Store.runStoreIO storeHandle (listDispatchDeadLetters "counter-pm")
+            case deadLetters of
+                [row] -> do
+                    row ^. #emitIndex `shouldBe` (-1)
+                    row ^. #targetStreamName `shouldBe` StreamName "pm:counter-order-1"
+                    row ^. #errorClass `shouldBe` "command_rejected"
+                other -> expectationFailure ("expected one manager-state dead letter, got " <> show other)
+            Right managerEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "pm:counter-order-1") (StreamVersion 0) 10
+            managerEvents `shouldBe` Vector.empty
+
+        it "keeps rejected-dispatch dead letters idempotent on source redelivery" $ \storeHandle -> do
+            decisionsRef <- newIORef []
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
+                adapter = inMemoryAdapter decisionsRef [(sourceEvent, CounterAdded 9), (sourceEvent, CounterAdded 9)]
+                rejectingPm =
+                    (counterProcessManager :: ProcessManager CounterEvent (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent)
+                        { targetEventStream = rejectingEventStream
+                        }
+                workerOptions = defaultWorkerOptions & #rejectedCommandPolicy .~ RejectedDeadLetter
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runProcessManagerWorkerWith workerOptions defaultRunCommandOptions rejectingPm adapter Just
+            readIORef decisionsRef `shouldReturn` [AckOk, AckOk]
+            Right deadLetters <- Store.runStoreIO storeHandle (listDispatchDeadLetters "counter-pm")
+            Prelude.length deadLetters `shouldBe` 1
+
         it "records dispatch failures through worker metrics" $ \storeHandle -> do
             (exporter, metricsRef) <- inMemoryMetricExporter
             (provider, _env) <-
@@ -2285,6 +2407,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             lookup "keiro.dispatch.failed" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
 
         it "classifies transient store failures as retry and deterministic command failures as halt" $ \_storeHandle -> do
+            isRejectionClass CommandRejected `shouldBe` True
+            isRejectionClass (CommandAmbiguous [0, 1]) `shouldBe` True
+            isRejectionClass (EncodeFailed (NonObjectCallerMetadata Aeson.Null)) `shouldBe` False
             ackForCommandError (RetryDelay 5) (StoreFailed (Store.ConnectionLost "boom"))
                 `shouldBe` AckRetry (RetryDelay 5)
             ackForCommandError (RetryDelay 5) CommandRejected `shouldSatisfy` \case
@@ -2786,6 +2911,24 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             decisions `shouldSatisfy` \case
                 [AckHalt (HaltFatal _)] -> True
                 _ -> False
+
+        it "dead-letters a rejected router dispatch and acknowledges the source event" $ \storeHandle -> do
+            decisionsRef <- newIORef []
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+                adapter = inMemoryAdapter decisionsRef [(sourceEvent, RouteGroup "g1")]
+                workerOptions = defaultWorkerOptions & #rejectedCommandPolicy .~ RejectedDeadLetter
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    runRouterWorkerWith workerOptions defaultRunCommandOptions failingRouter adapter Just
+            readIORef decisionsRef `shouldReturn` [AckOk]
+            Right deadLetters <- Store.runStoreIO storeHandle (listDispatchDeadLetters "failing-router")
+            case deadLetters of
+                [row] -> do
+                    row ^. #dispatcherKind `shouldBe` DispatcherRouter
+                    row ^. #correlationId `shouldBe` "g1"
+                    row ^. #targetStreamName `shouldBe` StreamName "failing-target"
+                    row ^. #errorClass `shouldBe` "command_rejected"
+                other -> expectationFailure ("expected one router dead letter, got " <> show other)
 
         it "finalizes AckRetry for a transient thrown resolver error and continues" $ \storeHandle -> do
             Right () <-
@@ -9887,6 +10030,36 @@ rejectingEventStreamDef =
 
 rejectingEventStream :: ValidatedCounterEventStream
 rejectingEventStream = mkEventStreamOrThrow "rejecting-counter" rejectingEventStreamDef
+
+{- | Accept every Add command except amount 9, which exercises a worker that
+dead-letters one rejected dispatch and then successfully processes the next.
+-}
+rejectNineEventStream :: ValidatedCounterEventStream
+rejectNineEventStream = mkEventStreamOrThrow "reject-nine-counter" rejectNineEventStreamDef
+
+rejectNineEventStreamDef :: CounterEventStream
+rejectNineEventStreamDef =
+    counterEventStreamDef & #transducer .~ rejectNineTransducer
+
+rejectNineTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
+rejectNineTransducer =
+    SymTransducer
+        { edgesOut = \case
+            Counting ->
+                [ Edge
+                    { guard =
+                        PAnd
+                            (matchInCtor addCtor)
+                            (PNot (inpCtor addCtor #amount .== Keiki.lit 9))
+                    , update = UKeep
+                    , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
+                    , target = Counting
+                    }
+                ]
+        , initial = Counting
+        , initialRegs = RNil
+        , isFinal = \_ -> False
+        }
 
 rejectingTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
 rejectingTransducer =

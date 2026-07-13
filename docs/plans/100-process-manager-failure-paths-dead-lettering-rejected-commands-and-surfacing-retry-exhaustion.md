@@ -54,13 +54,13 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-07-13 17:22Z) M1: `keiro_dead_letters` migration authored via `keiro-migrate -- new`, manifest checked, `keiro-migrations-test` green (10 examples, 0 failures)
 - [x] (2026-07-13 17:22Z) M1: `Keiro.DeadLetter.Schema` statements (insert idempotent, list) written and unit-tested
 - [x] (2026-07-13 17:22Z) M1: `Keiro.DeadLetter` typed API (`DispatchDeadLetter`, `recordDispatchDeadLetter`, `listDispatchDeadLetters`) exported; `keiro-test` green (317 examples, 0 failures)
-- [ ] M2: `PMCommandFailed` carries the target stream name; call sites and existing tests updated
-- [ ] M2: `RejectedCommandPolicy` added to `WorkerOptions` (default `RejectedHalt`); shared `decideForFailures` classification extracted
-- [ ] M2: process-manager worker wired: dead-letter write + `AckOk` under `RejectedDeadLetter`; manager-state rejection covered (emit index -1)
-- [ ] M2: router worker wired to the same policy
-- [ ] M2: `keiro.dispatch.deadlettered` counter added to `Keiro.Telemetry`
-- [ ] M2: end-to-end tests: dead-letter path (row + ack + next event processes), halt default preserved, skip path
-- [ ] M2: saga-history divergence documented in `Keiro.ProcessManager` haddock
+- [x] (2026-07-13 17:35Z) M2: `PMCommandFailed` carries the target stream name; call sites and existing tests updated
+- [x] (2026-07-13 17:35Z) M2: `RejectedCommandPolicy` added to `WorkerOptions` (default `RejectedHalt`); shared `decideForFailures` classification extracted
+- [x] (2026-07-13 17:35Z) M2: process-manager worker wired: dead-letter write + `AckOk` under `RejectedDeadLetter`; manager-state rejection covered (emit index -1)
+- [x] (2026-07-13 17:35Z) M2: router worker wired to the same policy
+- [x] (2026-07-13 17:35Z) M2: `keiro.dispatch.deadlettered` counter added to `Keiro.Telemetry`
+- [x] (2026-07-13 17:35Z) M2: end-to-end tests cover row + ack + subsequent processing, default halt, skip, router parity, manager-state rejection, and redelivery idempotency; `keiro-test` passes 322 examples
+- [x] (2026-07-13 17:35Z) M2: saga-history divergence documented in `Keiro.ProcessManager` haddock
 - [ ] M3: retry-bound documentation corrected in `Keiro.ProcessManager` and `Keiro.Router` haddocks (bound, knob, consequence, per-path behavior)
 - [ ] M3: `Keiro.Telemetry.kirokuEventBridge` helper + `keiro.subscription.deadlettered` counter
 - [ ] M3: retry-exhaustion visibility test (RetryPolicy 2 through the ack bridge; dead-letter row, metric, checkpoint advance, next event delivered)
@@ -115,6 +115,10 @@ Findings from plan-authoring research (2026-07-12), each verified against source
   `ShardDelivery`, and `ShardAckRetry` / `ShardAckDeadLetter` map to Kiroku's
   bounded `SubscriptionResult`. EP-100 therefore consumes this delivered
   surface; it does not need the plan's old conditional integration fallback.
+- `commandErrorClass` already encoded EP-99's low-cardinality taxonomy but was
+  private to `Keiro.Command`. EP-100 exports that existing function and uses it
+  for dead-letter rows; duplicating the pattern match in the coordination layer
+  would let span and dead-letter classifications drift.
 
 
 ## Decision Log
@@ -251,6 +255,15 @@ Record every decision made while working on the plan.
   abstraction would duplicate completed work.
   Date: 2026-07-13
 
+- Decision: make `Keiro.Command.commandErrorClass` public and use it as the
+  single source for both span `error.type` and dispatch dead-letter
+  `error_class`.
+  Rationale: the live function already owns every `CommandError` constructor
+  and its EP-99 classification. A second mapping in `Keiro.ProcessManager`
+  would undermine MasterPlan Integration Point 1's one-class-per-constructor
+  contract.
+  Date: 2026-07-13
+
 
 ## Outcomes & Retrospective
 
@@ -258,6 +271,14 @@ Summarize outcomes, gaps, and lessons learned at major milestones or at completi
 Compare the result against the original purpose.
 
 (To be filled during and after implementation.)
+
+Milestone 2 delivered the opt-in rejected-command escape paths without changing
+the safe default. Process-manager and router workers share one classifier:
+transient failures retry, systemic deterministic failures halt, and only
+rejection/ambiguity reaches `RejectedHalt`, `RejectedDeadLetter`, or
+`RejectedSkip`. The dead-letter path records target identity and typed error
+class before acknowledging, including manager-state rejection at emit index
+`-1`; redelivery produces one row. The full suite passes 322 examples.
 
 
 ## Context and Orientation
@@ -959,3 +980,7 @@ Telemetry names respect Integration Point 3's reservations.
   child plan, refreshed the completed EP-96/EP-99 integration context, and
   completed Milestone 1 with CLI-generated migration 0018, typed storage APIs,
   and passing migration plus 317-example Keiro test suites.
+- 2026-07-13: Completed Milestone 2. Added shared rejection policy and
+  classification, target-aware failure results, process-manager/router
+  dead-letter and skip paths, telemetry, saga-divergence documentation, and
+  end-to-end coverage; the full Keiro suite passes 322 examples.

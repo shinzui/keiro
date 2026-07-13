@@ -95,6 +95,7 @@ module Keiro.Telemetry (
     keiroSnapshotWriteFailuresName,
     keiroSnapshotApplyDivergenceName,
     keiroDispatchFailedName,
+    keiroDispatchDeadletteredName,
     keiroDispatchDuplicatesName,
     keiroDispatchPoisonName,
     keiroWorkflowStepsExecutedName,
@@ -135,6 +136,7 @@ module Keiro.Telemetry (
     recordSnapshotWriteFailures,
     recordSnapshotApplyDivergence,
     recordDispatchFailed,
+    recordDispatchDeadLettered,
     recordDispatchDuplicate,
     recordDispatchPoison,
     recordWorkflowStepExecuted,
@@ -587,6 +589,8 @@ keiroSnapshotApplyDivergenceName :: Text
 keiroSnapshotApplyDivergenceName = "keiro.snapshot.apply.divergence"
 keiroDispatchFailedName :: Text
 keiroDispatchFailedName = "keiro.dispatch.failed"
+keiroDispatchDeadletteredName :: Text
+keiroDispatchDeadletteredName = "keiro.dispatch.deadlettered"
 keiroDispatchDuplicatesName :: Text
 keiroDispatchDuplicatesName = "keiro.dispatch.duplicates"
 keiroDispatchPoisonName :: Text
@@ -649,6 +653,7 @@ data KeiroMetrics = KeiroMetrics
     , snapshotWriteFailures :: Counter Int64
     , snapshotApplyDivergence :: Counter Int64
     , dispatchFailed :: Counter Int64
+    , dispatchDeadlettered :: Counter Int64
     , dispatchDuplicates :: Counter Int64
     , dispatchPoison :: Counter Int64
     , workflowStepsExecuted :: Counter Int64
@@ -698,6 +703,7 @@ newKeiroMetrics meter = liftIO $ do
     snapshotWriteFailures' <- counterI64 keiroSnapshotWriteFailuresName "{failure}" "Post-commit snapshot writes that failed and were swallowed."
     snapshotApplyDivergence' <- counterI64 keiroSnapshotApplyDivergenceName "{failure}" "Just-appended event batches that failed to replay from the pre-command state; the stream is poisoned and its next hydration will fail."
     dispatchFailed' <- counterI64 keiroDispatchFailedName "{command}" "Process-manager/router dispatch commands that failed."
+    dispatchDeadlettered' <- counterI64 keiroDispatchDeadletteredName "{command}" "Rejected process-manager/router dispatch commands handled by dead-letter or skip policy."
     dispatchDuplicates' <- counterI64 keiroDispatchDuplicatesName "{command}" "Process-manager/router dispatch commands skipped as duplicate deterministic event ids."
     dispatchPoison' <- counterI64 keiroDispatchPoisonName "{message}" "Process-manager/router worker messages classified as poison."
     workflowStepsExecuted' <- counterI64 keiroWorkflowStepsExecutedName "{step}" "Workflow steps that ran their action (a journal miss)."
@@ -738,6 +744,7 @@ newKeiroMetrics meter = liftIO $ do
             , snapshotWriteFailures = snapshotWriteFailures'
             , snapshotApplyDivergence = snapshotApplyDivergence'
             , dispatchFailed = dispatchFailed'
+            , dispatchDeadlettered = dispatchDeadlettered'
             , dispatchDuplicates = dispatchDuplicates'
             , dispatchPoison = dispatchPoison'
             , workflowStepsExecuted = workflowStepsExecuted'
@@ -833,6 +840,8 @@ recordSnapshotApplyDivergence :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m
 recordSnapshotApplyDivergence = recordCounter snapshotApplyDivergence
 recordDispatchFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordDispatchFailed = recordCounter dispatchFailed
+recordDispatchDeadLettered :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordDispatchDeadLettered = recordCounter dispatchDeadlettered
 recordDispatchDuplicate :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordDispatchDuplicate = recordCounter dispatchDuplicates
 recordDispatchPoison :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()

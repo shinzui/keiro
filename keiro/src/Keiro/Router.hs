@@ -45,20 +45,22 @@ import Effectful.Error.Static (Error, tryError)
 import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Command (CommandError (..), RunCommandOptions)
+import Keiro.DeadLetter (DispatcherKind (..))
 import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
 import Keiro.ProcessManager (
+    DispatchFailure (..),
     PMCommand (..),
     PMCommandResult (..),
     PoisonPolicy (..),
     WorkerOptions (..),
     ackForCommandError,
     confirmBenignDuplicate,
+    decideForFailures,
     defaultWorkerOptions,
     deterministicCommandId,
     eventAlreadyIn,
-    isTransientCommandError,
  )
 import Keiro.Projection (InlineProjection, runCommandWithProjections)
 import Keiro.Stream (Stream)
@@ -70,10 +72,10 @@ import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..))
 import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (Ingested (..))
-import Shibuya.Core.Types (Envelope (..))
+import Shibuya.Core.Types (Attempt (..), Envelope (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
-import Prelude (any, filter, fromIntegral, length, not, snd, zip, (+))
+import Prelude (filter, fromIntegral, length, snd, zip, (+))
 
 {- | A stateless, content-based router (in the Enterprise Integration Patterns
 sense): for each incoming event it resolves a data-dependent set of target
@@ -267,7 +269,7 @@ runRouterOnce options router sourceEvent input = do
                             Right result -> pure (PMCommandAppended result)
                             Left err -> do
                                 benign <- confirmBenignDuplicate targetStreamName commandId err
-                                pure $ if benign then PMCommandDuplicate commandId else PMCommandFailed err
+                                pure $ if benign then PMCommandDuplicate commandId else PMCommandFailed targetStreamName err
 
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce
@@ -285,17 +287,23 @@ Ack policy (see this plan's Decision Log):
   * otherwise, after dispatch, if every 'PMCommandResult' is
     'PMCommandAppended' or 'PMCommandDuplicate' the message finalizes 'AckOk';
   * if any dispatch is 'PMCommandFailed', transient failures finalize
-    'AckRetry' and deterministic failures finalize @AckHalt (HaltFatal …)@.
+    'AckRetry', systemic deterministic failures finalize @AckHalt
+    (HaltFatal …)@, and rejection-class failures follow
+    'RejectedCommandPolicy'.
 
 Benign domain rejections (a target aggregate refusing a "check" command because
 no edge matches) must be modeled as /total/ transitions in the keiki transducer
 (an ε-complement self-loop) so they never surface as 'PMCommandFailed' and
-therefore never wedge the worker.
+therefore never wedge the worker. When the rejection is genuinely
+data-dependent, 'RejectedDeadLetter' persists a queryable
+"Keiro.DeadLetter.DispatchDeadLetter" and acknowledges the source event;
+'RejectedSkip' acknowledges and records only the metric. 'RejectedHalt' remains
+the default.
 
 The worker invokes each ingested message's 'Shibuya.Core.AckHandle.AckHandle'
 @finalize@ exactly once with the decision, so the decision reaches the adapter.
-Use 'runRouterWorkerWith' to override poison-message handling, transient retry
-delay, or dispatch metrics.
+Use 'runRouterWorkerWith' to override poison-message handling, rejected-command
+handling, transient retry delay, or dispatch metrics.
 -}
 runRouterWorker ::
     forall msg input targetPhi targetRs targetState targetCi targetCo es.
@@ -338,28 +346,34 @@ runRouterWorkerWith workerOptions options router Adapter{source = adapterSource}
         decision <- case decodeMessage message of
             Nothing -> decideForPoison "router worker could not decode message" env
             Just (recorded, input) -> do
+                let correlationId = (router ^. #key) input
+                    attemptCount = envelopeAttemptCount env
                 outcome <- tryError @StoreError (runRouterOnce options router recorded input)
                 case outcome of
                     Left (_, storeErr) -> do
                         recordDispatchFailed (workerOptions ^. #metrics) 1
                         pure (ackForCommandError (workerOptions ^. #transientRetryDelay) (StoreFailed storeErr))
-                    Right (RouterResult results) -> ackDecisionFor results
+                    Right (RouterResult results) -> ackDecisionFor recorded correlationId attemptCount results
         finalizeAck decision
         pure decision
 
-    ackDecisionFor :: [PMCommandResult target] -> Eff es AckDecision
-    ackDecisionFor results = do
+    ackDecisionFor :: RecordedEvent -> Text -> Int -> [PMCommandResult target] -> Eff es AckDecision
+    ackDecisionFor sourceEvent correlationId attemptCount results = do
         let duplicateCount = commandDuplicateCount results
-            failures = [err | PMCommandFailed err <- results]
+            failures =
+                [ DispatchFailure emitIndex targetStreamName err
+                | (emitIndex, PMCommandFailed targetStreamName err) <- zip [0 ..] results
+                ]
         recordDispatchDuplicate (workerOptions ^. #metrics) duplicateCount
         recordDispatchFailed (workerOptions ^. #metrics) (fromIntegral (length failures))
-        pure $ case failures of
-            [] -> AckOk
-            errs
-                | any (not . isTransientCommandError) errs ->
-                    AckHalt (HaltFatal (Text.pack (show (headDeterministic errs))))
-                | otherwise ->
-                    AckRetry (workerOptions ^. #transientRetryDelay)
+        decideForFailures
+            workerOptions
+            DispatcherRouter
+            (router ^. #name)
+            correlationId
+            sourceEvent
+            attemptCount
+            failures
 
     commandDuplicateCount :: [PMCommandResult target] -> Int64
     commandDuplicateCount =
@@ -368,14 +382,6 @@ runRouterWorkerWith workerOptions options router Adapter{source = adapterSource}
         isDuplicateResult = \case
             PMCommandDuplicate{} -> True
             _ -> False
-
-    headDeterministic :: [CommandError] -> CommandError
-    headDeterministic errs =
-        case filter (not . isTransientCommandError) errs of
-            err : _ -> err
-            [] -> case errs of
-                err : _ -> err
-                [] -> CommandRejected
 
     decideForPoison :: Text -> Envelope msg -> Eff es AckDecision
     decideForPoison reason env = do
@@ -388,3 +394,9 @@ runRouterWorkerWith workerOptions options router Adapter{source = adapterSource}
             PoisonDeadLetter callback -> do
                 callback env
                 pure (AckDeadLetter (InvalidPayload reason))
+
+    envelopeAttemptCount :: Envelope msg -> Int
+    envelopeAttemptCount env =
+        case env ^. #attempt of
+            Nothing -> 1
+            Just (Attempt attempt) -> fromIntegral attempt + 1

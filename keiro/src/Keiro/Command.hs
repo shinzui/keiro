@@ -36,6 +36,7 @@ module Keiro.Command (
     CommandResult (..),
     CommandError (..),
     HydrationReplayReason (..),
+    commandErrorClass,
 
     -- * Options
     RunCommandOptions (..),
