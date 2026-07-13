@@ -53,7 +53,7 @@ commands =
                 (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
             <> command
                 "diff"
-                (info (Diff <$> fileArg <*> sinceOpt <**> helper) (progDesc "Classify spec changes since a git ref as ADDITIVE/BREAKING; exit non-zero on any breaking change"))
+                (info (Diff <$> fileArg <*> sinceOpt <**> helper) (progDesc "Classify spec changes since a git ref as ADDITIVE/WARNING/BREAKING over the decode and identity surface; exit non-zero on any BREAKING change"))
             <> command
                 "new"
                 (info (New <$> kindArg <**> helper) (progDesc "Print a minimal valid .keiro skeleton for a node kind (aggregate, process, contract, intake, emit, publisher, workqueue, dispatch, workflow, operation)"))

@@ -203,7 +203,7 @@ keiro-dsl parse    <file.keiro>                 # parse + pretty-print it back
 keiro-dsl check    <file.keiro> [--emit]        # validate; --emit pretty-prints the spec on success
 keiro-dsl scaffold <file.keiro> --out DIR \     # validate, emit @generated + holes + manifest, self-check firewall
   [--module-root Acme] [--collocate]            # optional placement (overrides the module/layout clauses)
-keiro-dsl diff     --since <git-ref> <file.keiro>   # classify changes ADDITIVE/BREAKING since a ref
+keiro-dsl diff     --since <git-ref> <file.keiro>   # classify ADDITIVE/WARNING/BREAKING since a ref
 ```
 
 - `new <kind>` — `kind` ∈ aggregate, process, contract, intake, emit, publisher, workqueue,

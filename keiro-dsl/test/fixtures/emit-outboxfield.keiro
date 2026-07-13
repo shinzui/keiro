@@ -1,0 +1,47 @@
+context hospital-capacity
+
+contract emergency {
+  schemaVersion 1
+  discriminator messageType
+  topic hospitalEvents "emergency.hospital.events"
+  event TransferReservationAccepted on hospitalEvents {
+    incidentId: typeid "inc"
+    reservationId: typeid "rsv"
+  }
+  event TransferReservationRejected on hospitalEvents {
+    incidentId: typeid "inc"
+    reason: text
+  }
+  event TransferExpired on hospitalEvents {
+    incidentId: typeid "inc"
+    expiredAt: text
+  }
+  event PatientAdmitted on hospitalEvents {
+    incidentId: typeid "inc"
+    admissionOutcome: text
+  }
+}
+
+emit reservationResponse {
+  contract emergency
+  topic hospitalEvents
+  source "hospital-capacity"
+  key incidentId
+  map status {
+    "confirmed" => TransferReservationAccepted
+    "released" => TransferReservationRejected
+    "expired" => TransferExpired
+    "admitted" => PatientAdmitted
+    _ => skip
+  }
+  messageId derive "msg" hole
+  idempotencyKey derive hole
+}
+
+publisher hospitalPublisher {
+  emit reservationResponse
+  ordering PerKeyHeadOfLine
+  maxAttempts 10
+  backoff constant 2s
+  outboxId stable from incidentId
+}

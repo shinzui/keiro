@@ -140,11 +140,11 @@ familyRegistry =
     [ (FamAggregate, DiffFamily aggregateDiff)
     , (FamProcess, DiffFamily processDiff)
     , (FamContract, DiffFamily contractDiff)
-    , (FamIntake, OutOfDiffScope "not yet diffed; Milestone 4 of docs/plans/103 covers intake dedupe identity and decode posture")
-    , (FamEmit, OutOfDiffScope "not yet diffed; Milestone 4 of docs/plans/103 covers emit derivations and mappings")
-    , (FamPublisher, OutOfDiffScope "not yet diffed; Milestone 4 of docs/plans/103 covers publisher identity and ordering")
+    , (FamIntake, DiffFamily intakeDiff)
+    , (FamEmit, DiffFamily emitDiff)
+    , (FamPublisher, DiffFamily publisherDiff)
     , (FamWorkqueue, DiffFamily workqueueDiff)
-    , (FamPgmqDispatch, OutOfDiffScope "not yet diffed; Milestone 4 of docs/plans/103 covers dispatch dedupe identity and retargeting")
+    , (FamPgmqDispatch, DiffFamily pgmqDispatchDiff)
     , (FamWorkflow, DiffFamily workflowDiff)
     , (FamOperation, OutOfDiffScope "operations own no persisted decode or identity surface; their references and workflow signal/await pairing are single-spec validation concerns")
     ]
@@ -164,7 +164,7 @@ runFamily _ (OutOfDiffScope _) = []
 -- behaviour but neither interpret stored bytes nor derive persisted keys.
 -- Shared id and enum declarations become diffed in Milestones 2 and 4.
 sharedDeclarationDiff :: DiffEnv -> [Change]
-sharedDeclarationDiff = enumDiff
+sharedDeclarationDiff env = enumDiff env ++ idDiff env
 
 nodeAggregate :: Node -> Maybe Aggregate
 nodeAggregate (NAggregate a) = Just a
@@ -178,9 +178,25 @@ nodeContract :: Node -> Maybe ContractNode
 nodeContract (NContract contract) = Just contract
 nodeContract _ = Nothing
 
+nodeIntake :: Node -> Maybe IntakeNode
+nodeIntake (NIntake intake) = Just intake
+nodeIntake _ = Nothing
+
+nodeEmit :: Node -> Maybe EmitNode
+nodeEmit (NEmit emit) = Just emit
+nodeEmit _ = Nothing
+
+nodePublisher :: Node -> Maybe PublisherNode
+nodePublisher (NPublisher publisher) = Just publisher
+nodePublisher _ = Nothing
+
 nodeWorkqueue :: Node -> Maybe WorkqueueNode
 nodeWorkqueue (NWorkqueue workqueue) = Just workqueue
 nodeWorkqueue _ = Nothing
+
+nodePgmqDispatch :: Node -> Maybe PgmqDispatchNode
+nodePgmqDispatch (NPgmqDispatch dispatch) = Just dispatch
+nodePgmqDispatch _ = Nothing
 
 nodeWorkflow :: Node -> Maybe WorkflowNode
 nodeWorkflow (NWorkflow workflow) = Just workflow
@@ -199,6 +215,7 @@ aggregatePairDiff oldAgg newAgg =
     concatMap (eventDiff oldAgg newAgg) (aggEvents newAgg)
         ++ removedEvents oldAgg newAgg
         ++ wireDiff oldAgg newAgg
+        ++ projectionDiff oldAgg newAgg
 
 addedAggregateDiff :: Aggregate -> [Change]
 addedAggregateDiff newAgg =
@@ -328,6 +345,43 @@ effectiveWire (Just w) = (wireKind w, wireFields w)
 
 renderWire :: (Text, Text) -> Text
 renderWire (kindName, fieldNames) = "kind=" <> kindName <> ", fields=" <> fieldNames
+
+projectionDiff :: Aggregate -> Aggregate -> [Change]
+projectionDiff oldAggregate newAggregate
+    | projectionSurface (aggProjection oldAggregate) == projectionSurface (aggProjection newAggregate) = []
+    | otherwise =
+        [ advisory
+            (aggName newAggregate)
+            "projection"
+            (aggName newAggregate)
+            ProjectionChanged
+            "projection table, consistency, key, or status mapping changed; coordinate the read-model migration"
+        ]
+
+projectionSurface :: Maybe ProjectionSpec -> Maybe (Name, Consistency, Name, Maybe Mapping)
+projectionSurface projection = do
+    value <- projection
+    pure (projTable value, projConsistency value, projKey value, projStatusMap value)
+
+idDiff :: DiffEnv -> [Change]
+idDiff env =
+    concatMap (uncurry idPairDiff) (prMatched paired)
+        ++ concatMap addedIdDiff (prAdded paired)
+        ++ concatMap removedIdDiff (prRemoved paired)
+  where
+    paired = pairDeclarations idName (specIds (deOld env)) (specIds (deNew env))
+
+idPairDiff :: IdDecl -> IdDecl -> [Change]
+idPairDiff oldId newId =
+    [ breaking (idName newId) "id-prefix" (idName newId) IdPrefixChanged ("prefix changed '" <> idPrefix oldId <> "' -> '" <> idPrefix newId <> "'; stored and newly minted ids no longer share an identity domain")
+    | idPrefix oldId /= idPrefix newId
+    ]
+
+addedIdDiff :: IdDecl -> [Change]
+addedIdDiff declaration = [additive (idName declaration) "id-prefix" (idName declaration) "new id declaration"]
+
+removedIdDiff :: IdDecl -> [Change]
+removedIdDiff declaration = [breaking (idName declaration) "id-prefix" (idName declaration) IdPrefixChanged "id declaration removed; persisted ids still use its prefix"]
 
 enumDiff :: DiffEnv -> [Change]
 enumDiff env =
@@ -529,6 +583,7 @@ workqueuePairDiff oldQueue newQueue =
     concatMap pairedFieldDiff (prMatched fields)
         ++ concatMap addedFieldDiff (prAdded fields)
         ++ concatMap removedFieldDiff (prRemoved fields)
+        ++ queueIdentityDiff oldQueue newQueue
   where
     -- wqPayloadName is a generated Haskell type name, not a wire-visible name.
     fields = pairDeclarations wqfName (wqPayload oldQueue) (wqPayload newQueue)
@@ -551,6 +606,21 @@ addedWorkqueueDiff queue =
 removedWorkqueueDiff :: WorkqueueNode -> [Change]
 removedWorkqueueDiff queue =
     [breaking (wqName queue) "payload-field" (wqfName field) WqPayloadFieldChanged "workqueue removed while persisted jobs may still carry this payload" | field <- wqPayload queue]
+        ++ [breaking (wqName queue) "queue-identity" (wqName queue) QueueIdentityChanged "workqueue removed; its physical queue, DLQ, and pgmq table may still hold state"]
+
+queueIdentityDiff :: WorkqueueNode -> WorkqueueNode -> [Change]
+queueIdentityDiff oldQueue newQueue =
+    [ breaking
+        (wqName newQueue)
+        "queue-identity"
+        (wqName newQueue)
+        QueueIdentityChanged
+        "logical, physical, DLQ, or table name changed; queued jobs and dispatch dedupe records remain under the old identity"
+    | queueIdentity oldQueue /= queueIdentity newQueue
+    ]
+
+queueIdentity :: WorkqueueNode -> (Text, Text, Text, Text)
+queueIdentity queue = (wqLogical queue, wqPhysical queue, wqDlq queue, wqTable queue)
 
 processDiff :: DiffEnv -> [Change]
 processDiff env =
@@ -565,6 +635,8 @@ processPairDiff oldProcess newProcess =
     concatMap pairedFieldDiff (prMatched fields)
         ++ map (fieldChange "field added; source events at the old shape cannot populate it") (prAdded fields)
         ++ map (fieldChange "field removed; the generated process input decoder changed") (prRemoved fields)
+        ++ processIdentityDiff oldProcess newProcess
+        ++ processTimerWindowDiff oldProcess newProcess
   where
     -- inName is a generated Haskell type name; the wire shape is inFields.
     fields = pairDeclarations fieldName (inFields (procInput oldProcess)) (inFields (procInput newProcess))
@@ -580,6 +652,47 @@ addedProcessDiff process =
 removedProcessDiff :: ProcessNode -> [Change]
 removedProcessDiff process =
     [breaking (procId process) "input-field" (fieldName field) ProcessInputChanged "process removed while persisted source events may still require this input decoder" | field <- inFields (procInput process)]
+        ++ [breaking (procId process) "derived-identity" (procId process) DerivedIdentityChanged "process removed while persisted saga, dispatch, and timer identities may still exist"]
+
+processIdentityDiff :: ProcessNode -> ProcessNode -> [Change]
+processIdentityDiff oldProcess newProcess =
+    [ breaking
+        (procId newProcess)
+        "derived-identity"
+        (procId newProcess)
+        DerivedIdentityChanged
+        "process name, correlation derivation, saga stream prefix, timer id prefix, or fired-event-id prefix changed; replays and retries no longer derive the persisted identity"
+    | processIdentity oldProcess /= processIdentity newProcess
+    ]
+
+processIdentity :: ProcessNode -> (Text, Name, Name, Text, Text, Text)
+processIdentity process =
+    ( procName process
+    , corrField (procCorrelate process)
+    , corrVia (procCorrelate process)
+    , sagaStreamPrefix (procSaga process)
+    , idePrefix (tmId (procTimer process))
+    , idePrefix (fireFiredEventId (tmFire (procTimer process)))
+    )
+
+processTimerWindowDiff :: ProcessNode -> ProcessNode -> [Change]
+processTimerWindowDiff oldProcess newProcess =
+    [ advisory
+        (procId newProcess)
+        "timer"
+        (tmName (procTimer newProcess))
+        TimerWindowChanged
+        ( "fireAt source/window changed "
+            <> renderFireAt (tmFireAt (procTimer oldProcess))
+            <> " -> "
+            <> renderFireAt (tmFireAt (procTimer newProcess))
+            <> "; already-scheduled timers keep their persisted deadline"
+        )
+    | tmFireAt (procTimer oldProcess) /= tmFireAt (procTimer newProcess)
+    ]
+
+renderFireAt :: FireAtExpr -> Text
+renderFireAt expression = "input." <> faField expression <> " + " <> faWindow expression
 
 workflowDiff :: DiffEnv -> [Change]
 workflowDiff env =
@@ -594,6 +707,7 @@ workflowPairDiff oldWorkflow newWorkflow =
     inputChanges
         ++ outputChanges
         ++ classifyWorkflowBody oldWorkflow newWorkflow
+        ++ workflowIdentityDiff oldWorkflow newWorkflow
   where
     fields = pairDeclarations fieldName (wfInputFields oldWorkflow) (wfInputFields newWorkflow)
     inputChanges =
@@ -614,6 +728,181 @@ addedWorkflowDiff workflow = [additive (wfId workflow) "workflow" (wfId workflow
 
 removedWorkflowDiff :: WorkflowNode -> [Change]
 removedWorkflowDiff workflow = [breaking (wfId workflow) "workflow" (wfId workflow) WorkflowShapeChanged "workflow removed while in-flight journals and outcomes may still require its decoder"]
+
+workflowIdentityDiff :: WorkflowNode -> WorkflowNode -> [Change]
+workflowIdentityDiff oldWorkflow newWorkflow =
+    [ breaking
+        (wfId newWorkflow)
+        "workflow-name"
+        (wfId newWorkflow)
+        WorkflowStableNameChanged
+        ("stable name changed '" <> wfStable oldWorkflow <> "' -> '" <> wfStable newWorkflow <> "'; in-flight journals remain under the old stream name")
+    | wfStable oldWorkflow /= wfStable newWorkflow
+    ]
+        ++ [ breaking
+                (wfId newWorkflow)
+                "derived-identity"
+                (wfId newWorkflow)
+                DerivedIdentityChanged
+                "workflow id source field or derivation changed; journal and deterministic child/step identities no longer coalesce with persisted executions"
+           | (wfIdField oldWorkflow, wfIdVia oldWorkflow) /= (wfIdField newWorkflow, wfIdVia newWorkflow)
+           ]
+
+intakeDiff :: DiffEnv -> [Change]
+intakeDiff env =
+    concatMap (uncurry intakePairDiff) (prMatched paired)
+        ++ concatMap addedIntakeDiff (prAdded paired)
+        ++ concatMap removedIntakeDiff (prRemoved paired)
+  where
+    paired = pairByName nodeIntake inkName env
+
+intakePairDiff :: IntakeNode -> IntakeNode -> [Change]
+intakePairDiff oldIntake newIntake =
+    [ breaking
+        (inkName newIntake)
+        "dedupe-identity"
+        (inkName newIntake)
+        DedupeIdentityChanged
+        "dedupe key or policy changed; redelivered messages no longer match their persisted dedupe record"
+    | (inkDedupeKey oldIntake, inkDedupePolicy oldIntake) /= (inkDedupeKey newIntake, inkDedupePolicy newIntake)
+    ]
+        ++ [ advisory
+                (inkName newIntake)
+                "decode-posture"
+                (inkName newIntake)
+                DecodePostureChanged
+                "envelope/body decode posture changed; future messages are accepted or rejected differently"
+           | inkDecode oldIntake /= inkDecode newIntake
+           ]
+
+addedIntakeDiff :: IntakeNode -> [Change]
+addedIntakeDiff intake = [additive (inkName intake) "intake" (inkName intake) "new intake"]
+
+removedIntakeDiff :: IntakeNode -> [Change]
+removedIntakeDiff intake = [breaking (inkName intake) "dedupe-identity" (inkName intake) DedupeIdentityChanged "intake removed while persisted dedupe records and redeliveries may remain"]
+
+emitDiff :: DiffEnv -> [Change]
+emitDiff env =
+    concatMap (uncurry emitPairDiff) (prMatched paired)
+        ++ concatMap addedEmitDiff (prAdded paired)
+        ++ concatMap removedEmitDiff (prRemoved paired)
+  where
+    paired = pairByName nodeEmit emName env
+
+emitPairDiff :: EmitNode -> EmitNode -> [Change]
+emitPairDiff oldEmit newEmit =
+    [ breaking
+        (emName newEmit)
+        "derived-identity"
+        "messageId"
+        DerivedIdentityChanged
+        "messageId derive prefix changed; outbox retries no longer coalesce with persisted messages"
+    | emMessageId oldEmit /= emMessageId newEmit
+    ]
+        ++ [ breaking
+                (emName newEmit)
+                "derived-identity"
+                "idempotencyKey"
+                DerivedIdentityChanged
+                "idempotencyKey derive prefix changed; downstream dedupe no longer matches persisted messages"
+           | emIdempotencyKey oldEmit /= emIdempotencyKey newEmit
+           ]
+        ++ [ advisory
+                (emName newEmit)
+                "emit-mapping"
+                (emName newEmit)
+                EmitMappingChanged
+                "emit key, status discriminant, mapping rows, or explicit skip posture changed"
+           | emitMapping oldEmit /= emitMapping newEmit
+           ]
+
+emitMapping :: EmitNode -> (Name, Name, [EmitMapRow], Bool)
+emitMapping emit = (emKey emit, emDiscriminant emit, emMap emit, emSkip emit)
+
+addedEmitDiff :: EmitNode -> [Change]
+addedEmitDiff emit = [additive (emName emit) "emit" (emName emit) "new emit mapping"]
+
+removedEmitDiff :: EmitNode -> [Change]
+removedEmitDiff emit = [breaking (emName emit) "derived-identity" (emName emit) DerivedIdentityChanged "emit removed while persisted outbox identities may still retry"]
+
+publisherDiff :: DiffEnv -> [Change]
+publisherDiff env =
+    concatMap (uncurry publisherPairDiff) (prMatched paired)
+        ++ concatMap addedPublisherDiff (prAdded paired)
+        ++ concatMap removedPublisherDiff (prRemoved paired)
+  where
+    paired = pairByName nodePublisher pubName env
+
+publisherPairDiff :: PublisherNode -> PublisherNode -> [Change]
+publisherPairDiff oldPublisher newPublisher =
+    -- maxAttempts/backoff are retry tuning, not persisted decode or identity.
+    [ breaking
+        (pubName newPublisher)
+        "derived-identity"
+        "outboxId"
+        DerivedIdentityChanged
+        "stable outbox-id source field changed; retries no longer coalesce with persisted outbox rows"
+    | pubOutboxField oldPublisher /= pubOutboxField newPublisher
+    ]
+        ++ [ advisory
+                (pubName newPublisher)
+                "publisher-policy"
+                (pubName newPublisher)
+                PublisherPolicyChanged
+                ("ordering changed " <> pubOrdering oldPublisher <> " -> " <> pubOrdering newPublisher)
+           | pubOrdering oldPublisher /= pubOrdering newPublisher
+           ]
+
+addedPublisherDiff :: PublisherNode -> [Change]
+addedPublisherDiff publisher = [additive (pubName publisher) "publisher" (pubName publisher) "new publisher"]
+
+removedPublisherDiff :: PublisherNode -> [Change]
+removedPublisherDiff publisher = [breaking (pubName publisher) "derived-identity" (pubName publisher) DerivedIdentityChanged "publisher removed while persisted outbox rows may still require its stable identity"]
+
+pgmqDispatchDiff :: DiffEnv -> [Change]
+pgmqDispatchDiff env =
+    concatMap (uncurry pgmqDispatchPairDiff) (prMatched paired)
+        ++ concatMap addedPgmqDispatchDiff (prAdded paired)
+        ++ concatMap removedPgmqDispatchDiff (prRemoved paired)
+  where
+    paired = pairByName nodePgmqDispatch pdName env
+
+pgmqDispatchPairDiff :: PgmqDispatchNode -> PgmqDispatchNode -> [Change]
+pgmqDispatchPairDiff oldDispatch newDispatch =
+    [ breaking
+        (pdName newDispatch)
+        "dedupe-identity"
+        (pdName newDispatch)
+        DedupeIdentityChanged
+        "dispatch dedupe key/read-model/queue surface changed; prior enqueue records no longer match"
+    | dispatchDedupe oldDispatch /= dispatchDedupe newDispatch
+    ]
+        ++ [ advisory
+                (pdName newDispatch)
+                "retarget"
+                (pdName newDispatch)
+                DispatchRetargeted
+                "source read model or target queue changed; future fan-out is routed differently"
+           | dispatchTargets oldDispatch /= dispatchTargets newDispatch
+           ]
+
+dispatchDedupe :: PgmqDispatchNode -> (Name, Name, Text, Name, Text)
+dispatchDedupe dispatch =
+    ( pdDedupKey dispatch
+    , pdDedupReadModel dispatch
+    , pdDedupReadModelField dispatch
+    , pdDedupQueue dispatch
+    , pdDedupQueueField dispatch
+    )
+
+dispatchTargets :: PgmqDispatchNode -> (Name, Name)
+dispatchTargets dispatch = (pdSourceReadModel dispatch, pdEnqueueTo dispatch)
+
+addedPgmqDispatchDiff :: PgmqDispatchNode -> [Change]
+addedPgmqDispatchDiff dispatch = [additive (pdName dispatch) "dispatch" (pdName dispatch) "new pgmq dispatch"]
+
+removedPgmqDispatchDiff :: PgmqDispatchNode -> [Change]
+removedPgmqDispatchDiff dispatch = [breaking (pdName dispatch) "dedupe-identity" (pdName dispatch) DedupeIdentityChanged "dispatch removed while persisted queue and read-model dedupe records may remain"]
 
 -- | Conservative extension seam used by the workflow-evolution plan.
 classifyWorkflowBody :: WorkflowNode -> WorkflowNode -> [Change]

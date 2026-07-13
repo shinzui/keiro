@@ -94,11 +94,11 @@ Milestone 3 (cross-node decode surface — A4):
 
 Milestone 4 (identity surface — A6 — plus CLI/doc truth):
 
-- [ ] Identity rules: `WorkflowStableNameChanged`, `IdPrefixChanged`, `DedupeIdentityChanged`, `DerivedIdentityChanged`, `QueueIdentityChanged` (breaking); `TimerWindowChanged`, `EmitMappingChanged`, `DecodePostureChanged`, `ProjectionChanged`, `PublisherPolicyChanged`, `DispatchRetargeted`, `ContractSchemaVersionBumped` (warnings).
-- [ ] Fixtures + unit tests per code; `diff-test.sh` identity + warning-tier cases added.
-- [ ] Rewrite the `Keiro.Dsl.Diff` module haddock (it currently claims enum deltas are emitted; they are not).
-- [ ] Update the `diff` subcommand help text in `keiro-dsl/app/Main.hs` and the one-line diff descriptions in `agents/skills/keiro-dsl-authoring/NOTATION.md` and `agents/skills/keiro-dsl-authoring/SKILL.md` to name the three tiers.
-- [ ] Full validation sweep: unit suite from `keiro-dsl/`, `diff-test.sh`, manual before/after repro, conformance suites untouched and green.
+- [x] (2026-07-13 20:18Z) Identity rules: `WorkflowStableNameChanged`, `IdPrefixChanged`, `DedupeIdentityChanged`, `DerivedIdentityChanged`, `QueueIdentityChanged` (breaking); `TimerWindowChanged`, `EmitMappingChanged`, `DecodePostureChanged`, `ProjectionChanged`, `PublisherPolicyChanged`, `DispatchRetargeted`, `ContractSchemaVersionBumped` (warnings).
+- [x] (2026-07-13 20:18Z) Fixtures + unit tests per code; `diff-test.sh` identity + warning-tier cases added (92 examples, 0 failures; cases 1–8 passed).
+- [x] (2026-07-13 20:18Z) Rewrite the `Keiro.Dsl.Diff` module haddock (it currently claims enum deltas are emitted; they are not).
+- [x] (2026-07-13 20:18Z) Update the `diff` subcommand help text in `keiro-dsl/app/Main.hs` and the one-line diff descriptions in `agents/skills/keiro-dsl-authoring/NOTATION.md` and `agents/skills/keiro-dsl-authoring/SKILL.md` to name the three tiers.
+- [x] (2026-07-13 20:18Z) Full validation sweep: unit suite from `keiro-dsl/`, `diff-test.sh`, manual before/after repro, conformance suites untouched and green (`keiro-dsl-conformance`: 1 suite/5 checks passed; CLI help names both surfaces and all three tiers).
 
 
 ## Surprises & Discoveries
@@ -142,6 +142,12 @@ exit=0
   and workflows each use `pairByName` and emit their own facet/code. The contract
   schema-bump case is visibly `WARNING`/exit 0 while the same field addition at the old
   version is `BREAKING`, pinning the coordinated-rollout distinction.
+- Milestone 4 validation (2026-07-13 20:18Z) proved the warning tier is observable but
+  non-blocking end to end: a timer-window mutation prints `WARNING: ...
+  [TimerWindowChanged]` and exits 0, while workflow stable-name and id-prefix mutations
+  print their distinct breaking codes and exit 1. The registry now has real differs for
+  every node family except the permanently excluded operation family; top-level rules
+  remain explicitly excluded by the documented single-spec/evolution boundary.
 
 (Add new entries here as implementation proceeds.)
 

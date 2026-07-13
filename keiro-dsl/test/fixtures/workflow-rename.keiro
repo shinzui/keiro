@@ -1,0 +1,33 @@
+context hospital-capacity
+
+workflow HospitalTransferReservation
+  name "hospital-transfer-reservation-v2"
+  in ReservationWorkflowInput { reservationId:Id hospitalId:Id }
+  out ReservationWorkflowSummary
+  id from input.reservationId via idText
+  body
+    step create-transfer-hold -> ReservationHold
+    await reservation-confirmation -> ReservationConfirmation
+    step release-or-retain-capacity -> CapacityRelease
+    step summarize-reservation -> ReservationWorkflowSummary
+
+operation ConfirmReservation
+  command on Reservation
+    stream from reservationId via reservationStream
+    project [ transferDecision ]
+
+operation QueryTransferDecision
+  query transferDecision
+    input TransferReservationId
+    result Maybe TransferDecision
+    consistency Strong
+
+operation SignalReservationConfirmation
+  signal reservation-confirmation of HospitalTransferReservation
+    key from reservationId via reservationWorkflowId
+    value ReservationConfirmation
+
+operation RunReservationWorkflow
+  run HospitalTransferReservation
+    input ReservationWorkflowInput
+    outcome -> ReservationWorkflowRun

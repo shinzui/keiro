@@ -66,7 +66,7 @@ cabal run keiro-dsl -- parse   <file.keiro>            # parse + pretty-print (p
 cabal run keiro-dsl -- check   <file.keiro> [--emit]   # validate; --emit pretty-prints the spec on success
 cabal run keiro-dsl -- scaffold <file.keiro> --out DIR # validate, then emit @generated + create-if-absent holes
                             [--module-root Acme] [--collocate]  # place modules under Acme.<Ctx>.<Node>(.Generated)
-cabal run keiro-dsl -- diff --since <git-ref> <file.keiro>  # classify changes ADDITIVE/BREAKING; gate a merge
+cabal run keiro-dsl -- diff --since <git-ref> <file.keiro>  # classify ADDITIVE/WARNING/BREAKING; BREAKING gates a merge
 cabal run keiro-dsl -- new <kind>                      # print a minimal valid skeleton (kinds below)
 ```
 

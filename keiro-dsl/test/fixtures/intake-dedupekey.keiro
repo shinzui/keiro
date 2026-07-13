@@ -1,0 +1,41 @@
+context hospital-capacity
+
+contract emergency {
+  schemaVersion 1
+  discriminator messageType
+  topic incidentEvents "emergency.incident.events"
+  event IncidentTransferNeedDeclared on incidentEvents {
+    incidentId: typeid "inc"
+    region: text
+  }
+}
+
+intake incidentInbox {
+  contract emergency
+  topic incidentEvents
+  accept IncidentTransferNeedDeclared
+
+  bind source from header "keiro-source" required
+  bind schemaVersion from header "keiro-schema-version" required cross-check body
+  bind messageId from header "keiro-message-id" required cross-check body
+  bind key from kafka-key
+  bind occurredAt from kafka-cursor
+  bind idempotencyKey from body
+
+  dedupe key idempotencyKey policy PreferIntegrationMessageId
+
+  decode {
+    envelope strict-required lenient-optional
+    body strict schemaVersion == 1
+  }
+
+  disposition {
+    processed => ackOk
+    duplicate => ackOk
+    inProgress => retry 5s
+    previouslyFailed => deadLetter "previous inbox failure"
+    decodeFailed => deadLetter
+    dedupeFailed => deadLetter
+    storeFailed => retry 5s
+  }
+}

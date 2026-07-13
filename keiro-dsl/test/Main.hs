@@ -299,6 +299,58 @@ main = hspec $ do
             [ckCode k | Breaking k <- relabeled] `shouldContain` [Just WorkflowBodyChanged]
             appended <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-stepadd.keiro"
             [ckCode k | Breaking k <- appended] `shouldContain` [Just WorkflowBodyChanged]
+        it "classifies a workflow stable-name change as WorkflowStableNameChanged" $ do
+            cs <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-rename.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just WorkflowStableNameChanged]
+        it "classifies workflow id-derivation changes as DerivedIdentityChanged" $ do
+            cs <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-idfield.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just DerivedIdentityChanged]
+        it "classifies an id prefix change as IdPrefixChanged" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-idprefix.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just IdPrefixChanged]
+        it "classifies intake dedupe key and policy changes as DedupeIdentityChanged" $ do
+            policy <- diffFixtures "test/fixtures/intake.keiro" "test/fixtures/intake-dedupepolicy.keiro"
+            [ckCode k | Breaking k <- policy] `shouldContain` [Just DedupeIdentityChanged]
+            key <- diffFixtures "test/fixtures/intake.keiro" "test/fixtures/intake-dedupekey.keiro"
+            [ckCode k | Breaking k <- key] `shouldContain` [Just DedupeIdentityChanged]
+        it "reports intake decode-posture changes as warnings" $ do
+            cs <- diffFixtures "test/fixtures/intake.keiro" "test/fixtures/intake-decode.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckCode k | Advisory k <- cs] `shouldContain` [Just DecodePostureChanged]
+        it "classifies process and timer derivation changes as DerivedIdentityChanged" $ do
+            processName <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-procname.keiro"
+            [ckCode k | Breaking k <- processName] `shouldContain` [Just DerivedIdentityChanged]
+            timerId <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-timerid.keiro"
+            [ckCode k | Breaking k <- timerId] `shouldContain` [Just DerivedIdentityChanged]
+        it "reports a timer window change as a warning" $ do
+            cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-window.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckCode k | Advisory k <- cs] `shouldContain` [Just TimerWindowChanged]
+        it "reports emit-map changes as warnings and derive changes as breaking" $ do
+            mapping <- diffFixtures "test/fixtures/emit.keiro" "test/fixtures/emit-mapchange.keiro"
+            any isBreaking mapping `shouldBe` False
+            [ckCode k | Advisory k <- mapping] `shouldContain` [Just EmitMappingChanged]
+            derive <- diffFixtures "test/fixtures/emit.keiro" "test/fixtures/emit-derive.keiro"
+            [ckCode k | Breaking k <- derive] `shouldContain` [Just DerivedIdentityChanged]
+        it "classifies publisher outbox identity and ordering independently" $ do
+            outbox <- diffFixtures "test/fixtures/emit.keiro" "test/fixtures/emit-outboxfield.keiro"
+            [ckCode k | Breaking k <- outbox] `shouldContain` [Just DerivedIdentityChanged]
+            ordering <- diffFixtures "test/fixtures/emit.keiro" "test/fixtures/emit-ordering.keiro"
+            any isBreaking ordering `shouldBe` False
+            [ckCode k | Advisory k <- ordering] `shouldContain` [Just PublisherPolicyChanged]
+        it "classifies workqueue names as QueueIdentityChanged" $ do
+            cs <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-rename.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just QueueIdentityChanged]
+        it "classifies pgmq dispatch dedupe and retargeting independently" $ do
+            dedupe <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-dedupkey.keiro"
+            [ckCode k | Breaking k <- dedupe] `shouldContain` [Just DedupeIdentityChanged]
+            retarget <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-retarget.keiro"
+            any isBreaking retarget `shouldBe` False
+            [ckCode k | Advisory k <- retarget] `shouldContain` [Just DispatchRetargeted]
+        it "reports aggregate projection changes as warnings" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-projection.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckCode k | Advisory k <- cs] `shouldContain` [Just ProjectionChanged]
 
     describe "module placement (M1)" $ do
         it "GeneratedPrefix is today's namespace (Generated.<Ctx>.<Node>, holes at <Ctx>.<Node>)" $ do

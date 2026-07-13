@@ -78,4 +78,54 @@ else
   echo "FAIL: contract event removal used the wrong diagnostic code"; exit 1
 fi
 
-echo "PASS: diff --since gates breaking event changes"
+echo "== 6) workflow stable-name rename must be BREAKING =="
+cp "$FIX/workflow.keiro" "$DEMO/svc.keiro"
+git -C "$DEMO" add svc.keiro
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "workflow baseline"
+cp "$FIX/workflow-rename.keiro" "$DEMO/svc.keiro"
+if output="$("$EXE" diff --since HEAD "$DEMO/svc.keiro" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: workflow stable-name rename was not flagged breaking"; exit 1
+elif [[ "$output" == *"[WorkflowStableNameChanged]"* ]]; then
+  echo "$output"
+  echo "ok: workflow identity change blocks the merge"
+else
+  echo "$output"
+  echo "FAIL: workflow rename used the wrong diagnostic code"; exit 1
+fi
+
+echo "== 7) id prefix change must be BREAKING =="
+cp "$FIX/reservation.keiro" "$DEMO/svc.keiro"
+git -C "$DEMO" add svc.keiro
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "reservation identity baseline"
+cp "$FIX/reservation-idprefix.keiro" "$DEMO/svc.keiro"
+if output="$("$EXE" diff --since HEAD "$DEMO/svc.keiro" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: id prefix change was not flagged breaking"; exit 1
+elif [[ "$output" == *"[IdPrefixChanged]"* ]]; then
+  echo "$output"
+  echo "ok: id prefix change blocks the merge"
+else
+  echo "$output"
+  echo "FAIL: id prefix change used the wrong diagnostic code"; exit 1
+fi
+
+echo "== 8) timer window change must WARNING and exit 0 =="
+cp "$FIX/hospital-surge.keiro" "$DEMO/svc.keiro"
+git -C "$DEMO" add svc.keiro
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "timer baseline"
+cp "$FIX/hospital-surge-window.keiro" "$DEMO/svc.keiro"
+if output="$("$EXE" diff --since HEAD "$DEMO/svc.keiro" 2>&1)"; then
+  if [[ "$output" == WARNING:* && "$output" == *"[TimerWindowChanged]"* ]]; then
+    echo "$output"
+    echo "ok: timer policy change is visible without blocking the merge"
+  else
+    echo "$output"
+    echo "FAIL: timer window change did not print the expected WARNING"; exit 1
+  fi
+else
+  echo "$output"
+  echo "FAIL: timer window warning incorrectly blocked the merge"; exit 1
+fi
+
+echo "PASS: diff --since gates the decode and identity surface"
