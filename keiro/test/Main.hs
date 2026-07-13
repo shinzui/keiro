@@ -2136,6 +2136,131 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Vector.length targetB `shouldBe` 1
             Vector.length targetC `shouldBe` 1
 
+        it "dedups by target identity when a redelivered resolve reorders targets after a partial dispatch" $ \storeHandle -> do
+            attemptsRef <- newIORef (0 :: Int)
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+                router = unstableRouter attemptsRef $ \case
+                    0 -> ["swap-a"]
+                    _ -> ["swap-b", "swap-a"]
+            Right (RouterResult firstAttempt) <-
+                Store.runStoreIO storeHandle $
+                    runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
+            firstAttempt `shouldSatisfy` all isAppended
+            Right (RouterResult secondAttempt) <-
+                Store.runStoreIO storeHandle $
+                    runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
+            secondAttempt `shouldSatisfy` \case
+                [swapB, swapA] -> isAppended swapB && isDuplicate swapA
+                _ -> False
+            Right swapAEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "swap-a") (StreamVersion 0) 10
+            Right swapBEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "swap-b") (StreamVersion 0) 10
+            Vector.length swapAEvents `shouldBe` 1
+            Vector.length swapBEvents `shouldBe` 1
+
+        it "dispatches a target added by resolve drift instead of misreading it as a duplicate" $ \storeHandle -> do
+            attemptsRef <- newIORef (0 :: Int)
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+                router = unstableRouter attemptsRef $ \case
+                    0 -> ["growth-a", "growth-b"]
+                    _ -> ["growth-a", "growth-c"]
+            Right (RouterResult firstAttempt) <-
+                Store.runStoreIO storeHandle $
+                    runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
+            firstAttempt `shouldSatisfy` all isAppended
+            Right (RouterResult secondAttempt) <-
+                Store.runStoreIO storeHandle $
+                    runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
+            secondAttempt `shouldSatisfy` \case
+                [growthA, growthC] -> isDuplicate growthA && isAppended growthC
+                _ -> False
+            Right growthAEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "growth-a") (StreamVersion 0) 10
+            Right growthBEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "growth-b") (StreamVersion 0) 10
+            Right growthCEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "growth-c") (StreamVersion 0) 10
+            Vector.length growthAEvents `shouldBe` 1
+            Vector.length growthBEvents `shouldBe` 1
+            Vector.length growthCEvents `shouldBe` 1
+
+        it "keeps full-completion order swaps idempotent" $ \storeHandle -> do
+            attemptsRef <- newIORef (0 :: Int)
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+                router = unstableRouter attemptsRef $ \case
+                    0 -> ["order-a", "order-b"]
+                    _ -> ["order-b", "order-a"]
+            Right (RouterResult firstAttempt) <-
+                Store.runStoreIO storeHandle $
+                    runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
+            firstAttempt `shouldSatisfy` all isAppended
+            Right (RouterResult secondAttempt) <-
+                Store.runStoreIO storeHandle $
+                    runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
+            secondAttempt `shouldSatisfy` all isDuplicate
+            Right orderAEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "order-a") (StreamVersion 0) 10
+            Right orderBEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "order-b") (StreamVersion 0) 10
+            Vector.length orderAEvents `shouldBe` 1
+            Vector.length orderBEvents `shouldBe` 1
+
+        it "keeps dispatches to targets dropped by a later resolve attempt" $ \storeHandle -> do
+            attemptsRef <- newIORef (0 :: Int)
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+                router = unstableRouter attemptsRef $ \case
+                    0 -> ["drop-a", "drop-b"]
+                    _ -> ["drop-b"]
+            Right (RouterResult firstAttempt) <-
+                Store.runStoreIO storeHandle $
+                    runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
+            firstAttempt `shouldSatisfy` all isAppended
+            Right (RouterResult secondAttempt) <-
+                Store.runStoreIO storeHandle $
+                    runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
+            secondAttempt `shouldSatisfy` \case
+                [dropB] -> isDuplicate dropB
+                _ -> False
+            -- Resolve is authoritative per attempt. Across redeliveries, the
+            -- dispatched set is the union of each attempt's resolved targets.
+            Right dropAEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "drop-a") (StreamVersion 0) 10
+            Right dropBEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "drop-b") (StreamVersion 0) 10
+            Vector.length dropAEvents `shouldBe` 1
+            Vector.length dropBEvents `shouldBe` 1
+
+        it "keeps repeated commands to one target distinct within a resolve batch" $ \storeHandle -> do
+            attemptsRef <- newIORef (0 :: Int)
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+                router = unstableRouter attemptsRef (const ["twin", "twin"])
+            Right (RouterResult firstAttempt) <-
+                Store.runStoreIO storeHandle $
+                    runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
+            firstAttempt `shouldSatisfy` all isAppended
+            Right twinEventsAfterFirstAttempt <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "twin") (StreamVersion 0) 10
+            Vector.length twinEventsAfterFirstAttempt `shouldBe` 2
+            Right (RouterResult secondAttempt) <-
+                Store.runStoreIO storeHandle $
+                    runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
+            secondAttempt `shouldSatisfy` all isDuplicate
+            Right twinEventsAfterSecondAttempt <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "twin") (StreamVersion 0) 10
+            Vector.length twinEventsAfterSecondAttempt `shouldBe` 2
+
         it "drains an adapter, dispatching one command per resolved target for every message" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
@@ -8706,6 +8831,32 @@ demoRouter =
                     | targetId <- targetIds
                     ]
                 Left _ -> []
+        , targetEventStream = counterEventStream
+        , targetProjections = const []
+        }
+
+unstableRouter ::
+    (IOE :> es) =>
+    IORef Int ->
+    (Int -> [Text]) ->
+    Router
+        RouteGroup
+        (HsPred '[] CounterCommand)
+        '[]
+        CounterState
+        CounterCommand
+        CounterEvent
+        es
+unstableRouter attemptsRef targetsFor =
+    Router
+        { name = "unstable-router"
+        , key = \(RouteGroup g) -> g
+        , resolve = \_ -> do
+            attempt <- liftIO (atomicModifyIORef' attemptsRef (\n -> (n + 1, n)))
+            pure
+                [ PMCommand{target = stream targetId, command = Add 1}
+                | targetId <- targetsFor attempt
+                ]
         , targetEventStream = counterEventStream
         , targetProjections = const []
         }

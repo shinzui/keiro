@@ -4,6 +4,7 @@ slug: stable-router-idempotency-keys-derived-from-target-stream-names
 title: "Stable router idempotency keys derived from target stream names"
 kind: exec-plan
 created_at: 2026-07-12T05:07:53Z
+intention: intention_01kxcz37ave9t8d6amvvxnemr6
 master_plan: "docs/masterplans/14-harden-the-keiro-command-coordination-and-snapshot-paths-surfaced-by-the-2026-07-keiki-path-review.md"
 ---
 
@@ -49,8 +50,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: red tests added to `keiro/test/Main.hs` (reorder-after-partial-dispatch, set-growth) and observed failing for the documented reasons.
-- [ ] Milestone 1: passing characterization tests added (full-completion order swap, dropped target, same-target-twice) and observed passing.
+- [x] (2026-07-13) Milestone 1: red tests added to `keiro/test/Main.hs` (reorder-after-partial-dispatch, set-growth) and observed failing for the documented reasons.
+- [x] (2026-07-13) Milestone 1: passing characterization tests added (full-completion order swap, dropped target, same-target-twice) and observed passing.
 - [ ] Milestone 2: `deterministicRouterCommandId`, occurrence annotation, and the transition legacy-id pre-check implemented in `keiro/src/Keiro/Router.hs`.
 - [ ] Milestone 2: existing "folds a concurrent duplicate router dispatch" test updated to the new id scheme; upgrade-transition test added; all `Keiro.Router` tests green (including Milestone 1's red tests).
 - [ ] Milestone 3: `confirmBenignDuplicate` added to `keiro/src/Keiro/ProcessManager.hs`, exported, and used at all three duplicate-fold sites (router dispatch, PM dispatch, PM manager-state); helper tests green.
@@ -87,6 +88,19 @@ implementation. Provide concise evidence.
   `keiro/src/Keiro/Workflow.hs` `deterministicJournalId` (lines 894–911) keys journal ids
   by workflow name, id, generation, and *step name* precisely so ids do not depend on
   position.
+- Baseline validation on 2026-07-13 required a temporary project file that imports
+  `cabal.project` without loading the user-owned `cabal.project.local`: the local file
+  adds kiroku 0.3.0.0 packages alongside the repository's pinned kiroku 0.2.1.0 source
+  packages, and Cabal rejects the duplicate user goals before compilation. With that
+  clean project file, `cabal build keiro` passed and 283 of 284 `keiro-test` examples
+  passed. The sole failure was the existing compile-time negative test, which launches
+  a nested default `cabal` process and therefore reloaded the conflicting local file;
+  every runtime test, including all pre-existing router tests, passed.
+- Milestone 1's focused run produced exactly `12 examples, 2 failures`. The partial
+  reorder returned duplicate-for-B then appended-for-A, proving A was dispatched twice
+  while B was silently dropped; the set-growth run returned duplicates for both A and
+  C, proving the newly resolved C was silently dropped. The three characterization
+  cases and all seven pre-existing router cases passed unchanged.
 
 
 ## Decision Log
@@ -782,3 +796,8 @@ global, positional-id drift manifests as silent permanently-dropped dispatches (
 by the loose `DuplicateEvent` fold) plus crash-window double dispatches, rather than as
 unconditional double dispatch on any order swap; the milestones, tests, and the
 Milestone 2→3 ordering constraint follow from that mechanism.
+
+Revision note (2026-07-13): began implementation with the active MasterPlan intention,
+recorded the clean-project baseline constraint, and completed Milestone 1's two
+fail-before plus three characterization tests. The focused router run failed in exactly
+the two predicted drift scenarios, establishing the defect before production changes.
