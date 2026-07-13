@@ -118,7 +118,7 @@ a kiroku-side child plan for the subscription bridge (rejected: kiroku already s
 | 98 | Snapshot subsystem hardening: uninit-register guards, read-side telemetry, and workflow write alignment | docs/plans/98-snapshot-subsystem-hardening-uninit-register-guards-read-side-telemetry-and-workflow-write-alignment.md | None | EP-95 | Complete |
 | 99 | Silent-edge validation and divergence witnesses on the command path | docs/plans/99-silent-edge-validation-and-divergence-witnesses-on-the-command-path.md | EP-95 | None | Complete |
 | 100 | Process-manager failure paths: dead-lettering rejected commands and surfacing retry exhaustion | docs/plans/100-process-manager-failure-paths-dead-lettering-rejected-commands-and-surfacing-retry-exhaustion.md | None | EP-99 | Complete |
-| 101 | Read-model rebuild correctness: dedup reset, writer fencing, and Strong cursor semantics | docs/plans/101-read-model-rebuild-correctness-dedup-reset-writer-fencing-and-strong-cursor-semantics.md | None | None | In Progress |
+| 101 | Read-model rebuild correctness: dedup reset, writer fencing, and Strong cursor semantics | docs/plans/101-read-model-rebuild-correctness-dedup-reset-writer-fencing-and-strong-cursor-semantics.md | None | None | Complete |
 | 102 | Persistence polish: truncation guards, enrichment parity, and messaging caveat documentation | docs/plans/102-persistence-polish-truncation-guards-enrichment-parity-and-messaging-caveat-documentation.md | None | EP-95 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -224,7 +224,7 @@ where its truncation guard reports failures through the migrated hydration error
 - [x] EP-99: no-op `CommandResult.globalPosition` normalized to `Nothing`
 - [x] EP-100: rejected PM commands dead-letter instead of halt-looping; saga-state/dispatch divergence documented or closed
 - [x] EP-100: retry exhaustion documented; kiroku dead-letter replay path exists
-- [ ] EP-101: rebuild resets projection dedup; writers fenced during rebuild; `Strong` usable with multiple active categories
+- [x] EP-101: rebuild resets projection dedup; writers fenced during rebuild; `Strong` usable with multiple active categories
 - [ ] EP-102: truncation contiguity guard; enrichment parity between append paths; messaging caveats documented
 
 
@@ -249,6 +249,14 @@ where its truncation guard reports failures through the migrated hydration error
   use them as evidence or include migrating them in scope. (The in-repo `jitsurei`
   package still must compile; EP-95 and EP-102 record compile-verification-only
   decisions for it.)
+- EP-101 reproduced both read-model defects before closing them: a literal run of
+  the former rebuild procedure promoted an empty table because retained dedup keys
+  skipped replay, and an otherwise caught-up category subscription timed out for
+  5.199 seconds after unrelated traffic advanced the all-stream head. Atomic reset
+  helpers and `CategoryHead` strong scope now make both invariants executable.
+- Kiroku's monotonic checkpoint save cannot reset a subscription for replay. EP-101
+  therefore performs the direct checkpoint reset only inside `startRebuild`'s
+  transaction, under the same registry lock that excludes live projection writers.
 - Plan authoring (2026-07-12) surfaced discoveries that reshaped the plans:
   - EP-97's verification sharpened the router defect model: kiroku's GLOBAL primary
     key on `event_id` means a pure order swap cannot double-dispatch after full
@@ -424,7 +432,21 @@ and transaction contracts provide the operator path the review found missing. Fi
 evidence is a fresh-database `just verify`: 325 Keiro examples, all package and
 migration suites, the whole workspace build, and the generated-site link check passed.
 
+EP-101 completed the read-model half of Phase 4. Registration is explicit and fails
+closed, rebuild reset is atomic across status, data, dedup keys, and checkpoint,
+normal async writers are fenced by the registry row lock, guarded promotion rejects
+an empty replay, and strong reads can target a category head instead of unrelated
+all-stream traffic. The unsafe prose procedure is retired in favor of the helper
+sequence. Final evidence is `just haskell-build`, successful Keiro Haddock generation,
+and 331 Keiro examples with zero failures.
+
 ## Revision Notes
+
+- 2026-07-13: Completed EP-101. Added explicit read-model registration, atomic
+  rebuild reset and guarded promotion, database-backed async writer fencing,
+  category-scoped strong reads, red/green and concurrency coverage, and the
+  helper-enforced operator workflow. Build, Haddock, and all 331 Keiro examples
+  passed.
 
 - 2026-07-13: Completed EP-100. Added durable rejected-dispatch records and shared
   process-manager/router policies, surfaced bounded Kiroku retry exhaustion, added
