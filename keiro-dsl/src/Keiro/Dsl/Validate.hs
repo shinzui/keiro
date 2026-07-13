@@ -132,6 +132,10 @@ data DiagnosticCode
     | WqTableDivergence
     | DispatchDedupQueueUnresolved
     | DispatchDedupFieldUnresolved
+    | -- EP-105 (notation integrity and scaffold-safe names).
+      IdentHaskellKeyword
+    | IdentNotConstructorSafe
+    | VertexCtorCollision
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -171,7 +175,181 @@ line for stable, readable output.
 -}
 validateSpec :: Spec -> [Diagnostic]
 validateSpec spec =
-    sortOn line (specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
+    sortOn line (validateNames spec ++ specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
+
+{- | Reject names that would make the scaffolder emit illegal Haskell. The
+parser enforces the ASCII alphabet; this pass applies the category-specific
+uppercase/lowercase and keyword rules that require AST context.
+-}
+validateNames :: Spec -> [Diagnostic]
+validateNames spec =
+    concat
+        [ concatMap idNames (specIds spec)
+        , concatMap enumNames (specEnums spec)
+        , concatMap nodeNames (specNodes spec)
+        ]
+  where
+    idNames declaration =
+        constructorName "id name" (idName declaration) (idLoc declaration)
+
+    enumNames declaration =
+        constructorName "enum name" (enumName declaration) (enumLoc declaration)
+            ++ concatMap
+                (\(ctor, _) -> constructorName ("constructor of enum '" <> enumName declaration <> "'") ctor (enumLoc declaration))
+                (enumCtors declaration)
+
+    nodeNames = \case
+        NAggregate aggregate -> aggregateNames aggregate
+        NProcess process -> processNames process
+        NContract contract ->
+            pascalizedNodeName "contract" (ctrName contract) (ctrLoc contract)
+                ++ concatMap
+                    (\event -> constructorName "contract event name" (ceName event) (ctrLoc contract) ++ concatMap (contractFieldName contract) (ceFields event))
+                    (ctrEvents contract)
+        NIntake intake -> pascalizedNodeName "intake" (inkName intake) (inkLoc intake)
+        NEmit emitNode -> pascalizedNodeName "emit" (emName emitNode) (emLoc emitNode)
+        NPublisher publisher -> pascalizedNodeName "publisher" (pubName publisher) (pubLoc publisher)
+        NWorkqueue workqueue ->
+            pascalizedNodeName "workqueue" (wqName workqueue) (wqLoc workqueue)
+                ++ constructorName "workqueue payload name" (wqPayloadName workqueue) (wqLoc workqueue)
+                ++ concatMap (\field -> fieldNameRule "workqueue payload field" (wqfName field) (wqLoc workqueue)) (wqPayload workqueue)
+        NPgmqDispatch dispatch -> pascalizedNodeName "dispatch" (pdName dispatch) (pdLoc dispatch)
+        NWorkflow workflow -> constructorName "workflow name" (wfId workflow) (wfLoc workflow)
+        NOperation _ -> []
+
+    aggregateNames aggregate =
+        constructorName "aggregate name" (aggName aggregate) (aggLoc aggregate)
+            ++ concatMap
+                (\register -> fieldNameRule "register name" (regName register) (regLoc register))
+                (aggRegs aggregate)
+            ++ concatMap commandNames (aggCommands aggregate)
+            ++ concatMap eventNames (aggEvents aggregate)
+            ++ maybe [] (\projection -> fieldNameRule "projection key" (projKey projection) (projLoc projection)) (aggProjection aggregate)
+            ++ vertexCollisions aggregate
+      where
+        commandNames command =
+            constructorName "command name" (cmdName command) (cmdLoc command)
+                ++ concatMap (\field -> fieldNameRule "command field" (fieldName field) (cmdLoc command)) (cmdFields command)
+        eventNames event =
+            constructorName "event name" (evName event) (evLoc event)
+                ++ case evBody event of
+                    EventFields fields -> concatMap (\field -> fieldNameRule "event field" (fieldName field) (evLoc event)) fields
+                    EventFromCommand _ -> []
+
+    processNames process =
+        constructorName "process name" (procId process) (procLoc process)
+            ++ constructorName "process input name" (inName input) (procLoc process)
+            ++ concatMap (\field -> fieldNameRule "process input field" (fieldName field) (procLoc process)) (inFields input)
+            ++ concatMap (bindingName "advance field binding" (procLoc process)) (advFields (hAdvance handle))
+            ++ concatMap dispatchBindings (hDispatch handle)
+            ++ concatMap (bindingName "timer payload field binding" (tmLoc timer)) (tmPayload timer)
+            ++ concatMap (bindingName "timer fire field binding" (tmLoc timer)) (fireFields (tmFire timer))
+      where
+        input = procInput process
+        handle = procHandle process
+        timer = procTimer process
+        dispatchBindings dispatch = concatMap (bindingName "dispatch field binding" (dispLoc dispatch)) (dispFields dispatch)
+
+    bindingName category anchor binding = fieldNameRule category (fbName binding) anchor
+    contractFieldName contract field = fieldNameRule "contract field" (cfName field) (ctrLoc contract)
+
+    constructorName category name anchor
+        | constructorSafe name = []
+        | otherwise =
+            [ mkErr (locLine anchor) IdentNotConstructorSafe $
+                category <> " '" <> name <> "' must be PascalCase: it becomes a Haskell constructor, type name, or module segment in scaffolded code"
+            ]
+
+    pascalizedNodeName category name anchor
+        | "_" `T.isPrefixOf` name =
+            [ mkErr (locLine anchor) IdentNotConstructorSafe $
+                category <> " name '" <> name <> "' cannot begin with '_': title-casing leaves an invalid Haskell module segment"
+            ]
+        | otherwise = []
+
+    fieldNameRule category name anchor
+        | name `Set.member` haskellKeywords =
+            [ mkErr (locLine anchor) IdentHaskellKeyword $
+                category <> " '" <> name <> "' is a Haskell keyword and cannot become a record field in generated code"
+            ]
+        | fieldSafe name = []
+        | otherwise =
+            [ mkErr (locLine anchor) IdentNotConstructorSafe $
+                category <> " '" <> name <> "' must begin with a lowercase ASCII letter or underscore to become a Haskell record field"
+            ]
+
+    vertexCollisions aggregate =
+        [ mkErr (locLine (aggLoc aggregate)) VertexCtorCollision $
+            "aggregate '"
+                <> aggName aggregate
+                <> "' state '"
+                <> stName state
+                <> "' generates vertex constructor '"
+                <> vertex
+                <> "', which collides with "
+                <> declarationKind
+                <> " '"
+                <> vertex
+                <> "' in the generated Domain constructor namespace"
+        | state <- aggStates aggregate
+        , let vertex = aggName aggregate <> stName state
+        , declarationKind <- collisionKinds aggregate vertex
+        ]
+
+    collisionKinds aggregate vertex =
+        ["event" | vertex `elem` map evName (aggEvents aggregate)]
+            ++ ["command" | vertex `elem` map cmdName (aggCommands aggregate)]
+            ++ ["enum constructor" | vertex `elem` [ctor | enum <- specEnums spec, (ctor, _) <- enumCtors enum]]
+
+-- Haskell 2010 reserved identifiers plus commonly enabled extension keywords.
+haskellKeywords :: Set Name
+haskellKeywords =
+    Set.fromList
+        [ "case"
+        , "class"
+        , "data"
+        , "default"
+        , "deriving"
+        , "do"
+        , "else"
+        , "foreign"
+        , "if"
+        , "import"
+        , "in"
+        , "infix"
+        , "infixl"
+        , "infixr"
+        , "instance"
+        , "let"
+        , "module"
+        , "newtype"
+        , "of"
+        , "then"
+        , "type"
+        , "where"
+        , "mdo"
+        , "rec"
+        , "proc"
+        ]
+
+constructorSafe :: Name -> Bool
+constructorSafe name = case T.uncons name of
+    Just (first, rest) -> asciiUpper first && T.all asciiAlphaNumOrUnderscore rest
+    Nothing -> False
+
+fieldSafe :: Name -> Bool
+fieldSafe name = case T.uncons name of
+    Just (first, rest) -> (asciiLower first || first == '_') && T.all asciiAlphaNumOrUnderscore rest
+    Nothing -> False
+
+asciiUpper :: Char -> Bool
+asciiUpper c = c >= 'A' && c <= 'Z'
+
+asciiLower :: Char -> Bool
+asciiLower c = c >= 'a' && c <= 'z'
+
+asciiAlphaNumOrUnderscore :: Char -> Bool
+asciiAlphaNumOrUnderscore c = asciiUpper c || asciiLower c || (c >= '0' && c <= '9') || c == '_'
 
 -- | Rules over namespaces shared by the whole specification.
 specLevelRules :: Spec -> [Diagnostic]

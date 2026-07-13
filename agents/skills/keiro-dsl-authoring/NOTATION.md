@@ -15,6 +15,12 @@ rule lifeCriticalOverride : PatientAcuity -> Bool
   ex RedTag => true ; YellowTag => false ; GreenTag => false
 ```
 
+Identifiers use ASCII letters, digits, and underscores. Aggregate, process, workflow,
+type, and constructor names use `PascalCase`; fields and registers begin with a lowercase
+letter or underscore and cannot be Haskell keywords. Generated vertex constructors also
+share the constructor namespace: for example, state `Created` in aggregate `Reservation`
+generates `ReservationCreated`, so an event with that name is rejected as a collision.
+
 ## module placement (optional)
 
 Two optional clauses may follow `context <name>` to control where the emitted modules land. Both

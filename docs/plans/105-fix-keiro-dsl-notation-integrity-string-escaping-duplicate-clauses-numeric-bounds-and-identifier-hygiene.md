@@ -54,11 +54,11 @@ a line-numbered error.
 - [x] M3: `status-map partial { … }` concrete syntax for `mapPartial` (parser, printer, generator, NOTATION.md snippet) (C2). Completed 2026-07-13T21:03:28Z; 117 examples passed with totality suppression and round-trip coverage.
 - [x] M4: duplicate `wire`/`projection`/`goto` rejected with positioned errors; missing-goto reported at the transition line; dash-aware keyword boundary; `try pRegDecl` removed (C3 + C6). Completed 2026-07-13T21:05:55Z; 122 examples passed and the CLI rejected the duplicate `goto` at line 10, column 5.
 - [x] M5: bounded decimals at all seven `L.decimal` sites (C4). Completed 2026-07-13T21:08:42Z; all seven overflow fixtures and the `maxBound` boundary passed in the 130-example suite, and the CLI rejected the audited wraparound value.
-- [ ] M6: identifier hygiene validator rules + parser ASCII alphabet (C5).
+- [x] M6: identifier hygiene validator rules + parser ASCII alphabet (C5). Completed 2026-07-13T21:15:14Z; 134 examples passed, all skeletons validate, and the CLI emitted the expected line-3/line-7 hygiene diagnostics.
 - [ ] M7: round-trip property extended to all node families with adversarial generators and empty-list edges; `states` accepts zero names; NOTATION.md touch-ups (C7).
 - [ ] Full keiro-dsl test matrix green (unit + all conformance suites); Outcomes written.
 
-Implementation started 2026-07-13; M1 through M5 are complete and M6 is next.
+Implementation started 2026-07-13; M1 through M6 are complete and M7 is next.
 
 
 ## Surprises & Discoveries
@@ -72,6 +72,11 @@ Implementation started 2026-07-13; M1 through M5 are complete and M6 is next.
   all 112 examples, while the repository-root run failed exactly 100 examples, all on
   unresolved `test/fixtures/` or `test/conformance/` paths. After routing reads through
   `resolveTestPath`, both invocation forms pass all 112 examples.
+- M6 disproved the authoring-time claim that every starter skeleton was already
+  identifier-safe. The aggregate skeleton declared state `Done` and event `ThingDone`;
+  the live scaffolder's `vertexCtor` concatenation generates `ThingDone` for that state,
+  so the two constructors collide. The skeleton now uses event `ThingCompleted`, keeping
+  its state machine behavior while making `new aggregate` pass the new validator rule.
 - (During implementation, record further discoveries here with short evidence snippets.)
 
 
@@ -130,6 +135,13 @@ Implementation started 2026-07-13; M1 through M5 are complete and M6 is next.
   diverges from the source tree during development; `getExecutablePath` depends on
   dist-newstyle layout. The probe covers the two real invocation points (repo root and
   package dir), and the env var covers everything else.
+  Date: 2026-07-13.
+- Decision: expand M6's file scope to `keiro-dsl/src/Keiro/Dsl/Skeleton.hs` solely to
+  rename the aggregate starter's colliding `ThingDone` event to `ThingCompleted`.
+  Rationale: the new `VertexCtorCollision` diagnostic correctly exposed that the
+  existing starter violated the plan's non-negotiable acceptance criterion that every
+  `new <kind>` skeleton validate cleanly. Leaving a built-in invalid skeleton or
+  weakening the diagnostic would contradict the purpose of M6.
   Date: 2026-07-13.
 - Decision: `pStatesLine` changes from `some pStateDecl` to `many pStateDecl` so an
   aggregate with zero states is *representable* and the printer's output for it re-parses
@@ -341,11 +353,13 @@ root, `cabal run keiro-dsl-test` fails dozens of examples with file-not-found; o
 
 All file paths are repo-relative. Work happens in `keiro-dsl/src/Keiro/Dsl/Parser.hs`,
 `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`, `keiro-dsl/src/Keiro/Dsl/Validate.hs`,
-`keiro-dsl/test/Main.hs`, `keiro-dsl/keiro-dsl.cabal` (test-suite deps only), and
-`agents/skills/keiro-dsl-authoring/NOTATION.md`. `Grammar.hs`, `Scaffold.hs`,
-`Harness.hs`, `Skeleton.hs`, `Diff.hs`, `Manifest.hs`, and `app/Main.hs` are NOT edited
-(sibling plans own their fixes; the skeletons and committed conformance sources must stay
-parseable/green under the changes here — the existing tests enforce that).
+`keiro-dsl/src/Keiro/Dsl/Skeleton.hs`, `keiro-dsl/test/Main.hs`,
+`keiro-dsl/keiro-dsl.cabal` (test-suite deps only), and
+`agents/skills/keiro-dsl-authoring/NOTATION.md`. `Skeleton.hs` receives only the M6
+aggregate-event rename documented in the Decision Log. `Grammar.hs`, `Scaffold.hs`,
+`Harness.hs`, `Diff.hs`, `Manifest.hs`, and `app/Main.hs` are NOT edited (sibling plans
+own their fixes; the skeletons and committed conformance sources must stay parseable/green
+under the changes here — the existing tests enforce that).
 
 ### Milestone 1 — run the unit suite from any cwd (C8)
 
@@ -618,10 +632,9 @@ Tests: one unit example per rule using inline spec text (e.g.
 `IdentHaskellKeyword`; the Reservation/Created/ReservationCreated collision →
 `VertexCtorCollision`), each asserting the code AND that the diagnostic's `line` equals
 the declaration's line; plus a guard example that the canonical
-`test/fixtures/reservation.keiro` and every `Skeleton.hs` template still validate with
-zero errors (the existing skeleton test covers the latter — verified by reading
-Skeleton.hs that all its names are already legal, e.g. `reservation_work` pascalizes to
-`Reservation_work`, a valid conid).
+`test/fixtures/reservation.keiro` and every `Skeleton.hs` template validate with zero
+errors. M6 implementation found and corrected the aggregate starter's `ThingDone`
+vertex/event collision; the existing skeleton test pins the corrected result.
 
 NOTATION.md: add a short "identifier legality" paragraph to the shared-declarations
 section (ASCII; PascalCase for aggregate/process/workflow and all type/constructor
@@ -869,3 +882,11 @@ Sibling-plan touchpoints (paths only, per MasterPlan 15): escaping contract and
 `payloadExpr` — docs/plans/106-harden-the-keiro-dsl-scaffolder-template-injection-firewall-completeness-collision-and-stale-module-detection-and-faithful-policy-lowering.md;
 duplicate-name rules and semantic numeric ranges — docs/plans/104-close-the-keiro-dsl-validator-soundness-holes-workflows-rules-cross-node-references-and-disposition-tables.md;
 holistic NOTATION/skill refresh — docs/plans/110-align-keiro-dsl-with-the-safe-apis-and-refresh-the-authoring-skill-and-corpus.md.
+
+
+## Revision Notes
+
+- 2026-07-13: Expanded M6 to update `Skeleton.hs` after the implemented validator
+  proved the aggregate starter's `Done` state and `ThingDone` event generated the same
+  Haskell constructor. This preserves the original acceptance criterion that every
+  built-in skeleton passes `check`.

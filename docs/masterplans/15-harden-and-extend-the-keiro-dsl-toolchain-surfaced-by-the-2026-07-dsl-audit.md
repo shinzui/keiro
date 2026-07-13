@@ -357,6 +357,11 @@ EP-106 in parallel alongside the front of that path.
     `keiro-dsl-conformance-*` suites plus the unit suite, 17 test suites total. All 17
     passed; later plans should use the package target rather than a hand-maintained
     numeric list.
+  - EP-105 implementation found the built-in aggregate skeleton itself had a generated
+    constructor collision: state `Done` and event `ThingDone` both scaffolded as
+    `ThingDone`. EP-105 renamed the starter event to `ThingCompleted`; EP-106 can rely on
+    `new aggregate` passing the identifier-hygiene gate before its compile-all-skeletons
+    milestone.
 
 
 ## Decision Log

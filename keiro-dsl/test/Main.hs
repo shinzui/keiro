@@ -116,6 +116,22 @@ main = hspec $ do
             [wireSchemaVersion wire | NAggregate aggregate <- specNodes spec, Just wire <- [aggWire aggregate]]
                 `shouldBe` [maxBound]
 
+    describe "identifier hygiene" $ do
+        it "reports constructor shape and Haskell keywords at their owning declarations" $ do
+            spec <- parseInlineSpec "<identifier-hygiene>" identifierHygieneSpec
+            [(code diagnostic, line diagnostic) | diagnostic <- validateSpec spec, code diagnostic `elem` [IdentNotConstructorSafe, IdentHaskellKeyword]]
+                `shouldContain` [(IdentNotConstructorSafe, 3), (IdentHaskellKeyword, 7)]
+        it "rejects generated vertex constructors that collide with event constructors" $ do
+            spec <- parseInlineSpec "<vertex-collision>" vertexCollisionSpec
+            [(code diagnostic, line diagnostic) | diagnostic <- validateSpec spec, code diagnostic == VertexCtorCollision]
+                `shouldBe` [(VertexCtorCollision, 3)]
+        it "rejects underscore-leading names whose title-casing cannot make a module segment" $ do
+            spec <- parseInlineSpec "<underscore-node>" underscoreNodeSpec
+            [(code diagnostic, line diagnostic) | diagnostic <- validateSpec spec, code diagnostic == IdentNotConstructorSafe]
+                `shouldBe` [(IdentNotConstructorSafe, 3)]
+        it "rejects non-ASCII identifier characters in the parser" $
+            parseSpec "<unicode-identifier>" unicodeIdentifierSpec `shouldSatisfy` leftContains "unexpected"
+
     describe "canonical reservation.keiro" $
         it "parses into the expected aggregate shape" $ do
             input <- readTestText "test/fixtures/reservation.keiro"
@@ -999,6 +1015,51 @@ timerDecimalSpec value =
         "max-attempts 5"
         ("max-attempts " <> value)
         (renderSpec (Spec "svc" Nothing Nothing [] [] [] [NProcess (processWithLiteral "literal")]))
+
+identifierHygieneSpec :: T.Text
+identifierHygieneSpec =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate thing"
+        , "  regs"
+        , "  states Open"
+        , ""
+        , "  command DoIt { data }"
+        ]
+
+vertexCollisionSpec :: T.Text
+vertexCollisionSpec =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate Reservation"
+        , "  regs"
+        , "  states Created"
+        , ""
+        , "  event ReservationCreated { }"
+        ]
+
+underscoreNodeSpec :: T.Text
+underscoreNodeSpec =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "contract _contract {"
+        , "  schemaVersion 1"
+        , "  discriminator kind"
+        , "}"
+        ]
+
+unicodeIdentifierSpec :: T.Text
+unicodeIdentifierSpec =
+    T.unlines
+        [ "context svc"
+        , ""
+        , "aggregate Résumé"
+        , "  regs"
+        , "  states Open"
+        ]
 
 --------------------------------------------------------------------------------
 -- Generators (bounded; restricted to valid, non-reserved identifiers)

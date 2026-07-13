@@ -13,12 +13,13 @@ module Keiro.Dsl.Parser (
 where
 
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
+import Data.Char (isAlpha, isAlphaNum, isAscii, isDigit, isUpper)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Void (Void)
 import Keiro.Dsl.Grammar
 import Text.Megaparsec hiding (ParseError)
-import Text.Megaparsec.Char (alphaNumChar, char, digitChar, letterChar, space1, upperChar)
+import Text.Megaparsec.Char (char, digitChar, letterChar, space1)
 import Text.Megaparsec.Char.Lexer qualified as L
 
 -- | A rendered, line-numbered parse error, ready to print to the user.
@@ -63,7 +64,19 @@ keyword w = (lexeme . try) (string' w *> notFollowedBy (identChar <|> (char '-' 
     string' = chunk
 
 identChar :: P Char
-identChar = alphaNumChar <|> char '_'
+identChar = asciiAlphaNum <|> char '_'
+
+asciiLetter :: P Char
+asciiLetter = satisfy (\c -> isAscii c && isAlpha c)
+
+asciiUpper :: P Char
+asciiUpper = satisfy (\c -> isAscii c && isUpper c)
+
+asciiDigit :: P Char
+asciiDigit = satisfy (\c -> isAscii c && isDigit c)
+
+asciiAlphaNum :: P Char
+asciiAlphaNum = satisfy (\c -> isAscii c && isAlphaNum c)
 
 -- | Fail with the diagnostic caret placed at a previously captured offset.
 failAt :: Int -> String -> P a
@@ -163,7 +176,7 @@ names, command\/event\/state names, enum constructors, projection keys.
 -}
 ident :: P Name
 ident = (lexeme . try) $ do
-    c <- letterChar <|> char '_'
+    c <- asciiLetter <|> char '_'
     cs <- many identChar
     let w = T.pack (c : cs)
     if w `elem` reservedWords
@@ -176,7 +189,7 @@ spellings, and status-map values.
 -}
 wireWord :: P Text
 wireWord = lexeme $ do
-    c <- letterChar <|> digitChar
+    c <- asciiLetter <|> asciiDigit
     cs <- many (identChar <|> char '-')
     pure (T.pack (c : cs))
 
@@ -234,7 +247,7 @@ pModulePrefix = lexeme $ do
     pure (T.intercalate "." (seg0 : segs))
   where
     pSeg = do
-        c <- upperChar
+        c <- asciiUpper
         cs <- many identChar
         pure (T.pack (c : cs))
 
@@ -1131,8 +1144,8 @@ pBindingValue = choice [quoted, dottedRef]
 -}
 dottedRef :: P Text
 dottedRef = lexeme $ do
-    c <- letterChar
-    cs <- many (alphaNumChar <|> char '_' <|> char '.')
+    c <- asciiLetter
+    cs <- many (asciiAlphaNum <|> char '_' <|> char '.')
     pure (T.pack (c : cs))
 
 {- | A double-quoted string literal, returning raw (unescaped) inner text.
