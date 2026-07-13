@@ -103,11 +103,12 @@ Milestone 3 — Scaffold emitters:
 
 Milestone 4 — Harness + conformance suite:
 
-- [ ] `harnessReadModel` emits the facts-harness module.
-- [ ] `keiro-dsl-conformance-readmodel-runtime` suite compiles the generated module + a
+- [x] (2026-07-13 23:00Z) `harnessReadModel` emits the runtime-free facts-harness module and is registered in
+      the central scaffold family dispatch.
+- [x] (2026-07-13 23:00Z) `keiro-dsl-conformance-readmodel-runtime` suite compiles the generated modules + a
       filled reference hole against the live `Keiro.ReadModel` and asserts the record
       fields; committed copies pinned byte-identical by the scaffold-conformance test.
-- [ ] Existing fixtures updated (`reservation-work.keiro`, `subscription.keiro`, and any
+- [x] (2026-07-13 23:00Z) Existing fixtures updated (`reservation-work.keiro`, `subscription.keiro`, and any
       other fixture with a `Strong` inline projection); pinned scaffold outputs regenerated.
 
 Milestone 5 — Differ registration + docs:
@@ -149,6 +150,13 @@ implementation. Provide concise evidence.
   skeleton compile also showed that `RecordedEvent (..)` must be imported for GHC 9.12's
   record-dot field selection. Evidence: `keiro-dsl-conformance-skeletons` compiled both
   subscription-fed read-model verticals after regeneration.
+
+- The runtime package exposing `Kiroku.Store.Effect` and `Kiroku.Store.Types` is named
+  `kiroku-store`, not `kiroku`. The generated subscription record also needs
+  `RecordedEvent (..)` in the same canonical import as `GlobalPosition`; emitting the
+  combined import keeps fresh scaffolds equal to treefmt-normalized committed pins.
+  Evidence: the dedicated conformance suite resolves with `kiroku-store`, and the complete
+  `cabal test` matrix passes.
 
 
 ## Decision Log
@@ -290,6 +298,13 @@ aggregate projection holes receive schema-qualified table guidance. The unit sui
 164 examples, a repeated CLI scaffold preserved both hand-owned holes, the firewall
 reported zero breaches, and `keiro-dsl-conformance-skeletons` compiled the generated
 records against the current Keiro/Kiroku APIs.
+
+Milestone 4 is complete. Generated facts compare captured/expected identities with the
+shared derivations, the starter-union suite compiles both read-model harnesses, and a
+dedicated subscription-fed reference vertical compiles a filled qualified-table query
+against the live runtime. Its database-free driver asserts all record fields,
+Strong/category scope, runtime/table qualification parity, async identities, and helper
+signatures. The full `keiro-dsl` cabal test matrix passed, including 165 unit examples.
 
 
 ## Context and Orientation
@@ -862,7 +877,7 @@ canonical module set.
 
 Acceptance: from `keiro-dsl/`,
 `cabal run keiro-dsl -- scaffold test/fixtures/readmodel.keiro --out /tmp/rm-demo` writes
-both modules per node, reports zero firewall breaches, and a second run reports the hole
+all modules per node, reports zero firewall breaches, and a second run reports the hole
 module as `kept` (create-if-absent respected). The scaffolded text matches the committed
 conformance copies (Milestone 4).
 
@@ -896,17 +911,18 @@ test-suite keiro-dsl-conformance-readmodel-runtime
   other-modules:
     Generated.HospitalCapacity.Transfer_decisions.ReadModel
     Generated.HospitalCapacity.Transfer_decisions.ReadModelHarness
+    Generated.HospitalCapacity.Transfer_decisions.ReadModelTable
     HospitalCapacity.Transfer_decisions.ReadModelHoles
   build-depends:
     , base               >=4.21 && <5
     , effectful-core
     , hasql-transaction
     , keiro
-    , kiroku
+    , kiroku-store
     , text               >=2.1
 ```
 
-(adjust the dependency set to whatever the compile actually needs — `kiroku` provides
+(adjust the dependency set to whatever the compile actually needs — `kiroku-store` provides
 `Kiroku.Store.Effect`/`Kiroku.Store.Types`; check how the existing runtime suites obtain
 them). `test/conformance-readmodel-runtime/` holds committed copies of the scaffolded
 modules (pinned byte-identical to fresh scaffold output by the existing

@@ -820,7 +820,7 @@ emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readMo
             ++ [ "import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), ReadModelMetadata, StrongScope (..), registerReadModel)"
                , "import Keiro.ReadModel.Rebuild qualified as Rebuild"
                , "import Kiroku.Store.Effect (Store)"
-               , "import Kiroku.Store.Types (GlobalPosition)"
+               , "import Kiroku.Store.Types (" <> kirokuTypes <> ")"
                , ""
                , readModelName <> " :: ReadModel " <> queryInputType <> " " <> queryResultType
                , readModelName <> " ="
@@ -880,10 +880,10 @@ emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readMo
     holeImports = [queryInputType, queryResultType, queryName] ++ [applyName | rmFeed readModel == RmSubscription]
     asyncImports = case rmFeed readModel of
         RmInline -> []
-        RmSubscription ->
-            [ "import Keiro.Projection (AsyncProjection (..))"
-            , "import Kiroku.Store.Types (RecordedEvent (..))"
-            ]
+        RmSubscription -> ["import Keiro.Projection (AsyncProjection (..))"]
+    kirokuTypes = case rmFeed readModel of
+        RmInline -> "GlobalPosition"
+        RmSubscription -> "GlobalPosition, RecordedEvent (..)"
     projectionNames = case rmFeed readModel of
         RmInline -> "[]"
         RmSubscription -> "[" <> tshow asyncName <> "]"

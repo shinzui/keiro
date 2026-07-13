@@ -142,10 +142,12 @@ test-suite keiro-dsl-conformance-skeletons
     SkelProcess.MyService.HospitalSurge.ProcessHoles
     SkelProcess.MyService.Surge.Holes
     SkelQueue.Generated.MyService.Accepted_transfer_needs.ReadModel
+    SkelQueue.Generated.MyService.Accepted_transfer_needs.ReadModelHarness
     SkelQueue.Generated.MyService.Accepted_transfer_needs.ReadModelTable
     SkelQueue.Generated.MyService.Reservation_work.Queue
     SkelQueue.Generated.MyService.Reservation_work.QueuePolicy
     SkelQueue.Generated.MyService.Transfer_decisions.ReadModel
+    SkelQueue.Generated.MyService.Transfer_decisions.ReadModelHarness
     SkelQueue.Generated.MyService.Transfer_decisions.ReadModelTable
     SkelQueue.MyService.Accepted_transfer_needs.ReadModelHoles
     SkelQueue.MyService.Transfer_decisions.ReadModelHoles
@@ -271,6 +273,28 @@ test-suite keiro-dsl-conformance-queue-runtime
     , keiro-pgmq
     , pgmq-core
     , text        >=2.1
+
+-- EP-107 read-model runtime conformance: the scaffolded ReadModel record,
+-- registration/rebuild helpers, AsyncProjection, facts harness, and a filled
+-- qualified-table query compiled against the live Keiro.ReadModel API.
+test-suite keiro-dsl-conformance-readmodel-runtime
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-readmodel-runtime
+  main-is:        Main.hs
+  other-modules:
+    Generated.HospitalCapacity.Transfer_decisions.ReadModel
+    Generated.HospitalCapacity.Transfer_decisions.ReadModelHarness
+    Generated.HospitalCapacity.Transfer_decisions.ReadModelTable
+    HospitalCapacity.Transfer_decisions.ReadModelHoles
+
+  build-depends:
+    , base               >=4.21 && <5
+    , effectful-core
+    , hasql-transaction
+    , keiro
+    , kiroku-store
+    , text               >=2.1
 
 -- EP-5 M5 full-service conformance: a complete pgmq dispatch service — scaffolded
 -- Job codec + retry policy + a filled worker handler assembled into a live

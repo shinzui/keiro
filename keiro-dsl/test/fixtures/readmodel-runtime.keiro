@@ -1,0 +1,18 @@
+context hospital-capacity
+
+readmodel transfer_decisions {
+  table = "transfer_decisions"
+  schema = "hospital_capacity"
+  columns {
+    reservation_id text required
+    hospital_id text required
+    status text required
+    decided_at timestamptz
+  }
+  version = 1
+  shape = "fnv1a:3717f6d9e3c44bd6"
+  consistency = Strong
+  scope = category "reservation"
+  feed = subscription
+  subscription = "hospital-capacity-transfer-decisions-sub"
+}

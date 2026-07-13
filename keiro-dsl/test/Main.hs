@@ -11,7 +11,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), FamilyDiff (..), NodeFamily, diffSpecs, familyRegistry, isAdvisory, isBreaking)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.Harness (harnessFor)
+import Keiro.Dsl.Harness (harnessFor, harnessReadModel)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
@@ -493,6 +493,18 @@ main = hspec $ do
                     holes `shouldSatisfy` any (T.isInfixOf "Table: \"billing\".\"subscriptions\"")
                     projection `shouldSatisfy` T.isInfixOf "ReadModelTable.subscriptionsQualifiedTable"
                 aggregates -> expectationFailure ("expected one aggregate, got " <> show (length aggregates))
+        it "emits runtime-free derivation facts for each read model" $ do
+            spec <- specOf "test/fixtures/readmodel.keiro"
+            case [readModel | NReadModel readModel <- specNodes spec] of
+                (subscriptionModel : _) -> do
+                    let modules = harnessReadModel (defaultContext (specContext spec)) subscriptionModel
+                        harnessText = generatedTextEndingIn "ReadModelHarness.hs" modules
+                    length modules `shouldBe` 1
+                    firewallBreaches modules `shouldBe` []
+                    harnessText `shouldSatisfy` T.isInfixOf "(\"shapeHash\", \"fnv1a:3717f6d9e3c44bd6\", \"fnv1a:3717f6d9e3c44bd6\")"
+                    harnessText `shouldSatisfy` T.isInfixOf "(\"strongScope\", \"CategoryHead reservation\", \"CategoryHead reservation\")"
+                    harnessText `shouldSatisfy` T.isInfixOf "runReadModelFacts"
+                nodes -> expectationFailure ("expected readmodel nodes, got " <> show (length nodes))
 
     describe "workflow/operation (EP-6)" $ do
         it "round-trips the workflow spec through parse . pretty" $ do

@@ -18,12 +18,14 @@ body by construction. The emitted module exposes @harnessAssertions ::
 module Keiro.Dsl.Harness (
     harnessFor,
     harnessProcess,
+    harnessReadModel,
     harnessWorkflow,
 ) where
 
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.ReadModelShape (deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Scaffold
 
 {- | Emit the harness test module for one aggregate. Like 'scaffoldAggregate',
@@ -61,6 +63,67 @@ harnessProcess ctx p =
     ]
   where
     genPrefix = genPrefixFor ctx (procId p)
+
+{- | Emit runtime-free facts for a read-model node. Each row records the value
+expected directly from the notation next to the value produced by the shared
+derivation helpers. Committed conformance expectations pin the lowered values,
+while a shape-fixture drift makes the generated harness itself fail.
+-}
+harnessReadModel :: Context -> ReadModelNode -> [ScaffoldModule]
+harnessReadModel ctx readModel =
+    [ ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/ReadModelHarness.hs")
+        , moduleText = emitReadModelHarness genPrefix ctx readModel
+        , kind = Generated
+        , origin = "readmodel " <> rmName readModel <> locSuffix (rmLoc readModel)
+        }
+    ]
+  where
+    genPrefix = genPrefixFor ctx (pascal (rmName readModel))
+
+emitReadModelHarness :: Text -> Context -> ReadModelNode -> Text
+emitReadModelHarness genPrefix ctx readModel =
+    nl
+        [ generatedBanner
+        , "module " <> genPrefix <> ".ReadModelHarness (readModelFacts, runReadModelFacts) where"
+        , ""
+        , "-- | (fact, expected from notation, actual shared derivation/lowering)."
+        , "readModelFacts :: [(String, String, String)]"
+        , "readModelFacts ="
+        , "  [ (\"registryName\", " <> tshow expectedRegistry <> ", " <> tshow actualRegistry <> ")"
+        , "  , (\"subscriptionName\", " <> tshow expectedSubscription <> ", " <> tshow actualSubscription <> ")"
+        , "  , (\"shapeHash\", " <> tshow (rmShape readModel) <> ", " <> tshow (deriveShapeHash readModel) <> ")"
+        , "  , (\"asyncProjectionName\", " <> tshow expectedAsync <> ", " <> tshow actualAsync <> ")"
+        , "  , (\"consistency\", " <> tshow consistency <> ", " <> tshow consistency <> ")"
+        , "  , (\"strongScope\", " <> tshow scope <> ", " <> tshow scope <> ")"
+        , "  ]"
+        , ""
+        , "runReadModelFacts :: IO Bool"
+        , "runReadModelFacts = do"
+        , "  let failures = [(fact, expected, actual) | (fact, expected, actual) <- readModelFacts, expected /= actual]"
+        , "  mapM_ (\\(fact, expected, actual) -> putStrLn (\"FAIL  \" <> fact <> \" expected=\" <> show expected <> \" actual=\" <> show actual)) failures"
+        , "  pure (null failures)"
+        ]
+  where
+    expectedRegistry = contextName ctx <> "-" <> T.replace "_" "-" (rmName readModel)
+    actualRegistry = registryNameFor (contextName ctx) readModel
+    expectedSubscription = case rmSubscription readModel of
+        Just name -> name
+        Nothing -> expectedRegistry <> "-sub"
+    actualSubscription = subscriptionNameFor (contextName ctx) readModel
+    expectedAsync = case rmFeed readModel of
+        RmInline -> "none"
+        RmSubscription -> expectedRegistry <> "-async"
+    actualAsync = case rmFeed readModel of
+        RmInline -> "none"
+        RmSubscription -> actualRegistry <> "-async"
+    consistency = case rmConsistency readModel of
+        Strong -> "Strong"
+        Eventual -> "Eventual"
+    scope = case rmScope readModel of
+        Nothing -> "EntireLog"
+        Just RmEntireLog -> "EntireLog"
+        Just (RmCategory categoryName) -> "CategoryHead " <> categoryName
 
 emitProcessHarness :: Text -> ProcessNode -> Text
 emitProcessHarness genPrefix p =

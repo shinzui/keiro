@@ -20,7 +20,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
-import Keiro.Dsl.Harness (harnessFor, harnessProcess, harnessWorkflow)
+import Keiro.Dsl.Harness (harnessFor, harnessProcess, harnessReadModel, harnessWorkflow)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
@@ -68,7 +68,7 @@ scaffoldModules ctx spec =
             NIntake intake -> scaffoldIntake ctx intake
             NPublisher publisher -> scaffoldPublisher ctx publisher
             NWorkqueue workqueue -> scaffoldWorkqueue ctx workqueue
-            NReadModel readModel -> scaffoldReadModel ctx readModel
+            NReadModel readModel -> scaffoldReadModel ctx readModel <> harnessReadModel ctx readModel
             NWorkflow workflow -> harnessWorkflow ctx workflow
             NEmit _ -> []
             NPgmqDispatch _ -> []
