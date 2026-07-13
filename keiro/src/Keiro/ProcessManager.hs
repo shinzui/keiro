@@ -225,7 +225,11 @@ ackForCommandError delay err
 The same inputs always yield the same id, so a replayed source event
 produces the same write ids and the store's uniqueness constraint collapses
 the duplicate. The manager-state append uses an emit index of @-1@ to keep
-it distinct from the dispatched commands (which start at @0@).
+it distinct from the dispatched commands (which start at @0@). This positional
+index is sound because 'handle' is pure and therefore returns the same command
+order for the same input. The effectful router uses
+'Keiro.Router.deterministicRouterCommandId' instead, retaining this positional
+id only as a transition probe for pre-upgrade router dispatches.
 -}
 deterministicCommandId :: Text -> Text -> EventId -> Int -> EventId
 deterministicCommandId managerName correlationId sourceEventId emitIndex =

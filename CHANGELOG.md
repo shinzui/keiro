@@ -11,12 +11,22 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 - `keiro-migrations` now exports a native `pg-migrate` component and composes
   Kiroku through an explicit component dependency instead of a combined Codd
   migration-set API.
+- Router deterministic command ids are now derived from the resolved target
+  stream name and same-stream occurrence rather than the target's list position.
+  A transition point-probe recognizes legacy positional ids for stable resolver
+  output and may be removed in a later release. If both the deployment version
+  and resolver output change between attempts, a target command may be
+  dispatched at most one extra time across that one-time upgrade window.
 
 ### Other Changes
 
 - The shared PostgreSQL test fixture now provisions templates through the
   native Kiroku/Keiro migration plan. Codd transition and remediation tests are
   retained behind the manual `legacy-codd-tools` flag.
+- Router and process-manager duplicate-event rejections are now confirmed
+  against the intended target stream before being treated as benign.
+  Unconfirmed cross-stream or id-less collisions surface as command failures,
+  causing workers to halt instead of silently dropping a dispatch.
 
 ## 0.1.0.0 — 2026-07-05
 

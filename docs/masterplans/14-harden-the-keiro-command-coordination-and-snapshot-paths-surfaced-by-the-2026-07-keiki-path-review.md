@@ -114,7 +114,7 @@ a kiroku-side child plan for the subscription bridge (rejected: kiroku already s
 |---|-------|------|-----------|-----------|--------|
 | 95 | Migrate to post-MP-16 keiki and adopt the structured replay and step APIs | docs/plans/95-migrate-to-post-mp-16-keiki-and-adopt-the-structured-replay-and-step-apis.md | keiki MP-16 (external) | None | Not Started |
 | 96 | Ack-coupled sharded subscription delivery with rebalance-under-load coverage | docs/plans/96-ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-coverage.md | None | None | Complete |
-| 97 | Stable router idempotency keys derived from target stream names | docs/plans/97-stable-router-idempotency-keys-derived-from-target-stream-names.md | None | None | In Progress |
+| 97 | Stable router idempotency keys derived from target stream names | docs/plans/97-stable-router-idempotency-keys-derived-from-target-stream-names.md | None | None | Complete |
 | 98 | Snapshot subsystem hardening: uninit-register guards, read-side telemetry, and workflow write alignment | docs/plans/98-snapshot-subsystem-hardening-uninit-register-guards-read-side-telemetry-and-workflow-write-alignment.md | None | EP-95 | Not Started |
 | 99 | Silent-edge validation and divergence witnesses on the command path | docs/plans/99-silent-edge-validation-and-divergence-witnesses-on-the-command-path.md | EP-95 | None | Not Started |
 | 100 | Process-manager failure paths: dead-lettering rejected commands and surfacing retry exhaustion | docs/plans/100-process-manager-failure-paths-dead-lettering-rejected-commands-and-surfacing-retry-exhaustion.md | None | EP-99 | Not Started |
@@ -217,7 +217,7 @@ where its truncation guard reports failures through the migrated hydration error
 - [ ] EP-95: command evaluation distinguishes ambiguous guards from business rejection in `CommandError` and `error.type`
 - [x] EP-96: sharded worker acks after the handler returns; batch-tail crash/rebalance loses nothing
 - [x] EP-96: rebalance-under-load and zombie-overlap tests exist and pass
-- [ ] EP-97: router event ids derived from target stream names; unstable-resolve redelivery test passes; dropped-target semantics decided and documented
+- [x] EP-97: router event ids derived from target stream names; unstable-resolve redelivery test passes; dropped-target semantics decided and documented
 - [ ] EP-98: uninit-register encode caught at mkEventStream and degraded to the counted advisory path at write time
 - [ ] EP-98: snapshot read-side telemetry (decode failures at minimum); workflow snapshot writes swallowed-and-counted like the command path
 - [ ] EP-99: keiki's `StateChangingEpsilon` and `checkHeadRecoverability` force-enabled at stream validation (no caller opt-out; bypass only via the named unchecked constructor); the every-append replay-divergence check counts witnesses, never discards them
@@ -286,6 +286,17 @@ where its truncation guard reports failures through the migrated hydration error
     scope uses a keiro-side SQL query with the coupling assessed in its Decision
     Log; the checkpoint-advance-on-empty-fetch alternative is noted as the upstream
     kiroku fix.
+- EP-97 implementation found the authored colon-delimited UUID-v5 name was itself
+  collision-prone for colon-bearing fields and non-ASCII text. The delivered router
+  derivation length-prefixes each UTF-8 field and has direct regression coverage. It
+  also exported `confirmBenignDuplicate` from `Keiro.ProcessManager`; EP-100 must
+  preserve this per-target confirmation when it converts rejected or failed dispatches
+  into dead-letter outcomes.
+- The user-owned `cabal.project.local` currently overlays kiroku 0.3.0.0 packages on
+  top of `cabal.project`'s pinned kiroku 0.2.1.0 source packages, so default Cabal
+  dependency resolution fails before compilation. EP-97 validated through a temporary
+  clean project/shim without modifying that file; later child plans should do the same
+  or reconcile the overlay explicitly if their scope updates dependency pins.
 
 
 ## Decision Log
@@ -345,6 +356,12 @@ where its truncation guard reports failures through the migrated hydration error
 (To be filled during and after implementation.)
 
 ## Revision Notes
+
+- 2026-07-13: Completed EP-97. Router ids are keyed by target stream and same-stream
+  occurrence with a legacy positional transition probe; all duplicate-rejection folds
+  confirm the attempted id in the intended stream; and Haddocks, the router guide, and
+  changelog state the resolver-drift union contract. Formatting and build passed, and
+  the full `keiro-test` suite reported 295 examples with zero failures.
 
 - 2026-07-13: Completed EP-96. The sharded worker now acknowledges only after the
   handler returns, retries synchronous failures within a configurable bound, and

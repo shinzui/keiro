@@ -55,7 +55,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-07-13) Milestone 2: `deterministicRouterCommandId`, occurrence annotation, and the transition legacy-id pre-check implemented in `keiro/src/Keiro/Router.hs`.
 - [x] (2026-07-13) Milestone 2: existing "folds a concurrent duplicate router dispatch" test updated to the new id scheme; upgrade-transition test added; all `Keiro.Router` tests green (including Milestone 1's red tests).
 - [x] (2026-07-13) Milestone 3: `confirmBenignDuplicate` added to `keiro/src/Keiro/ProcessManager.hs`, exported, and used at all three duplicate-fold sites (router dispatch, PM dispatch, PM manager-state); helper tests green.
-- [ ] Milestone 4: module haddocks, `docs/guides/routers-and-effectful-fan-out.md`, and `CHANGELOG.md` updated; `nix fmt` run; full `keiro-test` suite green.
+- [x] (2026-07-13) Milestone 4: module haddocks, `docs/guides/routers-and-effectful-fan-out.md`, and `CHANGELOG.md` updated; `nix fmt` run; full `keiro-test` suite green.
 
 
 ## Surprises & Discoveries
@@ -107,6 +107,10 @@ implementation. Provide concise evidence.
   code points to bytes. The implementation instead length-prefixes the UTF-8 bytes of
   every field. Direct regression coverage proves colon-bearing component boundaries and
   two non-ASCII code points with the same low byte produce distinct ids.
+- Final validation kept the user-owned `cabal.project.local` untouched by placing a
+  temporary `cabal` shim first on `PATH`; both the outer suite and its nested compile-
+  time probe then used a temporary project file importing only `cabal.project`. After
+  removing both temporary files, the recorded result was `295 examples, 0 failures`.
 
 
 ## Decision Log
@@ -229,12 +233,22 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-Milestones 1 through 3 are complete. The fail-before suite demonstrated both positional-id
-loss modes, and the name-keyed implementation makes all 14 router examples green while
-preserving repeated same-stream commands and pre-upgrade positional deduplication. The
-shared confirmation helper now rejects mismatched, cross-stream, and non-duplicate
-failures while preserving all three concurrent true-duplicate race folds. The remaining
-work is to align the public documentation and run the full validation matrix.
+All four milestones are complete. Router dispatch ids now follow target identity rather
+than effectful resolver position, with a per-target occurrence preserving repeated
+commands and a legacy positional probe covering stable upgrade redeliveries. The v5 name
+uses length-prefixed UTF-8, closing delimiter and non-ASCII collision hazards found during
+implementation. `confirmBenignDuplicate` makes all router and process-manager append-race
+folds verify the attempted id in the intended live stream, so cross-stream collisions
+surface as failures rather than silent drops.
+
+The user-visible contract is now honest: redelivery is idempotent for every target
+resolved again regardless of distinct-target order, while resolver membership drift
+accumulates the union of attempt outputs. The module Haddocks, router guide, and changelog
+state that exact-set routing requires a stable resolver and document the one-time legacy
+transition window. Validation completed with `nix fmt` changing no files, `cabal build
+keiro` succeeding, all focused router/helper/race tests passing, and the full suite
+reporting 295 examples with zero failures. No implementation work remains in this child
+plan.
 
 
 ## Context and Orientation
@@ -839,3 +853,8 @@ Revision note (2026-07-13): completed Milestone 3 by routing all three append-ra
 through `confirmBenignDuplicate`. Four focused helper cases, three pre-existing
 concurrent duplicate integrations, and all 14 router examples pass, proving honest
 cross-stream rejection without regressing genuine duplicate recovery.
+
+Revision note (2026-07-13): completed Milestone 4 and the ExecPlan. Replaced unconditional
+exactly-once prose with the per-target union contract, documented the ID migration and
+failure-posture changes, ran formatting/build/full-suite validation, and recorded the
+final 295-example zero-failure result and residual upgrade/stable-resolver constraints.

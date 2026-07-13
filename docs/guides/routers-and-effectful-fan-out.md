@@ -11,8 +11,10 @@ property-sale transaction must be recorded against every "chapter" whose
 geographic service areas overlap the transaction's areas. That set of chapters
 is not derivable from the transaction alone; it lives in a read-model table and
 must be queried. The router runs that query, then dispatches one command per
-resolved chapter — with the same crash-safe, exactly-once-per-target idempotency
-the process manager provides.
+resolved chapter — with crash-safe, per-target redelivery idempotency whenever
+the target is resolved again. Resolver output
+may drift between redeliveries; the precise cumulative contract is described
+under Idempotency below.
 
 The primitive is `Keiro.Router`
 ([`../../src/Keiro/Router.hs`](../../src/Keiro/Router.hs)); the worked example is
@@ -174,11 +176,22 @@ the list.
 Fan-out is **not** one multi-stream transaction — each target append is its own
 optimistic-concurrency transaction, which cannot be made atomic across N streams.
 Safety comes from determinism instead: Keiro derives each command's event id from
-`(router name, key input, source event id, target index)`, uses a point lookup to
-pre-check whether that id is already in the target stream, and folds the store's
-duplicate rejection into `PMCommandDuplicate` if a concurrent worker wins after
-the pre-check. Re-running the router over the same source event — after a crash,
-or a retried delivery — therefore writes nothing new.
+`(router name, key input, source event id, resolved target stream name,
+occurrence)`, where occurrence counts commands addressed to the same stream in
+one resolve batch. It uses a point lookup to pre-check whether that id is already
+in the target stream. If a concurrent worker wins after the pre-check, a store
+duplicate rejection becomes `PMCommandDuplicate` only after another point lookup
+confirms that the attempted id is in that target stream. Target order and the
+positions of distinct targets therefore do not affect redelivery ids.
+
+`resolve` remains effectful, so two attempts may produce different target sets.
+The cumulative dispatched set is the union of attempt outputs: a target resolved
+only on the first attempt keeps its immutable dispatch, while a target first
+resolved on a later attempt is dispatched then. Where the exact recipient set
+matters, make `resolve` a stable function of the source event across
+redeliveries. Repeating one target within a batch is supported; the relative
+order of commands for that same target determines their occurrence numbers and
+must also remain stable across redeliveries.
 
 ## Running as a worker
 

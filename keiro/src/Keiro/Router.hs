@@ -4,10 +4,14 @@ A 'Router' is the stateless sibling of
 'Keiro.ProcessManager.ProcessManager': for each incoming event it resolves
 a data-dependent set of target streams /effectfully/ (typically via a
 read-model query) and dispatches one command to each. Dispatch is
-exactly-once-per-target by construction — every command is appended under a
-deterministic id and store-level duplicate rejections are folded into a
-benign 'PMCommandDuplicate' — so replaying a source event writes nothing
-new.
+idempotent per resolved target identity: every command is appended under a
+target-name-keyed deterministic id, and store-level duplicate rejections are
+confirmed against that target before becoming a benign
+'PMCommandDuplicate'. Redelivery therefore deduplicates every target resolved
+again, regardless of target order. Because resolution is effectful, the target
+set may drift between attempts; dispatches accumulate as the union of those
+attempts, so callers that require one exact set must keep resolution stable for
+a source event.
 
 Use 'runRouterOnce' to dispatch a single event, or 'runRouterWorker' to run
 the router as a live subscription draining a Shibuya adapter.
@@ -82,10 +86,16 @@ sole new capability over the process manager is that target resolution runs in
 fan-out set can be /looked up/ rather than computed purely from the event.
 
 Dispatch is idempotent by construction: each target command is appended under a
-deterministic identifier derived from @(name, key input, source event id, emit
-index)@ (see 'deterministicCommandId'), pre-checked with 'eventAlreadyIn', and
-the store's @DuplicateEvent@ rejection is treated as a benign duplicate. Replay
-of the same source event therefore writes no new events.
+deterministic identifier derived from @(name, key input, source event id,
+resolved target stream name, occurrence)@ (see
+'deterministicRouterCommandId'), pre-checked with 'eventAlreadyIn', and the
+store's @DuplicateEvent@ rejection is confirmed against the target stream
+before it is treated as benign. A redelivery deduplicates every target it
+resolves again even if target order or membership changed. A target resolved
+only on an earlier attempt keeps its immutable dispatch, and a newly resolved
+target is dispatched on the later attempt; the cumulative set is therefore the
+union of attempt outputs. Keep 'resolve' stable for a source event when the
+exact recipient set matters.
 
 Each dispatch also runs 'targetProjections' for the target aggregate in the same
 append transaction. The function receives the concrete target stream so callers can
@@ -165,14 +175,14 @@ deterministicRouterCommandId routerName correlationId sourceEventId targetStream
                 ]
 
 {- | Resolve the targets for one source event, then dispatch one command per
-target with the same crash-safe, exactly-once-per-target idempotency the
-process manager provides.
+target with crash-safe, target-identity idempotency.
 
-The dispatch logic per target is identical to
-'Keiro.ProcessManager.runProcessManagerOnce''s @dispatchCommand@: derive a
-deterministic command id, skip if 'eventAlreadyIn' the target stream, otherwise
-'Keiro.Projection.runCommandWithProjections' and fold a @DuplicateEvent@
-rejection into 'PMCommandDuplicate'.
+Unlike 'Keiro.ProcessManager.runProcessManagerOnce', whose pure command list
+can safely use positional ids, a router derives each id from the resolved
+target stream name and its same-stream occurrence. It skips ids already in the
+target stream, otherwise runs 'Keiro.Projection.runCommandWithProjections', and
+folds a @DuplicateEvent@ rejection only after confirming the attempted id is in
+that target stream.
 
 Returns 'RouterResult' directly (no outer @Either CommandError@) because — unlike
 the process manager — there is no manager-state append that can fail before
