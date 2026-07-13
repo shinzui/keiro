@@ -38,11 +38,11 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] M1: `deepseq` added to `keiro-core/keiro-core.cabal` build-depends
 - [x] M1: `initialSnapshotEncodeWarnings` implemented in `keiro-core/src/Keiro/EventStream/Validate.hs` and wired into `validateEventStreamWith`
 - [x] M1: uninit-slot fixture (two slots, one never written) added to `keiro/test/Main.hs`; `mkEventStream` rejection test passes and names the slot
-- [ ] M2: `deepseq` added to `keiro/keiro.cabal` (library and, if needed, test suite)
-- [ ] M2: `keiro.snapshot.encode.failures` counter added to `keiro/src/Keiro/Telemetry.hs` (name constant, `KeiroMetrics` field, registration, recorder)
-- [ ] M2: `encodeSnapshotStrict` and `writeSnapshotEncoded` added to `keiro/src/Keiro/Snapshot.hs`
-- [ ] M2: `writeSnapshotIfNeeded` in `keiro/src/Keiro/Command.hs` forces the encode before the store call and degrades to a counted swallow on `ErrorCall`
-- [ ] M2: runtime degrade integration test (partial `ToJSON` state) and direct unit test of `encodeSnapshotStrict` over an `emptyRegFile` pair pass
+- [x] M2: `deepseq` added to `keiro/keiro.cabal` (library and, if needed, test suite)
+- [x] M2: `keiro.snapshot.encode.failures` counter added to `keiro/src/Keiro/Telemetry.hs` (name constant, `KeiroMetrics` field, registration, recorder)
+- [x] M2: `encodeSnapshotStrict` and `writeSnapshotEncoded` added to `keiro/src/Keiro/Snapshot.hs`
+- [x] M2: `writeSnapshotIfNeeded` in `keiro/src/Keiro/Command.hs` forces the encode before the store call and degrades to a counted swallow on `ErrorCall`
+- [x] M2: runtime degrade integration test (partial `ToJSON` state) and direct unit test of `encodeSnapshotStrict` over an `emptyRegFile` pair pass
 - [ ] M3: `SnapshotLookup` / `SnapshotMissReason` types and `lookupSnapshotSeed` added to `keiro/src/Keiro/Snapshot.hs`; `hydrateWithSnapshot` kept as a compatibility wrapper
 - [ ] M3: `keiro.snapshot.decode.failures`, `keiro.snapshot.read.hits`, `keiro.snapshot.read.misses` counters added to `keiro/src/Keiro/Telemetry.hs`
 - [ ] M3: `hydrate` in `keiro/src/Keiro/Command.hs` records hit/miss/decode-failure via the new lookup
@@ -532,3 +532,5 @@ Boundaries this plan must respect: keiki owns the shape hash, the `uninit:` mess
 Revision note (2026-07-12): initial authoring. Fleshed out the skeleton after verifying every link of the four review findings against the working tree (file:line citations throughout), reading MP-14's Integration Points 3 and 5 and its Decision Log entry on uninit-slot enforcement, and reading keiki EP-78's Milestone 4 to pin the non-duplication boundary. Key resolutions recorded in the Decision Log: spoon-idiom purity for the validation guard, `ErrorCall`-only catching, a distinct encode-failure counter, caller-side metric recording via a reason-carrying `SnapshotLookup`, no logging seam (decision: data + counter), shared write-failure counter for workflows, keeping `rotateGeneration`'s unconditional seed snapshot (already documented as deliberate), and the `Error StoreError` constraint addition.
 
 Revision note (2026-07-13): completed M1. Added the strict initial snapshot encode probe, a two-register `emptyRegFile` regression fixture, and focused acceptance coverage that proves the warning names `uninit: neverWritten`. Recorded the user-local Cabal overlay and clean-project validation procedure under Surprises & Discoveries.
+
+Revision note (2026-07-13): completed M2. Split strict encoding from the store upsert, routed command snapshots through the pre-store encode guard, registered the dedicated encode-failure counter, and added direct plus PostgreSQL-backed regressions. The focused `Keiro.Snapshot` run passed 11 examples, including proof that an event remains committed while the snapshot row is absent and encode failures count separately from write failures.

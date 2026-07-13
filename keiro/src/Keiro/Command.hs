@@ -58,7 +58,7 @@ import Keiro.Codec (Codec, CodecError, decodeRecorded, encodeForAppendWithMetada
 import Keiro.EventStream (EventStream, Terminality (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
-import Keiro.Snapshot (hydrateWithSnapshot, writeSnapshot)
+import Keiro.Snapshot (encodeSnapshotStrict, hydrateWithSnapshot, writeSnapshotEncoded)
 import Keiro.Snapshot.Policy (shouldSnapshotSpan)
 import Keiro.Stream (Stream)
 import Keiro.Telemetry (
@@ -68,6 +68,7 @@ import Keiro.Telemetry (
     recordCommandConflicts,
     recordCommandDuplicates,
     recordCommandRetries,
+    recordSnapshotEncodeFailures,
     recordSnapshotWriteFailures,
     withCommandSpan,
  )
@@ -600,10 +601,14 @@ writeSnapshotIfNeeded options eventStream current events appendResult =
                                 else NotTerminal
                     when (shouldSnapshotSpan (eventStream ^. #snapshotPolicy) terminality finalState (current ^. #streamVersion) finalVersion)
                         $ do
-                            outcome <- tryError @StoreError (writeSnapshot (appendResult ^. #streamId) finalVersion codec finalState)
-                            case outcome of
-                                Right () -> pure ()
-                                Left _ -> recordSnapshotWriteFailures (options ^. #metrics) 1
+                            encoded <- liftIO (encodeSnapshotStrict codec finalState)
+                            case encoded of
+                                Left _ -> recordSnapshotEncodeFailures (options ^. #metrics) 1
+                                Right value -> do
+                                    outcome <- tryError @StoreError (writeSnapshotEncoded (appendResult ^. #streamId) finalVersion codec value)
+                                    case outcome of
+                                        Right () -> pure ()
+                                        Left _ -> recordSnapshotWriteFailures (options ^. #metrics) 1
 
 retryOrFail ::
     (IOE :> es) =>

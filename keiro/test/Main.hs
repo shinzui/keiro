@@ -6,7 +6,7 @@ where
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, contrazip6)
 import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar, tryPutMVar)
-import Control.Exception (Exception, SomeException, evaluate, finally, throwIO, try)
+import Control.Exception (Exception, SomeException, displayException, evaluate, finally, throwIO, try)
 import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -1042,6 +1042,15 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 other -> expectationFailure ("expected Unset/Ok, got " <> show other)
 
     describe "Keiro.Snapshot" $ around (withFreshStore fixture) $ do
+        it "reports an ErrorCall when strict encoding reaches an empty register slot" $ \_storeHandle -> do
+            result <-
+                encodeSnapshotStrict
+                    (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
+                    (Counting, emptyRegFile @SnapshotCounterRegs)
+            case result of
+                Left err -> displayException err `shouldSatisfy` isInfixOf "uninit: lastAmount"
+                Right _ -> expectationFailure "expected strict snapshot encoding to fail on an empty register slot"
+
         it "writes a snapshot after policy threshold" $ \storeHandle -> do
             let target = stream "snapshot-write-threshold" :: Stream SnapshotCounterEventStream
             Right (Right _) <-
@@ -1109,6 +1118,40 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Store.runTransaction $
                         Tx.statement "snapshot-write-failure-swallowed" snapshotVersionForStreamStmt
             snapshotVersionAfterRecovery `shouldBe` Just (StreamVersion 4)
+
+        it "does not fail a committed command when strict snapshot encoding fails" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            let target = stream "snapshot-encode-failure-swallowed" :: Stream PartialSnapshotEventStream
+                options = defaultRunCommandOptions & #metrics ?~ keiroMetrics
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand options partialSnapshotEventStream target (Add 7)
+            case result of
+                Right (Right commandResult) -> do
+                    commandResult ^. #streamVersion `shouldBe` StreamVersion 1
+                    commandResult ^. #eventsAppended `shouldBe` 1
+                other -> expectationFailure ("expected committed command despite snapshot encode failure, got " <> show other)
+            Right recorded <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "snapshot-encode-failure-swallowed") (StreamVersion 0) 10
+            traverse (decodeRecorded counterCodec) (Vector.toList recorded)
+                `shouldBe` Right [CounterAdded 7]
+            Right snapshotVersion <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement "snapshot-encode-failure-swallowed" snapshotVersionForStreamStmt
+            snapshotVersion `shouldBe` Nothing
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            let scalars = flattenScalarPoints exported
+            lookup "keiro.snapshot.encode.failures" scalars `shouldBe` Just (IntNumber 1)
+            lookup "keiro.snapshot.write.failures" scalars `shouldBe` Nothing
 
         it "hydrates from snapshot and replays only the tail" $ \storeHandle -> do
             let target = stream "snapshot-tail-hydration" :: Stream SnapshotCounterEventStream
@@ -7967,6 +8010,8 @@ type UninitializedSnapshotRegs = '[ '("initialized", Int), '("neverWritten", Int
 
 type SnapshotCounterEventStream = EventStream (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
 
+type PartialSnapshotEventStream = EventStream (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs PartialSnapshotState CounterCommand CounterEvent
+
 type ValidatedSnapshotCounterEventStream = ValidatedEventStream (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
 
 type UninitializedSnapshotEventStream = EventStream (HsPred UninitializedSnapshotRegs CounterCommand) UninitializedSnapshotRegs CounterState CounterCommand CounterEvent
@@ -7984,6 +8029,21 @@ data CounterState
     = Counting
     deriving stock (Generic, Eq, Show, Enum, Bounded, Ord)
     deriving anyclass (FromJSON, ToJSON)
+
+data PartialSnapshotState
+    = SnapshotEncodable
+    | SnapshotEncodeBomb
+    deriving stock (Generic, Eq, Show, Enum, Bounded, Ord)
+
+instance ToJSON PartialSnapshotState where
+    toJSON SnapshotEncodable = Aeson.String "encodable"
+    toJSON SnapshotEncodeBomb = error "snapshot state encoder exploded"
+
+instance FromJSON PartialSnapshotState where
+    parseJSON = Aeson.withText "PartialSnapshotState" $ \case
+        "encodable" -> pure SnapshotEncodable
+        "bomb" -> pure SnapshotEncodeBomb
+        other -> fail ("unknown partial snapshot state: " <> Text.unpack other)
 
 counterEventStreamDef :: CounterEventStream
 counterEventStreamDef =
@@ -8078,6 +8138,37 @@ snapshotCounterEventStreamDef =
         , resolveStreamName = Stream.streamName
         , snapshotPolicy = Every 2
         , stateCodec = Just (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
+        }
+
+partialSnapshotEventStream :: ValidatedEventStream (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs PartialSnapshotState CounterCommand CounterEvent
+partialSnapshotEventStream = mkEventStreamOrThrow "partial-snapshot" partialSnapshotEventStreamDef
+
+partialSnapshotEventStreamDef :: PartialSnapshotEventStream
+partialSnapshotEventStreamDef =
+    EventStream
+        { transducer =
+            SymTransducer
+                { edgesOut = \_ ->
+                    [ Edge
+                        { guard = matchInCtor addCtor
+                        , update =
+                            USet
+                                (#lastAmount :: IndexN "lastAmount" SnapshotCounterRegs Int)
+                                (inpCtor addCtor #amount)
+                        , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
+                        , target = SnapshotEncodeBomb
+                        }
+                    ]
+                , initial = SnapshotEncodable
+                , initialRegs = RCons (Proxy @"lastAmount") 0 RNil
+                , isFinal = \_ -> False
+                }
+        , initialState = SnapshotEncodable
+        , initialRegisters = RCons (Proxy @"lastAmount") 0 RNil
+        , eventCodec = counterCodec
+        , resolveStreamName = Stream.streamName
+        , snapshotPolicy = Every 1
+        , stateCodec = Just (defaultStateCodec @SnapshotCounterRegs @PartialSnapshotState 1)
         }
 
 uninitializedSnapshotEventStreamDef :: UninitializedSnapshotEventStream

@@ -87,6 +87,7 @@ module Keiro.Telemetry (
     keiroCommandConflictsName,
     keiroCommandRetriesName,
     keiroCommandDuplicatesName,
+    keiroSnapshotEncodeFailuresName,
     keiroSnapshotWriteFailuresName,
     keiroDispatchFailedName,
     keiroDispatchDuplicatesName,
@@ -122,6 +123,7 @@ module Keiro.Telemetry (
     recordCommandConflicts,
     recordCommandRetries,
     recordCommandDuplicates,
+    recordSnapshotEncodeFailures,
     recordSnapshotWriteFailures,
     recordDispatchFailed,
     recordDispatchDuplicate,
@@ -559,6 +561,8 @@ keiroCommandRetriesName :: Text
 keiroCommandRetriesName = "keiro.command.retries"
 keiroCommandDuplicatesName :: Text
 keiroCommandDuplicatesName = "keiro.command.duplicates"
+keiroSnapshotEncodeFailuresName :: Text
+keiroSnapshotEncodeFailuresName = "keiro.snapshot.encode.failures"
 keiroSnapshotWriteFailuresName :: Text
 keiroSnapshotWriteFailuresName = "keiro.snapshot.write.failures"
 keiroDispatchFailedName :: Text
@@ -618,6 +622,7 @@ data KeiroMetrics = KeiroMetrics
     , commandConflicts :: Counter Int64
     , commandRetries :: Counter Int64
     , commandDuplicates :: Counter Int64
+    , snapshotEncodeFailures :: Counter Int64
     , snapshotWriteFailures :: Counter Int64
     , dispatchFailed :: Counter Int64
     , dispatchDuplicates :: Counter Int64
@@ -662,6 +667,7 @@ newKeiroMetrics meter = liftIO $ do
     commandConflicts' <- counterI64 keiroCommandConflictsName "{conflict}" "Optimistic-concurrency conflicts observed by command runners."
     commandRetries' <- counterI64 keiroCommandRetriesName "{retry}" "Command retry attempts started after an optimistic-concurrency conflict."
     commandDuplicates' <- counterI64 keiroCommandDuplicatesName "{event}" "Command appends rejected as duplicate deterministic event ids."
+    snapshotEncodeFailures' <- counterI64 keiroSnapshotEncodeFailuresName "{failure}" "Post-commit snapshot encodes that failed and were swallowed."
     snapshotWriteFailures' <- counterI64 keiroSnapshotWriteFailuresName "{failure}" "Post-commit snapshot writes that failed and were swallowed."
     dispatchFailed' <- counterI64 keiroDispatchFailedName "{command}" "Process-manager/router dispatch commands that failed."
     dispatchDuplicates' <- counterI64 keiroDispatchDuplicatesName "{command}" "Process-manager/router dispatch commands skipped as duplicate deterministic event ids."
@@ -697,6 +703,7 @@ newKeiroMetrics meter = liftIO $ do
             , commandConflicts = commandConflicts'
             , commandRetries = commandRetries'
             , commandDuplicates = commandDuplicates'
+            , snapshotEncodeFailures = snapshotEncodeFailures'
             , snapshotWriteFailures = snapshotWriteFailures'
             , dispatchFailed = dispatchFailed'
             , dispatchDuplicates = dispatchDuplicates'
@@ -780,6 +787,8 @@ recordCommandRetries :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordCommandRetries = recordCounter commandRetries
 recordCommandDuplicates :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordCommandDuplicates = recordCounter commandDuplicates
+recordSnapshotEncodeFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordSnapshotEncodeFailures = recordCounter snapshotEncodeFailures
 recordSnapshotWriteFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotWriteFailures = recordCounter snapshotWriteFailures
 recordDispatchFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()

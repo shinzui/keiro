@@ -18,6 +18,8 @@ module Keiro.Snapshot (
     -- * Hydration seed
     SnapshotSeed (..),
     hydrateWithSnapshot,
+    encodeSnapshotStrict,
+    writeSnapshotEncoded,
     writeSnapshot,
 
     -- * State codec and storage
@@ -26,6 +28,8 @@ module Keiro.Snapshot (
 )
 where
 
+import Control.DeepSeq (force)
+import Control.Exception (ErrorCall, evaluate, try)
 import Effectful (Eff, (:>))
 import Keiki.Core (RegFile)
 import Keiro.EventStream (StateCodec)
@@ -76,10 +80,39 @@ hydrateWithSnapshot streamName codec = do
                         , streamVersion = snapshot ^. #streamVersion
                         }
 
+{- | Strictly encode @state@ with @codec@, forcing the complete JSON value and
+returning an 'ErrorCall' raised by a partial encoder or an uninitialized keiki
+register. Other exception types deliberately remain visible to the caller.
+-}
+encodeSnapshotStrict :: StateCodec state -> state -> IO (Either ErrorCall Value)
+encodeSnapshotStrict codec state =
+    try @ErrorCall (evaluate (force ((codec ^. #encode) state)))
+
+{- | Upsert a JSON value that has already been encoded and forced. Keeping this
+separate from 'writeSnapshot' lets post-commit callers prove encoding is safe
+before they touch the store.
+-}
+writeSnapshotEncoded ::
+    (Store :> es) =>
+    StreamId ->
+    StreamVersion ->
+    StateCodec state ->
+    Value ->
+    Eff es ()
+writeSnapshotEncoded streamId streamVersion codec encoded =
+    writeSnapshotRow
+        SnapshotWrite
+            { streamId = streamId
+            , streamVersion = streamVersion
+            , state = encoded
+            , stateCodecVersion = codec ^. #stateCodecVersion
+            , regfileShapeHash = codec ^. #shapeHash
+            }
+
 {- | Encode @state@ with @codec@ and upsert it as the snapshot for the given
-stream at @streamVersion@. The underlying write keeps only the
-highest-version snapshot per stream, so an out-of-order or stale write is
-ignored.
+stream at @streamVersion@. This compatibility helper preserves the historical
+lazy encoding behavior; post-commit advisory paths should call
+'encodeSnapshotStrict' first and pass the result to 'writeSnapshotEncoded'.
 -}
 writeSnapshot ::
     (Store :> es) =>
@@ -89,11 +122,4 @@ writeSnapshot ::
     state ->
     Eff es ()
 writeSnapshot streamId streamVersion codec state =
-    writeSnapshotRow
-        SnapshotWrite
-            { streamId = streamId
-            , streamVersion = streamVersion
-            , state = (codec ^. #encode) state
-            , stateCodecVersion = codec ^. #stateCodecVersion
-            , regfileShapeHash = codec ^. #shapeHash
-            }
+    writeSnapshotEncoded streamId streamVersion codec ((codec ^. #encode) state)

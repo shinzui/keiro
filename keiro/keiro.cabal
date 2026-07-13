@@ -99,6 +99,7 @@ library
     , bytestring                             >=0.11
     , containers                             >=0.6
     , contravariant-extras                   >=0.3
+    , deepseq                                >=1.5
     , effectful                              >=2.6
     , effectful-core                         >=2.6
     , generic-lens                           >=2.2
