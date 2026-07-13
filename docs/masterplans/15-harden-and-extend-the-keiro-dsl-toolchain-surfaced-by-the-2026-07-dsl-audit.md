@@ -135,7 +135,7 @@ three plans register with it).
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 103 | Make keiro-dsl diff sound over the full decode and identity surface | docs/plans/103-make-keiro-dsl-diff-sound-over-the-full-decode-and-identity-surface.md | None | None | In Progress |
+| 103 | Make keiro-dsl diff sound over the full decode and identity surface | docs/plans/103-make-keiro-dsl-diff-sound-over-the-full-decode-and-identity-surface.md | None | None | Complete |
 | 104 | Close the keiro-dsl validator soundness holes: workflows, rules, cross-node references, and disposition tables | docs/plans/104-close-the-keiro-dsl-validator-soundness-holes-workflows-rules-cross-node-references-and-disposition-tables.md | None | None | Not Started |
 | 105 | Fix keiro-dsl notation integrity: string escaping, duplicate clauses, numeric bounds, and identifier hygiene | docs/plans/105-fix-keiro-dsl-notation-integrity-string-escaping-duplicate-clauses-numeric-bounds-and-identifier-hygiene.md | None | None | Not Started |
 | 106 | Harden the keiro-dsl scaffolder: template injection, firewall completeness, collision and stale-module detection, and faithful policy lowering | docs/plans/106-harden-the-keiro-dsl-scaffolder-template-injection-firewall-completeness-collision-and-stale-module-detection-and-faithful-policy-lowering.md | None | EP-104, EP-105 | Not Started |
@@ -279,8 +279,8 @@ EP-106 in parallel alongside the front of that path.
 
 ## Progress
 
-- [ ] EP-103: every node family diffed or explicitly out-of-scope; field-type, enum, wire, and contract changes classify Breaking with red/green fixtures
-- [ ] EP-103: version-chain contiguity checked against the old spec; identity-bearing renames (workflow stable name, id prefixes) Breaking; corrected diagnostic codes
+- [x] EP-103: every node family diffed or explicitly out-of-scope; field-type, enum, wire, and contract changes classify Breaking with red/green fixtures
+- [x] EP-103: version-chain contiguity checked against the old spec; identity-bearing renames (workflow stable name, id prefixes) Breaking; corrected diagnostic codes
 - [ ] EP-104: workflows and rules validated (duplicate labels rejected, rule-body clock/scope bypass closed, rule totality)
 - [ ] EP-104: process/operation cross-refs resolved; disposition completeness and duplicate-row shadowing; topic affinity; duplicate-name rules; workqueue fixture trio fully checked
 - [ ] EP-105: string escaping round-trips adversarial input; mapPartial has concrete syntax; duplicate wire/projection/goto rejected
@@ -339,6 +339,12 @@ EP-106 in parallel alongside the front of that path.
     dispatch level — a deliberate breaking notation change so existing process specs
     fail parse rather than inherit the silent-halt default. EP-110's skill guidance
     depends on exactly this vocabulary.
+  - EP-103 implementation found that a pgmq dispatch retarget and a dedupe-queue change
+    cannot share one warning fixture: changing `enqueue to` is `DispatchRetargeted`
+    (WARNING), but changing `seenIn queue` is independently `DedupeIdentityChanged`
+    (BREAKING). The committed retarget fixture adds a second valid workqueue while
+    retaining the original dedupe arm, so plans extending dispatch/workqueue notation
+    must preserve this separation.
 
 
 ## Decision Log

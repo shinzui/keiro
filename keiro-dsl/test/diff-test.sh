@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Integration test for `keiro-dsl diff --since` (EP-2 / plan 60, milestone 2).
+# Integration test for `keiro-dsl diff --since` (EP-103).
 #
-# Proves the merge gate end-to-end against real git history: a field added to an
-# event without a version bump is BREAKING (exit != 0); wrapping the same field
-# as a v2 with an upcaster hole is ADDITIVE (exit 0).
+# Proves the merge gate end-to-end against real git history across all three
+# tiers and both axes: decode and identity changes block as BREAKING, safe
+# additions remain ADDITIVE, and forward-policy changes print WARNING without
+# blocking.
 #
-# Exit 0 => both classifications and exit codes are correct.
+# Exit 0 => all classifications, codes, and process exit statuses are correct.
 # Run from the keiro repo root:  bash keiro-dsl/test/diff-test.sh
 set -euo pipefail
 

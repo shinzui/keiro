@@ -303,10 +303,39 @@ exit=0
   and all disposition tables (single-spec validator territory).
   Date: 2026-07-13.
 
+- Decision: the `DispatchRetargeted` fixture adds a second valid target workqueue and
+  changes only `enqueue to`; it does not rename the queue used by the `seenIn queue`
+  dedupe arm.
+  Rationale: changing the dedupe queue is independently and correctly BREAKING under
+  `DedupeIdentityChanged`, so combining it with retargeting cannot prove the intended
+  WARNING/exit-0 contract. Isolating the two surfaces makes both classifications
+  reviewable and preserves a check-clean spec.
+  Date: 2026-07-13.
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-07-13. `keiro-dsl diff --since` now walks an exhaustive node-family
+registry and compares both persisted decode shapes and persisted identity derivations.
+All ten current `Node` constructors are represented: nine have concrete family differs,
+and `NOperation` has the permanent, test-enforced out-of-scope rationale described in
+the Decision Log. Top-level ids and enums are diffed; top-level rules remain explicitly
+outside the decode/identity axes.
+
+The CLI now has three observable tiers. `ADDITIVE` and `WARNING` exit zero; `BREAKING`
+exits non-zero. Distinct diagnostic codes replace the previously overloaded
+`EvtFieldAddedWithoutBump`, and committed fixtures cover every new code. The final unit
+suite has 92 examples with zero failures, the eight-case real-git shell gate passes,
+all new mutation fixtures pass single-spec checking, and `keiro-dsl-conformance` passes
+all five checks. The CLI help and the two authoring-skill one-liners name the three tiers
+and both comparison surfaces.
+
+The main implementation lesson is that behavioral retargeting and dedupe identity must
+be varied independently in fixtures. A pgmq dispatch that changes `enqueue to` can be a
+warning, but changing its `seenIn queue` arm at the same time correctly makes the change
+breaking. The retarget fixture therefore adds a second valid target queue while retaining
+the old dedupe queue. Plans 107–109 can extend the exported registry and
+`classifyWorkflowBody` seam without reconstructing the differ.
 
 
 ## Context and Orientation
