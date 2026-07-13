@@ -4,6 +4,7 @@ of the canonical Reservation fixture.
 -}
 module Main (main) where
 
+import Control.Monad (filterM)
 import Data.List (sort)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
@@ -16,6 +17,9 @@ import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), Placement (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, validateSpec)
+import System.Directory (doesFileExist)
+import System.Environment (lookupEnv)
+import System.FilePath ((</>))
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
 
@@ -28,7 +32,7 @@ main = hspec $ do
 
     describe "canonical reservation.keiro" $
         it "parses into the expected aggregate shape" $ do
-            input <- TIO.readFile "test/fixtures/reservation.keiro"
+            input <- readTestText "test/fixtures/reservation.keiro"
             case parseSpec "test/fixtures/reservation.keiro" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> do
@@ -103,7 +107,7 @@ main = hspec $ do
 
     describe "evolution parsing" $
         it "parses event version and upcaster from reservation-v2.keiro" $ do
-            input <- TIO.readFile "test/fixtures/reservation-v2.keiro"
+            input <- readTestText "test/fixtures/reservation-v2.keiro"
             case parseSpec "test/fixtures/reservation-v2.keiro" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> case [e | NAggregate a <- specNodes spec, e <- aggEvents a, evName e == "TransferReservationCreated"] of
@@ -114,7 +118,7 @@ main = hspec $ do
 
     describe "process/timer (EP-3)" $ do
         it "parses the hospital-surge process + nested timer" $ do
-            input <- TIO.readFile "test/fixtures/hospital-surge.keiro"
+            input <- readTestText "test/fixtures/hospital-surge.keiro"
             case parseSpec "test/fixtures/hospital-surge.keiro" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> case [p | NProcess p <- specNodes spec] of
@@ -126,7 +130,7 @@ main = hspec $ do
                         tmMaxAttempts (procTimer p) `shouldBe` 5
                     [] -> expectationFailure "no process node parsed"
         it "round-trips the hospital-surge spec through parse . pretty" $ do
-            input <- TIO.readFile "test/fixtures/hospital-surge.keiro"
+            input <- readTestText "test/fixtures/hospital-surge.keiro"
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
@@ -173,7 +177,7 @@ main = hspec $ do
 
     describe "contract (EP-4)" $ do
         it "parses the emergency contract (topics + events-on-topic + typed fields)" $ do
-            input <- TIO.readFile "test/fixtures/contract.keiro"
+            input <- readTestText "test/fixtures/contract.keiro"
             case parseSpec "test/fixtures/contract.keiro" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> case [c | NContract c <- specNodes spec] of
@@ -184,12 +188,12 @@ main = hspec $ do
                         map ceName (ctrEvents c) `shouldBe` ["IncidentTransferNeedDeclared", "TransferReservationAccepted"]
                     [] -> expectationFailure "no contract node parsed"
         it "round-trips the contract spec through parse . pretty" $ do
-            input <- TIO.readFile "test/fixtures/contract.keiro"
+            input <- readTestText "test/fixtures/contract.keiro"
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
         it "round-trips the intake (inbox) spec through parse . pretty" $ do
-            input <- TIO.readFile "test/fixtures/intake.keiro"
+            input <- readTestText "test/fixtures/intake.keiro"
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
@@ -212,7 +216,7 @@ main = hspec $ do
             codes <- errorCodesOf "test/fixtures/intake-topic-mismatch.keiro"
             codes `shouldContain` [TopicAffinityMismatch]
         it "round-trips the emit/publisher spec through parse . pretty" $ do
-            input <- TIO.readFile "test/fixtures/emit.keiro"
+            input <- readTestText "test/fixtures/emit.keiro"
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
@@ -231,7 +235,7 @@ main = hspec $ do
 
     describe "pgmq workqueue/dispatch (EP-5)" $ do
         it "round-trips the reservation-work spec through parse . pretty" $ do
-            input <- TIO.readFile "test/fixtures/reservation-work.keiro"
+            input <- readTestText "test/fixtures/reservation-work.keiro"
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
@@ -276,7 +280,7 @@ main = hspec $ do
 
     describe "workflow/operation (EP-6)" $ do
         it "round-trips the workflow spec through parse . pretty" $ do
-            input <- TIO.readFile "test/fixtures/workflow.keiro"
+            input <- readTestText "test/fixtures/workflow.keiro"
             case parseSpec "in" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
@@ -478,7 +482,7 @@ main = hspec $ do
                     specLayout spec `shouldBe` Just CollocatedLeaf
                     parseSpec "<m1>" (renderSpec spec) `shouldBe` Right spec
         it "a spec without the clauses leaves placement at the default" $ do
-            input <- TIO.readFile "test/fixtures/reservation.keiro"
+            input <- readTestText "test/fixtures/reservation.keiro"
             case parseSpec "test/fixtures/reservation.keiro" input of
                 Left err -> expectationFailure (T.unpack err)
                 Right spec -> do
@@ -572,7 +576,7 @@ test on a parse error).
 -}
 diagnosticCodesOf :: FilePath -> IO [DiagnosticCode]
 diagnosticCodesOf path = do
-    input <- TIO.readFile path
+    input <- readTestText path
     case parseSpec path input of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right spec -> pure (map code (validateSpec spec))
@@ -582,7 +586,7 @@ the benign-inversion notices, are excluded).
 -}
 errorCodesOf :: FilePath -> IO [DiagnosticCode]
 errorCodesOf path = do
-    input <- TIO.readFile path
+    input <- readTestText path
     case parseSpec path input of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right spec -> pure [code d | d <- validateSpec spec, severity d == Error]
@@ -590,8 +594,8 @@ errorCodesOf path = do
 -- | Parse two fixtures and diff them (old, new).
 diffFixtures :: FilePath -> FilePath -> IO [Change]
 diffFixtures oldP newP = do
-    old <- TIO.readFile oldP
-    new <- TIO.readFile newP
+    old <- readTestText oldP
+    new <- readTestText newP
     case (,) <$> parseSpec oldP old <*> parseSpec newP new of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right (o, n) -> pure (diffSpecs o n)
@@ -615,7 +619,7 @@ assertSkeletonValid kind = case skeletonFor kind of
 -- | Parse a fixture into a 'Spec', failing the test on a parse error.
 specOf :: FilePath -> IO Spec
 specOf path = do
-    input <- TIO.readFile path
+    input <- readTestText path
     case parseSpec path input of
         Left err -> expectationFailure (T.unpack err) >> error "unreachable"
         Right spec -> pure spec
@@ -623,7 +627,7 @@ specOf path = do
 -- | Parse a fixture and scaffold every aggregate in it.
 scaffoldFixture :: FilePath -> IO [ScaffoldModule]
 scaffoldFixture path = do
-    input <- TIO.readFile path
+    input <- readTestText path
     case parseSpec path input of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right spec ->
@@ -637,7 +641,7 @@ scaffoldFixture path = do
 
 scaffoldProcessFixture :: FilePath -> IO [ScaffoldModule]
 scaffoldProcessFixture path = do
-    input <- TIO.readFile path
+    input <- readTestText path
     case parseSpec path input of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right spec ->
@@ -653,7 +657,7 @@ to known-compiling output.
 assertMatchesCommitted :: ScaffoldModule -> IO ()
 assertMatchesCommitted m = do
     let committedPath = "test/conformance/" <> modulePath m
-    committed <- TIO.readFile committedPath
+    committed <- readTestText committedPath
     normalize committed `shouldBe` normalize (moduleText m)
   where
     -- Compare the deterministic body, robust to formatter-only changes. Import
@@ -673,6 +677,27 @@ assertMatchesCommitted m = do
     isImport l = case T.words l of
         ("import" : _) -> True
         _ -> False
+
+{- | Locate and read a test fixture or committed conformance source regardless
+of whether the suite was launched from the package directory or repo root.
+-}
+readTestText :: FilePath -> IO T.Text
+readTestText path = resolveTestPath path >>= TIO.readFile
+
+-- | Locate a repo file regardless of the test process's current directory.
+resolveTestPath :: FilePath -> IO FilePath
+resolveTestPath rel = do
+    override <- lookupEnv "KEIRO_DSL_TEST_ROOT"
+    let candidates = [rel, "keiro-dsl" </> rel] <> maybe [] (\root -> [root </> rel]) override
+    existing <- filterM doesFileExist candidates
+    case existing of
+        path : _ -> pure path
+        [] ->
+            fail $
+                "unable to locate keiro-dsl test file "
+                    <> show rel
+                    <> "; tried "
+                    <> show candidates
 
 --------------------------------------------------------------------------------
 -- Generators (bounded; restricted to valid, non-reserved identifiers)

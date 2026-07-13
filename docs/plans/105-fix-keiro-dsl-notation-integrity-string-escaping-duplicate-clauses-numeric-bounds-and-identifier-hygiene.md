@@ -49,7 +49,7 @@ a line-numbered error.
 
 ## Progress
 
-- [ ] M1: unit suite runs from any cwd (fixture-resolution helper, C8).
+- [x] M1: unit suite runs from any cwd (fixture-resolution helper, C8). Completed 2026-07-13T20:57:16Z; 112 examples passed from both the repository root and `keiro-dsl/`.
 - [ ] M2: string escaping in `stringLit` + `dquoted`, quoted-binding re-escape, unit tests, adversarial round-trip test (C1).
 - [ ] M3: `status-map partial { … }` concrete syntax for `mapPartial` (parser, printer, generator, NOTATION.md snippet) (C2).
 - [ ] M4: duplicate `wire`/`projection`/`goto` rejected with positioned errors; missing-goto reported at the transition line; dash-aware keyword boundary; `try pRegDecl` removed (C3 + C6).
@@ -58,7 +58,7 @@ a line-numbered error.
 - [ ] M7: round-trip property extended to all node families with adversarial generators and empty-list edges; `states` accepts zero names; NOTATION.md touch-ups (C7).
 - [ ] Full keiro-dsl test matrix green (unit + all conformance suites); Outcomes written.
 
-Plan drafted 2026-07-13; no implementation started.
+Implementation started 2026-07-13; M1 is complete and M2 is next.
 
 
 ## Surprises & Discoveries
@@ -68,6 +68,10 @@ Plan drafted 2026-07-13; no implementation started.
   (`pVersion`), 420 (wire `schemaVersion`), 470 (contract `schemaVersion`), 570 (decode
   `schemaVersion ==`), 656 (publisher `maxAttempts`), 697 (workqueue `maxRetries`), and
   1001 (timer `max-attempts`). All seven get the bound check.
+- The cwd baseline was sharper than a generic failure: the package-directory run passed
+  all 112 examples, while the repository-root run failed exactly 100 examples, all on
+  unresolved `test/fixtures/` or `test/conformance/` paths. After routing reads through
+  `resolveTestPath`, both invocation forms pass all 112 examples.
 - (During implementation, record further discoveries here with short evidence snippets.)
 
 
