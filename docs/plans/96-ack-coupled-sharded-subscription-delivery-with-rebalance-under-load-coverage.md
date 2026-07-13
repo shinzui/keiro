@@ -32,8 +32,8 @@ After this change, the sharded worker acknowledges each event to the underlying 
 - [x] (2026-07-13 05:39Z) M2: `ShardedWorkerOptions` gains `handlerRetryDelay` and `retryPolicy` with validation in `mkShardedWorkerOptions`
 - [x] (2026-07-13 05:39Z) M2: existing "reader killed by a handler exception is restarted" test rewritten for the new bounded-retry semantics
 - [x] (2026-07-13 05:39Z) M2: stale zombie docstring (Worker.hs:44-48) rewritten; module contract prose updated; all shard tests green; committed together with the M1 tests
-- [ ] M3: zombie-overlap duplicate test written and passing (duplicates observed, zero loss)
-- [ ] M3: poison-event dead-letter test written and passing (bounded retries, row in kiroku's dead-letter table, drain continues)
+- [x] (2026-07-13 05:44Z) M3: zombie-overlap duplicate test written and passing (duplicates observed, zero loss)
+- [x] (2026-07-13 05:44Z) M3: poison-event dead-letter test written and passing (bounded retries, row in kiroku's dead-letter table, drain continues)
 - [ ] M4: master plan EP-96 checkboxes ticked; Outcomes & Retrospective written; revision note appended
 
 
@@ -79,6 +79,21 @@ implementation. Provide concise evidence.
   Finished in 8.6551 seconds
   6 examples, 0 failures
   ```
+
+- Discovery: the zombie-overlap test can use `reconcileShardsOnce` directly with
+  a known one-bucket `ShardLease`: worker A starts one reader and stops renewing
+  while blocked on an unacknowledged event; after the two-second lease expires,
+  worker B claims the same consumer-group member and redelivers from the old
+  checkpoint. The raw delivery log is larger than the five-event input while
+  the idempotent sink contains exactly five rows, proving duplicates without
+  loss. A cleanup reconcile stops A's otherwise-zombie reader.
+
+- Validation: the poison handler threw synchronously on every delivery of one
+  event with `RetryPolicy 3`. The focused test observed exactly three handler
+  calls, one `kiroku.dead_letters` row with summary `max retry attempts exceeded
+  (3)` and attempt count 3, all three non-poison events in the sink, and no
+  `ShardReaderDied`. Together the four ack-coupling examples passed in 8.5129
+  seconds with zero failures.
 
 
 ## Decision Log

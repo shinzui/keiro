@@ -5,8 +5,8 @@ where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, contrazip6)
 import Control.Concurrent (forkIO, killThread, threadDelay)
-import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar)
-import Control.Exception (Exception, SomeException, evaluate, throwIO, try)
+import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar, tryPutMVar)
+import Control.Exception (Exception, SomeException, evaluate, finally, throwIO, try)
 import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -145,13 +145,16 @@ import Keiro.Subscription.Shard.Schema (
     renewLeaseTx,
  )
 import Keiro.Subscription.Shard.Worker (
+    ShardAck (..),
     ShardWorkerError (..),
     ShardedWorkerConfigError (..),
     ShardedWorkerOptions (..),
     acquireOutcome,
     defaultShardedWorkerOptions,
     mkShardedWorkerOptions,
+    reconcileShardsOnce,
     runShardedSubscriptionGroup,
+    runShardedSubscriptionGroupAck,
  )
 import Keiro.Telemetry qualified as Telemetry
 import Keiro.Test.Postgres (withFreshStore, withFreshStoreWith, withFreshStores2, withMigratedSuite)
@@ -5763,6 +5766,99 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             drained `shouldBe` True
             shardSinkCount store `shouldReturn` total
 
+        it "allows zombie overlap duplicates without losing an event" $ \store -> do
+            Right () <- Store.runStoreIO store $ Store.runTransaction (Tx.sql createShardSinkSql)
+            total <- seedOrders store 1 5
+            entered <- newEmptyMVar
+            release <- newEmptyMVar
+            deliveries <- newIORef ([] :: [EventId])
+            successor <- newIORef Nothing
+            readersA <- newIORef Map.empty
+            let sub = SubscriptionName "orders-ack-zombie"
+                opts =
+                    (defaultShardedWorkerOptions (Category (CategoryName "orders")) 1)
+                        { leaseTtl = 2
+                        , renewInterval = 0.2
+                        }
+                leaseA =
+                    ShardLease
+                        { subscriptionName = sub
+                        , workerId = WorkerId sampleUuid
+                        , shardCount = 1
+                        , leaseTtl = 2
+                        }
+                handlerA delivery = do
+                    let ev = delivery ^. #event
+                    modifyIORef' deliveries ((ev ^. #eventId) :)
+                    putMVar entered ()
+                    takeMVar release
+                    sinkHandler store 1 ev
+                    pure ShardAckOk
+                handlerB delivery = do
+                    let ev = delivery ^. #event
+                    modifyIORef' deliveries ((ev ^. #eventId) :)
+                    sinkHandler store 2 ev
+                    pure ShardAckOk
+                cleanup = do
+                    void (tryPutMVar release ())
+                    mSuccessor <- readIORef successor
+                    for_ mSuccessor killThread
+                    now <- getCurrentTime
+                    let cleanupWorker = WorkerId sampleUuid2
+                    _ <- Store.runStoreIO store $ Store.runTransaction $ do
+                        releaseShardsTx sub (WorkerId sampleUuid) [0]
+                        claimShardsTx sub cleanupWorker 1 now 30
+                    void (reconcileShardsOnce store leaseA opts readersA handlerA)
+            ( do
+                    Right () <- Store.runStoreIO store (ensureShards leaseA)
+                    void (reconcileShardsOnce store leaseA opts readersA handlerA)
+                    timeout 10_000_000 (takeMVar entered) `shouldReturn` Just ()
+                    -- A no longer renews, but its reader remains alive and blocked
+                    -- with one unacknowledged event. B can claim after expiry and
+                    -- must therefore receive that event again from the checkpoint.
+                    threadDelay 2_500_000
+                    workerB <- forkIO (runShardedSubscriptionGroupAck store sub opts handlerB)
+                    writeIORef successor (Just workerB)
+                    drained <- waitUntilSinkCount store total 20_000_000
+                    drained `shouldBe` True
+                    raw <- readIORef deliveries
+                    length raw `shouldSatisfy` (> total)
+                    shardSinkCount store `shouldReturn` total
+                )
+                `finally` cleanup
+
+        it "dead-letters a poison event after bounded retries and keeps draining" $ \store -> do
+            Right () <- Store.runStoreIO store $ Store.runTransaction (Tx.sql createShardSinkSql)
+            total <- seedOrders store 1 4
+            poisonDeliveries <- newIORef (0 :: Int)
+            errors <- newIORef []
+            let sub = SubscriptionName "orders-ack-poison"
+                opts =
+                    (defaultShardedWorkerOptions (Category (CategoryName "orders")) 1)
+                        { leaseTtl = 3
+                        , renewInterval = 0.2
+                        , handlerRetryDelay = KirokuSub.RetryDelay 0.05
+                        , retryPolicy = KirokuSub.RetryPolicy 3
+                        , onShardError = Just (\err -> modifyIORef' errors (err :))
+                        }
+                handler ev = do
+                    let orderNumber = parseEither (withObject "OrderPlaced" (.: "n")) (ev ^. #payload)
+                    if orderNumber == Right (1 :: Int)
+                        then do
+                            modifyIORef' poisonDeliveries (+ 1)
+                            throwIO (userError "poison order")
+                        else sinkHandler store 1 ev
+            worker <- forkIO (runShardedSubscriptionGroup store sub opts handler)
+            drained <- waitUntilSinkCount store (total - 1) 20_000_000
+            details <- shardDeadLetterDetails store "orders-ack-poison"
+            attempts <- readIORef poisonDeliveries
+            seenErrors <- readIORef errors
+            killThread worker
+            drained `shouldBe` True
+            attempts `shouldBe` 3
+            details `shouldBe` (1, Just "max retry attempts exceeded (3)", Just 3)
+            seenErrors `shouldSatisfy` all (\case ShardReaderDied _ _ -> False; _ -> True)
+
     describe "Keiro.Workflow observability" $ around (withFreshStore fixture) $ do
         -- The headline operability signal: executed (real work) vs replayed
         -- (recorded history), recorded by the runtime through an SDK meter and read
@@ -8829,6 +8925,25 @@ countShardSinkStmt =
         "SELECT count(*) FROM shard_sink"
         E.noParams
         (D.singleRow (fromIntegral <$> D.column (D.nonNullable D.int8)))
+
+shardDeadLetterDetails :: Store.KirokuStore -> Text -> IO (Int, Maybe Text, Maybe Int)
+shardDeadLetterDetails store subscription =
+    either (const (0, Nothing, Nothing)) id
+        <$> Store.runStoreIO store (Store.runTransaction (Tx.statement subscription shardDeadLetterDetailsStmt))
+
+shardDeadLetterDetailsStmt :: Statement Text (Int, Maybe Text, Maybe Int)
+shardDeadLetterDetailsStmt =
+    preparable
+        "SELECT count(*)::bigint, max(reason_summary), max(attempt_count) \
+        \FROM kiroku.dead_letters \
+        \WHERE subscription_name = $1 AND consumer_group_member = 0"
+        (E.param (E.nonNullable E.text))
+        ( D.singleRow $
+            (,,)
+                <$> (fromIntegral <$> D.column (D.nonNullable D.int8))
+                <*> D.column (D.nullable D.text)
+                <*> (fmap fromIntegral <$> D.column (D.nullable D.int4))
+        )
 
 -- The largest number of distinct workers that processed any single stream. 1
 -- means perfectly disjoint ownership (no stream split across workers).
