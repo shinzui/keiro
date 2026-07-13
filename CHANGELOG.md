@@ -23,6 +23,21 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 - `mkEventStream` now rejects snapshot codecs that cannot encode their initial
   state and register file. Snapshot-enabled streams built from
   `emptyRegFile` must initialize every slot before validation.
+- Keiro now requires post-MP-16 Keiki 0.2. Stream validation runs the new
+  head-recoverability, inversion-ambiguity, unguarded-input-read, and
+  state-changing-silent-edge checks; any warning makes `mkEventStream` reject
+  the stream at startup.
+- `HydrationReplayFailed` now carries a typed `HydrationReplayReason` alongside
+  the failing stream version. The reasons distinguish no inverting edge,
+  ambiguous inversion, queue mismatch, and a truncated multi-event chain.
+  `CommandError` also gains `CommandAmbiguous`, carrying matched edge indices.
+- A command matching multiple transitions is now reported as
+  `CommandAmbiguous` instead of `CommandRejected`. Process managers and routers
+  halt on this aggregate-definition bug, while generated timer dispositions
+  route it through their on-error arm rather than benign on-reject handling.
+- The `hydration_replay_failed` telemetry class is replaced by four
+  reason-specific `error.type` values, and `command_ambiguous` is new.
+  Dashboards keyed on the old hydration class must be updated.
 
 ### Other Changes
 
@@ -47,6 +62,8 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   codec version and shape hash, while an incompatible codec can replace a newer
   row to permit rollback. Upgrade notes cover the full-replay miss caused by
   Keiki EP-78's stable shape hash.
+- Kiroku 0.3/0.2, Keiki 0.2, and pg-migrate 1.0 now resolve from Hackage; their
+  obsolete Git package overrides and local Cabal overlay are no longer needed.
 
 ## 0.1.0.0 — 2026-07-05
 

@@ -97,8 +97,7 @@ jitsurei-db-create:
 
 [group('jitsurei')]
 jitsurei-migrate: jitsurei-db-create
-    mkdir -p .dev/codd-expected-schema
-    KEIRO_MIGRATE_NO_CHECK=1 CODD_CONNECTION="host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}" CODD_MIGRATION_DIRS=unused-for-embedded-migrations CODD_EXPECTED_SCHEMA_DIR=.dev/codd-expected-schema CODD_SCHEMAS=kiroku cabal run keiro-migrate
+    cabal run keiro-migrate -- up --database-url "host={{pg_host}} dbname={{jitsurei_database}} user={{pg_user}}"
 
 [group('jitsurei')]
 jitsurei-fulfillment: jitsurei-migrate

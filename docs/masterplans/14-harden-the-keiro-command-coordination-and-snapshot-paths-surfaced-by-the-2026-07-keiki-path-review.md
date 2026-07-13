@@ -112,7 +112,7 @@ a kiroku-side child plan for the subscription bridge (rejected: kiroku already s
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 95 | Migrate to post-MP-16 keiki and adopt the structured replay and step APIs | docs/plans/95-migrate-to-post-mp-16-keiki-and-adopt-the-structured-replay-and-step-apis.md | keiki MP-16 (external) | None | In Progress |
+| 95 | Migrate to post-MP-16 keiki and adopt the structured replay and step APIs | docs/plans/95-migrate-to-post-mp-16-keiki-and-adopt-the-structured-replay-and-step-apis.md | keiki MP-16 (external) | None | Complete |
 | 96 | Ack-coupled sharded subscription delivery with rebalance-under-load coverage | docs/plans/96-ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-coverage.md | None | None | Complete |
 | 97 | Stable router idempotency keys derived from target stream names | docs/plans/97-stable-router-idempotency-keys-derived-from-target-stream-names.md | None | None | Complete |
 | 98 | Snapshot subsystem hardening: uninit-register guards, read-side telemetry, and workflow write alignment | docs/plans/98-snapshot-subsystem-hardening-uninit-register-guards-read-side-telemetry-and-workflow-write-alignment.md | None | EP-95 | Complete |
@@ -212,9 +212,9 @@ where its truncation guard reports failures through the migrated hydration error
 
 ## Progress
 
-- [ ] EP-95: keiro compiles against post-MP-16 keiki; Validate.hs renders the four new keiki warning constructors
-- [ ] EP-95: hydrate/hydrateFull folds replaced by keiki's seedable structured fold; hydration failures carry event index and typed reason
-- [ ] EP-95: command evaluation distinguishes ambiguous guards from business rejection in `CommandError` and `error.type`
+- [x] EP-95: keiro compiles against post-MP-16 keiki; Validate.hs renders the four new keiki warning constructors
+- [x] EP-95: hydrate/hydrateFull folds replaced by keiki's seedable structured fold; hydration failures carry event index and typed reason
+- [x] EP-95: command evaluation distinguishes ambiguous guards from business rejection in `CommandError` and `error.type`
 - [x] EP-96: sharded worker acks after the handler returns; batch-tail crash/rebalance loses nothing
 - [x] EP-96: rebalance-under-load and zombie-overlap tests exist and pass
 - [x] EP-97: router event ids derived from target stream names; unstable-resolve redelivery test passes; dropped-target semantics decided and documented
@@ -303,7 +303,11 @@ where its truncation guard reports failures through the migrated hydration error
   user confirmed pg-migrate and the latest Kiroku releases were on Hackage. Removing
   both projects' source pins and the local overlay now resolves
   `kiroku-store-0.3.0.0`, `kiroku-store-migrations-0.2.0.0`, and pg-migrate 1.0 from
-  Hackage; default `cabal build all` and all 308 `keiro-test` examples pass.
+  Hackage; default `cabal build all` and all 309 `keiro-test` examples pass.
+- EP-95's optional repository-wide verification found the Jitsurei migration recipe
+  still spoke the retired bare/Codd CLI. The recipe now uses native pg-migrate's
+  explicit `up --database-url` form. Verification passed against a fresh task-scoped
+  database; the existing legacy developer database was intentionally left untouched.
 
 
 ## Decision Log
@@ -375,9 +379,23 @@ where its truncation guard reports failures through the migrated hydration error
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-95 completed Phase 1's keiki alignment. The durable boundary now rejects all four
+new replay-breaking warnings, hydration reports exact versions and typed structured
+reasons through a single seeded fold, and command ambiguity is distinct from business
+rejection through `CommandAmbiguous` and `command_ambiguous` telemetry. This unblocks
+EP-99 directly and gives EP-100/EP-102 the planned failure vocabulary.
+
+The dependency graph also became simpler than authored: Keiki 0.2, Kiroku 0.3/0.2,
+and pg-migrate 1.0 all resolve from Hackage, so their Git pins and the local Cabal
+overlay are gone. Final evidence is `cabal build all`, 309 Keiro examples, the PGMQ
+and Jitsurei suites, formatting, and a fresh-database repository-wide verification
+including migration and site checks.
 
 ## Revision Notes
+
+- 2026-07-13: Completed EP-95. Marked its registry row and three outcomes complete;
+  adopted structured replay/step diagnostics and reason-specific telemetry, recorded
+  the 309-example/full-workspace verification, and unblocked EP-99's hard dependency.
 
 - 2026-07-13: Removed the now-obsolete Kiroku and pg-migrate Git pins plus the local
   Cabal overlay, constrained Kiroku to its published 0.3/0.2 package lines, and proved

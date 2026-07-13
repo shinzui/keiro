@@ -96,9 +96,9 @@ Use this checklist to track granular steps; split partially-done items into "don
 - [x] (2026-07-13 15:37Z) M3: `evaluateCommand` rewritten over `Keiki.stepEither`; `CommandAmbiguous` constructor added
 - [x] (2026-07-13 15:37Z) M3: `commandErrorClass` and `isTransientCommandError` updated for `CommandAmbiguous`; all `CommandError` match sites audited (list in Context)
 - [x] (2026-07-13 15:37Z) M3: ambiguity tests added (`CommandAmbiguous [0,1]` end-to-end with no append and `command_ambiguous` telemetry; `ackForCommandError` halts on it)
-- [ ] M4: full sweep green (`cabal build all`, `just haskell-test`, `nix fmt -- --no-cache`); in-repo `jitsurei` and `keiro-dsl` recompile without edits (verify, do not assume)
-- [ ] M4: `CHANGELOG.md` entry written, including the behavior-visible ambiguity change
-- [ ] M4: master plan registry row EP-95 flipped to Complete; its three EP-95 progress boxes ticked; Outcomes & Retrospective written
+- [x] (2026-07-13 15:45Z) M4: full sweep green (`cabal build all`, `just haskell-test`, `nix fmt -- --no-cache`); in-repo `jitsurei` and `keiro-dsl` recompiled without source edits
+- [x] (2026-07-13 15:45Z) M4: `CHANGELOG.md` entry written, including the behavior-visible ambiguity and telemetry changes
+- [x] (2026-07-13 15:45Z) M4: master plan registry row EP-95 flipped to Complete; its three EP-95 progress boxes ticked; Outcomes & Retrospective written
 
 
 ## Surprises & Discoveries
@@ -133,7 +133,7 @@ implementation, with concise evidence.
   remains possible and testable.
 - (2026-07-13; resolved below) The ignored, user-owned `cabal.project.local` combined local
   kiroku 0.3 packages with `cabal.project`'s kiroku 0.2.1 source pins, so default
-  dependency solving fails before compilation. Validation uses a temporary project
+  dependency solving failed before compilation. Initial validation used a temporary project
   file that imports only `cabal.project`; through it Cabal downloaded both keiki
   0.2.0.0 packages from Hackage, `cabal build all` passed, all four focused warning
   specs passed, and the production-stream audit remained clean. The local overlay is
@@ -155,6 +155,11 @@ implementation, with concise evidence.
   the in-repo Jitsurei rejection assertions and generated DSL `CommandRejected`
   disposition matches required no edits, confirming they remain no-edge/no-match
   business outcomes rather than ambiguity paths.
+- (2026-07-13) The optional `just verify` gate exposed a stale Jitsurei migration
+  recipe that still invoked the pre-pg-migrate bare/Codd CLI. It now calls
+  `keiro-migrate up --database-url …`. The existing developer database has legacy
+  schema objects without the native ledger, so it was preserved untouched; the gate
+  passed against a fresh task-scoped database, which was removed afterward.
 
 (Add implementation-time entries here.)
 
@@ -301,9 +306,23 @@ implementation, with concise evidence.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation. Compare against Purpose: do the
-corrupted-stream tests name typed reasons? Is ambiguity distinguishable from rejection
-end-to-end, including in `error.type`?)
+EP-95 is complete. Keiro consumes Keiki 0.2 from Hackage, renders and rejects all four
+new replay-safety warnings, and replaces its duplicated hydration folds with one
+seedable `replayEvents` path. Corrupted-stream coverage now pins the failing stream
+version and each typed `HydrationReplayReason`.
+
+Command evaluation now uses `stepEither`: genuine no-edge/no-match outcomes remain
+`CommandRejected`, while a validated runtime-overlap witness returns
+`CommandAmbiguous [0,1]`, appends nothing, records `error.type=command_ambiguous`, and
+halts process-manager/router delivery as a deterministic definition error. Existing
+Jitsurei business-rejection assertions and generated DSL dispositions stayed green
+without source changes.
+
+The final default-Hackage matrix passed `cabal build all`, 309 Keiro examples, 50
+PGMQ examples (2 expected pending), 16 Jitsurei examples, diagram freshness, and
+formatting. A fresh-database `just verify` additionally passed process-compose
+validation, the Jitsurei demo, a 122-page site link check, and 10 migration examples.
+The Kiroku/pg-migrate Git pins and `cabal.project.local` are no longer needed.
 
 
 ## Context and Orientation
@@ -1087,6 +1106,11 @@ keiki's `StateChangingEpsilon` and `HeadUnrecoverable` checks at the durable bou
 and rebases on this plan's render arms; it does not add a duplicate silent-edge scan.
 
 ---
+
+Revision note (2026-07-13): completed EP-95. Adopted structured replay and step
+failures, added typed hydration and ambiguity outcomes with end-to-end coverage,
+updated the changelog, repaired the optional Jitsurei verification recipe for the
+native pg-migrate CLI, and closed the MasterPlan registry/progress entries.
 
 Revision note (2026-07-13): followed the user's dependency-cleanup directive after
 pg-migrate and the latest Kiroku packages reached Hackage. Removed the Kiroku and
