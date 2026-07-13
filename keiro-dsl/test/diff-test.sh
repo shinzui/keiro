@@ -36,4 +36,30 @@ else
   echo "FAIL: v2 + upcaster was wrongly flagged breaking"; exit 1
 fi
 
+echo "== 3) field type change must be BREAKING with EvtFieldTypeChanged =="
+cp "$FIX/reservation-fieldtype.keiro" "$DEMO/svc.keiro"
+if output="$("$EXE" diff --since HEAD "$DEMO/svc.keiro" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: field type change was not flagged breaking"; exit 1
+elif [[ "$output" == *"[EvtFieldTypeChanged]"* ]]; then
+  echo "$output"
+  echo "ok: field type change blocks the merge with the right code"
+else
+  echo "$output"
+  echo "FAIL: field type change used the wrong diagnostic code"; exit 1
+fi
+
+echo "== 4) v1 -> v3 with only v2 upcaster must be BREAKING =="
+cp "$FIX/reservation-v3-dangling.keiro" "$DEMO/svc.keiro"
+if output="$("$EXE" diff --since HEAD "$DEMO/svc.keiro" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: dangling upcaster jump was not flagged breaking"; exit 1
+elif [[ "$output" == *"[EvtVersionMissingUpcaster]"* ]]; then
+  echo "$output"
+  echo "ok: dangling upcaster chain blocks the merge"
+else
+  echo "$output"
+  echo "FAIL: dangling upcaster jump used the wrong diagnostic code"; exit 1
+fi
+
 echo "PASS: diff --since gates breaking event changes"

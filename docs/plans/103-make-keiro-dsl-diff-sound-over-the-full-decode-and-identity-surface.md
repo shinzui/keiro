@@ -76,13 +76,13 @@ Milestone 1 (registry restructure, parity):
 
 Milestone 2 (aggregate-family decode soundness — A1, A2, A3, A5, A7):
 
-- [ ] Field comparison by `(name, type)`; `EvtFieldTypeChanged` breaking rule (direct fields and `fields(Command)` indirection).
-- [ ] Correct codes for removal (`EvtFieldRemovedSameVersion`) and version decrease (`EvtVersionDecreased`).
-- [ ] Version-bump rule anchored to the OLD spec's version (fixes the dangling-upcaster hole).
-- [ ] Spec-level enum differ (`EnumCtorRemoved`, `EnumWireSpellingChanged`, additions additive).
-- [ ] Wire-spec differ with default normalization (`WireSpecChanged`).
-- [ ] Un-deprecation advisory (`EventUndeprecated`).
-- [ ] Red/green fixtures committed under `keiro-dsl/test/fixtures/`; unit tests per code; `diff-test.sh` cases 3–4 added.
+- [x] (2026-07-13 20:04Z) Field comparison by `(name, type)`; `EvtFieldTypeChanged` breaking rule (direct fields and `fields(Command)` indirection).
+- [x] (2026-07-13 20:04Z) Correct codes for removal (`EvtFieldRemovedSameVersion`) and version decrease (`EvtVersionDecreased`).
+- [x] (2026-07-13 20:04Z) Version-bump rule anchored to the OLD spec's version (fixes the dangling-upcaster hole).
+- [x] (2026-07-13 20:04Z) Spec-level enum differ (`EnumCtorRemoved`, `EnumWireSpellingChanged`, additions additive).
+- [x] (2026-07-13 20:04Z) Wire-spec differ with default normalization (`WireSpecChanged`).
+- [x] (2026-07-13 20:04Z) Un-deprecation advisory (`EventUndeprecated`).
+- [x] (2026-07-13 20:04Z) Red/green fixtures committed under `keiro-dsl/test/fixtures/`; unit tests per code; `diff-test.sh` cases 3–4 added (69 examples, 0 failures; every new fixture also passes `keiro-dsl check`).
 
 Milestone 3 (cross-node decode surface — A4):
 
@@ -132,6 +132,11 @@ exit=0
   The unit suite increased from 58 to 59 examples and remained green; the new example
   proves every `NodeFamily` appears exactly once and every exclusion has a non-empty
   rationale.
+- Milestone 2 validation (2026-07-13 20:04Z) showed the old-spec anchor is sufficient
+  to reject the audited v1→v3 false additive without reconstructing unavailable history:
+  the CLI now reports `EvtVersionMissingUpcaster` and exits 1. Direct fields and
+  `fields(Command)` both report `EvtFieldTypeChanged`; all nine mutation fixtures remain
+  valid single specs, separating evolution failures from validator failures.
 
 (Add new entries here as implementation proceeds.)
 

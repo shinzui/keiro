@@ -7,7 +7,7 @@ module Main (main) where
 import Data.List (sort)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Keiro.Dsl.Diff (Change (..), ChangeKind (..), FamilyDiff (..), NodeFamily, diffSpecs, familyRegistry, isBreaking)
+import Keiro.Dsl.Diff (Change (..), ChangeKind (..), FamilyDiff (..), NodeFamily, diffSpecs, familyRegistry, isAdvisory, isBreaking)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
@@ -217,6 +217,40 @@ main = hspec $ do
         it "reports no breaking change when the spec is unchanged" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation.keiro"
             any isBreaking cs `shouldBe` False
+        it "classifies a direct event field type change as EvtFieldTypeChanged" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-fieldtype.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtFieldTypeChanged]
+        it "resolves fields(Command) before comparing event field types" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-cmdfieldtype.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtFieldTypeChanged]
+        it "uses EvtFieldRemovedSameVersion for an unchanged-version removal" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-fieldremove.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtFieldRemovedSameVersion]
+        it "uses EvtVersionDecreased for a version decrease" $ do
+            cs <- diffFixtures "test/fixtures/reservation-v2.keiro" "test/fixtures/reservation.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtVersionDecreased]
+        it "rejects a v1 to v3 jump whose only upcaster starts at v2" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-v3-dangling.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtVersionMissingUpcaster]
+        it "classifies an enum constructor removal as EnumCtorRemoved" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-enumdrop.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just EnumCtorRemoved]
+        it "classifies an enum wire-spelling change as EnumWireSpellingChanged" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-enumwire.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just EnumWireSpellingChanged]
+        it "classifies an enum constructor addition as additive" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-enumadd.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckSubject k | Additive k <- cs] `shouldContain` ["BlackTag"]
+        it "classifies an effective wire convention change as WireSpecChanged" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-wire.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just WireSpecChanged]
+        it "keeps deprecation additive and reports un-deprecation as EventUndeprecated" $ do
+            deprecated <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-deprecated.keiro"
+            any isBreaking deprecated `shouldBe` False
+            restored <- diffFixtures "test/fixtures/reservation-deprecated.keiro" "test/fixtures/reservation.keiro"
+            any isAdvisory restored `shouldBe` True
+            [ckCode k | Advisory k <- restored] `shouldContain` [Just EventUndeprecated]
 
     describe "module placement (M1)" $ do
         it "GeneratedPrefix is today's namespace (Generated.<Ctx>.<Node>, holes at <Ctx>.<Node>)" $ do

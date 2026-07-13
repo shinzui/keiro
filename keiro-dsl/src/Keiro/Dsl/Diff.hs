@@ -164,7 +164,7 @@ runFamily _ (OutOfDiffScope _) = []
 -- behaviour but neither interpret stored bytes nor derive persisted keys.
 -- Shared id and enum declarations become diffed in Milestones 2 and 4.
 sharedDeclarationDiff :: DiffEnv -> [Change]
-sharedDeclarationDiff _ = []
+sharedDeclarationDiff = enumDiff
 
 nodeAggregate :: Node -> Maybe Aggregate
 nodeAggregate (NAggregate a) = Just a
@@ -182,6 +182,7 @@ aggregatePairDiff :: Aggregate -> Aggregate -> [Change]
 aggregatePairDiff oldAgg newAgg =
     concatMap (eventDiff oldAgg newAgg) (aggEvents newAgg)
         ++ removedEvents oldAgg newAgg
+        ++ wireDiff oldAgg newAgg
 
 addedAggregateDiff :: Aggregate -> [Change]
 addedAggregateDiff newAgg =
@@ -203,25 +204,26 @@ eventDiff oldAgg newAgg e =
             [additive (aggName newAgg) "event" (evName e) "new event type"]
         Just oldE
             | evVersion e > evVersion oldE ->
-                if evUpcastFrom e `hasSource` (evVersion e - 1)
-                    then [additive (aggName newAgg) "event" (evName e) ("new version v" <> tInt (evVersion e) <> " with upcaster from v" <> tInt (evVersion e - 1))]
-                    else [breaking (aggName newAgg) "event" (evName e) EvtVersionMissingUpcaster ("version bumped to v" <> tInt (evVersion e) <> " with no contiguous upcaster (gap in chain)")]
+                if evVersion e == evVersion oldE + 1 && evUpcastFrom e `hasSource` evVersion oldE
+                    then [additive (aggName newAgg) "event" (evName e) ("new version v" <> tInt (evVersion e) <> " with upcaster from v" <> tInt (evVersion oldE))]
+                    else
+                        [ breaking
+                            (aggName newAgg)
+                            "event"
+                            (evName e)
+                            EvtVersionMissingUpcaster
+                            ( "version changed from v"
+                                <> tInt (evVersion oldE)
+                                <> " to v"
+                                <> tInt (evVersion e)
+                                <> " without the required contiguous upcaster from v"
+                                <> tInt (evVersion oldE)
+                            )
+                        ]
             | evVersion e < evVersion oldE ->
-                [breaking (aggName newAgg) "event" (evName e) EvtFieldAddedWithoutBump ("version decreased from v" <> tInt (evVersion oldE) <> " to v" <> tInt (evVersion e))]
+                [breaking (aggName newAgg) "event" (evName e) EvtVersionDecreased ("version decreased from v" <> tInt (evVersion oldE) <> " to v" <> tInt (evVersion e))]
             | otherwise ->
-                let oldFields = eventFieldNames oldAgg oldE
-                    newFields = eventFieldNames newAgg e
-                    added = newFields \\ oldFields
-                    removed = oldFields \\ newFields
-                 in if not (null added)
-                        then [breaking (aggName newAgg) "event" (evName e) EvtFieldAddedWithoutBump ("field(s) " <> commas added <> " added at the same version v" <> tInt (evVersion e) <> " without a version bump or upcaster")]
-                        else
-                            if not (null removed)
-                                then [breaking (aggName newAgg) "event" (evName e) EvtFieldAddedWithoutBump ("field(s) " <> commas removed <> " removed at the same version v" <> tInt (evVersion e))]
-                                else
-                                    [ additive (aggName newAgg) "event" (evName e) "event deprecated (still decodable)"
-                                    | evDeprecated e && not (evDeprecated oldE)
-                                    ]
+                sameVersionEventDiff oldAgg newAgg oldE e
 
 {- | Events present in the old aggregate but absent in the new one. Removing a
 tag entirely is breaking; keeping it as a deprecated event is safe.
@@ -237,11 +239,142 @@ hasSource :: Maybe (Int, Hole) -> Int -> Bool
 hasSource (Just (m, _)) n = m == n
 hasSource Nothing _ = False
 
-eventFieldNames :: Aggregate -> Event -> [Name]
-eventFieldNames agg e = case evBody e of
-    EventFields fs -> map fieldName fs
+eventFieldSigs :: Aggregate -> Event -> [(Name, Maybe Name)]
+eventFieldSigs agg e = case evBody e of
+    EventFields fs -> map fieldSig fs
     EventFromCommand cn ->
-        maybe [] (map fieldName . cmdFields) (find ((== cn) . cmdName) (aggCommands agg))
+        maybe [] (map fieldSig . cmdFields) (find ((== cn) . cmdName) (aggCommands agg))
+  where
+    fieldSig f = (fieldName f, fieldType f)
+
+sameVersionEventDiff :: Aggregate -> Aggregate -> Event -> Event -> [Change]
+sameVersionEventDiff oldAgg newAgg oldE newE =
+    addedChanges
+        ++ removedChanges
+        ++ typeChanges
+        ++ deprecationChanges
+  where
+    oldFields = eventFieldSigs oldAgg oldE
+    newFields = eventFieldSigs newAgg newE
+    oldNames = map fst oldFields
+    newNames = map fst newFields
+    added = newNames \\ oldNames
+    removed = oldNames \\ newNames
+    changed =
+        [ (field, oldType, newType)
+        | (field, oldType) <- oldFields
+        , Just newType <- [lookup field newFields]
+        , oldType /= newType
+        ]
+    addedChanges =
+        [ breaking (aggName newAgg) "event" (evName newE) EvtFieldAddedWithoutBump ("field(s) " <> commas added <> " added at the same version v" <> tInt (evVersion newE) <> " without a version bump or upcaster")
+        | not (null added)
+        ]
+    removedChanges =
+        [ breaking (aggName newAgg) "event" (evName newE) EvtFieldRemovedSameVersion ("field(s) " <> commas removed <> " removed at the same version v" <> tInt (evVersion newE))
+        | not (null removed)
+        ]
+    typeChanges =
+        [ breaking
+            (aggName newAgg)
+            "event-field"
+            (evName newE <> "." <> field)
+            EvtFieldTypeChanged
+            ("type changed " <> renderFieldType oldType <> " -> " <> renderFieldType newType <> " at the same version v" <> tInt (evVersion newE))
+        | (field, oldType, newType) <- changed
+        ]
+    deprecationChanges
+        | not (evDeprecated oldE) && evDeprecated newE =
+            [additive (aggName newAgg) "event" (evName newE) "event deprecated (still decodable)"]
+        | evDeprecated oldE && not (evDeprecated newE) =
+            [advisory (aggName newAgg) "event" (evName newE) EventUndeprecated "event returned to the write surface; old payloads remain decodable but new writes resume"]
+        | otherwise = []
+
+renderFieldType :: Maybe Name -> Text
+renderFieldType Nothing = "(declared)"
+renderFieldType (Just name) = name
+
+wireDiff :: Aggregate -> Aggregate -> [Change]
+wireDiff oldAgg newAgg
+    | effectiveWire (aggWire oldAgg) == effectiveWire (aggWire newAgg) = []
+    | otherwise =
+        [ breaking
+            (aggName newAgg)
+            "wire"
+            (aggName newAgg)
+            WireSpecChanged
+            ("effective wire convention changed " <> renderWire (effectiveWire (aggWire oldAgg)) <> " -> " <> renderWire (effectiveWire (aggWire newAgg)))
+        ]
+
+effectiveWire :: Maybe WireSpec -> (Text, Text)
+effectiveWire Nothing = ("ctorName", "camelCase")
+effectiveWire (Just w) = (wireKind w, wireFields w)
+
+renderWire :: (Text, Text) -> Text
+renderWire (kindName, fieldNames) = "kind=" <> kindName <> ", fields=" <> fieldNames
+
+enumDiff :: DiffEnv -> [Change]
+enumDiff env =
+    concatMap (uncurry (enumPairDiff (deOld env))) (prMatched paired)
+        ++ concatMap addedEnumDiff (prAdded paired)
+        ++ concatMap (removedEnumDiff (deOld env)) (prRemoved paired)
+  where
+    paired = pairDeclarations enumName (specEnums (deOld env)) (specEnums (deNew env))
+
+enumPairDiff :: Spec -> EnumDecl -> EnumDecl -> [Change]
+enumPairDiff oldSpec oldEnum newEnum =
+    [ breaking (enumName newEnum) "enum-constructor" ctor EnumCtorRemoved ("constructor removed; stored wire value '" <> wire <> "' no longer decodes" <> enumUsageSuffix oldSpec (enumName oldEnum))
+    | (ctor, wire) <- enumCtors oldEnum
+    , isNothing (lookup ctor (enumCtors newEnum))
+    ]
+        ++ [ breaking (enumName newEnum) "enum-constructor" ctor EnumWireSpellingChanged ("wire spelling changed '" <> oldWire <> "' -> '" <> newWire <> "'; stored values using the old spelling no longer decode" <> enumUsageSuffix oldSpec (enumName oldEnum))
+           | (ctor, oldWire) <- enumCtors oldEnum
+           , Just newWire <- [lookup ctor (enumCtors newEnum)]
+           , oldWire /= newWire
+           ]
+        ++ [ additive (enumName newEnum) "enum-constructor" ctor ("new constructor with wire spelling '" <> wire <> "'")
+           | (ctor, wire) <- enumCtors newEnum
+           , isNothing (lookup ctor (enumCtors oldEnum))
+           ]
+
+addedEnumDiff :: EnumDecl -> [Change]
+addedEnumDiff enumDecl =
+    [additive (enumName enumDecl) "enum-constructor" ctor ("new enum constructor with wire spelling '" <> wire <> "'") | (ctor, wire) <- enumCtors enumDecl]
+
+removedEnumDiff :: Spec -> EnumDecl -> [Change]
+removedEnumDiff oldSpec enumDecl =
+    [ breaking (enumName enumDecl) "enum-constructor" ctor EnumCtorRemoved ("enum removed; stored wire value '" <> wire <> "' no longer decodes" <> enumUsageSuffix oldSpec (enumName enumDecl))
+    | (ctor, wire) <- enumCtors enumDecl
+    ]
+
+enumUsageSuffix :: Spec -> Name -> Text
+enumUsageSuffix spec enumType = case enumUsages spec enumType of
+    [] -> ""
+    usages -> "; used by " <> commas usages
+
+enumUsages :: Spec -> Name -> [Text]
+enumUsages spec enumType =
+    [aggName agg <> ".reg." <> regName reg | agg <- aggregates, reg <- aggRegs agg, regType reg == enumType]
+        ++ [ aggName agg <> ".event." <> evName event <> "." <> field
+           | agg <- aggregates
+           , event <- aggEvents agg
+           , (field, Just fieldTypeName) <- eventFieldSigs agg event
+           , fieldTypeName == enumType
+           ]
+  where
+    aggregates = [agg | NAggregate agg <- specNodes spec]
+
+pairDeclarations :: (n -> Name) -> [n] -> [n] -> Paired n
+pairDeclarations nameOf oldNodes newNodes =
+    Paired
+        { prMatched =
+            [ (oldNode, newNode)
+            | newNode <- newNodes
+            , Just oldNode <- [find ((== nameOf newNode) . nameOf) oldNodes]
+            ]
+        , prAdded = [newNode | newNode <- newNodes, isNothing (find ((== nameOf newNode) . nameOf) oldNodes)]
+        , prRemoved = [oldNode | oldNode <- oldNodes, isNothing (find ((== nameOf oldNode) . nameOf) newNodes)]
+        }
 
 {- | Extension seam used by the workflow-evolution plan. Milestone 3 replaces
 this temporary no-op with the conservative workflow-body classifier.
@@ -254,6 +387,9 @@ additive n facet subj detail = Additive (ChangeKind n facet subj Nothing detail)
 
 breaking :: Name -> Text -> Text -> DiagnosticCode -> Text -> Change
 breaking n facet subj c detail = Breaking (ChangeKind n facet subj (Just c) detail)
+
+advisory :: Name -> Text -> Text -> DiagnosticCode -> Text -> Change
+advisory n facet subj c detail = Advisory (ChangeKind n facet subj (Just c) detail)
 
 commas :: [Text] -> Text
 commas = T.intercalate ", "
