@@ -137,7 +137,7 @@ three plans register with it).
 |---|-------|------|-----------|-----------|--------|
 | 103 | Make keiro-dsl diff sound over the full decode and identity surface | docs/plans/103-make-keiro-dsl-diff-sound-over-the-full-decode-and-identity-surface.md | None | None | Complete |
 | 104 | Close the keiro-dsl validator soundness holes: workflows, rules, cross-node references, and disposition tables | docs/plans/104-close-the-keiro-dsl-validator-soundness-holes-workflows-rules-cross-node-references-and-disposition-tables.md | None | None | Complete |
-| 105 | Fix keiro-dsl notation integrity: string escaping, duplicate clauses, numeric bounds, and identifier hygiene | docs/plans/105-fix-keiro-dsl-notation-integrity-string-escaping-duplicate-clauses-numeric-bounds-and-identifier-hygiene.md | None | None | In Progress |
+| 105 | Fix keiro-dsl notation integrity: string escaping, duplicate clauses, numeric bounds, and identifier hygiene | docs/plans/105-fix-keiro-dsl-notation-integrity-string-escaping-duplicate-clauses-numeric-bounds-and-identifier-hygiene.md | None | None | Complete |
 | 106 | Harden the keiro-dsl scaffolder: template injection, firewall completeness, collision and stale-module detection, and faithful policy lowering | docs/plans/106-harden-the-keiro-dsl-scaffolder-template-injection-firewall-completeness-collision-and-stale-module-detection-and-faithful-policy-lowering.md | None | EP-104, EP-105 | Not Started |
 | 107 | Add a first-class read-model node with registration, schema, and consistency to keiro-dsl | docs/plans/107-add-a-first-class-read-model-node-with-registration-schema-and-consistency-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Not Started |
 | 108 | Add a router node and rejection and poison policy surfaces to keiro-dsl | docs/plans/108-add-a-router-node-and-rejection-and-poison-policy-surfaces-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Not Started |
@@ -283,8 +283,8 @@ EP-106 in parallel alongside the front of that path.
 - [x] EP-103: version-chain contiguity checked against the old spec; identity-bearing renames (workflow stable name, id prefixes) Breaking; corrected diagnostic codes
 - [x] EP-104: workflows and rules validated (duplicate labels rejected, rule-body clock/scope bypass closed, rule totality)
 - [x] EP-104: process/operation cross-refs resolved; disposition completeness and duplicate-row shadowing; topic affinity; duplicate-name rules; workqueue fixture trio fully checked
-- [ ] EP-105: string escaping round-trips adversarial input; mapPartial has concrete syntax; duplicate wire/projection/goto rejected
-- [ ] EP-105: numeric bounds enforced; identifier-hygiene diagnostics; round-trip generator covers all node families; unit suite cwd-independent
+- [x] EP-105: string escaping round-trips adversarial input; mapPartial has concrete syntax; duplicate wire/projection/goto rejected
+- [x] EP-105: numeric bounds enforced; identifier-hygiene diagnostics; round-trip generator covers all node families; unit suite cwd-independent
 - [ ] EP-106: payload splice escaped (injection closed); canonical firewall list shared by CLI and test with token-aware scan; breach handling decided
 - [ ] EP-106: path-collision/stale-module/banner detection; every `new` skeleton scaffolds compiling code; backoff and duration lowering faithful; harness handles Int; conformance pin includes imports
 - [ ] EP-107: `readmodel` node parses, validates, round-trips; Strong-on-inline-only impossible; schema clause threads into projection holes
@@ -421,8 +421,14 @@ EP-104 completed the validator-soundness work stream. It added row-precise diagn
 workflow/rule/operation/process reference validation, collision detection, disposition
 and topic safety, exact status maps, faithful queue fixture validation, and dispatch
 dedup resolution. Its full package battery passed all 17 test suites. The initiative is
-not complete: EP-105 through EP-110 remain, with EP-106 and EP-107 carrying the two
-explicit handoffs recorded in Surprises & Discoveries.
+not complete.
+
+EP-105 completed the notation-integrity work stream. It delivered lossless escaping,
+reachable partial status maps, positioned duplicate and overflow errors, ASCII and
+Haskell identifier hygiene, portable fixtures, and all-family adversarial round-trip
+coverage. Its full package battery also passed all 17 suites. EP-106 through EP-110
+remain; EP-106 owns the generated-Haskell side of the escaping contract, and the Phase 3
+verticals must register every new node keyword in the parser's structural-word set.
 
 
 ## Revision Notes

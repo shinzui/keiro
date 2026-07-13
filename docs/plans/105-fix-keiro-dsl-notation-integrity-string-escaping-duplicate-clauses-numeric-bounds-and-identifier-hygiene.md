@@ -56,9 +56,9 @@ a line-numbered error.
 - [x] M5: bounded decimals at all seven `L.decimal` sites (C4). Completed 2026-07-13T21:08:42Z; all seven overflow fixtures and the `maxBound` boundary passed in the 130-example suite, and the CLI rejected the audited wraparound value.
 - [x] M6: identifier hygiene validator rules + parser ASCII alphabet (C5). Completed 2026-07-13T21:15:14Z; 134 examples passed, all skeletons validate, and the CLI emitted the expected line-3/line-7 hygiene diagnostics.
 - [x] M7: round-trip property extended to all node families with adversarial generators and empty-list edges; `states` accepts zero names; NOTATION.md touch-ups (C7). Completed 2026-07-13T21:22:23Z; the standard 136-example suite passed and a 1,000-case stress run covered every node family.
-- [ ] Full keiro-dsl test matrix green (unit + all conformance suites); Outcomes written.
+- [x] Full keiro-dsl test matrix green (unit + all conformance suites); Outcomes written. Completed 2026-07-13T21:23:37Z; `cabal test keiro-dsl` passed all 17 suites.
 
-Implementation started 2026-07-13; M1 through M7 are complete and the full package matrix is next.
+Implementation completed 2026-07-13; all milestones and acceptance gates are complete.
 
 
 ## Surprises & Discoveries
@@ -168,7 +168,29 @@ Implementation started 2026-07-13; M1 through M7 are complete and the full packa
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-105 restored notation integrity across the parser, pretty-printer, validator, and
+test harness. Quoted text now has a closed, round-tripping escape scheme; partial status
+maps are writable; duplicate singleton blocks and clauses fail at their second
+occurrence; all seven decimal sites reject overflow; and validator diagnostics prevent
+scaffold-unsafe Haskell names with declaration line numbers. The fixture resolver makes
+the unit suite independent of its launch directory, and the round-trip property now
+generates every node family with adversarial text and empty-list edges.
+
+Implementation also found two defects outside the audit's minimal repros. The aggregate
+starter's `Done` state collided with event `ThingDone`, so the starter event is now
+`ThingCompleted`. The all-family generator exposed cross-node parser ambiguity around
+omitted `process`/`dispatch` reserved words and top-level `emit` blocks; both boundaries
+now have deterministic regression tests. These discoveries strengthen EP-106's skeleton
+acceptance and give EP-107/108/109 an explicit requirement to reserve every new node
+keyword.
+
+Acceptance evidence is complete: the unit suite passes from both repository and package
+directories; all four CLI smokes reject or preserve the audited examples as specified;
+the standard unit run has 136 examples with coverage for all ten node families; a
+1,000-case round-trip stress run passed; and `cabal test keiro-dsl` passed the unit suite
+plus all sixteen conformance suites. No EP-105 implementation work remains. EP-106 still
+owns generated-Haskell escaping for `payloadExpr`, as recorded in the cross-plan
+contract.
 
 
 ## Context and Orientation
