@@ -30,6 +30,45 @@ main = hspec $ do
             forAll genSpec $ \s ->
                 parseSpec "<gen>" (renderSpec s) === Right s
 
+    describe "string literal integrity" $ do
+        it "parses an escaped emit-map value as exactly one row" $ do
+            let src =
+                    T.unlines
+                        [ "context svc"
+                        , ""
+                        , "emit e {"
+                        , "  contract c"
+                        , "  topic events"
+                        , "  source \"svc\""
+                        , "  key thingId"
+                        , "  map status {"
+                        , "    \"a\\\" => Wat \\\"b\" => ThingAccepted"
+                        , "    _ => skip"
+                        , "  }"
+                        , "  messageId derive hole"
+                        , "  idempotencyKey derive hole"
+                        , "}"
+                        ]
+            case parseSpec "<escaped-map>" src of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> case [row | NEmit e <- specNodes spec, row <- emMap e] of
+                    [row] -> do
+                        emrValue row `shouldBe` "a\" => Wat \"b"
+                        emrEvent row `shouldBe` "ThingAccepted"
+                    rows -> expectationFailure ("expected one emit-map row, got " <> show (length rows))
+        it "rejects a raw newline inside a quoted string" $ do
+            let src = "context svc\n\ncontract c {\n  schemaVersion 1\n  discriminator kind\n  topic events \"first\nsecond\"\n}\n"
+            parseSpec "<raw-newline>" src `shouldSatisfy` leftContains "unescaped newline"
+        it "rejects an unknown escape sequence" $ do
+            let src = "context svc\n\ncontract c {\n  schemaVersion 1\n  discriminator kind\n  topic events \"bad\\q\"\n}\n"
+            parseSpec "<unknown-escape>" src `shouldSatisfy` leftContains "unknown escape"
+        it "round-trips adversarial text through topics, emit maps, and quoted bindings" $
+            property $
+                forAll genAdversarialText $ \t ->
+                    let spec = escapedSpec t
+                        rendered = renderSpec spec
+                     in counterexample (T.unpack rendered) (parseSpec "<escaped-round-trip>" rendered === Right spec)
+
     describe "canonical reservation.keiro" $
         it "parses into the expected aggregate shape" $ do
             input <- readTestText "test/fixtures/reservation.keiro"
@@ -699,9 +738,103 @@ resolveTestPath rel = do
                     <> "; tried "
                     <> show candidates
 
+leftContains :: T.Text -> Either T.Text a -> Bool
+leftContains needle = \case
+    Left err -> needle `T.isInfixOf` err
+    Right _ -> False
+
 --------------------------------------------------------------------------------
 -- Generators (bounded; restricted to valid, non-reserved identifiers)
 --------------------------------------------------------------------------------
+
+{- | Text that exercises every supported escape plus notation punctuation that
+used to be able to split one emit-map row into several rows.
+-}
+genAdversarialText :: Gen T.Text
+genAdversarialText =
+    T.concat
+        <$> resize
+            20
+            (listOf (elements ["a", "Z", "\"", "\\", "\n", "\t", "\r", "=>", "#", "{", "}", " "]))
+
+{- | One spec carrying the same adversarial value through three distinct
+printer paths: a contract topic, an emit-map value, and a quote-wrapped
+field-binding literal.
+-}
+escapedSpec :: T.Text -> Spec
+escapedSpec value =
+    Spec
+        "escape"
+        Nothing
+        Nothing
+        []
+        []
+        []
+        [ NContract
+            ContractNode
+                { ctrName = "Contract"
+                , ctrSchemaVersion = 1
+                , ctrDiscriminator = "kind"
+                , ctrTopics = [("events", value)]
+                , ctrEvents = []
+                , ctrLoc = noLoc
+                }
+        , NEmit
+            EmitNode
+                { emName = "Emit"
+                , emContract = "Contract"
+                , emTopic = "events"
+                , emSource = "source"
+                , emKey = "key"
+                , emDiscriminant = "status"
+                , emMap = [EmitMapRow value "Event" noLoc]
+                , emSkip = True
+                , emMessageId = DeriveSpec Nothing
+                , emIdempotencyKey = DeriveSpec Nothing
+                , emLoc = noLoc
+                }
+        , NProcess (processWithLiteral value)
+        ]
+
+processWithLiteral :: T.Text -> ProcessNode
+processWithLiteral value =
+    ProcessNode
+        { procId = "Process"
+        , procName = "process"
+        , procInput = InputDecl "Input" []
+        , procCorrelate = CorrelateDecl "key" "idText"
+        , procSaga = SagaRef "Saga" "saga-"
+        , procTarget = "Target"
+        , procProjections = []
+        , procHandle =
+            HandleNode
+                { hOn = "Input"
+                , hAdvance = AdvanceNode "Advance" [FieldBinding "literal" (Just ("\"" <> value <> "\""))]
+                , hDispatch = []
+                , hSchedule = "timer"
+                }
+        , procTimer =
+            TimerNode
+                { tmName = "timer"
+                , tmId = IdExpr UuidV5Id "timer:"
+                , tmFireAt = FireAtExpr "observedAt" "5m"
+                , tmPayload = []
+                , tmFire =
+                    FireNode
+                        { fireTarget = "Target"
+                        , fireKey = "correlationId"
+                        , fireCommand = "Fire"
+                        , fireFields = []
+                        , fireFiredEventId = IdExpr UuidV5Id "fired:"
+                        , fireDisposition = FireDisposition OFired OFired ORetry ORetry
+                        }
+                , tmDecodeUnknown = "Cancelled"
+                , tmMaxAttempts = 5
+                , tmDeadLetter = "exhausted"
+                , tmLoc = noLoc
+                }
+        , procLoc = noLoc
+        }
 
 genName :: Gen Name
 genName = do

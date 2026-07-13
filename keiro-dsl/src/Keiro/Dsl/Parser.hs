@@ -1094,13 +1094,32 @@ dottedRef = lexeme $ do
     cs <- many (alphaNumChar <|> char '_' <|> char '.')
     pure (T.pack (c : cs))
 
--- | A double-quoted string literal (no escapes), returning the inner text.
+{- | A double-quoted string literal, returning raw (unescaped) inner text.
+The surface syntax supports a closed escape set so unknown escapes remain
+available for backward-compatible extensions.
+-}
 stringLit :: P Text
 stringLit = lexeme $ do
     _ <- char '"'
-    s <- many (anySingleBut '"')
+    s <- many strChar
     _ <- char '"'
     pure (T.pack s)
+  where
+    strChar =
+        choice
+            [ char '\\' *> escapeCode
+            , char '\n' *> fail "unescaped newline in string literal (write \\n)"
+            , anySingleBut '"'
+            ]
+    escapeCode =
+        choice
+            [ '"' <$ char '"'
+            , '\\' <$ char '\\'
+            , '\n' <$ char 'n'
+            , '\t' <$ char 't'
+            , '\r' <$ char 'r'
+            , anySingle >>= \c -> fail ("unknown escape sequence \\" <> [c] <> " in string literal")
+            ]
 
 brackets :: P a -> P a
 brackets = between (symbol "[") (symbol "]")

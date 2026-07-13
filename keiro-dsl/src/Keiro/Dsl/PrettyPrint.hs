@@ -12,6 +12,7 @@ module Keiro.Dsl.PrettyPrint (
 where
 
 import Data.Text (Text)
+import Data.Text qualified as T
 import Keiro.Dsl.Grammar
 import Prettyprinter
 import Prettyprinter.Render.Text (renderStrict)
@@ -361,10 +362,21 @@ docFireOutcome ORetry = "Retry"
 docFieldBinding :: FieldBinding -> Doc ann
 docFieldBinding b = case fbValue b of
     Nothing -> pretty (fbName b)
-    Just v -> pretty (fbName b) <> "=" <> pretty v
+    Just v -> pretty (fbName b) <> "=" <> docValue v
+  where
+    docValue v = case T.stripPrefix "\"" v >>= T.stripSuffix "\"" of
+        Just rawInner -> dquoted rawInner
+        Nothing -> pretty v
 
 dquoted :: Text -> Doc ann
-dquoted t = "\"" <> pretty t <> "\""
+dquoted t = "\"" <> pretty (T.concatMap escapeChar t) <> "\""
+  where
+    escapeChar '"' = "\\\""
+    escapeChar '\\' = "\\\\"
+    escapeChar '\n' = "\\n"
+    escapeChar '\t' = "\\t"
+    escapeChar '\r' = "\\r"
+    escapeChar c = T.singleton c
 
 bracketed :: [Doc ann] -> Doc ann
 bracketed [] = "[ ]"
