@@ -1,0 +1,10 @@
+context repro
+
+workflow Loose
+  name "loose"
+  in LooseInput { orderId:Id }
+  out LooseSummary
+  id from input.missingField via idText
+  body
+    step do-work -> StepResult
+    sleep cool-off after missingDelay

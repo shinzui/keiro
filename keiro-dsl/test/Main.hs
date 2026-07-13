@@ -234,6 +234,25 @@ main = hspec $ do
         it "rejects a signal label with no matching await as AwaitSignalMismatch" $ do
             codes <- errorCodesOf "test/fixtures/workflow-signal-mismatch.keiro"
             codes `shouldContain` [AwaitSignalMismatch]
+        it "rejects duplicate workflow labels" $ do
+            codes <- errorCodesOf "test/fixtures/workflow-dup-label.keiro"
+            codes `shouldContain` [WorkflowDuplicateLabel]
+        it "rejects unresolved workflow id and sleep fields" $ do
+            codes <- errorCodesOf "test/fixtures/workflow-unresolved-fields.keiro"
+            codes `shouldContain` [WorkflowIdFieldUnresolved, WorkflowSleepDelayUnresolved]
+        it "validates rule domains, totality, case constructors, and bodies" $ do
+            unresolved <- errorCodesOf "test/fixtures/rule-bad-domain.keiro"
+            unresolved `shouldBe` [RuleDomainUnresolved]
+            codes <- errorCodesOf "test/fixtures/rule-not-total.keiro"
+            mapM_
+                (\expected -> codes `shouldContain` [expected])
+                [RuleNotTotal, RuleCaseUnknownCtor, ClockSampled, GuardAtomOutOfScope]
+        it "rejects unresolved command operation references" $ do
+            codes <- errorCodesOf "test/fixtures/operation-ghost-aggregate.keiro"
+            codes `shouldContain` [OperationUnresolvedRef]
+        it "rejects a signal value type that differs from its await" $ do
+            codes <- errorCodesOf "test/fixtures/operation-signal-value.keiro"
+            codes `shouldContain` [AwaitSignalValueMismatch]
 
     describe "diff (evolution classification)" $ do
         it "covers every node family exactly once and explains exclusions" $ do

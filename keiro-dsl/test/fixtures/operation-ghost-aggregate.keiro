@@ -1,0 +1,14 @@
+context repro
+
+workflow Wf
+  name "wf"
+  in WfInput { thingId:Id }
+  out WfSummary
+  id from input.thingId via idText
+  body
+    await approval -> ApprovalResult
+
+operation DoThing
+  command on GhostAggregate
+    stream from thingId via thingStream
+    project [ ghostTable ]

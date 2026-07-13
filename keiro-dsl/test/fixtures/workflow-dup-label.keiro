@@ -1,0 +1,10 @@
+context repro
+
+workflow Dupes
+  name "dupes"
+  in DupInput { orderId:Id }
+  out DupSummary
+  id from input.orderId via idText
+  body
+    step do-work -> StepResult
+    await do-work -> ApprovalResult

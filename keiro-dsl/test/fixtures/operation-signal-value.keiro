@@ -1,0 +1,14 @@
+context repro
+
+workflow Wf
+  name "wf"
+  in WfInput { thingId:Id }
+  out WfSummary
+  id from input.thingId via idText
+  body
+    await approval -> ApprovalResult
+
+operation SignalApproval
+  signal approval of Wf
+    key from thingId via wfId
+    value WrongType

@@ -170,7 +170,7 @@ validateSpec spec =
 
 -- | Rules over namespaces shared by the whole specification.
 specLevelRules :: Spec -> [Diagnostic]
-specLevelRules spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefixes
+specLevelRules spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefixes ++ ruleDiagnostics
   where
     duplicateNodes =
         [ mkErr (locLine loc) DuplicateNodeName $
@@ -194,6 +194,7 @@ specLevelRules spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefi
             "id '" <> idName d <> "' reuses prefix '" <> idPrefix d <> "'"
         | d <- duplicatesBy idPrefix (specIds spec)
         ]
+    ruleDiagnostics = concatMap (validateRule spec) (specRules spec)
 
 nodeIdentity :: Node -> (Text, Name, Loc)
 nodeIdentity (NAggregate a) = ("aggregate", aggName a, aggLoc a)
@@ -216,35 +217,143 @@ validateNode spec (NEmit e) = validateEmit spec e
 validateNode spec (NPublisher p) = validatePublisher spec p
 validateNode _spec (NWorkqueue w) = validateWorkqueue w
 validateNode spec (NPgmqDispatch d) = validatePgmqDispatch spec d
-validateNode _spec (NWorkflow _) = []
+validateNode _spec (NWorkflow w) = validateWorkflow w
 validateNode spec (NOperation o) = validateOperation spec o
 
-{- | EP-6 operation rules: a @signal <label> of <wf>@ must match an @await@ of
-that workflow (else the deterministic awakeable id never matches and the
-workflow waits forever); a @run <wf>@ must resolve to a declared workflow.
+-- | Workflow replay keys and injected input references must be unambiguous.
+validateWorkflow :: WorkflowNode -> [Diagnostic]
+validateWorkflow w = duplicateLabels ++ sleepFields ++ idField
+  where
+    inputFields = map fieldName (wfInputFields w)
+    duplicateLabels =
+        [ mkErr (locLine (wfBodyLoc item)) WorkflowDuplicateLabel $
+            "workflow '" <> wfId w <> "' declares label '" <> wfBodyLabel item <> "' more than once; labels key deterministic replay, so a duplicate label replays the first occurrence's journaled result"
+        | item <- duplicatesBy wfBodyLabel (wfBody w)
+        ]
+    sleepFields =
+        [ mkErr (locLine loc) WorkflowSleepDelayUnresolved $
+            "workflow '" <> wfId w <> "' sleep '" <> label <> "' references undeclared input field '" <> delay <> "'"
+        | WfSleep label delay loc <- wfBody w
+        , delay `notElem` inputFields
+        ]
+    idField = case wfIdField w of
+        Just field
+            | field `notElem` inputFields ->
+                [ mkErr (locLine (wfLoc w)) WorkflowIdFieldUnresolved $
+                    "workflow '" <> wfId w <> "' derives its id from undeclared input field '" <> field <> "'"
+                ]
+        _ -> []
+
+wfBodyLabel :: WfBodyItem -> Name
+wfBodyLabel (WfStep label _ _) = label
+wfBodyLabel (WfAwait label _ _) = label
+wfBodyLabel (WfSleep label _ _) = label
+wfBodyLabel (WfChild label _ _ _) = label
+
+wfBodyLoc :: WfBodyItem -> Loc
+wfBodyLoc (WfStep _ _ loc) = loc
+wfBodyLoc (WfAwait _ _ loc) = loc
+wfBodyLoc (WfSleep _ _ loc) = loc
+wfBodyLoc (WfChild _ _ _ loc) = loc
+
+-- | A top-level rule is a total, clock-free function over one declared enum.
+validateRule :: Spec -> RuleDecl -> [Diagnostic]
+validateRule spec rule = case [e | e <- specEnums spec, enumName e == ruleDomain rule] of
+    [] ->
+        [ mkErr rl RuleDomainUnresolved $
+            "rule '" <> ruleName rule <> "' has undeclared enum domain '" <> ruleDomain rule <> "'"
+        ]
+    (domain : _) -> totality domain ++ unknownCases domain ++ bodyDiagnostics
+  where
+    rl = locLine (ruleLoc rule)
+    caseNames = map fst (ruleCases rule)
+    allEnumCtors = Set.fromList [ctor | e <- specEnums spec, (ctor, _) <- enumCtors e]
+    totality domain =
+        let missing = [ctor | (ctor, _) <- enumCtors domain, ctor `notElem` caseNames]
+         in [ mkErr rl RuleNotTotal $
+                "rule '" <> ruleName rule <> "' is not total over enum '" <> enumName domain <> "'; missing cases {" <> T.intercalate ", " missing <> "}"
+            | not (null missing)
+            ]
+    unknownCases domain =
+        [ mkErr rl RuleCaseUnknownCtor $
+            "rule '" <> ruleName rule <> "' has case '" <> ctor <> "' which is not a constructor of enum '" <> enumName domain <> "'"
+        | (ctor, _) <- ruleCases rule
+        , ctor `notElem` map fst (enumCtors domain)
+        ]
+    bodyDiagnostics = concatMap validateBody (ruleCases rule)
+    validateBody (ctor, expr) =
+        [ mkErr rl ClockSampled $
+            "rule '" <> ruleName rule <> "' case '" <> ctor <> "' samples the wall clock via '" <> atom <> "'; rules must be deterministic"
+        | atom <- dedup (exprNames expr)
+        , atom `Set.member` clockAtoms
+        ]
+            ++ [ mkErr rl GuardAtomOutOfScope $
+                    "atom '" <> atom <> "' in rule '" <> ruleName rule <> "' resolves to no enum constructor or boolean literal"
+               | atom <- dedup (exprNames expr)
+               , atom `Set.notMember` clockAtoms
+               , atom `Set.notMember` allEnumCtors
+               ]
+
+{- | Operation rules resolve command aggregates, stream fields, projections,
+workflow signal labels and value types, and run targets. Query read-model
+resolution remains explicitly deferred until the grammar can declare one.
 -}
 validateOperation :: Spec -> OperationNode -> [Diagnostic]
 validateOperation spec o = case opShape o of
-    SignalOp lbl wf _ _ _ ->
+    CommandOp aggregate streamField _ projections ->
+        aggregateRef aggregate streamField ++ projectionRefs projections
+    QueryOp readModel _ _ _ ->
+        resolveReadModelRef spec (opLoc o) ("query operation '" <> opName o <> "'") readModel
+    SignalOp lbl wf _ _ valueType ->
         case lookupWorkflow wf of
             Nothing ->
                 [mkErr ol AwaitSignalMismatch ("signal operation '" <> opName o <> "' targets undeclared workflow '" <> wf <> "'")]
-            Just w
-                | lbl `elem` awaitLabels w -> []
-                | otherwise ->
+            Just w -> case [(resultType, loc) | WfAwait label resultType loc <- wfBody w, label == lbl] of
+                [] ->
                     [ mkErr ol AwaitSignalMismatch $
                         "signal '" <> lbl <> "' of " <> wf <> " has no matching 'await' (workflow declares awaits {" <> T.intercalate ", " (awaitLabels w) <> "}); the deterministic awakeable id will not match and the workflow will wait forever"
                     ]
+                ((resultType, _) : _)
+                    | valueType == resultType -> []
+                    | otherwise ->
+                        [ mkErr ol AwaitSignalValueMismatch $
+                            "signal '" <> lbl <> "' of " <> wf <> " carries value type '" <> valueType <> "' but the await expects '" <> resultType <> "'"
+                        ]
     RunOp wf _ _ ->
         [ mkErr ol RunWorkflowUnresolved ("run operation '" <> opName o <> "' targets undeclared workflow '" <> wf <> "'")
         | wf `notElem` map wfId workflows
         ]
-    _ -> []
   where
     ol = locLine (opLoc o)
     workflows = [w | NWorkflow w <- specNodes spec]
+    aggregates = [a | NAggregate a <- specNodes spec]
+    projectionTables = [projTable p | a <- aggregates, Just p <- [aggProjection a]]
     lookupWorkflow n = case [w | w <- workflows, wfId w == n] of (w : _) -> Just w; [] -> Nothing
     awaitLabels w = [l | WfAwait l _ _ <- wfBody w]
+    aggregateRef name streamField = case [a | a <- aggregates, aggName a == name] of
+        [] ->
+            [ mkErr ol OperationUnresolvedRef $
+                "command operation '" <> opName o <> "' targets undeclared aggregate '" <> name <> "'"
+            ]
+        (aggregate : _) ->
+            [ mkErr ol OperationUnresolvedRef $
+                "command operation '" <> opName o <> "' stream field '" <> streamField <> "' is not declared by any command of aggregate '" <> name <> "'"
+            | streamField `notElem` [fieldName field | command <- aggCommands aggregate, field <- cmdFields command]
+            ]
+    projectionRefs projections =
+        [ mkErr ol OperationUnresolvedRef $
+            "command operation '" <> opName o <> "' references undeclared projection table '" <> projection <> "'"
+        | projection <- projections
+        , projection `notElem` projectionTables
+        ]
+
+{- | Read-model reference resolution is DEFERRED: the grammar has no readmodel
+node to resolve against (2026-07 audit, finding E1). Returns no diagnostics
+today. docs/plans/107-add-a-first-class-read-model-node-with-registration-schema-and-consistency-to-keiro-dsl.md
+replaces this body with real resolution once the node exists.
+-}
+resolveReadModelRef :: Spec -> Loc -> Text -> Name -> [Diagnostic]
+resolveReadModelRef _spec _loc _context _name = []
 
 {- | EP-5 workqueue rules: the captured physical name must match the queueRef
 derivation; the disposition inversions (storeFailure transient => must retry;

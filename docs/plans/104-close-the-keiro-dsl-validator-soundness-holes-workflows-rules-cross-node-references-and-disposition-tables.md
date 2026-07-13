@@ -49,9 +49,9 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] (2026-07-13 20:29Z) M1: round-trip property, 94-example unit suite, aggregate conformance pin, and workflow conformance pin all green.
 - [x] (2026-07-13 20:32Z) M2: spec-level duplicate detection (nodes, enum ctors/wires, id prefixes, command/event names) with fixture `duplicate-names.keiro`.
 - [x] (2026-07-13 20:32Z) M2: aggregate-local reference soundness (write targets, `fields(Cmd)` resolution, `regInitial` scope) with fixture `aggregate-bad-refs.keiro`; 96-example unit suite green.
-- [ ] M3: `validateWorkflow` (duplicate labels, sleep-delay resolution, `id from input.<field>` resolution) with fixtures `workflow-dup-label.keiro`, `workflow-unresolved-fields.keiro`.
-- [ ] M3: rule validation (domain resolution, totality, dangling cases, clock-free + scoped bodies) with fixtures `rule-bad-domain.keiro`, `rule-not-total.keiro`.
-- [ ] M3: operation validation (CommandOp aggregate/stream-field/projections, SignalOp value type, QueryOp deferral stub) with fixtures `operation-ghost-aggregate.keiro`, `operation-signal-value.keiro`; update `workflow.keiro` and `workflow-signal-mismatch.keiro`.
+- [x] (2026-07-13 20:35Z) M3: `validateWorkflow` (duplicate labels, sleep-delay resolution, `id from input.<field>` resolution) with fixtures `workflow-dup-label.keiro`, `workflow-unresolved-fields.keiro`.
+- [x] (2026-07-13 20:35Z) M3: rule validation (domain resolution, totality, dangling cases, clock-free + scoped bodies) with fixtures `rule-bad-domain.keiro`, `rule-not-total.keiro`.
+- [x] (2026-07-13 20:35Z) M3: operation validation (CommandOp aggregate/stream-field/projections, SignalOp value type, QueryOp deferral stub) with fixtures `operation-ghost-aggregate.keiro`, `operation-signal-value.keiro`; updated workflow fixtures; 101-example unit suite and workflow conformance suite green.
 - [ ] M4: process cross-node resolution (advance/dispatch/fire commands, target-side field bindings, `schedule` = timer name, projections, advance-arm dispatch-id, `max-attempts >= 1`) with fixtures `process-ghost-refs.keiro`, `process-bad-timer.keiro`.
 - [ ] M4: update `hospital-surge.keiro`, `surge-service.keiro`, and the `process` skeleton in `Skeleton.hs` so the canonical corpus resolves.
 - [ ] M5: workqueue disposition completeness + duplicate-row detection in both intake and workqueue tables, with fixtures `workqueue-incomplete.keiro`, `workqueue-dup-row.keiro`, `intake-dup-row.keiro`.

@@ -1,0 +1,6 @@
+context repro
+
+enum Color { Red=red Green=green }
+
+rule isHot : Color -> Bool
+  ex Red => now ; Blue => ghost
