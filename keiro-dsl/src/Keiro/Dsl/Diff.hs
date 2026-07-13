@@ -25,6 +25,7 @@ module Keiro.Dsl.Diff (
     familyRegistry,
     Paired (..),
     pairByName,
+    readModelDiff,
     classifyWorkflowBody,
 ) where
 
@@ -33,6 +34,7 @@ import Data.Maybe (isNothing, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
 -- | A classified spec change.
@@ -147,7 +149,7 @@ familyRegistry =
     , (FamPublisher, DiffFamily publisherDiff)
     , (FamWorkqueue, DiffFamily workqueueDiff)
     , (FamPgmqDispatch, DiffFamily pgmqDispatchDiff)
-    , (FamReadModel, OutOfDiffScope "read-model evolution is implemented by EP-107 Milestone 5 after the node grammar lands")
+    , (FamReadModel, DiffFamily readModelDiff)
     , (FamWorkflow, DiffFamily workflowDiff)
     , (FamOperation, OutOfDiffScope "operations own no persisted decode or identity surface; their references and workflow signal/await pairing are single-spec validation concerns")
     ]
@@ -201,9 +203,106 @@ nodePgmqDispatch :: Node -> Maybe PgmqDispatchNode
 nodePgmqDispatch (NPgmqDispatch dispatch) = Just dispatch
 nodePgmqDispatch _ = Nothing
 
+nodeReadModel :: Node -> Maybe ReadModelNode
+nodeReadModel (NReadModel readModel) = Just readModel
+nodeReadModel _ = Nothing
+
 nodeWorkflow :: Node -> Maybe WorkflowNode
 nodeWorkflow (NWorkflow workflow) = Just workflow
 nodeWorkflow _ = Nothing
+
+readModelDiff :: DiffEnv -> [Change]
+readModelDiff env =
+    concatMap (uncurry (readModelPairDiff env)) (prMatched paired)
+        ++ concatMap addedReadModelDiff (prAdded paired)
+        ++ concatMap removedReadModelDiff (prRemoved paired)
+  where
+    paired = pairByName nodeReadModel rmName env
+
+readModelPairDiff :: DiffEnv -> ReadModelNode -> ReadModelNode -> [Change]
+readModelPairDiff env oldReadModel newReadModel =
+    versionChanges
+        ++ shapeChanges
+        ++ identityChanges
+        ++ feedChanges
+        ++ consistencyChanges
+        ++ scopeChanges
+  where
+    nodeName = rmName newReadModel
+    versionChanges
+        | rmVersion newReadModel < rmVersion oldReadModel =
+            [ breaking nodeName "read-model-version" nodeName ReadModelVersionDecreased ("version decreased from " <> tInt (rmVersion oldReadModel) <> " to " <> tInt (rmVersion newReadModel))
+            ]
+        | rmVersion newReadModel > rmVersion oldReadModel =
+            [ additive nodeName "read-model-version" nodeName ("version increased from " <> tInt (rmVersion oldReadModel) <> " to " <> tInt (rmVersion newReadModel) <> "; register and rebuild the new shape before serving it")
+            ]
+        | otherwise = []
+    oldShape = (rmColumns oldReadModel, rmShape oldReadModel)
+    newShape = (rmColumns newReadModel, rmShape newReadModel)
+    shapeChanges =
+        [ breaking nodeName "read-model-shape" nodeName ReadModelShapeChangedWithoutBump ("declared columns or captured shape hash changed at version " <> tInt (rmVersion newReadModel) <> "; bump version and rebuild")
+        | oldShape /= newShape
+        , rmVersion oldReadModel == rmVersion newReadModel
+        ]
+    oldRegistry = registryNameFor (specContext (deOld env)) oldReadModel
+    newRegistry = registryNameFor (specContext (deNew env)) newReadModel
+    oldSubscription = subscriptionNameFor (specContext (deOld env)) oldReadModel
+    newSubscription = subscriptionNameFor (specContext (deNew env)) newReadModel
+    identityChanges =
+        [ breaking nodeName "read-model-identity" nodeName DerivedIdentityChanged ("registry name changed '" <> oldRegistry <> "' -> '" <> newRegistry <> "'; the old registration row is orphaned")
+        | oldRegistry /= newRegistry
+        ]
+            ++ [ breaking nodeName "read-model-table" nodeName DerivedIdentityChanged ("qualified table changed '" <> qualifiedIdentity oldReadModel <> "' -> '" <> qualifiedIdentity newReadModel <> "'; existing data remains under the old identity")
+               | (rmSchema oldReadModel, rmTable oldReadModel) /= (rmSchema newReadModel, rmTable newReadModel)
+               ]
+            ++ [ breaking nodeName "read-model-subscription" nodeName DerivedIdentityChanged ("subscription changed '" <> oldSubscription <> "' -> '" <> newSubscription <> "'; the worker cursor remains under the old identity")
+               | oldSubscription /= newSubscription
+               ]
+    feedChanges =
+        [ breaking nodeName "read-model-feed" nodeName ReadModelFeedChanged ("feed changed " <> renderFeed (rmFeed oldReadModel) <> " -> " <> renderFeed (rmFeed newReadModel) <> "; projection wiring and rebuild identities changed")
+        | rmFeed oldReadModel /= rmFeed newReadModel
+        ]
+    consistencyChanges = case (rmConsistency oldReadModel, rmConsistency newReadModel) of
+        (Strong, Eventual) ->
+            [breaking nodeName "read-model-consistency" nodeName ReadModelConsistencyWeakened "default consistency changed Strong -> Eventual; callers lose the cursor-wait guarantee"]
+        (Eventual, Strong) ->
+            [additive nodeName "read-model-consistency" nodeName "default consistency changed Eventual -> Strong; callers gain a cursor-wait guarantee"]
+        _ -> []
+    oldScope = effectiveScope (rmScope oldReadModel)
+    newScope = effectiveScope (rmScope newReadModel)
+    scopeChanges
+        | oldScope == newScope = []
+        | scopeStrengthened oldScope newScope =
+            [additive nodeName "read-model-scope" nodeName ("Strong scope widened " <> renderScope oldScope <> " -> " <> renderScope newScope)]
+        | otherwise =
+            [breaking nodeName "read-model-scope" nodeName ReadModelConsistencyWeakened ("Strong scope changed " <> renderScope oldScope <> " -> " <> renderScope newScope <> "; callers no longer wait on the same event surface")]
+
+addedReadModelDiff :: ReadModelNode -> [Change]
+addedReadModelDiff readModel =
+    [additive (rmName readModel) "read-model" (rmName readModel) "new read model"]
+
+removedReadModelDiff :: ReadModelNode -> [Change]
+removedReadModelDiff readModel =
+    [breaking (rmName readModel) "read-model-identity" (rmName readModel) DerivedIdentityChanged "read model removed while registered metadata, data, subscription cursors, and callers may remain"]
+
+qualifiedIdentity :: ReadModelNode -> Text
+qualifiedIdentity readModel = rmSchema readModel <> "." <> rmTable readModel
+
+renderFeed :: RmFeed -> Text
+renderFeed RmInline = "inline"
+renderFeed RmSubscription = "subscription"
+
+effectiveScope :: Maybe RmScope -> RmScope
+effectiveScope Nothing = RmEntireLog
+effectiveScope (Just scope) = scope
+
+scopeStrengthened :: RmScope -> RmScope -> Bool
+scopeStrengthened (RmCategory _) RmEntireLog = True
+scopeStrengthened _ _ = False
+
+renderScope :: RmScope -> Text
+renderScope RmEntireLog = "entire-log"
+renderScope (RmCategory categoryName) = "category '" <> categoryName <> "'"
 
 aggregateDiff :: DiffEnv -> [Change]
 aggregateDiff env =

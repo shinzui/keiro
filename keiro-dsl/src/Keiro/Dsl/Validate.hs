@@ -149,6 +149,11 @@ data DiagnosticCode
     | QueryConsistencyInvalid
     | DispatchReadModelUnresolved
     | DispatchReadModelFieldUnknown
+    | -- EP-107 diff-only read-model evolution rules.
+      ReadModelVersionDecreased
+    | ReadModelShapeChangedWithoutBump
+    | ReadModelFeedChanged
+    | ReadModelConsistencyWeakened
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

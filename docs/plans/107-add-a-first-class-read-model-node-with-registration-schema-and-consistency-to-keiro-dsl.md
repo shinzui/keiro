@@ -113,14 +113,14 @@ Milestone 4 — Harness + conformance suite:
 
 Milestone 5 — Differ registration + docs:
 
-- [ ] `readModelDiff` registered with the generalized differ of
+- [x] (2026-07-13 23:05Z) `readModelDiff` registered with the generalized differ of
       `docs/plans/103-make-keiro-dsl-diff-sound-over-the-full-decode-and-identity-surface.md`
-      (or carried as a standalone arm if 103 has not landed; reconciled at implementation
-      time), covering removal, version decrease, shape-change-without-bump, identity
-      renames, feed flips, and consistency weakening.
-- [ ] `agents/skills/keiro-dsl-authoring/NOTATION.md` gains the minimal `readmodel`
+      via its delivered `DiffEnv -> [Change]` family registry, covering removal, version
+      decrease, shape-change-without-bump, identity renames, feed flips, and
+      consistency/scope weakening.
+- [x] (2026-07-13 23:05Z) `agents/skills/keiro-dsl-authoring/NOTATION.md` gains the minimal `readmodel`
       section; the `query`/`dispatch` lines gain "resolved against readmodel nodes" notes.
-- [ ] Outcomes & Retrospective written; MasterPlan 15 registry row updated.
+- [x] (2026-07-13 23:05Z) Outcomes & Retrospective written; MasterPlan 15 registry row updated.
 
 
 ## Surprises & Discoveries
@@ -157,6 +157,12 @@ implementation. Provide concise evidence.
   combined import keeps fresh scaffolds equal to treefmt-normalized committed pins.
   Evidence: the dedicated conformance suite resolves with `kiroku-store`, and the complete
   `cabal test` matrix passes.
+
+- EP-103 landed before this milestone with a stronger integration seam than the draft
+  anticipated: `familyRegistry` accepts `DiffFamily (DiffEnv -> [Change])` and already
+  pairs every family through `pairByName`. `FamReadModel` therefore changed directly from
+  a documented `OutOfDiffScope` entry to `DiffFamily readModelDiff`; no standalone arm or
+  later migration was needed. The unit registry-coverage assertion stayed total.
 
 
 ## Decision Log
@@ -275,6 +281,21 @@ Record every decision made while working on the plan.
   manifests, stale detection, and firewall checks consume the same module set.
   Date: 2026-07-13
 
+- Decision: Reuse `DerivedIdentityChanged` for registry, qualified-table, subscription,
+  rename/removal changes, and append four read-model-specific diff codes only for the
+  missing concepts: version decrease, unversioned shape change, feed change, and
+  consistency/scope weakening.
+  Rationale: the existing identity code already names the persisted-key failure mode,
+  while event-version and payload-shape codes would falsely imply event decoding. The
+  four additions preserve machine-readable distinctions without duplicating the generic
+  identity vocabulary. Date: 2026-07-13
+
+- Decision: Treat category-to-entire-log Strong scope changes as additive strengthening,
+  and entire-log-to-category or category-to-different-category as breaking weakening.
+  Rationale: widening the wait surface preserves and strengthens the read guarantee;
+  narrowing or retargeting it means callers no longer wait for the same events.
+  Date: 2026-07-13
+
 
 ## Outcomes & Retrospective
 
@@ -305,6 +326,15 @@ dedicated subscription-fed reference vertical compiles a filled qualified-table 
 against the live runtime. Its database-free driver asserts all record fields,
 Strong/category scope, runtime/table qualification parity, async identities, and helper
 signatures. The full `keiro-dsl` cabal test matrix passed, including 165 unit examples.
+
+Milestone 5 and EP-107 are complete. `FamReadModel` now classifies additions/removals,
+version and shape evolution, derived identities, feed flips, and consistency/scope
+changes. Four focused diff tests raise the unit suite to 169 examples. The mutation walk
+first produced `RmShapeHashDrift` with recomputed hash `fnv1a:ee81a5eedc97185c`; after
+capturing that hash without bumping version, CLI diff emitted BREAKING
+`ReadModelShapeChangedWithoutBump` and exited 1. NOTATION now documents both feed modes,
+identity/shape derivation, qualified SQL, and query/dispatch resolution. No runtime
+package was changed.
 
 
 ## Context and Orientation
@@ -955,12 +985,10 @@ node. At the end, an identity-bearing edit exits non-zero as BREAKING.
 `docs/plans/103-make-keiro-dsl-diff-sound-over-the-full-decode-and-identity-surface.md` is
 a **hard dependency**: it generalizes `Keiro.Dsl.Diff.diffSpecs` (today hardwired to
 `NAggregate`, `Diff.hs:52-58`) into per-node-family differs over matched old/new node
-pairs, producing `Change = Additive ChangeKind | Breaking ChangeKind` values carrying a
-`DiagnosticCode`. The interface this plan expects to register against is, in whatever
-concrete spelling 103 delivers, "given `(Maybe ReadModelNode, Maybe ReadModelNode)` matched
-by node name, return `[Change]`". Implement
-`readModelDiff :: Name -> Maybe ReadModelNode -> Maybe ReadModelNode -> [Change]` in
-`Keiro.Dsl.Diff` and register it: node removed ⇒ Breaking (queries against a registered
+pairs, producing additive/advisory/breaking `Change` values carrying a `DiagnosticCode`.
+EP-103 delivered `DiffFamily (DiffEnv -> [Change])` plus `pairByName`; implement
+`readModelDiff :: DiffEnv -> [Change]` in `Keiro.Dsl.Diff` and register it directly for
+`FamReadModel`: node removed ⇒ Breaking (queries against a registered
 model whose definition vanished); node added ⇒ Additive; `version` decreased ⇒ Breaking;
 `shape` changed while `version` unchanged ⇒ Breaking (the registry comparison in
 `ensureReadModel` will fail every query with `ReadModelStaleSchema`, and nothing marks the
@@ -968,11 +996,9 @@ rebuild); `table`, `schema`, `subscription` (declared or derived), or node name 
 Breaking (identity rename: the data table, the cursor, or the registry row is orphaned);
 `feed` flipped ⇒ Breaking (the feeding machinery and rebuild projection lists change);
 consistency `Strong -> Eventual` ⇒ Breaking (callers lose a read guarantee) while
-`Eventual -> Strong` ⇒ Additive. Reuse existing diff codes where they fit; add codes only
-if 103's delivered vocabulary lacks a fit (append-only, as always). If 103 has not landed
-when this milestone starts, carry `readModelDiff` as a standalone arm called from
-`diffSpecs` and reconcile the wiring when 103 lands — record the reconciliation in both
-plans' Decision Logs.
+`Eventual -> Strong` ⇒ Additive. Scope narrowing/retargeting is likewise Breaking and
+category-to-entire-log is Additive. Reuse `DerivedIdentityChanged` for identity changes;
+append the four missing read-model codes for version, shape, feed, and guarantee changes.
 
 In `agents/skills/keiro-dsl-authoring/NOTATION.md`, add a minimal `## readmodel (EP-107)`
 section after the workqueue/dispatch section: the two worked examples from this plan's
@@ -1173,3 +1199,6 @@ the same closure the existing runtime suites draw on.
   generated runtime module and the hand-owned SQL hole; `ScaffoldRun` owns family dispatch
   after EP-106's centralization. Progress, design prose, decisions, interfaces, and
   acceptance evidence were updated to match the implemented structure.
+- 2026-07-13: Milestone 5 reconciled the drafted optional-node differ signature with
+  EP-103's delivered `DiffEnv` family registry, documented Strong-scope evolution, and
+  recorded the minimal append-only diagnostic vocabulary used by the implementation.

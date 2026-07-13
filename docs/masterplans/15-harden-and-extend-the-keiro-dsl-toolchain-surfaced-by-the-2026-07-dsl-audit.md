@@ -139,7 +139,7 @@ three plans register with it).
 | 104 | Close the keiro-dsl validator soundness holes: workflows, rules, cross-node references, and disposition tables | docs/plans/104-close-the-keiro-dsl-validator-soundness-holes-workflows-rules-cross-node-references-and-disposition-tables.md | None | None | Complete |
 | 105 | Fix keiro-dsl notation integrity: string escaping, duplicate clauses, numeric bounds, and identifier hygiene | docs/plans/105-fix-keiro-dsl-notation-integrity-string-escaping-duplicate-clauses-numeric-bounds-and-identifier-hygiene.md | None | None | Complete |
 | 106 | Harden the keiro-dsl scaffolder: template injection, firewall completeness, collision and stale-module detection, and faithful policy lowering | docs/plans/106-harden-the-keiro-dsl-scaffolder-template-injection-firewall-completeness-collision-and-stale-module-detection-and-faithful-policy-lowering.md | None | EP-104, EP-105 | Complete |
-| 107 | Add a first-class read-model node with registration, schema, and consistency to keiro-dsl | docs/plans/107-add-a-first-class-read-model-node-with-registration-schema-and-consistency-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | In Progress |
+| 107 | Add a first-class read-model node with registration, schema, and consistency to keiro-dsl | docs/plans/107-add-a-first-class-read-model-node-with-registration-schema-and-consistency-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Complete |
 | 108 | Add a router node and rejection and poison policy surfaces to keiro-dsl | docs/plans/108-add-a-router-node-and-rejection-and-poison-policy-surfaces-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Not Started |
 | 109 | Extend keiro-dsl node coverage: pgmq ordering and provisioning, snapshot policy, and workflow patch and continue-as-new | docs/plans/109-extend-keiro-dsl-node-coverage-pgmq-ordering-and-provisioning-snapshot-policy-and-workflow-patch-and-continue-as-new.md | EP-103 | EP-104, EP-105, EP-106 | Not Started |
 | 110 | Align keiro-dsl with the safe APIs and refresh the authoring skill and corpus | docs/plans/110-align-keiro-dsl-with-the-safe-apis-and-refresh-the-authoring-skill-and-corpus.md | EP-107, EP-108, EP-109 | EP-103, EP-104, EP-105, EP-106 | Not Started |
@@ -287,8 +287,8 @@ EP-106 in parallel alongside the front of that path.
 - [x] EP-105: numeric bounds enforced; identifier-hygiene diagnostics; round-trip generator covers all node families; unit suite cwd-independent
 - [x] EP-106: payload splice escaped (injection closed); canonical firewall list shared by CLI and test with token-aware scan; breach handling is pre-write refusal
 - [x] EP-106: path-collision/stale-module/banner detection; every `new` skeleton scaffolds compiling code; backoff and duration lowering faithful; harness handles Int; conformance pin includes imports
-- [ ] EP-107: `readmodel` node parses, validates, round-trips; Strong-on-inline-only impossible; schema clause threads into projection holes
-- [ ] EP-107: scaffold emits ReadModel value + registration; QueryOp and PgmqDispatch read-model resolution completed; conformance against live Keiro.ReadModel
+- [x] EP-107: `readmodel` node parses, validates, round-trips; Strong-on-inline-only impossible; schema clause threads into projection holes
+- [x] EP-107: scaffold emits ReadModel value + registration; QueryOp and PgmqDispatch read-model resolution completed; conformance against live Keiro.ReadModel
 - [ ] EP-108: `router` node full vertical with conformance against live Keiro.Router
 - [ ] EP-108: `rejected`/`poison` clauses on process and router lowered to WorkerOptions; per-dispatch consistency rule; ambiguity vocabulary decided and pinned
 - [ ] EP-109: workqueue ordering/provision/group clauses lowered against live keiro-pgmq (unlogged warned)
@@ -374,6 +374,11 @@ EP-106 in parallel alongside the front of that path.
     guard allows only those explicit names and rejects the rest of keiki's authoring
     surface. Its new compile-all-starters target raises the package battery to 18 suites;
     all 18 passed, including 152 unit examples and 31 compiled starter modules.
+  - EP-107 implementation found the qualified-table constant cannot live in the generated
+    runtime module without creating an import cycle with the hand-owned query hole. A
+    generated `ReadModelTable` leaf now owns the constant and is imported by both layers.
+    It also confirmed the Kiroku package name is `kiroku-store` and used EP-103's delivered
+    `DiffEnv` family registry directly, replacing the read-model out-of-scope marker.
 
 
 ## Decision Log
@@ -444,6 +449,14 @@ docs reflect the delivered behavior, and the full package battery passed all 18 
 EP-107, EP-108, and EP-109 are now independently implementable; by registry order EP-107
 is next.
 
+EP-107 completed the first Phase 3 architecture vertical. The DSL now has first-class
+read-model declarations with derived/captured identities, Strong-feed safety, schema and
+column resolution across aggregates, queries, and dispatch, acyclic generated runtime and
+SQL-hole modules, registration/rebuild/async wiring, derivation harnesses, and evolution
+classification. The dedicated live-runtime conformance suite and the full package matrix
+passed; the unit suite has 169 examples. EP-108 and EP-109 remain independently
+implementable, with EP-108 next by registry order.
+
 
 ## Revision Notes
 
@@ -452,3 +465,6 @@ is next.
   architecture-surface drift against post-MP-14 keiro, safe-API and skill refresh),
   with the standing assumption that MasterPlan 14 lands first and the audit's
   "do not fix" list binding.
+- 2026-07-13: EP-107 completed. Registry/progress, cross-plan discoveries, and outcomes
+  now record the first-class read-model grammar, scaffold, runtime conformance, and differ
+  vertical; EP-108 is the next implementable child.

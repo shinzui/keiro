@@ -687,6 +687,41 @@ main = hspec $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-projection.keiro"
             any isBreaking cs `shouldBe` False
             [ckCode k | Advisory k <- cs] `shouldContain` [Just ProjectionChanged]
+        it "classifies read-model version and unversioned shape changes" $ do
+            base <- specOf "test/fixtures/readmodel-runtime.keiro"
+            let versionTwo = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmVersion = 2}) base
+                changedShape = modifyReadModel "transfer_decisions" changeReadModelShape base
+                bumpedShape = modifyReadModel "transfer_decisions" (\readModel -> (changeReadModelShape readModel){rmVersion = 2}) base
+                decreased = diffSpecs versionTwo base
+                unversioned = diffSpecs base changedShape
+                bumped = diffSpecs base bumpedShape
+            [ckCode k | Breaking k <- decreased] `shouldContain` [Just ReadModelVersionDecreased]
+            [ckCode k | Breaking k <- unversioned] `shouldContain` [Just ReadModelShapeChangedWithoutBump]
+            any isBreaking bumped `shouldBe` False
+            [ckFacet k | Additive k <- bumped] `shouldContain` ["read-model-version"]
+        it "classifies read-model registry, table, subscription, and removal identities" $ do
+            base <- specOf "test/fixtures/readmodel-runtime.keiro"
+            let tableChanged = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmTable = "transfer_decisions_v2"}) base
+                subscriptionChanged = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmSubscription = Just "transfer-decisions-v2"}) base
+                renamed = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmName = "reservation_decisions"}) base
+                removed = removeReadModel "transfer_decisions" base
+            mapM_
+                (\changes -> [ckCode k | Breaking k <- changes] `shouldContain` [Just DerivedIdentityChanged])
+                [diffSpecs base tableChanged, diffSpecs base subscriptionChanged, diffSpecs base renamed, diffSpecs base removed]
+        it "classifies read-model feed flips and consistency/scope weakening as breaking" $ do
+            base <- specOf "test/fixtures/readmodel-runtime.keiro"
+            let feedChanged = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmFeed = RmInline}) base
+                consistencyWeakened = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmConsistency = Eventual}) base
+                entireLog = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmScope = Just RmEntireLog}) base
+            [ckCode k | Breaking k <- diffSpecs base feedChanged] `shouldContain` [Just ReadModelFeedChanged]
+            [ckCode k | Breaking k <- diffSpecs base consistencyWeakened] `shouldContain` [Just ReadModelConsistencyWeakened]
+            [ckCode k | Breaking k <- diffSpecs entireLog base] `shouldContain` [Just ReadModelConsistencyWeakened]
+        it "classifies Eventual to Strong read-model consistency as additive" $ do
+            strong <- specOf "test/fixtures/readmodel-runtime.keiro"
+            let eventual = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmConsistency = Eventual}) strong
+                changes = diffSpecs eventual strong
+            any isBreaking changes `shouldBe` False
+            [ckFacet k | Additive k <- changes] `shouldContain` ["read-model-consistency"]
 
     describe "module placement (M1)" $ do
         it "GeneratedPrefix is today's namespace (Generated.<Ctx>.<Node>, holes at <Ctx>.<Node>)" $ do
@@ -1073,6 +1108,31 @@ diffFixtures oldP newP = do
     case (,) <$> parseSpec oldP old <*> parseSpec newP new of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right (o, n) -> pure (diffSpecs o n)
+
+modifyReadModel :: Name -> (ReadModelNode -> ReadModelNode) -> Spec -> Spec
+modifyReadModel target update spec =
+    spec
+        { specNodes =
+            [ case node of
+                NReadModel readModel | rmName readModel == target -> NReadModel (update readModel)
+                _ -> node
+            | node <- specNodes spec
+            ]
+        }
+
+removeReadModel :: Name -> Spec -> Spec
+removeReadModel target spec =
+    spec{specNodes = [node | node <- specNodes spec, not (isTarget node)]}
+  where
+    isTarget (NReadModel readModel) = rmName readModel == target
+    isTarget _ = False
+
+changeReadModelShape :: ReadModelNode -> ReadModelNode
+changeReadModelShape readModel =
+    readModel
+        { rmColumns = rmColumns readModel <> [RmColumn "reviewed_by" "text" False]
+        , rmShape = "fnv1a:0000000000000000"
+        }
 
 {- | Assert a @new \<kind\>@ skeleton parses and validates with zero
 error-severity diagnostics.

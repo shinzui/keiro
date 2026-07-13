@@ -70,7 +70,7 @@ aggregate Reservation
     goto  Held
 
   wire kind=ctorName fields=camelCase schemaVersion=1
-  projection transfer_decisions consistency=Strong key=reservationId
+  projection transfer_decisions key=reservationId          # references readmodel by name; consistency= is legacy/optional
     status-map { TransferReservationCreated=>held TransferReservationConfirmed=>confirmed }
                                                              # exact event constructor => status; must be total
     # Or: status-map partial { TransferReservationCreated=>held }
@@ -193,14 +193,58 @@ workqueue reservation_work {
 }
 
 dispatch reservation_work_dispatch {
-  source readModel = accepted_transfer_needs key = reservationId
+  source readModel = accepted_transfer_needs key = reservationId   # must resolve to a readmodel node
   fanout body = resolveTransferCandidates                  # effectful 1->N — HOLE
   dedup key = reservationId
-        seenIn readModel = transfer_decisions field = reservation_id
+        seenIn readModel = transfer_decisions field = reservation_id # node + declared column must resolve
         seenIn queue = reservation_work field = reservation_id   # raw-SQL — HOLE
   enqueue to = reservation_work
 }
 ```
+
+## readmodel (EP-107)
+
+```text
+readmodel transfer_decisions {
+  table = "transfer_decisions"
+  schema = "hospital_capacity"
+  columns {
+    reservation_id text required
+    hospital_id text required
+    status text required
+    decided_at timestamptz
+  }
+  version = 1
+  shape = "fnv1a:3717f6d9e3c44bd6"
+  consistency = Strong
+  scope = category "reservation"
+  feed = subscription
+  subscription = "hospital-capacity-transfer-decisions-sub" # optional override
+}
+
+readmodel subscriptions {
+  table = "subscriptions"
+  schema = "billing"
+  columns { subscription_id text required status text required }
+  version = 1
+  shape = "fnv1a:f54d9bb2f40a6738"
+  consistency = Eventual
+  feed = inline
+}
+```
+
+The registry name is `<context>-<node_name_with_hyphens>`; the default subscription name
+is `<registry-name>-sub`. `shape` is a captured FNV-1a-64 fixture derived from the table
+name and ordered `name:type:req|null` column surface. `check` reports the recomputed value
+when it drifts, and changing the declared shape requires a version bump.
+
+`Strong` requires `feed = subscription`; `scope` is legal only with `Strong` and defaults
+to `entire-log`. An inline model must be referenced by an aggregate `projection` of the
+same name. The projection-level `consistency=` clause is optional legacy syntax; the
+readmodel node owns the real default. Query operations and both read-model references in a
+dispatch resolve against these nodes; dispatch `field =` also resolves against `columns`.
+Generated query/projection holes import a schema-qualified table constant—interpolate it
+into SQL instead of depending on PostgreSQL `search_path`.
 
 ## workflow / operation (EP-6)
 
@@ -224,6 +268,11 @@ operation RunReservationWorkflow
   run HospitalTransferReservation
     input ReservationWorkflowInput
     outcome -> ReservationWorkflowRun
+operation QueryTransferDecisions
+  query transfer_decisions                                 # must resolve to a readmodel node
+    input TransferDecisionQuery
+    result Maybe TransferDecision
+    consistency Strong
 ```
 
 Operation shapes: `command on <Agg> …`, `query <ReadModel> …`, `signal <label> of <Wf> …`,
@@ -245,7 +294,7 @@ keiro-dsl diff     --since <git-ref> <file.keiro>   # classify ADDITIVE/WARNING/
 ```
 
 - `new <kind>` — `kind` ∈ aggregate, process, contract, intake, emit, publisher, workqueue,
-  dispatch, workflow, operation. Prints a guaranteed-valid starter spec to stdout
+  dispatch, readmodel, workflow, operation. Prints a guaranteed-valid starter spec to stdout
   (`keiro-dsl new aggregate > service.keiro`).
 - `scaffold` validates first, then runs collision, firewall, faithful-lowering, and existing-file
   banner gates before writing. Any refusal exits 1 and writes nothing. A Generated target
