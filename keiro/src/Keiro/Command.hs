@@ -23,11 +23,13 @@ Three runners expose this pipeline at increasing levels of integration:
   emitted events paired with their 'RecordedEvent's. This is the primitive
   the projection, process-manager, and router layers build on.
 
-Snapshots are written transparently after a successful append when the
-stream's 'Keiro.EventStream.SnapshotPolicy' fires. Because that write
-happens after the command's events are already committed, snapshot-write
-failures are swallowed and counted instead of being reported as command
-failures. Every runner accepts a tracer for optional OpenTelemetry spans.
+Every successful append is replayed immediately from its pre-command state so
+an unreplayable batch is witnessed at the moment it poisons the stream. The
+post-commit witness is counted and attached to the command span without
+changing the successful result. The same replay fold feeds transparent
+snapshot writes when the stream's 'Keiro.EventStream.SnapshotPolicy' fires;
+post-commit snapshot failures are likewise swallowed and counted. Every runner
+accepts a tracer for optional OpenTelemetry spans.
 -}
 module Keiro.Command (
     -- * Results and errors
@@ -72,10 +74,12 @@ import Keiro.Stream (Stream)
 import Keiro.Telemetry (
     KeiroMetrics,
     keiro_events_appended,
+    keiro_replay_divergence,
     keiro_retry_attempt,
     recordCommandConflicts,
     recordCommandDuplicates,
     recordCommandRetries,
+    recordSnapshotApplyDivergence,
     recordSnapshotDecodeFailures,
     recordSnapshotEncodeFailures,
     recordSnapshotReadHits,
@@ -188,6 +192,11 @@ data HydrationReplayReason
 * 'retryBackoffMicros' — base delay before the k-th OCC retry, capped at
   100 ms and jittered. Set to 0 to disable backoff.
 * 'metrics' — optional metrics handle for command and snapshot counters.
+* 'verifyReplayOnAppend' — replay every just-appended batch from the
+  pre-command state. Divergence is a post-commit advisory: it is counted and
+  attached to the command span, but the already-successful command still
+  succeeds. Snapshot-enabled streams always run the fold because snapshots
+  consume its result.
 -}
 data RunCommandOptions = RunCommandOptions
     { retryLimit :: !Int
@@ -196,6 +205,7 @@ data RunCommandOptions = RunCommandOptions
     , beforeAppend :: !(IO ())
     , retryBackoffMicros :: !Int
     , metrics :: !(Maybe KeiroMetrics)
+    , verifyReplayOnAppend :: !Bool
     , tracer :: !(Maybe Tracer)
     {- ^ Optional OpenTelemetry tracer. When 'Just', the command runner
     opens an 'Internal'-kind span around each invocation, named after
@@ -216,8 +226,8 @@ data RunCommandOptions = RunCommandOptions
     deriving stock (Generic)
 
 {- | Sensible defaults: 3 retries, 256-event read pages, no caller-assigned
-event ids, a no-op pre-append hook, 5ms retry backoff, no metrics, no tracer,
-and no extra metadata.
+event ids, a no-op pre-append hook, 5ms retry backoff, no metrics, post-append
+replay verification enabled, no tracer, and no extra metadata.
 -}
 defaultRunCommandOptions :: RunCommandOptions
 defaultRunCommandOptions =
@@ -228,6 +238,7 @@ defaultRunCommandOptions =
         , beforeAppend = pure ()
         , retryBackoffMicros = 5000
         , metrics = Nothing
+        , verifyReplayOnAppend = True
         , tracer = Nothing
         , metadata = Nothing
         }
@@ -436,17 +447,17 @@ runCommand ::
     Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co)))
 runCommand options validatedEventStream targetStream command =
     withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> do
-        (result, attemptNo) <- attempt 1 Nothing
+        (result, attemptNo) <- attempt mSpan 1 Nothing
         recordCommandOutcome mSpan (^. #eventsAppended) attemptNo result
         pure result
   where
     eventStream = unvalidated validatedEventStream
 
-    attempt attemptNo lastConflict = do
+    attempt mSpan attemptNo lastConflict = do
         hydrated <- hydrate options eventStream targetStream
-        either (\err -> pure (Left err, attemptNo)) (runPlan attemptNo lastConflict) hydrated
+        either (\err -> pure (Left err, attemptNo)) (runPlan mSpan attemptNo lastConflict) hydrated
 
-    runPlan attemptNo lastConflict current =
+    runPlan mSpan attemptNo lastConflict current =
         case conflictFixpoint lastConflict (current ^. #streamVersion) of
             Just err -> pure (Left err, attemptNo)
             Nothing ->
@@ -454,9 +465,9 @@ runCommand options validatedEventStream targetStream command =
                     Left err -> pure (Left err, attemptNo)
                     Right (CommandNoOp result) -> pure (Right result, attemptNo)
                     Right (CommandAppend current' events encoded) ->
-                        appendOnce attemptNo current' events encoded
+                        appendOnce mSpan attemptNo current' events encoded
 
-    appendOnce attemptNo current events encoded = do
+    appendOnce mSpan attemptNo current events encoded = do
         liftIO (options ^. #beforeAppend)
         appended <-
             tryError @StoreError
@@ -466,10 +477,10 @@ runCommand options validatedEventStream targetStream command =
                     encoded
         case appended of
             Right appendResult -> do
-                writeSnapshotIfNeeded options eventStream current events appendResult
+                verifyAndSnapshot options mSpan eventStream current events appendResult
                 pure (Right (appendedResult targetStream appendResult (Prelude.length encoded)), attemptNo)
             Left (_, storeError) ->
-                retryOrFail options attempt attemptNo (current ^. #streamVersion) storeError
+                retryOrFail options (attempt mSpan) attemptNo (current ^. #streamVersion) storeError
 
 {- | Like 'runCommand', but run @afterAppend@ inside the /same/ transaction
 as the append, so a read-model write commits atomically with the events.
@@ -507,17 +518,17 @@ runCommandWithSqlEvents ::
     Eff es (Either CommandError (CommandResult (EventStream phi rs s ci co), Maybe a))
 runCommandWithSqlEvents options validatedEventStream targetStream command afterAppend =
     withCommandSpan (options ^. #tracer) (resolvedStreamName eventStream targetStream) Nothing $ \mSpan -> do
-        (result, attemptNo) <- attempt 1 Nothing
+        (result, attemptNo) <- attempt mSpan 1 Nothing
         recordCommandOutcome mSpan (\(r, _) -> r ^. #eventsAppended) attemptNo result
         pure result
   where
     eventStream = unvalidated validatedEventStream
 
-    attempt attemptNo lastConflict = do
+    attempt mSpan attemptNo lastConflict = do
         hydrated <- hydrate options eventStream targetStream
-        either (\err -> pure (Left err, attemptNo)) (runPlan attemptNo lastConflict) hydrated
+        either (\err -> pure (Left err, attemptNo)) (runPlan mSpan attemptNo lastConflict) hydrated
 
-    runPlan attemptNo lastConflict current =
+    runPlan mSpan attemptNo lastConflict current =
         case conflictFixpoint lastConflict (current ^. #streamVersion) of
             Just err -> pure (Left err, attemptNo)
             Nothing ->
@@ -525,9 +536,9 @@ runCommandWithSqlEvents options validatedEventStream targetStream command afterA
                     Left err -> pure (Left err, attemptNo)
                     Right (CommandNoOp result) -> pure (Right (result, Nothing), attemptNo)
                     Right (CommandAppend current' events encoded) ->
-                        appendWithSqlOnce attemptNo current' events encoded
+                        appendWithSqlOnce mSpan attemptNo current' events encoded
 
-    appendWithSqlOnce attemptNo current events encoded = do
+    appendWithSqlOnce mSpan attemptNo current events encoded = do
         liftIO (options ^. #beforeAppend)
         prepared <- prepareEventsIO encoded
         now <- liftIO getCurrentTime
@@ -545,12 +556,12 @@ runCommandWithSqlEvents options validatedEventStream targetStream command afterA
         outcome <- tryError @StoreError (runTransaction body)
         case outcome of
             Right (Right (appendResult, userValue)) -> do
-                writeSnapshotIfNeeded options eventStream current events appendResult
+                verifyAndSnapshot options mSpan eventStream current events appendResult
                 pure (Right (appendedResult targetStream appendResult (Prelude.length encoded), Just userValue), attemptNo)
             Right (Left storeError) ->
-                retryOrFail options attempt attemptNo (current ^. #streamVersion) storeError
+                retryOrFail options (attempt mSpan) attemptNo (current ^. #streamVersion) storeError
             Left (_, storeError) ->
-                retryOrFail options attempt attemptNo (current ^. #streamVersion) storeError
+                retryOrFail options (attempt mSpan) attemptNo (current ^. #streamVersion) storeError
 
 prepareCommandPlan ::
     (BoolAlg phi (RegFile rs, ci)) =>
@@ -626,37 +637,60 @@ commandErrorClass = \case
     RetryExhausted{} -> "retry_exhausted"
     ConflictFixpoint{} -> "conflict_fixpoint"
 
-writeSnapshotIfNeeded ::
+verifyAndSnapshot ::
     forall phi rs s ci co es.
     (BoolAlg phi (RegFile rs, ci), IOE :> es, Store :> es, Error StoreError :> es, Eq co) =>
     RunCommandOptions ->
+    Maybe Span ->
     EventStream phi rs s ci co ->
     Hydrated rs s ->
     [co] ->
     AppendResult ->
     Eff es ()
-writeSnapshotIfNeeded options eventStream current events appendResult =
-    case eventStream ^. #stateCodec of
-        Nothing -> pure ()
-        Just codec ->
-            case Keiki.applyEvents (eventStream ^. #transducer) (state current, registers current) events of
-                Nothing -> pure ()
-                Just finalState -> do
-                    let finalVersion = appendResult ^. #streamVersion
-                        terminality =
-                            if Keiki.isFinal (eventStream ^. #transducer) (Prelude.fst finalState)
-                                then Terminal
-                                else NotTerminal
-                    when (shouldSnapshotSpan (eventStream ^. #snapshotPolicy) terminality finalState (current ^. #streamVersion) finalVersion)
-                        $ do
-                            encoded <- liftIO (encodeSnapshotStrict codec finalState)
-                            case encoded of
-                                Left _ -> recordSnapshotEncodeFailures (options ^. #metrics) 1
-                                Right value -> do
-                                    outcome <- tryError @StoreError (writeSnapshotEncoded (appendResult ^. #streamId) finalVersion codec value)
-                                    case outcome of
-                                        Right () -> pure ()
-                                        Left _ -> recordSnapshotWriteFailures (options ^. #metrics) 1
+verifyAndSnapshot options mSpan eventStream current events appendResult
+    | Prelude.not (options ^. #verifyReplayOnAppend)
+    , Nothing <- eventStream ^. #stateCodec =
+        pure ()
+    | otherwise =
+        case Keiki.applyEventsEither (eventStream ^. #transducer) (state current, registers current) events of
+            Left failure -> do
+                recordSnapshotApplyDivergence (options ^. #metrics) 1
+                for_ mSpan $ \sp ->
+                    addAttribute
+                        sp
+                        (unkey keiro_replay_divergence)
+                        (Text.take 256 (renderReplayFailure failure))
+            Right finalState ->
+                case eventStream ^. #stateCodec of
+                    Nothing -> pure ()
+                    Just codec -> do
+                        let finalVersion = appendResult ^. #streamVersion
+                            terminality =
+                                if Keiki.isFinal (eventStream ^. #transducer) (Prelude.fst finalState)
+                                    then Terminal
+                                    else NotTerminal
+                        when (shouldSnapshotSpan (eventStream ^. #snapshotPolicy) terminality finalState (current ^. #streamVersion) finalVersion)
+                            $ do
+                                encoded <- liftIO (encodeSnapshotStrict codec finalState)
+                                case encoded of
+                                    Left _ -> recordSnapshotEncodeFailures (options ^. #metrics) 1
+                                    Right value -> do
+                                        outcome <- tryError @StoreError (writeSnapshotEncoded (appendResult ^. #streamId) finalVersion codec value)
+                                        case outcome of
+                                            Right () -> pure ()
+                                            Left _ -> recordSnapshotWriteFailures (options ^. #metrics) 1
+
+renderReplayFailure :: Keiki.ReplayFailure s co -> Text
+renderReplayFailure failure =
+    "event_index="
+        <> Text.pack (show (Keiki.replayFailedIndex failure))
+        <> ";reason="
+        <> case Keiki.replayFailureReason failure of
+            Keiki.ReplayEventFailed stepFailure -> case stepFailure of
+                Keiki.ReplayNoInvertingEdge{} -> "no_inverting_edge"
+                Keiki.ReplayAmbiguousInversions{} -> "ambiguous_inversions"
+                Keiki.ReplayQueueMismatch{} -> "queue_mismatch"
+            Keiki.ReplayLogTruncated{} -> "log_truncated"
 
 retryOrFail ::
     (IOE :> es) =>

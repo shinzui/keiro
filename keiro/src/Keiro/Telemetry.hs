@@ -21,8 +21,8 @@ library while every convention name is anchored to the spec-generated module
 rather than a hand-typed string.
 
 Only the @keiro.*@ keys ('keiro_stream_name', 'keiro_retry_attempt',
-'keiro_events_appended') are defined locally: they are bespoke to keiro and
-have no upstream equivalent.
+'keiro_events_appended', 'keiro_replay_divergence') are defined locally: they
+are bespoke to keiro and have no upstream equivalent.
 -}
 module Keiro.Telemetry (
     -- * Span helpers
@@ -56,6 +56,7 @@ module Keiro.Telemetry (
     keiro_stream_name,
     keiro_retry_attempt,
     keiro_events_appended,
+    keiro_replay_divergence,
     keiro_workflow_name,
     keiro_workflow_id,
     keiro_workflow_step,
@@ -92,6 +93,7 @@ module Keiro.Telemetry (
     keiroSnapshotReadHitsName,
     keiroSnapshotReadMissesName,
     keiroSnapshotWriteFailuresName,
+    keiroSnapshotApplyDivergenceName,
     keiroDispatchFailedName,
     keiroDispatchDuplicatesName,
     keiroDispatchPoisonName,
@@ -131,6 +133,7 @@ module Keiro.Telemetry (
     recordSnapshotReadHits,
     recordSnapshotReadMisses,
     recordSnapshotWriteFailures,
+    recordSnapshotApplyDivergence,
     recordDispatchFailed,
     recordDispatchDuplicate,
     recordDispatchPoison,
@@ -240,6 +243,9 @@ keiro_retry_attempt = AttributeKey "keiro.retry.attempt"
 
 keiro_events_appended :: AttributeKey Int64
 keiro_events_appended = AttributeKey "keiro.events.appended"
+
+keiro_replay_divergence :: AttributeKey Text
+keiro_replay_divergence = AttributeKey "keiro.replay.divergence"
 
 keiro_workflow_name :: AttributeKey Text
 keiro_workflow_name = AttributeKey "keiro.workflow.name"
@@ -577,6 +583,8 @@ keiroSnapshotReadMissesName :: Text
 keiroSnapshotReadMissesName = "keiro.snapshot.read.misses"
 keiroSnapshotWriteFailuresName :: Text
 keiroSnapshotWriteFailuresName = "keiro.snapshot.write.failures"
+keiroSnapshotApplyDivergenceName :: Text
+keiroSnapshotApplyDivergenceName = "keiro.snapshot.apply.divergence"
 keiroDispatchFailedName :: Text
 keiroDispatchFailedName = "keiro.dispatch.failed"
 keiroDispatchDuplicatesName :: Text
@@ -639,6 +647,7 @@ data KeiroMetrics = KeiroMetrics
     , snapshotReadHits :: Counter Int64
     , snapshotReadMisses :: Counter Int64
     , snapshotWriteFailures :: Counter Int64
+    , snapshotApplyDivergence :: Counter Int64
     , dispatchFailed :: Counter Int64
     , dispatchDuplicates :: Counter Int64
     , dispatchPoison :: Counter Int64
@@ -687,6 +696,7 @@ newKeiroMetrics meter = liftIO $ do
     snapshotReadHits' <- counterI64 keiroSnapshotReadHitsName "{read}" "Snapshot lookups that yielded a usable hydration seed."
     snapshotReadMisses' <- counterI64 keiroSnapshotReadMissesName "{read}" "Snapshot lookups that fell back to full replay."
     snapshotWriteFailures' <- counterI64 keiroSnapshotWriteFailuresName "{failure}" "Post-commit snapshot writes that failed and were swallowed."
+    snapshotApplyDivergence' <- counterI64 keiroSnapshotApplyDivergenceName "{failure}" "Just-appended event batches that failed to replay from the pre-command state; the stream is poisoned and its next hydration will fail."
     dispatchFailed' <- counterI64 keiroDispatchFailedName "{command}" "Process-manager/router dispatch commands that failed."
     dispatchDuplicates' <- counterI64 keiroDispatchDuplicatesName "{command}" "Process-manager/router dispatch commands skipped as duplicate deterministic event ids."
     dispatchPoison' <- counterI64 keiroDispatchPoisonName "{message}" "Process-manager/router worker messages classified as poison."
@@ -726,6 +736,7 @@ newKeiroMetrics meter = liftIO $ do
             , snapshotReadHits = snapshotReadHits'
             , snapshotReadMisses = snapshotReadMisses'
             , snapshotWriteFailures = snapshotWriteFailures'
+            , snapshotApplyDivergence = snapshotApplyDivergence'
             , dispatchFailed = dispatchFailed'
             , dispatchDuplicates = dispatchDuplicates'
             , dispatchPoison = dispatchPoison'
@@ -818,6 +829,8 @@ recordSnapshotReadMisses :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotReadMisses = recordCounter snapshotReadMisses
 recordSnapshotWriteFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotWriteFailures = recordCounter snapshotWriteFailures
+recordSnapshotApplyDivergence :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordSnapshotApplyDivergence = recordCounter snapshotApplyDivergence
 recordDispatchFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordDispatchFailed = recordCounter dispatchFailed
 recordDispatchDuplicate :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()

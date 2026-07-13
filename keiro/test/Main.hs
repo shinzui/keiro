@@ -1055,6 +1055,95 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             traverse (decodeRecorded counterCodec) (Vector.toList recorded)
                 `shouldBe` Right [CounterAdded 5, CounterAudited 5]
 
+        it "counts and traces a just-appended batch that cannot replay" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (metricProvider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter metricProvider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            (processor, spansRef) <- inMemoryListExporter
+            tracerProvider <- createTracerProvider [processor] emptyTracerProviderOptions
+            let tracer = makeTracer tracerProvider "keiro-test" tracerOptions
+                target = stream "counter-command-replay-divergence" :: Stream CounterEventStream
+                options =
+                    defaultRunCommandOptions
+                        & #metrics
+                        ?~ keiroMetrics
+                        & #tracer
+                        ?~ tracer
+            Right (Right commandResult) <-
+                Store.runStoreIO storeHandle $
+                    runCommand options headUnrecoverableEventStream target (Add 2)
+            commandResult ^. #streamVersion `shouldBe` StreamVersion 2
+            commandResult ^. #eventsAppended `shouldBe` 2
+            _ <- forceFlushMeterProvider metricProvider Nothing
+            exported <- readIORef metricsRef
+            lookup "keiro.snapshot.apply.divergence" (flattenScalarPoints exported)
+                `shouldBe` Just (IntNumber 1)
+            next <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions headUnrecoverableEventStream target (Add 3)
+            case next of
+                Right (Left HydrationReplayFailed{}) -> pure ()
+                other -> expectationFailure ("expected the witnessed divergence to poison hydration, got " <> show other)
+            _ <- shutdownTracerProvider tracerProvider Nothing
+            spans <- traverse captureSpan =<< readIORef spansRef
+            case spans of
+                [sp] ->
+                    textAttr (csAttributes sp) "keiro.replay.divergence"
+                        `shouldBe` Just "event_index=0;reason=no_inverting_edge"
+                other -> expectationFailure ("expected one divergence span, got " <> show (length other))
+
+        it "skips replay verification for a snapshot-less stream when disabled" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            let target = stream "counter-command-replay-divergence-disabled" :: Stream CounterEventStream
+                options =
+                    defaultRunCommandOptions
+                        & #metrics
+                        ?~ keiroMetrics
+                        & #verifyReplayOnAppend
+                        .~ False
+            Right (Right commandResult) <-
+                Store.runStoreIO storeHandle $
+                    runCommand options headUnrecoverableEventStream target (Add 2)
+            commandResult ^. #eventsAppended `shouldBe` 2
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            lookup "keiro.snapshot.apply.divergence" (flattenScalarPoints exported)
+                `shouldBe` Nothing
+
+        it "witnesses replay divergence on the transactional SQL append path" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            let target = stream "counter-command-replay-divergence-sql" :: Stream CounterEventStream
+                options = defaultRunCommandOptions & #metrics ?~ keiroMetrics
+            Right (Right (commandResult, Just ())) <-
+                Store.runStoreIO storeHandle $
+                    runCommandWithSqlEvents
+                        options
+                        headUnrecoverableEventStream
+                        target
+                        (Add 2)
+                        (\_ _ -> pure ())
+            commandResult ^. #eventsAppended `shouldBe` 2
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            lookup "keiro.snapshot.apply.divergence" (flattenScalarPoints exported)
+                `shouldBe` Just (IntNumber 1)
+
         it "replays a prior multi-event command before appending the next batch" $ \storeHandle -> do
             let target = stream "counter-command-multi-replay" :: Stream CounterEventStream
             Right (Right _) <-
@@ -4902,6 +4991,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             attrKeyText Telemetry.keiro_stream_name `shouldBe` "keiro.stream.name"
             attrKeyTextInt64 Telemetry.keiro_retry_attempt `shouldBe` "keiro.retry.attempt"
             attrKeyTextInt64 Telemetry.keiro_events_appended `shouldBe` "keiro.events.appended"
+            attrKeyText Telemetry.keiro_replay_divergence `shouldBe` "keiro.replay.divergence"
 
         it "extracts a TraceContext from a W3C traceparent header pair" $ do
             let traceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
@@ -8608,6 +8698,9 @@ by inverting only the head, so the stored chain cannot reconstruct @Add@.
 headUnrecoverableEventStreamDef :: CounterEventStream
 headUnrecoverableEventStreamDef =
     counterEventStreamDef & #transducer .~ headUnrecoverableTransducer
+
+headUnrecoverableEventStream :: ValidatedCounterEventStream
+headUnrecoverableEventStream = mkEventStreamUnchecked headUnrecoverableEventStreamDef
 
 headUnrecoverableTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
 headUnrecoverableTransducer =

@@ -79,10 +79,10 @@ reporting `globalPosition = Nothing` where it previously fabricated `Just 0`.
 
 - [x] (2026-07-13T15:52:56Z) M1: replay-contract checks force-enabled in `validateEventStreamWith` / `mkEventStreamWith` (caller options may only strengthen); `mkEventStreamUnchecked` escape hatch added with a loud haddock
 - [x] (2026-07-13T15:52:56Z) M1: silent-move fixture, silent register-write fixture, weakened-options-still-rejected specs, and keiki-flags-it spec added to `keiro/test/Main.hs`; existing no-op fixture still validates clean
-- [ ] M2: `verifyReplayOnAppend` flag added to `RunCommandOptions` (default `True`)
-- [ ] M2: post-append replay check extracted, runs on both append paths, witnesses divergence via counter + span attribute; snapshot write consumes the same fold
-- [ ] M2: `keiro.snapshot.apply.divergence` counter and `keiro_replay_divergence` attribute key added to `keiro/src/Keiro/Telemetry.hs`
-- [ ] M2: split-coverage divergence spec (counter increments, command still succeeds, next command fails with `HydrationReplayFailed`)
+- [x] (2026-07-13T16:04:07Z) M2: `verifyReplayOnAppend` flag added to `RunCommandOptions` (default `True`)
+- [x] (2026-07-13T16:04:07Z) M2: post-append replay check extracted, runs on both append paths, witnesses divergence via counter + span attribute; snapshot write consumes the same fold
+- [x] (2026-07-13T16:04:07Z) M2: `keiro.snapshot.apply.divergence` counter and `keiro_replay_divergence` attribute key added to `keiro/src/Keiro/Telemetry.hs`
+- [x] (2026-07-13T16:04:07Z) M2: split-coverage divergence spec (counter increments, command still succeeds, next command fails with `HydrationReplayFailed`)
 - [ ] M3: `noOpResult` reports `globalPosition = Nothing`; dead `Hydrated.globalPosition` bookkeeping removed
 - [ ] M3: no-op globalPosition normalization spec (fails before the fix)
 - [ ] M4: CHANGELOG entries, semconv audit doc row, module haddock updates, master plan registry/progress update, `nix fmt`, full sweep
@@ -136,6 +136,15 @@ implementation-time discoveries as they occur.
   Evidence: `cabal test keiro-test --test-options='--match "mkEventStream"'`;
   the milestone gate also passed `cabal build all` and the full 312-example
   `cabal test keiro-test` suite.
+- Milestone 2 did not need the authored two-field `PairCommand` fixture. EP-95
+  had already added `headUnrecoverableEventStreamDef`, whose head uses a literal
+  and whose tail alone carries `CounterCommand.amount`; it is the same
+  split-coverage failure shape. Mounting that existing fixture through
+  `mkEventStreamUnchecked` produced `event_index=0;reason=no_inverting_edge`,
+  incremented the divergence counter, and caused the next hydration to fail as
+  predicted. Focused plain-runner, opt-out, and transactional-SQL-path specs all
+  passed; the milestone gate then passed `cabal build all` and all 315
+  `keiro-test` examples.
 
 
 ## Decision Log
@@ -258,6 +267,25 @@ implementation-time discoveries as they occur.
   Discoveries). If EP-95's migration to keiki's `replayEvents` has already deleted
   the bookkeeping, only the `noOpResult` edit and its haddock remain.
   Date: 2026-07-11
+
+- Decision: render the `keiro.replay.divergence` span attribute as a bounded,
+  structured summary (`event_index=<n>;reason=<class>`) rather than `show`ing
+  the entire `ReplayFailure` value.
+  Rationale: `ReplayFailure`'s derived `Show` instance requires `Show s` and
+  `Show co`, but Keiro's public command runners deliberately require neither.
+  Adding those constraints would be an unrelated source-breaking API change.
+  The index and typed reason class preserve the operational witness without
+  widening the runner contracts or leaking event payloads into telemetry.
+  Date: 2026-07-13
+
+- Decision: reuse EP-95's existing `headUnrecoverableEventStreamDef` as the
+  Milestone 2 split-coverage fixture instead of adding the authored
+  `PairCommand`/`PairEvent` duplicate.
+  Rationale: the existing edge has the identical replay defect — the first
+  output cannot recover the command field and the tail alone carries it — and
+  the test proves the same counter, span, successful-append, and poisoned-next-
+  hydration behavior with less fixture surface.
+  Date: 2026-07-13
 
 
 ## Outcomes & Retrospective
@@ -660,12 +688,15 @@ Command path (`keiro/src/Keiro/Command.hs`):
   `Keiki.applyEventsEither (eventStream ^. #transducer) (state current, registers current) events`.
   On `Left failure`: `recordSnapshotApplyDivergence (options ^. #metrics) 1`, and
   when a span is present,
-  `addAttribute sp (unkey keiro_replay_divergence) (Text.take 256 (Text.pack (show failure)))`
-  (the 256-cap mirrors `recordCommandOutcome`'s error description at line 565); no
-  snapshot is attempted (there is no trustworthy final state) and the function
-  returns normally. On `Right finalState`: proceed with the existing snapshot body
-  verbatim (terminality computation, `shouldSnapshotSpan`, `writeSnapshot`,
-  swallow-and-count via `recordSnapshotWriteFailures` — lines 595-606 today).
+  `addAttribute sp (unkey keiro_replay_divergence) (Text.take 256 (renderReplayFailure failure))`.
+  `renderReplayFailure` records the zero-based failed event index and one of the
+  structured reason classes `no_inverting_edge`, `ambiguous_inversions`,
+  `queue_mismatch`, or `log_truncated`; this avoids adding `Show` constraints to
+  the public runners. No snapshot is attempted (there is no trustworthy final
+  state) and the function returns normally. On `Right finalState`: proceed with
+  the existing snapshot body verbatim (terminality computation,
+  `shouldSnapshotSpan`, `writeSnapshot`, swallow-and-count via
+  `recordSnapshotWriteFailures`).
 - Thread the span: both runners already receive `mSpan` in their `withCommandSpan`
   lambda (lines 393 and 464); pass it as a new parameter through
   `attempt`/`runPlan`/`appendOnce` (and the `WithSqlEvents` equivalents) to the
@@ -674,35 +705,16 @@ Command path (`keiro/src/Keiro/Command.hs`):
 - Update the module haddock's snapshot paragraph (lines 26-29) to describe the
   replay check and its advisory posture.
 
-The divergence spec, in `keiro/test/Main.hs` under the `describe "Keiro.Command"`
-block. First the fixture — a "split coverage" transducer, the shape keiki EP-71
-uses to demonstrate a validator-blessed transducer whose emitted batch cannot
-replay (keiki repository,
-`docs/plans/71-align-build-time-validation-with-replay-head-recoverability-cross-edge-inversion-ambiguity-and-guard-implies-input-read-checks.md`,
-Milestone 1): a two-field command emitting a two-event chain where the head event
-carries only the first field and the tail only the second. Forward `step`
-evaluates both events fine; replay must invert the *head* alone, cannot recover
-the second field, and fails. Concretely, following the `addCtor` /
-`counterAddedCtor` fixture idioms (`keiro/test/Main.hs:7775-7795`):
-
-- `data PairCommand = AddPair !Int !Int`; `data PairEvent = PairFirst !Int | PairSecond !Int`;
-  single-vertex `data PairState = Pairing deriving (..., Enum, Bounded, Ord)`;
-  an `InCtor PairCommand` over slots `first`/`second`; two `WireCtor`s; a `Codec
-  PairEvent` with both event types (copy `counterCodec`'s shape).
-- `splitPairTransducer`: one self-loop edge, `guard = matchInCtor pairCtor`,
-  `update = UKeep`, `output = [pack pairCtor pairFirstCtor (inpCtor pairCtor #first *: oNil),
-  pack pairCtor pairSecondCtor (inpCtor pairCtor #second *: oNil)]`,
-  `target = Pairing`. Note it passes Milestone 1's rule (it emits) and passes
-  today's hidden-input check (the union across the chain covers both fields), but
-  post-MP-16 keiki's head-recoverability check rightly flags it, and Milestone 1
-  force-enables that check — so mount the stream with `mkEventStreamUnchecked`,
-  with a comment stating why: the public path now rejects this transducer (that is
-  Milestone 1's point), and the unchecked mount stands in for the residual ways a
-  divergent stream can exist in production — a validator blind spot (keiki EP-71
-  documents the `TLit` limits of its inversion-ambiguity criterion), a wrongly
-  narrowed non-contract check, or a legacy stream validated before the checks
-  existed. `stateCodec = Nothing`, `snapshotPolicy = Never` — proving the
-  coverage-hole fix (pre-plan code would never have run the check on this stream).
+The divergence specs live in `keiro/test/Main.hs` under `describe
+"Keiro.Command"`. They reuse EP-95's `headUnrecoverableEventStreamDef`: its
+two-event edge emits a literal-valued head and carries `CounterCommand.amount`
+only in the tail, so forward execution succeeds but replay cannot recover the
+command from the head. The public boundary rejects this transducer; the fixture
+is deliberately mounted with `mkEventStreamUnchecked` to stand in for a legacy
+stream or a future validator blind spot. It has `stateCodec = Nothing` and
+`snapshotPolicy = Never`, proving the pre-plan snapshot-only coverage hole is
+closed. A sibling transactional-SQL spec proves both append paths use the same
+epilogue.
 
 Then the spec, combining the metrics harness (`keiro/test/Main.hs:322-350`) with
 the command harness (`:592-609`):
@@ -996,3 +1008,9 @@ Revision note (2026-07-13): implemented Milestone 1 and associated this child pl
 with the MasterPlan's existing intention. Keiro now force-enables both durable
 replay-contract checks, exposes only a loudly named wholly unchecked bypass, and
 pins the boundary behavior with silent vertex-change and caller-weakening specs.
+
+Revision note (2026-07-13): implemented Milestone 2. Every append path now shares
+one structured `applyEventsEither` epilogue with snapshotting, divergence is
+counted and traced without changing the committed command result, the default-on
+flag has a tested snapshot-less opt-out, and both plain and transactional SQL
+append paths have focused regression coverage.
