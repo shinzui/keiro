@@ -50,6 +50,7 @@ import Keiki.Core (
     (.==),
  )
 import Keiki.Core qualified as Keiki
+import Keiki.Generics (emptyRegFile)
 import Keiro
 import Keiro qualified as KeiroRoot
 import Keiro.Connection (ensureProjectionSchema, qualifyTable, withProjectionSchema)
@@ -576,6 +577,19 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             expectAccepted "snapshot-counter-guarded" guardedSnapshotCounterEventStreamDef
             expectAccepted "pm-snapshot-counter" pmSnapshotCounterEventStreamDef
             expectAccepted "rejecting-counter" rejectingEventStreamDef
+
+        it "rejects a snapshot codec whose initial register file contains an uninitialized slot" $ do
+            case mkEventStream "uninitialized-snapshot" uninitializedSnapshotEventStreamDef of
+                Left warns -> do
+                    map eswStreamLabel warns `shouldSatisfy` all (== "uninitialized-snapshot")
+                    map eswReason warns `shouldSatisfy` any (Text.isInfixOf "cannot encode the initial state/registers")
+                    map eswReason warns `shouldSatisfy` any (Text.isInfixOf "uninit: neverWritten")
+                Right _ -> expectationFailure "expected mkEventStream to reject an uninitialized snapshot register"
+
+        it "accepts the same snapshot stream when every initial register is initialized" $ do
+            case mkEventStream "initialized-snapshot" initializedSnapshotEventStreamDef of
+                Right _ -> pure ()
+                Left warns -> expectationFailure ("expected initialized snapshot registers to validate, got " <> show warns)
 
         it "rejects a bare EventStream at runCommand (compile-time)" $ do
             (exitCode, _stdout, stderr) <-
@@ -7949,9 +7963,13 @@ type ValidatedCounterEventStream = ValidatedEventStream (HsPred '[] CounterComma
 
 type SnapshotCounterRegs = '[ '("lastAmount", Int)]
 
+type UninitializedSnapshotRegs = '[ '("initialized", Int), '("neverWritten", Int)]
+
 type SnapshotCounterEventStream = EventStream (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
 
 type ValidatedSnapshotCounterEventStream = ValidatedEventStream (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
+
+type UninitializedSnapshotEventStream = EventStream (HsPred UninitializedSnapshotRegs CounterCommand) UninitializedSnapshotRegs CounterState CounterCommand CounterEvent
 
 data CounterCommand
     = Add !Int
@@ -8060,6 +8078,30 @@ snapshotCounterEventStreamDef =
         , resolveStreamName = Stream.streamName
         , snapshotPolicy = Every 2
         , stateCodec = Just (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
+        }
+
+uninitializedSnapshotEventStreamDef :: UninitializedSnapshotEventStream
+uninitializedSnapshotEventStreamDef =
+    initializedSnapshotEventStreamDef
+        & #initialRegisters
+        .~ RCons (Proxy @"initialized") 0 (emptyRegFile @'[ '("neverWritten", Int)])
+
+initializedSnapshotEventStreamDef :: UninitializedSnapshotEventStream
+initializedSnapshotEventStreamDef =
+    EventStream
+        { transducer =
+            SymTransducer
+                { edgesOut = \case Counting -> []
+                , initial = Counting
+                , initialRegs = RCons (Proxy @"initialized") 0 (RCons (Proxy @"neverWritten") 0 RNil)
+                , isFinal = \_ -> False
+                }
+        , initialState = Counting
+        , initialRegisters = RCons (Proxy @"initialized") 0 (RCons (Proxy @"neverWritten") 0 RNil)
+        , eventCodec = counterCodec
+        , resolveStreamName = Stream.streamName
+        , snapshotPolicy = Every 2
+        , stateCodec = Just (defaultStateCodec @UninitializedSnapshotRegs @CounterState 1)
         }
 
 snapshotCounterEventStream :: ValidatedSnapshotCounterEventStream

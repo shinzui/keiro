@@ -4,6 +4,7 @@ slug: snapshot-subsystem-hardening-uninit-register-guards-read-side-telemetry-an
 title: "Snapshot subsystem hardening: uninit-register guards, read-side telemetry, and workflow write alignment"
 kind: exec-plan
 created_at: 2026-07-12T05:07:53Z
+intention: intention_01kxcz37ave9t8d6amvvxnemr6
 master_plan: "docs/masterplans/14-harden-the-keiro-command-coordination-and-snapshot-paths-surfaced-by-the-2026-07-keiki-path-review.md"
 ---
 
@@ -34,9 +35,9 @@ To see it working: run `cabal test keiro-test` from the repository root and obse
 Use a checklist to summarize granular steps. Every stopping point must be documented here,
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 
-- [ ] M1: `deepseq` added to `keiro-core/keiro-core.cabal` build-depends
-- [ ] M1: `initialSnapshotEncodeWarnings` implemented in `keiro-core/src/Keiro/EventStream/Validate.hs` and wired into `validateEventStreamWith`
-- [ ] M1: uninit-slot fixture (two slots, one never written) added to `keiro/test/Main.hs`; `mkEventStream` rejection test passes and names the slot
+- [x] M1: `deepseq` added to `keiro-core/keiro-core.cabal` build-depends
+- [x] M1: `initialSnapshotEncodeWarnings` implemented in `keiro-core/src/Keiro/EventStream/Validate.hs` and wired into `validateEventStreamWith`
+- [x] M1: uninit-slot fixture (two slots, one never written) added to `keiro/test/Main.hs`; `mkEventStream` rejection test passes and names the slot
 - [ ] M2: `deepseq` added to `keiro/keiro.cabal` (library and, if needed, test suite)
 - [ ] M2: `keiro.snapshot.encode.failures` counter added to `keiro/src/Keiro/Telemetry.hs` (name constant, `KeiroMetrics` field, registration, recorder)
 - [ ] M2: `encodeSnapshotStrict` and `writeSnapshotEncoded` added to `keiro/src/Keiro/Snapshot.hs`
@@ -82,6 +83,13 @@ implementation. Provide concise evidence.
   logger. The discarded decode-error text is therefore surfaced through the
   `SnapshotDecodeFailed Text` constructor (available to callers and tests) plus the
   counter, not through a log line (see Decision Log).
+- (Implementation, 2026-07-13) The repository's ignored `cabal.project.local`
+  overlays kiroku 0.3.0.0 packages on the plan's pinned kiroku 0.2.1.0 packages,
+  so the default `cabal` invocation cannot solve. Milestone validation uses a
+  temporary project that imports only `cabal.project`; the M1 focused run passed
+  four examples after excluding the pre-existing compile-time test whose nested
+  `cabal` process still observes the local overlay. The final full-suite run will
+  put the same clean project selection in front of nested `cabal` calls as well.
 
 
 ## Decision Log
@@ -522,3 +530,5 @@ Boundaries this plan must respect: keiki owns the shape hash, the `uninit:` mess
 ---
 
 Revision note (2026-07-12): initial authoring. Fleshed out the skeleton after verifying every link of the four review findings against the working tree (file:line citations throughout), reading MP-14's Integration Points 3 and 5 and its Decision Log entry on uninit-slot enforcement, and reading keiki EP-78's Milestone 4 to pin the non-duplication boundary. Key resolutions recorded in the Decision Log: spoon-idiom purity for the validation guard, `ErrorCall`-only catching, a distinct encode-failure counter, caller-side metric recording via a reason-carrying `SnapshotLookup`, no logging seam (decision: data + counter), shared write-failure counter for workflows, keeping `rotateGeneration`'s unconditional seed snapshot (already documented as deliberate), and the `Error StoreError` constraint addition.
+
+Revision note (2026-07-13): completed M1. Added the strict initial snapshot encode probe, a two-register `emptyRegFile` regression fixture, and focused acceptance coverage that proves the warning names `uninit: neverWritten`. Recorded the user-local Cabal overlay and clean-project validation procedure under Surprises & Discoveries.

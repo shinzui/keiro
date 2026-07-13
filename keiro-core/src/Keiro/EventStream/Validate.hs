@@ -27,6 +27,8 @@ module Keiro.EventStream.Validate (
     mkEventStreamOrThrow,
 ) where
 
+import Control.DeepSeq (force)
+import Control.Exception (ErrorCall, displayException, evaluate, try)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import GHC.Stack (HasCallStack)
@@ -38,7 +40,8 @@ import Keiki.Core (
     defaultValidationOptions,
     validateTransducer,
  )
-import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
+import Keiro.EventStream (EventStream (..), SnapshotPolicy (..), StateCodec (..))
+import System.IO.Unsafe (unsafePerformIO)
 
 {- | A validation warning about one event stream, tagged with the
 caller-supplied label so a multi-aggregate service can tell which stream is at
@@ -87,6 +90,7 @@ validateEventStreamWith ::
     [EventStreamWarning]
 validateEventStreamWith opts label es =
     snapshotWarnings label es
+        <> initialSnapshotEncodeWarnings label es
         <> [ EventStreamWarning{eswStreamLabel = label, eswReason = renderWarning w}
            | w <- validateTransducer opts (transducer es)
            ]
@@ -167,3 +171,29 @@ snapshotWarnings label es =
                 , eswReason = "snapshotPolicy is set but stateCodec is Nothing; snapshots would never be written"
                 }
             ]
+
+{- | Force the configured codec over the initial aggregate state while the
+stream is being validated. This catches the labelled @uninit: <slot>@
+'ErrorCall' thunks installed by 'Keiki.Generics.emptyRegFile' before a service
+can accept commands for a snapshot-enabled stream.
+
+The public validation API remains pure; this narrowly scoped exception spoon
+observes only 'ErrorCall'. Any other exception remains a programmer-visible
+failure instead of being converted into a warning.
+-}
+initialSnapshotEncodeWarnings :: Text -> EventStream phi rs s ci co -> [EventStreamWarning]
+initialSnapshotEncodeWarnings label es =
+    case stateCodec es of
+        Nothing -> []
+        Just codec -> unsafePerformIO $ do
+            encoded <- try @ErrorCall (evaluate (force (encode codec (initialState es, initialRegisters es))))
+            pure $ case encoded of
+                Right _ -> []
+                Left err ->
+                    [ EventStreamWarning
+                        { eswStreamLabel = label
+                        , eswReason =
+                            "stateCodec cannot encode the initial state/registers: "
+                                <> Text.pack (displayException err)
+                        }
+                    ]
