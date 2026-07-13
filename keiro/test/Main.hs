@@ -544,6 +544,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 [ validateEventStream "counter" counterEventStreamDef
                 , validateEventStream "counter-no-op" noOpCounterEventStreamDef
                 , validateEventStream "counter-multi" multiCounterEventStreamDef
+                , validateEventStream "counter-ambiguous" ambiguousCounterEventStreamDef
                 , validateEventStream "snapshot-counter" snapshotCounterEventStreamDef
                 , validateEventStream "snapshot-counter-multi" multiSnapshotCounterEventStreamDef
                 , validateEventStream "snapshot-counter-guarded" guardedSnapshotCounterEventStreamDef
@@ -596,6 +597,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             expectAccepted "counter" counterEventStreamDef
             expectAccepted "counter-no-op" noOpCounterEventStreamDef
             expectAccepted "counter-multi" multiCounterEventStreamDef
+            expectAccepted "counter-ambiguous" ambiguousCounterEventStreamDef
             expectAccepted "snapshot-counter" snapshotCounterEventStreamDef
             expectAccepted "snapshot-counter-multi" multiSnapshotCounterEventStreamDef
             expectAccepted "snapshot-counter-guarded" guardedSnapshotCounterEventStreamDef
@@ -649,6 +651,26 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Vector.length recorded `shouldBe` 1
             traverse (decodeRecorded counterCodec) (Vector.toList recorded)
                 `shouldBe` Right [CounterAdded 2]
+
+        it "surfaces runtime edge ambiguity without appending" $ \storeHandle -> do
+            (processor, spansRef) <- inMemoryListExporter
+            provider <- createTracerProvider [processor] emptyTracerProviderOptions
+            let tracer = makeTracer provider "keiro-test" tracerOptions
+                target = stream "counter-command-ambiguous" :: Stream CounterEventStream
+                options = defaultRunCommandOptions & #tracer ?~ tracer
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand options ambiguousCounterEventStream target (Add 1)
+            _ <- shutdownTracerProvider provider Nothing
+            result `shouldBe` Right (Left (CommandAmbiguous [0, 1]))
+            Right recorded <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "counter-command-ambiguous") (StreamVersion 0) 10
+            recorded `shouldBe` Vector.empty
+            spans <- traverse captureSpan =<< readIORef spansRef
+            case spans of
+                [sp] -> textAttr (csAttributes sp) "error.type" `shouldBe` Just "command_ambiguous"
+                other -> expectationFailure ("expected one span, got " <> show (length other))
 
         it "rehydrates prior events before appending a second command event" $ \storeHandle -> do
             let target = stream "counter-command-update" :: Stream CounterEventStream
@@ -2077,10 +2099,13 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             exported <- readIORef metricsRef
             lookup "keiro.dispatch.failed" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
 
-        it "classifies transient store failures as retry and command rejections as halt" $ \_storeHandle -> do
+        it "classifies transient store failures as retry and deterministic command failures as halt" $ \_storeHandle -> do
             ackForCommandError (RetryDelay 5) (StoreFailed (Store.ConnectionLost "boom"))
                 `shouldBe` AckRetry (RetryDelay 5)
             ackForCommandError (RetryDelay 5) CommandRejected `shouldSatisfy` \case
+                AckHalt (HaltFatal _) -> True
+                _ -> False
+            ackForCommandError (RetryDelay 5) (CommandAmbiguous [0, 1]) `shouldSatisfy` \case
                 AckHalt (HaltFatal _) -> True
                 _ -> False
 
@@ -8312,6 +8337,40 @@ multiCounterTransducer =
         , initialRegs = RNil
         , isFinal = \_ -> False
         }
+
+{- | Both guards match at runtime but remain outside keiki's conservative pure
+overlap fragment. Distinct head event constructors keep inversion unambiguous,
+so this is a validated stream that exercises the runtime step witness.
+-}
+ambiguousCounterEventStreamDef :: CounterEventStream
+ambiguousCounterEventStreamDef =
+    counterEventStreamDef & #transducer .~ ambiguousCounterTransducer
+
+ambiguousCounterEventStream :: ValidatedCounterEventStream
+ambiguousCounterEventStream =
+    mkEventStreamOrThrow "counter-ambiguous" ambiguousCounterEventStreamDef
+
+ambiguousCounterTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
+ambiguousCounterTransducer =
+    counterTransducer
+        { edgesOut = \case
+            Counting ->
+                [ Edge
+                    { guard = ambiguousGuard
+                    , update = UKeep
+                    , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
+                    , target = Counting
+                    }
+                , Edge
+                    { guard = ambiguousGuard
+                    , update = UKeep
+                    , output = [pack addCtor counterAuditedCtor (inpCtor addCtor #amount *: oNil)]
+                    , target = Counting
+                    }
+                ]
+        }
+  where
+    ambiguousGuard = PAnd (matchInCtor addCtor) (PNot PBot)
 
 snapshotCounterEventStreamDef :: SnapshotCounterEventStream
 snapshotCounterEventStreamDef =

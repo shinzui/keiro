@@ -212,6 +212,7 @@ isTransientCommandError = \case
     HydrationDecodeFailed{} -> False
     HydrationReplayFailed{} -> False
     CommandRejected -> False
+    CommandAmbiguous{} -> False
     EncodeFailed{} -> False
 
 ackForCommandError :: RetryDelay -> CommandError -> AckDecision

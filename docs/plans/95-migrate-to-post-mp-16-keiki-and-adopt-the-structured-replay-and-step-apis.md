@@ -93,9 +93,9 @@ Use this checklist to track granular steps; split partially-done items into "don
 - [x] (2026-07-13 15:22Z) M2: `hydrate`/`hydrateFull` collapsed into one seeded fold over keiki's `replayEvents`; duplicated fold deleted
 - [x] (2026-07-13 15:22Z) M2: `commandErrorClass` refined for the four hydration reasons
 - [x] (2026-07-13 15:22Z) M2: corrupted-stream tests added (no-inverting-edge, queue-mismatch, truncated-chain, ambiguous-inversion) — the first runtime assertions ever on `HydrationReplayFailed`
-- [ ] M3: `evaluateCommand` rewritten over `Keiki.stepEither`; `CommandAmbiguous` constructor added
-- [ ] M3: `commandErrorClass` and `isTransientCommandError` updated for `CommandAmbiguous`; all `CommandError` match sites audited (list in Context)
-- [ ] M3: ambiguity tests added (`CommandAmbiguous [0,1]` end-to-end; `ackForCommandError` halts on it)
+- [x] (2026-07-13 15:37Z) M3: `evaluateCommand` rewritten over `Keiki.stepEither`; `CommandAmbiguous` constructor added
+- [x] (2026-07-13 15:37Z) M3: `commandErrorClass` and `isTransientCommandError` updated for `CommandAmbiguous`; all `CommandError` match sites audited (list in Context)
+- [x] (2026-07-13 15:37Z) M3: ambiguity tests added (`CommandAmbiguous [0,1]` end-to-end with no append and `command_ambiguous` telemetry; `ackForCommandError` halts on it)
 - [ ] M4: full sweep green (`cabal build all`, `just haskell-test`, `nix fmt -- --no-cache`); in-repo `jitsurei` and `keiro-dsl` recompile without edits (verify, do not assume)
 - [ ] M4: `CHANGELOG.md` entry written, including the behavior-visible ambiguity change
 - [ ] M4: master plan registry row EP-95 flipped to Complete; its three EP-95 progress boxes ticked; Outcomes & Retrospective written
@@ -150,6 +150,11 @@ implementation, with concise evidence.
   stanzas and the ignored `cabal.project.local`, ordinary `cabal build all` and
   `cabal test keiro-test` succeeded; the latter passed all 308 examples, including
   the nested compile-time API probe without a wrapper.
+- (2026-07-13) `stepEither` preserved every existing rejection outcome while exposing
+  the previously collapsed ambiguity witness. The full suite passed 309 examples;
+  the in-repo Jitsurei rejection assertions and generated DSL `CommandRejected`
+  disposition matches required no edits, confirming they remain no-edge/no-match
+  business outcomes rather than ambiguity paths.
 
 (Add implementation-time entries here.)
 

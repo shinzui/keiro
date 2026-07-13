@@ -6,8 +6,9 @@ Running a command against an 'EventStream' follows one pipeline:
    from a snapshot) through the keiki transducer to recover the current
    @(state, registers)@ and stream version.
 2. /Transduce/ — step the transducer with the command. A rejected transition
-   yields 'CommandRejected'; a transition that emits no events yields a
-   no-op 'CommandResult'.
+   yields 'CommandRejected', while multiple matching transitions yield
+   'CommandAmbiguous'; a transition that emits no events yields a no-op
+   'CommandResult'.
 3. /Append/ — encode the emitted events with the stream's 'Codec' and append
    them at the expected version. An optimistic-concurrency conflict is
    retried up to 'retryLimit' times by rehydrating and replaying; exhausting
@@ -135,8 +136,14 @@ data CommandError
       which the expected multi-event chain remained incomplete.
       -}
       HydrationReplayFailed !StreamVersion !HydrationReplayReason
-    | -- | The transducer rejected the command in the hydrated state.
+    | -- | No transducer edge matched the command in the hydrated state.
       CommandRejected
+    | {- | Two or more transducer edges matched the command in the hydrated
+      state. This is a deterministic aggregate-definition bug rather than a
+      business rejection; the list contains the zero-based matched edge
+      indices in declaration order.
+      -}
+      CommandAmbiguous ![Int]
     | -- | An emitted event could not be encoded for append.
       EncodeFailed !CodecError
     | -- | The underlying store rejected the append.
@@ -613,6 +620,7 @@ commandErrorClass = \case
     HydrationReplayFailed _ HydrationQueueMismatch -> "hydration_replay_queue_mismatch"
     HydrationReplayFailed _ HydrationTruncatedChain -> "hydration_replay_truncated_chain"
     CommandRejected -> "command_rejected"
+    CommandAmbiguous{} -> "command_ambiguous"
     EncodeFailed{} -> "encode_failed"
     StoreFailed{} -> "store_failed"
     RetryExhausted{} -> "retry_exhausted"
@@ -699,9 +707,17 @@ evaluateCommand ::
     ci ->
     Either CommandError [co]
 evaluateCommand eventStream current command =
-    case Keiki.step (eventStream ^. #transducer) (state current, registers current) command of
-        Nothing -> Left CommandRejected
-        Just (_, _, events) -> Right events
+    case Keiki.stepEither (eventStream ^. #transducer) (state current, registers current) command of
+        Left Keiki.NoOutgoingEdges{} -> Left CommandRejected
+        Left Keiki.NoMatchingEdge{} -> Left CommandRejected
+        Left (Keiki.AmbiguousEdges _ matches) ->
+            Left
+                ( CommandAmbiguous
+                    [ Keiki.edgeIndex (Keiki.matchedEdge matched)
+                    | matched <- matches
+                    ]
+                )
+        Right (_, _, events) -> Right events
 
 encodeEvents :: Codec co -> Maybe Value -> [co] -> Either CommandError [EventData]
 encodeEvents codec md =
