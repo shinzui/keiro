@@ -25,6 +25,7 @@ module Keiro.ReadModel.Schema (
     markRebuilding,
     markLive,
     markAbandoned,
+    transitionReadModelTx,
 )
 where
 
@@ -95,30 +96,31 @@ Marks the model as being repopulated so queries stop serving it until
 -}
 markRebuilding :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 markRebuilding name version shapeHash =
-    runTransaction
-        $ Tx.statement
-            (name, Prelude.fromIntegral version, shapeHash, statusToText Rebuilding)
-            transitionReadModelStmt
+    runTransaction $ transitionReadModelTx name version shapeHash Rebuilding
 
 {- | Upsert the registry row to 'Live' at the given schema identity, stamping
 @last_built_at@. Makes the model queryable again after a rebuild.
 -}
 markLive :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 markLive name version shapeHash =
-    runTransaction
-        $ Tx.statement
-            (name, Prelude.fromIntegral version, shapeHash, statusToText Live)
-            transitionReadModelStmt
+    runTransaction $ transitionReadModelTx name version shapeHash Live
 
 {- | Upsert the registry row to 'Abandoned' at the given schema identity,
 recording that a rebuild was given up on.
 -}
 markAbandoned :: (Store :> es) => Text -> Int -> Text -> Eff es ReadModelMetadata
 markAbandoned name version shapeHash =
-    runTransaction
-        $ Tx.statement
-            (name, Prelude.fromIntegral version, shapeHash, statusToText Abandoned)
-            transitionReadModelStmt
+    runTransaction $ transitionReadModelTx name version shapeHash Abandoned
+
+{- | Transaction-composable form of a registry status transition. Rebuild
+orchestration uses this form so the status row lock, table reset, dedup reset,
+and checkpoint reset share one database transaction.
+-}
+transitionReadModelTx :: Text -> Int -> Text -> ReadModelStatus -> Tx.Transaction ReadModelMetadata
+transitionReadModelTx name version shapeHash status =
+    Tx.statement
+        (name, Prelude.fromIntegral version, shapeHash, statusToText status)
+        transitionReadModelStmt
 
 registerReadModelStmt :: Statement (Text, Int64, Text) ReadModelMetadata
 registerReadModelStmt =

@@ -2121,6 +2121,97 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         Tx.statement () selectProjectionDedupCounterStmt
             countAfterPrune `shouldBe` 2
 
+        it "rebuild repopulates the projection table through the supported workflow" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+            let target = stream "read-model-rebuild-runbook" :: Stream CounterEventStream
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions counterEventStream target (Add 7)
+            Right recorded <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "read-model-rebuild-runbook") (StreamVersion 0) 10
+            event <- case Vector.toList recorded of
+                [onlyEvent] -> pure onlyEvent
+                other -> expectationFailure ("expected one event, got " <> show other) *> error "unreachable"
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        applyAsyncProjection counterAsyncProjection event
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement
+                            ( "counter-read-model-sub"
+                            , globalPositionToInt (event ^. #globalPosition)
+                            )
+                            upsertSubscriptionCursorStmt
+            beforeRebuild <-
+                Store.runStoreIO storeHandle $
+                    runQuery Nothing counterReadModel "async-idempotent"
+            beforeRebuild `shouldBe` Right (Right 7)
+
+            Right rebuilding <-
+                Store.runStoreIO storeHandle $
+                    Rebuild.startRebuild
+                        counterReadModel
+                        [counterAsyncProjection ^. #name]
+                        (GlobalPosition 0)
+            rebuilding ^. #status `shouldBe` Rebuilding
+            checkpointAfterReset <-
+                Store.runStoreIO storeHandle $
+                    readSubscriptionPosition "counter-read-model-sub"
+            checkpointAfterReset `shouldBe` Right (Just (GlobalPosition 0))
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        applyAsyncProjection counterAsyncProjection event
+            Right (Right live) <-
+                Store.runStoreIO storeHandle $
+                    Rebuild.finishRebuild
+                        counterReadModel
+                        [counterAsyncProjection ^. #name]
+                        (GlobalPosition 0)
+            live ^. #status `shouldBe` Live
+
+            afterRebuild <-
+                Store.runStoreIO storeHandle $
+                    runQuery Nothing counterReadModel "async-idempotent"
+            afterRebuild `shouldBe` Right (Right 7)
+
+        it "keeps a non-empty-log rebuild offline when replay applies nothing" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+            let target = stream "read-model-rebuild-empty-replay" :: Stream CounterEventStream
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions counterEventStream target (Add 7)
+            Right _ <-
+                Store.runStoreIO storeHandle $
+                    Rebuild.startRebuild
+                        counterReadModel
+                        [counterAsyncProjection ^. #name]
+                        (GlobalPosition 0)
+            finishResult <-
+                Store.runStoreIO storeHandle $
+                    Rebuild.finishRebuild
+                        counterReadModel
+                        [counterAsyncProjection ^. #name]
+                        (GlobalPosition 0)
+            case finishResult of
+                Right (Left (Rebuild.RebuildProducedNoApplies modelName headPosition)) -> do
+                    modelName `shouldBe` "counter-read-model"
+                    headPosition `shouldSatisfy` (> GlobalPosition 0)
+                other -> expectationFailure ("expected zero-apply guard, got " <> show other)
+            queryResult <-
+                Store.runStoreIO storeHandle $
+                    runQuery Nothing counterReadModel "async-idempotent"
+            queryResult
+                `shouldBe` Right
+                    (Left (ReadModelNotLive "counter-read-model" Rebuilding))
+
         it "tracks rebuild state transitions" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
