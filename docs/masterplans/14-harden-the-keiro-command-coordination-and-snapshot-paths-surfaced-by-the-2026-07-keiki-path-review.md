@@ -115,7 +115,7 @@ a kiroku-side child plan for the subscription bridge (rejected: kiroku already s
 | 95 | Migrate to post-MP-16 keiki and adopt the structured replay and step APIs | docs/plans/95-migrate-to-post-mp-16-keiki-and-adopt-the-structured-replay-and-step-apis.md | keiki MP-16 (external) | None | Not Started |
 | 96 | Ack-coupled sharded subscription delivery with rebalance-under-load coverage | docs/plans/96-ack-coupled-sharded-subscription-delivery-with-rebalance-under-load-coverage.md | None | None | Complete |
 | 97 | Stable router idempotency keys derived from target stream names | docs/plans/97-stable-router-idempotency-keys-derived-from-target-stream-names.md | None | None | Complete |
-| 98 | Snapshot subsystem hardening: uninit-register guards, read-side telemetry, and workflow write alignment | docs/plans/98-snapshot-subsystem-hardening-uninit-register-guards-read-side-telemetry-and-workflow-write-alignment.md | None | EP-95 | In Progress |
+| 98 | Snapshot subsystem hardening: uninit-register guards, read-side telemetry, and workflow write alignment | docs/plans/98-snapshot-subsystem-hardening-uninit-register-guards-read-side-telemetry-and-workflow-write-alignment.md | None | EP-95 | Complete |
 | 99 | Silent-edge validation and divergence witnesses on the command path | docs/plans/99-silent-edge-validation-and-divergence-witnesses-on-the-command-path.md | EP-95 | None | Not Started |
 | 100 | Process-manager failure paths: dead-lettering rejected commands and surfacing retry exhaustion | docs/plans/100-process-manager-failure-paths-dead-lettering-rejected-commands-and-surfacing-retry-exhaustion.md | None | EP-99 | Not Started |
 | 101 | Read-model rebuild correctness: dedup reset, writer fencing, and Strong cursor semantics | docs/plans/101-read-model-rebuild-correctness-dedup-reset-writer-fencing-and-strong-cursor-semantics.md | None | None | Not Started |
@@ -218,8 +218,8 @@ where its truncation guard reports failures through the migrated hydration error
 - [x] EP-96: sharded worker acks after the handler returns; batch-tail crash/rebalance loses nothing
 - [x] EP-96: rebalance-under-load and zombie-overlap tests exist and pass
 - [x] EP-97: router event ids derived from target stream names; unstable-resolve redelivery test passes; dropped-target semantics decided and documented
-- [ ] EP-98: uninit-register encode caught at mkEventStream and degraded to the counted advisory path at write time
-- [ ] EP-98: snapshot read-side telemetry (decode failures at minimum); workflow snapshot writes swallowed-and-counted like the command path
+- [x] EP-98: uninit-register encode caught at mkEventStream and degraded to the counted advisory path at write time
+- [x] EP-98: snapshot read-side telemetry (decode failures at minimum); workflow snapshot writes swallowed-and-counted like the command path
 - [ ] EP-99: keiki's `StateChangingEpsilon` and `checkHeadRecoverability` force-enabled at stream validation (no caller opt-out; bypass only via the named unchecked constructor); the every-append replay-divergence check counts witnesses, never discards them
 - [ ] EP-99: no-op `CommandResult.globalPosition` normalized to `Nothing`
 - [ ] EP-100: rejected PM commands dead-letter instead of halt-looping; saga-state/dispatch divergence documented or closed
@@ -389,3 +389,10 @@ where its truncation guard reports failures through the migrated hydration error
   in Surprises & Discoveries — most notably EP-97's sharpened router defect model
   (silent drops, not double-dispatch, are the primary failure) and EP-99's finding
   that keiki already exports enough to implement the full silent-edge rule.
+
+- 2026-07-13: Completed EP-98. Snapshot-enabled streams now reject unencodable
+  initial registers; command snapshot encoding and all workflow snapshot writes
+  degrade through counted advisory paths; aggregate and workflow reads expose
+  hit, miss, and decode-failure telemetry; and operator docs state the
+  codec-mismatch rollback clobber plus Keiki EP-78 replay cost. Validation passed
+  the whole workspace build, Haddock render, and 300-example PostgreSQL suite.

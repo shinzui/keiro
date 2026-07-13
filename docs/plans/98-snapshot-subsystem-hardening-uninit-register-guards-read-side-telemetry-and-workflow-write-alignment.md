@@ -55,8 +55,8 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] M5: `keiro/src/Keiro/Workflow/Snapshot.hs` "Advisory semantics" section updated for swallowed writes
 - [x] M5: `docs/guides/snapshots-and-hydration.md` gains the clobber caveat and the keiki EP-78 one-time-replay upgrade note
 - [x] M5: `CHANGELOG.md` Unreleased entry written
-- [ ] Full suite green: `cabal test keiro-test` (and `cabal build keiro-core keiro` clean)
-- [ ] Master plan MP-14 Progress checkboxes for EP-98 ticked and registry status updated
+- [x] Full suite green: `cabal test keiro-test` (and `cabal build keiro-core keiro` clean)
+- [x] Master plan MP-14 Progress checkboxes for EP-98 ticked and registry status updated
 
 
 ## Surprises & Discoveries
@@ -222,7 +222,33 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+EP-98 delivered all four intended guarantees. Snapshot-enabled streams are
+rejected before startup when their initial state/register pair cannot be fully
+encoded. Command snapshot encoding is forced before the store call and degrades
+on `ErrorCall`; workflow step, completion, and rotation writes now share the
+same post-commit swallow-and-count contract for `StoreError`. Neither advisory
+path can reverse an already-durable event or workflow journal append.
+
+Snapshot hydration is observable without breaking compatibility. The new
+reason-carrying aggregate and workflow lookup APIs distinguish no stream, no
+compatible row, and decode failure, while the prior `Maybe` helpers remain thin
+wrappers. The four new counters separate encode bugs, corrupt rows, usable
+seeds, and ordinary full-replay misses; the existing write-failure counter now
+covers both command and workflow storage failures.
+
+The operator contract now matches the database behavior: non-regression is
+scoped to a stable codec version and shape hash; incompatible codecs may
+replace newer rows for rollback, and prolonged mixed deployments may thrash the
+single row. The guide also documents Keiki EP-78's benign shape-hash miss and
+the resulting replay-metric spike.
+
+Final validation used the repository's pinned dependency graph without editing
+the user-owned `cabal.project.local`: `cabal build all` passed,
+`cabal haddock keiro` rendered the updated snapshot modules at 100% declaration
+coverage, `nix fmt` passed over every touched file, and
+`cabal test keiro-test` passed 300 examples with zero failures. The only
+remaining noise is the repository's pre-existing Haddock ambiguity/link
+warnings; no EP-98 behavior or documentation work remains.
 
 
 ## Context and Orientation
@@ -551,3 +577,5 @@ Revision note (2026-07-13): completed M3. Added reason-preserving aggregate and 
 Revision note (2026-07-13): completed M4. Routed step-boundary, terminal, and rotation-seed writes through one `StoreError`-catching advisory helper, propagated the required error constraint through the public workflow and child-runtime signatures, and added a constraint-block integration regression. The focused workflow snapshot run passed 7 examples; the new case commits all seven journal events, writes no snapshot, counts exactly three failed Every-2 boundaries, then proves snapshot recovery after the constraint is removed.
 
 Revision note (2026-07-13): completed M5. Corrected the codec-mismatch clobber contract in storage/runtime Haddocks, documented workflow write advisory behavior, added operator guidance for mixed-codec deployments and the Keiki EP-78 shape-hash replay, and recorded all source/metric changes under the root Unreleased changelog. `cabal haddock keiro` completed successfully with the updated snapshot modules at 100% declaration coverage; pre-existing package-wide link warnings are recorded under Surprises & Discoveries.
+
+Revision note (2026-07-13): completed EP-98. Recorded the final workspace build, Haddock render, formatting pass, and full 300-example PostgreSQL suite; filled Outcomes & Retrospective; and synchronized MP-14's progress checklist and registry status to Complete.
