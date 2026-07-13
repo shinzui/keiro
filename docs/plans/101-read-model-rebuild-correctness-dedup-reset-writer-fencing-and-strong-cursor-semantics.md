@@ -75,8 +75,8 @@ shows a live applier being fenced during a rebuild, and a two-category test show
 - [x] (2026-07-13 18:39Z) M3: `AsyncProjection` carries `readModelName`; `applyAsyncProjection` returns `AsyncApplyOutcome` and fences on non-`Live` status.
 - [x] (2026-07-13 18:39Z) M3: `applyAsyncProjectionUnfenced` rebuild-path variant exists; all call sites updated.
 - [x] (2026-07-13 18:39Z) M3: writer-fence race test (live applier vs. rebuild) passes.
-- [ ] M4: `StrongScope` field on `ReadModel`; `categoryHeadPosition` query implemented.
-- [ ] M4: red cross-category `Strong` timeout test observed failing; green with `CategoryHead` scope.
+- [x] (2026-07-13 18:48Z) M4: `StrongScope` field on `ReadModel`; `categoryHeadPosition` query implemented.
+- [x] (2026-07-13 18:48Z) M4: red cross-category `Strong` timeout test observed failing; green with `CategoryHead` scope.
 - [ ] M5: `Rebuild.hs` runbook rewritten as a helper-enforced checklist; docs swept.
 - [ ] M5: full `just haskell-build` and `cabal test keiro-test` pass; retrospective written.
 
@@ -111,6 +111,19 @@ Findings from authoring-time verification (2026-07-11); implementation entries g
   tests prove that `AsyncFenced` inserts no dedup key and performs no model write,
   that the named unfenced path repopulates during `Rebuilding`, and that normal
   application returns `AsyncApplied` again after promotion.
+- M4's cross-category red test timed out after 5.199 seconds with a counter
+  subscription caught up at position 1 while an unrelated category advanced
+  `$all` to position 2.
+
+  ```text
+  expected: Right (Right 8)
+   but got: Right (Left (ReadModelWaitTimeout "counter-read-model" (GlobalPosition 2) (GlobalPosition 1)))
+  ```
+
+  With `CategoryHead "counter"`, the same query returned the projected value in
+  0.184 seconds. The three existing `EntireLog` specifications still pass, the
+  in-repository example package compiles with explicit `EntireLog` scopes, and
+  the complete suite passes 331 examples.
 
 - The dedup table is keyed per projection (`PRIMARY KEY (projection_name, event_id)`,
   `keiro-migrations/sql-migrations/2026-06-15-21-49-37-keiro-projection-dedup.sql:1-6`),
@@ -261,6 +274,12 @@ row lock and report `AsyncApplied`, `AsyncDuplicate`, or `AsyncFenced`; the rebu
 transition's row update therefore waits out in-flight writers and excludes later
 ones. Only `applyAsyncProjectionUnfenced` may replay while the model is rebuilding.
 The complete suite passed with 330 examples.
+
+M4 made the strong-read target explicit per model. `EntireLog` preserves the old
+whole-store contract, while `CategoryHead category` targets the latest global
+position originating in that category. The cross-category regression now returns
+promptly without weakening existing whole-log behavior; `cabal build all` and the
+331-example suite pass.
 
 
 ## Context and Orientation

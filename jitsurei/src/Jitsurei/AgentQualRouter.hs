@@ -74,7 +74,7 @@ import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
 import Keiro.ProcessManager (PMCommand (..))
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), runQuery)
+import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..), runQuery)
 import Keiro.Router (Router (..))
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
@@ -245,6 +245,7 @@ areaChaptersReadModel =
         , version = 1
         , shapeHash = "jitsurei-area-chapters-v1"
         , defaultConsistency = Eventual
+        , strongScope = EntireLog
         , query = \(AreaId area) -> Tx.statement area selectAreaChaptersStmt
         }
 

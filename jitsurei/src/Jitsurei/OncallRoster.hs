@@ -25,7 +25,7 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Jitsurei.Incident (Service (..))
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..))
+import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 newtype ResponderId = ResponderId Text
@@ -53,6 +53,7 @@ serviceOncallReadModel =
         , version = 1
         , shapeHash = "jitsurei-service-oncall-v1"
         , defaultConsistency = Eventual
+        , strongScope = EntireLog
         , query = \(Service service) -> Tx.statement service selectOncallStmt
         }
 

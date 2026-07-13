@@ -1893,6 +1893,37 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     runQueryWith Nothing Strong counterReadModel "inline"
             queryResult `shouldBe` Right (Right 6)
 
+        it "Strong returns when its category is caught up despite another active category" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+            let counterTarget = stream "counter-strong-scope" :: Stream CounterEventStream
+                otherTarget = stream "otherload-1" :: Stream CounterEventStream
+            Right (Right counterResult) <-
+                Store.runStoreIO storeHandle $
+                    runCommandWithProjections
+                        defaultRunCommandOptions
+                        counterEventStream
+                        counterTarget
+                        (Add 8)
+                        [counterInlineProjection]
+            counterPosition <- case counterResult ^. #globalPosition of
+                Just position -> pure position
+                Nothing -> expectationFailure "expected counter global position" *> error "unreachable"
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement
+                            ("counter-read-model-sub", globalPositionToInt counterPosition)
+                            upsertSubscriptionCursorStmt
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions counterEventStream otherTarget (Add 1)
+            queryResult <-
+                Store.runStoreIO storeHandle $
+                    runQueryWith Nothing Strong counterCategoryReadModel "inline"
+            queryResult `shouldBe` Right (Right 8)
+
         it "inline projection populates actor and source_event_id from command metadata" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
@@ -10011,8 +10042,13 @@ counterReadModel =
         , version = 1
         , shapeHash = "counter-read-model-v1"
         , defaultConsistency = Eventual
+        , strongScope = EntireLog
         , query = \modelId -> Tx.statement modelId selectCounterReadModelStmt
         }
+
+counterCategoryReadModel :: ReadModel Text Int
+counterCategoryReadModel =
+    counterReadModel & #strongScope .~ CategoryHead "counter"
 
 registerReadModelDefinition :: (Store :> es) => ReadModel q r -> Eff es ()
 registerReadModelDefinition readModel =
@@ -10108,6 +10144,7 @@ placedReadModel =
         , version = 1
         , shapeHash = "placed-counter-v1"
         , defaultConsistency = Eventual
+        , strongScope = EntireLog
         , query = \modelId -> Tx.statement modelId selectPlacedStmt
         }
 
@@ -10367,6 +10404,7 @@ routerTargetsReadModel =
         , version = 1
         , shapeHash = "router-targets-v1"
         , defaultConsistency = Eventual
+        , strongScope = EntireLog
         , query = \groupId -> Tx.statement groupId selectRouterTargetsStmt
         }
 

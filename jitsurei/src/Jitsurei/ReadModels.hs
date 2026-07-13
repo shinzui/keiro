@@ -18,7 +18,7 @@ import Jitsurei.Domain
 import Keiro.Connection (qualifyTable, quoteIdentifier)
 import Keiro.Prelude
 import Keiro.Projection (InlineProjection (..))
-import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..))
+import Keiro.ReadModel (ConsistencyMode (..), ReadModel (..), StrongScope (..))
 import Kiroku.Store.Types (GlobalPosition (..), RecordedEvent)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
@@ -61,6 +61,7 @@ orderSummaryReadModel =
         , version = 1
         , shapeHash = "jitsurei-order-summary-v1"
         , defaultConsistency = Eventual
+        , strongScope = EntireLog
         , query = \(OrderSummaryQuery orderId) ->
             Tx.statement (orderIdText orderId) selectOrderSummaryStmt
         }

@@ -32,6 +32,7 @@ module Keiro.ReadModel (
 
     -- * Consistency
     ConsistencyMode (..),
+    StrongScope (..),
     PositionWaitOptions (..),
     defaultStrongWaitOptions,
 
@@ -41,6 +42,7 @@ module Keiro.ReadModel (
     waitFor,
     readSubscriptionPosition,
     storeHeadPosition,
+    categoryHeadPosition,
 
     -- * Errors
     ReadModelError (..),
@@ -84,6 +86,7 @@ import Prelude qualified
 * 'version' \/ 'shapeHash' — schema identity; a query fails with
   'ReadModelStaleSchema' if the registered values diverge, forcing a rebuild.
 * 'defaultConsistency' — the 'ConsistencyMode' used by 'runQuery'.
+* 'strongScope' — the event-log head a 'Strong' query waits for.
 * 'query' — the SQL read, as a 'Hasql.Transaction.Transaction'.
 -}
 data ReadModel q r = ReadModel
@@ -94,6 +97,7 @@ data ReadModel q r = ReadModel
     , version :: !Int
     , shapeHash :: !Text
     , defaultConsistency :: !ConsistencyMode
+    , strongScope :: !StrongScope
     , query :: !(q -> Tx.Transaction r)
     }
     deriving stock (Generic)
@@ -109,9 +113,10 @@ qualifiedTableName readModel =
 {- | How fresh a read must be before the query runs.
 
 'Strong' waits for the model's subscription to reach the store head captured
-at query start. It is intended for asynchronous read models with a worker
-advancing that subscription cursor; inline-only models should use 'Eventual'
-because they have no subscription worker to advance while waiting.
+at query start according to the model's 'strongScope'. It is intended for
+asynchronous read models with a worker advancing that subscription cursor;
+inline-only models should use 'Eventual' because they have no subscription
+worker to advance while waiting.
 'PositionWait' blocks until the projection has caught up to a caller-supplied
 target log position (or times out). 'Eventual' queries immediately.
 -}
@@ -119,6 +124,24 @@ data ConsistencyMode
     = Strong
     | Eventual
     | PositionWait !PositionWaitOptions
+    deriving stock (Generic, Eq, Show)
+
+{- | Which log head a 'Strong' read must reach.
+
+'EntireLog' preserves the original behavior and is live only when the model's
+subscription observes every event. A category subscription should use
+'CategoryHead' with its Kiroku category, so unrelated categories cannot hold
+the read behind forever. A model fed by multiple categories should use
+'PositionWait' for an explicit write position or 'EntireLog' with a matching
+all-stream subscription.
+
+Kiroku currently does not advance category checkpoints on empty fetches. If it
+does so in a future release, category-scoped targets may become unnecessary,
+but the explicit model contract remains valid.
+-}
+data StrongScope
+    = EntireLog
+    | CategoryHead !Text
     deriving stock (Generic, Eq, Show)
 
 {- | Parameters for a 'PositionWait' query.
@@ -278,7 +301,9 @@ waitIfNeeded ::
     ReadModel q r ->
     Eff es (Either ReadModelError ())
 waitIfNeeded metrics Strong readModel = do
-    target <- storeHeadPosition
+    target <- case readModel ^. #strongScope of
+        EntireLog -> storeHeadPosition
+        CategoryHead category -> categoryHeadPosition category
     waitFor metrics (defaultStrongWaitOptions & #target ?~ target) readModel target
 waitIfNeeded _ Eventual _ = pure (Right ())
 waitIfNeeded metrics (PositionWait options) readModel =
@@ -315,3 +340,27 @@ storeHeadPosition = do
     pure $ case Vector.toList recent of
         (event : _) -> event ^. #globalPosition
         [] -> GlobalPosition 0
+
+{- | The latest global position originating in a Kiroku category, or
+@GlobalPosition 0@ when that category has no events. This deliberately reads
+Kiroku's indexed @streams@ and @$all@ membership tables because Kiroku 0.3 does
+not export a category-head query.
+-}
+categoryHeadPosition :: (Store :> es) => Text -> Eff es GlobalPosition
+categoryHeadPosition category =
+    runTransaction
+        $ Tx.statement category categoryHeadPositionStmt
+
+categoryHeadPositionStmt :: Statement Text GlobalPosition
+categoryHeadPositionStmt =
+    preparable
+        """
+        SELECT COALESCE(max(se.stream_version), 0)
+        FROM streams s
+        JOIN stream_events se
+          ON se.original_stream_id = s.stream_id
+         AND se.stream_id = 0
+        WHERE s.category = $1
+        """
+        (E.param (E.nonNullable E.text))
+        (D.singleRow (GlobalPosition <$> D.column (D.nonNullable D.int8)))
