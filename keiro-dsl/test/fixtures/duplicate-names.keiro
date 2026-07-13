@@ -1,0 +1,19 @@
+context repro
+
+id ThingId prefix=thing
+id OtherId prefix=thing
+
+enum Color { Red=red Red=crimson Green=red }
+
+aggregate Thing
+  regs
+  states Idle
+
+  command DoThing { thingId }
+  command DoThing { otherId }
+  event ThingDone { thingId }
+  event ThingDone { otherId }
+
+aggregate Thing
+  regs
+  states Idle

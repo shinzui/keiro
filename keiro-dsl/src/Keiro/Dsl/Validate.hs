@@ -99,6 +99,34 @@ data DiagnosticCode
     | DispatchRetargeted
     | ContractSchemaVersionBumped
     | EventUndeprecated
+    | -- EP-104 (validator soundness).
+      WorkflowDuplicateLabel
+    | WorkflowSleepDelayUnresolved
+    | WorkflowIdFieldUnresolved
+    | RuleDomainUnresolved
+    | RuleNotTotal
+    | RuleCaseUnknownCtor
+    | ProcessFieldBindingUnresolved
+    | ProcessTimerCeilingInvalid
+    | OperationUnresolvedRef
+    | AwaitSignalValueMismatch
+    | WqDispositionIncomplete
+    | DispositionDuplicateOutcome
+    | TopicAffinityMismatch
+    | StatusMapDanglingKey
+    | StatusMapDuplicateKey
+    | WriteTargetNotRegister
+    | RegisterInitialOutOfScope
+    | DuplicateNodeName
+    | DuplicateEnumCtor
+    | DuplicateEnumWire
+    | DuplicateIdPrefix
+    | DuplicateCommandName
+    | DuplicateEventName
+    | WqDlqDivergence
+    | WqTableDivergence
+    | DispatchDedupQueueUnresolved
+    | DispatchDedupFieldUnresolved
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -138,7 +166,46 @@ line for stable, readable output.
 -}
 validateSpec :: Spec -> [Diagnostic]
 validateSpec spec =
-    sortOn line (concatMap (validateNode spec) (specNodes spec))
+    sortOn line (specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
+
+-- | Rules over namespaces shared by the whole specification.
+specLevelRules :: Spec -> [Diagnostic]
+specLevelRules spec = duplicateNodes ++ duplicateEnumMembers ++ duplicateIdPrefixes
+  where
+    duplicateNodes =
+        [ mkErr (locLine loc) DuplicateNodeName $
+            "duplicate " <> kind <> " node name '" <> name <> "'"
+        | node <- duplicatesBy nodeKey (specNodes spec)
+        , let (kind, name, loc) = nodeIdentity node
+        ]
+    nodeKey node = let (kind, name, _) = nodeIdentity node in (kind, name)
+    duplicateEnumMembers = concatMap enumDuplicates (specEnums spec)
+    enumDuplicates e =
+        [ mkErr (locLine (enumLoc e)) DuplicateEnumCtor $
+            "enum '" <> enumName e <> "' declares constructor '" <> ctor <> "' more than once"
+        | (ctor, _) <- duplicatesBy fst (enumCtors e)
+        ]
+            ++ [ mkErr (locLine (enumLoc e)) DuplicateEnumWire $
+                    "enum '" <> enumName e <> "' declares wire spelling '" <> wire <> "' more than once"
+               | (_, wire) <- duplicatesBy snd (enumCtors e)
+               ]
+    duplicateIdPrefixes =
+        [ mkErr (locLine (idLoc d)) DuplicateIdPrefix $
+            "id '" <> idName d <> "' reuses prefix '" <> idPrefix d <> "'"
+        | d <- duplicatesBy idPrefix (specIds spec)
+        ]
+
+nodeIdentity :: Node -> (Text, Name, Loc)
+nodeIdentity (NAggregate a) = ("aggregate", aggName a, aggLoc a)
+nodeIdentity (NProcess p) = ("process", procId p, procLoc p)
+nodeIdentity (NContract c) = ("contract", ctrName c, ctrLoc c)
+nodeIdentity (NIntake i) = ("intake", inkName i, inkLoc i)
+nodeIdentity (NEmit e) = ("emit", emName e, emLoc e)
+nodeIdentity (NPublisher p) = ("publisher", pubName p, pubLoc p)
+nodeIdentity (NWorkqueue w) = ("workqueue", wqName w, wqLoc w)
+nodeIdentity (NPgmqDispatch d) = ("dispatch", pdName d, pdLoc d)
+nodeIdentity (NWorkflow w) = ("workflow", wfId w, wfLoc w)
+nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
 
 validateNode :: Spec -> Node -> [Diagnostic]
 validateNode spec (NAggregate agg) = validateAggregate spec agg
@@ -364,7 +431,10 @@ validateProcess spec p =
 validateAggregate :: Spec -> Aggregate -> [Diagnostic]
 validateAggregate spec agg =
     concat
-        [ declaredRefs
+        [ duplicateMembers
+        , declaredRefs
+        , eventBodyRefs
+        , registerInitialScope
         , reachability
         , terminalNoOutgoing
         , guardScope
@@ -382,6 +452,44 @@ validateAggregate spec agg =
     enumCtorNames = Set.fromList [c | e <- specEnums spec, (c, _) <- enumCtors e]
     ruleNames = Set.fromList (map ruleName (specRules spec))
     registerNames = Set.fromList (map regName (aggRegs agg))
+
+    duplicateMembers =
+        [ mkErr (locLine (cmdLoc c)) DuplicateCommandName $
+            "aggregate '" <> aggName agg <> "' declares command '" <> cmdName c <> "' more than once"
+        | c <- duplicatesBy cmdName (aggCommands agg)
+        ]
+            ++ [ mkErr (locLine (evLoc e)) DuplicateEventName $
+                    "aggregate '" <> aggName agg <> "' declares event '" <> evName e <> "' more than once"
+               | e <- duplicatesBy evName (aggEvents agg)
+               ]
+
+    eventBodyRefs =
+        [ mkErr (locLine (evLoc e)) UndeclaredCommand $
+            "event '" <> evName e <> "' copies fields from undeclared command '" <> command <> "'"
+        | e <- aggEvents agg
+        , EventFromCommand command <- [evBody e]
+        , command `Set.notMember` commandNames
+        ]
+
+    registerInitialScope = concatMap checkRegisterInitial (aggRegs agg)
+    checkRegisterInitial r = case [e | e <- specEnums spec, enumName e == regType r] of
+        (e : _) ->
+            [ outOfScope r "constructor of enum" (enumName e)
+            | regInitial r `notElem` map fst (enumCtors e)
+            ]
+        []
+            | regType r == aggName agg <> "Vertex" ->
+                [ outOfScope r "state of aggregate" (aggName agg)
+                | regInitial r `Set.notMember` states
+                ]
+            | regType r `elem` map idName (specIds spec) ->
+                [ outOfScope r "literal" "placeholder"
+                | regInitial r /= "placeholder"
+                ]
+            | otherwise -> []
+    outOfScope r expected domain =
+        mkErr (locLine (regLoc r)) RegisterInitialOutOfScope $
+            "register '" <> regName r <> "' initial '" <> regInitial r <> "' is not a " <> expected <> " '" <> domain <> "'"
 
     -- Rule 1: declared-reference for command / emit / goto / source.
     declaredRefs =
@@ -451,10 +559,15 @@ validateAggregate spec agg =
                 , not (n `Set.member` clockAtoms) -- clock atoms reported separately
                 , not (n `Set.member` inScope)
                 ]
-         in [ mkErr (locLine (tLoc t)) GuardAtomOutOfScope $
-                "atom '" <> n <> "' in transition '" <> tSource t <> " -- " <> tCommand t <> "' resolves to no register, command field, enum constructor, or rule"
-            | n <- dedup badAtoms
+            badTargets = [target | (target, _) <- tWrites t, target `Set.notMember` registerNames]
+         in [ mkErr (locLine (tLoc t)) WriteTargetNotRegister $
+                "write target '" <> target <> "' is not a register of aggregate '" <> aggName agg <> "'"
+            | target <- dedup badTargets
             ]
+                ++ [ mkErr (locLine (tLoc t)) GuardAtomOutOfScope $
+                        "atom '" <> n <> "' in transition '" <> tSource t <> " -- " <> tCommand t <> "' resolves to no register, command field, enum constructor, or rule"
+                   | n <- dedup badAtoms
+                   ]
 
     -- Rule 5 (cross-cutting): no guard or write Expr samples a wall clock.
     clockFree = concatMap transitionClock (aggTransitions agg)
@@ -540,3 +653,13 @@ exprNames (EAtom (ABool _)) = []
 
 dedup :: (Ord a) => [a] -> [a]
 dedup = Set.toList . Set.fromList
+
+{- | Keep each occurrence after the first for a chosen key. Diagnostics are
+anchored on the shadowing declaration rather than the declaration it shadows.
+-}
+duplicatesBy :: (Eq key) => (a -> key) -> [a] -> [a]
+duplicatesBy key xs =
+    [ x
+    | (index, x) <- zip [0 :: Int ..] xs
+    , key x `elem` map key (take index xs)
+    ]

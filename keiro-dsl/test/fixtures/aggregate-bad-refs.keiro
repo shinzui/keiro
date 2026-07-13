@@ -1,0 +1,19 @@
+context repro
+
+enum Color { Red=red Green=green }
+
+aggregate Thing
+  regs
+    tint Color = NotAColor
+    thingState ThingVertex = Pending
+  states Pending Done!
+
+  command DoThing { thingId }
+  event ThingDone = fields(NoSuchCommand)
+
+  Pending -- DoThing -->
+    write ghostRegister := Done
+    emit ThingDone
+    goto Done
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

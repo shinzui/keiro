@@ -65,6 +65,20 @@ main = hspec $ do
         it "rejects a v2 event with no upcaster as EvtVersionMissingUpcaster" $ do
             codes <- diagnosticCodesOf "test/fixtures/reservation-v2-noupcast.keiro"
             codes `shouldContain` [EvtVersionMissingUpcaster]
+        it "rejects duplicate spec and aggregate names" $ do
+            codes <- errorCodesOf "test/fixtures/duplicate-names.keiro"
+            mapM_
+                (\expected -> codes `shouldContain` [expected])
+                [ DuplicateNodeName
+                , DuplicateEnumCtor
+                , DuplicateEnumWire
+                , DuplicateIdPrefix
+                , DuplicateCommandName
+                , DuplicateEventName
+                ]
+        it "rejects aggregate-local references that do not resolve" $ do
+            codes <- errorCodesOf "test/fixtures/aggregate-bad-refs.keiro"
+            codes `shouldContain` [RegisterInitialOutOfScope, UndeclaredCommand, WriteTargetNotRegister]
         it "anchors UnreachableState on the state row" $ do
             let src =
                     T.unlines

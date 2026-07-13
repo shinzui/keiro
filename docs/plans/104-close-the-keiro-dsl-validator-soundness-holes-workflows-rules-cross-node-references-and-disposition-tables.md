@@ -47,8 +47,8 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] (2026-07-13 20:29Z) M1: populate the new locations in `keiro-dsl/src/Keiro/Dsl/Parser.hs`; update pattern matches in `PrettyPrint.hs`, `Validate.hs`, `Harness.hs`; update `genState` in `test/Main.hs`.
 - [x] (2026-07-13 20:29Z) M1: fix the `ProcessFireAtNotInjected` double-fire in `Validate.hs` and re-anchor `UnreachableState` and per-dispatch diagnostics to their rows; disposition-row anchoring will be exercised when M5 adds duplicate-row diagnostics.
 - [x] (2026-07-13 20:29Z) M1: round-trip property, 94-example unit suite, aggregate conformance pin, and workflow conformance pin all green.
-- [ ] M2: spec-level duplicate detection (nodes, enum ctors/wires, id prefixes, command/event names) with fixture `duplicate-names.keiro`.
-- [ ] M2: aggregate-local reference soundness (write targets, `fields(Cmd)` resolution, `regInitial` scope) with fixture `aggregate-bad-refs.keiro`.
+- [x] (2026-07-13 20:32Z) M2: spec-level duplicate detection (nodes, enum ctors/wires, id prefixes, command/event names) with fixture `duplicate-names.keiro`.
+- [x] (2026-07-13 20:32Z) M2: aggregate-local reference soundness (write targets, `fields(Cmd)` resolution, `regInitial` scope) with fixture `aggregate-bad-refs.keiro`; 96-example unit suite green.
 - [ ] M3: `validateWorkflow` (duplicate labels, sleep-delay resolution, `id from input.<field>` resolution) with fixtures `workflow-dup-label.keiro`, `workflow-unresolved-fields.keiro`.
 - [ ] M3: rule validation (domain resolution, totality, dangling cases, clock-free + scoped bodies) with fixtures `rule-bad-domain.keiro`, `rule-not-total.keiro`.
 - [ ] M3: operation validation (CommandOp aggregate/stream-field/projections, SignalOp value type, QueryOp deferral stub) with fixtures `operation-ghost-aggregate.keiro`, `operation-signal-value.keiro`; update `workflow.keiro` and `workflow-signal-mismatch.keiro`.
