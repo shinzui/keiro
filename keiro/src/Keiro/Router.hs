@@ -17,6 +17,9 @@ module Keiro.Router (
     Router (..),
     RouterResult (..),
 
+    -- * Idempotency
+    deterministicRouterCommandId,
+
     -- * Running
     runRouterOnce,
     runRouterWorkerWith,
@@ -24,8 +27,15 @@ module Keiro.Router (
 )
 where
 
+import Data.ByteString qualified as ByteString
+import Data.ByteString.Char8 qualified as ByteString.Char8
 import Data.Coerce (coerce)
+import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text.Encoding
+import Data.Traversable (mapAccumL)
+import Data.UUID qualified as UUID
+import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, tryError)
 import GHC.Stack (HasCallStack)
@@ -50,7 +60,7 @@ import Keiro.Stream (Stream)
 import Keiro.Telemetry (recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError (..))
-import Kiroku.Store.Types (RecordedEvent)
+import Kiroku.Store.Types (EventId (..), RecordedEvent, StreamName (..))
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..))
 import Shibuya.Core.AckHandle (AckHandle (..))
@@ -58,7 +68,7 @@ import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
-import Prelude (any, filter, fromIntegral, length, not, zip)
+import Prelude (any, filter, fromIntegral, length, not, snd, zip, (+))
 
 {- | A stateless, content-based router (in the Enterprise Integration Patterns
 sense): for each incoming event it resolves a data-dependent set of target
@@ -111,6 +121,48 @@ newtype RouterResult target = RouterResult
     }
     deriving stock (Generic, Eq, Show)
 
+{- | Derive a stable, collision-resistant 'EventId' for a router dispatch from
+@(router name, key input, source event id, resolved target stream name,
+occurrence)@ via a v5 UUID.
+
+Unlike 'Keiro.ProcessManager.deterministicCommandId' (which the process manager
+still uses, soundly, because its command list is a pure function of the input),
+the router keys the id by the target's identity rather than its position in the
+resolved list: 'resolve' is effectful, so a redelivery may see the same targets
+in a different order or a drifted set, and a positional id would then point at
+the wrong target. The @occurrence@ is the index among commands in the same
+resolve batch that address the same target stream (0 for the first), so
+resolving the same target twice in one batch still yields distinct ids.
+
+The v5 name encodes every text field as length-prefixed UTF-8. This avoids both
+delimiter ambiguity when names contain colons and character truncation for
+non-ASCII names.
+-}
+deterministicRouterCommandId :: Text -> Text -> EventId -> StreamName -> Int -> EventId
+deterministicRouterCommandId routerName correlationId sourceEventId targetStreamName occurrence =
+    EventId
+        $ UUID.V5.generateNamed UUID.V5.namespaceURL
+        $ ByteString.unpack
+        $ ByteString.concat
+        $ fmap
+            encodeField
+            [ "keiro"
+            , "router"
+            , routerName
+            , correlationId
+            , UUID.toText (coerce sourceEventId)
+            , coerce targetStreamName
+            , Text.pack (show occurrence)
+            ]
+  where
+    encodeField field =
+        let bytes = Text.Encoding.encodeUtf8 field
+         in ByteString.concat
+                [ ByteString.Char8.pack (show (ByteString.length bytes))
+                , ByteString.singleton 58
+                , bytes
+                ]
+
 {- | Resolve the targets for one source event, then dispatch one command per
 target with the same crash-safe, exactly-once-per-target idempotency the
 process manager provides.
@@ -142,34 +194,69 @@ runRouterOnce ::
 runRouterOnce options router sourceEvent input = do
     let correlationId = (router ^. #key) input
     commands <- (router ^. #resolve) input
+    let named =
+            [ (streamNameOf command, command)
+            | command <- commands
+            ]
+        annotated = snd (mapAccumL occurrenceStep Map.empty (zip [0 ..] named))
+        occurrenceStep seen (legacyIndex, (targetStreamName, command)) =
+            let occurrence = Map.findWithDefault 0 targetStreamName seen
+             in ( Map.insert targetStreamName (occurrence + 1) seen
+                , (legacyIndex, occurrence, targetStreamName, command)
+                )
     results <-
         traverse
-            (\(emitIndex, command) -> dispatchCommand correlationId (sourceEvent ^. #eventId) emitIndex command)
-            (zip [0 ..] commands)
+            (dispatchCommand correlationId (sourceEvent ^. #eventId))
+            annotated
     pure (RouterResult results)
   where
-    dispatchCommand correlationId sourceEventId emitIndex command = do
-        let commandId = deterministicCommandId (router ^. #name) correlationId sourceEventId emitIndex
+    streamNameOf command =
+        ((unvalidated (router ^. #targetEventStream)) ^. #resolveStreamName)
+            (retarget (command ^. #target))
+
+    dispatchCommand correlationId sourceEventId (legacyIndex, occurrence, targetStreamName, command) = do
+        let commandId =
+                deterministicRouterCommandId
+                    (router ^. #name)
+                    correlationId
+                    sourceEventId
+                    targetStreamName
+                    occurrence
+            -- Transition: dispatches written by keiro versions that derived
+            -- positional ids must still dedup across the upgrade. Remove in a
+            -- later release after the compatibility window closes.
+            legacyCommandId =
+                deterministicCommandId
+                    (router ^. #name)
+                    correlationId
+                    sourceEventId
+                    legacyIndex
             targetOptions = options & #eventIds .~ [commandId]
             targetEventStream = router ^. #targetEventStream
             targetStream = retarget (command ^. #target)
-            targetStreamName = ((unvalidated targetEventStream) ^. #resolveStreamName) targetStream
         commandAlreadyProcessed <- eventAlreadyIn options targetStreamName commandId
+        legacyAlreadyProcessed <-
+            if commandAlreadyProcessed
+                then pure False
+                else eventAlreadyIn options targetStreamName legacyCommandId
         if commandAlreadyProcessed
             then pure (PMCommandDuplicate commandId)
-            else do
-                outcome <-
-                    runCommandWithProjections
-                        targetOptions
-                        targetEventStream
-                        targetStream
-                        (command ^. #command)
-                        ((router ^. #targetProjections) (command ^. #target))
-                pure $ case outcome of
-                    Right result -> PMCommandAppended result
-                    Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == commandId -> PMCommandDuplicate commandId
-                    Left (StoreFailed (DuplicateEvent Nothing)) -> PMCommandDuplicate commandId
-                    Left err -> PMCommandFailed err
+            else
+                if legacyAlreadyProcessed
+                    then pure (PMCommandDuplicate legacyCommandId)
+                    else do
+                        outcome <-
+                            runCommandWithProjections
+                                targetOptions
+                                targetEventStream
+                                targetStream
+                                (command ^. #command)
+                                ((router ^. #targetProjections) (command ^. #target))
+                        pure $ case outcome of
+                            Right result -> PMCommandAppended result
+                            Left (StoreFailed (DuplicateEvent (Just duplicateId))) | duplicateId == commandId -> PMCommandDuplicate commandId
+                            Left (StoreFailed (DuplicateEvent Nothing)) -> PMCommandDuplicate commandId
+                            Left err -> PMCommandFailed err
 
     retarget :: Stream targetCi -> Stream (EventStream targetPhi targetRs targetState targetCi targetCo)
     retarget = coerce

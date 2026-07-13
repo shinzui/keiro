@@ -2068,6 +2068,39 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 other -> expectationFailure ("expected snapshot-assisted PM reaction, got " <> show other)
 
     describe "Keiro.Router" $ around (withFreshStore fixture) $ do
+        it "encodes colon-bearing and non-ASCII id components without collisions" $ \_storeHandle -> do
+            let sourceEventId = EventId sampleUuid
+                colonLeft =
+                    deterministicRouterCommandId
+                        "router:a"
+                        "key"
+                        sourceEventId
+                        (StreamName "target")
+                        0
+                colonRight =
+                    deterministicRouterCommandId
+                        "router"
+                        "a:key"
+                        sourceEventId
+                        (StreamName "target")
+                        0
+                unicodeLeft =
+                    deterministicRouterCommandId
+                        "router"
+                        "key"
+                        sourceEventId
+                        (StreamName ("target-" <> Text.singleton '\x101'))
+                        0
+                unicodeRight =
+                    deterministicRouterCommandId
+                        "router"
+                        "key"
+                        sourceEventId
+                        (StreamName ("target-" <> Text.singleton '\x201'))
+                        0
+            colonLeft `shouldNotBe` colonRight
+            unicodeLeft `shouldNotBe` unicodeRight
+
         it "resolves targets effectfully and fans out one command per target" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
@@ -2385,8 +2418,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Store.runTransaction (Tx.statement ("g1", "router-duplicate-target") insertRouterTargetStmt)
             insertCount <- newIORef (0 :: Int)
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
-                commandId = deterministicCommandId "demo-router" "g1" (sourceEvent ^. #eventId) 0
                 targetStreamName = StreamName "router-duplicate-target"
+                commandId =
+                    deterministicRouterCommandId
+                        "demo-router"
+                        "g1"
+                        (sourceEvent ^. #eventId)
+                        targetStreamName
+                        0
                 insertConcurrentTarget = do
                     callNo <- atomicModifyIORef' insertCount (\n -> (n + 1, n))
                     when (callNo == 0) $ appendCounterEventWithId storeHandle targetStreamName commandId (CounterAdded 1)
@@ -2403,6 +2442,29 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Right (RouterResult [PMCommandDuplicate duplicateId]) ->
                     duplicateId `shouldBe` commandId
                 other -> expectationFailure ("expected duplicate router dispatch fold, got " <> show other)
+            Right targetEvents <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward targetStreamName (StreamVersion 0) 10
+            Vector.length targetEvents `shouldBe` 1
+
+        it "dedups a pre-upgrade positional router dispatch during the transition" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction initializeRouterTargetsTable
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction (Tx.statement ("g1", "transition-target") insertRouterTargetStmt)
+            let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+                legacyId = deterministicCommandId "demo-router" "g1" (sourceEvent ^. #eventId) 0
+                targetStreamName = StreamName "transition-target"
+            appendCounterEventWithId storeHandle targetStreamName legacyId (CounterAdded 1)
+            result <-
+                Store.runStoreIO storeHandle $
+                    runRouterOnce defaultRunCommandOptions demoRouter sourceEvent (RouteGroup "g1")
+            case result of
+                Right (RouterResult [PMCommandDuplicate duplicateId]) ->
+                    duplicateId `shouldBe` legacyId
+                other -> expectationFailure ("expected transition duplicate, got " <> show other)
             Right targetEvents <-
                 Store.runStoreIO storeHandle $
                     Store.readStreamForward targetStreamName (StreamVersion 0) 10

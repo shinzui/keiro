@@ -52,8 +52,8 @@ This section must always reflect the actual current state of the work.
 
 - [x] (2026-07-13) Milestone 1: red tests added to `keiro/test/Main.hs` (reorder-after-partial-dispatch, set-growth) and observed failing for the documented reasons.
 - [x] (2026-07-13) Milestone 1: passing characterization tests added (full-completion order swap, dropped target, same-target-twice) and observed passing.
-- [ ] Milestone 2: `deterministicRouterCommandId`, occurrence annotation, and the transition legacy-id pre-check implemented in `keiro/src/Keiro/Router.hs`.
-- [ ] Milestone 2: existing "folds a concurrent duplicate router dispatch" test updated to the new id scheme; upgrade-transition test added; all `Keiro.Router` tests green (including Milestone 1's red tests).
+- [x] (2026-07-13) Milestone 2: `deterministicRouterCommandId`, occurrence annotation, and the transition legacy-id pre-check implemented in `keiro/src/Keiro/Router.hs`.
+- [x] (2026-07-13) Milestone 2: existing "folds a concurrent duplicate router dispatch" test updated to the new id scheme; upgrade-transition test added; all `Keiro.Router` tests green (including Milestone 1's red tests).
 - [ ] Milestone 3: `confirmBenignDuplicate` added to `keiro/src/Keiro/ProcessManager.hs`, exported, and used at all three duplicate-fold sites (router dispatch, PM dispatch, PM manager-state); helper tests green.
 - [ ] Milestone 4: module haddocks, `docs/guides/routers-and-effectful-fan-out.md`, and `CHANGELOG.md` updated; `nix fmt` run; full `keiro-test` suite green.
 
@@ -101,6 +101,12 @@ implementation. Provide concise evidence.
   while B was silently dropped; the set-growth run returned duplicates for both A and
   C, proving the newly resolved C was silently dropped. The three characterization
   cases and all seven pre-existing router cases passed unchanged.
+- During Milestone 2, the authored colon-delimited v5 name was found not to be
+  injective: variable router names, keys, and stream names can themselves contain
+  colons, and the suggested `fromIntegral . fromEnum` conversion truncates Unicode
+  code points to bytes. The implementation instead length-prefixes the UTF-8 bytes of
+  every field. Direct regression coverage proves colon-bearing component boundaries and
+  two non-ASCII code points with the same low byte produce distinct ids.
 
 
 ## Decision Log
@@ -161,6 +167,15 @@ Record every decision made while working on the plan.
   already being paid (any change to the inputs changes every id).
   Date: 2026-07-12
 
+- Decision: encode the router v5 name as a concatenation of length-prefixed UTF-8
+  fields, preserving the planned field tuple and namespace but replacing the authored
+  colon-delimited character conversion.
+  Rationale: colon delimiters do not uniquely separate variable fields that may contain
+  colons, and converting Unicode `Char`s to `Word8` truncates high bits. Both defects
+  contradict the public function's collision-resistant contract. Length-prefixing raw
+  UTF-8 is injective over the complete field sequence and requires no new dependency.
+  Date: 2026-07-13
+
 - Decision: migration — implement an unconditional transition pre-check: before running a
   command, the dispatcher checks the target stream for the *new* name-keyed id and, if
   absent, also for the *legacy* positional id (computed with the old
@@ -214,7 +229,12 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+Milestones 1 and 2 are complete. The fail-before suite demonstrated both positional-id
+loss modes, and the name-keyed implementation makes all 14 router examples green while
+preserving repeated same-stream commands and pre-upgrade positional deduplication. The
+remaining work is to make duplicate rejection folding honest at all router and process-
+manager append sites, then align the public documentation and run the full validation
+matrix.
 
 
 ## Context and Orientation
@@ -407,17 +427,16 @@ targets in a different order or a drifted set, and a positional id would then
 point at the wrong target. The @occurrence@ is the index among commands in the
 /same resolve batch/ that address the same target stream (0 for the first), so
 resolving the same target twice in one batch still yields distinct ids. The
-occurrence is the final field and never contains a colon, so the encoding is
-unambiguous even for stream names containing colons.
+v5 name encodes every text field as length-prefixed UTF-8, avoiding delimiter
+ambiguity and non-ASCII truncation.
 -}
 deterministicRouterCommandId :: Text -> Text -> EventId -> StreamName -> Int -> EventId
 deterministicRouterCommandId routerName correlationId sourceEventId targetStreamName occurrence =
     EventId
         $ UUID.V5.generateNamed UUID.V5.namespaceURL
-        $ fmap (fromIntegral . fromEnum)
-        $ Text.unpack
-        $ Text.intercalate
-            ":"
+        $ ByteString.unpack
+        $ ByteString.concat
+        $ fmap encodeField
             [ "keiro"
             , "router"
             , routerName
@@ -426,11 +445,18 @@ deterministicRouterCommandId routerName correlationId sourceEventId targetStream
             , coerce targetStreamName
             , Text.pack (show occurrence)
             ]
+  where
+    encodeField field =
+        let bytes = Text.Encoding.encodeUtf8 field
+         in ByteString.concat
+                [ ByteString.Char8.pack (show (ByteString.length bytes))
+                , ByteString.singleton 58
+                , bytes
+                ]
 ```
 
-This needs new imports in Router.hs: `Data.UUID qualified as UUID`,
-`Data.UUID.V5 qualified as UUID.V5` (mirror the import style at the top of
-`ProcessManager.hs`), and `StreamName` added to the existing
+This needs new imports in Router.hs: `Data.ByteString`, `Data.ByteString.Char8`,
+`Data.Text.Encoding`, `Data.UUID`, and `Data.UUID.V5`, plus `StreamName` added to the existing
 `Kiroku.Store.Types (RecordedEvent)` import. `EventId` and `StreamName` are newtypes
 over `UUID` and `Text` respectively, so `coerce` (already imported) unwraps them; if the
 newtypes' constructors are directly importable, pattern-matching them is equally fine.
@@ -772,8 +798,9 @@ At the end of Milestone 2, `keiro/src/Keiro/Router.hs` exports:
 deterministicRouterCommandId :: Text -> Text -> EventId -> StreamName -> Int -> EventId
 ```
 
-with the semantics in the Decision Log (v5 UUID over
-`"keiro:router:<name>:<key>:<source-uuid>:<target-stream-name>:<occurrence>"`).
+with the semantics in the Decision Log: a v5 UUID over length-prefixed UTF-8 fields for
+`keiro`, `router`, router name, key, source UUID text, target stream name, and occurrence,
+in that order.
 
 At the end of Milestone 3, `keiro/src/Keiro/ProcessManager.hs` exports:
 
@@ -801,3 +828,9 @@ Revision note (2026-07-13): began implementation with the active MasterPlan inte
 recorded the clean-project baseline constraint, and completed Milestone 1's two
 fail-before plus three characterization tests. The focused router run failed in exactly
 the two predicted drift scenarios, establishing the defect before production changes.
+
+Revision note (2026-07-13): completed Milestone 2 with target-name/occurrence keyed ids,
+the legacy positional transition probe, and 14 green router examples. Replaced the
+authored colon-delimited v5 name with length-prefixed UTF-8 after implementation review
+found delimiter and Unicode collisions; updated the Decision Log, milestone prose, and
+interface contract to match.
