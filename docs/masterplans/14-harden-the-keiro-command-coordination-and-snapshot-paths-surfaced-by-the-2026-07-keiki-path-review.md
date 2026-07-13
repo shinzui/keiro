@@ -118,7 +118,7 @@ a kiroku-side child plan for the subscription bridge (rejected: kiroku already s
 | 98 | Snapshot subsystem hardening: uninit-register guards, read-side telemetry, and workflow write alignment | docs/plans/98-snapshot-subsystem-hardening-uninit-register-guards-read-side-telemetry-and-workflow-write-alignment.md | None | EP-95 | Complete |
 | 99 | Silent-edge validation and divergence witnesses on the command path | docs/plans/99-silent-edge-validation-and-divergence-witnesses-on-the-command-path.md | EP-95 | None | Complete |
 | 100 | Process-manager failure paths: dead-lettering rejected commands and surfacing retry exhaustion | docs/plans/100-process-manager-failure-paths-dead-lettering-rejected-commands-and-surfacing-retry-exhaustion.md | None | EP-99 | Complete |
-| 101 | Read-model rebuild correctness: dedup reset, writer fencing, and Strong cursor semantics | docs/plans/101-read-model-rebuild-correctness-dedup-reset-writer-fencing-and-strong-cursor-semantics.md | None | None | Not Started |
+| 101 | Read-model rebuild correctness: dedup reset, writer fencing, and Strong cursor semantics | docs/plans/101-read-model-rebuild-correctness-dedup-reset-writer-fencing-and-strong-cursor-semantics.md | None | None | In Progress |
 | 102 | Persistence polish: truncation guards, enrichment parity, and messaging caveat documentation | docs/plans/102-persistence-polish-truncation-guards-enrichment-parity-and-messaging-caveat-documentation.md | None | EP-95 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.

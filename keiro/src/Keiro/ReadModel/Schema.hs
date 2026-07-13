@@ -1,6 +1,6 @@
 {- | The @keiro_read_models@ registry: schema identity and lifecycle status.
 
-Every read model registers a row recording its 'version', 'shapeHash', and
+Every read model explicitly registers a row at projection startup recording its 'version', 'shapeHash', and
 'ReadModelStatus'. The registry is what lets 'Keiro.ReadModel.runQuery'
 refuse to serve a model whose code-side schema has drifted from the table on
 disk, or one that is mid-rebuild. The status transitions ('markRebuilding',
@@ -68,7 +68,10 @@ data ReadModelMetadata = ReadModelMetadata
     }
     deriving stock (Generic, Eq, Show)
 
-{- | Register a read model, inserting a 'Live' row if none exists. Idempotent:
+{- | Register a read model once at projection startup, inserting a 'Live' row
+if none exists. Querying never performs this registration automatically, so
+deployments that previously relied on their first query to register must add
+this startup call. Idempotent:
 an existing registration is returned unchanged (the @version@ and
 @shapeHash@ are /not/ overwritten), so a query can compare them and detect
 schema drift.

@@ -1760,7 +1760,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Right () <-
                     Store.runStoreIO storeHandle $ do
                         ensureProjectionSchema "app_reads"
-                        Store.runTransaction initializePlacedTable
+                        initializeRegisteredReadModel placedReadModel initializePlacedTable
 
                 -- Drive a command with the inline projection that writes the app table.
                 let target = stream "placed-in-app-reads" :: Stream CounterEventStream
@@ -1799,7 +1799,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "queries inline projection with Eventual consistency" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             let target = stream "read-model-inline" :: Stream CounterEventStream
             result <-
                 Store.runStoreIO storeHandle $
@@ -1832,7 +1832,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "Strong returns immediately on an empty log" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             queryResult <-
                 Store.runStoreIO storeHandle $
                     runQueryWith Nothing Strong counterReadModel "empty"
@@ -1841,7 +1841,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "Strong returns immediately when the subscription is already at the store head" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             let target = stream "read-model-strong-at-head" :: Stream CounterEventStream
             Right (Right commandResult) <-
                 Store.runStoreIO storeHandle $
@@ -1866,7 +1866,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "Strong blocks until the subscription reaches the store head captured at query start" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             let target = stream "read-model-strong-blocking" :: Stream CounterEventStream
             Right (Right commandResult) <-
                 Store.runStoreIO storeHandle $
@@ -1896,7 +1896,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "inline projection populates actor and source_event_id from command metadata" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             let target = stream "read-model-inline-metadata" :: Stream CounterEventStream
                 opts =
                     defaultRunCommandOptions
@@ -1915,7 +1915,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "waits for async projection cursor with PositionWait" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             let target = stream "read-model-position-wait" :: Stream CounterEventStream
             Right (Right commandResult) <-
                 Store.runStoreIO storeHandle $
@@ -1944,7 +1944,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "times out when PositionWait target is not reached" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
@@ -1963,7 +1963,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "does not write the registry row on repeated read-model queries" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             Right (Right 0) <-
                 Store.runStoreIO storeHandle $
                     runQuery Nothing counterReadModel "no-churn"
@@ -1980,7 +1980,19 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         Tx.statement "counter-read-model" readModelXminStmt
             xminAfter `shouldBe` xminBefore
 
-        it "handles concurrent first-time read-model registration" $ \storeHandle -> do
+        it "rejects an unregistered model without creating a registry row" $ \storeHandle -> do
+            let unregistered :: ReadModel Text Int
+                unregistered = counterReadModel & #name .~ ("never-registered" :: Text)
+            queryResult <-
+                Store.runStoreIO storeHandle $
+                    runQuery Nothing unregistered "missing"
+            queryResult `shouldBe` Right (Left (ReadModelUnregistered "never-registered"))
+            found <-
+                Store.runStoreIO storeHandle $
+                    lookupReadModel "never-registered"
+            found `shouldBe` Right Nothing
+
+        it "handles concurrent explicit read-model registration" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction initializeCounterReadModelTable
@@ -1988,21 +2000,25 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             resultB <- newEmptyMVar
             _ <-
                 forkIO $
-                    Store.runStoreIO storeHandle (runQuery Nothing counterReadModel "concurrent")
+                    Store.runStoreIO storeHandle (registerReadModelDefinition counterReadModel)
                         >>= putMVar resultA
             _ <-
                 forkIO $
-                    Store.runStoreIO storeHandle (runQuery Nothing counterReadModel "concurrent")
+                    Store.runStoreIO storeHandle (registerReadModelDefinition counterReadModel)
                         >>= putMVar resultB
             first <- takeMVar resultA
             second <- takeMVar resultB
-            first `shouldBe` Right (Right 0)
-            second `shouldBe` Right (Right 0)
+            first `shouldBe` Right ()
+            second `shouldBe` Right ()
+            queryResult <-
+                Store.runStoreIO storeHandle $
+                    runQuery Nothing counterReadModel "concurrent"
+            queryResult `shouldBe` Right (Right 0)
 
         it "rejects stale read-model schema" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             Right (Right 0) <-
                 Store.runStoreIO storeHandle $
                     runQuery Nothing counterReadModel "stale"
@@ -2020,7 +2036,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "surfaces unknown read-model statuses with the raw status text" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             Right (Right 0) <-
                 Store.runStoreIO storeHandle $
                     runQuery Nothing counterReadModel "unknown-status"
@@ -2038,7 +2054,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "ignores duplicate async event by source_event_id" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             let target = stream "read-model-async-idempotent" :: Stream CounterEventStream
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
@@ -2106,6 +2122,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             countAfterPrune `shouldBe` 2
 
         it "tracks rebuild state transitions" $ \storeHandle -> do
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    registerReadModelDefinition counterReadModel
             Right rebuilding <-
                 Store.runStoreIO storeHandle $
                     Rebuild.rebuild counterReadModel
@@ -2129,7 +2148,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             keiroMetrics <- Telemetry.newKeiroMetrics meter
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             let target = stream "read-model-lag" :: Stream CounterEventStream
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
@@ -2159,7 +2178,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             keiroMetrics <- Telemetry.newKeiroMetrics meter
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeCounterReadModelTable
+                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction $
@@ -2858,7 +2877,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "resolves targets effectfully and fans out one command per target" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeRouterTargetsTable
+                    initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
             Right () <- Store.runStoreIO storeHandle $
                 Store.runTransaction $ do
                     Tx.statement ("g1", "router-target-a") insertRouterTargetStmt
@@ -2893,7 +2912,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "reports every dispatch as a duplicate on replay, writing no new events" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeRouterTargetsTable
+                    initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
             Right () <- Store.runStoreIO storeHandle $
                 Store.runTransaction $ do
                     Tx.statement ("g1", "router-target-a") insertRouterTargetStmt
@@ -3051,7 +3070,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "drains an adapter, dispatching one command per resolved target for every message" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeRouterTargetsTable
+                    initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
             Right () <- Store.runStoreIO storeHandle $
                 Store.runTransaction $ do
                     Tx.statement ("g1", "worker-a") insertRouterTargetStmt
@@ -3117,7 +3136,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "finalizes AckRetry for a transient thrown resolver error and continues" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeRouterTargetsTable
+                    initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction (Tx.statement ("g2", "worker-after-retry") insertRouterTargetStmt)
@@ -3184,7 +3203,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "folds a concurrent duplicate router dispatch to PMCommandDuplicate" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeRouterTargetsTable
+                    initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction (Tx.statement ("g1", "router-duplicate-target") insertRouterTargetStmt)
@@ -3222,7 +3241,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         it "dedups a pre-upgrade positional router dispatch during the transition" $ \storeHandle -> do
             Right () <-
                 Store.runStoreIO storeHandle $
-                    Store.runTransaction initializeRouterTargetsTable
+                    initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
             Right () <-
                 Store.runStoreIO storeHandle $
                     Store.runTransaction (Tx.statement ("g1", "transition-target") insertRouterTargetStmt)
@@ -9806,6 +9825,23 @@ counterReadModel =
         , defaultConsistency = Eventual
         , query = \modelId -> Tx.statement modelId selectCounterReadModelStmt
         }
+
+registerReadModelDefinition :: (Store :> es) => ReadModel q r -> Eff es ()
+registerReadModelDefinition readModel =
+    void $
+        registerReadModel
+            (readModel ^. #name)
+            (readModel ^. #version)
+            (readModel ^. #shapeHash)
+
+initializeRegisteredReadModel ::
+    (Store :> es) =>
+    ReadModel q r ->
+    Tx.Transaction () ->
+    Eff es ()
+initializeRegisteredReadModel readModel initializeTable = do
+    Store.runTransaction initializeTable
+    registerReadModelDefinition readModel
 
 counterInlineProjection :: InlineProjection CounterEvent
 counterInlineProjection =

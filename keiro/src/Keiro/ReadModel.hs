@@ -20,6 +20,10 @@ The consistency modes trade freshness against latency:
 
 Schema lifecycle (registration, status transitions) lives in
 "Keiro.ReadModel.Schema", which is re-exported here.
+
+Register each model once at projection startup with 'registerReadModel' before
+serving queries. Queries fail with 'ReadModelUnregistered' when startup wiring
+has not registered the model; they never create registry rows themselves.
 -}
 module Keiro.ReadModel (
     -- * Definition
@@ -144,7 +148,11 @@ defaultStrongWaitOptions =
 
 -- | Why a read-model query could not run.
 data ReadModelError
-    = {- | The registered schema (version or shape hash) differs from the
+    = {- | No registry row exists for the model. Register it once at projection
+      startup with 'registerReadModel' before serving queries.
+      -}
+      ReadModelUnregistered !Text
+    | {- | The registered schema (version or shape hash) differs from the
       model's current definition: name, expected vs. found version, then
       expected vs. found shape hash. The model must be rebuilt.
       -}
@@ -238,15 +246,9 @@ ensureReadModel ::
     Eff es (Either ReadModelError ())
 ensureReadModel readModel = do
     found <- lookupReadModel (readModel ^. #name)
-    metadata <-
-        case found of
-            Just metadata -> pure metadata
-            Nothing ->
-                registerReadModel
-                    (readModel ^. #name)
-                    (readModel ^. #version)
-                    (readModel ^. #shapeHash)
-    pure (validateMetadata readModel metadata)
+    pure $ case found of
+        Just metadata -> validateMetadata readModel metadata
+        Nothing -> Left (ReadModelUnregistered (readModel ^. #name))
 
 validateMetadata :: ReadModel q r -> ReadModelMetadata -> Either ReadModelError ()
 validateMetadata readModel metadata

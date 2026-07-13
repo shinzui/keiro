@@ -4,6 +4,7 @@ slug: read-model-rebuild-correctness-dedup-reset-writer-fencing-and-strong-curso
 title: "Read-model rebuild correctness: dedup reset, writer fencing, and Strong cursor semantics"
 kind: exec-plan
 created_at: 2026-07-12T05:07:53Z
+intention: intention_01kxcz37ave9t8d6amvvxnemr6
 master_plan: "docs/masterplans/14-harden-the-keiro-command-coordination-and-snapshot-paths-surfaced-by-the-2026-07-keiki-path-review.md"
 ---
 
@@ -64,9 +65,9 @@ shows a live applier being fenced during a rebuild, and a two-category test show
 
 ## Progress
 
-- [ ] M1: `ReadModelUnregistered` error constructor added to `ReadModelError`.
-- [ ] M1: `ensureReadModel` no longer auto-registers; unknown-model queries fail closed.
-- [ ] M1: test fixtures register models explicitly; new unregistered-query test passes.
+- [x] (2026-07-13 18:23Z) M1: `ReadModelUnregistered` error constructor added to `ReadModelError`.
+- [x] (2026-07-13 18:23Z) M1: `ensureReadModel` no longer auto-registers; unknown-model queries fail closed.
+- [x] (2026-07-13 18:23Z) M1: test fixtures register models explicitly; new unregistered-query test passes.
 - [ ] M2: `RebuildError` type and `startRebuild` helper (atomic status/truncate/dedup/checkpoint) exist.
 - [ ] M2: `finishRebuild` helper with the zero-apply promotion guard exists.
 - [ ] M2: red rebuild-per-current-runbook test written and observed failing (empty table).
@@ -83,6 +84,17 @@ shows a live applier being fenced during a rebuild, and a two-category test show
 ## Surprises & Discoveries
 
 Findings from authoring-time verification (2026-07-11); implementation entries go below.
+
+- M1 implementation established a clean baseline (`cabal build all` and 325
+  examples), then completed explicit registration with 326 examples passing.
+  The unregistered-query spec proves both the returned
+  `ReadModelUnregistered "never-registered"` value and the absence of a registry
+  row after the failed query.
+- The authored dependency-location note was stale: `cabal.project` no longer pins
+  Kiroku, and `keiro/keiro.cabal` now resolves `kiroku-store >=0.3 && <0.4` from
+  Hackage. `mori registry show shinzui/kiroku --full` locates the matching source
+  corpus at `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`; the SQL and
+  transaction APIs used below were re-verified there before implementation.
 
 - The dedup table is keyed per projection (`PRIMARY KEY (projection_name, event_id)`,
   `keiro-migrations/sql-migrations/2026-06-15-21-49-37-keiro-projection-dedup.sql:1-6`),
@@ -217,17 +229,21 @@ Findings from authoring-time verification (2026-07-11); implementation entries g
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+M1 made registration an explicit startup responsibility. Unknown models now fail
+closed without mutating the registry, while idempotent concurrent calls to
+`registerReadModel` remain supported. The complete Keiro test suite passed with
+326 examples after updating counter, configured-schema, and router fixtures.
 
 
 ## Context and Orientation
 
 Keiro is a Haskell event-sourcing framework in this repository (packages `keiro`,
 `keiro-core`, `keiro-migrations`, and test packages), built on the kiroku event
-store, which is consumed as a pinned git source dependency (`cabal.project:24-35`;
-if you need to read kiroku source beyond what this plan quotes, the pinned revision
-is the source of truth). Events are appended to PostgreSQL; everything below is
-plain SQL against one database.
+store. `keiro/keiro.cabal` constrains `kiroku-store` to the 0.3 series and Cabal
+resolves it from Hackage. When implementation needs dependency source beyond what
+this plan quotes, use `mori registry show shinzui/kiroku --full`; the registered
+source corpus is `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`. Events are
+appended to PostgreSQL; everything below is plain SQL against one database.
 
 Terms used throughout, in plain language:
 
@@ -672,8 +688,9 @@ fenced transaction; document it, and do not export the raw statement.
 No new packages. Everything uses the already-present stack: `hasql` statements via
 `Hasql.Statement.preparable`, transactions via `Kiroku.Store.Transaction.runTransaction`
 and `Hasql.Transaction`, the `Store` effect from `Kiroku.Store.Effect`, types from
-`Kiroku.Store.Types` (`GlobalPosition`, `EventId`, `RecordedEvent`). kiroku stays at
-the pin in `cabal.project`; this plan adds no kiroku features.
+`Kiroku.Store.Types` (`GlobalPosition`, `EventId`, `RecordedEvent`). Kiroku stays
+within the `kiroku-store >=0.3 && <0.4` Hackage bound in `keiro/keiro.cabal`; this
+plan adds no Kiroku features.
 
 End-state signatures (module-qualified; field lists show only additions):
 
