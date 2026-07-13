@@ -13,6 +13,12 @@ change to the snapshot encoding or to the register layout transparently
 falls back to a full replay rather than decoding stale bytes. The JSON
 encoding lives in "Keiro.Snapshot.Codec" and the SQL storage in
 "Keiro.Snapshot.Schema", both re-exported here.
+
+Snapshot version non-regression applies only while the codec version and shape
+hash stay the same. A writer with either discriminant changed may replace a
+higher-version row, allowing codec rollback to recover. In a mixed-version
+deployment incompatible writers can therefore thrash the one row per stream
+and repeatedly force full replay; this affects performance, not correctness.
 -}
 module Keiro.Snapshot (
     -- * Hydration seed
@@ -123,7 +129,9 @@ encodeSnapshotStrict codec state =
 
 {- | Upsert a JSON value that has already been encoded and forced. Keeping this
 separate from 'writeSnapshot' lets post-commit callers prove encoding is safe
-before they touch the store.
+before they touch the store. For a fixed codec version and shape hash, stale
+versions are ignored. A different codec version or shape hash may replace a
+higher-version row to permit codec rollback; see the module header.
 -}
 writeSnapshotEncoded ::
     (Store :> es) =>
@@ -145,7 +153,9 @@ writeSnapshotEncoded streamId streamVersion codec encoded =
 {- | Encode @state@ with @codec@ and upsert it as the snapshot for the given
 stream at @streamVersion@. This compatibility helper preserves the historical
 lazy encoding behavior; post-commit advisory paths should call
-'encodeSnapshotStrict' first and pass the result to 'writeSnapshotEncoded'.
+'encodeSnapshotStrict' first and pass the result to 'writeSnapshotEncoded'. For
+a fixed codec version and shape hash stale writes are ignored, while an
+incompatible codec may replace a newer row to permit rollback.
 -}
 writeSnapshot ::
     (Store :> es) =>

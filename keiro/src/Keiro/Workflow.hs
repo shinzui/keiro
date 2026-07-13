@@ -855,6 +855,8 @@ writeWorkflowSnapshotAdvisory ::
     WorkflowState ->
     Eff es ()
 writeWorkflowSnapshotAdvisory mMetrics streamId version state = do
+    -- WorkflowState is already a Map Text Value assembled from journaled step
+    -- results, so this path has no aggregate RegFile/uninit encode to guard.
     outcome <- tryError @StoreError (writeWorkflowSnapshot streamId version state)
     case outcome of
         Right () -> pure ()

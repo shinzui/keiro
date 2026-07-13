@@ -3,9 +3,17 @@
 One row per stream holds the latest snapshot of its folded state as JSONB,
 tagged with the 'stateCodecVersion' and 'regfileShapeHash' that produced it.
 'lookupSnapshot' fetches the newest row matching a given version and shape
-hash (so incompatible snapshots are simply not found); 'writeSnapshotRow'
-upserts, keeping only the highest stream version per stream so a late or
-out-of-order write cannot regress the snapshot.
+hash (so incompatible snapshots are simply not found). Within one codec
+version and shape hash, 'writeSnapshotRow' keeps only the highest stream
+version, so a late or out-of-order write cannot regress the snapshot.
+
+A write with a /different/ codec version or shape hash deliberately replaces
+the row even at a lower stream version. This lets a rolled-back deployment
+reclaim the single snapshot slot instead of being locked out by a newer codec
+forever. During a mixed-version deployment, however, writers with incompatible
+codecs can thrash that row and each side will miss the other's snapshot. The
+cost is repeated full replay, never incorrect state: the event log remains the
+source of truth.
 
 This module is the storage layer beneath "Keiro.Snapshot"; callers normally
 go through 'Keiro.Snapshot.hydrateWithSnapshot' and
@@ -78,9 +86,11 @@ lookupSnapshot streamId version shapeHash =
             (streamIdToInt streamId, Prelude.fromIntegral version, shapeHash)
             lookupSnapshotStmt
 
-{- | Upsert a snapshot row for its stream. The write only takes effect when
-its 'streamVersion' is at least the stored one, so concurrent or replayed
-writes never regress the snapshot to an older version.
+{- | Upsert a snapshot row for its stream. For the same codec version and shape
+hash, the write only takes effect when its 'streamVersion' is at least the
+stored one. An incompatible codec version or shape hash replaces the row even
+at a lower version so codec rollback can make progress; see the module header
+for the mixed-deployment performance caveat.
 -}
 writeSnapshotRow ::
     (Store :> es) =>

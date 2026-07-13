@@ -41,7 +41,22 @@ Snapshots are advisory. If the row is missing, corrupt, or shape-incompatible,
 Keiro falls back to full replay. Stored event decode failures still fail the
 command because the event log is the source of truth. `mkEventStreamOrThrow`
 also prevents an incoherent snapshot configuration (`snapshotPolicy` enabled
-with `stateCodec = Nothing`) from becoming a runnable stream.
+with `stateCodec = Nothing`) from becoming a runnable stream, and rejects a
+codec that cannot encode its initial state and registers. Post-append encode or
+store failures are swallowed so they cannot reverse an already-committed
+command or workflow journal append.
+
+The snapshot metrics distinguish these paths:
+
+- `keiro.snapshot.read.hits` counts usable hydration seeds.
+- `keiro.snapshot.read.misses` counts full-replay fallbacks, including a fresh
+  stream with no snapshot yet.
+- `keiro.snapshot.decode.failures` counts matching rows whose JSON cannot be
+  decoded.
+- `keiro.snapshot.encode.failures` counts post-commit encodes that raised an
+  `ErrorCall` and were skipped.
+- `keiro.snapshot.write.failures` counts post-commit store writes that failed
+  and were skipped.
 
 The snapshot test initializes `keiro_snapshots`, runs `PlaceOrder` and
 `ApprovePayment` through `snapshotOrderEventStream`, then queries the snapshot
@@ -51,3 +66,32 @@ row and expects stream version 2. See
 Use snapshots when measurement shows hydration latency matters. Do not enable
 them as a substitute for event-log correctness, and version snapshot codecs as
 carefully as event codecs.
+
+## The one write that can replace a newer snapshot
+
+Keiro rejects an older snapshot write when the stored row uses the same codec
+version and register-file shape hash. If either discriminant differs, however,
+the incoming write replaces the row even when it describes a lower stream
+version. This escape hatch is intentional: after a codec rollback, the older
+deployment must be able to reclaim the snapshot slot instead of missing a
+newer, incompatible row forever.
+
+Because there is one snapshot row per stream, two live deployments with
+different codec versions or shape hashes can overwrite that row back and
+forth. Each side then misses snapshots written by the other and pays for full
+replay. Avoid prolonged mixed-codec deployments; the behavior is a performance
+cost, not a correctness risk, because hydration always falls back to the event
+log.
+
+## Upgrading Keiki: expect a one-time full replay
+
+Keiki EP-78 stabilizes the register-file shape-hash calculation. When upgrading
+from a Keiki version with the earlier hash, existing snapshot rows no longer
+match the recomputed `regfile_shape_hash`. Keiro deliberately does not
+compensate for that change: Keiki owns the hash, and an incompatible snapshot
+is handled as an ordinary advisory miss.
+
+Expect `keiro.snapshot.read.misses` to spike while each affected stream pays a
+full replay. Its snapshot row repopulates the next time the configured policy
+fires after an append, after which hydration hits again. No event or aggregate
+state migration is required.

@@ -51,10 +51,10 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] M4: `Error StoreError :> es` constraint added to `runWorkflow` / `runWorkflowWith` / `rotateGeneration` in `keiro/src/Keiro/Workflow.hs`
 - [x] M4: all three `writeWorkflowSnapshot` call sites swallow-and-count (`keiro.snapshot.write.failures`)
 - [x] M4: workflow snapshot write-failure test (constraint-block pattern) asserts the run succeeds with a counted failure
-- [ ] M5: `keiro/src/Keiro/Snapshot/Schema.hs` and `keiro/src/Keiro/Snapshot.hs` module docs document the codec-mismatch clobber escape hatch and mixed-deploy caveat
-- [ ] M5: `keiro/src/Keiro/Workflow/Snapshot.hs` "Advisory semantics" section updated for swallowed writes
-- [ ] M5: `docs/guides/snapshots-and-hydration.md` gains the clobber caveat and the keiki EP-78 one-time-replay upgrade note
-- [ ] M5: `CHANGELOG.md` Unreleased entry written
+- [x] M5: `keiro/src/Keiro/Snapshot/Schema.hs` and `keiro/src/Keiro/Snapshot.hs` module docs document the codec-mismatch clobber escape hatch and mixed-deploy caveat
+- [x] M5: `keiro/src/Keiro/Workflow/Snapshot.hs` "Advisory semantics" section updated for swallowed writes
+- [x] M5: `docs/guides/snapshots-and-hydration.md` gains the clobber caveat and the keiki EP-78 one-time-replay upgrade note
+- [x] M5: `CHANGELOG.md` Unreleased entry written
 - [ ] Full suite green: `cabal test keiro-test` (and `cabal build keiro-core keiro` clean)
 - [ ] Master plan MP-14 Progress checkboxes for EP-98 ticked and registry status updated
 
@@ -95,6 +95,12 @@ implementation. Provide concise evidence.
   the constraint because it is the typed child-runtime wrapper. The resume worker
   already carried the error effect, so this was the only library signature beyond
   the three named in the milestone that needed the mechanical propagation.
+- (Implementation, 2026-07-13) `cabal haddock keiro` succeeds and renders all
+  three updated snapshot modules at 100% declaration coverage, but the package
+  already emits many repository-wide Haddock link/ambiguity warnings (for
+  example duplicate record fields and missing dependency docs). None is a parse
+  or render failure introduced by M5; making the entire pre-existing Haddock
+  output warning-free is outside this snapshot-hardening plan.
 
 
 ## Decision Log
@@ -543,3 +549,5 @@ Revision note (2026-07-13): completed M2. Split strict encoding from the store u
 Revision note (2026-07-13): completed M3. Added reason-preserving aggregate and workflow snapshot lookups while retaining the erasing compatibility wrappers, registered hit/miss/decode-failure counters, and recorded them at the command/workflow option-owning call sites. Focused validation passed 11 aggregate snapshot examples and 6 workflow snapshot examples; corrupt JSON counts decode failures, mismatches/truncation count only misses, and tail hydration counts a hit.
 
 Revision note (2026-07-13): completed M4. Routed step-boundary, terminal, and rotation-seed writes through one `StoreError`-catching advisory helper, propagated the required error constraint through the public workflow and child-runtime signatures, and added a constraint-block integration regression. The focused workflow snapshot run passed 7 examples; the new case commits all seven journal events, writes no snapshot, counts exactly three failed Every-2 boundaries, then proves snapshot recovery after the constraint is removed.
+
+Revision note (2026-07-13): completed M5. Corrected the codec-mismatch clobber contract in storage/runtime Haddocks, documented workflow write advisory behavior, added operator guidance for mixed-codec deployments and the Keiki EP-78 shape-hash replay, and recorded all source/metric changes under the root Unreleased changelog. `cabal haddock keiro` completed successfully with the updated snapshot modules at 100% declaration coverage; pre-existing package-wide link warnings are recorded under Surprises & Discoveries.

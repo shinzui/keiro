@@ -17,6 +17,12 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   output and may be removed in a later release. If both the deployment version
   and resolver output change between attempts, a target command may be
   dispatched at most one extra time across that one-time upgrade window.
+- `runWorkflow`, `runWorkflowWith`, and the child-workflow runtime now require
+  `Error StoreError` in their effect rows so post-commit workflow snapshot
+  failures can be caught without leaving the typed error channel.
+- `mkEventStream` now rejects snapshot codecs that cannot encode their initial
+  state and register file. Snapshot-enabled streams built from
+  `emptyRegFile` must initialize every slot before validation.
 
 ### Other Changes
 
@@ -27,6 +33,20 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   against the intended target stream before being treated as benign.
   Unconfirmed cross-stream or id-less collisions surface as command failures,
   causing workers to halt instead of silently dropping a dispatch.
+- Aggregate snapshot encoding is forced before the store write. An `ErrorCall`
+  from a partial state encoder or uninitialized register is swallowed after the
+  event append and counted instead of escaping a successful command.
+- Workflow snapshot writes after steps, completion, and continue-as-new
+  rotation are advisory: store failures are swallowed and counted after the
+  journal append commits.
+- Added `keiro.snapshot.encode.failures`,
+  `keiro.snapshot.decode.failures`, `keiro.snapshot.read.hits`, and
+  `keiro.snapshot.read.misses`; snapshot lookup APIs now retain miss and decode
+  reasons while compatibility wrappers preserve the previous `Maybe` surface.
+- Corrected snapshot documentation: version non-regression applies within one
+  codec version and shape hash, while an incompatible codec can replace a newer
+  row to permit rollback. Upgrade notes cover the full-replay miss caused by
+  Keiki EP-78's stable shape hash.
 
 ## 0.1.0.0 — 2026-07-05
 

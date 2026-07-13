@@ -27,6 +27,12 @@ returns 'Nothing' — meaning "replay from version 0" — when the stream has no
 id yet, no matching snapshot, or an undecodable snapshot. So a stale or corrupt
 snapshot degrades performance at worst, never correctness.
 
+Runtime snapshot writes are advisory too. After a workflow journal append has
+committed, "Keiro.Workflow" swallows any snapshot-store failure and increments
+@keiro.snapshot.write.failures@; the committed step, completion, or rotation
+therefore still determines a successful run. This low-level module continues
+to expose the store primitive, while the runtime owns that error handling.
+
 Snapshot writes store the full accumulated step map each time the selected
 policy fires. With an every-n policy that means rewriting the complete map at
 each boundary; the intended way to bound that cost for forever-running
