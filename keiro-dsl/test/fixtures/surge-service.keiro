@@ -8,7 +8,7 @@ process SurgeFlow
   correlate input.hospitalId via idText
   saga Surge stream="surge-" <> correlationId
   target Hospital
-  projections [ ]
+  projections [ surge ]
 
   on SurgeInput
     advance NoteSurgeThreshold { hospitalId }

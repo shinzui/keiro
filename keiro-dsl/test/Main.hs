@@ -140,6 +140,18 @@ main = hspec $ do
         it "rejects an unresolved saga reference as ProcessUnresolvedRef" $ do
             codes <- errorCodesOf "test/fixtures/hospital-surge-badref.keiro"
             codes `shouldContain` [ProcessUnresolvedRef]
+        it "rejects unresolved process commands, projections, schedules, and advance ids" $ do
+            codes <- errorCodesOf "test/fixtures/process-ghost-refs.keiro"
+            length (filter (== ProcessUnresolvedRef) codes) `shouldBe` 5
+            codes `shouldContain` [ProcessDispatchIdSupplied]
+        it "rejects invalid timer ceilings and target field bindings" $ do
+            codes <- errorCodesOf "test/fixtures/process-bad-timer.keiro"
+            mapM_
+                (\expected -> codes `shouldContain` [expected])
+                [ProcessTimerCeilingInvalid, ProcessFieldBindingUnresolved]
+        it "accepts resolved process projection references" $ do
+            codes <- errorCodesOf "test/fixtures/surge-service.keiro"
+            codes `shouldBe` []
         it "scaffolds the process: Generated wiring is firewall-clean + a HoleStub" $ do
             mods <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
             let gens = [m | m <- mods, kind m == Generated]

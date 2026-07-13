@@ -88,7 +88,7 @@ processSkeleton =
         , "  correlate input.hospitalId via idText"
         , "  saga Surge stream=\"hospital-surge-\" <> correlationId"
         , "  target Hospital"
-        , "  projections [ hospitalReadiness ]"
+        , "  projections [ ]"
         , ""
         , "  on SurgeInput"
         , "    advance NoteSurgeThreshold { hospitalId availableIcuBeds redDemand timerId=timer.id }"
@@ -112,9 +112,14 @@ processSkeleton =
         , "  regs"
         , "  states Idle"
         , ""
+        , "  command NoteSurgeThreshold { hospitalId availableIcuBeds:Int redDemand:Int timerId }"
+        , "  command MarkSurgeTimerFired { hospitalId timerId }"
+        , ""
         , "aggregate Hospital"
         , "  regs"
         , "  states Operational"
+        , ""
+        , "  command ActivateSurge { hospitalId }"
         ]
 
 contractSkeleton :: Text

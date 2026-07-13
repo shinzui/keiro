@@ -474,9 +474,11 @@ validateIntake i = concat [completeness, inversions]
 -- | EP-3 rules for a process manager + its nested timer.
 validateProcess :: Spec -> ProcessNode -> [Diagnostic]
 validateProcess spec p =
-    concat [noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, benignInversions]
+    concat [noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, timerCeiling, benignInversions]
   where
-    aggNames = [aggName a | NAggregate a <- specNodes spec]
+    aggregates = [a | NAggregate a <- specNodes spec]
+    aggNames = map aggName aggregates
+    projectionTables = [projTable projection | aggregate <- aggregates, Just projection <- [aggProjection aggregate]]
     inputFields = map fieldName (inFields (procInput p))
     timeFields = [fieldName f | f <- inFields (procInput p), fieldType f == Just "Time"]
     timer = procTimer p
@@ -501,19 +503,25 @@ validateProcess spec p =
     -- Dispatched (and fired) command ids are runtime-owned; no field binding may
     -- supply a commandId/id.
     runtimeOwnedDispatchId =
-        [ mkErr (locLine (dispLoc d)) ProcessDispatchIdSupplied $
-            "dispatch to '" <> dispTarget d <> "' supplies a runtime-owned id field '" <> fbName b <> "'; remove it"
-        | d <- hDispatch (procHandle p)
-        , b <- dispFields d
-        , fbName b `elem` (["commandId", "id"] :: [Name])
+        [ mkErr pl ProcessDispatchIdSupplied $
+            "advance command '" <> advCommand advance <> "' supplies a runtime-owned id field '" <> fbName binding <> "'; remove it"
+        | let advance = hAdvance (procHandle p)
+        , binding <- advFields advance
+        , fbName binding `elem` (["commandId", "id"] :: [Name])
         ]
+            ++ [ mkErr (locLine (dispLoc d)) ProcessDispatchIdSupplied $
+                    "dispatch to '" <> dispTarget d <> "' supplies a runtime-owned id field '" <> fbName b <> "'; remove it"
+               | d <- hDispatch (procHandle p)
+               , b <- dispFields d
+               , fbName b `elem` (["commandId", "id"] :: [Name])
+               ]
             ++ [ mkErr (locLine (tmLoc timer)) ProcessDispatchIdSupplied $
                     "timer fire supplies a runtime-owned id field '" <> fbName b <> "'; remove it"
                | b <- fireFields (tmFire timer)
                , fbName b `elem` (["commandId", "id"] :: [Name])
                ]
 
-    -- saga / target / fire-target must resolve to declared aggregates.
+    -- Aggregate, command, field, timer, and projection references must resolve.
     crossNodeCoupling =
         [ mkErr pl ProcessUnresolvedRef ("saga '" <> sagaAgg (procSaga p) <> "' does not resolve to a declared aggregate")
         | sagaAgg (procSaga p) `notElem` aggNames
@@ -524,6 +532,50 @@ validateProcess spec p =
             ++ [ mkErr (locLine (tmLoc timer)) ProcessUnresolvedRef ("timer fire target '" <> fireTarget (tmFire timer) <> "' must be the saga or the target aggregate")
                | fireTarget (tmFire timer) `notElem` [sagaAgg (procSaga p), procTarget p]
                ]
+            ++ resolveCommand pl "advance" (sagaAgg (procSaga p)) (advCommand advance) (advFields advance)
+            ++ concatMap resolveDispatch (hDispatch (procHandle p))
+            ++ resolveCommand (locLine (tmLoc timer)) "timer fire" (fireTarget fire) (fireCommand fire) (fireFields fire)
+            ++ [ mkErr pl ProcessUnresolvedRef $
+                    "process '" <> procId p <> "' schedules undeclared timer '" <> hSchedule (procHandle p) <> "'; declared timer is '" <> tmName timer <> "'"
+               | hSchedule (procHandle p) /= tmName timer
+               ]
+            ++ [ mkErr pl ProcessUnresolvedRef $
+                    "process '" <> procId p <> "' references undeclared projection table '" <> projection <> "'"
+               | projection <- procProjections p
+               , projection `notElem` projectionTables
+               ]
+      where
+        advance = hAdvance (procHandle p)
+        fire = tmFire timer
+        resolveDispatch dispatch =
+            resolveCommand
+                (locLine (dispLoc dispatch))
+                "dispatch"
+                (dispTarget dispatch)
+                (dispCommand dispatch)
+                (dispFields dispatch)
+        resolveCommand diagnosticLine context target command bindings = case lookupAggregate target of
+            Nothing -> []
+            Just aggregate -> case [decl | decl <- aggCommands aggregate, cmdName decl == command] of
+                [] ->
+                    [ mkErr diagnosticLine ProcessUnresolvedRef $
+                        context <> " command '" <> command <> "' is not declared by aggregate '" <> target <> "'"
+                    ]
+                (declaration : _) ->
+                    [ mkErr diagnosticLine ProcessFieldBindingUnresolved $
+                        context <> " command '" <> command <> "' binds undeclared target field '" <> fbName binding <> "'"
+                    | binding <- bindings
+                    , fbName binding `notElem` map fieldName (cmdFields declaration)
+                    ]
+        lookupAggregate name = case [aggregate | aggregate <- aggregates, aggName aggregate == name] of
+            (aggregate : _) -> Just aggregate
+            [] -> Nothing
+
+    timerCeiling =
+        [ mkErr (locLine (tmLoc timer)) ProcessTimerCeilingInvalid $
+            "timer '" <> tmName timer <> "' max-attempts must be at least 1"
+        | tmMaxAttempts timer < 1
+        ]
 
     -- Surface the dangerous benign inversions the author confirmed (warnings).
     benignInversions =
