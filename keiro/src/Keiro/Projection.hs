@@ -50,6 +50,7 @@ import Keiro.Stream (Stream)
 import Keiro.Telemetry (KeiroMetrics)
 import Keiro.Telemetry qualified as Telemetry
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..), GlobalPosition (..), RecordedEvent)
@@ -100,7 +101,7 @@ together or not at all.
 -}
 runCommandWithProjections ::
     forall phi rs s ci co es.
-    (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+    (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
     RunCommandOptions ->
     ValidatedEventStream phi rs s ci co ->
     Stream (EventStream phi rs s ci co) ->

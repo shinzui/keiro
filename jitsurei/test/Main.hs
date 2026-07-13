@@ -21,7 +21,7 @@ import Keiro.Connection (withProjectionSchema)
 import Keiro.ProcessManager
 import Keiro.Projection
 import Keiro.ReadModel
-import Keiro.Test.Postgres (withFreshStore, withFreshStoreWith, withMigratedSuite)
+import Keiro.Test.Postgres (StoreRunner (..), withFreshResourceStore, withFreshResourceStoreWith, withMigratedSuite)
 import Keiro.Timer
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types (
@@ -58,19 +58,19 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                             }
                     )
 
-    describe "Jitsurei command cycle" $ around (withFreshStore fixture) $ do
-        it "places and pays for an order in stream order" $ \store -> do
+    describe "Jitsurei command cycle" $ around (withFreshResourceStore fixture) $ do
+        it "places and pays for an order in stream order" $ \(_store, StoreRunner runner) -> do
             let target = orderStream sampleOrderId
             Right (Right placed) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand defaultRunCommandOptions orderEventStream target samplePlaceOrder
             placed ^. #streamVersion `shouldBe` StreamVersion 1
             Right (Right paid) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand defaultRunCommandOptions orderEventStream target sampleApprovePayment
             paid ^. #streamVersion `shouldBe` StreamVersion 2
             Right recorded <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "order-order-100") (StreamVersion 0) 10
             traverse (decodeRecorded orderCodec) (Vector.toList recorded)
                 `shouldBe` Right
@@ -87,9 +87,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                             }
                     ]
 
-        it "rejects shipping an unpaid order as a domain outcome" $ \store -> do
+        it "rejects shipping an unpaid order as a domain outcome" $ \(_store, StoreRunner runner) -> do
             result <-
-                Store.runStoreIO store $
+                runner $
                     runCommand
                         defaultRunCommandOptions
                         orderEventStream
@@ -103,11 +103,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         )
             result `shouldBe` Right (Left CommandRejected)
 
-    describe "Jitsurei read model" $ around (withFreshStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
-        it "updates and queries the inline order summary in the append transaction" $ \store -> do
-            Right () <- Store.runStoreIO store initializeJitsureiTables
+    describe "Jitsurei read model" $ around (withFreshResourceStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
+        it "updates and queries the inline order summary in the append transaction" $ \(_store, StoreRunner runner) -> do
+            Right () <- runner initializeJitsureiTables
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommandWithProjections
                         defaultRunCommandOptions
                         orderEventStream
@@ -115,7 +115,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         samplePlaceOrder
                         [orderSummaryInlineProjection]
             Right summaryResult <-
-                Store.runStoreIO store $
+                runner $
                     runQuery Nothing orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
             case summaryResult of
                 Right (Just summary) -> do
@@ -125,11 +125,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     summary ^. #status `shouldBe` "placed"
                 other -> expectationFailure ("expected live order summary, got " <> show other)
 
-    describe "Jitsurei snapshots" $ around (withFreshStore fixture) $ do
-        it "writes a snapshot after the configured threshold" $ \store -> do
+    describe "Jitsurei snapshots" $ around (withFreshResourceStore fixture) $ do
+        it "writes a snapshot after the configured threshold" $ \(_store, StoreRunner runner) -> do
             let target = orderStream (OrderId "snapshot-100")
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand
                         defaultRunCommandOptions
                         snapshotOrderEventStream
@@ -142,7 +142,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                                 }
                         )
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand
                         defaultRunCommandOptions
                         snapshotOrderEventStream
@@ -154,31 +154,31 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                                 }
                         )
             Right snapshotVersion <-
-                Store.runStoreIO store $
+                runner $
                     Store.runTransaction $
                         Tx.statement "order-snapshot-100" snapshotVersionForStreamStmt
             snapshotVersion `shouldBe` Just (StreamVersion 2)
 
-    describe "Jitsurei process manager" $ around (withFreshStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
-        it "dispatches a packing command once for a payment event" $ \store -> do
+    describe "Jitsurei process manager" $ around (withFreshResourceStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
+        it "dispatches a packing command once for a payment event" $ \(_store, StoreRunner runner) -> do
             -- Dispatching the fulfillment process manager now runs the target's
             -- inline order-summary projection (see commit "run target inline
             -- projections on dispatch"), which writes to jitsurei_order_summary.
             -- That application table must exist before dispatch.
-            Right () <- Store.runStoreIO store initializeJitsureiTables
+            Right () <- runner initializeJitsureiTables
             let target = orderStream sampleOrderId
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand defaultRunCommandOptions orderEventStream target samplePlaceOrder
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand defaultRunCommandOptions orderEventStream target sampleApprovePayment
             Right recorded <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "order-order-100") (StreamVersion 0) 10
             let paymentRecorded = Vector.toList recorded !! 1
             first <-
-                Store.runStoreIO store $
+                runner $
                     runFulfillmentOnce
                         defaultRunCommandOptions
                         paymentRecorded
@@ -190,7 +190,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         _ -> False
                 _ -> False
             second <-
-                Store.runStoreIO store $
+                runner $
                     runFulfillmentOnce
                         defaultRunCommandOptions
                         paymentRecorded
@@ -202,11 +202,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         _ -> False
                 _ -> False
 
-        it "updates the target inline read model when fulfillment dispatches packing" $ \store -> do
-            Right () <- Store.runStoreIO store initializeJitsureiTables
+        it "updates the target inline read model when fulfillment dispatches packing" $ \(_store, StoreRunner runner) -> do
+            Right () <- runner initializeJitsureiTables
             let target = orderStream sampleOrderId
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommandWithProjections
                         defaultRunCommandOptions
                         orderEventStream
@@ -214,7 +214,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         samplePlaceOrder
                         [orderSummaryInlineProjection]
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommandWithProjections
                         defaultRunCommandOptions
                         orderEventStream
@@ -222,18 +222,18 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         sampleApprovePayment
                         [orderSummaryInlineProjection]
             Right paidSummary <-
-                Store.runStoreIO store $
+                runner $
                     runQuery Nothing orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
             case paidSummary of
                 Right (Just summary) -> summary ^. #status `shouldBe` "paid"
                 other -> expectationFailure ("expected paid order summary, got " <> show other)
 
             Right recorded <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "order-order-100") (StreamVersion 0) 10
             let paymentRecorded = Vector.toList recorded !! 1
             first <-
-                Store.runStoreIO store $
+                runner $
                     runFulfillmentOnce
                         defaultRunCommandOptions
                         paymentRecorded
@@ -245,14 +245,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         _ -> False
                 _ -> False
             Right packedSummary <-
-                Store.runStoreIO store $
+                runner $
                     runQuery Nothing orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
             case packedSummary of
                 Right (Just summary) -> summary ^. #status `shouldBe` "packed"
                 other -> expectationFailure ("expected packed order summary, got " <> show other)
 
             second <-
-                Store.runStoreIO store $
+                runner $
                     runFulfillmentOnce
                         defaultRunCommandOptions
                         paymentRecorded
@@ -264,29 +264,29 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         _ -> False
                 _ -> False
             Right replayedSummary <-
-                Store.runStoreIO store $
+                runner $
                     runQuery Nothing orderSummaryReadModel (OrderSummaryQuery sampleOrderId)
             case replayedSummary of
                 Right (Just summary) -> summary ^. #status `shouldBe` "packed"
                 other -> expectationFailure ("expected packed order summary after replay, got " <> show other)
 
-    describe "Jitsurei timers" $ around (withFreshStore fixture) $ do
-        it "claims a due timer and marks it fired" $ \store -> do
+    describe "Jitsurei timers" $ around (withFreshResourceStore fixture) $ do
+        it "claims a due timer and marks it fired" $ \(_store, StoreRunner runner) -> do
             Right () <-
-                Store.runStoreIO store $
+                runner $
                     Store.runTransaction $
                         scheduleTimerTx (paymentTimeoutRequest sampleOrderId dueTime)
             Right claimed <-
-                Store.runStoreIO store $
+                runner $
                     runPaymentTimeoutWorker dueTime
             claimed `shouldSatisfy` isJust
 
-    describe "Jitsurei agent-qualification router" $ around (withFreshStore fixture) $ do
-        it "routes a transaction to every chapter resolved from its areas, idempotently" $ \store -> do
+    describe "Jitsurei agent-qualification router" $ around (withFreshResourceStore fixture) $ do
+        it "routes a transaction to every chapter resolved from its areas, idempotently" $ \(_store, StoreRunner runner) -> do
             Right () <-
-                Store.runStoreIO store $
+                runner $
                     Store.runTransaction initializeAreaChaptersTable
-            Right () <- Store.runStoreIO store $
+            Right () <- runner $
                 Store.runTransaction $ do
                     -- area-north and area-south overlap on (m2, c2).
                     Tx.statement ("area-north", "m1", "c1") insertAreaChapterStmt
@@ -301,18 +301,18 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             -- First pass: three distinct chapters resolved (m2/c2 de-duplicated
             -- across the two overlapping areas), one command appended to each.
             Right (RouterResult rs1) <-
-                Store.runStoreIO store $
+                runner $
                     runRouterOnce defaultRunCommandOptions agentQualRouter sourceTransactionEvent transaction
             length rs1 `shouldBe` 3
             rs1 `shouldSatisfy` all isAppended
             Right c1 <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "chapter-m1-c1") (StreamVersion 0) 10
             Right c2 <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "chapter-m2-c2") (StreamVersion 0) 10
             Right c3 <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "chapter-m3-c3") (StreamVersion 0) 10
             Vector.length c1 `shouldBe` 1
             Vector.length c2 `shouldBe` 1
@@ -320,7 +320,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             -- Data-dependence: a transaction whose areas are unseeded resolves to no
             -- chapters, so the count tracks the read model rather than a fixed list.
             Right (RouterResult rsEmpty) <-
-                Store.runStoreIO store $
+                runner $
                     runRouterOnce
                         defaultRunCommandOptions
                         agentQualRouter
@@ -329,29 +329,29 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             length rsEmpty `shouldBe` 0
             -- Replay: the same source event re-dispatches as duplicates, no new events.
             Right (RouterResult rs2) <-
-                Store.runStoreIO store $
+                runner $
                     runRouterOnce defaultRunCommandOptions agentQualRouter sourceTransactionEvent transaction
             length rs2 `shouldBe` 3
             rs2 `shouldSatisfy` all isDuplicate
             Right c1' <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "chapter-m1-c1") (StreamVersion 0) 10
             Right c2' <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "chapter-m2-c2") (StreamVersion 0) 10
             Right c3' <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "chapter-m3-c3") (StreamVersion 0) 10
             Vector.length c1' `shouldBe` 1
             Vector.length c2' `shouldBe` 1
             Vector.length c3' `shouldBe` 1
 
-    describe "Jitsurei incident aggregate" $ around (withFreshStore fixture) $ do
-        it "raises, acknowledges, and rejects a post-acknowledgement escalation" $ \store -> do
+    describe "Jitsurei incident aggregate" $ around (withFreshResourceStore fixture) $ do
+        it "raises, acknowledges, and rejects a post-acknowledgement escalation" $ \(_store, StoreRunner runner) -> do
             let incidentId = IncidentId "inc-1"
                 target = incidentStream incidentId
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand defaultRunCommandOptions incidentEventStream target $
                         RaiseIncident
                             RaiseIncidentData
@@ -361,7 +361,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                                 , raisedAt = incidentRaisedAt
                                 }
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand
                         defaultRunCommandOptions
                         incidentEventStream
@@ -370,7 +370,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             -- The aggregate's guards resolve the ack/escalate race: once acknowledged,
             -- EscalateIncident has no edge and is a benign domain rejection.
             escalateResult <-
-                Store.runStoreIO store $
+                runner $
                     runCommand
                         defaultRunCommandOptions
                         incidentEventStream
@@ -378,7 +378,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         (EscalateIncident (EscalateIncidentData incidentId))
             escalateResult `shouldBe` Right (Left CommandRejected)
             Right recorded <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "incident-inc-1") (StreamVersion 0) 10
             traverse (decodeRecorded incidentCodec) (Vector.toList recorded)
                 `shouldBe` Right
@@ -392,27 +392,27 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     , IncidentAcknowledged (IncidentAcknowledgedData incidentId)
                     ]
 
-    describe "Jitsurei paging" $ around (withFreshStore fixture) $ do
-        it "sends then acknowledges a page" $ \store -> do
+    describe "Jitsurei paging" $ around (withFreshResourceStore fixture) $ do
+        it "sends then acknowledges a page" $ \(_store, StoreRunner runner) -> do
             let incidentId = IncidentId "inc-1"
                 responderId = ResponderId "alice"
                 target = pageStream incidentId responderId
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand
                         defaultRunCommandOptions
                         pageEventStream
                         target
                         (SendPage (SendPageData incidentId responderId))
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand
                         defaultRunCommandOptions
                         pageEventStream
                         target
                         (AcknowledgePage (AcknowledgePageData incidentId responderId))
             Right recorded <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "page-inc-1-alice") (StreamVersion 0) 10
             traverse (decodeRecorded pageCodec) (Vector.toList recorded)
                 `shouldBe` Right
@@ -420,11 +420,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     , PageAcknowledged (PageAcknowledgedData incidentId responderId)
                     ]
 
-        it "fans IncidentRaised out to one page per rostered responder, idempotently" $ \store -> do
+        it "fans IncidentRaised out to one page per rostered responder, idempotently" $ \(_store, StoreRunner runner) -> do
             Right () <-
-                Store.runStoreIO store $
+                runner $
                     Store.runTransaction initializeOncallRosterTable
-            Right () <- Store.runStoreIO store $
+            Right () <- runner $
                 Store.runTransaction $ do
                     Tx.statement ("checkout", "alice", 1) insertOncallStmt
                     Tx.statement ("checkout", "bob", 1) insertOncallStmt
@@ -437,25 +437,25 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         , raisedAt = incidentRaisedAt
                         }
             Right (RouterResult rs1) <-
-                Store.runStoreIO store $
+                runner $
                     runRouterOnce defaultRunCommandOptions pagingRouter incidentRaisedSource raised
             length rs1 `shouldBe` 3
             rs1 `shouldSatisfy` all isAppended
             Right pa <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "page-inc-1-alice") (StreamVersion 0) 10
             Right pb <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "page-inc-1-bob") (StreamVersion 0) 10
             Right pc <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "page-inc-1-carol") (StreamVersion 0) 10
             Vector.length pa `shouldBe` 1
             Vector.length pb `shouldBe` 1
             Vector.length pc `shouldBe` 1
             -- Data-dependence: an unrostered service resolves to no pages.
             Right (RouterResult rsNone) <-
-                Store.runStoreIO store $
+                runner $
                     runRouterOnce
                         defaultRunCommandOptions
                         pagingRouter
@@ -464,17 +464,17 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             length rsNone `shouldBe` 0
             -- Replay the same source event: every dispatch is a duplicate, no new pages.
             Right (RouterResult rs2) <-
-                Store.runStoreIO store $
+                runner $
                     runRouterOnce defaultRunCommandOptions pagingRouter incidentRaisedSource raised
             length rs2 `shouldBe` 3
             rs2 `shouldSatisfy` all isDuplicate
             Right paAgain <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "page-inc-1-alice") (StreamVersion 0) 10
             Vector.length paAgain `shouldBe` 1
 
-    describe "Jitsurei escalation process manager" $ around (withFreshStore fixture) $ do
-        it "advances the saga and schedules an escalation timer on IncidentRaised" $ \store -> do
+    describe "Jitsurei escalation process manager" $ around (withFreshResourceStore fixture) $ do
+        it "advances the saga and schedules an escalation timer on IncidentRaised" $ \(_store, StoreRunner runner) -> do
             let incidentId = IncidentId "inc-1"
                 raised =
                     IncidentRaisedData
@@ -484,7 +484,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         , raisedAt = incidentRaisedAt
                         }
             result <-
-                Store.runStoreIO store $
+                runner $
                     runEscalationOnce defaultRunCommandOptions incidentRaisedSource (IncidentReported raised)
             case result of
                 Right (Right pmResult) -> do
@@ -494,15 +494,15 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     pmResult ^. #timersScheduled `shouldBe` 1
                 other -> expectationFailure ("expected process-manager success, got " <> show other)
             -- The Sev1 escalation window is 5 minutes; a timer due at +10m is claimable.
-            claimed <- Store.runStoreIO store $ claimDueTimer (addUTCTime 600 incidentRaisedAt)
+            claimed <- runner $ claimDueTimer (addUTCTime 600 incidentRaisedAt)
             claimed `shouldSatisfy` \case
                 Right (Just _) -> True
                 _ -> False
 
-        it "dispatches AcknowledgeIncident on PageAcknowledged, idempotently" $ \store -> do
+        it "dispatches AcknowledgeIncident on PageAcknowledged, idempotently" $ \(_store, StoreRunner runner) -> do
             let incidentId = IncidentId "inc-2"
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand
                         defaultRunCommandOptions
                         incidentEventStream
@@ -511,11 +511,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             -- The saga must observe the incident before an acknowledgement, exactly as
             -- the live flow does (IncidentRaised reaches the PM before any PageAcknowledged).
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runEscalationOnce defaultRunCommandOptions incidentRaisedSource (IncidentReported (sampleRaised incidentId Sev2))
             let acked = PageAcknowledgedData{incidentId = incidentId, responderId = ResponderId "alice"}
             firstResult <-
-                Store.runStoreIO store $
+                runner $
                     runEscalationOnce defaultRunCommandOptions pageAckSource (ResponderAcked acked)
             firstResult `shouldSatisfy` \case
                 Right (Right pmResult) ->
@@ -524,12 +524,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         _ -> False
                 _ -> False
             Right recorded <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "incident-inc-2") (StreamVersion 0) 10
             fmap last (traverse (decodeRecorded incidentCodec) (Vector.toList recorded))
                 `shouldBe` Right (IncidentAcknowledged (IncidentAcknowledgedData incidentId))
             secondResult <-
-                Store.runStoreIO store $
+                runner $
                     runEscalationOnce defaultRunCommandOptions pageAckSource (ResponderAcked acked)
             secondResult `shouldSatisfy` \case
                 Right (Right pmResult) ->
@@ -538,51 +538,51 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         _ -> False
                 _ -> False
 
-        it "escalates an unacknowledged incident when the timer fires" $ \store -> do
+        it "escalates an unacknowledged incident when the timer fires" $ \(_store, StoreRunner runner) -> do
             let incidentId = IncidentId "inc-3"
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand
                         defaultRunCommandOptions
                         incidentEventStream
                         (incidentStream incidentId)
                         (RaiseIncident (sampleRaiseCmd incidentId Sev1))
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runEscalationOnce defaultRunCommandOptions incidentRaisedSource (IncidentReported (sampleRaised incidentId Sev1))
             _ <-
-                Store.runStoreIO store $
+                runner $
                     runEscalationTimerWorker defaultRunCommandOptions (addUTCTime 600 incidentRaisedAt)
             Right recorded <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "incident-inc-3") (StreamVersion 0) 10
             fmap last (traverse (decodeRecorded incidentCodec) (Vector.toList recorded))
                 `shouldBe` Right (IncidentEscalated (IncidentEscalatedData incidentId))
 
-        it "is a benign no-op when the incident was already acknowledged" $ \store -> do
+        it "is a benign no-op when the incident was already acknowledged" $ \(_store, StoreRunner runner) -> do
             let incidentId = IncidentId "inc-4"
                 target = incidentStream incidentId
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand defaultRunCommandOptions incidentEventStream target (RaiseIncident (sampleRaiseCmd incidentId Sev1))
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runCommand
                         defaultRunCommandOptions
                         incidentEventStream
                         target
                         (AcknowledgeIncident (AcknowledgeIncidentData incidentId))
             Right (Right _) <-
-                Store.runStoreIO store $
+                runner $
                     runEscalationOnce defaultRunCommandOptions incidentRaisedSource (IncidentReported (sampleRaised incidentId Sev1))
             fired <-
-                Store.runStoreIO store $
+                runner $
                     runEscalationTimerWorker defaultRunCommandOptions (addUTCTime 600 incidentRaisedAt)
             fired `shouldSatisfy` \case
                 Right (Just _) -> True
                 _ -> False
             Right recorded <-
-                Store.runStoreIO store $
+                runner $
                     Store.readStreamForward (StreamName "incident-inc-4") (StreamVersion 0) 10
             let events = either (const []) id (traverse (decodeRecorded incidentCodec) (Vector.toList recorded))
             any isIncidentEscalated events `shouldBe` False

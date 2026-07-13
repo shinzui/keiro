@@ -8,6 +8,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Breaking Changes
 
+- `runCommandWithSql`, `runCommandWithSqlEvents`,
+  `runCommandWithProjections`, and the process-manager/router runners now
+  require `KirokuStoreResource` so transactional appends can apply Kiroku's
+  configured `enrichEvent` hook. Acquire the store with `withKirokuStore` and
+  interpret `Store` with `runStoreResource`; plain `runCommand` is unchanged.
 - Read-model queries no longer auto-register missing registry rows. Applications
   must call `registerReadModel` at projection startup; unknown models now return
   `ReadModelUnregistered` without mutating the registry.

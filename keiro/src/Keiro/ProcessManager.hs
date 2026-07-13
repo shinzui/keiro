@@ -148,6 +148,7 @@ import Keiro.Stream (Stream)
 import Keiro.Telemetry (KeiroMetrics, recordDispatchDeadLettered, recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison)
 import Keiro.Timer (TimerRequest, scheduleTimerTx)
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError (..))
 import Kiroku.Store.Read (eventExistsInStream)
 import Kiroku.Store.Transaction (runTransaction)
@@ -445,6 +446,7 @@ runProcessManagerOnce ::
     , IOE :> es
     , Store :> es
     , Error StoreError :> es
+    , KirokuStoreResource :> es
     , BoolAlg phi (RegFile rs, ci)
     , BoolAlg targetPhi (RegFile targetRs, targetCi)
     , Eq co
@@ -550,6 +552,7 @@ runProcessManagerWorker ::
     , IOE :> es
     , Store :> es
     , Error StoreError :> es
+    , KirokuStoreResource :> es
     , BoolAlg phi (RegFile rs, ci)
     , BoolAlg targetPhi (RegFile targetRs, targetCi)
     , Eq co
@@ -569,6 +572,7 @@ runProcessManagerWorkerWith ::
     , IOE :> es
     , Store :> es
     , Error StoreError :> es
+    , KirokuStoreResource :> es
     , BoolAlg phi (RegFile rs, ci)
     , BoolAlg targetPhi (RegFile targetRs, targetCi)
     , Eq co

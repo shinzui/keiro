@@ -13,6 +13,8 @@ import Data.Time.Format (defaultTimeLocale, formatTime)
 import Data.UUID (UUID)
 import Data.UUID.V5 qualified as UUID.V5
 import Data.Vector qualified as Vector
+import Effectful (Eff, IOE, UnliftStrategy (..), runEff, withEffToIO)
+import Effectful.Error.Static (Error, runErrorNoCallStack)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
@@ -35,6 +37,9 @@ import Keiro.Workflow.Awakeable (signalAwakeable)
 import Keiro.Workflow.Resume (defaultWorkflowResumeOptions, resumeWorkflowsOnce)
 import Keiro.Workflow.Sleep (runWorkflowTimerWorker)
 import Kiroku.Store qualified as Store
+import Kiroku.Store.Effect qualified as StoreEffect
+import Kiroku.Store.Effect.Resource qualified as StoreResource
+import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Types (
     EventId (..),
     EventType (..),
@@ -76,13 +81,13 @@ runFulfillmentDemo :: IO ()
 runFulfillmentDemo = withJitsureiStore $ \store -> do
     orderId <- freshOrderId "demo"
     putStrLn ("[jitsurei:fulfillment] running order fulfillment demo for " <> Text.unpack (orderIdText orderId))
-    requireEither =<< Store.runStoreIO store initializeJitsureiTables
+    requireEither =<< runJitsureiStore store initializeJitsureiTables
 
     putStrLn "[jitsurei:fulfillment] appending PlaceOrder with the order-summary inline projection"
     placed <-
         requireEither
             =<< requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 ( runCommandWithProjections
                     defaultRunCommandOptions
@@ -103,7 +108,7 @@ runFulfillmentDemo = withJitsureiStore $ \store -> do
     paid <-
         requireEither
             =<< requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 ( runCommandWithProjections
                     defaultRunCommandOptions
@@ -123,7 +128,7 @@ runFulfillmentDemo = withJitsureiStore $ \store -> do
     putStrLn "[jitsurei:fulfillment] order stream after payment"
     printDecoded orderCodec orderEventsBefore
 
-    summary <- requireEither =<< Store.runStoreIO store (runQuery Nothing orderSummaryReadModel (OrderSummaryQuery orderId))
+    summary <- requireEither =<< runJitsureiStore store (runQuery Nothing orderSummaryReadModel (OrderSummaryQuery orderId))
     putStrLn "[jitsurei:fulfillment] jitsurei_order_summary row"
     print summary
 
@@ -136,7 +141,7 @@ runFulfillmentDemo = withJitsureiStore $ \store -> do
                     }
     putStrLn "[jitsurei:fulfillment] running fulfillment process-manager worker for PaymentApproved"
     requireEither
-        =<< Store.runStoreIO
+        =<< runJitsureiStore
             store
             ( runProcessManagerWorker
                 defaultRunCommandOptions
@@ -158,13 +163,13 @@ runSnapshotsDemo :: IO ()
 runSnapshotsDemo = withJitsureiStore $ \store -> do
     orderId <- freshOrderId "snapshot"
     putStrLn ("[jitsurei:snapshots] running snapshot demo for " <> Text.unpack (orderIdText orderId))
-    requireEither =<< Store.runStoreIO store initializeJitsureiTables
+    requireEither =<< runJitsureiStore store initializeJitsureiTables
 
     putStrLn "[jitsurei:snapshots] appending PlaceOrder through snapshotOrderEventStream"
     _ <-
         requireEither
             =<< requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 ( runCommand
                     defaultRunCommandOptions
@@ -183,7 +188,7 @@ runSnapshotsDemo = withJitsureiStore $ \store -> do
     _ <-
         requireEither
             =<< requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 ( runCommand
                     defaultRunCommandOptions
@@ -216,24 +221,24 @@ runPagingDemo = withJitsureiStore $ \store -> do
                 }
         source = sourceEvent "IncidentRaised" ("paging:" <> incidentIdText incidentId) stableRaisedAt
     putStrLn ("[jitsurei:paging] seeding jitsurei_service_oncall for " <> Text.unpack (serviceText service))
-    requireEither =<< Store.runStoreIO store initializeJitsureiTables
-    requireEither =<< Store.runStoreIO store (Store.runTransaction initializeOncallRosterTable)
+    requireEither =<< runJitsureiStore store initializeJitsureiTables
+    requireEither =<< runJitsureiStore store (Store.runTransaction initializeOncallRosterTable)
     requireEither
-        =<< Store.runStoreIO
+        =<< runJitsureiStore
             store
             ( Store.runTransaction do
                 Tx.statement (serviceText service, "alice", 1) insertOncallStmt
                 Tx.statement (serviceText service, "bob", 1) insertOncallStmt
                 Tx.statement (serviceText service, "carol", 2) insertOncallStmt
             )
-    roster <- requireEither =<< Store.runStoreIO store (runQuery Nothing serviceOncallReadModel service)
+    roster <- requireEither =<< runJitsureiStore store (runQuery Nothing serviceOncallReadModel service)
     putStrLn "[jitsurei:paging] resolved roster read-model rows"
     print roster
 
     putStrLn "[jitsurei:paging] routing IncidentRaised to page streams"
     routerResult <-
         requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 (runRouterOnce defaultRunCommandOptions pagingRouter source raised)
     print routerResult
@@ -267,10 +272,10 @@ runEscalationDemo = withJitsureiStore $ \store -> do
                 }
         alice = ResponderId "alice"
     putStrLn ("[jitsurei:escalation] running incident escalation demo for " <> Text.unpack (incidentIdText incidentId))
-    requireEither =<< Store.runStoreIO store initializeJitsureiTables
-    requireEither =<< Store.runStoreIO store (Store.runTransaction initializeOncallRosterTable)
+    requireEither =<< runJitsureiStore store initializeJitsureiTables
+    requireEither =<< runJitsureiStore store (Store.runTransaction initializeOncallRosterTable)
     requireEither
-        =<< Store.runStoreIO
+        =<< runJitsureiStore
             store
             ( Store.runTransaction do
                 Tx.statement (serviceText service, responderIdText alice, 1) insertOncallStmt
@@ -281,7 +286,7 @@ runEscalationDemo = withJitsureiStore $ \store -> do
     _ <-
         requireEither
             =<< requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 (runCommand defaultRunCommandOptions incidentEventStream (incidentStream incidentId) (RaiseIncident raisedData))
     incidentEventsAfterRaise <- readEvents store ("incident-" <> incidentIdText incidentId)
@@ -290,7 +295,7 @@ runEscalationDemo = withJitsureiStore $ \store -> do
     putStrLn "[jitsurei:escalation] running the paging router from the persisted IncidentRaised"
     pagingResult <-
         requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 (runRouterOnce defaultRunCommandOptions pagingRouter raisedRecorded raisedEvent)
     print pagingResult
@@ -299,7 +304,7 @@ runEscalationDemo = withJitsureiStore $ \store -> do
     escalationRaised <-
         requireEither
             =<< requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 (runEscalationOnce defaultRunCommandOptions raisedRecorded (IncidentReported raisedEvent))
     print escalationRaised
@@ -309,7 +314,7 @@ runEscalationDemo = withJitsureiStore $ \store -> do
     _ <-
         requireEither
             =<< requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 (runCommand defaultRunCommandOptions pageEventStream (pageStream incidentId alice) (AcknowledgePage (AcknowledgePageData incidentId alice)))
     alicePageEvents <- readEvents store ("page-" <> incidentIdText incidentId <> "-" <> responderIdText alice)
@@ -317,7 +322,7 @@ runEscalationDemo = withJitsureiStore $ \store -> do
     escalationAcked <-
         requireEither
             =<< requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 (runEscalationOnce defaultRunCommandOptions ackRecorded (ResponderAcked (PageAcknowledgedData incidentId alice)))
     print escalationAcked
@@ -325,7 +330,7 @@ runEscalationDemo = withJitsureiStore $ \store -> do
     putStrLn "[jitsurei:escalation] firing the due timer after acknowledgement; the incident aggregate rejects escalation benignly"
     fired <-
         requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 (runEscalationTimerWorker defaultRunCommandOptions (addUTCTime 600 raisedAt))
     print fired
@@ -355,10 +360,10 @@ runAgentQualDemo = withJitsureiStore $ \store -> do
                 }
         source = sourceEvent "TransactionSubmitted" ("agent-qual:" <> txnIdText txn.txnId) stableRaisedAt
     putStrLn "[jitsurei:agent-qual] seeding jitsurei_area_chapters"
-    requireEither =<< Store.runStoreIO store initializeJitsureiTables
-    requireEither =<< Store.runStoreIO store (Store.runTransaction initializeAreaChaptersTable)
+    requireEither =<< runJitsureiStore store initializeJitsureiTables
+    requireEither =<< runJitsureiStore store (Store.runTransaction initializeAreaChaptersTable)
     requireEither
-        =<< Store.runStoreIO
+        =<< runJitsureiStore
             store
             ( Store.runTransaction do
                 Tx.statement (areaIdText north, "m1", "c1") insertAreaChapterStmt
@@ -366,15 +371,15 @@ runAgentQualDemo = withJitsureiStore $ \store -> do
                 Tx.statement (areaIdText south, "m2", "c2") insertAreaChapterStmt
                 Tx.statement (areaIdText south, "m3", "c3") insertAreaChapterStmt
             )
-    northTargets <- requireEither =<< Store.runStoreIO store (runQuery Nothing areaChaptersReadModel north)
-    southTargets <- requireEither =<< Store.runStoreIO store (runQuery Nothing areaChaptersReadModel south)
+    northTargets <- requireEither =<< runJitsureiStore store (runQuery Nothing areaChaptersReadModel north)
+    southTargets <- requireEither =<< runJitsureiStore store (runQuery Nothing areaChaptersReadModel south)
     putStrLn "[jitsurei:agent-qual] area read-model rows"
     print (northTargets, southTargets)
 
     putStrLn "[jitsurei:agent-qual] routing the transaction to de-duplicated chapter streams"
     routerResult <-
         requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 (runRouterOnce defaultRunCommandOptions agentQualRouter source txn)
     print routerResult
@@ -406,14 +411,14 @@ runDurableWorkflowDemo = do
 
     withJitsureiStore $ \store -> do
         putStrLn ("[jitsurei:workflow] running durable order-fulfillment workflow for " <> Text.unpack idText)
-        requireEither =<< Store.runStoreIO store initializeJitsureiTables
+        requireEither =<< runJitsureiStore store initializeJitsureiTables
 
         -- 1) First run: reserve inventory runs, the cooling-off sleep arms, the
         --    run suspends.
         putStrLn "[jitsurei:workflow] first run: invoking the workflow"
         outcome1 <-
             requireEither
-                =<< Store.runStoreIO store (runWorkflow orderFulfillmentWorkflowName wfId (orderFulfillmentWorkflow orderId))
+                =<< runJitsureiStore store (runWorkflow orderFulfillmentWorkflowName wfId (orderFulfillmentWorkflow orderId))
         putStrLn ("[jitsurei:workflow] first run outcome: " <> show outcome1 <> " (armed the cooling-off sleep)")
 
         -- 2) Fire the durable sleep timer (advance the clock well past the delay).
@@ -424,7 +429,7 @@ runDurableWorkflowDemo = do
         --    the payment-webhook awakeable, and parks again.
         summary1 <-
             requireEither
-                =<< Store.runStoreIO store (resumeWorkflowsOnce defaultWorkflowResumeOptions jitsureiWorkflowRegistry)
+                =<< runJitsureiStore store (resumeWorkflowsOnce defaultWorkflowResumeOptions jitsureiWorkflowRegistry)
         putStrLn ("[jitsurei:workflow] resume pass 1: " <> show summary1)
         putStrLn "  (replayed reserve-inventory + sleep:cooling-off, parked on the payment-webhook awakeable)"
 
@@ -432,7 +437,7 @@ runDurableWorkflowDemo = do
         putStrLn "[jitsurei:workflow] signalling the payment-webhook awakeable (simulated webhook)"
         signalled <-
             requireEither
-                =<< Store.runStoreIO
+                =<< runJitsureiStore
                     store
                     (signalAwakeable (paymentWebhookAwakeableId orderId) (PaymentConfirmation "pay_demo" 4200))
         putStrLn ("  signalAwakeable payment-webhook -> " <> show signalled)
@@ -443,7 +448,7 @@ runDurableWorkflowDemo = do
         -- 6) Read the final outcome by replaying the now-complete journal.
         finalOutcome <-
             requireEither
-                =<< Store.runStoreIO store (runWorkflow orderFulfillmentWorkflowName wfId (orderFulfillmentWorkflow orderId))
+                =<< runJitsureiStore store (runWorkflow orderFulfillmentWorkflowName wfId (orderFulfillmentWorkflow orderId))
         putStrLn ("[jitsurei:workflow] final outcome: " <> show finalOutcome)
 
         -- 7) Dump both journals.
@@ -477,17 +482,17 @@ workflowStreamNameText name wid =
 {- | Unfinished workflows (per 'findUnfinishedWorkflowIds') whose id is one of
 ours this run — the parent and the ship-order child carry distinct ids.
 -}
-ourUnfinishedWorkflows :: Store.KirokuStore -> [Text] -> IO [(Text, Text)]
+ourUnfinishedWorkflows :: JitsureiStore -> [Text] -> IO [(Text, Text)]
 ourUnfinishedWorkflows store ourIds = do
     now <- getCurrentTime
-    pairs <- requireEither =<< Store.runStoreIO store (findUnfinishedWorkflowIds now)
+    pairs <- requireEither =<< runJitsureiStore store (findUnfinishedWorkflowIds now)
     pure [pair | pair@(wid, _) <- pairs, wid `elem` ourIds]
 
 {- | Fire workflow-sleep timers (with a clock well past the delay) until the
 @sleep:cooling-off@ completion appears in the journal, bounded so a stray
 non-sleep timer cannot hang the demo.
 -}
-fireSleepTimerUntilJournaled :: Store.KirokuStore -> Text -> IO ()
+fireSleepTimerUntilJournaled :: JitsureiStore -> Text -> IO ()
 fireSleepTimerUntilJournaled store parentStream = do
     fireTime <- addUTCTime 3600 <$> getCurrentTime
     let loop :: Int -> IO ()
@@ -500,14 +505,14 @@ fireSleepTimerUntilJournaled store parentStream = do
                     else do
                         _ <-
                             requireEither
-                                =<< Store.runStoreIO store (runWorkflowTimerWorker Nothing fireTime (\_ -> pure Nothing))
+                                =<< runJitsureiStore store (runWorkflowTimerWorker Nothing fireTime (\_ -> pure Nothing))
                         loop (n + 1)
     loop 0
 
 {- | Run the resume worker until no workflow of ours remains unfinished, bounded
 so a non-converging journal cannot hang the demo. Prints each pass's summary.
 -}
-driveResumeUntilDone :: Store.KirokuStore -> [Text] -> Int -> IO ()
+driveResumeUntilDone :: JitsureiStore -> [Text] -> Int -> IO ()
 driveResumeUntilDone store ourIds = go
   where
     go :: Int -> IO ()
@@ -520,12 +525,12 @@ driveResumeUntilDone store ourIds = go
                 else do
                     summary <-
                         requireEither
-                            =<< Store.runStoreIO store (resumeWorkflowsOnce defaultWorkflowResumeOptions jitsureiWorkflowRegistry)
+                            =<< runJitsureiStore store (resumeWorkflowsOnce defaultWorkflowResumeOptions jitsureiWorkflowRegistry)
                     putStrLn ("[jitsurei:workflow] resume pass " <> show passNo <> ": " <> show summary)
                     go (passNo + 1)
 
 -- | Whether a workflow journal already records a 'StepRecorded' for @target@.
-journalHasStep :: Store.KirokuStore -> Text -> Text -> IO Bool
+journalHasStep :: JitsureiStore -> Text -> Text -> IO Bool
 journalHasStep store journalStream target = do
     events <- readEvents store journalStream
     let decoded = [event | Right event <- decodeRecorded workflowJournalCodec <$> events]
@@ -535,11 +540,27 @@ journalHasStep store journalStream target = do
         StepRecorded name _ _ -> name == target
         _ -> False
 
-withJitsureiStore :: (Store.KirokuStore -> IO ()) -> IO ()
+newtype JitsureiStore
+    = JitsureiStore
+        (forall a. Eff '[StoreEffect.Store, Error StoreError, StoreResource.KirokuStoreResource, IOE] a -> IO (Either StoreError a))
+
+runJitsureiStore ::
+    JitsureiStore ->
+    Eff '[StoreEffect.Store, Error StoreError, StoreResource.KirokuStoreResource, IOE] a ->
+    IO (Either StoreError a)
+runJitsureiStore (JitsureiStore runner) = runner
+
+withJitsureiStore :: (JitsureiStore -> IO ()) -> IO ()
 withJitsureiStore action = do
     connString <- getConnectionString
     putStrLn ("[jitsurei] connecting to " <> Text.unpack connString)
-    Store.withStore (keiroConnectionSettings connString jitsureiProjectionSchema) action
+    runEff $
+        StoreResource.withKirokuStore (keiroConnectionSettings connString jitsureiProjectionSchema) $
+            withEffToIO SeqUnlift \unlift ->
+                action
+                    ( JitsureiStore
+                        (unlift . runErrorNoCallStack . StoreEffect.runStoreResource)
+                    )
 
 getConnectionString :: IO Text
 getConnectionString = do
@@ -582,11 +603,11 @@ processManagerAdapter recorded event =
         , shutdown = pure ()
         }
 
-readEvents :: Store.KirokuStore -> Text -> IO [RecordedEvent]
+readEvents :: JitsureiStore -> Text -> IO [RecordedEvent]
 readEvents store targetStreamName = do
     events <-
         requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 (Store.readStreamForward (StreamName targetStreamName) (StreamVersion 0) 100)
     pure (Vector.toList events)
@@ -625,21 +646,21 @@ printDecoded codec events =
                         <> show event
                     )
 
-printTimerRows :: Store.KirokuStore -> IncidentId -> IO ()
+printTimerRows :: JitsureiStore -> IncidentId -> IO ()
 printTimerRows store incidentId = do
     rows <-
         requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 (Store.runTransaction (Tx.statement (incidentIdText incidentId) selectTimerRowsStmt))
     putStrLn "[jitsurei:escalation] keiro_timers rows for incident"
     traverse_ print rows
 
-printSnapshotRows :: Store.KirokuStore -> OrderId -> IO ()
+printSnapshotRows :: JitsureiStore -> OrderId -> IO ()
 printSnapshotRows store orderId = do
     rows <-
         requireEither
-            =<< Store.runStoreIO
+            =<< runJitsureiStore
                 store
                 (Store.runTransaction (Tx.statement ("order-" <> orderIdText orderId) selectSnapshotRowsStmt))
     putStrLn "[jitsurei:snapshots] keiro_snapshots rows for order stream"

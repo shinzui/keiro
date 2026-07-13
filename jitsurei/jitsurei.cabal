@@ -87,6 +87,7 @@ executable jitsurei-demo
   build-depends:
     , aeson              >=2.2
     , base               >=4.21    && <5
+    , effectful          >=2.6
     , hasql              >=1.10
     , hasql-transaction  >=1.1
     , jitsurei

@@ -29,17 +29,17 @@ To see it working after implementation: run `cabal test keiro-test` from the rep
 
 ## Progress
 
-- [x] (2026-07-13 21:40 PDT) Milestone 1: `HydrationGapDetected` constructor added to `CommandError` with a `commandErrorClass` arm.
-- [x] (2026-07-13 21:48 PDT) Milestone 1: contiguity guard implemented in EP-95's shared page-oriented hydration input pipeline in `keiro/src/Keiro/Command.hs`.
-- [x] (2026-07-13 21:48 PDT) Milestone 1: red-then-green test — truncation without covering snapshot yields `HydrationGapDetected` (full-hydration path).
-- [x] (2026-07-13 21:48 PDT) Milestone 1: red-then-green test — mid-batch truncation (multi-event command) yields `HydrationGapDetected`.
-- [x] (2026-07-13 21:48 PDT) Milestone 1: positive test — truncation with a covering snapshot hydrates and appends normally.
-- [ ] Milestone 2: `KirokuStoreResource` constraint added to `runCommandWithSqlEvents` / `runCommandWithSql` and propagated to `runCommandWithProjections`, `runProcessManagerOnce`, `runRouterOnce`.
-- [ ] Milestone 2: `enrichEventsIO` wired before `prepareEventsIO` in `appendWithSqlOnce`.
-- [ ] Milestone 2: `withFreshResourceStore` fixture added to `keiro-test-support` and affected existing tests migrated.
-- [ ] Milestone 2: red-then-green enrichment-parity test (both runner paths carry the hook's marker).
-- [ ] Milestone 2: in-repo `jitsurei` worked example compiles again (mechanical wiring only).
-- [ ] Milestone 2: CHANGELOG "Breaking Changes" entry written.
+- [x] (2026-07-13 12:14 PDT) Milestone 1: `HydrationGapDetected` constructor added to `CommandError` with a `commandErrorClass` arm.
+- [x] (2026-07-13 12:14 PDT) Milestone 1: contiguity guard implemented in EP-95's shared page-oriented hydration input pipeline in `keiro/src/Keiro/Command.hs`.
+- [x] (2026-07-13 12:14 PDT) Milestone 1: red-then-green test — truncation without covering snapshot yields `HydrationGapDetected` (full-hydration path).
+- [x] (2026-07-13 12:14 PDT) Milestone 1: red-then-green test — mid-batch truncation (multi-event command) yields `HydrationGapDetected`.
+- [x] (2026-07-13 12:14 PDT) Milestone 1: positive test — truncation with a covering snapshot hydrates and appends normally.
+- [x] (2026-07-13 12:14 PDT) Milestone 2: `KirokuStoreResource` constraint added to `runCommandWithSqlEvents` / `runCommandWithSql` and propagated through projections, process managers, routers, and their workers.
+- [x] (2026-07-13 12:14 PDT) Milestone 2: `enrichEventsIO` wired before `prepareEventsIO` in `appendWithSqlOnce`.
+- [x] (2026-07-13 12:14 PDT) Milestone 2: `withFreshResourceStore` fixture added to `keiro-test-support` and affected existing tests migrated.
+- [x] (2026-07-13 12:14 PDT) Milestone 2: red-then-green enrichment-parity test proves both runner paths and callback records carry the hook's marker.
+- [x] (2026-07-13 12:14 PDT) Milestone 2: in-repo `jitsurei` worked example compiles again (mechanical wiring only).
+- [x] (2026-07-13 12:14 PDT) Milestone 2: CHANGELOG "Breaking Changes" entry written.
 - [ ] Milestone 3: truncation precondition documented (Command.hs module Haddock, `docs/user/operations.md`, `docs/user/snapshots.md`).
 - [ ] Milestone 3: inbox GC / dedup-window caveats on `Keiro.Inbox` module header and GC/insert Haddocks.
 - [ ] Milestone 3: outbox ordering caveat surfaced on `enqueueOutboxTx` and `enqueueProducerEventTx`.
@@ -60,6 +60,21 @@ To see it working after implementation: run `cabal test keiro-test` from the rep
   two-event command batch returned
   `HydrationReplayFailed (StreamVersion 2) HydrationNoInvertingEdge` instead of
   identifying the storage gap. The covering-snapshot control passed.
+- Kiroku 0.3 already exports `runTransactionAppendingResource`, but that
+  wrapper supplies only `AppendResult` to its continuation. Keiro must retain
+  its lower-level `appendToStreamTx` path because
+  `runCommandWithSqlEvents` reconstructs the exact persisted
+  `RecordedEvent`s for projections and routers; explicit `enrichEventsIO`
+  before `prepareEventsIO` preserves both requirements.
+- The resource constraint propagates beyond the four public runners named in
+  the authored plan: live process-manager/router workers and the two in-repo
+  Jitsurei process-manager wrappers also transit those runners. The compiler
+  enumerated these mechanical additions; the library, demo executable, Keiro
+  test suite, and Jitsurei test suite all compile with the resource stack.
+- The enrichment regression test was made red by temporarily preparing the
+  original un-enriched batch. It failed on transactional metadata containing
+  only `schemaVersion`; restoring the enriched batch made the same focused run
+  pass, including the callback `RecordedEvent` assertion.
 
 
 ## Decision Log
@@ -100,6 +115,15 @@ To see it working after implementation: run `cabal test keiro-test` from the rep
   existing pending decode failure preserves event-order semantics: a replay
   failure in an earlier visible event wins over a later gap, while a gap at
   the head is reported before attempting to decode or replay the suffix.
+  Date: 2026-07-13
+
+- Decision: keep Keiro's existing low-level transactional append shape and
+  call `enrichEventsIO` explicitly instead of switching to Kiroku's
+  `runTransactionAppendingResource` convenience wrapper.
+  Rationale: Keiro needs the enriched prepared events to reconstruct the
+  callback's `RecordedEvent`s exactly. The convenience wrapper exposes only
+  `AppendResult`, so using it would either discard callback fidelity or require
+  duplicating Kiroku's private preparation details.
   Date: 2026-07-13
 
 

@@ -179,7 +179,15 @@ import Keiro.Subscription.Shard.Worker (
     runShardedSubscriptionGroupAck,
  )
 import Keiro.Telemetry qualified as Telemetry
-import Keiro.Test.Postgres (withFreshStore, withFreshStoreWith, withFreshStores2, withMigratedSuite)
+import Keiro.Test.Postgres (
+    StoreRunner (..),
+    withFreshResourceStore,
+    withFreshResourceStoreWith,
+    withFreshStore,
+    withFreshStoreWith,
+    withFreshStores2,
+    withMigratedSuite,
+ )
 import Keiro.Timer
 import Keiro.Wake (
     WakeReason (..),
@@ -1238,23 +1246,24 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         other -> expectationFailure ("expected error span status, got " <> show other)
                 other -> expectationFailure ("expected one span, got " <> show (length other))
 
-        it "rolls back the append when inline SQL condemns the transaction" $ \storeHandle -> do
-            let target = stream "counter-command-rollback" :: Stream CounterEventStream
-            result <-
-                Store.runStoreIO storeHandle $
-                    runCommandWithSql
-                        defaultRunCommandOptions
-                        counterEventStream
-                        target
-                        (Add 1)
-                        (\_ -> Tx.condemn >> pure ("rolled-back" :: Text))
-            case result of
-                Right (Right (_, Just "rolled-back")) -> pure ()
-                other -> expectationFailure ("expected condemned transaction result, got " <> show other)
-            Right recorded <-
-                Store.runStoreIO storeHandle $
-                    Store.readStreamForward (StreamName "counter-command-rollback") (StreamVersion 0) 10
-            recorded `shouldBe` Vector.empty
+        it "rolls back the append when inline SQL condemns the transaction" $ \_ ->
+            withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+                let target = stream "counter-command-rollback" :: Stream CounterEventStream
+                result <-
+                    runner $
+                        runCommandWithSql
+                            defaultRunCommandOptions
+                            counterEventStream
+                            target
+                            (Add 1)
+                            (\_ -> Tx.condemn >> pure ("rolled-back" :: Text))
+                case result of
+                    Right (Right (_, Just "rolled-back")) -> pure ()
+                    other -> expectationFailure ("expected condemned transaction result, got " <> show other)
+                Right recorded <-
+                    Store.runStoreIO storeHandle $
+                        Store.readStreamForward (StreamName "counter-command-rollback") (StreamVersion 0) 10
+                recorded `shouldBe` Vector.empty
 
         it "appends all events emitted by one accepted command" $ \storeHandle -> do
             let target = stream "counter-command-multi-create" :: Stream CounterEventStream
@@ -1338,29 +1347,30 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             lookup "keiro.snapshot.apply.divergence" (flattenScalarPoints exported)
                 `shouldBe` Nothing
 
-        it "witnesses replay divergence on the transactional SQL append path" $ \storeHandle -> do
-            (exporter, metricsRef) <- inMemoryMetricExporter
-            (provider, _env) <-
-                createMeterProvider
-                    emptyMaterializedResources
-                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
-            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
-            keiroMetrics <- Telemetry.newKeiroMetrics meter
-            let target = stream "counter-command-replay-divergence-sql" :: Stream CounterEventStream
-                options = defaultRunCommandOptions & #metrics ?~ keiroMetrics
-            Right (Right (commandResult, Just ())) <-
-                Store.runStoreIO storeHandle $
-                    runCommandWithSqlEvents
-                        options
-                        headUnrecoverableEventStream
-                        target
-                        (Add 2)
-                        (\_ _ -> pure ())
-            commandResult ^. #eventsAppended `shouldBe` 2
-            _ <- forceFlushMeterProvider provider Nothing
-            exported <- readIORef metricsRef
-            lookup "keiro.snapshot.apply.divergence" (flattenScalarPoints exported)
-                `shouldBe` Just (IntNumber 1)
+        it "witnesses replay divergence on the transactional SQL append path" $ \_ ->
+            withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+                (exporter, metricsRef) <- inMemoryMetricExporter
+                (provider, _env) <-
+                    createMeterProvider
+                        emptyMaterializedResources
+                        defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+                meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+                keiroMetrics <- Telemetry.newKeiroMetrics meter
+                let target = stream "counter-command-replay-divergence-sql" :: Stream CounterEventStream
+                    options = defaultRunCommandOptions & #metrics ?~ keiroMetrics
+                Right (Right (commandResult, Just ())) <-
+                    runner $
+                        runCommandWithSqlEvents
+                            options
+                            headUnrecoverableEventStream
+                            target
+                            (Add 2)
+                            (\_ _ -> pure ())
+                commandResult ^. #eventsAppended `shouldBe` 2
+                _ <- forceFlushMeterProvider provider Nothing
+                exported <- readIORef metricsRef
+                lookup "keiro.snapshot.apply.divergence" (flattenScalarPoints exported)
+                    `shouldBe` Just (IntNumber 1)
 
         it "replays a prior multi-event command before appending the next batch" $ \storeHandle -> do
             let target = stream "counter-command-multi-replay" :: Stream CounterEventStream
@@ -1381,22 +1391,23 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             traverse (decodeRecorded counterCodec) (Vector.toList recorded)
                 `shouldBe` Right [CounterAdded 2, CounterAudited 2, CounterAdded 3, CounterAudited 3]
 
-        it "passes the complete multi-event batch to inline SQL in append order" $ \storeHandle -> do
-            let target = stream "counter-command-multi-sql-events" :: Stream CounterEventStream
-            result <-
-                Store.runStoreIO storeHandle $
-                    runCommandWithSqlEvents
-                        defaultRunCommandOptions
-                        multiCounterEventStream
-                        target
-                        (Add 8)
-                        (\pairs _ -> pure (Prelude.map Prelude.fst pairs))
-            case result of
-                Right (Right (commandResult, Just observed)) -> do
-                    commandResult ^. #streamVersion `shouldBe` StreamVersion 2
-                    commandResult ^. #eventsAppended `shouldBe` 2
-                    observed `shouldBe` [CounterAdded 8, CounterAudited 8]
-                other -> expectationFailure ("expected successful SQL multi-event command, got " <> show other)
+        it "passes the complete multi-event batch to inline SQL in append order" $ \_ ->
+            withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+                let target = stream "counter-command-multi-sql-events" :: Stream CounterEventStream
+                result <-
+                    runner $
+                        runCommandWithSqlEvents
+                            defaultRunCommandOptions
+                            multiCounterEventStream
+                            target
+                            (Add 8)
+                            (\pairs _ -> pure (Prelude.map Prelude.fst pairs))
+                case result of
+                    Right (Right (commandResult, Just observed)) -> do
+                        commandResult ^. #streamVersion `shouldBe` StreamVersion 2
+                        commandResult ^. #eventsAppended `shouldBe` 2
+                        observed `shouldBe` [CounterAdded 8, CounterAudited 8]
+                    other -> expectationFailure ("expected successful SQL multi-event command, got " <> show other)
 
         it "command metadata is merged into stored event metadata" $ \storeHandle -> do
             let target = stream "counter-command-metadata" :: Stream CounterEventStream
@@ -1416,38 +1427,39 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         `shouldBe` Just (object ["actor" Aeson..= ("agent-7" :: Text), "schemaVersion" Aeson..= (1 :: Int)])
                 other -> expectationFailure ("expected a single recorded event, got " <> show other)
 
-        it "reconstructed RecordedEvents match the stored batch" $ \storeHandle -> do
-            let target = stream "counter-reconstruct-fidelity" :: Stream CounterEventStream
-                opts =
-                    defaultRunCommandOptions
-                        & #metadata
-                        ?~ object ["actor" Aeson..= ("agent-7" :: Text)]
-            Right (Right (_, Just pairs)) <-
-                Store.runStoreIO storeHandle $
-                    runCommandWithSqlEvents opts multiCounterEventStream target (Add 8) (\ps _ -> pure ps)
-            let reconstructed = Prelude.map Prelude.snd pairs
-            -- Read the stored events back from their source stream.
-            Right storedVec <-
-                Store.runStoreIO storeHandle $
-                    Store.readStreamForward (StreamName "counter-reconstruct-fidelity") (StreamVersion 0) 10
-            let stored = Vector.toList storedVec
-            -- readStreamForward reports globalPosition 0 for stream reads, so take
-            -- the true global positions from a category read (the DB is fresh per
-            -- test, so category "counter" holds exactly this batch).
-            Right catVec <-
-                Store.runStoreIO storeHandle $
-                    Store.readCategory (CategoryName "counter") (GlobalPosition 0) 10
-            let catList = Vector.toList catVec
-            Prelude.length reconstructed `shouldBe` 2
-            Prelude.length stored `shouldBe` 2
-            fmap (^. #eventId) reconstructed `shouldBe` fmap (^. #eventId) stored
-            fmap (^. #eventType) reconstructed `shouldBe` fmap (^. #eventType) stored
-            fmap (^. #streamVersion) reconstructed `shouldBe` fmap (^. #streamVersion) stored
-            fmap (^. #originalVersion) reconstructed `shouldBe` fmap (^. #originalVersion) stored
-            fmap (^. #originalStreamId) reconstructed `shouldBe` fmap (^. #originalStreamId) stored
-            fmap (^. #payload) reconstructed `shouldBe` fmap (^. #payload) stored
-            fmap (^. #metadata) reconstructed `shouldBe` fmap (^. #metadata) stored
-            fmap (^. #globalPosition) reconstructed `shouldBe` fmap (^. #globalPosition) catList
+        it "reconstructed RecordedEvents match the stored batch" $ \_ ->
+            withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+                let target = stream "counter-reconstruct-fidelity" :: Stream CounterEventStream
+                    opts =
+                        defaultRunCommandOptions
+                            & #metadata
+                            ?~ object ["actor" Aeson..= ("agent-7" :: Text)]
+                Right (Right (_, Just pairs)) <-
+                    runner $
+                        runCommandWithSqlEvents opts multiCounterEventStream target (Add 8) (\ps _ -> pure ps)
+                let reconstructed = Prelude.map Prelude.snd pairs
+                -- Read the stored events back from their source stream.
+                Right storedVec <-
+                    Store.runStoreIO storeHandle $
+                        Store.readStreamForward (StreamName "counter-reconstruct-fidelity") (StreamVersion 0) 10
+                let stored = Vector.toList storedVec
+                -- readStreamForward reports globalPosition 0 for stream reads, so take
+                -- the true global positions from a category read (the DB is fresh per
+                -- test, so category "counter" holds exactly this batch).
+                Right catVec <-
+                    Store.runStoreIO storeHandle $
+                        Store.readCategory (CategoryName "counter") (GlobalPosition 0) 10
+                let catList = Vector.toList catVec
+                Prelude.length reconstructed `shouldBe` 2
+                Prelude.length stored `shouldBe` 2
+                fmap (^. #eventId) reconstructed `shouldBe` fmap (^. #eventId) stored
+                fmap (^. #eventType) reconstructed `shouldBe` fmap (^. #eventType) stored
+                fmap (^. #streamVersion) reconstructed `shouldBe` fmap (^. #streamVersion) stored
+                fmap (^. #originalVersion) reconstructed `shouldBe` fmap (^. #originalVersion) stored
+                fmap (^. #originalStreamId) reconstructed `shouldBe` fmap (^. #originalStreamId) stored
+                fmap (^. #payload) reconstructed `shouldBe` fmap (^. #payload) stored
+                fmap (^. #metadata) reconstructed `shouldBe` fmap (^. #metadata) stored
+                fmap (^. #globalPosition) reconstructed `shouldBe` fmap (^. #globalPosition) catList
 
         it "runCommand emits a Command span with the stream name, db.system.name, and keiro.events.appended" $ \storeHandle -> do
             (processor, spansRef) <- inMemoryListExporter
@@ -1477,6 +1489,43 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Unset -> pure ()
                 Ok -> pure ()
                 other -> expectationFailure ("expected Unset/Ok, got " <> show other)
+
+    describe "Keiro.Command enrichment parity" $ do
+        let addMarker eventData = pure (eventData & #metadata %~ injectMarker)
+            injectMarker = \case
+                Just (Aeson.Object fields) ->
+                    Just (Aeson.Object (KeyMap.insert "enriched" (Aeson.Bool True) fields))
+                _ -> Just (object ["enriched" Aeson..= True])
+            installHook = #storeSettings . #enrichEvent ?~ addMarker
+            hasMarker = \case
+                Just (Aeson.Object fields) ->
+                    KeyMap.lookup "enriched" fields == Just (Aeson.Bool True)
+                _ -> False
+        around (withFreshResourceStoreWith fixture installHook) $
+            it "applies the store enrichment hook to both command append paths" $ \(_storeHandle, StoreRunner runner) -> do
+                let plainTarget = stream "enrich-plain" :: Stream CounterEventStream
+                    transactionalTarget = stream "enrich-transactional" :: Stream CounterEventStream
+                Right (Right _) <-
+                    runner $
+                        runCommand defaultRunCommandOptions counterEventStream plainTarget (Add 1)
+                Right (Right (_, Just callbackRecordeds)) <-
+                    runner $
+                        runCommandWithSqlEvents
+                            defaultRunCommandOptions
+                            counterEventStream
+                            transactionalTarget
+                            (Add 1)
+                            (\pairs _ -> pure (fmap snd pairs))
+                Right plainEvents <-
+                    runner $
+                        Store.readStreamForward (StreamName "enrich-plain") (StreamVersion 0) 10
+                Right transactionalEvents <-
+                    runner $
+                        Store.readStreamForward (StreamName "enrich-transactional") (StreamVersion 0) 10
+                for_ (Vector.toList plainEvents <> Vector.toList transactionalEvents) $ \recorded ->
+                    recorded ^. #metadata `shouldSatisfy` hasMarker
+                for_ callbackRecordeds $ \recorded ->
+                    recorded ^. #metadata `shouldSatisfy` hasMarker
 
     describe "Keiro.Snapshot" $ around (withFreshStore fixture) $ do
         it "reports an ErrorCall when strict encoding reaches an empty register slot" $ \_storeHandle -> do
@@ -1813,8 +1862,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             snapshotVersionAfter `shouldBe` Just (StreamVersion 2)
 
     describe "Keiro.Connection projection schema" $
-        around (withFreshStoreWith fixture (withProjectionSchema "app_reads")) $ do
-            it "places a read-model table in a configured schema, separate from keiro metadata" $ \storeHandle -> do
+        around (withFreshResourceStoreWith fixture (withProjectionSchema "app_reads")) $ do
+            it "places a read-model table in a configured schema, separate from keiro metadata" $ \(storeHandle, StoreRunner runner) -> do
                 -- qualifiedTableName builds the app's fully-qualified data table ref.
                 qualifiedTableName placedReadModel `shouldBe` "\"app_reads\".\"placed_counter\""
 
@@ -1827,7 +1876,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 -- Drive a command with the inline projection that writes the app table.
                 let target = stream "placed-in-app-reads" :: Stream CounterEventStream
                 result <-
-                    Store.runStoreIO storeHandle $
+                    runner $
                         runCommandWithProjections
                             defaultRunCommandOptions
                             counterEventStream
@@ -1858,27 +1907,28 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 keiroMeta `shouldBe` (1 :: Int)
 
     describe "Keiro.ReadModel" $ around (withFreshStore fixture) $ do
-        it "queries inline projection with Eventual consistency" $ \storeHandle -> do
-            Right () <-
-                Store.runStoreIO storeHandle $
-                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
-            let target = stream "read-model-inline" :: Stream CounterEventStream
-            result <-
-                Store.runStoreIO storeHandle $
-                    runCommandWithProjections
-                        defaultRunCommandOptions
-                        counterEventStream
-                        target
-                        (Add 5)
-                        [counterInlineProjection]
-            case result of
-                Right (Right commandResult) ->
-                    commandResult ^. #globalPosition `shouldSatisfy` isJust
-                other -> expectationFailure ("expected inline projection command, got " <> show other)
-            queryResult <-
-                Store.runStoreIO storeHandle $
-                    runQuery Nothing counterReadModel "inline"
-            queryResult `shouldBe` Right (Right 5)
+        it "queries inline projection with Eventual consistency" $ \_ ->
+            withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+                Right () <-
+                    Store.runStoreIO storeHandle $
+                        initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+                let target = stream "read-model-inline" :: Stream CounterEventStream
+                result <-
+                    runner $
+                        runCommandWithProjections
+                            defaultRunCommandOptions
+                            counterEventStream
+                            target
+                            (Add 5)
+                            [counterInlineProjection]
+                case result of
+                    Right (Right commandResult) ->
+                        commandResult ^. #globalPosition `shouldSatisfy` isJust
+                    other -> expectationFailure ("expected inline projection command, got " <> show other)
+                queryResult <-
+                    Store.runStoreIO storeHandle $
+                        runQuery Nothing counterReadModel "inline"
+                queryResult `shouldBe` Right (Right 5)
 
         it "reads the minimum checkpoint across consumer-group subscription members" $ \storeHandle -> do
             Right () <-
@@ -1900,139 +1950,144 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     runQueryWith Nothing Strong counterReadModel "empty"
             queryResult `shouldBe` Right (Right 0)
 
-        it "Strong returns immediately when the subscription is already at the store head" $ \storeHandle -> do
-            Right () <-
-                Store.runStoreIO storeHandle $
-                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
-            let target = stream "read-model-strong-at-head" :: Stream CounterEventStream
-            Right (Right commandResult) <-
-                Store.runStoreIO storeHandle $
-                    runCommandWithProjections
-                        defaultRunCommandOptions
-                        counterEventStream
-                        target
-                        (Add 5)
-                        [counterInlineProjection]
-            globalPosition <- case commandResult ^. #globalPosition of
-                Just position -> pure position
-                Nothing -> expectationFailure "expected command global position" *> error "unreachable"
-            Right () <-
-                Store.runStoreIO storeHandle $
-                    Store.runTransaction $
-                        Tx.statement ("counter-read-model-sub", globalPositionToInt globalPosition) upsertSubscriptionCursorStmt
-            queryResult <-
-                Store.runStoreIO storeHandle $
-                    runQueryWith Nothing Strong counterReadModel "inline"
-            queryResult `shouldBe` Right (Right 5)
-
-        it "Strong blocks until the subscription reaches the store head captured at query start" $ \storeHandle -> do
-            Right () <-
-                Store.runStoreIO storeHandle $
-                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
-            let target = stream "read-model-strong-blocking" :: Stream CounterEventStream
-            Right (Right commandResult) <-
-                Store.runStoreIO storeHandle $
-                    runCommandWithProjections
-                        defaultRunCommandOptions
-                        counterEventStream
-                        target
-                        (Add 6)
-                        [counterInlineProjection]
-            globalPosition <- case commandResult ^. #globalPosition of
-                Just position -> pure position
-                Nothing -> expectationFailure "expected command global position" *> error "unreachable"
-            _ <- forkIO $ do
-                threadDelay 20000
-                advanced <-
+        it "Strong returns immediately when the subscription is already at the store head" $ \_ ->
+            withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+                Right () <-
+                    Store.runStoreIO storeHandle $
+                        initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+                let target = stream "read-model-strong-at-head" :: Stream CounterEventStream
+                Right (Right commandResult) <-
+                    runner $
+                        runCommandWithProjections
+                            defaultRunCommandOptions
+                            counterEventStream
+                            target
+                            (Add 5)
+                            [counterInlineProjection]
+                globalPosition <- case commandResult ^. #globalPosition of
+                    Just position -> pure position
+                    Nothing -> expectationFailure "expected command global position" *> error "unreachable"
+                Right () <-
                     Store.runStoreIO storeHandle $
                         Store.runTransaction $
                             Tx.statement ("counter-read-model-sub", globalPositionToInt globalPosition) upsertSubscriptionCursorStmt
-                case advanced of
-                    Right () -> pure ()
-                    Left err -> expectationFailure ("failed to advance subscription cursor: " <> show err)
-            queryResult <-
-                Store.runStoreIO storeHandle $
-                    runQueryWith Nothing Strong counterReadModel "inline"
-            queryResult `shouldBe` Right (Right 6)
+                queryResult <-
+                    Store.runStoreIO storeHandle $
+                        runQueryWith Nothing Strong counterReadModel "inline"
+                queryResult `shouldBe` Right (Right 5)
 
-        it "Strong returns when its category is caught up despite another active category" $ \storeHandle -> do
-            Right () <-
-                Store.runStoreIO storeHandle $
-                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
-            let counterTarget = stream "counter-strong-scope" :: Stream CounterEventStream
-                otherTarget = stream "otherload-1" :: Stream CounterEventStream
-            Right (Right counterResult) <-
-                Store.runStoreIO storeHandle $
-                    runCommandWithProjections
+        it "Strong blocks until the subscription reaches the store head captured at query start" $ \_ ->
+            withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+                Right () <-
+                    Store.runStoreIO storeHandle $
+                        initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+                let target = stream "read-model-strong-blocking" :: Stream CounterEventStream
+                Right (Right commandResult) <-
+                    runner $
+                        runCommandWithProjections
+                            defaultRunCommandOptions
+                            counterEventStream
+                            target
+                            (Add 6)
+                            [counterInlineProjection]
+                globalPosition <- case commandResult ^. #globalPosition of
+                    Just position -> pure position
+                    Nothing -> expectationFailure "expected command global position" *> error "unreachable"
+                _ <- forkIO $ do
+                    threadDelay 20000
+                    advanced <-
+                        Store.runStoreIO storeHandle $
+                            Store.runTransaction $
+                                Tx.statement ("counter-read-model-sub", globalPositionToInt globalPosition) upsertSubscriptionCursorStmt
+                    case advanced of
+                        Right () -> pure ()
+                        Left err -> expectationFailure ("failed to advance subscription cursor: " <> show err)
+                queryResult <-
+                    Store.runStoreIO storeHandle $
+                        runQueryWith Nothing Strong counterReadModel "inline"
+                queryResult `shouldBe` Right (Right 6)
+
+        it "Strong returns when its category is caught up despite another active category" $ \_ ->
+            withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+                Right () <-
+                    Store.runStoreIO storeHandle $
+                        initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+                let counterTarget = stream "counter-strong-scope" :: Stream CounterEventStream
+                    otherTarget = stream "otherload-1" :: Stream CounterEventStream
+                Right (Right counterResult) <-
+                    runner $
+                        runCommandWithProjections
+                            defaultRunCommandOptions
+                            counterEventStream
+                            counterTarget
+                            (Add 8)
+                            [counterInlineProjection]
+                counterPosition <- case counterResult ^. #globalPosition of
+                    Just position -> pure position
+                    Nothing -> expectationFailure "expected counter global position" *> error "unreachable"
+                Right () <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction $
+                            Tx.statement
+                                ("counter-read-model-sub", globalPositionToInt counterPosition)
+                                upsertSubscriptionCursorStmt
+                Right (Right _) <-
+                    Store.runStoreIO storeHandle $
+                        runCommand defaultRunCommandOptions counterEventStream otherTarget (Add 1)
+                queryResult <-
+                    Store.runStoreIO storeHandle $
+                        runQueryWith Nothing Strong counterCategoryReadModel "inline"
+                queryResult `shouldBe` Right (Right 8)
+
+        it "inline projection populates actor and source_event_id from command metadata" $ \_ ->
+            withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+                Right () <-
+                    Store.runStoreIO storeHandle $
+                        initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+                let target = stream "read-model-inline-metadata" :: Stream CounterEventStream
+                    opts =
                         defaultRunCommandOptions
-                        counterEventStream
-                        counterTarget
-                        (Add 8)
-                        [counterInlineProjection]
-            counterPosition <- case counterResult ^. #globalPosition of
-                Just position -> pure position
-                Nothing -> expectationFailure "expected counter global position" *> error "unreachable"
-            Right () <-
-                Store.runStoreIO storeHandle $
-                    Store.runTransaction $
-                        Tx.statement
-                            ("counter-read-model-sub", globalPositionToInt counterPosition)
-                            upsertSubscriptionCursorStmt
-            Right (Right _) <-
-                Store.runStoreIO storeHandle $
-                    runCommand defaultRunCommandOptions counterEventStream otherTarget (Add 1)
-            queryResult <-
-                Store.runStoreIO storeHandle $
-                    runQueryWith Nothing Strong counterCategoryReadModel "inline"
-            queryResult `shouldBe` Right (Right 8)
+                            & #metadata
+                            ?~ object ["actor" Aeson..= ("agent-7" :: Text)]
+                Right (Right _) <-
+                    runner $
+                        runCommandWithProjections opts counterEventStream target (Add 5) [counterInlineProjection]
+                Right row <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction (Tx.statement "inline" selectCounterMetaStmt)
+                -- selectCounterMetaStmt returns (amount, actor, source_event_id).
+                row `shouldSatisfy` \(amount, actor, srcId) ->
+                    amount == 5 && actor == Just "agent-7" && isJust srcId
 
-        it "inline projection populates actor and source_event_id from command metadata" $ \storeHandle -> do
-            Right () <-
-                Store.runStoreIO storeHandle $
-                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
-            let target = stream "read-model-inline-metadata" :: Stream CounterEventStream
-                opts =
-                    defaultRunCommandOptions
-                        & #metadata
-                        ?~ object ["actor" Aeson..= ("agent-7" :: Text)]
-            Right (Right _) <-
-                Store.runStoreIO storeHandle $
-                    runCommandWithProjections opts counterEventStream target (Add 5) [counterInlineProjection]
-            Right row <-
-                Store.runStoreIO storeHandle $
-                    Store.runTransaction (Tx.statement "inline" selectCounterMetaStmt)
-            -- selectCounterMetaStmt returns (amount, actor, source_event_id).
-            row `shouldSatisfy` \(amount, actor, srcId) ->
-                amount == 5 && actor == Just "agent-7" && isJust srcId
-
-        it "waits for async projection cursor with PositionWait" $ \storeHandle -> do
-            Right () <-
-                Store.runStoreIO storeHandle $
-                    initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
-            let target = stream "read-model-position-wait" :: Stream CounterEventStream
-            Right (Right commandResult) <-
-                Store.runStoreIO storeHandle $
-                    runCommandWithProjections
-                        defaultRunCommandOptions
-                        counterEventStream
-                        target
-                        (Add 3)
-                        [counterInlineProjection]
-            globalPosition <- case commandResult ^. #globalPosition of
-                Just position -> pure position
-                Nothing -> expectationFailure "expected command global position" *> error "unreachable"
-            Right () <-
-                Store.runStoreIO storeHandle $
-                    Store.runTransaction $
-                        Tx.statement ("counter-read-model-sub", globalPositionToInt globalPosition) upsertSubscriptionCursorStmt
-            queryResult <-
-                Store.runStoreIO storeHandle $
-                    runQueryWith
-                        Nothing
-                        (PositionWait (fastWaitOptions & #target .~ Just globalPosition))
-                        counterReadModel
-                        "inline"
-            queryResult `shouldBe` Right (Right 3)
+        it "waits for async projection cursor with PositionWait" $ \_ ->
+            withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+                Right () <-
+                    Store.runStoreIO storeHandle $
+                        initializeRegisteredReadModel counterReadModel initializeCounterReadModelTable
+                let target = stream "read-model-position-wait" :: Stream CounterEventStream
+                Right (Right commandResult) <-
+                    runner $
+                        runCommandWithProjections
+                            defaultRunCommandOptions
+                            counterEventStream
+                            target
+                            (Add 3)
+                            [counterInlineProjection]
+                globalPosition <- case commandResult ^. #globalPosition of
+                    Just position -> pure position
+                    Nothing -> expectationFailure "expected command global position" *> error "unreachable"
+                Right () <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction $
+                            Tx.statement ("counter-read-model-sub", globalPositionToInt globalPosition) upsertSubscriptionCursorStmt
+                queryResult <-
+                    Store.runStoreIO storeHandle $
+                        runQueryWith
+                            Nothing
+                            (PositionWait (fastWaitOptions & #target .~ Just globalPosition))
+                            counterReadModel
+                            "inline"
+                queryResult `shouldBe` Right (Right 3)
 
         it "times out when PositionWait target is not reached" $ \storeHandle -> do
             Right () <-
@@ -2480,11 +2535,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             -- The single give-up bumped the counter exactly once.
             lookup "keiro.projection.wait.timeouts" scalars `shouldBe` Just (IntNumber 1)
 
-    describe "Keiro.ProcessManager" $ around (withFreshStore fixture) $ do
-        it "advances manager state, emits a deterministic target command once, and schedules a timer" $ \storeHandle -> do
+    describe "Keiro.ProcessManager" $ around (withFreshResourceStore fixture) $ do
+        it "advances manager state, emits a deterministic target command once, and schedules a timer" $ \(_storeHandle, StoreRunner _runner) -> do
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
             result <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce defaultRunCommandOptions counterProcessManager sourceEvent (CounterAdded 9)
             case result of
                 Right (Right pmResult) -> do
@@ -2499,15 +2554,15 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     pmResult ^. #timersScheduled `shouldBe` 1
                 other -> expectationFailure ("expected process-manager success, got " <> show other)
             Right managerEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "pm:counter-order-1") (StreamVersion 0) 10
             Right targetEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "counter-target-order-1") (StreamVersion 0) 10
             Vector.length managerEvents `shouldBe` 1
             Vector.length targetEvents `shouldBe` 1
             timer <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     claimDueTimer dueTimerTime
             case timer of
                 Right (Just row) -> do
@@ -2515,10 +2570,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     row ^. #correlationId `shouldBe` "order-1"
                 other -> expectationFailure ("expected scheduled timer row, got " <> show other)
 
-        it "schedules timers when the manager command emits no events" $ \storeHandle -> do
+        it "schedules timers when the manager command emits no events" $ \(_storeHandle, StoreRunner _runner) -> do
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
             result <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce defaultRunCommandOptions timerOnlyProcessManager sourceEvent (CounterAdded 9)
             case result of
                 Right (Right pmResult) -> do
@@ -2531,11 +2586,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     pmResult ^. #timersScheduled `shouldBe` 1
                 other -> expectationFailure ("expected process-manager success, got " <> show other)
             dueCount <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     countDueTimers dueTimerTime
             dueCount `shouldBe` Right 1
             timer <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     claimDueTimer dueTimerTime
             case timer of
                 Right (Just row) -> do
@@ -2543,13 +2598,13 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     row ^. #correlationId `shouldBe` "order-1"
                 other -> expectationFailure ("expected scheduled timer row, got " <> show other)
 
-        it "treats duplicate input delivery as idempotent state and command dispatch" $ \storeHandle -> do
+        it "treats duplicate input delivery as idempotent state and command dispatch" $ \(_storeHandle, StoreRunner _runner) -> do
             let sourceEvent = recordedFromEventId (EventId sampleUuid2) (CounterAdded 4)
             Right (Right _) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce defaultRunCommandOptions counterProcessManager sourceEvent (CounterAdded 4)
             duplicate <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce defaultRunCommandOptions counterProcessManager sourceEvent (CounterAdded 4)
             case duplicate of
                 Right (Right pmResult) -> do
@@ -2561,15 +2616,15 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         _ -> False
                 other -> expectationFailure ("expected idempotent duplicate handling, got " <> show other)
             Right managerEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "pm:counter-order-1") (StreamVersion 0) 10
             Right targetEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "counter-target-order-1") (StreamVersion 0) 10
             Vector.length managerEvents `shouldBe` 1
             Vector.length targetEvents `shouldBe` 1
 
-        it "replays a Kiroku dead letter freshly and deduplicates a second replay" $ \storeHandle -> do
+        it "replays a Kiroku dead letter freshly and deduplicates a second replay" $ \(_storeHandle, StoreRunner _runner) -> do
             let subName = SubscriptionName "counter-pm-replay-fresh"
                 replayHandler recorded =
                     case decodeRecorded counterCodec recorded of
@@ -2585,12 +2640,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                                 case outcome of
                                     Left err -> Left (Text.pack (show err))
                                     Right result -> Right (classifyProcessManagerReplay result)
-            source <- deadLetterCounterSource storeHandle subName (CounterAdded 7)
-            Right listed <- Store.runStoreIO storeHandle (listSubscriptionDeadLetters subName 0)
+            source <- deadLetterCounterSource _storeHandle subName (CounterAdded 7)
+            Right listed <- _runner (listSubscriptionDeadLetters subName 0)
             Vector.length listed `shouldBe` 1
 
             Right firstPass <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     replaySubscriptionDeadLetters subName 0 replayHandler
             firstPass
                 `shouldBe` [ ReplayOutcome
@@ -2599,10 +2654,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                                 , replayResult = ReplayedFresh
                                 }
                            ]
-            processManagerReplayCounts storeHandle `shouldReturn` (1, 1)
+            processManagerReplayCounts _storeHandle `shouldReturn` (1, 1)
 
             Right secondPass <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     replaySubscriptionDeadLetters subName 0 replayHandler
             secondPass
                 `shouldBe` [ ReplayOutcome
@@ -2611,11 +2666,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                                 , replayResult = ReplayedDuplicate
                                 }
                            ]
-            processManagerReplayCounts storeHandle `shouldReturn` (1, 1)
-            Right retained <- Store.runStoreIO storeHandle (listSubscriptionDeadLetters subName 0)
+            processManagerReplayCounts _storeHandle `shouldReturn` (1, 1)
+            Right retained <- _runner (listSubscriptionDeadLetters subName 0)
             Vector.length retained `shouldBe` 1
 
-        it "reports an already-processed Kiroku dead letter without appending" $ \storeHandle -> do
+        it "reports an already-processed Kiroku dead letter without appending" $ \(_storeHandle, StoreRunner _runner) -> do
             let subName = SubscriptionName "counter-pm-replay-duplicate"
                 replayHandler recorded =
                     case decodeRecorded counterCodec recorded of
@@ -2631,18 +2686,18 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                                 case outcome of
                                     Left err -> Left (Text.pack (show err))
                                     Right result -> Right (classifyProcessManagerReplay result)
-            source <- deadLetterCounterSource storeHandle subName (CounterAdded 8)
+            source <- deadLetterCounterSource _storeHandle subName (CounterAdded 8)
             Right (Right _) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce
                         defaultRunCommandOptions
                         counterProcessManager
                         source
                         (CounterAdded 8)
-            countsBefore <- processManagerReplayCounts storeHandle
+            countsBefore <- processManagerReplayCounts _storeHandle
 
             Right outcomes <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     replaySubscriptionDeadLetters subName 0 replayHandler
             outcomes
                 `shouldBe` [ ReplayOutcome
@@ -2651,9 +2706,9 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                                 , replayResult = ReplayedDuplicate
                                 }
                            ]
-            processManagerReplayCounts storeHandle `shouldReturn` countsBefore
+            processManagerReplayCounts _storeHandle `shouldReturn` countsBefore
 
-        it "keeps multiple workflow process managers isolated by configured streams and categories" $ \storeHandle -> do
+        it "keeps multiple workflow process managers isolated by configured streams and categories" $ \(_storeHandle, StoreRunner _runner) -> do
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 6)
                 fulfillmentManager =
                     workflowProcessManager
@@ -2666,25 +2721,25 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         "pm:billing"
                         "billing-target-order-1"
             fulfillmentResult <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce defaultRunCommandOptions fulfillmentManager sourceEvent (CounterAdded 6)
             billingResult <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce defaultRunCommandOptions billingManager sourceEvent (CounterAdded 6)
             assertWorkflowProcessManagerAppended fulfillmentResult
             assertWorkflowProcessManagerAppended billingResult
 
             Right fulfillmentManagerEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "pm:fulfillment-order-1") (StreamVersion 0) 10
             Right billingManagerEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "pm:billing-order-1") (StreamVersion 0) 10
             Right fulfillmentTargetEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "fulfillment-target-order-1") (StreamVersion 0) 10
             Right billingTargetEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "billing-target-order-1") (StreamVersion 0) 10
             Vector.length fulfillmentManagerEvents `shouldBe` 1
             Vector.length billingManagerEvents `shouldBe` 1
@@ -2692,34 +2747,34 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Vector.length billingTargetEvents `shouldBe` 1
 
             Right fulfillmentCategoryEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readCategory (CategoryName "pm:fulfillment") (GlobalPosition 0) 10
             Right billingCategoryEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readCategory (CategoryName "pm:billing") (GlobalPosition 0) 10
             Right sharedPmCategoryEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readCategory (CategoryName "pm") (GlobalPosition 0) 10
             Right sharedPmNamespaceEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readCategory (CategoryName "pm:") (GlobalPosition 0) 10
             Vector.length fulfillmentCategoryEvents `shouldBe` 1
             Vector.length billingCategoryEvents `shouldBe` 1
             sharedPmCategoryEvents `shouldBe` Vector.empty
             sharedPmNamespaceEvents `shouldBe` Vector.empty
 
-        it "worker finalizes AckOk through the ack handle on success" $ \storeHandle -> do
+        it "worker finalizes AckOk through the ack handle on success" $ \(_storeHandle, StoreRunner _runner) -> do
             decisionsRef <- newIORef []
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
                 messages = [(sourceEvent, CounterAdded 9)]
                 adapter = inMemoryAdapter decisionsRef messages
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerWorker defaultRunCommandOptions counterProcessManager adapter Just
             decisions <- readIORef decisionsRef
             decisions `shouldBe` [AckOk]
 
-        it "worker halts instead of acking when a target dispatch is rejected" $ \storeHandle -> do
+        it "worker halts instead of acking when a target dispatch is rejected" $ \(_storeHandle, StoreRunner _runner) -> do
             decisionsRef <- newIORef []
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
                 messages = [(sourceEvent, CounterAdded 9)]
@@ -2729,22 +2784,22 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         { targetEventStream = rejectingEventStream
                         }
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerWorker defaultRunCommandOptions rejectingPm adapter Just
             decisions <- readIORef decisionsRef
             decisions `shouldSatisfy` \case
                 [AckHalt (HaltFatal _)] -> True
                 _ -> False
             Right targetEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "counter-target-order-1") (StreamVersion 0) 10
             Right managerEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "pm:counter-order-1") (StreamVersion 0) 10
             Vector.length targetEvents `shouldBe` 0
             Vector.length managerEvents `shouldBe` 1
 
-        it "dead-letters a rejected dispatch and continues to the next event" $ \storeHandle -> do
+        it "dead-letters a rejected dispatch and continues to the next event" $ \(_storeHandle, StoreRunner _runner) -> do
             (exporter, metricsRef) <- inMemoryMetricExporter
             (provider, _env) <-
                 createMeterProvider
@@ -2768,10 +2823,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         & #metrics
                         ?~ keiroMetrics
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerWorkerWith workerOptions defaultRunCommandOptions policyPm adapter Just
             readIORef decisionsRef `shouldReturn` [AckOk, AckOk]
-            Right deadLetters <- Store.runStoreIO storeHandle (listDispatchDeadLetters "counter-pm")
+            Right deadLetters <- _runner (listDispatchDeadLetters "counter-pm")
             case deadLetters of
                 [row] -> do
                     row ^. #dispatcherKind `shouldBe` DispatcherProcessManager
@@ -2783,10 +2838,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     row ^. #attemptCount `shouldBe` 1
                 other -> expectationFailure ("expected one rejected dispatch dead letter, got " <> show other)
             Right targetEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "counter-target-order-1") (StreamVersion 0) 10
             Right managerEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "pm:counter-order-1") (StreamVersion 0) 10
             Vector.length targetEvents `shouldBe` 1
             Vector.length managerEvents `shouldBe` 2
@@ -2794,7 +2849,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             exported <- readIORef metricsRef
             lookup "keiro.dispatch.deadlettered" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
 
-        it "skips a rejected dispatch without writing a dead-letter row" $ \storeHandle -> do
+        it "skips a rejected dispatch without writing a dead-letter row" $ \(_storeHandle, StoreRunner _runner) -> do
             (exporter, metricsRef) <- inMemoryMetricExporter
             (provider, _env) <-
                 createMeterProvider
@@ -2816,16 +2871,16 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         & #metrics
                         ?~ keiroMetrics
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerWorkerWith workerOptions defaultRunCommandOptions rejectingPm adapter Just
             readIORef decisionsRef `shouldReturn` [AckOk]
-            Right deadLetters <- Store.runStoreIO storeHandle (listDispatchDeadLetters "counter-pm")
+            Right deadLetters <- _runner (listDispatchDeadLetters "counter-pm")
             deadLetters `shouldBe` []
             _ <- forceFlushMeterProvider provider Nothing
             exported <- readIORef metricsRef
             lookup "keiro.dispatch.deadlettered" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
 
-        it "dead-letters a manager-state rejection at emit index minus one" $ \storeHandle -> do
+        it "dead-letters a manager-state rejection at emit index minus one" $ \(_storeHandle, StoreRunner _runner) -> do
             decisionsRef <- newIORef []
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
                 adapter = inMemoryAdapter decisionsRef [(sourceEvent, CounterAdded 9)]
@@ -2835,10 +2890,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         }
                 workerOptions = defaultWorkerOptions & #rejectedCommandPolicy .~ RejectedDeadLetter
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerWorkerWith workerOptions defaultRunCommandOptions rejectingManager adapter Just
             readIORef decisionsRef `shouldReturn` [AckOk]
-            Right deadLetters <- Store.runStoreIO storeHandle (listDispatchDeadLetters "counter-pm")
+            Right deadLetters <- _runner (listDispatchDeadLetters "counter-pm")
             case deadLetters of
                 [row] -> do
                     row ^. #emitIndex `shouldBe` (-1)
@@ -2846,11 +2901,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     row ^. #errorClass `shouldBe` "command_rejected"
                 other -> expectationFailure ("expected one manager-state dead letter, got " <> show other)
             Right managerEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "pm:counter-order-1") (StreamVersion 0) 10
             managerEvents `shouldBe` Vector.empty
 
-        it "keeps rejected-dispatch dead letters idempotent on source redelivery" $ \storeHandle -> do
+        it "keeps rejected-dispatch dead letters idempotent on source redelivery" $ \(_storeHandle, StoreRunner _runner) -> do
             decisionsRef <- newIORef []
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
                 adapter = inMemoryAdapter decisionsRef [(sourceEvent, CounterAdded 9), (sourceEvent, CounterAdded 9)]
@@ -2860,13 +2915,13 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         }
                 workerOptions = defaultWorkerOptions & #rejectedCommandPolicy .~ RejectedDeadLetter
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerWorkerWith workerOptions defaultRunCommandOptions rejectingPm adapter Just
             readIORef decisionsRef `shouldReturn` [AckOk, AckOk]
-            Right deadLetters <- Store.runStoreIO storeHandle (listDispatchDeadLetters "counter-pm")
+            Right deadLetters <- _runner (listDispatchDeadLetters "counter-pm")
             Prelude.length deadLetters `shouldBe` 1
 
-        it "records dispatch failures through worker metrics" $ \storeHandle -> do
+        it "records dispatch failures through worker metrics" $ \(_storeHandle, StoreRunner _runner) -> do
             (exporter, metricsRef) <- inMemoryMetricExporter
             (provider, _env) <-
                 createMeterProvider
@@ -2884,13 +2939,13 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         }
                 workerOptions = defaultWorkerOptions & #metrics ?~ keiroMetrics
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerWorkerWith workerOptions defaultRunCommandOptions rejectingPm adapter Just
             _ <- forceFlushMeterProvider provider Nothing
             exported <- readIORef metricsRef
             lookup "keiro.dispatch.failed" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
 
-        it "classifies transient store failures as retry and deterministic command failures as halt" $ \_storeHandle -> do
+        it "classifies transient store failures as retry and deterministic command failures as halt" $ \(_storeHandle, StoreRunner _runner) -> do
             isRejectionClass CommandRejected `shouldBe` True
             isRejectionClass (CommandAmbiguous [0, 1]) `shouldBe` True
             isRejectionClass (EncodeFailed (NonObjectCallerMetadata Aeson.Null)) `shouldBe` False
@@ -2903,11 +2958,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 AckHalt (HaltFatal _) -> True
                 _ -> False
 
-        it "worker applies poison-message policy on decode failure" $ \storeHandle -> do
+        it "worker applies poison-message policy on decode failure" $ \(_storeHandle, StoreRunner _runner) -> do
             let badMessages = ["not-decodable" :: Text]
             defaultDecisions <- newIORef []
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerWorker
                         defaultRunCommandOptions
                         counterProcessManager
@@ -2925,7 +2980,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         & #poisonPolicy
                         .~ PoisonSkip (\env -> liftIO (modifyIORef' skippedRef (<> [env ^. #payload])))
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerWorkerWith
                         skipOptions
                         defaultRunCommandOptions
@@ -2942,7 +2997,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         & #poisonPolicy
                         .~ PoisonDeadLetter (\env -> liftIO (modifyIORef' deadLetterRef (<> [env ^. #payload])))
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerWorkerWith
                         deadLetterOptions
                         defaultRunCommandOptions
@@ -2955,14 +3010,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 _ -> False
             readIORef deadLetterRef `shouldReturn` badMessages
 
-        it "folds a concurrent duplicate target dispatch to PMCommandDuplicate" $ \storeHandle -> do
+        it "folds a concurrent duplicate target dispatch to PMCommandDuplicate" $ \(_storeHandle, StoreRunner _runner) -> do
             insertCount <- newIORef (0 :: Int)
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
                 commandId = deterministicCommandId "counter-pm" "order-1" (sourceEvent ^. #eventId) 0
                 targetStreamName = StreamName "counter-target-order-1"
                 insertConcurrentTarget = do
                     callNo <- atomicModifyIORef' insertCount (\n -> (n + 1, n))
-                    when (callNo == 1) $ appendCounterEventWithId storeHandle targetStreamName commandId (CounterAdded 9)
+                    when (callNo == 1) $ appendCounterEventWithId _storeHandle targetStreamName commandId (CounterAdded 9)
                 options =
                     defaultRunCommandOptions
                         & #beforeAppend
@@ -2970,7 +3025,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         & #retryBackoffMicros
                         .~ 0
             result <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce options counterProcessManager sourceEvent (CounterAdded 9)
             case result of
                 Right (Right pmResult) ->
@@ -2979,18 +3034,18 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         _ -> False
                 other -> expectationFailure ("expected duplicate target dispatch fold, got " <> show other)
             Right targetEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward targetStreamName (StreamVersion 0) 10
             Vector.length targetEvents `shouldBe` 1
 
-        it "folds a concurrent duplicate manager-state append to PMStateDuplicate" $ \storeHandle -> do
+        it "folds a concurrent duplicate manager-state append to PMStateDuplicate" $ \(_storeHandle, StoreRunner _runner) -> do
             insertCount <- newIORef (0 :: Int)
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
                 managerId = deterministicCommandId "counter-pm" "order-1" (sourceEvent ^. #eventId) (-1)
                 managerStreamName = StreamName "pm:counter-order-1"
                 insertConcurrentManager = do
                     callNo <- atomicModifyIORef' insertCount (\n -> (n + 1, n))
-                    when (callNo == 0) $ appendCounterEventWithId storeHandle managerStreamName managerId (CounterAdded 9)
+                    when (callNo == 0) $ appendCounterEventWithId _storeHandle managerStreamName managerId (CounterAdded 9)
                 options =
                     defaultRunCommandOptions
                         & #beforeAppend
@@ -2998,7 +3053,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         & #retryBackoffMicros
                         .~ 0
             result <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce options counterProcessManager sourceEvent (CounterAdded 9)
             case result of
                 Right (Right pmResult) -> do
@@ -3010,47 +3065,47 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         _ -> False
                 other -> expectationFailure ("expected duplicate manager-state fold, got " <> show other)
 
-    describe "Keiro.ProcessManager duplicate confirmation" $ around (withFreshStore fixture) $ do
-        it "rejects a duplicate report carrying a different id" $ \storeHandle -> do
+    describe "Keiro.ProcessManager duplicate confirmation" $ around (withFreshResourceStore fixture) $ do
+        it "rejects a duplicate report carrying a different id" $ \(_storeHandle, StoreRunner _runner) -> do
             let targetStreamName = StreamName "duplicate-confirmation-mismatch"
                 ourId = EventId sampleUuid
                 otherId = EventId sampleUuid2
-            appendCounterEventWithId storeHandle targetStreamName otherId (CounterAdded 1)
+            appendCounterEventWithId _storeHandle targetStreamName otherId (CounterAdded 1)
             outcome <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     confirmBenignDuplicate
                         targetStreamName
                         ourId
                         (StoreFailed (Store.DuplicateEvent (Just otherId)))
             outcome `shouldBe` Right False
 
-        it "rejects a matching id that exists only in another stream" $ \storeHandle -> do
+        it "rejects a matching id that exists only in another stream" $ \(_storeHandle, StoreRunner _runner) -> do
             let targetStreamName = StreamName "duplicate-confirmation-target"
                 otherStreamName = StreamName "duplicate-confirmation-other"
                 ourId = EventId sampleUuid
                 targetEventId = EventId sampleUuid2
-            appendCounterEventWithId storeHandle targetStreamName targetEventId (CounterAdded 1)
-            appendCounterEventWithId storeHandle otherStreamName ourId (CounterAdded 1)
+            appendCounterEventWithId _storeHandle targetStreamName targetEventId (CounterAdded 1)
+            appendCounterEventWithId _storeHandle otherStreamName ourId (CounterAdded 1)
             outcome <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     confirmBenignDuplicate
                         targetStreamName
                         ourId
                         (StoreFailed (Store.DuplicateEvent (Just ourId)))
             outcome `shouldBe` Right False
 
-        it "confirms matching and id-less duplicate reports when the id is in the target stream" $ \storeHandle -> do
+        it "confirms matching and id-less duplicate reports when the id is in the target stream" $ \(_storeHandle, StoreRunner _runner) -> do
             let targetStreamName = StreamName "duplicate-confirmation-present"
                 ourId = EventId sampleUuid
-            appendCounterEventWithId storeHandle targetStreamName ourId (CounterAdded 1)
+            appendCounterEventWithId _storeHandle targetStreamName ourId (CounterAdded 1)
             matchingOutcome <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     confirmBenignDuplicate
                         targetStreamName
                         ourId
                         (StoreFailed (Store.DuplicateEvent (Just ourId)))
             missingDetailOutcome <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     confirmBenignDuplicate
                         targetStreamName
                         ourId
@@ -3058,60 +3113,60 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             matchingOutcome `shouldBe` Right True
             missingDetailOutcome `shouldBe` Right True
 
-        it "rejects non-duplicate command failures" $ \storeHandle -> do
+        it "rejects non-duplicate command failures" $ \(_storeHandle, StoreRunner _runner) -> do
             let targetStreamName = StreamName "duplicate-confirmation-non-duplicate"
                 ourId = EventId sampleUuid
-            appendCounterEventWithId storeHandle targetStreamName ourId (CounterAdded 1)
+            appendCounterEventWithId _storeHandle targetStreamName ourId (CounterAdded 1)
             outcome <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     confirmBenignDuplicate
                         targetStreamName
                         ourId
                         (StoreFailed (Store.ConnectionLost "boom"))
             outcome `shouldBe` Right False
 
-    describe "Keiro.ProcessManager snapshots" $ around (withFreshStore fixture) $ do
-        it "writes a snapshot of the manager state stream after the policy threshold" $ \storeHandle -> do
+    describe "Keiro.ProcessManager snapshots" $ around (withFreshResourceStore fixture) $ do
+        it "writes a snapshot of the manager state stream after the policy threshold" $ \(_storeHandle, StoreRunner _runner) -> do
             -- Two distinct source events, both correlating to "order-1", drive the one
             -- manager instance to manager-stream version 2, which Every 2 snapshots.
             let sourceA = recordedFromEventId (EventId sampleUuid) (CounterAdded 2)
                 sourceB = recordedFromEventId (EventId sampleUuid2) (CounterAdded 3)
             Right (Right _) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce defaultRunCommandOptions pmSnapshotProcessManager sourceA (CounterAdded 2)
             Right (Right _) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce defaultRunCommandOptions pmSnapshotProcessManager sourceB (CounterAdded 3)
             Right managerEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "pm:counter-snap-order-1") (StreamVersion 0) 10
             Vector.length managerEvents `shouldBe` 2
             Right snapshotVersion <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.runTransaction $
                         Tx.statement "pm:counter-snap-order-1" snapshotVersionForStreamStmt
             snapshotVersion `shouldBe` Just (StreamVersion 2)
 
-        it "hydrates the manager from its snapshot and replays only the tail" $ \storeHandle -> do
+        it "hydrates the manager from its snapshot and replays only the tail" $ \(_storeHandle, StoreRunner _runner) -> do
             -- After the threshold snapshot exists, a third reaction should land on top of
             -- the snapshot at version 3 rather than replaying from version 0.
             let sourceA = recordedFromEventId (EventId sampleUuid) (CounterAdded 2)
                 sourceB = recordedFromEventId (EventId sampleUuid2) (CounterAdded 3)
                 sourceC = recordedFromEventId (EventId sampleUuid3) (CounterAdded 4)
             Right (Right _) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce defaultRunCommandOptions pmSnapshotProcessManager sourceA (CounterAdded 2)
             Right (Right _) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce defaultRunCommandOptions pmSnapshotProcessManager sourceB (CounterAdded 3)
             -- Confirm the snapshot is present before the tail-replay reaction.
             Right snapshotVersion <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.runTransaction $
                         Tx.statement "pm:counter-snap-order-1" snapshotVersionForStreamStmt
             snapshotVersion `shouldBe` Just (StreamVersion 2)
             result <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runProcessManagerOnce defaultRunCommandOptions pmSnapshotProcessManager sourceC (CounterAdded 4)
             case result of
                 Right (Right pmResult) ->
@@ -3121,8 +3176,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         other -> expectationFailure ("expected appended manager state, got " <> show other)
                 other -> expectationFailure ("expected snapshot-assisted PM reaction, got " <> show other)
 
-    describe "Keiro.Router" $ around (withFreshStore fixture) $ do
-        it "encodes colon-bearing and non-ASCII id components without collisions" $ \_storeHandle -> do
+    describe "Keiro.Router" $ around (withFreshResourceStore fixture) $ do
+        it "encodes colon-bearing and non-ASCII id components without collisions" $ \(_storeHandle, StoreRunner _runner) -> do
             let sourceEventId = EventId sampleUuid
                 colonLeft =
                     deterministicRouterCommandId
@@ -3155,163 +3210,163 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             colonLeft `shouldNotBe` colonRight
             unicodeLeft `shouldNotBe` unicodeRight
 
-        it "resolves targets effectfully and fans out one command per target" $ \storeHandle -> do
+        it "resolves targets effectfully and fans out one command per target" $ \(_storeHandle, StoreRunner _runner) -> do
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
-            Right () <- Store.runStoreIO storeHandle $
+            Right () <- _runner $
                 Store.runTransaction $ do
                     Tx.statement ("g1", "router-target-a") insertRouterTargetStmt
                     Tx.statement ("g1", "router-target-b") insertRouterTargetStmt
                     Tx.statement ("g1", "router-target-c") insertRouterTargetStmt
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
             Right (RouterResult rs1) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions demoRouter sourceEvent (RouteGroup "g1")
             length rs1 `shouldBe` 3
             rs1 `shouldSatisfy` all isAppended
             -- Data-dependence is load-bearing: an unseeded group resolves to no
             -- targets, so the count tracks the read model, not a fixed list.
             Right (RouterResult rsEmpty) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions demoRouter sourceEvent (RouteGroup "no-such-group")
             length rsEmpty `shouldBe` 0
             -- Each resolved target stream received exactly one command.
             Right targetA <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "router-target-a") (StreamVersion 0) 10
             Right targetB <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "router-target-b") (StreamVersion 0) 10
             Right targetC <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "router-target-c") (StreamVersion 0) 10
             Vector.length targetA `shouldBe` 1
             Vector.length targetB `shouldBe` 1
             Vector.length targetC `shouldBe` 1
 
-        it "reports every dispatch as a duplicate on replay, writing no new events" $ \storeHandle -> do
+        it "reports every dispatch as a duplicate on replay, writing no new events" $ \(_storeHandle, StoreRunner _runner) -> do
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
-            Right () <- Store.runStoreIO storeHandle $
+            Right () <- _runner $
                 Store.runTransaction $ do
                     Tx.statement ("g1", "router-target-a") insertRouterTargetStmt
                     Tx.statement ("g1", "router-target-b") insertRouterTargetStmt
                     Tx.statement ("g1", "router-target-c") insertRouterTargetStmt
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
             Right (RouterResult rs1) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions demoRouter sourceEvent (RouteGroup "g1")
             rs1 `shouldSatisfy` all isAppended
             Right (RouterResult rs2) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions demoRouter sourceEvent (RouteGroup "g1")
             length rs2 `shouldBe` 3
             rs2 `shouldSatisfy` all isDuplicate
             -- Replay added nothing: each target stream still holds exactly one event.
             Right targetA <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "router-target-a") (StreamVersion 0) 10
             Right targetB <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "router-target-b") (StreamVersion 0) 10
             Right targetC <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "router-target-c") (StreamVersion 0) 10
             Vector.length targetA `shouldBe` 1
             Vector.length targetB `shouldBe` 1
             Vector.length targetC `shouldBe` 1
 
-        it "dedups by target identity when a redelivered resolve reorders targets after a partial dispatch" $ \storeHandle -> do
+        it "dedups by target identity when a redelivered resolve reorders targets after a partial dispatch" $ \(_storeHandle, StoreRunner _runner) -> do
             attemptsRef <- newIORef (0 :: Int)
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
                 router = unstableRouter attemptsRef $ \case
                     0 -> ["swap-a"]
                     _ -> ["swap-b", "swap-a"]
             Right (RouterResult firstAttempt) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
             firstAttempt `shouldSatisfy` all isAppended
             Right (RouterResult secondAttempt) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
             secondAttempt `shouldSatisfy` \case
                 [swapB, swapA] -> isAppended swapB && isDuplicate swapA
                 _ -> False
             Right swapAEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "swap-a") (StreamVersion 0) 10
             Right swapBEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "swap-b") (StreamVersion 0) 10
             Vector.length swapAEvents `shouldBe` 1
             Vector.length swapBEvents `shouldBe` 1
 
-        it "dispatches a target added by resolve drift instead of misreading it as a duplicate" $ \storeHandle -> do
+        it "dispatches a target added by resolve drift instead of misreading it as a duplicate" $ \(_storeHandle, StoreRunner _runner) -> do
             attemptsRef <- newIORef (0 :: Int)
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
                 router = unstableRouter attemptsRef $ \case
                     0 -> ["growth-a", "growth-b"]
                     _ -> ["growth-a", "growth-c"]
             Right (RouterResult firstAttempt) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
             firstAttempt `shouldSatisfy` all isAppended
             Right (RouterResult secondAttempt) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
             secondAttempt `shouldSatisfy` \case
                 [growthA, growthC] -> isDuplicate growthA && isAppended growthC
                 _ -> False
             Right growthAEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "growth-a") (StreamVersion 0) 10
             Right growthBEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "growth-b") (StreamVersion 0) 10
             Right growthCEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "growth-c") (StreamVersion 0) 10
             Vector.length growthAEvents `shouldBe` 1
             Vector.length growthBEvents `shouldBe` 1
             Vector.length growthCEvents `shouldBe` 1
 
-        it "keeps full-completion order swaps idempotent" $ \storeHandle -> do
+        it "keeps full-completion order swaps idempotent" $ \(_storeHandle, StoreRunner _runner) -> do
             attemptsRef <- newIORef (0 :: Int)
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
                 router = unstableRouter attemptsRef $ \case
                     0 -> ["order-a", "order-b"]
                     _ -> ["order-b", "order-a"]
             Right (RouterResult firstAttempt) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
             firstAttempt `shouldSatisfy` all isAppended
             Right (RouterResult secondAttempt) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
             secondAttempt `shouldSatisfy` all isDuplicate
             Right orderAEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "order-a") (StreamVersion 0) 10
             Right orderBEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "order-b") (StreamVersion 0) 10
             Vector.length orderAEvents `shouldBe` 1
             Vector.length orderBEvents `shouldBe` 1
 
-        it "keeps dispatches to targets dropped by a later resolve attempt" $ \storeHandle -> do
+        it "keeps dispatches to targets dropped by a later resolve attempt" $ \(_storeHandle, StoreRunner _runner) -> do
             attemptsRef <- newIORef (0 :: Int)
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
                 router = unstableRouter attemptsRef $ \case
                     0 -> ["drop-a", "drop-b"]
                     _ -> ["drop-b"]
             Right (RouterResult firstAttempt) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
             firstAttempt `shouldSatisfy` all isAppended
             Right (RouterResult secondAttempt) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
             secondAttempt `shouldSatisfy` \case
                 [dropB] -> isDuplicate dropB
@@ -3319,40 +3374,40 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             -- Resolve is authoritative per attempt. Across redeliveries, the
             -- dispatched set is the union of each attempt's resolved targets.
             Right dropAEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "drop-a") (StreamVersion 0) 10
             Right dropBEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "drop-b") (StreamVersion 0) 10
             Vector.length dropAEvents `shouldBe` 1
             Vector.length dropBEvents `shouldBe` 1
 
-        it "keeps repeated commands to one target distinct within a resolve batch" $ \storeHandle -> do
+        it "keeps repeated commands to one target distinct within a resolve batch" $ \(_storeHandle, StoreRunner _runner) -> do
             attemptsRef <- newIORef (0 :: Int)
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
                 router = unstableRouter attemptsRef (const ["twin", "twin"])
             Right (RouterResult firstAttempt) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
             firstAttempt `shouldSatisfy` all isAppended
             Right twinEventsAfterFirstAttempt <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "twin") (StreamVersion 0) 10
             Vector.length twinEventsAfterFirstAttempt `shouldBe` 2
             Right (RouterResult secondAttempt) <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions router sourceEvent (RouteGroup "g1")
             secondAttempt `shouldSatisfy` all isDuplicate
             Right twinEventsAfterSecondAttempt <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "twin") (StreamVersion 0) 10
             Vector.length twinEventsAfterSecondAttempt `shouldBe` 2
 
-        it "drains an adapter, dispatching one command per resolved target for every message" $ \storeHandle -> do
+        it "drains an adapter, dispatching one command per resolved target for every message" $ \(_storeHandle, StoreRunner _runner) -> do
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
-            Right () <- Store.runStoreIO storeHandle $
+            Right () <- _runner $
                 Store.runTransaction $ do
                     Tx.statement ("g1", "worker-a") insertRouterTargetStmt
                     Tx.statement ("g1", "worker-b") insertRouterTargetStmt
@@ -3366,46 +3421,46 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     ]
                 adapter = inMemoryAdapter decisionsRef messages
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterWorker defaultRunCommandOptions demoRouter adapter Just
             decisions <- readIORef decisionsRef
             decisions `shouldBe` [AckOk, AckOk]
             Right wa <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "worker-a") (StreamVersion 0) 10
             Right wb <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "worker-b") (StreamVersion 0) 10
             Right wc <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward (StreamName "worker-c") (StreamVersion 0) 10
             Vector.length wa `shouldBe` 1
             Vector.length wb `shouldBe` 1
             Vector.length wc `shouldBe` 1
 
-        it "finalizes AckHalt rather than AckOk when a dispatched command fails" $ \storeHandle -> do
+        it "finalizes AckHalt rather than AckOk when a dispatched command fails" $ \(_storeHandle, StoreRunner _runner) -> do
             decisionsRef <- newIORef []
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
                 messages = [(sourceEvent, RouteGroup "g1")]
                 adapter = inMemoryAdapter decisionsRef messages
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterWorker defaultRunCommandOptions failingRouter adapter Just
             decisions <- readIORef decisionsRef
             decisions `shouldSatisfy` \case
                 [AckHalt (HaltFatal _)] -> True
                 _ -> False
 
-        it "dead-letters a rejected router dispatch and acknowledges the source event" $ \storeHandle -> do
+        it "dead-letters a rejected router dispatch and acknowledges the source event" $ \(_storeHandle, StoreRunner _runner) -> do
             decisionsRef <- newIORef []
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
                 adapter = inMemoryAdapter decisionsRef [(sourceEvent, RouteGroup "g1")]
                 workerOptions = defaultWorkerOptions & #rejectedCommandPolicy .~ RejectedDeadLetter
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterWorkerWith workerOptions defaultRunCommandOptions failingRouter adapter Just
             readIORef decisionsRef `shouldReturn` [AckOk]
-            Right deadLetters <- Store.runStoreIO storeHandle (listDispatchDeadLetters "failing-router")
+            Right deadLetters <- _runner (listDispatchDeadLetters "failing-router")
             case deadLetters of
                 [row] -> do
                     row ^. #dispatcherKind `shouldBe` DispatcherRouter
@@ -3414,12 +3469,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     row ^. #errorClass `shouldBe` "command_rejected"
                 other -> expectationFailure ("expected one router dead letter, got " <> show other)
 
-        it "finalizes AckRetry for a transient thrown resolver error and continues" $ \storeHandle -> do
+        it "finalizes AckRetry for a transient thrown resolver error and continues" $ \(_storeHandle, StoreRunner _runner) -> do
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.runTransaction (Tx.statement ("g2", "worker-after-retry") insertRouterTargetStmt)
             decisionsRef <- newIORef []
             attemptsRef <- newIORef (0 :: Int)
@@ -3450,14 +3505,14 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         , targetProjections = const []
                         }
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterWorker defaultRunCommandOptions flakyRouter adapter Just
             decisions <- readIORef decisionsRef
             decisions `shouldSatisfy` \case
                 [AckRetry{}, AckOk] -> True
                 _ -> False
 
-        it "finalizes AckHalt for a deterministic thrown resolver error" $ \storeHandle -> do
+        it "finalizes AckHalt for a deterministic thrown resolver error" $ \(_storeHandle, StoreRunner _runner) -> do
             decisionsRef <- newIORef []
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
                 messages = [(sourceEvent, RouteGroup "g1")]
@@ -3474,19 +3529,19 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         , targetProjections = const []
                         }
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterWorker defaultRunCommandOptions failingResolveRouter adapter Just
             decisions <- readIORef decisionsRef
             decisions `shouldSatisfy` \case
                 [AckHalt (HaltFatal _)] -> True
                 _ -> False
 
-        it "folds a concurrent duplicate router dispatch to PMCommandDuplicate" $ \storeHandle -> do
+        it "folds a concurrent duplicate router dispatch to PMCommandDuplicate" $ \(_storeHandle, StoreRunner _runner) -> do
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.runTransaction (Tx.statement ("g1", "router-duplicate-target") insertRouterTargetStmt)
             insertCount <- newIORef (0 :: Int)
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
@@ -3500,7 +3555,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         0
                 insertConcurrentTarget = do
                     callNo <- atomicModifyIORef' insertCount (\n -> (n + 1, n))
-                    when (callNo == 0) $ appendCounterEventWithId storeHandle targetStreamName commandId (CounterAdded 1)
+                    when (callNo == 0) $ appendCounterEventWithId _storeHandle targetStreamName commandId (CounterAdded 1)
                 options =
                     defaultRunCommandOptions
                         & #beforeAppend
@@ -3508,37 +3563,37 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         & #retryBackoffMicros
                         .~ 0
             result <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce options demoRouter sourceEvent (RouteGroup "g1")
             case result of
                 Right (RouterResult [PMCommandDuplicate duplicateId]) ->
                     duplicateId `shouldBe` commandId
                 other -> expectationFailure ("expected duplicate router dispatch fold, got " <> show other)
             Right targetEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward targetStreamName (StreamVersion 0) 10
             Vector.length targetEvents `shouldBe` 1
 
-        it "dedups a pre-upgrade positional router dispatch during the transition" $ \storeHandle -> do
+        it "dedups a pre-upgrade positional router dispatch during the transition" $ \(_storeHandle, StoreRunner _runner) -> do
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     initializeRegisteredReadModel routerTargetsReadModel initializeRouterTargetsTable
             Right () <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.runTransaction (Tx.statement ("g1", "transition-target") insertRouterTargetStmt)
             let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
                 legacyId = deterministicCommandId "demo-router" "g1" (sourceEvent ^. #eventId) 0
                 targetStreamName = StreamName "transition-target"
-            appendCounterEventWithId storeHandle targetStreamName legacyId (CounterAdded 1)
+            appendCounterEventWithId _storeHandle targetStreamName legacyId (CounterAdded 1)
             result <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     runRouterOnce defaultRunCommandOptions demoRouter sourceEvent (RouteGroup "g1")
             case result of
                 Right (RouterResult [PMCommandDuplicate duplicateId]) ->
                     duplicateId `shouldBe` legacyId
                 other -> expectationFailure ("expected transition duplicate, got " <> show other)
             Right targetEvents <-
-                Store.runStoreIO storeHandle $
+                _runner $
                     Store.readStreamForward targetStreamName (StreamVersion 0) 10
             Vector.length targetEvents `shouldBe` 1
 

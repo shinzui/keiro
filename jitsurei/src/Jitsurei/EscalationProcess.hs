@@ -96,6 +96,7 @@ import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow, runTimerWorker)
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Types (EventId (..), EventType (..), RecordedEvent)
 
@@ -291,6 +292,7 @@ runEscalationOnce ::
     , IOE :> es
     , Store :> es
     , Error StoreError :> es
+    , KirokuStoreResource :> es
     ) =>
     RunCommandOptions ->
     RecordedEvent ->

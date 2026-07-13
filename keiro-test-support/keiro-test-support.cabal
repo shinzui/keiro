@@ -41,6 +41,7 @@ library
     , aeson                    >=2.2
     , base                     >=4.21     && <5
     , containers               >=0.6
+    , effectful                >=2.6
     , ephemeral-pg             >=0.2
     , hasql                    >=1.10
     , hasql-pool               >=1.2

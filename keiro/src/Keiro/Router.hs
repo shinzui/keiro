@@ -77,6 +77,7 @@ import Keiro.Projection (InlineProjection, runCommandWithProjections)
 import Keiro.Stream (Stream)
 import Keiro.Telemetry (recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison)
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError (..))
 import Kiroku.Store.Types (EventId (..), RecordedEvent, StreamName (..))
 import Shibuya.Adapter (Adapter (..))
@@ -207,6 +208,7 @@ runRouterOnce ::
     , IOE :> es
     , Store :> es
     , Error StoreError :> es
+    , KirokuStoreResource :> es
     , BoolAlg targetPhi (RegFile targetRs, targetCi)
     , Eq targetCo
     ) =>
@@ -330,6 +332,7 @@ runRouterWorker ::
     , IOE :> es
     , Store :> es
     , Error StoreError :> es
+    , KirokuStoreResource :> es
     , BoolAlg targetPhi (RegFile targetRs, targetCi)
     , Eq targetCo
     ) =>
@@ -347,6 +350,7 @@ runRouterWorkerWith ::
     , IOE :> es
     , Store :> es
     , Error StoreError :> es
+    , KirokuStoreResource :> es
     , BoolAlg targetPhi (RegFile targetRs, targetCi)
     , Eq targetCo
     ) =>

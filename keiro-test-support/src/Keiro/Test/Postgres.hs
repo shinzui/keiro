@@ -30,6 +30,9 @@ module Keiro.Test.Postgres (
     withFreshDatabase,
     withFreshStore,
     withFreshStoreWith,
+    StoreRunner (..),
+    withFreshResourceStore,
+    withFreshResourceStoreWith,
     withFreshStores2,
 )
 where
@@ -39,6 +42,8 @@ import Control.Exception (bracket, onException)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Database.PostgreSQL.Migrate (defaultRunOptions, runMigrationPlan)
+import Effectful (Eff, IOE, UnliftStrategy (..), runEff, withEffToIO)
+import Effectful.Error.Static (Error, runErrorNoCallStack)
 import EphemeralPg qualified as Pg
 import Hasql.Connection.Settings qualified as Conn
 import Hasql.Pool qualified as Pool
@@ -46,6 +51,9 @@ import Hasql.Pool.Config qualified as Pool.Config
 import Hasql.Session qualified as Session
 import Keiro.Migrations (frameworkMigrationPlan, keiroMigrations)
 import Kiroku.Store qualified as Store
+import Kiroku.Store.Effect (Store, runStoreResource)
+import Kiroku.Store.Effect.Resource (KirokuStoreResource, getKirokuStore, withKirokuStore)
+import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Migrations qualified as Kiroku
 
 {- | A running, migrated suite fixture: one cached PostgreSQL server owning a
@@ -120,6 +128,38 @@ withFreshStoreWith ::
 withFreshStoreWith fixture modify action =
     withFreshDatabase fixture \connStr ->
         Store.withStore (modify (Store.defaultConnectionSettings connStr)) action
+
+{- | A reusable interpreter for computations that need both the dynamic
+'Store' effect and the resource effect carrying the same live store handle.
+-}
+newtype StoreRunner
+    = StoreRunner
+        (forall a. Eff '[Store, Error StoreError, KirokuStoreResource, IOE] a -> IO (Either StoreError a))
+
+{- | Like 'withFreshStore', but also supplies the resource-aware interpreter
+required by Keiro's transactional command runners.
+-}
+withFreshResourceStore :: Fixture -> ((Store.KirokuStore, StoreRunner) -> IO ()) -> IO ()
+withFreshResourceStore fixture = withFreshResourceStoreWith fixture id
+
+{- | Like 'withFreshResourceStore', with a connection-settings modifier for
+projection schemas or store hooks.
+-}
+withFreshResourceStoreWith ::
+    Fixture ->
+    (Store.ConnectionSettings -> Store.ConnectionSettings) ->
+    ((Store.KirokuStore, StoreRunner) -> IO ()) ->
+    IO ()
+withFreshResourceStoreWith fixture modify action =
+    withFreshDatabase fixture \connStr ->
+        runEff $
+            withKirokuStore (modify (Store.defaultConnectionSettings connStr)) $ do
+                store <- getKirokuStore
+                withEffToIO SeqUnlift \unlift ->
+                    action
+                        ( store
+                        , StoreRunner (unlift . runErrorNoCallStack . runStoreResource)
+                        )
 
 {- | Like 'withFreshStore' but provides two independent migrated databases (and
 two stores) cloned from the same template — used by cross-context

@@ -90,12 +90,14 @@ import Keiro.Telemetry (
  )
 import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Effect.Resource (KirokuStoreResource, getKirokuStore)
 import Kiroku.Store.Error (StoreError (..))
 import Kiroku.Store.Read (readStreamForwardStream)
 import Kiroku.Store.Transaction (
     PreparedEvent,
     appendConflictToStoreError,
     appendToStreamTx,
+    enrichEventsIO,
     prepareEventsIO,
     runTransaction,
  )
@@ -515,7 +517,7 @@ no-op command that appended nothing).
 -}
 runCommandWithSql ::
     forall phi rs s ci co a es.
-    (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+    (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
     RunCommandOptions ->
     ValidatedEventStream phi rs s ci co ->
     Stream (EventStream phi rs s ci co) ->
@@ -535,7 +537,7 @@ projections, process managers, and routers are all built on this.
 -}
 runCommandWithSqlEvents ::
     forall phi rs s ci co a es.
-    (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+    (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
     RunCommandOptions ->
     ValidatedEventStream phi rs s ci co ->
     Stream (EventStream phi rs s ci co) ->
@@ -566,7 +568,9 @@ runCommandWithSqlEvents options validatedEventStream targetStream command afterA
 
     appendWithSqlOnce mSpan attemptNo current events encoded = do
         liftIO (options ^. #beforeAppend)
-        prepared <- prepareEventsIO encoded
+        store <- getKirokuStore
+        enriched <- liftIO (enrichEventsIO store encoded)
+        prepared <- prepareEventsIO enriched
         now <- liftIO getCurrentTime
         let streamName = (eventStream ^. #resolveStreamName) targetStream
             expected = expectedVersion (current ^. #streamVersion)

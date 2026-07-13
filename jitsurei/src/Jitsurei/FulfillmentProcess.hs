@@ -44,6 +44,7 @@ import Keiro.ProcessManager (
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 import Kiroku.Store.Effect (Store)
+import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Types (EventType (..), RecordedEvent)
 
@@ -155,6 +156,7 @@ runFulfillmentOnce ::
     ( IOE :> es
     , Store :> es
     , Error StoreError :> es
+    , KirokuStoreResource :> es
     ) =>
     RunCommandOptions ->
     RecordedEvent ->
