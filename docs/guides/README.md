@@ -17,6 +17,8 @@ are adopting:
   `ValidatedEventStream` boundary, and `runCommand`.
 - [Replayability Safety](../user/replay-safety.md) explains the validation
   guarantee that keeps unchecked streams out of command runners.
+- [Typed Specifications With `keiro-dsl`](../user/typed-spec-toolchain.md)
+  covers the spec/check/scaffold/diff loop for generated service surfaces.
 - [Migrating To `ValidatedEventStream`](migrating-to-validated-event-stream.md)
   is the compiler-driven source migration for services that still build bare
   `EventStream` values at runner boundaries.
@@ -39,6 +41,8 @@ are adopting:
   snapshots for the order stream.
 - [Run And Operate Jitsurei](run-and-operate-jitsurei.md) collects build,
   migration, and production-readiness commands.
+- [Dead Letters And Replay](../user/dead-letters.md) is the operator reference
+  for rejected dispatches and subscription replay.
 - [Integration Events With Kafka](integration-events-with-kafka.md) describes
   the canonical two-context Kafka topology, the operational guarantees,
   and when to deviate from the default ordering and retention policies.

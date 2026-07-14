@@ -142,11 +142,12 @@ in `jitsurei/src/Jitsurei/OrderStream.hs` and the command tests live in
 
 ## Initialize Keiro Tables
 
-Run `keiro-migrate` before starting the application; see
-[Database Migrations](migrations.md). The codd migrations in `keiro-migrations`
-are the single source of Keiro's framework schema — there are no in-application
-`CREATE TABLE` helpers to call. Test suites apply the same migrations to a
-template database via the `keiro-test-support` `withMigratedSuite` fixture.
+Run `keiro-migrate up` before starting the application; see
+[Database Migrations](migrations.md). Its native `pg-migrate` plan composes the
+embedded Kiroku component before Keiro's component. There are no
+in-application `CREATE TABLE` helpers to call. Test suites apply the same plan
+to a template database via the `keiro-test-support` `withMigratedSuite`
+fixture.
 
 ## Verify The Repository
 

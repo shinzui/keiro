@@ -17,7 +17,7 @@ may drift between redeliveries; the precise cumulative contract is described
 under Idempotency below.
 
 The primitive is `Keiro.Router`
-([`../../src/Keiro/Router.hs`](../../src/Keiro/Router.hs)); the worked example is
+([`../../keiro/src/Keiro/Router.hs`](../../keiro/src/Keiro/Router.hs)); the worked example is
 [`../../jitsurei/src/Jitsurei/AgentQualRouter.hs`](../../jitsurei/src/Jitsurei/AgentQualRouter.hs).
 
 ## Router vs. process manager

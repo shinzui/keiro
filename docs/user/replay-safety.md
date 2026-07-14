@@ -32,12 +32,22 @@ The default check rejects:
 
 - hidden input: a transition reads command input that is not represented in the
   emitted event stream;
+- an unrecoverable head: the first emitted event does not identify a unique
+  transition for replay;
+- ambiguous inversion: one observed event can invert to multiple transitions;
+- unguarded input reads: a transition reads fields without first selecting the
+  matching command constructor;
+- state-changing epsilon edges: an output-free transition changes durable
+  state that events cannot reconstruct;
 - nondeterministic guards: more than one transition could match the same folded
   state and command;
 - statically dead edges: a transition appears unreachable under the structural
   analysis;
+- opaque guards that the structural analysis cannot prove safe;
 - incoherent snapshot configuration: a snapshot policy is enabled but
-  `stateCodec = Nothing`.
+  `stateCodec = Nothing`;
+- a snapshot codec that throws while encoding the initial state/register file,
+  including uninitialized `emptyRegFile` slots.
 
 The check is pure and solver-free. It runs before the stream is used, not while
 events are being appended. Once construction returns `Right validated`, command
@@ -132,9 +142,11 @@ For example, if `PlaceOrder` writes a `customerId` register, emit an
 register. Do not fix a hidden input by disabling the check; doing so weakens the
 replayability guarantee.
 
-`mkEventStreamWith` exists for rare cases where a non-hidden-input warning is
-known to be benign and documented. Use it narrowly. In ordinary application code,
-prefer `mkEventStream` with the default options.
+`mkEventStreamWith` exists for rare cases where an optional structural warning
+is known to be benign and documented. Head recoverability and state-changing
+epsilon validation are force-enabled at Keiro's durable boundary, regardless of
+the supplied options. Use the explicitly unsafe `mkEventStreamUnchecked` only
+in tests or emergency forensics, never for a production stream.
 
 ## What Keiro Does Not Prove
 

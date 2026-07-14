@@ -169,8 +169,8 @@ The mapping is:
 
 ## Schema and storage
 
-The outbox table is created by `keiro-migrate` from the embedded codd
-migration `2026-05-17-01-00-00-keiro-outbox.sql`:
+The outbox table is created by `keiro-migrate` from the native Keiro component's
+embedded `0002-keiro-outbox.sql` migration:
 
 ```sql
 CREATE TABLE keiro_outbox (

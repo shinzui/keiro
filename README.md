@@ -52,12 +52,15 @@ motivation and an honest account of what keiro deliberately gives up.
 
 - typed stream names, event codecs, schema versions, event-type validation, and
   upcasters (`Keiro.Stream`, `Keiro.Codec`, `Keiro.EventStream`);
+- a `ValidatedEventStream` boundary that rejects unrecoverable, ambiguous, or
+  state-losing transducers before they can run commands;
 - the canonical command cycle — load, streaming replay, decide, append-batch
   with optimistic concurrency — including a **transactional step**
   (`runCommandWithSql`) that appends events, updates inline projections, and
   writes outbox/timer rows in one Postgres transaction (`Keiro.Command`);
 - advisory snapshots that never become load-bearing (`Keiro.Snapshot`);
-- read models, inline/async projections, and rebuild metadata
+- explicitly registered read models, category-scoped strong reads,
+  inline/async projections, and atomically fenced rebuilds
   (`Keiro.ReadModel`, `Keiro.Projection`);
 - event-sourced process managers, routers, and durable timers
   (`Keiro.ProcessManager`, `Keiro.Router`, `Keiro.Timer`);
@@ -66,6 +69,13 @@ motivation and an honest account of what keiro deliberately gives up.
   (`Keiro.Workflow` and submodules);
 - a transactional outbox / idempotent inbox with Kafka adapters
   (`Keiro.Outbox`, `Keiro.Inbox`);
+- durable rejected-dispatch records and idempotent subscription dead-letter
+  replay (`Keiro.DeadLetter`);
+- a typed `.keiro` toolchain that checks cross-node policy, scaffolds generated
+  modules and create-once holes, emits harnesses, and gates persistence-aware
+  evolution (`keiro-dsl`);
+- native dependency-ordered database migration components and the
+  `keiro-migrate` CLI (`keiro-migrations`, `pg-migrate`);
 - OpenTelemetry telemetry across every delivery and handler (`Keiro.Telemetry`).
 
 ## Runtime stack
@@ -95,10 +105,11 @@ effect handling, and **Streamly** for streaming reads and worker loops.
   `Keiro.Snapshot.Policy`, `Keiro.Stream`) shared by the other packages.
 - `keiro-pgmq/` — PostgreSQL job-queue (PGMQ) integration: a reusable
   Postgres-backed work queue built on `pgmq-hs` and shibuya's pgmq adapter.
-- `keiro-dsl/` — typed-specification (`.keiro`) toolchain for keiro services:
-  parse / check / scaffold / harness / diff.
-- `keiro-migrations/` — SQL schema migrations for the PostgreSQL event store and
-  keiro's tables.
+- `keiro-dsl/` — typed-specification (`.keiro`) toolchain for aggregates,
+  process managers, routers, integration, queues, read models, and durable
+  workflows: parse / check / scaffold / harness / diff.
+- `keiro-migrations/` — native `pg-migrate` component and CLI for the Kiroku and
+  Keiro PostgreSQL schemas, plus verified legacy-Codd import evidence.
 - `keiro-test-support/` — shared PostgreSQL test fixtures for the test suites.
 - `jitsurei/` — guide-backed, runnable worked examples that depend on `keiro`.
 
@@ -117,6 +128,10 @@ must be on `PATH` (the Nix dev shell provides one).
 ## Documentation
 
 - User-facing documentation starts at [`docs/user/README.md`](docs/user/README.md).
+- The typed-spec toolchain starts at
+  [`docs/user/typed-spec-toolchain.md`](docs/user/typed-spec-toolchain.md).
+- Migration setup and operations start at
+  [`docs/user/migrations.md`](docs/user/migrations.md).
 - Long-form, guide-backed examples start at
   [`docs/guides/README.md`](docs/guides/README.md) and use the `jitsurei`
   package as their executable source.
@@ -126,13 +141,14 @@ must be on `PATH` (the Nix dev shell provides one).
 
 ## Status
 
-The event-sourcing core (command cycle, snapshots, read models and projections,
-process managers, routers, durable timers, transactional outbox/inbox) and the
-named-step durable-execution runtime are implemented — production-shaped for
-controlled early use, not yet a 1.0. keiro is Haskell-only and single-region
-Postgres by design; remaining work is future-facing — exactly-once async
-projection checkpoints and higher-level ergonomic facades over the low-level
-APIs. See [`docs/user/production-status.md`](docs/user/production-status.md).
+The event-sourcing core, hardened replay validation, snapshots, fenced read
+models/projections, process managers, routers, timers, transactional messaging,
+dead-letter tooling, named-step durable execution, typed-spec scaffolding, and
+native migrations are implemented — production-shaped for controlled early
+use, not yet a 1.0. keiro is Haskell-only and single-region Postgres by design;
+exactly-once async projection checkpoints and higher-level ergonomic facades
+remain future-facing. See
+[`docs/user/production-status.md`](docs/user/production-status.md).
 
 ## License
 

@@ -2,6 +2,14 @@
 
 This directory holds the research backing the design of 経路 (keiro), a Haskell event-sourcing and workflow-engine framework intended to replace an in-production system. Each numbered document is a self-contained survey or design note. Read them in order on first pass; thereafter use this index to jump.
 
+> **Status note (2026-07-13):** these documents preserve the design history and
+> may describe gaps as they existed when each study closed. Keiro is now an
+> implemented multi-package framework. For the current public contract use the
+> [User Guide](../user/README.md), [Production Status](../user/production-status.md),
+> [API Reference](../user/api-reference.md), and
+> [Typed Specifications](../user/typed-spec-toolchain.md). The overview below
+> annotates major closures but does not rewrite historical conclusions in place.
+
 ## What keiro is
 
 A library (not a server) that composes:
@@ -14,7 +22,10 @@ A library (not a server) that composes:
 - **pgmq-hs** — Postgres queue. Already on the registry.
 - **effectful**, **hasql** — runtime substrate.
 
-keiro itself is currently empty (`agents/skills/`, `docs/`). The work this research informs is to design and then build keiro on top of the above.
+Keiro now implements the command cycle, codecs, replay validation, snapshots,
+read models/projections, process managers, routers, timers, transactional
+messaging, durable workflows, dead-letter tooling, native migrations, PGMQ
+jobs, and the `.keiro` typed-spec toolchain described by this research.
 
 ## Document index
 
@@ -44,12 +55,33 @@ How does keiro turn the cycle below into a first-class, type-safe, production-qu
 5. Append new events to kiroku with `ExpectedVersion = ExactVersion(loadedVersion)`.
 6. On `WrongExpectedVersion` retry from step 2.
 
-This cycle does not exist today: kiroku and keiki are independent libraries, with no glue. Designing it (and all the supporting primitives — codecs, snapshots, subscriptions, process managers, transactional steps, durable timers) is the purpose of the research MasterPlan.
+This cycle now exists in `Keiro.Command` as `runCommand` and its transactional
+variants, behind the `ValidatedEventStream` replay-safety boundary. The section
+is retained because designing it (and the supporting codecs, snapshots,
+subscriptions, process managers, transactional steps, and timers) was the
+original purpose of the research program.
 
 ## Headline findings (cross-document synthesis)
 
-- **kiroku is solid** for append/read with optimistic concurrency. Crucially, kiroku's Strategy E (atomic counter on the `$all` row) gives gap-free contiguous global positions with immediate read-your-own-writes — see `kiroku/docs/DESIGN.md`. This is a deliberate departure from Marten's bigserial-plus-high-water-mark approach; keiro must rely on Strategy E rather than reinventing HWM. As of 2026-05-10 kiroku additionally exposes a `Kiroku.Store.Transaction` module with `runTransactionAppending`/`runTransactionAppendingNoRetry` (single-stream append + user `Tx.Transaction` continuation atomically), `appendToStreamTx`/`prepareEventsIO` (the lower-level building block), and `runTransaction`/`runTransactionNoRetry` (the bare escape hatch) — closing what was previously listed as a missing primitive. As of 2026-05-14 a second wave of kiroku closures has landed: `Kiroku.Store.Read.readStreamForwardStream` (Streamly-native single-stream forward read), `Kiroku.Store.Settings.StoreSettings { enrichEvent, decodeHook }` (interpreter-level event-data hooks, plus hook-aware `runTransactionAppendingResource(NoRetry)` and `enrichEventsIO`), `Kiroku.Store.Causation` (`findCausationDescendants`/`findCausationAncestors`/`findByCorrelation` chain-walkers backed by existing partial indexes), and `Kiroku.Store.Read.lookupStreamId` (lighter than `getStream` for name → surrogate-id resolution). Missing for keiro: typed payload codecs (keiro-owned per EP-2 + new sibling `keiki-codec-json`), typed `StreamId` per aggregate (keiro-owned `Stream a` per EP-1), snapshots (keiro-owned `keiro_snapshots` per EP-4), a read-decide-append combinator (keiro-owned `runCommand` per EP-1, now built on `runTransactionAppending`), projection-rebuild helpers (keiro-owned per EP-8), point-in-time replay (`readStreamUntil`, still open per `11-upstream-roadmap.md` §4.10), prefix-style category subscriptions (still open per §4.4), and the shibuya-kiroku-adapter `HandlerInTransaction` shape blocking exactly-once async projections (§5.1).
-- **keiki's contract for keiro is `SymTransducer`, not `Decider`.** `Keiki.Decider` is a legacy compatibility facade that masks ε-edges and the typed register file `RegFile rs` — the very features keiki provides to support workflows. Keiro consumes the native `SymTransducer phi rs s ci co` directly via `step`/`delta`/`omega`/`applyEvent`/`applyEvents`/`reconstitute`. As of 2026-05-14 keiki ships the register-file serialization helper plus the snapshot shape hash that EP-4 relied on: `Keiki.Shape.regFileShapeHash` lives in core keiki, and the sibling package `keiki-codec-json` ships `regFileToJSON`/`regFileFromJSON`/`regFileToEncoding` plus TH derivation `deriveRegFileCodec` and a `keiki-codec-json-test` property/golden toolkit (keiki MasterPlan 11 EPs 36/38/39 Complete; EP-37 Hackage upload *In Progress*). Still missing for keiro: a structured error model on `step`/`omega` (per `11-upstream-roadmap.md` §7.3), optional effectful reads in decide (§7.6), a compile-time inverse-recoverability check on event payloads (§7.4), a v2 saga/compensate direction (§7.5).
+- **kiroku is solid** for append/read with optimistic concurrency. Crucially,
+  kiroku's Strategy E gives gap-free contiguous global positions with immediate
+  read-your-own-writes. The transaction, streaming read, enrichment, causation,
+  and stream-id primitives identified by the research have shipped. Keiro now
+  owns the typed codecs/streams, snapshots, command cycle, and fenced read-model
+  rebuilds on top. Point-in-time replay and an upstream transactional
+  subscription handler remain demand-driven gaps; exact category subscriptions
+  plus Keiro's consumer-group sharding cover the current scaling path.
+- **keiki's contract for keiro is `SymTransducer`, not `Decider`.** Keiro uses
+  the native symbolic transducer and typed register file. Keiki now supplies the
+  JSON/shape support and structured replay validation/failures used by Keiro's
+  `ValidatedEventStream` and typed hydration errors. Effectful reads remain
+  outside pure aggregate decision, and compensation remains application-owned.
 - **shibuya is production-grade** for queue processing with NQE supervision and OpenTelemetry. Missing: transactional checkpoint+side-effect outbox, process-manager primitive (which keiro provides on top of `SymTransducer`), durable timers, aggregate snapshot loading, multi-source correlation.
-- **The kiroku × keiki integration is stub-only.** Read+append in a single Haskell-layer transaction is not currently exposed for a single stream (only `appendMultiStream` opens a tx). Optimistic-retry on `WrongExpectedVersion` is the path forward and is implementable as a generic combinator.
+- **The kiroku × keiki integration has shipped.** `Keiro.Command` performs
+  streaming hydration, typed replay failure reporting, deterministic decision,
+  optimistic append/retry, transactional SQL/projection continuations, event
+  enrichment, post-append replay witnessing, and advisory snapshots. Public
+  runners require a `ValidatedEventStream` whose Keiki 0.2 validation includes
+  head recoverability, inversion ambiguity, guarded input reads, and
+  state-changing epsilon checks.
 - **Prior art consensus**: Postgres-native + library-shaped wins at our scale (DBOS, Marten). Defer Temporal/Restate-style deterministic-replay durable execution to v2; for v1 ship event-sourced process managers (~90% of workflow needs). Adopt DBOS's transactional step. *Do not* adopt Marten's high-water-mark — kiroku's Strategy E supersedes it. *Do not* adopt the Chassaing decider facade as the contract — use `SymTransducer` directly.

@@ -74,12 +74,15 @@ Types and functions:
 - `mkEventStream`
 - `mkEventStreamWith`
 - `mkEventStreamOrThrow`
+- `mkEventStreamUnchecked`
 
 Use it to turn a raw `EventStream` definition into the `ValidatedEventStream`
 required by command runners, projections, routers, and process managers. Prefer
 `mkEventStream` in application startup code when you want to handle warnings
 explicitly; use `mkEventStreamOrThrow` for generated code and fixtures that have
 a sibling validation proof.
+`mkEventStreamUnchecked` bypasses every replay-contract check and is reserved
+for tests and emergency forensics.
 
 ## `Keiro.Command`
 
@@ -87,6 +90,7 @@ Types and functions:
 
 - `CommandResult (..)`
 - `CommandError (..)`
+- `HydrationReplayReason (..)`
 - `RunCommandOptions (..)`
 - `defaultRunCommandOptions`
 - `runCommand`
@@ -96,13 +100,20 @@ Types and functions:
 Use it for the canonical load, streaming replay, decide, append command cycle.
 Commands may append zero, one, or many produced events as one store batch.
 All three runners require `ValidatedEventStream` as their stream argument.
+Transactional runners also require `KirokuStoreResource` so Kiroku's configured
+event enrichment runs before append preparation.
 
 ## `Keiro.Snapshot`
 
 Types and functions:
 
 - `SnapshotSeed (..)`
+- `SnapshotMissReason (..)`
+- `SnapshotLookup (..)`
+- `lookupSnapshotSeed`
 - `hydrateWithSnapshot`
+- `encodeSnapshotStrict`
+- `writeSnapshotEncoded`
 - `writeSnapshot`
 - re-exports from `Keiro.Snapshot.Codec`;
 - re-exports from `Keiro.Snapshot.Schema`.
@@ -144,11 +155,27 @@ integration publishing, or any projection work that can be eventually
 consistent; inline projection SQL runs inside the append transaction and can
 slow or fail the dispatch.
 
+## `Keiro.Connection`
+
+Types and functions:
+
+- `qualifyTable`
+- `quoteIdentifier`
+- `withProjectionSchema`
+- `keiroConnectionSettings`
+- `ensureProjectionSchema`
+
+Use it to keep application-owned projection tables outside the `kiroku` and
+`keiro` framework schemas. Prefer schema-qualified SQL; the connection helpers
+can additionally add an application schema to Kiroku's `extraSearchPath`
+without changing the event-store schema or notification channel.
+
 ## `Keiro.ReadModel`
 
 Types and functions:
 
 - `ReadModel (..)`
+- `qualifiedTableName`
 - `ConsistencyMode (..)`
 - `StrongScope (..)`
 - `PositionWaitOptions (..)`
@@ -156,6 +183,9 @@ Types and functions:
 - `runQuery`
 - `runQueryWith`
 - `waitFor`
+- `readSubscriptionPosition`
+- `storeHeadPosition`
+- `categoryHeadPosition`
 - re-exports from `Keiro.ReadModel.Schema`.
 
 Use it to define typed query wrappers and consistency behavior.
@@ -199,13 +229,18 @@ Types and functions:
 - `PMCommandResult (..)`
 - `PMStateResult (..)`
 - `PoisonPolicy (..)`
+- `RejectedCommandPolicy (..)`
+- `DispatchFailure (..)`
 - `WorkerOptions (..)`
 - `defaultWorkerOptions`
 - `isTransientStoreError`
 - `isTransientCommandError`
+- `isRejectionClass`
+- `decideForFailures`
 - `ackForCommandError`
 - `deterministicCommandId`
 - `eventAlreadyIn`
+- `confirmBenignDuplicate`
 - `runProcessManagerOnce`
 - `runProcessManagerWorkerWith`
 - `runProcessManagerWorker`
@@ -222,6 +257,10 @@ read-your-own-writes for target read models updated by process-manager dispatch.
 The projections should be small, deterministic writes for the target aggregate's
 own read model, not a replacement for async projections or process-manager state
 projection.
+`RejectedHalt` is the safe default for target rejections. `RejectedDeadLetter`
+persists a dispatch witness before acknowledging, while `RejectedSkip`
+acknowledges without one. `confirmBenignDuplicate` proves a duplicate event id
+belongs to the intended target stream before it is treated as success.
 
 ## `Keiro.Router`
 
@@ -257,6 +296,33 @@ Types and functions:
 - `runTimerWorker`
 
 Use it for durable timer storage and polling workers.
+
+## `Keiro.DeadLetter`
+
+Types and functions:
+
+- `DispatcherKind (..)`
+- `DispatchDeadLetter (..)`
+- `DispatchDeadLetterRecord (..)`
+- `recordDispatchDeadLetter`
+- `listDispatchDeadLetters`
+
+Use it to persist and inspect process-manager/router target rejections when a
+worker deliberately selects `RejectedDeadLetter`.
+
+## `Keiro.DeadLetter.Replay`
+
+Types and functions:
+
+- `ReplayOutcome (..)`
+- `ReplayResult (..)`
+- `DeadLetterRecord (..)`
+- `listSubscriptionDeadLetters`
+- `replaySubscriptionDeadLetters`
+
+Use it for repeatable operator replay of Kiroku subscription dead letters. The
+caller supplies domain decoding/handling and classifies fresh versus duplicate
+work; stored rows are retained.
 
 ## `Keiro.Integration.Event`
 
@@ -309,6 +375,14 @@ Kiroku/Keiro import mapping used during cutover.
 
 Use it to compose Kiroku first and Keiro second, apply or strictly verify the
 plan, and import an existing shared Codd ledger without replaying SQL.
+
+## `Keiro.Dsl.*` (package `keiro-dsl`)
+
+The library exposes the grammar, parser, pretty-printer, validator, diff
+classifier, scaffolder, scaffold planner/runner, manifest, read-model shape,
+starter skeleton, and harness modules. Most applications use the `keiro-dsl`
+executable instead: `parse`, `check`, `scaffold`, `diff --since`, and
+`new <kind>`. See [Typed Specifications](typed-spec-toolchain.md).
 
 ## `Keiro.Prelude`
 

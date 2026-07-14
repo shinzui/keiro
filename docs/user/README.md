@@ -18,6 +18,8 @@ pieces those modules import.
   projections, process managers, and timers.
 - [Replayability Safety](replay-safety.md): the `ValidatedEventStream` boundary,
   hidden-input rejection, and what replay safety does and does not guarantee.
+- [Typed Specifications With `keiro-dsl`](typed-spec-toolchain.md): check,
+  scaffold, harness, and evolution gates for `.keiro` service specs.
 - [Choosing A Primitive](../guides/choosing-a-primitive.md): the routing map for
   deciding between an `EventStream`, Keiki composition, a projection, a process
   manager, or a router.
@@ -40,6 +42,8 @@ pieces those modules import.
 - [Idempotent Inbox](inbox.md): how the receiving bounded context
   deduplicates Kafka redeliveries, dedupe policies, and the
   transactional handler wrapper.
+- [Dead Letters And Replay](dead-letters.md): rejected dispatch records and
+  idempotent operator replay of subscription dead letters.
 - [Database Migrations](migrations.md): running `keiro-migrate`, disabling
   runtime schema initialization, and owning application table migrations.
 - [Migration Ownership](migration-ownership.md): framework-owned vs
@@ -82,6 +86,8 @@ The v1 library includes:
 - a transactional outbox through `Keiro.Outbox` and an idempotent inbox through
   `Keiro.Inbox`, each with a Kafka adapter;
 - OpenTelemetry command/producer/consumer spans through `Keiro.Telemetry`.
+- checked `.keiro` specifications, safe scaffolding, conformance harnesses, and
+  persistence-aware diffs through the `keiro-dsl` package.
 
 The top-level `Keiro` module re-exports the core stream, codec, event-stream,
 command, router, and snapshot APIs. Import read-model, projection,

@@ -56,9 +56,9 @@ Both react to the *same* `IncidentRaised` event. The source lives in:
 - [`../../jitsurei/src/Jitsurei/EscalationProcess.hs`](../../jitsurei/src/Jitsurei/EscalationProcess.hs) — the process manager and the escalation timer.
 
 The two keiro primitives are `Keiro.Router`
-([`../../src/Keiro/Router.hs`](../../src/Keiro/Router.hs)) and
+([`../../keiro/src/Keiro/Router.hs`](../../keiro/src/Keiro/Router.hs)) and
 `Keiro.ProcessManager`
-([`../../src/Keiro/ProcessManager.hs`](../../src/Keiro/ProcessManager.hs)).
+([`../../keiro/src/Keiro/ProcessManager.hs`](../../keiro/src/Keiro/ProcessManager.hs)).
 
 ## The aggregates
 

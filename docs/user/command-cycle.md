@@ -19,6 +19,9 @@ data RunCommandOptions = RunCommandOptions
   , pageSize :: Int32
   , eventIds :: [EventId]
   , beforeAppend :: IO ()
+  , retryBackoffMicros :: Int
+  , metrics :: Maybe KeiroMetrics
+  , verifyReplayOnAppend :: Bool
   , tracer :: Maybe Tracer
   , metadata :: Maybe Value
   }
@@ -36,8 +39,17 @@ codec always adds the `schemaVersion` key, and these keys are merged on top.
 - `pageSize = 256`;
 - no caller-supplied event ids;
 - no `beforeAppend` hook;
+- a 5 ms base retry backoff, jittered and capped at 100 ms;
+- no metrics handle;
+- post-append replay verification enabled;
 - no `tracer` (no spans emitted);
 - no `metadata`.
+
+`verifyReplayOnAppend` witnesses a bad just-committed batch immediately by
+replaying it from the pre-command state. Because the append has committed, a
+divergence is reported through telemetry and does not turn success into a
+failure. Snapshot-enabled streams always perform the fold because snapshot
+creation consumes its final state.
 
 ## Running A Command
 
@@ -61,6 +73,11 @@ transaction as the append.
 
 Use `runCommandWithSqlEvents` when that continuation needs the decoded output
 events as well as the append result.
+
+The transactional runners require `KirokuStoreResource` so they can apply the
+store's configured `enrichEvent` hook before preparing the append. Acquire it
+with `withKirokuStore` and interpret `Store` with `runStoreResource`. The plain
+`runCommand` runner does not add this resource requirement.
 
 See [Build The Command Side](../guides/build-the-command-side.md) for a
 guide-backed order stream that exercises `runCommand`, successful appends, and
@@ -90,6 +107,8 @@ Keiro calls `Keiki.step` with the hydrated `(state, registers)` and the command.
 Outcomes:
 
 - `Nothing`: command rejected, returned as `CommandRejected`.
+- more than one matching edge: aggregate-definition failure, returned as
+  `CommandAmbiguous` with the zero-based edge indices;
 - `Just (_, _, events)`: command accepted, where `events` is the list of
   domain events to append. An empty list is an accepted no-op.
 
@@ -159,12 +178,22 @@ runCommandWithSqlEvents
 `CommandError` values:
 
 - `HydrationDecodeFailed CodecError`: a stored event could not be decoded.
-- `HydrationReplayFailed StreamVersion`: Keiki could not replay a stored event.
+- `HydrationReplayFailed StreamVersion HydrationReplayReason`: replay stalled.
+  The reason is `HydrationNoInvertingEdge`, `HydrationAmbiguousInversion`,
+  `HydrationQueueMismatch`, or `HydrationTruncatedChain`.
+- `HydrationGapDetected expected observed`: stream truncation hid an event not
+  covered by the hydration snapshot.
 - `CommandRejected`: the transducer rejected the command.
+- `CommandAmbiguous edgeIndices`: multiple transitions matched; this is a
+  deterministic definition bug, not a normal domain rejection.
 - `EncodeFailed CodecError`: a produced event could not be encoded.
 - `StoreFailed StoreError`: Kiroku returned a non-retryable store error.
 - `RetryExhausted Int StoreError`: retries were exhausted on a conflict.
+- `ConflictFixpoint StreamVersion StoreError`: the store reports an existing
+  stream but repeated hydration cannot observe progress, commonly because the
+  stream was soft-deleted.
 
 Treat hydration failures as data/schema incidents. Treat command rejection as a
-domain outcome. Treat store failures as infrastructure or concurrency failures,
-depending on the underlying `StoreError`.
+domain outcome. Halt and fix ambiguous commands and replay-contract failures.
+Treat store failures as infrastructure or concurrency failures, depending on
+the underlying `StoreError`.

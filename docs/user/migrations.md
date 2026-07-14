@@ -1,118 +1,71 @@
 # Database Migrations
 
-Keiro uses PostgreSQL tables from two layers:
+Keiro uses two framework-owned PostgreSQL schemas:
 
-- Kiroku owns the event-store tables in the `kiroku` PostgreSQL schema:
-  `streams`, `events`, `stream_events`, and `subscriptions`.
-- Keiro owns its framework metadata tables — `keiro_snapshots`,
-  `keiro_read_models`, `keiro_timers`, `keiro_outbox`, `keiro_inbox`, and the
-  workflow tables — in a **dedicated `keiro` PostgreSQL schema that Keiro's
-  bootstrap migration creates and owns** (with `CREATE SCHEMA IF NOT EXISTS
-  keiro`). `kiroku` and `keiro` are two separate namespaces in the same database.
+- Kiroku owns the event store in `kiroku`.
+- Keiro owns snapshots, read-model metadata, timers, inbox/outbox state,
+  workflow state, projection deduplication, and dispatch dead letters in
+  `keiro`.
 
-A PostgreSQL *schema* is a named table namespace inside one database. Every Keiro
-migration now creates its objects **schema-qualified** as `keiro.<table>` and
-does **not** set `search_path`, so framework tables can never accidentally land
-in `public` or `kiroku` on an incremental upgrade.
+Every framework object is schema-qualified. Application projections and read
+models belong to the application and should live in a separately owned schema;
+see [Migration Ownership](migration-ownership.md).
 
-Production deployments should create and evolve these tables with the
-`keiro-migrate` executable from the `keiro-migrations` package. The executable
-uses codd and applies Kiroku's embedded migrations first (creating the `kiroku`
-schema and event-store tables), then Keiro's embedded migrations (creating the
-`keiro` schema and framework tables), in one ordered migration ledger.
+## Native migration plan
 
-## Migrations Are The Only Source Of Schema
+The supported path is the `keiro-migrate` executable from `keiro-migrations`.
+It uses `pg-migrate` and embeds two immutable components into the binary:
 
-The codd migrations in `keiro-migrations` are the single definition of Keiro's
-framework tables. The library no longer ships `initialize*Schema` helpers that
-embedded `CREATE TABLE` statements in Haskell — keeping a second copy of the DDL
-in sync with the migrations was a source of drift, so it was removed.
+1. Kiroku's `kiroku` component;
+2. Keiro's `keiro` component, which declares a dependency on `kiroku`.
 
-Because there is only one definition, the schema applied in tests is exactly the
-schema applied in production:
+`frameworkMigrationPlan` validates that concrete dependency order before a
+database connection is opened. The checked-in
+`keiro-migrations/migrations/manifest` is the authoritative order of Keiro SQL
+files. Runtime code contains no second copy of the framework DDL.
 
-- Production: run `keiro-migrate` before starting application processes.
-- Tests: apply the same migrations to a template database once per suite and
-  clone it per example. The `keiro-test-support` `withMigratedSuite` fixture
-  does this with `runAllKeiroMigrationsNoCheck`; the dedicated
-  `keiro-migrations-test` suite performs strict checked-in schema verification.
+The old timestamped Codd files, expected-schema snapshot, and lock manifest are
+retained only as cutover evidence and opt-in legacy verification. They are not
+the normal migration runner.
 
-codd records which migrations have run, provides a reviewed forward history, and
-verifies database shape — guarantees an in-application `CREATE TABLE IF NOT
-EXISTS` cannot give you.
+## Inspect and apply
 
-Keiro also checks `keiro-migrations/migrations.lock`, a SHA-256 manifest for the
-embedded SQL files. Editing a shipped migration body after it has been reviewed
-is a test failure; add a new forward migration instead. When you intentionally
-add a SQL file, regenerate the lockfile with `keiro-migrate lock` and review it
-with the SQL diff.
-
-## Run The Migration
-
-From the Keiro repository or a workspace that includes `keiro-migrations`, run:
+Set the standard connection string and run the read-only inspection commands
+before applying:
 
 ```bash
-CODD_CONNECTION='host=/tmp port=5432 dbname=keiro user=keiro_admin' \
-CODD_MIGRATION_DIRS=unused-for-embedded-migrations \
-CODD_EXPECTED_SCHEMA_DIR=keiro-migrations/expected-schema \
-CODD_SCHEMAS=keiro \
-cabal run keiro-migrate
+export DATABASE_URL='host=/tmp port=5432 dbname=service user=service_owner'
+
+cabal run keiro-migrate -- plan
+cabal run keiro-migrate -- status
+cabal run keiro-migrate -- verify
+cabal run keiro-migrate -- up
+cabal run keiro-migrate -- verify
 ```
 
-`CODD_CONNECTION` is the PostgreSQL connection string for the target database.
-`CODD_SCHEMAS=keiro` tells codd to scope its drift check to the dedicated `keiro`
-schema that Keiro's framework tables live in. (Kiroku drift-gates its own
-`kiroku` schema in its own package, so Keiro's gate need only see `keiro`.) codd
-currently requires `CODD_MIGRATION_DIRS` and `CODD_EXPECTED_SCHEMA_DIR` in its
-settings environment even though Keiro passes embedded migrations directly from
-Haskell.
+- `plan` prints the embedded component and migration order without changing the
+  database.
+- `status` compares declared migrations with the durable `pgmigrate` ledger.
+- `verify` is the strict deployment gate. It rejects pending, changed,
+  reordered, repaired, or unknown history.
+- `up` acquires the shared advisory lock and applies the complete pending plan
+  in dependency order. Do not select a subset during deployment.
 
-For local development only, `KEIRO_MIGRATE_NO_CHECK=1`, `true`, or `yes` skips
-the expected-schema check. Unset means checked. Other values, including
-`false`, are treated as checked and produce a warning.
+Database-backed commands accept `--database-url`; otherwise `keiro-migrate`
+reads `DATABASE_URL`. Add `--json` for machine-readable output. The `up` and
+`repair` commands also accept `--no-wait`, `--lock-timeout`, and
+`--statement-timeout`; use them only as explicit deployment-policy choices.
+The defaults preserve serialized migration execution.
 
-After a successful run, the database has Kiroku's event-store tables (in
-`kiroku`), Keiro's framework tables (in `keiro`), and codd's internal migration
-ledger. With codd v0.1.8, fresh databases use `codd.sql_migrations`; older
-databases may briefly show `codd_schema.sql_migrations` until codd's internal
-upgrade renames it. Application-owned tables live wherever your service
-migrations place them — see [Application Tables](#application-tables) below for
-how to choose the schema your read-model and projection tables live in.
+`pg-migrate` commits transactional SQL and its ledger row atomically.
+Nontransactional migrations use durable running/applied/failed states. If one
+has an ambiguous outcome, inspect the database and use the explicit `repair`
+command with `--confirm` and an audit reason; never edit ledger rows directly.
 
-`keiro-migrate` uses strict command dispatch: bare invocation and `up` apply
-migrations; `verify`, `status`, `new`, and `lock` are explicit non-apply
-commands; unknown arguments exit 2 with usage before reading database settings.
-The apply path also takes a PostgreSQL advisory lock shared with
-`kiroku-store-migrate`, so concurrent migration processes against one database
-serialize instead of racing on codd's ledger. Embedded migrations run with codd's
-retry policy forced to a single try because codd 0.1.8 cannot retry in-memory
-migration streams without masking the original failure.
+## Application startup
 
-## Verify And Inspect
-
-`keiro-migrate verify` is read-only. It first checks the combined Kiroku+Keiro
-ledger for pending embedded migration names. Pending migrations are printed and
-exit 2. When the ledger is complete, `verify` strict-compares the live `keiro`
-schema against the expected-schema snapshot embedded in the executable, exits 0
-on a match, and exits 1 with codd's differing objects on drift.
-
-`keiro-migrate status` is read-only and exits 0 whenever it can reach the
-database. It prints the ledger location, applied migration names and timestamps,
-pending embedded names, and a summary line. Use `status` for inspection and
-`verify` for deployment gates.
-
-## Upgrading An Existing Alpha Database
-
-Databases first migrated by `keiro-migrations 0.1.0.0` have their `keiro_*`
-tables in the `kiroku` schema (the old layout). **Before** running the current
-migrations against such a database, follow the one-time
-[Upgrading To The Keiro Schema](./upgrading-to-the-keiro-schema.md) runbook once
-to relocate the tables into `keiro` — no data is lost. Fresh databases and
-ephemeral test databases do not need it; they land in `keiro` from the start.
-
-## Start The Application Afterward
-
-Once migrations have run, open Kiroku with schema initialization disabled:
+Run migrations as a deployment job before starting application processes, then
+open Kiroku with schema initialization disabled:
 
 ```haskell
 withStore
@@ -121,83 +74,80 @@ withStore
   app
 ```
 
-This keeps application startup focused on opening the store, not changing the
-database. It also prevents production rollouts from depending on whichever
-application instance happens to start first.
+This makes schema ownership deterministic instead of depending on whichever
+application replica starts first.
 
-To fail fast with a clear error before opening the store, call the startup
-handshake exported by `keiro-migrations`:
+## Authoring a migration
 
-```haskell
-missing <- Keiro.Migrations.missingMigrations coddSettings (secondsToDiffTime 5)
-unless (null missing) $
-  fail ("Run keiro-migrate before starting; pending migrations: " <> show missing)
+Append migrations through the ordered manifest:
+
+```bash
+cabal run keiro-migrate -- new \
+  --manifest keiro-migrations/migrations/manifest \
+  --description "add workflow lookup index"
+
+cabal run keiro-migrate -- check \
+  --manifest keiro-migrations/migrations/manifest
 ```
 
-## Runtime Role Privileges
+Review the SQL file and manifest append together. Never edit, rename, remove, or
+reorder a migration that may have reached a shared database. Correct mistakes
+with a new forward migration. Qualify every object with its owner schema and do
+not rely on `search_path`.
 
-Run migrations with an owner/admin role. Grant the application runtime role only
-the privileges it needs on framework-owned objects:
+The manifest embedder checks ordering, missing entries, unlisted sibling SQL,
+duplicate names, and payload validity at build time. Production executables do
+not need the SQL files on disk.
+
+## Existing 0.1.0.0 databases
+
+The native ledger uses stable component-local identities such as
+`keiro/0001-keiro-bootstrap`. It must not replay SQL merely because an older
+database recorded the equivalent timestamped names in Codd.
+
+For a database created by `keiro-migrations 0.1.0.0`:
+
+1. follow [Upgrading To The Keiro Schema](upgrading-to-the-keiro-schema.md) if
+   its `keiro_*` tables still live in `kiroku`;
+2. quiesce legacy migration writers;
+3. import the combined Kiroku/Keiro Codd history through
+   `Keiro.Migrations.History.Codd`;
+4. run `keiro-migrate verify`, then `up`.
+
+The importer checks the selected legacy rows, manifest checksums, and exact SQL
+payloads before recording native history. See
+[Migration Ownership](migration-ownership.md#importing-existing-codd-history)
+for the API shape and safety constraints.
+
+## Runtime role privileges
+
+Use an owner/admin role for migrations. Grant the runtime role only the access
+it needs:
 
 ```sql
 GRANT USAGE ON SCHEMA kiroku, keiro TO your_app_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA kiroku, keiro TO your_app_role;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA kiroku, keiro TO your_app_role;
--- Re-run after any framework upgrade whose migrations add tables or sequences:
--- new objects are NOT covered by past GRANT ... ON ALL TABLES statements.
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON ALL TABLES IN SCHEMA kiroku, keiro TO your_app_role;
+GRANT USAGE, SELECT
+  ON ALL SEQUENCES IN SCHEMA kiroku, keiro TO your_app_role;
 ```
 
-## Application Tables
+Past `GRANT ... ON ALL` statements do not automatically cover objects created
+later. Reapply grants after an upgrade or configure appropriate default
+privileges for the migration owner.
 
-Keiro migrations only cover Keiro-owned framework tables (in `keiro`). They do
-not create your application read-model tables, indexes, materialized views, or
-reporting schemas.
+## Repository verification
 
-For the full ownership contract, application authoring rules, guard snippets,
-combined-ledger composition, and grants guidance, see
-[Migration Ownership](./migration-ownership.md). For the `ReadModel` `schema`
-field and `Keiro.Connection` helpers, see
-[Read Models And Projections](./read-models-and-projections.md#choosing-your-projection-schema).
-
-## Forward-Only Recovery
-
-codd is forward-only. Do not rename or edit a migration file after it has
-reached a shared database. If a migration is wrong in production, recover by
-restoring from backup or by shipping a new forward migration that repairs the
-schema.
-
-For local development, an already-initialized database can usually run
-`keiro-migrate` successfully because Keiro's bootstrap SQL uses
-`CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS`. After codd records
-the migration, its ledger is the source of truth.
-
-## Updating The Expected Schema
-
-The repository stores codd's expected schema files under
-`keiro-migrations/expected-schema`. These files are the reviewed snapshot used
-by `cabal test keiro-migrations-test` to prove the migrated database still
-matches the schema Keiro intends to ship.
-
-When a real schema change is required, add a new forward SQL migration under
-`keiro-migrations/sql-migrations/`. Then regenerate the lockfile and the
-expected schema from a fresh ephemeral PostgreSQL database:
+The normal migration tests exercise the native embedded plan and ledger. The
+historical Codd transition suite is deliberately opt-in:
 
 ```bash
-cd keiro-migrations
-cabal --project-dir=.. run keiro-migrations:exe:keiro-migrate -- lock
-cd ..
-cabal run keiro-write-expected-schema
+cabal test keiro-migrations:keiro-migrations-test
+
+cabal test -flegacy-codd-tools \
+  keiro-migrations:keiro-migrations-legacy-test
 ```
 
-Review the resulting diff before committing:
-
-```bash
-git diff -- keiro-migrations/sql-migrations keiro-migrations/expected-schema
-cabal test keiro-migrations-test
-```
-
-Commit the SQL migration, `keiro-migrations/migrations.lock`, and
-`keiro-migrations/expected-schema` changes together. Ordinary fixture-based
-suites intentionally skip expected-schema comparison during setup so they remain
-quiet and fast; `keiro-migrations-test` and `keiro-migrate verify` are the
-strict schema drift gates.
+Back up persistent databases and prove restore procedures before framework
+upgrades. Migration recovery is forward-only: restore or append a reviewed
+repair migration; never bypass checksum or history mismatches.

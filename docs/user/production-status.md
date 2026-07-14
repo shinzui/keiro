@@ -18,7 +18,9 @@ The current library includes:
 - same-transaction SQL continuations for inline projections;
 - advisory snapshots;
 - read-model metadata, consistency modes, and position waits;
-- async projection helpers with idempotency expectations;
+- explicitly registered read models; atomically fenced rebuilds; category-scoped
+  strong reads; and async projection outcomes that prevent checkpointing fenced
+  events;
 - event-sourced process managers, with snapshot-policy guidance and a tested
   PM-state-stream snapshot example;
 - stateless, effectful fan-out routers;
@@ -43,7 +45,13 @@ The current library includes:
   `runShardedSubscriptionGroup`): a pool of identical workers leases kiroku
   consumer-group buckets to drain a high-volume category disjointly, with
   automatic, coordinator-free failover when a worker dies;
-- embedded codd migrations for Kiroku and Keiro framework tables.
+- durable rejected-dispatch records plus idempotent replay of Kiroku
+  subscription dead letters;
+- native `pg-migrate` components for Kiroku and Keiro framework tables, composed
+  in dependency order by `keiro-migrate`.
+- the `keiro-dsl` typed-spec toolchain across aggregates, process managers,
+  routers, integration, queues, read models, and durable workflows, with
+  validation, safe scaffolding, conformance harnesses, and evolution diffs.
 
 The repository test suite exercises these paths against an ephemeral PostgreSQL
 database.

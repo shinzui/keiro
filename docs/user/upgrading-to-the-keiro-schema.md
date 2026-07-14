@@ -34,14 +34,10 @@ runs, in a single transaction:
    none are dropped**, so it cannot lose data. Each move is guarded by
    `to_regclass`, so a table already in `keiro` (or absent) is skipped.
 
-**It does not touch codd's migration ledger.** codd identifies an applied
-migration purely by its file *name* in its ledger table. codd v0.1.8 stores that
-ledger at `codd.sql_migrations` on fresh databases and auto-renames older
-`codd_schema.sql_migrations` ledgers during apply. The new release keeps every
-migration filename unchanged — only the file bodies were rewritten. So a
-`0.1.0.0` database already records every migration as applied and codd re-runs
-nothing; there is no ledger row to rename or realign. The script therefore only
-creates the schema and moves the tables.
+**It does not touch migration history.** The script only creates the schema and
+moves tables. A `0.1.0.0` database still has its historical rows in Codd's
+ledger; those rows must be imported into the native `pgmigrate` ledger as a
+separate, verified cutover step before `keiro-migrate up` is allowed to run.
 
 The `keiro_*` framework tables use no `SERIAL` columns and no foreign keys, so
 there is no dependent sequence to orphan and no cross-schema reference to break —
@@ -72,25 +68,34 @@ The script is itself wrapped in `BEGIN`/`COMMIT` and is idempotent: a second run
 is a safe no-op (every table is already in `keiro`, so the `to_regclass` guard
 skips them and no error is raised).
 
-## 3. Run The New Migrations
+## 3. Import Legacy History
 
-After remediation, apply the current migrations the normal way (the
-`keiro-migrate` invocation from [Database Migrations](./migrations.md), with
-`CODD_SCHEMAS=keiro`):
+With application and legacy migration writers still quiescent, import the
+combined Kiroku/Keiro Codd history through
+`Keiro.Migrations.History.Codd`. The checked-in mapping verifies the legacy
+manifest, SQL payloads, and all selected ledger rows before recording native
+component identities. Follow
+[Migration Ownership → Importing Existing Codd History](migration-ownership.md#importing-existing-codd-history).
+
+Do not run `up` first: without imported evidence, the native runner correctly
+sees the historical migrations as pending.
+
+## 4. Run And Verify The Native Plan
+
+After remediation and history import, use the normal native CLI:
 
 ```bash
-CODD_CONNECTION='host=/tmp port=5432 dbname=keiro user=keiro_admin' \
-CODD_MIGRATION_DIRS=unused-for-embedded-migrations \
-CODD_EXPECTED_SCHEMA_DIR=keiro-migrations/expected-schema \
-CODD_SCHEMAS=keiro \
-cabal run keiro-migrate
+export DATABASE_URL='host=/tmp port=5432 dbname=keiro user=keiro_admin'
+cabal run keiro-migrate -- status
+cabal run keiro-migrate -- verify
+cabal run keiro-migrate -- up
+cabal run keiro-migrate -- verify
 ```
 
-Expected result: because the tables are already in `keiro` and every migration
-filename is already recorded as applied, this run makes **no** schema changes —
-it is effectively a no-op that confirms the ledger is consistent.
+Expected result: imported historical entries are already applied; `up` executes
+only native migrations introduced after that history.
 
-## 4. Verify Success
+## 5. Verify Success
 
 Confirm every `keiro_*` table now lives in `keiro` and none remain in `kiroku`:
 
@@ -106,7 +111,7 @@ Every `keiro_*` row should show `table_schema = keiro`; none should show
 **"the application serves traffic against the relocated tables" is the ultimate
 acceptance signal**. A subsequent `keiro-migrate` should report nothing to apply.
 
-## 5. Rollback / Recovery
+## 6. Rollback / Recovery
 
 Because the remediation is a single transaction, a failure mid-script leaves the
 database unchanged (all-or-nothing). The backup covers the case where a *later*

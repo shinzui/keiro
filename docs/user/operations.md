@@ -17,7 +17,7 @@ processes. See [Database Migrations](migrations.md) for the command, required
 environment variables, and startup guidance.
 
 There is no in-application schema initializer for the framework tables: the
-codd migrations in `keiro-migrations` are the single source of schema truth.
+embedded native `pg-migrate` components are the single source of schema truth.
 Tests apply the same migrations to a template database (see the
 `keiro-test-support` `withMigratedSuite` fixture) rather than creating tables
 inline.
@@ -42,6 +42,8 @@ Typical deployments have:
   `publishClaimedOutbox`) to the configured destination;
 - operational jobs for rebuilds, repairs, and inbox GC
   (`garbageCollectCompleted` pruning completed `keiro_inbox` rows).
+- operator tooling that lists rejected dispatches and replays Kiroku
+  subscription dead letters through idempotent handlers.
 
 Keiro does not supervise these OS processes. Use your normal process manager,
 container orchestrator, or service framework.
@@ -57,10 +59,11 @@ external ids before calling `runCommand` and pass them through command data or
 
 ## Replayability Safety
 
-Every command-side stream should be validated before it reaches a runner. Public
-write APIs require `ValidatedEventStream`, which is produced by `mkEventStream`
-or `mkEventStreamOrThrow` after Keiki checks the transducer for hidden inputs,
-nondeterministic guards, and dead edges. Treat validation failures as deploy-time
+Every command-side stream should be validated before it reaches a runner.
+Public write APIs require `ValidatedEventStream`, which is produced by
+`mkEventStream` or `mkEventStreamOrThrow` after Keiki checks hidden inputs, head
+recoverability, inversion ambiguity, guarded reads, output-free state changes,
+guard determinism, and dead edges. Treat validation failures as deploy-time
 incidents: a replay-unsafe aggregate can make live state diverge from rebuilt
 state after restart or snapshot fallback.
 
@@ -80,6 +83,9 @@ Use explicit idempotency whenever work may be delivered more than once:
 - keep external outbox-delivery handlers idempotent (delivery is at-least-once).
 
 At-least-once delivery is normal for async workers in v1.
+
+See [Dead Letters And Replay](dead-letters.md) before acknowledging rejected
+dispatches or replaying terminal subscription failures.
 
 See [Run And Operate Jitsurei](../guides/run-and-operate-jitsurei.md) for the
 guide-backed local verification path and the operational assumptions behind the

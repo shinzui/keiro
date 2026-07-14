@@ -7,8 +7,8 @@ which workflow features are deliberately later.
 
 This is not a date commitment. It is the intended order and shape of the work.
 
-The current baseline reflects the `0.1.0.0` release. See `CHANGELOG.md` for the
-exact released surface and `docs/user/production-status.md` for adoption posture.
+The current baseline includes `0.1.0.0` plus the unreleased hardening described
+in `CHANGELOG.md`. See `docs/user/production-status.md` for adoption posture.
 
 ## At A Glance
 
@@ -33,12 +33,13 @@ exact released surface and `docs/user/production-status.md` for adoption posture
 | Process managers | Available now | V1 workflow substrate for sagas and choreography. |
 | Routers (effectful fan-out) | Available now | `Keiro.Router`: stateless content-based router / recipient list; targets resolved effectfully from read models. |
 | Durable timers | Available now | Polling worker, timer table, and a stuck-row recovery API (find/requeue/cancel/dead-letter) with an operations runbook. |
-| codd migrations | Available now | `keiro-migrate` applies Kiroku and Keiro framework tables, including `keiro_outbox` and `keiro_inbox`. |
+| Native migrations | Available now | `keiro-migrate` composes Kiroku and Keiro `pg-migrate` components in dependency order, including `keiro_outbox`, `keiro_inbox`, and dispatch dead letters. |
 | Transactional outbox | Available now | `Keiro.Outbox` + `keiro_outbox`: per-key ordering, backoff, dead-lettering, and a Kafka producer adapter. |
 | Inbox deduplication | Available now | `Keiro.Inbox` + `keiro_inbox`: claim/retry/release/dead transitions, GC, and Shibuya + Kafka adapters. |
 | Integration events | Available now | `Keiro.Integration.Event`: canonical cross-context envelope with W3C trace context and Kafka header helpers. |
 | OpenTelemetry tracing | Available now | `Keiro.Telemetry`: Internal (command), Producer (outbox), and Consumer spans; opt-in via `RunCommandOptions.tracer`. |
 | Worker metrics | Available now | `Keiro.Telemetry` exposes opt-in OpenTelemetry metrics for outbox, inbox, timer, and async-projection workers (backlog, lag, duplicate, dead-letter, and stuck-timer instruments). |
+| Typed service specifications | Available now | `keiro-dsl` checks, scaffolds, emits conformance harnesses, and classifies persistence-aware evolution across aggregate, coordination, integration, queue, read-model, and workflow nodes. |
 | Exactly-once async projections | Planned v1.x / upstream-dependent | Blocks on transactional Shibuya/Kiroku checkpoint handling. |
 | Prefix subscriptions | Planned v1.x / upstream-dependent | Needed for `pm:` and future `wf:` stream families at scale. |
 | Durable execution runtime | Available now | `Keiro.Workflow`: named-step `Workflow es a`, durable `sleep`, awakeables, child workflows, a crash-recovery resume worker, and journal snapshots (`keiro_workflow_steps` + `keiro_awakeables`). Continue-as-new journal rotation (`continueAsNew`/`restoreSeed`) keeps unbounded histories bounded; the `patch` API gives stable, journaled branch decisions for cross-cutting workflow-logic changes. |
