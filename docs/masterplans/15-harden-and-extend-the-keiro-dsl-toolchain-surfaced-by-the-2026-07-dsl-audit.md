@@ -141,7 +141,7 @@ three plans register with it).
 | 106 | Harden the keiro-dsl scaffolder: template injection, firewall completeness, collision and stale-module detection, and faithful policy lowering | docs/plans/106-harden-the-keiro-dsl-scaffolder-template-injection-firewall-completeness-collision-and-stale-module-detection-and-faithful-policy-lowering.md | None | EP-104, EP-105 | Complete |
 | 107 | Add a first-class read-model node with registration, schema, and consistency to keiro-dsl | docs/plans/107-add-a-first-class-read-model-node-with-registration-schema-and-consistency-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Complete |
 | 108 | Add a router node and rejection and poison policy surfaces to keiro-dsl | docs/plans/108-add-a-router-node-and-rejection-and-poison-policy-surfaces-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Complete |
-| 109 | Extend keiro-dsl node coverage: pgmq ordering and provisioning, snapshot policy, and workflow patch and continue-as-new | docs/plans/109-extend-keiro-dsl-node-coverage-pgmq-ordering-and-provisioning-snapshot-policy-and-workflow-patch-and-continue-as-new.md | EP-103 | EP-104, EP-105, EP-106 | In Progress |
+| 109 | Extend keiro-dsl node coverage: pgmq ordering and provisioning, snapshot policy, and workflow patch and continue-as-new | docs/plans/109-extend-keiro-dsl-node-coverage-pgmq-ordering-and-provisioning-snapshot-policy-and-workflow-patch-and-continue-as-new.md | EP-103 | EP-104, EP-105, EP-106 | Complete |
 | 110 | Align keiro-dsl with the safe APIs and refresh the authoring skill and corpus | docs/plans/110-align-keiro-dsl-with-the-safe-apis-and-refresh-the-authoring-skill-and-corpus.md | EP-107, EP-108, EP-109 | EP-103, EP-104, EP-105, EP-106 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -291,8 +291,8 @@ EP-106 in parallel alongside the front of that path.
 - [x] EP-107: scaffold emits ReadModel value + registration; QueryOp and PgmqDispatch read-model resolution completed; conformance against live Keiro.ReadModel
 - [x] EP-108: `router` node full vertical with conformance against live Keiro.Router
 - [x] EP-108: `rejected`/`poison` clauses on process and router lowered to WorkerOptions; per-dispatch consistency rule; ambiguity vocabulary decided and pinned
-- [ ] EP-109: workqueue ordering/provision/group clauses lowered against live keiro-pgmq (unlogged warned)
-- [ ] EP-109: aggregate snapshot policy clause lowered and accepted by mkEventStreamOrThrow; workflow patch/continueAsNew with patch-aware diff classification
+- [x] EP-109: workqueue ordering/provision/group clauses lowered against live keiro-pgmq (unlogged warned)
+- [x] EP-109: aggregate snapshot policy clause lowered and accepted by mkEventStreamOrThrow; workflow patch/continueAsNew with patch-aware diff classification
 - [ ] EP-110: category-stream notation replaces raw concatenation in grammar, scaffold, and reference fills; confirmBenignDuplicate woven into fills and hole guidance
 - [ ] EP-110: skill/NOTATION/corpus refreshed and truthful; cold-start proof on the new surface green
 
@@ -391,6 +391,17 @@ EP-106 in parallel alongside the front of that path.
     pin in addition to the live-runtime and filled-router suites. Together with EP-107's
     suite, the package battery is now 22 suites; all pass, with 181 unit/property
     examples and compiled target-keyed router-id and exact-resolver-target proofs.
+  - EP-109 implementation found that keiki's snapshot shape hash includes module-qualified
+    application type names, so the DSL cannot independently derive it before scaffold
+    placement is known. The spec stores a captured fixture and the new live conformance
+    suite proves it against `regFileShapeHash`; `check` validates only the fixture's form.
+  - EP-109's M5 reconciled cleanly with EP-103's delivered `classifyWorkflowBody` seam.
+    It normalizes source locations, strips only entirely new patch blocks and a newly
+    appended terminal rotation, and requires exact equality with the old body before
+    calling an evolution additive. The conservative breaking fallback remains intact.
+  - Making workqueue policy evolution-sensitive exposed that older single-facet diff
+    fixtures predated EP-109's explicit ordering and group-key clauses. They now carry
+    the canonical policy so each pair continues to isolate the change named by its test.
 
 
 ## Decision Log
@@ -437,6 +448,16 @@ EP-106 in parallel alongside the front of that path.
   mechanisms are load-bearing for the fixes themselves.
   Date: 2026-07-13
 
+- Decision: EP-109 classifies a workflow body change as additive only when removing all
+  newly introduced patch blocks and an optional newly appended terminal
+  `continueAsNew` reproduces the normalized old body exactly; patch removal, seed-type
+  drift, and all other body changes remain breaking. Intake persistence drift is
+  advisory because it changes only future successful-row retention.
+  Rationale: this turns “entirely guarded” into a conservative executable rule while
+  surfacing the new intake semantic without claiming that existing identities or rows
+  require migration.
+  Date: 2026-07-13
+
 
 ## Outcomes & Retrospective
 
@@ -478,6 +499,15 @@ a filled pure resolver over exact target streams, and the compile-all-starters s
 green. The full 22-suite package battery passed, including 181 unit/property examples.
 EP-109 is the next implementable child; EP-110 remains blocked on EP-109 as designed.
 
+EP-109 completed the remaining architecture-surface vertical. Workqueues now carry and
+lower ordering, group-key, and provisioning contracts; aggregates carry validated live
+snapshot policy and codec fixtures; workflows express durable patch guards and terminal
+rotation; and intakes select success-envelope persistence. The EP-103 differ seam now
+classifies every new evolution surface with conservative patch-aware rules. Mutation,
+live-runtime, filled-body, snapshot, queue, and intake conformance are green, as is the
+full 23-suite package battery with 199 unit/property examples. EP-110 is now the next and
+only remaining child.
+
 
 ## Revision Notes
 
@@ -492,3 +522,6 @@ EP-109 is the next implementable child; EP-110 remains blocked on EP-109 as desi
 - 2026-07-13: EP-108 completed. Registry/progress, dependency-name and constructor-
   collision discoveries, policy/router runtime proofs, and the 22-suite package outcome
   are recorded; EP-109 is the next implementable child.
+- 2026-07-13: EP-109 completed. Registry/progress, snapshot hash placement, patch-aware
+  differ reconciliation, workqueue fixture alignment, and the 23-suite package outcome
+  are recorded; EP-110 is now implementable.

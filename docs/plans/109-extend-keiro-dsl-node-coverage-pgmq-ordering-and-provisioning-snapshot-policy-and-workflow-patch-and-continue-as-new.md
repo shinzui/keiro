@@ -78,7 +78,10 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
 - [x] (2026-07-14T00:31:31Z) M4: intake `persist` clause (grammar through conformance) + Decision Log entries
       for the E8 scope decisions + differ-integration expectations recorded against
       docs/plans/103.
-- [ ] Final: full `cabal test` sweep of the keiro-dsl suites green; Outcomes &
+- [x] (2026-07-14T00:43:54Z) M5: workflow patch/continue-as-new and workqueue policy evolution
+      refinements registered through EP-103's per-node differ, with code/detail fixture
+      pins for every classification rule and intake persistence surfaced as advisory.
+- [x] (2026-07-14T00:43:54Z) Final: full `cabal test` sweep of all 23 keiro-dsl suites green; Outcomes &
       Retrospective written.
 
 
@@ -132,6 +135,18 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
   wrapper always selects `PersistFullEnvelope`. Merely exporting the generated constant
   would therefore leave the spec unapplied in the end-to-end sample. The fill now calls
   live `runInboxTransactionWith` and passes both generated policy values.
+- EP-103 had already landed exactly the workflow extension seam this plan anticipated:
+  `classifyWorkflowBody` receives the paired old/new workflow nodes, while workqueue and
+  intake dispatch already expose their complete nodes. M5 could therefore refine the
+  delivered differ without another registry or dispatch rewrite.
+- Source locations make structurally equal parsed workflow bodies compare unequal across
+  fixture files. M5 normalizes every nested body item's `Loc` before applying the guarded-
+  change proof; the semantic comparison remains structural while diagnostics keep their
+  original locations elsewhere.
+- The pre-M1 workqueue diff fixtures omitted the newly explicit ordering and group-key
+  clauses. Once M5 made those policies evolution-sensitive, the old fixture pairs reported
+  unrelated policy drift; aligning each pair with the canonical M1 policy restored their
+  intended single-facet assertions.
 
 (To be extended during implementation.)
 
@@ -215,6 +230,19 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
   rotation surfaces. Using the explicit evolution fixture for generated copies keeps
   those two roles honest instead of silently changing the baseline.
   Date: 2026-07-13
+- Decision: prove an additive workflow-body evolution by removing only patch blocks whose
+  ids are new in the candidate spec, removing only a newly appended terminal
+  `continueAsNew`, and requiring the normalized remainder to equal the old body exactly.
+  Any body delta that does not satisfy that executable proof remains `WorkflowBodyChanged`.
+  Rationale: this directly implements “entirely guarded” without trying to infer author
+  intent; it accepts nested new patch blocks and combined patch/rotation additions while
+  preserving EP-103's conservative fallback for moves, deletions, and unguarded edits.
+  Date: 2026-07-13
+- Decision: classify intake persistence changes as advisory, not breaking.
+  Rationale: the clause changes the retained envelope shape only for future successful
+  inbox rows; existing dedupe identities and stored rows remain valid, so operators need
+  visibility but no compatibility migration is required.
+  Date: 2026-07-13
 
 (Extend as decisions are made during implementation.)
 
@@ -254,6 +282,14 @@ integration passes it to `runInboxTransactionWith`; documentation states the emp
 success-payload and full failed-envelope behavior. The authoring guide also records
 delegated idempotence under plan 83 and keeps consumer-group/sharding controls in
 deployment-owned hole-kind 8. The unit suite is green at 193 examples. M5 remains.
+
+M5 and EP-109 are complete. The differ now treats wholly new patch-guarded workflow
+blocks and terminal `continueAsNew` appends as additive, while unguarded body edits,
+patch removal, and seed-type drift are breaking with actionable guidance. Workqueue
+ordering, provisioning, and group-key changes are breaking and explain their delivery
+or migration consequences; intake persistence drift is advisory. The mutation test
+catches both await relabeling and patch removal, the representative `check` commands
+are green, the unit suite has 199 examples, and the full 23-suite package battery passes.
 
 
 ## Context and Orientation

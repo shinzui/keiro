@@ -103,6 +103,11 @@ data DiagnosticCode
     | WorkflowShapeChanged
     | WorkflowBodyChanged
     | WorkflowStableNameChanged
+    | WorkflowPatchRemoved
+    | WorkflowContinueSeedChanged
+    | WqOrderingChanged
+    | WqProvisionChanged
+    | WqGroupKeyChanged
     | IdPrefixChanged
     | DedupeIdentityChanged
     | DerivedIdentityChanged
@@ -110,6 +115,7 @@ data DiagnosticCode
     | TimerWindowChanged
     | EmitMappingChanged
     | DecodePostureChanged
+    | IntakePersistenceChanged
     | ProjectionChanged
     | PublisherPolicyChanged
     | DispatchRetargeted

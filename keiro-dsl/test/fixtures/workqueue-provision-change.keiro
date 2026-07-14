@@ -1,0 +1,22 @@
+context hospital-capacity
+
+workqueue reservation_work {
+  queue logical = "hospital_capacity.reservation_work"
+  derive physical = "hospital_capacity_reservation_work"
+         dlq = "hospital_capacity_reservation_work_dlq"
+         table = "pgmq.q_hospital_capacity_reservation_work"
+  ordering fifo-throughput
+  group key from reservationId via raw
+  provision unlogged
+  payload ReservationWorkItem {
+    reservationId -> "reservation_id" text required
+    hospitalId -> "hospital_id" text required
+  }
+  retry maxRetries = 3 delay = 5s dlq = on
+  disposition {
+    storeFailure -> retry 5s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}

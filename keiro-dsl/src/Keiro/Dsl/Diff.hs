@@ -30,7 +30,7 @@ module Keiro.Dsl.Diff (
 ) where
 
 import Data.List (find, (\\))
-import Data.Maybe (isNothing, mapMaybe)
+import Data.Maybe (isJust, isNothing, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
@@ -722,6 +722,7 @@ workqueuePairDiff oldQueue newQueue =
         ++ concatMap addedFieldDiff (prAdded fields)
         ++ concatMap removedFieldDiff (prRemoved fields)
         ++ queueIdentityDiff oldQueue newQueue
+        ++ queuePolicyDiff oldQueue newQueue
   where
     -- wqPayloadName is a generated Haskell type name, not a wire-visible name.
     fields = pairDeclarations wqfName (wqPayload oldQueue) (wqPayload newQueue)
@@ -759,6 +760,44 @@ queueIdentityDiff oldQueue newQueue =
 
 queueIdentity :: WorkqueueNode -> (Text, Text, Text, Text)
 queueIdentity queue = (wqLogical queue, wqPhysical queue, wqDlq queue, wqTable queue)
+
+queuePolicyDiff :: WorkqueueNode -> WorkqueueNode -> [Change]
+queuePolicyDiff oldQueue newQueue = ordering ++ provision ++ groupKey
+  where
+    nodeName = wqName newQueue
+    ordering =
+        [ breaking nodeName "queue-ordering" nodeName WqOrderingChanged $
+            "ordering changed " <> renderWqOrdering (wqOrdering oldQueue) <> " -> " <> renderWqOrdering (wqOrdering newQueue) <> "; consumers were written against the old delivery-order contract"
+        | wqOrdering oldQueue /= wqOrdering newQueue
+        ]
+    provision =
+        [ breaking nodeName "queue-provision" nodeName WqProvisionChanged $
+            "provision changed " <> renderWqProvision (wqProvision oldQueue) <> " -> " <> renderWqProvision (wqProvision newQueue) <> "; provisioning is create-time only, so migrate the existing queue operationally before changing the spec"
+        | wqProvision oldQueue /= wqProvision newQueue
+        ]
+    groupKey =
+        [ breaking nodeName "queue-group-key" nodeName WqGroupKeyChanged $
+            "group key derivation changed " <> renderWqGroupKey (wqGroupKey oldQueue) <> " -> " <> renderWqGroupKey (wqGroupKey newQueue) <> "; FIFO messages are re-partitioned across durable ordering groups"
+        | wqGroupKey oldQueue /= wqGroupKey newQueue
+        ]
+
+renderWqOrdering :: WqOrdering -> Text
+renderWqOrdering WqUnordered = "unordered"
+renderWqOrdering WqFifoThroughput = "fifo-throughput"
+renderWqOrdering WqFifoRoundRobin = "fifo-roundrobin"
+
+renderWqProvision :: WqProvision -> Text
+renderWqProvision WqStandard = "standard"
+renderWqProvision WqUnlogged = "unlogged"
+renderWqProvision (WqPartitioned interval duration) = "partitioned(interval=" <> interval <> ", retention=" <> duration <> ")"
+
+renderWqGroupKey :: Maybe WqGroupKey -> Text
+renderWqGroupKey Nothing = "none"
+renderWqGroupKey (Just groupKey) =
+    gkField groupKey
+        <> " via "
+        <> gkVia groupKey
+        <> maybe "" (" fixture " <>) (gkFixture groupKey)
 
 processDiff :: DiffEnv -> [Change]
 processDiff env =
@@ -912,6 +951,18 @@ intakePairDiff oldIntake newIntake =
                 "envelope/body decode posture changed; future messages are accepted or rejected differently"
            | inkDecode oldIntake /= inkDecode newIntake
            ]
+        ++ [ advisory
+                (inkName newIntake)
+                "inbox-persistence"
+                (inkName newIntake)
+                IntakePersistenceChanged
+                ("success-path envelope persistence changed " <> renderInkPersist (inkPersist oldIntake) <> " -> " <> renderInkPersist (inkPersist newIntake) <> "; existing rows are unchanged while future successful rows retain a different envelope shape")
+           | inkPersist oldIntake /= inkPersist newIntake
+           ]
+
+renderInkPersist :: InkPersist -> Text
+renderInkPersist InkPersistFull = "full-envelope"
+renderInkPersist InkPersistDedupeOnly = "dedupe-only"
 
 addedIntakeDiff :: IntakeNode -> [Change]
 addedIntakeDiff intake = [additive (inkName intake) "intake" (inkName intake) "new intake"]
@@ -1042,18 +1093,91 @@ addedPgmqDispatchDiff dispatch = [additive (pdName dispatch) "dispatch" (pdName 
 removedPgmqDispatchDiff :: PgmqDispatchNode -> [Change]
 removedPgmqDispatchDiff dispatch = [breaking (pdName dispatch) "dedupe-identity" (pdName dispatch) DedupeIdentityChanged "dispatch removed while persisted queue and read-model dedupe records may remain"]
 
--- | Conservative extension seam used by the workflow-evolution plan.
+{- | Classify the runtime's sanctioned workflow-evolution mechanisms before
+falling back to the conservative unguarded-body rule.
+-}
 classifyWorkflowBody :: WorkflowNode -> WorkflowNode -> [Change]
 classifyWorkflowBody oldWorkflow newWorkflow
-    | wfBody oldWorkflow == wfBody newWorkflow = []
+    | oldBody == newBody = []
+    | not (null removedPatchIds) = map removedPatch removedPatchIds
+    | Just (oldSeedType, newSeedType) <- changedSeed =
+        [ breaking nodeName "workflow-continue-as-new" nodeName WorkflowContinueSeedChanged $
+            "continueAsNew seed type changed " <> oldSeedType <> " -> " <> newSeedType <> "; the next generation's restoreSeed must decode the seed written by the previous generation"
+        ]
+    | safeAdditions =
+        map addedPatch newPatchIds
+            ++ [ additive nodeName "workflow-continue-as-new" seedType "terminal continueAsNew is additive; old generations carry no rotation marker"
+               | Just seedType <- [appendedSeed]
+               ]
     | otherwise =
         [ breaking
-            (wfId newWorkflow)
+            nodeName
             "workflow-body"
-            (wfId newWorkflow)
+            nodeName
             WorkflowBodyChanged
-            "workflow body labels, kinds, result types, or order changed; existing journals require patch guards (added by docs/plans/109) before such evolution is safe"
+            "workflow body labels, kinds, result types, or order changed without a new patch guard; wrap a cross-cutting change in patch, or rename the replay label for one changed step"
         ]
+  where
+    nodeName = wfId newWorkflow
+    oldBody = normaliseWorkflowBody (wfBody oldWorkflow)
+    newBody = normaliseWorkflowBody (wfBody newWorkflow)
+    oldPatchIds = workflowBodyPatchIds oldBody
+    newPatchIdsAll = workflowBodyPatchIds newBody
+    newPatchIds = newPatchIdsAll \\ oldPatchIds
+    removedPatchIds = oldPatchIds \\ newPatchIdsAll
+    oldSeed = terminalContinueSeed oldBody
+    newSeed = terminalContinueSeed newBody
+    changedSeed = case (oldSeed, newSeed) of
+        (Just oldSeedType, Just newSeedType)
+            | oldSeedType /= newSeedType -> Just (oldSeedType, newSeedType)
+        _ -> Nothing
+    appendedSeed = case (oldSeed, newSeed) of
+        (Nothing, Just seedType) -> Just seedType
+        _ -> Nothing
+    strippedNewBody = stripNewPatches newPatchIds newBody
+    comparableNewBody = case appendedSeed of
+        Just _ -> dropTerminalContinue strippedNewBody
+        Nothing -> strippedNewBody
+    safeAdditions =
+        (not (null newPatchIds) || isJust appendedSeed)
+            && comparableNewBody == oldBody
+    removedPatch patchId =
+        breaking nodeName "workflow-patch" patchId WorkflowPatchRemoved "patch id existed in the old spec but was removed; the differ cannot prove that no workflow generation still replays its journaled branch"
+    addedPatch patchId =
+        additive nodeName "workflow-patch" patchId "new patch guard contains the entire body change, so in-flight generations retain their journaled branch"
+
+normaliseWorkflowBody :: [WfBodyItem] -> [WfBodyItem]
+normaliseWorkflowBody = map go
+  where
+    go (WfStep label result _) = WfStep label result noLoc
+    go (WfAwait label result _) = WfAwait label result noLoc
+    go (WfSleep label delay _) = WfSleep label delay noLoc
+    go (WfChild label via result _) = WfChild label via result noLoc
+    go (WfPatch patchId items _) = WfPatch patchId (normaliseWorkflowBody items) noLoc
+    go (WfContinueAsNew seedType _) = WfContinueAsNew seedType noLoc
+
+workflowBodyPatchIds :: [WfBodyItem] -> [Name]
+workflowBodyPatchIds = concatMap go
+  where
+    go (WfPatch patchId items _) = patchId : workflowBodyPatchIds items
+    go _ = []
+
+stripNewPatches :: [Name] -> [WfBodyItem] -> [WfBodyItem]
+stripNewPatches newPatchIds = concatMap go
+  where
+    go (WfPatch patchId _ _) | patchId `elem` newPatchIds = []
+    go (WfPatch patchId items loc) = [WfPatch patchId (stripNewPatches newPatchIds items) loc]
+    go item = [item]
+
+terminalContinueSeed :: [WfBodyItem] -> Maybe Name
+terminalContinueSeed items = case reverse items of
+    WfContinueAsNew seedType _ : _ -> Just seedType
+    _ -> Nothing
+
+dropTerminalContinue :: [WfBodyItem] -> [WfBodyItem]
+dropTerminalContinue items = case reverse items of
+    WfContinueAsNew{} : rest -> reverse rest
+    _ -> items
 
 additive :: Name -> Text -> Text -> Text -> Change
 additive n facet subj detail = Additive (ChangeKind n facet subj Nothing detail)

@@ -1,0 +1,60 @@
+context hospital-capacity
+
+readmodel transferDecision {
+  table = "transfer_decision"
+  schema = "hospital_capacity"
+  columns {
+    reservation_id text required
+  }
+  version = 1
+  shape = "fnv1a:a61bd2c21d54fa64"
+  consistency = Strong
+  feed = subscription
+}
+
+workflow HospitalTransferReservation
+  name "hospital-transfer-reservation"
+  in ReservationWorkflowInput { reservationId:Id hospitalId:Id }
+  out ReservationWorkflowSummary
+  id from input.reservationId via idText
+  body
+    step create-transfer-hold -> ReservationHold
+    await reservation-confirmation -> ReservationConfirmation
+    step release-or-retain-capacity -> CapacityRelease
+    step summarize-reservation -> ReservationWorkflowSummary
+    continueAsNew RolloverSeed
+
+operation ConfirmReservation
+  command on Reservation
+    stream from reservationId via reservationStream
+    project [ transferDecision ]
+
+operation QueryTransferDecision
+  query transferDecision
+    input TransferReservationId
+    result Maybe TransferDecision
+    consistency Strong
+
+operation SignalReservationConfirmation
+  signal reservation-confirmation of HospitalTransferReservation
+    key from reservationId via reservationWorkflowId
+    value ReservationConfirmation
+
+operation RunReservationWorkflow
+  run HospitalTransferReservation
+    input ReservationWorkflowInput
+    outcome -> ReservationWorkflowRun
+
+aggregate Reservation
+  regs
+    reservationState ReservationVertex = Open
+  states Open Confirmed!
+
+  command ConfirmTransfer { reservationId }
+  event TransferConfirmed = fields(ConfirmTransfer)
+
+  Open -- ConfirmTransfer --> write reservationState := Confirmed ; emit TransferConfirmed ; goto Confirmed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection transferDecision key=reservationId
+    status-map { TransferConfirmed=>confirmed }

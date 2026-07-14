@@ -852,6 +852,21 @@ main = hspec $ do
             cs <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-optfield.keiro"
             any isBreaking cs `shouldBe` False
             [ckSubject k | Additive k <- cs] `shouldContain` ["note"]
+        it "classifies workqueue ordering changes as breaking delivery-contract changes" $ do
+            cs <- diffFixtures "test/fixtures/workqueue-policy-base.keiro" "test/fixtures/workqueue-ordering-change.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just WqOrderingChanged]
+            [ckDetail k | Breaking k <- cs, ckCode k == Just WqOrderingChanged]
+                `shouldSatisfy` any (T.isInfixOf "delivery-order contract")
+        it "classifies workqueue provision changes as operational migrations" $ do
+            cs <- diffFixtures "test/fixtures/workqueue-policy-base.keiro" "test/fixtures/workqueue-provision-change.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just WqProvisionChanged]
+            [ckDetail k | Breaking k <- cs, ckCode k == Just WqProvisionChanged]
+                `shouldSatisfy` any (T.isInfixOf "migrate the existing queue operationally")
+        it "classifies workqueue group-key changes as breaking repartitioning" $ do
+            cs <- diffFixtures "test/fixtures/workqueue-policy-base.keiro" "test/fixtures/workqueue-group-key-change.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just WqGroupKeyChanged]
+            [ckDetail k | Breaking k <- cs, ckCode k == Just WqGroupKeyChanged]
+                `shouldSatisfy` any (T.isInfixOf "re-partitioned")
         it "classifies a process input type change as ProcessInputChanged" $ do
             cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-inputtype.keiro"
             [ckCode k | Breaking k <- cs] `shouldContain` [Just ProcessInputChanged]
@@ -865,6 +880,26 @@ main = hspec $ do
             [ckCode k | Breaking k <- relabeled] `shouldContain` [Just WorkflowBodyChanged]
             appended <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-stepadd.keiro"
             [ckCode k | Breaking k <- appended] `shouldContain` [Just WorkflowBodyChanged]
+            [ckDetail k | Breaking k <- appended, ckCode k == Just WorkflowBodyChanged]
+                `shouldSatisfy` any (T.isInfixOf "new patch guard")
+        it "classifies a body addition wholly guarded by a new patch as additive" $ do
+            cs <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-evolution-diff.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckSubject k | Additive k <- cs, ckFacet k == "workflow-patch"] `shouldContain` ["fraud-check-v2"]
+            [ckSubject k | Additive k <- cs, ckFacet k == "workflow-continue-as-new"] `shouldContain` ["RolloverSeed"]
+        it "classifies removing an existing patch as breaking" $ do
+            cs <- diffFixtures "test/fixtures/workflow-evolution-diff.keiro" "test/fixtures/workflow-continue.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just WorkflowPatchRemoved]
+            [ckDetail k | Breaking k <- cs, ckCode k == Just WorkflowPatchRemoved]
+                `shouldSatisfy` any (T.isInfixOf "cannot prove")
+        it "classifies terminal continueAsNew append as additive and seed drift as breaking" $ do
+            appended <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-continue.keiro"
+            any isBreaking appended `shouldBe` False
+            [ckFacet k | Additive k <- appended] `shouldContain` ["workflow-continue-as-new"]
+            changed <- diffFixtures "test/fixtures/workflow-continue.keiro" "test/fixtures/workflow-continue-seed-v2.keiro"
+            [ckCode k | Breaking k <- changed] `shouldContain` [Just WorkflowContinueSeedChanged]
+            [ckDetail k | Breaking k <- changed, ckCode k == Just WorkflowContinueSeedChanged]
+                `shouldSatisfy` any (T.isInfixOf "restoreSeed")
         it "classifies a workflow stable-name change as WorkflowStableNameChanged" $ do
             cs <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-rename.keiro"
             [ckCode k | Breaking k <- cs] `shouldContain` [Just WorkflowStableNameChanged]
@@ -883,6 +918,7 @@ main = hspec $ do
             cs <- diffFixtures "test/fixtures/intake.keiro" "test/fixtures/intake-decode.keiro"
             any isBreaking cs `shouldBe` False
             [ckCode k | Advisory k <- cs] `shouldContain` [Just DecodePostureChanged]
+            [ckCode k | Advisory k <- cs] `shouldContain` [Just IntakePersistenceChanged]
         it "classifies process and timer derivation changes as DerivedIdentityChanged" $ do
             processName <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-procname.keiro"
             [ckCode k | Breaking k <- processName] `shouldContain` [Just DerivedIdentityChanged]
