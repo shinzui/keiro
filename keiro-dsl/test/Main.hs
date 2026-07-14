@@ -17,7 +17,7 @@ import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
 import Keiro.Dsl.ScaffoldRun (Refusal (..), ScaffoldReport (..), StaleModule (..), executeScaffold, planScaffold, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
@@ -483,6 +483,19 @@ main = hspec $ do
         it "accepts the intake spec (complete disposition, no inversions)" $ do
             codes <- errorCodesOf "test/fixtures/intake.keiro"
             codes `shouldBe` []
+        it "lowers explicit dedupe-only persistence and defaults omission to full-envelope" $ do
+            spec <- specOf "test/fixtures/intake.keiro"
+            ordinary <- specOf "test/fixtures/intake-decode.keiro"
+            case ([intake | NIntake intake <- specNodes spec], [intake | NIntake intake <- specNodes ordinary]) of
+                ([intake], [defaultIntake]) -> do
+                    inkPersist intake `shouldBe` InkPersistDedupeOnly
+                    inkPersist defaultIntake `shouldBe` InkPersistFull
+                    renderSpec spec `shouldSatisfy` T.isInfixOf "persist = dedupe-only"
+                    renderSpec ordinary `shouldNotSatisfy` T.isInfixOf "persist ="
+                    let inbox = generatedTextEndingIn "Inbox.hs" (scaffoldIntake (defaultContext (specContext spec)) intake)
+                    inbox `shouldSatisfy` T.isInfixOf "inboxPersistence = PersistDedupeOnly"
+                (intakes, defaultIntakes) ->
+                    expectationFailure ("expected one intake in each fixture, got " <> show (length intakes, length defaultIntakes))
         it "rejects duplicate => retry (inversion 1)" $ do
             codes <- errorCodesOf "test/fixtures/intake-dup-retry.keiro"
             codes `shouldContain` [DispositionDuplicateRetry]
@@ -2197,6 +2210,7 @@ genIntake =
         <*> smallList (BindRow <$> genName <*> genWireSource <*> arbitrary <*> arbitrary)
         <*> genName
         <*> genName
+        <*> elements [InkPersistFull, InkPersistDedupeOnly]
         <*> genDecodeSpec
         <*> smallList genDispositionRow
         <*> pure noLoc

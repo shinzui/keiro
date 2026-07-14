@@ -256,7 +256,9 @@ docIntake i =
         ]
             ++ map (indent 2 . docBind) (inkBinds i)
             ++ [ indent 2 ("dedupe key" <+> pretty (inkDedupeKey i) <+> "policy" <+> pretty (inkDedupePolicy i))
-               , indent 2 (docDecode (inkDecode i))
+               ]
+            ++ [indent 2 "persist = dedupe-only" | inkPersist i == InkPersistDedupeOnly]
+            ++ [ indent 2 (docDecode (inkDecode i))
                , indent 2 "disposition {"
                ]
             ++ map (indent 4 . docDispRow) (inkDisposition i)

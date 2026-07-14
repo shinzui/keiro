@@ -23,6 +23,7 @@ intake incidentInbox {
   bind idempotencyKey from body
 
   dedupe key messageId policy PreferIntegrationMessageId
+  persist = dedupe-only
 
   decode {
     envelope strict-required lenient-optional

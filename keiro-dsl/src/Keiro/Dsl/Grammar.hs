@@ -84,6 +84,7 @@ module Keiro.Dsl.Grammar (
     InboxAction (..),
     DispositionRow (..),
     DecodeSpec (..),
+    InkPersist (..),
     IntakeNode (..),
 
     -- * The integration emit/publisher nodes (EP-4)
@@ -693,6 +694,10 @@ data DecodeSpec = DecodeSpec
     }
     deriving stock (Eq, Show, Generic)
 
+-- | How much of a successfully processed envelope the inbox retains.
+data InkPersist = InkPersistFull | InkPersistDedupeOnly
+    deriving stock (Eq, Show, Generic)
+
 {- | An @intake@ (Kafka consumer / inbox) node. The runtime-config @consumer@
 block (brokers/groupId/offsetReset) is hole-kind 8, delegated to deployment
 and not modelled here.
@@ -705,6 +710,7 @@ data IntakeNode = IntakeNode
     , inkBinds :: ![BindRow]
     , inkDedupeKey :: !Name
     , inkDedupePolicy :: !Name
+    , inkPersist :: !InkPersist
     , inkDecode :: !DecodeSpec
     , inkDisposition :: ![DispositionRow]
     , inkLoc :: !Loc

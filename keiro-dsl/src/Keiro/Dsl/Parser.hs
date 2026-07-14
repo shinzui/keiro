@@ -153,6 +153,7 @@ reservedWords =
     , "accept"
     , "bind"
     , "dedupe"
+    , "persist"
     , "decode"
     , "disposition"
     , "publisher"
@@ -631,6 +632,14 @@ pIntake = do
     dk <- ident
     keyword "policy"
     dp <- ident
+    persistence <-
+        option InkPersistFull $
+            keyword "persist"
+                *> symbol "="
+                *> choice
+                    [ InkPersistFull <$ keyword "full-envelope"
+                    , InkPersistDedupeOnly <$ keyword "dedupe-only"
+                    ]
     dec <- pDecode
     disp <- pDisposition
     _ <- symbol "}"
@@ -643,6 +652,7 @@ pIntake = do
             , inkBinds = binds
             , inkDedupeKey = dk
             , inkDedupePolicy = dp
+            , inkPersist = persistence
             , inkDecode = dec
             , inkDisposition = disp
             , inkLoc = loc

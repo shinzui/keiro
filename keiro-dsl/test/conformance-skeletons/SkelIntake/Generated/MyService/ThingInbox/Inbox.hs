@@ -4,14 +4,22 @@
 module SkelIntake.Generated.MyService.ThingInbox.Inbox (
     InboxAck (..),
     inboxDedupePolicy,
+    inboxPersistence,
     inboxDisposition,
 ) where
 
-import Keiro.Inbox.Types (InboxDedupePolicy (..), InboxResult (..))
+import Keiro.Inbox.Types (InboxDedupePolicy (..), InboxPersistence (..), InboxResult (..))
 
 -- The dedupe policy (hole-kind 4), lowered to the live InboxDedupePolicy.
 inboxDedupePolicy :: InboxDedupePolicy
 inboxDedupePolicy = PreferIntegrationMessageId
+
+{- | Success-path envelope retention passed to runInboxTransactionWith.
+Failures always retain their full operator-facing dead-letter envelope.
+Dedupe-only success rows decode with an empty payload.
+-}
+inboxPersistence :: InboxPersistence
+inboxPersistence = PersistFullEnvelope
 
 -- The service's ack decision for each inbox classification.
 data InboxAck = InboxAckOk | InboxRetry | InboxDeadLetter

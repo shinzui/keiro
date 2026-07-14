@@ -8,9 +8,9 @@ module HospitalCapacity.IncidentInbox.Integration (
 ) where
 
 import Effectful (Eff, IOE, (:>))
-import Generated.HospitalCapacity.IncidentInbox.Inbox (inboxDedupePolicy)
+import Generated.HospitalCapacity.IncidentInbox.Inbox (inboxDedupePolicy, inboxPersistence)
 import Hasql.Transaction qualified as Tx
-import Keiro.Inbox (InboxError, InboxResult, runInboxTransaction)
+import Keiro.Inbox (InboxError, InboxResult, runInboxTransactionWith)
 import Keiro.Inbox.Types (KafkaDeliveryRef)
 import Keiro.Integration.Event (IntegrationEvent)
 import Keiro.Outbox (IntegrationProducer (..))
@@ -26,7 +26,7 @@ runIncidentInbox ::
     (IntegrationEvent -> Tx.Transaction a) ->
     Eff es (Either InboxError (InboxResult a))
 runIncidentInbox event kafka handler =
-    runInboxTransaction Nothing inboxDedupePolicy event kafka handler
+    runInboxTransactionWith Nothing inboxPersistence inboxDedupePolicy event kafka handler
 
 {- | The outbox producer; @mapEvent@ is the filled emit map (here the total
 @_ => skip@ mapping — a valid, exhaustive choice).

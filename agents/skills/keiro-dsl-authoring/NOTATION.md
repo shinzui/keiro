@@ -194,6 +194,7 @@ intake incidentInbox {
   bind messageId from header "keiro-message-id" required cross-check body
   bind key from kafka-key
   dedupe key messageId policy PreferIntegrationMessageId
+  persist = dedupe-only                                  # optional; default full-envelope
   decode { envelope strict-required lenient-optional ; body strict schemaVersion == 1 }
   disposition {                                            # MANDATORY + COMPLETE (7 outcomes)
     processed => ackOk
@@ -223,6 +224,19 @@ topic/event coupling resolves; publisher→emit resolves. Publisher backoff is e
 `backoff constant <window>` or
 `backoff exponential <initial> max=<window> multiplier=<decimal>`. Exponential backoff
 requires both clauses; the scaffolder refuses to invent a maximum or multiplier.
+
+`persist = full-envelope | dedupe-only` controls only successful inbox rows and
+defaults to `full-envelope` when omitted. The generated `inboxPersistence` value is
+passed to `runInboxTransactionWith`. Choose `dedupe-only` only when the payload is
+re-fetchable or worthless after success: those rows keep dedupe/operator correlation
+but decode with an empty payload. Failed rows always retain the full envelope because
+they are the operator-facing dead-letter record.
+
+Delegated-idempotence intake is intentionally absent here: its runtime has not landed,
+and `docs/plans/83-delegated-idempotence-inbox-intake-bypass-the-keiro-inbox-table-when-the-downstream-state-machine-already-dedupes.md`
+owns that future DSL surface. Kafka sharding and consumer-group settings are also
+absent permanently; they vary by deployment and remain hole-kind 8 runtime config,
+not deterministic service semantics.
 
 ## workqueue / dispatch (EP-5)
 

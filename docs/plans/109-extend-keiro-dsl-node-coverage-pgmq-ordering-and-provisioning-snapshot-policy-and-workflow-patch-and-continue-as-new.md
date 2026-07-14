@@ -75,7 +75,7 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
       `declaredPatchStepNames` / `withDeclaredPatches` over the live runtime) +
       extended `conformance-workflow-runtime` / `conformance-workflow-full` +
       NOTATION.md snippet.
-- [ ] M4: intake `persist` clause (grammar through conformance) + Decision Log entries
+- [x] (2026-07-14T00:31:31Z) M4: intake `persist` clause (grammar through conformance) + Decision Log entries
       for the E8 scope decisions + differ-integration expectations recorded against
       docs/plans/103.
 - [ ] Final: full `cabal test` sweep of the keiro-dsl suites green; Outcomes &
@@ -128,6 +128,10 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
   without compiling it, so the formatter has no Cabal default-language context for
   that file. `WorkflowRuntime` now emits an explicit `ImportQualifiedPost` pragma;
   every generated copy is independently parseable by tooling as well as by GHC.
+- The existing filled intake integration used `runInboxTransaction`, whose compatibility
+  wrapper always selects `PersistFullEnvelope`. Merely exporting the generated constant
+  would therefore leave the spec unapplied in the end-to-end sample. The fill now calls
+  live `runInboxTransactionWith` and passes both generated policy values.
 
 (To be extended during implementation.)
 
@@ -242,6 +246,14 @@ exactly those ids and exposes the live `patchStepName` journal keys. The runtime
 full-body suites compile `patch`, `restoreSeed`, and `continueAsNew` against the live
 effect, and both await-renaming and patch-guard-removal mutations turn the facts suite
 red. The unit suite is green at 192 examples. M4–M5 remain.
+
+M4 is complete. Intakes now opt into success-path `dedupe-only` persistence while
+omission remains the byte-stable `full-envelope` default. The scaffold exports a live
+`InboxPersistence` value, the runtime suite pins `PersistDedupeOnly`, and the filled
+integration passes it to `runInboxTransactionWith`; documentation states the empty
+success-payload and full failed-envelope behavior. The authoring guide also records
+delegated idempotence under plan 83 and keeps consumer-group/sharding controls in
+deployment-owned hole-kind 8. The unit suite is green at 193 examples. M5 remains.
 
 
 ## Context and Orientation
