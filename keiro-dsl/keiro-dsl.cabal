@@ -506,6 +506,42 @@ test-suite keiro-dsl-conformance-router-full
     , shibuya-core
     , text            >=2.1
 
+-- MP-15/EP-110 M6 cold-start: a fresh agent, given only the authoring skill
+-- and feature sentence, produced this aggregate + readmodel + router service.
+-- The component compiles generated output and hand-owned fills together and
+-- runs the aggregate, readmodel, router-policy, and live Router assertions.
+test-suite keiro-dsl-conformance-newsurface
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-newsurface
+  main-is:        Main.hs
+  other-modules:
+    Generated.TransferRouting.Hospital.Codec
+    Generated.TransferRouting.Hospital.Domain
+    Generated.TransferRouting.Hospital.EventStream
+    Generated.TransferRouting.Hospital.Harness
+    Generated.TransferRouting.Hospital.Projection
+    Generated.TransferRouting.Hospital_load.ReadModel
+    Generated.TransferRouting.Hospital_load.ReadModelHarness
+    Generated.TransferRouting.Hospital_load.ReadModelTable
+    Generated.TransferRouting.HospitalTransferRouter.Router
+    Generated.TransferRouting.HospitalTransferRouter.RouterHarness
+    TransferRouting.Hospital.Holes
+    TransferRouting.Hospital_load.ReadModelHoles
+    TransferRouting.HospitalTransferRouter.RouterHoles
+    TransferRouting.HospitalTransferRouter.RouterValue
+
+  build-depends:
+    , aeson              >=2.2
+    , base               >=4.21 && <5
+    , effectful-core
+    , hasql-transaction
+    , keiki              >=0.2  && <0.3
+    , keiro
+    , kiroku-store
+    , shibuya-core
+    , text               >=2.1
+
 -- Process-manager facts harness (EP-3 M4): the self-contained, firewall-clean
 -- ProcessHarness module scaffolded from hospital-surge.keiro, compiled + run to
 -- prove the scaffolder lowered the spec's deterministic process/timer decisions

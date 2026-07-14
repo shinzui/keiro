@@ -142,7 +142,7 @@ three plans register with it).
 | 107 | Add a first-class read-model node with registration, schema, and consistency to keiro-dsl | docs/plans/107-add-a-first-class-read-model-node-with-registration-schema-and-consistency-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Complete |
 | 108 | Add a router node and rejection and poison policy surfaces to keiro-dsl | docs/plans/108-add-a-router-node-and-rejection-and-poison-policy-surfaces-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Complete |
 | 109 | Extend keiro-dsl node coverage: pgmq ordering and provisioning, snapshot policy, and workflow patch and continue-as-new | docs/plans/109-extend-keiro-dsl-node-coverage-pgmq-ordering-and-provisioning-snapshot-policy-and-workflow-patch-and-continue-as-new.md | EP-103 | EP-104, EP-105, EP-106 | Complete |
-| 110 | Align keiro-dsl with the safe APIs and refresh the authoring skill and corpus | docs/plans/110-align-keiro-dsl-with-the-safe-apis-and-refresh-the-authoring-skill-and-corpus.md | EP-107, EP-108, EP-109 | EP-103, EP-104, EP-105, EP-106 | In Progress |
+| 110 | Align keiro-dsl with the safe APIs and refresh the authoring skill and corpus | docs/plans/110-align-keiro-dsl-with-the-safe-apis-and-refresh-the-authoring-skill-and-corpus.md | EP-107, EP-108, EP-109 | EP-103, EP-104, EP-105, EP-106 | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-103).
@@ -293,8 +293,8 @@ EP-106 in parallel alongside the front of that path.
 - [x] EP-108: `rejected`/`poison` clauses on process and router lowered to WorkerOptions; per-dispatch consistency rule; ambiguity vocabulary decided and pinned
 - [x] EP-109: workqueue ordering/provision/group clauses lowered against live keiro-pgmq (unlogged warned)
 - [x] EP-109: aggregate snapshot policy clause lowered and accepted by mkEventStreamOrThrow; workflow patch/continueAsNew with patch-aware diff classification
-- [ ] EP-110: category-stream notation replaces raw concatenation in grammar, scaffold, and reference fills; confirmBenignDuplicate woven into fills and hole guidance
-- [ ] EP-110: skill/NOTATION/corpus refreshed and truthful; cold-start proof on the new surface green
+- [x] EP-110: category-stream notation replaces raw concatenation in grammar, scaffold, and reference fills; confirmBenignDuplicate woven into fills and hole guidance
+- [x] EP-110: skill/NOTATION/corpus refreshed and truthful; cold-start proof on the new surface green
 
 
 ## Surprises & Discoveries
@@ -391,6 +391,16 @@ EP-106 in parallel alongside the front of that path.
     pin in addition to the live-runtime and filled-router suites. Together with EP-107's
     suite, the package battery is now 22 suites; all pass, with 181 unit/property
     examples and compiled target-keyed router-id and exact-resolver-target proofs.
+  - EP-110's fresh-agent acceptance converged in two check attempts: the only error was the
+    intentional placeholder readmodel shape, and `RmShapeHashDrift` supplied the correct
+    captured value. The promoted 40-line spec exercises an aggregate, first-class readmodel,
+    router, dead-letter rejection policy, poison policy, category-safe target streams, and
+    a live assembled Router; its 12 assertions pass after a byte-identical fresh-scaffold
+    audit with zero supervisor design interventions.
+  - EP-110's final fresh scaffold exposed one remaining M1 style inconsistency: the
+    EventStream emitter used pre-qualified syntax for its new `Keiro.Stream` category import.
+    The project standard remains post-qualified; the emitter and all affected pins now use
+    `import Keiro.Stream qualified as Stream`.
   - EP-109 implementation found that keiki's snapshot shape hash includes module-qualified
     application type names, so the DSL cannot independently derive it before scaffold
     placement is known. The spec stores a captured fixture and the new live conformance
@@ -508,6 +518,17 @@ live-runtime, filled-body, snapshot, queue, and intake conformance are green, as
 full 23-suite package battery with 199 unit/property examples. EP-110 is now the next and
 only remaining child.
 
+EP-110 completed the delivery tail and the initiative. Saga notation now carries validated,
+load-bearing stream categories and generated `StreamCategory` constants; reference process
+and router fills construct entity streams without raw concatenation. Duplicate confirmation
+and the full replay/command failure taxonomy are taught at every decision point. The checker
+claim audit reconciles every documented promise with shipped diagnostics, and the corpus now
+indexes all 121 fixtures, 23 conformance components, and five mutation/gate scripts.
+Finally, a fresh agent given only the skill produced the 40-line transfer-routing service in
+two check attempts, edited no generated code, passed a byte-identical re-scaffold audit, and
+landed 12 green aggregate/readmodel/router assertions. The new component, unit suite, and all
+23 conformance components pass (24 package suites total). All eight child plans are Complete.
+
 
 ## Revision Notes
 
@@ -525,3 +546,6 @@ only remaining child.
 - 2026-07-13: EP-109 completed. Registry/progress, snapshot hash placement, patch-aware
   differ reconciliation, workqueue fixture alignment, and the 23-suite package outcome
   are recorded; EP-110 is now implementable.
+- 2026-07-14: EP-110 completed. Registry/progress now record category-safe streams,
+  duplicate/failure guidance, the truthful skill and complete corpus, and the successful
+  fresh-agent new-surface conformance artifact. All MasterPlan children are Complete.

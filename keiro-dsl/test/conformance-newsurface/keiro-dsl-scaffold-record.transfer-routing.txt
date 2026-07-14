@@ -1,0 +1,17 @@
+keiro-dsl scaffold record v1
+spec: test/fixtures/transfer-routing.keiro
+module-root: (none)
+layout: prefixed
+generated Generated/TransferRouting/Hospital_load/ReadModelTable.hs
+generated Generated/TransferRouting/Hospital_load/ReadModel.hs
+hole TransferRouting/Hospital_load/ReadModelHoles.hs
+generated Generated/TransferRouting/Hospital_load/ReadModelHarness.hs
+generated Generated/TransferRouting/HospitalTransferRouter/Router.hs
+hole TransferRouting/HospitalTransferRouter/RouterHoles.hs
+generated Generated/TransferRouting/HospitalTransferRouter/RouterHarness.hs
+generated Generated/TransferRouting/Hospital/Domain.hs
+generated Generated/TransferRouting/Hospital/Codec.hs
+generated Generated/TransferRouting/Hospital/EventStream.hs
+generated Generated/TransferRouting/Hospital/Projection.hs
+hole TransferRouting/Hospital/Holes.hs
+generated Generated/TransferRouting/Hospital/Harness.hs

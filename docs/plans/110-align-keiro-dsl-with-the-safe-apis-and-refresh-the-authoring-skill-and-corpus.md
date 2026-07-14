@@ -138,15 +138,15 @@ This section must always reflect the actual current state of the work.
 
 **M6 — cold-start proof on the new surface (the MasterPlan's end-to-end acceptance)**
 
-- [ ] Fix the one-line feature description and the scratch protocol (below); confirm the
+- [x] (2026-07-14 03:50Z) Fix the one-line feature description and the scratch protocol (below); confirm the
       skill is the only context handed to the fresh agent.
-- [ ] Run the cold-start: fresh agent → `.keiro` with at least `readmodel` + `router` +
+- [x] (2026-07-14 03:50Z) Run the cold-start: fresh agent → `.keiro` with at least `readmodel` + `router` +
       rejection/poison policies → `check` exit 0 → `scaffold` → fill holes only → green
       harness; capture the transcript.
-- [ ] Commit the result as a permanent conformance component
+- [x] (2026-07-14 03:50Z) Promote the result as a permanent conformance component
       (`keiro-dsl/test/conformance-newsurface/` + a `keiro-dsl-conformance-newsurface`
       test-suite stanza), pinned like the existing `conformance-coldstart` suite.
-- [ ] Verify no `-- @generated` module was hand-edited (diff discipline below); record the
+- [x] (2026-07-14 03:50Z) Verify no `-- @generated` module was hand-edited (diff discipline below); record the
       outcome in Outcomes & Retrospective and roll it up to the MasterPlan Progress.
 
 
@@ -221,6 +221,19 @@ appropriate.
   3 of 22 current conformance components. The refresh records one resolving path per fixture,
   every component, and all five mutation/gate scripts; shell set comparison found zero
   missing or extra fixture paths.
+- Implementation discovery (2026-07-14): the M1 Process emitter and its corrected standalone
+  fixture used the repository's post-qualified import style, but the sibling EventStream
+  category emission still rendered `import qualified Keiro.Stream as Stream`. The M6 fresh
+  scaffold exposed the inconsistency. The emitter and every affected category-bearing pin now
+  render `import Keiro.Stream qualified as Stream`; no pre-qualified workaround remains for
+  this newly emitted import.
+- Cold-start discovery (2026-07-14): the fresh agent needed exactly two explicit check
+  attempts. Its placeholder readmodel shape produced `RmShapeHashDrift` with the correct
+  replacement (`fnv1a:977395d28f254ddb`), after which check passed. The remaining
+  `PolicyDeadLetterUnused`, `AmbiguousFollowsRejectedPolicy`, and
+  `ProcessBenignInversion` warnings were explanatory and matched the documented policy and
+  duplicate taxonomy. Scratch-local direct-GHC/package-environment attempts were awkward,
+  but a local Cabal component compiled the same sources without any skill or design blocker.
 
 
 ## Decision Log
@@ -302,6 +315,12 @@ Record every decision made while working on the plan.
   apparently concise group silently omitting variants that exercise different diagnostics.
   Date: 2026-07-14
 
+- Decision: preserve post-qualified imports for every new category-stream emission.
+  Rationale: post-qualified syntax is the repository standard. A formatter failure in a
+  standalone fixture is solved by declaring `ImportQualifiedPost` where that isolated
+  component needs it, never by changing generated imports to pre-qualified syntax.
+  Date: 2026-07-14
+
 (Add entries as implementation decisions are made.)
 
 
@@ -319,7 +338,19 @@ conformance matrix passed. M3 added the source-verified eight-warning replay pla
 EP-108-aligned `CommandAmbiguous` disposition rules. M4 reconciled every checker claim with
 the shipped diagnostics and expanded the authoring loop's failure guide. M5 now documents
 every delivered node/clause, distinguishes parser nodes from skeleton kinds, and indexes all
-120 fixtures and 22 current conformance components; `mori validate` passes. M6 remains.
+121 fixtures and 23 current conformance components; `mori validate` passes.
+
+M6 closed the MasterPlan acceptance with zero supervisor design interventions. A fresh agent,
+given only the authoring skill and the fixed feature sentence, authored the 40-line
+`transfer-routing.keiro` aggregate/readmodel/router spec. Check passed on attempt two after
+the shape-hash diagnostic supplied the captured value. Scaffold reported 10 generated
+modules, 3 preserved hole modules, and `firewall: OK (10 generated modules scanned, 0
+forbidden operators)`. A fresh-output directory diff proved the generated tree byte-identical
+before promotion; the agent edited no generated file. The promoted harness passes all 12
+aggregate replay/codec/behavior, readmodel fact, router identity/policy, category-safe target,
+and command-payload assertions. `keiro-dsl-conformance-newsurface`, `keiro-dsl-test`, and the
+full 23-component conformance sweep pass, making 24 green package suites including the unit
+suite. The cold-start agent succeeded without touching a generated module.
 
 (The M6 entry must state whether the cold-start agent succeeded without touching a generated
 module — that entry is the MasterPlan's end-to-end acceptance record.)

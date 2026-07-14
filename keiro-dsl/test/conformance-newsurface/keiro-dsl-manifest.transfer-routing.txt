@@ -1,0 +1,30 @@
+-- keiro-dsl build manifest for test/fixtures/transfer-routing.keiro
+-- Paste the two blocks below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+other-modules:
+    Generated.TransferRouting.Hospital.Codec
+    Generated.TransferRouting.Hospital.Domain
+    Generated.TransferRouting.Hospital.EventStream
+    Generated.TransferRouting.Hospital.Harness
+    Generated.TransferRouting.Hospital.Projection
+    Generated.TransferRouting.HospitalTransferRouter.Router
+    Generated.TransferRouting.HospitalTransferRouter.RouterHarness
+    Generated.TransferRouting.Hospital_load.ReadModel
+    Generated.TransferRouting.Hospital_load.ReadModelHarness
+    Generated.TransferRouting.Hospital_load.ReadModelTable
+    TransferRouting.Hospital.Holes
+    TransferRouting.HospitalTransferRouter.RouterHoles
+    TransferRouting.Hospital_load.ReadModelHoles
+
+build-depends:
+    , aeson
+    , base
+    , effectful-core
+    , hasql-transaction
+    , keiki
+    , keiro
+    , kiroku-store
+    , shibuya-core
+    , text

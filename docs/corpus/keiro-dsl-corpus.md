@@ -7,7 +7,7 @@ its negative or diff variants to see the exact guardrails.
 
 ## Complete fixture inventory
 
-This is the complete 120-fixture inventory as of 2026-07-14. Every path below resolves.
+This is the complete 121-fixture inventory as of 2026-07-14. Every path below resolves.
 
 | Fixture | Role / primary coverage |
 | --- | --- |
@@ -104,6 +104,7 @@ This is the complete 120-fixture inventory as of 2026-07-14. Every path below re
 | `test/fixtures/statusmap-dup-key.keiro` | negative duplicate status-map key |
 | `test/fixtures/subscription.keiro` | cold-start aggregate authored from the skill |
 | `test/fixtures/surge-service.keiro` | full process-service scaffold source |
+| `test/fixtures/transfer-routing.keiro` | fresh-agent aggregate + hospital-load readmodel + dead-lettering router cold-start |
 | `test/fixtures/workflow-body.keiro` | workflow body evolution |
 | `test/fixtures/workflow-can-mid.keiro` | negative non-terminal/nested `continueAsNew` |
 | `test/fixtures/workflow-continue-seed-v2.keiro` | breaking continuation seed evolution |
@@ -134,8 +135,7 @@ This is the complete 120-fixture inventory as of 2026-07-14. Every path below re
 
 ## Compiled conformance and harness components
 
-The 22 current `keiro-dsl-conformance*` Cabal components are all indexed here. M6 adds the
-new-surface cold-start component to this table when its artifact exists.
+The 23 current `keiro-dsl-conformance*` Cabal components are all indexed here.
 
 | Component | Proves |
 | --- | --- |
@@ -159,6 +159,7 @@ new-surface cold-start component to this table when its artifact exists.
 | `test/conformance-router-runtime/` (`keiro-dsl-conformance-router-runtime`) | router policy lowering and target-keyed deterministic id contract compile against live runtime |
 | `test/conformance-router/` (`keiro-dsl-conformance-router`) | generated router facts match hand-written expectations |
 | `test/conformance-router-full/` (`keiro-dsl-conformance-router-full`) | filled resolver/router value and target aggregate compile against live APIs |
+| `test/conformance-newsurface/` (`keiro-dsl-conformance-newsurface`) | fresh-agent aggregate/readmodel/router artifact passes 12 scaffold and live-router assertions |
 | `test/conformance-process/` (`keiro-dsl-conformance-process`) | generated process facts are firewall-clean and mutation-pinnable |
 | `test/conformance-v2/` (`keiro-dsl-conformance-v2`) | generated v2 codec and filled upcaster migrate v1 payloads through the chain |
 

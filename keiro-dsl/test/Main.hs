@@ -1277,6 +1277,12 @@ main = hspec $ do
         it "matches the committed compiling Generated conformance modules (modulo whitespace)" $ do
             mods <- scaffoldFixture "test/fixtures/reservation.keiro"
             mapM_ assertMatchesCommitted [m | m <- mods, kind m == Generated]
+        it "matches every committed new-surface Generated module (modulo formatting)" $ do
+            spec <- specOf "test/fixtures/transfer-routing.keiro"
+            let modules = scaffoldModules (defaultContext (specContext spec)) spec
+            forM_ [m | m <- modules, kind m == Generated] $ \m -> do
+                committed <- readTestText ("test/conformance-newsurface/" <> modulePath m)
+                normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText m)
         it "scaffolds the register-free OrderStream smoke target without error" $ do
             mods <- scaffoldFixture "test/fixtures/order.keiro"
             -- 5 Generated (Domain/Codec/EventStream/Projection/Harness) + 1 Holes.

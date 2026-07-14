@@ -1,0 +1,40 @@
+context transfer-routing
+
+readmodel hospital_load {
+  table = "hospital_load"
+  schema = "hospital_transfer"
+  columns {
+    hospital_id text required
+    region text required
+    available_beds int required
+  }
+  version = 1
+  shape = "fnv1a:977395d28f254ddb"
+  consistency = Eventual
+  feed = subscription
+  subscription = "transfer-routing-hospital-load-sub"
+}
+
+router HospitalTransferRouter
+  name "hospital-transfer-router"
+  input AcceptedHospitalTransferNeed { transferNeedId region }
+  key input.transferNeedId via idText
+  resolve stable via read-model hospital_load row { hospitalId }
+  target Hospital
+  projections [ ]
+  dispatch-each RouteAcceptedTransferNeed { transferNeedId=input.transferNeedId hospitalId=resolved.hospitalId }
+    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)
+  rejected => deadLetter
+  poison => halt
+
+aggregate Hospital
+  regs
+  states Accepting
+
+  command RouteAcceptedTransferNeed { transferNeedId hospitalId }
+  event AcceptedTransferNeedRouted = fields(RouteAcceptedTransferNeed)
+
+  Accepting -- RouteAcceptedTransferNeed -->
+    emit AcceptedTransferNeedRouted
+    goto Accepting
