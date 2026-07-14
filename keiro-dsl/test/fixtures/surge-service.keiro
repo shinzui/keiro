@@ -6,7 +6,7 @@ process SurgeFlow
   name "surge-demo"
   input SurgeInput { hospitalId observedAt:Time }
   correlate input.hospitalId via idText
-  saga Surge stream="surge-" <> correlationId
+  saga Surge category "surge"
   target Hospital
   projections [ surge ]
 

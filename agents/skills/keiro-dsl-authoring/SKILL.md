@@ -35,7 +35,12 @@ edit a `-- @generated` module.
    is success), `previouslyFailed => deadLetter` (not retry), pgmq `storeFailure => retry`
    (transient) vs `decodeFailure => deadLetter` (poison), timer `on-reject => Fired` (a
    rejected replay is benign success). The checker forces you to state each one; state them
-   correctly, not the safe-looking-but-wrong way.
+   correctly, not the safe-looking-but-wrong way. Dispatch `on-duplicate AckOk` is sound
+   because the runtime confirms the attempted event id against the **target** stream with
+   `confirmBenignDuplicate :: StreamName -> EventId -> CommandError -> Eff es Bool` before
+   acknowledging it. If you handle duplicates by hand, call that function, fold `True` into
+   the duplicate result, and surface `False` as the original failure; never treat a bare
+   `DuplicateEvent` as success because event-id uniqueness is global.
 5. **The harness — not the scaffold — pins behaviour.** Two agents can fill the holes
    differently but correctly and both pass; one wrong guard/mapping/disposition fails a
    specific named harness test. Run it. The harness also proves **replay-safety**: the

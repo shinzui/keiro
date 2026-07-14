@@ -63,6 +63,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
+import Keiro.Dsl.Validate (sagaCategoryError)
 import Text.Read (readMaybe)
 
 {- | One emitted module: its on-disk path (relative to the scaffold @--out@
@@ -1188,6 +1189,7 @@ emitProcessGen _ctxPascal genPrefix _holePrefix p =
         , generatedBanner
         , "module " <> genPrefix <> ".Process"
         , "  ( " <> lo <> "ProcessName"
+        , "  , " <> lo <> "Category"
         , "  , " <> lo <> "ProcessWorkerOptions"
         , "  , " <> lo <> "TimerRequest"
         , "  , " <> lo <> "FireOutcome"
@@ -1200,6 +1202,7 @@ emitProcessGen _ctxPascal genPrefix _holePrefix p =
         , "import Data.UUID (UUID)"
         , "import qualified Data.UUID.V5 as UUID.V5"
         , "import Keiro.Command (CommandError (..))"
+        , "import qualified Keiro.Stream as Stream"
         , "import Keiro.Timer (TimerId (..), TimerRequest (..))"
         ]
             ++ workerPolicyImports (procPoison p)
@@ -1207,6 +1210,12 @@ emitProcessGen _ctxPascal genPrefix _holePrefix p =
                , "-- The define-once ProcessManager name (hole-kind 5: referenced, never retyped)."
                , lo <> "ProcessName :: Text"
                , lo <> "ProcessName = " <> tshow (procName p)
+               , ""
+               , "-- The validated saga stream category (hole-kind 5: referenced, never retyped)."
+               , "-- Saga streams are '<category>-<correlationId>' via Keiro.Stream.entityStream."
+               , "-- categoryUnsafe is safe here because keiro-dsl check proved the literal legal."
+               , lo <> "Category :: Stream.StreamCategory a"
+               , lo <> "Category = Stream.categoryUnsafe " <> tshow categoryName
                , ""
                , "-- Node-level worker policy lowered from the spec. Pass this value to"
                , "-- Keiro.ProcessManager.runProcessManagerWorkerWith."
@@ -1228,6 +1237,10 @@ emitProcessGen _ctxPascal genPrefix _holePrefix p =
                , ""
                , "-- The timer-fire disposition table (hole-kind 2), derived from the spec."
                , "-- on-reject => " <> showOutcome (onReject fd) <> " is the benign inversion."
+               , "-- A duplicate append reaches on-error unless it is confirmed against the"
+               , "-- target stream. Use Keiro.ProcessManager.confirmBenignDuplicate:"
+               , "--   StreamName -> EventId -> CommandError -> Eff es Bool"
+               , "-- Fold True into the duplicate result and surface False as the failure."
                , lo <> "FireOutcome :: Either CommandError a -> Maybe ()"
                , lo <> "FireOutcome result = case result of"
                , "  Right{} -> " <> outcomeToMaybe (onOk fd)
@@ -1245,6 +1258,7 @@ emitProcessGen _ctxPascal genPrefix _holePrefix p =
                ]
   where
     lo = lowerFirst (procId p)
+    categoryName = staticCategory ("process " <> procId p) (sagaCategory (procSaga p))
     timer = procTimer p
     fd = fireDisposition (tmFire timer)
 
@@ -1278,6 +1292,8 @@ emitProcessHoles _genPrefix holePrefix p =
         , ""
         , "-- HOLE handle: build the ProcessManagerAction (the self-advance"
         , "--   '" <> advCommand (hAdvance (procHandle p)) <> "', the dispatch(es), and the timer) from the input."
+        , "-- HOLE streams: build streamFor with entityStream " <> lowerFirst (procId p) <> "Category;"
+        , "--   build target streams with entityStream " <> lowerFirst (procTarget p) <> "Category. Never concatenate raw stream names."
         , "-- HOLE window: the deadline policy, e.g. surgeWindow :: NominalDiffTime;"
         , "--   surgeDeadline observedAt = addUTCTime surgeWindow observedAt  (TIME INJECTED)."
         , "-- HOLE fire command: construct " <> fireCommand (tmFire (procTimer p)) <> " for the timer fire,"
@@ -1285,7 +1301,11 @@ emitProcessHoles _genPrefix holePrefix p =
         , "--   " <> tshow (idePrefix (fireFiredEventId (tmFire (procTimer p)))) <> " <> correlationId."
         , "-- NOTE on-duplicate AckOk is sound because the runtime confirms a duplicate"
         , "--   event id against the TARGET stream via confirmBenignDuplicate before"
-        , "--   returning PMCommandDuplicate. Hand-rolled dispatch paths must do likewise."
+        , "--   returning PMCommandDuplicate. Its effective signature is:"
+        , "--     StreamName -> EventId -> CommandError -> Eff es Bool"
+        , "--   Hand-rolled paths must call it with the target stream and attempted event id,"
+        , "--   fold True into the duplicate result, and surface False as the original failure."
+        , "--   Never pattern-match DuplicateEvent as success: event ids are globally unique."
         ]
 
 --------------------------------------------------------------------------------
@@ -1614,7 +1634,8 @@ emitEventStream a =
     nl $
         [ generatedBanner
         , "module " <> aGenPrefix a <> ".EventStream"
-        , "  ( " <> lowerFirst (aName a) <> "EventStream"
+        , "  ( " <> lowerFirst (aName a) <> "Category"
+        , "  , " <> lowerFirst (aName a) <> "EventStream"
         , "  , " <> lowerFirst (aName a) <> "EventStreamDef"
         , "  , " <> aName a <> "EventStream"
         , "  , " <> aName a <> "EventStreamDef"
@@ -1632,6 +1653,12 @@ emitEventStream a =
             ++ ["import Data.Text (Text)" | hasSnapshot a]
             ++ ["import Keiro.Snapshot.Codec (defaultStateCodec)" | hasSnapshot a]
             ++ [ "import qualified Keiro.Stream as Stream"
+               , ""
+               , "-- The validated aggregate stream category (hole-kind 5: referenced, never retyped)."
+               , "-- Entity streams are '<category>-<id>' via Keiro.Stream.entityStream."
+               , "-- categoryUnsafe is safe here because this generated literal passed the DSL category proof."
+               , lowerFirst (aName a) <> "Category :: Stream.StreamCategory a"
+               , lowerFirst (aName a) <> "Category = Stream.categoryUnsafe " <> tshow categoryName
                , ""
                , "type " <> aName a <> "EventStreamDef ="
                , "  EventStream (HsPred " <> aName a <> "Regs " <> aName a <> "Command) " <> aName a <> "Regs " <> aVertexType a <> " " <> aName a <> "Command " <> aName a <> "Event"
@@ -1657,6 +1684,8 @@ emitEventStream a =
                , lowerFirst (aName a) <> "EventStream ="
                , "  mkEventStreamOrThrow " <> tshow (aName a) <> " " <> lowerFirst (aName a) <> "EventStreamDef"
                ]
+  where
+    categoryName = staticCategory ("aggregate " <> aName a) (lowerFirst (aName a))
 
 snapshotPolicyExpr :: Agg -> Text
 snapshotPolicyExpr aggregate = case aSnapshot aggregate of
@@ -2069,6 +2098,14 @@ lowerFirst :: Text -> Text
 lowerFirst t = case T.uncons t of
     Just (c, rest) -> T.cons (toLower c) rest
     Nothing -> t
+
+{- | Assert the shared category proof at emission time as a belt-and-braces
+guard for callers that bypass the CLI's normal validate-before-scaffold path.
+-}
+staticCategory :: Text -> Text -> Text
+staticCategory owner value = case sagaCategoryError value of
+    Nothing -> value
+    Just reason -> error (T.unpack ("keiro-dsl scaffold: illegal " <> owner <> " category " <> tshow value <> " " <> reason))
 
 pascal :: Text -> Text
 pascal t = case T.uncons t of

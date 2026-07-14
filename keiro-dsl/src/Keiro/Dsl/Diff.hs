@@ -838,7 +838,7 @@ processIdentityDiff oldProcess newProcess =
         "derived-identity"
         (procId newProcess)
         DerivedIdentityChanged
-        "process name, correlation derivation, saga stream prefix, timer id prefix, or fired-event-id prefix changed; replays and retries no longer derive the persisted identity"
+        "process name, correlation derivation, saga stream category, timer id prefix, or fired-event-id prefix changed; replays and retries no longer derive the persisted identity"
     | processIdentity oldProcess /= processIdentity newProcess
     ]
 
@@ -847,7 +847,7 @@ processIdentity process =
     ( procName process
     , corrField (procCorrelate process)
     , corrVia (procCorrelate process)
-    , sagaStreamPrefix (procSaga process)
+    , sagaCategory (procSaga process)
     , idePrefix (tmId (procTimer process))
     , idePrefix (fireFiredEventId (tmFire (procTimer process)))
     )

@@ -447,6 +447,7 @@ test-suite keiro-dsl-conformance-process-runtime
     , aeson         >=2.2
     , base          >=4.21 && <5
     , keiro
+    , keiro-dsl
     , shibuya-core
     , text          >=2.1
     , time          >=1.12

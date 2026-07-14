@@ -77,6 +77,12 @@ the `Keiro.Codec`, the `ProcessManager` wiring). Use the corpus
 (`docs/corpus/keiro-dsl-corpus.md`) to see how a real spec's holes were filled. **Never edit
 a `-- @generated` module** — change the `.keiro` and re-scaffold instead.
 
+For any hand-written duplicate path, follow the generated hole note and call
+`confirmBenignDuplicate :: StreamName -> EventId -> CommandError -> Eff es Bool` with the
+target stream and attempted event id. Fold `True` into the duplicate outcome and preserve
+`False` as the original failure. Pattern-matching `DuplicateEvent` alone is unsafe because
+event ids are globally unique across streams.
+
 ### 6. Run the harness (pin behaviour)
 
 The scaffolder emits a harness (`Harness.hs` for aggregates; a facts harness for processes)

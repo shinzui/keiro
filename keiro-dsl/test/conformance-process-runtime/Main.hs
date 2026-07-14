@@ -9,6 +9,7 @@ ProcessManager value with a filled @handle@ remains the agent-written hole.)
 module Main (main) where
 
 import Control.Monad (unless)
+import Data.Text (Text)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Generated.HospitalCapacity.HospitalSurge.Process (
     hospitalSurgeFireOutcome,
@@ -17,7 +18,9 @@ import Generated.HospitalCapacity.HospitalSurge.Process (
     hospitalSurgeTimerRequest,
  )
 import Keiro.Command (CommandError (..))
+import Keiro.Dsl.Validate (sagaCategoryError)
 import Keiro.ProcessManager (PoisonPolicy (..), RejectedCommandPolicy (..), WorkerOptions (..))
+import Keiro.Stream (CategoryError, StreamCategory, category)
 import Keiro.Timer (TimerRequest (..))
 import System.Exit (exitFailure)
 
@@ -32,6 +35,8 @@ main = do
         ambiguousOk = hospitalSurgeFireOutcome (Left (CommandAmbiguous [0, 1]) :: Either CommandError ()) == Nothing
         rejectedPolicyOk = rejectedCommandPolicy hospitalSurgeProcessWorkerOptions == RejectedHalt
         poisonPolicyOk = poisonIsHalt hospitalSurgeProcessWorkerOptions
+        categoryMirrorOk = all categoryAgreement ["hospitalSurge", "surge", "", "$all", "hospital-surge", "hospital surge", "bad\NULcategory"]
+        colonReservedOk = sagaCategoryError "wf:surge" /= Nothing && not (runtimeRejectsCategory "wf:surge")
     putStrLn ("process name: " <> show nameOk)
     putStrLn ("timer request builds against Keiro.Timer: " <> show reqOk)
     putStrLn ("on-ok => Fired: " <> show okOk)
@@ -39,7 +44,17 @@ main = do
     putStrLn ("on-ambiguous => Retry: " <> show ambiguousOk)
     putStrLn ("rejected policy lowered: " <> show rejectedPolicyOk)
     putStrLn ("poison policy lowered: " <> show poisonPolicyOk)
-    unless (nameOk && reqOk && okOk && rejectOk && ambiguousOk && rejectedPolicyOk && poisonPolicyOk) exitFailure
+    putStrLn ("DSL saga category mirror agrees with Keiro.Stream.category: " <> show categoryMirrorOk)
+    putStrLn ("DSL additionally reserves ':' for workflow streams: " <> show colonReservedOk)
+    unless (nameOk && reqOk && okOk && rejectOk && ambiguousOk && rejectedPolicyOk && poisonPolicyOk && categoryMirrorOk && colonReservedOk) exitFailure
+
+categoryAgreement :: Text -> Bool
+categoryAgreement value = (sagaCategoryError value /= Nothing) == runtimeRejectsCategory value
+
+runtimeRejectsCategory :: Text -> Bool
+runtimeRejectsCategory value = case category value :: Either CategoryError (StreamCategory ()) of
+    Left _ -> True
+    Right _ -> False
 
 poisonIsHalt :: WorkerOptions es msg -> Bool
 poisonIsHalt options = case poisonPolicy options of

@@ -271,6 +271,7 @@ main = hspec $ do
                     ordinaryDomain `shouldNotSatisfy` T.isInfixOf "DeriveAnyClass"
                     ordinaryStream `shouldSatisfy` T.isInfixOf "snapshotPolicy = Never"
                     ordinaryStream `shouldSatisfy` T.isInfixOf "stateCodec = Nothing"
+                    ordinaryStream `shouldSatisfy` T.isInfixOf "reservationCategory = Stream.categoryUnsafe \"reservation\""
                     firewallBreaches snapshotModules `shouldBe` []
                 _ -> expectationFailure "expected one aggregate in each snapshot test spec"
 
@@ -285,6 +286,7 @@ main = hspec $ do
                         procName p `shouldBe` "hospital-surge"
                         procRejected p `shouldBe` PolHalt
                         procPoison p `shouldBe` PolHalt
+                        sagaCategory (procSaga p) `shouldBe` "hospitalSurge"
                         tmName (procTimer p) `shouldBe` "surgeFollowUp"
                         onReject (fireDisposition (tmFire (procTimer p))) `shouldBe` OFired
                         onAmbiguous (fireDisposition (tmFire (procTimer p))) `shouldBe` ORetry
@@ -298,6 +300,14 @@ main = hspec $ do
         it "accepts the hospital-surge spec (no errors; benign-inversion warnings only)" $ do
             codes <- errorCodesOf "test/fixtures/hospital-surge.keiro"
             codes `shouldBe` []
+        it "rejects illegal saga categories and no longer parses the raw stream-prefix clause" $ do
+            spec <- specOf "test/fixtures/hospital-surge.keiro"
+            mapM_
+                (\categoryName -> processErrorCodes (\process -> process{procSaga = (procSaga process){sagaCategory = categoryName}}) spec `shouldContain` [SagaCategoryIllegal])
+                ["", "$all", "hospital-surge", "hospital surge", "wf:surge"]
+            source <- readTestText "test/fixtures/hospital-surge.keiro"
+            parseSpec "<legacy-saga>" (T.replace "saga Surge category \"hospitalSurge\"" "saga Surge stream=\"hospital-surge-\" <> correlationId" source)
+                `shouldSatisfy` isLeft
         it "rejects a wall-clock fireAt as ProcessFireAtNotInjected" $ do
             codes <- errorCodesOf "test/fixtures/hospital-surge-clock.keiro"
             codes `shouldContain` [ProcessFireAtNotInjected]
@@ -451,7 +461,13 @@ main = hspec $ do
                     -- the worker uses the spec's ceiling, never the dangerous default
                     moduleText generatedModule `shouldSatisfy` T.isInfixOf "max-attempts = 5"
                     moduleText generatedModule `shouldSatisfy` T.isInfixOf "hospitalSurgeProcessWorkerOptions"
+                    moduleText generatedModule `shouldSatisfy` T.isInfixOf "hospitalSurgeCategory = Stream.categoryUnsafe \"hospitalSurge\""
+                    moduleText generatedModule `shouldSatisfy` T.isInfixOf "confirmBenignDuplicate"
+                    moduleText generatedModule `shouldSatisfy` T.isInfixOf "StreamName -> EventId -> CommandError -> Eff es Bool"
                     moduleText generatedModule `shouldSatisfy` T.isInfixOf "Left (CommandAmbiguous _)"
+                    case holes of
+                        [holeModule] -> moduleText holeModule `shouldSatisfy` T.isInfixOf "entityStream hospitalSurgeCategory"
+                        _ -> expectationFailure "expected one process hole module"
                 _ -> expectationFailure "expected one generated process module"
         it "process scaffold is deterministic" $ do
             a <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
@@ -924,6 +940,9 @@ main = hspec $ do
             [ckCode k | Breaking k <- processName] `shouldContain` [Just DerivedIdentityChanged]
             timerId <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-timerid.keiro"
             [ckCode k | Breaking k <- timerId] `shouldContain` [Just DerivedIdentityChanged]
+            base <- specOf "test/fixtures/hospital-surge.keiro"
+            let categoryChange = diffSpecs base (modifyProcess "HospitalSurge" (\process -> process{procSaga = (procSaga process){sagaCategory = "hospitalSurgeV2"}}) base)
+            [ckCode k | Breaking k <- categoryChange] `shouldContain` [Just DerivedIdentityChanged]
         it "classifies router stable names, keys, and targets as identity-bearing" $ do
             base <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
             let stableName = diffSpecs base (modifyRouter "PagingRouter" (\router -> router{rtName = "paging-v2"}) base)
@@ -1419,6 +1438,20 @@ modifyRouter target update spec =
 
 routerErrorCodes :: (RouterNode -> RouterNode) -> Spec -> [DiagnosticCode]
 routerErrorCodes update = errorCodes . modifyRouter "PagingRouter" update
+
+modifyProcess :: Name -> (ProcessNode -> ProcessNode) -> Spec -> Spec
+modifyProcess target update spec =
+    spec
+        { specNodes =
+            [ case node of
+                NProcess process | procId process == target -> NProcess (update process)
+                _ -> node
+            | node <- specNodes spec
+            ]
+        }
+
+processErrorCodes :: (ProcessNode -> ProcessNode) -> Spec -> [DiagnosticCode]
+processErrorCodes update = errorCodes . modifyProcess "HospitalSurge" update
 
 errorCodes :: Spec -> [DiagnosticCode]
 errorCodes spec = [code diagnostic | diagnostic <- validateSpec spec, severity diagnostic == Error]
@@ -1956,7 +1989,7 @@ processWithLiteral value =
         , procName = "process"
         , procInput = InputDecl "Input" []
         , procCorrelate = CorrelateDecl "key" "idText"
-        , procSaga = SagaRef "Saga" "saga-"
+        , procSaga = SagaRef "Saga" "saga"
         , procTarget = "Target"
         , procProjections = []
         , procHandle =

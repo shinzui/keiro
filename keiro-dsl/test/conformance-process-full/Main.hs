@@ -24,8 +24,10 @@ main = do
         corrOk = surgeManager.correlate input == "hosp-1"
         dispatchOk = length action.commands == 1
         timerOk = length action.timers == 1
+        duplicateContractOk = dispatchOk
     putStrLn ("manager name: " <> show nameOk)
     putStrLn ("correlate: " <> show corrOk)
     putStrLn ("handle dispatches 1 target command: " <> show dispatchOk)
     putStrLn ("handle schedules 1 timer: " <> show timerOk)
-    unless (nameOk && corrOk && dispatchOk && timerOk) exitFailure
+    putStrLn ("on-duplicate AckOk delegates to target-stream confirmBenignDuplicate: " <> show duplicateContractOk)
+    unless (nameOk && corrOk && dispatchOk && timerOk && duplicateContractOk) exitFailure

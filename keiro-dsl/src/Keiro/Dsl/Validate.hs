@@ -15,10 +15,11 @@ module Keiro.Dsl.Validate (
     renderDiagnostic,
     validateSpec,
     derivedQueueTrio,
+    sagaCategoryError,
 ) where
 
 import Data.Bits (xor)
-import Data.Char (ord)
+import Data.Char (isControl, isSpace, ord)
 import Data.List (sortOn)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -57,6 +58,7 @@ data DiagnosticCode
     | ProcessDispatchIdSupplied
     | ProcessUnresolvedRef
     | ProcessBenignInversion
+    | SagaCategoryIllegal
     | -- EP-4 (integration intake / inbox disposition).
       DispositionIncomplete
     | DispositionDuplicateRetry
@@ -925,7 +927,7 @@ validateIntake i = concat [completeness, duplicateRows, inversions]
 -- | EP-3 rules for a process manager + its nested timer.
 validateProcess :: Spec -> ProcessNode -> [Diagnostic]
 validateProcess spec p =
-    concat [noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, timerCeiling, policyRules, ambiguityRule, benignInversions]
+    concat [sagaCategoryRule, noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, timerCeiling, policyRules, ambiguityRule, benignInversions]
   where
     aggregates = [a | NAggregate a <- specNodes spec]
     aggNames = map aggName aggregates
@@ -934,6 +936,12 @@ validateProcess spec p =
     timeFields = [fieldName f | f <- inFields (procInput p), fieldType f == Just "Time"]
     timer = procTimer p
     pl = locLine (procLoc p)
+
+    sagaCategoryRule =
+        [ mkErr pl SagaCategoryIllegal $
+            "saga category " <> T.pack (show (sagaCategory (procSaga p))) <> " " <> reason
+        | Just reason <- [sagaCategoryError (sagaCategory (procSaga p))]
+        ]
 
     -- TIME IS INJECTED, NOT SAMPLED: fireAt's field must be a declared :Time
     -- input field. (FireAtExpr has no clock-sampling constructor, so this is a
@@ -1054,6 +1062,21 @@ validateProcess spec p =
                | d <- hDispatch (procHandle p)
                , onDuplicate (dispDisposition d) == DAckOk
                ]
+
+{- | Explain why a process saga category is illegal.  The first four cases
+mirror 'Keiro.Stream.category' without introducing a runtime dependency into
+the toolchain library.  The final @:@ case is deliberately stricter because
+that prefix is reserved for the @wf:<name>@ workflow stream family.
+-}
+sagaCategoryError :: Text -> Maybe Text
+sagaCategoryError categoryName
+    | T.null categoryName = Just "is empty; use a non-empty camelCase category"
+    | categoryName == "$all" = Just "is reserved by the event store; choose a service-owned camelCase category"
+    | T.isInfixOf "-" categoryName = Just "contains '-' (kiroku's category/id boundary); write compound categories in camelCase, for example \"hospitalSurge\""
+    | Just illegal <- T.find (\character -> isSpace character || isControl character) categoryName =
+        Just ("contains whitespace or control character " <> T.pack (show illegal) <> "; remove it and use camelCase")
+    | T.isInfixOf ":" categoryName = Just "contains ':' which is reserved for the wf:<name> workflow stream family; choose a camelCase category without ':'"
+    | otherwise = Nothing
 
 -- | EP-108 rules for a stateless content-based router.
 validateRouter :: Spec -> RouterNode -> [Diagnostic]

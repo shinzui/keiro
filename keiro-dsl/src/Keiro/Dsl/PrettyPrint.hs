@@ -387,7 +387,7 @@ docCorrelate :: CorrelateDecl -> Doc ann
 docCorrelate c = "correlate" <+> ("input." <> pretty (corrField c)) <+> "via" <+> pretty (corrVia c)
 
 docSaga :: SagaRef -> Doc ann
-docSaga s = "saga" <+> pretty (sagaAgg s) <+> ("stream=" <> dquoted (sagaStreamPrefix s) <+> "<>" <+> "correlationId")
+docSaga s = "saga" <+> pretty (sagaAgg s) <+> "category" <+> dquoted (sagaCategory s)
 
 docHandle :: HandleNode -> Doc ann
 docHandle h =

@@ -7,6 +7,11 @@
 -- scaffolded timer-request builder. This is the behaviour-bearing body the
 -- scaffolder deliberately leaves as a hole (the firewall); here it is written
 -- and type-checked against the runtime to prove the full service compiles.
+--
+-- The runtime dispatch worker may acknowledge @on-duplicate AckOk@ only after
+-- @confirmBenignDuplicate@ proves the attempted event id exists in this
+-- command's target stream. A hand-written dispatch path must preserve that
+-- target-stream check; a bare global @DuplicateEvent@ is not sufficient.
 module SurgeDemo.SurgeFlow.Manager (
     surgeManager,
     SurgeInput (..),
@@ -15,13 +20,13 @@ module SurgeDemo.SurgeFlow.Manager (
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import Generated.SurgeDemo.Hospital.Domain qualified as H
-import Generated.SurgeDemo.Hospital.EventStream (hospitalEventStream)
+import Generated.SurgeDemo.Hospital.EventStream (hospitalCategory, hospitalEventStream)
 import Generated.SurgeDemo.Surge.Domain qualified as S
 import Generated.SurgeDemo.Surge.EventStream (surgeEventStream)
-import Generated.SurgeDemo.SurgeFlow.Process (surgeFlowTimerRequest)
+import Generated.SurgeDemo.SurgeFlow.Process (surgeFlowCategory, surgeFlowTimerRequest)
 import Keiki.Core (HsPred)
 import Keiro.ProcessManager (PMCommand (..), ProcessManager (..), ProcessManagerAction (..))
-import Keiro.Stream (stream)
+import Keiro.Stream (entityStream)
 
 data SurgeInput = SurgeInput
     { hospitalId :: Text
@@ -46,7 +51,7 @@ surgeManager =
         { name = "surge-demo"
         , correlate = \i -> hospitalId (i :: SurgeInput)
         , eventStream = surgeEventStream
-        , streamFor = \cid -> stream ("surge-" <> cid)
+        , streamFor = entityStream surgeFlowCategory
         , targetEventStream = hospitalEventStream
         , targetProjections = const []
         , handle = \i ->
@@ -54,7 +59,7 @@ surgeManager =
                 { command = S.NoteSurgeThreshold (S.NoteSurgeThresholdData (S.HospitalId (hospitalId i)))
                 , commands =
                     [ PMCommand
-                        { target = stream ("hospital-" <> hospitalId i)
+                        { target = entityStream hospitalCategory (hospitalId i)
                         , command = H.ActivateSurge (H.ActivateSurgeData (H.HospitalId (hospitalId i)))
                         }
                     ]

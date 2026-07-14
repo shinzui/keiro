@@ -59,41 +59,41 @@ This section must always reflect the actual current state of the work.
 
 **M1 — category-based saga stream construction**
 
-- [ ] Replace `SagaRef.sagaStreamPrefix` with `sagaCategory` in
+- [x] (2026-07-14 03:15Z) Replace `SagaRef.sagaStreamPrefix` with `sagaCategory` in
       `keiro-dsl/src/Keiro/Dsl/Grammar.hs` and update the docstring.
-- [ ] Rewrite `pSaga` in `keiro-dsl/src/Keiro/Dsl/Parser.hs` to parse
+- [x] (2026-07-14 03:15Z) Rewrite `pSaga` in `keiro-dsl/src/Keiro/Dsl/Parser.hs` to parse
       `saga <Agg> category "<name>"` (hard break on the old clause — see Decision Log).
-- [ ] Rewrite `docSaga` in `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` to print the new clause;
+- [x] (2026-07-14 03:15Z) Rewrite `docSaga` in `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` to print the new clause;
       round-trip property still passes.
-- [ ] Add the `SagaCategoryIllegal` check-time diagnostic in
+- [x] (2026-07-14 03:15Z) Add the `SagaCategoryIllegal` check-time diagnostic in
       `keiro-dsl/src/Keiro/Dsl/Validate.hs`, mirroring `Keiro.Stream.category` legality
       (non-empty, no `-`, not `$all`, no whitespace/control characters).
-- [ ] Update the `new process` skeleton template (`keiro-dsl/src/Keiro/Dsl/Skeleton.hs:89`)
+- [x] (2026-07-14 03:15Z) Update the `new process` skeleton template (`keiro-dsl/src/Keiro/Dsl/Skeleton.hs:89`)
       to the new clause with a legal category.
-- [ ] Emit the saga category constant (`<proc>Category` via `categoryUnsafe`) from
+- [x] (2026-07-14 03:15Z) Emit the saga category constant (`<proc>Category` via `categoryUnsafe`) from
       `emitProcessGen` and a per-aggregate `<agg>Category` constant from `emitEventStream`
       in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`; update the `ProcessHoles` stub comments to
       reference them.
-- [ ] Migrate all five saga fixtures (`hospital-surge.keiro`,
+- [x] (2026-07-14 03:15Z) Migrate every current saga fixture (`hospital-surge.keiro`,
       `hospital-surge-{clock,dispatchid,badref}.keiro`, `surge-service.keiro`) and any
       skill/corpus snippets to the new clause.
-- [ ] Rewrite `keiro-dsl/test/conformance-process-full/SurgeDemo/SurgeFlow/Manager.hs`
+- [x] (2026-07-14 03:15Z) Rewrite `keiro-dsl/test/conformance-process-full/SurgeDemo/SurgeFlow/Manager.hs`
       (lines 49 and 57) to `entityStream` against the emitted category constants; sweep for
       other raw `stream ("…" <> …)` fills (grep evidence recorded below).
-- [ ] Regenerate and re-commit the pinned byte-stable `Generated/` trees affected by the new
+- [x] (2026-07-14 03:15Z) Regenerate and re-commit the pinned byte-stable `Generated/` trees affected by the new
       emissions; all conformance suites and the unit suite green.
-- [ ] Add unit coverage: illegal category rejected by `check`, legal one accepted, skeleton
+- [x] (2026-07-14 03:15Z) Add unit coverage: illegal category rejected by `check`, legal one accepted, skeleton
       still certified valid.
 
 **M2 — confirmBenignDuplicate in fills, holes, and the skill**
 
-- [ ] Add a `confirmBenignDuplicate` reference to the generated `Process` module comment
+- [x] (2026-07-14 03:15Z) Add a `confirmBenignDuplicate` reference to the generated `Process` module comment
       block (next to the `FireOutcome` disposition) and to the `emitProcessHoles` stub in
       `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`.
-- [ ] Extend the process reference material (the `conformance-process-runtime` suite or the
+- [x] (2026-07-14 03:15Z) Extend the process reference material (using the documented
       `Manager.hs` fill commentary) with a worked duplicate-dispatch demonstration that
       names `confirmBenignDuplicate` as the mechanism behind `on-duplicate AckOk`.
-- [ ] Write the hole-filling-contract paragraph into
+- [x] (2026-07-14 03:15Z) Write the hole-filling-contract paragraph into
       `agents/skills/keiro-dsl-authoring/SKILL.md` (rule 4) and `LOOP.md` step 5, with the
       quoted signature.
 
@@ -164,6 +164,23 @@ implementation. Provide concise evidence.
   `stream ("surge-" <> cid)`. M1 makes the clause load-bearing (an emitted, define-once
   category constant) precisely so this class of drift becomes impossible.
 
+- Implementation discovery (2026-07-14): the pre-work inventory's five saga fixtures had
+  grown to eleven after EP-109, and EP-108's router fill introduced two additional raw
+  `stream ("…" <> …)` targets. M1 migrated every current grammar occurrence and both process
+  and router fills; `rg -n 'stream \("' keiro-dsl/test -g '!**/Generated/**'` now has no
+  matches.
+- Implementation discovery (2026-07-14): `hospital-surge.keiro` is a validator fixture with
+  command-only aggregates and the delivered EP-106 scaffold refusal correctly reports
+  `AggregateEmpty`; it cannot be used to regenerate its historical conformance tree through
+  the CLI. The three affected category-bearing files in `conformance-process` and
+  `conformance-process-runtime` were updated surgically, while every scaffoldable tree was
+  regenerated normally. The focused matrix passed all twelve requested components, including
+  200 unit/property examples and the compile-all-skeletons suite.
+- Implementation discovery (2026-07-14): EP-108 had already added router-side
+  `confirmBenignDuplicate` comments and a short NOTATION mention. M2 retained that delivered
+  guidance, added the missing process generated/stub signature and hand-written-path rules,
+  and aligned SKILL/LOOP plus the process reference fill.
+
 (Nothing further yet.)
 
 
@@ -221,6 +238,16 @@ Record every decision made while working on the plan.
   no deployed streams exist under the old names — so no data migration arises.
   Date: 2026-07-13
 
+- Decision: use M2's documented-assertion fallback in the pure process conformance component
+  rather than introduce a PostgreSQL store fixture solely to re-test
+  `confirmBenignDuplicate` internals.
+  Rationale: the runtime process and router workers already exercise the function on their
+  dispatch paths, while the DSL obligation is to expose the exact target-stream contract at
+  every hand-written decision point. The generated output is pinned to the signature, the
+  process reference fill explains the global-id collision hazard, and the green full-process
+  component records that the worker owns the confirmation behind `on-duplicate AckOk`.
+  Date: 2026-07-14
+
 (Add entries as implementation decisions are made.)
 
 
@@ -229,9 +256,15 @@ Record every decision made while working on the plan.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
-(To be filled during and after implementation. The M6 entry must state whether the
-cold-start agent succeeded without touching a generated module — that entry is the
-MasterPlan's end-to-end acceptance record.)
+M1 replaced raw saga prefixes with validated categories, made category literals load-bearing
+through generated `StreamCategory` constants, migrated process and router fills to
+`entityStream`, and pinned the mirrored runtime rule plus the stricter workflow-colon
+reservation. M2 made the target-stream duplicate confirmation contract visible in generated
+process output, hole stubs, the reference fill, and the authoring loop. The focused unit and
+conformance matrix passed. M3–M6 remain.
+
+(The M6 entry must state whether the cold-start agent succeeded without touching a generated
+module — that entry is the MasterPlan's end-to-end acceptance record.)
 
 
 ## Context and Orientation

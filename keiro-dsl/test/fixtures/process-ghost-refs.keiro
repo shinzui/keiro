@@ -4,7 +4,7 @@ process Demo
   name "demo"
   input DemoInput { thingId observedAt:Time }
   correlate input.thingId via idText
-  saga Saga stream="demo-" <> correlationId
+  saga Saga category "demo"
   target Target
   projections [ ghostReadiness ]
 

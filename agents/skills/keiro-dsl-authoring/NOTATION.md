@@ -122,7 +122,7 @@ process HospitalSurge
   name "hospital-surge"
   input SurgeInput { hospitalId availableIcuBeds:Int observedAt:Time }
   correlate input.hospitalId via idText
-  saga Surge stream="hospital-surge-" <> correlationId
+  saga Surge category "hospitalSurge"
   target Hospital
   projections [ hospitalReadiness ]
   on SurgeInput
@@ -151,6 +151,13 @@ must be passed to `runProcessManagerWorkerWith`; `CommandAmbiguous` follows the 
 `rejected` policy for ordinary dispatches. Holes: the `handle` body, the deadline window,
 the fire command, and SQL. An `on-duplicate AckOk` hand-written path must use
 `confirmBenignDuplicate` against the target stream before acknowledging the duplicate.
+
+The saga clause names a validated stream **category**, not a raw prefix. Categories are
+non-empty, contain no `-`, whitespace, control characters, or `:`, and may not be `$all`;
+write compound names in camelCase. The scaffold emits `<process>Category` and one
+`<aggregate>Category` constant per aggregate. Hole fills construct streams with
+`entityStream` or `entityStreamId` against those constants—never with raw text
+concatenation.
 
 ## router (EP-108)
 

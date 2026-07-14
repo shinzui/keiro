@@ -435,12 +435,13 @@ data CorrelateDecl = CorrelateDecl
     }
     deriving stock (Eq, Show, Generic)
 
-{- | @saga Surge stream=\"hospital-surge-\" <> correlationId@ — the saga's own
-aggregate plus the @streamFor@ suffix-splice prefix.
+{- | @saga Surge category \"hospitalSurge\"@ — the saga's own aggregate plus
+the validated stream category used with @Keiro.Stream.entityStream@.  For a
+correlation id @c@, the saga stream is @<category>-<c>@.
 -}
 data SagaRef = SagaRef
     { sagaAgg :: !Name
-    , sagaStreamPrefix :: !Text
+    , sagaCategory :: !Text
     }
     deriving stock (Eq, Show, Generic)
 

@@ -127,6 +127,7 @@ reservedWords =
     , "wire"
     , "projection"
     , "snapshot"
+    , "category"
     , "guard"
     , "write"
     , "emit"
@@ -1252,12 +1253,9 @@ pSaga :: P SagaRef
 pSaga = do
     keyword "saga"
     agg <- ident
-    _ <- symbol "stream"
-    _ <- symbol "="
-    pfx <- stringLit
-    _ <- symbol "<>"
-    _ <- ident -- correlationId (fixed)
-    pure SagaRef{sagaAgg = agg, sagaStreamPrefix = pfx}
+    keyword "category"
+    categoryName <- stringLit
+    pure SagaRef{sagaAgg = agg, sagaCategory = categoryName}
 
 pHandle :: P HandleNode
 pHandle = do
