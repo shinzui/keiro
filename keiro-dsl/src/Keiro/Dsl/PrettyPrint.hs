@@ -130,8 +130,11 @@ docWorkqueue w =
         , indent 2 ("derive physical =" <+> dquoted (wqPhysical w))
         , indent 4 ("dlq =" <+> dquoted (wqDlq w))
         , indent 4 ("table =" <+> dquoted (wqTable w))
-        , indent 2 ("payload" <+> pretty (wqPayloadName w) <+> "{")
         ]
+            ++ orderingLines
+            ++ groupKeyLines
+            ++ provisionLines
+            ++ [indent 2 ("payload" <+> pretty (wqPayloadName w) <+> "{")]
             ++ map (indent 4 . field) (wqPayload w)
             ++ [ indent 2 "}"
                , indent 2 ("retry maxRetries =" <+> pretty (wqMaxRetries w) <+> "delay =" <+> pretty (wqDelay w) <+> "dlq =" <+> (if wqDlqOn w then "on" else "off"))
@@ -140,6 +143,25 @@ docWorkqueue w =
             ++ map (indent 4 . dispRow) (wqDisposition w)
             ++ [indent 2 "}", "}"]
   where
+    orderingLines = case wqOrdering w of
+        WqUnordered -> []
+        WqFifoThroughput -> [indent 2 "ordering fifo-throughput"]
+        WqFifoRoundRobin -> [indent 2 "ordering fifo-roundrobin"]
+    groupKeyLines = case wqGroupKey w of
+        Nothing -> []
+        Just groupKey ->
+            [ indent 2 $
+                "group key from"
+                    <+> pretty (gkField groupKey)
+                    <+> "via"
+                    <+> pretty (gkVia groupKey)
+                    <> maybe mempty (\fixture -> " fixture " <> dquoted fixture) (gkFixture groupKey)
+            ]
+    provisionLines = case wqProvision w of
+        WqStandard -> []
+        WqUnlogged -> [indent 2 "provision unlogged"]
+        WqPartitioned interval retention ->
+            [indent 2 ("provision partitioned(interval=" <> dquoted interval <> ", retention=" <> dquoted retention <> ")")]
     field f = pretty (wqfName f) <+> "->" <+> dquoted (wqfWire f) <+> pretty (wqfType f) <> (if wqfRequired f then " required" else mempty)
     dispRow r = pretty (wqdOutcome r) <+> "->" <+> act (wqdAction r)
     act IAckOk = "ackOk"

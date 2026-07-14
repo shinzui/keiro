@@ -276,13 +276,18 @@ test-suite keiro-dsl-conformance-queue-runtime
   type:           exitcode-stdio-1.0
   hs-source-dirs: test/conformance-queue-runtime
   main-is:        Main.hs
-  other-modules:  Generated.HospitalCapacity.Reservation_work.QueuePolicy
+  other-modules:
+    Generated.HospitalCapacity.Reservation_work.Queue
+    Generated.HospitalCapacity.Reservation_work.QueuePolicy
+
   build-depends:
-    , base        >=4.21 && <5
+    , aeson        >=2.2
+    , base         >=4.21 && <5
     , keiro-dsl
     , keiro-pgmq
+    , pgmq-config
     , pgmq-core
-    , text        >=2.1
+    , text         >=2.1
 
 -- EP-107 read-model runtime conformance: the scaffolded ReadModel record,
 -- registration/rebuild helpers, AsyncProjection, facts harness, and a filled

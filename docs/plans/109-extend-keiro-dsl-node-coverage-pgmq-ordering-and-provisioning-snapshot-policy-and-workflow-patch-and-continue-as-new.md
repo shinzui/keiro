@@ -56,10 +56,10 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
 
 ## Progress
 
-- [ ] M1: `workqueue` ordering / provisioning / group-key — grammar, parser,
+- [x] (2026-07-13T23:59:41Z) M1: `workqueue` ordering / provisioning / group-key — grammar, parser,
       pretty-printer, validator rules (incl. the unlogged durability warning and the
       group-key-iff-FIFO rule), fixtures, unit pins.
-- [ ] M1: `workqueue` scaffold lowering (`jobOrdering`, `queueProvision`,
+- [x] (2026-07-13T23:59:41Z) M1: `workqueue` scaffold lowering (`jobOrdering`, `queueProvision`,
       `jobTuningFor`, `groupKeyFor`) + regenerated committed conformance copies +
       extended `conformance-queue-runtime` assertions + NOTATION.md snippet.
 - [ ] M2: aggregate `snapshot` clause — grammar, parser, pretty-printer, validator
@@ -103,6 +103,15 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
   prettyprinter/text — it cannot re-derive the hash at `check` time. Hence the
   shape hash is a *captured fixture* verified by the conformance suite against the live
   runtime, not by the validator (see Decision Log).
+- The authored baseline command `cabal build keiro-dsl` became ambiguous after the
+  package exposed both a library and an executable with that component name. The
+  qualified command `cabal build lib:keiro-dsl` is green, and the actual pre-M1 unit
+  baseline is 181 examples rather than the plan's historical 58. M1 raises it to 184.
+- `queueProvisionConfigs` returns `Pgmq.Config.QueueConfig`, whose source belongs to
+  the registered `shinzui/pgmq-hs` project's `pgmq-config` package, not `pgmq-core`.
+  The runtime conformance suite now depends on `pgmq-config` explicitly and inspects
+  the live config fields, proving a FIFO index on the main queue and a standard,
+  non-FIFO DLQ without requiring a database.
 
 (To be extended during implementation.)
 
@@ -184,7 +193,14 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+M1 is complete. Workqueues now express unordered or FIFO ordering, required FIFO group
+keys, and standard/unlogged/partitioned provisioning. `check` rejects missing,
+ignored, unresolved, and malformed combinations and warns on the unlogged crash-loss
+tradeoff. Generated queue modules expose total raw group-key projection plus live
+`JobOrdering`, `JobTuning`, and `QueueProvision` values. The unit suite (184 examples),
+queue codec suite, queue runtime suite, and filled dispatch suite are green; the
+runtime suite inspects the pure live `queueProvisionConfigs` result to pin the main
+queue and DLQ shapes. M2–M5 remain.
 
 
 ## Context and Orientation

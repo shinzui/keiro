@@ -72,6 +72,11 @@ data DiagnosticCode
     | WqStoreFailureNotRetry
     | WqDecodeFailureNotDeadLetter
     | WqDlqWithoutCeiling
+    | WqGroupKeyMissing
+    | WqGroupKeyWithoutFifo
+    | WqGroupKeyUnresolved
+    | WqUnloggedDurability
+    | WqPartitionSpecEmpty
     | DispatchEnqueueUnresolved
     | -- EP-6 (workflow/operation).
       AwaitSignalMismatch
@@ -638,7 +643,7 @@ derivation; the disposition inversions (storeFailure transient => must retry;
 decodeFailure poison => must dead-letter); and dlq=on requires a retry ceiling.
 -}
 validateWorkqueue :: WorkqueueNode -> [Diagnostic]
-validateWorkqueue w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling]
+validateWorkqueue w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling, orderingRules, groupKeyRules, provisionRules]
   where
     wl = locLine (wqLoc w)
     rows = wqDisposition w
@@ -686,6 +691,48 @@ validateWorkqueue w = concat [divergence, completeness, duplicateRows, inversion
         [ mkErr wl WqDlqWithoutCeiling ("workqueue '" <> wqName w <> "': dlq=on requires maxRetries >= 1 (an absent ceiling never dead-letters)")
         | wqDlqOn w && wqMaxRetries w < 1
         ]
+    fifo = wqOrdering w /= WqUnordered
+    orderingRules =
+        [ mkErr wl WqGroupKeyMissing $
+            "workqueue '" <> wqName w <> "': FIFO delivery is per group, so ordering requires a 'group key' clause that makes enqueueToGroup deterministic"
+        | fifo && wqGroupKey w == Nothing
+        ]
+            ++ [ mkErr wl WqGroupKeyWithoutFifo $
+                    "workqueue '" <> wqName w <> "': a group key with unordered reads would be ignored; declare a FIFO ordering or remove the key"
+               | not fifo && wqGroupKey w /= Nothing
+               ]
+    groupKeyRules = case wqGroupKey w of
+        Nothing -> []
+        Just groupKey ->
+            case [field | field <- wqPayload w, wqfName field == gkField groupKey] of
+                [] ->
+                    [ mkErr wl WqGroupKeyUnresolved $
+                        "workqueue '" <> wqName w <> "': group key field '" <> gkField groupKey <> "' is not declared in its payload"
+                    ]
+                field : _ ->
+                    [ mkErr wl WqGroupKeyUnresolved $
+                        "workqueue '" <> wqName w <> "': group key via raw requires a text payload field, but '" <> gkField groupKey <> "' has type '" <> wqfType field <> "'"
+                    | gkVia groupKey == "raw" && wqfType field /= "text"
+                    ]
+                        ++ [ mkErr wl WqGroupKeyUnresolved $
+                                "workqueue '" <> wqName w <> "': opaque group-key derivation '" <> gkVia groupKey <> "' requires a captured fixture"
+                           | gkVia groupKey /= "raw" && gkFixture groupKey == Nothing
+                           ]
+    provisionRules = case wqProvision w of
+        WqStandard -> []
+        WqUnlogged ->
+            [ Diagnostic
+                { line = wl
+                , severity = Warning
+                , code = WqUnloggedDurability
+                , message = "workqueue '" <> wqName w <> "': provision unlogged is truncated to empty on a database crash; use it only for transient, regenerable work"
+                }
+            ]
+        WqPartitioned interval retention ->
+            [ mkErr wl WqPartitionSpecEmpty $
+                "workqueue '" <> wqName w <> "': partition interval and retention must be non-empty; they are create-time settings and the additive reconciler will not migrate an existing queue"
+            | T.null interval || T.null retention
+            ]
 
 -- | EP-5 dispatch rule: the @enqueue to@ target must resolve to a declared workqueue.
 validatePgmqDispatch :: Spec -> PgmqDispatchNode -> [Diagnostic]

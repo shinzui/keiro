@@ -668,6 +668,7 @@ emitWorkqueueGen genPrefix w =
         , "  , encode" <> payloadTy
         , "  , parse" <> payloadTy
         , "  , queuePhysical, queueDlq, queueTable"
+        , groupKeyExport
         , "  ) where"
         , ""
         , "import Data.Aeson (Value, object, withObject, (.:), (.=))"
@@ -680,15 +681,17 @@ emitWorkqueueGen genPrefix w =
         , "queueDlq = " <> tshow (wqDlq w)
         , "queueTable = " <> tshow (wqTable w)
         , ""
-        , "data " <> payloadTy <> " = " <> payloadTy
-        , "  { " <> T.intercalate "\n  , " [wqfName f <> " :: !" <> hsType (wqfType f) | f <- wqPayload w]
-        , "  }"
-        , "  deriving stock (Eq, Show)"
-        , ""
-        , "encode" <> payloadTy <> " :: " <> payloadTy <> " -> Value"
-        , "encode" <> payloadTy <> " p ="
-        , "  object"
         ]
+            ++ groupKeyLines
+            ++ [ "data " <> payloadTy <> " = " <> payloadTy
+               , "  { " <> T.intercalate "\n  , " [wqfName f <> " :: !" <> hsType (wqfType f) | f <- wqPayload w]
+               , "  }"
+               , "  deriving stock (Eq, Show)"
+               , ""
+               , "encode" <> payloadTy <> " :: " <> payloadTy <> " -> Value"
+               , "encode" <> payloadTy <> " p ="
+               , "  object"
+               ]
             ++ [lead i (tshow (wqfWire f) <> " .= p." <> wqfName f) | (i, f) <- zip [(0 :: Int) ..] (wqPayload w)]
             ++ [ "    ]"
                , ""
@@ -702,6 +705,31 @@ emitWorkqueueGen genPrefix w =
                ]
   where
     payloadTy = wqPayloadName w
+    groupKeyExport = case wqGroupKey w of
+        Nothing -> ""
+        Just groupKey
+            | gkVia groupKey == "raw" -> "  , groupKeyField, groupKeyFor"
+            | otherwise -> "  , groupKeyField"
+    groupKeyLines = case wqGroupKey w of
+        Nothing -> []
+        Just groupKey -> common <> derivationLines groupKey
+          where
+            common =
+                [ "groupKeyField :: Text"
+                , "groupKeyField = " <> tshow (gkField groupKey)
+                , ""
+                ]
+            derivationLines key
+                | gkVia key == "raw" =
+                    [ "groupKeyFor :: " <> payloadTy <> " -> Text"
+                    , "groupKeyFor payload = payload." <> gkField key
+                    , ""
+                    ]
+                | otherwise =
+                    [ "-- Opaque group-key derivation '" <> gkVia key <> "' remains hand-owned."
+                    , "-- Captured fixture: " <> fromMaybe "<missing>" (gkFixture key)
+                    , ""
+                    ]
     hsType "bool" = "Bool"
     hsType "int" = "Int"
     hsType _ = "Text"
@@ -720,10 +748,24 @@ emitQueuePolicy genPrefix w =
     nl $
         [ "{-# LANGUAGE OverloadedStrings #-}"
         , generatedBanner
-        , "module " <> genPrefix <> ".QueuePolicy (retryPolicy, jobOutcomeFor) where"
+        , "module " <> genPrefix <> ".QueuePolicy"
+        , "  ( retryPolicy, jobOutcomeFor"
+        , "  , jobOrdering, jobTuningFor, queueProvision"
+        , "  ) where"
         , ""
         , "import Data.Text (Text)"
-        , "import Keiro.PGMQ.Job (JobOutcome (..), RetryDelay (..), RetryPolicy (..))"
+        , "import Keiro.PGMQ.Job (JobOrdering (..), JobOutcome (..), JobTuning, PartitionSpec (..), QueueProvision, RetryDelay (..), RetryPolicy (..), partitionedProvision, standardProvision, unloggedProvision, withFifoIndexProvision, withOrdering)"
+        , ""
+        , "jobOrdering :: JobOrdering"
+        , "jobOrdering = " <> orderingCtor
+        , ""
+        , "-- Deployment owns visibility timeout, batch size, and polling; the spec owns ordering."
+        , "jobTuningFor :: JobTuning -> JobTuning"
+        , "jobTuningFor = withOrdering jobOrdering"
+        , ""
+        , "-- Pass this to ensureJobQueueWith at worker startup. FIFO adds the required GIN index; the DLQ remains standard."
+        , "queueProvision :: QueueProvision"
+        , "queueProvision = " <> provisionExpr
         , ""
         , "retryPolicy :: RetryPolicy"
         , "retryPolicy ="
@@ -741,6 +783,23 @@ emitQueuePolicy genPrefix w =
             ++ ["  " <> tshow (wqdOutcome r) <> " -> " <> outcome (wqdAction r) | r <- wqDisposition w]
             ++ ["  _ -> Retry (RetryDelay " <> windowText (wqDelay w) <> ")"]
   where
+    orderingCtor = case wqOrdering w of
+        WqUnordered -> "Unordered"
+        WqFifoThroughput -> "FifoThroughput"
+        WqFifoRoundRobin -> "FifoRoundRobin"
+    provisionExpr = fifoWrap baseProvision
+    fifoWrap expression = case wqOrdering w of
+        WqUnordered -> expression
+        _ -> "withFifoIndexProvision (" <> expression <> ")"
+    baseProvision = case wqProvision w of
+        WqStandard -> "standardProvision"
+        WqUnlogged -> "unloggedProvision"
+        WqPartitioned interval retention ->
+            "partitionedProvision (PartitionSpec { partitionInterval = "
+                <> tshow interval
+                <> ", retentionInterval = "
+                <> tshow retention
+                <> " })"
     outcome IAckOk = "Done"
     outcome (IRetry win) = "Retry (RetryDelay " <> windowText win <> ")"
     outcome (IDeadLetter mr) = "Dead " <> tshow (fromMaybe "dead-lettered" mr)

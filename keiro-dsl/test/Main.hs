@@ -523,6 +523,31 @@ main = hspec $ do
             ghost `shouldContain` [DispatchDedupQueueUnresolved]
             field <- errorCodesOf "test/fixtures/dispatch-dedup-bad-field.keiro"
             field `shouldContain` [DispatchDedupFieldUnresolved]
+        it "requires a resolvable group key exactly when ordering is FIFO" $ do
+            noKey <- errorCodesOf "test/fixtures/reservation-work-fifo-nokey.keiro"
+            noKey `shouldContain` [WqGroupKeyMissing]
+            unordered <- errorCodesOf "test/fixtures/reservation-work-key-unordered.keiro"
+            unordered `shouldContain` [WqGroupKeyWithoutFifo]
+            source <- readTestText "test/fixtures/reservation-work.keiro"
+            unresolved <- parseInlineSpec "<unresolved-group-key>" (T.replace "group key from reservationId" "group key from missingId" source)
+            map code (validateSpec unresolved) `shouldContain` [WqGroupKeyUnresolved]
+        it "warns on unlogged storage and rejects empty partition settings" $ do
+            warningCodes <- diagnosticCodesOf "test/fixtures/reservation-work-unlogged.keiro"
+            warningCodes `shouldContain` [WqUnloggedDurability]
+            partitionCodes <- errorCodesOf "test/fixtures/reservation-work-partitioned-empty.keiro"
+            partitionCodes `shouldContain` [WqPartitionSpecEmpty]
+        it "lowers ordering, provisioning, and raw group-key projection" $ do
+            spec <- specOf "test/fixtures/reservation-work.keiro"
+            case [workqueue | NWorkqueue workqueue <- specNodes spec] of
+                workqueue : _ -> do
+                    let modules = scaffoldWorkqueue (defaultContext (specContext spec)) workqueue
+                        queue = generatedTextEndingIn "Queue.hs" modules
+                        policy = generatedTextEndingIn "QueuePolicy.hs" modules
+                    queue `shouldSatisfy` T.isInfixOf "groupKeyFor payload = payload.reservationId"
+                    policy `shouldSatisfy` T.isInfixOf "jobOrdering = FifoThroughput"
+                    policy `shouldSatisfy` T.isInfixOf "withFifoIndexProvision (standardProvision)"
+                    firewallBreaches modules `shouldBe` []
+                [] -> expectationFailure "reservation-work fixture has no workqueue"
 
     describe "readmodel (EP-107)" $ do
         it "parses and round-trips first-class read models" $ do
@@ -2152,6 +2177,9 @@ genWorkqueue =
         <*> genAdversarialText
         <*> genAdversarialText
         <*> genAdversarialText
+        <*> elements [WqUnordered, WqFifoThroughput, WqFifoRoundRobin]
+        <*> genMaybe (WqGroupKey <$> genName <*> genName <*> genMaybe genAdversarialText)
+        <*> oneof [pure WqStandard, pure WqUnlogged, WqPartitioned <$> genAdversarialText <*> genAdversarialText]
         <*> genName
         <*> smallList genWqField
         <*> choose (0, 5)

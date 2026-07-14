@@ -762,6 +762,9 @@ pWorkqueue = do
     dlqName <- stringLit
     _ <- symbol "table" *> symbol "="
     tbl <- stringLit
+    ordering <- option WqUnordered pOrdering
+    groupKey <- optional pGroupKey
+    provision <- option WqStandard pProvision
     keyword "payload"
     pn <- ident
     fields <- braces (many pWqField)
@@ -782,6 +785,9 @@ pWorkqueue = do
             , wqPhysical = phys
             , wqDlq = dlqName
             , wqTable = tbl
+            , wqOrdering = ordering
+            , wqGroupKey = groupKey
+            , wqProvision = provision
             , wqPayloadName = pn
             , wqPayload = fields
             , wqMaxRetries = mr
@@ -791,6 +797,34 @@ pWorkqueue = do
             , wqLoc = loc
             }
   where
+    pOrdering = do
+        _ <- symbol "ordering"
+        choice
+            [ WqUnordered <$ symbol "unordered"
+            , WqFifoThroughput <$ symbol "fifo-throughput"
+            , WqFifoRoundRobin <$ symbol "fifo-roundrobin"
+            ]
+    pGroupKey = do
+        _ <- symbol "group" *> symbol "key" *> symbol "from"
+        field <- ident
+        _ <- symbol "via"
+        via <- ident
+        fixture <- optional (symbol "fixture" *> stringLit)
+        pure WqGroupKey{gkField = field, gkVia = via, gkFixture = fixture}
+    pProvision = do
+        _ <- symbol "provision"
+        choice
+            [ WqStandard <$ symbol "standard"
+            , WqUnlogged <$ symbol "unlogged"
+            , do
+                _ <- symbol "partitioned" *> symbol "("
+                _ <- symbol "interval" *> symbol "="
+                interval <- stringLit
+                _ <- symbol "," *> symbol "retention" *> symbol "="
+                retention <- stringLit
+                _ <- symbol ")"
+                pure (WqPartitioned interval retention)
+            ]
     pWqField = do
         n <- ident
         _ <- symbol "->"

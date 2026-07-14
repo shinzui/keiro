@@ -214,6 +214,9 @@ workqueue reservation_work {
   derive physical = "hospital_capacity_reservation_work"   # captured fixture trio; validator re-derives physical/dlq/table and checks drift
          dlq = "hospital_capacity_reservation_work_dlq"
          table = "pgmq.q_hospital_capacity_reservation_work"
+  ordering fifo-throughput                               # default: unordered; also fifo-roundrobin
+  group key from reservationId via raw                   # required exactly when ordering is FIFO
+  provision standard                                     # default; also unlogged or partitioned(...)
   payload ReservationWorkItem { reservationId -> "reservation_id" text required }
   retry maxRetries = 3 delay = 5s dlq = on                 # dlq=on needs maxRetries>=1
   disposition {
@@ -233,6 +236,20 @@ dispatch reservation_work_dispatch {
   enqueue to = reservation_work
 }
 ```
+
+`ordering` is the consumer's delivery contract. FIFO modes preserve send order within
+each declared group while allowing different groups to proceed in parallel; delivery
+remains at-least-once, so handlers stay idempotent. `via raw` requires a `text` payload
+field. An opaque derivation uses `via <name> fixture "<input> => <output>"` so its
+hand-owned implementation can be re-derived consistently.
+
+`provision unlogged` is faster but PostgreSQL truncates the queue to empty after a
+database crash, so `check` emits `WqUnloggedDurability`. Partitioned syntax is
+`provision partitioned(interval="daily", retention="7 days")`; it requires
+`pg_partman`, and these are create-time settings—the additive provisioner does not
+migrate an existing queue. FIFO provisioning adds the required GIN index; a DLQ stays
+standard. Headers, batch enqueue, visibility timeout, batch size, polling, and metrics
+remain deployment tuning (hole-kind 8).
 
 ## readmodel (EP-107)
 

@@ -31,6 +31,9 @@ workqueue reservation_work {
          dlq = "hospital_capacity_reservation_work_dlq"
          table = "pgmq.q_hospital_capacity_reservation_work"
 
+  ordering fifo-throughput
+  group key from reservationId via raw
+
   payload ReservationWorkItem {
     reservationId -> "reservation_id" text required
     hospitalId -> "hospital_id" text required

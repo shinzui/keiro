@@ -8,10 +8,13 @@ module Main (main) where
 
 import Control.Monad (unless)
 import Data.Text (Text)
-import Generated.HospitalCapacity.Reservation_work.QueuePolicy (jobOutcomeFor, retryPolicy)
+import Generated.HospitalCapacity.Reservation_work.Queue (ReservationWorkItem (..), encodeReservationWorkItem, groupKeyFor, parseReservationWorkItem)
+import Generated.HospitalCapacity.Reservation_work.QueuePolicy (jobOrdering, jobOutcomeFor, jobTuningFor, queueProvision, retryPolicy)
 import Keiro.Dsl.Validate (derivedQueueTrio)
-import Keiro.PGMQ.Job (JobOutcome (..), RetryPolicy (..))
+import Keiro.PGMQ.Codec (mkJobCodec)
+import Keiro.PGMQ.Job (Job (..), JobOrdering (..), JobOutcome (..), JobTuning (..), RetryPolicy (..), defaultJobTuning, queueProvisionConfigs)
 import Keiro.PGMQ.Runtime (QueueRef (..), queueRef)
+import Pgmq.Config qualified as Config
 import Pgmq.Types (queueNameToText)
 import System.Exit (exitFailure)
 
@@ -28,6 +31,23 @@ main = do
     let storeOk = isRetry (jobOutcomeFor "storeFailure") -- transient: MUST retry
         decodeOk = isDead (jobOutcomeFor "decodeFailure") -- poison: MUST dead-letter
         ceilingOk = maxRetries retryPolicy == 3 && useDeadLetter retryPolicy
+        orderingOk = jobOrdering == FifoThroughput
+        tuningOk = ordering (jobTuningFor defaultJobTuning) == FifoThroughput
+        job =
+            Job
+                { jobName = "reservation-work"
+                , jobQueue = queueRef "hospital_capacity.reservation_work"
+                , jobCodec = mkJobCodec encodeReservationWorkItem parseReservationWorkItem
+                , jobPolicy = retryPolicy
+                }
+        provisionOk = case queueProvisionConfigs queueProvision job of
+            [mainQueue, deadLetterQueue] ->
+                Config.fifoIndex mainQueue
+                    && not (Config.fifoIndex deadLetterQueue)
+                    && isStandard mainQueue
+                    && isStandard deadLetterQueue
+            _ -> False
+        groupKeyOk = groupKeyFor (ReservationWorkItem "rsv-123" "hsp-1" "cmd-1" True) == "rsv-123"
         vectors =
             [ "hospital_capacity.reservation_work"
             , "Repro.Work"
@@ -40,8 +60,12 @@ main = do
     putStrLn ("storeFailure => Retry (transient): " <> show storeOk)
     putStrLn ("decodeFailure => Dead (poison): " <> show decodeOk)
     putStrLn ("retry ceiling + dlq on: " <> show ceilingOk)
+    putStrLn ("ordering lowered to FifoThroughput: " <> show orderingOk)
+    putStrLn ("provision includes the FIFO index: " <> show provisionOk)
+    putStrLn ("groupKeyFor projects the payload field: " <> show groupKeyOk)
+    putStrLn ("jobTuningFor overlays deployment tuning: " <> show tuningOk)
     mapM_ (\(logical, matches) -> putStrLn ("derivedQueueTrio " <> show logical <> " == live queueRef: " <> show matches)) parity
-    unless (storeOk && decodeOk && ceilingOk && all snd parity) exitFailure
+    unless (storeOk && decodeOk && ceilingOk && orderingOk && provisionOk && groupKeyOk && tuningOk && all snd parity) exitFailure
 
 liveQueueTrio :: Text -> (Text, Text, Text)
 liveQueueTrio logical =
@@ -52,3 +76,8 @@ liveQueueTrio logical =
   where
     ref = queueRef logical
     physical = queueNameToText (physicalName ref)
+
+isStandard :: Config.QueueConfig -> Bool
+isStandard config = case Config.queueType config of
+    Config.StandardQueue -> True
+    _ -> False

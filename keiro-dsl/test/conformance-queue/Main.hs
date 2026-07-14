@@ -15,6 +15,8 @@ main = do
     let sample = ReservationWorkItem "rsv-1" "hsp-1" "cmd-1" True
         roundTrips = parseReservationWorkItem (encodeReservationWorkItem sample) == Right sample
         physicalOk = queuePhysical == "hospital_capacity_reservation_work"
+        groupKeyOk = groupKeyFor sample == "rsv-1"
     putStrLn ((if roundTrips then "PASS  " else "FAIL  ") <> "Job codec round-trip")
     putStrLn ((if physicalOk then "PASS  " else "FAIL  ") <> "captured physical name")
-    unless (roundTrips && physicalOk) exitFailure
+    putStrLn ((if groupKeyOk then "PASS  " else "FAIL  ") <> "raw FIFO group-key projection")
+    unless (roundTrips && physicalOk && groupKeyOk) exitFailure

@@ -94,6 +94,9 @@ module Keiro.Dsl.Grammar (
     -- * The pgmq workqueue/dispatch nodes (EP-5)
     WqField (..),
     WqDispRow (..),
+    WqOrdering (..),
+    WqGroupKey (..),
+    WqProvision (..),
     WorkqueueNode (..),
     PgmqDispatchNode (..),
 
@@ -768,6 +771,25 @@ data WqDispRow = WqDispRow
     }
     deriving stock (Eq, Show, Generic)
 
+-- | The queue's semantic delivery-order contract.
+data WqOrdering = WqUnordered | WqFifoThroughput | WqFifoRoundRobin
+    deriving stock (Eq, Show, Generic)
+
+-- | A FIFO message-group key derived from one payload field.
+data WqGroupKey = WqGroupKey
+    { gkField :: !Name
+    , gkVia :: !Name
+    , gkFixture :: !(Maybe Text)
+    }
+    deriving stock (Eq, Show, Generic)
+
+-- | The PostgreSQL storage shape provisioned for a queue.
+data WqProvision
+    = WqStandard
+    | WqUnlogged
+    | WqPartitioned !Text !Text
+    deriving stock (Eq, Show, Generic)
+
 {- | A pgmq @workqueue@ node. The @derive@ trio (physical\/dlq\/table) is a
 /captured fixture/ (hole-kind 1): the validator re-derives the physical name
 from @logical@ and flags any divergence (the drift hazard at the dedup site).
@@ -778,6 +800,9 @@ data WorkqueueNode = WorkqueueNode
     , wqPhysical :: !Text
     , wqDlq :: !Text
     , wqTable :: !Text
+    , wqOrdering :: !WqOrdering
+    , wqGroupKey :: !(Maybe WqGroupKey)
+    , wqProvision :: !WqProvision
     , wqPayloadName :: !Name
     , wqPayload :: ![WqField]
     , wqMaxRetries :: !Int
