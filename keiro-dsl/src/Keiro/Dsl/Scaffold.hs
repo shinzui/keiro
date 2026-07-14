@@ -1652,7 +1652,7 @@ emitEventStream a =
                ]
             ++ ["import Data.Text (Text)" | hasSnapshot a]
             ++ ["import Keiro.Snapshot.Codec (defaultStateCodec)" | hasSnapshot a]
-            ++ [ "import qualified Keiro.Stream as Stream"
+            ++ [ "import Keiro.Stream qualified as Stream"
                , ""
                , "-- The validated aggregate stream category (hole-kind 5: referenced, never retyped)."
                , "-- Entity streams are '<category>-<id>' via Keiro.Stream.entityStream."
