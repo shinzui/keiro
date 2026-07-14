@@ -6,8 +6,26 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## 0.2.0.0 — 2026-07-13
+
+A major release across the package set. The headline changes are the relocation
+of Keiro's framework tables into a dedicated `keiro` PostgreSQL schema, stricter
+replay-contract validation on the Keiki 0.2 core, durable dead letters for
+rejected dispatches, and a substantially expanded `keiro-dsl` spec surface
+(read models, routers, snapshots, queue ordering, and workflow evolution).
+
 ### Breaking Changes
 
+- **Keiro's framework tables moved out of the `kiroku` schema into a new,
+  dedicated `keiro` PostgreSQL schema that Keiro creates and owns.** Every
+  runtime query is now schema-qualified (`keiro.keiro_snapshots`,
+  `keiro.keiro_timers`, `keiro.keiro_outbox`, …) and no longer depends on
+  `search_path`. `keiro-core` exports the new `Keiro.Schema.keiroSchema` as the
+  single source of truth for the name. Existing databases must run the
+  `keiro-migrations` bootstrap, which creates the schema and relocates the
+  tables; application SQL that read bare `keiro_*` relations must be re-qualified.
 - `runCommandWithSql`, `runCommandWithSqlEvents`,
   `runCommandWithProjections`, and the process-manager/router runners now
   require `KirokuStoreResource` so transactional appends can apply Kiroku's
@@ -19,8 +37,20 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 - `ReadModel` now requires a `strongScope :: StrongScope` field. Use
   `EntireLog` for all-stream subscriptions or `CategoryHead category` for a
   category subscription so unrelated traffic cannot hold `Strong` reads behind.
+- `ReadModel` now also requires a `schema :: Text` field naming the PostgreSQL
+  schema its data table lives in. Keiro does not rewrite `query`; qualify the
+  application's SQL with `qualifiedTableName` or `Keiro.Connection.qualifyTable`.
+  The field is Haskell-level wiring only and is deliberately not persisted in the
+  `keiro.keiro_read_models` registry.
 - `AsyncProjection` now requires `readModelName`, naming the registry row that
   fences writes during a rebuild.
+- `PMCommandResult.PMCommandFailed` now carries the target `StreamName` alongside
+  its `CommandError`, so worker policy can identify the failing target.
+- `WorkerOptions` gains a `rejectedCommandPolicy :: RejectedCommandPolicy` field,
+  and `ShardedWorkerOptions` gains `handlerRetryDelay :: RetryDelay` and
+  `retryPolicy :: RetryPolicy`. Record construction must supply them; the
+  `defaultWorkerOptions` and `defaultShardedWorkerOptions` defaults are unchanged
+  in behavior.
 - `applyAsyncProjection` now returns `AsyncApplyOutcome` (`AsyncApplied`,
   `AsyncDuplicate`, or `AsyncFenced`) and live workers must not checkpoint a
   fenced event. Rebuild replayers use `applyAsyncProjectionUnfenced` between the
@@ -60,6 +90,68 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   options may only strengthen validation at Keiro's durable boundary; use the
   explicitly unsafe `mkEventStreamUnchecked` only for tests and emergency
   forensics, never production streams.
+- `keiro-dsl`: the process `saga` clause is now
+  `saga <Aggregate> category "<camelCase>"`, replacing
+  `saga <Aggregate> stream="<prefix>-" <> correlationId`; `process` nodes must
+  declare node-level `rejected` and `poison` policies; every timer `fire`
+  disposition must carry an `on-ambiguous` arm; identifiers are restricted to
+  ASCII and checked for Haskell hygiene; and numeric literals exceeding
+  `maxBound :: Int` are rejected instead of silently wrapping. Validation is
+  substantially stricter overall, so specs that checked under 0.1.0.0 may now be
+  rejected. See `keiro-dsl/CHANGELOG.md` for the full list.
+- `keiro-dsl`: `scaffold` now plans the whole module set before writing any byte
+  and refuses to overwrite a `Generated` path lacking the `@generated` banner
+  (override with `--force-generated-overwrite`). `diff` gained a `WARNING:` tier
+  and reformatted its change lines; only `BREAKING:` changes exit non-zero.
+
+### New Features
+
+- Durable dispatch dead letters. New `Keiro.DeadLetter`,
+  `Keiro.DeadLetter.Schema`, and `Keiro.DeadLetter.Replay` modules let
+  process-manager and router workers park a rejected dispatch instead of halting.
+  `RejectedCommandPolicy` selects `RejectedHalt` (the default),
+  `RejectedDeadLetter` (persist to the new `keiro.keiro_dead_letters` table and
+  acknowledge), or `RejectedSkip`. `replaySubscriptionDeadLetters` re-runs a
+  caller-supplied handler over the rows Kiroku parked in `kiroku.dead_letters`
+  without deleting or mutating those Kiroku-owned rows.
+- New `Keiro.Connection` module for application read-model and projection tables:
+  `qualifyTable`, `quoteIdentifier`, `withProjectionSchema`,
+  `keiroConnectionSettings`, and the opt-in `ensureProjectionSchema`. The store
+  connection's `schema` stays `kiroku` because it drives the `LISTEN`/`NOTIFY`
+  channel; a projection schema is reached by qualification and/or
+  `extraSearchPath`.
+- Acknowledgement-aware sharded subscriptions: `runShardedSubscriptionGroupAck`
+  with `ShardAck`, `ShardDelivery`, and `ShardEventHandler`, plus per-event retry
+  and dead-letter dispositions. `runShardedSubscriptionGroup` remains as the
+  compatibility wrapper.
+- New telemetry: `keiro.dispatch.deadlettered`, `keiro.subscription.deadlettered`,
+  `keiro.snapshot.encode.failures`, `keiro.snapshot.decode.failures`,
+  `keiro.snapshot.read.hits`, `keiro.snapshot.read.misses`, and
+  `keiro.snapshot.apply.divergence`. `Keiro.Telemetry.kirokuEventBridge` installs
+  on Kiroku's `eventHandler` to observe the terminal retry-exhaustion signal.
+- `keiro-dsl` gained a first-class `readmodel` node (typed columns, shape-hash
+  drift detection, consistency/scope/feed validation) and a `router` node for
+  stateless content-based routing, both with generated runtime modules and typed
+  holes. Query operations and PGMQ dispatch dedup references now genuinely resolve
+  against declared read models — they were deferred no-ops in 0.1.0.0.
+- `keiro-dsl` gained aggregate `snapshot` policies with a captured state-codec
+  fixture, workqueue `ordering` and provisioning (FIFO, group keys, unlogged,
+  partitioned), intake `persist` posture, and durable-workflow evolution via
+  guarded `patch` blocks and terminal `continueAsNew`. `diff` was rebuilt on an
+  exhaustive node-family registry, so a new node kind can no longer be silently
+  classified as safe.
+- `keiro-migrations` appended `0018`, creating `keiro.keiro_dead_letters`.
+
+### Bug Fixes
+
+- Sharded subscription readers now acknowledge each event only after its handler
+  returns. A shed or rebalanced bucket's checkpoint can no longer cover an
+  unprocessed event.
+- `keiro-dsl` string literals now decode and re-render the closed DSL escape set,
+  so topics, emit maps, and quoted field bindings survive a parse/pretty-print
+  round trip. The scaffolder also escapes payload literal splices, closing a
+  template-injection path where a quoted spec literal could break out of the
+  generated Haskell string.
 
 ### Other Changes
 
@@ -101,6 +193,24 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 - No-op commands now report `CommandResult.globalPosition = Nothing` instead
   of exposing Kiroku's per-stream-read sentinel `GlobalPosition 0`. Appended
   commands continue to report the real store-assigned position.
+- Exported additional runtime helpers so custom workers can reuse the framework's
+  classification logic: `commandErrorClass`, `isRejectionClass`,
+  `decideForFailures`, `DispatchFailure`, `confirmBenignDuplicate`,
+  `deterministicRouterCommandId`, `ReadModel.categoryHeadPosition`,
+  `ReadModel.qualifiedTableName`, `StrongScope`, and `RebuildError`.
+- Documented previously implicit runtime contracts: the inbox deduplication window
+  closes when `garbageCollectCompleted` removes a completed row; outbox
+  `created_at` is transaction-start time, so `PerKeyHeadOfLine` and
+  `PerSourceStream` ordering is best-effort unless the caller serializes same-key
+  enqueues; the default timer worker has no attempt ceiling and requeues claims
+  left `Firing` for five minutes; and process-manager `correlate` joins across
+  streams must be order-insensitive.
+- Added upper bounds alongside the move to Hackage: `keiki >=0.2 && <0.3`,
+  `keiki-codec-json >=0.2 && <0.3`, and `kiroku-store >=0.3 && <0.4`.
+- `keiro-dsl` added conformance suites that round-trip every node family, compile
+  every `keiro-dsl new <kind>` starter, and cold-start the new read-model, router,
+  snapshot, queue-ordering, and workflow-rotation surfaces against the live
+  runtime.
 
 ## 0.1.0.0 — 2026-07-05
 

@@ -8,6 +8,15 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 _No unreleased changes._
 
+## 0.2.0.0 — 2026-07-13
+
+No user-facing changes. `keiro-pgmq` is released at 0.2.0.0 to stay in lockstep
+with the rest of the Keiro package set, and is rebuilt against `keiro-core`
+0.2.0.0. Consumers should note that the stricter event-stream validation and the
+relocation of Keiro's framework tables into the dedicated `keiro` PostgreSQL
+schema — both described in the `keiro-core` and `keiro` changelogs — apply to any
+application that wires this package's workqueue and dispatch workers.
+
 ## 0.1.0.0 — 2026-07-05
 
 Initial Hackage release.

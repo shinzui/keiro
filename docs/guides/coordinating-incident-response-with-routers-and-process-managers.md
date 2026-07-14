@@ -149,6 +149,7 @@ stateDiagram-v2
     [*] --> EscalationIdle
     EscalationIdle --> Awaiting : NoteRaised / RaiseNoted
     Awaiting --> Settled : NoteAcknowledged / AcknowledgeNoted
+    Settled --> [*]
 ```
 <!-- jitsurei-diagram: escalation-stream end -->
 

@@ -6,8 +6,18 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## 0.2.0.0 — 2026-07-13
+
 ### Added
 
+- Appended `0018`, creating `keiro.keiro_dead_letters`. It durably records
+  process-manager and router dispatches that reached a target stream and were
+  rejected. These rows are distinct from `kiroku.dead_letters`: the source
+  subscription event is successfully handled and checkpointed only after every
+  rejected dispatch has been recorded. The `keiro` package reads and replays them
+  through `Keiro.DeadLetter`.
 - Appended `0017-schema-management-comment`, an observable non-destructive
   native-runner canary. The combined-history fixture proves Kiroku `0008`
   completes before Keiro `0017`, then strict verification and reruns succeed.

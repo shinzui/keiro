@@ -1,6 +1,6 @@
 cabal-version:   3.0
 name:            keiro-pgmq
-version:         0.1.0.0
+version:         0.2.0.0
 synopsis:        PostgreSQL job-queue (PGMQ) integration for Keiro
 description:
   A typed background-job queue for Keiro applications on top of PGMQ (the
@@ -58,7 +58,7 @@ library
     , hasql                 >=1.10
     , hasql-pool            >=1.2
     , hs-opentelemetry-api  >=1.0      && <1.1
-    , keiro-core            ^>=0.1.0.0
+    , keiro-core            ^>=0.2.0.0
     , pgmq-config           >=0.3      && <0.4
     , pgmq-core             >=0.3      && <0.4
     , pgmq-effectful        >=0.3      && <0.4
@@ -85,7 +85,7 @@ test-suite keiro-pgmq-test
     , hs-opentelemetry-propagator-w3c  >=1.0      && <1.1
     , hs-opentelemetry-sdk             >=1.0      && <1.1
     , hspec                            >=2.11
-    , keiro-core                       ^>=0.1.0.0
+    , keiro-core                       ^>=0.2.0.0
     , keiro-pgmq
     , keiro-test-support
     , pgmq-config                      >=0.3      && <0.4

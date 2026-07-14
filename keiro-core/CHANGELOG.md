@@ -8,6 +8,44 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 _No unreleased changes._
 
+## 0.2.0.0 — 2026-07-13
+
+### Breaking Changes
+
+- `keiro-core` now requires post-MP-16 Keiki 0.2 (`keiki >=0.2 && <0.3`) and
+  Kiroku 0.3 (`kiroku-store >=0.3 && <0.4`). Stream validation runs Keiki's new
+  head-recoverability, inversion-ambiguity, unguarded-input-read, and
+  state-changing-silent-edge checks; any warning enabled by the selected
+  `ValidationOptions` makes `mkEventStream` reject the stream at startup.
+- `validateEventStreamWith` and `mkEventStreamWith` now force-enable Keiki's
+  `checkHeadRecoverability` and `checkStateChangingEpsilon`. Caller-supplied
+  options may only strengthen validation at Keiro's durable boundary; use the
+  explicitly unsafe `mkEventStreamUnchecked` only for tests and emergency
+  forensics, never for production streams.
+- `mkEventStream` now rejects snapshot codecs that cannot encode their initial
+  state and register file. Snapshot-enabled streams built from `emptyRegFile`
+  must initialize every slot before validation; the labelled `uninit: <slot>`
+  `ErrorCall` is reported as an `EventStreamWarning` instead of escaping at the
+  first snapshot write.
+
+### New Features
+
+- New module `Keiro.Schema`, exporting `keiroSchema :: Text` (`"keiro"`). This
+  is the single source of truth for the dedicated PostgreSQL schema that owns
+  Keiro's framework tables: `keiro-migrations` creates them schema-qualified and
+  the `keiro` runtime queries resolve against the same name.
+- Added `mkEventStreamUnchecked`, which wraps an `EventStream` with no Keiki or
+  Keiro checks at all. It exists for tests and emergency forensics; a stream
+  admitted through it can silently lose state changes and fail hydration.
+
+### Other Changes
+
+- Keiki 0.2 and Kiroku 0.3 now resolve from Hackage; their obsolete Git package
+  overrides and the local Cabal overlay are no longer needed.
+- Added a `deepseq` dependency: `validateEventStream` forces the configured
+  `stateCodec` over the initial state and registers, observing only `ErrorCall`
+  so that any other exception stays programmer-visible.
+
 ## 0.1.0.0 — 2026-07-05
 
 Initial Hackage release.
