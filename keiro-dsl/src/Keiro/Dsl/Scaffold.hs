@@ -1202,7 +1202,7 @@ emitProcessGen _ctxPascal genPrefix _holePrefix p =
         , "import Data.UUID (UUID)"
         , "import qualified Data.UUID.V5 as UUID.V5"
         , "import Keiro.Command (CommandError (..))"
-        , "import qualified Keiro.Stream as Stream"
+        , "import Keiro.Stream qualified as Stream"
         , "import Keiro.Timer (TimerId (..), TimerRequest (..))"
         ]
             ++ workerPolicyImports (procPoison p)
