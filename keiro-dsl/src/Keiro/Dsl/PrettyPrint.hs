@@ -95,6 +95,9 @@ docWorkflow w =
     bodyItem (WfAwait l r _) = "await" <+> pretty l <+> "->" <+> pretty r
     bodyItem (WfSleep l a _) = "sleep" <+> pretty l <+> "after" <+> pretty a
     bodyItem (WfChild l v r _) = "child" <+> pretty l <+> "id input via" <+> pretty v <+> "->" <+> pretty r
+    bodyItem (WfPatch patchId items _) =
+        vsep $ ["patch" <+> pretty patchId <+> "{"] ++ map (indent 2 . bodyItem) items ++ ["}"]
+    bodyItem (WfContinueAsNew seedType _) = "continueAsNew" <+> pretty seedType
 
 docOperation :: OperationNode -> Doc ann
 docOperation o =

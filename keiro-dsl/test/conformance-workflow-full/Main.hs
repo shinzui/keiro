@@ -6,7 +6,7 @@ The body's await label is the same one the scaffolded runtime declares.
 module Main (main) where
 
 import Control.Monad (unless)
-import Generated.HospitalCapacity.HospitalTransferReservation.WorkflowRuntime (awaitLabels)
+import Generated.HospitalCapacity.HospitalTransferReservation.WorkflowRuntime (awaitLabels, declaredPatchStepNames)
 import System.Exit (exitFailure)
 
 -- The filled workflow body (reservationWorkflow) is compiled as the
@@ -15,5 +15,7 @@ import System.Exit (exitFailure)
 main :: IO ()
 main = do
     let labelOk = "reservation-confirmation" `elem` awaitLabels
+        patchOk = declaredPatchStepNames == ["patch:fraud-check-v2"]
     putStrLn ("workflow body compiles against Keiro.Workflow + await label declared: " <> show labelOk)
-    unless labelOk exitFailure
+    putStrLn ("workflow body patch uses the declared runtime journal key: " <> show patchOk)
+    unless (labelOk && patchOk) exitFailure

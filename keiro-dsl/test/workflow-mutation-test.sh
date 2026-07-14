@@ -4,7 +4,7 @@
 # assertions (they diverge from the hand-written expectation in
 # test/conformance-workflow/Main.hs). Exit 0 => the mutation was caught.
 set -euo pipefail
-SPEC="keiro-dsl/test/fixtures/workflow.keiro"
+SPEC="keiro-dsl/test/fixtures/workflow-evolution.keiro"
 OUT="keiro-dsl/test/conformance-workflow"
 EXE="$(cabal list-bin keiro-dsl 2>/dev/null)"
 MUT="$(mktemp).keiro"
@@ -21,4 +21,12 @@ if cabal test keiro-dsl-conformance-workflow >/dev/null 2>&1; then
 else
   echo "ok: the await-rename mutation reddened a specific assertion (caught)"
 fi
-echo "PASS: the workflow facts harness pins the await/body decisions"
+
+sed '/patch fraud-check-v2 {/d; /^    }$/d' "$SPEC" > "$MUT"
+"$EXE" scaffold "$MUT" --out "$OUT" >/dev/null
+if cabal test keiro-dsl-conformance-workflow >/dev/null 2>&1; then
+  echo "FAIL: removing the patch guard was not caught"; exit 1
+else
+  echo "ok: removing the patch guard reddened the body/patch assertions (caught)"
+fi
+echo "PASS: the workflow facts harness pins await, body, and patch decisions"

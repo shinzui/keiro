@@ -14,8 +14,9 @@ expected =
     [ ("name", "hospital-transfer-reservation")
     , ("idVia", "idText")
     , ("idField", "reservationId")
-    , ("body", "step:create-transfer-hold,await:reservation-confirmation,step:release-or-retain-capacity,step:summarize-reservation")
+    , ("body", "step:create-transfer-hold,patch:fraud-check-v2(step:fraud-check),await:reservation-confirmation,step:release-or-retain-capacity,step:summarize-reservation,continueAsNew:RolloverSeed")
     , ("awaits", "reservation-confirmation") -- the signal operation's id must match this
+    , ("patches", "fraud-check-v2")
     ]
 
 main :: IO ()

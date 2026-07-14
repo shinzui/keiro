@@ -176,6 +176,8 @@ reservedWords =
     , "await"
     , "sleep"
     , "child"
+    , "patch"
+    , "continueAsNew"
     , -- EP-107 read-model structural words. Clause labels such as table and
       -- schema remain usable identifiers because their block parser consumes
       -- them with symbol-style matching.
@@ -206,6 +208,15 @@ wireWord :: P Text
 wireWord = lexeme $ do
     c <- asciiLetter <|> asciiDigit
     cs <- many (identChar <|> char '-')
+    pure (T.pack (c : cs))
+
+{- | Patch ids use wire-word spelling, but admit @:@ so the validator can emit
+the domain-specific 'WorkflowPatchIdInvalid' diagnostic at the owning item.
+-}
+patchIdWord :: P Text
+patchIdWord = lexeme $ do
+    c <- asciiLetter <|> asciiDigit
+    cs <- many (identChar <|> char '-' <|> char ':')
     pure (T.pack (c : cs))
 
 getLoc :: P Loc
@@ -1010,6 +1021,15 @@ pWorkflow = do
                     <*> (keyword "id" *> keyword "input" *> keyword "via" *> ident)
                     <*> (symbol "->" *> ident)
                     <*> pure loc
+            , do
+                loc <- getLoc
+                WfPatch
+                    <$> (keyword "patch" *> patchIdWord)
+                    <*> braces (many pWfBodyItem)
+                    <*> pure loc
+            , do
+                loc <- getLoc
+                WfContinueAsNew <$> (keyword "continueAsNew" *> ident) <*> pure loc
             ]
 
 pOperation :: P OperationNode

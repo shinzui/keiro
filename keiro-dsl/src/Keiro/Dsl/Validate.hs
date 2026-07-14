@@ -83,6 +83,9 @@ data DiagnosticCode
     | -- EP-6 (workflow/operation).
       AwaitSignalMismatch
     | RunWorkflowUnresolved
+    | WorkflowPatchDuplicate
+    | WorkflowPatchIdInvalid
+    | WorkflowContinueAsNewNotTerminal
     | -- Diff-only (cross-spec) decode and identity evolution rules.
       EvtFieldTypeChanged
     | EvtFieldRemovedSameVersion
@@ -456,21 +459,40 @@ validateNode spec (NReadModel readModel) = validateReadModel spec readModel
 validateNode _spec (NWorkflow w) = validateWorkflow w
 validateNode spec (NOperation o) = validateOperation spec o
 
--- | Workflow replay keys and injected input references must be unambiguous.
+-- | Workflow replay keys, patch guards, rotation, and injected inputs must be unambiguous.
 validateWorkflow :: WorkflowNode -> [Diagnostic]
-validateWorkflow w = duplicateLabels ++ sleepFields ++ idField
+validateWorkflow w = duplicateLabels ++ sleepFields ++ patchDuplicates ++ patchIds ++ continuePositions ++ idField
   where
     inputFields = map fieldName (wfInputFields w)
+    labelledItems = workflowLabelledItems (wfBody w)
+    patchItems = workflowPatchItems (wfBody w)
     duplicateLabels =
         [ mkErr (locLine (wfBodyLoc item)) WorkflowDuplicateLabel $
-            "workflow '" <> wfId w <> "' declares label '" <> wfBodyLabel item <> "' more than once; labels key deterministic replay, so a duplicate label replays the first occurrence's journaled result"
-        | item <- duplicatesBy wfBodyLabel (wfBody w)
+            "workflow '" <> wfId w <> "' declares label '" <> label <> "' more than once; labels key deterministic replay, so a duplicate label replays the first occurrence's journaled result"
+        | (label, item) <- duplicatesBy fst labelledItems
         ]
     sleepFields =
         [ mkErr (locLine loc) WorkflowSleepDelayUnresolved $
             "workflow '" <> wfId w <> "' sleep '" <> label <> "' references undeclared input field '" <> delay <> "'"
-        | WfSleep label delay loc <- wfBody w
+        | WfSleep label delay loc <- map snd labelledItems
         , delay `notElem` inputFields
+        ]
+    patchDuplicates =
+        [ mkErr (locLine loc) WorkflowPatchDuplicate $
+            "workflow '" <> wfId w <> "' declares patch id '" <> patchId <> "' more than once; patch decisions journal under one stable key"
+        | (patchId, _, loc) <- duplicatesBy (\(patchId, _, _) -> patchId) patchItems
+        ]
+    patchIds =
+        [ mkErr (locLine loc) WorkflowPatchIdInvalid $
+            "workflow '" <> wfId w <> "' patch id '" <> patchId <> "' contains ':'; the runtime reserves that separator for the patch journal-key prefix"
+        | (patchId, _, loc) <- patchItems
+        , ":" `T.isInfixOf` patchId
+        ]
+    continuePositions =
+        [ mkErr (locLine loc) WorkflowContinueAsNewNotTerminal $
+            "workflow '" <> wfId w <> "' continueAsNew must be the last top-level body item and may not appear inside a patch"
+        | (isTopLevelTerminal, loc) <- workflowContinueItems (wfBody w)
+        , not isTopLevelTerminal
         ]
     idField = case wfIdField w of
         Just field
@@ -480,17 +502,43 @@ validateWorkflow w = duplicateLabels ++ sleepFields ++ idField
                 ]
         _ -> []
 
-wfBodyLabel :: WfBodyItem -> Name
-wfBodyLabel (WfStep label _ _) = label
-wfBodyLabel (WfAwait label _ _) = label
-wfBodyLabel (WfSleep label _ _) = label
-wfBodyLabel (WfChild label _ _ _) = label
-
 wfBodyLoc :: WfBodyItem -> Loc
 wfBodyLoc (WfStep _ _ loc) = loc
 wfBodyLoc (WfAwait _ _ loc) = loc
 wfBodyLoc (WfSleep _ _ loc) = loc
 wfBodyLoc (WfChild _ _ _ loc) = loc
+wfBodyLoc (WfPatch _ _ loc) = loc
+wfBodyLoc (WfContinueAsNew _ loc) = loc
+
+workflowLabelledItems :: [WfBodyItem] -> [(Name, WfBodyItem)]
+workflowLabelledItems = concatMap go
+  where
+    go item@(WfStep label _ _) = [(label, item)]
+    go item@(WfAwait label _ _) = [(label, item)]
+    go item@(WfSleep label _ _) = [(label, item)]
+    go item@(WfChild label _ _ _) = [(label, item)]
+    go (WfPatch _ items _) = workflowLabelledItems items
+    go WfContinueAsNew{} = []
+
+workflowPatchItems :: [WfBodyItem] -> [(Name, [WfBodyItem], Loc)]
+workflowPatchItems = concatMap go
+  where
+    go (WfPatch patchId items loc) = (patchId, items, loc) : workflowPatchItems items
+    go _ = []
+
+-- | Pair every rotation with whether it is the final top-level item.
+workflowContinueItems :: [WfBodyItem] -> [(Bool, Loc)]
+workflowContinueItems items = topLevel ++ nested
+  where
+    topLevel =
+        [ (index == length items - 1, loc)
+        | (index, WfContinueAsNew _ loc) <- zip [0 ..] items
+        ]
+    nested =
+        [ (False, loc)
+        | WfPatch _ patchBody _ <- items
+        , (_, loc) <- workflowContinueItems patchBody
+        ]
 
 -- | A top-level rule is a total, clock-free function over one declared enum.
 validateRule :: Spec -> RuleDecl -> [Diagnostic]
@@ -547,7 +595,7 @@ validateOperation spec o = case opShape o of
         case lookupWorkflow wf of
             Nothing ->
                 [mkErr ol AwaitSignalMismatch ("signal operation '" <> opName o <> "' targets undeclared workflow '" <> wf <> "'")]
-            Just w -> case [(resultType, loc) | WfAwait label resultType loc <- wfBody w, label == lbl] of
+            Just w -> case [(resultType, loc) | (_, WfAwait label resultType loc) <- workflowLabelledItems (wfBody w), label == lbl] of
                 [] ->
                     [ mkErr ol AwaitSignalMismatch $
                         "signal '" <> lbl <> "' of " <> wf <> " has no matching 'await' (workflow declares awaits {" <> T.intercalate ", " (awaitLabels w) <> "}); the deterministic awakeable id will not match and the workflow will wait forever"
@@ -568,7 +616,7 @@ validateOperation spec o = case opShape o of
     aggregates = [a | NAggregate a <- specNodes spec]
     projectionTables = [projTable p | a <- aggregates, Just p <- [aggProjection a]]
     lookupWorkflow n = case [w | w <- workflows, wfId w == n] of (w : _) -> Just w; [] -> Nothing
-    awaitLabels w = [l | WfAwait l _ _ <- wfBody w]
+    awaitLabels w = [l | (_, WfAwait l _ _) <- workflowLabelledItems (wfBody w)]
     aggregateRef name streamField = case [a | a <- aggregates, aggName a == name] of
         [] ->
             [ mkErr ol OperationUnresolvedRef $

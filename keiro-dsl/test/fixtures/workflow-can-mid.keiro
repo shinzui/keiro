@@ -1,0 +1,13 @@
+context hospital-capacity
+
+workflow HospitalTransferReservation
+  name "hospital-transfer-reservation"
+  in ReservationWorkflowInput { reservationId:Id }
+  out ReservationWorkflowSummary
+  id from input.reservationId via idText
+  body
+    continueAsNew RolloverSeed
+    patch rotation-v2 {
+      continueAsNew NestedSeed
+    }
+    step summarize-reservation -> ReservationWorkflowSummary

@@ -1,0 +1,11 @@
+context hospital-capacity
+
+workflow HospitalTransferReservation
+  name "hospital-transfer-reservation"
+  in ReservationWorkflowInput { reservationId:Id }
+  out ReservationWorkflowSummary
+  id from input.reservationId via idText
+  body
+    patch fraud:check-v2 {
+      step fraud-check -> FraudCheckResult
+    }

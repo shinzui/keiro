@@ -68,10 +68,10 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
       in EventStream, fixture export) + new `conformance-snapshot` suite proving
       `mkEventStreamOrThrow` accepts the stream and the captured shape hash matches the
       live `regFileShapeHash` + NOTATION.md snippet.
-- [ ] M3: workflow `patch` / `continueAsNew` body items — grammar, parser,
+- [x] (2026-07-14T00:23:10Z) M3: workflow `patch` / `continueAsNew` body items — grammar, parser,
       pretty-printer, validator rules (unique patch ids, terminal-only continueAsNew),
       fixtures, unit pins.
-- [ ] M3: workflow harness lowering (facts tags, `declaredPatches` /
+- [x] (2026-07-14T00:23:10Z) M3: workflow harness lowering (facts tags, `declaredPatches` /
       `declaredPatchStepNames` / `withDeclaredPatches` over the live runtime) +
       extended `conformance-workflow-runtime` / `conformance-workflow-full` +
       NOTATION.md snippet.
@@ -119,6 +119,15 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
   ordinary aggregate output remains byte-for-byte unchanged. The capture loop pinned
   the live reservation shape hash as
   `7eb3a94f62f947231375d44083e2a1c8029d91ffe0329107d55092ed3430efcc`.
+- The live workflow APIs made two integration requirements concrete: generated patch
+  sets import `Data.Set`, so workflow runtime manifests and conformance components need
+  `containers`; and `restoreSeed` takes a first-generation default and returns a seed
+  directly, rather than returning `Maybe`. The filled conformance body now compiles
+  those exact signatures before tail-calling `continueAsNew`.
+- The facts-only workflow suite still carries the sibling generated runtime module
+  without compiling it, so the formatter has no Cabal default-language context for
+  that file. `WorkflowRuntime` now emits an explicit `ImportQualifiedPost` pragma;
+  every generated copy is independently parseable by tooling as well as by GHC.
 
 (To be extended during implementation.)
 
@@ -194,6 +203,14 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
   code registry first, these codes are registered through whatever registry shape it
   lands; the rule *semantics* in this plan are authoritative either way.
   Date: 2026-07-13
+- Decision: keep `test/fixtures/workflow.keiro` as the pre-evolution differ baseline;
+  drive the workflow facts/runtime/full conformance copies and mutation script from
+  the sibling `workflow-evolution.keiro` fixture.
+  Rationale: M5 needs an old body against which adding a fully guarded patch can be
+  classified as additive, while M3 conformance must still prove the new patch and
+  rotation surfaces. Using the explicit evolution fixture for generated copies keeps
+  those two roles honest instead of silently changing the baseline.
+  Date: 2026-07-13
 
 (Extend as decisions are made during implementation.)
 
@@ -216,6 +233,15 @@ captured fixture while ordinary aggregate output is unchanged. The new snapshot
 conformance suite constructs the validated stream, proves initial-state codec
 round-tripping, and matches the captured fixture against the live
 `regFileShapeHash`. The unit suite is green at 187 examples. M3–M5 remain.
+
+M3 is complete. Workflow bodies now express nested durable patch guards and a
+terminal `continueAsNew`, with recursive label/await validation, globally unique and
+separator-safe patch ids, and top-level-terminal rotation enforcement. Generated
+facts pin nested structure and declared ids; generated runtime wiring activates
+exactly those ids and exposes the live `patchStepName` journal keys. The runtime and
+full-body suites compile `patch`, `restoreSeed`, and `continueAsNew` against the live
+effect, and both await-renaming and patch-guard-removal mutations turn the facts suite
+red. The unit suite is green at 192 examples. M4–M5 remain.
 
 
 ## Context and Orientation

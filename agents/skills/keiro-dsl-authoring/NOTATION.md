@@ -323,9 +323,13 @@ workflow HospitalTransferReservation
   id from input.reservationId via idText
   body                                                     # ORDERED; replay matches on label
     step  create-transfer-hold      -> ReservationHold
+    patch fraud-check-v2 {                                  # guarded multi-step evolution
+      step fraud-check -> FraudCheckResult
+    }
     await reservation-confirmation  -> ReservationConfirmation
     sleep cooling-off after coolingOffDelay               # TIME INJECTED
     child ship-order id input via shipChildId -> Text     # child id derived by the via-function hole (see generated hole docs)
+    continueAsNew RolloverSeed                             # terminal, top-level rotation
 
 operation SignalReservationConfirmation
   signal reservation-confirmation of HospitalTransferReservation   # MUST match an await label
@@ -345,6 +349,23 @@ operation QueryTransferDecisions
 Operation shapes: `command on <Agg> …`, `query <ReadModel> …`, `signal <label> of <Wf> …`,
 `run <Wf> …`. Checked: every `signal <label> of <wf>` matches an `await <label>` of that
 workflow (else the awakeable id never matches and the workflow waits forever).
+
+`patch <id> { ... }` guards a cross-cutting workflow change for in-flight instances.
+The deploy that introduces the block activates the generated `declaredPatches` set;
+the runtime journals the decision under `patch:<id>`, so each generation keeps the
+same branch on replay. Patch ids are opaque, never reused, unique across nested blocks,
+and may not contain `:`. Rename a single changed step instead of introducing a patch;
+use a patch only when adding, removing, reordering, or changing several journaled
+steps would otherwise leave an in-flight instance incoherent. Remove a patch id from
+the spec only after its guarded change has become permanent.
+
+`continueAsNew <SeedType>` must be the final top-level body item. It rotates an
+unbounded workflow onto a fresh journal generation carrying that seed; the hand-owned
+workflow body calls `restoreSeed` at its start and `continueAsNew` at its tail. It is
+illegal mid-body or inside a patch because later notation would be unreachable or
+only conditionally terminal. Workflows intentionally generate facts and live-runtime
+wiring only—the behavior-bearing body remains hand code, with no domain scaffold or
+hole stub.
 
 ## CLI
 

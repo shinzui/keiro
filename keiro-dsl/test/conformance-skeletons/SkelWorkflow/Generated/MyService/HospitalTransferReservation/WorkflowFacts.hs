@@ -14,4 +14,5 @@ workflowFacts =
     , ("idField", "reservationId")
     , ("body", "step:create-transfer-hold,await:reservation-confirmation,step:summarize-reservation")
     , ("awaits", "reservation-confirmation")
+    , ("patches", "")
     ]

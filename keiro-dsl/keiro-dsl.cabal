@@ -187,6 +187,7 @@ test-suite keiro-dsl-conformance-skeletons
   build-depends:
     , aeson              >=2.2
     , base               >=4.21 && <5
+    , containers
     , effectful-core
     , hasql-transaction
     , keiki              >=0.2  && <0.3
@@ -376,9 +377,10 @@ test-suite keiro-dsl-conformance-workflow-runtime
     Generated.HospitalCapacity.HospitalTransferReservation.WorkflowRuntime
 
   build-depends:
-    , base   >=4.21 && <5
+    , base        >=4.21 && <5
+    , containers
     , keiro
-    , text   >=2.1
+    , text        >=2.1
 
 -- EP-3 M5 full-service conformance: a complete process service — the scaffolded
 -- Surge (saga) + Hospital (target) aggregates with filled transducers, plus a
@@ -425,7 +427,9 @@ test-suite keiro-dsl-conformance-workflow-full
     HospitalCapacity.HospitalTransferReservation.WorkflowBody
 
   build-depends:
+    , aeson           >=2.2
     , base            >=4.21 && <5
+    , containers
     , effectful-core
     , keiro
     , text            >=2.1

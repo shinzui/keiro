@@ -12,7 +12,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), FamilyDiff (..), NodeFamily, diffSpecs, familyRegistry, isAdvisory, isBreaking)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.Harness (harnessFor, harnessReadModel, harnessRouter)
+import Keiro.Dsl.Harness (harnessFor, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
@@ -725,6 +725,35 @@ main = hspec $ do
         it "rejects a signal value type that differs from its await" $ do
             codes <- errorCodesOf "test/fixtures/operation-signal-value.keiro"
             codes `shouldContain` [AwaitSignalValueMismatch]
+        it "round-trips guarded patches and terminal continueAsNew" $ do
+            input <- readTestText "test/fixtures/workflow-evolution.keiro"
+            case parseSpec "workflow-evolution" input of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> do
+                    parseSpec "workflow-evolution" (renderSpec spec) `shouldBe` Right spec
+                    errorCodes spec `shouldBe` []
+        it "rejects duplicate patch ids anywhere in the workflow body" $ do
+            codes <- errorCodesOf "test/fixtures/workflow-patch-dup.keiro"
+            codes `shouldBe` [WorkflowPatchDuplicate]
+        it "rejects non-terminal and nested continueAsNew" $ do
+            codes <- errorCodesOf "test/fixtures/workflow-can-mid.keiro"
+            codes `shouldBe` [WorkflowContinueAsNewNotTerminal, WorkflowContinueAsNewNotTerminal]
+        it "rejects a colon in a patch id with a workflow diagnostic" $ do
+            codes <- errorCodesOf "test/fixtures/workflow-patch-colon.keiro"
+            codes `shouldBe` [WorkflowPatchIdInvalid]
+        it "lowers patch facts and live runtime declarations" $ do
+            spec <- specOf "test/fixtures/workflow-evolution.keiro"
+            case [workflow | NWorkflow workflow <- specNodes spec] of
+                [workflow] -> do
+                    let modules = harnessWorkflow (defaultContext (specContext spec)) workflow
+                        facts = generatedTextEndingIn "WorkflowFacts.hs" modules
+                        runtime = generatedTextEndingIn "WorkflowRuntime.hs" modules
+                    facts `shouldSatisfy` T.isInfixOf "patch:fraud-check-v2(step:fraud-check)"
+                    facts `shouldSatisfy` T.isInfixOf "continueAsNew:RolloverSeed"
+                    facts `shouldSatisfy` T.isInfixOf "(\"patches\", \"fraud-check-v2\")"
+                    runtime `shouldSatisfy` T.isInfixOf "declaredPatches = Set.fromList [PatchId \"fraud-check-v2\"]"
+                    runtime `shouldSatisfy` T.isInfixOf "opts{activePatches = declaredPatches}"
+                workflows -> expectationFailure ("expected one workflow, got " <> show (length workflows))
 
     describe "diff (evolution classification)" $ do
         it "covers every node family exactly once and explains exclusions" $ do
@@ -2257,13 +2286,19 @@ genPgmqDispatch =
         <*> pure noLoc
 
 genWfBodyItem :: Gen WfBodyItem
-genWfBodyItem =
-    oneof
-        [ WfStep <$> genWireWord <*> genName <*> pure noLoc
-        , WfAwait <$> genWireWord <*> genName <*> pure noLoc
-        , WfSleep <$> genWireWord <*> genName <*> pure noLoc
-        , WfChild <$> genWireWord <*> genName <*> genName <*> pure noLoc
-        ]
+genWfBodyItem = sized go
+  where
+    go size =
+        oneof $
+            [ WfStep <$> genWireWord <*> genName <*> pure noLoc
+            , WfAwait <$> genWireWord <*> genName <*> pure noLoc
+            , WfSleep <$> genWireWord <*> genName <*> pure noLoc
+            , WfChild <$> genWireWord <*> genName <*> genName <*> pure noLoc
+            , WfContinueAsNew <$> genName <*> pure noLoc
+            ]
+                ++ [ WfPatch <$> genWireWord <*> resize (size `div` 2) (smallList genWfBodyItem) <*> pure noLoc
+                   | size > 0
+                   ]
 
 genWorkflow :: Gen WorkflowNode
 genWorkflow =

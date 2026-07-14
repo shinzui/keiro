@@ -229,8 +229,9 @@ derivation, the ordered body (step/await/sleep/child by label), and the await
 labels (whose ids the signal operations must match). Exposes
 @workflowFacts :: [(String, String)]@ so a driver asserts them against a
 hand-written expectation — a spec change (e.g. renaming an await label) diverges
-and reddens a specific assertion. (Full @Keiro.Workflow@ runtime conformance is
-the heavier remaining step.)
+and reddens a specific assertion. Workflows intentionally have no domain scaffold
+or hole stub: their behaviour-bearing body remains hand-written, while these facts
+and the live-runtime module pin its declared structure.
 -}
 harnessWorkflow :: Context -> WorkflowNode -> [ScaffoldModule]
 harnessWorkflow ctx w =
@@ -272,7 +273,8 @@ emitWorkflowFacts genPrefix w =
         , "  , (\"idVia\", " <> hs (wfIdVia w) <> ")"
         , "  , (\"idField\", " <> hs (maybe "input" id (wfIdField w)) <> ")"
         , "  , (\"body\", " <> hs (T.intercalate "," (map bodyTag (wfBody w))) <> ")"
-        , "  , (\"awaits\", " <> hs (T.intercalate "," [l | WfAwait l _ _ <- wfBody w]) <> ")"
+        , "  , (\"awaits\", " <> hs (T.intercalate "," (workflowAwaitLabels (wfBody w))) <> ")"
+        , "  , (\"patches\", " <> hs (T.intercalate "," (workflowPatchIds (wfBody w))) <> ")"
         , "  ]"
         ]
   where
@@ -281,6 +283,8 @@ emitWorkflowFacts genPrefix w =
     bodyTag (WfAwait l _ _) = "await:" <> l
     bodyTag (WfSleep l _ _) = "sleep:" <> l
     bodyTag (WfChild l _ _ _) = "child:" <> l
+    bodyTag (WfPatch patchId items _) = "patch:" <> patchId <> "(" <> T.intercalate "," (map bodyTag items) <> ")"
+    bodyTag (WfContinueAsNew seedType _) = "continueAsNew:" <> seedType
 
 {- | Emit the workflow's deterministic id derivation compiled against the LIVE
 @Keiro.Workflow@: the 'WorkflowName' and the awakeable-id function (the actual
@@ -292,17 +296,24 @@ the real runtime function, not just by label-string equality.
 emitWorkflowRuntime :: Text -> WorkflowNode -> Text
 emitWorkflowRuntime genPrefix w =
     nl $
-        [ "{-# LANGUAGE OverloadedStrings #-}"
+        [ "{-# LANGUAGE ImportQualifiedPost #-}"
+        , "{-# LANGUAGE OverloadedStrings #-}"
         , generatedBanner
         , "module " <> genPrefix <> ".WorkflowRuntime"
         , "  ( workflowName"
         , "  , awaitAwakeableId"
         , "  , awaitLabels"
+        , "  , declaredPatches"
+        , "  , declaredPatchStepNames"
+        , "  , withDeclaredPatches"
         , "  ) where"
         , ""
+        , "import Data.Set (Set)"
+        , "import Data.Set qualified as Set"
         , "import Data.Text (Text)"
+        , "import Keiro.Workflow (WorkflowRunOptions (..))"
         , "import Keiro.Workflow.Awakeable (AwakeableId, deterministicAwakeableId)"
-        , "import Keiro.Workflow.Types (WorkflowId, WorkflowName (..))"
+        , "import Keiro.Workflow.Types (PatchId (..), WorkflowId, WorkflowName (..), patchStepName)"
         , ""
         , "workflowName :: WorkflowName"
         , "workflowName = WorkflowName " <> tshow (wfStable w)
@@ -313,8 +324,32 @@ emitWorkflowRuntime genPrefix w =
         , "awaitAwakeableId wid label = deterministicAwakeableId workflowName wid label"
         , ""
         , "awaitLabels :: [Text]"
-        , "awaitLabels = [" <> T.intercalate ", " [tshow l | WfAwait l _ _ <- wfBody w] <> "]"
+        , "awaitLabels = [" <> T.intercalate ", " (map tshow (workflowAwaitLabels (wfBody w))) <> "]"
+        , ""
+        , "declaredPatches :: Set PatchId"
+        , "declaredPatches = Set.fromList [" <> T.intercalate ", " ["PatchId " <> tshow patchId | patchId <- workflowPatchIds (wfBody w)] <> "]"
+        , ""
+        , "-- The journal keys the runtime records patch decisions under."
+        , "declaredPatchStepNames :: [Text]"
+        , "declaredPatchStepNames = map patchStepName (Set.toList declaredPatches)"
+        , ""
+        , "-- Activate exactly the patches declared by this spec for a workflow run."
+        , "withDeclaredPatches :: WorkflowRunOptions -> WorkflowRunOptions"
+        , "withDeclaredPatches opts = opts{activePatches = declaredPatches}"
         ]
+
+workflowAwaitLabels :: [WfBodyItem] -> [Name]
+workflowAwaitLabels = concatMap go
+  where
+    go (WfAwait label _ _) = [label]
+    go (WfPatch _ items _) = workflowAwaitLabels items
+    go _ = []
+
+workflowPatchIds :: [WfBodyItem] -> [Name]
+workflowPatchIds = concatMap go
+  where
+    go (WfPatch patchId items _) = patchId : workflowPatchIds items
+    go _ = []
 
 emitHarness :: Agg -> Text
 emitHarness a =

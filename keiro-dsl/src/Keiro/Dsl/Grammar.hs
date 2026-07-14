@@ -897,6 +897,10 @@ data WfBodyItem
       WfSleep !Name !Name !Loc
     | -- | @child <label> id input via <childIdFn> -> <ResultType>@
       WfChild !Name !Name !Name !Loc
+    | -- | @patch <patch-id> { <items> }@ — guard items behind a durable patch.
+      WfPatch !Name ![WfBodyItem] !Loc
+    | -- | @continueAsNew <SeedType>@ — rotate after the terminal top-level item.
+      WfContinueAsNew !Name !Loc
     deriving stock (Eq, Show, Generic)
 
 -- | A durable @workflow@ node.

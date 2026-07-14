@@ -19,7 +19,9 @@ spec. The mapping is grounded in the existing per-suite @build-depends@ in
   * workqueue           => aeson, keiro-pgmq, text       (…-queue, …-queue-runtime)
   * dispatch            => aeson, effectful-core, keiro-pgmq, text
                                                          (…-dispatch-full)
-  * workflow/operation  => effectful-core, keiro, text   (…-workflow-full)
+  * workflow/operation  => containers, effectful-core, keiro, text
+                            (…-workflow-full; facts and runtime wiring only,
+                             with the body hand-owned)
 
 @base@ is always present.
 -}
@@ -81,7 +83,7 @@ depsForNode n = case n of
     NWorkqueue{} -> ["aeson", "keiro-pgmq", "text"]
     NPgmqDispatch{} -> ["aeson", "effectful-core", "keiro-pgmq", "text"]
     NReadModel{} -> ["effectful-core", "hasql-transaction", "keiro", "kiroku-store", "text"]
-    NWorkflow{} -> ["effectful-core", "keiro", "text"]
+    NWorkflow{} -> ["containers", "effectful-core", "keiro", "text"]
     NOperation{} -> ["effectful-core", "keiro", "text"]
   where
     integration = ["effectful-core", "hasql-transaction", "keiro", "kiroku-store"]

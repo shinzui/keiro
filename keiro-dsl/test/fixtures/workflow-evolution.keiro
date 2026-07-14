@@ -1,0 +1,16 @@
+context hospital-capacity
+
+workflow HospitalTransferReservation
+  name "hospital-transfer-reservation"
+  in ReservationWorkflowInput { reservationId:Id hospitalId:Id }
+  out ReservationWorkflowSummary
+  id from input.reservationId via idText
+  body
+    step create-transfer-hold -> ReservationHold
+    patch fraud-check-v2 {
+      step fraud-check -> FraudCheckResult
+    }
+    await reservation-confirmation -> ReservationConfirmation
+    step release-or-retain-capacity -> CapacityRelease
+    step summarize-reservation -> ReservationWorkflowSummary
+    continueAsNew RolloverSeed
