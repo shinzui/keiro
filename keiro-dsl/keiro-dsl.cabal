@@ -1,6 +1,6 @@
 cabal-version:   3.0
 name:            keiro-dsl
-version:         0.2.0.0
+version:         0.3.0.0
 synopsis:        Typed specification toolchain for keiro services
 description:
   keiro-dsl is the toolchain over a typed `.keiro` specification of a keiro

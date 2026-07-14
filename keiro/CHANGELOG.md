@@ -8,6 +8,14 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 _No unreleased changes._
 
+## 0.3.0.0 — 2026-07-14
+
+No user-facing changes to the `keiro` library. It is released at 0.3.0.0 to stay
+in lockstep with the rest of the Keiro package set, and is rebuilt against
+`keiro-core` 0.3.0.0. Applications that provision their test databases through
+`keiro-test-support` should note the `withMigratedSuiteWith` change described in
+the root changelog.
+
 ## 0.2.0.0 — 2026-07-13
 
 ### Breaking Changes

@@ -6,6 +6,21 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## 0.3.0.0 — 2026-07-14
+
+A dependency-realignment release across the package set. `keiro-migrations` and
+`keiro-pgmq` now sit on one `pg-migrate` 1.1 family together with Kiroku, so a
+single ledger owns the kiroku, keiro, and pgmq migration components. `keiro-core`,
+`keiro`, and `keiro-dsl` have no source changes and are released at 0.3.0.0 to
+stay in lockstep with the set.
+
+With this release every dependency in the default build plan resolves from
+Hackage: `codd` and `codd-extras` remain the only non-Hackage packages, and they
+are reachable only through the manual `legacy-codd-tools` flag, which is off by
+default.
+
 ### Breaking Changes
 
 - `keiro-migrate check` now takes the manifest as `--manifest PATH` instead of a

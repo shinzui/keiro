@@ -6,6 +6,10 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## 0.3.0.0 — 2026-07-14
+
 ### Breaking Changes
 
 - `keiro-migrate check` now takes the manifest as `--manifest PATH` instead of a

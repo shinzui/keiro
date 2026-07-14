@@ -6,6 +6,10 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## 0.3.0.0 — 2026-07-14
+
 ### Changed
 
 - Upgraded to `shibuya-pgmq-adapter` 0.12.0.0 and the `pgmq-*` 0.4 package family

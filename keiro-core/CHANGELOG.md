@@ -8,6 +8,11 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 _No unreleased changes._
 
+## 0.3.0.0 — 2026-07-14
+
+No user-facing changes. `keiro-core` is released at 0.3.0.0 to stay in lockstep
+with the rest of the Keiro package set.
+
 ## 0.2.0.0 — 2026-07-13
 
 ### Breaking Changes

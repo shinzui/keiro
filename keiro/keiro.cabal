@@ -1,6 +1,6 @@
 cabal-version:   3.0
 name:            keiro
-version:         0.2.0.0
+version:         0.3.0.0
 synopsis:        Event sourcing framework and workflow engine
 description:
   A library that composes kiroku, keiki, and shibuya into an
@@ -114,7 +114,7 @@ library
     , hs-opentelemetry-semantic-conventions  >=1.40     && <2
     , keiki                                  >=0.2      && <0.3
     , keiki-codec-json                       >=0.2      && <0.3
-    , keiro-core                             ^>=0.2.0.0
+    , keiro-core                             ^>=0.3.0.0
     , kiroku-store                           >=0.3      && <0.4
     , lens                                   >=5.2
     , mmzk-typeid                            >=0.7
@@ -181,7 +181,7 @@ benchmark keiro-bench
     , hs-opentelemetry-api  >=1.0      && <1.1
     , hs-opentelemetry-sdk  >=1.0      && <1.1
     , keiro
-    , keiro-core            ^>=0.2.0.0
+    , keiro-core            ^>=0.3.0.0
     , keiro-test-support
     , kiroku-store          >=0.3      && <0.4
     , tasty-bench           >=0.4

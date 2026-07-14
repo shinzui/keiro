@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               keiro-migrations
-version:            0.2.0.0
+version:            0.3.0.0
 synopsis:           Schema migrations for keiro
 description:
   Embedded PostgreSQL schema migrations and a migration runner for the Keiro
