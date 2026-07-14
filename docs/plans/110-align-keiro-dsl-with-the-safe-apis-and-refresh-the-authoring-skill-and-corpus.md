@@ -111,13 +111,14 @@ This section must always reflect the actual current state of the work.
 
 **M4 — NOTATION truthfulness re-audit (after EP-103…EP-106 land)**
 
-- [ ] Enumerate every "Checked:" / "validator …" claim in
+- [x] (2026-07-14 03:22Z) Enumerate every "Checked:" / "validator …" claim in
       `agents/skills/keiro-dsl-authoring/NOTATION.md` and `SKILL.md`/`LOOP.md`.
-- [ ] Verify each against the delivered diagnostics (grep the shipped
+- [x] (2026-07-14 03:22Z) Verify each against the delivered diagnostics (grep the shipped
       `keiro-dsl/src/Keiro/Dsl/Validate.hs` code list and the `check` output of the negative
       fixtures); fix the two known overclaims (workqueue trio at `NOTATION.md:145`, child-id
       at `NOTATION.md:180`) in whichever direction the delivered validator dictates.
-- [ ] Record the audit table (claim → verdict → action) in Surprises & Discoveries.
+- [x] (2026-07-14 03:22Z) Record the audit table (claim → verdict → action) in Surprises &
+      Discoveries and expand `LOOP.md`'s underclaimed diagnostic guide.
 
 **M5 — holistic skill + corpus refresh for the new surface (after EP-107…EP-109 land)**
 
@@ -184,8 +185,31 @@ implementation. Provide concise evidence.
   the eight rendered warning families disabled by `defaultValidationOptions`; it is
   advisory because the pure symbolic analyses under-verify opaque function applications.
   `TAXONOMY.md` labels it opt-in rather than implying that every generated harness runs it.
+- Implementation discovery (2026-07-14): the two predicted NOTATION overclaims resolved in
+  opposite ways. EP-104 shipped `WqDlqDivergence` and `WqTableDivergence`, so the captured
+  queue-trio claim is now true and remains. It did not ship a semantic parent/child workflow
+  id inequality check, so the workflow example now states only the enforceable truth: the
+  child id is produced by the generated via-function hole, whose contract is documented in
+  the hole output.
 
-(Nothing further yet.)
+The M4 claim audit below was run against the delivered `DiagnosticCode` registry,
+`Keiro.Dsl.Diff`, the unit tests, and real `keiro-dsl check` output from the named negative
+fixtures. “True” includes parser and scaffolder gates where no validator diagnostic is
+appropriate.
+
+| Claim group | Verdict and evidence | Action |
+| --- | --- | --- |
+| Escaped strings; duplicate `wire`, `projection`, and `goto`; generated-name safety | True: positioned parser tests cover the syntax failures; `IdentHaskellKeyword`, `IdentNotConstructorSafe`, and `VertexCtorCollision` cover scaffold-safe identifiers. | Retain the claims; add syntax/name diagnostics to `LOOP.md`. |
+| Aggregate references, status-map exactness/uniqueness/totality, rule totality, and snapshot fixtures | True: `WriteTargetNotRegister`, `RegisterInitialOutOfScope`, `StatusMapDanglingKey`, `StatusMapDuplicateKey`, `StatusMapNotTotal`, the `Rule*` codes, `SnapshotIntervalInvalid`, and `SnapshotCodecFixtureInvalid`; demonstrated by `aggregate-bad-refs.keiro`, `statusmap-{dangling,dup-key}.keiro`, and `rule-not-total.keiro`. | Retain; enumerate the previously omitted EP-104 codes in `LOOP.md`. |
+| Process time injection, runtime-owned dispatch id, references/bindings/ceiling, policy consistency, ambiguity, and saga-category legality | True: `ProcessFireAtNotInjected`, `ProcessDispatchIdSupplied`, `ProcessUnresolvedRef`, `ProcessFieldBindingUnresolved`, `ProcessTimerCeilingInvalid`, `PolicyContradiction`, `AmbiguousMarkedBenign`, and `SagaCategoryIllegal`; demonstrated by the `hospital-surge-*` and `process-*` negatives plus the category mutation test. | Retain; add the post-hardening codes and warnings to `LOOP.md`. |
+| Router target/key/bindings/readmodel/command and rejection-policy claims | True: `RouterUnresolvedRef`, `RouterKeyFieldUnknown`, `RouterBindingUnscoped`, `RouterCommandUnknown`, `RouterReadModelUnverified`, and the policy codes; unit mutations of `incident-paging.keiro` exercise each path, and the diff suite pins identity-bearing changes. | Retain; add router/policy diagnostics to `LOOP.md`. |
+| Intake disposition completeness/inversions, contract/topic coupling, emit fallback, and publisher references | True: `DispositionIncomplete`, `DispositionDuplicateOutcome`, the three inversion codes, `TopicAffinityMismatch`, `EmitSkipMissing`, `EmitUnresolvedContract`, `PublisherUnresolvedEmit`, and `IntakeUnresolvedContract`; demonstrated by the `intake-*` and `emit-*` negatives. | Retain; replace the old `Disposition*` shorthand with named families in `LOOP.md`. |
+| Captured workqueue physical/DLQ/table trio and failure-policy/ordering/provisioning constraints | Former overclaim, now true: EP-104 shipped all three drift checks (`WqPhysicalDivergence`, `WqDlqDivergence`, `WqTableDivergence`); workqueue negatives also exercise completeness, inversions, group-key, partition, dedupe, and enqueue references. | Keep the trio wording; add all three drift codes and the newer workqueue/dispatch diagnostics to `LOOP.md`. |
+| Readmodel shape/consistency/scope/feed and query/dispatch references | True: the `Rm*`, `Query*`, and `DispatchReadModel*` diagnostics are exercised by the `readmodel-*` fixtures; diff tests pin versioned shape/feed/consistency evolution. | Retain; add the delivered diagnostics and warning to `LOOP.md`. |
+| Workflow signal/await type and label integrity, id/sleep references, patches, terminal continuation, and operation references | True: `AwaitSignalMismatch`, `AwaitSignalValueMismatch`, `WorkflowDuplicateLabel`, `WorkflowIdFieldUnresolved`, `WorkflowSleepDelayUnresolved`, the patch/continue codes, `RunWorkflowUnresolved`, and `OperationUnresolvedRef` are fixture-backed. | Retain; enumerate the EP-104 and EP-109 codes in `LOOP.md`. |
+| Workflow child id “must differ from parent” | Overclaim in the pre-audit text: no diagnostic can prove inequality for an effectful via-function. | Keep the corrected, narrower statement that the id is derived by the typed via-function hole; do not claim checker enforcement. |
+| CLI scaffold collision, faithful-lowering, firewall, banner, and stale-path behavior | True: EP-106 CLI tests exercise the all-or-nothing refusal gates and informational exit-0 stale report. | Retain the CLI prose; it is a scaffold gate, not an `error[Code]`, and is already explained in LOOP step 4. |
+| LOOP step 3 diagnostic list | Underclaim: it named the early verticals but omitted most EP-104/EP-107/EP-108/EP-109 and M1 diagnostics. | Replace it with grouped, explicit syntax/name, aggregate/rule, process/router, integration, workqueue, readmodel, and workflow/operation lists. |
 
 
 ## Decision Log

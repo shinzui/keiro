@@ -26,12 +26,44 @@ cabal run keiro-dsl -- check service.keiro ; echo "exit=$?"
 `OK` / exit 0 means every required decision is present and no dangerous inversion is stated
 the wrong way. Any `error[Code]` (exit non-zero) names the rule and line — fix the spec, not
 the generated code. Warnings (e.g. benign-inversion notices) are informational and pass.
-Common rejections you must resolve in the spec:
+Common diagnostics you must resolve in the spec (the warning-only codes are called out):
 
-- `StatusMapNotTotal`, `EvtVersionMissingUpcaster`, `ClockSampled`,
-  `ProcessFireAtNotInjected`, `ProcessDispatchIdSupplied`, `*UnresolvedRef`/`*Unresolved*`,
-  `Disposition*` (duplicate/previouslyFailed retry, decode unbounded retry, incomplete),
-  `EmitSkipMissing`, `WqPhysicalDivergence`, `Wq*` inversions, `AwaitSignalMismatch`.
+- Syntax and generated names: positioned parse errors reject raw newlines in strings and
+  duplicate `wire`, `projection`, or transition `goto` clauses. `IdentHaskellKeyword`,
+  `IdentNotConstructorSafe`, `VertexCtorCollision`, `DuplicateNodeName`,
+  `DuplicateEnumCtor`, `DuplicateEnumWire`, `DuplicateIdPrefix`, `DuplicateCommandName`,
+  and `DuplicateEventName` reject names that would collide or generate illegal Haskell.
+- Aggregate, rule, and evolution: `StatusMapNotTotal`, `StatusMapDanglingKey`,
+  `StatusMapDuplicateKey`, `WriteTargetNotRegister`, `RegisterInitialOutOfScope`,
+  `UndeclaredCommand`, `UndeclaredEvent`, `UndeclaredState`, `UnreachableState`,
+  `TerminalHasOutgoing`, `RuleDomainUnresolved`, `RuleNotTotal`, `RuleCaseUnknownCtor`,
+  `ClockSampled`, `GuardAtomOutOfScope`, `EvtVersionMissingUpcaster`,
+  `DeprecatedEventStillEmitted`, `SnapshotIntervalInvalid`, and
+  `SnapshotCodecFixtureInvalid`. `WireSchemaVersionMismatch` is a warning.
+- Process, router, and worker policy: `SagaCategoryIllegal`, `ProcessFireAtNotInjected`,
+  `ProcessDispatchIdSupplied`, `ProcessUnresolvedRef`, `ProcessFieldBindingUnresolved`,
+  `ProcessTimerCeilingInvalid`, `RouterUnresolvedRef`, `RouterKeyFieldUnknown`,
+  `RouterBindingUnscoped`, `RouterCommandUnknown`, `RouterReadModelUnverified`,
+  `PolicyContradiction`, and `AmbiguousMarkedBenign`. `ProcessBenignInversion`,
+  `PolicyDeadLetterUnused`, and `AmbiguousFollowsRejectedPolicy` are explanatory warnings.
+- Integration: `DispositionIncomplete`, `DispositionDuplicateOutcome`,
+  `DispositionDuplicateRetry`, `DispositionPreviouslyFailedRetry`,
+  `DispositionDecodeUnboundedRetry`, `TopicAffinityMismatch`, `EmitSkipMissing`,
+  `EmitUnresolvedContract`, `PublisherUnresolvedEmit`, and `IntakeUnresolvedContract`.
+- Workqueue and dispatch: `WqPhysicalDivergence`, `WqDlqDivergence`,
+  `WqTableDivergence`, `WqDispositionIncomplete`, `WqStoreFailureNotRetry`,
+  `WqDecodeFailureNotDeadLetter`, `WqDlqWithoutCeiling`, `WqGroupKeyMissing`,
+  `WqGroupKeyWithoutFifo`, `WqGroupKeyUnresolved`, `WqPartitionSpecEmpty`,
+  `DispatchEnqueueUnresolved`, `DispatchDedupQueueUnresolved`, and
+  `DispatchDedupFieldUnresolved`. `WqUnloggedDurability` is a warning.
+- Read models: `RmShapeHashDrift`, `RmStrongInlineOnly`, `RmScopeWithoutStrong`,
+  `RmUnknownColumnType`, `RmInlineFeedUnreferenced`, `RmConsistencyConflict`,
+  `QueryUnresolvedReadModel`, `QueryConsistencyInvalid`, `DispatchReadModelUnresolved`, and
+  `DispatchReadModelFieldUnknown`; `RmProjectionWithoutNode` is a warning.
+- Workflow and operations: `WorkflowDuplicateLabel`, `WorkflowSleepDelayUnresolved`,
+  `WorkflowIdFieldUnresolved`, `AwaitSignalMismatch`, `AwaitSignalValueMismatch`,
+  `RunWorkflowUnresolved`, `OperationUnresolvedRef`, `WorkflowPatchDuplicate`,
+  `WorkflowPatchIdInvalid`, and `WorkflowContinueAsNewNotTerminal`.
 
 ### 4. Scaffold (emit generated layer + holes)
 
