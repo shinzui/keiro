@@ -6,7 +6,17 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Changed
+
+- Upgraded to `shibuya-pgmq-adapter` 0.12.0.0 and the `pgmq-*` 0.4 package family
+  (`pgmq-core`, `pgmq-config`, `pgmq-effectful`, `pgmq-hasql`, and `pgmq-migration`
+  in the test suite). `keiro-pgmq`'s own API is unchanged. The adapter's 0.12 fix
+  makes idle streams observe shutdown: a processor with nothing to consume now
+  finishes on request instead of polling until it is forcibly cancelled.
+- The test suite installs the PGMQ schema by appending `pgmq-migration`'s native
+  `pgmqMigrations` component to the suite's framework plan, rather than calling the
+  `migrate` runner that `pgmq-migration` 0.4 removed. One pg-migrate ledger now owns
+  the kiroku, keiro, and pgmq components together.
 
 ## 0.2.0.0 — 2026-07-13
 

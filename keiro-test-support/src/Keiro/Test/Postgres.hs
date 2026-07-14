@@ -17,7 +17,7 @@ Usage from @hspec@:
 @
 main :: IO ()
 main =
-  'withMigratedSuiteWith' installExtraSchema \\fixture ->
+  'withMigratedSuiteWith' [pgmqMigrations] \\fixture ->
     hspec $
       describe "..." $ around ('withFreshStore' fixture) $ do
         it "..." $ \\store -> ...
@@ -39,9 +39,10 @@ where
 
 import Control.Concurrent.STM (TVar, atomically, newTVarIO, stateTVar)
 import Control.Exception (bracket, onException)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Database.PostgreSQL.Migrate (defaultRunOptions, runMigrationPlan)
+import Database.PostgreSQL.Migrate (MigrationComponent, defaultRunOptions, migrationPlan, runMigrationPlan)
 import Effectful (Eff, IOE, UnliftStrategy (..), runEff, withEffToIO)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import EphemeralPg qualified as Pg
@@ -49,7 +50,7 @@ import Hasql.Connection.Settings qualified as Conn
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool.Config
 import Hasql.Session qualified as Session
-import Keiro.Migrations (frameworkMigrationPlan, keiroMigrations)
+import Keiro.Migrations (keiroMigrations)
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource, getKirokuStore, withKirokuStore)
@@ -77,15 +78,21 @@ Kiroku event-store schema and Keiro framework schema to it once, then run
 are applied here against the template before any example clones it.
 -}
 withMigratedSuite :: (Fixture -> IO a) -> IO a
-withMigratedSuite = withMigratedSuiteWith \_ -> pure ()
+withMigratedSuite = withMigratedSuiteWith []
 
-{- | Like 'withMigratedSuite', but runs an extra migration hook against the
-template database after the Kiroku and Keiro migrations and before any example
-database is cloned. Use this for suites that need additional schema, such as
-PGMQ tables, in every fresh database.
+{- | Like 'withMigratedSuite', but appends extra @pg-migrate@ components to the
+framework plan so the template database also carries their schema — for example
+@pgmq-migration@'s @pgmqMigrations@. The extra components are applied after
+Kiroku's and Keiro's, in the order given, and before any example database is
+cloned.
+
+They join the framework plan rather than running as a separate plan because a
+@pg-migrate@ ledger is shared by every component in it: a plan that omits a
+component already recorded in the ledger fails strict verification with
+@UnknownStoredMigration@.
 -}
-withMigratedSuiteWith :: (Text -> IO ()) -> (Fixture -> IO a) -> IO a
-withMigratedSuiteWith extraTemplateMigration action = do
+withMigratedSuiteWith :: [MigrationComponent] -> (Fixture -> IO a) -> IO a
+withMigratedSuiteWith extraComponents action = do
     started <- Pg.startCached Pg.defaultConfig Pg.defaultCacheConfig
     case started of
         Left err -> fail (Text.unpack (Pg.renderStartError err))
@@ -102,8 +109,7 @@ withMigratedSuiteWith extraTemplateMigration action = do
         -- Apply migrations through short-lived pg-migrate connections, all of which are
         -- released before any clone, so the template has no active sessions when
         -- PostgreSQL copies it.
-        migrateTemplate templateConnStr
-        extraTemplateMigration templateConnStr
+        migrateTemplate extraComponents templateConnStr
         pure (Fixture server templateDbName counter)
 
 {- | Clone a fresh, empty, migrated database from the template, open a
@@ -195,11 +201,11 @@ withFreshDatabase fixture action =
         runSql fixture.server $
             "DROP DATABASE IF EXISTS " <> quoteIdentifier dbName <> " WITH (FORCE)"
 
-migrateTemplate :: Text -> IO ()
-migrateTemplate connStr = do
+migrateTemplate :: [MigrationComponent] -> Text -> IO ()
+migrateTemplate extraComponents connStr = do
     kiroku <- either (fail . show) pure Kiroku.kirokuMigrations
     keiro <- either (fail . show) pure keiroMigrations
-    plan <- either (fail . show) pure (frameworkMigrationPlan kiroku keiro)
+    plan <- either (fail . show) pure (migrationPlan (kiroku :| keiro : extraComponents))
     result <-
         runMigrationPlan
             defaultRunOptions

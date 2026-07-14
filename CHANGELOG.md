@@ -10,6 +10,13 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 - `keiro-migrate check` now takes the manifest as `--manifest PATH` instead of a
   positional argument, following the `pg-migrate-cli` 1.1.0.0 parser.
+- `Keiro.Test.Postgres.withMigratedSuiteWith` now takes `[MigrationComponent]` —
+  extra `pg-migrate` components appended to the framework plan — instead of a
+  `Text -> IO ()` hook that ran its own migration against the template database.
+  A `pg-migrate` ledger is shared by every component in it, so a second plan that
+  omitted Kiroku's and Keiro's components failed strict verification with
+  `UnknownStoredMigration`. Suites that installed extra schema (such as PGMQ) now
+  pass the component itself: `withMigratedSuiteWith [pgmqMigrations]`.
 
 ### Changed
 
@@ -21,6 +28,17 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   From `kiroku-store` 0.3.0.1, a failure raised inside an opaque `runTransaction`
   body now preserves its SQLSTATE and server message instead of surfacing as
   `StreamNotFound (StreamName "<transaction>")`.
+- Upgraded `keiro-pgmq` to `shibuya-pgmq-adapter` 0.12.0.0 and the `pgmq-*` 0.4
+  package family, which is what aligns the PGMQ path with pg-migrate 1.1. The
+  adapter's own API is unchanged; the notable fix is that idle streams now observe
+  shutdown, so a processor with nothing to consume finishes on request instead of
+  polling until it is forcibly cancelled. `shibuya-core` stays at 0.8.0.1 (already
+  the latest).
+- Dropped the `hasql-migration` `source-repository-package` pin from
+  `cabal.project`. It existed only because `pgmq-migration` 0.3 depended on
+  `hasql-migration`, whose Hackage release does not build against hasql 1.10;
+  `pgmq-migration` 0.4 is a native `pg-migrate` component and nothing in the build
+  plan depends on it now.
 
 ## 0.2.0.0 — 2026-07-13
 

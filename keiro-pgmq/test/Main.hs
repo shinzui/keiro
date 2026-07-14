@@ -76,21 +76,15 @@ data Ping = Ping
 type Stack = '[Reader PgmqAdapterEnv, Pgmq, Tracing, Error PgmqRuntimeError, IOE]
 
 main :: IO ()
-main =
-    Postgres.withMigratedSuiteWith installPgmq \fixture ->
+main = do
+    -- PGMQ's schema is installed by appending pgmq-migration's native component to
+    -- the suite's framework plan, so one pg-migrate ledger owns kiroku, keiro, and
+    -- pgmq together.
+    pgmq <- either (fail . show) pure Migration.pgmqMigrations
+    Postgres.withMigratedSuiteWith [pgmq] \fixture ->
         hspec $
             describe "Keiro.PGMQ" $
                 around (Postgres.withFreshDatabase fixture) spec
-
--- | Install the PGMQ schema into the ephemeral database via @pgmq-migration@.
-installPgmq :: Text -> IO ()
-installPgmq connStr =
-    withPool connStr $ \pool -> do
-        result <- Pool.use pool Migration.migrate
-        case result of
-            Left usageErr -> fail ("pgmq pool error during migration: " <> show usageErr)
-            Right (Left migErr) -> fail ("pgmq migration error: " <> show migErr)
-            Right (Right ()) -> pure ()
 
 withPool :: Text -> (Pool -> IO a) -> IO a
 withPool connStr =
