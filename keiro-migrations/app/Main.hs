@@ -33,7 +33,7 @@ main = do
         TextOutput -> Text.IO.putStrLn (renderMigrationCommandText outcome)
         JsonOutput -> LazyByteString.putStrLn (Aeson.encode (renderMigrationCommandJson outcome))
     Exit.exitWith
-        (case exitClass outcome of ExitSuccess -> Exit.ExitSuccess; _ -> Exit.ExitFailure 1)
+        (case exitClass outcome of ExitSucceeded -> Exit.ExitSuccess; _ -> Exit.ExitFailure 1)
 
 commandOutputFormat :: MigrationCommand -> OutputFormat
 commandOutputFormat command =

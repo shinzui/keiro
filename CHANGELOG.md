@@ -6,7 +6,21 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Breaking Changes
+
+- `keiro-migrate check` now takes the manifest as `--manifest PATH` instead of a
+  positional argument, following the `pg-migrate-cli` 1.1.0.0 parser.
+
+### Changed
+
+- Upgraded `kiroku-store` to 0.3.0.1, `kiroku-store-migrations` to 0.3.0.0, and the
+  `pg-migrate` package family to 1.1.0.0 in `keiro-migrations` and
+  `keiro-test-support`. This realigns Keiro's pg-migrate version with the one
+  Kiroku's migration component requires — the previous `^>=1.0.0.0` bounds excluded
+  pg-migrate 1.1 and so could not resolve alongside `kiroku-store-migrations` 0.3.
+  From `kiroku-store` 0.3.0.1, a failure raised inside an opaque `runTransaction`
+  body now preserves its SQLSTATE and server message instead of surfacing as
+  `StreamNotFound (StreamName "<transaction>")`.
 
 ## 0.2.0.0 — 2026-07-13
 

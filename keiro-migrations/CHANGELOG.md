@@ -6,7 +6,22 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Breaking Changes
+
+- `keiro-migrate check` now takes the manifest as `--manifest PATH` instead of a
+  positional argument, matching `new --manifest`. This follows the `pg-migrate-cli`
+  1.1.0.0 parser, and matches the same change in `kiroku-store-migrate check`.
+
+### Changed
+
+- Upgraded to `pg-migrate` 1.1.0.0 and `kiroku-store-migrations` 0.3.0.0, keeping
+  the pg-migrate version aligned with the one Kiroku's migration component
+  requires. `keiro-migrate up` and `repair` now accept `--wait` and
+  `--no-statement-timeout` overrides; omitting an execution flag preserves the
+  configured runner settings instead of discarding them. A durably successful
+  migration, repair, or history-import run is now preserved with its cleanup
+  observations attached, rather than replaced by an error, when advisory unlock or
+  statement-timeout restoration fails.
 
 ## 0.2.0.0 — 2026-07-13
 
