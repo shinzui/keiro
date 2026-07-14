@@ -122,19 +122,19 @@ This section must always reflect the actual current state of the work.
 
 **M5 — holistic skill + corpus refresh for the new surface (after EP-107…EP-109 land)**
 
-- [ ] Extend `NOTATION.md` with the delivered `readmodel`, `router`, and policy clauses
+- [x] (2026-07-14 03:28Z) Extend `NOTATION.md` with the delivered `readmodel`, `router`, and policy clauses
       (EP-107/EP-108) and the pgmq ordering/provisioning, snapshot, and workflow
       `patch`/`continueAsNew` clauses (EP-109), sourced from those plans' shipped grammar —
       never invented.
-- [ ] Document the string-escaping rules EP-105 delivers and the category-stream rules from
+- [x] (2026-07-14 03:28Z) Document the string-escaping rules EP-105 delivers and the category-stream rules from
       M1.
-- [ ] Refresh `LOOP.md`/`SKILL.md`/`WALKTHROUGH.md` for any changed CLI output (scaffold
+- [x] (2026-07-14 03:28Z) Refresh `LOOP.md`/`SKILL.md` for changed CLI output (scaffold
       report, new diagnostics) and the new hole kinds.
-- [ ] Rewrite `docs/corpus/keiro-dsl-corpus.md`: add rows for every fixture and conformance
-      component added by EP-103…EP-109 and this plan, and backfill the components the index
-      already omits (it lists 3 of the 16 conformance suites in
-      `keiro-dsl/keiro-dsl.cabal`).
-- [ ] `mori validate` passes with the refreshed description/paths in `mori.dhall`.
+- [x] (2026-07-14 03:28Z) Rewrite `docs/corpus/keiro-dsl-corpus.md` with a resolving row for
+      all 120 current fixtures, all 22 current conformance components, and all five mutation/
+      gate scripts. M6 owns adding its new fixture/component rows when they exist.
+- [x] (2026-07-14 03:28Z) `mori validate` passes with the refreshed surface description and
+      unchanged skill/corpus paths in `mori.dhall`.
 
 **M6 — cold-start proof on the new surface (the MasterPlan's end-to-end acceptance)**
 
@@ -211,6 +211,17 @@ appropriate.
 | CLI scaffold collision, faithful-lowering, firewall, banner, and stale-path behavior | True: EP-106 CLI tests exercise the all-or-nothing refusal gates and informational exit-0 stale report. | Retain the CLI prose; it is a scaffold gate, not an `error[Code]`, and is already explained in LOOP step 4. |
 | LOOP step 3 diagnostic list | Underclaim: it named the early verticals but omitted most EP-104/EP-107/EP-108/EP-109 and M1 diagnostics. | Replace it with grouped, explicit syntax/name, aggregate/rule, process/router, integration, workqueue, readmodel, and workflow/operation lists. |
 
+- Implementation discovery (2026-07-14): `readmodel` is a full `Node` constructor and
+  notation section but not a standalone `new <kind>` skeleton. The coupled `new workqueue`
+  starter supplies the readmodels its dispatch needs. NOTATION had incorrectly included
+  `readmodel` in the skeleton-kind list, while SKILL omitted the real `router` kind; both
+  lists now match `Skeleton.skeletonKinds` and explicitly explain the distinction.
+- Implementation discovery (2026-07-14): the corpus had fallen from a useful index into a
+  severe under-inventory: grouped prose covered only a fraction of 120 fixtures and named
+  3 of 22 current conformance components. The refresh records one resolving path per fixture,
+  every component, and all five mutation/gate scripts; shell set comparison found zero
+  missing or extra fixture paths.
+
 
 ## Decision Log
 
@@ -284,6 +295,13 @@ Record every decision made while working on the plan.
   keeping them together gives a red harness one direct destination without burying notation.
   Date: 2026-07-14
 
+- Decision: index corpus fixtures as one explicit resolving path per row, not brace-expanded
+  filename groups.
+  Rationale: the M5 acceptance is a completeness property. Explicit paths can be compared
+  mechanically with `rg --files`, expose newly added fixtures immediately, and avoid an
+  apparently concise group silently omitting variants that exercise different diagnostics.
+  Date: 2026-07-14
+
 (Add entries as implementation decisions are made.)
 
 
@@ -298,7 +316,10 @@ through generated `StreamCategory` constants, migrated process and router fills 
 reservation. M2 made the target-stream duplicate confirmation contract visible in generated
 process output, hole stubs, the reference fill, and the authoring loop. The focused unit and
 conformance matrix passed. M3 added the source-verified eight-warning replay playbook and the
-EP-108-aligned `CommandAmbiguous` disposition rules. M4–M6 remain.
+EP-108-aligned `CommandAmbiguous` disposition rules. M4 reconciled every checker claim with
+the shipped diagnostics and expanded the authoring loop's failure guide. M5 now documents
+every delivered node/clause, distinguishes parser nodes from skeleton kinds, and indexes all
+120 fixtures and 22 current conformance components; `mori validate` passes. M6 remains.
 
 (The M6 entry must state whether the cold-start agent succeeded without touching a generated
 module — that entry is the MasterPlan's end-to-end acceptance record.)

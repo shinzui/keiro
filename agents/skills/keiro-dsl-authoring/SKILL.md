@@ -5,8 +5,9 @@ description: >
   end to end: write the spec, `check` it, `scaffold` the symbol-free deterministic layer plus
   typed holes, fill the holes and the transducer body against the GENERATED signatures, run
   the harness, and `diff` the spec to gate unsafe evolution. TRIGGER when: building or changing
-  a keiro service (aggregate, process manager + timer, Kafka inbox/outbox/contract, pgmq
-  workqueue/dispatch, durable workflow/operation) and you want the spec to be the source of truth.
+  a keiro service (aggregate/snapshot, process manager + timer, router, Kafka
+  inbox/outbox/contract, pgmq workqueue/dispatch, read model, durable workflow/operation) and
+  you want the spec to be the source of truth.
 argument-hint: <feature description, or a path to an existing .keiro>
 ---
 
@@ -55,8 +56,9 @@ edit a `-- @generated` module.
 
 ## What to read next
 
-- `NOTATION.md` — the complete typed-spec notation for every node type (aggregate, process +
-  timer, contract/intake/emit/publisher, workqueue/dispatch, workflow/operation, evolution).
+- `NOTATION.md` — the complete typed-spec notation for every node type (aggregate/snapshot,
+  process + timer, router, contract/intake/emit/publisher, workqueue/dispatch, readmodel,
+  workflow/operation, evolution).
 - `LOOP.md` — the write → check → scaffold → fill → harness → diff loop as numbered steps.
 - `WALKTHROUGH.md` — a worked end-to-end example on the Reservation aggregate.
 - `TAXONOMY.md` — the replay-safety warning playbook and the `CommandAmbiguous` disposition
@@ -79,9 +81,11 @@ cabal run keiro-dsl -- new <kind>                      # print a minimal valid s
 ```
 
 `new <kind>` prints a minimal, guaranteed-valid `.keiro` skeleton to stdout for
-any of: `aggregate`, `process`, `contract`, `intake`, `emit`, `publisher`,
+any of: `aggregate`, `process`, `router`, `contract`, `intake`, `emit`, `publisher`,
 `workqueue`, `dispatch`, `workflow`, `operation`. Pipe it straight into a file
 to start, e.g. `cabal run -v0 keiro-dsl -- new aggregate > service.keiro`.
+`readmodel` is a full top-level notation node but has no standalone starter; `new workqueue`
+includes the coupled readmodel nodes its dispatch example requires.
 
 There is a `keiro-dsl/bin/keiro-dsl` wrapper so you can drop the verbose
 `cabal run -v0 keiro-dsl --` prefix: put `keiro-dsl/bin` on your `PATH` and run

@@ -43,7 +43,7 @@ in  Schema.Project::{
         , type = Schema.PackageType.Other "Toolchain"
         , language = Schema.Language.Haskell
         , description = Some
-            "Typed-spec (.keiro) toolchain for keiro services: parse/check/scaffold/harness/diff. Authoring skill: agents/skills/keiro-dsl-authoring; corpus index: docs/corpus/keiro-dsl-corpus.md"
+            "Typed-spec (.keiro) toolchain for aggregates, integration, queues, read models, routers, processes, and workflows: parse/check/scaffold/harness/diff. Authoring skill: agents/skills/keiro-dsl-authoring; corpus index: docs/corpus/keiro-dsl-corpus.md"
         }
       ]
     , dependencies =

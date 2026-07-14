@@ -186,6 +186,10 @@ typed effectful resolver. Bindings may read declared `input.*` and `resolved.*` 
 The target aggregate and command must resolve. Router name, key derivation, and target are
 identity-bearing and therefore Breaking in `diff`. The generated `WorkerOptions` must be
 passed to `runRouterWorkerWith`; dispatch-level `CommandAmbiguous` follows `rejected =>`.
+Maps to a generated `Router` module plus a create-once `RouterHoles` module for the resolver,
+target stream/projections, and assembled runtime value. Checked: router/readmodel/aggregate/
+command references resolve; key and binding fields are in scope; worker policy agrees with
+the dispatch arms; ambiguity cannot be marked benign.
 
 ## contract / intake / emit / publisher (EP-4)
 
@@ -293,6 +297,12 @@ migrate an existing queue. FIFO provisioning adds the required GIN index; a DLQ 
 standard. Headers, batch enqueue, visibility timeout, batch size, polling, and metrics
 remain deployment tuning (hole-kind 8).
 
+Maps to generated `Queue` and `QueuePolicy` modules; fanout, worker handling, and raw-SQL
+dedupe remain hand-owned. Checked: all four disposition outcomes are present, the transient/
+poison inversions are rejected, the captured physical/DLQ/table trio is re-derived, FIFO
+and group-key clauses agree, provisioning fixtures are non-empty, and dispatch queue/
+readmodel/field references resolve.
+
 ## readmodel (EP-107)
 
 ```text
@@ -336,6 +346,10 @@ readmodel node owns the real default. Query operations and both read-model refer
 dispatch resolve against these nodes; dispatch `field =` also resolves against `columns`.
 Generated query/projection holes import a schema-qualified table constant—interpolate it
 into SQL instead of depending on PostgreSQL `search_path`.
+Maps to generated `ReadModelTable`, `ReadModel`, and facts-harness modules plus a create-once
+`ReadModelHoles` module for inline apply, async apply, and query behavior. Checked: captured
+shape, column types, feed/consistency/scope combinations, inline projection ownership, and
+query/dispatch references agree.
 
 ## workflow / operation (EP-6)
 
@@ -372,7 +386,9 @@ operation QueryTransferDecisions
 
 Operation shapes: `command on <Agg> …`, `query <ReadModel> …`, `signal <label> of <Wf> …`,
 `run <Wf> …`. Checked: every `signal <label> of <wf>` matches an `await <label>` of that
-workflow (else the awakeable id never matches and the workflow waits forever).
+workflow (else the awakeable id never matches and the workflow waits forever); signal value
+types agree, workflow labels are unique, id/sleep fields and operation targets resolve,
+patch ids are unique and colon-free, and `continueAsNew` is terminal and top-level.
 
 `patch <id> { ... }` guards a cross-cutting workflow change for in-flight instances.
 The deploy that introduces the block activates the generated `declaredPatches` set;
@@ -405,9 +421,11 @@ keiro-dsl scaffold <file.keiro> --out DIR \     # validate, emit @generated + ho
 keiro-dsl diff     --since <git-ref> <file.keiro>   # classify ADDITIVE/WARNING/BREAKING since a ref
 ```
 
-- `new <kind>` — `kind` ∈ aggregate, process, router, contract, intake, emit, publisher, workqueue,
-  dispatch, readmodel, workflow, operation. Prints a guaranteed-valid starter spec to stdout
-  (`keiro-dsl new aggregate > service.keiro`).
+- `new <kind>` — `kind` ∈ aggregate, process, router, contract, intake, emit, publisher,
+  workqueue, dispatch, workflow, operation. Prints a guaranteed-valid starter spec to stdout
+  (`keiro-dsl new aggregate > service.keiro`). `readmodel` is a top-level notation node but
+  not a standalone skeleton kind; the coupled `new workqueue` starter includes the readmodels
+  needed by its dispatch.
 - `scaffold` validates first, then runs collision, firewall, faithful-lowering, and existing-file
   banner gates before writing. Any refusal exits 1 and writes nothing. A Generated target
   lacking `-- @generated` is protected unless `--force-generated-overwrite` is explicitly passed;
