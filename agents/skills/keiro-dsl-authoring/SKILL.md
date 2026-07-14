@@ -50,7 +50,8 @@ edit a `-- @generated` module.
    `mkEventStreamOrThrow`. That wrapper throws at startup unless the transducer is
    replay-safe, and the generated harness's `validateTransducer defaultValidationOptions … ==
    []` assertion is exactly what guarantees it won't. Both bindings live in the `-- @generated`
-   module — you never write them; a green harness is what lets them stay green.
+   module — you never write them; a green harness is what lets them stay green. If it is red,
+   use `TAXONOMY.md` to interpret every warning family and fix the hand-owned transition.
 
 ## What to read next
 
@@ -58,6 +59,8 @@ edit a `-- @generated` module.
   timer, contract/intake/emit/publisher, workqueue/dispatch, workflow/operation, evolution).
 - `LOOP.md` — the write → check → scaffold → fill → harness → diff loop as numbered steps.
 - `WALKTHROUGH.md` — a worked end-to-end example on the Reservation aggregate.
+- `TAXONOMY.md` — the replay-safety warning playbook and the `CommandAmbiguous` disposition
+  rules.
 - `docs/corpus/keiro-dsl-corpus.md` (repo root) — the captured conformance corpus: real
   `.keiro` specs paired with the hand-filled reference modules they map to. Consult these as
   worked examples of how a spec lowers to filled holes.

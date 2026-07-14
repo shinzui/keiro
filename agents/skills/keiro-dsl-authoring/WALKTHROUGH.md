@@ -62,6 +62,10 @@ cabal test keiro-dsl-conformance
 # PASS  accepts RequestTransferReservation from ReservationUnrequested
 ```
 
+If `validateTransducer` is not empty, use `TAXONOMY.md` to start from the named vertex and
+repair the corresponding hand-owned edge. In particular, an output-free edge that changes
+state is `state-changing-epsilon`; emitting a real event is the preferred fix.
+
 ## 5. The harness pins behaviour (mutation)
 
 `bash keiro-dsl/test/mutation-test.sh` flips the filled guard `./=` to `.==` and shows the

@@ -151,6 +151,9 @@ must be passed to `runProcessManagerWorkerWith`; `CommandAmbiguous` follows the 
 `rejected` policy for ordinary dispatches. Holes: the `handle` body, the deadline window,
 the fire command, and SQL. An `on-duplicate AckOk` hand-written path must use
 `confirmBenignDuplicate` against the target stream before acknowledging the duplicate.
+See `TAXONOMY.md` for the full distinction: `CommandAmbiguous` is non-transient and never
+benign, while the timer's mandatory `on-ambiguous Retry` arm turns it into a ceiling-bounded
+dead-letter witness.
 
 The saga clause names a validated stream **category**, not a raw prefix. Categories are
 non-empty, contain no `-`, whitespace, control characters, or `:`, and may not be `$all`;

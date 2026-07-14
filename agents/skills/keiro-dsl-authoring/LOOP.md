@@ -91,6 +91,11 @@ asserts `validateTransducer == []`, codec round-trips, the disposition/time-inje
 decisions, and a behavioural accept. A wrong fill turns a **specific** named test red. Green
 harness = your fill matches the spec.
 
+If validation is red or startup reports `is not replay-safe`, open `TAXONOMY.md`. It explains
+all eight warning families, including why a `state-changing-epsilon` transition must emit an
+event or stop changing durable state. Do not silence the gate with
+`mkEventStreamUnchecked`.
+
 ### 7. Diff (gate evolution over time)
 
 When you later change the spec, gate the change against history:

@@ -99,14 +99,14 @@ This section must always reflect the actual current state of the work.
 
 **M3 — failure-taxonomy guidance (StateChangingEpsilon, CommandAmbiguous)**
 
-- [ ] Write the `mkEventStreamOrThrow` rejection playbook into the skill (new section in
+- [x] (2026-07-14 03:19Z) Write the `mkEventStreamOrThrow` rejection playbook into the skill (new section in
       `NOTATION.md` or a referenced page): all eight warning families, deep guidance on
       `state-changing-epsilon` with the canonical fixes.
-- [ ] Write the `CommandAmbiguous` explanation (definition bug, rejection-class, never
+- [x] (2026-07-14 03:19Z) Write the `CommandAmbiguous` explanation (definition bug, rejection-class, never
       transient) into the skill's disposition guidance, using the vocabulary
       `docs/plans/108-add-a-router-node-and-rejection-and-poison-policy-surfaces-to-keiro-dsl.md`
       decided (read its Decision Log at execution time).
-- [ ] Cross-link from `WALKTHROUGH.md` (the harness's `validateTransducer` step) to the
+- [x] (2026-07-14 03:19Z) Cross-link from `WALKTHROUGH.md` (the harness's `validateTransducer` step) to the
       playbook.
 
 **M4 — NOTATION truthfulness re-audit (after EP-103…EP-106 land)**
@@ -180,6 +180,10 @@ implementation. Provide concise evidence.
   `confirmBenignDuplicate` comments and a short NOTATION mention. M2 retained that delivered
   guidance, added the missing process generated/stub signature and hand-written-path rules,
   and aligned SKILL/LOOP plus the process reference fill.
+- Implementation discovery (2026-07-14): keiki's `OpaqueGuard` audit is the only one of
+  the eight rendered warning families disabled by `defaultValidationOptions`; it is
+  advisory because the pure symbolic analyses under-verify opaque function applications.
+  `TAXONOMY.md` labels it opt-in rather than implying that every generated harness runs it.
 
 (Nothing further yet.)
 
@@ -248,6 +252,14 @@ Record every decision made while working on the plan.
   component records that the worker owns the confirmation behind `on-duplicate AckOk`.
   Date: 2026-07-14
 
+- Decision: put the replay-safety and command-failure playbook in a new sibling
+  `agents/skills/keiro-dsl-authoring/TAXONOMY.md` and cross-link it from the three existing
+  entry points.
+  Rationale: the eight-warning table, the full state-changing-epsilon repair order, and the
+  process/router/timer ambiguity split are a troubleshooting workflow longer than one screen;
+  keeping them together gives a red harness one direct destination without burying notation.
+  Date: 2026-07-14
+
 (Add entries as implementation decisions are made.)
 
 
@@ -261,7 +273,8 @@ through generated `StreamCategory` constants, migrated process and router fills 
 `entityStream`, and pinned the mirrored runtime rule plus the stricter workflow-colon
 reservation. M2 made the target-stream duplicate confirmation contract visible in generated
 process output, hole stubs, the reference fill, and the authoring loop. The focused unit and
-conformance matrix passed. M3–M6 remain.
+conformance matrix passed. M3 added the source-verified eight-warning replay playbook and the
+EP-108-aligned `CommandAmbiguous` disposition rules. M4–M6 remain.
 
 (The M6 entry must state whether the cold-start agent succeeded without touching a generated
 module — that entry is the MasterPlan's end-to-end acceptance record.)
