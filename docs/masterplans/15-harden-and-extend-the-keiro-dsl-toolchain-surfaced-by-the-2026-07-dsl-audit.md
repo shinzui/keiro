@@ -142,7 +142,7 @@ three plans register with it).
 | 107 | Add a first-class read-model node with registration, schema, and consistency to keiro-dsl | docs/plans/107-add-a-first-class-read-model-node-with-registration-schema-and-consistency-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Complete |
 | 108 | Add a router node and rejection and poison policy surfaces to keiro-dsl | docs/plans/108-add-a-router-node-and-rejection-and-poison-policy-surfaces-to-keiro-dsl.md | EP-103 | EP-104, EP-105, EP-106 | Complete |
 | 109 | Extend keiro-dsl node coverage: pgmq ordering and provisioning, snapshot policy, and workflow patch and continue-as-new | docs/plans/109-extend-keiro-dsl-node-coverage-pgmq-ordering-and-provisioning-snapshot-policy-and-workflow-patch-and-continue-as-new.md | EP-103 | EP-104, EP-105, EP-106 | Complete |
-| 110 | Align keiro-dsl with the safe APIs and refresh the authoring skill and corpus | docs/plans/110-align-keiro-dsl-with-the-safe-apis-and-refresh-the-authoring-skill-and-corpus.md | EP-107, EP-108, EP-109 | EP-103, EP-104, EP-105, EP-106 | Not Started |
+| 110 | Align keiro-dsl with the safe APIs and refresh the authoring skill and corpus | docs/plans/110-align-keiro-dsl-with-the-safe-apis-and-refresh-the-authoring-skill-and-corpus.md | EP-107, EP-108, EP-109 | EP-103, EP-104, EP-105, EP-106 | In Progress |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-103).
