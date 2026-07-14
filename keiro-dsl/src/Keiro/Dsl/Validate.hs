@@ -77,6 +77,8 @@ data DiagnosticCode
     | WqGroupKeyUnresolved
     | WqUnloggedDurability
     | WqPartitionSpecEmpty
+    | SnapshotIntervalInvalid
+    | SnapshotCodecFixtureInvalid
     | DispatchEnqueueUnresolved
     | -- EP-6 (workflow/operation).
       AwaitSignalMismatch
@@ -1150,6 +1152,7 @@ validateAggregate spec agg =
         , projectionSafety
         , statusMapTotality
         , evolutionRules
+        , snapshotRules
         ]
   where
     states = Set.fromList (map stName (aggStates agg))
@@ -1161,6 +1164,19 @@ validateAggregate spec agg =
     enumCtorNames = Set.fromList [c | e <- specEnums spec, (c, _) <- enumCtors e]
     ruleNames = Set.fromList (map ruleName (specRules spec))
     registerNames = Set.fromList (map regName (aggRegs agg))
+
+    snapshotRules = case aggSnapshot agg of
+        Nothing -> []
+        Just snapshot ->
+            [ mkErr (locLine (snapLoc snapshot)) SnapshotIntervalInvalid $
+                "aggregate '" <> aggName agg <> "': snapshot every requires an interval of at least 1; non-positive runtime intervals silently disable snapshots"
+            | SnapEvery interval <- [snapPolicy snapshot]
+            , interval < 1
+            ]
+                ++ [ mkErr (locLine (snapLoc snapshot)) SnapshotCodecFixtureInvalid $
+                        "aggregate '" <> aggName agg <> "': snapshot state-codec version must be at least 1 and shape-hash must be non-empty"
+                   | snapCodecVersion snapshot < 1 || T.null (snapShapeHash snapshot)
+                   ]
 
     duplicateMembers =
         [ mkErr (locLine (cmdLoc c)) DuplicateCommandName $

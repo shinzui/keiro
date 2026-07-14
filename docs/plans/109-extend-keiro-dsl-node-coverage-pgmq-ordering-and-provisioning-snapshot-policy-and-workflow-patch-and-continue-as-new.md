@@ -62,9 +62,9 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
 - [x] (2026-07-13T23:59:41Z) M1: `workqueue` scaffold lowering (`jobOrdering`, `queueProvision`,
       `jobTuningFor`, `groupKeyFor`) + regenerated committed conformance copies +
       extended `conformance-queue-runtime` assertions + NOTATION.md snippet.
-- [ ] M2: aggregate `snapshot` clause — grammar, parser, pretty-printer, validator
+- [x] (2026-07-14T00:11:39Z) M2: aggregate `snapshot` clause — grammar, parser, pretty-printer, validator
       rules (N >= 1, codec fixture required with policy), fixtures, unit pins.
-- [ ] M2: snapshot scaffold lowering (aeson derivations on Domain, `defaultStateCodec`
+- [x] (2026-07-14T00:11:39Z) M2: snapshot scaffold lowering (aeson derivations on Domain, `defaultStateCodec`
       in EventStream, fixture export) + new `conformance-snapshot` suite proving
       `mkEventStreamOrThrow` accepts the stream and the captured shape hash matches the
       live `regFileShapeHash` + NOTATION.md snippet.
@@ -112,6 +112,13 @@ Only the `keiro-dsl` package, its tests, and the authoring-skill docs under
   The runtime conformance suite now depends on `pgmq-config` explicitly and inspects
   the live config fields, proving a FIFO index on the main queue and a standard,
   non-FIFO DLQ without requiring a database.
+- Compiling the snapshot scaffold exposed that keiki's `KnownRegFileShape` constraint
+  also requires `CanonicalTypeName` instances for every generated application type;
+  built-in types already provide theirs. Snapshot-enabled Domain modules now emit
+  default canonical-name instances for generated ids, enums, and the vertex while
+  ordinary aggregate output remains byte-for-byte unchanged. The capture loop pinned
+  the live reservation shape hash as
+  `7eb3a94f62f947231375d44083e2a1c8029d91ffe0329107d55092ed3430efcc`.
 
 (To be extended during implementation.)
 
@@ -200,7 +207,15 @@ tradeoff. Generated queue modules expose total raw group-key projection plus liv
 `JobOrdering`, `JobTuning`, and `QueueProvision` values. The unit suite (184 examples),
 queue codec suite, queue runtime suite, and filled dispatch suite are green; the
 runtime suite inspects the pure live `queueProvisionConfigs` result to pin the main
-queue and DLQ shapes. M2–M5 remain.
+queue and DLQ shapes.
+
+M2 is complete. Aggregates now express periodic or terminal snapshot policy together
+with a required state-codec version and captured shape hash. Snapshot-enabled
+scaffolds derive JSON codecs, emit the live `defaultStateCodec`, and export the
+captured fixture while ordinary aggregate output is unchanged. The new snapshot
+conformance suite constructs the validated stream, proves initial-state codec
+round-tripping, and matches the captured fixture against the live
+`regFileShapeHash`. The unit suite is green at 187 examples. M3–M5 remain.
 
 
 ## Context and Orientation

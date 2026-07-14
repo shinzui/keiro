@@ -498,8 +498,19 @@ docAggregate a =
             ++ blank (aggTransitions a)
             ++ maybe [] (\w -> [indent 2 (docWire w)]) (aggWire a)
             ++ maybe [] (\p -> [indent 2 (docProjection p)]) (aggProjection a)
+            ++ maybe [] (\snapshot -> [indent 2 (docSnapshot snapshot)]) (aggSnapshot a)
   where
     blank xs = if null xs then [] else [mempty]
+
+docSnapshot :: SnapshotSpec -> Doc ann
+docSnapshot snapshot =
+    vsep
+        [ "snapshot" <+> policyDoc (snapPolicy snapshot)
+        , indent 2 ("state-codec version=" <> pretty (snapCodecVersion snapshot) <+> "shape-hash=" <> dquoted (snapShapeHash snapshot))
+        ]
+  where
+    policyDoc (SnapEvery interval) = "every" <+> pretty interval
+    policyDoc SnapOnTerminal = "on-terminal"
 
 docReg :: RegDecl -> Doc ann
 docReg r = pretty (regName r) <+> pretty (regType r) <+> "=" <+> docRegInitial (regInitial r)

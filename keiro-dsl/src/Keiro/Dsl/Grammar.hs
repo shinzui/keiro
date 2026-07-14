@@ -42,6 +42,8 @@ module Keiro.Dsl.Grammar (
     WireSpec (..),
     ProjectionSpec (..),
     Consistency (..),
+    SnapPolicy (..),
+    SnapshotSpec (..),
     Aggregate (..),
 
     -- * The process + timer nodes (EP-3)
@@ -372,6 +374,19 @@ data ProjectionSpec = ProjectionSpec
 data Consistency = Strong | Eventual
     deriving stock (Eq, Show, Generic)
 
+-- | A generated aggregate snapshot policy supported by the notation.
+data SnapPolicy = SnapEvery !Int | SnapOnTerminal
+    deriving stock (Eq, Show, Generic)
+
+-- | Snapshot policy plus the captured live state-codec identity.
+data SnapshotSpec = SnapshotSpec
+    { snapPolicy :: !SnapPolicy
+    , snapCodecVersion :: !Int
+    , snapShapeHash :: !Text
+    , snapLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
 {- | An @aggregate@ node: a consistency boundary whose state is rebuilt by
 replaying events.
 -}
@@ -384,6 +399,7 @@ data Aggregate = Aggregate
     , aggTransitions :: ![Transition]
     , aggWire :: !(Maybe WireSpec)
     , aggProjection :: !(Maybe ProjectionSpec)
+    , aggSnapshot :: !(Maybe SnapshotSpec)
     , aggLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)

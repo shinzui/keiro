@@ -106,6 +106,27 @@ test-suite keiro-dsl-conformance
     , keiro
     , text   >=2.1
 
+-- EP-109 M2: snapshot-enabled aggregate scaffolding compiled against the live
+-- defaultStateCodec and stream-construction guards, with the captured codec
+-- identity checked against keiki's regFileShapeHash.
+test-suite keiro-dsl-conformance-snapshot
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-snapshot
+  main-is:        Main.hs
+  other-modules:
+    Generated.HospitalCapacity.Reservation.Codec
+    Generated.HospitalCapacity.Reservation.Domain
+    Generated.HospitalCapacity.Reservation.EventStream
+    HospitalCapacity.Reservation.Holes
+
+  build-depends:
+    , aeson  >=2.2
+    , base   >=4.21 && <5
+    , keiki  >=0.2  && <0.3
+    , keiro
+    , text   >=2.1
+
 -- EP-106 M6: every distinct `new <kind>` skeleton is scaffolded into this
 -- committed tree. Compiling the union proves a starter that passes `check`
 -- cannot emit syntactically or type-invalid Haskell.

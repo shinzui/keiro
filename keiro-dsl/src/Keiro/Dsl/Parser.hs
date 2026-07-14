@@ -126,6 +126,7 @@ reservedWords =
     , "event"
     , "wire"
     , "projection"
+    , "snapshot"
     , "guard"
     , "write"
     , "emit"
@@ -344,6 +345,7 @@ data BodyItem
     | BIEvent Event
     | BIWire WireSpec
     | BIProjection ProjectionSpec
+    | BISnapshot SnapshotSpec
     | BITransition Transition
 
 pAggregate :: P Aggregate
@@ -357,6 +359,7 @@ pAggregate = do
     let items = map snd positionedItems
         wireOffsets = [offset | (offset, BIWire _) <- positionedItems]
         projectionOffsets = [offset | (offset, BIProjection _) <- positionedItems]
+        snapshotOffsets = [offset | (offset, BISnapshot _) <- positionedItems]
     case wireOffsets of
         _ : duplicateOffset : _ ->
             failAt duplicateOffset ("duplicate wire block in aggregate " <> T.unpack name <> " (only one is allowed)")
@@ -364,6 +367,10 @@ pAggregate = do
     case projectionOffsets of
         _ : duplicateOffset : _ ->
             failAt duplicateOffset ("duplicate projection block in aggregate " <> T.unpack name <> " (only one is allowed)")
+        _ -> pure ()
+    case snapshotOffsets of
+        _ : duplicateOffset : _ ->
+            failAt duplicateOffset ("duplicate snapshot block in aggregate " <> T.unpack name <> " (only one is allowed)")
         _ -> pure ()
     pure
         Aggregate
@@ -375,6 +382,7 @@ pAggregate = do
             , aggTransitions = [t | BITransition t <- items]
             , aggWire = listToMaybe [w | BIWire w <- items]
             , aggProjection = listToMaybe [p | BIProjection p <- items]
+            , aggSnapshot = listToMaybe [s | BISnapshot s <- items]
             , aggLoc = loc
             }
   where
@@ -419,8 +427,25 @@ pBodyItem =
         , BIEvent <$> pEvent
         , BIWire <$> pWire
         , BIProjection <$> pProjection
+        , BISnapshot <$> pSnapshot
         , BITransition <$> pTransition
         ]
+
+pSnapshot :: P SnapshotSpec
+pSnapshot = do
+    loc <- getLoc
+    keyword "snapshot"
+    policy <-
+        choice
+            [ SnapEvery <$> (keyword "every" *> boundedDecimal)
+            , SnapOnTerminal <$ symbol "on-terminal"
+            ]
+    _ <- symbol "state-codec"
+    _ <- symbol "version" *> symbol "="
+    version <- boundedDecimal
+    _ <- symbol "shape-hash" *> symbol "="
+    hash <- stringLit
+    pure SnapshotSpec{snapPolicy = policy, snapCodecVersion = version, snapShapeHash = hash, snapLoc = loc}
 
 pCommand :: P Command
 pCommand = do

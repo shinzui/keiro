@@ -97,6 +97,24 @@ All duration windows in the notation are decimal digits followed by exactly one 
 7200 seconds. This grammar applies to retry delays, timer offsets, and publisher backoff;
 unitless values and other suffixes are rejected.
 
+An aggregate may opt into generated snapshots after its projection:
+
+```text
+snapshot every 100
+  state-codec version=1 shape-hash="<captured-live-hash>"
+# Or: snapshot on-terminal with the same mandatory state-codec line.
+```
+
+`check` requires an interval of at least 1, a codec version of at least 1, and a
+non-empty captured hash. The scaffold derives internal JSON instances and lowers the
+clause to `Every n` or `OnTerminal` plus `defaultStateCodec version`. Runtime stream
+construction proves policy/codec coherence and initial-state encodability. The hash is
+module-qualified Haskell shape data and cannot be derived by `check`: scaffold with a
+placeholder, run `keiro-dsl-conformance-snapshot`, copy the printed live hash into the
+spec, regenerate, and rerun. Snapshot JSON is internal and gated by both codec version
+and shape hash; it is independent of the event wire format. Custom snapshot predicates
+remain hand-owned behavior and are intentionally absent from the notation.
+
 ## process + timer (EP-3)
 
 ```text

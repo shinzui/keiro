@@ -237,6 +237,43 @@ main = hspec $ do
                         evUpcastFrom e `shouldBe` Just (1, Hole)
                     [] -> expectationFailure "TransferReservationCreated not found"
 
+    describe "aggregate snapshots (EP-109)" $ do
+        it "parses, validates, and round-trips a snapshot policy with codec fixture" $ do
+            spec <- specOf "test/fixtures/reservation-snapshot.keiro"
+            errorCodesOf "test/fixtures/reservation-snapshot.keiro" `shouldReturn` []
+            parseSpec "<snapshot-round-trip>" (renderSpec spec) `shouldBe` Right spec
+            case [aggregate | NAggregate aggregate <- specNodes spec] of
+                [aggregate] -> aggSnapshot aggregate `shouldBe` Just (SnapshotSpec (SnapEvery 100) 1 "7eb3a94f62f947231375d44083e2a1c8029d91ffe0329107d55092ed3430efcc" noLoc)
+                aggregates -> expectationFailure ("expected one snapshot aggregate, got " <> show (length aggregates))
+        it "rejects disabled intervals and invalid codec fixtures" $ do
+            source <- readTestText "test/fixtures/reservation-snapshot.keiro"
+            interval <- parseInlineSpec "<snapshot-zero>" (T.replace "snapshot every 100" "snapshot every 0" source)
+            map code (validateSpec interval) `shouldContain` [SnapshotIntervalInvalid]
+            version <- parseInlineSpec "<snapshot-version-zero>" (T.replace "state-codec version=1" "state-codec version=0" source)
+            map code (validateSpec version) `shouldContain` [SnapshotCodecFixtureInvalid]
+            emptyHash <- parseInlineSpec "<snapshot-empty-hash>" (T.replace "shape-hash=\"7eb3a94f62f947231375d44083e2a1c8029d91ffe0329107d55092ed3430efcc\"" "shape-hash=\"\"" source)
+            map code (validateSpec emptyHash) `shouldContain` [SnapshotCodecFixtureInvalid]
+        it "conditionally lowers JSON instances and the live defaultStateCodec" $ do
+            snapshot <- specOf "test/fixtures/reservation-snapshot.keiro"
+            ordinary <- specOf "test/fixtures/reservation.keiro"
+            case ([aggregate | NAggregate aggregate <- specNodes snapshot], [aggregate | NAggregate aggregate <- specNodes ordinary]) of
+                ([snapshotAggregate], [ordinaryAggregate]) -> do
+                    let snapshotModules = scaffoldAggregate (defaultContext (specContext snapshot)) snapshot snapshotAggregate
+                        ordinaryModules = scaffoldAggregate (defaultContext (specContext ordinary)) ordinary ordinaryAggregate
+                        snapshotDomain = generatedTextEndingIn "Domain.hs" snapshotModules
+                        snapshotStream = generatedTextEndingIn "EventStream.hs" snapshotModules
+                        ordinaryDomain = generatedTextEndingIn "Domain.hs" ordinaryModules
+                        ordinaryStream = generatedTextEndingIn "EventStream.hs" ordinaryModules
+                    snapshotDomain `shouldSatisfy` T.isInfixOf "deriving anyclass (ToJSON, FromJSON)"
+                    snapshotStream `shouldSatisfy` T.isInfixOf "snapshotPolicy = Every 100"
+                    snapshotStream `shouldSatisfy` T.isInfixOf "stateCodec = Just (defaultStateCodec 1)"
+                    snapshotStream `shouldSatisfy` T.isInfixOf "reservationSnapshotFixture = (1, \"7eb3a94f62f947231375d44083e2a1c8029d91ffe0329107d55092ed3430efcc\")"
+                    ordinaryDomain `shouldNotSatisfy` T.isInfixOf "DeriveAnyClass"
+                    ordinaryStream `shouldSatisfy` T.isInfixOf "snapshotPolicy = Never"
+                    ordinaryStream `shouldSatisfy` T.isInfixOf "stateCodec = Nothing"
+                    firewallBreaches snapshotModules `shouldBe` []
+                _ -> expectationFailure "expected one aggregate in each snapshot test spec"
+
     describe "process/timer (EP-3)" $ do
         it "parses the hospital-surge process + nested timer" $ do
             input <- readTestText "test/fixtures/hospital-surge.keiro"
@@ -1742,7 +1779,7 @@ emptyStatesSpec =
         []
         []
         []
-        [NAggregate (Aggregate "Thing" [] [] [] [] [] Nothing Nothing noLoc)]
+        [NAggregate (Aggregate "Thing" [] [] [] [] [] Nothing Nothing Nothing noLoc)]
 
 crossFamilyBoundarySpec :: T.Text
 crossFamilyBoundarySpec =
@@ -1986,6 +2023,7 @@ genAggregate =
         <*> smallList genTransition
         <*> genMaybe genWireSpec
         <*> genMaybe genProjection
+        <*> genMaybe (SnapshotSpec <$> oneof [SnapEvery <$> choose (0, 5), pure SnapOnTerminal] <*> choose (0, 5) <*> genAdversarialText <*> pure noLoc)
         <*> pure noLoc
 
 genDottedRef :: Gen T.Text

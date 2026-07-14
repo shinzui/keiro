@@ -266,6 +266,7 @@ data Agg = Agg
     , aTransitions :: ![Transition]
     , aWire :: !WireSpec
     , aProjection :: !(Maybe ProjectionSpec)
+    , aSnapshot :: !(Maybe SnapshotSpec)
     , aReadModels :: ![ReadModelNode]
     , aGenPrefix :: !Text
     -- ^ e.g. @Generated.HospitalCapacity.Reservation@
@@ -304,6 +305,7 @@ resolveAgg ctx spec agg =
         , aTransitions = aggTransitions agg
         , aWire = fromMaybe defaultWire (aggWire agg)
         , aProjection = aggProjection agg
+        , aSnapshot = aggSnapshot agg
         , aReadModels = [readModel | NReadModel readModel <- specNodes spec]
         , aGenPrefix = genPrefixFor ctx nm
         , aHolePrefix = holePrefixFor ctx nm
@@ -1282,66 +1284,83 @@ emitProcessHoles _genPrefix holePrefix p =
 
 emitDomain :: Agg -> Text
 emitDomain a =
-    nl
+    nl $
         [ "{-# LANGUAGE DataKinds #-}"
         , "{-# LANGUAGE DuplicateRecordFields #-}"
-        , "{-# LANGUAGE OverloadedStrings #-}"
-        , "{-# LANGUAGE TemplateHaskell #-}"
-        , "{-# LANGUAGE TypeApplications #-}"
-        , "{-# OPTIONS_GHC -Wno-unused-top-binds #-}"
-        , generatedBanner
-        , "module " <> aGenPrefix a <> ".Domain where"
-        , ""
-        , "import Data.Proxy (Proxy (..))"
-        , "import Data.Text (Text)"
-        , "import GHC.Generics (Generic)"
-        , "import Keiki.Core (RegFile (..))"
-        , "import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)"
-        , ""
-        , sectionsOf
-            [ map emitId (aIds a)
-            , map (emitEnum) (aEnums a)
-            , [emitVertex a]
-            , map (emitRecord) (aCommands a)
-            , [emitSum (aName a <> "Command") (aCommands a)]
-            , map (emitRecord) (aEvents a)
-            , [emitSum (aName a <> "Event") (aEvents a)]
-            , [emitRegsType a, emitInitialRegs a]
-            ,
-                [ "$(deriveAggregateCtorsAll ''" <> aName a <> "Command ''" <> aName a <> "Regs)"
-                , ""
-                , "$(deriveWireCtorsAll ''" <> aName a <> "Event)"
-                ]
-            ]
         ]
+            ++ ["{-# LANGUAGE DeriveAnyClass #-}" | hasSnapshot a]
+            ++ [ "{-# LANGUAGE OverloadedStrings #-}"
+               , "{-# LANGUAGE TemplateHaskell #-}"
+               , "{-# LANGUAGE TypeApplications #-}"
+               , "{-# OPTIONS_GHC -Wno-unused-top-binds #-}"
+               , generatedBanner
+               , "module " <> aGenPrefix a <> ".Domain where"
+               , ""
+               ]
+            ++ ["import Data.Aeson (FromJSON, ToJSON)" | hasSnapshot a]
+            ++ [ "import Data.Proxy (Proxy (..))"
+               , "import Data.Text (Text)"
+               , "import GHC.Generics (Generic)"
+               , "import Keiki.Core (RegFile (..))"
+               ]
+            ++ ["import Keiki.Shape (CanonicalTypeName)" | hasSnapshot a]
+            ++ [ "import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)"
+               , ""
+               , sectionsOf
+                    [ map (emitId a) (aIds a)
+                    , map (emitEnum a) (aEnums a)
+                    , [emitVertex a]
+                    , map (emitRecord) (aCommands a)
+                    , [emitSum (aName a <> "Command") (aCommands a)]
+                    , map (emitRecord) (aEvents a)
+                    , [emitSum (aName a <> "Event") (aEvents a)]
+                    , [emitRegsType a, emitInitialRegs a]
+                    ,
+                        [ "$(deriveAggregateCtorsAll ''" <> aName a <> "Command ''" <> aName a <> "Regs)"
+                        , ""
+                        , "$(deriveWireCtorsAll ''" <> aName a <> "Event)"
+                        ]
+                    ]
+               ]
 
-emitId :: IdDecl -> Text
-emitId d =
-    nl
+hasSnapshot :: Agg -> Bool
+hasSnapshot = maybe False (const True) . aSnapshot
+
+emitId :: Agg -> IdDecl -> Text
+emitId a d =
+    nl $
         [ "newtype " <> idName d <> " = " <> idName d <> " Text"
         , "  deriving stock (Generic, Eq, Ord, Show)"
-        , ""
-        , lowerFirst (idName d) <> "Text :: " <> idName d <> " -> Text"
-        , lowerFirst (idName d) <> "Text (" <> idName d <> " t) = t"
         ]
+            ++ ["  deriving anyclass (ToJSON, FromJSON)" | hasSnapshot a]
+            ++ ["instance CanonicalTypeName " <> idName d | hasSnapshot a]
+            ++ [ ""
+               , lowerFirst (idName d) <> "Text :: " <> idName d <> " -> Text"
+               , lowerFirst (idName d) <> "Text (" <> idName d <> " t) = t"
+               ]
 
-emitEnum :: EnumDecl -> Text
-emitEnum d =
-    nl
+emitEnum :: Agg -> EnumDecl -> Text
+emitEnum a d =
+    nl $
         [ "data " <> enumName d <> " = " <> T.intercalate " | " (map fst (enumCtors d))
         , "  deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)"
-        , ""
-        , lowerFirst (enumName d) <> "Text :: " <> enumName d <> " -> Text"
-        , lowerFirst (enumName d) <> "Text = \\case"
-        , nl ["  " <> c <> " -> " <> tshow w | (c, w) <- enumCtors d]
         ]
+            ++ ["  deriving anyclass (ToJSON, FromJSON)" | hasSnapshot a]
+            ++ ["instance CanonicalTypeName " <> enumName d | hasSnapshot a]
+            ++ [ ""
+               , lowerFirst (enumName d) <> "Text :: " <> enumName d <> " -> Text"
+               , lowerFirst (enumName d) <> "Text = \\case"
+               , nl ["  " <> c <> " -> " <> tshow w | (c, w) <- enumCtors d]
+               ]
 
 emitVertex :: Agg -> Text
 emitVertex a =
-    nl
+    nl $
         [ "data " <> aVertexType a <> " = " <> T.intercalate " | " (map (vertexCtor a . stName) (aStates a))
         , "  deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)"
         ]
+            ++ ["  deriving anyclass (ToJSON, FromJSON)" | hasSnapshot a]
+            ++ ["instance CanonicalTypeName " <> aVertexType a | hasSnapshot a]
 
 emitRecord :: ResolvedCtor -> Text
 emitRecord rc =
@@ -1582,44 +1601,72 @@ emitDecode a =
 
 emitEventStream :: Agg -> Text
 emitEventStream a =
-    nl
+    nl $
         [ generatedBanner
         , "module " <> aGenPrefix a <> ".EventStream"
         , "  ( " <> lowerFirst (aName a) <> "EventStream"
         , "  , " <> lowerFirst (aName a) <> "EventStreamDef"
         , "  , " <> aName a <> "EventStream"
         , "  , " <> aName a <> "EventStreamDef"
-        , "  ) where"
+        ]
+            ++ ["  , " <> lowerFirst (aName a) <> "SnapshotFixture" | hasSnapshot a]
+            ++ [ "  ) where"
+               , ""
+               , "import " <> aGenPrefix a <> ".Domain"
+               , "import " <> aGenPrefix a <> ".Codec (" <> lowerFirst (aName a) <> "Codec)"
+               , "import " <> aHolePrefix a <> ".Holes (" <> lowerFirst (aName a) <> "Transducer)"
+               , "import Keiki.Core (HsPred)"
+               , "import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))"
+               , "import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)"
+               ]
+            ++ ["import Data.Text (Text)" | hasSnapshot a]
+            ++ ["import Keiro.Snapshot.Codec (defaultStateCodec)" | hasSnapshot a]
+            ++ [ "import qualified Keiro.Stream as Stream"
+               , ""
+               , "type " <> aName a <> "EventStreamDef ="
+               , "  EventStream (HsPred " <> aName a <> "Regs " <> aName a <> "Command) " <> aName a <> "Regs " <> aVertexType a <> " " <> aName a <> "Command " <> aName a <> "Event"
+               , ""
+               , "type " <> aName a <> "EventStream ="
+               , "  ValidatedEventStream (HsPred " <> aName a <> "Regs " <> aName a <> "Command) " <> aName a <> "Regs " <> aVertexType a <> " " <> aName a <> "Command " <> aName a <> "Event"
+               , ""
+               , lowerFirst (aName a) <> "EventStreamDef :: " <> aName a <> "EventStreamDef"
+               , lowerFirst (aName a) <> "EventStreamDef ="
+               , "  EventStream"
+               , "    { transducer = " <> lowerFirst (aName a) <> "Transducer"
+               , "    , initialState = " <> initialVertex a
+               , "    , initialRegisters = initial" <> aName a <> "Regs"
+               , "    , eventCodec = " <> lowerFirst (aName a) <> "Codec"
+               , "    , resolveStreamName = Stream.streamName"
+               , "    , snapshotPolicy = " <> snapshotPolicyExpr a
+               , "    , stateCodec = " <> stateCodecExpr a
+               , "    }"
+               , ""
+               ]
+            ++ snapshotFixtureLines a
+            ++ [ lowerFirst (aName a) <> "EventStream :: " <> aName a <> "EventStream"
+               , lowerFirst (aName a) <> "EventStream ="
+               , "  mkEventStreamOrThrow " <> tshow (aName a) <> " " <> lowerFirst (aName a) <> "EventStreamDef"
+               ]
+
+snapshotPolicyExpr :: Agg -> Text
+snapshotPolicyExpr aggregate = case aSnapshot aggregate of
+    Nothing -> "Never"
+    Just snapshot -> case snapPolicy snapshot of
+        SnapEvery interval -> "Every " <> tshow' interval
+        SnapOnTerminal -> "OnTerminal"
+
+stateCodecExpr :: Agg -> Text
+stateCodecExpr aggregate = case aSnapshot aggregate of
+    Nothing -> "Nothing"
+    Just snapshot -> "Just (defaultStateCodec " <> tshow' (snapCodecVersion snapshot) <> ")"
+
+snapshotFixtureLines :: Agg -> [Text]
+snapshotFixtureLines aggregate = case aSnapshot aggregate of
+    Nothing -> []
+    Just snapshot ->
+        [ lowerFirst (aName aggregate) <> "SnapshotFixture :: (Int, Text)"
+        , lowerFirst (aName aggregate) <> "SnapshotFixture = (" <> tshow' (snapCodecVersion snapshot) <> ", " <> tshow (snapShapeHash snapshot) <> ")"
         , ""
-        , "import " <> aGenPrefix a <> ".Domain"
-        , "import " <> aGenPrefix a <> ".Codec (" <> lowerFirst (aName a) <> "Codec)"
-        , "import " <> aHolePrefix a <> ".Holes (" <> lowerFirst (aName a) <> "Transducer)"
-        , "import Keiki.Core (HsPred)"
-        , "import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))"
-        , "import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)"
-        , "import qualified Keiro.Stream as Stream"
-        , ""
-        , "type " <> aName a <> "EventStreamDef ="
-        , "  EventStream (HsPred " <> aName a <> "Regs " <> aName a <> "Command) " <> aName a <> "Regs " <> aVertexType a <> " " <> aName a <> "Command " <> aName a <> "Event"
-        , ""
-        , "type " <> aName a <> "EventStream ="
-        , "  ValidatedEventStream (HsPred " <> aName a <> "Regs " <> aName a <> "Command) " <> aName a <> "Regs " <> aVertexType a <> " " <> aName a <> "Command " <> aName a <> "Event"
-        , ""
-        , lowerFirst (aName a) <> "EventStreamDef :: " <> aName a <> "EventStreamDef"
-        , lowerFirst (aName a) <> "EventStreamDef ="
-        , "  EventStream"
-        , "    { transducer = " <> lowerFirst (aName a) <> "Transducer"
-        , "    , initialState = " <> initialVertex a
-        , "    , initialRegisters = initial" <> aName a <> "Regs"
-        , "    , eventCodec = " <> lowerFirst (aName a) <> "Codec"
-        , "    , resolveStreamName = Stream.streamName"
-        , "    , snapshotPolicy = Never"
-        , "    , stateCodec = Nothing"
-        , "    }"
-        , ""
-        , lowerFirst (aName a) <> "EventStream :: " <> aName a <> "EventStream"
-        , lowerFirst (aName a) <> "EventStream ="
-        , "  mkEventStreamOrThrow " <> tshow (aName a) <> " " <> lowerFirst (aName a) <> "EventStreamDef"
         ]
 
 --------------------------------------------------------------------------------
