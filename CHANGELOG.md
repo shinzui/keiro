@@ -6,7 +6,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
-_No unreleased changes._
+- `keiro`: `Keiro.version` now reports the current package version. It had
+  been left at `"0.1.0.0"` since the initial scaffold while the package
+  shipped 0.2.0.0 and 0.3.0.0; keep it in lockstep with `keiro/keiro.cabal`
+  when cutting a release.
 
 ## 0.3.0.0 — 2026-07-14
 

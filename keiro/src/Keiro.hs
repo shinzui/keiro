@@ -52,6 +52,9 @@ import Keiro.Router
 import Keiro.Snapshot
 import Keiro.Stream
 
--- | The Keiro library version, as a 'Text' for display and telemetry.
+{- | The Keiro library version, as a 'Text' for display and telemetry.
+Keep in lockstep with the @version:@ field in @keiro/keiro.cabal@ when
+cutting a release.
+-}
 version :: Text
-version = "0.1.0.0"
+version = "0.3.0.0"
