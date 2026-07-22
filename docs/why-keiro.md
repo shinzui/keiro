@@ -684,17 +684,22 @@ won't pretend it's zero.
 
 ### 7.4 Pre-1.0 today
 
-The repository is currently in research phase
-(`README.md`, "Status"). What exists is design documents and validating
-spikes; there is no production-ready Haskell library yet. The MasterPlan
-[`docs/masterplans/1-keiro-research-foundation.md`](masterplans/1-keiro-research-foundation.md)
-sequences the design effort into six child plans; a separate
-implementation MasterPlan ships the production library.
+The library is implemented and shipping: the 0.2.0.0 (2026-07-13) and
+0.3.0.0 (2026-07-14) releases deliver the event-sourcing core, hardened
+replay validation, snapshots, fenced read models and projections, process
+managers, routers, durable timers, transactional outbox/inbox, dead-letter
+tooling, named-step durable workflows, the typed-spec toolchain
+(`keiro-dsl`), and native migrations. Keiro is already used in production
+(`README.md`, "Status"), but it is not yet a 1.0: the public API may still
+change in breaking ways between releases, and
+[`docs/user/production-status.md`](user/production-status.md) describes it
+as production-shaped for controlled early use rather than a turnkey,
+externally polished framework.
 
-Teams that need to ship today should pick a system that exists today —
-DBOS, Temporal, Marten, Eventide. Teams evaluating where to invest for
-the next 18 months can reasonably consider keiro now, with the
-understanding that the implementation is downstream of the research.
+Teams that need a stable, polished 1.0-grade system today should still
+weigh DBOS, Temporal, Marten, or Eventide. Teams comfortable tracking a
+pre-1.0 API in exchange for the integrated design this document argues
+for can adopt keiro now.
 
 ### 7.5 v1 lacks deterministic-replay durable execution
 
@@ -785,8 +790,9 @@ Do **not** choose keiro when:
   required.
 - The workflow is genuinely a DAG of opaque steps (ETL, CI, ML training
   pipelines) and the event-sourcing layer adds no value.
-- A production-ready library is needed in 2026 (today's keiro is
-  pre-implementation; the design is in flight).
+- A stable 1.0 API contract is required today (keiro ships and is used in
+  production, but pre-1.0 breaking changes between releases are still
+  expected).
 
 ---
 

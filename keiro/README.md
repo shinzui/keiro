@@ -85,14 +85,17 @@ guide-backed examples start at `docs/guides/README.md` and use the sibling
 
 ## Status
 
-The v1 implementation MasterPlan is complete. The library currently includes
-the package scaffold, public `EventStream` and codec contract, command cycle,
-snapshots, read models and projections, process managers, and durable timer APIs.
+The event-sourcing core, hardened replay validation, snapshots, fenced read
+models and projections, process managers, routers, durable timers,
+transactional messaging (outbox/inbox), dead-letter tooling, and named-step
+durable workflows are implemented — production-shaped for controlled early
+use, not yet a 1.0. See the repository-level [`README.md`](../README.md) and
+[`docs/user/production-status.md`](../docs/user/production-status.md) for the
+authoritative status.
 
-Remaining work is future-facing: the v2 deterministic durable-execution runtime,
-exactly-once async projection checkpoint/user-SQL transactions once shibuya
-exposes that boundary, and higher-level ergonomic facades over the low-level v1
-APIs.
+Remaining work is future-facing: exactly-once async projection
+checkpoint/user-SQL transactions once shibuya exposes that boundary, and
+higher-level ergonomic facades over the low-level APIs.
 
 ## License
 
