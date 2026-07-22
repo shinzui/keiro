@@ -54,9 +54,10 @@ import OpenTelemetry.Context.ThreadLocal qualified as CtxtLocal
 import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
 import OpenTelemetry.Processor.Span (SpanProcessor)
 import OpenTelemetry.Propagator.W3CTraceContext qualified as W3C
-import OpenTelemetry.Trace.Core (ImmutableSpan (..), SpanHot (..))
+import OpenTelemetry.Trace.Core (Event (..), ImmutableSpan (..), SpanHot (..))
 import OpenTelemetry.Trace.Core qualified as OTel
 import OpenTelemetry.Trace.Id.Generator.Default (defaultIdGenerator)
+import OpenTelemetry.Util (appendOnlyBoundedCollectionValues)
 import Pgmq.Config.Types qualified as Config
 import Pgmq.Effectful (Message (..), MessageBody (..), Pgmq, QueueMetrics (..), ReadMessage (..), SendMessage (..))
 import Pgmq.Effectful qualified as Pgmq
@@ -257,6 +258,7 @@ data CapturedSpan = CapturedSpan
     , csStatus :: OTel.SpanStatus
     , csContext :: OTel.SpanContext
     , csParent :: Maybe OTel.Span
+    , csEventNames :: [Text]
     }
 
 captureSpan :: ImmutableSpan -> IO CapturedSpan
@@ -270,6 +272,8 @@ captureSpan sp = do
             , csStatus = hotStatus hot
             , csContext = spanContext sp
             , csParent = spanParent sp
+            , csEventNames =
+                map eventName (toList (appendOnlyBoundedCollectionValues (hotEvents hot)))
             }
 
 textAttr :: Attributes -> Text -> Maybe Text
@@ -284,6 +288,25 @@ spansNamed name = filter ((== name) . csName)
 -- | The 'OTel.SpanContext' of a captured span's parent, if it had one.
 parentSpanContext :: CapturedSpan -> IO (Maybe OTel.SpanContext)
 parentSpanContext = traverse OTel.getSpanContext . csParent
+
+{- | The one @\<jobName\> process@ span a single one-shot delivery must produce.
+Anything other than exactly one is a failure that names every captured span, so
+a duplicate wrapper is diagnosed rather than silently accepted by taking the
+head of the list.
+-}
+theProcessSpan :: Text -> [CapturedSpan] -> IO CapturedSpan
+theProcessSpan jobName spans =
+    case spansNamed (jobName <> " process") spans of
+        [only] -> pure only
+        other ->
+            fail
+                ( "expected exactly one "
+                    <> show (jobName <> " process")
+                    <> " span, got "
+                    <> show (length other)
+                    <> "; all captured spans: "
+                    <> show (map csName spans)
+                )
 
 {- | Run a @Stack@ action against a fresh 'JobRuntime' wired to @tracer@, so both
 the shibuya 'Tracing' effect and the @pgmq@ interpreter emit spans. Fails the
@@ -898,33 +921,141 @@ spec = do
         drained `shouldBe` 1
 
         spans <- capturedSpans provider spansRef
-        case spansNamed (job.jobName <> " process") spans of
-            [processSpan] -> do
-                csKind processSpan `shouldBe` OTel.Consumer
-                OTel.traceId (csContext processSpan) `shouldBe` OTel.traceId producerCtx
-                parentSpanContext processSpan
-                    >>= \parent -> fmap OTel.spanId parent `shouldBe` Just (OTel.spanId producerCtx)
-                textAttr (csAttributes processSpan) "messaging.system"
-                    `shouldBe` Just "shibuya"
-                textAttr (csAttributes processSpan) "messaging.destination.name"
-                    `shouldBe` Just job.jobName
-                textAttr (csAttributes processSpan) "messaging.operation.type"
-                    `shouldBe` Just "process"
-                textAttr (csAttributes processSpan) "messaging.message.id"
-                    `shouldSatisfy` \case
-                        Just _ -> True
-                        Nothing -> False
-                textAttr (csAttributes processSpan) "shibuya.ack.decision"
-                    `shouldBe` Just "ack_ok"
-                csStatus processSpan `shouldBe` OTel.Ok
-            other ->
-                expectationFailure
-                    ( "expected exactly one process span, got "
-                        <> show (length other)
-                        <> " (all captured spans: "
-                        <> show (map csName spans)
-                        <> ")"
-                    )
+        processSpan <- theProcessSpan job.jobName spans
+        csKind processSpan `shouldBe` OTel.Consumer
+        OTel.traceId (csContext processSpan) `shouldBe` OTel.traceId producerCtx
+        parent <- parentSpanContext processSpan
+        fmap OTel.spanId parent `shouldBe` Just (OTel.spanId producerCtx)
+        textAttr (csAttributes processSpan) "messaging.system" `shouldBe` Just "shibuya"
+        textAttr (csAttributes processSpan) "messaging.destination.name"
+            `shouldBe` Just job.jobName
+        textAttr (csAttributes processSpan) "messaging.operation.type" `shouldBe` Just "process"
+        textAttr (csAttributes processSpan) "messaging.message.id" `shouldSatisfy` \case
+            Just _ -> True
+            Nothing -> False
+        textAttr (csAttributes processSpan) "shibuya.ack.decision" `shouldBe` Just "ack_ok"
+        csStatus processSpan `shouldBe` OTel.Ok
+
+    -- EP-111 M3: the branches whose telemetry meaning differs from plain success.
+    it "one-shot Retry reports ack_retry with an OK span and hides the row" $ \connStr -> do
+        (provider, spansRef) <- setupCapturingProvider
+        let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+            job = mkJob "keiro_pgmq_test.span_retry"
+        (drained, len, hidden) <-
+            runDbTraced connStr tracer $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "r" 1)
+                drained <-
+                    runJobOnceWithContext defaultJobTuning 1 job \_ctx _payload ->
+                        pure (Retry (RetryDelay 30))
+                len <- queueLen job.jobQueue.physicalName
+                hidden <- readOneIsEmpty job.jobQueue.physicalName
+                pure (drained, len, hidden)
+        drained `shouldBe` 1
+        len `shouldBe` 1
+        hidden `shouldBe` True
+        processSpan <- theProcessSpan job.jobName =<< capturedSpans provider spansRef
+        textAttr (csAttributes processSpan) "shibuya.ack.decision" `shouldBe` Just "ack_retry"
+        csStatus processSpan `shouldBe` OTel.Ok
+
+    it "one-shot Dead reports ack_dead_letter with an ERROR span" $ \connStr -> do
+        (provider, spansRef) <- setupCapturingProvider
+        let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+            job = mkJob "keiro_pgmq_test.span_dead"
+        (mainLen, dlqLen) <-
+            runDbTraced connStr tracer $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "poison" 1)
+                runJobOnce 1 job (\_ -> pure (Dead "bad"))
+                mainLen <- queueLen job.jobQueue.physicalName
+                dlqLen <- queueLen job.jobQueue.dlqName
+                pure (mainLen, dlqLen)
+        mainLen `shouldBe` 0
+        dlqLen `shouldBe` 1
+        processSpan <- theProcessSpan job.jobName =<< capturedSpans provider spansRef
+        textAttr (csAttributes processSpan) "shibuya.ack.decision"
+            `shouldBe` Just "ack_dead_letter"
+        csStatus processSpan `shouldBe` OTel.Error "poison_pill: bad"
+
+    it "an undecodable payload reports ack_dead_letter without a handler-started event" $ \connStr -> do
+        (provider, spansRef) <- setupCapturingProvider
+        let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+            job = mkJob "keiro_pgmq_test.span_malformed"
+        dlqLen <-
+            runDbTraced connStr tracer $ do
+                ensureJobQueue job
+                _ <-
+                    Pgmq.sendMessage
+                        SendMessage
+                            { queueName = job.jobQueue.physicalName
+                            , messageBody = MessageBody (String "not a ping")
+                            , delay = Nothing
+                            }
+                runJobOnce 1 job (\_ -> pure Done)
+                queueLen job.jobQueue.dlqName
+        dlqLen `shouldBe` 1
+        processSpan <- theProcessSpan job.jobName =<< capturedSpans provider spansRef
+        textAttr (csAttributes processSpan) "shibuya.ack.decision"
+            `shouldBe` Just "ack_dead_letter"
+        csStatus processSpan `shouldSatisfy` \case
+            OTel.Error reason -> "invalid_payload: " `Text.isPrefixOf` reason
+            _ -> False
+        csEventNames processSpan `shouldNotSatisfy` elem "shibuya.handler.started"
+
+    it "a thrown handler records an exception and claims no acknowledgement" $ \connStr -> do
+        (provider, spansRef) <- setupCapturingProvider
+        let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+            job = mkJob "keiro_pgmq_test.span_throw"
+        (drained, len, hidden) <-
+            runDbTraced connStr tracer $ do
+                ensureJobQueue job
+                _ <- enqueue job (Ping "boom" 1)
+                drained <-
+                    runJobOnceWithContext defaultJobTuning 1 job \_ctx _payload ->
+                        liftIO (throwIO (userError "handler exploded"))
+                len <- queueLen job.jobQueue.physicalName
+                hidden <- readOneIsEmpty job.jobQueue.physicalName
+                pure (drained, len, hidden)
+        drained `shouldBe` 0
+        len `shouldBe` 1
+        hidden `shouldBe` True
+        processSpan <- theProcessSpan job.jobName =<< capturedSpans provider spansRef
+        csEventNames processSpan `shouldSatisfy` elem "shibuya.handler.started"
+        csEventNames processSpan `shouldSatisfy` elem "exception"
+        csEventNames processSpan `shouldNotSatisfy` elem "shibuya.handler.completed"
+        textAttr (csAttributes processSpan) "shibuya.ack.decision" `shouldBe` Nothing
+        csStatus processSpan `shouldSatisfy` \case
+            OTel.Error reason -> "handler exception: " `Text.isPrefixOf` reason
+            _ -> False
+
+    it "a message with no trace headers still gets exactly one process span" $ \connStr -> do
+        (provider, spansRef) <- setupCapturingProvider
+        let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+            job = mkJob "keiro_pgmq_test.span_no_parent"
+        -- Plain 'enqueue' writes no headers at all, so there is no traceparent
+        -- to extract and shibuya falls back to the ambient local context.
+        runDbTraced connStr tracer $ do
+            ensureJobQueue job
+            _ <- enqueue job (Ping "plain" 1)
+            runJobOnce 1 job (\_ -> pure Done)
+        processSpan <- theProcessSpan job.jobName =<< capturedSpans provider spansRef
+        csKind processSpan `shouldBe` OTel.Consumer
+        textAttr (csAttributes processSpan) "shibuya.ack.decision" `shouldBe` Just "ack_ok"
+        csStatus processSpan `shouldBe` OTel.Ok
+
+    it "a FIFO delivery carries shibuya.partition on its process span" $ \connStr -> do
+        (provider, spansRef) <- setupCapturingProvider
+        let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+            job = mkJob "keiro_pgmq_test.span_partition"
+        drained <-
+            runDbTraced connStr tracer $ do
+                ensureOrderedJobQueue job
+                _ <- enqueueToGroup job "g1" (Ping "grouped" 1)
+                runJobOnceWithContext (withOrdering FifoThroughput defaultJobTuning) 1 job \_ctx _p ->
+                    pure Done
+        drained `shouldBe` 1
+        processSpan <- theProcessSpan job.jobName =<< capturedSpans provider spansRef
+        textAttr (csAttributes processSpan) "shibuya.partition" `shouldBe` Just "g1"
 
     -- EP-2 M1: unlogged vs standard provisioning.
     it "ensureJobQueueWith unlogged creates an unlogged queue" $ \connStr -> do

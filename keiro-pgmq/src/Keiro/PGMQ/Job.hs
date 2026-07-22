@@ -42,6 +42,32 @@ payload back to the main queue and then deletes the DLQ row.
 Transient database errors during PGMQ polling are retried by the adapter, and a
 polling failure that exhausts that retry policy is propagated visibly through
 shibuya supervision rather than completing the worker silently.
+
+== Tracing
+
+Both execution shapes propagate W3C trace context and emit the same common
+per-message span. A message enqueued with 'enqueueTraced' carries @traceparent@
+(and optional @tracestate@) in PGMQ's JSONB @headers@ column; at consumption
+time that context is extracted and installed as the parent, so the handler's
+span continues the producer's trace even across processes. The span is
+Consumer-kind, named @\<jobName\> process@, and carries
+@messaging.system=shibuya@, @messaging.destination.name=\<jobName\>@,
+@messaging.operation.type=process@, @messaging.message.id@,
+@shibuya.partition@ for FIFO deliveries, and @shibuya.ack.decision@ once the
+message has actually been finalized. @AckOk@ and @AckRetry@ end the span @OK@;
+dead-lettering and halting end it @ERROR@ with the reason.
+
+The continuous 'runJobWorkers' path gets this from shibuya's supervised runner
+and additionally reports @shibuya.inflight.count@ and @shibuya.inflight.max@.
+The bounded 'runJobOnce' \/ 'runJobOnceWithContext' path opens the span itself
+and deliberately omits those two: a direct drain has no shibuya inbox and no
+concurrency meter to describe. Lower-level PGMQ operation spans
+(@publish \<queue\>@, @receive \<queue\>@, deletes, visibility changes, DLQ
+sends) come from the traced @pgmq-effectful@ interpreter and are unaffected.
+
+Tracing is opt-in: with no tracer wired into the runtime (see
+'Keiro.PGMQ.Runtime.withJobRuntime'), every span operation is a no-op and
+processing behavior is identical.
 -}
 module Keiro.PGMQ.Job (
     -- * Job declaration
@@ -759,6 +785,13 @@ jobProcessor job handle =
 {- | Continuous, multi-processor run (the @rei@ cadence): run a supervised app
 over several processors built with 'jobProcessor'. Returns the app handle; the
 caller decides whether to block on it. The inbox size is clamped to at least 1.
+
+Shibuya's supervised runner opens the per-message @\<jobName\> process@ span
+described in the module's tracing section, continuing the producer's trace from
+the message's @traceparent@. Because this path owns an inbox and a concurrency
+limit, its spans additionally carry @shibuya.inflight.count@ and
+@shibuya.inflight.max@, which the bounded 'runJobOnceWithContext' path has no
+equivalent for.
 -}
 runJobWorkers ::
     (Pgmq :> es, Reader PgmqAdapterEnv :> es, IOE :> es, Tracing :> es) =>
@@ -1036,6 +1069,8 @@ runJobOnceWithContext tuning n job handle
 {- | One-shot drain of up to @n@ messages (the @hospital-capacity@ cadence):
 read directly from PGMQ with 'defaultJobTuning', run the handler on each
 available message, and return promptly when the queue is empty.
+
+Each delivery is traced exactly as 'runJobOnceWithContext' describes.
 -}
 runJobOnce ::
     (Pgmq :> es, IOE :> es, Tracing :> es) =>

@@ -6,7 +6,25 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Fixed
+
+- One-shot job processing (`runJobOnce` and `runJobOnceWithContext`) now continues the
+  producer's trace instead of leaving a hole between the enqueue and settlement spans.
+  Each claimed message extracts the W3C `traceparent` that `enqueueTraced` stored in the
+  PGMQ `headers` column, installs it as a remote parent, and runs the handler inside one
+  Consumer-kind `<jobName> process` span. The span carries the same common surface as the
+  continuous `runJobWorkers` path — `messaging.system`, `messaging.destination.name`,
+  `messaging.operation.type`, `messaging.message.id`, `shibuya.partition` for FIFO
+  deliveries, and `shibuya.ack.decision` recorded only after the finalizing PGMQ statement
+  returns, with `OK` for `Done`/retry and `ERROR` for dead-lettering. A handler that throws
+  is recorded as an exception with an `ERROR` status and no acknowledgement attribute.
+  Deliveries carrying no usable trace header still get exactly one span.
+
+  Deliberately absent: the `shibuya.inflight.*` gauges the continuous path reports. A
+  bounded drain has no shibuya inbox and no concurrency meter to describe.
+
+  No public API, function signature, delivery semantic, queue behavior, PGMQ header shape,
+  or wire payload changed — downstream applications gain trace continuity by rebuilding.
 
 ## 0.3.0.0 — 2026-07-14
 

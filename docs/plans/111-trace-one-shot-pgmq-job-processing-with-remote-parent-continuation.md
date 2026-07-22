@@ -54,10 +54,23 @@ kind, messaging attributes, and acknowledgement result.
   kind, shared trace id, remote parent span id, the four `messaging.*` attributes,
   `shibuya.ack.decision=ack_ok`, and status `OK`.
   `cabal test keiro-pgmq-test` reported 52 examples, 0 failures, 2 pending.
-- [ ] Milestone 3: cover success, retry, dead-letter, handler-exception, absent-context,
-  and tracing-disabled behavior; update Haddocks and `keiro-pgmq/CHANGELOG.md`.
-- [ ] Final validation: run formatting, the focused package suite, the whole Haskell test
-  recipe, and the complete workspace build with no unexpected worktree changes.
+- [x] Milestone 3 (2026-07-22): added six branch-coverage examples — retry (`ack_retry`/`OK`
+  plus a still-queued, still-hidden row), `Dead` (`ack_dead_letter`/`ERROR "poison_pill: bad"`),
+  malformed payload (`ack_dead_letter`/`ERROR "invalid_payload: …"` with no
+  `shibuya.handler.started` event), thrown handler (exception event, `ERROR`, no
+  `shibuya.ack.decision`, row left for redelivery), a header-less message (still exactly one
+  Consumer span), and a FIFO delivery (`shibuya.partition=g1`). `CapturedSpan` grew
+  `csEventNames` and a `theProcessSpan` helper that fails loudly on any cardinality other
+  than one. Module/`runJobWorkers`/`runJobOnce` Haddocks gained a Tracing section, and
+  `keiro-pgmq/CHANGELOG.md` gained an `Unreleased` → `Fixed` entry.
+  `cabal test keiro-pgmq-test` reported 58 examples, 0 failures, 2 pending.
+- [x] Final validation (2026-07-22): `nix fmt` (no churn beyond the touched files),
+  `cabal build keiro-pgmq`, `cabal test keiro-pgmq-test` (58/0/2), `just haskell-test`
+  (`keiro-test` 335/0, `keiro-pgmq-test` 58/0/2, `jitsurei-test` 16/0, diagrams up to date),
+  `cabal build all`, `git diff --check` clean. The module export list is byte-identical to
+  the pre-change version and the only dependency change is test-only.
+- [x] Out-of-plan repair (2026-07-22): `just haskell-test` failed on entry for a reason
+  unrelated to this plan — see Surprises & Discoveries. Fixed in its own commit.
 
 
 ## Surprises & Discoveries
@@ -77,6 +90,29 @@ kind, messaging attributes, and acknowledgement result.
   signatures already use. The resolution is a narrow qualified import
   (`Shibuya.Core.Types qualified as ShibuyaTypes`) used only to pattern-match the
   constructor: `let ShibuyaTypes.MessageId messageIdText = envelope.messageId`.
+  Date: 2026-07-22
+
+- `just haskell-test` was already failing on `master` before any work in this plan, for an
+  unrelated reason. Commit `9e81fff` ("align Keiro.version with the released package
+  version") changed `keiro/src/Keiro.hs` to report `0.3.0.0` but left
+  `keiro/test/Main.hs` asserting the old literal:
+
+  ```text
+  test/Main.hs:356:31:
+  1) Keiro exposes the scaffold version
+       expected: "0.1.0.0"
+        but got: "0.3.0.0"
+  ```
+
+  Neither file is touched by this plan (`git diff --stat` over this plan's commits lists
+  only `keiro-pgmq/*` and the plan itself). Because this plan's acceptance gate runs
+  `just haskell-test`, the stale literal was corrected in a separate, clearly scoped commit
+  rather than being worked around or silently tolerated.
+  Date: 2026-07-22
+
+- The captured-span assertions are a genuine regression test, not a tautology: before
+  Milestone 2 the drain emitted no `<jobName> process` span at all, so every one of these
+  examples would have failed at `theProcessSpan` with an empty match list.
   Date: 2026-07-22
 
 
@@ -127,10 +163,91 @@ kind, messaging attributes, and acknowledgement result.
   continuity by rebuilding rather than by migrating source or persisted data.
   Date: 2026-07-14
 
+- Decision: Read shibuya's `MessageId` through a narrowly qualified import
+  (`Shibuya.Core.Types qualified as ShibuyaTypes`) used only to pattern-match the
+  constructor, rather than importing `MessageId (..)` unqualified.
+  Rationale: `Shibuya.Core.Types` is compiled with `NoFieldSelectors`, so neither
+  `OverloadedRecordDot` nor a selector import can reach the wrapped `Text` (see Surprises &
+  Discoveries). Importing the type unqualified would additionally shadow
+  `Pgmq.Effectful`'s `MessageId`, which every producer signature in this module already
+  returns. The qualified alias touches one line and leaves the producer signatures alone.
+  Date: 2026-07-22
+
+- Decision: `settle` performs `ackMessage` first and `recordAckOnSpan` second, rather than
+  annotating the span with the intended decision up front.
+  Rationale: The acknowledgement attribute must describe what actually happened. If a PGMQ
+  statement throws, the exception propagates out of the span with no `shibuya.ack.decision`
+  attached, which is the truthful reading. Annotating first would leave a span claiming an
+  acknowledgement that the database never performed.
+  Date: 2026-07-22
+
+- Decision: Add a `theProcessSpan` test helper that fails when the match count is anything
+  other than exactly one, and include every captured span name in the failure message.
+  Rationale: The plan's Idempotence and Recovery section forbids weakening the cardinality
+  check or selecting the first span. Encoding that rule in a helper makes it impossible for
+  a later example to quietly take the head of a list, and the failure message points
+  straight at a duplicated wrapper.
+  Date: 2026-07-22
+
+- Decision: Fix the unrelated stale `Keiro.version` assertion in `keiro/test/Main.hs` inside
+  this plan's work, in a separate commit.
+  Rationale: The plan's acceptance gate runs `just haskell-test`, which was red on entry for
+  a reason this plan did not cause (see Surprises & Discoveries). Skipping the gate would
+  hide real regressions; a one-line correction of a literal that a prior commit forgot is
+  lower risk than leaving the suite red. Keeping it in its own commit with its own message
+  keeps the plan's diff honest.
+  Date: 2026-07-22
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The gap is closed. Every message claimed by `runJobOnce` or `runJobOnceWithContext` now runs
+inside exactly one Consumer-kind `<jobName> process` span. When the producer used
+`enqueueTraced`, that span is a direct child of the producer span encoded in the PGMQ JSONB
+headers, proven by a test that attaches the producer context only for the enqueue and
+detaches it before the drain — so the only path from producer to consumer is the stored
+`traceparent`, not thread-local state.
+
+What exists now that did not before, all inside `keiro-pgmq`:
+
+- `Keiro.PGMQ.Job` gained five private helpers — `withOneShotProcessSpan`,
+  `recordAckOnSpan`, `ackDecisionText`, `deadLetterReasonText`, `haltReasonText` — and the
+  drain converts each raw PGMQ row to a shibuya `Envelope` exactly once, threading that
+  envelope and the span through `processMessage`, `settle`, and `contextFor`.
+- `keiro-pgmq/test/Main.hs` gained a reusable captured-span fixture (`mkW3CProvider`,
+  `setupCapturingProvider`, `capturedSpans`, `CapturedSpan`/`captureSpan`, `textAttr`,
+  `spansNamed`, `parentSpanContext`, `theProcessSpan`, `runDbTraced`) and seven examples: the
+  fixture self-check, the central remote-parent proof, and five branch-coverage cases.
+- The module, `runJobWorkers`, and `runJobOnce` Haddocks now describe the shared span
+  surface and name the deliberate difference, and `CHANGELOG.md` carries the `Unreleased`
+  entry.
+
+The suite went from 51 to 58 examples with zero failures, and the two pre-existing pendings
+(the `pg_partman` live test and the transient-polling fault injector) are untouched.
+
+What did not change, verified rather than asserted: the module export list is byte-identical
+to the pre-change version, no function signature moved, the only dependency edit is
+`hs-opentelemetry-exporter-in-memory` in the test component, and no migration, PGMQ header
+shape, or wire payload was touched. Every pre-existing drain behavior test — empty-queue
+promptness, multi-message batches, `Done` deletion, retry hiding, thrown-handler
+redelivery, max-retry and malformed dead-lettering, FIFO ordering, handled counts — passes
+unchanged, and the whole `runDb` (no-tracer) suite passing is the standing proof that
+disabled telemetry adds no required runtime setup.
+
+Lessons worth carrying forward. First, proving the test fixture against spans that already
+existed (Milestone 1) before writing any production code was worth the extra milestone: it
+meant the Milestone 2 failure mode "the assertion is wrong" had already been ruled out, so
+the first red run could only mean "the instrumentation is wrong". Second, ordering the
+finalization before the span annotation is what makes the telemetry trustworthy under
+failure, and that ordering is easy to reverse by accident during a later refactor — it is
+now stated in both the code comment and the ADR. Third, the plan's instruction to diagnose
+rather than weaken a cardinality failure was best honored by encoding it in a helper instead
+of trusting future authors to remember it.
+
+The durable half of this — why the two execution shapes are instrumented separately, and
+what their spans are contractually required to agree on — is promoted to
+[docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md](../adr/0001-keiro-pgmq-job-processing-telemetry-contract.md),
+which is the first ADR in this repository.
 
 
 ## Context and Orientation
@@ -181,6 +298,13 @@ the original JSON headers to the handler, but no code calls `extractTraceContext
 `withExtractedContext`, or `withSpan'`. The surrounding `runJobEff` runtime may therefore
 emit `publish <queue>`, `receive <queue>`, delete/change-visibility, and DLQ spans through
 the traced `pgmq-effectful` interpreter, but it emits no span for the job handler itself.
+
+When this plan was written `docs/adr/` did not exist, so no ADR context applied. The
+distillation pass at completion created the directory's first entry,
+[docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md](../adr/0001-keiro-pgmq-job-processing-telemetry-contract.md),
+which records why the two execution shapes are instrumented separately and what their spans
+are contractually required to agree on. Read that ADR before changing either path's
+telemetry.
 
 The behavior and hardening history are recorded in checked-in plans
 `docs/plans/74-expose-keiro-pgmq-tuning-surface-and-make-job-workers-resilient.md` and
@@ -470,3 +594,25 @@ The only dependency addition is
 to use its existing OpenTelemetry API, W3C propagator, and SDK dependencies. No new library
 dependency is needed because `keiro-pgmq` already depends on `shibuya-core` and
 `shibuya-pgmq-adapter`.
+
+
+## Revision Notes
+
+### 2026-07-22 — implementation complete
+
+All three milestones and final validation are done; Progress, Surprises & Discoveries,
+Decision Log, and Outcomes & Retrospective are filled in from what actually happened rather
+than from what was planned.
+
+Three things diverged from the plan as written and are recorded above rather than silently
+absorbed. Reading shibuya's `MessageId` needed a narrowly qualified import because
+`Shibuya.Core.Types` is compiled with `NoFieldSelectors` and its type name collides with
+`Pgmq.Effectful`'s. `just haskell-test` was already red on entry for an unrelated stale
+assertion in `keiro/test/Main.hs`, which was corrected in its own commit so this plan's
+acceptance gate could actually run. And the Context and Orientation section, which
+originally noted that no ADR directory existed, now points at the ADR the completion pass
+created.
+
+The plan's substance did not change: no public API, signature, migration, PGMQ header shape,
+or wire payload was touched, and the module export list is byte-identical to the pre-change
+version.
