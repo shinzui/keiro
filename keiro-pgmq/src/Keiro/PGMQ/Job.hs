@@ -143,11 +143,45 @@ import "shibuya-core" Shibuya.App (
     mkProcessor,
     runApp,
  )
-import "shibuya-core" Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), RetryDelay (..))
+import "shibuya-core" Shibuya.Core.Ack (
+    AckDecision (..),
+    DeadLetterReason (..),
+    HaltReason (..),
+    RetryDelay (..),
+ )
 import "shibuya-core" Shibuya.Core.Ingested qualified as Shibuya
 import "shibuya-core" Shibuya.Core.Lease (Lease (..))
 import "shibuya-core" Shibuya.Core.Types (Attempt (..), Envelope (..))
-import "shibuya-core" Shibuya.Telemetry.Effect (Tracing)
+
+-- Qualified only for 'unMessageId': shibuya's @MessageId@ type name would
+-- otherwise collide with @Pgmq.Effectful@'s, which the producer signatures use.
+import "shibuya-core" Shibuya.Core.Types qualified as ShibuyaTypes
+import "shibuya-core" Shibuya.Telemetry.Effect (
+    Span,
+    SpanStatus (..),
+    Tracing,
+    addAttribute,
+    addEvent,
+    recordException,
+    setStatus,
+    toAttribute,
+    withExtractedContext,
+    withSpan',
+ )
+import "shibuya-core" Shibuya.Telemetry.Propagation (extractTraceContext)
+import "shibuya-core" Shibuya.Telemetry.Semantic (
+    attrMessagingDestinationName,
+    attrMessagingMessageId,
+    attrMessagingOperation,
+    attrMessagingSystem,
+    attrShibuyaAckDecision,
+    attrShibuyaPartition,
+    consumerSpanArgs,
+    eventHandlerCompleted,
+    eventHandlerStarted,
+    mkEvent,
+    processSpanName,
+ )
 import "shibuya-pgmq-adapter" Shibuya.Adapter.Pgmq (
     FifoConfig (..),
     FifoReadStrategy (..),
@@ -164,6 +198,7 @@ import "shibuya-pgmq-adapter" Shibuya.Adapter.Pgmq.Convert (
     pgmqMessageToEnvelope,
  )
 import "text" Data.Text (Text)
+import "text" Data.Text qualified as Text
 import "time" Data.Time (NominalDiffTime, nominalDiffTimeToSeconds)
 
 -- | What a job handler decides. Never exposes shibuya/PGMQ wire types to the caller.
@@ -735,6 +770,77 @@ runJobWorkers strategy inboxSize procs = do
     ps <- sequence procs
     runApp AppConfig{strategy = strategy, inboxSize = max 1 inboxSize} ps
 
+{- | Open the one-shot equivalent of shibuya's per-message processing span.
+
+The continuous worker path gets this from shibuya's supervised runner; the
+direct drain has no runner, so it opens the same span itself. The trace context
+that 'enqueueTraced' wrote into the PGMQ @headers@ column (and that
+'pgmqMessageToEnvelope' projects onto @Envelope.traceContext@) is installed as
+the parent for the dynamic extent of this one delivery, so the span continues
+the producer's trace across processes rather than starting a new one. Deliveries
+without a usable @traceparent@ fall back to whatever local context is active,
+and still get exactly one span.
+
+The attribute set is deliberately the subset the two execution shapes agree on:
+the OTel @messaging.*@ quartet plus @shibuya.partition@ for FIFO deliveries. The
+@shibuya.inflight.*@ gauges are omitted because the direct drain has no shibuya
+inbox and no concurrency meter to report.
+-}
+withOneShotProcessSpan ::
+    (IOE :> es, Tracing :> es) =>
+    Job p ->
+    Envelope Value ->
+    (Span -> Eff es a) ->
+    Eff es a
+withOneShotProcessSpan job envelope act =
+    withExtractedContext (envelope.traceContext >>= extractTraceContext) $
+        withSpan' (processSpanName job.jobName) consumerSpanArgs $ \traceSpan -> do
+            let ShibuyaTypes.MessageId messageIdText = envelope.messageId
+            addAttribute traceSpan attrMessagingSystem ("shibuya" :: Text)
+            addAttribute traceSpan attrMessagingDestinationName job.jobName
+            addAttribute traceSpan attrMessagingOperation ("process" :: Text)
+            addAttribute traceSpan attrMessagingMessageId messageIdText
+            case envelope.partition of
+                Just partition -> addAttribute traceSpan attrShibuyaPartition partition
+                Nothing -> pure ()
+            act traceSpan
+
+{- | Record a finalization that already succeeded on the process span, using the
+same decision text and status mapping as shibuya's continuous runner. Call this
+only /after/ the corresponding PGMQ statement returned, so the attribute never
+claims an acknowledgement that did not happen.
+-}
+recordAckOnSpan ::
+    (IOE :> es, Tracing :> es) => Span -> AckDecision -> Eff es ()
+recordAckOnSpan traceSpan decision = do
+    let decisionText = ackDecisionText decision
+    addEvent traceSpan $
+        mkEvent eventHandlerCompleted [(attrShibuyaAckDecision, toAttribute decisionText)]
+    addAttribute traceSpan attrShibuyaAckDecision decisionText
+    setStatus traceSpan $ case decision of
+        AckOk -> Ok
+        AckRetry _ -> Ok
+        AckDeadLetter reason -> Error (deadLetterReasonText reason)
+        AckHalt reason -> Error (haltReasonText reason)
+
+-- | The @shibuya.ack.decision@ value for a decision, matching shibuya's runner.
+ackDecisionText :: AckDecision -> Text
+ackDecisionText AckOk = "ack_ok"
+ackDecisionText (AckRetry _) = "ack_retry"
+ackDecisionText (AckDeadLetter _) = "ack_dead_letter"
+ackDecisionText (AckHalt _) = "ack_halt"
+
+-- | The @ERROR@ status description for a dead-letter, matching shibuya's runner.
+deadLetterReasonText :: DeadLetterReason -> Text
+deadLetterReasonText (PoisonPill t) = "poison_pill: " <> t
+deadLetterReasonText (InvalidPayload t) = "invalid_payload: " <> t
+deadLetterReasonText MaxRetriesExceeded = "max_retries_exceeded"
+
+-- | The @ERROR@ status description for a halt, matching shibuya's runner.
+haltReasonText :: HaltReason -> Text
+haltReasonText (HaltOrderedStream t) = "halt_ordered_stream: " <> t
+haltReasonText (HaltFatal t) = "halt_fatal: " <> t
+
 {- | One-shot drain of up to @n@ messages with explicit tuning and a
 context-aware handler. This reads directly from PGMQ and returns when the queue
 is empty or @n@ messages have been acknowledged/retried/dead-lettered,
@@ -743,6 +849,19 @@ whichever comes first.
 If a handler throws, the message is left on the main queue and remains invisible
 until the active visibility timeout expires; the drain keeps processing the rest
 of the batch and does not count that message in the returned total.
+
+Each claimed message is processed inside one Consumer-kind
+@\<jobName\> process@ span that continues the producer's trace when the message
+carries a W3C @traceparent@ (see 'enqueueTraced'), exactly as the continuous
+'runJobWorkers' path does. The span carries @messaging.system@,
+@messaging.destination.name@, @messaging.operation.type@,
+@messaging.message.id@, @shibuya.partition@ for FIFO deliveries, and — once the
+finalizing PGMQ statement has returned — @shibuya.ack.decision@ with a matching
+span status. A handler that throws is recorded as an exception with an @ERROR@
+status and no acknowledgement attribute, because the direct drain deliberately
+issues no finalizer call and leaves the row for visibility-timeout redelivery.
+Unlike the continuous path this span has no @shibuya.inflight.*@ attributes:
+there is no shibuya inbox or concurrency meter behind a bounded drain.
 -}
 runJobOnceWithContext ::
     (Pgmq :> es, IOE :> es, Tracing :> es) =>
@@ -791,50 +910,63 @@ runJobOnceWithContext tuning n job handle
     nextBatchSize remaining =
         fromIntegral (min remaining (fromIntegral tuning.batchSize :: Int))
 
+    -- One conversion point per delivery: the envelope supplies the payload, the
+    -- attempt number, the FIFO partition, the message id, and the trace context.
     step count message = do
-        disposed <- processMessage message
+        let envelope = pgmqMessageToEnvelope message
+        disposed <-
+            withOneShotProcessSpan job envelope (processMessage message envelope)
         pure $
             if disposed
                 then count + 1
                 else count
 
-    processMessage message
-        | message.readCount > job.jobPolicy.maxRetries = do
-            ackMessage message (AckDeadLetter MaxRetriesExceeded)
-            pure True
+    -- Settle exactly as before; the span only observes what already happened.
+    -- 'recordAckOnSpan' runs after 'ackMessage' returns, so a failed
+    -- finalization propagates without leaving a false acknowledgement behind.
+    processMessage message envelope traceSpan
+        | message.readCount > job.jobPolicy.maxRetries =
+            settle message traceSpan (AckDeadLetter MaxRetriesExceeded)
         | otherwise =
-            case decodeJob job.jobCodec (messagePayload message) of
-                Left (JobPayloadFromFuture _payloadVersion _workerVersion) -> do
-                    ackMessage message (AckRetry job.jobPolicy.defaultRetryDelay)
-                    pure True
-                Left (JobPayloadMalformed err) -> do
-                    ackMessage message (AckDeadLetter (InvalidPayload err))
-                    pure True
+            case decodeJob job.jobCodec envelope.payload of
+                Left (JobPayloadFromFuture _payloadVersion _workerVersion) ->
+                    settle message traceSpan (AckRetry job.jobPolicy.defaultRetryDelay)
+                Left (JobPayloadMalformed err) ->
+                    settle message traceSpan (AckDeadLetter (InvalidPayload err))
                 Right p -> do
-                    outcome <- EffException.try @SomeException (handle (contextFor message) p)
+                    addEvent traceSpan (mkEvent eventHandlerStarted [])
+                    outcome <-
+                        EffException.try @SomeException (handle (contextFor message envelope) p)
                     case outcome of
-                        Left _handlerException ->
+                        Left handlerException -> do
+                            -- No finalizer call: the row stays invisible until its
+                            -- visibility timeout expires, so there is no ack to claim.
+                            recordException traceSpan handlerException
+                            setStatus traceSpan (Error (handlerExceptionText handlerException))
                             pure False
-                        Right jobOutcome -> do
-                            ackMessage message (outcomeToAck jobOutcome)
-                            pure True
+                        Right jobOutcome ->
+                            settle message traceSpan (outcomeToAck jobOutcome)
 
-    messagePayload = (.payload) . pgmqMessageToEnvelope
+    settle message traceSpan decision = do
+        ackMessage message decision
+        recordAckOnSpan traceSpan decision
+        pure True
 
-    contextFor message =
-        let envelope = pgmqMessageToEnvelope message
-         in JobContext
-                { extendLease = \duration ->
-                    void $
-                        Pgmq.changeVisibilityTimeout
-                            VisibilityTimeoutQuery
-                                { queueName = job.jobQueue.physicalName
-                                , messageId = message.messageId
-                                , visibilityTimeoutOffset = nominalToSeconds duration
-                                }
-                , attempt = fmap (.unAttempt) envelope.attempt
-                , headers = message.headers
-                }
+    handlerExceptionText ex = "handler exception: " <> Text.pack (show (ex :: SomeException))
+
+    contextFor message envelope =
+        JobContext
+            { extendLease = \duration ->
+                void $
+                    Pgmq.changeVisibilityTimeout
+                        VisibilityTimeoutQuery
+                            { queueName = job.jobQueue.physicalName
+                            , messageId = message.messageId
+                            , visibilityTimeoutOffset = nominalToSeconds duration
+                            }
+            , attempt = fmap (.unAttempt) envelope.attempt
+            , headers = message.headers
+            }
 
     outcomeToAck Done = AckOk
     outcomeToAck (Retry d) = AckRetry d

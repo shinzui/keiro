@@ -45,9 +45,15 @@ kind, messaging attributes, and acknowledgement result.
   "captured tracing fixture sees PGMQ publish and receive spans". Only the test component
   gained a dependency (`hs-opentelemetry-exporter-in-memory`); no production source changed.
   `cabal test keiro-pgmq-test` reported 51 examples, 0 failures, 2 pending.
-- [ ] Milestone 2: instrument the direct one-shot processing boundary with remote-parent
-  extraction, one Consumer span, common Shibuya attributes, and truthful disposition
-  status while preserving the existing drain behavior.
+- [x] Milestone 2 (2026-07-22): instrumented the direct one-shot processing boundary.
+  `Keiro.PGMQ.Job` gained the private `withOneShotProcessSpan`, `recordAckOnSpan`,
+  `ackDecisionText`, `deadLetterReasonText`, and `haltReasonText`; the drain now converts
+  each raw message to an `Envelope` exactly once and threads that envelope plus the span
+  through `processMessage`/`settle`/`contextFor`. No public signature changed. The example
+  "one-shot process span continues the enqueued W3C parent" asserts cardinality, Consumer
+  kind, shared trace id, remote parent span id, the four `messaging.*` attributes,
+  `shibuya.ack.decision=ack_ok`, and status `OK`.
+  `cabal test keiro-pgmq-test` reported 52 examples, 0 failures, 2 pending.
 - [ ] Milestone 3: cover success, retry, dead-letter, handler-exception, absent-context,
   and tracing-disabled behavior; update Haddocks and `keiro-pgmq/CHANGELOG.md`.
 - [ ] Final validation: run formatting, the focused package suite, the whole Haskell test
@@ -56,7 +62,22 @@ kind, messaging attributes, and acknowledgement result.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Shibuya's `MessageId` newtype cannot be read with `OverloadedRecordDot`. `Shibuya.Core.Types`
+  is compiled with `NoFieldSelectors`, and GHC 9.12 declines to solve the implied
+  `HasField "unMessageId"` constraint, so `envelope.messageId.unMessageId` fails to compile:
+
+  ```text
+  src/Keiro/PGMQ/Job.hs:797:59: error: [GHC-39999]
+      • Could not deduce ‘HasField "unMessageId" Shibuya.Core.Types.MessageId a0’
+  ```
+
+  Importing the field selector directly is also unavailable (`the module ‘Shibuya.Core.Types’
+  does not export ‘unMessageId’ … suppressed by NoFieldSelectors`). Worse, importing the
+  type unqualified would collide with `Pgmq.Effectful`'s own `MessageId`, which the producer
+  signatures already use. The resolution is a narrow qualified import
+  (`Shibuya.Core.Types qualified as ShibuyaTypes`) used only to pattern-match the
+  constructor: `let ShibuyaTypes.MessageId messageIdText = envelope.messageId`.
+  Date: 2026-07-22
 
 
 ## Decision Log

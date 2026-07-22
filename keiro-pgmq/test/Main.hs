@@ -281,6 +281,10 @@ textAttr attrs name = case lookupAttribute attrs name of
 spansNamed :: Text -> [CapturedSpan] -> [CapturedSpan]
 spansNamed name = filter ((== name) . csName)
 
+-- | The 'OTel.SpanContext' of a captured span's parent, if it had one.
+parentSpanContext :: CapturedSpan -> IO (Maybe OTel.SpanContext)
+parentSpanContext = traverse OTel.getSpanContext . csParent
+
 {- | Run a @Stack@ action against a fresh 'JobRuntime' wired to @tracer@, so both
 the shibuya 'Tracing' effect and the @pgmq@ interpreter emit spans. Fails the
 test on any PGMQ runtime error, exactly like 'runDb'.
@@ -868,6 +872,59 @@ spec = do
         spans <- capturedSpans provider spansRef
         map csName spans `shouldSatisfy` elem ("publish " <> queue)
         map csName spans `shouldSatisfy` elem ("receive " <> queue)
+
+    -- EP-111 M2: the central proof — the one-shot process span continues the
+    -- producer's trace using only what the PGMQ headers carry.
+    it "one-shot process span continues the enqueued W3C parent" $ \connStr -> do
+        (provider, spansRef) <- setupCapturingProvider
+        let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+            job = mkJob "keiro_pgmq_test.one_shot_parent"
+        producerSpan <- OTel.createSpan tracer Ctxt.empty "enqueue" OTel.defaultSpanArguments
+        producerCtx <- OTel.getSpanContext producerSpan
+        -- Attach the producer span only for the enqueue, then detach it. The
+        -- drain therefore has no local parent to inherit: the only path from
+        -- producer to consumer is the traceparent stored in the PGMQ headers.
+        token <- CtxtLocal.attachContext (Ctxt.insertSpan producerSpan Ctxt.empty)
+        runDbTraced connStr tracer $ do
+            ensureJobQueue job
+            _ <- enqueueTraced provider job (MessageHeaders (object [])) (Ping "traced" 1)
+            pure ()
+        CtxtLocal.detachContext token
+        OTel.endSpan producerSpan Nothing
+
+        drained <-
+            runDbTraced connStr tracer $
+                runJobOnceWithContext defaultJobTuning 1 job \_ctx _payload -> pure Done
+        drained `shouldBe` 1
+
+        spans <- capturedSpans provider spansRef
+        case spansNamed (job.jobName <> " process") spans of
+            [processSpan] -> do
+                csKind processSpan `shouldBe` OTel.Consumer
+                OTel.traceId (csContext processSpan) `shouldBe` OTel.traceId producerCtx
+                parentSpanContext processSpan
+                    >>= \parent -> fmap OTel.spanId parent `shouldBe` Just (OTel.spanId producerCtx)
+                textAttr (csAttributes processSpan) "messaging.system"
+                    `shouldBe` Just "shibuya"
+                textAttr (csAttributes processSpan) "messaging.destination.name"
+                    `shouldBe` Just job.jobName
+                textAttr (csAttributes processSpan) "messaging.operation.type"
+                    `shouldBe` Just "process"
+                textAttr (csAttributes processSpan) "messaging.message.id"
+                    `shouldSatisfy` \case
+                        Just _ -> True
+                        Nothing -> False
+                textAttr (csAttributes processSpan) "shibuya.ack.decision"
+                    `shouldBe` Just "ack_ok"
+                csStatus processSpan `shouldBe` OTel.Ok
+            other ->
+                expectationFailure
+                    ( "expected exactly one process span, got "
+                        <> show (length other)
+                        <> " (all captured spans: "
+                        <> show (map csName spans)
+                        <> ")"
+                    )
 
     -- EP-2 M1: unlogged vs standard provisioning.
     it "ensureJobQueueWith unlogged creates an unlogged queue" $ \connStr -> do
