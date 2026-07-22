@@ -26,7 +26,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Data.Either (isRight)
 import Data.Foldable (toList, traverse_)
-import Data.IORef (modifyIORef', newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Int (Int32, Int64)
 import Data.List (find)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -48,9 +48,13 @@ import Keiro.Codec (EventType (..))
 import Keiro.Codec qualified as CoreCodec
 import Keiro.PGMQ
 import Keiro.Test.Postgres qualified as Postgres
+import OpenTelemetry.Attributes (Attribute (..), Attributes, PrimitiveAttribute (..), lookupAttribute)
 import OpenTelemetry.Context qualified as Ctxt
 import OpenTelemetry.Context.ThreadLocal qualified as CtxtLocal
+import OpenTelemetry.Exporter.InMemory.Span (inMemoryListExporter)
+import OpenTelemetry.Processor.Span (SpanProcessor)
 import OpenTelemetry.Propagator.W3CTraceContext qualified as W3C
+import OpenTelemetry.Trace.Core (ImmutableSpan (..), SpanHot (..))
 import OpenTelemetry.Trace.Core qualified as OTel
 import OpenTelemetry.Trace.Id.Generator.Default (defaultIdGenerator)
 import Pgmq.Config.Types qualified as Config
@@ -205,17 +209,87 @@ headerKey k = \case
 
 {- | A real tracer provider with the W3C Trace Context propagator and a
 non-dummy id generator, so an active span produces a @traceparent@ on injection.
-No span processors are needed — the test inspects propagated headers, not
-exported spans.
+Dummy ids cannot encode a valid @traceparent@, which is why the default id
+generator is wired in explicitly.
 -}
-setupW3CProvider :: IO OTel.TracerProvider
-setupW3CProvider =
+mkW3CProvider :: [SpanProcessor] -> IO OTel.TracerProvider
+mkW3CProvider processors =
     OTel.createTracerProvider
-        []
+        processors
         OTel.emptyTracerProviderOptions
             { OTel.tracerProviderOptionsIdGenerator = defaultIdGenerator
             , OTel.tracerProviderOptionsPropagators = W3C.w3cTraceContextPropagator
             }
+
+{- | A W3C provider with no span processors: enough to inspect propagated
+headers, not enough to inspect exported spans.
+-}
+setupW3CProvider :: IO OTel.TracerProvider
+setupW3CProvider = mkW3CProvider []
+
+{- | A W3C provider whose ended spans are collected in memory. Shut the provider
+down (see 'capturedSpans') before reading the reference so every span that was
+still open has been flushed.
+-}
+setupCapturingProvider :: IO (OTel.TracerProvider, IORef [ImmutableSpan])
+setupCapturingProvider = do
+    (processor, spansRef) <- inMemoryListExporter
+    provider <- mkW3CProvider [processor]
+    pure (provider, spansRef)
+
+{- | Shut the provider down (ending and exporting everything still buffered) and
+return a frozen snapshot of every captured span.
+-}
+capturedSpans :: OTel.TracerProvider -> IORef [ImmutableSpan] -> IO [CapturedSpan]
+capturedSpans provider spansRef = do
+    _ <- OTel.shutdownTracerProvider provider Nothing
+    traverse captureSpan =<< readIORef spansRef
+
+{- | A frozen snapshot of an 'ImmutableSpan'. In hs-opentelemetry 1.0 the mutable
+span fields (name, attributes, status) live behind the @spanHot :: IORef SpanHot@
+field rather than directly on 'ImmutableSpan', so the tests read that reference
+once after the span ends and assert on this flat record.
+-}
+data CapturedSpan = CapturedSpan
+    { csName :: Text
+    , csKind :: OTel.SpanKind
+    , csAttributes :: Attributes
+    , csStatus :: OTel.SpanStatus
+    , csContext :: OTel.SpanContext
+    , csParent :: Maybe OTel.Span
+    }
+
+captureSpan :: ImmutableSpan -> IO CapturedSpan
+captureSpan sp = do
+    hot <- readIORef (spanHot sp)
+    pure
+        CapturedSpan
+            { csName = hotName hot
+            , csKind = spanKind sp
+            , csAttributes = hotAttributes hot
+            , csStatus = hotStatus hot
+            , csContext = spanContext sp
+            , csParent = spanParent sp
+            }
+
+textAttr :: Attributes -> Text -> Maybe Text
+textAttr attrs name = case lookupAttribute attrs name of
+    Just (AttributeValue (TextAttribute t)) -> Just t
+    _ -> Nothing
+
+-- | Every captured span whose name matches exactly.
+spansNamed :: Text -> [CapturedSpan] -> [CapturedSpan]
+spansNamed name = filter ((== name) . csName)
+
+{- | Run a @Stack@ action against a fresh 'JobRuntime' wired to @tracer@, so both
+the shibuya 'Tracing' effect and the @pgmq@ interpreter emit spans. Fails the
+test on any PGMQ runtime error, exactly like 'runDb'.
+-}
+runDbTraced :: Text -> OTel.Tracer -> Eff Stack a -> IO a
+runDbTraced connStr tracer act =
+    withJobRuntime connStr (Just tracer) $ \rt -> do
+        res <- runJobEff rt act
+        either (\e -> fail ("PGMQ runtime error: " <> show e)) pure res
 
 stopAppQuickly :: (IOE :> es) => AppHandle es -> Eff es ()
 stopAppQuickly app = do
@@ -778,6 +852,22 @@ spec = do
         headerKey "traceparent" captured `shouldSatisfy` \case
             Just (String _) -> True
             _ -> False
+
+    -- EP-111 M1: the captured-span fixture itself, proven against the spans the
+    -- traced pgmq interpreter already emits.
+    it "captured tracing fixture sees PGMQ publish and receive spans" $ \connStr -> do
+        (provider, spansRef) <- setupCapturingProvider
+        let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+            job = mkJob "keiro_pgmq_test.fixture_spans"
+            queue = queueNameToText job.jobQueue.physicalName
+        runDbTraced connStr tracer $ do
+            ensureJobQueue job
+            _ <- enqueue job (Ping "fixture" 1)
+            _ <- readMessages job.jobQueue.physicalName 1
+            pure ()
+        spans <- capturedSpans provider spansRef
+        map csName spans `shouldSatisfy` elem ("publish " <> queue)
+        map csName spans `shouldSatisfy` elem ("receive " <> queue)
 
     -- EP-2 M1: unlogged vs standard provisioning.
     it "ensureJobQueueWith unlogged creates an unlogged queue" $ \connStr -> do
