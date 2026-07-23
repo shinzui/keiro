@@ -4,6 +4,7 @@ slug: restore-the-migration-integrity-gates-under-pg-migrate-surfaced-by-the-202
 title: "Restore the migration integrity gates under pg-migrate surfaced by the 2026-07 migration review"
 kind: master-plan
 created_at: 2026-07-23T03:02:16Z
+intention: intention_01ky8hzdgxe7etqkgzfma64nj5
 ---
 
 # Restore the migration integrity gates under pg-migrate surfaced by the 2026-07 migration review
@@ -43,7 +44,7 @@ ADR context: `docs/adr/` contains only `0001-keiro-pgmq-job-processing-telemetry
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Restore live schema verification, body lint, and the startup handshake under pg-migrate | docs/plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md | None | None | Not Started |
+| 1 | Restore live schema verification, body lint, and the startup handshake under pg-migrate | docs/plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md | None | None | In Progress |
 | 2 | Add the embed recompile plugin and native manifest coverage | docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md | None | None | Not Started |
 | 3 | Guard up against codd-ledgered databases and mount the codd import in the CLI | docs/plans/124-guard-up-against-codd-ledgered-databases-and-mount-the-codd-import-in-the-cli.md | None | EP-1 | Not Started |
 
@@ -83,6 +84,7 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
 - Plan authoring (2026-07-23), affects EP-2: `migrations.lock` cannot be extended to cover native migrations — it is embedded as codd-import evidence (`keiroCoddManifestText`) and the strict import fails on unexpected entries. This forces the separate `migrations.native.lock` design; recorded as the deciding rationale in docs/plans/123.
 - Plan authoring (2026-07-23), affects EP-1: the checked-in `expected-schema/v18` snapshot predates migration `0018` (no `keiro_dead_letters` in it) — it is a valid legacy-world artifact but stale as a native gate; EP-1 freezes it and adds a new native snapshot.
 - Plan authoring (2026-07-23), affects EP-3: the sentinel ledger fixup remaps 14 rows, not 16 (two legacy files never had sentinel names); pg-migrate ships no reusable codd-import CLI parser (`--mapping` is application-interpreted), so EP-3 (docs/plans/124) builds a keiro-shaped `import-codd-history` subcommand over `frameworkCoddHistoryMappings` instead of mounting a shipped parser; and the preflight is implemented keiro-side pre-lock with the TOCTOU accepted (the guarded hazard is operator error, not a concurrent race — `Database.PostgreSQL.Migrate.Runner`'s in-lock surface is not exposed).
+- EP-1 implementation (2026-07-23), affects all child plans: migrations `0019-keiro-snapshots-state-shape-hash.sql` and `0020-keiro-workflow-children-failure-reason.sql` landed after plan authoring. The current native component contains 20 Keiro migrations and the composed plan contains 28 entries, so EP-1 now gates all 20 bodies and all 28 startup-handshake entries. EP-2 must generate native manifest coverage for 20 files, and EP-3 must treat the two new native migrations as pending after a 23-row codd history import.
 
 
 ## Decision Log

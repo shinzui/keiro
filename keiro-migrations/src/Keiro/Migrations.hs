@@ -3,6 +3,7 @@ module Keiro.Migrations (
     MigrationComponent,
     MigrationPlan,
     PlanError,
+    embeddedMigrationEntries,
     frameworkMigrationPlan,
     keiroMigrations,
 ) where
@@ -15,7 +16,10 @@ import Database.PostgreSQL.Migrate (
     PlanError,
     migrationPlan,
  )
-import Keiro.Migrations.Internal.Definition (keiroMigrations)
+import Keiro.Migrations.Internal.Definition (
+    embeddedMigrationEntries,
+    keiroMigrations,
+ )
 
 {- | Compose the concrete Kiroku and Keiro components in dependency order.
 

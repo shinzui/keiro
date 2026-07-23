@@ -4,6 +4,7 @@ slug: restore-live-schema-verification-body-lint-and-the-startup-handshake-under
 title: "Restore live schema verification, body lint, and the startup handshake under pg-migrate"
 kind: exec-plan
 created_at: 2026-07-23T03:02:27Z
+intention: intention_01ky8hzdgxe7etqkgzfma64nj5
 master_plan: "docs/masterplans/19-restore-the-migration-integrity-gates-under-pg-migrate-surfaced-by-the-2026-07-migration-review.md"
 ---
 
@@ -31,8 +32,9 @@ opt-in `legacy-codd-tools` cabal flag that nobody builds by default:
    migrations would have built.
 2. **The migration body lint (finding MIG-2).** The check that every migration body is
    schema-qualified and never touches `search_path` runs only in the flag-gated legacy test
-   suite, over the frozen legacy files. The two native migrations added since
-   (`0017-schema-management-comment.sql`, `0018.sql`) have never been linted; a future
+   suite, over the frozen legacy files. The four native migrations added since
+   (`0017-schema-management-comment.sql` through
+   `0020-keiro-workflow-children-failure-reason.sql`) have never been linted; a future
    unqualified migration would reach production unchallenged.
 3. **The `missingMigrations` startup handshake (finding MIG-3).** Services used to ask, at
    boot, "does the database carry every migration this binary expects?" and refuse to start
@@ -50,7 +52,7 @@ documented in `docs/user/migrations.md`.
 
 ## Progress
 
-- [ ] Milestone 1: pure lint module ported into the default test suite; unqualified fixture fails; all 18 embedded bodies pass; `embeddedMigrationEntries` exported from the library.
+- [x] (2026-07-23T22:42:00Z) Milestone 1: pure lint module ported into the default test suite; unqualified fixture fails; all 20 embedded bodies pass; `embeddedMigrationEntries` exported from the library. Validation: `cabal build keiro-migrations` and `cabal test keiro-migrations-test --test-show-details=direct` passed (14 examples, 0 failures).
 - [ ] Milestone 2: `missingMigrations` and `StartupHandshake` exported from `Keiro.Migrations`; fresh/fully-migrated/half-applied tests green; `docs/user/migrations.md` Application startup section documents the handshake.
 - [ ] Milestone 3: `Keiro.Migrations.SchemaCheck` library module with canonical snapshot, comparison, and embedded expected snapshot; checked-in `expected-schema/native/keiro-v18.txt` generated and validated by a suite test with a regeneration mode.
 - [ ] Milestone 4: `keiro-migrate verify-schema` subcommand wired; drifted-database integration test exits with named drifted objects; `docs/user/migrations.md` documents `verify-schema`; suite green end to end.
@@ -58,7 +60,14 @@ documented in `docs/user/migrations.md`.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Discovery: The current branch contains migrations
+  `0019-keiro-snapshots-state-shape-hash.sql` and
+  `0020-keiro-workflow-children-failure-reason.sql`, added after this plan was authored.
+  The native manifest therefore contains 20 Keiro migrations and the composed plan contains
+  28 migrations (8 Kiroku plus 20 Keiro), not 18 and 26.
+  Evidence: `keiro-migrations/test/Main.hs` already asserts 20 Keiro entries and 28 composed
+  outcomes, and both files are present in `keiro-migrations/migrations/manifest`.
+  Date: 2026-07-23
 
 
 ## Decision Log
@@ -112,6 +121,13 @@ documented in `docs/user/migrations.md`.
   Rationale: The master plan keeps the pre-existing PG-17-snapshot exclusion excluded.
   Date: 2026-07-23
 
+- Decision: Implement the restored gates against the current 20-file Keiro manifest and
+  28-entry composed plan.
+  Rationale: Integrity gates must cover every migration shipped by the current branch.
+  Freezing the tests at the plan-authoring count would leave the two newest schema changes
+  outside the lint and startup-handshake acceptance.
+  Date: 2026-07-23
+
 
 ## Outcomes & Retrospective
 
@@ -145,11 +161,13 @@ becomes buildable (lines 406-439). The **default** test suite is named
 what CI runs: the repository has no `.github/` workflows — verification is `just verify`
 from the repo root, whose final step is `cabal test keiro-migrations-test`.
 
-**The migrations.** `keiro-migrations/migrations/` holds 18 immutable SQL files
+**The migrations.** `keiro-migrations/migrations/` holds 20 immutable SQL files
 (`0001-keiro-bootstrap.sql` … `0016-keiro-inbox-drop-received-idx.sql` are byte-identical
-ports of the 16 codd-era files; `0017-schema-management-comment.sql` and `0018.sql` are
-native-era additions) plus the ordered `manifest` file. The library embeds them at compile
-time: `keiro-migrations/src/Keiro/Migrations/Internal/Definition.hs` calls pg-migrate-embed's
+ports of the 16 codd-era files; `0017-schema-management-comment.sql`, `0018.sql`,
+`0019-keiro-snapshots-state-shape-hash.sql`, and
+`0020-keiro-workflow-children-failure-reason.sql` are native-era additions) plus the ordered
+`manifest` file. The library embeds them at compile time:
+`keiro-migrations/src/Keiro/Migrations/Internal/Definition.hs` calls pg-migrate-embed's
 `embedMigrationManifest "migrations/manifest"` producing `embeddedMigrationEntries ::
 NonEmpty (FilePath, ByteString)`, and builds the `keiro` component with a declared
 dependency on `kiroku`. `keiro-migrations/src/Keiro/Migrations.hs` currently exports only
@@ -235,7 +253,7 @@ drifted-database proof and documentation.
 
 ### Milestone 1 — the body lint runs in the default suite (MIG-2)
 
-Scope: port the pure lint validators into the default test suite and run them over all 18
+Scope: port the pure lint validators into the default test suite and run them over all 20
 embedded migration bodies. At the end, an unqualified fixture body fails the lint, all real
 bodies pass, and the check runs on every `cabal test keiro-migrations-test`.
 
@@ -273,7 +291,7 @@ Add a spec to `keiro-migrations/test/Main.hs` (import `Lint`):
 - "flags an unqualified DDL target": `lintViolations (LintConfig "keiro." []) [("9999-fixture.sql", "CREATE TABLE widgets (id int);")]` yields exactly one violation whose text names `9999-fixture.sql`.
 - "flags a search_path mention": a fixture body containing `SET search_path TO keiro;` yields a violation.
 - "ignores comment-only mentions": a body whose only `search_path` occurrence is on a `--` comment line yields no violations.
-- "passes all 18 embedded native bodies": `lintViolations (LintConfig "keiro." []) (toList embeddedMigrationEntries)` is `[]`. (Expected to hold: 0001-0016 are byte-identical to the legacy files the legacy lint already passed, 0017 is a `COMMENT ON SCHEMA` the lint does not target, and 0018 qualifies both its `CREATE TABLE` and `CREATE INDEX`. If a body unexpectedly fails, do not add it to `exemptFiles` without recording why in the Decision Log.)
+- "passes all 20 embedded native bodies": `lintViolations (LintConfig "keiro." []) (toList embeddedMigrationEntries)` is `[]`. (Expected to hold: 0001-0016 are byte-identical to the legacy files the legacy lint already passed, 0017 is a `COMMENT ON SCHEMA` the lint does not target, 0018 qualifies both its `CREATE TABLE` and `CREATE INDEX`, and 0019-0020 qualify their `ALTER TABLE` targets. If a body unexpectedly fails, do not add it to `exemptFiles` without recording why in the Decision Log.)
 
 Acceptance: `cabal test keiro-migrations-test` green; temporarily un-qualifying a target in
 a scratch copy of the fixture demonstrates the failure output.
@@ -319,8 +337,8 @@ application component in the same ledger pass their full composed plan instead.
 Tests in `keiro-migrations/test/Main.hs` (a new `describe "startup handshake"`):
 
 - Fresh database: inside `withKeiroPg`, with no migrations applied, `missingMigrations
-  defaultRunOptions provider plan` returns `pendingMigrations` equal to all 26 plan ids
-  (8 kiroku + 18 keiro, in plan order) and `ledgerIssues = []`. (An absent `pgmigrate`
+  defaultRunOptions provider plan` returns `pendingMigrations` equal to all 28 plan ids
+  (8 Kiroku plus 20 Keiro, in plan order) and `ledgerIssues = []`. (An absent `pgmigrate`
   schema is a defined state: `loadLedger` returns an empty snapshot, so everything is
   pending and nothing errors.)
 - Fully migrated: inside `withMigratedDatabase plan`, the handshake returns `[]` pending,
@@ -329,7 +347,7 @@ Tests in `keiro-migrations/test/Main.hs` (a new `describe "startup handshake"`):
   component (`kirokuOnly <- requireRight (migrationPlan (kiroku :| []))` then
   `runMigrationPlan defaultRunOptions settings kirokuOnly`), then call
   `missingMigrations` with the full framework plan; `pendingMigrations` must be exactly the
-  18 keiro ids in order and `ledgerIssues` must be `[]`.
+  20 Keiro ids in order and `ledgerIssues` must be `[]`.
 
 Documentation: rewrite the "Application startup" section of `docs/user/migrations.md`
 (currently lines 65-78; this plan owns that section). Keep the deployment-job guidance and
@@ -560,7 +578,7 @@ migration body lint
   flags an unqualified DDL target [✔]
   flags a search_path mention [✔]
   ignores comment-only mentions [✔]
-  passes all 18 embedded native bodies [✔]
+  passes all 20 embedded native bodies [✔]
 ```
 
 Milestone 2:
@@ -571,7 +589,7 @@ cabal test keiro-migrations-test
 ```
 
 The three handshake examples must appear and pass; the half-applied one proves the tail
-shape (18 keiro ids).
+shape (20 Keiro ids).
 
 Milestone 3 (note the bootstrap ordering):
 
@@ -636,8 +654,8 @@ command from the repository root:
 2. Lint gate: adding a scratch fixture body `CREATE TABLE widgets (id int);` to the lint's
    fixture list (or, equivalently, un-qualifying a target in a copy) produces a failing
    example whose message names the offending file and statement; reverting restores green.
-3. Handshake: the fresh-database example asserts 26 pending ids, the migrated example
-   asserts zero, the half-applied example asserts exactly the 18 keiro ids — these encode
+3. Handshake: the fresh-database example asserts 28 pending ids, the migrated example
+   asserts zero, the half-applied example asserts exactly the 20 Keiro ids — these encode
    the master-plan acceptance "fresh DB returns the full embedded list, fully-migrated DB
    returns empty, half-applied returns the tail".
 4. Drift gate, library level: the "verify-schema detects a hand-altered database" example
@@ -705,3 +723,9 @@ Signatures that must exist at the end of each milestone:
 Cross-plan interface: the `KeiroCommand` wrapper in `keiro-migrations/app/Main.hs` is
 shared with `docs/plans/124-guard-up-against-codd-ledgered-databases-and-mount-the-codd-import-in-the-cli.md`;
 both plans add constructors additively and coordinate only on merge order.
+
+
+Revision note (2026-07-23): Updated the plan from the 18-file/26-entry authoring snapshot to
+the current 20-file/28-entry migration plan after discovering migrations 0019 and 0020 on
+the active branch. The implementation and all acceptance counts now cover every shipped
+migration.

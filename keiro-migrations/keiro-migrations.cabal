@@ -384,6 +384,7 @@ test-suite keiro-migrations-test
   import:         common
   type:           exitcode-stdio-1.0
   main-is:        Main.hs
+  other-modules:  Lint
   hs-source-dirs: test
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:

@@ -40,6 +40,7 @@ import Keiro.Migrations
 import Keiro.Migrations.History.Codd
 import Kiroku.Store.Migrations qualified as Kiroku
 import Kiroku.Store.Migrations.History.Codd qualified as Kiroku.Codd
+import Lint
 import Numeric qualified
 import System.Directory (doesDirectoryExist, doesFileExist)
 import System.FilePath ((</>))
@@ -83,6 +84,33 @@ main = hspec $ do
             keiro <- requireRight keiroMigrations
             migrationPlan (keiro :| []) `shouldSatisfy` isLeft
             frameworkMigrationPlan keiro kiroku `shouldSatisfy` isLeft
+
+    describe "migration body lint" $ do
+        let config = LintConfig{requiredQualifier = "keiro.", exemptFiles = []}
+
+        it "flags an unqualified DDL target" $ do
+            let violations =
+                    lintViolations
+                        config
+                        [("9999-fixture.sql", "CREATE TABLE widgets (id int);")]
+            violations `shouldSatisfy` \case
+                [violation] -> "9999-fixture.sql" `Text.isInfixOf` violation
+                _ -> False
+
+        it "flags a search_path mention" $ do
+            lintViolations
+                config
+                [("9999-fixture.sql", "SET search_path TO keiro;")]
+                `shouldSatisfy` (not . null)
+
+        it "ignores comment-only mentions" $ do
+            lintViolations
+                config
+                [("9999-fixture.sql", "-- Never set search_path in a migration.\nSELECT 1;")]
+                `shouldBe` []
+
+        it "passes all 20 embedded native bodies" $ do
+            lintViolations config (toList embeddedMigrationEntries) `shouldBe` []
 
     describe "fresh native databases" $ do
         it "applies Kiroku then Keiro, verifies strictly, and is repeatable" $ do
