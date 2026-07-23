@@ -89,9 +89,11 @@ region is rejected; the same machine without the twin → `HydrationNoInvertingE
 - [ ] M2 residual: plan 142's replay-audit assertions over the divert store
       (B-bad `ReplayFailed` / B-good `ReplayOk`) — skipped because plan 142
       has not landed; activate when both plans are in.
-- [ ] Release residual: publish keiki 0.3.0.0 and delete keiro's
-      `cabal.project.local` (coordinate a release train with plan 138's keiki
-      work if it is in flight by then).
+- [ ] Release residual: keiki 0.3.0.0 is committed and tagged upstream
+      (`chore(release): 0.3.0.0`, tag `v0.3.0.0`, 2026-07-23) but not yet in
+      the package index keiro resolves against (verified: resolution fails
+      without the override), so keiro's untracked `cabal.project.local` stays
+      until the release is published; delete it then.
 - [x] M3 (2026-07-23, keiro commit `101f549`): DSL `replay-only` marker (a prefix on
       the transition line — the grammar has no `transition` keyword; see Decision
       Log): grammar `tMode`, parser (+ a states-line lookahead fix), pretty-print
