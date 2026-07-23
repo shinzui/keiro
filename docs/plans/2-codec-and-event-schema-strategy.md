@@ -25,6 +25,29 @@ This plan resolves how keiro handles event encoding, decoding, type-tagging, and
 
 The user-visible behaviour the eventual library will deliver: an aggregate author writes one `Codec` value per event sum, declares schema versions explicitly, and gets confidence that every wire-shape produced by previous deploys can still be decoded.
 
+### Shape of the codec boundary
+
+```mermaid
+flowchart LR
+  A[Typed domain event] --> B[Codec encode]
+  B --> C[Kiroku payload plus metadata schemaVersion]
+  C --> D[Read RecordedEvent]
+  D --> E{Stored version vs schemaVersion}
+  E -->|older| F[migrateToCurrent upcaster chain]
+  E -->|equal| G[decode]
+  E -->|newer| H[VersionAhead]
+  F --> G
+  F -->|missing rung| I[GapInUpcasterChain]
+  G --> J[Typed latest event]
+```
+
+> Verified against `keiro-core/src/Keiro/Codec.hs` on 2026-07-23. The shipped
+> `Codec e` carries `eventTypes`, `eventType`, `schemaVersion`, `encode`, `decode`,
+> and `upcasters :: [Upcaster]`; `schemaVersion` is stamped into event metadata on
+> append and used as the migration target on read, exactly as this plan specifies.
+> The two error edges are `CodecError` constructors and were implicit in the
+> original sketch.
+
 
 ## Progress
 

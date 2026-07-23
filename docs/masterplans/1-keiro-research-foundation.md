@@ -69,6 +69,28 @@ EP-7 (`docs/plans/7-internal-decider-style-ergonomic-facade-over-runcommand.md`)
 
 The plan order is foundation → parallel research → synthesis.
 
+```mermaid
+flowchart TD
+  A[EP-1 Command cycle] --> B[EP-2 Codec strategy]
+  A --> C[EP-3 Subscriptions and PMs]
+  B -.-> C
+  A --> D[EP-4 Snapshots]
+  B -.-> D
+  C -.-> E[EP-5 Workflow roadmap]
+  A --> F[EP-8 Read model query API]
+  C --> F
+  B -.-> F
+  D -.-> F
+  A --> G[EP-6 Upstream roadmap]
+  B --> G
+  C --> G
+  D --> G
+  E --> G
+```
+
+Solid edges are hard dependencies, dashed edges soft. EP-7 is deliberately absent
+for the reason given under the registry above. The prose below states each edge.
+
 EP-1 (command cycle) is the foundation. It defines the types and combinators every other plan refers to: `EventStream phi rs s ci co`, `Stream a`, `runCommand`, the optimistic-retry loop, and the transactional-step primitive. Until those types are written down, EP-2 cannot pick a codec signature, EP-3 cannot describe how a process manager runs a mini command cycle, and EP-4 cannot describe how a snapshot accelerates the hydration phase. EP-1 therefore has no dependencies and must complete first.
 
 EP-2 (codecs) hard-depends on EP-1 because the codec layer must produce the exact types the command cycle expects (typed events going into `EventData.payload`, decoded back into the keiki domain type). EP-2 can be drafted in parallel with EP-1 once the latter has fixed its public types in the design document, but a clean validation of EP-2 requires EP-1's spike.

@@ -29,6 +29,27 @@ This plan is *design-only*: no spike. The substance is consolidation across earl
 
 The user-visible behaviour the eventual library will deliver: when keiro v1 is being implemented in a future MasterPlan, the upstream maintainers (kiroku and keiki) will already have a clear, prioritized backlog with rationale, ready to schedule.
 
+### Shape of the upstream sequencing
+
+```mermaid
+flowchart TD
+  A[Blocking: kiroku runInTransaction — closed 2026-05-10] --> B[keiro v1 implementation can begin]
+  B --> C[Wanted: transactional subscription handler — still open]
+  B --> D[Wanted: keiki RegFile helpers — closed 2026-05-14]
+  B --> E[Optional: sharding, push, refinements — shipped in keiro]
+  C --> F[exactly-once projection window]
+  D --> G[snapshot and workflow ergonomics]
+```
+
+> Status labels reconciled on 2026-07-23 against this plan's Decision Log and
+> `docs/research/00-overview.md`. The Blocking item shipped as
+> `Kiroku.Store.Transaction.runTransactionAppending`; the keiki helpers shipped as
+> `Keiki.Shape.regFileShapeHash` plus the `keiki-codec-json` package. The
+> `shibuya-kiroku-adapter` `HandlerInTransaction` shape is still open — no such
+> symbol exists in the kiroku or shibuya trees as of this check. Sharding and push
+> were delivered inside keiro (`Keiro.Subscription.Shard`, `Keiro.Wake`) rather than
+> upstream.
+
 
 ## Progress
 

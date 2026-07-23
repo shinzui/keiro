@@ -30,6 +30,24 @@ After this plan is complete, anyone with the keiro source tree can:
 
 The user-visible behaviour the eventual library will deliver: an aggregate author writes a projection function `event -> Hasql.Session ()`, picks a lifecycle (`Inline` or `Async name`), and the framework persists, observes, and rebuilds it correctly. A workflow author writes a `(state, event) -> (state, [command])` step function and the framework runs it as an event-sourced process manager.
 
+### Shape of the read-side runtime
+
+```mermaid
+flowchart LR
+  A[Kiroku global stream] --> B[Shibuya adapter]
+  B --> C[Subscription handler]
+  C --> D[Projection]
+  C --> E[Process manager]
+  E --> F[Command cycle]
+  C --> G[Outbox and inbox]
+```
+
+> Verified against `keiro/src/Keiro/{Projection,ProcessManager,Outbox,Inbox}.hs` on
+> 2026-07-23; the spine is unchanged. The diagram is deliberately scoped to this
+> plan. Three read-side consumers arrived later and hang off the same subscription
+> handler: read models (EP-8, `Keiro.ReadModel`), routers (`Keiro.Router`), and
+> sharded delivery (`Keiro.Subscription.Shard`) with push wake-ups (`Keiro.Wake`).
+
 
 ## Progress
 

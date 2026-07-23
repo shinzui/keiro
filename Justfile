@@ -1,6 +1,5 @@
 set shell := ["zsh", "-cu"]
 
-site := "site-dist"
 pg_host := env_var_or_default("PGHOST", "db")
 pg_data := env_var_or_default("PGDATA", "db/db")
 pg_log := env_var_or_default("PGLOG", "db/postgres.log")
@@ -15,29 +14,6 @@ default:
 [group('meta')]
 verify: process-compose-check jitsurei haskell-verify
     cabal test keiro-migrations-test
-
-[group('website')]
-install:
-    pnpm install --frozen-lockfile
-
-[group('website')]
-website-build:
-    BUNDLE_PRAGMATA_PRO=1 pnpm run build
-
-[group('website')]
-website-dev:
-    BUNDLE_PRAGMATA_PRO=1 pnpm run dev
-
-[group('website')]
-website-preview:
-    BUNDLE_PRAGMATA_PRO=1 pnpm run preview
-
-[group('website')]
-website-linkcheck:
-    node site/check-links.mjs {{site}}
-
-[group('website')]
-website-verify: install website-build website-linkcheck
 
 [group('haskell')]
 haskell-build:
@@ -60,7 +36,7 @@ bench-regression:
     cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --baseline bench/baseline-inbox.csv --fail-if-slower 25"
 
 [group('haskell')]
-haskell-verify: haskell-build haskell-test website-verify
+haskell-verify: haskell-build haskell-test
 
 [group('database')]
 postgres-init:

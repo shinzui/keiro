@@ -28,6 +28,27 @@ This plan is *design-only*: no spike. The substance is selection, not feasibilit
 
 The user-visible behaviour the eventual library will deliver: in v1, workflow authors compose process managers (designed in EP-3) plus durable timers; in v2, they additionally compose journaled durable functions with named steps, sleeps, and external-completion handles. The roadmap fixes which features land in which version and why.
 
+### Shape of the roadmap
+
+```mermaid
+flowchart TD
+  A[v1 event-sourcing core] --> B[Process managers]
+  A --> C[Durable timers]
+  B --> D[Sagas via process managers]
+  C --> D
+  D --> E[v2 named-step durable execution]
+  E --> F[Awakeables]
+  E --> G[Child workflows]
+  E --> H[Versioning and continue-as-new]
+```
+
+> Verified on 2026-07-23: both versions have shipped, so every node above is now
+> delivered rather than planned. v1 is `Keiro.ProcessManager` and `Keiro.Timer`;
+> v2 is the journaled `Workflow` effect in `keiro/src/Keiro/Workflow.hs` plus
+> `Workflow.{Sleep,Child,Resume,Snapshot,Instance,Gc}`, with `continueAsNew` and the
+> `"awk:"` awakeable step prefix on the effect itself. The v1-to-v2 boundary the
+> plan fixed held; nothing was reshuffled across it.
+
 
 ## Progress
 

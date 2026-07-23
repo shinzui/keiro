@@ -30,8 +30,6 @@
             pkgs.rdkafka
             pkgs.jq
             pkgs.just
-            pkgs.nodejs_22
-            pkgs.pnpm
             pkgs.postgresql_18
             pkgs.z3
             pkgs.process-compose

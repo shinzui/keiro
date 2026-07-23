@@ -27,7 +27,49 @@ read models/projections, process managers, routers, timers, transactional
 messaging, durable workflows, dead-letter tooling, native migrations, PGMQ
 jobs, and the `.keiro` typed-spec toolchain described by this research.
 
+```mermaid
+flowchart LR
+  A[keiki SymTransducer] --> B[keiro command cycle]
+  C[kiroku event store] <--> B
+  B --> D[typed events and codecs]
+  C --> E[shibuya subscriptions]
+  E --> F[projections and read models]
+  E --> G[process managers and routers]
+  G --> B
+  B --> H[snapshots]
+  G --> I[durable timers]
+  I --> J[durable workflows]
+```
+
 ## Document index
+
+Reading map — surveys feed the integration study, which feeds the designs, which
+feed the upstream synthesis:
+
+```mermaid
+flowchart TD
+  A[00 Overview] --> B[01 Kiroku survey]
+  A --> C[02 Keiki survey]
+  A --> D[03 Shibuya survey]
+  A --> E[05 Workflow prior art]
+  B --> F[04 Kiroku/keiki integration]
+  C --> F
+  F --> G[06 Command-cycle design]
+  G --> H[07 Codec strategy]
+  G --> I[08 Subscriptions and PMs]
+  D --> I
+  H --> J[09 Snapshots]
+  I --> K[10 Workflow roadmap]
+  E --> K
+  J --> K
+  I --> L[12 Read-model query API]
+  K --> M[11 Upstream roadmap]
+  L --> M
+```
+
+`13-agent-qualification-runtime-wiring.md` and `opentelemetry-semconv-audit.md`
+sit outside this map: both are standalone notes written after the research
+programme closed, not rungs in the original reading order.
 
 - `01-kiroku-read-side.md` — Current state of kiroku: types, append/read APIs, subscriptions, schema, effects, gaps for keiro.
 - `02-keiki-decide-loop.md` — Current state of keiki: `SymTransducer` core, `decide`/`evolve`/`reconstitute`, composition, codec story, gaps.

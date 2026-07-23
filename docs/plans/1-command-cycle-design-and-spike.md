@@ -38,6 +38,28 @@ The user-visible outcome of the eventual library implementation (which this plan
 
 …where `EventStream a` is the keiro-native bundle (the `SymTransducer`, codecs, policies — final exact shape derived in this plan) and `Event a` is the typed event sum. The spike validates that the necessary primitives exist; the design doc fixes the contract precisely.
 
+### Shape of the command cycle
+
+```mermaid
+flowchart LR
+  A[Command ci] --> B[ValidatedEventStream]
+  B --> C[Hydrate stream]
+  C --> D[Fold events through SymTransducer]
+  D --> E[Decide]
+  E --> F{Append at ExactVersion}
+  F -->|ok| G[CommandResult with typed events]
+  F -->|WrongExpectedVersion| H{attempt &lt;= retryLimit}
+  H -->|yes| C
+  H -->|no| I[RetryExhausted]
+  D --> J[RegFile and state carried through]
+```
+
+> Verified against `keiro/src/Keiro/Command.hs` on 2026-07-23. Two nodes post-date
+> this plan: the `ValidatedEventStream` gate is the replay-safety boundary added by
+> EP-84 (`Keiro.EventStream.Validate`), and the bounded retry with a terminal
+> `RetryExhausted` is `RunCommandOptions.retryLimit` (default 3) plus
+> `retryBackoffMicros`. The plan's own retry-on-conflict loop is otherwise intact.
+
 
 ## Progress
 

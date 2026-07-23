@@ -44,8 +44,7 @@ The following packages are **NOT released** to Hackage:
 - **keiro-test-support** (`keiro-test-support/`) — internal: shared PostgreSQL
   test fixtures, consumed only by the packages' test suites.
 - **jitsurei** (`jitsurei/`) — internal: guide-backed worked examples, not a
-  reusable library. (Note: `site-dist/jitsurei/` is generated website output —
-  ignore it; it is not in `cabal.project`.)
+  reusable library.
 
 > **⚠️ Hackage prerequisite — read before uploading.** Several publishable
 > packages currently depend on **git-pinned upstreams that are not yet on

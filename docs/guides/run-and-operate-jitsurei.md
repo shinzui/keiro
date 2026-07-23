@@ -97,9 +97,9 @@ The broad local verification path is:
 cabal build all
 cabal test keiro-test
 cabal test jitsurei-test
-just website-verify
 ```
 
-Run that before changing the guide source links. The website build copies
-`jitsurei/` into `site-dist/` so links from `docs/guides/` to source files are
-checked with the rest of the docs.
+Or `just haskell-verify`, which runs the same set plus the diagram check. The
+links from this guide into `jitsurei/` source files are plain repository-relative
+paths; check them by hand when you move or rename a module. They used to be
+verified by the generated docs website, which was removed on 2026-07-23.

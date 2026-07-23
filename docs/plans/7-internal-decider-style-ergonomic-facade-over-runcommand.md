@@ -77,6 +77,26 @@ retrospective) why we chose to expose `EventStream` directly to all users.
 The exit criterion is a decision recorded in this plan's Decision Log: **ship**,
 **ship as cookbook only**, or **reject**.
 
+### Shape of the hypothesis
+
+```mermaid
+flowchart LR
+  A[Pure CQRS aggregate author] --> B[PureAggregate decide/evolve — proposed]
+  B --> C[Internal facade — proposed]
+  C --> D[EventStream phi rs s ci co]
+  D --> E[mkEventStream validation]
+  E --> F[runCommand]
+  G[Workflow author] --> D
+```
+
+> This diagram is the *hypothesis*, not the shipped design. Re-checked 2026-07-23:
+> no `PureAggregate` type and no `Keiro.Decider` module exist anywhere in `keiro`,
+> `keiro-core`, or `keiro-dsl`, so the two proposed nodes remain unbuilt and the
+> plan's "evaluated; do not implement now" status stands. One node did move under
+> it: `runCommand` no longer accepts a bare `EventStream`, so any future facade
+> would have to emit a `ValidatedEventStream` via `mkEventStream` (or
+> `mkEventStreamUnchecked`) rather than hand off the record directly.
+
 
 ## Progress
 

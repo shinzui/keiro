@@ -25,6 +25,26 @@ This plan is *design-only*: no spike. The reasoning is that snapshots are pure s
 
 The user-visible behaviour the eventual library will deliver: aggregate authors annotate their `EventStream` (EP-1's `EventStream phi rs s ci co` contract over keiki's native `SymTransducer`, *not* the legacy `Keiki.Decider` facade) with a snapshot policy (`every N events`); hydration paths transparently use the latest snapshot when present and fall back to full replay when not; operators can purge snapshots safely at any time.
 
+### Shape of snapshot hydration
+
+```mermaid
+flowchart LR
+  A[Command] --> B{Snapshot row present}
+  B -->|no| C[Initial state]
+  B -->|yes| D{Decode state and RegFile}
+  D -->|ok| E[Replay tail from streamVersion plus 1]
+  D -->|codec or shape mismatch| C
+  C --> F[Replay full stream]
+  E --> G[Decide and append]
+  F --> G
+```
+
+> Verified against `keiro/src/Keiro/Command.hs` (`hydrate`, `hydrateSeeded`,
+> `hydrateFull`) on 2026-07-23. The decode-failure edge back to full replay is the
+> `Left _ -> hydrateFull` fall-through that makes snapshots advisory rather than
+> load-bearing — it is the `state_codec_version` / `regfile_shape_hash` discriminant
+> pair this plan designed, and it was missing from the original sketch.
+
 
 ## Progress
 
