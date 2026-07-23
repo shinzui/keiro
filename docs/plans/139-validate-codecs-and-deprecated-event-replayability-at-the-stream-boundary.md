@@ -120,6 +120,14 @@ implementation. Provide concise evidence.
   (inverting edge present), gate-clean (not statically dead), and operationally inert;
   guard-on-command-input is the only shape meeting all three under the current checks.
   Date: 2026-07-23
+  SUPERSEDED 2026-07-23 by plan 143 (landed second-to-none: plan 143 landed first, so
+  this plan performs the reconciliation): keiki now has a native `ReplayOnly` edge mode
+  and the DSL a `replay-only` transition marker (docs/adr/0002). The sanctioned
+  retained-edge shape is a `replay-only` transition — replay-only transitions are exempt
+  from `DeprecatedEventStillEmitted` (they are not the write path), forward-unreachable
+  by definition rather than by phantom guard, and already dead-edge-clean. This plan's
+  validator/diff work should prescribe `replay-only` in its guidance text and treat the
+  guarded-but-inert shape as the legacy fallback for hand-written machines only.
 
 - Decision: Landing order with plan 140 (which rewrites the upcaster lowering to a
   per-rung, per-event dispatch): this plan's `DuplicateUpcasterSource` error is correct for

@@ -42,7 +42,7 @@ ADR context: `docs/adr/0001` (pgmq telemetry) is tangentially relevant to EP-3's
 | 3 | Fix DSL upcaster lowering and adopt versioned job codecs | docs/plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md | None | EP-2 | Not Started |
 | 4 | Correct the evolution documentation and deploy-ordering guidance | docs/plans/141-correct-the-evolution-documentation-and-deploy-ordering-guidance.md | None | EP-1, EP-2, EP-3, EP-5 | Not Started |
 | 5 | Add a pre-deploy replay audit and decide-surface change advisories | docs/plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md | None | EP-1, EP-2, EP-3 | Not Started |
-| 6 | Add first-class replay-only transitions for guard evolution | docs/plans/143-add-first-class-replay-only-transitions-for-guard-evolution.md | None | EP-1, EP-2, EP-5 | Not Started |
+| 6 | Add first-class replay-only transitions for guard evolution | docs/plans/143-add-first-class-replay-only-transitions-for-guard-evolution.md | None | EP-1, EP-2, EP-5 | Complete (residuals: keiki release, EP-5 audit assertions) |
 
 
 ## Dependency Graph
@@ -75,8 +75,8 @@ Cross-plan decision for ADR promotion: the snapshot-discriminator contract; the 
 - [ ] EP-4: Four drifted docs corrected; deploy-ordering rules documented (including the replay audit as the standard pre-deploy gate); guide cross-linked.
 - [ ] EP-5: Replay audit library and generated per-context wiring shipped; the no-inverting-edge and stale-seed scenarios are caught against a real store pre-deploy; digests stable across runs.
 - [ ] EP-5: Router/process decide-surface and timer-payload diff advisories fire on fixture pairs with drain-before-deploy guidance; jitsurei reference assembly added.
-- [ ] EP-6: keiki `EdgeMode` landed (forward-excluded, inversion-included, reachability-exempt, ambiguity-checked); black-acuity regression green with a replay-only twin and red without.
-- [ ] EP-6: DSL `replay-only transition` marker round-trips and lowers; the guard-tightening advisory prints the paste-ready computed twin; guide/adoption-doc procedures in present tense.
+- [x] EP-6 (2026-07-23): keiki `EdgeMode` landed (forward-excluded, two-phase inversion-included, dead-edge-clean without a reachability change, same-mode ambiguity-checked; keiki 0.3.0.0, commit `a8d6377`); black-acuity regression green with a replay-only twin and red without (keiro `48ef795`).
+- [x] EP-6 (2026-07-23): DSL `replay-only` marker round-trips and lowers to `B.replayOnly`; the `AggGuardTightened` advisory prints the paste-ready computed twin (`complementExpr`); guide/adoption-doc procedures in present tense (keiro `101f549`; ADR 0002). Residuals tracked in plan 143: keiki 0.3.0.0 release publication, and the plan-142 audit assertions over the divert store.
 
 
 ## Surprises & Discoveries

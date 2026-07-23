@@ -92,12 +92,23 @@ region is rejected; the same machine without the twin → `HydrationNoInvertingE
 - [ ] Release residual: publish keiki 0.3.0.0 and delete keiro's
       `cabal.project.local` (coordinate a release train with plan 138's keiki
       work if it is in flight by then).
-- [ ] M3: DSL `replay-only transition` marker (grammar/parser/pretty-print/validator/
-      scaffold lowering); diff advisory on guard tightening prints the computed
-      replay-only twin; fixtures + 24-suite bar green.
-- [ ] Close-out: docs/plans/139 retained-edge wording reconciled; guide + adoption doc
-      flipped to present tense; master plan 24 boxes ticked; CHANGELOGs; ADR
-      distillation (replay-only semantics into the evolution-gate inventory).
+- [x] M3 (2026-07-23, keiro commit `101f549`): DSL `replay-only` marker (a prefix on
+      the transition line — the grammar has no `transition` keyword; see Decision
+      Log): grammar `tMode`, parser (+ a states-line lookahead fix), pretty-print
+      round-trip (QuickCheck generator now covers both modes), validator codes
+      `ReplayOnlyEmitsNothing`/`ReplayOnlyCommandStillLive`, scaffold lowering to
+      `B.replayOnly`; diff `AggGuardTightened` advisory prints the
+      `complementExpr`-computed paste-ready twin, with tests proving the pasted twin
+      re-parses, validates clean, and silences the advisory; CLI spot check
+      captured; 210 unit examples, all 24 keiro-dsl suites, full repo 28 suites
+      green; guides updated; CHANGELOGs (keiki, keiro, keiro-dsl).
+- [x] Close-out (2026-07-23): docs/plans/139 retained-edge wording reconciled
+      (143 landed first, so the supersession note was added to 139's Decision Log
+      for its implementer); guide + adoption doc flipped to present tense; master
+      plan 24 EP-6 boxes ticked; CHANGELOGs written; ADR distillation →
+      `docs/adr/0002-replay-only-edges-are-the-sanctioned-remedy-for-guard-tightening.md`
+      (the evolution-gate inventory ADR did not exist yet — plan 139 adds its rows
+      to ADR 0002 or merges it when it lands).
 
 
 ## Surprises & Discoveries
@@ -265,6 +276,39 @@ implementation. Provide concise evidence.
   (`machineBBad` → `ReplayNoInvertingEdge`) upstream.
   Date: 2026-07-23
 
+- Decision: The DSL marker is a `replay-only` *prefix on the transition line*
+  (`replay-only Held -- ConfirmReservation --> …`), not the plan's illustrative
+  `replay-only transition` keyword pair.
+  Rationale: The real grammar has no `transition` keyword — transitions are bare
+  `Src -- Cmd --> clauses` lines inside the aggregate body — so the plan's sketch
+  is adapted to the grammar's actual shape. The lexer's `keyword` combinator
+  already handles hyphenated keywords; the one parser subtlety was the `states`
+  line's greedy identifier loop, which needed a `notFollowedBy (keyword
+  "replay-only")` so a marker directly after `states` is not swallowed as a state
+  name (`ident` excludes hyphens, stranding `-only`). Caught by the QuickCheck
+  round-trip property on the 56th case.
+  Date: 2026-07-23
+
+- Decision: The guard-tightening advisory ships under a new `AggGuardTightened`
+  diagnostic code and a new `guardTighteningDiff` rule in `aggregatePairDiff`,
+  because plan 138's `AggFoldSurfaceChanged`/`transitionSurfaceDiff` (which the
+  plan expected to extend) has not landed. When 138 lands it should merge or
+  subsume the code (append-only enum; the detection —
+  live-pair guard inequality with a declared new guard and no existing twin — and
+  the twin-printing detail text live in `guardTighteningDiff`). 138's fold
+  fingerprint must also include `tMode` in its canonical transition rendering: a
+  mode flip changes replay attribution. Recorded in ADR 0002's consequences.
+  Date: 2026-07-23
+
+- Decision: `DeprecatedEventStillEmitted` now considers only live transitions'
+  emits — a deprecated event emitted by a replay-only transition is legal.
+  Rationale: Replay-only transitions are not the write path (a `ReplayOnly` edge
+  can never fire forward, so it can never append), and "deprecated but still
+  invertible" is precisely the retained-edge shape this plan makes first-class.
+  Without the exemption the sanctioned retirement shape would be refused by the
+  validator it is meant to satisfy. Plan 139's ladder builds on this.
+  Date: 2026-07-23
+
 - Decision: Replay-only edges do not stack indefinitely by default guidance — the
   documented lifecycle ends in retirement.
   Rationale: Each tightening can add a twin; over years a state could accrete
@@ -279,10 +323,40 @@ implementation. Provide concise evidence.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation. At completion, feed the replay-only
-semantics into the evolution-gate inventory ADR: guard tightening — advised at diff
-with a computed remedy, checked by the targeted audit, resolved by a replay-only twin
-or truncation.)
+**Outcome (2026-07-23): all three milestones and close-out landed in one day.**
+Commits: keiki `a8d6377` (0.3.0.0, `EdgeMode` + two-phase inversion + mode-aware
+checks + `Keiki.Builder.replayOnly`; 22-example `ReplayOnlySpec` reproducing
+black-acuity at the keiki level; all four repo suites green), keiro `48ef795`
+(keiki-0.3 adoption + the three-assertion store-backed black-acuity regression),
+keiro `101f549` (DSL marker, validator codes, scaffold lowering, the
+`AggGuardTightened` paste-ready-twin advisory, `complementExpr`, guides,
+CHANGELOGs). ADR 0002 holds the durable semantics. Master plan 24's EP-6 rows are
+ticked; plan 139 carries the reconciliation note.
+
+**What remains** (tracked as unchecked Progress items): publishing keiki 0.3.0.0
+and deleting keiro's untracked `cabal.project.local` (one release train with plan
+138's keiki work if concurrent), and activating the plan-142 replay-audit
+assertions over the divert store once 142 lands.
+
+**Lessons.**
+- The plan's line citations and its illustrative DSL syntax had both drifted from
+  the code; re-verifying every cited region before editing (and adapting the
+  marker to the grammar's real transition shape) cost little and prevented a
+  wrong-keyword surface. Living documents should cite behaviour, not lines.
+- Two of the plan's anticipated work items were empty on inspection: keiro's
+  library code constructs no `Edge` records (the "EventStream mode-threading"
+  surface), and keiki's dead-edge check needed no change (its two flag reasons
+  remain genuine defects for replay-only edges, and reachability already
+  traverses their targets). Verifying the *absence* of work is as valuable as
+  doing it — both facts are now pinned by tests.
+- `-Werror=missing-fields` is the right driver for a Haskell record-extension
+  sweep (60+ construction sites across two repos, record and positional syntax
+  mixed); the treefmt pre-commit hooks in both repos reformat and fail the first
+  commit attempt by design — commit twice.
+- The two-phase inversion decision (made at plan time, verified here) is what
+  made the whole feature land without touching keiro's boundary: the forced
+  guard-blind ambiguity check stays intact for same-mode pairs and simply scopes
+  itself out of the cross-mode case.
 
 
 ## Context and Orientation
@@ -582,3 +656,16 @@ docs/plans/139 (retained-edge wording reconciliation), docs/plans/142 (the audit
 both the checker for "does stored data exercise the removed region" and the prover
 for the twin-deletion endgame; its black-acuity audit assertions activate when both
 plans are landed). Guides owned: the two documents named in M3.
+
+---
+
+*Revision note (2026-07-23, implementation complete).* All milestones executed and
+checked off; Surprises & Discoveries records the dead-edge no-op, the plan-text
+ambiguity-test contradiction (resolved in favour of the Decision Log), the M2
+reproduction transcript, and the empty keiro mode-threading surface. Decision Log
+gained the M1 validator audit table, the checkpoint resequencing, the marker-syntax
+adaptation (`replay-only` prefix — the grammar has no `transition` keyword), the
+`AggGuardTightened` code-ownership note for plan 138, and the
+`DeprecatedEventStillEmitted` live-only scoping. Durable semantics promoted to
+`docs/adr/0002`; residuals (keiki release publication, plan-142 audit assertions)
+remain as unchecked Progress items.
