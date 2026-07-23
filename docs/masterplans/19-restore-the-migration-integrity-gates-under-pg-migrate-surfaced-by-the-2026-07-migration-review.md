@@ -37,7 +37,10 @@ EP-3 (plan 124) makes the cutover safe: a preflight on the `up` path that refuse
 
 Alternatives considered. One plan per finding (seven plans) was rejected as far too granular — MIG-4 is one pragma. Two plans (gates vs cutover) was rejected because EP-1 is test-infrastructure-heavy while EP-2 is a build-system change with a policy decision; keeping them separate lets EP-2 land in an afternoon. Doing the preflight in pg-migrate core rather than keiro-migrations is left as an open design choice inside EP-3 (a keiro-side preflight needs no upstream release; an upstream `preApplyCheck` hook would serve kiroku-store-migrations too) — the plan records the tradeoff and decides.
 
-ADR context: `docs/adr/` contains only `0001-keiro-pgmq-job-processing-telemetry-contract.md`, not relevant — no relevant ADR exists for this initiative. Candidate ADRs at completion: the migration gate inventory and which build (default vs legacy flag) enforces each; the cutover preflight policy.
+ADR context: `docs/adr/0002-keiro-owns-live-schema-verification-under-pg-migrate.md`
+now records EP-1's separation of ledger and live-schema verification and its default-build
+gate inventory. EP-2 extends that record with build- and review-time integrity; the cutover
+preflight policy remains an ADR candidate for EP-3.
 
 
 ## Exec-Plan Registry
@@ -45,7 +48,7 @@ ADR context: `docs/adr/` contains only `0001-keiro-pgmq-job-processing-telemetry
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Restore live schema verification, body lint, and the startup handshake under pg-migrate | docs/plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md | None | None | Complete |
-| 2 | Add the embed recompile plugin and native manifest coverage | docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md | None | None | Not Started |
+| 2 | Add the embed recompile plugin and native manifest coverage | docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md | None | None | In Progress |
 | 3 | Guard up against codd-ledgered databases and mount the codd import in the CLI | docs/plans/124-guard-up-against-codd-ledgered-databases-and-mount-the-codd-import-in-the-cli.md | None | EP-1 | Not Started |
 
 

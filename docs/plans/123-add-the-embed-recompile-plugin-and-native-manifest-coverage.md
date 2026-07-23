@@ -4,6 +4,7 @@ slug: add-the-embed-recompile-plugin-and-native-manifest-coverage
 title: "Add the embed recompile plugin and native manifest coverage"
 kind: exec-plan
 created_at: 2026-07-23T03:02:27Z
+intention: intention_01ky8hzdgxe7etqkgzfma64nj5
 master_plan: "docs/masterplans/19-restore-the-migration-integrity-gates-under-pg-migrate-surfaced-by-the-2026-07-migration-review.md"
 ---
 
@@ -31,10 +32,11 @@ pg-migrate-embed's own documentation says GHC 9.12 users should load it.
 
 Second (finding MIG-7): the repo-side tamper check pins only the 16 legacy-parity migration
 files byte-for-byte (against `keiro-migrations/migrations.lock`, which is really codd-cutover
-evidence). The native-era migrations `0017-schema-management-comment.sql` and `0018.sql` —
-and every future one — are in no repo-side checksum manifest. Runtime checksum keying still
-catches an edit, but only at deploy time as a `PlanVerificationFailed` outage on every
-already-migrated database, instead of at review time as a CI failure.
+evidence). The native-era migrations `0017-schema-management-comment.sql` through
+`0020-keiro-workflow-children-failure-reason.sql` — and every future one — are in no
+repo-side checksum manifest. Runtime checksum keying still catches an edit, but only at
+deploy time as a `PlanVerificationFailed` outage on every already-migrated database,
+instead of at review time as a CI failure.
 
 After this plan: the pragma is in place (with an honest account of what it does and does
 not cover, demonstrated by a reproduction transcript), and a new native lockfile
@@ -46,13 +48,38 @@ gate) runs. The master plan sizes this plan at roughly an afternoon; keep it tha
 
 ## Progress
 
-- [ ] Milestone 1: `RecompilePlugin` pragma and comment added to keiro's embed module; stale-embed hazard reproduced pre-fix and shown caught post-fix; transcript recorded in this plan; suite green.
-- [ ] Milestone 2: `migrations.native.lock` checked in covering all 18 native files; suite test asserts lockfile/manifest/directory/bytes four-way agreement; `docs/user/migration-ownership.md` manifest statement updated; suite green.
+- [x] (2026-07-23T23:16:24Z) Milestone 1: `RecompilePlugin` pragma and comment added to keiro's embed module; stale-embed hazard reproduced pre-fix and shown caught post-fix; the no-GHC residual reproduced; default migration suite passed (20 examples, 0 failures).
+- [ ] Milestone 2: `migrations.native.lock` checked in covering all 20 native files; suite test asserts lockfile/manifest/directory/bytes four-way agreement; `docs/user/migration-ownership.md` manifest statement updated; suite green.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Discovery: The pre-fix incremental build reproduced the stale-embed hazard exactly. After
+  a clean build, adding an unlisted `0099-stale-embed-drill.sql` and changing only
+  `Keiro.Migrations` recompiled that module but not
+  `Keiro.Migrations.Internal.Definition`; the build exited zero:
+
+  ```text
+  [2 of 5] Compiling Keiro.Migrations ... [Source file changed]
+  exit 0
+  ```
+
+  With the plugin pragma installed, the same unlisted file plus a change to
+  `Keiro.Migrations` forced the embedding module and failed before a stale component could
+  be produced:
+
+  ```text
+  [1 of 5] Compiling Keiro.Migrations.Internal.Definition
+      [Impure plugin forced recompilation]
+  invalid pg-migrate manifest: UnlistedSqlFiles ["0099-stale-embed-drill.sql"]
+  exit 1
+  ```
+
+  Finally, after a successful plugin-enabled build, adding only the unlisted SQL file and
+  changing no Haskell source printed `Up to date` and exited zero. This confirms the
+  documented residual: the plugin protects every build in which Cabal invokes GHC, while
+  the native lockfile test must protect test runs where Cabal invokes no compiler.
+  Date: 2026-07-23
 
 
 ## Decision Log
@@ -91,6 +118,13 @@ gate) runs. The master plan sizes this plan at roughly an afternoon; keep it tha
   fix.
   Date: 2026-07-23
 
+- Decision: Implement the native lockfile against the current 20-file manifest, including
+  migrations 0019 and 0020 that landed after this plan was authored.
+  Rationale: A build-integrity gate must cover the branch being shipped. Keeping the
+  plan-authoring count of 18 would leave the newest snapshot and workflow-failure columns
+  outside review-time checksum coverage.
+  Date: 2026-07-23
+
 
 ## Outcomes & Retrospective
 
@@ -105,8 +139,11 @@ checkouts are read-only references: pg-migrate at `/Users/shinzui/Keikaku/bokuno
 (the local source of the pinned `pg-migrate` 1.1.0.0 family) and kiroku at
 `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`.
 
-`docs/adr/` contains exactly one ADR, `0001-keiro-pgmq-job-processing-telemetry-contract.md`
-(pgmq telemetry) — not relevant; no relevant ADR exists for this work.
+`docs/adr/0002-keiro-owns-live-schema-verification-under-pg-migrate.md` is relevant.
+It separates pg-migrate's ledger guarantee from Keiro-owned default-build gates and states
+that the checks are defense in depth rather than substitutes for one another. This plan
+extends that inventory with compile-time directory revalidation and review-time native
+checksum coverage. ADR 0001 concerns PGMQ telemetry and is unrelated.
 
 **The embed pipeline.** `keiro-migrations/src/Keiro/Migrations/Internal/Definition.hs`
 contains the splice:
@@ -142,8 +179,9 @@ files from `keiro-migrations/migrations/` and assert its SHA-256 equals the entr
 in `keiro-migrations/migrations.lock` under the file's old codd-era timestamped name.
 `migrations.lock` has exactly 16 entries (`sha256␣␣legacy-filename` lines) and is *also*
 embedded as codd-import evidence — see the first Decision Log entry for why it must not
-grow. Nothing pins `0017-schema-management-comment.sql`, `0018.sql`, or any future native
-file. The suite's checksum helper (`checksumText`, using pg-migrate's
+grow. Nothing pins `0017-schema-management-comment.sql` through
+`0020-keiro-workflow-children-failure-reason.sql`, or any future native file. The suite's
+checksum helper (`checksumText`, using pg-migrate's
 `migrationFingerprint`, which is SHA-256) and its lockfile parser (`parseLockfile`) already
 exist in `test/Main.hs` and are reused as-is.
 
@@ -228,7 +266,7 @@ enforcement statement.
 
 Generate `keiro-migrations/migrations.native.lock` in the same two-space format as
 `migrations.lock` (`<64-hex-sha256>␣␣<filename>`, one line per file, in manifest order),
-covering all 18 files currently in `keiro-migrations/migrations/` — the exact generation
+covering all 20 files currently in `keiro-migrations/migrations/` — the exact generation
 command is in Concrete Steps. Register it under `extra-source-files` in
 `keiro-migrations/keiro-migrations.cabal` (next to the existing `migrations.lock` entry).
 
@@ -239,7 +277,7 @@ the file bytes, at test runtime:
 - Parse `keiro-migrations/migrations.native.lock` with the existing `parseLockfile` helper
   (locate it with the existing `findFile` pattern, candidates
   `keiro-migrations/migrations.native.lock` and `migrations.native.lock`).
-- Read the manifest (the suite already does this in "tracks eighteen native files in
+- Read the manifest (the suite already does this in "tracks twenty native files in
   manifest order") and list the directory's `*.sql` files.
 - Assert: the lockfile's filename list equals the manifest's entries exactly and in order;
   the sorted directory `*.sql` listing equals the sorted manifest entries (this is the
@@ -332,8 +370,9 @@ cd ..
 wc -l keiro-migrations/migrations.native.lock
 ```
 
-Expected: `18 keiro-migrations/migrations.native.lock`, entries from
-`0001-keiro-bootstrap.sql` through `0018.sql`.
+Expected: `20 keiro-migrations/migrations.native.lock`, entries from
+`0001-keiro-bootstrap.sql` through
+`0020-keiro-workflow-children-failure-reason.sql`.
 
 Milestone 2, verification loop:
 
@@ -372,7 +411,7 @@ expectation — either failure mode is acceptance; record which fired.)
    and `cabal test keiro-migrations-test` are green from the repository root.
 2. The three reproduction transcripts (hazard, catch, residual) are recorded in Surprises
    & Discoveries with real output.
-3. `keiro-migrations/migrations.native.lock` exists with 18 entries matching
+3. `keiro-migrations/migrations.native.lock` exists with 20 entries matching
    `migrations/manifest` order; it is listed in `extra-source-files`.
 4. The tamper drill (append one comment line to any native SQL file) fails the suite
    naming that file; restoring the file restores green.
@@ -417,3 +456,8 @@ points: `test/Main.hs` gains independent `describe` groups here and in
 (merge-order coordination only), and `docs/user/migration-ownership.md` is owned by this
 plan while `docs/user/migrations.md` and `docs/user/upgrading-to-the-keiro-schema.md`
 belong to the siblings.
+
+
+Revision note (2026-07-23): Inherited the MasterPlan intention and revised the native
+coverage target from the plan-authoring count of 18 migrations to the current 20-file
+manifest after EP-1 established that migrations 0019 and 0020 had landed.
