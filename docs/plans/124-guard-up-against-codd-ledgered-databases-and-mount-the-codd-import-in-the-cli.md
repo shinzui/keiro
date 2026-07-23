@@ -50,7 +50,7 @@ integration test in the default suite.
 ## Progress
 
 - [x] Milestone 1: `preflightFreshLedgerOverCodd` in the library; `up` path refuses codd-ledgered databases without the override; preflight behavior covered by integration tests (blocked on `codd` and `codd_schema` fixtures, clear on empty and imported databases). Completed 2026-07-23: all 25 default migration examples pass; the scratch CLI drill exited 1 naming `codd.sql_migrations`, rejected override use with `status`, and the override reached and completed the 28-migration runner.
-- [ ] Milestone 2: `keiro-migrate import-codd-history` subcommand mounted over `frameworkCoddSourceConfig`/`frameworkCoddHistoryMappings`; manual transcript recorded.
+- [x] Milestone 2: `keiro-migrate import-codd-history` subcommand mounted over `frameworkCoddSourceConfig`/`frameworkCoddHistoryMappings`; manual transcript recorded. Completed 2026-07-23: help exposes all six planned options; the 23-row scratch ledger failed with `CoddConfirmationRequired` before confirmation, imported all 23 mappings with confirmation, reported all 23 as already imported on rerun, and emitted pg-migrate-cli JSON schema version 1.
 - [ ] Milestone 3: end-to-end recovery test for the dominant trap (up → poisoned ledger → recovery → import succeeds → verify green → up green).
 - [ ] Milestone 4: cutover runbook rewritten (preflight, sentinel fixup step, import subcommand, recovery procedure for both variants, post-cutover validation reference); fixup header comment corrected; suite green.
 

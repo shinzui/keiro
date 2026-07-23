@@ -367,6 +367,7 @@ executable keiro-migrate
     , optparse-applicative     >=0.17     && <0.20
     , pg-migrate               ^>=1.1.0.0
     , pg-migrate-cli           ^>=1.1.0.0
+    , pg-migrate-import-codd   ^>=1.1.0.0
     , text                     >=2.0      && <2.2
 
 executable keiro-write-expected-schema
