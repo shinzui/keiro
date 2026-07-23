@@ -126,6 +126,34 @@ implementation. Provide concise evidence.
   paste the twin, or audit and truncate; the advisory names both paths.
   Date: 2026-07-23
 
+- Decision: Inversion becomes **two-phase**: candidates are sought among `Live` edges
+  first, and only when no live edge matches (solve + guard) are `ReplayOnly` edges
+  tried; ambiguity is judged per phase. The static `inversionAmbiguityWarnings` check
+  is correspondingly scoped to same-mode pairs.
+  Rationale: Discovered during plan verification (2026-07-23): the static ambiguity
+  check is deliberately guard-blind — it flags any same-vertex pair whose first
+  outputs share a wire constructor, documented as unable to prove semantic guard
+  disjointness (`keiki/src/Keiki/Core.hs:2180-2221`), and it is default-on and fatal
+  at keiro's boundary — so a live edge plus its replay-only twin would be refused at
+  startup under a single-phase design, regardless of their actually-disjoint guards.
+  Two-phase attribution needs no guard reasoning at all: an event attributable under
+  the current rule attributes there; only unattributable history falls through to the
+  replay-only arms. This also makes the twin robust to imperfectly complemented
+  guards (an overlap cannot create ambiguity across phases, only a deterministic
+  live-first preference).
+  Date: 2026-07-23
+
+- Decision: The computed twin guard is expressed in the existing DSL grammar via a
+  total `complementExpr` — no `ENot` grammar extension.
+  Rationale: `Expr` is `EOr | EAnd | ECmp | EAtom` with no negation constructor
+  (`keiro-dsl/src/Keiro/Dsl/Grammar.hs:238-246`), but negation is eliminable:
+  De Morgan over `EOr`/`EAnd`, comparison-operator flipping (`OpEq`↔`OpNeq`,
+  `OpLt`↔`OpGe`, `OpLe`↔`OpGt`), boolean-literal flip, and `x == false` for a bare
+  boolean atom. So `old ∧ ¬new` is printable as a parse-valid guard today, keeping
+  the advisory paste-ready without touching the expression grammar (and keeping the
+  fold-fingerprint and validator surfaces unchanged for unrelated specs).
+  Date: 2026-07-23
+
 - Decision: Replay-only edges do not stack indefinitely by default guidance — the
   documented lifecycle ends in retirement.
   Rationale: Each tightening can add a twin; over years a state could accrete
@@ -174,6 +202,16 @@ The keiki facts this plan builds on (verified 2026-07-23 against source):
   literal-false-guard test, enabled by default and fatal at keiro's boundary
   (`Core.hs:1853-1864,1888-1891`; forced-check context in
   docs/plans/139's Context section).
+* The static inversion-ambiguity check is guard-blind by design: any same-vertex
+  edge pair sharing a first-output wire constructor is flagged, with the haddock
+  stating it "cannot prove semantic guard disjointness"
+  (`Core.hs:2180-2225`; `checkInversionAmbiguity = True` default at
+  `Core.hs:1840,1861`). This is why inversion must be two-phase (Decision Log) —
+  a single-phase design would have every live/twin pair refused at startup.
+* The DSL guard grammar has no negation constructor — `Expr` is
+  `EOr | EAnd | ECmp | EAtom`, comparisons carry `OpEq/OpNeq/OpLt/OpLe/OpGt/OpGe`
+  (`keiro-dsl/src/Keiro/Dsl/Grammar.hs:238-258`) — but complement is total by
+  structural elimination (Decision Log), so the printed twin re-parses today.
 
 The keiro facts:
 
@@ -243,14 +281,19 @@ Working tree `/Users/shinzui/Keikaku/bokuno/keiki`. In `src/Keiki/Core.hs`:
    (`Core.hs:916,939,1017,1079` — follow every forward consumer of `edgesOut` found by
    grep; the static forward-behaviour checks that model "which edge fires next" count
    as forward consumers) add `mode e == Live` to the candidate filter.
-4. Inversion: `applyEventStreamingEither` (`Core.hs:1222-1229`) deliberately does
-   **not** filter on mode — add a comment saying so and why.
+4. Inversion: `applyEventStreamingEither` (`Core.hs:1191-1229`) becomes two-phase per
+   the Decision Log: compute `matched` over `Live` edges; if empty, recompute over
+   `ReplayOnly` edges; ambiguity (`ReplayAmbiguousInversions`) is judged within the
+   phase that produced candidates. The `ReplayNoInvertingEdge` rejection summary
+   reports both phases' rejections so diagnostics stay complete.
 5. Checks: the dead-edge/reachability check (`Core.hs:1853-1891` region) skips
    `ReplayOnly` edges (forward-unreachable is their definition, not a defect); the
-   inversion-ambiguity checks (`Core.hs:1514,1932` regions) include them (a twin that
-   shadows a live edge must be rejected — the twin's guard must be disjoint from the
-   live edge's, which the removed-region construction guarantees by construction).
-   Audit the remaining validator checks one by one and decide include/exempt with a
+   static `inversionAmbiguityWarnings` (`Core.hs:2188-2225`) adds a same-mode
+   condition to its pair comprehension — cross-mode pairs are resolved by phase order,
+   same-mode pairs stay flagged exactly as today. The hidden-input analysis
+   (`checkHiddenInputs`, `Core.hs:1503-1516`) applies to replay-only edges unchanged
+   (their outputs must still recover their inputs — that is their whole job). Audit
+   the remaining validator checks one by one and decide include/exempt with a
    one-line rationale each; record the table in this plan's Decision Log.
 6. Tests (keiki suite): forward stepping never selects a `ReplayOnly` edge even when
    its guard models the command (command in the removed region is rejected/unmatched);
@@ -333,10 +376,13 @@ by adding:
     ...same emits/writes/goto as the previous version...
 ```
 
-(The twin's guard is the mechanical `old ∧ ¬new`; simplification of the printed
-predicate is nice-to-have, not required — correctness over beauty. The "same
-emits/writes/goto" line is filled with the *old* spec's actual clauses, which diff
-has.) Fixtures: a tightened-guard pair asserting the advisory contains
+(The twin's guard is the mechanical `old ∧ complement(new)`, where `complementExpr`
+eliminates negation inside the existing grammar — De Morgan, comparison-operator
+flip, `x == false` for bare boolean atoms; see the Decision Log. Simplification of
+the printed predicate is nice-to-have, not required — correctness over beauty. The
+"same emits/writes/goto" line is filled with the *old* spec's actual clauses, which
+diff has. The printed guard shown above is illustrative; the real output is whatever
+`complementExpr` yields, and a test asserts it re-parses.) Fixtures: a tightened-guard pair asserting the advisory contains
 `replay-only transition`; a pair where the twin is already present asserting the
 advisory omits the remedy; a `replay-only`-marked spec scaffolding to a machine whose
 generated code carries the mode.
