@@ -116,13 +116,16 @@ What keiro does about it (master plan 24):
 2. **It is checked against real data before traffic switches** — the targeted
    replay audit replays exactly the streams containing the affected event
    types (proportional to the change, not the store) *(docs/plans/142)*.
-3. **The fix is a first-class, one-keyword pattern** — a `replay-only`
-   transition carrying the *removed* guard region keeps history invertible
-   while being excluded from forward execution, so the business rule tightens
-   for the future without reinterpreting or breaking the past
-   *(docs/plans/143)*. The old rule stays visible in the spec as a record of
-   what was once allowed — which is exactly what an event-sourced model should
-   preserve.
+3. **The fix is a first-class, one-keyword pattern — and the tool writes it
+   for you.** A `replay-only` transition carrying the *removed* guard region
+   keeps history invertible while being excluded from forward execution, so
+   the business rule tightens for the future without reinterpreting or
+   breaking the past. The removed region is mechanical (`old-guard ∧
+   ¬new-guard`), so the `diff` advisory prints the paste-ready twin transition
+   whenever it detects a tightening — the developer pastes it or proves via
+   the audit that no stored stream needs it *(planned: docs/plans/143)*. The
+   old rule stays visible in the spec as a record of what was once allowed —
+   which is exactly what an event-sourced model should preserve.
 
 With those three in place the concession reads: *guard changes require one
 explicit keyword and a verdict-guided check, instead of being silently immune
