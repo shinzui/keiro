@@ -11,11 +11,17 @@ event, writes the current schema version, and supplies encode/decode functions:
 ```haskell
 orderCodec :: Codec OrderEvent
 orderCodec = Codec
-  { eventTypes = "OrderPlaced" :| ["PaymentApproved", "OrderPacked", "OrderShipped", "OrderCancelled"]
+  { eventTypes =
+      EventType "OrderPlaced"
+        :| [ EventType "PaymentApproved"
+           , EventType "OrderPacked"
+           , EventType "OrderShipped"
+           , EventType "OrderCancelled"
+           ]
   , schemaVersion = 2
   , encode = ...
   , decode = parseOrderEvent
-  , upcasters = [(1, upcastOrderPlacedV1)]
+  , upcasters = [(1, const upcastOrderPlacedV1)]
   }
 ```
 
@@ -27,6 +33,12 @@ not have one, and returns the current version-2 JSON shape:
 upcastOrderPlacedV1 :: Value -> Either Text Value
 ```
 
+The codec-level `Upcaster` receives the stored event type as well as the JSON
+payload. This single-event helper stays payload-only because `orderCodec`
+stores it as `(1, const upcastOrderPlacedV1)`. For a generated multi-event
+codec, the generated rung dispatches by `EventType` before calling the
+payload-only helper and passes unrelated event kinds through unchanged.
+
 During hydration, `runCommand` calls `decodeRecorded`. That function checks the
 stored event type tag first, reads `schemaVersion` from metadata, runs each
 needed upcaster in order, and only then decodes the current payload. Keiro does
@@ -36,7 +48,8 @@ history.
 The guide test proves the old payload still works:
 
 ```haskell
-decodeRaw orderCodec 1 (object ["orderId" .= ("order-100" :: Text), "qty" .= (3 :: Int)])
+decodeRaw orderCodec (EventType "OrderPlaced") 1
+  (object ["orderId" .= ("order-100" :: Text), "qty" .= (3 :: Int)])
 ```
 
 The expected decoded event is a current record-payload event:
@@ -54,11 +67,17 @@ Use this pattern for production event evolution:
 
 - Keep event type names semantic and stable.
 - Increment `schemaVersion` when the payload shape changes.
-- Add consecutive upcasters from every supported old version.
+- Keep consecutive upcasters from every historical version; they are permanent
+  compatibility code.
 - Test old payloads directly with `decodeRaw` and recorded-event tests with
   `decodeRecorded`.
+- Check in a versioned golden containing the genuine old payload shape.
 - Prefer defaulting new fields over rewriting old event meaning.
 
 The codec test lives in
 [`../../jitsurei/test/Main.hs`](../../jitsurei/test/Main.hs) under
 `Jitsurei codec evolution`.
+
+For the full operational procedure, including deployment ordering and replay
+checks, see
+[Evolution And Replayability](evolution-and-replayability.md).
