@@ -27,7 +27,7 @@ The umbrella `Keiro` module does **not** re-export the workflow surface; import
 
 ```haskell
 data Workflow :: Effect
-data WorkflowOutcome a = Completed a | Suspended | Cancelled | ContinuedAsNew
+data WorkflowOutcome a = Completed a | Suspended | Cancelled | Failed | ContinuedAsNew
 
 runWorkflow     :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
 runWorkflowWith :: (IOE :> es, Store :> es) => WorkflowRunOptions -> WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
@@ -37,6 +37,8 @@ data WorkflowRunOptions = WorkflowRunOptions
   , pageSize       :: Int32
   , metrics        :: Maybe KeiroMetrics
   , tracer         :: Maybe Tracer
+  , activePatches  :: Set PatchId
+  , leaseHeartbeat :: Maybe LeaseHeartbeat
   }
 defaultWorkflowRunOptions :: WorkflowRunOptions
 ```
@@ -47,6 +49,12 @@ so a resumed run honours the same options. Set option fields with the generic-le
 label (`opts & #snapshotPolicy .~ p`, `opts & #metrics .~ Just m`) — a bare record
 update is ambiguous because `snapshotPolicy` collides with keiki's `EventStream`
 field of the same name.
+
+The resume worker supplies `leaseHeartbeat` automatically and renews before
+fresh step actions and unresolved await arms. Leave it `Nothing` for direct
+runs. Size `WorkflowResumeOptions.leaseTtl` above the longest single action or
+arm; a lost lease throws `WorkflowLeaseLost` before further side effects and is
+counted as a lease skip rather than a crash.
 
 ## The four primitives
 

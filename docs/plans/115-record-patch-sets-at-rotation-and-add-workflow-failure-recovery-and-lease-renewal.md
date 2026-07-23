@@ -41,10 +41,10 @@ This is the plan-authoring-time checklist of the work. Update it at every stoppi
 - [x] (2026-07-23 21:15Z) M2: the `WorkflowFailed` marker append switched to a store-generated event id (re-failure after resurrection hazard — see Decision Log).
 - [x] (2026-07-23 21:15Z) M2: resurrect-then-complete and resurrect-then-refail tests pass; full suite green (`cabal test keiro-test`: 370 examples, 0 failures).
 - [x] (2026-07-23 21:15Z) M2: `docs/guides/durable-workflows.md` gains the failure/retry/resurrection section (backoff math, `maxAttempts` sizing, API usage).
-- [ ] M3: `LeaseHeartbeat` option + `renewInstanceLeaseTx` + step-boundary renewal + `WorkflowLeaseLost` implemented.
-- [ ] M3: resume worker threads its owner/ttl into run options and treats a lost lease as a skip, not a crash.
-- [ ] M3: heartbeat-keeps-exclusivity and lost-lease-stops tests pass; `leaseTtl` haddock and guide updated; full suite green.
-- [ ] `CHANGELOG.md` entry written; master plan 16 Progress boxes for EP-4 ticked and registry status updated.
+- [x] (2026-07-23 21:25Z) M3: `LeaseHeartbeat` option + `renewInstanceLeaseTx` + step-boundary renewal + `WorkflowLeaseLost` implemented.
+- [x] (2026-07-23 21:25Z) M3: resume worker threads its owner/ttl into run options and treats a lost lease as a skip, not a crash.
+- [x] (2026-07-23 21:25Z) M3: heartbeat-keeps-exclusivity and lost-lease-stops tests pass; `leaseTtl` haddock and guide updated; full suite green (`cabal test keiro-test`: 372 examples, 0 failures).
+- [x] (2026-07-23 21:25Z) `CHANGELOG.md` entry and ADR 8 written; master plan 16 Progress boxes ticked and registry status updated.
 
 
 ## Surprises & Discoveries
@@ -62,6 +62,13 @@ implementation. Provide concise evidence.
   store-generated id, and the instance could be resurrected again. Child-link
   revival and the not-failed/not-found guards passed in the same focused group;
   the full suite passed 370 examples.
+- Milestone 3 validation (2026-07-23): renewing at a fresh boundary extended a
+  deliberately short original lease before a slow action, so a second owner
+  could not claim it. A direct run with a stolen lease threw
+  `WorkflowLeaseLost` before either side effect, while a resume-worker run that
+  lost ownership between its first and second steps counted one `leaseSkipped`,
+  ran no second side effect, and left `attempts = 0`. The full suite passed 372
+  examples.
 
 
 ## Decision Log
@@ -116,13 +123,19 @@ contract as a candidate ADR). Keep task-local execution details here.
   failure marker; immutable journal history remains intact. Fresh failure event
   ids make repeated fail/resurrect cycles safe, and the operator guide documents
   retry timing, attempt sizing, and parent/child consequences.
+- Milestone 3 (2026-07-23): resume-worker ownership now survives multi-step
+  advances through renewal before every fresh step action and unresolved await
+  arm. Lost ownership stops the run before further side effects and is
+  classified as a lease skip rather than a crash. Direct runs remain unchanged
+  under the `Nothing` default. ADR 8 records the resurrection and immutable
+  failure-history contract; all three lifecycle findings are closed.
 
 
 ## Context and Orientation
 
 This section is self-contained.
 
-ADR context: `docs/adr/` contains only `0001-keiro-pgmq-job-processing-telemetry-contract.md` (pgmq job-processing telemetry) — no relevant ADR exists for this work. The master plan lists "the resurrection/terminal-status contract" as an ADR to distill from this plan at completion.
+ADR context at completion: `docs/adr/0008-workflow-failure-history-is-immutable-and-derived-terminal-state-is-revivable.md` records the resurrection and terminal-status contract distilled from this plan. ADRs 5–7 record the complementary snapshot, wake-source, and sleep lifecycle decisions from the sibling plans.
 
 ### The moving parts
 

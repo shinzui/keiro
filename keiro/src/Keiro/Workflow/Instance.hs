@@ -15,6 +15,8 @@ module Keiro.Workflow.Instance (
     markInstanceSuspended,
     lookupInstance,
     claimInstance,
+    renewInstanceLeaseTx,
+    renewInstanceLease,
     releaseInstance,
     recordCrashTx,
     resetInstanceAttempts,
@@ -92,6 +94,35 @@ claimInstance owner ttl name@(WorkflowName nameText) wid@(WorkflowId widText) = 
             <$> Tx.statement
                 (widText, nameText, owner, now, addUTCTime ttl now)
                 claimInstanceStmt
+
+{- | Extend an instance lease only when @owner@ still holds it.
+
+The caller supplies one clock reading so @updated_at@ and the new expiry share
+the same boundary. Returns 'False' after ownership is lost or the row vanishes.
+-}
+renewInstanceLeaseTx ::
+    Text ->
+    NominalDiffTime ->
+    UTCTime ->
+    Text ->
+    Text ->
+    Tx.Transaction Bool
+renewInstanceLeaseTx owner ttl now wid name =
+    Tx.statement
+        (wid, name, owner, now, addUTCTime ttl now)
+        renewInstanceLeaseStmt
+
+-- | Effect-level wrapper around 'renewInstanceLeaseTx' using the current time.
+renewInstanceLease ::
+    (IOE :> es, Store :> es) =>
+    Text ->
+    NominalDiffTime ->
+    WorkflowName ->
+    WorkflowId ->
+    Eff es Bool
+renewInstanceLease owner ttl (WorkflowName name) (WorkflowId wid) = do
+    now <- liftIO getCurrentTime
+    runTransaction (renewInstanceLeaseTx owner ttl now wid name)
 
 releaseInstance :: (Store :> es) => Text -> Bool -> WorkflowName -> WorkflowId -> Eff es ()
 releaseInstance owner progressed (WorkflowName name) (WorkflowId wid) =
@@ -242,6 +273,26 @@ claimInstanceStmt =
             (E.param (E.nonNullable E.timestamptz))
         )
         (D.rowMaybe (D.column (D.nonNullable D.bool)))
+
+renewInstanceLeaseStmt :: Statement (Text, Text, Text, UTCTime, UTCTime) Bool
+renewInstanceLeaseStmt =
+    preparable
+        """
+        UPDATE keiro.keiro_workflows
+        SET lease_expires_at = $5,
+            updated_at = $4
+        WHERE workflow_id = $1
+          AND workflow_name = $2
+          AND leased_by = $3
+        """
+        ( contrazip5
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.timestamptz))
+            (E.param (E.nonNullable E.timestamptz))
+        )
+        ((> 0) <$> D.rowsAffected)
 
 releaseInstanceStmt :: Statement (Text, Text, Text, Bool) ()
 releaseInstanceStmt =

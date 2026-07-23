@@ -39,7 +39,7 @@ EP-4 (plan 115) owns lifecycle policy: recording the patch set atomically inside
 
 Alternatives considered. A severity-ordered decomposition was rejected for the same reason MasterPlan 9 rejected it: it couples unrelated modules in every plan. Folding EP-2 into EP-1 (both touch await/arm paths) was rejected because EP-1 must stay small and reviewable — it changes replay semantics on the hot path — while EP-2 carries a migration. Merging EP-3 and EP-4 (both touch rotation-adjacent code) was rejected because EP-3's fixes are mechanical correctness repairs with crash-window tests, while EP-4 makes policy decisions (resurrection semantics, lease-renewal cadence) that deserve their own Decision Log.
 
-ADR context at authoring: `docs/adr/` contained only `0001-keiro-pgmq-job-processing-telemetry-contract.md`, which does not touch the workflow engine. Since authoring, `docs/adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md` established the complementary rule that snapshots are advisory cached seeds whose compatibility is checked separately from completeness. EP-1 produced `docs/adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md` for the invariant that a workflow snapshot seed plus exclusive tail read must remain recoverable from the step index. EP-2 produced `docs/adr/0006-workflow-wake-source-rows-govern-exposure-and-terminal-races.md` for the durable row-lifecycle and terminal-race contract. EP-3 produced `docs/adr/0007-workflow-sleep-timers-are-generation-owned-lifecycle-state.md` for generation-pinned firing, first-arm ownership of `wake_after`, and terminal/GC timer arbitration. The resurrection/terminal-status contract remains a candidate ADR for EP-4.
+ADR context at authoring: `docs/adr/` contained only `0001-keiro-pgmq-job-processing-telemetry-contract.md`, which does not touch the workflow engine. Since authoring, `docs/adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md` established the complementary rule that snapshots are advisory cached seeds whose compatibility is checked separately from completeness. EP-1 produced `docs/adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md` for the invariant that a workflow snapshot seed plus exclusive tail read must remain recoverable from the step index. EP-2 produced `docs/adr/0006-workflow-wake-source-rows-govern-exposure-and-terminal-races.md` for the durable row-lifecycle and terminal-race contract. EP-3 produced `docs/adr/0007-workflow-sleep-timers-are-generation-owned-lifecycle-state.md` for generation-pinned firing, first-arm ownership of `wake_after`, and terminal/GC timer arbitration. EP-4 produced `docs/adr/0008-workflow-failure-history-is-immutable-and-derived-terminal-state-is-revivable.md` for the resurrection and terminal-status contract.
 
 
 ## Exec-Plan Registry
@@ -49,7 +49,7 @@ ADR context at authoring: `docs/adr/` contained only `0001-keiro-pgmq-job-proces
 | 1 | Make workflow journal snapshots wake-safe with a step-index fallback on await | docs/plans/112-make-workflow-journal-snapshots-wake-safe-with-a-step-index-fallback-on-await.md | None | None | Complete |
 | 2 | Deliver child failure and awakeable signals across generations and races | docs/plans/113-deliver-child-failure-and-awakeable-signals-across-generations-and-races.md | None | None | Complete |
 | 3 | Pin sleep firing to its generation and make GC cancel scheduled sleep timers | docs/plans/114-pin-sleep-firing-to-its-generation-and-make-gc-cancel-scheduled-sleep-timers.md | None | None | Complete |
-| 4 | Record patch sets at rotation and add workflow failure recovery and lease renewal | docs/plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md | None | EP-2 | In Progress |
+| 4 | Record patch sets at rotation and add workflow failure recovery and lease renewal | docs/plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md | None | EP-2 | Complete |
 
 
 ## Dependency Graph
@@ -84,7 +84,7 @@ Cross-plan decision recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-
 - [x] (2026-07-23 20:57Z) EP-3: GC cancels/deletes all sleep timers for terminal instances; orphan-fire resurrection test passes.
 - [x] (2026-07-23 21:04Z) EP-4: Patch set recorded atomically in `rotateGeneration`; pre-first-run-append test passes.
 - [x] (2026-07-23 21:15Z) EP-4: `resurrectFailedWorkflow` operator API shipped and documented.
-- [ ] EP-4: Lease renewal during advance implemented; slow-advance duplicate-execution test passes.
+- [x] (2026-07-23 21:25Z) EP-4: Lease renewal during advance implemented; slow-advance duplicate-execution test passes.
 
 
 ## Surprises & Discoveries
@@ -104,6 +104,12 @@ Cross-plan decision recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-
   `WorkflowFailed` can safely use store-generated event ids. Two failures on
   the same resurrected generation produced distinct journal ids while all 370
   tests remained green.
+- EP-4 milestone 3 (2026-07-23): a boundary heartbeat must renew for longer
+  than the action that follows it; it cannot make an arbitrarily long action
+  exclusive. The focused test proves renewal prevents takeover when
+  `leaseTtl` exceeds that action, and the guide now makes this sizing rule
+  explicit. Lost ownership is detected before the next fresh boundary and
+  consumes no crash attempt.
 
 
 ## Decision Log
@@ -139,6 +145,13 @@ Cross-plan decision recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-
   firing, rotation, and collection.
   Date: 2026-07-23
 
+- Decision: Record the EP-4 resurrection and terminal-status rule in
+  `docs/adr/0008-workflow-failure-history-is-immutable-and-derived-terminal-state-is-revivable.md`.
+  Rationale: Preserving append-only failure history while transactionally
+  reviving its derived instance, step-index, and child-link state constrains
+  every future workflow recovery tool.
+  Date: 2026-07-23
+
 
 ## Outcomes & Retrospective
 
@@ -150,13 +163,16 @@ Cross-plan decision recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-
   arbitration now decides journal delivery from transactional state. ADR 6
   records the shared lifecycle rule.
 - EP-2 validation finished with 10 migration examples and 360 workflow examples,
-  all passing. EP-3 and EP-4 remain outstanding.
+  all passing. EP-3 and EP-4 were still outstanding at that milestone.
 - EP-3 closed stale cross-generation sleep firing, wake-hint postponement, and
   post-GC resurrection without a migration. Focused crash-window tests and all
   366 workflow examples pass; ADR 7 records the durable timer lifecycle.
-  EP-4 remains outstanding.
-- EP-4 milestones 1 and 2 now make patch recording immune to pre-first-run wake
-  appends and provide transactional terminal-failure resurrection, including
-  failed-child revival and safe repeated failure on one generation. The full
-  suite passes 370 examples; lease renewal remains before EP-4 and the initiative
-  are complete.
+  EP-4 was still outstanding at that milestone.
+- EP-4 makes patch recording immune to pre-first-run wake appends, provides
+  transactional terminal-failure resurrection (including failed-child revival
+  and safe repeated failure on one generation), and renews workflow leases at
+  fresh side-effect boundaries. Lost leases stop cleanly without a crash
+  attempt. ADR 8 records the failure-history contract.
+- The initiative closes all ten verified durable-execution findings across its
+  four child plans. The final `cabal test keiro-test` run passes 372 examples
+  with 0 failures; no work remains in the Exec-Plan registry.

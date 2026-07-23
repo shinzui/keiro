@@ -53,10 +53,11 @@ Discovery is the 'findUnfinishedWorkflowIds' index query plus the child-row
 seed query. Each candidate is claimed through an expiry-based row lease in
 @keiro_workflows@ before it is advanced. A live foreign lease skips only that
 instance and increments 'leaseSkipped'; a dead worker's lease becomes claimable
-after 'leaseTtl'. The lease prevents duplicate steady-state work, while the
-journal append path still serializes same-step writers so lease expiry races
-converge on one recorded result. There is __no kiroku @wf:@ prefix
-subscription__ and no session-level advisory lock.
+after 'leaseTtl'. Each fresh workflow boundary renews the lease before running
+side effects. The lease prevents duplicate steady-state work, while the journal
+append path still serializes same-step writers so lease expiry races converge
+on one recorded result. There is __no kiroku @wf:@ prefix subscription__ and no
+session-level advisory lock.
 -}
 module Keiro.Workflow.Resume (
     -- * Registry
@@ -98,7 +99,7 @@ import Data.UUID.V4 qualified as UUIDv4
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
 import Effectful.Error.Static qualified as Error
-import Effectful.Exception (catchSync, finally, throwIO)
+import Effectful.Exception (catch, catchSync, finally, throwIO)
 import Keiro.Prelude
 import Keiro.Telemetry (
     recordWorkflowAwakeablesPending,
@@ -110,10 +111,12 @@ import Keiro.Telemetry (
 import Keiro.Wake (WakeSignal (..), wakeSignalFromStore)
 import Keiro.Workflow (
     JournalAppendOutcome (..),
+    LeaseHeartbeat (..),
     Workflow,
     WorkflowError (..),
     WorkflowId (..),
     WorkflowJournalEvent (..),
+    WorkflowLeaseLost (..),
     WorkflowName (..),
     WorkflowOutcome (..),
     WorkflowRunOptions,
@@ -175,7 +178,10 @@ data WorkflowResumeOptions = WorkflowResumeOptions
     , maxAttempts :: !Int
     -- ^ Workflow-level synchronous exceptions before terminal failure.
     , leaseTtl :: !NominalDiffTime
-    -- ^ How long a claimed workflow instance stays leased if the worker dies mid-advance.
+    {- ^ How long a claimed workflow instance stays leased without reaching
+    another fresh workflow boundary. It bounds dead-worker recovery time and
+    must exceed the longest single step action or await arm.
+    -}
     , logEvent :: !(ResumeLogEvent -> IO ())
     -- ^ Per-worker logging hook. Defaults to a compact stderr renderer.
     }
@@ -341,8 +347,9 @@ resumeWorkflowsOnce opts registry = do
                                 attempt <-
                                     Error.catchError
                                         @StoreError
-                                        (AdvOk <$> driveInstance name wid runDef)
+                                        (AdvOk <$> driveInstance owner name wid runDef)
                                         (\_ e -> pure (AdvTransient e))
+                                        `catch` (\WorkflowLeaseLost -> pure AdvLeaseLost)
                                         `catchSync` (pure . AdvCrashed)
                                 recordWorkflowResumed mMetrics 1
                                 (acc', progressed) <- handleAttempt acc name wid attempt
@@ -352,12 +359,16 @@ resumeWorkflowsOnce opts registry = do
                             `finally` do
                                 progressed <- liftIO (readIORef progressedRef)
                                 releaseInstance owner progressed name wid
-    driveInstance :: (Aeson.ToJSON a) => WorkflowName -> WorkflowId -> (WorkflowId -> Eff (Workflow : es) a) -> Eff es (WorkflowOutcome a)
-    driveInstance name@(WorkflowName wnameText) wid@(WorkflowId widText) runDef = do
+    driveInstance :: (Aeson.ToJSON a) => Text -> WorkflowName -> WorkflowId -> (WorkflowId -> Eff (Workflow : es) a) -> Eff es (WorkflowOutcome a)
+    driveInstance owner name@(WorkflowName wnameText) wid@(WorkflowId widText) runDef = do
         mChild <- lookupChild widText wnameText
+        let runOpts =
+                runOptions opts
+                    & #leaseHeartbeat
+                    .~ Just LeaseHeartbeat{owner, ttl = leaseTtl opts}
         case mChild of
-            Just _ -> runChildWorkflow (runOptions opts) name wid (runDef wid)
-            Nothing -> runWorkflowWith (runOptions opts) name wid (runDef wid)
+            Just _ -> runChildWorkflow runOpts name wid (runDef wid)
+            Nothing -> runWorkflowWith runOpts name wid (runDef wid)
     handleAttempt :: ResumeSummary -> WorkflowName -> WorkflowId -> AdvanceResult a -> Eff es (ResumeSummary, Bool)
     handleAttempt acc name@(WorkflowName wnameText) wid@(WorkflowId widText) = \case
         AdvOk outcome -> do
@@ -367,6 +378,9 @@ resumeWorkflowsOnce opts registry = do
             liftIO $ logEvent opts (ResumeTransientError wnameText widText rendered)
             recordWorkflowResumeErrors mMetrics 1
             pure (acc{resumed = resumed acc + 1, transientErrors = transientErrors acc + 1}, False)
+        AdvLeaseLost -> do
+            recordWorkflowLeaseSkipped mMetrics 1
+            pure (acc{leaseSkipped = leaseSkipped acc + 1}, False)
         AdvCrashed err -> do
             let rendered = Text.pack (show err)
             attempt <- runTransaction (recordCrashTx widText wnameText rendered)
@@ -388,6 +402,7 @@ resumeWorkflowsOnce opts registry = do
 data AdvanceResult a
     = AdvOk !(WorkflowOutcome a)
     | AdvTransient !StoreError
+    | AdvLeaseLost
     | AdvCrashed !Exception.SomeException
 
 appendFailedChildAndWakeParent ::

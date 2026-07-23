@@ -30,6 +30,14 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Added
 
+- Durable workflows can be returned from terminal failure with
+  `Keiro.Workflow.Instance.resurrectFailedWorkflow`. The transactional API
+  resets retry/lease state, removes only the derived current-generation failure
+  marker, revives failed child links, and preserves append-only failure history.
+- `WorkflowRunOptions` gains the additive `leaseHeartbeat` option plus the
+  `LeaseHeartbeat` and `WorkflowLeaseLost` contracts. Resume workers populate it
+  automatically and classify mid-run lease loss as `leaseSkipped` without
+  consuming a crash attempt.
 - `keiro-dsl` now lowers same-version event upcasters into one
   `EventType`-dispatching rung, so unrelated event kinds pass through
   unchanged, and supports `diff --emit-goldens DIR` plus
@@ -61,6 +69,13 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Fixed
 
+- Active workflow patch sets are now recorded atomically with the seed when
+  `continueAsNew` opens a generation, so an asynchronous wake append before the
+  first run cannot silently force every patch decision to the old branch.
+- Resume-worker leases renew before fresh step actions and unresolved await
+  arms. A healthy multi-step advance no longer loses ownership merely because
+  its original claim aged past `leaseTtl`; operators should size the TTL above
+  the longest individual action or arm.
 - Workflow sleep timer fires are pinned to the generation that armed them,
   including legacy timer payloads recovered from deterministic timer ids. A
   stale re-fire after `continueAsNew` can no longer resolve a same-named sleep

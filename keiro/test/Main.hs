@@ -201,6 +201,7 @@ import Keiro.Wake (
     wakeSignalFromStore,
  )
 import Keiro.Workflow (
+    LeaseHeartbeat (..),
     PatchId (..),
     StepName (..),
     Workflow,
@@ -208,6 +209,7 @@ import Keiro.Workflow (
     WorkflowId (..),
     WorkflowIdentityError (..),
     WorkflowJournalEvent (StepRecorded, WorkflowCancelled, WorkflowCompleted, WorkflowContinuedAsNew, WorkflowFailed),
+    WorkflowLeaseLost (..),
     WorkflowName (..),
     WorkflowOutcome (..),
     appendJournalEntry,
@@ -7275,6 +7277,112 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             summary2 `shouldBe` emptyResumeSummary
             readIORef counter >>= \c -> c `shouldBe` 3
 
+    describe "Keiro.Workflow lease renewal" $ around (withFreshStore fixture) $ do
+        it "renews before a slow fresh step so the original lease cannot be stolen" $ \storeHandle -> do
+            attemptedClaim <- newIORef Nothing
+            let name = WorkflowName "lease-heartbeat"
+                wid = WorkflowId "heartbeat-1"
+                runOpts =
+                    defaultWorkflowRunOptions
+                        & #leaseHeartbeat
+                        .~ Just LeaseHeartbeat{owner = "owner-a", ttl = 60}
+                body =
+                    step (StepName "slow-boundary") $ do
+                        liftIO (threadDelay 300_000)
+                        claimed <-
+                            Instance.claimInstance
+                                "owner-b"
+                                60
+                                name
+                                wid
+                        liftIO (writeIORef attemptedClaim (Just claimed))
+                        pure claimed
+            Right claimedA <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-a" 0.2 name wid
+            claimedA `shouldBe` True
+            outcome <- Store.runStoreIO storeHandle $ runWorkflowWith runOpts name wid body
+            outcome `shouldBe` Right (Completed False)
+            readIORef attemptedClaim `shouldReturn` Just False
+            Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            row ^. #leasedBy `shouldBe` Just "owner-a"
+
+        it "stops at a lost lease boundary and the resume worker records no crash" $ \storeHandle -> do
+            let directName = WorkflowName "lease-lost-direct"
+                directId = WorkflowId "lost-direct-1"
+                directOpts =
+                    defaultWorkflowRunOptions
+                        & #leaseHeartbeat
+                        .~ Just LeaseHeartbeat{owner = "owner-a", ttl = 60}
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry directName directId (StepRecorded "seed" (toJSON True) now)
+            Right claimedA <- Store.runStoreIO storeHandle $ Instance.claimInstance "owner-a" 60 directName directId
+            claimedA `shouldBe` True
+            leaseUntil <- addUTCTime 60 <$> getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement
+                            ("lost-direct-1", "lease-lost-direct", "owner-b", leaseUntil)
+                            forceWorkflowLeaseStmt
+            firstDirectEffect <- newIORef (0 :: Int)
+            secondDirectEffect <- newIORef (0 :: Int)
+            direct <-
+                try
+                    ( Store.runStoreIO storeHandle $
+                        runWorkflowWith directOpts directName directId $ do
+                            _ <- step (StepName "first") (liftIO (incrementAndRead firstDirectEffect))
+                            step (StepName "second") (liftIO (incrementAndRead secondDirectEffect))
+                    ) ::
+                    IO
+                        ( Either
+                            WorkflowLeaseLost
+                            (Either Store.StoreError (WorkflowOutcome Int))
+                        )
+            direct `shouldBe` Left WorkflowLeaseLost
+            readIORef firstDirectEffect `shouldReturn` 0
+            readIORef secondDirectEffect `shouldReturn` 0
+            directFinishedAt <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry directName directId (WorkflowCompleted directFinishedAt)
+
+            firstWorkerEffect <- newIORef (0 :: Int)
+            secondWorkerEffect <- newIORef (0 :: Int)
+            let workerName = WorkflowName "lease-lost-worker"
+                workerId = WorkflowId "lost-worker-1"
+                workerOpts =
+                    defaultWorkflowResumeOptions
+                        & #logEvent
+                        .~ const (pure ())
+                registry =
+                    Map.singleton workerName $
+                        WorkflowDef $ \_ -> do
+                            _ <-
+                                step (StepName "first") $ do
+                                    value <- liftIO (incrementAndRead firstWorkerEffect)
+                                    expires <- liftIO (addUTCTime 60 <$> getCurrentTime)
+                                    Store.runTransaction $
+                                        Tx.statement
+                                            ("lost-worker-1", "lease-lost-worker", "owner-b", expires)
+                                            forceWorkflowLeaseStmt
+                                    pure value
+                            step (StepName "second") (liftIO (incrementAndRead secondWorkerEffect))
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry workerName workerId (StepRecorded "seed" (toJSON True) now)
+            Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce workerOpts registry
+            summary
+                `shouldBe` emptyResumeSummary
+                    { discovered = 1
+                    , leaseSkipped = 1
+                    }
+            readIORef firstWorkerEffect `shouldReturn` 1
+            readIORef secondWorkerEffect `shouldReturn` 0
+            Right (Just row) <- Store.runStoreIO storeHandle $ Instance.lookupInstance workerName workerId
+            row ^. #attempts `shouldBe` 0
+            row ^. #leasedBy `shouldBe` Just "owner-b"
+
     describe "Keiro.Workflow continue-as-new" $ around (withFreshStore fixture) $ do
         -- EP-48 headline proof (Checks 1 & 2): a 300-step rolling-total workflow that
         -- rotates every 50 steps keeps each physical generation journal bounded by
@@ -9449,6 +9557,25 @@ effect, so replay can be proven by watching the counter).
 -}
 incrementAndRead :: IORef Int -> IO Int
 incrementAndRead ref = atomicModifyIORef' ref (\n -> (n + 1, n + 1))
+
+forceWorkflowLeaseStmt :: Statement (Text, Text, Text, UTCTime) ()
+forceWorkflowLeaseStmt =
+    preparable
+        """
+        UPDATE keiro.keiro_workflows
+        SET leased_by = $3,
+            lease_expires_at = $4,
+            updated_at = now()
+        WHERE workflow_id = $1
+          AND workflow_name = $2
+        """
+        ( contrazip4
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.timestamptz))
+        )
+        D.noResult
 
 {- | Six numbered steps, each returning its index after bumping a shared
 counter. The counter lets a re-hydration prove the steps short-circuit

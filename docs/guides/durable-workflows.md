@@ -250,6 +250,20 @@ subscription, so the runtime has no upstream dependency. An unfinished workflow
 whose name is absent from the registry is surfaced as `unknownName`, never
 silently dropped.
 
+### Lease sizing and lease loss
+
+The resume worker claims each instance for `leaseTtl` and passes those
+coordinates to the workflow as a `LeaseHeartbeat`. Before every fresh step
+action and unresolved await arm, the runtime renews the lease for another full
+TTL. Replay hits do not write or renew.
+
+Set `leaseTtl` longer than the slowest single step action or await arm, including
+its normal timeout. It no longer needs to cover the entire multi-step advance,
+because each fresh boundary renews it. If another worker owns the row at a
+boundary, the runtime throws `WorkflowLeaseLost` before running further side
+effects; the resume worker counts that as `leaseSkipped` and consumes no crash
+attempt. Direct `runWorkflow` calls use no heartbeat by default.
+
 ### Failure, retries, and resurrection
 
 A synchronous exception escaping a workflow body consumes one workflow attempt.
@@ -322,7 +336,14 @@ pass.
 For long journals, enable snapshots so a resume does not replay every step:
 
 ```haskell
-data WorkflowRunOptions = WorkflowRunOptions { snapshotPolicy :: SnapshotPolicy WorkflowState, pageSize :: Int32, metrics :: Maybe KeiroMetrics, tracer :: Maybe Tracer }
+data WorkflowRunOptions = WorkflowRunOptions
+  { snapshotPolicy :: SnapshotPolicy WorkflowState
+  , pageSize        :: Int32
+  , metrics         :: Maybe KeiroMetrics
+  , tracer          :: Maybe Tracer
+  , activePatches   :: Set PatchId
+  , leaseHeartbeat  :: Maybe LeaseHeartbeat
+  }
 runWorkflowWith :: (IOE :> es, Store :> es) => WorkflowRunOptions -> WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
 ```
 
@@ -356,6 +377,9 @@ so a resumed run instruments itself. See [Operations](../user/operations.md).
 - Run `resumeWorkflowsOnce` on a polling loop in production (the same
   claim-process-commit-poll shape as the timer and outbox workers) so suspended
   workflows resume after their waits resolve and after process restarts.
+- Set `leaseTtl` above the longest individual step or await-arm timeout. A live
+  worker renews at fresh boundaries; expiry remains the dead-worker takeover
+  delay.
 - Repair a stuck awakeable with `cancelAwakeable awkId`; repair a parent stuck on
   a never-finishing child by driving or cancelling the child.
 - Enable a `snapshotPolicy` for workflows with long journals.

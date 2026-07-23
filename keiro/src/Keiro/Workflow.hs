@@ -84,6 +84,7 @@ module Keiro.Workflow (
     runWorkflow,
     runWorkflowWith,
     WorkflowRunOptions (..),
+    LeaseHeartbeat (..),
     defaultWorkflowRunOptions,
 
     -- * Journal append helpers (used by wake-source plans)
@@ -95,6 +96,7 @@ module Keiro.Workflow (
 
     -- * Errors thrown by the runtime
     WorkflowError (..),
+    WorkflowLeaseLost (..),
 
     -- * Re-exported core contracts
     module Keiro.Workflow.Types,
@@ -123,6 +125,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
+import Data.Time (NominalDiffTime)
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Dispatch (..), DispatchOf, Eff, Effect, IOE, (:>))
 import Effectful.Dispatch.Dynamic (EffectHandler, interpret, localSeqUnlift, send)
@@ -149,6 +152,7 @@ import Keiro.Telemetry (
 import Keiro.Workflow.Instance (
     WorkflowStatus (..),
     markInstanceSuspended,
+    renewInstanceLease,
     upsertInstanceTx,
  )
 import Keiro.Workflow.Schema (WorkflowStepRow (..), clearWorkflowWakeAfterTx, currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lockWorkflowStepTx, lookupStepResult, lookupStepResultTx, recordStepTx, setWorkflowWakeAfterTx, stepExists)
@@ -302,6 +306,17 @@ patch pid = send (Patch pid)
 -- Per-run options
 -- ---------------------------------------------------------------------------
 
+{- | Lease renewal coordinates for a resume-worker-owned workflow run.
+
+The runtime renews this lease immediately before each fresh step action and
+unresolved await arm. Direct 'runWorkflow' calls leave it 'Nothing'.
+-}
+data LeaseHeartbeat = LeaseHeartbeat
+    { owner :: !Text
+    , ttl :: !NominalDiffTime
+    }
+    deriving stock (Generic, Eq, Show)
+
 {- | Options for a single workflow run. This is the canonical home for
 per-run options across the v2 initiative — EP-41 adds the snapshot policy,
 EP-44 adds metrics/tracer fields, all additive. Extend it additively; never
@@ -329,6 +344,11 @@ data WorkflowRunOptions = WorkflowRunOptions
     workflow generation records this set once under 'patchSetStepName', and
     each 'patch' call returns 'True' iff its id was in that recorded set.
     -}
+    , leaseHeartbeat :: !(Maybe LeaseHeartbeat)
+    {- ^ Resume-worker lease coordinates. When present, fresh workflow
+    boundaries renew the lease and throw 'WorkflowLeaseLost' if another owner
+    has taken it. 'Nothing' keeps direct runs free of lease traffic.
+    -}
     }
     deriving stock (Generic)
 
@@ -344,6 +364,7 @@ defaultWorkflowRunOptions =
         , metrics = Nothing
         , tracer = Nothing
         , activePatches = Set.empty
+        , leaseHeartbeat = Nothing
         }
 
 -- ---------------------------------------------------------------------------
@@ -368,6 +389,17 @@ data WorkflowError
     deriving stock (Eq, Show)
 
 instance Exception WorkflowError
+
+{- | The resume worker no longer owns the workflow instance lease.
+
+Thrown before a fresh step action or unresolved await arm, so the run stops
+before performing further side effects. Resume workers classify this as a
+lease skip rather than a workflow crash.
+-}
+data WorkflowLeaseLost = WorkflowLeaseLost
+    deriving stock (Eq, Show)
+
+instance Exception WorkflowLeaseLost
 
 -- | Internal sentinel thrown to unwind a suspended run up to 'runWorkflowWith'.
 data WorkflowSuspend = WorkflowSuspend
@@ -561,6 +593,7 @@ runWorkflowWith options name wid action = do
                     recordWorkflowStepReplayed mMetrics 1
                     decodeStored key stored
                 Nothing -> do
+                    renewLease
                     checkCancellationPending name wid gen
                     a <- localSeqUnlift env (\unlift -> unlift act)
                     checkCancellationPending name wid gen
@@ -619,6 +652,7 @@ runWorkflowWith options name wid action = do
                             recordWorkflowStepReplayed mMetrics 1
                             decodeStored key stored
                         Nothing -> do
+                            renewLease
                             checkCancellationPending name wid gen
                             localSeqUnlift env (\unlift -> unlift arm)
                             throwIO WorkflowSuspend
@@ -666,6 +700,16 @@ runWorkflowWith options name wid action = do
                             decodeStored key stored
                         JournalAppendConflict err ->
                             throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+      where
+        renewLease =
+            for_ (options ^. #leaseHeartbeat) $ \heartbeat -> do
+                renewed <-
+                    renewInstanceLease
+                        (heartbeat ^. #owner)
+                        (heartbeat ^. #ttl)
+                        name
+                        wid
+                unless renewed (throwIO WorkflowLeaseLost)
 
 -- | Decode a stored journal result into the type the caller expects.
 decodeStored :: (Aeson.FromJSON a) => Text -> Aeson.Value -> Eff es a
