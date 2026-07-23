@@ -36,8 +36,9 @@ today (aggregate codec bumps are not rolling-deploy-safe at all — stop-the-wor
 blue/green cutover, with roll-forward-only as the rollback corollary;
 workers-before-producers for versioned job codecs; drain-before-deploy for decide changes
 over process-manager/router redelivery windows; the direct-write metadata hazard;
-unversioned timer payloads; manual consumer-side integration versioning; and the workflow
-step-result crash ladder); and
+unversioned timer payloads; manual consumer-side integration versioning; the workflow
+step-result crash ladder; and the pre-deploy replay audit as the standard gate for any
+transducer change, cited from docs/plans/142 as planned until it lands); and
 every touched document cross-links the companion guide
 `docs/guides/evolution-and-replayability.md`. Sections that describe the gates plans
 138/139/140 are building say "planned — see docs/plans/…" until those plans land, per
@@ -54,7 +55,7 @@ page.
 - [ ] M1: `codecs-and-event-evolution.md` and `evolve-events-safely.md` corrected against current `Keiro.Codec`; cross-links added.
 - [ ] M2: `snapshots.md` corrected (`Custom`/`Terminality`; the discriminator section rewritten — coordinated with plan 138's minimal fix); `replay-safety.md` gains the evolution-over-time boundary section.
 - [ ] M3: `docs/user/deploy-ordering.md` written; `docs/user/README.md` index updated; guide cross-links landed in all touched docs.
-- [ ] Close-out: planned-gate references flipped to present tense for any of plans 138/139/140 that landed before this plan closes; master plan 24 EP-4 box ticked; ADR distillation pass.
+- [ ] Close-out: planned-gate references flipped to present tense for any of plans 138/139/140/142 that landed before this plan closes; master plan 24 EP-4 box ticked; ADR distillation pass.
 
 
 ## Surprises & Discoveries
@@ -78,7 +79,7 @@ implementation. Provide concise evidence.
   doc is the reference statement of the same rules and links to it.
   Date: 2026-07-23
 
-- Decision: Sections that describe gates delivered by plans 138/139/140 are written now
+- Decision: Sections that describe gates delivered by plans 138/139/140/142 are written now
   in "planned" form with an explicit plan-path citation ("planned — see
   docs/plans/138-gate-snapshot-staleness-on-fold-changes.md"), and this plan's close-out
   flips each to present tense only after the cited plan lands.
@@ -132,12 +133,13 @@ its documentation. User documentation lives in `docs/user/` (indexed by
 `docs/guides/evolution-and-replayability.md` was authored together with master plan 24 —
 it is the narrative "what to do per change class" document, it already exists, and this
 plan must NOT rewrite it; this plan only cross-links it and keeps the `docs/user/`
-reference pages true. The four sibling implementation plans are
+reference pages true. The sibling implementation plans are
 `docs/plans/138-gate-snapshot-staleness-on-fold-changes.md`,
 `docs/plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md`,
-and `docs/plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md`; this
-plan is soft-dependent on all three (it documents their shipped shapes and cites them as
-planned until then).
+`docs/plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md`, and
+`docs/plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md`;
+this plan is soft-dependent on all four (it documents their shipped shapes and cites them
+as planned until then).
 
 Architectural ground truth that the corrected docs must convey. keiki (at
 `/Users/shinzui/Keikaku/bokuno/keiki`) has no separate decide/evolve — one edge set is
@@ -379,7 +381,13 @@ required-field additions / producer-first for optional ones; cross-service confo
 checking is manual today (deferred initiative, per master plan 24's Decision Log).
 (8) Workflows: a step-result type change crashes resume; after five attempts the
 instance is `WorkflowFailed` terminally; recovery API is the deliverable of
-docs/plans/115 — do not rely on it until that plan lands. Front-matter paragraph links
+docs/plans/115 — do not rely on it until that plan lands. (9) The replay audit: for any
+transducer change (guards, outputs, updates, transition removal, fold edits), run the
+candidate binary's replay audit against a production-copy or staging database before
+switching traffic — non-zero exit (a stream that fails replay, or a snapshot seed that
+diverges from full replay) means do not deploy; quote the audit contract from
+docs/plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md's
+Decision Log once landed, cite it as planned until then. Front-matter paragraph links
 the companion guide's "Deploy-ordering rules" section as the narrative version.
 
 Update `docs/user/README.md`: add the page to the index (alongside Operations), one
@@ -435,7 +443,7 @@ documents `mkCodec`. (3) `docs/guides/evolve-events-safely.md`'s `decodeRaw` exa
 four arguments and matches the jitsurei test it cites. (4) `docs/user/snapshots.md`
 contains no sentence claiming state-shape or fold changes update the hash unless plan
 138's gate has landed and the sentence describes it accurately. (5)
-`docs/user/deploy-ordering.md` exists, is indexed, and each of its eight sections names
+`docs/user/deploy-ordering.md` exists, is indexed, and each of its nine sections names
 the observable failure mode with its error constructor or mechanism
 (`VersionAhead`, `JobPayloadFromFuture`, benign-duplicate confirmation, v1 default
 stamp, timer dead-letter, `FromJSON` decode failure, `WorkflowFailed`). (6) Every
@@ -465,7 +473,7 @@ No code interfaces. Files owned/edited: `docs/user/codecs-and-event-evolution.md
 `docs/user/durable-workflows.md`. Files explicitly NOT edited:
 `docs/guides/evolution-and-replayability.md` (authored with master plan 24; cross-linked
 only) and the master plan itself (except its Progress/registry rows at close-out, which
-its own protocol requires). Soft dependencies: plans 138, 139, 140 (tense of gate
+its own protocol requires). Soft dependencies: plans 138, 139, 140, 142 (tense of gate
 descriptions; quoted Decision Log contracts). Source-of-truth files verified against:
 `keiro-core/src/Keiro/Codec.hs`, `keiro-core/src/Keiro/EventStream.hs`,
 `keiro-core/src/Keiro/Integration/Event.hs`, `keiro/src/Keiro/Snapshot/Codec.hs`,

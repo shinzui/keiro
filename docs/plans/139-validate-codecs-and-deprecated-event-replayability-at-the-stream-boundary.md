@@ -601,7 +601,13 @@ the first fixture, and `conformance-v2/Main.hs` decodes every golden through
 Dependencies: no new packages. Coordination: plan 138 (one `DiagnosticCode` constructor +
 one Diff rule, disjoint), plan 140 (consumes the golden path convention from its generated
 harness; relaxes `DuplicateUpcasterSource` when its dispatch lowering lands — soft
-dependency EP-3→EP-2 in master plan 24's registry). Companion guide:
+dependency EP-3→EP-2 in master plan 24's registry), plan 142 (adds its own disjoint
+`Diff.hs` share — decide-surface advisories — and owns the *replay* half of old-log
+safety: this plan's golden fixtures prove old payloads still *decode* through
+`decodeRaw`; whether they still *invert* through the current transducer against real
+stream histories is the pre-deploy replay audit of
+docs/plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md,
+not a gap in this plan). Companion guide:
 `docs/guides/evolution-and-replayability.md` documents the operator-facing retirement
 procedure this plan's messages point at; plan 141 owns all user-doc edits and will quote
 this plan's Decision Log wording.

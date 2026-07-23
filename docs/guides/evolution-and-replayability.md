@@ -254,7 +254,10 @@ The safe procedure today:
 > replacement-event variants of retiring a live event pass every gate and fail
 > in production. The diff/validator rule that refuses deprecation of an event
 > whose aggregate is non-terminal — and points at the safe pattern above — is
-> [`docs/plans/139`](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md).
+> [`docs/plans/139`](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md);
+> the pre-deploy replay audit that catches the variant a developer ships
+> anyway — against the streams that actually contain the event —
+> is [`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md).
 
 ## Changing decisions: guards, outputs, and dispatch
 
@@ -291,14 +294,20 @@ half-old/half-new fan-out. Dead-letter replay
 (`keiro/src/Keiro/DeadLetter/Replay.hs`) has the same property by design: it
 re-runs the *current* handler against the stored source event.
 
-> **Nothing catches these today.** Old-log guard compatibility has no gate
-> (golden replay fixtures are the cheapest one — captured as part of
-> [`docs/plans/139`](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md));
-> decide-change redelivery mixing has none either (a `diff` advisory on
-> process/router mapping changes is in scope for
-> [`docs/masterplans/24`](../masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md)).
-> Until then: drain PM/router redelivery and replay any dead letters **before**
-> deploying a decide change (see [Deploy ordering](#deploy-ordering-rules)).
+> **Nothing catches these today.** Old-log guard compatibility has no gate:
+> the golden payloads of
+> [`docs/plans/139`](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md)
+> prove old shapes still *decode*, never that they still *invert* — the
+> pre-deploy replay audit that replays real streams through the candidate
+> binary (and whose digest mode makes even an inversion that silently *shifts
+> to a different edge* reviewable) is
+> [`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md).
+> Decide-change redelivery mixing has no gate either; the `diff` advisory on
+> process/router mapping changes is also
+> [`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md).
+> Until those land: drain PM/router redelivery and replay any dead letters
+> **before** deploying a decide change (see
+> [Deploy ordering](#deploy-ordering-rules)).
 
 ## Changing the fold: same events, different state — and what snapshots do to you
 
@@ -355,7 +364,11 @@ protected only by its decoder failing, and fold logic is protected by nothing.
 > invisible to it), not the harness, not `mkEventStream`, not any runtime
 > witness — connects a fold change to snapshot invalidation. The
 > fold-sensitive snapshot discriminator and the interim `diff` advisory are
-> [`docs/plans/138`](../plans/138-gate-snapshot-staleness-on-fold-changes.md).
+> [`docs/plans/138`](../plans/138-gate-snapshot-staleness-on-fold-changes.md);
+> for fold changes that discriminator *cannot* see (hand-written or
+> Holes-only bodies with a missed manual bump), the pre-deploy replay audit's
+> seeded-vs-full-replay comparison is the detection backstop —
+> [`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md).
 
 ## Changing the state shape
 
@@ -534,6 +547,12 @@ adds them to the reference docs):
 - **Fold changes with snapshots: bump `stateCodecVersion` in the same deploy**
   and expect a full-replay cost spike (see
   [fold changes](#changing-the-fold-same-events-different-state--and-what-snapshots-do-to-you)).
+- **Any transducer change: run the replay audit before switching traffic**
+  (once
+  [`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md)
+  lands): point the candidate binary's audit at a production-copy or staging
+  database; a non-zero exit — any stream that fails replay or whose snapshot
+  seed diverges from full replay — means do not deploy.
 
 ## Gate coverage summary
 
@@ -548,13 +567,13 @@ DSL-only gates do not exist for hand-authored services.
 | Required add / rename / retype, unguarded | BREAKING | — | `HydrationDecodeFailed` (loud/delayed) | hand-written: no pre-deploy gate | [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md) |
 | Field removal, unguarded | BREAKING | — | decodes fine | **silent wrong state** (hand-written) | [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md) |
 | Version bump + upcaster | ADDITIVE | — (chain unchecked) | `GapInUpcasterChain`/`UpcasterError` if wrong | two DSL codec-gen bugs report ADDITIVE | [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md), [140](../plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md) |
-| Deprecate event, live streams affected | ADDITIVE (misleading) | ε-variant rejected loudly | `HydrationNoInvertingEdge` (loud/delayed) | **passes every gate** (transition-removal variant) | [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md) |
-| Guard/output change vs old logs | invisible | new machine only | `HydrationReplayFailed` (loud/delayed) | inversion-compatible edits are silent | [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md) (fixtures) |
-| Decide change over redelivery window | invisible | — | deduped as benign duplicates | **silent mixed fan-out** | [24](../masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md) |
-| Fold change, snapshots enabled | invisible | — | none — witness blind here | **silent stale state, compounding** | [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
+| Deprecate event, live streams affected | ADDITIVE (misleading) | ε-variant rejected loudly | `HydrationNoInvertingEdge` (loud/delayed) | **passes every gate** (transition-removal variant) | [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md), [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit) |
+| Guard/output change vs old logs | invisible | new machine only | `HydrationReplayFailed` (loud/delayed) | inversion-compatible edits are silent | [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (replay audit + digest diff) |
+| Decide change over redelivery window | invisible | — | deduped as benign duplicates | **silent mixed fan-out** | [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (advisory) + drain rule |
+| Fold change, snapshots enabled | invisible | — | none — witness blind here | **silent stale state, compounding** | [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md), [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit backstop) |
 | Register slot change | n/a | — | full replay (benign) | mixed-deploy snapshot thrash | — |
-| State type `s` decodable change | invisible | — | none | **silent stale snapshot** | [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
-| Timer payload shape | input fields BREAKING | — | timer dead-letter (loud/delayed) | hand-written: none | — |
+| State type `s` decodable change | invisible | — | none | **silent stale snapshot** | [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md), [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit backstop) |
+| Timer payload shape | input fields BREAKING | — | timer dead-letter (loud/delayed) | hand-written: none | [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (payload-block advisory) |
 | Workflow step result type | BREAKING (body) | — | `WorkflowStepDecodeError` → terminal fail, no recovery API | recovery gap | [115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md) |
 | Job payload (aesonJobCodec) | workqueue BREAKING | — | DLQ flood (loud) | unversioned runtime | [140](../plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md) |
 | Contract field change | BREAKING / advisory | — | consumer dead letters | cross-repo skew unchecked | [24](../masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md) (out of scope, manual rules here) |

@@ -105,7 +105,11 @@ implementation. Provide concise evidence.
   re-persisting derived state is sound. The residual exposure — a hand-written service that
   changes fold logic without bumping `stateCodecVersion` — is exactly the documented manual
   contract, and a provenance gate cannot detect it either (the discriminators are equal by
-  construction in that case). Recorded here so plan 141 can quote it.
+  construction in that case). The residual is *detectable* pre-deploy by the replay audit's
+  seeded-vs-full-replay comparison
+  (docs/plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md,
+  which reuses this plan's stale-fold test scenario as its acceptance case). Recorded here
+  so plan 141 can quote it.
   Date: 2026-07-23
 
 - Decision: This plan edits only the factually false sentence of
