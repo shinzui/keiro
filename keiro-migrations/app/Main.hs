@@ -11,7 +11,13 @@ import Database.PostgreSQL.Migrate (
  )
 import Database.PostgreSQL.Migrate.CLI
 import Hasql.Connection.Settings qualified as Settings
-import Keiro.Migrations (frameworkMigrationPlan, keiroMigrations)
+import Keiro.Migrations (
+    CoddLedgerPreflight (..),
+    frameworkMigrationPlan,
+    keiroMigrations,
+    preflightFreshLedgerOverCodd,
+    renderCoddPreflight,
+ )
 import Keiro.Migrations.SchemaCheck (
     renderSchemaDrift,
     verifyExpectedSchema,
@@ -20,32 +26,89 @@ import Kiroku.Store.Migrations qualified as Kiroku
 import Options.Applicative
 import System.Environment (lookupEnv)
 import System.Exit qualified as Exit
+import System.IO (stderr)
 
 main :: IO ()
 main = do
     kiroku <- either (fail . show) pure Kiroku.kirokuMigrations
     keiro <- either (fail . show) pure keiroMigrations
     plan <- either (fail . show) pure (frameworkMigrationPlan kiroku keiro)
-    keiroCommand <-
+    invocation <-
         execParser
             ( info
-                (keiroCommandParser plan <**> helper)
+                (keiroInvocationParser plan <**> helper)
                 (fullDesc <> progDesc "Manage the Kiroku and Keiro migration components")
             )
     defaultDatabaseUrl <- lookupEnv "DATABASE_URL"
     let defaultSettings =
             Settings.connectionString (Text.pack (maybe "" id defaultDatabaseUrl))
+    runKeiroInvocation defaultSettings plan invocation
+
+data KeiroInvocation = KeiroInvocation
+    { allowFreshLedgerOverCodd :: Bool
+    , keiroCommand :: KeiroCommand
+    }
+
+runKeiroInvocation ::
+    Settings.Settings ->
+    MigrationPlan ->
+    KeiroInvocation ->
+    IO ()
+runKeiroInvocation
+    defaultSettings
+    plan
+    KeiroInvocation{allowFreshLedgerOverCodd, keiroCommand} = do
+        if allowFreshLedgerOverCodd && not (isUpCommand keiroCommand)
+            then do
+                Text.IO.hPutStrLn
+                    stderr
+                    "--allow-fresh-ledger-over-codd applies only to up"
+                Exit.exitFailure
+            else pure ()
+        case keiroCommand of
+            Framework command -> do
+                preflightFrameworkUp defaultSettings allowFreshLedgerOverCodd command
+                let environment = cliEnvironment defaultSettings plan defaultRunOptions
+                outcome <- runMigrationCommand environment command
+                case commandOutputFormat command of
+                    TextOutput -> Text.IO.putStrLn (renderMigrationCommandText outcome)
+                    JsonOutput -> LazyByteString.putStrLn (Aeson.encode (renderMigrationCommandJson outcome))
+                Exit.exitWith
+                    (case exitClass outcome of ExitSucceeded -> Exit.ExitSuccess; _ -> Exit.ExitFailure 1)
+            VerifySchema options ->
+                runVerifySchema defaultSettings options
+
+isUpCommand :: KeiroCommand -> Bool
+isUpCommand keiroCommand =
     case keiroCommand of
-        Framework command -> do
-            let environment = cliEnvironment defaultSettings plan defaultRunOptions
-            outcome <- runMigrationCommand environment command
-            case commandOutputFormat command of
-                TextOutput -> Text.IO.putStrLn (renderMigrationCommandText outcome)
-                JsonOutput -> LazyByteString.putStrLn (Aeson.encode (renderMigrationCommandJson outcome))
-            Exit.exitWith
-                (case exitClass outcome of ExitSucceeded -> Exit.ExitSuccess; _ -> Exit.ExitFailure 1)
-        VerifySchema options ->
-            runVerifySchema defaultSettings options
+        Framework Up{} -> True
+        _ -> False
+
+preflightFrameworkUp ::
+    Settings.Settings ->
+    Bool ->
+    MigrationCommand ->
+    IO ()
+preflightFrameworkUp defaultSettings allowFreshLedgerOverCodd command =
+    case command of
+        Up UpOptions{connection = ConnectionOptions{databaseSettings}}
+            | not allowFreshLedgerOverCodd -> do
+                result <-
+                    preflightFreshLedgerOverCodd
+                        (maybe defaultSettings id databaseSettings)
+                case result of
+                    Left migrationError -> do
+                        Text.IO.hPutStrLn
+                            stderr
+                            ( "codd-ledger preflight failed: "
+                                <> Text.pack (show migrationError)
+                            )
+                        Exit.exitFailure
+                    Right CoddPreflightClear -> pure ()
+                    Right blocked@CoddPreflightBlocked{} -> do
+                        Text.IO.hPutStrLn stderr (renderCoddPreflight blocked)
+                        Exit.exitFailure
+        _ -> pure ()
 
 data KeiroCommand
     = Framework MigrationCommand
@@ -54,6 +117,16 @@ data KeiroCommand
 newtype VerifySchemaOptions = VerifySchemaOptions
     { verifySchemaDatabaseSettings :: Maybe Settings.Settings
     }
+
+keiroInvocationParser :: MigrationPlan -> Parser KeiroInvocation
+keiroInvocationParser plan =
+    KeiroInvocation
+        <$> switch
+            ( long "allow-fresh-ledger-over-codd"
+                <> help
+                    "Allow up to initialize native history even when a codd ledger exists"
+            )
+        <*> keiroCommandParser plan
 
 keiroCommandParser :: MigrationPlan -> Parser KeiroCommand
 keiroCommandParser plan =

@@ -286,6 +286,42 @@ main = hspec $ do
                 sort [reportOutcomes first, reportOutcomes second]
                     `shouldBe` sort [replicate 28 AppliedNow, replicate 28 AlreadyApplied]
 
+    describe "codd-ledger preflight" $ do
+        it "blocks a current codd ledger before native history exists" $
+            assertBlockedCoddPreflight "codd"
+
+        it "blocks a legacy codd_schema ledger before native history exists" $
+            assertBlockedCoddPreflight "codd_schema"
+
+        it "is clear on a fresh database" $
+            withKeiroPg $ \database -> do
+                preflight <-
+                    preflightFreshLedgerOverCodd (Pg.connectionSettings database)
+                        >>= requireRight
+                preflight `shouldBe` CoddPreflightClear
+
+        it "is clear after codd history has been imported" $ do
+            plan <- requirePlan
+            withKeiroPg $ \database -> do
+                let settings = Pg.connectionSettings database
+                    provider = connectionProviderFromSettings settings
+                withConnection settings $ \connection -> do
+                    applyLegacyPayloads connection
+                    installCoddLedger connection "codd" False False
+                config <-
+                    requireRight
+                        (frameworkCoddSourceConfig provider True "preflight fixture" Confirmed)
+                _ <-
+                    importCoddHistory
+                        defaultImportOptions
+                        config
+                        provider
+                        plan
+                        frameworkCoddHistoryMappings
+                        >>= requireRight
+                preflight <- preflightFreshLedgerOverCodd settings >>= requireRight
+                preflight `shouldBe` CoddPreflightClear
+
     describe "combined Codd history import" $ do
         it "imports a shared Codd V5 ledger atomically without replaying target SQL" $
             importFixture "codd"
@@ -329,6 +365,22 @@ main = hspec $ do
                 imported `shouldSatisfy` \case
                     Left CoddStrictSourceHasUnselected{} -> True
                     _ -> False
+
+assertBlockedCoddPreflight :: Text -> Expectation
+assertBlockedCoddPreflight sourceSchema =
+    withKeiroPg $ \database -> do
+        let settings = Pg.connectionSettings database
+        withConnection settings $ \connection -> do
+            applyLegacyPayloads connection
+            installCoddLedger connection sourceSchema False False
+        preflight <- preflightFreshLedgerOverCodd settings >>= requireRight
+        let expectedTable = sourceSchema <> ".sql_migrations"
+        preflight
+            `shouldBe` CoddPreflightBlocked
+                { coddLedgerTable = expectedTable
+                , nativeLedgerAbsent = True
+                }
+        renderCoddPreflight preflight `shouldSatisfy` Text.isInfixOf expectedTable
 
 importFixture :: Text -> Expectation
 importFixture sourceSchema = do

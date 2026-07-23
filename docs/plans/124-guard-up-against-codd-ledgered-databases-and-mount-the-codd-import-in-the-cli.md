@@ -4,6 +4,7 @@ slug: guard-up-against-codd-ledgered-databases-and-mount-the-codd-import-in-the-
 title: "Guard up against codd-ledgered databases and mount the codd import in the CLI"
 kind: exec-plan
 created_at: 2026-07-23T03:02:27Z
+intention: intention_01ky8hzdgxe7etqkgzfma64nj5
 master_plan: "docs/masterplans/19-restore-the-migration-integrity-gates-under-pg-migrate-surfaced-by-the-2026-07-migration-review.md"
 ---
 
@@ -48,7 +49,7 @@ integration test in the default suite.
 
 ## Progress
 
-- [ ] Milestone 1: `preflightFreshLedgerOverCodd` in the library; `up` path refuses codd-ledgered databases without the override; preflight behavior covered by integration tests (blocked on `codd` and `codd_schema` fixtures, clear on empty and imported databases).
+- [x] Milestone 1: `preflightFreshLedgerOverCodd` in the library; `up` path refuses codd-ledgered databases without the override; preflight behavior covered by integration tests (blocked on `codd` and `codd_schema` fixtures, clear on empty and imported databases). Completed 2026-07-23: all 25 default migration examples pass; the scratch CLI drill exited 1 naming `codd.sql_migrations`, rejected override use with `status`, and the override reached and completed the 28-migration runner.
 - [ ] Milestone 2: `keiro-migrate import-codd-history` subcommand mounted over `frameworkCoddSourceConfig`/`frameworkCoddHistoryMappings`; manual transcript recorded.
 - [ ] Milestone 3: end-to-end recovery test for the dominant trap (up → poisoned ledger → recovery → import succeeds → verify green → up green).
 - [ ] Milestone 4: cutover runbook rewritten (preflight, sentinel fixup step, import subcommand, recovery procedure for both variants, post-cutover validation reference); fixup header comment corrected; suite green.
@@ -56,7 +57,16 @@ integration test in the default suite.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- pg-migrate deliberately keeps `ConnectionProvider` opaque. A Keiro-defined Hasql
+  session cannot be run through it without importing runner internals, so the planned
+  preflight signature cannot accept a provider. The sibling live-schema API already
+  establishes the supported application boundary: accept `Hasql.Connection.Settings`
+  and bracket a dedicated connection.
+
+- pg-migrate's safe facade keeps `MigrationId` opaque, while the separately exposed
+  `Database.PostgreSQL.Migrate.Internal` module supplies the text accessors used by
+  pg-migrate-cli's own renderers. The Keiro executable may use those accessors only for
+  human rendering; JSON continues through the stable `renderHistoryImportJson` boundary.
 
 
 ## Decision Log
@@ -131,6 +141,16 @@ integration test in the default suite.
   library result.
   Date: 2026-07-23
 
+- Decision: `preflightFreshLedgerOverCodd` accepts `Hasql.Connection.Settings.Settings`,
+  not `ConnectionProvider`.
+  Rationale: The provider's constructor is intentionally hidden from the safe facade and
+  there is no public operation for running an application-defined session through it.
+  Importing runner internals would couple this integrity gate to an unsupported
+  implementation detail. Settings preserve the CLI's exact `--database-url` over
+  `DATABASE_URL` precedence and match `verifyExpectedSchema`, the existing Keiro-owned
+  read-only integrity API.
+  Date: 2026-07-23
+
 
 ## Outcomes & Retrospective
 
@@ -145,8 +165,11 @@ absolute). Read-only references: the pg-migrate repository at
 `/Users/shinzui/Keikaku/bokuno/pg-migrate` (local source of the pinned 1.1.0.0 family) and
 the kiroku repository at `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`.
 
-`docs/adr/` contains exactly one ADR, `0001-keiro-pgmq-job-processing-telemetry-contract.md`
-(pgmq telemetry) — not relevant; no relevant ADR exists for this work.
+`docs/adr/0002-keiro-owns-live-schema-verification-under-pg-migrate.md` is relevant
+background: it records that Keiro owns the default-build integrity gates pg-migrate does
+not provide. This plan adds the distinct operator-safety policy for one-time codd
+cutovers; that policy is an ADR candidate at completion. ADR 0001 concerns PGMQ telemetry
+and is unrelated.
 
 **Vocabulary.** "codd" is the retired migration runner; a *codd ledger* is its
 applied-history table, `codd.sql_migrations` in current databases or
@@ -157,7 +180,7 @@ tables `ledger_metadata`, `migrations`, `history_imports`, and `repairs`
 which also fixes the advisory lock key `0x70675F6D69677261`). The *codd import* is
 pg-migrate-import-codd's verified transfer of codd history into the native ledger without
 re-executing SQL. The *framework plan* is the two-component pg-migrate plan — kiroku's 8
-migrations then keiro's 18 — built by `Keiro.Migrations.frameworkMigrationPlan` with
+migrations then keiro's 20 — built by `Keiro.Migrations.frameworkMigrationPlan` with
 kiroku first (`keiro-migrations/src/Keiro/Migrations.hs`).
 
 **The unguarded path, verified.** `keiro-migrations/app/Main.hs` parses with
@@ -184,9 +207,11 @@ duplicate-object error — an *accidental* tripwire, not a designed guard. Commi
 five audit-less kiroku rows in `pgmigrate.migrations` (each committed atomically with its
 no-op body), plus seconds of `ACCESS EXCLUSIVE` lock churn on live kiroku tables. No data
 loss is possible in either component: there is no `TRUNCATE`, `DELETE FROM`, or `DROP
-TABLE` in any of the 26 bodies; all `CREATE`s are `IF NOT EXISTS`; keiro 0008's unguarded
+TABLE` in any of the 28 bodies; all `CREATE`s are `IF NOT EXISTS`; keiro 0008's unguarded
 `DROP CONSTRAINT keiro_workflow_steps_pkey` is self-healing because the preceding `CREATE
-TABLE IF NOT EXISTS` names its primary key deterministically.
+TABLE IF NOT EXISTS` names its primary key deterministically. The current composed plan
+contains 28 bodies after migrations 0019 and 0020 landed; neither new body changes this
+analysis.
 
 The poisoned ledger then cleanly blocks the import: pg-migrate's `classifyImport`
 (`History.hs`, the `(Just migration, Nothing audit)` case falling through to
@@ -199,7 +224,7 @@ it rejects transactional targets (`Repair.hs` lines 123-125) and Applied status 
 history predates the stream-name-length migration sails past 0006. Against a
 pre-remediation 0.1.0.0 layout (the `keiro_*` tables still living in the `kiroku` schema),
 keiro's component then builds a complete parallel **empty** `keiro.*` schema and the whole
-plan SUCCEEDS silently: a full 26-row audit-less native ledger, an import conflicted on
+plan SUCCEEDS silently: a full 28-row audit-less native ledger, an import conflicted on
 every id, and a subsequently deployed service reads the empty `keiro.*` tables while the
 real workflow/timer/outbox rows sit invisible in `kiroku.keiro_*` — a silent operational
 outage. Everything is recoverable; nothing is destroyed.
@@ -302,7 +327,7 @@ data CoddLedgerPreflight
 
 -- | Refuse to initialize a fresh native ledger over a live codd ledger.
 preflightFreshLedgerOverCodd ::
-    ConnectionProvider ->
+    Settings.Settings ->
     IO (Either MigrationError CoddLedgerPreflight)
 
 renderCoddPreflight :: CoddLedgerPreflight -> Text
@@ -449,12 +474,11 @@ before import poisons the ledger and the documented recovery restores the cutove
 5. Recovery step 2: `Session.script "DROP SCHEMA pgmigrate CASCADE;"`.
 6. Recovery step 3: the import now succeeds — 23 `Imported` outcomes (the importer
    re-initialized the ledger itself).
-7. Post-recovery proof: `verifyMigrationPlan` reports exactly three `PendingMigration`
-   issues (`kiroku/0008-schema-management-comment`, `keiro/0017-schema-management-comment`,
-   `keiro/0018`) and nothing else; `runMigrationPlan` applies exactly those three
-   (`AlreadyApplied` × 7, `AppliedNow`, `AlreadyApplied` × 16, `AppliedNow` × 2 — the same
-   shape `importFixture` asserts); a final `verifyMigrationPlan` has no issues; the
-   existing `assertSchema` helper passes.
+7. Post-recovery proof: `verifyMigrationPlan` reports exactly five `PendingMigration`
+   issues (`kiroku/0008-schema-management-comment` and Keiro migrations 0017 through 0020)
+   and nothing else; `runMigrationPlan` applies exactly those five
+   (`AlreadyApplied` × 7, `AppliedNow`, `AlreadyApplied` × 16, `AppliedNow` × 4); a final
+   `verifyMigrationPlan` has no issues; the existing `assertSchema` helper passes.
 
 The worse variant (pre-2026-06-14 history on a 0.1.0.0 layout) is covered by runbook text
 only, per the master plan ("both trap variants at least covered by the runbook text; the
@@ -678,8 +702,9 @@ plan 122), `optparse-applicative` (executable, already present). Library-interna
 
 Signatures that must exist at the end of each milestone:
 
-- Milestone 1: `Keiro.Migrations.preflightFreshLedgerOverCodd :: ConnectionProvider -> IO
-  (Either MigrationError CoddLedgerPreflight)`; `CoddLedgerPreflight (..)` with
+- Milestone 1: `Keiro.Migrations.preflightFreshLedgerOverCodd ::
+  Hasql.Connection.Settings.Settings -> IO (Either MigrationError
+  CoddLedgerPreflight)`; `CoddLedgerPreflight (..)` with
   `coddLedgerTable :: Text` and `nativeLedgerAbsent :: Bool`; `renderCoddPreflight ::
   CoddLedgerPreflight -> Text`; `keiro-migrate` accepting
   `--allow-fresh-ledger-over-codd` and refusing blocked `up` with exit 1.
@@ -694,3 +719,11 @@ shared with `docs/plans/122-restore-live-schema-verification-body-lint-and-the-s
 (additive constructors, merge-order coordination only). Recorded follow-up (not in this
 plan): mirror the preflight in the kiroku repository's `kiroku-store-migrate` CLI, which
 has the identical unguarded `up` path.
+
+
+Revision note (2026-07-23): Inherited the MasterPlan intention, incorporated ADR 0002,
+and revised the plan-authoring 18/26 counts and three-pending recovery expectation to the
+current 20-file Keiro component, 28-entry composed plan, and five post-import pending
+migrations after 0019 and 0020 landed. Reconciled the preflight signature with
+pg-migrate's opaque provider boundary: it now accepts Hasql settings, as the existing
+live-schema checker does.
