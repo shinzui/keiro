@@ -4,6 +4,7 @@ slug: make-workflow-journal-snapshots-wake-safe-with-a-step-index-fallback-on-aw
 title: "Make workflow journal snapshots wake-safe with a step-index fallback on await"
 kind: exec-plan
 created_at: 2026-07-23T03:02:27Z
+intention: intention_01ky88vm7tew7akz5pgfq0fbqg
 master_plan: "docs/masterplans/16-harden-the-durable-execution-engine-surfaced-by-the-2026-07-durable-execution-review.md"
 ---
 
@@ -22,24 +23,24 @@ Keiro's durable workflows journal every step result to a per-workflow event stre
 
 After this plan, the `Await` miss path consults the authoritative `keiro_workflow_steps` index (a point query) before arming and suspending. If the awaited step is already journaled — no matter how the in-memory map became stale — the run adopts the recorded result and proceeds instead of suspending. This closes the entire stale-visibility class in one place, which is why the master plan chose it over snapshot invalidation (see the master plan's Decision Log). It also masks the same-generation variant of the missing-`ChildFailed`-delivery gap fixed properly in `docs/plans/113-deliver-child-failure-and-awakeable-signals-across-generations-and-races.md`, because a parent whose stale map hides an already-journaled `{"failed": reason}` sentinel will now find it in the index and throw `WorkflowChildFailed` instead of suspending.
 
-To see it working: run `cabal test keiro-test` from the repository root and observe the new "Keiro.Workflow snapshot wake-safety" tests, most notably one in which a workflow whose step action signals its own awakeable mid-run — under `snapshotPolicy = Every 1` — completes on that same run instead of suspending forever.
+To see it working: run `cabal test keiro-test` from the repository root and observe the new "Keiro.Workflow snapshot wake-safety" tests, most notably one in which a workflow pre-arms an awakeable and a later run signals it from a step action — under `snapshotPolicy = Every 1` — then completes on that signal-and-await run instead of suspending forever.
 
 
 ## Progress
 
 This is the plan-authoring-time checklist of the work. Update it at every stopping point.
 
-- [ ] M1: `lookupStepResult` (Eff-level point query) added to `keiro/src/Keiro/Workflow/Schema.hs` and exported.
-- [ ] M1: `Await` miss path in `keiro/src/Keiro/Workflow.hs` consults `lookupStepResult` before arming; on a hit it adopts the stored value into the in-memory map and delivers it.
-- [ ] M1: no-spurious-delivery regression test (a genuinely unresolved await under `Every 1` still suspends and fabricates nothing).
-- [ ] M1: full suite green (`cabal test keiro-test`).
-- [ ] M2: mid-run staleness test — awakeable signalled from within a step action under `Every 1`; run completes instead of suspending.
-- [ ] M2: snapshot staleness test — two-phase awakeable body; resume from a stale snapshot delivers instead of stalling.
-- [ ] M2: child-completion variant — child driven to completion inside a parent step action; parent's `awaitChild` delivers.
-- [ ] M2: full suite green.
-- [ ] M3: `loadJournal` haddock corrected (the "byte-for-byte" claim removed and replaced with the true contract).
-- [ ] M3: `docs/guides/durable-workflows.md` Snapshots section notes the index fallback; `CHANGELOG.md` entry written.
-- [ ] M3: full suite green; master plan 16 Progress boxes for EP-1 ticked and registry status updated.
+- [x] (2026-07-23 20:05Z) M1: `lookupStepResult` (Eff-level point query) added to `keiro/src/Keiro/Workflow/Schema.hs` and exported.
+- [x] (2026-07-23 20:05Z) M1: `Await` miss path in `keiro/src/Keiro/Workflow.hs` consults `lookupStepResult` before arming; on a hit it adopts the stored value into the in-memory map and delivers it.
+- [x] (2026-07-23 20:05Z) M1: no-spurious-delivery regression test (a genuinely unresolved await under `Every 1` still suspends and fabricates nothing).
+- [x] (2026-07-23 20:11Z) M1: full suite green (`cabal test keiro-test`: 357 examples, 0 failures).
+- [x] (2026-07-23 20:05Z) M2: mid-run staleness test — a previously armed awakeable is signalled from within a step action under `Every 1`; the signal-and-await run completes instead of suspending.
+- [x] (2026-07-23 20:05Z) M2: snapshot staleness test — the awakeable is armed first, then a two-phase body writes and consumes a stale snapshot without stalling.
+- [x] (2026-07-23 20:05Z) M2: child-completion variant — child driven to completion inside a parent step action; parent's `awaitChild` delivers.
+- [x] (2026-07-23 20:11Z) M2: full suite green (357 examples, 0 failures).
+- [x] (2026-07-23 20:11Z) M3: `loadJournal` haddock corrected (the "byte-for-byte" claim removed and replaced with the true contract).
+- [x] (2026-07-23 20:11Z) M3: `docs/guides/durable-workflows.md` Snapshots section notes the index fallback; `CHANGELOG.md` entry written.
+- [x] (2026-07-23 20:11Z) M3: full suite green; master plan 16 Progress boxes for EP-1 ticked and registry status updated.
 
 
 ## Surprises & Discoveries
@@ -47,7 +48,29 @@ This is the plan-authoring-time checklist of the work. Update it at every stoppi
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The plan-authoring test sketch attempted to signal an awakeable immediately after allocation, but the current implementation registers `keiro_awakeables` only when the returned await action first arms. The initial focused run therefore produced `Right Suspended` for both awakeable regressions while the child regression passed. This is WFX-2, already assigned to `docs/plans/113-deliver-child-failure-and-awakeable-signals-across-generations-and-races.md`, rather than a failure of the step-index fallback. Evidence:
+
+  ```text
+  expected: Right (Completed "payload")
+   but got: Right Suspended
+
+  Keiro.Workflow snapshot wake-safety
+    delivers a child completion shadowed by a snapshot on a later run [✔]
+  ```
+
+- After pre-arming the awakeables through an ordinary unresolved run, the focused group passed all four cases:
+
+  ```text
+  Keiro.Workflow snapshot wake-safety
+    keeps a genuinely unresolved awakeable pending under Every 1 [✔]
+    delivers an awakeable signalled mid-run despite the stale in-memory map [✔]
+    delivers an awakeable shadowed by a snapshot on a later run [✔]
+    delivers a child completion shadowed by a snapshot on a later run [✔]
+
+  4 examples, 0 failures
+  ```
+
+- The repository gained tests between plan authoring and implementation, so the authoring-time prediction of 339 total examples was stale. The completed suite contains 357 examples, including this plan's four additions, and all pass.
 
 
 ## Decision Log
@@ -70,6 +93,14 @@ Record every decision made while working on the plan.
   Rationale: Journal replay is defined per generation; delivering a prior generation's entry onto a later generation would violate the rotation contract. Cross-generation delivery of child failure is `docs/plans/113-deliver-child-failure-and-awakeable-signals-across-generations-and-races.md`'s scope.
   Date: 2026-07-23
 
+- Decision: Pre-arm awakeables in the WFC-1 regression setup before signalling them from a later run.
+  Rationale: Until `docs/plans/113-deliver-child-failure-and-awakeable-signals-across-generations-and-races.md` fixes WFX-2, allocating an id does not register its row and an immediate signal legitimately returns `False`. Pre-arming uses the public workflow API to create the pending row, keeps EP-1 independently implementable, and still deterministically creates the exact stale in-memory-map and stale-snapshot windows under test.
+  Date: 2026-07-23
+
+- Decision: Promote the workflow replay-visibility invariant into `docs/adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md`.
+  Rationale: The authoritative-index rule constrains every future workflow journal append path and explains why compatible snapshots can still under-approximate concurrent history. It is durable architecture context, not merely an EP-1 implementation detail.
+  Date: 2026-07-23
+
 
 ## Outcomes & Retrospective
 
@@ -78,14 +109,18 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+EP-1 is complete. `Keiro.Workflow.Schema.lookupStepResult` exposes the existing indexed point lookup at the `Eff` layer, and the `Await` miss path now consults it before cancellation, arming, or suspension. A hit is adopted into the live map and delivered with replay metrics, preserving the same semantics as an in-memory hit. Four regression tests cover a genuine unresolved await, same-run awakeable staleness, stale-snapshot awakeable replay, and stale-snapshot child completion.
+
+The documentation now states the true snapshot contract in `keiro/src/Keiro/Workflow.hs`, `docs/guides/durable-workflows.md`, and `CHANGELOG.md`. The durable invariant is recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md`, with `docs/adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md` retained as the complementary compatibility decision.
+
+Validation completed with `cabal test keiro-test` (357 examples, 0 failures), focused `snapshot wake-safety` testing (4 examples, 0 failures), `cabal haddock keiro` (successful; only the repository's existing documentation warnings), `nix fmt -- ... --fail-on-change` (0 files changed), and `git diff --check` (clean). Nothing remains in EP-1; WFX-2's allocate-before-register gap remains intentionally assigned to `docs/plans/113-deliver-child-failure-and-awakeable-signals-across-generations-and-races.md`.
 
 
 ## Context and Orientation
 
 This section is self-contained; read it even if you know the repository.
 
-ADR context: `docs/adr/` contains only `0001-keiro-pgmq-job-processing-telemetry-contract.md`, which covers pgmq job-processing telemetry and does not touch the workflow engine — no relevant ADR exists for this work. The master plan proposes an ADR at initiative completion for the invariant this plan implements ("the step index is the authoritative record of journaled steps; every replay-visibility mechanism must fall back to it").
+ADR context changed after plan authoring. `docs/adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md` establishes that snapshots are advisory cached seeds and governs whether a seed is compatible with the current state and fold assumptions; compatibility alone does not guarantee that a workflow snapshot captured concurrent wake appends. This plan therefore produced the complementary `docs/adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md`, which records the authoritative-index fallback and generation boundary. The remaining ADRs under `docs/adr/` concern pgmq telemetry and event-evolution boundaries and are not relevant to this work.
 
 ### The moving parts
 
@@ -109,7 +144,7 @@ The *resume worker* (`keiro/src/Keiro/Workflow/Resume.hs`) re-invokes unfinished
 
 The adversarial verification pass confirmed all five refutation avenues are absent: nothing re-reads the stream inside the run, nothing invalidates snapshots, the arm repair cannot append, the snapshot guard admits the stale write, and suspension never escalates. A mainstream trigger with `Every n`: `spawnChild`, then fresh steps, then `awaitChild` racing the child's completion; or an external `signalAwakeable` arriving during earlier steps; timer-fired sleep entries ride the same append path.
 
-Two adjacent facts matter for the fix. First, the point-query statement already exists — `lookupStepResultStmt` (`keiro/src/Keiro/Workflow/Schema.hs:151-165`) with its transaction wrapper `lookupStepResultTx` (81-83), whose only production call site is inside `prepareJournalAppend`; there is no `Eff`-level wrapper yet (the map-level `loadStepIndex` at 98-100 is exported but has no production call site at all). Second, the `loadJournal` haddock (`Workflow.hs:656-663`) currently promises the seeded map is "byte-for-byte the one a full version-0 replay would produce" — false under this defect, and to be corrected in M3.
+Two adjacent facts shaped the fix. First, the point-query statement already existed — `lookupStepResultStmt` (`keiro/src/Keiro/Workflow/Schema.hs`) with its transaction wrapper `lookupStepResultTx`, whose only production call site was inside `prepareJournalAppend`; this plan added the missing `Eff`-level wrapper next to `loadStepIndex`. Second, the pre-fix `loadJournal` haddock promised the seeded map was "byte-for-byte the one a full version-0 replay would produce" — false under this defect and corrected in M3.
 
 ### Existing test coverage and the gap
 
@@ -181,7 +216,7 @@ Acceptance: `cabal test keiro-test` green, including the new test and the entire
 
 Scope: deterministic tests that fail before M1's fix (stall) and pass after it. Write them in the `"Keiro.Workflow snapshot wake-safety"` group. All three use the trick of performing the wake append *inside a step action of the same run*, which reproduces "a wake lands while the owning run is mid-flight" without racing threads.
 
-Test A — mid-run staleness, awakeable variant. Body (all under `defaultWorkflowRunOptions & #snapshotPolicy .~ Every 1`):
+Test A — mid-run staleness, awakeable variant. First run the ordinary allocate-and-await body once so the awakeable is pending; this setup is required until `docs/plans/113-deliver-child-failure-and-awakeable-signals-across-generations-and-races.md` closes WFX-2 by registering during allocation. Then run this signal-and-await body under `defaultWorkflowRunOptions & #snapshotPolicy .~ Every 1`:
 
 ```haskell
 shadowedAwakeable :: (Workflow :> es, Store :> es, IOE :> es) => Eff es Text
@@ -191,9 +226,9 @@ shadowedAwakeable = do
     await
 ```
 
-Sequence on the first run: the allocation step journals `awkid:gate` (snapshot fires), then the `mid` action runs and `signalAwakeable` appends `awk:<uuid>` from outside the run's map, then `mid`'s own append lands one version later and the `Every 1` snapshot captures a map *missing* the `awk` entry — the exact WFC-1 shape. Before the fix the run's `await` misses, the arm's repair collapses to `JournalAlreadyPresent`, and the run returns `Suspended` — forever, on every re-run. After the fix, assert the *first* run returns `Completed "payload"`, and a second `runWorkflowWith` replays to `Completed "payload"` again.
+Sequence on the signal-and-await run: the allocation step replays `awkid:gate`, then the `mid` action runs and `signalAwakeable` appends `awk:<uuid>` from outside the run's map, then `mid`'s own append lands one version later and the `Every 1` snapshot captures a map *missing* the `awk` entry — the exact WFC-1 shape. Before the fix the run's `await` misses, the arm's repair collapses to `JournalAlreadyPresent`, and the run returns `Suspended` — forever, on every re-run. After the fix, assert the signal-and-await run returns `Completed "payload"`, and a following `runWorkflowWith` replays to `Completed "payload"` again.
 
-Test B — snapshot staleness across runs (the resume path). Replay is keyed by step name, so a test may run different bodies against the same journal (an established pattern in this suite). Phase 1 body: allocate `gate`, journal `mid` whose action signals `gate` (as in Test A), then park on an unrelated never-resolving await — `awaitStep (StepName "hold") (pure ())` — so the run suspends *after* writing the stale snapshot. Phase 2 body: allocate `gate`, `mid` (replays), then `await` the awakeable. Run phase 1 (expect `Suspended`), then run phase 2: before the fix, `loadJournal` seeds the stale snapshot, the tail read returns nothing, and the run suspends forever; after the fix it returns `Completed "payload"`. This is the variant that specifically exercises the snapshot-seeded `loadJournal` path rather than same-run map staleness.
+Test B — snapshot staleness across runs (the resume path). Replay is keyed by step name, so a test may run different bodies against the same journal (an established pattern in this suite). Use the same ordinary pre-arm setup as Test A. Phase 1 body: replay the allocation, journal `mid` whose action signals `gate`, then park on an unrelated never-resolving await — `awaitStep (StepName "hold") (pure ())` — so the run suspends *after* writing the stale snapshot. Phase 2 body: allocate `gate`, `mid` (both replay), then `await` the awakeable. Run phase 1 (expect `Suspended`), then run phase 2: before the fix, `loadJournal` seeds the stale snapshot, the tail read returns nothing, and the run suspends forever; after the fix it returns `Completed "payload"`. This is the variant that specifically exercises the snapshot-seeded `loadJournal` path rather than same-run map staleness.
 
 Test C — child-completion variant. Phase 1 body: `h <- spawnChild childNm childWid childBody`; a step `"drive"` whose action drives the child to completion inline via `runChildWorkflow defaultWorkflowRunOptions childNm childWid childBody` (this fires `childCompletionHook`, which appends the parent's `child:<id>:result` step from outside the parent's map — `keiro/src/Keiro/Workflow/Child.hs:334-367`); then park on `awaitStep (StepName "hold") (pure ())`. Phase 2 body: spawn, `"drive"` (replays), `awaitChild h`. Under `Every 1`, phase 1 writes a snapshot shadowing the child-result entry; phase 2 before the fix suspends forever, after the fix returns the child's result. (`runChildWorkflow` needs `Error StoreError :> es`, which `Store.runStoreIO` already provides in this suite.)
 
@@ -229,7 +264,11 @@ cabal test keiro-test
 335 examples, 0 failures
 ```
 
-After this plan the example count grows by the four new tests (expect `339 examples, 0 failures`; adjust if you add more).
+After this plan the example count grows by four. Intervening work raised the baseline after authoring; the completed run is:
+
+```text
+357 examples, 0 failures
+```
 
 To run only the new group while iterating:
 
@@ -244,7 +283,7 @@ Order of edits: Schema.hs export + function, Workflow.hs import + handler, tests
 
 Acceptance is behavioral:
 
-1. With `snapshotPolicy = Every 1`, running `shadowedAwakeable` (Test A) returns `Completed "payload"` on its first invocation. Before this plan the same run returns `Suspended`, and re-running it returns `Suspended` indefinitely.
+1. With `snapshotPolicy = Every 1`, pre-arm the awakeable once and then run `shadowedAwakeable` (Test A). The signal-and-await run returns `Completed "payload"`. Before this plan the same run returns `Suspended`, and re-running it returns `Suspended` indefinitely.
 2. The two-phase variants (Tests B and C) return `Completed ...` on the phase-2 run that seeds from the stale snapshot. Before this plan they return `Suspended` indefinitely.
 3. A genuinely unsignalled awakeable under `Every 1` still returns `Suspended` on every run, with its `keiro_awakeables` row `pending` — the fallback delivers only what the index actually records.
 4. The full suite passes: `cabal test keiro-test` prints `0 failures`. Existing groups that exercise the await paths without snapshots ("Keiro.Workflow.Awakeable", "Keiro.Workflow.Child", the sleep tests) are unchanged and green, demonstrating no behavioral drift on the default `Never` policy.
@@ -274,3 +313,8 @@ lookupStepResult :: (Store :> es) => WorkflowName -> WorkflowId -> Int -> Text -
 - `docs/guides/durable-workflows.md`, `CHANGELOG.md` — documentation.
 
 Coordination with siblings (from the master plan's Integration Points): `docs/plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md` also edits `keiro/src/Keiro/Workflow.hs` but different functions (`rotateGeneration`, `recordPatchSetIfFresh`); merge order is free, no shared types change. All four plans append distinct test groups to `keiro/test/Main.hs`.
+
+
+## Revision Note
+
+2026-07-23: implementation changed the awakeable regression setup to pre-arm each awakeable through the public API before the run that signals it. This keeps EP-1 independent of EP-2's known allocate-before-register fix while preserving the exact WFC-1 stale-map and stale-snapshot windows. The living sections, test narrative, acceptance criteria, ADR context, and observed suite count were updated to match the completed implementation.

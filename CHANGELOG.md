@@ -51,6 +51,13 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   shipped 0.2.0.0 and 0.3.0.0; keep it in lockstep with `keiro/keiro.cabal`
   when cutting a release.
 
+### Fixed
+
+- Workflows using journal snapshots no longer suspend forever when a child,
+  awakeable, or sleep completion was journaled while a run was mid-flight but
+  omitted from that run's snapshot. The `awaitStep` miss path now falls back to
+  the authoritative workflow-step index before arming and suspending.
+
 ## 0.3.0.0 — 2026-07-14
 
 A dependency-realignment release across the package set. `keiro-migrations` and

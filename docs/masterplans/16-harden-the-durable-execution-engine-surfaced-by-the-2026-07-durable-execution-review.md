@@ -4,6 +4,7 @@ slug: harden-the-durable-execution-engine-surfaced-by-the-2026-07-durable-execut
 title: "Harden the durable-execution engine surfaced by the 2026-07 durable-execution review"
 kind: master-plan
 created_at: 2026-07-23T03:02:15Z
+intention: intention_01ky88vm7tew7akz5pgfq0fbqg
 ---
 
 # Harden the durable-execution engine surfaced by the 2026-07 durable-execution review
@@ -38,14 +39,14 @@ EP-4 (plan 115) owns lifecycle policy: recording the patch set atomically inside
 
 Alternatives considered. A severity-ordered decomposition was rejected for the same reason MasterPlan 9 rejected it: it couples unrelated modules in every plan. Folding EP-2 into EP-1 (both touch await/arm paths) was rejected because EP-1 must stay small and reviewable — it changes replay semantics on the hot path — while EP-2 carries a migration. Merging EP-3 and EP-4 (both touch rotation-adjacent code) was rejected because EP-3's fixes are mechanical correctness repairs with crash-window tests, while EP-4 makes policy decisions (resurrection semantics, lease-renewal cadence) that deserve their own Decision Log.
 
-ADR context: `docs/adr/` contains only `0001-keiro-pgmq-job-processing-telemetry-contract.md`, which does not touch the workflow engine — no relevant ADR exists for this initiative. Candidate ADRs to produce at completion: the invariant that the workflow snapshot seed plus exclusive tail read must always be recoverable from the step index (EP-1), and the resurrection/terminal-status contract (EP-4).
+ADR context at authoring: `docs/adr/` contained only `0001-keiro-pgmq-job-processing-telemetry-contract.md`, which does not touch the workflow engine. Since authoring, `docs/adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md` established the complementary rule that snapshots are advisory cached seeds whose compatibility is checked separately from completeness. EP-1 produced `docs/adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md` for the invariant that a workflow snapshot seed plus exclusive tail read must remain recoverable from the step index. The resurrection/terminal-status contract remains a candidate ADR for EP-4.
 
 
 ## Exec-Plan Registry
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Make workflow journal snapshots wake-safe with a step-index fallback on await | docs/plans/112-make-workflow-journal-snapshots-wake-safe-with-a-step-index-fallback-on-await.md | None | None | Not Started |
+| 1 | Make workflow journal snapshots wake-safe with a step-index fallback on await | docs/plans/112-make-workflow-journal-snapshots-wake-safe-with-a-step-index-fallback-on-await.md | None | None | Complete |
 | 2 | Deliver child failure and awakeable signals across generations and races | docs/plans/113-deliver-child-failure-and-awakeable-signals-across-generations-and-races.md | None | None | Not Started |
 | 3 | Pin sleep firing to its generation and make GC cancel scheduled sleep timers | docs/plans/114-pin-sleep-firing-to-its-generation-and-make-gc-cancel-scheduled-sleep-timers.md | None | None | Not Started |
 | 4 | Record patch sets at rotation and add workflow failure recovery and lease renewal | docs/plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md | None | EP-2 | Not Started |
@@ -68,13 +69,13 @@ Migration numbering in `keiro-migrations/migrations/`: EP-2 adds a migration (fa
 
 `keiro/test/Main.hs`: all four plans add test groups. Additive appends; no coordination needed beyond keeping group names distinct.
 
-Cross-plan decision recorded for ADR promotion at completion: the fix philosophy chosen for the whole initiative is "the step index (`keiro_workflow_steps`) is the authoritative record of journaled steps; every replay-visibility mechanism (in-memory map, snapshot seed, tail read) must fall back to it rather than assume completeness." EP-1 implements the fallback; EP-2/EP-3 rely on it as the safety net for their narrower fixes.
+Cross-plan decision recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md`: the fix philosophy chosen for the whole initiative is "the step index (`keiro_workflow_steps`) is the authoritative record of journaled steps; every replay-visibility mechanism (in-memory map, snapshot seed, tail read) must fall back to it rather than assume completeness." EP-1 implements the fallback; EP-2/EP-3 rely on it as the safety net for their narrower fixes.
 
 
 ## Progress
 
-- [ ] EP-1: Step-index fallback on the `Await` miss path implemented and unit-covered.
-- [ ] EP-1: Snapshot-with-concurrent-wake crash-window tests (child completion and awakeable signal variants) pass; `loadJournal` haddock corrected.
+- [x] (2026-07-23 20:11Z) EP-1: Step-index fallback on the `Await` miss path implemented and unit-covered.
+- [x] (2026-07-23 20:11Z) EP-1: Snapshot-with-concurrent-wake crash-window tests (child completion and awakeable signal variants) pass; `loadJournal` haddock corrected.
 - [ ] EP-2: `ChildFailed` arm case with failure-reason column and migration; cross-generation failed-child await test passes.
 - [ ] EP-2: Awakeable registration moved into id-allocation transaction; signal-in-gap test passes.
 - [ ] EP-2: Cancelled-then-signalled race closed with in-transaction re-read; race test passes.
@@ -91,6 +92,7 @@ Cross-plan decision recorded for ADR promotion at completion: the fix philosophy
 - Plan authoring (2026-07-23), affects EP-4: the `WorkflowFailed` marker's journal event id is deterministic per `(name, wid, generation, failedStepName)` (`keiro/src/Keiro/Workflow.hs:942-948`), so after resurrection deletes the failed index row, a second failure at the same generation would collide with kiroku's duplicate-event-id detection and crash the marking path. EP-4 (docs/plans/115) switches failure markers to store-generated ids and records why dedupe does not regress.
 - Plan authoring (2026-07-23), affects EP-3: an unconditional "refuse to fire when the instance row is missing" guard would break a legitimate recovery path — a workflow whose first operation is a sleep journals nothing and has no instance row if the process dies before `markInstanceSuspended`; the timer fire's append-and-upsert is what makes it discoverable again. EP-3 (docs/plans/114) refuses only on existing terminal rows.
 - Plan authoring (2026-07-23), affects EP-1: no Eff-level step-index point query exists — the finding's `lookupStepResult` is transaction-level only (`lookupStepResultTx`, with a production call site inside `prepareJournalAppend`); EP-1 (docs/plans/112) adds the Eff wrapper it needs.
+- EP-1 implementation (2026-07-23), confirms EP-2's WFX-2 setup constraint: `awakeableNamed` currently registers its pending row only when the returned await action arms, so signalling immediately after allocation returns `False`. EP-1 pre-arms awakeables through an ordinary unresolved run before constructing its stale-map windows; EP-2 remains responsible for closing the allocation-to-registration gap.
 
 
 ## Decision Log
@@ -109,6 +111,10 @@ Cross-plan decision recorded for ADR promotion at completion: the fix philosophy
 
 - Decision: The review's accepted-known items (kiroku `$all` ceiling, shard cold-start spread, push workers for timers/outbox) stay accepted; the narrow advisory-vs-`$all` lock-order inversion found in the core pass (childCompletionHook racing appendFailedChildAndWakeParent) is documented, not fixed.
   Rationale: Verified consequence is a transient-classified deadlock abort and retry (~1 s hiccup), not a stall; fixing lock order would complicate every composed append for no behavioral gain.
+  Date: 2026-07-23
+
+- Decision: Record the EP-1 replay-visibility rule in `docs/adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md`.
+  Rationale: The step-index fallback constrains all future workflow append paths and is distinct from snapshot codec compatibility in ADR 0003, so it must survive beyond the implementation plan.
   Date: 2026-07-23
 
 

@@ -295,6 +295,10 @@ defaultWorkflowRunOptions & #snapshotPolicy .~ Every 2
 The accumulated step-result map is snapshotted via `workflowStateCodec`, whose
 shape hash is the fixed sentinel `"keiro.workflow.stepmap.v1"` — per-step
 result-type evolution stays each step's own `ToJSON`/`FromJSON` concern.
+Snapshots are safe to combine with awakeables, child workflows, and sleeps: if
+a snapshot shadows a wake completion journaled concurrently with its run, an
+await miss falls back to the transactionally maintained workflow-step index
+before arming or suspending.
 
 ## Observability
 
