@@ -73,9 +73,25 @@ region is rejected; the same machine without the twin → `HydrationNoInvertingE
       keiki-codec-json 102+13); version 0.3.0.0 (PVP-major: `Edge` record
       change), sibling packages rebound to `^>=0.3`; `Keiki.Builder.replayOnly`
       shipped alongside.
-- [ ] M2: keiro black-acuity end-to-end test green (with-twin replays, without-twin
-      fails, forward command in removed region rejected); `EventStream` construction
-      surface passes the mode through; keiro-test green against local keiki.
+- [x] M2 (2026-07-23, keiro commit `48ef795`): black-acuity end-to-end
+      regression green — three store-backed tests in `keiro/test/Main.hs`
+      (divert fixture): B-bad fails `HydrationReplayFailed (StreamVersion 1)
+      HydrationNoInvertingEdge`, B-good replays the same history through the
+      twin and serves the tightened rule (streamVersion 2, both events decode
+      back), and a new removed-region command is `CommandRejected` without
+      appending. keiro/keiro-core/keiro-dsl/jitsurei library code compiled
+      UNCHANGED against keiki 0.3 (no `Edge` construction outside tests), so
+      no mode-threading surface was needed — the `EventStream` record wraps
+      whole transducers. All keiki bounds bumped to `>=0.3 && <0.4`;
+      `cabal.project.local` (untracked) points at the local keiki checkout.
+      Full repo green: keiro-test 338 examples, keiro-dsl-test 201, all
+      conformance suites, keiro-migrations 10 — 90 suite PASSes total.
+- [ ] M2 residual: plan 142's replay-audit assertions over the divert store
+      (B-bad `ReplayFailed` / B-good `ReplayOk`) — skipped because plan 142
+      has not landed; activate when both plans are in.
+- [ ] Release residual: publish keiki 0.3.0.0 and delete keiro's
+      `cabal.project.local` (coordinate a release train with plan 138's keiki
+      work if it is in flight by then).
 - [ ] M3: DSL `replay-only transition` marker (grammar/parser/pretty-print/validator/
       scaffold lowering); diff advisory on guard tightening prints the computed
       replay-only twin; fixtures + 24-suite bar green.
@@ -110,6 +126,27 @@ implementation. Provide concise evidence.
   boundary). The Decision Log governs; the shipped tests assert cross-mode
   pairs are unflagged and *same-mode* pairs (live/live and
   replay-only/replay-only) are still flagged.
+- The M2 reproduction transcript (the concern this plan exists for), pinned as
+  a passing assertion in `keiro/test/Main.hs`: history appended by machine A
+  (`ConfirmDivert True` → `DivertConfirmed True`, streamVersion 1), then the
+  next command through the tightened machine returns
+
+  ```text
+  Right (Left (HydrationReplayFailed (StreamVersion 1) HydrationNoInvertingEdge))
+  ```
+
+  and the same command through the twin-bearing machine returns
+  `Right (Right CommandResult {streamVersion = StreamVersion 2, …})`. Nothing
+  in keiro's library code needed changing to get there: `mkEventStreamOrThrow`
+  accepted the twin machine because M1's same-mode ambiguity scoping keeps the
+  forced `InversionAmbiguity` boundary check quiet on cross-mode pairs —
+  exactly the refusal the single-phase design would have hit.
+- keiro's library packages (keiro-core, keiro, keiro-dsl, jitsurei) contain
+  zero direct `Edge` constructions — everything flows through whole-transducer
+  values — so the anticipated "EventStream construction surface passes the
+  mode through" work item was empty; only keiro-test's 18 hand-written fixture
+  edges needed `mode = Keiki.Live` (`Live` unqualified collides with
+  `Keiro.ReadModel.Live`).
 - keiki's test tree constructs `Edge` at 60+ sites (record and positional
   syntax mixed), and `-Wmissing-fields` is a warning, not an error, under the
   repo's `-Wall`. The record change was driven to completeness by building
