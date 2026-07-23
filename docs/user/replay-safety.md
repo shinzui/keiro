@@ -155,15 +155,65 @@ application code to preserve these properties:
 
 - command values should be deterministic data, not live reads from clocks,
   random generators, or external services inside the transducer;
-- event codecs and upcasters must decode every stored event version you still
-  need to replay;
+- event codecs and upcasters must decode every stored event version; Keiro has
+  no mechanism for declaring an old version unsupported;
 - explicit event ids are still needed for externally retried command submissions
   and integration boundaries;
 - async projections, inbox handlers, outbox publishers, and timer firing
   functions must remain idempotent because those workers are at-least-once;
 - snapshots are an optimization only. A corrupt or incompatible snapshot falls
-  back to full event replay, so replay from events must remain correct.
+  back to full event replay, so replay from events must remain correct;
+- a fold change outside the snapshot discriminator — notably a hand-written or
+  Holes-only guard/update edit with no `stateCodecVersion` bump — can accept a
+  stale snapshot seed;
+- a deprecated event is not necessarily replayable. Removing its emitting
+  transition leaves already-stored events with no inverting edge even when they
+  still decode.
+
+## Replay Safety Over Time
+
+Validation proves that the machine being constructed is internally replay-safe
+now. It does not prove that today's machine interprets yesterday's stored log
+the same way yesterday's machine did.
+
+Keiki uses one edge set for both live decisions and replay. During replay it
+inverts each stored event back to a command, selects an edge, re-checks the
+guard against the folded state, and applies that edge's writes. Editing a
+guard, output, update, target, or transition mode therefore changes the meaning
+of existing history. Removing an emitting transition can make hydration fail
+with `HydrationReplayFailed HydrationNoInvertingEdge`. A change can also remain
+invertible but silently apply different register writes.
+
+Keiro's evolution gates make the detectable parts explicit:
+
+- DSL-visible fold edits produce `AggFoldSurfaceChanged`, and the snapshot
+  discriminator automatically invalidates old seeds for generated services.
+  Hand-written and Holes-only fold changes must still bump
+  `stateCodecVersion`.
+- Event retirement is a two-stage protocol. Keep the live emitter while the
+  event is `retiring`; at cutover, mark it `deprecated` and keep an equivalent
+  `replay-only` transition. `DeprecatedEventReplayHazard` warns when that
+  inverting edge is missing.
+- Guard tightening keeps its removed historical region in an explicit
+  `replay-only` twin. Replay-only transitions are used for inversion but never
+  accept a new command; see
+  [ADR 0002](../adr/0002-replay-only-edges-are-the-sanctioned-remedy-for-guard-tightening.md).
+- Codec construction, versioned old-payload goldens, and tag-dispatched
+  upcasters protect decoding, but a decode golden does not prove that the
+  decoded event still inverts or folds identically.
+
+Real stored histories are the evidence static checks lack. The differential,
+database-backed audit planned in
+[plan 142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md)
+will replay only streams affected by a non-neutral diff, compare full replay
+with snapshot-seeded replay, and emit reviewable state digests. Until it lands,
+use explicit old-log replay tests and a production-copy database before
+deploying any transducer change.
 
 In short: `ValidatedEventStream` makes unsafe aggregate replay shape
 unrepresentable at the command boundary. It does not replace codec tests,
 idempotency keys, operational monitoring, or deterministic integration design.
+
+See
+[Evolution And Replayability](../guides/evolution-and-replayability.md) for the
+safe procedure for each change class.

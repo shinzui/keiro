@@ -54,7 +54,7 @@ page.
 ## Progress
 
 - [x] M1 (2026-07-23T18:16:15Z): `codecs-and-event-evolution.md` and `evolve-events-safely.md` corrected against current `Keiro.Codec`; companion-guide cross-links added; `just website-verify` passed (163 HTML pages).
-- [ ] M2: `snapshots.md` corrected (`Custom`/`Terminality`; the discriminator section rewritten — coordinated with plan 138's minimal fix); `replay-safety.md` gains the evolution-over-time boundary section.
+- [x] M2 (2026-07-23T18:17:45Z): `snapshots.md` corrected (`Custom`/`Terminality`; three-component discriminator and manual-bump residual documented); `replay-safety.md` now covers evolution over time, retirement, replay-only edges, and the planned real-log audit; `just website-verify` passed (163 HTML pages).
 - [ ] M3: `docs/user/deploy-ordering.md` written; `docs/user/README.md` index updated; guide cross-links landed in all touched docs.
 - [ ] Close-out: planned-gate references flipped to present tense for any of plans 138/139/140/142 that landed before this plan closes; master plan 24 EP-4 box ticked; ADR distillation pass.
 

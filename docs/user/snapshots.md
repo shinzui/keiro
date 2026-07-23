@@ -43,7 +43,7 @@ data SnapshotPolicy state
   = Never
   | Every Int
   | OnTerminal
-  | Custom (state -> StreamVersion -> Bool)
+  | Custom (Terminality -> state -> StreamVersion -> Bool)
 ```
 
 Use:
@@ -51,7 +51,9 @@ Use:
 - `Never` for small streams or early development.
 - `Every n` for long-lived streams with predictable growth.
 - `OnTerminal` when terminal aggregates are read often after closure.
-- `Custom` when snapshot cadence depends on state or stream version.
+- `Custom` when snapshot cadence depends on terminality, state, or stream
+  version. `Terminality` tells the policy whether the fold reached a terminal
+  state, so a custom policy can snapshot on close.
 
 Intervals less than or equal to zero never snapshot.
 
@@ -76,13 +78,22 @@ Choose a policy by how the manager's state stream grows and ends:
   of events is cheaper than maintaining snapshots.
 
 Snapshots remain advisory for managers exactly as for aggregates: a missing, corrupt, or
-shape-incompatible snapshot falls back to full replay of the manager state stream, and a
-stored manager-event decode failure still fails the reaction. When you change the
-manager's register layout or control-state shape, `defaultStateCodec` invalidates older
-snapshots automatically; for DSL-generated services, spec-visible fold changes do too.
-Fold changes the discriminator cannot see — hand-written update/guard bodies or Holes-only
-edits — require bumping `stateCodecVersion` yourself.
-<!-- plan 141: full rewrite -->
+incompatible snapshot falls back to full replay of the manager state stream, and a stored
+manager-event decode or replay failure still fails the reaction. Snapshot compatibility
+uses three components: the manually owned codec version, the register-file layout hash,
+and the control-state/fold hash. `defaultStateCodec` automatically changes the two hashes
+when the register layout or control-state datatype changes. DSL-generated services also
+compose a fingerprint of the spec-visible replay surface — transition modes, guards,
+writes, outputs, targets, and referenced rules — into the control-state/fold hash.
+
+A fold change outside those visible surfaces still requires a manual
+`stateCodecVersion` bump. This includes hand-written guard or update function bodies and
+logic changed only in a generated service's hand-owned Holes module. Without that bump,
+an old seed can still match and be served silently; post-append verification may then
+persist stale-derived state at a newer stream version. The planned database-backed replay
+audit in
+[plan 142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md)
+will compare seeded and full replay to detect this residual mistake before deployment.
 
 The keiro test suite proves this end to end in
 `keiro/test/Main.hs` under `describe "Keiro.ProcessManager snapshots"`: a manager with
@@ -95,6 +106,7 @@ later reaction hydrates from that snapshot and lands on top of it.
 data StateCodec state = StateCodec
   { stateCodecVersion :: Int
   , shapeHash :: Text
+  , stateShapeHash :: Text
   , encode :: state -> Value
   , decode :: Value -> Either Text state
   }
@@ -102,16 +114,32 @@ data StateCodec state = StateCodec
 
 For an `EventStream`, the state codec encodes `(s, RegFile rs)`.
 
-`shapeHash` must change when the register-file or state shape changes in a way
-that makes old snapshots unsafe. A mismatched `shapeHash` causes Keiro to ignore
-the snapshot and replay from the beginning.
+The three compatibility components have distinct jobs:
+
+- `stateCodecVersion` is owned by the service. Bump it when the snapshot
+  encoding changes incompatibly or when fold logic changes in a way neither
+  derived hash nor a maintained fingerprint can see.
+- `shapeHash` identifies the register-file layout. `defaultStateCodec` derives
+  it from the ordered register slot names and canonical type names.
+- `stateShapeHash` identifies the control-state datatype and optionally the
+  event-fold logic. `defaultStateCodec` derives the state portion; generated DSL
+  streams add `;fold=<fingerprint>` with `withFoldFingerprint`.
+
+Keiro loads a snapshot only when all three values match. A mismatch is a normal
+cache miss: the stream replays from the beginning and may later replace the row
+with a snapshot produced by the current codec. Migration
+`0019-keiro-snapshots-state-shape-hash.sql` gave existing rows an empty
+`state_shape_hash`, so each pre-migration row misses once after the upgrade.
+
+This contract and the surviving manual version-bump obligation are recorded in
+[ADR 0003](../adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md).
 
 ## Hydration Behavior
 
 During `runCommand`, Keiro:
 
-1. looks up a snapshot by stream id, `stateCodec.stateCodecVersion`, and
-   `stateCodec.shapeHash`;
+1. looks up a snapshot by stream id, `stateCodec.stateCodecVersion`,
+   `stateCodec.shapeHash`, and `stateCodec.stateShapeHash`;
 2. decodes the snapshot state;
 3. replays events after the snapshot stream version;
 4. falls back to full replay if the snapshot path fails.
@@ -131,9 +159,15 @@ older snapshot write cannot overwrite a newer row.
 
 - Snapshots are an optimization, not a source of truth.
 - Keep snapshot codecs simple and deterministic.
-- Treat snapshot schema changes as deploy-time compatibility work.
+- Treat snapshot schema and fold changes as deploy-time compatibility work.
+- Bump `stateCodecVersion` for every hand-written or Holes-only fold change
+  that does not change a maintained fingerprint.
 - Prefer full replay correctness over clever snapshot recovery.
 - Monitor hydration latency before adding snapshot complexity.
+
+See
+[Evolution And Replayability](../guides/evolution-and-replayability.md#changing-the-fold-same-events-different-state--and-what-snapshots-do-to-you)
+for the per-change procedure.
 
 Stream truncation is the exception to ordinary advisory fallback: once older
 events are hidden, a valid snapshot must cover the hidden prefix. Before moving
