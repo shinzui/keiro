@@ -1180,6 +1180,54 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 `shouldBe` Right
                     (Left (HydrationReplayFailed (StreamVersion 1) HydrationNoInvertingEdge))
 
+        it "fails hydration after guard tightening without a replay-only twin (plan 143 reproduction)" $ \storeHandle -> do
+            let target = stream "divert-black-acuity-bad" :: Stream DivertEventStream
+            Right (Right appended) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions permissiveDivertEventStream target (ConfirmDivert True)
+            appended ^. #streamVersion `shouldBe` StreamVersion 1
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions tightenedDivertEventStream target (ConfirmDivert False)
+            result
+                `shouldBe` Right
+                    (Left (HydrationReplayFailed (StreamVersion 1) HydrationNoInvertingEdge))
+
+        it "replays black-acuity history through the replay-only twin and keeps serving the live rule" $ \storeHandle -> do
+            let target = stream "divert-black-acuity-good" :: Stream DivertEventStream
+            Right (Right appended) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions permissiveDivertEventStream target (ConfirmDivert True)
+            appended ^. #streamVersion `shouldBe` StreamVersion 1
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions twinDivertEventStream target (ConfirmDivert False)
+            case result of
+                Right (Right commandResult) -> do
+                    commandResult ^. #streamVersion `shouldBe` StreamVersion 2
+                    commandResult ^. #eventsAppended `shouldBe` 1
+                other ->
+                    expectationFailure ("expected hydration through the twin to succeed, got " <> show other)
+            Right recorded <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "divert-black-acuity-good") (StreamVersion 0) 10
+            traverse (decodeRecorded divertCodec) (Vector.toList recorded)
+                `shouldBe` Right [DivertConfirmed True, DivertConfirmed False]
+
+        it "rejects a new command in the removed region under the twin-bearing machine" $ \storeHandle -> do
+            let target = stream "divert-black-acuity-removed" :: Stream DivertEventStream
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions permissiveDivertEventStream target (ConfirmDivert True)
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions twinDivertEventStream target (ConfirmDivert True)
+            result `shouldBe` Right (Left CommandRejected)
+            Right recorded <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward (StreamName "divert-black-acuity-removed") (StreamVersion 0) 10
+            Vector.length recorded `shouldBe` 1
+
         it "surfaces a typed queue-mismatch hydration failure with the failing version" $ \storeHandle -> do
             let targetStreamName = StreamName "counter-command-queue-mismatch"
                 target = stream "counter-command-queue-mismatch" :: Stream CounterEventStream
@@ -9165,6 +9213,7 @@ counterTransducer =
                     , update = UKeep
                     , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         , initial = Counting
@@ -9182,6 +9231,7 @@ noOpCounterTransducer =
                     , update = UKeep
                     , output = []
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         , initial = Counting
@@ -9209,6 +9259,7 @@ multiCounterTransducer =
                         , pack addCtor counterAuditedCtor (inpCtor addCtor #amount *: oNil)
                         ]
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         , initial = Counting
@@ -9238,12 +9289,14 @@ ambiguousCounterTransducer =
                     , update = UKeep
                     , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 , Edge
                     { guard = ambiguousGuard
                     , update = UKeep
                     , output = [pack addCtor counterAuditedCtor (inpCtor addCtor #amount *: oNil)]
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         }
@@ -9279,6 +9332,7 @@ partialSnapshotEventStreamDef =
                                 (inpCtor addCtor #amount)
                         , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
                         , target = SnapshotEncodeBomb
+                        , mode = Keiki.Live
                         }
                     ]
                 , initial = SnapshotEncodable
@@ -9333,6 +9387,7 @@ snapshotCounterTransducer =
                             (inpCtor addCtor #amount)
                     , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         , initial = Counting
@@ -9367,6 +9422,7 @@ multiSnapshotCounterTransducer =
                         , pack addCtor counterAuditedCtor (inpCtor addCtor #amount *: oNil)
                         ]
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         , initial = Counting
@@ -9397,6 +9453,7 @@ guardedSnapshotCounterTransducer =
                             (inpCtor addCtor #amount)
                     , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         , initial = Counting
@@ -9427,6 +9484,7 @@ brokenHiddenInputTransducer =
                             (inpCtor addCtor #amount)
                     , output = []
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         , initial = Counting
@@ -9458,6 +9516,7 @@ headUnrecoverableTransducer =
                         , pack addCtor counterAuditedCtor (inpCtor addCtor #amount *: oNil)
                         ]
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         }
@@ -9496,6 +9555,7 @@ inversionAmbiguousTransducer =
             , update = UKeep
             , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
             , target = Counting
+            , mode = Keiki.Live
             }
 
 {- | This edge reads @Add.amount@ while guarded only by @PTop@. A different
@@ -9516,6 +9576,7 @@ unguardedInputReadTransducer =
                     , update = UKeep
                     , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         }
@@ -9540,6 +9601,7 @@ stateChangingEpsilonTransducer =
                             (Keiki.lit 0)
                     , output = []
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         }
@@ -9568,6 +9630,7 @@ silentMoveTransducer =
                     , update = UKeep
                     , output = []
                     , target = Drained
+                    , mode = Keiki.Live
                     }
                 ]
             Drained -> []
@@ -9631,12 +9694,14 @@ skipTransducer =
                     , update = UKeep
                     , output = [pack sAddCtor counterAddedCtor (inpCtor sAddCtor #amount *: oNil)]
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 , Edge
                     { guard = matchInCtor sSkipCtor
                     , update = UKeep
                     , output = []
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         , initial = Counting
@@ -9725,6 +9790,147 @@ parseCounterEvent (EventType tag) value =
             "CounterAdded" -> pure (CounterAdded amount)
             "CounterAudited" -> pure (CounterAudited amount)
             _ -> fail "unknown counter event type"
+
+-- * Divert fixture (plan 143: replay-only transitions / black-acuity) -----
+
+type DivertEventStream = EventStream (HsPred '[] DivertCommand) '[] DivertState DivertCommand DivertEvent
+
+type ValidatedDivertEventStream = ValidatedEventStream (HsPred '[] DivertCommand) '[] DivertState DivertCommand DivertEvent
+
+data DivertCommand
+    = ConfirmDivert !Bool
+    deriving stock (Generic, Eq, Show)
+
+newtype DivertEvent
+    = DivertConfirmed Bool
+    deriving stock (Generic, Eq, Show)
+
+data DivertState
+    = DivertHeld
+    deriving stock (Generic, Eq, Show, Enum, Bounded, Ord)
+
+type DivertFields = '[ '("acuityBlack", Bool)]
+
+confirmDivertCtor :: InCtor DivertCommand DivertFields
+confirmDivertCtor =
+    InCtor
+        { icName = "ConfirmDivert"
+        , icMatch = \case
+            ConfirmDivert acuityBlack -> Just (RCons Proxy acuityBlack RNil)
+        , icBuild = \case
+            RCons _ acuityBlack RNil -> ConfirmDivert acuityBlack
+        }
+
+divertConfirmedCtor :: WireCtor DivertEvent (Bool, ())
+divertConfirmedCtor =
+    WireCtor
+        { wcName = "DivertConfirmed"
+        , wcMatch = \case
+            DivertConfirmed acuityBlack -> Just (acuityBlack, ())
+        , wcBuild = \case
+            (acuityBlack, ()) -> DivertConfirmed acuityBlack
+        }
+
+divertCodec :: Codec DivertEvent
+divertCodec =
+    Codec
+        { eventTypes = EventType "DivertConfirmed" :| []
+        , eventType = \_ -> EventType "DivertConfirmed"
+        , schemaVersion = 1
+        , encode = \case
+            DivertConfirmed acuityBlack -> object ["acuityBlack" Aeson..= acuityBlack]
+        , decode = parseDivertEvent
+        , upcasters = []
+        }
+
+parseDivertEvent :: EventType -> Value -> Either Text DivertEvent
+parseDivertEvent _ value =
+    case parseEither parser value of
+        Right event -> Right event
+        Left message -> Left (fromStringLiteral message)
+  where
+    parser = withObject "DivertConfirmed" $ \objectValue ->
+        DivertConfirmed <$> objectValue .: "acuityBlack"
+
+-- | The old rule: confirm any reservation.
+divertOldGuard :: HsPred '[] DivertCommand
+divertOldGuard = matchInCtor confirmDivertCtor
+
+-- | The tightened rule: confirm only non-black acuity.
+divertNewGuard :: HsPred '[] DivertCommand
+divertNewGuard =
+    PAnd
+        (matchInCtor confirmDivertCtor)
+        (inpCtor confirmDivertCtor #acuityBlack .== Keiki.lit False)
+
+-- | The removed region, @old ∧ ¬new@: exactly black acuity.
+divertRemovedRegionGuard :: HsPred '[] DivertCommand
+divertRemovedRegionGuard =
+    PAnd
+        (matchInCtor confirmDivertCtor)
+        (inpCtor confirmDivertCtor #acuityBlack .== Keiki.lit True)
+
+divertConfirmEdge ::
+    HsPred '[] DivertCommand ->
+    Keiki.EdgeMode ->
+    Edge (HsPred '[] DivertCommand) '[] DivertCommand DivertEvent DivertState
+divertConfirmEdge edgeGuard edgeMode =
+    Edge
+        { guard = edgeGuard
+        , update = UKeep
+        , output = [pack confirmDivertCtor divertConfirmedCtor (inpCtor confirmDivertCtor #acuityBlack *: oNil)]
+        , target = DivertHeld
+        , mode = edgeMode
+        }
+
+divertEventStreamDef ::
+    [Edge (HsPred '[] DivertCommand) '[] DivertCommand DivertEvent DivertState] ->
+    DivertEventStream
+divertEventStreamDef heldEdges =
+    EventStream
+        { transducer =
+            SymTransducer
+                { edgesOut = \case
+                    DivertHeld -> heldEdges
+                , initial = DivertHeld
+                , initialRegs = RNil
+                , isFinal = const False
+                }
+        , initialState = DivertHeld
+        , initialRegisters = RNil
+        , eventCodec = divertCodec
+        , resolveStreamName = Stream.streamName
+        , snapshotPolicy = Never
+        , stateCodec = Nothing
+        }
+
+-- | Machine A: the original permissive rule.
+permissiveDivertEventStream :: ValidatedDivertEventStream
+permissiveDivertEventStream =
+    mkEventStreamOrThrow
+        "divert-permissive"
+        (divertEventStreamDef [divertConfirmEdge divertOldGuard Keiki.Live])
+
+-- | Machine B without the twin: the tightened rule alone.
+tightenedDivertEventStream :: ValidatedDivertEventStream
+tightenedDivertEventStream =
+    mkEventStreamOrThrow
+        "divert-tightened"
+        (divertEventStreamDef [divertConfirmEdge divertNewGuard Keiki.Live])
+
+{- | Machine B with the replay-only twin carrying the removed region:
+the tightened rule governs new traffic; black-acuity history keeps
+its inverting edge.
+-}
+twinDivertEventStream :: ValidatedDivertEventStream
+twinDivertEventStream =
+    mkEventStreamOrThrow
+        "divert-twin"
+        ( divertEventStreamDef
+            [ divertConfirmEdge divertNewGuard Keiki.Live
+            , divertConfirmEdge divertRemovedRegionGuard Keiki.ReplayOnly
+            ]
+        )
 
 counterProcessManager ::
     ProcessManager
@@ -10692,6 +10898,7 @@ rejectNineTransducer =
                     , update = UKeep
                     , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
                     , target = Counting
+                    , mode = Keiki.Live
                     }
                 ]
         , initial = Counting

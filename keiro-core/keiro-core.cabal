@@ -56,7 +56,7 @@ library
     , bytestring    >=0.11
     , deepseq       >=1.5
     , generic-lens  >=2.2
-    , keiki         >=0.2  && <0.3
+    , keiki         >=0.3  && <0.4
     , kiroku-store  >=0.3  && <0.4
     , lens          >=5.2
     , scientific    >=0.3

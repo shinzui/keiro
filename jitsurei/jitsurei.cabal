@@ -60,7 +60,7 @@ library
   hs-source-dirs:  src
   build-depends:
     , aeson                 >=2.2
-    , base                  >=4.21 && <5
+    , base                  >=4.21    && <5
     , containers            >=0.6
     , contravariant-extras  >=0.3
     , effectful             >=2.6
@@ -68,10 +68,10 @@ library
     , generic-lens          >=2.2
     , hasql                 >=1.10
     , hasql-transaction     >=1.1
-    , keiki                 >=0.2  && <0.3
-    , keiki-codec-json      >=0.2  && <0.3
+    , keiki                 >=0.3     && <0.4
+    , keiki-codec-json      >=0.2.0.1 && <0.3
     , keiro
-    , kiroku-store          >=0.3  && <0.4
+    , kiroku-store          >=0.3     && <0.4
     , lens                  >=5.2
     , mmzk-typeid           >=0.1
     , text                  >=2.1

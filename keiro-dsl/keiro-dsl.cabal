@@ -102,7 +102,7 @@ test-suite keiro-dsl-conformance
   build-depends:
     , aeson  >=2.2
     , base   >=4.21 && <5
-    , keiki  >=0.2  && <0.3
+    , keiki  >=0.3  && <0.4
     , keiro
     , text   >=2.1
 
@@ -123,7 +123,7 @@ test-suite keiro-dsl-conformance-snapshot
   build-depends:
     , aeson  >=2.2
     , base   >=4.21 && <5
-    , keiki  >=0.2  && <0.3
+    , keiki  >=0.3  && <0.4
     , keiro
     , text   >=2.1
 
@@ -190,7 +190,7 @@ test-suite keiro-dsl-conformance-skeletons
     , containers
     , effectful-core
     , hasql-transaction
-    , keiki              >=0.2  && <0.3
+    , keiki              >=0.3  && <0.4
     , keiro
     , keiro-pgmq
     , kiroku-store
@@ -218,7 +218,7 @@ test-suite keiro-dsl-conformance-coldstart
   build-depends:
     , aeson  >=2.2
     , base   >=4.21 && <5
-    , keiki  >=0.2  && <0.3
+    , keiki  >=0.3  && <0.4
     , keiro
     , text   >=2.1
 
@@ -407,7 +407,7 @@ test-suite keiro-dsl-conformance-process-full
   build-depends:
     , aeson         >=2.2
     , base          >=4.21 && <5
-    , keiki         >=0.2  && <0.3
+    , keiki         >=0.3  && <0.4
     , keiro
     , shibuya-core
     , text          >=2.1
@@ -501,7 +501,7 @@ test-suite keiro-dsl-conformance-router-full
     , aeson           >=2.2
     , base            >=4.21 && <5
     , effectful-core
-    , keiki           >=0.2  && <0.3
+    , keiki           >=0.3  && <0.4
     , keiro
     , shibuya-core
     , text            >=2.1
@@ -536,7 +536,7 @@ test-suite keiro-dsl-conformance-newsurface
     , base               >=4.21 && <5
     , effectful-core
     , hasql-transaction
-    , keiki              >=0.2  && <0.3
+    , keiki              >=0.3  && <0.4
     , keiro
     , kiroku-store
     , shibuya-core
@@ -578,6 +578,6 @@ test-suite keiro-dsl-conformance-v2
   build-depends:
     , aeson  >=2.2
     , base   >=4.21 && <5
-    , keiki  >=0.2  && <0.3
+    , keiki  >=0.3  && <0.4
     , keiro
     , text   >=2.1
