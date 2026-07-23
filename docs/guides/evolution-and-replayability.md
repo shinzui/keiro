@@ -280,7 +280,11 @@ guards or writes, and `mkEventStream` validates the new machine against
 itself, not against old logs. The safe procedure is to treat a guard or output
 edit exactly like a schema edit: if historical events were produced under the
 old rule, keep an edge that inverts them (typically: keep the old edge, add a
-new edge with a new event or new event version for the new behaviour).
+new edge with a new event or new event version for the new behaviour). A
+first-class form of exactly this — a `replay-only transition` carrying the
+removed guard region, excluded from forward execution but available to
+inversion, with `diff` computing and printing the twin for you — is
+[`docs/plans/143`](../plans/143-add-first-class-replay-only-transitions-for-guard-evolution.md).
 
 **Reason two: redelivery windows.** Process-manager and router dispatch is
 made idempotent by deterministic event ids derived from
