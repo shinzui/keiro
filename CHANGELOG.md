@@ -26,6 +26,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   chains, supports a mutually exclusive `retiring event` marker, and warns
   when deprecated events lack the replay-only transition required to hydrate
   old payloads.
+- `keiro-dsl diff` now reports vanished upcaster rungs as breaking and
+  distinguishes hazardous event deprecation from the replay-safe
+  deprecated-plus-replay-only cutover. Versioned old-payload JSON goldens now
+  exercise `decodeRaw` in the v2 conformance suite.
 - `defaultStateCodec` derives a control-state discriminator through Keiki's
   `CanonicalStateShape`; `withFoldFingerprint` composes an explicit fold token
   as `<state-hash>;fold=<fingerprint>`.

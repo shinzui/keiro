@@ -577,8 +577,9 @@ test-suite keiro-dsl-conformance-v2
     HospitalCapacity.Reservation.Holes
 
   build-depends:
-    , aeson  >=2.2
-    , base   >=4.21 && <5
-    , keiki  >=0.3  && <0.4
+    , aeson      >=2.2
+    , base       >=4.21 && <5
+    , directory  >=1.3
+    , keiki      >=0.3  && <0.4
     , keiro
-    , text   >=2.1
+    , text       >=2.1

@@ -447,7 +447,26 @@ eventDiff oldAgg newAgg e =
         Just oldE
             | evVersion e > evVersion oldE ->
                 if evVersion e == evVersion oldE + 1 && evUpcastFrom e `hasSource` evVersion oldE
-                    then [additive (aggName newAgg) "event" (evName e) ("new version v" <> tInt (evVersion e) <> " with upcaster from v" <> tInt (evVersion oldE))]
+                    then
+                        [additive (aggName newAgg) "event" (evName e) ("new version v" <> tInt (evVersion e) <> " with upcaster from v" <> tInt (evVersion oldE))]
+                            ++ [ breaking
+                                    (aggName newAgg)
+                                    "event"
+                                    (evName e)
+                                    UpcasterChainGap
+                                    ( "bumping v"
+                                        <> tInt (evVersion oldE)
+                                        <> " to v"
+                                        <> tInt (evVersion e)
+                                        <> " replaced the 'upcast from v"
+                                        <> tInt vanishedSource
+                                        <> "' rung; stored v"
+                                        <> tInt vanishedSource
+                                        <> " payloads can no longer decode"
+                                    )
+                               | Just (vanishedSource, _) <- [evUpcastFrom oldE]
+                               , not (aggregateHasUpcasterSource newAgg vanishedSource)
+                               ]
                     else
                         [ breaking
                             (aggName newAgg)
@@ -468,11 +487,12 @@ eventDiff oldAgg newAgg e =
                 sameVersionEventDiff oldAgg newAgg oldE e
 
 {- | Events present in the old aggregate but absent in the new one. Removing a
-tag entirely is breaking; keeping it as a deprecated event is safe.
+tag entirely is breaking; deprecation preserves decoding but needs a retained
+replay-only emitter to preserve replay.
 -}
 removedEvents :: Aggregate -> Aggregate -> [Change]
 removedEvents oldAgg newAgg =
-    [ breaking (aggName newAgg) "event" (evName oldE) EvtRemovedNotDeprecated "event removed entirely; keep it as a 'deprecated event' so old payloads still decode"
+    [ breaking (aggName newAgg) "event" (evName oldE) EvtRemovedNotDeprecated "event removed entirely; its stored payloads can neither decode nor replay. Deprecating instead restores decode-ability only — replay still fails on live streams unless an equivalent replay-only emitting transition is retained; truncate or terminalize affected streams before deleting it"
     | oldE <- aggEvents oldAgg
     , isNothing (find ((== evName oldE) . evName) (aggEvents newAgg))
     ]
@@ -480,6 +500,16 @@ removedEvents oldAgg newAgg =
 hasSource :: Maybe (Int, Hole) -> Int -> Bool
 hasSource (Just (m, _)) n = m == n
 hasSource Nothing _ = False
+
+aggregateHasUpcasterSource :: Aggregate -> Int -> Bool
+aggregateHasUpcasterSource aggregate source =
+    any ((== Just source) . fmap fst . evUpcastFrom) (aggEvents aggregate)
+
+hasReplayOnlyEmitter :: Aggregate -> Name -> Bool
+hasReplayOnlyEmitter aggregate eventName =
+    any
+        (\transition -> tMode transition == TmReplayOnly && eventName `elem` tEmits transition)
+        (aggTransitions aggregate)
 
 eventFieldSigs :: Aggregate -> Event -> [(Name, Maybe Name)]
 eventFieldSigs agg e = case evBody e of
@@ -495,6 +525,7 @@ sameVersionEventDiff oldAgg newAgg oldE newE =
         ++ removedChanges
         ++ typeChanges
         ++ deprecationChanges
+        ++ retirementChanges
   where
     oldFields = eventFieldSigs oldAgg oldE
     newFields = eventFieldSigs newAgg newE
@@ -527,9 +558,32 @@ sameVersionEventDiff oldAgg newAgg oldE newE =
         ]
     deprecationChanges
         | not (evDeprecated oldE) && evDeprecated newE =
-            [additive (aggName newAgg) "event" (evName newE) "event deprecated (still decodable)"]
-        | evDeprecated oldE && not (evDeprecated newE) =
+            [ if hasReplayOnlyEmitter newAgg (evName newE)
+                then
+                    advisory
+                        (aggName newAgg)
+                        "event"
+                        (evName newE)
+                        EventRetirementInProgress
+                        "event deprecated and removed from the live write path, while an equivalent replay-only transition preserves hydration. Retain that transition until every affected stream is terminal, truncated, or passes the replay audit"
+                else
+                    advisory
+                        (aggName newAgg)
+                        "event"
+                        (evName newE)
+                        DeprecatedEventReplayHazard
+                        ( "event deprecated: old payloads remain decodable but are no longer replayable — hydration of live streams containing them fails at the first command (HydrationNoInvertingEdge). Add an equivalent replay-only emitting transition or confirm every affected stream is terminal or truncated before deploying"
+                            <> if evRetiring oldE then "" else "; consider a 'retiring event' stage first"
+                        )
+            ]
+        | evDeprecated oldE && not (evDeprecated newE) && not (evRetiring newE) =
             [advisory (aggName newAgg) "event" (evName newE) EventUndeprecated "event returned to the write surface; old payloads remain decodable but new writes resume"]
+        | otherwise = []
+    retirementChanges
+        | not (evRetiring oldE) && evRetiring newE =
+            [advisory (aggName newAgg) "event" (evName newE) EventRetirementInProgress "retirement started; keep the live emitting transition until affected streams are terminal or truncated, then cut over to deprecated plus an equivalent replay-only emitting transition"]
+        | evRetiring oldE && not (evRetiring newE) && not (evDeprecated newE) =
+            [additive (aggName newAgg) "event" (evName newE) "event retirement abandoned; ordinary live writes continue"]
         | otherwise = []
 
 renderFieldType :: Maybe Name -> Text

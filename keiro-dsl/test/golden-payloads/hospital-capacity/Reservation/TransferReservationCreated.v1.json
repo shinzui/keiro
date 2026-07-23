@@ -1,0 +1,9 @@
+{
+  "kind": "TransferReservationCreated",
+  "reservationId": "rsv_01hzy3v7q2e8kaw2m5x0d41n9c",
+  "hospitalId": "hosp_01hzy3v7q2e8kaw2m5x0d41n9d",
+  "commandId": "cmd_01hzy3v7q2e8kaw2m5x0d41n9e",
+  "patientAcuity": "red",
+  "divertStatus": "open",
+  "lifeCriticalOverride": true
+}

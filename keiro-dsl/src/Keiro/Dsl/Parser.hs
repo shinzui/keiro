@@ -136,6 +136,7 @@ reservedWords =
     , "status-map"
     , "true"
     , "false"
+    , "retiring"
     , "deprecated"
     , "upcast"
     , "from"

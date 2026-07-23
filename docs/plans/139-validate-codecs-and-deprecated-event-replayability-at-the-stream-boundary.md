@@ -53,7 +53,7 @@ chain for a stored v1 payload.
 
 - [x] (2026-07-23T17:03:52Z) M1: `validateEventStreamWith` runs `mkCodec`; duplicate-rung and vanished-rung codecs fail at `mkEventStreamOrThrow`; keiro tests green; CHANGELOG entry.
 - [x] (2026-07-23T17:13:55Z) M2: `retiring event` marker (grammar/parser/pretty-print); DSL validator rules `DuplicateUpcasterSource`, `UpcasterChainGap`, `DeprecatedEventReplayHazard`, `EventRetirementInProgress` implemented with fixture specs; `keiro-dsl-test` green.
-- [ ] M3: diff deprecation reclassified to advisory-with-warning; `Diff.hs:404` message fixed; diff tests (incl. the 830-835 assertion) updated; golden old-payload fixture format defined and the conformance-v2 decodeRaw golden test green; all 24 keiro-dsl suites green.
+- [x] (2026-07-23T17:22:41Z) M3: diff deprecation reclassified to advisory-with-warning; `Diff.hs:404` message fixed; diff tests (incl. the 830-835 assertion) updated; golden old-payload fixture format defined and the conformance-v2 decodeRaw golden test green; all 24 keiro-dsl suites green.
 - [ ] Close-out: master plan 24 boxes ticked; externally visible contracts recorded in this Decision Log for plan 141 to quote; ADR distillation pass done.
 
 
@@ -73,6 +73,20 @@ implementation. Provide concise evidence.
   hazard: the focused DSL suite now has 223 passing examples, and manual CLI checks prove
   duplicate/gap fixtures exit 1 while retiring, hazardous deprecated, and replay-safe
   deprecated fixtures exit 0 with distinct machine-readable warnings.
+- The golden test supplied both intended failure witnesses. Before the fixture existed,
+  `keiro-dsl-conformance-v2` failed opening the golden directory. With the fixture present
+  it printed `PASS golden TransferReservationCreated.v1`; temporarily removing the codec's
+  upcaster made both that golden and the existing synthetic upcaster assertion fail, and
+  restoring the rung returned the suite to green.
+- The first full 24-suite run exposed a lexical ambiguity absent from the hand-written
+  fixtures: with no commands before it, `retiring event` could be consumed as a state named
+  `retiring`. QuickCheck seed 180655211 reproduced it. Reserving `retiring` as a structural
+  keyword made that exact seed pass 100 cases; the repeated full package run then passed
+  all 24 suites and all 227 unit examples.
+- Re-scaffolding the v2 vertical found one meaningful pre-existing fixture drift: the
+  now-standard unqualified-read-model warning was absent from `Projection.hs`. The
+  refreshed vertical compiled and passed the golden test; the retirement marker itself
+  produced no generated-machine change.
 
 
 ## Decision Log

@@ -927,6 +927,9 @@ main = hspec $ do
         it "rejects a v1 to v3 jump whose only upcaster starts at v2" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-v3-dangling.keiro"
             [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtVersionMissingUpcaster]
+        it "classifies a vanished historical upcaster rung as UpcasterChainGap" $ do
+            cs <- diffFixtures "test/fixtures/reservation-v2.keiro" "test/fixtures/reservation-chain-gap.keiro"
+            [ckCode k | Breaking k <- cs] `shouldContain` [Just UpcasterChainGap]
         it "classifies an enum constructor removal as EnumCtorRemoved" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-enumdrop.keiro"
             [ckCode k | Breaking k <- cs] `shouldContain` [Just EnumCtorRemoved]
@@ -944,12 +947,45 @@ main = hspec $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-foldchange.keiro"
             any isBreaking cs `shouldBe` False
             [ckCode k | Advisory k <- cs] `shouldContain` [Just AggFoldSurfaceChanged]
-        it "keeps deprecation additive and reports un-deprecation as EventUndeprecated" $ do
+        it "advises on hazardous deprecation and reports un-deprecation" $ do
             deprecated <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-deprecated.keiro"
             any isBreaking deprecated `shouldBe` False
+            [ckCode k | Advisory k <- deprecated] `shouldContain` [Just DeprecatedEventReplayHazard]
             restored <- diffFixtures "test/fixtures/reservation-deprecated.keiro" "test/fixtures/reservation.keiro"
             any isAdvisory restored `shouldBe` True
             [ckCode k | Advisory k <- restored] `shouldContain` [Just EventUndeprecated]
+        it "recognises replay-only deprecation as a replay-safe retirement cutover" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-deprecated-replay-only.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckCode k | Advisory k <- cs] `shouldContain` [Just EventRetirementInProgress]
+            [ckCode k | Advisory k <- cs] `shouldNotContain` [Just DeprecatedEventReplayHazard]
+        it "advises when event retirement starts" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-retiring.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckCode k | Advisory k <- cs] `shouldContain` [Just EventRetirementInProgress]
+        it "does not recommend decode-only deprecation for an event removal" $ do
+            old <- specOf "test/fixtures/reservation.keiro"
+            let new =
+                    old
+                        { specNodes =
+                            [ case node of
+                                NAggregate aggregate ->
+                                    NAggregate
+                                        aggregate
+                                            { aggEvents =
+                                                [ event
+                                                | event <- aggEvents aggregate
+                                                , evName event /= "TransferReservationConfirmed"
+                                                ]
+                                            }
+                                _ -> node
+                            | node <- specNodes old
+                            ]
+                        }
+                removals = [change | change@(Breaking kind) <- diffSpecs old new, ckCode kind == Just EvtRemovedNotDeprecated]
+            removals `shouldSatisfy` (not . null)
+            [ckDetail kind | Breaking kind <- removals]
+                `shouldSatisfy` all (not . T.isInfixOf "so old payloads still decode")
         it "prints a paste-ready replay-only twin when a guard tightens (plan 143)" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-guard-tightened.keiro"
             any isBreaking cs `shouldBe` False
