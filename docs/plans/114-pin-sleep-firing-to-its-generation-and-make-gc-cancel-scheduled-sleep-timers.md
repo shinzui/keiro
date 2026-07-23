@@ -38,9 +38,9 @@ This is the plan-authoring-time checklist of the work. Update it at every stoppi
 - [x] (2026-07-23 20:47Z) M1: `deterministicJournalId` exported from `Keiro.Workflow`; `workflowSleepFireAction` appends pinned to the resolved generation.
 - [x] (2026-07-23 20:47Z) M1: legacy-payload generation resolution via timer-id matching implemented and unit-tested.
 - [x] (2026-07-23 20:47Z) M1: staged stale-re-fire-across-rotation test passes; full suite green (`cabal test keiro-test`: 362 examples, 0 failures).
-- [ ] M2: `scheduleTimerOnceTx` reports whether it inserted; the sleep arm writes `wake_after` only on actual insert.
-- [ ] M2: firing clears `wake_after` in the same transaction as the journal append; wrong in-code comment corrected.
-- [ ] M2: deterministic no-postponement test passes; existing "fires a sleep longer than the resume cadence" test tightened; full suite green.
+- [x] (2026-07-23 20:51Z) M2: `scheduleTimerOnceTx` reports whether it inserted; the sleep arm writes `wake_after` only on actual insert.
+- [x] (2026-07-23 20:51Z) M2: firing clears `wake_after` in the same transaction as the journal append; wrong in-code comment corrected.
+- [x] (2026-07-23 20:51Z) M2: deterministic no-postponement test passes; existing "fires a sleep longer than the resume cadence" test tightened; full suite green (363 examples, 0 failures).
 - [ ] M3: GC deletes all workflow-sleep timer rows for the instance regardless of status.
 - [ ] M3: fire action refuses (and cancels the timer) when the instance row is terminal.
 - [ ] M3: orphan-fire resurrection test passes; GC tests (deletion, mid-crash convergence) green; full suite green.
@@ -56,6 +56,11 @@ implementation. Provide concise evidence.
   examples rather than the authoring-time 335 because sibling plans and
   intervening work landed first. The focused crash-window test passed, and the
   full 362-example suite passed with zero failures.
+- Milestone 2 validation (2026-07-23): a zero-delay timer provides a
+  deterministic wake-boundary test without wall-clock tolerance. The resume
+  pass re-entered the arm, preserved the exact original `wake_after`, the fire
+  transaction cleared it, and the next resume pass completed. The focused
+  sleep group passed 13 examples and the full suite passed 363 examples.
 
 
 ## Decision Log
@@ -91,6 +96,10 @@ this section into docs/adr/. Keep task-local execution details here.
   the fire action appends directly to that generation. The staged
   append-committed/mark-lost crash window now leaves generation 1 suspended
   while retiring the stale generation-0 timer as fired.
+- Milestone 2 (2026-07-23): the first arm now owns both `fire_at` and
+  `wake_after`; replay arms cannot postpone either value. A successful fire
+  clears the hint atomically with its journal append, so the resume worker can
+  discover the completion immediately.
 
 
 ## Context and Orientation

@@ -105,6 +105,7 @@ module Keiro.Workflow (
     currentGeneration,
     findUnfinishedWorkflowIds,
     setWorkflowWakeAfterTx,
+    clearWorkflowWakeAfterTx,
 )
 where
 
@@ -150,7 +151,7 @@ import Keiro.Workflow.Instance (
     markInstanceSuspended,
     upsertInstanceTx,
  )
-import Keiro.Workflow.Schema (WorkflowStepRow (..), currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lockWorkflowStepTx, lookupStepResult, lookupStepResultTx, recordStepTx, setWorkflowWakeAfterTx, stepExists)
+import Keiro.Workflow.Schema (WorkflowStepRow (..), clearWorkflowWakeAfterTx, currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lockWorkflowStepTx, lookupStepResult, lookupStepResultTx, recordStepTx, setWorkflowWakeAfterTx, stepExists)
 import Keiro.Workflow.Snapshot (lookupWorkflowSnapshot, writeWorkflowSnapshot)
 import Keiro.Workflow.Types
 import Kiroku.Store.Effect (Store)

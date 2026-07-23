@@ -8,6 +8,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Breaking Changes
 
+- `Keiro.Timer.scheduleTimerOnceTx` now returns `Bool`: `True` when the
+  first-arm-wins insert created the timer row, and `False` when an existing row
+  won. Callers that discarded its former `()` result can continue to use
+  `void`.
 - `Keiro.Workflow.Child.Schema.ChildRow` gains `failureReason`, and
   `markChildFailedTx` now requires the failure reason as its third argument.
   Migration `0020-keiro-workflow-children-failure-reason.sql` adds the nullable
@@ -57,6 +61,13 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Fixed
 
+- Workflow sleep timer fires are pinned to the generation that armed them,
+  including legacy timer payloads recovered from deterministic timer ids. A
+  stale re-fire after `continueAsNew` can no longer resolve a same-named sleep
+  on the next generation.
+- Workflow sleep re-arms no longer postpone `wake_after`, and firing clears the
+  hint atomically with the journal append, so an already-fired sleeper is
+  rediscovered promptly.
 - Workflows using journal snapshots no longer suspend forever when a child,
   awakeable, or sleep completion was journaled while a run was mid-flight but
   omitted from that run's snapshot. The `awaitStep` miss path now falls back to

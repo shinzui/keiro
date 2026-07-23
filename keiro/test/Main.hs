@@ -8151,6 +8151,43 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 secondFireAt `shouldBe` firstFireAt
                 readIORef counter >>= (`shouldBe` 1)
 
+            it "keeps a due wake_after stable on re-arm and clears it on fire" $ \storeHandle -> do
+                counter <- newIORef (0 :: Int)
+                let name = WorkflowName "sleep-wake-stable"
+                    wid = WorkflowId "sws-1"
+                    registry = Map.singleton name (WorkflowDef (\_ -> sleepDemoNamed counter (StepName "wait") 0))
+                Right Suspended <-
+                    Store.runStoreIO storeHandle $
+                        runWorkflow name wid (sleepDemoNamed counter (StepName "wait") 0)
+                Right (Just firstWakeAfter) <-
+                    Store.runStoreIO storeHandle $
+                        workflowWakeAfter name wid
+
+                Right rearmed <-
+                    Store.runStoreIO storeHandle $
+                        resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+                discovered rearmed `shouldBe` 1
+                Right (Just secondWakeAfter) <-
+                    Store.runStoreIO storeHandle $
+                        workflowWakeAfter name wid
+                secondWakeAfter `shouldBe` firstWakeAfter
+
+                fireTime <- getCurrentTime
+                Right (Just _) <-
+                    Store.runStoreIO storeHandle $
+                        runWorkflowTimerWorker Nothing fireTime (\_ -> pure Nothing)
+                Right clearedWakeAfter <-
+                    Store.runStoreIO storeHandle $
+                        workflowWakeAfter name wid
+                clearedWakeAfter `shouldBe` Nothing
+
+                Right resumed <-
+                    Store.runStoreIO storeHandle $
+                        resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+                discovered resumed `shouldBe` 1
+                completed resumed `shouldBe` 1
+                readIORef counter >>= (`shouldBe` 2)
+
             it "skips a sleeping workflow until wake_after expires" $ \storeHandle -> do
                 counter <- newIORef (0 :: Int)
                 let name = WorkflowName "sleepwakeafter"
@@ -8200,22 +8237,23 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 let name = WorkflowName "sleepactive"
                     wid = WorkflowId "sa-1"
                     registry = Map.singleton name (WorkflowDef (\_ -> sleepDemoNamed counter (StepName "wait") 1))
-                    drive 0 = expectationFailure "active resume cadence kept postponing the sleep"
-                    drive n = do
-                        Right summary <-
-                            Store.runStoreIO storeHandle $
-                                resumeWorkflowsOnce defaultWorkflowResumeOptions registry
-                        now <- getCurrentTime
-                        _ <-
-                            Store.runStoreIO storeHandle $
-                                runWorkflowTimerWorker Nothing now (\_ -> pure Nothing)
-                        if completed summary == 1
-                            then pure ()
-                            else threadDelay 250_000 >> drive (n - 1)
                 Right Suspended <-
                     Store.runStoreIO storeHandle $
                         runWorkflow name wid (sleepDemoNamed counter (StepName "wait") 1)
-                drive (16 :: Int)
+                threadDelay 1_200_000
+                Right boundaryPass <-
+                    Store.runStoreIO storeHandle $
+                        resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+                discovered boundaryPass `shouldBe` 1
+                fireTime <- getCurrentTime
+                Right (Just _) <-
+                    Store.runStoreIO storeHandle $
+                        runWorkflowTimerWorker Nothing fireTime (\_ -> pure Nothing)
+                Right completionPass <-
+                    Store.runStoreIO storeHandle $
+                        resumeWorkflowsOnce defaultWorkflowResumeOptions registry
+                discovered completionPass `shouldBe` 1
+                completed completionPass `shouldBe` 1
                 readIORef counter >>= (`shouldBe` 2)
 
             it "uses generation-namespaced timer ids after continueAsNew" $ \storeHandle -> do

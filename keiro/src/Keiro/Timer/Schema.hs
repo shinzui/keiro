@@ -124,9 +124,10 @@ This is for callers whose first arm must win, such as durable workflow sleeps:
 every resume pass re-runs the sleep arm until the timer fires, and preserving
 the original 'fireAt' keeps the sleep measured from the first arm. Process
 managers that intentionally push a deadline back should keep using
-'scheduleTimerTx'.
+'scheduleTimerTx'. Returns 'True' when this call inserted the row and 'False'
+when an existing timer won.
 -}
-scheduleTimerOnceTx :: TimerRequest -> Tx.Transaction ()
+scheduleTimerOnceTx :: TimerRequest -> Tx.Transaction Bool
 scheduleTimerOnceTx request =
     Tx.statement
         ( timerIdToUuid (request ^. #timerId)
@@ -257,7 +258,7 @@ scheduleTimerStmt =
         )
         D.noResult
 
-scheduleTimerOnceStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text) ()
+scheduleTimerOnceStmt :: Statement (UUID, Text, Text, UTCTime, Value, Text) Bool
 scheduleTimerOnceStmt =
     preparable
         """
@@ -275,7 +276,7 @@ scheduleTimerOnceStmt =
             (E.param (E.nonNullable E.jsonb))
             (E.param (E.nonNullable E.text))
         )
-        D.noResult
+        ((> 0) <$> D.rowsAffected)
 
 claimDueTimerStmt :: Statement UTCTime (Maybe TimerRow)
 claimDueTimerStmt =

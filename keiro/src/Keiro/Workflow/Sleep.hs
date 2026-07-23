@@ -120,6 +120,7 @@ import Keiro.Workflow (
     WorkflowJournalEvent (..),
     WorkflowName (..),
     awaitStep,
+    clearWorkflowWakeAfterTx,
     currentGeneration,
     currentRunGeneration,
     currentWorkflow,
@@ -281,11 +282,13 @@ sleepNamed userStep delta = do
                     , fireAt = addUTCTime delta now
                     , payload = sleepTimerPayload gen full
                     }
-        -- Re-arms can only happen once discovery has found this instance again,
-        -- which means any existing wake_after has already self-expired. A later
-        -- overwrite is therefore bounded by the requested delay and suppresses
-        -- only future not-yet-due resume passes.
-        runTransaction (scheduleTimerOnceTx request >> setWorkflowWakeAfterTx name wid (request ^. #fireAt))
+        -- Only the arm that created the timer writes the wake hint. Replays
+        -- leave both fire_at and wake_after untouched, so re-entering a due or
+        -- already-fired sleep cannot postpone discovery. Firing clears the
+        -- hint in the same transaction as its journal append.
+        runTransaction $ do
+            inserted <- scheduleTimerOnceTx request
+            when inserted (setWorkflowWakeAfterTx name wid (request ^. #fireAt))
 
 {- | Durably pause the workflow for @delta@ under an ordinal name (the @N@th
 sleep in a run becomes @sleep:N@). Convenient but its determinism is
@@ -338,7 +341,7 @@ workflowSleepFireAction row =
                     wid
                     targetGen
                     (StepRecorded{stepName = full, result = Null, recordedAt = now})
-            runTransaction appendTx >>= \case
+            runTransaction (appendTx <* clearWorkflowWakeAfterTx name wid) >>= \case
                 JournalAppended{} ->
                     pure (Just (deterministicJournalId name wid targetGen full))
                 JournalAlreadyPresent{} ->

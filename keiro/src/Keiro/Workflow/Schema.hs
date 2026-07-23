@@ -20,6 +20,7 @@ module Keiro.Workflow.Schema (
     lookupStepResultTx,
     lockWorkflowStepTx,
     setWorkflowWakeAfterTx,
+    clearWorkflowWakeAfterTx,
 
     -- * Read-only lookups
     loadStepIndex,
@@ -90,6 +91,10 @@ lockWorkflowStepTx key =
 setWorkflowWakeAfterTx :: WorkflowName -> WorkflowId -> UTCTime -> Tx.Transaction ()
 setWorkflowWakeAfterTx (WorkflowName name) (WorkflowId wid) wakeAfter =
     Tx.statement (wid, name, wakeAfter) setWorkflowWakeAfterStmt
+
+clearWorkflowWakeAfterTx :: WorkflowName -> WorkflowId -> Tx.Transaction ()
+clearWorkflowWakeAfterTx (WorkflowName name) (WorkflowId wid) =
+    Tx.statement (wid, name) clearWorkflowWakeAfterStmt
 
 {- | Load every recorded step for a workflow instance as a @step name ->
 result@ map (includes the terminal completion marker row if present). Exposed
@@ -262,5 +267,20 @@ setWorkflowWakeAfterStmt =
             (E.param (E.nonNullable E.text))
             (E.param (E.nonNullable E.text))
             (E.param (E.nonNullable E.timestamptz))
+        )
+        D.noResult
+
+clearWorkflowWakeAfterStmt :: Statement (Text, Text) ()
+clearWorkflowWakeAfterStmt =
+    preparable
+        """
+        UPDATE keiro.keiro_workflows
+        SET wake_after = NULL,
+            updated_at = now()
+        WHERE workflow_id = $1 AND workflow_name = $2
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
         )
         D.noResult
