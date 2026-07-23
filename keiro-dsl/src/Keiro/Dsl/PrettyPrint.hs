@@ -8,6 +8,7 @@ to the identical AST.
 -}
 module Keiro.Dsl.PrettyPrint (
     renderSpec,
+    renderTransition,
 )
 where
 
@@ -558,12 +559,25 @@ docEvent e =
         EventFields fs -> braced (map docField fs)
     line1 = kw <+> nameVer <+> bodyDoc
 
+{- | Render one transition in concrete @.keiro@ syntax. Exported for @diff@'s
+guard-tightening advisory, which prints a paste-ready replay-only twin
+(plan 143).
+-}
+renderTransition :: Transition -> Text
+renderTransition =
+    renderStrict
+        . layoutPretty LayoutOptions{layoutPageWidth = Unbounded}
+        . docTransition
+
 docTransition :: Transition -> Doc ann
 docTransition t =
     vsep $
-        [pretty (tSource t) <+> "--" <+> pretty (tCommand t) <+> "-->"]
+        [modePrefix <> pretty (tSource t) <+> "--" <+> pretty (tCommand t) <+> "-->"]
             ++ map (indent 2) clauses
   where
+    modePrefix = case tMode t of
+        TmLive -> mempty
+        TmReplayOnly -> "replay-only "
     clauses =
         maybe [] (\g -> ["guard" <+> docExpr 0 g]) (tGuard t)
             ++ map (\(r, e) -> "write" <+> pretty r <+> ":=" <+> docExpr 0 e) (tWrites t)

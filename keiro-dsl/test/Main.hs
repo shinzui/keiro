@@ -15,7 +15,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
-import Keiro.Dsl.PrettyPrint (renderSpec)
+import Keiro.Dsl.PrettyPrint (renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
@@ -225,6 +225,54 @@ main = hspec $ do
                 Right spec ->
                     [line d | d <- validateSpec spec, code d == UnreachableState]
                         `shouldBe` [7]
+        it "accepts a replay-only twin with a live sibling (plan 143)" $ do
+            codes <- errorCodesOf "test/fixtures/reservation-guard-tightened-twin.keiro"
+            codes `shouldBe` []
+        it "rejects a replay-only transition that emits nothing" $ do
+            case parseSpec "<replay-only-no-emit>" (replayOnlySpecWith ["    write reservationState := Held", "    goto  Held"]) of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec ->
+                    [code d | d <- validateSpec spec, severity d == Error]
+                        `shouldContain` [ReplayOnlyEmitsNothing]
+        it "warns when a replay-only transition has no live sibling" $ do
+            case parseSpec "<replay-only-orphan>" (replayOnlySpecWith ["    emit  TransferReservationCreated", "    goto  Held"]) of
+                Left err -> expectationFailure (T.unpack err)
+                Right spec -> do
+                    [code d | d <- validateSpec spec, severity d == Warning]
+                        `shouldContain` [ReplayOnlyCommandStillLive]
+                    [code d | d <- validateSpec spec, severity d == Error]
+                        `shouldNotContain` [ReplayOnlyCommandStillLive]
+
+    describe "complementExpr (plan 143)" $ do
+        it "applies De Morgan over and/or and flips comparison operators" $ do
+            let a = EAtom (AName "a")
+                b = EAtom (AName "b")
+            complementExpr (EAnd a b)
+                `shouldBe` EOr (ECmp OpEq a (EAtom (ABool False))) (ECmp OpEq b (EAtom (ABool False)))
+            complementExpr (ECmp OpLt a b) `shouldBe` ECmp OpGe a b
+            complementExpr (ECmp OpEq a b) `shouldBe` ECmp OpNeq a b
+            complementExpr (ECmp OpLe a b) `shouldBe` ECmp OpGt a b
+            complementExpr (ECmp OpGt a b) `shouldBe` ECmp OpLe a b
+            complementExpr (ECmp OpGe a b) `shouldBe` ECmp OpLt a b
+            complementExpr (ECmp OpNeq a b) `shouldBe` ECmp OpEq a b
+        it "flips boolean literals and grounds bare names as == false" $ do
+            complementExpr (EAtom (ABool True)) `shouldBe` EAtom (ABool False)
+            complementExpr (EAtom (AName "open"))
+                `shouldBe` ECmp OpEq (EAtom (AName "open")) (EAtom (ABool False))
+        it "stays inside the grammar: the complement of any guard re-parses" $
+            property $
+                forAll genExpr $ \e ->
+                    let twin =
+                            replayOnlySpecWith
+                                [ "    guard " <> renderExprText (complementExpr e)
+                                , "    emit  TransferReservationCreated"
+                                , "    goto  Held"
+                                ]
+                     in case parseSpec "<complement>" twin of
+                            Left err -> counterexample (T.unpack err) False
+                            Right spec ->
+                                [tGuard t | NAggregate a <- specNodes spec, t <- aggTransitions a]
+                                    === [Just (complementExpr e)]
 
     describe "evolution parsing" $
         it "parses event version and upcaster from reservation-v2.keiro" $ do
@@ -833,6 +881,30 @@ main = hspec $ do
             restored <- diffFixtures "test/fixtures/reservation-deprecated.keiro" "test/fixtures/reservation.keiro"
             any isAdvisory restored `shouldBe` True
             [ckCode k | Advisory k <- restored] `shouldContain` [Just EventUndeprecated]
+        it "prints a paste-ready replay-only twin when a guard tightens (plan 143)" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-guard-tightened.keiro"
+            any isBreaking cs `shouldBe` False
+            let advisories = [k | Advisory k <- cs, ckCode k == Just AggGuardTightened]
+            map ckSubject advisories `shouldBe` ["Unrequested -- RequestTransferReservation"]
+            detail <- case advisories of
+                [k] -> pure (ckDetail k)
+                other -> expectationFailure ("expected one advisory, got " <> show other) >> pure ""
+            detail `shouldSatisfy` T.isInfixOf "replay-only Unrequested -- RequestTransferReservation"
+            -- The printed twin is paste-ready: appended to the new spec it
+            -- parses, validates without errors, and silences the advisory.
+            tightened <- readTestText "test/fixtures/reservation-guard-tightened.keiro"
+            let twinText = snd (T.breakOnEnd "\n\n" detail)
+                pasted = tightened <> "\n" <> twinText <> "\n"
+            case parseSpec "<pasted-twin>" pasted of
+                Left err -> expectationFailure (T.unpack err)
+                Right pastedSpec -> do
+                    [code d | d <- validateSpec pastedSpec, severity d == Error] `shouldBe` []
+                    base <- specOf "test/fixtures/reservation.keiro"
+                    [k | Advisory k <- diffSpecs base pastedSpec, ckCode k == Just AggGuardTightened]
+                        `shouldBe` []
+        it "omits the twin advisory when the twin is already present (plan 143)" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-guard-tightened-twin.keiro"
+            [k | Advisory k <- cs, ckCode k == Just AggGuardTightened] `shouldBe` []
         it "classifies a removed contract event as ContractEventRemoved" $ do
             cs <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-eventdrop.keiro"
             [ckCode k | Breaking k <- cs] `shouldContain` [Just ContractEventRemoved]
@@ -1288,6 +1360,13 @@ main = hspec $ do
             -- 5 Generated (Domain/Codec/EventStream/Projection/Harness) + 1 Holes.
             length mods `shouldBe` 6
             firewallBreaches mods `shouldBe` []
+        it "lowers a replay-only transition to B.replayOnly in the holes skeleton (plan 143)" $ do
+            twinMods <- scaffoldFixture "test/fixtures/reservation-guard-tightened-twin.keiro"
+            let twinHoles = [moduleText m | m <- twinMods, kind m == HoleStub]
+            twinHoles `shouldSatisfy` any (T.isInfixOf "B.replayOnly")
+            plainMods <- scaffoldFixture "test/fixtures/reservation.keiro"
+            let plainHoles = [moduleText m | m <- plainMods, kind m == HoleStub]
+            plainHoles `shouldSatisfy` all (not . T.isInfixOf "B.replayOnly")
 
 syntheticGenerated :: FilePath -> T.Text -> ScaffoldModule
 syntheticGenerated path contents =
@@ -1404,7 +1483,54 @@ errorCodesOf path = do
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right spec -> pure [code d | d <- validateSpec spec, severity d == Error]
 
--- | Parse two fixtures and diff them (old, new).
+{- | Parse two fixtures and diff them (old, new).
+| Plan 143: render an Expr in concrete guard syntax by printing a dummy
+transition through the real pretty-printer and slicing its guard clause,
+so the test exercises the exact printer the diff advisory uses.
+-}
+renderExprText :: Expr -> T.Text
+renderExprText e =
+    case [T.strip l | l <- T.lines rendered, "guard " `T.isPrefixOf` T.strip l] of
+        [guardLine] -> T.strip (T.drop (T.length "guard ") guardLine)
+        _ -> error ("renderExprText: unexpected printer output: " <> T.unpack rendered)
+  where
+    rendered =
+        renderTransition
+            Transition
+                { tSource = "S"
+                , tCommand = "C"
+                , tGuard = Just e
+                , tWrites = []
+                , tEmits = []
+                , tGoto = "S"
+                , tMode = TmLive
+                , tLoc = noLoc
+                }
+
+{- | Plan 143: a minimal spec whose only transition is replay-only, with the
+supplied clause lines spliced into its body.
+-}
+replayOnlySpecWith :: [T.Text] -> T.Text
+replayOnlySpecWith clauseLines =
+    T.unlines $
+        [ "context hospital-capacity"
+        , ""
+        , "id TransferReservationId prefix=rsv"
+        , ""
+        , "aggregate Reservation"
+        , "  regs"
+        , "    reservationId    TransferReservationId = placeholder"
+        , "    reservationState ReservationVertex     = Unrequested"
+        , "  states Unrequested Held"
+        , ""
+        , "  command RequestTransferReservation { reservationId }"
+        , ""
+        , "  event TransferReservationCreated = fields(RequestTransferReservation)"
+        , ""
+        , "  replay-only Unrequested -- RequestTransferReservation -->"
+        ]
+            ++ clauseLines
+
 diffFixtures :: FilePath -> FilePath -> IO [Change]
 diffFixtures oldP newP = do
     old <- readTestText oldP
@@ -2115,6 +2241,7 @@ genTransition =
         <*> smallList ((,) <$> genName <*> genExpr)
         <*> smallList genName
         <*> genName
+        <*> elements [TmLive, TmReplayOnly]
         <*> pure noLoc
 
 genWireSpec :: Gen WireSpec

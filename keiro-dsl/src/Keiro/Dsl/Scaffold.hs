@@ -1928,6 +1928,9 @@ onCmdBlock :: Agg -> Transition -> [Text]
 onCmdBlock a t =
     [ "      B.onCmd inCtor" <> tCommand t <> " $ \\d -> B.do"
     ]
+        -- Plan 143: the mode is structural, not hole-owned — a replay-only
+        -- transition lowers to B.replayOnly (keiki ReplayOnly edge).
+        ++ ["        B.replayOnly" | tMode t == TmReplayOnly]
         ++ maybe [] (\g -> ["        -- HOLE guard: " <> renderGuard g]) (tGuard t)
         ++ ["        -- HOLE write " <> r <> " := " <> renderGuard e | (r, e) <- tWrites t]
         ++ ["        -- HOLE emit " <> ev <> " (B.emit wire" <> ev <> " ...)" | ev <- tEmits t]

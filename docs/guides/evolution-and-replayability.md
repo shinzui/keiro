@@ -275,16 +275,54 @@ events and re-checks guards (see [ground truth](#the-ground-truth-why-evolution-
 - *Changing an output template* changes what the inversion solves against.
 
 These failures are loud but delayed to the next hydration of an affected
-stream. **No pre-deploy gate sees them**: `diff` does not compare transition
-guards or writes, and `mkEventStream` validates the new machine against
-itself, not against old logs. The safe procedure is to treat a guard or output
-edit exactly like a schema edit: if historical events were produced under the
-old rule, keep an edge that inverts them (typically: keep the old edge, add a
-new edge with a new event or new event version for the new behaviour). A
-first-class form of exactly this — a `replay-only transition` carrying the
-removed guard region, excluded from forward execution but available to
-inversion, with `diff` computing and printing the twin for you — is
-[`docs/plans/143`](../plans/143-add-first-class-replay-only-transitions-for-guard-evolution.md).
+stream. **The guard-tightening case now has a first-class remedy**
+([`docs/plans/143`](../plans/143-add-first-class-replay-only-transitions-for-guard-evolution.md)):
+a `replay-only` transition. Marked with a `replay-only` prefix on the
+transition line, it lowers to a keiki `ReplayOnly` edge — never taken by a
+new command, but available to inversion when no live edge attributes a stored
+event (inversion is two-phase: live edges are tried first, so a live edge
+always wins attribution and an imperfectly complemented twin cannot create
+ambiguity). The procedure when you tighten a guard:
+
+1. Tighten the live transition's guard to the new rule.
+2. Run `keiro-dsl diff --since <ref>`. The `AggGuardTightened` advisory
+   computes the removed region — `old-guard ∧ ¬new-guard`, expressed inside
+   the guard grammar — and prints a **paste-ready** `replay-only` twin
+   carrying that region with the old transition's writes/emits/goto.
+3. Decide: if stored streams may exercise the removed region (the replay
+   audit of
+   [`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md)
+   answers this against real data once landed), paste the twin — history
+   stays replayable and the retired rule remains visible in the spec. If no
+   stored data is affected (or you choose truncation), skip the twin.
+4. The scaffolder lowers the marker to `B.replayOnly` in the transducer
+   skeleton; hand-written services call `Keiki.Builder.replayOnly` in the
+   edge body (or set `mode = ReplayOnly` on a raw `Edge`).
+
+The validator keeps the pattern disciplined: a `replay-only` transition with
+no `emit` is an error (`ReplayOnlyEmitsNothing` — it can invert nothing), and
+one whose (source, command) pair has no live sibling is a warning
+(`ReplayOnlyCommandStillLive` — the command is fully retired there; the
+fuller procedure is event retirement,
+[`docs/plans/139`](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md)).
+A deprecated event may keep being emitted by a `replay-only` transition —
+replay-only transitions are not the write path — which supersedes the
+guarded-but-inert retained-edge contortion as the sanctioned shape.
+
+**Twins are not forever — they end in retirement.** Each tightening can add a
+twin; the endgame mirrors upcasters (rungs live *while payloads at their
+version persist*, not forever). Once every stream containing the removed
+region's events is terminal or truncated — the same condition as event
+retirement, and exactly what the replay audit of
+[`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md)
+proves — delete the twin. Deleting it earlier re-creates exactly the break it
+fixed.
+
+Output-template changes and guard *loosening* have no computed remedy: treat
+them like schema edits (new event or new event version for the new
+behaviour), and remember `diff`'s tightening detection is conservative — it
+fires on any guard change without a twin, and the advisory's audit-or-paste
+choice covers the loosening case too.
 
 **Reason two: redelivery windows.** Process-manager and router dispatch is
 made idempotent by deterministic event ids derived from
@@ -298,8 +336,10 @@ half-old/half-new fan-out. Dead-letter replay
 (`keiro/src/Keiro/DeadLetter/Replay.hs`) has the same property by design: it
 re-runs the *current* handler against the stored source event.
 
-> **Nothing catches these today.** Old-log guard compatibility has no gate:
-> the golden payloads of
+> **What is and is not gated.** Guard changes are now flagged at `diff` time:
+> the `AggGuardTightened` advisory prints the computed `replay-only` twin
+> (plan 143, above). What no gate yet *proves* is whether stored data
+> actually exercises a removed region: the golden payloads of
 > [`docs/plans/139`](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md)
 > prove old shapes still *decode*, never that they still *invert* — the
 > pre-deploy replay audit that replays real streams through the candidate

@@ -123,7 +123,9 @@ What keiro does about it (master plan 24):
    breaking the past. The removed region is mechanical (`old-guard ∧
    ¬new-guard`), so the `diff` advisory prints the paste-ready twin transition
    whenever it detects a tightening — the developer pastes it or proves via
-   the audit that no stored stream needs it *(planned: docs/plans/143)*. The
+   the audit that no stored stream needs it *(landed: docs/plans/143 — the
+   `replay-only` marker, keiki's two-phase `ReplayOnly` edge mode, and the
+   `AggGuardTightened` advisory)*. The
    old rule stays visible in the spec as a record of what was once allowed —
    which is exactly what an event-sourced model should preserve.
 

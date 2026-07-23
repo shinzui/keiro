@@ -6,7 +6,29 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+
+- First-class replay-only transitions for guard evolution (plan 143). A
+  `replay-only` prefix on a transition line marks it as serving inversion
+  only: the parser accepts it, the pretty-printer round-trips it, and the
+  scaffolder lowers it to `B.replayOnly` (keiki's `ReplayOnly` edge mode) in
+  the transducer skeleton. New validator rules: `ReplayOnlyEmitsNothing`
+  (error — a replay-only transition with no emit can invert nothing) and
+  `ReplayOnlyCommandStillLive` (warning — no live sibling for the (source,
+  command) pair; the fuller procedure is event retirement). A deprecated
+  event may keep being emitted by a replay-only transition — replay-only
+  transitions are not the write path.
+- `diff` computes the guard-tightening remedy (`AggGuardTightened`
+  advisory): on any live-transition guard change without a replay-only twin,
+  it prints a paste-ready `replay-only` twin whose guard is the removed
+  region `old ∧ ¬new`, negation eliminated inside the guard grammar by the
+  new total `Keiro.Dsl.Grammar.complementExpr` (De Morgan, comparison
+  flipping, `x == false` for bare boolean atoms). The twin carries the old
+  transition's writes/emits/goto and re-parses as-is; it is printed, never
+  auto-applied.
+- `Keiro.Dsl.PrettyPrint.renderTransition` renders one transition in
+  concrete `.keiro` syntax (used by the advisory).
+- Requires `keiki >=0.3` (the `EdgeMode` release).
 
 ## 0.3.0.0 — 2026-07-14
 

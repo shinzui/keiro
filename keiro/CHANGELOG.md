@@ -6,7 +6,19 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Changed
+
+- Adopts keiki 0.3 (`EdgeMode`, plan 143): a `ReplayOnly` edge is excluded
+  from forward stepping and serves two-phase inversion, so a tightened guard
+  can retain its removed region (`old ∧ ¬new`) as a replay-only twin and
+  keep stored history hydratable while new removed-region commands are
+  rejected with `CommandRejected`. No keiro API change — machines built with
+  `Keiki.Builder.replayOnly` (or `mode = ReplayOnly`) pass the existing
+  `mkEventStream` boundary checks; the black-acuity regression is pinned in
+  `keiro-test`. Rolling back a deployed replay-only twin re-creates exactly
+  the hydration break it fixed (stored events in the removed region lose
+  their inverting edge): delete a twin only when every affected stream is
+  terminal or truncated.
 
 ## 0.3.0.0 — 2026-07-14
 

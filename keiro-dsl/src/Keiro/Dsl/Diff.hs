@@ -34,6 +34,7 @@ import Data.Maybe (isJust, isNothing, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.PrettyPrint (renderTransition)
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
@@ -354,6 +355,58 @@ aggregatePairDiff oldAgg newAgg =
         ++ removedEvents oldAgg newAgg
         ++ wireDiff oldAgg newAgg
         ++ projectionDiff oldAgg newAgg
+        ++ guardTighteningDiff oldAgg newAgg
+
+{- | Plan 143: guard changes are replay-relevant. Hydration re-inverts each
+stored event and re-checks the edge guard, so a stored event legally appended
+under the old guard may no longer satisfy the new one — the next command on
+any stream containing such an event fails hydration with no inverting edge.
+The remedy is mechanical, so the tool computes it: the removed region is
+@old-guard ∧ ¬new-guard@ ('complementExpr' eliminates the negation inside the
+existing grammar), and the advisory prints a paste-ready replay-only twin
+carrying that region with the OLD transition's writes\/emits\/goto. Whether
+history should stay replayable (paste the twin) or be truncated instead is a
+business decision, so the twin is never auto-applied.
+
+Detection is conservative: any guard change on a paired live (source,
+command) transition where the new spec declares a guard and does not already
+contain a replay-only twin for the pair. A pure loosening also matches; the
+advisory says how to confirm no stored data is affected (the replay audit,
+docs/plans/142) rather than guessing.
+-}
+guardTighteningDiff :: Aggregate -> Aggregate -> [Change]
+guardTighteningDiff oldAgg newAgg =
+    [ advisory (aggName newAgg) "transition" subject AggGuardTightened detail
+    | newT <- aggTransitions newAgg
+    , tMode newT == TmLive
+    , Just oldT <-
+        [ find
+            (\o -> tSource o == tSource newT && tCommand o == tCommand newT && tMode o == TmLive)
+            (aggTransitions oldAgg)
+        ]
+    , tGuard newT /= tGuard oldT
+    , Just newGuard <- [tGuard newT]
+    , not (hasReplayOnlyTwin newT)
+    , let subject = tSource newT <> " -- " <> tCommand newT
+    , let removedRegion =
+            maybe (complementExpr newGuard) (\o -> EAnd o (complementExpr newGuard)) (tGuard oldT)
+    , let twin = oldT{tGuard = Just removedRegion, tMode = TmReplayOnly}
+    , let detail =
+            "guard changed on "
+                <> subject
+                <> ". Stored events appended under the old guard may no longer invert: "
+                <> "the next command on any stream containing one fails hydration with "
+                <> "no inverting edge. Either confirm via the replay audit that no stored "
+                <> "stream exercises the removed region, or keep history replayable by "
+                <> "adding the computed replay-only twin (the removed region with the old "
+                <> "transition's writes/emits/goto):\n\n"
+                <> renderTransition twin
+    ]
+  where
+    hasReplayOnlyTwin newT =
+        any
+            (\t -> tMode t == TmReplayOnly && tSource t == tSource newT && tCommand t == tCommand newT)
+            (aggTransitions newAgg)
 
 addedAggregateDiff :: Aggregate -> [Change]
 addedAggregateDiff newAgg =

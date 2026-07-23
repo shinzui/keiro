@@ -428,6 +428,10 @@ pStatesLine = do
     -- 'pTransition'.
     pStateDecl = try $ do
         loc <- getLoc
+        -- A @replay-only@ transition marker directly after the states line
+        -- must not be swallowed: 'ident' would take @replay@ (hyphens are
+        -- not identifier characters) and strand @-only@.
+        notFollowedBy (keyword "replay-only")
         n <- ident
         term <- option False (True <$ symbol "!")
         notFollowedBy (symbol "--")
@@ -1458,6 +1462,9 @@ pTransition :: P Transition
 pTransition = do
     startOffset <- getOffset
     loc <- getLoc
+    -- Plan 143: a @replay-only@ prefix marks the transition as serving
+    -- inversion only; it lowers to a keiki 'ReplayOnly' edge.
+    mode <- option TmLive (TmReplayOnly <$ keyword "replay-only")
     src <- ident
     _ <- symbol "--"
     cmd <- ident
@@ -1482,6 +1489,7 @@ pTransition = do
             , tWrites = [(r, e) | CWrite r e <- clauses]
             , tEmits = [n | CEmit n <- clauses]
             , tGoto = gt
+            , tMode = mode
             , tLoc = loc
             }
 

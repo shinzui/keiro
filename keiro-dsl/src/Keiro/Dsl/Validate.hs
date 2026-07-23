@@ -183,6 +183,13 @@ data DiagnosticCode
     | AmbiguousMarkedBenign
     | AmbiguousFollowsRejectedPolicy
     | RouterStableNameChanged
+    | -- Plan 143 (first-class replay-only transitions for guard evolution).
+      -- The first two fire in single-spec @validateSpec@; the third is the
+      -- diff-path guard-tightening advisory that prints the computed
+      -- replay-only twin.
+      ReplayOnlyEmitsNothing
+    | ReplayOnlyCommandStillLive
+    | AggGuardTightened
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -1230,6 +1237,7 @@ validateAggregate spec agg =
         , statusMapTotality
         , evolutionRules
         , snapshotRules
+        , replayOnlyRules
         ]
   where
     states = Set.fromList (map stName (aggStates agg))
@@ -1440,7 +1448,11 @@ validateAggregate spec agg =
 
     -- EP-2 evolution rules (single-spec; the diff path adds the cross-spec ones).
     evolutionRules = versionUpcasterRule ++ deprecatedEmitRule ++ wireVersionRule
-    emittedNames = Set.fromList (concatMap tEmits (aggTransitions agg))
+    -- Only live transitions are the write path: a replay-only transition can
+    -- never fire forward, so its emits exist purely to invert stored events —
+    -- which is exactly where a deprecated event is allowed to remain
+    -- (plan 143; supersedes the guarded-but-inert retained-edge pattern).
+    emittedNames = Set.fromList (concatMap tEmits [t | t <- aggTransitions agg, tMode t == TmLive])
     maxEventVersion = maximum (1 : map evVersion (aggEvents agg))
 
     -- A non-initial event version must carry a contiguous upcaster (from v-1).
@@ -1474,6 +1486,29 @@ validateAggregate spec agg =
                     }
                 ]
         _ -> []
+
+    -- Plan 143: replay-only transition discipline. A replay-only transition
+    -- exists to invert stored events, so one that emits nothing is dead
+    -- weight (error); one whose (source, command) pair has no live sibling
+    -- means the command is fully retired at that state — legitimate, but the
+    -- fuller procedure is event retirement (docs/plans/139), so warn.
+    replayOnlyRules = concatMap replayOnlyRule (aggTransitions agg)
+    replayOnlyRule t
+        | tMode t /= TmReplayOnly = []
+        | otherwise =
+            [ mkErr (locLine (tLoc t)) ReplayOnlyEmitsNothing $
+                "replay-only transition '" <> tSource t <> " -- " <> tCommand t <> "' emits no event; a replay-only transition exists to invert stored events and is dead weight without an emit"
+            | null (tEmits t)
+            ]
+                ++ [ Diagnostic
+                        { line = locLine (tLoc t)
+                        , severity = Warning
+                        , code = ReplayOnlyCommandStillLive
+                        , message =
+                            "replay-only transition '" <> tSource t <> " -- " <> tCommand t <> "' has no live sibling; command '" <> tCommand t <> "' is fully retired at state '" <> tSource t <> "' — if the intent is to retire its events too, follow the event-retirement procedure (docs/plans/139)"
+                        }
+                   | not (any (\sibling -> tMode sibling == TmLive && tSource sibling == tSource t && tCommand sibling == tCommand t) (aggTransitions agg))
+                   ]
 
 {- | The validator's re-derivation of the live
 'Keiro.PGMQ.Runtime.queueRef' trio: physical queue, dead-letter queue, and

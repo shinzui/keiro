@@ -28,6 +28,7 @@ module Keiro.Dsl.Grammar (
     Expr (..),
     CmpOp (..),
     Atom (..),
+    complementExpr,
 
     -- * The aggregate node
     RegInitial (..),
@@ -39,6 +40,7 @@ module Keiro.Dsl.Grammar (
     EventBody (..),
     Hole (..),
     Transition (..),
+    TransitionMode (..),
     WireSpec (..),
     ProjectionSpec (..),
     Consistency (..),
@@ -257,6 +259,33 @@ data Atom
     | ABool !Bool
     deriving stock (Eq, Show, Generic)
 
+{- | The logical complement of a guard, expressed inside the existing grammar —
+'Expr' has no negation constructor, but negation is eliminable: De Morgan over
+'EOr'\/'EAnd', comparison-operator flipping, boolean-literal flip, and
+@x == false@ for a bare name atom (guards are boolean-valued, so a bare name
+in guard position is a boolean read). Used by @diff@ to compute the
+replay-only twin of a tightened guard (@old ∧ ¬new@, plan 143): the printed
+complement re-parses as a valid guard today.
+
+Caveat: comparison flipping is classical — @¬(a < b) = a >= b@ — which is
+correct over the DSL's total ordered domains.
+-}
+complementExpr :: Expr -> Expr
+complementExpr = \case
+    EOr l r -> EAnd (complementExpr l) (complementExpr r)
+    EAnd l r -> EOr (complementExpr l) (complementExpr r)
+    ECmp op l r -> ECmp (complementCmp op) l r
+    EAtom (ABool b) -> EAtom (ABool (not b))
+    e@(EAtom (AName _)) -> ECmp OpEq e (EAtom (ABool False))
+  where
+    complementCmp = \case
+        OpEq -> OpNeq
+        OpNeq -> OpEq
+        OpLt -> OpGe
+        OpLe -> OpGt
+        OpGt -> OpLe
+        OpGe -> OpLt
+
 {- | @name Type = initial@ — a named register with its declared type and the
 initial value (an identifier: a literal like @placeholder@, an enum
 constructor, or a state name).
@@ -346,8 +375,21 @@ data Transition = Transition
     , tWrites :: ![(Name, Expr)]
     , tEmits :: ![Name]
     , tGoto :: !Name
+    , tMode :: !TransitionMode
     , tLoc :: !Loc
     }
+    deriving stock (Eq, Show, Generic)
+
+{- | Whether a transition serves forward execution or replay only (plan 143).
+A @replay-only@ transition lowers to a keiki 'ReplayOnly' edge: it is never
+taken by a new command and exists so events emitted under a retired rule keep
+an inverting edge. Spelled as a @replay-only@ prefix on the transition line:
+
+@
+replay-only Held -- ConfirmReservation --> guard … ; emit … ; goto …
+@
+-}
+data TransitionMode = TmLive | TmReplayOnly
     deriving stock (Eq, Show, Generic)
 
 {- | @wire kind=ctorName fields=camelCase schemaVersion=1@ — how events
