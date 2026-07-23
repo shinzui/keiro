@@ -149,7 +149,7 @@ import Keiro.Workflow.Instance (
     markInstanceSuspended,
     upsertInstanceTx,
  )
-import Keiro.Workflow.Schema (WorkflowStepRow (..), currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lockWorkflowStepTx, lookupStepResultTx, recordStepTx, setWorkflowWakeAfterTx, stepExists)
+import Keiro.Workflow.Schema (WorkflowStepRow (..), currentGeneration, findUnfinishedWorkflowIds, loadStepIndex, lockWorkflowStepTx, lookupStepResult, lookupStepResultTx, recordStepTx, setWorkflowWakeAfterTx, stepExists)
 import Keiro.Workflow.Snapshot (lookupWorkflowSnapshot, writeWorkflowSnapshot)
 import Keiro.Workflow.Types
 import Kiroku.Store.Effect (Store)
@@ -591,10 +591,23 @@ runWorkflowWith options name wid action = do
                     -- not a step execution and records nothing here.
                     recordWorkflowStepReplayed mMetrics 1
                     decodeStored key stored
-                Nothing -> do
-                    checkCancellationPending name wid gen
-                    localSeqUnlift env (\unlift -> unlift arm)
-                    throwIO WorkflowSuspend
+                Nothing ->
+                    -- The in-memory map can omit a wake completion journaled
+                    -- while a snapshotting run was mid-flight. The step index
+                    -- is written transactionally with every append, so consult
+                    -- it before arming and suspending.
+                    lookupStepResult name wid gen key >>= \case
+                        Just stored -> do
+                            liftIO
+                                ( atomicModifyIORef' journalRef $ \m ->
+                                    (Map.insert key stored m, ())
+                                )
+                            recordWorkflowStepReplayed mMetrics 1
+                            decodeStored key stored
+                        Nothing -> do
+                            checkCancellationPending name wid gen
+                            localSeqUnlift env (\unlift -> unlift arm)
+                            throwIO WorkflowSuspend
         CurrentWorkflow -> pure (name, wid)
         CurrentRunGeneration -> pure gen
         FreshOrdinal namespace ->
@@ -655,11 +668,16 @@ checkCancellationPending name wid gen = do
 
 If a compatible snapshot exists ('loadWorkflowSnapshot'), seed the map from it
 and read only the journal events /after/ the snapshot's version ("tail
-replay"); the resulting map is byte-for-byte the one a full version-0 replay
-would produce, because every 'StepRecorded' at or before the snapshot version
-is already captured in the seed. A missing, mismatched, or undecodable
-snapshot is recorded as a miss (and, for undecodable bytes, a decode failure)
-before the read falls back to a full replay from version 0.
+replay"). The reconstructed map is the journal state as the snapshotting run
+saw it. A wake completion journaled concurrently with that run can fall at or
+before the snapshot version yet be absent from the seed, so the map may
+under-approximate the journal. The @Await@ handler compensates by consulting
+the authoritative @keiro_workflow_steps@ index on a map miss; that index is
+written transactionally with every journal append.
+
+A missing, mismatched, or undecodable snapshot is recorded as a miss (and, for
+undecodable bytes, a decode failure) before the read falls back to a full
+replay from version 0.
 'WorkflowCompleted' contributes nothing to the map.
 -}
 loadJournal ::

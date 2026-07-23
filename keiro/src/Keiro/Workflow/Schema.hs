@@ -23,6 +23,7 @@ module Keiro.Workflow.Schema (
 
     -- * Read-only lookups
     loadStepIndex,
+    lookupStepResult,
     stepExists,
     currentGeneration,
     findUnfinishedWorkflowIds,
@@ -98,6 +99,16 @@ from the journal stream instead.
 loadStepIndex :: (Store :> es) => WorkflowName -> WorkflowId -> Int -> Eff es (Map Text Value)
 loadStepIndex (WorkflowName name) (WorkflowId wid) gen =
     Map.fromList <$> runTransaction (Tx.statement (wid, name, fromIntegral gen :: Int32) loadStepIndexStmt)
+
+{- | Point-lookup one recorded step result for a workflow instance and
+generation, directly from the authoritative @keiro_workflow_steps@ index.
+Used by the replay handler's @Await@ miss path as the safety net for a stale
+in-memory map: the index is written in the same transaction as every journal
+append, so it is complete even when the snapshot-seeded map is not.
+-}
+lookupStepResult :: (Store :> es) => WorkflowName -> WorkflowId -> Int -> Text -> Eff es (Maybe Value)
+lookupStepResult (WorkflowName name) (WorkflowId wid) gen key =
+    runTransaction (Tx.statement (wid, name, fromIntegral gen :: Int32, key) lookupStepResultStmt)
 
 {- | Whether a workflow instance already has an index row for the given step
 name. Used to make journal re-appends idempotent without relying on the event

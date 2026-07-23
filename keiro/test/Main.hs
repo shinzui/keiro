@@ -6729,6 +6729,81 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             lookup "keiro.snapshot.decode.failures" scalars `shouldBe` Just (IntNumber 1)
             lookup "keiro.snapshot.read.misses" scalars `shouldBe` Just (IntNumber 2)
 
+    describe "Keiro.Workflow snapshot wake-safety" $ around (withFreshStore fixture) $ do
+        it "keeps a genuinely unresolved awakeable pending under Every 1" $ \storeHandle -> do
+            aidRef <- newIORef Nothing
+            let name = WorkflowName "snapshot-unsignalled"
+                wid = WorkflowId "wf1"
+                opts = defaultWorkflowRunOptions & #snapshotPolicy .~ Every 1
+                run = Store.runStoreIO storeHandle $ runWorkflowWith opts name wid (snapshotUnsignalledAwakeable aidRef)
+            first <- run
+            first `shouldBe` Right Suspended
+            aid <- readRequiredAwakeableId aidRef
+            Right (Just rowAfterFirst) <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable (awakeableIdToUuid aid)
+            rowAfterFirst ^. #status `shouldBe` Awk.Pending
+            rowAfterFirst ^. #payload `shouldBe` Nothing
+            second <- run
+            second `shouldBe` Right Suspended
+            Right (Just rowAfterSecond) <- Store.runStoreIO storeHandle $ Awk.lookupAwakeable (awakeableIdToUuid aid)
+            rowAfterSecond ^. #status `shouldBe` Awk.Pending
+            rowAfterSecond ^. #payload `shouldBe` Nothing
+
+        it "delivers an awakeable signalled mid-run despite the stale in-memory map" $ \storeHandle -> do
+            aidRef <- newIORef Nothing
+            let name = WorkflowName "snapshot-midrun-awakeable"
+                wid = WorkflowId "wf1"
+                opts = defaultWorkflowRunOptions & #snapshotPolicy .~ Every 1
+                run = Store.runStoreIO storeHandle $ runWorkflowWith opts name wid snapshotShadowedAwakeable
+            armed <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith opts name wid (snapshotUnsignalledAwakeable aidRef)
+            armed `shouldBe` Right Suspended
+            first <- run
+            first `shouldBe` Right (Completed "payload")
+            second <- run
+            second `shouldBe` Right (Completed "payload")
+
+        it "delivers an awakeable shadowed by a snapshot on a later run" $ \storeHandle -> do
+            aidRef <- newIORef Nothing
+            let name = WorkflowName "snapshot-stale-awakeable"
+                wid = WorkflowId "wf1"
+                opts = defaultWorkflowRunOptions & #snapshotPolicy .~ Every 1
+            armed <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith opts name wid (snapshotUnsignalledAwakeable aidRef)
+            armed `shouldBe` Right Suspended
+            first <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith opts name wid (snapshotStaleAwakeablePhaseOne aidRef)
+            first `shouldBe` Right Suspended
+            aid <- readRequiredAwakeableId aidRef
+            Right (Just (staleSeed, _)) <-
+                Store.runStoreIO storeHandle $
+                    loadWorkflowSnapshot (workflowGenerationStreamName name wid 0)
+            staleSeed `shouldSatisfy` Map.notMember ("awk:" <> awakeableIdText aid)
+            second <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith opts name wid snapshotStaleAwakeablePhaseTwo
+            second `shouldBe` Right (Completed "payload")
+
+        it "delivers a child completion shadowed by a snapshot on a later run" $ \storeHandle -> do
+            let name = WorkflowName "snapshot-stale-child-parent"
+                wid = WorkflowId "wf1"
+                childWid = WorkflowId "child1"
+                opts = defaultWorkflowRunOptions & #snapshotPolicy .~ Every 1
+            first <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith opts name wid (snapshotStaleChildPhaseOne childWid)
+            first `shouldBe` Right Suspended
+            Right (Just (staleSeed, _)) <-
+                Store.runStoreIO storeHandle $
+                    loadWorkflowSnapshot (workflowGenerationStreamName name wid 0)
+            staleSeed `shouldSatisfy` Map.notMember (childResultStepName childWid)
+            second <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith opts name wid (snapshotStaleChildPhaseTwo childWid)
+            second `shouldBe` Right (Completed "packed+labelled")
+
     describe "Keiro.Workflow.Resume" $ around (withFreshStore fixture) $ do
         -- M2: crash mid-run, then a resume pass drives the workflow to Completed
         -- without re-running the already-journaled step.
@@ -9033,6 +9108,60 @@ approvalFlowWithId ref = do
     liftIO (writeIORef ref (Just aid))
     v <- await
     step (StepName "use") (pure (v <> "!"))
+
+snapshotUnsignalledAwakeable ::
+    (Workflow :> es, Store :> es, IOE :> es) =>
+    IORef (Maybe AwakeableId) ->
+    Eff es Text
+snapshotUnsignalledAwakeable ref = do
+    (aid, await) <- awakeableNamed (StepName "gate")
+    liftIO (writeIORef ref (Just aid))
+    await
+
+snapshotShadowedAwakeable :: (Workflow :> es, Store :> es, IOE :> es) => Eff es Text
+snapshotShadowedAwakeable = do
+    (aid, await) <- awakeableNamed (StepName "gate")
+    _ <- step (StepName "mid") (void (signalAwakeable aid ("payload" :: Text)))
+    await
+
+snapshotStaleAwakeablePhaseOne ::
+    forall es.
+    (Workflow :> es, Store :> es, IOE :> es) =>
+    IORef (Maybe AwakeableId) ->
+    Eff es ()
+snapshotStaleAwakeablePhaseOne ref = do
+    (aid, _await :: Eff es Text) <- awakeableNamed (StepName "gate")
+    liftIO (writeIORef ref (Just aid))
+    _ <- step (StepName "mid") (void (signalAwakeable aid ("payload" :: Text)))
+    (_ :: ()) <- awaitStep (StepName "hold") (pure ())
+    pure ()
+
+snapshotStaleAwakeablePhaseTwo :: (Workflow :> es, Store :> es, IOE :> es) => Eff es Text
+snapshotStaleAwakeablePhaseTwo = do
+    (_aid, await) <- awakeableNamed (StepName "gate")
+    _ <- step (StepName "mid") (pure ())
+    await
+
+snapshotStaleChildPhaseOne ::
+    (Workflow :> es, Store :> es, IOE :> es, Error Store.StoreError :> es) =>
+    WorkflowId ->
+    Eff es ()
+snapshotStaleChildPhaseOne childWid = do
+    _h <- spawnChild (WorkflowName "snapshot-child") childWid shipWorkflow
+    _ <-
+        step (StepName "drive") $
+            void (runChildWorkflow defaultWorkflowRunOptions (WorkflowName "snapshot-child") childWid shipWorkflow)
+    (_ :: ()) <- awaitStep (StepName "hold") (pure ())
+    pure ()
+
+snapshotStaleChildPhaseTwo ::
+    (Workflow :> es, Store :> es, IOE :> es) =>
+    WorkflowId ->
+    Eff es Text
+snapshotStaleChildPhaseTwo childWid = do
+    h <- spawnChild (WorkflowName "snapshot-child") childWid shipWorkflow
+    _ <- step (StepName "drive") (pure ())
+    awaitChild h
 
 readRequiredAwakeableId :: IORef (Maybe AwakeableId) -> IO AwakeableId
 readRequiredAwakeableId ref =
