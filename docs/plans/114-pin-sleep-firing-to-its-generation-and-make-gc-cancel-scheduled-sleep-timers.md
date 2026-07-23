@@ -4,6 +4,7 @@ slug: pin-sleep-firing-to-its-generation-and-make-gc-cancel-scheduled-sleep-time
 title: "Pin sleep firing to its generation and make GC cancel scheduled sleep timers"
 kind: exec-plan
 created_at: 2026-07-23T03:02:27Z
+intention: intention_01ky88vm7tew7akz5pgfq0fbqg
 master_plan: "docs/masterplans/16-harden-the-durable-execution-engine-surfaced-by-the-2026-07-durable-execution-review.md"
 ---
 
@@ -33,10 +34,10 @@ To see it working: run `cabal test keiro-test` from the repository root and obse
 
 This is the plan-authoring-time checklist of the work. Update it at every stopping point.
 
-- [ ] M1: `sleepTimerPayload` carries the arming generation; `parseSleepPayload` returns it.
-- [ ] M1: `deterministicJournalId` exported from `Keiro.Workflow`; `workflowSleepFireAction` appends pinned to the resolved generation.
-- [ ] M1: legacy-payload generation resolution via timer-id matching implemented and unit-tested.
-- [ ] M1: staged stale-re-fire-across-rotation test passes; full suite green (`cabal test keiro-test`).
+- [x] (2026-07-23 20:47Z) M1: `sleepTimerPayload` carries the arming generation; `parseSleepPayload` returns it.
+- [x] (2026-07-23 20:47Z) M1: `deterministicJournalId` exported from `Keiro.Workflow`; `workflowSleepFireAction` appends pinned to the resolved generation.
+- [x] (2026-07-23 20:47Z) M1: legacy-payload generation resolution via timer-id matching implemented and unit-tested.
+- [x] (2026-07-23 20:47Z) M1: staged stale-re-fire-across-rotation test passes; full suite green (`cabal test keiro-test`: 362 examples, 0 failures).
 - [ ] M2: `scheduleTimerOnceTx` reports whether it inserted; the sleep arm writes `wake_after` only on actual insert.
 - [ ] M2: firing clears `wake_after` in the same transaction as the journal append; wrong in-code comment corrected.
 - [ ] M2: deterministic no-postponement test passes; existing "fires a sleep longer than the resume cadence" test tightened; full suite green.
@@ -51,7 +52,10 @@ This is the plan-authoring-time checklist of the work. Update it at every stoppi
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Milestone 1 validation (2026-07-23): the current suite contains 362
+  examples rather than the authoring-time 335 because sibling plans and
+  intervening work landed first. The focused crash-window test passed, and the
+  full 362-example suite passed with zero failures.
 
 
 ## Decision Log
@@ -82,7 +86,11 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+- Milestone 1 (2026-07-23): workflow-sleep payloads now record the arming
+  generation, legacy payloads recover it from the deterministic timer id, and
+  the fire action appends directly to that generation. The staged
+  append-committed/mark-lost crash window now leaves generation 1 suspended
+  while retiring the stale generation-0 timer as fired.
 
 
 ## Context and Orientation

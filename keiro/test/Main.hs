@@ -272,6 +272,7 @@ import Keiro.Workflow.Resume (
     runWorkflowResumeWorkerWith,
  )
 import Keiro.Workflow.Sleep (
+    matchSleepTimerGeneration,
     parseSleepPayload,
     runWorkflowTimerWorker,
     sleepNamed,
@@ -7987,9 +7988,25 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             sleepTimerId name wid 2 "sleep:cool" `shouldNotBe` sleepTimerId name wid 1 "sleep:cool"
 
         it "round-trips and recognises its timer payload" $ do
-            parseSleepPayload (sleepTimerPayload "sleep:cool") `shouldBe` Just "sleep:cool"
+            parseSleepPayload (sleepTimerPayload 2 "sleep:cool")
+                `shouldBe` Just ("sleep:cool", Just 2)
+            parseSleepPayload
+                ( object
+                    [ "kind" Aeson..= ("keiro.workflow.sleep" :: Text)
+                    , "step" Aeson..= ("sleep:legacy" :: Text)
+                    ]
+                )
+                `shouldBe` Just ("sleep:legacy", Nothing)
             parseSleepPayload (object ["kind" Aeson..= ("counter-timeout" :: Text)])
                 `shouldBe` Nothing
+
+        it "recovers a legacy payload's generation from its deterministic timer id" $ do
+            let name = WorkflowName "wf"
+                wid = WorkflowId "w-legacy"
+                full = "sleep:cool"
+            for_ [0 .. 2] $ \gen ->
+                matchSleepTimerGeneration name wid 2 full (sleepTimerId name wid gen full)
+                    `shouldBe` Just gen
 
         it "prefixes the journal step name with the reserved sleep prefix" $
             sleepStepName (StepName "cool") `shouldBe` "sleep:cool"
@@ -8024,7 +8041,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                             Tx.statement timerUuid sleepTimerStatusStmt
                 timerRow `shouldSatisfy` \case
                     Just (status, payload) ->
-                        status == "scheduled" && parseSleepPayload payload == Just "sleep:cool"
+                        status == "scheduled"
+                            && parseSleepPayload payload == Just ("sleep:cool", Just 0)
                     Nothing -> False
                 -- Fire the timer through the routing worker (no PM fallback needed).
                 fireTime <- getCurrentTime
@@ -8220,6 +8238,71 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid (rollingSleepWorkflow counter)
                 drive (12 :: Int)
                 readIORef counter >>= (`shouldBe` 3)
+
+    describe "Keiro.Workflow sleep generation pinning" $ around (withFreshStore fixture) $ do
+        it "keeps a stale re-fire on the generation that armed the sleep" $ \storeHandle -> do
+            counter <- newIORef (0 :: Int)
+            let name = WorkflowName "sleep-generation-pin"
+                wid = WorkflowId "sgp-1"
+                full = "sleep:cool"
+                TimerId generationZeroTimerId = sleepTimerId name wid 0 full
+                TimerId generationOneTimerId = sleepTimerId name wid 1 full
+                body = do
+                    seed <- restoreSeed (0 :: Int)
+                    _ <- step (StepName "work") (liftIO (incrementAndRead counter))
+                    if seed == 0
+                        then sleepNamed (StepName "cool") 0 >> continueAsNew (1 :: Int)
+                        else sleepNamed (StepName "cool") 3600 >> pure seed
+
+            Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+            claimTime <- getCurrentTime
+            Right (Just claimed) <- Store.runStoreIO storeHandle $ claimDueTimer claimTime
+            claimed ^. #timerId `shouldBe` TimerId generationZeroTimerId
+            Right (Just _) <-
+                Store.runStoreIO storeHandle $
+                    workflowSleepFireAction claimed
+
+            Right ContinuedAsNew <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+            Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+            Right (Just generationOneFireAt) <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement generationOneTimerId sleepTimerFireAtStmt
+
+            requeueTime <- getCurrentTime
+            Right requeued <-
+                Store.runStoreIO storeHandle $
+                    requeueStuckTimers 0 (addUTCTime 1 requeueTime)
+            requeued `shouldBe` 1
+            Right (Just staleFire) <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowTimerWorker Nothing (addUTCTime 2 requeueTime) (\_ -> pure Nothing)
+            staleFire ^. #timerId `shouldBe` TimerId generationZeroTimerId
+
+            Right generationOneResolved <-
+                Store.runStoreIO storeHandle $
+                    stepExists name wid 1 full
+            generationOneResolved `shouldBe` False
+            Right (Just instanceRow) <-
+                Store.runStoreIO storeHandle $
+                    Instance.lookupInstance name wid
+            instanceRow ^. #status `shouldBe` Instance.WfSuspended
+            Right generationZeroStatus <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement generationZeroTimerId sleepTimerStatusStmt
+            fmap fst generationZeroStatus `shouldBe` Just "fired"
+            Right generationOneStatus <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement generationOneTimerId sleepTimerStatusStmt
+            fmap fst generationOneStatus `shouldBe` Just "scheduled"
+            Right (Just generationOneFireAtAfter) <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement generationOneTimerId sleepTimerFireAtStmt
+            generationOneFireAtAfter `shouldBe` generationOneFireAt
+            readIORef counter >>= (`shouldBe` 2)
 
     describe "Keiro.Workflow.Awakeable" $ do
         -- Pure (no-DB) check of the deterministic id derivation.

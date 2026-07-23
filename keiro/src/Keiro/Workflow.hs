@@ -91,6 +91,7 @@ module Keiro.Workflow (
     prepareJournalAppend,
     appendJournalEntry,
     appendJournalEntryReturningId,
+    deterministicJournalId,
 
     -- * Errors thrown by the runtime
     WorkflowError (..),

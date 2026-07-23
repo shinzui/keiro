@@ -46,10 +46,11 @@ already journaled and returns immediately, and only @step \"b\"@ runs for real.
 == Operational contract
 
 * __Payload discriminator.__ A workflow-sleep timer row carries
-  @{\"kind\":\"keiro.workflow.sleep\",\"step\":\"sleep:\<suffix\>\"}@ in its
-  @payload@ (see 'sleepTimerPayload' / 'parseSleepPayload'). This is how a
-  single timer worker distinguishes workflow sleeps from ordinary
-  process-manager timers and routes each correctly.
+  @{\"kind\":\"keiro.workflow.sleep\",\"step\":\"sleep:\<suffix\>\",\"gen\":0}@
+  in its @payload@ (see 'sleepTimerPayload' / 'parseSleepPayload'). This is how
+  a single timer worker distinguishes workflow sleeps from ordinary
+  process-manager timers, routes each correctly, and pins a fire to the
+  generation that armed it. Legacy payloads without @gen@ remain supported.
 
 * __Deterministic timer id.__ The timer id is a v5 UUID over
   @(\"keiro\":\"workflow-sleep\":name:id:generation:sleepStepName)@ for
@@ -87,6 +88,7 @@ module Keiro.Workflow.Sleep (
     sleepStepName,
     sleepTimerPayload,
     parseSleepPayload,
+    matchSleepTimerGeneration,
     workflowSleepKind,
 )
 where
@@ -94,10 +96,12 @@ where
 import Data.Aeson (Value (..), object)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.List (find)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, addUTCTime)
 import Data.UUID.V5 qualified as UUID.V5
 import Effectful (Eff, IOE, (:>))
+import Effectful.Exception (throwIO)
 import Keiro.Prelude
 import Keiro.Telemetry (KeiroMetrics)
 import Keiro.Timer (
@@ -108,16 +112,20 @@ import Keiro.Timer (
     scheduleTimerOnceTx,
  )
 import Keiro.Workflow (
+    JournalAppendOutcome (..),
     StepName (..),
     Workflow,
+    WorkflowError (..),
     WorkflowId (..),
     WorkflowJournalEvent (..),
     WorkflowName (..),
-    appendJournalEntryReturningId,
     awaitStep,
+    currentGeneration,
     currentRunGeneration,
     currentWorkflow,
+    deterministicJournalId,
     freshOrdinal,
+    prepareJournalAppend,
     setWorkflowWakeAfterTx,
     sleepStepPrefix,
  )
@@ -136,23 +144,36 @@ timer worker can route each correctly.
 workflowSleepKind :: Text
 workflowSleepKind = "keiro.workflow.sleep"
 
-{- | Build the JSON payload carried on a workflow-sleep timer row. The argument
-is the full @"sleep:\<suffix\>"@ journal step name the firing will record.
+{- | Build the JSON payload carried on a workflow-sleep timer row. The first
+argument is the generation that armed the timer; the second is the full
+@"sleep:\<suffix\>"@ journal step name the firing will record.
 -}
-sleepTimerPayload :: Text -> Value
-sleepTimerPayload fullStep =
-    object ["kind" Aeson..= workflowSleepKind, "step" Aeson..= fullStep]
+sleepTimerPayload :: Int -> Text -> Value
+sleepTimerPayload gen fullStep =
+    object
+        [ "kind" Aeson..= workflowSleepKind
+        , "step" Aeson..= fullStep
+        , "gen" Aeson..= gen
+        ]
 
-{- | Recognise and extract a workflow-sleep payload: @Just fullStep@ for a
-payload this module wrote, 'Nothing' for any other timer (e.g. a process
-manager's). The full step name returned is what the fire action journals.
+{- | Recognise and extract a workflow-sleep payload. The result contains the
+full step name and the generation when the payload records one. 'Nothing' in
+the generation slot denotes a legacy workflow-sleep payload written before
+generation pinning; an overall 'Nothing' denotes any other timer (for example,
+a process manager's).
 -}
-parseSleepPayload :: Value -> Maybe Text
+parseSleepPayload :: Value -> Maybe (Text, Maybe Int)
 parseSleepPayload = \case
     Object o
         | KeyMap.lookup "kind" o == Just (String workflowSleepKind) ->
             case KeyMap.lookup "step" o of
-                Just (String s) -> Just s
+                Just (String s) ->
+                    case KeyMap.lookup "gen" o of
+                        Nothing -> Just (s, Nothing)
+                        Just value ->
+                            case Aeson.fromJSON value of
+                                Aeson.Success gen -> Just (s, Just gen)
+                                Aeson.Error{} -> Nothing
                 _ -> Nothing
     _ -> Nothing
 
@@ -192,6 +213,24 @@ sleepTimerId name wid gen fullStep =
             , Text.pack (show gen)
             , fullStep
             ]
+
+{- | Recover the generation represented by a deterministic workflow-sleep
+timer id. Candidate generations from @currentGen@ down to zero are tested
+against 'sleepTimerId'; this lets a new worker pin legacy payloads that do not
+carry an explicit generation. Returns 'Nothing' only for an operator-crafted
+or otherwise non-matching timer id.
+-}
+matchSleepTimerGeneration ::
+    WorkflowName ->
+    WorkflowId ->
+    Int ->
+    Text ->
+    TimerId ->
+    Maybe Int
+matchSleepTimerGeneration name wid currentGen fullStep timerId =
+    find
+        (\gen -> sleepTimerId name wid gen fullStep == timerId)
+        (reverse [0 .. max 0 currentGen])
 
 {- | The durable journal step name for a sleep: the user's suffix prefixed with
 'sleepStepPrefix'. @'sleepStepName' (StepName \"cool\") == \"sleep:cool\"@. The
@@ -240,7 +279,7 @@ sleepNamed userStep delta = do
                     , processManagerName = unWorkflowName name
                     , correlationId = unWorkflowId wid
                     , fireAt = addUTCTime delta now
-                    , payload = sleepTimerPayload full
+                    , payload = sleepTimerPayload gen full
                     }
         -- Re-arms can only happen once discovery has found this instance again,
         -- which means any existing wake_after has already self-expired. A later
@@ -265,31 +304,47 @@ sleep delta = do
 {- | The fire action for workflow-sleep timers. For a 'TimerRow' whose payload
 is a workflow-sleep discriminator, reconstruct the workflow identity from the
 row's @processManagerName@ (= workflow name) and @correlationId@ (= workflow
-id), append a @StepRecorded@ completion (@result = null@) to the workflow's
-journal via 'appendJournalEntryReturningId', and return the appended 'EventId'
-so the worker marks the timer @Fired@. Returns 'Nothing' for a row whose
-payload is __not__ a workflow sleep, so a mixed worker can delegate that row to
-its process-manager fire action.
+id), resolve the generation that armed the timer, append a @StepRecorded@
+completion (@result = null@) to that generation's journal, and return the
+deterministic 'EventId' so the worker marks the timer @Fired@. Returns
+'Nothing' for a row whose payload is __not__ a workflow sleep, so a mixed
+worker can delegate that row to its process-manager fire action.
 
-Idempotent: 'appendJournalEntryReturningId' pre-checks the step and returns the
-same deterministic id on a re-fire, so at-least-once timer firing yields
-exactly-once journaling.
+Idempotent: 'prepareJournalAppend' pre-checks the generation-scoped step and
+the event id is deterministic, so at-least-once timer firing yields
+exactly-once journaling even after the workflow has rotated.
 -}
 workflowSleepFireAction ::
     (Store :> es, IOE :> es) => TimerRow -> Eff es (Maybe EventId)
 workflowSleepFireAction row =
     case parseSleepPayload (row ^. #payload) of
         Nothing -> pure Nothing
-        Just full -> do
-            now <- liftIO getCurrentTime
+        Just (full, payloadGen) -> do
             let name = WorkflowName (row ^. #processManagerName)
                 wid = WorkflowId (row ^. #correlationId)
-            eid <-
-                appendJournalEntryReturningId
+            targetGen <-
+                case payloadGen of
+                    Just gen -> pure gen
+                    Nothing -> do
+                        currentGen <- currentGeneration name wid
+                        pure $
+                            fromMaybe
+                                currentGen
+                                (matchSleepTimerGeneration name wid currentGen full (row ^. #timerId))
+            now <- liftIO getCurrentTime
+            appendTx <-
+                prepareJournalAppend
                     name
                     wid
+                    targetGen
                     (StepRecorded{stepName = full, result = Null, recordedAt = now})
-            pure (Just eid)
+            runTransaction appendTx >>= \case
+                JournalAppended{} ->
+                    pure (Just (deterministicJournalId name wid targetGen full))
+                JournalAlreadyPresent{} ->
+                    pure (Just (deterministicJournalId name wid targetGen full))
+                JournalAppendConflict err ->
+                    throwIO (WorkflowJournalAppendError (Text.pack (show err)))
 
 {- | A timer worker pass that handles __both__ workflow-sleep timers and
 ordinary process-manager timers. For each claimed timer: if its payload is a
