@@ -547,12 +547,17 @@ adds them to the reference docs):
 - **Fold changes with snapshots: bump `stateCodecVersion` in the same deploy**
   and expect a full-replay cost spike (see
   [fold changes](#changing-the-fold-same-events-different-state--and-what-snapshots-do-to-you)).
-- **Any transducer change: run the replay audit before switching traffic**
-  (once
+- **Any transducer change: consult the replay-impact verdict, and audit the
+  affected data before switching traffic** (once
   [`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md)
-  lands): point the candidate binary's audit at a production-copy or staging
-  database; a non-zero exit — any stream that fails replay or whose snapshot
-  seed diverges from full replay — means do not deploy.
+  lands). `diff` either proves the deploy replay-neutral (no old edge or decode
+  surface changed — no audit needed, the common case) or names the affected
+  event types; run the candidate binary's *targeted* audit — only streams
+  containing those types — against a production-copy or staging database.
+  Non-zero exit (a stream that fails replay, or a snapshot seed that diverges
+  from full replay) means do not deploy. The full-store sweep is for one-time
+  keiki-runtime cutovers, not routine deploys; between deploys, the sampled
+  runtime seed-verification metric is the alert to watch.
 
 ## Gate coverage summary
 

@@ -22,17 +22,15 @@ decode each payload through the upcaster chain, re-invert the event back to the 
 that produced it, re-check the edge's guard, fold the register writes — optionally seeded
 from a snapshot. The sibling plans close the decode layer (docs/plans/139, docs/plans/140)
 and the spec-visible snapshot discriminator (docs/plans/138), but two failure classes
-remain with **no mechanical gate against the data a service has actually stored**:
+remain with **no mechanical check against the data a service has actually stored**:
 
 1. *Inversion breaks or shifts.* A removed or re-pointed transition, a tightened guard,
    or a changed output template makes a stored event fail inversion
    (`HydrationReplayFailed HydrationNoInvertingEdge` / `HydrationAmbiguousInversion`) — or,
    worse, invert *unambiguously to a different edge* so replay succeeds with silently
-   different register writes. Pre-merge gates see at most an advisory
-   (`AggFoldSurfaceChanged`, docs/plans/138) or a warning
-   (`DeprecatedEventReplayHazard`, docs/plans/139); startup validation checks the new
-   machine in isolation, never against old logs. The failure detonates at the first
-   command or action on an affected stream, in production.
+   different register writes. Pre-merge gates see at most an advisory; startup validation
+   checks the new machine in isolation, never against old logs. The failure detonates at
+   the first command or action on an affected stream, in production.
 
 2. *The seed is stale and the discriminator cannot know.* docs/plans/138 makes every
    spec-visible fold change invalidate old snapshots, but a fold change made only in the
@@ -40,40 +38,75 @@ remain with **no mechanical gate against the data a service has actually stored*
    manual `stateCodecVersion` bump — and a missed bump silently serves old-fold state
    forever.
 
-After this plan, a **replay audit** exists: a read-only library (plus generated per-service
-wiring) that, pointed at a real database — a production copy, a staging environment, a
-pre-cutover replica — replays **every live stream through the candidate binary's
-transducer** and reports, per stream: full replay succeeded or the exact typed failure;
-whether the snapshot-seeded state diverges from the full-replay state (a stale seed, caught
-regardless of who forgot which bump); and a stable state digest, so running the audit under
-the currently deployed binary and under the candidate and diffing the digests turns *every*
-reinterpretation of history — intended or not — into a reviewable line. Running the audit
-before switching traffic is the fleet's standard pre-deploy gate for any transducer change.
+A naive answer — "full-replay the whole store before every deploy" — does not survive
+contact with reality: production categories hold tens of millions of events, and a
+routine deploy gate cannot be a store-wide scan. This plan therefore builds a
+**differential, budget-bounded replay audit** plus an **amortized runtime witness**, so
+that full replay of everything is reserved for the single moment it is proportionate (the
+one-time cutover of an existing service onto the keiki runtime) and never required for a
+routine deploy:
+
+* **Tier 0 — replay-neutrality verdict, zero data touched.** The interpretation of
+  stored data changes *only* when a transition's guard/writes/output surface or the
+  codec surface changes. `keiro-dsl diff` gains a replay-impact verdict: when no old
+  edge and no decode surface changed, the deploy is proved replay-neutral and **no audit
+  is needed at all** — the common case (new events, new edges, additive evolutions).
+* **Tier 1 — targeted audit, cost proportional to the change.** When edges did change,
+  the diff emits the *affected event-type set* (every type an added/removed/changed edge
+  could produce, under the old or new template — a conservative, sound over-approximation).
+  The audit then replays **only streams containing affected types** (plus all
+  snapshot-bearing streams of the aggregate when its fold surface changed), under a
+  budget, in parallel, resumable. A guard edit on one event type costs that type's
+  streams — not the store.
+* **Tier 2 — full sweep, opt-in.** `AuditFull` replays an entire category: parallel
+  across streams, checkpointed/resumable, intended for the one-time keiki-runtime
+  cutover of an existing service or post-incident forensics. Replay of one event is
+  microseconds of CPU; even large categories are a bounded offline job on a replica —
+  but it is never the routine gate.
+* **The amortized backstop — sampled runtime seed verification.** For the fold changes
+  no fingerprint or diff can see (hole bodies, hand-written code), a small configurable
+  fraction of snapshot-seeded hydrations asynchronously full-replays that one stream and
+  compares — emitting a divergence metric. No operator action, no deploy gate; the fleet
+  converges to verified within hours of any deploy, and a missed manual bump becomes an
+  alert instead of silent wrong state.
+
+Every audited stream reports: replay succeeded or the exact typed failure; whether the
+snapshot-seeded state diverges from full replay; and a stable state digest, so running
+the audit under the deployed binary and the candidate and diffing digests turns *every*
+reinterpretation of history — intended or not — into a reviewable line.
 
 Secondarily, this plan adds the `keiro-dsl diff` advisories the evolution guide promised
-for decide-surface changes: process/router dispatch mapping and timer-payload shape changes
-currently produce **no diff output at all**, yet deploying them over a redelivery window
-silently merges half-old/half-new fan-out (deterministic dispatch ids confirm the overlap
-as benign duplicates). The advisories name the drain-before-deploy procedure at exactly the
-moment the change is made.
+for decide-surface changes: process/router dispatch mapping and timer-payload shape
+changes currently produce **no diff output at all**, yet deploying them over a redelivery
+window silently merges half-old/half-new fan-out (deterministic dispatch ids confirm the
+overlap as benign duplicates). The advisories name the drain-before-deploy procedure at
+exactly the moment the change is made.
 
 You can see it working by running the new keiro-test examples: a stream whose history
 contains an event with no inverting edge in the candidate machine is reported
-`ReplayFailed` *before deploy*; a snapshot written under an old fold with an unbumped
-discriminator is reported as `SeedDivergence`; and `keiro-dsl diff` on a fixture pair that
-changes a router's dispatch block prints a `RouterDecideSurfaceChanged` advisory.
+`ReplayFailed` by a *targeted* audit that never read the unaffected streams; a snapshot
+written under an old fold with an unbumped discriminator is reported as `SeedDivergence`
+(by the audit, and by the sampled runtime witness's metric); `keiro-dsl diff` on an
+additive evolution prints `replay-neutral`; and a fixture pair changing a router's
+dispatch block prints a `RouterDecideSurfaceChanged` advisory.
 
 
 ## Progress
 
-- [ ] M1: `Keiro.ReplayAudit` library shipped (`auditStream`, `auditCategory`,
-      `SomeAuditTarget`, report rendering); `hydrateFull`/`hydrateSeeded`/`Hydrated`
-      exported from `Keiro.Command`; three keiro-test scenarios green (no-inverting-edge
-      caught, stale-seed divergence caught, clean audit with stable digests).
-- [ ] M2: scaffolder emits `Generated/<Ctx>/ReplayAudit.hs` audit targets for every
-      aggregate node; conformance runtime vertical runs an audit against its provisioned
-      database; jitsurei reference assembly added; 24 keiro-dsl suites green.
-- [ ] M3: `RouterDecideSurfaceChanged`, `ProcessDecideSurfaceChanged`,
+- [ ] M1: `Keiro.ReplayAudit` core shipped (`auditStreams` with selection/budget/
+      parallelism/watermark, `AuditTargeted`/`AuditFull` modes, digests, report
+      rendering); `hydrateFull`/`hydrateSeeded`/`Hydrated` exported from
+      `Keiro.Command`; keiro-test scenarios green (no-inverting-edge caught by a
+      targeted audit, stale-seed divergence caught, clean audit with stable digests,
+      targeted selection provably skips unaffected streams).
+- [ ] M2: `keiro-dsl diff` replay-impact verdict (`replay-neutral` vs affected
+      event-type set, machine-readable); scaffolder emits `Generated/<Ctx>/ReplayAudit.hs`
+      audit targets; conformance runtime vertical runs a targeted audit against its
+      provisioned database; jitsurei reference assembly; 24 keiro-dsl suites green.
+- [ ] M3: sampled runtime seed verification (config on the snapshot/command options,
+      async compare, divergence metric) landed with tests; default sampling rate and
+      off-switch documented.
+- [ ] M4: `RouterDecideSurfaceChanged`, `ProcessDecideSurfaceChanged`,
       `ProcessTimerPayloadChanged` diff advisories implemented with fixture pairs;
       diff tests green.
 - [ ] Close-out: CHANGELOG entries; master plan 24 EP-5 boxes ticked; contracts recorded
@@ -91,14 +124,52 @@ implementation. Provide concise evidence.
 
 ## Decision Log
 
-- Decision: The old-log compatibility gate is a database-backed audit tool, not a
-  synthetic CI harness of generated old-log fixtures.
-  Rationale: Whether a stored event still inverts depends on the *actual history* of each
-  stream (guards are re-checked against state folded from every prior event), which no
-  synthesized fixture set can enumerate. The golden payloads of docs/plans/139 and
-  docs/plans/140 prove decode-ability of old shapes in CI; only replay against real data
-  proves replay-ability. The full generated-fixture harness remains the recorded follow-on
-  it already was in master plan 24.
+- Decision: The audit is differential and budget-bounded, not a full-store replay; the
+  full sweep exists only as an opt-in mode for one-time cutovers and forensics.
+  Rationale: Production categories hold tens of millions of events (user constraint,
+  2026-07-23); a routine deploy gate cannot scan the store. The differential design is
+  *sound*, not merely cheaper: replay semantics of stored data change only when an
+  edge's guard/writes/output surface or the decode surface changes, so a
+  diff-proved-neutral deploy needs no audit, and a non-neutral deploy can only affect
+  streams containing the affected event types (see the affected-set decision). The
+  one-time full sweep aligns with the fleet plan: when an existing microservice first
+  moves onto the keiki runtime there is a migration/cutover window anyway, and that is
+  the single proportionate moment for store-wide certainty.
+  Date: 2026-07-23
+
+- Decision: The affected event-type set is computed conservatively from the spec diff:
+  every event type that any added, removed, or surface-changed transition could produce
+  under its old *or* new output template, plus every event type whose codec surface
+  (fields, wire clause, version, upcaster) changed; if the aggregate's fold surface
+  changed at all, all snapshot-bearing streams of that aggregate are additionally
+  selected. Edge comparison is syntactic equality of the pretty-printed
+  guard/writes/emits/target surface (the docs/plans/138 fold-surface rendering);
+  guard-implication refinement ("weaker guards are compatible") is recorded as a
+  possible follow-on, not a commitment.
+  Rationale: Soundness argument, stated so a reviewer can check it: an edge whose
+  printed surface is unchanged inverts exactly the events it inverted before, applies
+  the same writes, and re-checks the same guard — replay of streams containing only
+  such edges' events is bitwise identical, so excluding them cannot hide a regression.
+  A changed edge can affect (a) inversion of the event types it emits, old or new, and
+  (b) downstream guard checks *within streams that contain those events* — both inside
+  the selected set. Hand-written services have no spec to diff, so they get no Tier-0/1
+  narrowing: their options are targeted-by-event-type selection (caller-supplied) or the
+  full sweep, and the plan says so honestly in the generated and library docs.
+  Date: 2026-07-23
+
+- Decision: The stale-seed residual (hole-only / hand-written fold changes with a missed
+  manual bump) is covered by a *sampled runtime witness*, not by pre-deploy sweeps: a
+  configurable fraction of snapshot-seeded hydrations asynchronously full-replays the
+  stream and compares encoded states, emitting a divergence metric (extending the
+  existing post-append witness vocabulary, `keiro.snapshot.apply.divergence` /
+  `keiro.replay.divergence`).
+  Rationale: Nothing signals *when* a hole-body fold change ships — no fingerprint sees
+  it, so no deploy-time trigger exists even in principle; scheduled sweeps would pay
+  store-scale cost for a needle. Sampling attaches the check to exactly the streams
+  being served, costs a bounded background replay per N hydrations, converges
+  fleet-wide within hours of any deploy, and turns the documented-silent residual of
+  docs/plans/138 into an alertable metric. Default-on at a low rate with an off switch;
+  the exact default is fixed during implementation and recorded here.
   Date: 2026-07-23
 
 - Decision: The audit calls the hydrate *primitives* (`hydrateFull`, `hydrateSeeded`),
@@ -151,9 +222,10 @@ implementation. Provide concise evidence.
 ## Outcomes & Retrospective
 
 (To be filled during and after implementation. At completion, feed the audit's rows into
-the evolution-gate inventory ADR named by master plan 24: old-log inversion — audited
-pre-deploy; stale seed — detected by audit regardless of manual-bump discipline;
-reinterpretation — reviewable via digest diff; decide-surface change — advised at diff.)
+the evolution-gate inventory ADR named by master plan 24: old-log inversion — proved
+neutral or audited differentially pre-deploy; stale seed — detected by the audit at
+cutover and by the sampled runtime witness thereafter; reinterpretation — reviewable via
+digest diff; decide-surface change — advised at diff.)
 
 
 ## Context and Orientation
@@ -200,26 +272,35 @@ return `Either CommandError (Hydrated rs s)` where `Hydrated` carries
 / `HydrationQueueMismatch` / `HydrationTruncatedChain` reason and decode failures as
 `HydrationDecodeFailed` (`Command.hs:199-208`, `457-462`). None of `hydrate`,
 `hydrateFull`, `hydrateSeeded`, `Hydrated` is currently exported
-(`Command.hs:48-63` export list).
+(`Command.hs:48-63` export list). The existing post-append witness (`verifyAndSnapshot`,
+`Command.hs:696-737`) replays only the just-appended batch from the already-hydrated
+state and emits `keiro.snapshot.apply.divergence` / the `keiro.replay.divergence` span
+attribute on divergence — advisory telemetry, and structurally blind to a stale seed
+(it starts *from* the possibly-stale state); Milestone 3's sampled witness extends this
+vocabulary with a seed-vs-full comparison.
 
 Snapshots, precisely. `lookupSnapshotSeed` (`keiro/src/Keiro/Snapshot.hs:80-102`)
 returns a `SnapshotHit` seed only when the stored row's discriminator matches the
 stream's `StateCodec`. After docs/plans/138 lands the discriminator is three-component
 (`stateCodecVersion`, register `shapeHash`, `stateShapeHash` + optional fold
 fingerprint); before it lands it is two-component. This plan is correct in either world:
-the audit compares whatever seed the lookup accepts against the full replay, which is
-precisely the check that catches a seed the discriminator wrongly accepted (the manual
-contract's failure mode). `StateCodec` (`keiro-core/src/Keiro/EventStream.hs:102-108`)
-carries `encode :: state -> Value`, used for the byte comparison and the digest.
+the audit and the sampled witness compare whatever seed the lookup accepts against the
+full replay, which is precisely the check that catches a seed the discriminator wrongly
+accepted (the manual contract's failure mode). `StateCodec`
+(`keiro-core/src/Keiro/EventStream.hs:102-108`) carries `encode :: state -> Value`, used
+for the byte comparison and the digest.
 
-Stream enumeration. kiroku's read API exposes `readCategory` (paged reads of every
-message in a category from a global position) and `lookupStreamNames` (resolve internal
-stream ids to `StreamName`) —
+Stream enumeration and targeting. kiroku's read API exposes `readCategory` (paged reads
+of every message in a category from a global position) and `lookupStreamNames` (resolve
+internal stream ids to `StreamName`) —
 `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store/src/Kiroku/Store/Read.hs:147-230`
 (the module's own haddock at `Read.hs:205-207` describes collecting distinct
-`originalStreamId`s from category batches and resolving them in one call). The audit
-enumerates a category's streams that way: page `readCategory`, collect distinct ids,
-resolve names once per batch.
+`originalStreamId`s from category batches and resolving them in one call). Category rows
+carry the event type, so targeted selection — "streams containing at least one event of
+an affected type" — is a filtered pass over the same pagination, collecting distinct
+stream ids only for matching rows; discovery during implementation may substitute a
+dedicated SQL statement if the paged filter proves slow (record the substitution in the
+Decision Log; kiroku's schema indexes the category stream).
 
 The decide-surface diff gap, precisely. `keiro-dsl diff` pairs every node kind but diffs
 only identity/shape surfaces: `routerPairDiff` (`keiro-dsl/src/Keiro/Dsl/Diff.hs:232-248`)
@@ -239,15 +320,22 @@ half-old/half-new fan-out with no signal. The evolution guide
 the drain rule and promised the diff advisory; this plan delivers it.
 
 Ownership boundaries from master plan 24 (Integration Points). This plan owns
-`keiro/src/Keiro/ReplayAudit.hs` (new), the additive `Keiro.Command` exports, and — in
-`keiro-dsl` — the audit-target emission in `Scaffold.hs` plus a third disjoint share of
+`keiro/src/Keiro/ReplayAudit.hs` (new), the additive `Keiro.Command` exports, the
+Milestone 3 witness edit in the snapshot-lookup/command path (coordinate with
+docs/plans/138, which owns the discriminator files — the witness edit is confined to
+the post-hydration path and a new options field), and — in `keiro-dsl` — the
+replay-impact verdict and audit-target emission plus a third disjoint share of
 `Diff.hs` (decide-surface rules; docs/plans/138 owns the transition-surface advisory,
 docs/plans/139 owns deprecation + upcaster-chain rules). `DiagnosticCode` constructor
 additions to `Validate.hs` are append-only, same convention as the siblings. Scaffold.hs
 is also edited by docs/plans/138 (`stateCodecExpr`) and docs/plans/140 (upcaster
-lowering, `scaffoldWorkqueue`) — this plan adds a new emission function and does not
-touch theirs; rebase without reformatting neighbours. Conformance fixtures regenerate
-once per landed plan; the 24-suite keiro-dsl green bar is the shared acceptance floor.
+lowering, `scaffoldWorkqueue`) — this plan adds new emission functions and does not
+touch theirs; rebase without reformatting neighbours. The replay-impact verdict reuses
+docs/plans/138's `aggregateFoldSurface` rendering per transition (import it if 138 has
+landed; otherwise implement the per-transition rendering locally and reconcile at
+whichever lands second — record the choice in both Decision Logs). Conformance fixtures
+regenerate once per landed plan; the 24-suite keiro-dsl green bar is the shared
+acceptance floor.
 
 Relevant ADRs: `docs/adr/` contains only
 `0001-keiro-pgmq-job-processing-telemetry-contract.md`, unrelated. The
@@ -259,18 +347,23 @@ Term definitions. "Live stream" — a stream the service will hydrate again (non
 or terminal but still receiving reads that can miss a snapshot). "Seed" — the
 `(state, registers, streamVersion)` a snapshot row decodes to. "Digest" — SHA-256 hex of
 the canonical JSON encoding of a stream's final `(state, registers)`; comparable across
-runs and binaries. "Decide surface" — the spec-visible mapping from an input event to
-dispatched commands/timers (router `resolve`+`dispatch`, process `handle`, timer
-`payload`), as opposed to hole-owned bodies.
+runs and binaries. "Replay-neutral" — a spec change under which every retained edge's
+pretty-printed guard/writes/emits/target surface and the whole decode surface are
+unchanged, so replay of existing data is bitwise identical by construction.
+"Affected set" — the conservative over-approximation of event types whose stored
+occurrences could replay differently (see Decision Log). "Decide surface" — the
+spec-visible mapping from an input event to dispatched commands/timers (router
+`resolve`+`dispatch`, process `handle`, timer `payload`), as opposed to hole-owned
+bodies.
 
 
 ## Plan of Work
 
-### Milestone 1 — the replay audit library in keiro
+### Milestone 1 — the replay audit core in keiro
 
-Scope: `keiro` gains `Keiro.ReplayAudit`; `Keiro.Command` exports its hydrate
-primitives; keiro-test proves the three detection scenarios end to end. At the end, any
-service that can construct its `ValidatedEventStream`s can audit a database.
+Scope: `keiro` gains `Keiro.ReplayAudit` with targeted and full modes; `Keiro.Command`
+exports its hydrate primitives; keiro-test proves detection and — equally important —
+proves the targeted mode *skips* what it may soundly skip.
 
 Edit `keiro/src/Keiro/Command.hs`: add `hydrate`, `hydrateFull`, `hydrateSeeded`, and
 `Hydrated (..)` to the export list under a new `-- * Hydration primitives (replay audit)`
@@ -281,6 +374,24 @@ Add `keiro/src/Keiro/ReplayAudit.hs` (register in `keiro.cabal`'s library stanza
 Public surface:
 
 ```haskell
+data AuditMode
+    = AuditFull
+      -- ^ Every stream in the category. One-time cutovers and forensics only.
+    | AuditTargeted !AffectedSet
+      -- ^ Only streams containing at least one event whose type is in the set,
+      --   plus (when the set says so) all snapshot-bearing streams.
+
+data AffectedSet = AffectedSet
+    { affectedEventTypes :: !(Set EventType)
+    , includeSnapshotStreams :: !Bool   -- fold surface changed
+    }
+
+data AuditBudget = AuditBudget
+    { maxStreams :: !(Maybe Int)        -- Nothing = unbounded
+    , parallelism :: !Int
+    , resumeFrom :: !(Maybe GlobalPosition)  -- checkpoint watermark
+    }
+
 data AuditTarget phi rs s ci co = AuditTarget
     { eventStream :: !(ValidatedEventStream phi rs s ci co)
     , category :: !Text
@@ -291,11 +402,6 @@ data SomeAuditTarget where
     SomeAuditTarget ::
         (BoolAlg phi (RegFile rs, ci), Eq co) =>
         AuditTarget phi rs s ci co -> SomeAuditTarget
-
-data StreamAuditResult = StreamAuditResult
-    { streamName :: !StreamName
-    , outcome :: !AuditOutcome
-    }
 
 data AuditOutcome
     = ReplayOk { streamVersion :: !StreamVersion, digest :: !(Maybe Text) }
@@ -308,105 +414,180 @@ data AuditOutcome
 
 data AuditReport = AuditReport
     { targetCategory :: !Text
-    , results :: ![StreamAuditResult]
-    , streamsAudited :: !Int
+    , mode :: !Text                     -- "full" | "targeted"
+    , results :: ![StreamAuditResult]   -- non-OK always retained; OK counted
+    , streamsSelected :: !Int
+    , streamsSkipped :: !Int            -- targeted mode: proven-unaffected streams
     , failures :: !Int
     , divergences :: !Int
+    , checkpoint :: !(Maybe GlobalPosition)
     }
 
-auditStream :: … => AuditTarget … -> Stream … -> Eff es StreamAuditResult
-auditCategory :: … => AuditTarget … -> Eff es AuditReport
-auditTargets :: [SomeAuditTarget] -> Eff es [AuditReport]
-renderAuditReport :: AuditReport -> Text          -- one line per non-OK stream
-auditExitCode :: [AuditReport] -> Int             -- 0 clean, 1 failures/divergences
+auditStream  :: … => AuditTarget … -> Stream … -> Eff es StreamAuditResult
+auditStreams :: … => AuditMode -> AuditBudget -> AuditTarget … -> Eff es AuditReport
+auditTargets :: AuditMode -> AuditBudget -> [SomeAuditTarget] -> Eff es [AuditReport]
+renderAuditReport :: AuditReport -> Text
+auditExitCode :: [AuditReport] -> Int   -- 0 clean, 1 failures/divergences
 ```
 
 (Effect constraints follow what the compiler demands from the hydrate primitives —
 `IOE :> es, Store :> es` plus the snapshot lookup's requirements; mirror `hydrate`'s
-context.) Semantics of `auditStream`, in order:
+context. `GlobalPosition` is kiroku's category position type.) Semantics of
+`auditStream`, in order:
 
-1. Run `hydrateFull`. On `Left err`, return `ReplayFailed err` — this is the
-   no-inverting-edge / ambiguous-inversion / decode-failure detector.
+1. Run `hydrateFull`. On `Left err`, return `ReplayFailed err` — the
+   no-inverting-edge / ambiguous-inversion / shifted-inversion / decode-failure
+   detector.
 2. If the stream has a `stateCodec` *and* `lookupSnapshotSeed` returns a hit, run
    `hydrateSeeded` from the seed. If the seeded replay fails, or its final
    `(state, registers)` encodes differently (byte comparison of the codec's canonical
-   encoding) from the full replay's, return `SeedDivergence` with both digests — this is
-   the stale-seed detector, and it works whether the seed was accepted by a two- or
-   three-component discriminator, closing the manual-contract residual of
-   docs/plans/138.
+   encoding) from the full replay's, return `SeedDivergence` with both digests.
 3. Otherwise return `ReplayOk` with the full-replay version and, when a `stateCodec`
-   exists, the digest (SHA-256 hex over the canonical encoding; reuse the SHA-256
-   helper already available via keiki's `Keiki.Shape` dependency or `cryptohash`-free
-   equivalent already in the dependency tree — do not add a new package; if none is
-   importable, vendor the same digest approach `regFileShapeHash` uses).
+   exists, the digest (SHA-256 hex over the canonical encoding; reuse a SHA-256 helper
+   already reachable in the dependency tree — keiki's `Keiki.Shape` ships one for
+   `regFileShapeHash`; do not add a new package).
 
-`auditCategory` enumerates streams by paging `readCategory` from position zero,
-collecting distinct stream ids per batch, resolving them with `lookupStreamNames`, and
-auditing each name `mkStream` accepts (count and report names it rejects, so a
-mis-wired `mkStream` cannot silently audit nothing). The audit is **read-only by
-construction**: it calls only read paths and `lookupSnapshotSeed`; it must never call
-`verifyAndSnapshot` or any append/write. State the guarantee in the module header.
+`auditStreams` drives selection: page `readCategory` from `resumeFrom` (or zero),
+collect distinct stream ids — in `AuditTargeted` mode only from rows whose event type is
+in the affected set (and, when `includeSnapshotStreams`, union the aggregate's
+snapshot-bearing streams via a snapshot-table scan for the category) — resolve names
+with `lookupStreamNames`, audit each accepted stream with `parallelism` workers, honour
+`maxStreams`, and emit the final page position as `checkpoint` so an interrupted or
+budget-capped run resumes instead of restarting. Count and report names `mkStream`
+rejects (a mis-wired `mkStream` must not silently audit nothing) and count skipped
+streams (the targeted mode's savings must be visible in the report). The audit is
+**read-only by construction**: it calls only read paths and `lookupSnapshotSeed`; it
+must never call `verifyAndSnapshot` or any append/write. State the guarantee in the
+module header, together with the tier ladder and the honest statement that hand-written
+services without a spec get no automatic affected-set — they pass their own or use
+`AuditFull`.
 
 Tests in `keiro/test/Main.hs`, new `describe "Keiro.ReplayAudit"` group using the
 existing `withMigratedSuite` template-database fixture (suite-level, not per-example —
-repository convention). Three examples:
+repository convention). Four examples:
 
-1. *No-inverting-edge caught pre-deploy.* Build machine A with an edge emitting event
-   `E`; append a history containing `E`. Build machine B identical minus that edge
-   (the transition-removal retirement variant that passes every static gate — see
-   docs/plans/139's Context). `auditStream` under B reports `ReplayFailed` with a
-   `HydrationNoInvertingEdge` reason; under A reports `ReplayOk`.
+1. *No-inverting-edge caught by a targeted audit.* Build machine A with an edge emitting
+   event `E`; append histories to several streams, only some containing `E`. Build
+   machine B identical minus that edge (the transition-removal retirement variant that
+   passes every static gate — docs/plans/139's Context). `auditStreams` under B with
+   `AuditTargeted {affectedEventTypes = [E]}` reports `ReplayFailed` with a
+   `HydrationNoInvertingEdge` reason for every `E`-bearing stream **and**
+   `streamsSkipped` equal to the number of `E`-free streams — the audit finds the bug
+   without reading the unaffected streams. Under machine A the same call is clean.
 2. *Stale seed caught regardless of discipline.* Reuse the stale-fold scenario from
    docs/plans/138's Milestone 1 tests: two machines differing in one edge's update with
    *equal* discriminators (the documented residual). Run commands under machine 1 past
    the snapshot interval so a seed persists; `auditStream` under machine 2 reports
-   `SeedDivergence` (the seeded digest differs from the full digest). This is the
-   companion detection for the residual docs/plans/138 pins as accepted.
-3. *Clean audit, stable digest.* A service with history and a valid snapshot reports
-   `ReplayOk` for every stream; running the audit twice yields identical digests; and
-   `auditCategory` finds exactly the streams that were written.
+   `SeedDivergence` (the seeded digest differs from the full digest).
+3. *Clean audit, stable digest, resumability.* A service with history and a valid
+   snapshot reports `ReplayOk` for every stream; digests identical across two runs; a
+   run with `maxStreams = 1` returns a `checkpoint` from which a second run completes
+   the remainder with no stream audited twice.
+4. *Full mode parity.* `AuditFull` over the same fixtures selects every stream
+   (`streamsSkipped == 0`) and agrees with targeted mode on every overlapping verdict.
 
-Acceptance: `cabal test keiro-test` green with the three examples; the module compiles
+Acceptance: `cabal test keiro-test` green with the four examples; the module compiles
 into `keiro`'s public library surface; CHANGELOG entry under Unreleased (additive:
 `Keiro.ReplayAudit`, new `Keiro.Command` exports).
 
-### Milestone 2 — generated audit wiring and the reference assembly
+### Milestone 2 — the replay-impact verdict and generated wiring
 
-Scope: DSL services get their audit targets generated; one conformance runtime vertical
-proves the audit against a provisioned database; jitsurei shows the hand-written
-assembly. At the end, wiring the audit into a service is an import, not a design task.
+Scope: `keiro-dsl diff` learns to say "this deploy cannot change replay" or to name
+exactly what it can change; scaffolded services get their audit targets generated; one
+conformance runtime vertical proves the pipeline end to end; jitsurei shows the
+hand-written assembly.
 
-Edit `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`: add an emission function (new, disjoint from
-the sibling plans' edits) that, for each context, generates
-`Generated/<Ctx>/ReplayAudit.hs` containing
+Add the replay-impact computation (new module `Keiro.Dsl.ReplayImpact`, keeping
+`Diff.hs`'s sibling-owned regions untouched): given the old and new spec, per aggregate:
+
+* Render every transition's guard/writes/emits/target surface with the pretty-printer
+  (reuse docs/plans/138's `aggregateFoldSurface` per-transition rendering when
+  available — see Context for the landing-order reconciliation) and pair transitions
+  across old/new.
+* The verdict is **replay-neutral** iff every old transition's surface is present
+  unchanged in the new spec (additions are fine) *and* the decode surface is unchanged
+  (event fields, wire clauses, versions, upcaster declarations — the surfaces
+  `eventDiff` already classifies). Otherwise emit the **affected set**: event types any
+  changed/removed transition emits (old or new template) plus event types whose decode
+  surface changed, and `includeSnapshotStreams = True` when the fold surface changed.
+
+Wire it into the `diff` subcommand (`keiro-dsl/app/Main.hs`): a
+`--replay-impact-out FILE` option writing machine-readable JSON
+(`{"verdict": "replay-neutral"}` or
+`{"verdict": "affected", "aggregates": {"<Agg>": {"eventTypes": [...],
+"includeSnapshotStreams": bool}}}`), and a human line in the normal diff output
+(`replay-neutral: stored-data replay is unchanged by this diff` — or the affected
+summary with a pointer to the audit). This is advisory output only; it never flips the
+exit classification.
+
+Scaffolder: add an emission function (new, disjoint from the sibling plans' edits)
+generating `Generated/<Ctx>/ReplayAudit.hs` with
 `auditTargets :: [Keiro.ReplayAudit.SomeAuditTarget]` — one entry per `aggregate` node
 (including saga aggregates of `process` nodes), wiring the node's generated
-`ValidatedEventStream`, its stream category (the spec's category string), and a
-`mkStream` that parses the category's stream-name shape (reuse the same stream-name
-construction the generated node modules already use). The module is `Generated` kind,
-compiled against the live runtime (like `QueuePolicy.hs`), and carries a header stating
-the pre-deploy contract: run the audit against a production-copy or staging database
-under the candidate binary before switching traffic; non-zero exit means do not deploy.
+`ValidatedEventStream`, its category string, and a `mkStream` that parses the category's
+stream-name shape (reuse the stream-name construction the generated node modules already
+use). The module is `Generated` kind, compiled against the live runtime (like
+`QueuePolicy.hs`), and carries a header stating the tiered contract: consume the diff's
+replay-impact verdict; `replay-neutral` → no audit; affected → run `AuditTargeted` with
+the emitted set against a production-copy or staging database under the candidate
+binary; `AuditFull` at one-time cutovers; non-zero exit means do not deploy.
 
 Register the new generated module in the conformance verticals' `other-modules` and
 regenerate fixtures. Extend one runtime vertical that already provisions a database and
 appends events (`conformance-process-runtime` or `conformance-v2` — pick the one whose
-Main already runs commands; follow its existing fixture pattern) to finish by running
-`auditTargets` and asserting every report is clean — the end-to-end proof that generated
-wiring, enumeration, and hydration compose.
+Main already runs commands; follow its existing fixture pattern) to finish by running a
+targeted audit over its own written streams and asserting every report is clean — the
+end-to-end proof that verdict, generated wiring, enumeration, and hydration compose.
 
 jitsurei: add a reference assembly for hand-written services — a small
 `Jitsurei.ReplayAudit` module (or an addition to `jitsurei/test/Main.hs`) that builds
 `SomeAuditTarget` values for the Order aggregate and the escalation PM's saga aggregate
 (`jitsurei/src/Jitsurei/EscalationProcess.hs:157-167` is the snapshot-enabled one) and
 runs them in the test suite. This doubles as the documentation example docs/plans/141
-will cite.
+will cite, including the honest hand-written caveat (no spec → no automatic narrowing).
+
+Tests: unit tests for the verdict (additive evolution — new event, new edge — is
+replay-neutral; a guard edit yields exactly that transition's event types; a wire-clause
+change yields that event type; a write-expression change sets
+`includeSnapshotStreams`); a fixture-pair test asserting `reservation.keiro` →
+`reservation-v2.keiro` is *not* neutral (its event codec surface changed) while a
+formatting-only edit *is*; scaffold test asserting the generated module names every
+aggregate node of the context.
 
 Acceptance: all 24 keiro-dsl suites green; `cabal test jitsurei-test` green (or the
-jitsurei suite's actual name — `jitsurei/test/Main.hs`'s cabal stanza); the extended
-runtime vertical's output shows the audit summary line.
+jitsurei suite's actual cabal name); the extended runtime vertical's output shows the
+audit summary line with `streamsSkipped` visible.
 
-### Milestone 3 — decide-surface and timer-payload diff advisories
+### Milestone 3 — sampled runtime seed verification
+
+Scope: the amortized backstop for fold changes nothing can see at deploy time. At the
+end, a missed manual `stateCodecVersion` bump surfaces as a metric within hours of
+serving traffic, at bounded cost, with no operator action.
+
+Add a sampling knob to the command path's options (`RunCommandOptions`,
+`keiro/src/Keiro/Command.hs` — field name and default fixed at implementation, e.g.
+`seedVerifySampleRate :: !Int` meaning "verify one in N snapshot-seeded hydrations";
+`0` disables). After a hydration that was served from a snapshot seed, when the sampler
+fires, run `hydrateFull` for the same stream *asynchronously* (off the command's
+critical path — reuse the runtime's existing async/worker facility; never block or fail
+the command) and compare the seeded `(state, registers)` encoding at the seed's version
+boundary against the full replay's. On divergence, emit a metric in the existing
+witness vocabulary (`keiro.snapshot.seed.divergence`, alongside
+`keiro.snapshot.apply.divergence`) and a structured log line naming stream, seed
+version, and both digests. Document on the field: this is the detection path for
+fold-logic changes invisible to the discriminator (hand-written bodies, DSL holes); it
+is sampling, so it bounds cost, not latency-to-detection — the deploy-ordering doc
+(docs/plans/141) tells operators to alert on the metric.
+
+Tests in `keiro/test/Main.hs`: with the sampler forced to fire (rate 1), the stale-fold
+scenario from M1's example 2 produces the divergence metric (assert via the suite's
+existing metrics-capture pattern) while the command itself still succeeds; with rate 0
+nothing fires; the async verification does not write snapshots (assert row unchanged).
+
+Acceptance: `cabal test keiro-test` green; the new option documented in the CHANGELOG
+with its default and off switch.
+
+### Milestone 4 — decide-surface and timer-payload diff advisories
 
 Scope: the promised `diff` advisories exist with machine-readable codes and honest text.
 At the end, no spec-visible decide or timer-payload change passes `diff` silently.
@@ -419,12 +600,11 @@ In `keiro-dsl/src/Keiro/Dsl/Diff.hs` (this plan's disjoint share — new top-lev
 functions only):
 
 * Extend `routerPairDiff` (`Diff.hs:232-248`) with a rule comparing the pretty-printed
-  `rtResolve` and `rtDispatch` of old vs new (render via `Keiro.Dsl.PrettyPrint`, the
-  same formatting-insensitivity approach as docs/plans/138's fold surface). On change,
-  emit one `advisory` with `RouterDecideSurfaceChanged` and detail: "router dispatch
-  surface changed: a source event redelivered across the deploy dispatches under the
-  same deterministic ids, so half-old/half-new fan-out merges silently. Drain or pause
-  the router's subscription and replay or discard dead letters before deploying; see
+  `rtResolve` and `rtDispatch` of old vs new. On change, emit one `advisory` with
+  `RouterDecideSurfaceChanged` and detail: "router dispatch surface changed: a source
+  event redelivered across the deploy dispatches under the same deterministic ids, so
+  half-old/half-new fan-out merges silently. Drain or pause the router's subscription
+  and replay or discard dead letters before deploying; see
   docs/user/deploy-ordering.md." (Wording is a contract for docs/plans/141 to quote.)
 * Extend `processPairDiff` (`Diff.hs:810-869`) with the same-shaped rule over the
   spec-visible `handle` surface (`ProcessDecideSurfaceChanged`, same drain detail) and a
@@ -451,10 +631,11 @@ cabal run -v0 keiro-dsl -- diff <new-fixture> --since <ref>
 ```
 
 Close-out: tick master plan 24's EP-5 progress boxes and registry row; record the
-externally visible contracts (audit semantics and exit code, generated module shape,
-advisory wordings) in this Decision Log for docs/plans/141 to quote; CHANGELOG entries;
-run the ADR distillation pass (add the audit and advisory rows to the evolution-gate
-inventory ADR if it exists by then, else note them for its creator).
+externally visible contracts (verdict JSON shape, audit semantics and exit code,
+sampling-witness metric name, generated module shape, advisory wordings) in this
+Decision Log for docs/plans/141 to quote; CHANGELOG entries; run the ADR distillation
+pass (add the audit and advisory rows to the evolution-gate inventory ADR if it exists
+by then, else note them for its creator).
 
 
 ## Concrete Steps
@@ -468,76 +649,100 @@ cabal test keiro-test
 
 # M2
 cabal build keiro-dsl
+cabal run -v0 keiro-dsl -- diff keiro-dsl/test/fixtures/reservation-v2.keiro \
+  --since HEAD --replay-impact-out /tmp/impact.json
 cabal run -v0 keiro-dsl -- scaffold keiro-dsl/test/fixtures/hospital-surge.keiro \
   --out keiro-dsl/test/conformance-process-full
 cabal test keiro-dsl          # all 24 suites
 cabal test jitsurei-test      # or: (cd jitsurei && cabal test)
 
 # M3
+cabal test keiro-test
+
+# M4
 cabal test keiro-dsl-test
 cabal run -v0 keiro-dsl -- diff keiro-dsl/test/fixtures/<router-decide-fixture>.keiro --since HEAD
 ```
 
-Expected shapes: keiro-test ends `0 failures` with the three new ReplayAudit examples
-listed; the scaffold re-run's `git diff` shows only the new `ReplayAudit.hs` generated
-module (plus record-file updates); the diff spot check prints one
+Expected shapes: keiro-test ends `0 failures` with the ReplayAudit and seed-witness
+examples listed; the replay-impact run writes JSON with an `affected` verdict for the
+v1→v2 evolution; the scaffold re-run's `git diff` shows only the new `ReplayAudit.hs`
+generated module (plus record-file updates); the M4 diff spot check prints one
 `warning[RouterDecideSurfaceChanged]` line and exits zero.
 
 Red-then-green checkpoints: write M1's no-inverting-edge example first and run it
 against `hydrate` (not the primitives) to demonstrate the masking fallback — it must
 report success where the audit must report failure; capture that transcript in
 Surprises & Discoveries as the evidence for the primitives decision. Likewise M1's
-stale-seed example must fail (report `ReplayOk`) if pointed at `hydrate`, and pass with
-the seeded-vs-full comparison.
+stale-seed example must report `ReplayOk` if pointed at `hydrate`, and reports
+`SeedDivergence` with the seeded-vs-full comparison. For M2, run the verdict on a
+formatting-only spec edit before implementing neutrality detection and confirm the
+naive answer would have been "affected" — the neutral verdict is the feature.
 
 
 ## Validation and Acceptance
 
 Behavioural acceptance. (1) A stream whose history contains an event with no inverting
 edge in the audited machine is reported `ReplayFailed` with the
-`HydrationNoInvertingEdge` reason, against a real store, with no writes performed
-(assert the snapshot row and stream head are unchanged after the audit). (2) A snapshot
-written under a different fold with an equal discriminator is reported `SeedDivergence`
-with two differing digests. (3) A clean service audits `ReplayOk` on every stream with
-digests stable across two runs. (4) `auditCategory` on a category with N distinct
-streams reports exactly N results. (5) The generated `Generated/<Ctx>/ReplayAudit.hs`
-compiles in the conformance verticals and its `auditTargets` cover every aggregate node
-of the context (assert count in a scaffold test). (6) The three diff advisories fire on
-their fixture pairs with the exact codes, and formatting-only edits fire nothing.
-(7) The 24-suite keiro-dsl bar, keiro-test, and the jitsurei suite are green.
+`HydrationNoInvertingEdge` reason by a **targeted** audit whose report shows the
+unaffected streams were skipped, against a real store, with no writes performed (assert
+the snapshot row and stream head are unchanged after the audit). (2) A snapshot written
+under a different fold with an equal discriminator is reported `SeedDivergence` with two
+differing digests — by the audit, and by the M3 sampled witness as a
+`keiro.snapshot.seed.divergence` emission while the command still succeeds. (3) A clean
+service audits `ReplayOk` on every selected stream with digests stable across two runs,
+and a budget-capped run resumes from its checkpoint without re-auditing. (4) `diff`
+declares an additive evolution `replay-neutral` and a guard edit `affected` with exactly
+that transition's event types; the JSON round-trips into `AffectedSet`. (5) The
+generated `Generated/<Ctx>/ReplayAudit.hs` compiles in the conformance verticals and its
+`auditTargets` cover every aggregate node of the context (assert count in a scaffold
+test). (6) The three diff advisories fire on their fixture pairs with the exact codes,
+and formatting-only edits fire nothing. (7) The 24-suite keiro-dsl bar, keiro-test, and
+the jitsurei suite are green.
 
 
 ## Idempotence and Recovery
 
 The audit is read-only; running it repeatedly against any database is safe by
-construction, and interrupting it mid-run has no effect to recover from. All code
-changes are additive (new module, new exports, new generated module, new diff rules);
-re-running builds, tests, and scaffolds is safe. If the `Keiro.Command` export addition
-collides textually with a sibling plan's edit (docs/plans/138 touches the snapshot
-write path in the same package), rebase — the export list addition is append-only. If
-the digest helper choice proves wrong (no importable SHA-256 without a new dependency),
-fall back to the FNV-1a-64 fold precedent from
-`keiro-dsl/src/Keiro/Dsl/ReadModelShape.hs:33-58` for the digest only — the divergence
-*comparison* is byte equality of encodings and does not depend on the hash — and record
-the substitution in the Decision Log.
+construction, and an interrupted run resumes from its reported checkpoint. The M3
+witness is sampling-based, asynchronous, and write-free; disabling it (rate 0) restores
+exactly today's behaviour. All code changes are additive (new modules, new exports, new
+options field, new generated module, new diff rules); re-running builds, tests, and
+scaffolds is safe. If the `Keiro.Command` export addition or the M3 options field
+collides textually with docs/plans/138's edits in the same package, rebase — both are
+append-only. If the paged category filter proves too slow for targeted selection on a
+large replica, substitute a dedicated SQL statement over kiroku's category index and
+record it in the Decision Log — the selection contract (distinct streams containing
+affected types) is what matters, not the mechanism. If the digest helper choice proves
+wrong (no importable SHA-256 without a new dependency), fall back to the FNV-1a-64 fold
+precedent from `keiro-dsl/src/Keiro/Dsl/ReadModelShape.hs:33-58` for the digest only —
+the divergence *comparison* is byte equality of encodings and does not depend on the
+hash — and record the substitution in the Decision Log.
 
 
 ## Interfaces and Dependencies
 
 At the end of M1, `keiro` exports `Keiro.ReplayAudit` with the types and functions shown
-in Milestone 1, and `Keiro.Command` additionally exports `hydrate`, `hydrateFull`,
-`hydrateSeeded`, `Hydrated (..)`. At the end of M2, scaffolded contexts contain
+in Milestone 1 (`AuditMode`, `AffectedSet`, `AuditBudget`, `AuditTarget`,
+`SomeAuditTarget`, `AuditOutcome`, `AuditReport`, `auditStream`, `auditStreams`,
+`auditTargets`, `renderAuditReport`, `auditExitCode`), and `Keiro.Command` additionally
+exports `hydrate`, `hydrateFull`, `hydrateSeeded`, `Hydrated (..)`. At the end of M2,
+`keiro-dsl` ships `Keiro.Dsl.ReplayImpact` (verdict + affected-set computation), the
+`diff --replay-impact-out` option, and scaffolded contexts contain
 `Generated/<Ctx>/ReplayAudit.hs` exposing `auditTargets :: [SomeAuditTarget]`. At the
-end of M3, `Keiro.Dsl.Validate.DiagnosticCode` has constructors
-`RouterDecideSurfaceChanged`, `ProcessDecideSurfaceChanged`,
-`ProcessTimerPayloadChanged`, consumed by new rules in `Keiro.Dsl.Diff`.
+end of M3, `RunCommandOptions` carries the seed-verification sampling field and the
+runtime emits `keiro.snapshot.seed.divergence`. At the end of M4,
+`Keiro.Dsl.Validate.DiagnosticCode` has constructors `RouterDecideSurfaceChanged`,
+`ProcessDecideSurfaceChanged`, `ProcessTimerPayloadChanged`, consumed by new rules in
+`Keiro.Dsl.Diff`.
 
 Dependencies: no new third-party packages (see Idempotence for the digest fallback).
-Coordination: docs/plans/138 (shared keiro snapshot-path files and the stale-fold test
-scenario this plan reuses; land order free — the audit's seed comparison is valid with
-either discriminator), docs/plans/139/140 (disjoint `Diff.hs`/`Scaffold.hs` shares;
+Coordination: docs/plans/138 (shared keiro command/snapshot-path files, the stale-fold
+test scenario this plan reuses, and the per-transition surface rendering the
+replay-impact verdict shares with `aggregateFoldSurface` — land order free, reconcile at
+whichever lands second), docs/plans/139/140 (disjoint `Diff.hs`/`Scaffold.hs` shares;
 regenerate conformance fixtures once per landed plan), docs/plans/141 (quotes this
-plan's Decision Log wordings; documents the audit as the standard pre-deploy gate in
-`docs/user/deploy-ordering.md`). Companion guide:
+plan's Decision Log wordings; documents the tier ladder — verdict, targeted audit,
+cutover sweep, witness alerting — in `docs/user/deploy-ordering.md`). Companion guide:
 `docs/guides/evolution-and-replayability.md` names this plan as the old-log replay gate
 and the decide-surface advisory owner.
