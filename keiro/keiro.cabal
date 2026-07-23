@@ -122,6 +122,7 @@ library
     , kiroku-store                           >=0.3      && <0.4
     , lens                                   >=5.2
     , mmzk-typeid                            >=0.7
+    , random                                 >=1.2.1    && <1.4
     , scientific                             >=0.3
     , shibuya-core                           >=0.8.0.1  && <0.9
     , stm                                    >=2.5

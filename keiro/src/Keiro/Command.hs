@@ -74,22 +74,30 @@ module Keiro.Command (
 where
 
 import Control.Concurrent (threadDelay)
+import Control.Exception (displayException)
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy.Char8 qualified as LazyByteString
 import Data.Functor (($>))
 import Data.Int (Int32)
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
+import Effectful.Concurrent (runConcurrent)
+import Effectful.Concurrent.Async qualified as Async
 import Effectful.Error.Static (Error, tryError)
+import Effectful.Exception (trySync)
 import GHC.Clock (getMonotonicTimeNSec)
 import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
 import Keiki.Core qualified as Keiki
 import Keiro.Codec (Codec, CodecError, decodeRecorded, encodeForAppendWithMetadata)
-import Keiro.EventStream (EventStream, Terminality (..))
+import Keiro.EventStream (EventStream, StateCodec, Terminality (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
+import Keiro.ReplayDigest (canonicalJsonBytes, replayDigest)
 import Keiro.Snapshot (
     SnapshotLookup (..),
     SnapshotMissReason (..),
+    SnapshotSeed,
     encodeSnapshotStrict,
     lookupSnapshotSeed,
     writeSnapshotEncoded,
@@ -109,6 +117,7 @@ import Keiro.Telemetry (
     recordSnapshotEncodeFailures,
     recordSnapshotReadHits,
     recordSnapshotReadMisses,
+    recordSnapshotSeedDivergence,
     recordSnapshotWriteFailures,
     withCommandSpan,
  )
@@ -140,6 +149,8 @@ import OpenTelemetry.SemanticConventions (db_system_name, error_type)
 import OpenTelemetry.Trace.Core (Span, SpanStatus (..), Tracer, addAttribute, setStatus)
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
+import System.IO (stderr)
+import System.Random.Stateful (globalStdGen, uniformRM)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
 
@@ -235,6 +246,10 @@ data HydrationReplayReason
   attached to the command span, but the already-successful command still
   succeeds. Snapshot-enabled streams always run the fold because snapshots
   consume its result.
+* 'seedVerifySampleRate' — verify one in N snapshot seeds against a full
+  replay through the seed version. The replay runs asynchronously and never
+  blocks or fails the command. This detects hand-written fold changes that
+  leave the snapshot discriminator unchanged; @0@ disables the witness.
 -}
 data RunCommandOptions = RunCommandOptions
     { retryLimit :: !Int
@@ -244,6 +259,7 @@ data RunCommandOptions = RunCommandOptions
     , retryBackoffMicros :: !Int
     , metrics :: !(Maybe KeiroMetrics)
     , verifyReplayOnAppend :: !Bool
+    , seedVerifySampleRate :: !Int
     , tracer :: !(Maybe Tracer)
     {- ^ Optional OpenTelemetry tracer. When 'Just', the command runner
     opens an 'Internal'-kind span around each invocation, named after
@@ -265,7 +281,8 @@ data RunCommandOptions = RunCommandOptions
 
 {- | Sensible defaults: 3 retries, 256-event read pages, no caller-assigned
 event ids, a no-op pre-append hook, 5ms retry backoff, no metrics, post-append
-replay verification enabled, no tracer, and no extra metadata.
+replay verification enabled, one sampled snapshot-seed verification per 1000
+snapshot hits, no tracer, and no extra metadata.
 -}
 defaultRunCommandOptions :: RunCommandOptions
 defaultRunCommandOptions =
@@ -277,6 +294,7 @@ defaultRunCommandOptions =
         , retryBackoffMicros = 5000
         , metrics = Nothing
         , verifyReplayOnAppend = True
+        , seedVerifySampleRate = 1000
         , tracer = Nothing
         , metadata = Nothing
         }
@@ -314,7 +332,10 @@ hydrate options eventStream targetStream =
                     (seed ^. #streamVersion)
             case replayed of
                 Left _ -> hydrateFull options eventStream targetStream
-                Right hydrated -> pure (Right hydrated)
+                Right hydrated -> do
+                    for_ (eventStream ^. #stateCodec) $ \codec ->
+                        scheduleSeedVerification options eventStream targetStream codec seed
+                    pure (Right hydrated)
   where
     snapshotSeed =
         case eventStream ^. #stateCodec of
@@ -365,6 +386,27 @@ hydrateSeeded ::
     StreamVersion ->
     Eff es (Either CommandError (Hydrated rs s))
 hydrateSeeded options eventStream targetStream seedState seedRegisters seedVersion = do
+    hydrateSeededThrough
+        Nothing
+        options
+        eventStream
+        targetStream
+        seedState
+        seedRegisters
+        seedVersion
+
+hydrateSeededThrough ::
+    forall phi rs s ci co es.
+    (HasCallStack, Store :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+    Maybe StreamVersion ->
+    RunCommandOptions ->
+    EventStream phi rs s ci co ->
+    Stream (EventStream phi rs s ci co) ->
+    s ->
+    RegFile rs ->
+    StreamVersion ->
+    Eff es (Either CommandError (Hydrated rs s))
+hydrateSeededThrough replayThrough options eventStream targetStream seedState seedRegisters seedVersion = do
     replayed <-
         Streamly.fold
             (Fold.foldlM' replayPage (pure (Right initialReplay)))
@@ -376,7 +418,14 @@ hydrateSeeded options eventStream targetStream seedState seedRegisters seedVersi
     recordedPages =
         Streamly.foldMany
             (Fold.take groupSize Fold.toList)
-            (readStreamForwardStream resolvedName seedVersion readPageSize)
+            boundedRecorded
+    boundedRecorded =
+        case replayThrough of
+            Nothing -> readStreamForwardStream resolvedName seedVersion readPageSize
+            Just endVersion ->
+                Streamly.takeWhile
+                    (\recorded -> recorded ^. #streamVersion <= endVersion)
+                    (readStreamForwardStream resolvedName seedVersion readPageSize)
     resolvedName = (eventStream ^. #resolveStreamName) targetStream
     initialReplay = (Keiki.Settled seedState, seedRegisters, Nothing)
 
@@ -484,6 +533,124 @@ hydrateSeeded options eventStream targetStream seedState seedRegisters seedVersi
         case Prelude.drop eventIndex recorded of
             found : _ -> Just found
             [] -> Nothing
+
+scheduleSeedVerification ::
+    forall phi rs s ci co es.
+    (HasCallStack, IOE :> es, Store :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+    RunCommandOptions ->
+    EventStream phi rs s ci co ->
+    Stream (EventStream phi rs s ci co) ->
+    StateCodec (s, RegFile rs) ->
+    SnapshotSeed rs s ->
+    Eff es ()
+scheduleSeedVerification options eventStream targetStream codec seed = do
+    void $ trySync $ do
+        sampled <-
+            case options ^. #seedVerifySampleRate of
+                rate | rate <= 0 -> pure False
+                1 -> pure True
+                rate -> liftIO ((== (1 :: Int)) <$> uniformRM (1, rate) globalStdGen)
+        when sampled
+            $ void
+            $ runConcurrent
+            $ Async.async
+            $ verifySnapshotSeed options eventStream targetStream codec seed
+
+verifySnapshotSeed ::
+    forall phi rs s ci co es.
+    (HasCallStack, IOE :> es, Store :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+    RunCommandOptions ->
+    EventStream phi rs s ci co ->
+    Stream (EventStream phi rs s ci co) ->
+    StateCodec (s, RegFile rs) ->
+    SnapshotSeed rs s ->
+    Eff es ()
+verifySnapshotSeed options eventStream targetStream codec seed = do
+    let seedVersion = seed ^. #streamVersion
+        streamName = (eventStream ^. #resolveStreamName) targetStream
+    full <-
+        hydrateSeededThrough
+            (Just seedVersion)
+            options
+            eventStream
+            targetStream
+            (eventStream ^. #initialState)
+            (eventStream ^. #initialRegisters)
+            (StreamVersion 0)
+    seededEncoded <-
+        liftIO
+            $ encodeSnapshotStrict
+                codec
+                (seed ^. #state, seed ^. #registers)
+    case (seededEncoded, full) of
+        (Left seedEncodeError, _) ->
+            reportSeedDivergence
+                options
+                streamName
+                seedVersion
+                ("encode-failed:" <> Text.pack (displayException seedEncodeError))
+                (case full of Left replayError -> "replay-failed:" <> Text.pack (show replayError); Right _ -> "not-compared:seed-encode-failed")
+        (Right seededValue, Left replayError) ->
+            reportSeedDivergence
+                options
+                streamName
+                seedVersion
+                (replayDigest seededValue)
+                ("replay-failed:" <> Text.pack (show replayError))
+        (Right seededValue, Right fullHydrated)
+            | fullHydrated ^. #streamVersion /= seedVersion ->
+                reportSeedDivergence
+                    options
+                    streamName
+                    seedVersion
+                    (replayDigest seededValue)
+                    ("version-mismatch:" <> Text.pack (show (fullHydrated ^. #streamVersion)))
+            | otherwise -> do
+                fullEncoded <-
+                    liftIO
+                        $ encodeSnapshotStrict
+                            codec
+                            (fullHydrated ^. #state, fullHydrated ^. #registers)
+                case fullEncoded of
+                    Left fullEncodeError ->
+                        reportSeedDivergence
+                            options
+                            streamName
+                            seedVersion
+                            (replayDigest seededValue)
+                            ("encode-failed:" <> Text.pack (displayException fullEncodeError))
+                    Right fullValue ->
+                        unless
+                            (canonicalJsonBytes seededValue == canonicalJsonBytes fullValue)
+                            ( reportSeedDivergence
+                                options
+                                streamName
+                                seedVersion
+                                (replayDigest seededValue)
+                                (replayDigest fullValue)
+                            )
+
+reportSeedDivergence ::
+    (IOE :> es) =>
+    RunCommandOptions ->
+    StreamName ->
+    StreamVersion ->
+    Text ->
+    Text ->
+    Eff es ()
+reportSeedDivergence options (StreamName streamName) (StreamVersion seedVersion) seededDigest fullDigest = do
+    recordSnapshotSeedDivergence (options ^. #metrics) 1
+    liftIO
+        $ LazyByteString.hPutStrLn stderr
+        $ Aeson.encode
+        $ Aeson.object
+            [ "event" Aeson..= ("keiro.snapshot.seed.divergence" :: Text)
+            , "level" Aeson..= ("error" :: Text)
+            , "stream" Aeson..= streamName
+            , "seedVersion" Aeson..= seedVersion
+            , "seededDigest" Aeson..= seededDigest
+            , "fullDigest" Aeson..= fullDigest
+            ]
 
 {- | Hydrate the target stream, transduce the command, and append any emitted
 events. Retries optimistic-concurrency conflicts up to 'retryLimit'. This

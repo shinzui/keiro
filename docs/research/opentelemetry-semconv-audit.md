@@ -484,7 +484,7 @@ This table is the at-a-glance summary the Milestone 9 sweep will reconcile.
 
 ## Metrics
 
-This section catalogues the twenty metric instruments keiro records. They are
+This section catalogues the metric instruments keiro records. They are
 defined in `keiro/src/Keiro/Telemetry.hs` by
 `docs/plans/33-add-an-opentelemetry-metrics-surface-to-keiro-telemetry.md`
 (EP-33) as the `KeiroMetrics` record built by `newKeiroMetrics`, and recorded
@@ -605,6 +605,11 @@ generated module
   state; the stream is poisoned and its next hydration will fail." Semconv
   alignment: none (event-sourcing replay correctness has no OpenTelemetry
   semantic-convention equivalent).
+- **`keiro.snapshot.seed.divergence`** — unit `{failure}`, **Counter**
+  (`Int64`). Recorded by the sampled snapshot-seed verifier when the canonical
+  encoded seed disagrees with a full replay through the seed version.
+  Description: "Sampled snapshot seeds whose encoded state disagreed with a
+  full replay through the seed version." Semconv alignment: none.
 
 ### Workflow
 
@@ -665,6 +670,7 @@ options.
 | keiro.projection.lag             | {event}    | Gauge     | async projection drain, per pass          | none                                                |
 | keiro.projection.wait.timeouts   | {timeout}  | Counter   | position-wait path, on timeout            | none                                                |
 | keiro.snapshot.apply.divergence  | {failure}  | Counter   | command epilogue, on replay divergence    | none                                                |
+| keiro.snapshot.seed.divergence   | {failure}  | Counter   | sampled hydration verifier, on divergence | none                                                |
 | keiro.workflow.steps.executed    | {step}     | Counter   | workflow handler, on step miss            | none                                                |
 | keiro.workflow.steps.replayed    | {step}     | Counter   | workflow handler, on step hit             | none                                                |
 | keiro.workflow.resumed           | {workflow} | Counter   | resume worker, per re-invocation          | none                                                |

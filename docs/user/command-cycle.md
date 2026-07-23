@@ -22,6 +22,7 @@ data RunCommandOptions = RunCommandOptions
   , retryBackoffMicros :: Int
   , metrics :: Maybe KeiroMetrics
   , verifyReplayOnAppend :: Bool
+  , seedVerifySampleRate :: Int
   , tracer :: Maybe Tracer
   , metadata :: Maybe Value
   }
@@ -42,6 +43,7 @@ codec always adds the `schemaVersion` key, and these keys are merged on top.
 - a 5 ms base retry backoff, jittered and capped at 100 ms;
 - no metrics handle;
 - post-append replay verification enabled;
+- one asynchronous snapshot-seed verification per 1000 snapshot hits;
 - no `tracer` (no spans emitted);
 - no `metadata`.
 
@@ -50,6 +52,14 @@ replaying it from the pre-command state. Because the append has committed, a
 divergence is reported through telemetry and does not turn success into a
 failure. Snapshot-enabled streams always perform the fold because snapshot
 creation consumes its final state.
+
+`seedVerifySampleRate` is the amortized backstop for a snapshot discriminator
+that was accidentally left unchanged across a hand-written fold edit. A sampled
+snapshot hit full-replays only through the snapshot version in a background
+thread and compares canonical encoded `(state, registers)`. A mismatch emits
+`keiro.snapshot.seed.divergence` and a structured log containing the stream,
+seed version, and both SHA-256 digests. It never blocks the command and never
+writes a snapshot. Set the rate to `1` to verify every hit or `0` to disable it.
 
 ## Running A Command
 

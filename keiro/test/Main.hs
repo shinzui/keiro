@@ -1951,6 +1951,98 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     runCommand defaultRunCommandOptions foldV2WithoutFingerprintBumpEventStream target (Add 104)
             residualResult `shouldBe` Right (Left CommandRejected)
 
+        it "samples a stale accepted seed without failing the command or writing a snapshot" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            let targetName = "snapshot-seed-sampled-divergence"
+                target = stream targetName :: Stream SnapshotCounterEventStream
+                candidateStream :: ValidatedSnapshotCounterEventStream
+                candidateStream =
+                    mkEventStreamOrThrow
+                        "snapshot-counter-fold-v2-sampled"
+                        (foldV2WithoutFingerprintBumpEventStreamDef & #snapshotPolicy .~ Never)
+                options =
+                    defaultRunCommandOptions
+                        & #metrics
+                        ?~ keiroMetrics
+                        & #seedVerifySampleRate
+                        .~ 1
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 2)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 3)
+            result <-
+                Store.runStoreIO storeHandle $
+                    runCommand options candidateStream target (Add 4)
+            case result of
+                Right (Right commandResult) -> do
+                    commandResult ^. #streamVersion `shouldBe` StreamVersion 3
+                    commandResult ^. #eventsAppended `shouldBe` 1
+                other -> expectationFailure ("expected sampled verification to stay advisory, got " <> show other)
+            observed <-
+                timeout 5_000_000 $
+                    let awaitDivergence = do
+                            _ <- forceFlushMeterProvider provider Nothing
+                            exported <- readIORef metricsRef
+                            case lookup "keiro.snapshot.seed.divergence" (flattenScalarPoints exported) of
+                                Just (IntNumber 1) -> pure ()
+                                _ -> threadDelay 10_000 >> awaitDivergence
+                     in awaitDivergence
+            observed `shouldBe` Just ()
+            Right snapshotVersion <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement targetName snapshotVersionForStreamStmt
+            snapshotVersion `shouldBe` Just (StreamVersion 2)
+
+        it "disables sampled seed verification at rate zero" $ \storeHandle -> do
+            (exporter, metricsRef) <- inMemoryMetricExporter
+            (provider, _env) <-
+                createMeterProvider
+                    emptyMaterializedResources
+                    defaultSdkMeterProviderOptions{metricExporter = Just exporter}
+            meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+            keiroMetrics <- Telemetry.newKeiroMetrics meter
+            let targetName = "snapshot-seed-sampling-disabled"
+                target = stream targetName :: Stream SnapshotCounterEventStream
+                candidateStream :: ValidatedSnapshotCounterEventStream
+                candidateStream =
+                    mkEventStreamOrThrow
+                        "snapshot-counter-fold-v2-sampling-disabled"
+                        (foldV2WithoutFingerprintBumpEventStreamDef & #snapshotPolicy .~ Never)
+                options =
+                    defaultRunCommandOptions
+                        & #metrics
+                        ?~ keiroMetrics
+                        & #seedVerifySampleRate
+                        .~ 0
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 2)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 3)
+            Right (Right commandResult) <-
+                Store.runStoreIO storeHandle $
+                    runCommand options candidateStream target (Add 4)
+            commandResult ^. #streamVersion `shouldBe` StreamVersion 3
+            threadDelay 100_000
+            _ <- forceFlushMeterProvider provider Nothing
+            exported <- readIORef metricsRef
+            lookup "keiro.snapshot.seed.divergence" (flattenScalarPoints exported) `shouldBe` Nothing
+            Right snapshotVersion <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement targetName snapshotVersionForStreamStmt
+            snapshotVersion `shouldBe` Just (StreamVersion 2)
+
         it "falls back after operator truncation" $ \storeHandle -> do
             (exporter, metricsRef) <- inMemoryMetricExporter
             (provider, _env) <-

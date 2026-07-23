@@ -105,9 +105,11 @@ dispatch block prints a `RouterDecideSurfaceChanged` advisory.
       audit targets; multi-aggregate process conformance compiles the generated
       assembly; jitsurei's migrated-store test proves targeted skipping and full
       Order/escalation-saga replay.
-- [ ] M3: sampled runtime seed verification (config on the snapshot/command options,
-      async compare, divergence metric) landed with tests; default sampling rate and
-      off-switch documented.
+- [x] M3 (2026-07-23T21:05:00Z): sampled runtime seed verification landed on
+      `RunCommandOptions` (one in 1000 snapshot hits by default; zero disables);
+      bounded full replay runs asynchronously through the exact seed version,
+      emits `keiro.snapshot.seed.divergence` plus structured digests, and never
+      writes a snapshot; 352 runtime examples green.
 - [ ] M4: `RouterDecideSurfaceChanged`, `ProcessDecideSurfaceChanged`,
       `ProcessTimerPayloadChanged` diff advisories implemented with fixture pairs;
       diff tests green.
@@ -166,6 +168,14 @@ implementation. Provide concise evidence.
   `skipped=[0,1]` followed by full `selected=[1,1]`; and the category-safe runtime
   helper raised the Keiro suite to 350 passing examples.
 
+- Starting an unbounded full replay after snapshot hydration would race the command's
+  own append: the background reader could observe a newer head than the served seed
+  and report a false divergence. The verifier therefore replays through the immutable
+  seed-version boundary using the same paging/fold implementation. The forced sample
+  emitted seeded/full SHA-256 digests while the command succeeded at version 3 and the
+  snapshot row remained at version 2; rate zero emitted nothing. The full suite passed
+  352 examples in 70.3315 seconds.
+
 
 ## Decision Log
 
@@ -213,8 +223,29 @@ implementation. Provide concise evidence.
   store-scale cost for a needle. Sampling attaches the check to exactly the streams
   being served, costs a bounded background replay per N hydrations, converges
   fleet-wide within hours of any deploy, and turns the documented-silent residual of
-  docs/plans/138 into an alertable metric. Default-on at a low rate with an off switch;
-  the exact default is fixed during implementation and recorded here.
+  docs/plans/138 into an alertable metric. The landed default is one in 1000 compatible
+  snapshot hits and `0` is the off switch.
+  Date: 2026-07-23
+
+- Decision: A sample compares the decoded snapshot seed with a full replay bounded at
+  that seed's stream version, not with an unbounded replay to whatever head the
+  background thread happens to observe.
+  Rationale: The seed boundary is immutable and directly tests whether the accepted
+  row describes the event prefix it claims. An unbounded replay could overlap the
+  command append and compare different versions, creating a false positive. The
+  bounded path shares `hydrateSeeded`'s paging, decode, gap, and inversion logic and
+  differs only by a `takeWhile streamVersion <= seedVersion` cutoff.
+  Date: 2026-07-23
+
+- Decision: Use `random`'s atomic process-wide generator for the one-in-N decision and
+  Effectful's low-level `async` with a cloned effect environment for the read-only
+  replay. Synchronous sampling/spawn failures are swallowed with `trySync`; process
+  cancellation remains propagating.
+  Rationale: This is a real statistically distributed sampler without bespoke global
+  mutable state. Mori confirmed Effectful's `async` clones the effect environment;
+  Hackage reports `random` 1.3.1 current and its source documents
+  `uniformRM ... globalStdGen` since 1.2.1, so the bound is `>=1.2.1 && <1.4`.
+  Upstream tags include v1.3.0; no 1.3.1 tag was published.
   Date: 2026-07-23
 
 - Decision: The replay-impact verdict's guard rule is sharpened from "guard text

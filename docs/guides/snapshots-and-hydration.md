@@ -57,6 +57,15 @@ The snapshot metrics distinguish these paths:
   `ErrorCall` and were skipped.
 - `keiro.snapshot.write.failures` counts post-commit store writes that failed
   and were skipped.
+- `keiro.snapshot.seed.divergence` counts sampled compatible snapshot seeds
+  whose canonical encoded state disagrees with a full replay through the same
+  stream version. Alert on any non-zero value.
+
+Command hydration samples one in 1000 usable seeds by default. The check runs
+asynchronously, is read-only, and emits a structured log with the stream, seed
+version, and seeded/full SHA-256 digests when it finds a mismatch. Configure
+`RunCommandOptions.seedVerifySampleRate`; `1` verifies every snapshot hit and
+`0` disables the witness.
 
 The snapshot test initializes `keiro_snapshots`, runs `PlaceOrder` and
 `ApprovePayment` through `snapshotOrderEventStream`, then queries the snapshot

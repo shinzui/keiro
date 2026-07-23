@@ -15,6 +15,12 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 - Exposes the existing `Hydrated`, `hydrate`, `hydrateFull`, and
   `hydrateSeeded` primitives from `Keiro.Command` so audit tooling can compare
   seeded and full replay without changing command execution.
+- Adds `RunCommandOptions.seedVerifySampleRate`, defaulting to one verification
+  per 1000 snapshot hits. A sampled hit asynchronously full-replays through
+  the snapshot version and compares canonical encoded state. Divergence emits
+  `keiro.snapshot.seed.divergence` plus a structured digest log without
+  blocking the command or writing a snapshot; set the rate to `0` to disable
+  the witness.
 
 ### Changed
 

@@ -94,6 +94,7 @@ module Keiro.Telemetry (
     keiroSnapshotReadMissesName,
     keiroSnapshotWriteFailuresName,
     keiroSnapshotApplyDivergenceName,
+    keiroSnapshotSeedDivergenceName,
     keiroDispatchFailedName,
     keiroDispatchDeadletteredName,
     keiroSubscriptionDeadletteredName,
@@ -136,6 +137,7 @@ module Keiro.Telemetry (
     recordSnapshotReadMisses,
     recordSnapshotWriteFailures,
     recordSnapshotApplyDivergence,
+    recordSnapshotSeedDivergence,
     recordDispatchFailed,
     recordDispatchDeadLettered,
     recordSubscriptionDeadLettered,
@@ -593,6 +595,8 @@ keiroSnapshotWriteFailuresName :: Text
 keiroSnapshotWriteFailuresName = "keiro.snapshot.write.failures"
 keiroSnapshotApplyDivergenceName :: Text
 keiroSnapshotApplyDivergenceName = "keiro.snapshot.apply.divergence"
+keiroSnapshotSeedDivergenceName :: Text
+keiroSnapshotSeedDivergenceName = "keiro.snapshot.seed.divergence"
 keiroDispatchFailedName :: Text
 keiroDispatchFailedName = "keiro.dispatch.failed"
 keiroDispatchDeadletteredName :: Text
@@ -660,6 +664,7 @@ data KeiroMetrics = KeiroMetrics
     , snapshotReadMisses :: Counter Int64
     , snapshotWriteFailures :: Counter Int64
     , snapshotApplyDivergence :: Counter Int64
+    , snapshotSeedDivergence :: Counter Int64
     , dispatchFailed :: Counter Int64
     , dispatchDeadlettered :: Counter Int64
     , subscriptionDeadlettered :: Counter Int64
@@ -711,6 +716,7 @@ newKeiroMetrics meter = liftIO $ do
     snapshotReadMisses' <- counterI64 keiroSnapshotReadMissesName "{read}" "Snapshot lookups that fell back to full replay."
     snapshotWriteFailures' <- counterI64 keiroSnapshotWriteFailuresName "{failure}" "Post-commit snapshot writes that failed and were swallowed."
     snapshotApplyDivergence' <- counterI64 keiroSnapshotApplyDivergenceName "{failure}" "Just-appended event batches that failed to replay from the pre-command state; the stream is poisoned and its next hydration will fail."
+    snapshotSeedDivergence' <- counterI64 keiroSnapshotSeedDivergenceName "{failure}" "Sampled snapshot seeds whose encoded state disagreed with a full replay through the seed version."
     dispatchFailed' <- counterI64 keiroDispatchFailedName "{command}" "Process-manager/router dispatch commands that failed."
     dispatchDeadlettered' <- counterI64 keiroDispatchDeadletteredName "{command}" "Rejected process-manager/router dispatch commands handled by dead-letter or skip policy."
     subscriptionDeadlettered' <- counterI64 keiroSubscriptionDeadletteredName "{event}" "Kiroku source events dead-lettered by an explicit disposition or retry exhaustion."
@@ -753,6 +759,7 @@ newKeiroMetrics meter = liftIO $ do
             , snapshotReadMisses = snapshotReadMisses'
             , snapshotWriteFailures = snapshotWriteFailures'
             , snapshotApplyDivergence = snapshotApplyDivergence'
+            , snapshotSeedDivergence = snapshotSeedDivergence'
             , dispatchFailed = dispatchFailed'
             , dispatchDeadlettered = dispatchDeadlettered'
             , subscriptionDeadlettered = subscriptionDeadlettered'
@@ -849,6 +856,8 @@ recordSnapshotWriteFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m (
 recordSnapshotWriteFailures = recordCounter snapshotWriteFailures
 recordSnapshotApplyDivergence :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotApplyDivergence = recordCounter snapshotApplyDivergence
+recordSnapshotSeedDivergence :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordSnapshotSeedDivergence = recordCounter snapshotSeedDivergence
 recordDispatchFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordDispatchFailed = recordCounter dispatchFailed
 recordDispatchDeadLettered :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
