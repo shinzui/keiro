@@ -68,6 +68,11 @@ integration test in the default suite.
   pg-migrate-cli's own renderers. The Keiro executable may use those accessors only for
   human rendering; JSON continues through the stable `renderHistoryImportJson` boundary.
 
+- The focused `legacy-codd-tools` test cannot currently resolve `codd-extras` from the
+  repository's default Cabal project. The fixup edit is comment-only (confirmed by diff),
+  its executable SQL is unchanged, and the supported default verification path does not
+  enable that retired toolchain.
+
 
 ## Decision Log
 
@@ -167,9 +172,9 @@ the kiroku repository at `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`.
 
 `docs/adr/0002-keiro-owns-live-schema-verification-under-pg-migrate.md` is relevant
 background: it records that Keiro owns the default-build integrity gates pg-migrate does
-not provide. This plan adds the distinct operator-safety policy for one-time codd
-cutovers; that policy is an ADR candidate at completion. ADR 0001 concerns PGMQ telemetry
-and is unrelated.
+not provide. `docs/adr/0003-keiro-guards-fresh-native-history-over-codd-ledgers.md`
+records this plan's distinct operator-safety policy for one-time codd cutovers. ADR 0001
+concerns PGMQ telemetry and is unrelated.
 
 **Vocabulary.** "codd" is the retired migration runner; a *codd ledger* is its
 applied-history table, `codd.sql_migrations` in current databases or

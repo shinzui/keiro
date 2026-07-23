@@ -7,10 +7,10 @@
 -- that already applied the old names would otherwise treat every renamed file
 -- as pending and re-run it.
 --
--- This script rewrites the `name` and `migration_timestamp` columns of the
--- codd ledger from the old identity to the new one, so codd sees the renamed
--- migrations as already applied and skips them. It changes ONLY codd's
--- bookkeeping -- never your schema.
+-- This script rewrites only the `name` identity in the codd ledger, while
+-- re-asserting `migration_timestamp` at the row's originally recorded value.
+-- That timestamp assignment is a deliberate idempotent no-op. The script changes
+-- ONLY codd's bookkeeping identity -- never a timestamp and never your schema.
 --
 -- WHEN TO RUN: once per long-lived database (staging/prod/persistent local),
 -- BEFORE the next `codd up` / migrate that carries the renamed files.
