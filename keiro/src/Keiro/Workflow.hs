@@ -490,7 +490,15 @@ runWorkflowWith options name wid action = do
                 (Completed <$> runHandler)
                     `catch` (\WorkflowSuspend -> pure Suspended)
                     `catch` (\WorkflowCancelPending -> pure Cancelled)
-                    `catch` (\(WorkflowRotate seedJson) -> rotateGeneration mMetrics name wid gen seedJson)
+                    `catch` ( \(WorkflowRotate seedJson) ->
+                                rotateGeneration
+                                    mMetrics
+                                    (options ^. #activePatches)
+                                    name
+                                    wid
+                                    gen
+                                    seedJson
+                            )
             case outcome of
                 Completed result -> do
                     now <- liftIO getCurrentTime
@@ -522,6 +530,10 @@ runWorkflowWith options name wid action = do
                 -- already journaled the seed step on the next generation and the
                 -- rotation marker on this one, so there is nothing more to do here.
                 ContinuedAsNew -> pure ContinuedAsNew
+        -- Generation 0 has no rotation moment at which to record the patch set,
+        -- so it retains the fresh-journal path. Rotated generations receive the
+        -- set atomically with their seed in 'rotateGeneration'; this fallback
+        -- also keeps generations produced by a pre-change worker compatible.
         recordPatchSetIfFresh runGen initial = do
             let patches = options ^. #activePatches
                 freshStart = Map.keysSet initial `Set.isSubsetOf` Set.singleton continueSeedStepName
@@ -813,55 +825,110 @@ appendCompletion name wid gen now = do
         JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
 
 {- | Perform a continue-as-new rotation (EP-48): close generation @gen@ and open
-generation @gen + 1@, seeded with @seedJson@. Returns 'ContinuedAsNew'.
+generation @gen + 1@, seeded with @seedJson@ and the deployed patch set. Returns
+'ContinuedAsNew'.
 
-The two appends are ordered for crash-safety. We append the next generation's
-seed step __first__ (a single @StepRecorded continueSeedStepName seedJson@),
-which advances @MAX(generation)@ — and therefore 'currentGeneration' — to
-@gen + 1@. After that commits, any re-run resolves the current generation to
-@gen + 1@, hydrates from the seed, and never re-enters generation @gen@; so even
-a crash between the two appends converges to "continue from the seed", never
-re-running generation @gen@'s work. We then append the terminal
-'WorkflowContinuedAsNew' marker on generation @gen@. Both appends are guarded by
-an existence check and use deterministic, generation-namespaced ids, so the
+The next generation's seed and non-empty patch set are appended in one
+transaction before the old generation's rotation marker. The seed advances
+@MAX(generation)@ — and therefore 'currentGeneration' — to @gen + 1@, while the
+same commit makes patch decisions available before any asynchronous wake writer
+can append to the new generation. After that commit, any re-run resolves the
+current generation to @gen + 1@, hydrates from the seed and patch set, and never
+re-enters generation @gen@. We then append the terminal
+'WorkflowContinuedAsNew' marker on generation @gen@. Every append is guarded by
+an existence check and uses a deterministic, generation-namespaced id, so the
 whole rotation is idempotent.
 
-The seed step alone carries the state forward (the next run's 'loadJournal'
-reads it and 'restoreSeed' hits it); we additionally snapshot the one-entry seed
-map at the seed step's version so the next generation hydrates in O(1) rather
-than re-reading even that one event. The snapshot is advisory (a miss only costs
-a single event read), so it is written unconditionally on rotation regardless of
-the run's 'snapshotPolicy' — rotation is exactly when a fresh snapshot earns its
-keep.
+The seed carries state forward and the patch-set entry freezes code-evolution
+decisions. We snapshot their map at the newest fresh append's version so the
+next generation hydrates in O(1). The snapshot is advisory, so it is written
+unconditionally on rotation regardless of the run's 'snapshotPolicy' — rotation
+is exactly when a fresh snapshot earns its keep.
 -}
 rotateGeneration ::
     forall a es.
     (IOE :> es, Store :> es, Error StoreError :> es) =>
     Maybe KeiroMetrics ->
+    Set PatchId ->
     WorkflowName ->
     WorkflowId ->
     Int ->
     Aeson.Value ->
     Eff es (WorkflowOutcome a)
-rotateGeneration mMetrics name wid gen seedJson = do
+rotateGeneration mMetrics patches name wid gen seedJson = do
     let nextGen = gen + 1
+        encodedPatches = Aeson.toJSON (map unPatchId (Set.toList patches))
+        patchEvent =
+            StepRecorded patchSetStepName encodedPatches
     now <- liftIO getCurrentTime
-    -- 1. Seed step on the NEXT generation first (advances the current generation).
-    appendJournal name wid nextGen (StepRecorded continueSeedStepName seedJson now) >>= \case
-        JournalAppended appendResult ->
-            writeWorkflowSnapshotAdvisory
-                mMetrics
-                (appendResult ^. #streamId)
-                (appendResult ^. #streamVersion)
-                (Map.singleton continueSeedStepName seedJson)
-        JournalAlreadyPresent{} -> pure ()
-        JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+    seedTx <-
+        prepareJournalAppend
+            name
+            wid
+            nextGen
+            (StepRecorded continueSeedStepName seedJson now)
+    patchTx <-
+        if Set.null patches
+            then pure Nothing
+            else
+                Just
+                    <$> prepareJournalAppend
+                        name
+                        wid
+                        nextGen
+                        (patchEvent now)
+    -- 1. Seed and patch set on the NEXT generation in one transaction. A
+    -- conflict condemns the whole transaction before it returns its diagnostic
+    -- outcome, so no seed-without-patch intermediate state can commit.
+    (seedOutcome, patchOutcome) <-
+        runTransaction $ do
+            seedResult <- seedTx
+            condemnOnConflict seedResult
+            patchResult <- traverse id patchTx
+            traverse_ condemnOnConflict patchResult
+            pure (seedResult, patchResult)
+    throwOnConflict seedOutcome
+    traverse_ throwOnConflict patchOutcome
+    let seedValue = recordedValue seedJson seedOutcome
+        snapshotState =
+            maybe
+                (Map.singleton continueSeedStepName seedValue)
+                ( \outcome ->
+                    Map.fromList
+                        [ (continueSeedStepName, seedValue)
+                        , (patchSetStepName, recordedValue encodedPatches outcome)
+                        ]
+                )
+                patchOutcome
+        snapshotAppend =
+            case patchOutcome of
+                Just (JournalAppended appendResult) -> Just appendResult
+                _ -> case seedOutcome of
+                    JournalAppended appendResult -> Just appendResult
+                    _ -> Nothing
+    for_ snapshotAppend $ \appendResult ->
+        writeWorkflowSnapshotAdvisory
+            mMetrics
+            (appendResult ^. #streamId)
+            (appendResult ^. #streamVersion)
+            snapshotState
     -- 2. Terminal rotation marker on the CURRENT generation (audit + closes it).
     appendJournal name wid gen (WorkflowContinuedAsNew nextGen now) >>= \case
         JournalAppended{} -> pure ()
         JournalAlreadyPresent{} -> pure ()
         JournalAppendConflict err -> throwIO (WorkflowJournalAppendError (Text.pack (show err)))
     pure ContinuedAsNew
+  where
+    condemnOnConflict = \case
+        JournalAppendConflict{} -> Tx.condemn
+        _ -> pure ()
+    throwOnConflict = \case
+        JournalAppendConflict err ->
+            throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+        _ -> pure ()
+    recordedValue fallback = \case
+        JournalAlreadyPresent stored -> stored
+        _ -> fallback
 
 {- | Snapshot a workflow state after its journal append has committed. The
 snapshot is advisory: a store failure is counted and cannot turn the

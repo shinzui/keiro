@@ -49,7 +49,7 @@ ADR context at authoring: `docs/adr/` contained only `0001-keiro-pgmq-job-proces
 | 1 | Make workflow journal snapshots wake-safe with a step-index fallback on await | docs/plans/112-make-workflow-journal-snapshots-wake-safe-with-a-step-index-fallback-on-await.md | None | None | Complete |
 | 2 | Deliver child failure and awakeable signals across generations and races | docs/plans/113-deliver-child-failure-and-awakeable-signals-across-generations-and-races.md | None | None | Complete |
 | 3 | Pin sleep firing to its generation and make GC cancel scheduled sleep timers | docs/plans/114-pin-sleep-firing-to-its-generation-and-make-gc-cancel-scheduled-sleep-timers.md | None | None | Complete |
-| 4 | Record patch sets at rotation and add workflow failure recovery and lease renewal | docs/plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md | None | EP-2 | Not Started |
+| 4 | Record patch sets at rotation and add workflow failure recovery and lease renewal | docs/plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md | None | EP-2 | In Progress |
 
 
 ## Dependency Graph

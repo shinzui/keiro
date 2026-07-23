@@ -7352,6 +7352,64 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     ]
             gen1PatchSets `shouldBe` [toJSON [unPatchId fraudPatchId]]
 
+    describe "Keiro.Workflow patch recording at rotation" $ around (withFreshStore fixture) $ do
+        it "keeps the active patch after a wake append lands before the first rotated run" $ \storeHandle -> do
+            let name = WorkflowName "patch-rotation-race"
+                wid = WorkflowId "prr-1"
+                patchOptions =
+                    defaultWorkflowRunOptions
+                        & #activePatches
+                        .~ Set.singleton fraudPatchId
+                generationOneStream = workflowGenerationStreamName name wid 1
+
+            first <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith patchOptions name wid rotatingPatchWorkflow
+            first `shouldBe` Right ContinuedAsNew
+            Right patchSetRecorded <-
+                Store.runStoreIO storeHandle $
+                    stepExists name wid 1 patchSetStepName
+            patchSetRecorded `shouldBe` True
+
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry
+                        name
+                        wid
+                        ( StepRecorded
+                            "awk:11111111-1111-1111-1111-111111111111"
+                            (toJSON True)
+                            now
+                        )
+
+            second <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith patchOptions name wid rotatingPatchWorkflow
+            second `shouldBe` Right (Completed "new-branch")
+            replayed <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowWith patchOptions name wid rotatingPatchWorkflow
+            replayed `shouldBe` Right (Completed "new-branch")
+
+            Right generationOneJournal <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward generationOneStream (StreamVersion 0) 20
+            let decoded =
+                    map (decodeRecorded workflowJournalCodec) (Vector.toList generationOneJournal)
+                patchSets =
+                    [ value
+                    | Right (StepRecorded key value _) <- decoded
+                    , key == patchSetStepName
+                    ]
+                decisions =
+                    [ value
+                    | Right (StepRecorded key value _) <- decoded
+                    , key == patchStepName fraudPatchId
+                    ]
+            patchSets `shouldBe` [toJSON [unPatchId fraudPatchId]]
+            decisions `shouldBe` [toJSON True]
+
     describe "Keiro.Wake" $ around (withFreshStore fixture) $ do
         -- EP-50: the wake primitive over kiroku's existing per-store notifier.
         it "returns WokenByTimeout when idle (no append)" $ \store -> do

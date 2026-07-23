@@ -4,6 +4,7 @@ slug: record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-
 title: "Record patch sets at rotation and add workflow failure recovery and lease renewal"
 kind: exec-plan
 created_at: 2026-07-23T03:02:27Z
+intention: intention_01ky88vm7tew7akz5pgfq0fbqg
 master_plan: "docs/masterplans/16-harden-the-durable-execution-engine-surfaced-by-the-2026-07-durable-execution-review.md"
 ---
 
@@ -33,9 +34,9 @@ To see it working: run `cabal test keiro-test` from the repository root and obse
 
 This is the plan-authoring-time checklist of the work. Update it at every stopping point.
 
-- [ ] M1: `rotateGeneration` appends the seed and the patch-set record in one transaction; `runWorkflowWith` passes `activePatches` through.
-- [ ] M1: generation-0 path (`recordPatchSetIfFresh`) retained and its interplay documented.
-- [ ] M1: rotation + pre-first-run wake-append test passes (`patch` decides `True`); full suite green (`cabal test keiro-test`).
+- [x] (2026-07-23 21:04Z) M1: `rotateGeneration` appends the seed and the patch-set record in one transaction; `runWorkflowWith` passes `activePatches` through.
+- [x] (2026-07-23 21:04Z) M1: generation-0 path (`recordPatchSetIfFresh`) retained and its interplay documented.
+- [x] (2026-07-23 21:04Z) M1: rotation + pre-first-run wake-append test passes (`patch` decides `True`); full suite green (`cabal test keiro-test`: 367 examples, 0 failures).
 - [ ] M2: `resurrectFailedWorkflow` implemented (index-row delete + instance revive + child-link revive, one transaction) with a `ResurrectOutcome` result.
 - [ ] M2: the `WorkflowFailed` marker append switched to a store-generated event id (re-failure after resurrection hazard — see Decision Log).
 - [ ] M2: resurrect-then-complete and resurrect-then-refail tests pass; full suite green.
@@ -51,7 +52,10 @@ This is the plan-authoring-time checklist of the work. Update it at every stoppi
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Milestone 1 validation (2026-07-23): the focused test proved that the patch
+  set exists on generation 1 immediately after rotation, before the injected
+  wake append. The first generation-1 run and its replay both took the active
+  branch. The full suite passed 367 examples.
 
 
 ## Decision Log
@@ -95,7 +99,11 @@ distill durable project context from the Decision Log, Surprises & Discoveries, 
 this section into docs/adr/ (the master plan names the resurrection/terminal-status
 contract as a candidate ADR). Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+- Milestone 1 (2026-07-23): rotation now commits the next generation's seed
+  and non-empty active patch set together, condemning the transaction on either
+  append conflict. Generation 0 and pre-change rotated generations retain the
+  fresh-journal compatibility path. A pre-first-run wake append can no longer
+  suppress patch recording.
 
 
 ## Context and Orientation
