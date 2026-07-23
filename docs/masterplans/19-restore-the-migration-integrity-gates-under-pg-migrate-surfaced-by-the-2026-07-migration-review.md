@@ -44,7 +44,7 @@ ADR context: `docs/adr/` contains only `0001-keiro-pgmq-job-processing-telemetry
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Restore live schema verification, body lint, and the startup handshake under pg-migrate | docs/plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md | None | None | In Progress |
+| 1 | Restore live schema verification, body lint, and the startup handshake under pg-migrate | docs/plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md | None | None | Complete |
 | 2 | Add the embed recompile plugin and native manifest coverage | docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md | None | None | Not Started |
 | 3 | Guard up against codd-ledgered databases and mount the codd import in the CLI | docs/plans/124-guard-up-against-codd-ledgered-databases-and-mount-the-codd-import-in-the-cli.md | None | EP-1 | Not Started |
 
@@ -69,9 +69,9 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
 
 ## Progress
 
-- [ ] EP-1: Live schema-drift verification restored in the default build; drifted-database test exits nonzero naming the drifted objects.
-- [ ] EP-1: Body lint runs over embedded entries in the default test suite; an unqualified fixture migration fails it.
-- [ ] EP-1: Native `missingMigrations` exported and documented; fresh-database handshake test returns the full embedded list.
+- [x] (2026-07-23) EP-1: Live schema-drift verification restored in the default build; drifted-database test and operator drill exit nonzero naming the dropped index.
+- [x] (2026-07-23) EP-1: Body lint runs over all 20 embedded entries in the default test suite; an unqualified fixture migration fails it.
+- [x] (2026-07-23) EP-1: Native `missingMigrations` exported and documented; fresh-database handshake test returns all 28 composed migrations.
 - [ ] EP-2: `RecompilePlugin` pragma added; stale-embed reproduction documented or test-pinned.
 - [ ] EP-2: Native manifest coverage decision recorded and implemented (lockfile in CI or documented acceptance).
 - [ ] EP-3: `up` preflight refuses codd-ledgered databases without override; both trap variants covered by integration tests.
@@ -86,6 +86,11 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
 - Plan authoring (2026-07-23), affects EP-3: the sentinel ledger fixup remaps 14 rows, not 16 (two legacy files never had sentinel names); pg-migrate ships no reusable codd-import CLI parser (`--mapping` is application-interpreted), so EP-3 (docs/plans/124) builds a keiro-shaped `import-codd-history` subcommand over `frameworkCoddHistoryMappings` instead of mounting a shipped parser; and the preflight is implemented keiro-side pre-lock with the TOCTOU accepted (the guarded hazard is operator error, not a concurrent race — `Database.PostgreSQL.Migrate.Runner`'s in-lock surface is not exposed).
 - EP-1 implementation (2026-07-23), affects all child plans: migrations `0019-keiro-snapshots-state-shape-hash.sql` and `0020-keiro-workflow-children-failure-reason.sql` landed after plan authoring. The current native component contains 20 Keiro migrations and the composed plan contains 28 entries, so EP-1 now gates all 20 bodies and all 28 startup-handshake entries. EP-2 must generate native manifest coverage for 20 files, and EP-3 must treat the two new native migrations as pending after a 23-row codd history import.
 - EP-1 implementation (2026-07-23), affects EP-1's public boundary: pg-migrate 1.1.0.0 keeps `ConnectionProvider` opaque and has no public runner for application-defined Hasql sessions. `verifyExpectedSchema` therefore accepts public Hasql `Settings.Settings`, while `snapshotSchema` remains the connection-owned session API. This avoids an unsupported `Database.PostgreSQL.Migrate.Internal` dependency and preserves the no-upstream-release constraint.
+- EP-1 implementation (2026-07-23), affects canonical verification: PostgreSQL's
+  `pg_get_expr` deparses `regclass` values according to the active role's `search_path`.
+  The canonical snapshot query must pin a local `pg_catalog` search path or an unchanged
+  sequence-backed default can appear drifted solely because verification uses a different
+  login role.
 
 
 ## Decision Log
@@ -102,7 +107,22 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
   Rationale: The restored gates must not duplicate what pg-migrate already enforces; child plans build on, not around, the library's guarantees.
   Date: 2026-07-23
 
+- Decision: Keep ledger verification in pg-migrate and make live-schema verification a
+  separate Keiro-owned PostgreSQL 18 snapshot gate.
+  Rationale: The gates prove different properties, pg-migrate intentionally does not inspect
+  live objects, and its opaque provider cannot run an application-defined Hasql session.
+  ADR 0002 records the snapshot scope, public API boundary, and role-independent
+  canonicalization rule.
+  Date: 2026-07-23
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-1 is complete. Keiro's default build once again enforces migration-body qualification,
+offers a strict startup handshake, and detects live PostgreSQL 18 schema drift independently
+of pg-migrate's ledger verification. The full repository verification passed, the negative
+schema-drift paths name the altered objects, and the work required no pg-migrate changes.
+ADR 0002 captures the durable boundary.
+
+EP-2 and EP-3 remain. The initiative is not complete until stale-embed/native-manifest
+coverage and the codd-ledger cutover guard/import workflow are delivered.

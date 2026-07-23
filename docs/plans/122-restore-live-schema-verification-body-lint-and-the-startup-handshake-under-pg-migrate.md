@@ -56,6 +56,7 @@ documented in `docs/user/migrations.md`.
 - [x] (2026-07-23T22:49:00Z) Milestone 2: `missingMigrations` and `StartupHandshake` exported from `Keiro.Migrations`; fresh/fully-migrated/half-applied tests green; `docs/user/migrations.md` Application startup section documents the handshake. Validation: `cabal build keiro-migrations` and `cabal test keiro-migrations-test --test-show-details=direct` passed (17 examples, 0 failures).
 - [x] (2026-07-23T23:02:00Z) Milestone 3: `Keiro.Migrations.SchemaCheck` library module with canonical snapshot, comparison, and embedded expected snapshot; checked-in `expected-schema/native/keiro-v18.txt` generated and validated by a suite test with a regeneration mode. Validation: the full suite passed (19 examples); the snapshot contains 300 lines including `keiro_dead_letters`, `state_shape_hash`, and `failure_reason`; deleting line 1 failed with the exact expected/actual object names; regeneration restored the same SHA-256 `a78c933c490b3672c2ad2d907b18d024e7b06e128cbcd44ee11f5b027445eca3`.
 - [x] (2026-07-23T23:12:00Z) Milestone 4: `keiro-migrate verify-schema` subcommand wired; drifted-database integration test exits with named drifted objects; `docs/user/migrations.md` documents `verify-schema`; suite green end to end. Validation: `cabal test keiro-migrations-test --test-show-details=direct` passed (20 examples); CLI help lists `verify-schema`; a local scratch database returned exit 0 with `schema verification succeeded`, then exit 1 naming `keiro_outbox_pending_idx` after that index was dropped; the scratch database was removed.
+- [x] (2026-07-23T23:26:00Z) Final validation and closure: `just verify` passed, including 372 `keiro-test` examples, 58 `keiro-pgmq-test` examples (2 expected pending), 17 `jitsurei-test` examples, diagram freshness, and 20 `keiro-migrations-test` examples. The sibling pg-migrate worktree remained clean. The durable live-schema boundary is recorded in ADR 0002.
 
 
 ## Surprises & Discoveries
@@ -177,10 +178,36 @@ documented in `docs/user/migrations.md`.
   pooled connection.
   Date: 2026-07-23
 
+- Decision: Pin `search_path` to `pg_catalog` locally inside the canonical snapshot
+  statement.
+  Rationale: PostgreSQL deparsing functions consult `search_path`; without a fixed value,
+  the same unchanged `regclass` default rendered differently for the test owner and the
+  application role. A materialized configuration CTE makes the output role-independent
+  while containing the setting change to the snapshot statement.
+  Date: 2026-07-23
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All three gates in this ExecPlan are restored in Keiro's default build without changing
+pg-migrate. The default migration suite lints all 20 native bodies, a public startup
+handshake reports all 28 composed migrations on a fresh database and passes after apply,
+and `keiro-migrate verify-schema` compares a live PostgreSQL 18 database with the
+checked-in 300-line native snapshot. Both the automated drift test and a manual operator
+drill proved that a dropped index exits nonzero and names the object.
+
+The principal design adjustment was the public connection boundary. pg-migrate's opaque
+`ConnectionProvider` is sufficient for its own operations but cannot host a Keiro-defined
+Hasql session, so the high-level verifier accepts Hasql `Settings` and the lower-level
+snapshot stays a `Session`. This preserved the no-upstream-release constraint and avoided
+an internal-module dependency. The other important lesson was that PostgreSQL catalog
+deparsing is role-sensitive unless `search_path` is fixed; the canonical query now pins it
+locally.
+
+Repository-wide verification passed. The implementation required no schema migration,
+no dependency-bound change, and no edit to the pg-migrate checkout. ADR 0002 records the
+separation between ledger verification and Keiro-owned live-schema verification so future
+work does not collapse the two contracts.
 
 
 ## Context and Orientation
