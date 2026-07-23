@@ -39,7 +39,7 @@ EP-4 (plan 115) owns lifecycle policy: recording the patch set atomically inside
 
 Alternatives considered. A severity-ordered decomposition was rejected for the same reason MasterPlan 9 rejected it: it couples unrelated modules in every plan. Folding EP-2 into EP-1 (both touch await/arm paths) was rejected because EP-1 must stay small and reviewable — it changes replay semantics on the hot path — while EP-2 carries a migration. Merging EP-3 and EP-4 (both touch rotation-adjacent code) was rejected because EP-3's fixes are mechanical correctness repairs with crash-window tests, while EP-4 makes policy decisions (resurrection semantics, lease-renewal cadence) that deserve their own Decision Log.
 
-ADR context at authoring: `docs/adr/` contained only `0001-keiro-pgmq-job-processing-telemetry-contract.md`, which does not touch the workflow engine. Since authoring, `docs/adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md` established the complementary rule that snapshots are advisory cached seeds whose compatibility is checked separately from completeness. EP-1 produced `docs/adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md` for the invariant that a workflow snapshot seed plus exclusive tail read must remain recoverable from the step index. EP-2 produced `docs/adr/0006-workflow-wake-source-rows-govern-exposure-and-terminal-races.md` for the durable row-lifecycle and terminal-race contract. The resurrection/terminal-status contract remains a candidate ADR for EP-4.
+ADR context at authoring: `docs/adr/` contained only `0001-keiro-pgmq-job-processing-telemetry-contract.md`, which does not touch the workflow engine. Since authoring, `docs/adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md` established the complementary rule that snapshots are advisory cached seeds whose compatibility is checked separately from completeness. EP-1 produced `docs/adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md` for the invariant that a workflow snapshot seed plus exclusive tail read must remain recoverable from the step index. EP-2 produced `docs/adr/0006-workflow-wake-source-rows-govern-exposure-and-terminal-races.md` for the durable row-lifecycle and terminal-race contract. EP-3 produced `docs/adr/0007-workflow-sleep-timers-are-generation-owned-lifecycle-state.md` for generation-pinned firing, first-arm ownership of `wake_after`, and terminal/GC timer arbitration. The resurrection/terminal-status contract remains a candidate ADR for EP-4.
 
 
 ## Exec-Plan Registry
@@ -48,7 +48,7 @@ ADR context at authoring: `docs/adr/` contained only `0001-keiro-pgmq-job-proces
 |---|-------|------|-----------|-----------|--------|
 | 1 | Make workflow journal snapshots wake-safe with a step-index fallback on await | docs/plans/112-make-workflow-journal-snapshots-wake-safe-with-a-step-index-fallback-on-await.md | None | None | Complete |
 | 2 | Deliver child failure and awakeable signals across generations and races | docs/plans/113-deliver-child-failure-and-awakeable-signals-across-generations-and-races.md | None | None | Complete |
-| 3 | Pin sleep firing to its generation and make GC cancel scheduled sleep timers | docs/plans/114-pin-sleep-firing-to-its-generation-and-make-gc-cancel-scheduled-sleep-timers.md | None | None | In Progress |
+| 3 | Pin sleep firing to its generation and make GC cancel scheduled sleep timers | docs/plans/114-pin-sleep-firing-to-its-generation-and-make-gc-cancel-scheduled-sleep-timers.md | None | None | Complete |
 | 4 | Record patch sets at rotation and add workflow failure recovery and lease renewal | docs/plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md | None | EP-2 | Not Started |
 
 
@@ -79,9 +79,9 @@ Cross-plan decision recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-
 - [x] (2026-07-23 20:34Z) EP-2: `ChildFailed` arm case with failure-reason column and migration; cross-generation failed-child await test passes.
 - [x] (2026-07-23 20:34Z) EP-2: Awakeable registration moved into id-allocation transaction; signal-in-gap test passes.
 - [x] (2026-07-23 20:34Z) EP-2: Cancelled-then-signalled race closed with in-transaction re-read; race test passes.
-- [ ] EP-3: Sleep fire payload carries its generation; stale re-fire across rotation test passes.
-- [ ] EP-3: `wake_after` no longer postponed by re-arm at wake time; prompt-wake test passes.
-- [ ] EP-3: GC cancels/deletes all sleep timers for terminal instances; orphan-fire resurrection test passes.
+- [x] (2026-07-23 20:57Z) EP-3: Sleep fire payload carries its generation; stale re-fire across rotation test passes.
+- [x] (2026-07-23 20:57Z) EP-3: `wake_after` no longer postponed by re-arm at wake time; prompt-wake test passes.
+- [x] (2026-07-23 20:57Z) EP-3: GC cancels/deletes all sleep timers for terminal instances; orphan-fire resurrection test passes.
 - [ ] EP-4: Patch set recorded atomically in `rotateGeneration`; pre-first-run-append test passes.
 - [ ] EP-4: `resurrectFailedWorkflow` operator API shipped and documented.
 - [ ] EP-4: Lease renewal during advance implemented; slow-advance duplicate-execution test passes.
@@ -94,6 +94,11 @@ Cross-plan decision recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-
 - Plan authoring (2026-07-23), affects EP-1: no Eff-level step-index point query exists — the finding's `lookupStepResult` is transaction-level only (`lookupStepResultTx`, with a production call site inside `prepareJournalAppend`); EP-1 (docs/plans/112) adds the Eff wrapper it needs.
 - EP-1 implementation (2026-07-23), confirms EP-2's WFX-2 setup constraint: `awakeableNamed` currently registers its pending row only when the returned await action arms, so signalling immediately after allocation returns `False`. EP-1 pre-arms awakeables through an ordinary unresolved run before constructing its stale-map windows; EP-2 remains responsible for closing the allocation-to-registration gap.
 - EP-2 implementation (2026-07-23): migration 0019 was already occupied by `0019-keiro-snapshots-state-shape-hash.sql`, so the child failure-reason migration is 0020. The native migration suite now pins 20 Keiro migrations and 28 composed migrations.
+- EP-3 implementation (2026-07-23): the terminal-instance fire guard must not
+  reject a missing instance row. A first-operation sleep can be armed before
+  the suspended instance write; the focused recovery test proves its timer
+  append recreates a running instance, while an existing terminal row cancels
+  the timer without appending.
 
 
 ## Decision Log
@@ -122,6 +127,13 @@ Cross-plan decision recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-
   Rationale: Register-before-exposure, cross-generation child failure delivery, and in-transaction terminal arbitration constrain future wake-source implementations beyond the local fixes in plan 113.
   Date: 2026-07-23
 
+- Decision: Record the EP-3 sleep-timer ownership and lifecycle rule in
+  `docs/adr/0007-workflow-sleep-timers-are-generation-owned-lifecycle-state.md`.
+  Rationale: Generation ownership, first-arm wake-hint ownership, and
+  terminal/GC arbitration are shared constraints on future sleep scheduling,
+  firing, rotation, and collection.
+  Date: 2026-07-23
+
 
 ## Outcomes & Retrospective
 
@@ -134,3 +146,7 @@ Cross-plan decision recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-
   records the shared lifecycle rule.
 - EP-2 validation finished with 10 migration examples and 360 workflow examples,
   all passing. EP-3 and EP-4 remain outstanding.
+- EP-3 closed stale cross-generation sleep firing, wake-hint postponement, and
+  post-GC resurrection without a migration. Focused crash-window tests and all
+  366 workflow examples pass; ADR 7 records the durable timer lifecycle.
+  EP-4 remains outstanding.

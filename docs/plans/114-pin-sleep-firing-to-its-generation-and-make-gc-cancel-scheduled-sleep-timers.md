@@ -41,10 +41,10 @@ This is the plan-authoring-time checklist of the work. Update it at every stoppi
 - [x] (2026-07-23 20:51Z) M2: `scheduleTimerOnceTx` reports whether it inserted; the sleep arm writes `wake_after` only on actual insert.
 - [x] (2026-07-23 20:51Z) M2: firing clears `wake_after` in the same transaction as the journal append; wrong in-code comment corrected.
 - [x] (2026-07-23 20:51Z) M2: deterministic no-postponement test passes; existing "fires a sleep longer than the resume cadence" test tightened; full suite green (363 examples, 0 failures).
-- [ ] M3: GC deletes all workflow-sleep timer rows for the instance regardless of status.
-- [ ] M3: fire action refuses (and cancels the timer) when the instance row is terminal.
-- [ ] M3: orphan-fire resurrection test passes; GC tests (deletion, mid-crash convergence) green; full suite green.
-- [ ] `CHANGELOG.md` entry written; master plan 16 Progress boxes for EP-3 ticked and registry status updated.
+- [x] (2026-07-23 20:57Z) M3: GC deletes all workflow-sleep timer rows for the instance regardless of status.
+- [x] (2026-07-23 20:57Z) M3: fire action refuses (and cancels the timer) when the instance row is terminal.
+- [x] (2026-07-23 20:57Z) M3: orphan-fire resurrection test passes; GC tests (deletion, mid-crash convergence) green; missing-instance fire recovery preserved; full suite green (366 examples, 0 failures).
+- [x] (2026-07-23 20:57Z) `CHANGELOG.md` entry written; master plan 16 Progress boxes for EP-3 ticked and registry status updated.
 
 
 ## Surprises & Discoveries
@@ -61,6 +61,12 @@ implementation. Provide concise evidence.
   pass re-entered the arm, preserved the exact original `wake_after`, the fire
   transaction cleared it, and the next resume pass completed. The focused
   sleep group passed 13 examples and the full suite passed 363 examples.
+- Milestone 3 validation (2026-07-23): broad GC deletion and the terminal-row
+  guard close different crash windows. Focused tests proved that a collected
+  workflow has no timer left to claim, a timer claimed against a surviving
+  terminal row becomes `cancelled` without creating a stream, and a genuinely
+  missing row still fires and recreates a running instance. The full suite
+  passed 366 examples.
 
 
 ## Decision Log
@@ -83,6 +89,13 @@ Record every decision made while working on the plan.
   Rationale: A missing row is also the legitimate crash-recovery shape — a workflow whose first operation is a sleep journals nothing before suspending, and if the process dies before `markInstanceSuspended` (`keiro/src/Keiro/Workflow.hs:516`), the timer fire's append-and-upsert is the only path that makes the instance discoverable again. Refusing on missing rows would orphan that workflow. The GC hole is closed primarily by deleting the timer rows (the instance row is deleted in the same transaction as the timers, `keiro/src/Keiro/Workflow/Gc.hs:74-80`, so post-fix GC leaves no timer to fire); the terminal-row guard covers the mid-GC-crash window in which streams are already deleted but the instance row survives, preventing stream re-creation. `cancelTimer` (not `deadLetterTimer`) because an abandoned timer of a terminal workflow is the *designed* meaning of `cancelled`, and the row transitions `firing -> cancelled` are permitted (`keiro/src/Keiro/Timer/Schema.hs`, `cancelTimerStmt` matches `scheduled` and `firing`).
   Date: 2026-07-23
 
+- Decision: Record the combined sleep-timer ownership and lifecycle contract
+  in `docs/adr/0007-workflow-sleep-timers-are-generation-owned-lifecycle-state.md`.
+  Rationale: Generation pinning, first-arm ownership of discovery hints, and
+  GC/terminal arbitration constrain every future workflow-sleep writer and
+  worker; they must remain visible after this task-local plan is retired.
+  Date: 2026-07-23
+
 
 ## Outcomes & Retrospective
 
@@ -100,13 +113,26 @@ this section into docs/adr/. Keep task-local execution details here.
   `wake_after`; replay arms cannot postpone either value. A successful fire
   clears the hint atomically with its journal append, so the resume worker can
   discover the completion immediately.
+- Milestone 3 and final outcome (2026-07-23): GC now removes sleep timers in
+  every status, and a surviving terminal instance cancels a claimed timer
+  before it can append. Together with generation pinning and wake-hint
+  ownership, all three review findings WFX-1, WFX-3, and WFX-6 are closed.
+  Focused crash-window tests and all 366 `keiro-test` examples pass. ADR 7
+  preserves the cross-cutting lifecycle contract; no migration or unresolved
+  follow-up remains.
 
 
 ## Context and Orientation
 
 This section is self-contained.
 
-ADR context: `docs/adr/` contains only `0001-keiro-pgmq-job-processing-telemetry-contract.md` (pgmq job-processing telemetry) — no relevant ADR exists for this work.
+ADR context at authoring: `docs/adr/` contained only
+`0001-keiro-pgmq-job-processing-telemetry-contract.md` (pgmq job-processing
+telemetry), so no relevant ADR existed. The implementation now depends on
+`docs/adr/0005-workflow-awaits-fall-back-to-the-step-index-on-replay-misses.md`
+for generation-scoped result visibility and produced
+`docs/adr/0007-workflow-sleep-timers-are-generation-owned-lifecycle-state.md`
+for the generation, wake-hint, and GC lifecycle established here.
 
 ### The moving parts
 
@@ -266,7 +292,7 @@ Code-only; no migration; every edit is revertible per-commit. The new payload fi
 
 No new packages. End-state interfaces per milestone:
 
-- M1 — `keiro/src/Keiro/Workflow/Sleep.hs`: `sleepTimerPayload :: Int -> Text -> Value`; `parseSleepPayload :: Value -> Maybe (Text, Maybe Int)`; `keiro/src/Keiro/Workflow.hs`: `deterministicJournalId :: WorkflowName -> WorkflowId -> Int -> Text -> EventId` added to the export list (implementation unchanged).
+- M1 — `keiro/src/Keiro/Workflow/Sleep.hs`: `sleepTimerPayload :: Int -> Text -> Value`; `parseSleepPayload :: Value -> Maybe (Text, Maybe Int)`; `matchSleepTimerGeneration :: WorkflowName -> WorkflowId -> Int -> Text -> TimerId -> Maybe Int`; `keiro/src/Keiro/Workflow.hs`: `deterministicJournalId :: WorkflowName -> WorkflowId -> Int -> Text -> EventId` added to the export list (implementation unchanged).
 - M2 — `keiro/src/Keiro/Timer/Schema.hs`: `scheduleTimerOnceTx :: TimerRequest -> Tx.Transaction Bool` (breaking return-type change; sole caller updated); `keiro/src/Keiro/Workflow/Schema.hs`: new export `clearWorkflowWakeAfterTx :: WorkflowName -> WorkflowId -> Tx.Transaction ()`, re-exported from `Keiro.Workflow`.
 - M3 — `keiro/src/Keiro/Workflow/Gc.hs`: `deleteSleepTimersStmt` (all statuses); `keiro/src/Keiro/Workflow/Sleep.hs`: `workflowSleepFireAction` unchanged in type, new terminal-instance guard using `Keiro.Workflow.Instance.lookupInstance` and `Keiro.Timer.cancelTimer`.
 

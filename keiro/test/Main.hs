@@ -8232,6 +8232,30 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Store.runStoreIO storeHandle (runWorkflow name wid body)
                     `shouldReturn` Right Suspended
 
+            it "fires a sleep whose instance row is missing after an arm crash" $ \storeHandle -> do
+                let name = WorkflowName "sleep-missing-fire"
+                    wid = WorkflowId "smf-1"
+                    body = sleepNamed (StepName "wait") 0
+                Right Suspended <- Store.runStoreIO storeHandle $ runWorkflow name wid body
+                Right () <-
+                    Store.runStoreIO storeHandle $
+                        Store.runTransaction $
+                            Tx.statement ("smf-1", "sleep-missing-fire") deleteWorkflowInstanceStmt
+                fireTime <- getCurrentTime
+                Right (Just _) <-
+                    Store.runStoreIO storeHandle $
+                        runWorkflowTimerWorker Nothing fireTime (\_ -> pure Nothing)
+                Right resolved <-
+                    Store.runStoreIO storeHandle $
+                        stepExists name wid 0 "sleep:wait"
+                resolved `shouldBe` True
+                Right (Just recovered) <-
+                    Store.runStoreIO storeHandle $
+                        Instance.lookupInstance name wid
+                recovered ^. #status `shouldBe` Instance.WfRunning
+                Store.runStoreIO storeHandle (runWorkflow name wid body)
+                    `shouldReturn` Right (Completed ())
+
             it "fires a sleep longer than the resume cadence under an active resume worker" $ \storeHandle -> do
                 counter <- newIORef (0 :: Int)
                 let name = WorkflowName "sleepactive"
@@ -9103,6 +9127,87 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             Right Nothing <- Store.runStoreIO storeHandle $ Store.lookupStreamId gcStreamName
             Right afterCounts <- Store.runStoreIO storeHandle $ workflowOwnedRowCounts "gc-basic" "gb-1"
             afterCounts `shouldBe` (0, 0, 0, 0, 0, 0)
+
+        it "deletes scheduled sleep timers so a collected workflow cannot resurrect" $ \storeHandle -> do
+            counter <- newIORef (0 :: Int)
+            let name = WorkflowName "gc-scheduled-sleep"
+                wid = WorkflowId "gss-1"
+                journalStream = workflowGenerationStreamName name wid 0
+                TimerId timerUuid = sleepTimerId name wid 0 "sleep:wait"
+                body = do
+                    _ <- step (StepName "before-sleep") (liftIO (incrementAndRead counter))
+                    sleepNamed (StepName "wait") 3600
+            Right Suspended <-
+                Store.runStoreIO storeHandle $
+                    runWorkflow name wid body
+            Right timerBeforeGc <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement timerUuid sleepTimerStatusStmt
+            fmap fst timerBeforeGc `shouldBe` Just "scheduled"
+
+            cancelledAt <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry name wid (WorkflowCancelled cancelledAt)
+            gcClock <- getCurrentTime
+            Right collected <-
+                Store.runStoreIO storeHandle $
+                    WorkflowGc.gcWorkflowsOnce
+                        (addUTCTime 1 gcClock)
+                        WorkflowGc.WorkflowGcPolicy{retention = 0, batchSize = 10}
+            collected `shouldBe` WorkflowGc.WorkflowGcSummary{scanned = 1, deleted = 1}
+
+            Right Nothing <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            Right Nothing <- Store.runStoreIO storeHandle $ Store.lookupStreamId journalStream
+            Right timerAfterGc <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement timerUuid sleepTimerStatusStmt
+            timerAfterGc `shouldBe` Nothing
+
+            Right noClaim <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowTimerWorker Nothing (addUTCTime 7200 gcClock) (\_ -> pure Nothing)
+            noClaim `shouldBe` Nothing
+            Right Nothing <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            Right Nothing <- Store.runStoreIO storeHandle $ Store.lookupStreamId journalStream
+            readIORef counter >>= (`shouldBe` 1)
+
+        it "cancels a sleep fire when a terminal instance survives partial GC" $ \storeHandle -> do
+            let name = WorkflowName "gc-terminal-fire"
+                wid = WorkflowId "gtf-1"
+                full = "sleep:wait"
+                timerId@(TimerId timerUuid) = sleepTimerId name wid 0 full
+                journalStream = workflowGenerationStreamName name wid 0
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $ do
+                        Instance.upsertInstanceTx "gtf-1" "gc-terminal-fire" 0 Instance.WfCancelled Nothing
+                        void $
+                            scheduleTimerOnceTx
+                                TimerRequest
+                                    { timerId
+                                    , processManagerName = "gc-terminal-fire"
+                                    , correlationId = "gtf-1"
+                                    , fireAt = now
+                                    , payload = sleepTimerPayload 0 full
+                                    }
+            Right (Just claimed) <-
+                Store.runStoreIO storeHandle $
+                    runWorkflowTimerWorker Nothing now (\_ -> pure Nothing)
+            claimed ^. #timerId `shouldBe` timerId
+            Right terminalTimer <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement timerUuid sleepTimerStatusStmt
+            fmap fst terminalTimer `shouldBe` Just "cancelled"
+            Right Nothing <- Store.runStoreIO storeHandle $ Store.lookupStreamId journalStream
+            Right resolved <-
+                Store.runStoreIO storeHandle $
+                    stepExists name wid 0 full
+            resolved `shouldBe` False
 
         it "keeps completed children while a parent is live and converges after partial cleanup" $ \storeHandle -> do
             let parentName = WorkflowName "gc-live-parent"

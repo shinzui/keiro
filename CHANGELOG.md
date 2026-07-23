@@ -68,6 +68,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 - Workflow sleep re-arms no longer postpone `wake_after`, and firing clears the
   hint atomically with the journal append, so an already-fired sleeper is
   rediscovered promptly.
+- Workflow GC now deletes scheduled sleep timers as well as terminal timer
+  rows, and sleep firing cancels itself against a surviving terminal instance.
+  A timer can no longer resurrect and re-execute a cancelled workflow after
+  its journal and instance data were collected.
 - Workflows using journal snapshots no longer suspend forever when a child,
   awakeable, or sleep completion was journaled while a run was mid-flight but
   omitted from that run's snapshot. The `awaitStep` miss path now falls back to

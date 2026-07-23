@@ -4,7 +4,9 @@ The hot-path schema modules keep lifecycle writes and lookup statements. This
 module owns only cleanup statements used by an operator-scheduled GC pass.
 Eligibility is based on the derived @keiro_workflows@ row: terminal instances
 older than the retention cutoff are deleted, except completed children whose
-parent is still non-terminal and may still attach to their result.
+parent is still non-terminal and may still attach to their result. Cleanup
+removes workflow-sleep timers in every lifecycle state so no scheduled timer
+can later recreate a collected workflow.
 -}
 module Keiro.Workflow.Gc (
     WorkflowGcPolicy (..),
@@ -75,8 +77,10 @@ deleteWorkflow (widText, nameText) = do
         Tx.statement (widText, nameText) deleteStepsStmt
         Tx.statement (nameText, widText) deleteAwakeablesStmt
         Tx.statement (widText, nameText, widText, nameText) deleteChildrenStmt
+        -- Eligibility is already terminal, so remove every owned sleep timer:
+        -- a scheduled survivor could otherwise recreate this workflow later.
         -- Keep this literal in sync with Keiro.Workflow.Sleep.workflowSleepKind.
-        Tx.statement (widText, nameText, workflowSleepKindLiteral) deleteTerminalSleepTimersStmt
+        Tx.statement (widText, nameText, workflowSleepKindLiteral) deleteSleepTimersStmt
         Tx.statement (widText, nameText) deleteWorkflowStmt
 
 workflowSleepKindLiteral :: Text
@@ -162,15 +166,14 @@ deleteChildrenStmt =
         )
         D.noResult
 
-deleteTerminalSleepTimersStmt :: Statement (Text, Text, Text) ()
-deleteTerminalSleepTimersStmt =
+deleteSleepTimersStmt :: Statement (Text, Text, Text) ()
+deleteSleepTimersStmt =
     preparable
         """
         DELETE FROM keiro.keiro_timers
         WHERE correlation_id = $1
           AND process_manager_name = $2
           AND payload->>'kind' = $3
-          AND status IN ('fired', 'cancelled', 'dead')
         """
         ( contrazip3
             (E.param (E.nonNullable E.text))

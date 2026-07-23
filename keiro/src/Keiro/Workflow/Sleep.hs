@@ -108,6 +108,7 @@ import Keiro.Timer (
     TimerId (..),
     TimerRequest (..),
     TimerRow,
+    cancelTimer,
     runTimerWorker,
     scheduleTimerOnceTx,
  )
@@ -130,6 +131,7 @@ import Keiro.Workflow (
     setWorkflowWakeAfterTx,
     sleepStepPrefix,
  )
+import Keiro.Workflow.Instance qualified as Instance
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId)
@@ -310,8 +312,9 @@ row's @processManagerName@ (= workflow name) and @correlationId@ (= workflow
 id), resolve the generation that armed the timer, append a @StepRecorded@
 completion (@result = null@) to that generation's journal, and return the
 deterministic 'EventId' so the worker marks the timer @Fired@. Returns
-'Nothing' for a row whose payload is __not__ a workflow sleep, so a mixed
-worker can delegate that row to its process-manager fire action.
+'Nothing' for a row whose payload is __not__ a workflow sleep, or for a sleep
+owned by a terminal workflow (whose timer is cancelled), so a mixed worker can
+delegate that row to its process-manager fire action.
 
 Idempotent: 'prepareJournalAppend' pre-checks the generation-scoped step and
 the event id is deterministic, so at-least-once timer firing yields
@@ -325,29 +328,36 @@ workflowSleepFireAction row =
         Just (full, payloadGen) -> do
             let name = WorkflowName (row ^. #processManagerName)
                 wid = WorkflowId (row ^. #correlationId)
-            targetGen <-
-                case payloadGen of
-                    Just gen -> pure gen
-                    Nothing -> do
-                        currentGen <- currentGeneration name wid
-                        pure $
-                            fromMaybe
-                                currentGen
-                                (matchSleepTimerGeneration name wid currentGen full (row ^. #timerId))
-            now <- liftIO getCurrentTime
-            appendTx <-
-                prepareJournalAppend
-                    name
-                    wid
-                    targetGen
-                    (StepRecorded{stepName = full, result = Null, recordedAt = now})
-            runTransaction (appendTx <* clearWorkflowWakeAfterTx name wid) >>= \case
-                JournalAppended{} ->
-                    pure (Just (deterministicJournalId name wid targetGen full))
-                JournalAlreadyPresent{} ->
-                    pure (Just (deterministicJournalId name wid targetGen full))
-                JournalAppendConflict err ->
-                    throwIO (WorkflowJournalAppendError (Text.pack (show err)))
+            Instance.lookupInstance name wid >>= \case
+                Just instanceRow
+                    | instanceRow ^. #status
+                        `elem` [Instance.WfCompleted, Instance.WfCancelled, Instance.WfFailed] -> do
+                        void (cancelTimer (row ^. #timerId))
+                        pure Nothing
+                _ -> do
+                    targetGen <-
+                        case payloadGen of
+                            Just gen -> pure gen
+                            Nothing -> do
+                                currentGen <- currentGeneration name wid
+                                pure $
+                                    fromMaybe
+                                        currentGen
+                                        (matchSleepTimerGeneration name wid currentGen full (row ^. #timerId))
+                    now <- liftIO getCurrentTime
+                    appendTx <-
+                        prepareJournalAppend
+                            name
+                            wid
+                            targetGen
+                            (StepRecorded{stepName = full, result = Null, recordedAt = now})
+                    runTransaction (appendTx <* clearWorkflowWakeAfterTx name wid) >>= \case
+                        JournalAppended{} ->
+                            pure (Just (deterministicJournalId name wid targetGen full))
+                        JournalAlreadyPresent{} ->
+                            pure (Just (deterministicJournalId name wid targetGen full))
+                        JournalAppendConflict err ->
+                            throwIO (WorkflowJournalAppendError (Text.pack (show err)))
 
 {- | A timer worker pass that handles __both__ workflow-sleep timers and
 ordinary process-manager timers. For each claimed timer: if its payload is a
