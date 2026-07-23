@@ -8,6 +8,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Breaking Changes
 
+- `Keiro.Workflow.Child.Schema.ChildRow` gains `failureReason`, and
+  `markChildFailedTx` now requires the failure reason as its third argument.
+  Migration `0020-keiro-workflow-children-failure-reason.sql` adds the nullable
+  `failure_reason` column used by the new field.
 - `StateCodec` gains a `stateShapeHash` compatibility field, and aggregate
   snapshot lookup now requires codec version, register-layout hash, and
   control-state/fold hash to match. Migration
@@ -57,6 +61,15 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   awakeable, or sleep completion was journaled while a run was mid-flight but
   omitted from that run's snapshot. The `awaitStep` miss path now falls back to
   the authoritative workflow-step index before arming and suspending.
+- Failed children now preserve their terminal reason on the child link, and
+  `awaitChild` raises `WorkflowChildFailed` from that row even after the parent
+  rotates past the generation containing the original failure sentinel.
+- Awakeable rows are now registered before their ids can escape a journaled
+  allocation step, so an immediate external signal is no longer mistaken for
+  an unknown id.
+- `signalAwakeable` now re-reads status inside its transaction when a guarded
+  completion loses a race. If cancellation won, it returns `False` without
+  appending a result, preventing both compensation and completion from firing.
 
 ## 0.3.0.0 — 2026-07-14
 

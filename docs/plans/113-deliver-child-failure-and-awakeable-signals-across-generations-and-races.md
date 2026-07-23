@@ -4,6 +4,7 @@ slug: deliver-child-failure-and-awakeable-signals-across-generations-and-races
 title: "Deliver child failure and awakeable signals across generations and races"
 kind: exec-plan
 created_at: 2026-07-23T03:02:27Z
+intention: intention_01ky88vm7tew7akz5pgfq0fbqg
 master_plan: "docs/masterplans/16-harden-the-durable-execution-engine-surfaced-by-the-2026-07-durable-execution-review.md"
 ---
 
@@ -33,16 +34,16 @@ To see it working: run `cabal test keiro-test` from the repository root and obse
 
 This is the plan-authoring-time checklist of the work. Update it at every stopping point.
 
-- [ ] M1: migration `keiro-migrations/migrations/0019-keiro-workflow-children-failure-reason.sql` created and appended to `keiro-migrations/migrations/manifest` (renumber if a sibling claimed 0019 first — see Context).
-- [ ] M1: `keiro-migrations/test/Main.hs` count/list expectations reconciled; `cabal test keiro-migrations-test` green.
-- [ ] M1: `ChildRow` gains `failureReason`; `markChildFailedTx` takes and stores the reason; `Resume.hs` passes it.
-- [ ] M1: `awaitChild` arm throws `WorkflowChildFailed` on a `ChildFailed` row (with reason fallback chain).
-- [ ] M1: cross-generation failed-child test passes; full suite green (`cabal test keiro-test`).
-- [ ] M2: `awakeableNamed` registers the pending row inside the allocation step's action, before the id can escape.
-- [ ] M2: signal-in-gap test passes (signal after hand-off, before first await, returns `True` and later completes the workflow); full suite green.
-- [ ] M3: `signalAwakeable` decides append-vs-refuse from in-transaction state; `lookupAwakeableStatusTx` added to the schema module.
-- [ ] M3: cancelled-then-signalled race test passes (no journal entry, workflow throws `WorkflowAwakeableCancelled`); full suite green.
-- [ ] Master plan 16 Progress boxes for EP-2 ticked and registry status updated; `CHANGELOG.md` entry written.
+- [x] (2026-07-23T20:21:49Z) M1: migration `keiro-migrations/migrations/0020-keiro-workflow-children-failure-reason.sql` created and appended to `keiro-migrations/migrations/manifest`; authoring-time slot 0019 was already occupied.
+- [x] (2026-07-23T20:29:48Z) M1: `keiro-migrations/test/Main.hs` count/list expectations reconciled; `cabal test keiro-migrations-test` green (10 examples).
+- [x] (2026-07-23T20:21:49Z) M1: `ChildRow` gains `failureReason`; `markChildFailedTx` takes and stores the reason; `Resume.hs` passes it.
+- [x] (2026-07-23T20:21:49Z) M1: `awaitChild` arm throws `WorkflowChildFailed` on a `ChildFailed` row (with reason fallback chain).
+- [x] (2026-07-23T20:34:26Z) M1: cross-generation failed-child test passes; full suite green (`cabal test keiro-test`).
+- [x] (2026-07-23T20:29:48Z) M2: `awakeableNamed` registers the pending row inside the allocation step's action, before the id can escape.
+- [x] (2026-07-23T20:34:26Z) M2: signal-in-gap test passes (signal after hand-off, before first await, returns `True` and later completes the workflow); full suite green.
+- [x] (2026-07-23T20:29:48Z) M3: `signalAwakeable` decides append-vs-refuse from in-transaction state; `lookupAwakeableStatusTx` added to the schema module.
+- [x] (2026-07-23T20:34:26Z) M3: cancelled-then-signalled race test passes (no journal entry, workflow throws `WorkflowAwakeableCancelled`); full suite green.
+- [x] (2026-07-23T20:34:26Z) Master plan 16 Progress boxes for EP-2 ticked and registry status updated; `CHANGELOG.md` entry written.
 
 
 ## Surprises & Discoveries
@@ -50,7 +51,9 @@ This is the plan-authoring-time checklist of the work. Update it at every stoppi
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Discovery: The authoring-time migration claim `0019` was stale when implementation began: `keiro-migrations/migrations/manifest` already ended with `0019-keiro-snapshots-state-shape-hash.sql`.
+  Evidence: the manifest and `keiro-migrations/test/Main.hs` both pinned 19 Keiro migrations before this plan's changes.
+  Impact: this plan uses `0020-keiro-workflow-children-failure-reason.sql`; exact migration assertions are 20 Keiro migrations and 28 composed migrations (8 Kiroku + 20 Keiro).
 
 
 ## Decision Log
@@ -59,6 +62,10 @@ Record every decision made while working on the plan.
 
 - Decision: Persist the child failure reason in a new `failure_reason` column on `keiro.keiro_workflow_children` (migration), rather than recovering it from `keiro_workflows.last_error` at throw time.
   Rationale: The verification pass established that `ChildRow` stores no failure reason today (`markChildFailedTx` takes only id+name, `keiro/src/Keiro/Workflow/Child/Schema.hs:126-128`; `result` stays NULL for failed children). The column is durable — it survives instance-row GC and later `last_error` overwrites — and it rides the exact row the await arm already reads. `last_error` is kept only as a *fallback* for rows failed before this change (see M1).
+  Date: 2026-07-23
+
+- Decision: Claim migration number `0020`, replacing the plan's authoring-time `0019` placeholder.
+  Rationale: EP-1 already landed `0019-keiro-snapshots-state-shape-hash.sql`. The native manifest is ordered and file names identify migration ids, so reusing 0019 would be ambiguous and would violate the landing-order rule recorded by this plan.
   Date: 2026-07-23
 
 - Decision: The arm throws `WorkflowChildFailed` directly on a `ChildFailed` row; it does not append a `{"failed": reason}` sentinel onto the current generation, and `childCompletionHook`'s `ChildFailed -> pure ()` case stays.
@@ -80,12 +87,27 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose. Before marking the plan complete,
-distill durable project context from the Decision Log, Surprises & Discoveries, and
-this section into docs/adr/. Keep task-local execution details here.
+All three confirmed findings are closed.
 
-(To be filled during and after implementation.)
+The child failure test proves the generation boundary explicitly: its failure
+sentinel exists only on generation 0, generation 1 has no matching step-index
+entry, and the parent still catches the persisted `WorkflowChildFailed` reason.
+The allocation-gap test signals after a journaled hand-off but before the first
+real await. The deterministic stale-row race test cancels after the signal's
+pre-read and verifies both that no result was indexed and that the workflow
+surfaces `WorkflowAwakeableCancelled`.
+
+Validation completed with `keiro-migrations-test` at 10 examples and
+`keiro-test` at 360 examples, both with zero failures. The existing double
+signal, completed-row repair, await-arm repair, legacy-id adoption,
+per-generation allocation, child completion, child cancellation, and attach
+tests all remained green.
+
+The only implementation-time plan correction was migration numbering: 0019
+was already occupied, so this plan owns 0020 and later sibling migrations begin
+at 0021. ADR 6 captures the durable rule distilled from the work: wake-source
+rows govern exposure and terminal lifecycle, while generation-scoped journal
+entries deliver results to a particular run.
 
 
 ## Context and Orientation
@@ -126,9 +148,9 @@ The review verified these properties and this suite pins them; keep every one gr
 
 ### Migration numbering (Integration Point from the master plan)
 
-`keiro-migrations/migrations/` numbering: this plan claims the next free number, **0019 at authoring time**. If `docs/plans/114-...` or `docs/plans/115-...` lands a migration first (114 is expected code-only; 115's API needs none), renumber to the next free slot at landing time; never hard-code a number claimed by an unlanded sibling. Whichever plan lands first claims 0019.
+`keiro-migrations/migrations/` numbering: **0019 was already occupied at implementation time** by `0019-keiro-snapshots-state-shape-hash.sql`, so this plan claims the next free number, **0020**. A later sibling migration must begin at 0021.
 
-The test suites: `keiro-test` (335 examples, 0 failures at authoring time) self-provisions PostgreSQL via `withMigratedSuite`; `keiro-migrations-test` runs the migration-parity and fresh-database checks.
+The test suites: `keiro-test` self-provisions PostgreSQL via `withMigratedSuite`; the implementation baseline after EP-1 was 357 examples and this plan adds three, for an expected 360. `keiro-migrations-test` runs the migration-parity and fresh-database checks.
 
 
 ## Plan of Work
@@ -139,7 +161,7 @@ Three milestones, one per finding. Each ends with the full suite green.
 
 Scope: the migration, the schema plumbing, the arm case, and the cross-generation test.
 
-Migration. Create `keiro-migrations/migrations/0019-keiro-workflow-children-failure-reason.sql`:
+Migration. Create `keiro-migrations/migrations/0020-keiro-workflow-children-failure-reason.sql`:
 
 ```sql
 -- keiro workflow children: persist the terminal failure reason
@@ -154,7 +176,7 @@ ALTER TABLE keiro.keiro_workflow_children
   ADD COLUMN IF NOT EXISTS failure_reason TEXT NULL;
 ```
 
-Append the filename as the last line of `keiro-migrations/migrations/manifest`. Then reconcile `keiro-migrations/test/Main.hs`, which pins the file set: the `nativeMigrationFiles` list (around line 225) gains the new entry; the description and assertions "tracks eighteen native files" (line 51), `length keiroEntries shouldBe 18` (line 77), and every count that encodes the composed total of 26 (= 8 kiroku + 18 keiro; e.g. `replicate 26 AlreadyApplied` and `length applied shouldBe 26` around lines 95-100) become nineteen/27. The codd-import fixture test (around lines 160-207) treats post-cutover migrations as pending canaries: the pending list gains a `PendingMigration` for `keiro "0019-keiro-workflow-children-failure-reason"`, the `reportOutcomes up` expectation gains one more `AppliedNow`, and the final facts tuple `(26, 23, True)` becomes `(27, 23, True)`. The legacy `migrations.lock` parity test zips legacy names against native files and truncates at the shorter list, so a new native file needs no lock entry. Run `cabal test keiro-migrations-test` and let each failing assertion guide the remaining count. Build gotcha (documented in `keiro/src/Keiro/Workflow.hs:63-69`): the Template Haskell embed may not notice the new file — if cabal reports "Up to date", touch `keiro-migrations/src/Keiro/Migrations/Internal/Definition.hs` or run `cabal clean`.
+Append the filename as the last line of `keiro-migrations/migrations/manifest`. Then reconcile `keiro-migrations/test/Main.hs`, which pins the file set: `nativeMigrationFiles` gains 0020, Keiro counts become 20, and composed counts become 28 (= 8 Kiroku + 20 Keiro). The Codd-import fixture's pending canaries gain `keiro "0020-keiro-workflow-children-failure-reason"`, its final apply segment gains one `AppliedNow`, and the facts tuple becomes `(28, 23, True)`. The legacy `migrations.lock` parity test zips legacy names against native files and truncates at the shorter list, so a new native file needs no lock entry. Run `cabal test keiro-migrations-test` and let each failing assertion guide the remaining count. Build gotcha (documented in `keiro/src/Keiro/Workflow.hs:63-69`): the Template Haskell embed may not notice the new file — if cabal reports "Up to date", touch `keiro-migrations/src/Keiro/Migrations/Internal/Definition.hs` or run `cabal clean`.
 
 Schema plumbing in `keiro/src/Keiro/Workflow/Child/Schema.hs`: add `failureReason :: !(Maybe Text)` to `ChildRow` (place it after `result`); extend `childRowDecoder` and add `failure_reason` to the SELECT lists of `lookupChildStmt` and `lookupChildrenOfParentStmt`; change the signature to
 
@@ -294,10 +316,10 @@ cabal test keiro-migrations-test
 cabal test keiro-test
 ```
 
-(`just haskell-test` aliases `cabal test keiro-test`.) Baseline at authoring time:
+(`just haskell-test` aliases `cabal test keiro-test`.) Implementation baseline after EP-1:
 
 ```text
-335 examples, 0 failures
+357 examples, 0 failures
 ```
 
 Iterate on a single group with, e.g.:
@@ -324,7 +346,7 @@ Acceptance is behavioral:
 1. Cross-generation child failure: a parent that spawned on generation 0, rotated, and awaits on generation 1 a child that failed at the ceiling catches `WorkflowChildFailed` whose reason equals the recorded failure reason, and completes its compensation step. Before this plan the same sequence returns `Suspended` on every run, forever.
 2. Signal in the gap: after the hand-off step commits and before any await, `signalAwakeable` returns `True` and the workflow later completes with the signalled payload. Before this plan it returns `False` and the workflow suspends forever.
 3. Cancel/signal race: with a `pending` pre-read followed by a committed cancel, the signal returns `False`, journals nothing, and the workflow surfaces `WorkflowAwakeableCancelled`. Before this plan the signal journals the value and the workflow resumes with it despite the canceller having been told `True`.
-4. `cabal test keiro-migrations-test` passes with the reconciled counts (nineteen keiro migrations, 27 composed).
+4. `cabal test keiro-migrations-test` passes with the reconciled counts (20 Keiro migrations, 28 composed).
 5. `cabal test keiro-test` prints `0 failures`, including every pinned property listed in Context ("Verified-sound behavior…").
 
 Failure signatures: `Suspended` where `Completed`/exception is expected means the arm case or registration move is missing; a migrations-test count mismatch names the exact assertion to reconcile; a `keiro-test` failure in 7720/7756/7786 means the M3 transaction restructure broke a repair path — re-check the `Completed`-pre-read branch.
@@ -339,8 +361,11 @@ The migration is additive (`ADD COLUMN IF NOT EXISTS ... NULL`) — re-running i
 
 No new packages. End-state interfaces per milestone:
 
-- M1 — `keiro-migrations/migrations/0019-keiro-workflow-children-failure-reason.sql` (number subject to the landing-order rule in Context); `keiro/src/Keiro/Workflow/Child/Schema.hs`: `ChildRow` gains `failureReason :: !(Maybe Text)`; `markChildFailedTx :: Text -> Text -> Text -> Tx.Transaction Bool`; `keiro/src/Keiro/Workflow/Child.hs`: arm throws `WorkflowChildFailed` (existing type, `Child.hs:170-173`) on failed rows; `keiro/src/Keiro/Workflow/Resume.hs`: `markChildFailedTx` call carries the reason.
+- M1 — `keiro-migrations/migrations/0020-keiro-workflow-children-failure-reason.sql`; `keiro/src/Keiro/Workflow/Child/Schema.hs`: `ChildRow` gains `failureReason :: !(Maybe Text)`; `markChildFailedTx :: Text -> Text -> Text -> Tx.Transaction Bool`; `keiro/src/Keiro/Workflow/Child.hs`: arm throws `WorkflowChildFailed` (existing type, `Child.hs:170-173`) on failed rows; `keiro/src/Keiro/Workflow/Resume.hs`: `markChildFailedTx` call carries the reason.
 - M2 — `keiro/src/Keiro/Workflow/Awakeable.hs`: `awakeableNamed`'s allocation step registers the row; no signature changes.
 - M3 — `keiro/src/Keiro/Workflow/Awakeable/Schema.hs`: new export `lookupAwakeableStatusTx :: UUID -> Tx.Transaction (Maybe AwakeableStatus)`; `keiro/src/Keiro/Workflow/Awakeable.hs`: new export `signalAwakeableFrom :: (IOE :> es, Store :> es, ToJSON r) => AwakeableRow -> r -> Eff es Bool` (documented as the race-contract seam), `signalAwakeable` unchanged in signature.
 
-Cross-plan coordination (master plan Integration Points): this plan owns the migration number claim (0019 at authoring time; renumber at landing if a sibling claimed it). `docs/plans/115-...` soft-depends on this plan's `ChildFailed` semantics for its resurrection API; land this plan first when convenient, or 115 proceeds against pre-fix arm behavior and records the assumption. All four sibling plans append distinct test groups to `keiro/test/Main.hs`.
+Cross-plan coordination (master plan Integration Points): this plan owns migration 0020; a later sibling migration begins at 0021. `docs/plans/115-...` soft-depends on this plan's `ChildFailed` semantics for its resurrection API; land this plan first when convenient, or 115 proceeds against pre-fix arm behavior and records the assumption. All four sibling plans append distinct test groups to `keiro/test/Main.hs`.
+
+
+Revision note (2026-07-23): implementation inherited intention `intention_01ky88vm7tew7akz5pgfq0fbqg`, corrected the occupied migration slot from 0019 to 0020 and the exact migration totals to 20/28, completed all three milestones with 360 workflow examples green, and added ADR 0006 for the durable wake-source row contract.
