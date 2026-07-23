@@ -22,6 +22,7 @@ module Keiro.ReplayAudit (
     defaultAuditBudget,
     AuditTarget (..),
     SomeAuditTarget (..),
+    streamInCategory,
     AuditOutcome (..),
     StreamAuditResult (..),
     AuditReport (..),
@@ -60,17 +61,19 @@ import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
 import Keiro.ReplayDigest (canonicalJsonBytes, replayDigest)
 import Keiro.Snapshot (SnapshotLookup (..), lookupSnapshotSeed)
-import Keiro.Stream (Stream)
+import Keiro.Stream (Stream (..))
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Read (lookupStreamNames)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (
+    CategoryName (..),
     EventType (..),
     GlobalPosition (..),
     StreamId (..),
     StreamName (..),
     StreamVersion,
  )
+import Kiroku.Store.Types qualified as StoreTypes
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
 
@@ -124,6 +127,14 @@ data SomeAuditTarget where
         (BoolAlg phi (RegFile rs, ci), Eq co) =>
         AuditTarget phi rs s ci co ->
         SomeAuditTarget
+
+-- | Accept a raw store name only when it belongs to the expected category.
+streamInCategory :: Text -> StreamName -> Maybe (Stream eventStream)
+streamInCategory expected streamName =
+    case StoreTypes.categoryName streamName of
+        CategoryName actual
+            | actual == expected -> Just (Stream streamName)
+        _ -> Nothing
 
 -- | Replay result for one accepted stream name.
 data AuditOutcome

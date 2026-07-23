@@ -8,6 +8,17 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Added
 
+- `Keiro.Dsl.ReplayImpact` and `diff --replay-impact-out FILE`. Diffs now
+  print whether stored-data replay is unchanged and can emit a stable JSON
+  affected set for targeted auditing. New aggregates, events, transitions,
+  and syntactically proven guard loosenings are replay-neutral; changed
+  decode/fold surfaces identify conservative event types and whether
+  snapshot-bearing streams must be included.
+- Scaffolding now emits one context-wide
+  `Generated.<Context>.ReplayAudit` module. Its typed target list includes
+  every aggregate, validates discovered stream names against the generated
+  category, and documents the replay-neutral/targeted/full deployment tiers.
+
 - First-class replay-only transitions for guard evolution (plan 143). A
   `replay-only` prefix on a transition line marks it as serving inversion
   only: the parser accepts it, the pretty-printer round-trips it, and the

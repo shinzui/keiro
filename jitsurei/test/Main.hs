@@ -7,7 +7,9 @@ import Control.Lens ((^.))
 import Data.Aeson (object)
 import Data.Aeson qualified as Aeson
 import Data.Maybe (isJust)
+import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text.IO qualified as TIO
 import Data.Time (UTCTime (..), addUTCTime, secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID (UUID, fromString)
@@ -21,6 +23,7 @@ import Keiro.Connection (withProjectionSchema)
 import Keiro.ProcessManager
 import Keiro.Projection
 import Keiro.ReadModel
+import Keiro.ReplayAudit
 import Keiro.Test.Postgres (StoreRunner (..), withFreshResourceStore, withFreshResourceStoreWith, withMigratedSuite)
 import Keiro.Timer
 import Kiroku.Store qualified as Store
@@ -101,6 +104,58 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                                 }
                         )
             result `shouldBe` Right (Left CommandRejected)
+
+    describe "Jitsurei replay audit" $ around (withFreshResourceStore fixture) $ do
+        it "skips unaffected targets and full-replays Order plus the escalation saga" $ \(_store, StoreRunner runner) -> do
+            let orderId = OrderId "audit-order"
+                incidentId = IncidentId "audit-incident"
+            Right (Right _) <-
+                runner $
+                    runCommand
+                        defaultRunCommandOptions
+                        orderEventStream
+                        (orderStream orderId)
+                        ( PlaceOrder
+                            PlaceOrderData
+                                { orderId
+                                , sku = sampleSku
+                                , quantity = sampleQuantity
+                                }
+                        )
+            Right (Right _) <-
+                runner $
+                    runCommand
+                        defaultRunCommandOptions
+                        escalationEventStream
+                        (escalationStream incidentId)
+                        (NoteRaised NoteRaisedData{incidentId})
+            Right targetedReports <-
+                runner $
+                    auditTargets
+                        ( AuditTargeted
+                            AffectedSet
+                                { affectedEventTypes = Set.singleton (EventType "OrderPlaced")
+                                , includeSnapshotStreams = False
+                                }
+                        )
+                        defaultAuditBudget
+                        replayAuditTargets
+            mapM_ (TIO.putStrLn . renderAuditReport) targetedReports
+            map targetCategory targetedReports `shouldBe` ["order", "esc"]
+            map streamsSelected targetedReports `shouldBe` [1, 0]
+            map streamsSkipped targetedReports `shouldBe` [0, 1]
+            auditExitCode targetedReports `shouldBe` 0
+
+            Right fullReports <-
+                runner $
+                    auditTargets
+                        AuditFull
+                        defaultAuditBudget
+                        replayAuditTargets
+            mapM_ (TIO.putStrLn . renderAuditReport) fullReports
+            map targetCategory fullReports `shouldBe` ["order", "esc"]
+            map streamsSelected fullReports `shouldBe` [1, 1]
+            auditExitCode fullReports `shouldBe` 0
 
     describe "Jitsurei read model" $ around (withFreshResourceStoreWith fixture (withProjectionSchema jitsureiProjectionSchema)) $ do
         it "updates and queries the inline order summary in the append transaction" $ \(_store, StoreRunner runner) -> do

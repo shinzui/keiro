@@ -10,6 +10,8 @@ import Data.Aeson (Value, object, (.=))
 import Data.Either (isLeft)
 import Data.List (partition, sort)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
@@ -22,7 +24,9 @@ import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
+import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
 import Keiro.Dsl.ScaffoldRun (Refusal (..), ScaffoldReport (..), StaleModule (..), executeScaffold, planScaffold, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
@@ -901,6 +905,96 @@ main = hspec $ do
                     runtime `shouldSatisfy` T.isInfixOf "opts{activePatches = declaredPatches}"
                 workflows -> expectationFailure ("expected one workflow, got " <> show (length workflows))
 
+    describe "replay impact" $ do
+        it "treats new events and transitions as replay-neutral" $ do
+            old <- specOf "test/fixtures/reservation.keiro"
+            let aggregate = onlyAggregate old
+            case (aggEvents aggregate, aggTransitions aggregate) of
+                (event : _, transition : _) -> do
+                    let newEvent =
+                            event
+                                { evName = "ReservationReviewed"
+                                , evLoc = noLoc
+                                }
+                        newTransition =
+                            transition
+                                { tEmits = ["ReservationReviewed"]
+                                , tLoc = noLoc
+                                }
+                        new =
+                            modifyAggregate
+                                "Reservation"
+                                ( \candidate ->
+                                    candidate
+                                        { aggEvents = aggEvents candidate <> [newEvent]
+                                        , aggTransitions = aggTransitions candidate <> [newTransition]
+                                        }
+                                )
+                                old
+                    ReplayImpact.replayImpact old new `shouldBe` ReplayNeutral
+                _ -> expectationFailure "reservation fixture must contain an event and transition"
+
+        it "narrows a guard edit to that transition's event types" $ do
+            impact <- replayImpactFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-guard-tightened.keiro"
+            impact
+                `shouldBe` ReplayAffected
+                    ( Map.singleton
+                        "Reservation"
+                        AggregateImpact
+                            { eventTypes = Set.singleton "TransferReservationCreated"
+                            , includeSnapshotStreams = True
+                            }
+                    )
+
+        it "proves a syntactic guard loosening replay-neutral" $ do
+            old <- specOf "test/fixtures/reservation.keiro"
+            let loosened =
+                    modifyAggregate
+                        "Reservation"
+                        ( \aggregate ->
+                            aggregate
+                                { aggTransitions =
+                                    [ transition{tGuard = Nothing}
+                                    | transition <- aggTransitions aggregate
+                                    ]
+                                }
+                        )
+                        old
+            ReplayImpact.replayImpact old loosened `shouldBe` ReplayNeutral
+
+        it "marks every existing event when the aggregate wire convention changes" $ do
+            impact <- replayImpactFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-wire.keiro"
+            case impact of
+                ReplayAffected aggregates ->
+                    ReplayImpact.eventTypes <$> Map.lookup "Reservation" aggregates
+                        `shouldBe` Just (Set.fromList ["TransferReservationCreated", "TransferReservationConfirmed"])
+                ReplayNeutral -> expectationFailure "expected a wire-clause replay impact"
+
+        it "includes snapshot streams when a write expression changes" $ do
+            impact <- replayImpactFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-foldchange.keiro"
+            case impact of
+                ReplayAffected aggregates ->
+                    includeSnapshotStreams <$> Map.lookup "Reservation" aggregates
+                        `shouldBe` Just True
+                ReplayNeutral -> expectationFailure "expected a fold replay impact"
+
+        it "detects codec evolution and ignores formatting-only rewrites" $ do
+            changed <- replayImpactFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-v2.keiro"
+            changed `shouldSatisfy` (/= ReplayNeutral)
+            old <- specOf "test/fixtures/reservation.keiro"
+            formatted <- parseInlineSpec "<formatted>" (renderSpec old)
+            ReplayImpact.replayImpact old formatted `shouldBe` ReplayNeutral
+
+        it "generates one context target for every aggregate, including the process saga" $ do
+            spec <- specOf "test/fixtures/surge-service.keiro"
+            case scaffoldReplayAudit (defaultContext (specContext spec)) spec of
+                [assembly] -> do
+                    modulePath assembly `shouldBe` "Generated/SurgeDemo/ReplayAudit.hs"
+                    moduleText assembly `shouldSatisfy` T.isInfixOf "Hospital.hospitalEventStream"
+                    moduleText assembly `shouldSatisfy` T.isInfixOf "Surge.surgeEventStream"
+                    T.count "      AuditTarget" (moduleText assembly) `shouldBe` 2
+                assemblies -> expectationFailure ("expected one replay-audit assembly, got " <> show (length assemblies))
+
     describe "diff (evolution classification)" $ do
         it "covers every node family exactly once and explains exclusions" $ do
             sort (map fst familyRegistry) `shouldBe` ([minBound .. maxBound] :: [NodeFamily])
@@ -1731,6 +1825,23 @@ diffFixtures oldP newP = do
     case (,) <$> parseSpec oldP old <*> parseSpec newP new of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right (o, n) -> pure (diffSpecs o n)
+
+replayImpactFixtures :: FilePath -> FilePath -> IO ReplayImpact
+replayImpactFixtures oldPath newPath = do
+    old <- specOf oldPath
+    new <- specOf newPath
+    pure (ReplayImpact.replayImpact old new)
+
+modifyAggregate :: Name -> (Aggregate -> Aggregate) -> Spec -> Spec
+modifyAggregate target update spec =
+    spec
+        { specNodes =
+            [ case node of
+                NAggregate aggregate | aggName aggregate == target -> NAggregate (update aggregate)
+                _ -> node
+            | node <- specNodes spec
+            ]
+        }
 
 modifyReadModel :: Name -> (ReadModelNode -> ReadModelNode) -> Spec -> Spec
 modifyReadModel target update spec =

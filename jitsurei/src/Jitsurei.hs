@@ -11,6 +11,7 @@ module Jitsurei (
     module Jitsurei.OrderStream,
     module Jitsurei.Paging,
     module Jitsurei.ReadModels,
+    module Jitsurei.ReplayAudit,
     module Jitsurei.Snapshots,
     module Jitsurei.Timers,
 )
@@ -28,5 +29,6 @@ import Jitsurei.OncallRoster
 import Jitsurei.OrderStream
 import Jitsurei.Paging
 import Jitsurei.ReadModels
+import Jitsurei.ReplayAudit
 import Jitsurei.Snapshots
 import Jitsurei.Timers

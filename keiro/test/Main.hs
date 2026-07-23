@@ -2073,6 +2073,12 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             snapshotVersionAfter `shouldBe` Just (StreamVersion 2)
 
     describe "Keiro.ReplayAudit" $ around (withFreshStore fixture) $ do
+        it "accepts only stream names in the configured category" $ \_ -> do
+            ReplayAudit.streamInCategory "counter" (StreamName "counter-one")
+                `shouldBe` (Just (Stream.Stream (StreamName "counter-one")) :: Maybe (Stream ()))
+            ReplayAudit.streamInCategory "counter" (StreamName "other-one")
+                `shouldBe` (Nothing :: Maybe (Stream ()))
+
         it "catches a removed inverting edge while skipping unaffected streams" $ \storeHandle -> do
             let affectedTarget =
                     stream "auditremove-affected" :: Stream CounterEventStream

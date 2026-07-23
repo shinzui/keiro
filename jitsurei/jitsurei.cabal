@@ -54,6 +54,7 @@ library
     Jitsurei.OrderStream
     Jitsurei.Paging
     Jitsurei.ReadModels
+    Jitsurei.ReplayAudit
     Jitsurei.Snapshots
     Jitsurei.Timers
 
@@ -125,6 +126,7 @@ test-suite jitsurei-test
   build-depends:
     , aeson                 >=2.2
     , base                  >=4.21 && <5
+    , containers            >=0.6
     , contravariant-extras  >=0.3
     , effectful             >=2.6
     , hasql                 >=1.10

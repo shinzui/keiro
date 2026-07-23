@@ -66,22 +66,23 @@ scaffoldModules = scaffoldModulesWithGoldens []
 
 scaffoldModulesWithGoldens :: [GoldenPayload] -> Context -> Spec -> [ScaffoldModule]
 scaffoldModulesWithGoldens goldens ctx spec =
-    concat
-        [ case node of
-            NAggregate agg -> scaffoldAggregate ctx spec agg <> harnessForWithGoldens goldens ctx spec agg
-            NProcess process -> scaffoldProcess ctx process <> harnessProcess ctx process
-            NRouter router -> scaffoldRouter ctx router <> harnessRouter ctx router
-            NContract contract -> scaffoldContract ctx contract
-            NIntake intake -> scaffoldIntake ctx intake
-            NPublisher publisher -> scaffoldPublisher ctx publisher
-            NWorkqueue workqueue -> scaffoldWorkqueue ctx workqueue
-            NReadModel readModel -> scaffoldReadModel ctx readModel <> harnessReadModel ctx readModel
-            NWorkflow workflow -> harnessWorkflow ctx workflow
-            NEmit _ -> []
-            NPgmqDispatch _ -> []
-            NOperation _ -> []
-        | node <- specNodes spec
-        ]
+    scaffoldReplayAudit ctx spec
+        <> concat
+            [ case node of
+                NAggregate agg -> scaffoldAggregate ctx spec agg <> harnessForWithGoldens goldens ctx spec agg
+                NProcess process -> scaffoldProcess ctx process <> harnessProcess ctx process
+                NRouter router -> scaffoldRouter ctx router <> harnessRouter ctx router
+                NContract contract -> scaffoldContract ctx contract
+                NIntake intake -> scaffoldIntake ctx intake
+                NPublisher publisher -> scaffoldPublisher ctx publisher
+                NWorkqueue workqueue -> scaffoldWorkqueue ctx workqueue
+                NReadModel readModel -> scaffoldReadModel ctx readModel <> harnessReadModel ctx readModel
+                NWorkflow workflow -> harnessWorkflow ctx workflow
+                NEmit _ -> []
+                NPgmqDispatch _ -> []
+                NOperation _ -> []
+            | node <- specNodes spec
+            ]
 
 {- | Run every pure refusal gate. A successful result is the exact write set;
 a refusal has no write set and therefore cannot be accidentally executed.

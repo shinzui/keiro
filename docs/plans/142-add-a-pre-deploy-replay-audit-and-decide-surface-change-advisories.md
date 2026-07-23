@@ -100,10 +100,11 @@ dispatch block prints a `RouterDecideSurfaceChanged` advisory.
       `Keiro.Command`; keiro-test scenarios green (no-inverting-edge caught by a
       targeted audit, stale-seed divergence caught, clean audit with stable digests,
       targeted selection provably skips unaffected streams).
-- [ ] M2: `keiro-dsl diff` replay-impact verdict (`replay-neutral` vs affected
+- [x] M2 (2026-07-23T20:12:00Z): `keiro-dsl diff` replay-impact verdict (`replay-neutral` vs affected
       event-type set, machine-readable); scaffolder emits `Generated/<Ctx>/ReplayAudit.hs`
-      audit targets; conformance runtime vertical runs a targeted audit against its
-      provisioned database; jitsurei reference assembly; 24 keiro-dsl suites green.
+      audit targets; multi-aggregate process conformance compiles the generated
+      assembly; jitsurei's migrated-store test proves targeted skipping and full
+      Order/escalation-saga replay.
 - [ ] M3: sampled runtime seed verification (config on the snapshot/command options,
       async compare, divergence metric) landed with tests; default sampling rate and
       off-switch documented.
@@ -145,6 +146,25 @@ implementation. Provide concise evidence.
   Finished in 80.4740 seconds
   349 examples, 0 failures
   ```
+
+- No existing keiro-dsl conformance executable provisioned PostgreSQL. Retrofitting
+  the pure `conformance-process-full` executable with a migrated store also exposed
+  that its Cabal test runner was linked against the non-threaded RTS, while Kiroku's
+  pool requires `registerDelay`. The vertical remains the live compile proof for the
+  generated two-target assembly; Jitsurei's established migrated-store harness is
+  the runtime proof, visibly skipping the unaffected saga in targeted mode and then
+  full-replaying both Order and escalation-saga targets.
+
+- Generated target assembly originally used a total raw `StreamName` wrapper. That
+  would have made a category wiring mistake invisible, so `streamInCategory` now
+  checks Kiroku's actual category parse before constructing the phantom-typed stream;
+  a rejected name is counted by the audit rather than silently accepted.
+
+- The complete M2 bars passed: all 25 Cabal test components selected by
+  `cabal test keiro-dsl` passed, including 237 DSL examples and every generated
+  conformance tree; Jitsurei passed 17 examples with targeted `selected=[1,0]`,
+  `skipped=[0,1]` followed by full `selected=[1,1]`; and the category-safe runtime
+  helper raised the Keiro suite to 350 passing examples.
 
 
 ## Decision Log
@@ -259,6 +279,45 @@ implementation. Provide concise evidence.
   from one opaque Kiroku cursor without re-auditing an unchanged stream. A stream that
   receives a later event may be selected again intentionally because its history
   changed.
+  Date: 2026-07-23
+
+- Decision: The replay-impact JSON contract is
+  `{"verdict":"replay-neutral"}` or
+  `{"verdict":"affected","aggregates":{"<Agg>":{"eventTypes":[...],
+  "includeSnapshotStreams":<bool>}}}` with one keyed entry per affected aggregate and
+  event arrays emitted in ascending order. The human verdict is always printed, but neither form changes the
+  diff command's exit classification.
+  Rationale: Deployment tooling needs a stable, deterministic input to construct
+  `AuditTargeted`; replay impact is an advisory cost/narrowing decision, while the
+  existing Breaking changes remain the compatibility gate.
+  Date: 2026-07-23
+
+- Decision: The context-wide generated module exports exactly
+  `auditTargets :: [SomeAuditTarget]`, ordered by aggregate declaration. Its
+  `mkStream` uses `streamInCategory` with the generated category constant, and
+  process saga aggregates appear through their ordinary aggregate declaration.
+  Rationale: The generated list is the single typed runtime assembly shared by full
+  and targeted audits. Category validation makes wrong wiring observable through
+  `rejectedStreams`; deriving saga targets from aggregate declarations avoids a
+  second, drift-prone registry.
+  Date: 2026-07-23
+
+- Decision: Hand-written services receive target assembly but no automatic
+  affected-set narrowing; the jitsurei example therefore exposes both Order and the
+  escalation saga and demonstrates a caller-supplied targeted set plus `AuditFull`.
+  Rationale: Without old/new specs there is no sound mechanical basis for naming
+  affected event types. Operators must pass a conservative set they derived
+  themselves or use the full category mode.
+  Date: 2026-07-23
+
+- Decision: Keep `conformance-process-full` as a pure compile/run conformance target
+  and put M2's store-backed end-to-end proof in Jitsurei's existing migrated-store
+  harness.
+  Rationale: The conformance executable was not provisioned for PostgreSQL and linked
+  a non-threaded RTS, which is incompatible with Kiroku's pool timer. Jitsurei already
+  owns the correct threaded resource lifecycle and exercises the exact same public
+  generated-assembly shape; retrofitting a second database harness into a pure
+  scaffolding test would add infrastructure without strengthening the contract.
   Date: 2026-07-23
 
 - Decision: The decide-surface advisories compare the *pretty-printed spec surface*

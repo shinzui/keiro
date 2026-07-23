@@ -25,6 +25,7 @@ module Keiro.Dsl.Scaffold (
     defaultContext,
     genPrefixFor,
     holePrefixFor,
+    scaffoldReplayAudit,
     scaffoldAggregate,
     scaffoldProcess,
     scaffoldRouter,
@@ -371,6 +372,66 @@ scaffoldAggregate ctx spec agg =
     ]
   where
     a = resolveAgg ctx spec agg
+
+{- | Emit the context-wide replay-audit target assembly.
+
+There is one existential target per aggregate declaration. Process saga
+aggregates are ordinary aggregate nodes referenced by 'SagaRef', so they are
+included by the same single source of truth rather than being duplicated from
+the process declaration.
+-}
+scaffoldReplayAudit :: Context -> Spec -> [ScaffoldModule]
+scaffoldReplayAudit ctx spec
+    | null aggregates = []
+    | otherwise =
+        [ ScaffoldModule
+            { modulePath = T.unpack (T.replace "." "/" moduleName <> ".hs")
+            , moduleText = emitReplayAudit
+            , kind = Generated
+            , origin = "context " <> specContext spec <> " replay-audit assembly"
+            }
+        ]
+  where
+    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+    moduleName = contextGeneratedPrefix ctx <> ".ReplayAudit"
+    contextGeneratedPrefix context = case placement context of
+        GeneratedPrefix -> rootPrefix context <> "Generated." <> ctxPascalOf context
+        CollocatedLeaf -> rootPrefix context <> ctxPascalOf context <> ".Generated"
+    emitReplayAudit =
+        nl $
+            [ "{-# LANGUAGE GADTs #-}"
+            , generatedBanner
+            , "--"
+            , "-- Deployment contract:"
+            , "--   * replay-neutral diff: no data audit is required;"
+            , "--   * affected diff: run AuditTargeted with the emitted affected set"
+            , "--     against a production copy under the candidate binary;"
+            , "--   * one-time runtime cutover: run AuditFull;"
+            , "--   * any non-zero audit exit blocks deployment."
+            , "module " <> moduleName <> " (auditTargets) where"
+            , ""
+            ]
+                ++ [ "import " <> genPrefixFor ctx (aggName aggregate) <> ".EventStream qualified as " <> aggName aggregate
+                   | aggregate <- aggregates
+                   ]
+                ++ [ "import Keiro.ReplayAudit (AuditTarget (..), SomeAuditTarget (..), streamInCategory)"
+                   , "import Keiro.Stream qualified as Stream"
+                   , ""
+                   , "auditTargets :: [SomeAuditTarget]"
+                   , "auditTargets ="
+                   ]
+                ++ concat
+                    [ [ if index == (0 :: Int) then "  [ SomeAuditTarget" else "  , SomeAuditTarget"
+                      , "      AuditTarget"
+                      , "        { eventStream = " <> aggregateName <> "." <> lowerFirst aggregateName <> "EventStream"
+                      , "        , category = Stream.categoryText " <> aggregateName <> "." <> lowerFirst aggregateName <> "Category"
+                      , "        , mkStream = streamInCategory (Stream.categoryText " <> aggregateName <> "." <> lowerFirst aggregateName <> "Category)"
+                      , "        }"
+                      ]
+                    | (index, aggregate) <- zip [0 ..] aggregates
+                    , let aggregateName = aggName aggregate
+                    ]
+                ++ ["  ]"]
 
 genModule :: Agg -> Text -> Text -> ScaffoldModule
 genModule a name body =
