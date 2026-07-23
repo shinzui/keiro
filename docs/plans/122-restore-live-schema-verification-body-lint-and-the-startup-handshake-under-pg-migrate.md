@@ -54,7 +54,7 @@ documented in `docs/user/migrations.md`.
 
 - [x] (2026-07-23T22:42:00Z) Milestone 1: pure lint module ported into the default test suite; unqualified fixture fails; all 20 embedded bodies pass; `embeddedMigrationEntries` exported from the library. Validation: `cabal build keiro-migrations` and `cabal test keiro-migrations-test --test-show-details=direct` passed (14 examples, 0 failures).
 - [x] (2026-07-23T22:49:00Z) Milestone 2: `missingMigrations` and `StartupHandshake` exported from `Keiro.Migrations`; fresh/fully-migrated/half-applied tests green; `docs/user/migrations.md` Application startup section documents the handshake. Validation: `cabal build keiro-migrations` and `cabal test keiro-migrations-test --test-show-details=direct` passed (17 examples, 0 failures).
-- [ ] Milestone 3: `Keiro.Migrations.SchemaCheck` library module with canonical snapshot, comparison, and embedded expected snapshot; checked-in `expected-schema/native/keiro-v18.txt` generated and validated by a suite test with a regeneration mode.
+- [x] (2026-07-23T23:02:00Z) Milestone 3: `Keiro.Migrations.SchemaCheck` library module with canonical snapshot, comparison, and embedded expected snapshot; checked-in `expected-schema/native/keiro-v18.txt` generated and validated by a suite test with a regeneration mode. Validation: the full suite passed (19 examples); the snapshot contains 300 lines including `keiro_dead_letters`, `state_shape_hash`, and `failure_reason`; deleting line 1 failed with the exact expected/actual object names; regeneration restored the same SHA-256 `a78c933c490b3672c2ad2d907b18d024e7b06e128cbcd44ee11f5b027445eca3`.
 - [ ] Milestone 4: `keiro-migrate verify-schema` subcommand wired; drifted-database integration test exits with named drifted objects; `docs/user/migrations.md` documents `verify-schema`; suite green end to end.
 
 
@@ -75,6 +75,17 @@ documented in `docs/user/migrations.md`.
   Evidence: the first Milestone 2 build failed with GHC-87543 on
   `Migrate.pendingMigrations report` and `Migrate.issues report`. The adapter now matches
   the public `StatusReport` constructor and names the two values positionally.
+  Date: 2026-07-23
+
+- Discovery: pg-migrate intentionally exposes `ConnectionProvider` as an opaque type. Its
+  public facade can construct a provider and pass it to pg-migrate operations, but cannot
+  run an application-defined Hasql `Session` through it; the only consumer is
+  `Database.PostgreSQL.Migrate.Internal.useConnectionProvider`, and pg-migrate's public API
+  guide explicitly excludes `Internal` modules from compatibility.
+  Evidence: Mori resolved `shinzui/pg-migrate` to
+  `/Users/shinzui/Keikaku/bokuno/pg-migrate`; inspection of the 1.1.0.0 facade and
+  `Runner.Types` confirmed the constructor and `useDedicatedConnection` field are not
+  exported.
   Date: 2026-07-23
 
 
@@ -134,6 +145,16 @@ documented in `docs/user/migrations.md`.
   Rationale: Integrity gates must cover every migration shipped by the current branch.
   Freezing the tests at the plan-authoring count would leave the two newest schema changes
   outside the lint and startup-handshake acceptance.
+  Date: 2026-07-23
+
+- Decision: `verifyExpectedSchema` accepts public Hasql `Settings.Settings`, not
+  pg-migrate's opaque `ConnectionProvider`.
+  Rationale: The CLI already resolves `--database-url`/`DATABASE_URL` to `Settings`, and
+  direct Hasql acquisition can preserve the required structured
+  `ConnectionAcquisitionFailed`/`DatabaseSessionFailed` errors without importing an
+  unsupported pg-migrate internal module or requiring an upstream release. The lower-level
+  `snapshotSchema :: Text -> Session Text` remains available to applications that own a
+  pooled connection.
   Date: 2026-07-23
 
 
@@ -470,11 +491,13 @@ example `schema drift: missing index keiro_outbox_pending_idx (expected: CREATE 
 (that helper calls `addDependentFile`, so *content* changes to an existing snapshot file
 retrigger compilation; only wholly new sibling files have the recompilation caveat that
 `docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md` addresses).
-`verifyExpectedSchema :: ConnectionProvider -> IO (Either MigrationError [SchemaDrift])`
-brackets a connection (mirror how `Inspection.hs` uses `useDedicatedConnection`, mapping
-connection errors to `ConnectionAcquisitionFailed` and session errors to
-`DatabaseSessionFailed`), snapshots schema `keiro`, and compares against the embedded
-expectation. Register the new snapshot path under `extra-source-files` in the cabal file.
+`verifyExpectedSchema :: Settings.Settings -> IO (Either MigrationError [SchemaDrift])`
+brackets a Hasql connection from the public settings value, mapping acquisition errors to
+`ConnectionAcquisitionFailed` and session errors to `DatabaseSessionFailed`, snapshots
+schema `keiro`, and compares against the embedded expectation. It also checks
+`server_version_num` in the same session and returns `UnsupportedPostgresVersion` unless
+the major version is 18, because this plan deliberately ships only the PostgreSQL 18
+snapshot. Register the new snapshot path under `extra-source-files` in the cabal file.
 
 Bootstrapping the snapshot (chicken-and-egg: the library embeds a file the suite
 generates): create `keiro-migrations/expected-schema/native/keiro-v18.txt` as an empty file
@@ -532,16 +555,16 @@ keiroCommandParser plan =
 with `verifySchemaOptionsParser` offering the same `--database-url URL` option the upstream
 commands use (falling back to `DATABASE_URL`, exactly as `main` already does for the
 default settings). Dispatch: `Framework cmd` goes through the existing
-`runMigrationCommand` path unchanged; `VerifySchema opts` builds a `ConnectionProvider`
-from the selected settings, calls `verifyExpectedSchema`, prints `schema verification
+`runMigrationCommand` path unchanged; `VerifySchema opts` selects the explicit or default
+settings, calls `verifyExpectedSchema`, prints `schema verification
 succeeded` and exits 0 on `Right []`, prints each `renderSchemaDrift` line and exits 1 on
 `Right drifts`, prints the error and exits 1 on `Left`. Output is text-only for now (record
 any future `--json` need in the Decision Log rather than speculating).
 
 Integration test in `keiro-migrations/test/Main.hs`, "verify-schema detects a hand-altered
-database": inside `withMigratedDatabase plan`, first assert `verifyExpectedSchema` (via a
-provider over the callback connection, using the existing `providerFor` helper) returns
-`Right []`; then mutate the schema the way the finding describes —
+database": inside `withKeiroPg`, apply the full plan, first assert `verifyExpectedSchema`
+with the ephemeral database's settings returns `Right []`; then acquire a connection and
+mutate the schema the way the finding describes —
 
 ```sql
 DROP INDEX keiro.keiro_outbox_pending_idx;
@@ -724,7 +747,7 @@ Signatures that must exist at the end of each milestone:
 - Milestone 3: `Keiro.Migrations.SchemaCheck.snapshotSchema :: Text -> Session Text`;
   `compareSchemaSnapshot :: Text -> Text -> [SchemaDrift]`; `SchemaDrift (..)`;
   `renderSchemaDrift :: SchemaDrift -> Text`; `expectedSchemaSnapshot :: Text`;
-  `verifyExpectedSchema :: ConnectionProvider -> IO (Either MigrationError [SchemaDrift])`.
+  `verifyExpectedSchema :: Settings.Settings -> IO (Either MigrationError [SchemaDrift])`.
 - Milestone 4: `keiro-migrate verify-schema [--database-url URL]` exiting 0 on a clean
   database and 1 on drift or error, printing one `renderSchemaDrift` line per drift.
 
@@ -737,3 +760,8 @@ Revision note (2026-07-23): Updated the plan from the 18-file/26-entry authoring
 the current 20-file/28-entry migration plan after discovering migrations 0019 and 0020 on
 the active branch. The implementation and all acceptance counts now cover every shipped
 migration.
+
+Revision note (2026-07-23): Changed the schema-verification convenience API from opaque
+pg-migrate `ConnectionProvider` to public Hasql `Settings.Settings` after source inspection
+proved that application-defined sessions cannot consume the provider without an unsupported
+Internal import. The CLI and behavioral acceptance remain unchanged.

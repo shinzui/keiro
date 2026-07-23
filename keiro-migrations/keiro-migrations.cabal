@@ -18,6 +18,7 @@ extra-doc-files:
   README.md
 
 extra-source-files:
+  expected-schema/native/keiro-v18.txt
   expected-schema/v18/db-settings
   expected-schema/v18/roles/keiro
   expected-schema/v18/schemas/keiro/objrep
@@ -317,6 +318,7 @@ library
   exposed-modules:
     Keiro.Migrations
     Keiro.Migrations.History.Codd
+    Keiro.Migrations.SchemaCheck
 
   other-modules:
     Keiro.Migrations.Internal.Definition
@@ -327,6 +329,7 @@ library
     , base                     >=4.18     && <5
     , bytestring               >=0.11     && <0.13
     , containers               >=0.6      && <0.8
+    , hasql                    >=1.10     && <1.11
     , kiroku-store-migrations  ^>=0.3.0.0
     , pg-migrate               ^>=1.1.0.0
     , pg-migrate-embed         ^>=1.1.0.0

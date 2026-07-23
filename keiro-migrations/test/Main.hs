@@ -4,13 +4,13 @@ module Main (main) where
 
 import Control.Concurrent.Async (concurrently)
 import Control.Exception (finally)
-import Control.Monad (forM_)
+import Control.Monad (forM_, unless)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
 import Data.Either (isLeft)
 import Data.Foldable (toList)
 import Data.Int (Int64)
-import Data.List (sort)
+import Data.List (findIndex, sort)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
@@ -40,11 +40,13 @@ import Hasql.Statement qualified as Statement
 import Keiro.Migrations
 import Keiro.Migrations qualified as Keiro
 import Keiro.Migrations.History.Codd
+import Keiro.Migrations.SchemaCheck
 import Kiroku.Store.Migrations qualified as Kiroku
 import Kiroku.Store.Migrations.History.Codd qualified as Kiroku.Codd
 import Lint
 import Numeric qualified
 import System.Directory (doesDirectoryExist, doesFileExist)
+import System.Environment (lookupEnv)
 import System.FilePath ((</>))
 import Test.Hspec
 
@@ -154,6 +156,45 @@ main = hspec $ do
                 length (Keiro.pendingMigrations handshake) `shouldBe` 20
                 Keiro.ledgerIssues handshake `shouldBe` []
                 handshakePassed handshake `shouldBe` False
+
+    describe "native expected schema" $ do
+        it "classifies missing, unexpected, and changed objects" $ do
+            let expected =
+                    Text.unlines
+                        [ "column\twidgets.id\tinteger not null"
+                        , "index\twidgets_id_idx\tCREATE INDEX widgets_id_idx ON keiro.widgets USING btree (id)"
+                        ]
+                actual =
+                    Text.unlines
+                        [ "column\twidgets.id\tbigint not null"
+                        , "table\twidgets\tkind=r"
+                        ]
+            compareSchemaSnapshot expected actual
+                `shouldMatchList` [ ChangedObject
+                                        { driftKey = "column\twidgets.id"
+                                        , expectedDefinition = "integer not null"
+                                        , actualDefinition = "bigint not null"
+                                        }
+                                  , MissingObject
+                                        "index\twidgets_id_idx\tCREATE INDEX widgets_id_idx ON keiro.widgets USING btree (id)"
+                                  , UnexpectedObject "table\twidgets\tkind=r"
+                                  ]
+
+        it "checked-in snapshot matches what the migrations build" $ do
+            plan <- requirePlan
+            snapshotPath <- findNativeExpectedSchema
+            regenerate <- maybe False (const True) <$> lookupEnv "KEIRO_REGENERATE_EXPECTED_SCHEMA"
+            result <- withMigratedDatabase plan $ \connection -> do
+                actual <- useSession connection (snapshotSchema "keiro")
+                if regenerate
+                    then do
+                        Text.IO.writeFile snapshotPath actual
+                        putStrLn ("regenerated " <> snapshotPath)
+                    else do
+                        expected <- Text.IO.readFile snapshotPath
+                        unless (expected == actual) $
+                            expectationFailure (snapshotMismatch snapshotPath expected actual)
+            either (expectationFailure . show) pure result
 
     describe "fresh native databases" $ do
         it "applies Kiroku then Keiro, verifies strictly, and is repeatable" $ do
@@ -312,6 +353,13 @@ findLockfile :: IO FilePath
 findLockfile =
     findFile ["keiro-migrations/migrations.lock", "migrations.lock"]
 
+findNativeExpectedSchema :: IO FilePath
+findNativeExpectedSchema =
+    findFile
+        [ "keiro-migrations/expected-schema/native/keiro-v18.txt"
+        , "expected-schema/native/keiro-v18.txt"
+        ]
+
 findDirectory :: [FilePath] -> IO FilePath
 findDirectory candidates = do
     existing <- filterM doesDirectoryExist candidates
@@ -333,6 +381,31 @@ filterM predicate = foldr step (pure [])
         matches <- predicate value
         values <- remaining
         pure (if matches then value : values else values)
+
+snapshotMismatch :: FilePath -> Text -> Text -> String
+snapshotMismatch path expected actual =
+    "checked-in native schema snapshot differs at "
+        <> firstDifference
+        <> "\nRegenerate intentionally with "
+        <> "KEIRO_REGENERATE_EXPECTED_SCHEMA=1 cabal test keiro-migrations-test "
+        <> "--test-options='--match \"checked-in snapshot\"' and review "
+        <> path
+  where
+    expectedLines = Text.lines expected
+    actualLines = Text.lines actual
+    lineCount = max (length expectedLines) (length actualLines)
+    paddedExpected = take lineCount (expectedLines <> repeat "<end of snapshot>")
+    paddedActual = take lineCount (actualLines <> repeat "<end of snapshot>")
+    firstDifference =
+        case findIndex (uncurry (/=)) (zip paddedExpected paddedActual) of
+            Nothing -> "an unknown position"
+            Just index ->
+                "line "
+                    <> show (index + 1)
+                    <> "\nexpected: "
+                    <> Text.unpack (paddedExpected !! index)
+                    <> "\nactual:   "
+                    <> Text.unpack (paddedActual !! index)
 
 parseLockfile :: Text -> [(FilePath, Text)]
 parseLockfile contents =

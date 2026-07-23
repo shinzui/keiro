@@ -1,0 +1,300 @@
+column	keiro_awakeables.awakeable_id	uuid not null
+column	keiro_awakeables.completed_at	timestamp with time zone
+column	keiro_awakeables.created_at	timestamp with time zone not null default now()
+column	keiro_awakeables.owner_workflow_id	text not null
+column	keiro_awakeables.owner_workflow_name	text not null
+column	keiro_awakeables.payload	jsonb
+column	keiro_awakeables.status	text not null default 'pending'::text
+column	keiro_awakeables.updated_at	timestamp with time zone not null default now()
+column	keiro_dead_letters.attempt_count	integer not null
+column	keiro_dead_letters.correlation_id	text not null
+column	keiro_dead_letters.created_at	timestamp with time zone not null default now()
+column	keiro_dead_letters.dead_letter_id	bigint not null default nextval('keiro.keiro_dead_letters_dead_letter_id_seq'::regclass)
+column	keiro_dead_letters.dispatcher_kind	text not null
+column	keiro_dead_letters.dispatcher_name	text not null
+column	keiro_dead_letters.emit_index	integer not null
+column	keiro_dead_letters.error_class	text not null
+column	keiro_dead_letters.error_detail	text not null
+column	keiro_dead_letters.source_event_id	uuid not null
+column	keiro_dead_letters.source_global_position	bigint not null
+column	keiro_dead_letters.target_stream_name	text not null
+column	keiro_inbox.attempt_count	bigint not null default 0
+column	keiro_inbox.attributes	jsonb
+column	keiro_inbox.causation_id	uuid
+column	keiro_inbox.completed_at	timestamp with time zone
+column	keiro_inbox.content_type	text not null
+column	keiro_inbox.correlation_id	uuid
+column	keiro_inbox.dedupe_key	text not null
+column	keiro_inbox.destination	text
+column	keiro_inbox.event_type	text
+column	keiro_inbox.failed_at	timestamp with time zone
+column	keiro_inbox.kafka_offset	bigint
+column	keiro_inbox.kafka_partition	bigint
+column	keiro_inbox.kafka_topic	text
+column	keiro_inbox.last_error	text
+column	keiro_inbox.message_id	text
+column	keiro_inbox.occurred_at	timestamp with time zone
+column	keiro_inbox.payload_bytes	bytea not null
+column	keiro_inbox.received_at	timestamp with time zone not null default now()
+column	keiro_inbox.schema_fingerprint	text
+column	keiro_inbox.schema_id	bigint
+column	keiro_inbox.schema_registry	text
+column	keiro_inbox.schema_subject	text
+column	keiro_inbox.schema_version	bigint
+column	keiro_inbox.schema_version_ref	bigint
+column	keiro_inbox.source	text not null
+column	keiro_inbox.source_event_id	uuid
+column	keiro_inbox.source_global_position	bigint
+column	keiro_inbox.status	text not null default 'processing'::text
+column	keiro_inbox.traceparent	text
+column	keiro_inbox.tracestate	text
+column	keiro_outbox.attempt_count	bigint not null default 0
+column	keiro_outbox.attributes	jsonb
+column	keiro_outbox.causation_id	uuid
+column	keiro_outbox.content_type	text not null
+column	keiro_outbox.correlation_id	uuid
+column	keiro_outbox.created_at	timestamp with time zone not null default now()
+column	keiro_outbox.destination	text not null
+column	keiro_outbox.event_type	text not null
+column	keiro_outbox.last_error	text
+column	keiro_outbox.message_id	text not null
+column	keiro_outbox.message_key	text
+column	keiro_outbox.next_attempt_at	timestamp with time zone not null default now()
+column	keiro_outbox.occurred_at	timestamp with time zone not null
+column	keiro_outbox.outbox_id	uuid not null
+column	keiro_outbox.payload_bytes	bytea not null
+column	keiro_outbox.published_at	timestamp with time zone
+column	keiro_outbox.schema_fingerprint	text
+column	keiro_outbox.schema_id	bigint
+column	keiro_outbox.schema_registry	text
+column	keiro_outbox.schema_subject	text
+column	keiro_outbox.schema_version	bigint not null
+column	keiro_outbox.schema_version_ref	bigint
+column	keiro_outbox.source	text not null
+column	keiro_outbox.source_event_id	uuid
+column	keiro_outbox.source_global_position	bigint
+column	keiro_outbox.status	text not null default 'pending'::text
+column	keiro_outbox.traceparent	text
+column	keiro_outbox.tracestate	text
+column	keiro_outbox.updated_at	timestamp with time zone not null default now()
+column	keiro_projection_dedup.applied_at	timestamp with time zone not null default now()
+column	keiro_projection_dedup.event_id	uuid not null
+column	keiro_projection_dedup.projection_name	text not null
+column	keiro_read_models.last_built_at	timestamp with time zone
+column	keiro_read_models.name	text not null
+column	keiro_read_models.shape_hash	text not null
+column	keiro_read_models.status	text not null
+column	keiro_read_models.updated_at	timestamp with time zone not null default now()
+column	keiro_read_models.version	bigint not null
+column	keiro_snapshots.created_at	timestamp with time zone not null default now()
+column	keiro_snapshots.regfile_shape_hash	text not null
+column	keiro_snapshots.state	jsonb not null
+column	keiro_snapshots.state_codec_version	bigint not null
+column	keiro_snapshots.state_shape_hash	text not null default ''::text
+column	keiro_snapshots.stream_id	bigint not null
+column	keiro_snapshots.stream_version	bigint not null
+column	keiro_snapshots.updated_at	timestamp with time zone not null default now()
+column	keiro_subscription_shards.bucket	integer not null
+column	keiro_subscription_shards.heartbeat_at	timestamp with time zone
+column	keiro_subscription_shards.lease_expires_at	timestamp with time zone
+column	keiro_subscription_shards.owner_worker_id	uuid
+column	keiro_subscription_shards.shard_count	integer not null
+column	keiro_subscription_shards.subscription_name	text not null
+column	keiro_subscription_shards.updated_at	timestamp with time zone not null default now()
+column	keiro_timers.attempts	bigint not null default 0
+column	keiro_timers.correlation_id	text not null
+column	keiro_timers.created_at	timestamp with time zone not null default now()
+column	keiro_timers.fire_at	timestamp with time zone not null
+column	keiro_timers.fired_event_id	uuid
+column	keiro_timers.last_error	text
+column	keiro_timers.payload	jsonb not null
+column	keiro_timers.process_manager_name	text not null
+column	keiro_timers.status	text not null default 'scheduled'::text
+column	keiro_timers.timer_id	uuid not null
+column	keiro_timers.updated_at	timestamp with time zone not null default now()
+column	keiro_workflow_children.await_step	text not null
+column	keiro_workflow_children.child_id	text not null
+column	keiro_workflow_children.child_name	text not null
+column	keiro_workflow_children.completed_at	timestamp with time zone
+column	keiro_workflow_children.created_at	timestamp with time zone not null default now()
+column	keiro_workflow_children.failure_reason	text
+column	keiro_workflow_children.parent_id	text not null
+column	keiro_workflow_children.parent_name	text not null
+column	keiro_workflow_children.result	jsonb
+column	keiro_workflow_children.status	text not null default 'running'::text
+column	keiro_workflow_children.updated_at	timestamp with time zone not null default now()
+column	keiro_workflow_steps.generation	integer not null default 0
+column	keiro_workflow_steps.recorded_at	timestamp with time zone not null default now()
+column	keiro_workflow_steps.result	jsonb not null
+column	keiro_workflow_steps.step_name	text not null
+column	keiro_workflow_steps.workflow_id	text not null
+column	keiro_workflow_steps.workflow_name	text not null
+column	keiro_workflows.attempts	integer not null default 0
+column	keiro_workflows.completed_at	timestamp with time zone
+column	keiro_workflows.created_at	timestamp with time zone not null default now()
+column	keiro_workflows.generation	integer not null default 0
+column	keiro_workflows.last_error	text
+column	keiro_workflows.lease_expires_at	timestamp with time zone
+column	keiro_workflows.leased_by	text
+column	keiro_workflows.next_attempt_at	timestamp with time zone
+column	keiro_workflows.status	text not null default 'running'::text
+column	keiro_workflows.updated_at	timestamp with time zone not null default now()
+column	keiro_workflows.wake_after	timestamp with time zone
+column	keiro_workflows.workflow_id	text not null
+column	keiro_workflows.workflow_name	text not null
+constraint	keiro_awakeables.keiro_awakeables_awakeable_id_not_null	NOT NULL awakeable_id
+constraint	keiro_awakeables.keiro_awakeables_created_at_not_null	NOT NULL created_at
+constraint	keiro_awakeables.keiro_awakeables_owner_workflow_id_not_null	NOT NULL owner_workflow_id
+constraint	keiro_awakeables.keiro_awakeables_owner_workflow_name_not_null	NOT NULL owner_workflow_name
+constraint	keiro_awakeables.keiro_awakeables_pkey	PRIMARY KEY (awakeable_id)
+constraint	keiro_awakeables.keiro_awakeables_status_chk	CHECK ((status = ANY (ARRAY['pending'::text, 'completed'::text, 'cancelled'::text])))
+constraint	keiro_awakeables.keiro_awakeables_status_not_null	NOT NULL status
+constraint	keiro_awakeables.keiro_awakeables_updated_at_not_null	NOT NULL updated_at
+constraint	keiro_dead_letters.keiro_dead_letters_attempt_count_chk	CHECK ((attempt_count >= 1))
+constraint	keiro_dead_letters.keiro_dead_letters_attempt_count_not_null	NOT NULL attempt_count
+constraint	keiro_dead_letters.keiro_dead_letters_correlation_id_not_null	NOT NULL correlation_id
+constraint	keiro_dead_letters.keiro_dead_letters_created_at_not_null	NOT NULL created_at
+constraint	keiro_dead_letters.keiro_dead_letters_dead_letter_id_not_null	NOT NULL dead_letter_id
+constraint	keiro_dead_letters.keiro_dead_letters_dispatcher_kind_chk	CHECK ((dispatcher_kind = ANY (ARRAY['process-manager'::text, 'router'::text])))
+constraint	keiro_dead_letters.keiro_dead_letters_dispatcher_kind_not_null	NOT NULL dispatcher_kind
+constraint	keiro_dead_letters.keiro_dead_letters_dispatcher_name_not_null	NOT NULL dispatcher_name
+constraint	keiro_dead_letters.keiro_dead_letters_dispatcher_name_source_event_id_emit_ind_key	UNIQUE (dispatcher_name, source_event_id, emit_index)
+constraint	keiro_dead_letters.keiro_dead_letters_emit_index_not_null	NOT NULL emit_index
+constraint	keiro_dead_letters.keiro_dead_letters_error_class_not_null	NOT NULL error_class
+constraint	keiro_dead_letters.keiro_dead_letters_error_detail_not_null	NOT NULL error_detail
+constraint	keiro_dead_letters.keiro_dead_letters_pkey	PRIMARY KEY (dead_letter_id)
+constraint	keiro_dead_letters.keiro_dead_letters_source_event_id_not_null	NOT NULL source_event_id
+constraint	keiro_dead_letters.keiro_dead_letters_source_global_position_not_null	NOT NULL source_global_position
+constraint	keiro_dead_letters.keiro_dead_letters_target_stream_name_not_null	NOT NULL target_stream_name
+constraint	keiro_inbox.keiro_inbox_attempt_count_not_null	NOT NULL attempt_count
+constraint	keiro_inbox.keiro_inbox_content_type_not_null	NOT NULL content_type
+constraint	keiro_inbox.keiro_inbox_dedupe_key_not_null	NOT NULL dedupe_key
+constraint	keiro_inbox.keiro_inbox_payload_bytes_not_null	NOT NULL payload_bytes
+constraint	keiro_inbox.keiro_inbox_pkey	PRIMARY KEY (source, dedupe_key)
+constraint	keiro_inbox.keiro_inbox_received_at_not_null	NOT NULL received_at
+constraint	keiro_inbox.keiro_inbox_source_not_null	NOT NULL source
+constraint	keiro_inbox.keiro_inbox_status_not_null	NOT NULL status
+constraint	keiro_outbox.keiro_outbox_attempt_count_not_null	NOT NULL attempt_count
+constraint	keiro_outbox.keiro_outbox_content_type_not_null	NOT NULL content_type
+constraint	keiro_outbox.keiro_outbox_created_at_not_null	NOT NULL created_at
+constraint	keiro_outbox.keiro_outbox_destination_not_null	NOT NULL destination
+constraint	keiro_outbox.keiro_outbox_event_type_not_null	NOT NULL event_type
+constraint	keiro_outbox.keiro_outbox_message_id_not_null	NOT NULL message_id
+constraint	keiro_outbox.keiro_outbox_next_attempt_at_not_null	NOT NULL next_attempt_at
+constraint	keiro_outbox.keiro_outbox_occurred_at_not_null	NOT NULL occurred_at
+constraint	keiro_outbox.keiro_outbox_outbox_id_not_null	NOT NULL outbox_id
+constraint	keiro_outbox.keiro_outbox_payload_bytes_not_null	NOT NULL payload_bytes
+constraint	keiro_outbox.keiro_outbox_pkey	PRIMARY KEY (outbox_id)
+constraint	keiro_outbox.keiro_outbox_schema_version_not_null	NOT NULL schema_version
+constraint	keiro_outbox.keiro_outbox_source_message_id_key	UNIQUE (source, message_id)
+constraint	keiro_outbox.keiro_outbox_source_not_null	NOT NULL source
+constraint	keiro_outbox.keiro_outbox_status_not_null	NOT NULL status
+constraint	keiro_outbox.keiro_outbox_updated_at_not_null	NOT NULL updated_at
+constraint	keiro_projection_dedup.keiro_projection_dedup_applied_at_not_null	NOT NULL applied_at
+constraint	keiro_projection_dedup.keiro_projection_dedup_event_id_not_null	NOT NULL event_id
+constraint	keiro_projection_dedup.keiro_projection_dedup_pkey	PRIMARY KEY (projection_name, event_id)
+constraint	keiro_projection_dedup.keiro_projection_dedup_projection_name_not_null	NOT NULL projection_name
+constraint	keiro_read_models.keiro_read_models_name_not_null	NOT NULL name
+constraint	keiro_read_models.keiro_read_models_pkey	PRIMARY KEY (name)
+constraint	keiro_read_models.keiro_read_models_shape_hash_not_null	NOT NULL shape_hash
+constraint	keiro_read_models.keiro_read_models_status_not_null	NOT NULL status
+constraint	keiro_read_models.keiro_read_models_updated_at_not_null	NOT NULL updated_at
+constraint	keiro_read_models.keiro_read_models_version_not_null	NOT NULL version
+constraint	keiro_snapshots.keiro_snapshots_created_at_not_null	NOT NULL created_at
+constraint	keiro_snapshots.keiro_snapshots_pkey	PRIMARY KEY (stream_id)
+constraint	keiro_snapshots.keiro_snapshots_regfile_shape_hash_not_null	NOT NULL regfile_shape_hash
+constraint	keiro_snapshots.keiro_snapshots_state_codec_version_not_null	NOT NULL state_codec_version
+constraint	keiro_snapshots.keiro_snapshots_state_not_null	NOT NULL state
+constraint	keiro_snapshots.keiro_snapshots_state_shape_hash_not_null	NOT NULL state_shape_hash
+constraint	keiro_snapshots.keiro_snapshots_stream_id_not_null	NOT NULL stream_id
+constraint	keiro_snapshots.keiro_snapshots_stream_version_not_null	NOT NULL stream_version
+constraint	keiro_snapshots.keiro_snapshots_updated_at_not_null	NOT NULL updated_at
+constraint	keiro_subscription_shards.keiro_subscription_shards_bucket_not_null	NOT NULL bucket
+constraint	keiro_subscription_shards.keiro_subscription_shards_bucket_range_chk	CHECK (((bucket >= 0) AND (bucket < shard_count)))
+constraint	keiro_subscription_shards.keiro_subscription_shards_count_chk	CHECK ((shard_count >= 1))
+constraint	keiro_subscription_shards.keiro_subscription_shards_pkey	PRIMARY KEY (subscription_name, bucket)
+constraint	keiro_subscription_shards.keiro_subscription_shards_shard_count_not_null	NOT NULL shard_count
+constraint	keiro_subscription_shards.keiro_subscription_shards_subscription_name_not_null	NOT NULL subscription_name
+constraint	keiro_subscription_shards.keiro_subscription_shards_updated_at_not_null	NOT NULL updated_at
+constraint	keiro_timers.keiro_timers_attempts_not_null	NOT NULL attempts
+constraint	keiro_timers.keiro_timers_correlation_id_not_null	NOT NULL correlation_id
+constraint	keiro_timers.keiro_timers_created_at_not_null	NOT NULL created_at
+constraint	keiro_timers.keiro_timers_fire_at_not_null	NOT NULL fire_at
+constraint	keiro_timers.keiro_timers_payload_not_null	NOT NULL payload
+constraint	keiro_timers.keiro_timers_pkey	PRIMARY KEY (timer_id)
+constraint	keiro_timers.keiro_timers_process_manager_name_not_null	NOT NULL process_manager_name
+constraint	keiro_timers.keiro_timers_status_not_null	NOT NULL status
+constraint	keiro_timers.keiro_timers_timer_id_not_null	NOT NULL timer_id
+constraint	keiro_timers.keiro_timers_updated_at_not_null	NOT NULL updated_at
+constraint	keiro_workflow_children.keiro_workflow_children_await_step_not_null	NOT NULL await_step
+constraint	keiro_workflow_children.keiro_workflow_children_child_id_not_null	NOT NULL child_id
+constraint	keiro_workflow_children.keiro_workflow_children_child_name_not_null	NOT NULL child_name
+constraint	keiro_workflow_children.keiro_workflow_children_created_at_not_null	NOT NULL created_at
+constraint	keiro_workflow_children.keiro_workflow_children_parent_id_not_null	NOT NULL parent_id
+constraint	keiro_workflow_children.keiro_workflow_children_parent_name_not_null	NOT NULL parent_name
+constraint	keiro_workflow_children.keiro_workflow_children_pkey	PRIMARY KEY (child_id, child_name)
+constraint	keiro_workflow_children.keiro_workflow_children_status_chk	CHECK ((status = ANY (ARRAY['running'::text, 'completed'::text, 'cancelled'::text, 'failed'::text])))
+constraint	keiro_workflow_children.keiro_workflow_children_status_not_null	NOT NULL status
+constraint	keiro_workflow_children.keiro_workflow_children_updated_at_not_null	NOT NULL updated_at
+constraint	keiro_workflow_steps.keiro_workflow_steps_generation_not_null	NOT NULL generation
+constraint	keiro_workflow_steps.keiro_workflow_steps_pkey	PRIMARY KEY (workflow_id, workflow_name, generation, step_name)
+constraint	keiro_workflow_steps.keiro_workflow_steps_recorded_at_not_null	NOT NULL recorded_at
+constraint	keiro_workflow_steps.keiro_workflow_steps_result_not_null	NOT NULL result
+constraint	keiro_workflow_steps.keiro_workflow_steps_step_name_not_null	NOT NULL step_name
+constraint	keiro_workflow_steps.keiro_workflow_steps_workflow_id_not_null	NOT NULL workflow_id
+constraint	keiro_workflow_steps.keiro_workflow_steps_workflow_name_not_null	NOT NULL workflow_name
+constraint	keiro_workflows.keiro_workflows_attempts_not_null	NOT NULL attempts
+constraint	keiro_workflows.keiro_workflows_created_at_not_null	NOT NULL created_at
+constraint	keiro_workflows.keiro_workflows_generation_not_null	NOT NULL generation
+constraint	keiro_workflows.keiro_workflows_pkey	PRIMARY KEY (workflow_id, workflow_name)
+constraint	keiro_workflows.keiro_workflows_status_chk	CHECK ((status = ANY (ARRAY['running'::text, 'suspended'::text, 'completed'::text, 'cancelled'::text, 'failed'::text])))
+constraint	keiro_workflows.keiro_workflows_status_not_null	NOT NULL status
+constraint	keiro_workflows.keiro_workflows_updated_at_not_null	NOT NULL updated_at
+constraint	keiro_workflows.keiro_workflows_workflow_id_not_null	NOT NULL workflow_id
+constraint	keiro_workflows.keiro_workflows_workflow_name_not_null	NOT NULL workflow_name
+index	keiro_awakeables_owner_idx	CREATE INDEX keiro_awakeables_owner_idx ON keiro.keiro_awakeables USING btree (owner_workflow_name, owner_workflow_id)
+index	keiro_awakeables_pending_idx	CREATE INDEX keiro_awakeables_pending_idx ON keiro.keiro_awakeables USING btree (status) WHERE (status = 'pending'::text)
+index	keiro_awakeables_pkey	CREATE UNIQUE INDEX keiro_awakeables_pkey ON keiro.keiro_awakeables USING btree (awakeable_id)
+index	keiro_dead_letters_dispatcher_created_at_idx	CREATE INDEX keiro_dead_letters_dispatcher_created_at_idx ON keiro.keiro_dead_letters USING btree (dispatcher_name, created_at DESC)
+index	keiro_dead_letters_dispatcher_name_source_event_id_emit_ind_key	CREATE UNIQUE INDEX keiro_dead_letters_dispatcher_name_source_event_id_emit_ind_key ON keiro.keiro_dead_letters USING btree (dispatcher_name, source_event_id, emit_index)
+index	keiro_dead_letters_pkey	CREATE UNIQUE INDEX keiro_dead_letters_pkey ON keiro.keiro_dead_letters USING btree (dead_letter_id)
+index	keiro_inbox_backlog_idx	CREATE INDEX keiro_inbox_backlog_idx ON keiro.keiro_inbox USING btree (status) WHERE (status = ANY (ARRAY['processing'::text, 'failed'::text]))
+index	keiro_inbox_completed_idx	CREATE INDEX keiro_inbox_completed_idx ON keiro.keiro_inbox USING btree (completed_at) WHERE (status = 'completed'::text)
+index	keiro_inbox_pkey	CREATE UNIQUE INDEX keiro_inbox_pkey ON keiro.keiro_inbox USING btree (source, dedupe_key)
+index	keiro_outbox_claim_order_idx	CREATE INDEX keiro_outbox_claim_order_idx ON keiro.keiro_outbox USING btree (created_at, outbox_id) WHERE (status = ANY (ARRAY['pending'::text, 'failed'::text]))
+index	keiro_outbox_head_of_line_idx	CREATE INDEX keiro_outbox_head_of_line_idx ON keiro.keiro_outbox USING btree (source, message_key, created_at) WHERE ((status <> ALL (ARRAY['sent'::text, 'dead'::text])) AND (message_key IS NOT NULL))
+index	keiro_outbox_pending_idx	CREATE INDEX keiro_outbox_pending_idx ON keiro.keiro_outbox USING btree (status, next_attempt_at, created_at)
+index	keiro_outbox_pkey	CREATE UNIQUE INDEX keiro_outbox_pkey ON keiro.keiro_outbox USING btree (outbox_id)
+index	keiro_outbox_sent_gc_idx	CREATE INDEX keiro_outbox_sent_gc_idx ON keiro.keiro_outbox USING btree (published_at) WHERE (status = 'sent'::text)
+index	keiro_outbox_source_message_id_key	CREATE UNIQUE INDEX keiro_outbox_source_message_id_key ON keiro.keiro_outbox USING btree (source, message_id)
+index	keiro_outbox_source_order_idx	CREATE INDEX keiro_outbox_source_order_idx ON keiro.keiro_outbox USING btree (source, created_at, outbox_id) WHERE (status <> ALL (ARRAY['sent'::text, 'dead'::text]))
+index	keiro_projection_dedup_applied_at_idx	CREATE INDEX keiro_projection_dedup_applied_at_idx ON keiro.keiro_projection_dedup USING btree (applied_at)
+index	keiro_projection_dedup_pkey	CREATE UNIQUE INDEX keiro_projection_dedup_pkey ON keiro.keiro_projection_dedup USING btree (projection_name, event_id)
+index	keiro_read_models_pkey	CREATE UNIQUE INDEX keiro_read_models_pkey ON keiro.keiro_read_models USING btree (name)
+index	keiro_snapshots_compat_idx	CREATE INDEX keiro_snapshots_compat_idx ON keiro.keiro_snapshots USING btree (stream_id, state_codec_version, regfile_shape_hash, stream_version DESC)
+index	keiro_snapshots_pkey	CREATE UNIQUE INDEX keiro_snapshots_pkey ON keiro.keiro_snapshots USING btree (stream_id)
+index	keiro_subscription_shards_lease_idx	CREATE INDEX keiro_subscription_shards_lease_idx ON keiro.keiro_subscription_shards USING btree (subscription_name, lease_expires_at)
+index	keiro_subscription_shards_owner_idx	CREATE INDEX keiro_subscription_shards_owner_idx ON keiro.keiro_subscription_shards USING btree (subscription_name, owner_worker_id)
+index	keiro_subscription_shards_pkey	CREATE UNIQUE INDEX keiro_subscription_shards_pkey ON keiro.keiro_subscription_shards USING btree (subscription_name, bucket)
+index	keiro_timers_due_idx	CREATE INDEX keiro_timers_due_idx ON keiro.keiro_timers USING btree (status, fire_at, process_manager_name) WHERE (status = ANY (ARRAY['scheduled'::text, 'firing'::text]))
+index	keiro_timers_pkey	CREATE UNIQUE INDEX keiro_timers_pkey ON keiro.keiro_timers USING btree (timer_id)
+index	keiro_workflow_children_parent_idx	CREATE INDEX keiro_workflow_children_parent_idx ON keiro.keiro_workflow_children USING btree (parent_id, parent_name)
+index	keiro_workflow_children_pkey	CREATE UNIQUE INDEX keiro_workflow_children_pkey ON keiro.keiro_workflow_children USING btree (child_id, child_name)
+index	keiro_workflow_children_running_idx	CREATE INDEX keiro_workflow_children_running_idx ON keiro.keiro_workflow_children USING btree (status) WHERE (status = 'running'::text)
+index	keiro_workflow_steps_pkey	CREATE UNIQUE INDEX keiro_workflow_steps_pkey ON keiro.keiro_workflow_steps USING btree (workflow_id, workflow_name, generation, step_name)
+index	keiro_workflow_steps_workflow_idx	CREATE INDEX keiro_workflow_steps_workflow_idx ON keiro.keiro_workflow_steps USING btree (workflow_id, workflow_name, generation)
+index	keiro_workflows_active_idx	CREATE INDEX keiro_workflows_active_idx ON keiro.keiro_workflows USING btree (status) WHERE (status = ANY (ARRAY['running'::text, 'suspended'::text]))
+index	keiro_workflows_gc_idx	CREATE INDEX keiro_workflows_gc_idx ON keiro.keiro_workflows USING btree (status, completed_at)
+index	keiro_workflows_pkey	CREATE UNIQUE INDEX keiro_workflows_pkey ON keiro.keiro_workflows USING btree (workflow_id, workflow_name)
+table	keiro_awakeables	kind=r
+table	keiro_dead_letters	kind=r
+table	keiro_inbox	kind=r
+table	keiro_outbox	kind=r
+table	keiro_projection_dedup	kind=r
+table	keiro_read_models	kind=r
+table	keiro_snapshots	kind=r
+table	keiro_subscription_shards	kind=r
+table	keiro_timers	kind=r
+table	keiro_workflow_children	kind=r
+table	keiro_workflow_steps	kind=r
+table	keiro_workflows	kind=r
