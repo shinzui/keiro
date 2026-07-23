@@ -60,6 +60,7 @@ library
     Keiro.ReadModel
     Keiro.ReadModel.Rebuild
     Keiro.ReadModel.Schema
+    Keiro.ReplayAudit
     Keiro.Router
     Keiro.Snapshot
     Keiro.Snapshot.Codec
@@ -85,6 +86,7 @@ library
     Keiro.Workflow.Snapshot
     Keiro.Workflow.Types
 
+  other-modules:      Keiro.ReplayDigest
   reexported-modules:
     keiro-core:Keiro.Codec,
     keiro-core:Keiro.EventStream,
@@ -96,12 +98,14 @@ library
 
   hs-source-dirs:     src
   build-depends:
-    , aeson                                  >=2.2
+    , aeson                                  >=2.2.2    && <2.3
     , aeson-casing                           >=0.2
     , base                                   >=4.21     && <5
+    , base16-bytestring                      >=1.0.2    && <1.1
     , bytestring                             >=0.11
     , containers                             >=0.6
     , contravariant-extras                   >=0.3
+    , cryptohash-sha256                      >=0.11.102 && <0.12
     , deepseq                                >=1.5
     , effectful                              >=2.6
     , effectful-core                         >=2.6

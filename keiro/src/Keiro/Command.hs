@@ -44,6 +44,10 @@ changing the successful result. The same replay fold feeds transparent
 snapshot writes when the stream's 'Keiro.EventStream.SnapshotPolicy' fires;
 post-commit snapshot failures are likewise swallowed and counted. Every runner
 accepts a tracer for optional OpenTelemetry spans.
+
+The additive hydration primitives are also consumed by "Keiro.ReplayAudit".
+The audit deliberately calls the seeded and full variants separately so the
+public command-serving fallback cannot hide a stale or unreplayable seed.
 -}
 module Keiro.Command (
     -- * Results and errors
@@ -60,6 +64,12 @@ module Keiro.Command (
     runCommand,
     runCommandWithSql,
     runCommandWithSqlEvents,
+
+    -- * Hydration primitives (replay audit)
+    Hydrated (..),
+    hydrate,
+    hydrateFull,
+    hydrateSeeded,
 )
 where
 

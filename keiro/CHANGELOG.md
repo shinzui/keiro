@@ -6,6 +6,16 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Adds the read-only `Keiro.ReplayAudit` API for full or affected-event targeted
+  replay checks. Audits report hydration failures, compare accepted snapshot
+  seeds with full replay using RFC 8785 canonical JSON, emit stable SHA-256
+  digests, support bounded parallelism, and expose resumable checkpoints.
+- Exposes the existing `Hydrated`, `hydrate`, `hydrateFull`, and
+  `hydrateSeeded` primitives from `Keiro.Command` so audit tooling can compare
+  seeded and full replay without changing command execution.
+
 ### Changed
 
 - Adopts keiki 0.3 (`EdgeMode`, plan 143): a `ReplayOnly` edge is excluded

@@ -4,6 +4,7 @@ slug: add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories
 title: "Add a pre-deploy replay audit and decide-surface change advisories"
 kind: exec-plan
 created_at: 2026-07-23T12:19:38Z
+intention: intention_01ky7q57fbevsszaj32g77f6vt
 master_plan: "docs/masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md"
 ---
 
@@ -93,7 +94,7 @@ dispatch block prints a `RouterDecideSurfaceChanged` advisory.
 
 ## Progress
 
-- [ ] M1: `Keiro.ReplayAudit` core shipped (`auditStreams` with selection/budget/
+- [x] M1 (2026-07-23T18:42:11Z): `Keiro.ReplayAudit` core shipped (`auditStreams` with selection/budget/
       parallelism/watermark, `AuditTargeted`/`AuditFull` modes, digests, report
       rendering); `hydrateFull`/`hydrateSeeded`/`Hydrated` exported from
       `Keiro.Command`; keiro-test scenarios green (no-inverting-edge caught by a
@@ -119,7 +120,31 @@ dispatch block prints a `RouterDecideSurfaceChanged` advisory.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Kiroku's public `readCategory` API is correct for pagination but would read every
+  event in a category merely to discover a small affected stream set. The landed
+  selector instead uses Kiroku's documented `events(event_type)`,
+  `stream_events(original_stream_id, stream_version)`, and
+  `streams(category)` indexes through read-only Hasql statements; replay still uses
+  the public Store API. This is the plan's explicitly permitted dedicated-SQL
+  substitution.
+
+- `Keiki.Shape` uses SHA-256 internally but does not export its helper. With the
+  user's explicit permission to add a dependency in preference to a bespoke
+  implementation, the audit uses Aeson's RFC 8785 canonical encoder,
+  `cryptohash-sha256`, and `base16-bytestring`. Correctness still uses canonical
+  byte equality; the hash is a stable compact review identifier.
+
+- The full M1 database bar passed:
+
+  ```text
+  Keiro.ReplayAudit
+    catches a removed inverting edge while skipping unaffected streams [✔]
+    reports a stale accepted snapshot seed as a divergence [✔]
+    keeps clean digests stable and resumes without re-auditing [✔]
+
+  Finished in 80.4740 seconds
+  349 examples, 0 failures
+  ```
 
 
 ## Decision Log
@@ -207,8 +232,33 @@ implementation. Provide concise evidence.
   stream's `StateCodec` encode), not Haskell `Eq`.
   Rationale: `EventStream` state types do not universally carry `Eq`; the codec's encoder
   exists exactly when a snapshot exists, which is the only case with a seed to compare.
-  The digest is the SHA-256 of the same canonical encoding, so "seeded == full" and
-  "digest stable across binaries" share one canonicalization.
+  Aeson's `Data.Aeson.RFC8785.encodeCanonical` supplies the standard canonical
+  encoding and `cryptohash-sha256` supplies the plan's specified digest without
+  duplicating security-sensitive primitives. "Seeded == full" remains canonical-byte
+  equality, so the digest is an operator-facing identifier rather than the correctness
+  predicate.
+  Date: 2026-07-23
+
+- Decision: Add bounded dependencies on `cryptohash-sha256` 0.11.102.x and
+  `base16-bytestring` 1.0.2.x, and raise `aeson`'s lower bound to 2.2.2 for its
+  RFC 8785 module.
+  Rationale: The user explicitly preferred a proper dependency over a hacked local
+  implementation. The versions and APIs were checked against Hackage and their
+  upstream release tags after Mori confirmed they were not present in the local
+  dependency corpus.
+  Date: 2026-07-23
+
+- Decision: Targeted discovery uses dedicated, read-only SQL over Kiroku's documented
+  indexed schema, and checkpoints are the maximum global position of the last selected
+  stream at the discovery snapshot.
+  Rationale: Paging `readCategory` would transfer tens of millions of full payloads just
+  to filter their types, defeating the initiative's scale constraint. The selector
+  joins the category, event-type, and global-log indexes and returns only stream ids and
+  watermarks; `lookupStreamNames` and the public hydrate primitives remain the execution
+  path. Ordering streams by their latest global position makes `maxStreams` resumable
+  from one opaque Kiroku cursor without re-auditing an unchanged stream. A stream that
+  receives a later event may be selected again intentionally because its history
+  changed.
   Date: 2026-07-23
 
 - Decision: The decide-surface advisories compare the *pretty-printed spec surface*
@@ -359,17 +409,20 @@ whichever lands second — record the choice in both Decision Logs). Conformance
 regenerate once per landed plan; the 24-suite keiro-dsl green bar is the shared
 acceptance floor.
 
-Relevant ADRs: `docs/adr/` contains only
-`0001-keiro-pgmq-job-processing-telemetry-contract.md`, unrelated. The
-snapshot-discriminator and evolution-gate-inventory ADRs may exist by execution time
-(created by docs/plans/138/139); if the inventory ADR exists, this plan's close-out adds
-the audit rows to it.
+Relevant ADRs consulted during implementation:
+`docs/adr/0002-replay-only-edges-are-the-sanctioned-remedy-for-guard-tightening.md`
+defines the retained-edge remedy whose real-log relevance this audit checks;
+`docs/adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md`
+defines the manual-contract residual caught by seeded-vs-full comparison; and
+`docs/adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md`
+owns the gate inventory this plan extends at close-out. ADR 0001 remains unrelated.
 
 Term definitions. "Live stream" — a stream the service will hydrate again (non-terminal,
 or terminal but still receiving reads that can miss a snapshot). "Seed" — the
-`(state, registers, streamVersion)` a snapshot row decodes to. "Digest" — SHA-256 hex of
-the canonical JSON encoding of a stream's final `(state, registers)`; comparable across
-runs and binaries. "Replay-neutral" — a spec change under which every retained edge's
+`(state, registers, streamVersion)` a snapshot row decodes to. "Digest" — SHA-256 hex
+over RFC 8785 canonical JSON for a stream's final `(state, registers)`; comparable
+across runs and binaries, but not itself the byte-equality correctness predicate.
+"Replay-neutral" — a spec change under which every retained edge's
 pretty-printed guard/writes/emits/target surface and the whole decode surface are
 unchanged, so replay of existing data is bitwise identical by construction.
 "Affected set" — the conservative over-approximation of event types whose stored
@@ -465,17 +518,17 @@ context. `GlobalPosition` is kiroku's category position type.) Semantics of
    `(state, registers)` encodes differently (byte comparison of the codec's canonical
    encoding) from the full replay's, return `SeedDivergence` with both digests.
 3. Otherwise return `ReplayOk` with the full-replay version and, when a `stateCodec`
-   exists, the digest (SHA-256 hex over the canonical encoding; reuse a SHA-256 helper
-   already reachable in the dependency tree — keiki's `Keiki.Shape` ships one for
-   `regFileShapeHash`; do not add a new package).
+   exists, the SHA-256 digest over RFC 8785 canonical JSON. Canonical-byte equality,
+   not the digest, decides divergence.
 
-`auditStreams` drives selection: page `readCategory` from `resumeFrom` (or zero),
-collect distinct stream ids — in `AuditTargeted` mode only from rows whose event type is
-in the affected set (and, when `includeSnapshotStreams`, union the aggregate's
-snapshot-bearing streams via a snapshot-table scan for the category) — resolve names
-with `lookupStreamNames`, audit each accepted stream with `parallelism` workers, honour
-`maxStreams`, and emit the final page position as `checkpoint` so an interrupted or
-budget-capped run resumes instead of restarting. Count and report names `mkStream`
+`auditStreams` drives selection with dedicated read-only SQL over Kiroku's indexed
+category/event-type/global-log schema. In `AuditTargeted` mode it returns only stream
+ids containing an affected type (and, when `includeSnapshotStreams`, unions the
+aggregate's snapshot-bearing streams); `AuditFull` returns every non-empty category
+stream. Each selected row carries the stream's latest global position, so ordering by
+that opaque cursor, resolving names with `lookupStreamNames`, and checkpointing the last
+audited row makes `maxStreams` resumable without re-auditing an unchanged stream.
+Accepted streams run through `parallelism` workers. Count and report names `mkStream`
 rejects (a mis-wired `mkStream` must not silently audit nothing) and count skipped
 streams (the targeted mode's savings must be visible in the report). The audit is
 **read-only by construction**: it calls only read paths and `lookupSnapshotSeed`; it
@@ -735,11 +788,7 @@ collides textually with docs/plans/138's edits in the same package, rebase — b
 append-only. If the paged category filter proves too slow for targeted selection on a
 large replica, substitute a dedicated SQL statement over kiroku's category index and
 record it in the Decision Log — the selection contract (distinct streams containing
-affected types) is what matters, not the mechanism. If the digest helper choice proves
-wrong (no importable SHA-256 without a new dependency), fall back to the FNV-1a-64 fold
-precedent from `keiro-dsl/src/Keiro/Dsl/ReadModelShape.hs:33-58` for the digest only —
-the divergence *comparison* is byte equality of encodings and does not depend on the
-hash — and record the substitution in the Decision Log.
+affected types) is what matters, not the mechanism.
 
 
 ## Interfaces and Dependencies
@@ -758,7 +807,10 @@ runtime emits `keiro.snapshot.seed.divergence`. At the end of M4,
 `ProcessDecideSurfaceChanged`, `ProcessTimerPayloadChanged`, consumed by new rules in
 `Keiro.Dsl.Diff`.
 
-Dependencies: no new third-party packages (see Idempotence for the digest fallback).
+Dependencies: `aeson >= 2.2.2 && < 2.3` for RFC 8785 canonical JSON,
+`cryptohash-sha256 >= 0.11.102 && < 0.12` for SHA-256, and
+`base16-bytestring >= 1.0.2 && < 1.1` for lowercase hexadecimal rendering. These
+bounds were checked against the authoritative package registry and upstream tags.
 Coordination: docs/plans/138 (shared keiro command/snapshot-path files, the stale-fold
 test scenario this plan reuses, and the per-transition surface rendering the
 replay-impact verdict shares with `aggregateFoldSurface` — land order free, reconcile at

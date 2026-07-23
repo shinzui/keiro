@@ -42,7 +42,7 @@ ADR context: ADR 0001 (pgmq telemetry) is tangentially relevant to EP-3's job-co
 | 2 | Validate codecs and deprecated-event replayability at the stream boundary | docs/plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md | None | None | Complete |
 | 3 | Fix DSL upcaster lowering and adopt versioned job codecs | docs/plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md | None | EP-2 | Complete |
 | 4 | Correct the evolution documentation and deploy-ordering guidance | docs/plans/141-correct-the-evolution-documentation-and-deploy-ordering-guidance.md | None | EP-1, EP-2, EP-3, EP-5 | Complete |
-| 5 | Add a pre-deploy replay audit and decide-surface change advisories | docs/plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md | None | EP-1, EP-2, EP-3 | Not Started |
+| 5 | Add a pre-deploy replay audit and decide-surface change advisories | docs/plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md | None | EP-1, EP-2, EP-3 | In Progress |
 | 6 | Add first-class replay-only transitions for guard evolution | docs/plans/143-add-first-class-replay-only-transitions-for-guard-evolution.md | None | EP-1, EP-2, EP-5 | Complete (residuals: keiki release, EP-5 audit assertions) |
 
 

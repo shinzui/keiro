@@ -153,6 +153,7 @@ import Keiro.ProcessManager
 import Keiro.Projection
 import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild qualified as Rebuild
+import Keiro.ReplayAudit qualified as ReplayAudit
 import Keiro.Snapshot.Policy (shouldSnapshot, shouldSnapshotSpan)
 import Keiro.Stream qualified as Stream
 import Keiro.Subscription.Shard (
@@ -2070,6 +2071,175 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Store.runTransaction $
                         Tx.statement "snapshot-codec-rollback-overwrite" snapshotVersionForStreamStmt
             snapshotVersionAfter `shouldBe` Just (StreamVersion 2)
+
+    describe "Keiro.ReplayAudit" $ around (withFreshStore fixture) $ do
+        it "catches a removed inverting edge while skipping unaffected streams" $ \storeHandle -> do
+            let affectedTarget =
+                    stream "auditremove-affected" :: Stream CounterEventStream
+                unaffectedTarget =
+                    stream "auditremove-unaffected" :: Stream CounterEventStream
+                affected =
+                    ReplayAudit.AffectedSet
+                        { affectedEventTypes = Set.singleton (EventType "CounterAdded")
+                        , includeSnapshotStreams = False
+                        }
+                budget = ReplayAudit.defaultAuditBudget & #parallelism .~ 2
+                candidateTarget =
+                    ReplayAudit.AuditTarget
+                        { eventStream = auditedCounterEventStream
+                        , category = "auditremove"
+                        , mkStream = Just . Stream.Stream
+                        }
+                deployedTarget =
+                    ReplayAudit.AuditTarget
+                        { eventStream = counterEventStream
+                        , category = "auditremove"
+                        , mkStream = Just . Stream.Stream
+                        }
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions counterEventStream affectedTarget (Add 7)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions auditedCounterEventStream unaffectedTarget (Add 9)
+
+            Right candidateReport <-
+                Store.runStoreIO storeHandle $
+                    ReplayAudit.auditStreams
+                        (ReplayAudit.AuditTargeted affected)
+                        budget
+                        candidateTarget
+            candidateReport ^. #streamsSelected `shouldBe` 1
+            candidateReport ^. #streamsSkipped `shouldBe` 1
+            candidateReport ^. #failures `shouldBe` 1
+            candidateReport ^. #divergences `shouldBe` 0
+            candidateReport ^. #rejectedStreams `shouldBe` []
+            case candidateReport ^. #results of
+                [ ReplayAudit.StreamAuditResult
+                        _
+                        ( ReplayAudit.ReplayFailed
+                                (HydrationReplayFailed _ HydrationNoInvertingEdge)
+                            )
+                    ] -> pure ()
+                other ->
+                    expectationFailure
+                        ("expected a no-inverting-edge audit failure, got " <> show other)
+
+            Right deployedReport <-
+                Store.runStoreIO storeHandle $
+                    ReplayAudit.auditStreams
+                        (ReplayAudit.AuditTargeted affected)
+                        budget
+                        deployedTarget
+            ReplayAudit.auditExitCode [deployedReport] `shouldBe` 0
+
+            Right eventsAfterAudit <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward
+                        (StreamName "auditremove-affected")
+                        (StreamVersion 0)
+                        10
+            Vector.length eventsAfterAudit `shouldBe` 1
+
+        it "reports a stale accepted snapshot seed as a divergence" $ \storeHandle -> do
+            let target =
+                    stream "auditfold-stale" :: Stream SnapshotCounterEventStream
+                auditTarget =
+                    ReplayAudit.AuditTarget
+                        { eventStream = foldV2WithoutFingerprintBumpEventStream
+                        , category = "auditfold"
+                        , mkStream = Just . Stream.Stream
+                        }
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 7)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 8)
+
+            Right outcome <-
+                Store.runStoreIO storeHandle $
+                    ReplayAudit.auditStream auditTarget target
+            case outcome of
+                ReplayAudit.SeedDivergence
+                    { seedVersion = StreamVersion 2
+                    , seededDigest
+                    , fullDigest
+                    } ->
+                        seededDigest `shouldNotBe` fullDigest
+                other ->
+                    expectationFailure
+                        ("expected a stale-seed divergence, got " <> show other)
+
+        it "keeps clean digests stable and resumes without re-auditing" $ \storeHandle -> do
+            let targets =
+                    [ stream "auditclean-one" :: Stream SnapshotCounterEventStream
+                    , stream "auditclean-two" :: Stream SnapshotCounterEventStream
+                    ]
+                affected =
+                    ReplayAudit.AffectedSet
+                        { affectedEventTypes = Set.singleton (EventType "CounterAdded")
+                        , includeSnapshotStreams = False
+                        }
+                auditTarget =
+                    ReplayAudit.AuditTarget
+                        { eventStream = snapshotCounterEventStream
+                        , category = "auditclean"
+                        , mkStream = Just . Stream.Stream
+                        }
+                unbounded = ReplayAudit.defaultAuditBudget & #parallelism .~ 2
+            for_ (zip targets [10, 20]) $ \(target, amount) -> do
+                Right (Right _) <-
+                    Store.runStoreIO storeHandle $
+                        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add amount)
+                Right (Right _) <-
+                    Store.runStoreIO storeHandle $
+                        runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add (amount + 1))
+                pure ()
+
+            Right firstFull <-
+                Store.runStoreIO storeHandle $
+                    ReplayAudit.auditStreams ReplayAudit.AuditFull unbounded auditTarget
+            Right secondFull <-
+                Store.runStoreIO storeHandle $
+                    ReplayAudit.auditStreams ReplayAudit.AuditFull unbounded auditTarget
+            firstFull ^. #streamsSelected `shouldBe` 2
+            firstFull ^. #streamsSkipped `shouldBe` 0
+            firstFull ^. #results `shouldBe` secondFull ^. #results
+
+            Right firstPage <-
+                Store.runStoreIO storeHandle $
+                    ReplayAudit.auditStreams
+                        (ReplayAudit.AuditTargeted affected)
+                        (unbounded & #maxStreams ?~ 1)
+                        auditTarget
+            firstPage ^. #streamsSelected `shouldBe` 1
+            firstPage ^. #checkpoint `shouldSatisfy` isJust
+            Right secondPage <-
+                Store.runStoreIO storeHandle $
+                    ReplayAudit.auditStreams
+                        (ReplayAudit.AuditTargeted affected)
+                        ( unbounded
+                            & #maxStreams
+                            ?~ 1
+                            & #resumeFrom
+                            .~ (firstPage ^. #checkpoint)
+                        )
+                        auditTarget
+            secondPage ^. #streamsSelected `shouldBe` 1
+            let firstNames = Set.fromList ((^. #streamName) <$> firstPage ^. #results)
+                secondNames = Set.fromList ((^. #streamName) <$> secondPage ^. #results)
+            Set.disjoint firstNames secondNames `shouldBe` True
+            firstNames <> secondNames
+                `shouldBe` Set.fromList (Stream.streamName <$> targets)
+
+            Right targeted <-
+                Store.runStoreIO storeHandle $
+                    ReplayAudit.auditStreams
+                        (ReplayAudit.AuditTargeted affected)
+                        unbounded
+                        auditTarget
+            targeted ^. #results `shouldBe` firstFull ^. #results
 
     describe "Keiro.Connection projection schema" $
         around (withFreshResourceStoreWith fixture (withProjectionSchema "app_reads")) $ do
@@ -9370,6 +9540,30 @@ counterEventStreamDef =
 
 counterEventStream :: ValidatedCounterEventStream
 counterEventStream = mkEventStreamOrThrow "counter" counterEventStreamDef
+
+auditedCounterEventStream :: ValidatedCounterEventStream
+auditedCounterEventStream =
+    mkEventStreamOrThrow
+        "counter-audited-only"
+        (counterEventStreamDef & #transducer .~ auditedCounterTransducer)
+
+auditedCounterTransducer :: SymTransducer (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
+auditedCounterTransducer =
+    SymTransducer
+        { edgesOut = \case
+            Counting ->
+                [ Edge
+                    { guard = matchInCtor addCtor
+                    , update = UKeep
+                    , output = [pack addCtor counterAuditedCtor (inpCtor addCtor #amount *: oNil)]
+                    , target = Counting
+                    , mode = Keiki.Live
+                    }
+                ]
+        , initial = Counting
+        , initialRegs = RNil
+        , isFinal = \_ -> False
+        }
 
 noOpCounterEventStreamDef :: CounterEventStream
 noOpCounterEventStreamDef =
