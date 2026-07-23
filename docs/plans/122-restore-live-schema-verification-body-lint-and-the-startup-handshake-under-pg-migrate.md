@@ -55,7 +55,7 @@ documented in `docs/user/migrations.md`.
 - [x] (2026-07-23T22:42:00Z) Milestone 1: pure lint module ported into the default test suite; unqualified fixture fails; all 20 embedded bodies pass; `embeddedMigrationEntries` exported from the library. Validation: `cabal build keiro-migrations` and `cabal test keiro-migrations-test --test-show-details=direct` passed (14 examples, 0 failures).
 - [x] (2026-07-23T22:49:00Z) Milestone 2: `missingMigrations` and `StartupHandshake` exported from `Keiro.Migrations`; fresh/fully-migrated/half-applied tests green; `docs/user/migrations.md` Application startup section documents the handshake. Validation: `cabal build keiro-migrations` and `cabal test keiro-migrations-test --test-show-details=direct` passed (17 examples, 0 failures).
 - [x] (2026-07-23T23:02:00Z) Milestone 3: `Keiro.Migrations.SchemaCheck` library module with canonical snapshot, comparison, and embedded expected snapshot; checked-in `expected-schema/native/keiro-v18.txt` generated and validated by a suite test with a regeneration mode. Validation: the full suite passed (19 examples); the snapshot contains 300 lines including `keiro_dead_letters`, `state_shape_hash`, and `failure_reason`; deleting line 1 failed with the exact expected/actual object names; regeneration restored the same SHA-256 `a78c933c490b3672c2ad2d907b18d024e7b06e128cbcd44ee11f5b027445eca3`.
-- [ ] Milestone 4: `keiro-migrate verify-schema` subcommand wired; drifted-database integration test exits with named drifted objects; `docs/user/migrations.md` documents `verify-schema`; suite green end to end.
+- [x] (2026-07-23T23:12:00Z) Milestone 4: `keiro-migrate verify-schema` subcommand wired; drifted-database integration test exits with named drifted objects; `docs/user/migrations.md` documents `verify-schema`; suite green end to end. Validation: `cabal test keiro-migrations-test --test-show-details=direct` passed (20 examples); CLI help lists `verify-schema`; a local scratch database returned exit 0 with `schema verification succeeded`, then exit 1 naming `keiro_outbox_pending_idx` after that index was dropped; the scratch database was removed.
 
 
 ## Surprises & Discoveries
@@ -86,6 +86,26 @@ documented in `docs/user/migrations.md`.
   `/Users/shinzui/Keikaku/bokuno/pg-migrate`; inspection of the 1.1.0.0 facade and
   `Runner.Types` confirmed the constructor and `useDedicatedConnection` field are not
   exported.
+  Date: 2026-07-23
+
+- Discovery: pg-migrate-cli's public facade exports the `CliOutcome.command` record field,
+  which conflicts with optparse-applicative's `command` parser builder under GHC 9.12.
+  Evidence: the first Milestone 4 build failed with GHC-87543 at the new subcommand; using
+  `Options.Applicative.command` resolves the namespace without narrowing either public
+  import.
+  Date: 2026-07-23
+
+- Discovery: `pg_get_expr` renders a `regclass` default with or without its schema prefix
+  according to the connection's active `search_path`. The snapshot generated through
+  `withMigratedDatabase` contained
+  `nextval('keiro.keiro_dead_letters_dead_letter_id_seq'::regclass)`, while the first
+  `withKeiroPg` verification (role `keiro`, whose `$user` schema is visible) rendered the
+  same unchanged default without `keiro.` and falsely reported drift.
+  Evidence: the Milestone 4 clean-database assertion returned a `ChangedObject` for
+  `keiro_dead_letters.dead_letter_id`. The snapshot statement now calls
+  `set_config('search_path', 'pg_catalog', true)` through a materialized CTE referenced by
+  every union branch; the setting is local to that one statement and makes deparsing
+  role-independent.
   Date: 2026-07-23
 
 

@@ -196,6 +196,33 @@ main = hspec $ do
                             expectationFailure (snapshotMismatch snapshotPath expected actual)
             either (expectationFailure . show) pure result
 
+        it "detects named drift after a hand-altered database" $ do
+            plan <- requirePlan
+            withKeiroPg $ \database -> do
+                let settings = Pg.connectionSettings database
+                _ <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
+                clean <- verifyExpectedSchema settings >>= requireRight
+                clean `shouldBe` []
+                withConnection settings $ \connection ->
+                    useSession
+                        connection
+                        ( Session.script
+                            """
+                            DROP INDEX keiro.keiro_outbox_pending_idx;
+                            ALTER TABLE keiro.keiro_outbox
+                              ALTER COLUMN correlation_id TYPE character varying(64)
+                              USING correlation_id::text;
+                            """
+                        )
+                drifts <- verifyExpectedSchema settings >>= requireRight
+                let rendered = renderSchemaDrift <$> drifts
+                rendered
+                    `shouldSatisfy` any
+                        (Text.isInfixOf "keiro_outbox_pending_idx")
+                rendered
+                    `shouldSatisfy` any
+                        (Text.isInfixOf "keiro_outbox.correlation_id")
+
     describe "fresh native databases" $ do
         it "applies Kiroku then Keiro, verifies strictly, and is repeatable" $ do
             plan <- requirePlan

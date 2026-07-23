@@ -39,23 +39,30 @@ export DATABASE_URL='host=/tmp port=5432 dbname=service user=service_owner'
 cabal run keiro-migrate -- plan
 cabal run keiro-migrate -- status
 cabal run keiro-migrate -- verify
+cabal run keiro-migrate -- verify-schema
 cabal run keiro-migrate -- up
 cabal run keiro-migrate -- verify
+cabal run keiro-migrate -- verify-schema
 ```
 
 - `plan` prints the embedded component and migration order without changing the
   database.
 - `status` compares declared migrations with the durable `pgmigrate` ledger.
-- `verify` is the strict deployment gate. It rejects pending, changed,
-  reordered, repaired, or unknown history.
+- `verify` is the strict plan-versus-ledger gate. It rejects pending, changed,
+  reordered, repaired, or unknown migration history.
+- `verify-schema` compares the live tables, columns, constraints, and indexes in
+  the `keiro` schema with the embedded PostgreSQL 18 expected snapshot. Run it
+  after restores and cutovers, and alongside `verify` in deployment, so a clean
+  ledger cannot conceal live object drift.
 - `up` acquires the shared advisory lock and applies the complete pending plan
   in dependency order. Do not select a subset during deployment.
 
 Database-backed commands accept `--database-url`; otherwise `keiro-migrate`
-reads `DATABASE_URL`. Add `--json` for machine-readable output. The `up` and
+reads `DATABASE_URL`. The pg-migrate commands accept `--json` for
+machine-readable output; `verify-schema` currently emits text. The `up` and
 `repair` commands also accept `--no-wait`, `--lock-timeout`, and
-`--statement-timeout`; use them only as explicit deployment-policy choices.
-The defaults preserve serialized migration execution.
+`--statement-timeout`; use them only as explicit deployment-policy choices. The
+defaults preserve serialized migration execution.
 
 `pg-migrate` commits transactional SQL and its ledger row atomically.
 Nontransactional migrations use durable running/applied/failed states. If one
@@ -165,6 +172,17 @@ cabal test keiro-migrations:keiro-migrations-test
 cabal test -flegacy-codd-tools \
   keiro-migrations:keiro-migrations-legacy-test
 ```
+
+After an intentional PostgreSQL 18 schema change, regenerate the native
+expected snapshot explicitly and review its diff:
+
+```bash
+KEIRO_REGENERATE_EXPECTED_SCHEMA=1 \
+  cabal test keiro-migrations-test \
+  --test-options='--match "checked-in snapshot"'
+```
+
+The default suite never regenerates the file; it fails on drift.
 
 Back up persistent databases and prove restore procedures before framework
 upgrades. Migration recovery is forward-only: restore or append a reviewed

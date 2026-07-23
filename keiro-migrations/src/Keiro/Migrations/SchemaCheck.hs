@@ -167,11 +167,18 @@ schemaSnapshotStatement :: Statement Text [Text]
 schemaSnapshotStatement =
     Statement.preparable
         """
-        SELECT line FROM (
+        WITH configured AS MATERIALIZED (
+          SELECT set_config('search_path', 'pg_catalog', true) AS search_path
+        )
+        SELECT line
+        FROM configured
+        CROSS JOIN LATERAL (
           SELECT 'table' || E'\t' || c.relname || E'\t' || 'kind=r' AS line
             FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
-            WHERE n.nspname = $1 AND c.relkind = 'r'
+            WHERE n.nspname = $1
+              AND c.relkind = 'r'
+              AND configured.search_path = 'pg_catalog'
           UNION ALL
           SELECT 'column' || E'\t' || c.relname || '.' || a.attname || E'\t'
                  || format_type(a.atttypid, a.atttypmod)
@@ -186,6 +193,7 @@ schemaSnapshotStatement =
               AND c.relkind = 'r'
               AND a.attnum > 0
               AND NOT a.attisdropped
+              AND configured.search_path = 'pg_catalog'
           UNION ALL
           SELECT 'constraint' || E'\t' || rel.relname || '.' || con.conname || E'\t'
                  || pg_get_constraintdef(con.oid)
@@ -193,6 +201,7 @@ schemaSnapshotStatement =
             JOIN pg_class rel ON rel.oid = con.conrelid
             JOIN pg_namespace n ON n.oid = rel.relnamespace
             WHERE n.nspname = $1
+              AND configured.search_path = 'pg_catalog'
           UNION ALL
           SELECT 'index' || E'\t' || ci.relname || E'\t'
                  || pg_get_indexdef(i.indexrelid)
@@ -201,6 +210,7 @@ schemaSnapshotStatement =
             JOIN pg_class ct ON ct.oid = i.indrelid
             JOIN pg_namespace n ON n.oid = ct.relnamespace
             WHERE n.nspname = $1
+              AND configured.search_path = 'pg_catalog'
         ) snapshot
         ORDER BY line COLLATE "C"
         """
