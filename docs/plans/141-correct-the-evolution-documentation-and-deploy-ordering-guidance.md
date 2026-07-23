@@ -56,7 +56,7 @@ page.
 - [x] M1 (2026-07-23T18:16:15Z): `codecs-and-event-evolution.md` and `evolve-events-safely.md` corrected against current `Keiro.Codec`; companion-guide cross-links added; `just website-verify` passed (163 HTML pages).
 - [x] M2 (2026-07-23T18:17:45Z): `snapshots.md` corrected (`Custom`/`Terminality`; three-component discriminator and manual-bump residual documented); `replay-safety.md` now covers evolution over time, retirement, replay-only edges, and the planned real-log audit; `just website-verify` passed (163 HTML pages).
 - [x] M3 (2026-07-23T18:20:16Z): `docs/user/deploy-ordering.md` written with nine current rollout rule groups; `docs/user/README.md` indexed it; feature-doc pointers landed; `just website-verify` passed (163 HTML pages).
-- [ ] Close-out: planned-gate references flipped to present tense for any of plans 138/139/140/142 that landed before this plan closes; master plan 24 EP-4 box ticked; ADR distillation pass.
+- [x] Close-out (2026-07-23T18:26:25Z): plans 138/139/140 documented in present tense and plan 142 kept explicitly planned; master plan 24 EP-4 registry/progress updated; ADR 0004 distilled with durable rollout constraints; final `just website-verify` passed.
 
 
 ## Surprises & Discoveries
@@ -135,10 +135,37 @@ implementation. Provide concise evidence.
   gate status and links; it does not restructure or replace the guide.
   Date: 2026-07-23
 
+- Decision: Keep plan 142's replay-impact verdict, targeted audit, sampled seed witness,
+  and decide/timer advisories explicitly in future tense while documenting the manual
+  procedures that apply now.
+  Rationale: Plans 138, 139, and 140 are complete on the current branch, while plan 142's
+  Progress section remains entirely unchecked. The documentation must distinguish a
+  shipped static/startup gate from the real-log coverage still under construction.
+  Date: 2026-07-23
+
+- Decision: Distill rollout ordering into the existing evolution-gate inventory, ADR
+  0004, instead of creating a separate ADR.
+  Rationale: The stop-the-world/blue-green codec cutover, workers-before-producers queue
+  rollout, decide-surface drain, and manual timer/integration/workflow rules are operational
+  consequences of the evidence-boundary architecture ADR 0004 already owns. Keeping them
+  there makes the gate and its required deployment procedure one durable record.
+  Date: 2026-07-23
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-07-23. The four drifted reference documents now match the current
+`Keiro.Codec`, `SnapshotPolicy`, snapshot discriminator, and replay-only retirement
+contracts. `docs/user/deploy-ordering.md` is the indexed, operator-facing source for nine
+durable rollout surfaces, and the relevant codec, snapshot, replay, inbox/outbox,
+process-manager/timer, and workflow pages point to it.
+
+The close-out truth sweep also repaired the companion evolution guide after discovering
+that it still presented plans 138, 139, and 140 as future work. Plan 142 remains clearly
+labelled as planned everywhere: current readers receive the manual production-copy replay
+and drain procedures without being promised a command that does not exist. Three milestone
+and one final `just website-verify` runs built the documentation and reported no broken
+file links across 163 HTML pages. No source-code behavior changed.
 
 
 ## Context and Orientation
@@ -496,3 +523,12 @@ descriptions; quoted Decision Log contracts). Source-of-truth files verified aga
 `keiro/src/Keiro/Timer.hs`, `keiro/src/Keiro/Timer/Types.hs`,
 `keiro/src/Keiro/Router.hs`, `keiro/src/Keiro/Workflow/Resume.hs`,
 `keiro-pgmq/src/Keiro/PGMQ/Codec.hs`, `keiro-dsl/src/Keiro/Dsl/Diff.hs`.
+
+
+---
+
+Revision note (2026-07-23): implementation expanded the close-out truth sweep to include
+targeted status corrections in `docs/guides/evolution-and-replayability.md`. The original
+cross-link-only exclusion became unsafe after the guide was found to describe completed
+plans 138, 139, and 140 as unlanded; the guide's structure stayed intact while shipped
+gate descriptions and the coverage table were brought current.

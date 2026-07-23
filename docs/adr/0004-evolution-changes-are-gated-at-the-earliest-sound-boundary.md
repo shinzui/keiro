@@ -56,6 +56,28 @@ The landed inventory is:
 Plan 142 must extend it with replay-impact verdicts, targeted real-log audit
 coverage, and sampled seed verification.
 
+The same evidence boundaries determine rollout ordering:
+
+- An aggregate codec has one version for both writing and decoding. A version
+  bump therefore cannot run against a stream category with mixed old and new
+  replicas; use stop-the-world or blue/green cutover. After the first
+  new-version event, rollback is roll-forward-only because old code returns
+  `VersionAhead`.
+- Versioned job queues deploy workers before producers. A future envelope is
+  retried as `JobPayloadFromFuture`, consuming the configured delivery budget;
+  changing a non-empty queue between bare and `{v,t,data}` shapes requires a
+  drain or a transitional dual decoder.
+- Router and process-manager decide changes require a drained redelivery
+  window. Deterministic target-command ids intentionally confirm overlaps as
+  benign duplicates, so mixed-version fan-out otherwise merges silently.
+- Timer payloads, cross-service integration payloads, and workflow step results
+  have no automatic migration boundary. Firers/consumers must learn new shapes
+  before producers write them, old decoders remain until backlogs drain, and a
+  changed workflow result gets a new step name.
+- Once plan 142 lands, non-neutral transducer changes also require its targeted
+  real-log audit before traffic switches. Full-store replay remains a
+  one-time-cutover and forensics mode, not a routine deploy gate.
+
 
 ## Consequences
 

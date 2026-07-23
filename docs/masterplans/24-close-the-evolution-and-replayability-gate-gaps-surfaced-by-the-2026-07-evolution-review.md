@@ -41,7 +41,7 @@ ADR context: ADR 0001 (pgmq telemetry) is tangentially relevant to EP-3's job-co
 | 1 | Gate snapshot staleness on fold changes | docs/plans/138-gate-snapshot-staleness-on-fold-changes.md | None | None | Complete |
 | 2 | Validate codecs and deprecated-event replayability at the stream boundary | docs/plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md | None | None | Complete |
 | 3 | Fix DSL upcaster lowering and adopt versioned job codecs | docs/plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md | None | EP-2 | Complete |
-| 4 | Correct the evolution documentation and deploy-ordering guidance | docs/plans/141-correct-the-evolution-documentation-and-deploy-ordering-guidance.md | None | EP-1, EP-2, EP-3, EP-5 | In Progress |
+| 4 | Correct the evolution documentation and deploy-ordering guidance | docs/plans/141-correct-the-evolution-documentation-and-deploy-ordering-guidance.md | None | EP-1, EP-2, EP-3, EP-5 | Complete |
 | 5 | Add a pre-deploy replay audit and decide-surface change advisories | docs/plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md | None | EP-1, EP-2, EP-3 | Not Started |
 | 6 | Add first-class replay-only transitions for guard evolution | docs/plans/143-add-first-class-replay-only-transitions-for-guard-evolution.md | None | EP-1, EP-2, EP-5 | Complete (residuals: keiki release, EP-5 audit assertions) |
 
@@ -73,7 +73,7 @@ Cross-plan decision for ADR promotion: the snapshot-discriminator contract; the 
 - [x] EP-2 (2026-07-23): `mkCodec` runs at the stream boundary; duplicate-rung and vanished-rung evolutions fail at startup and are refused by new validator rules.
 - [x] EP-2 (2026-07-23): Two-stage retirement (`retiring`, then `deprecated` plus replay-only) is checked/advised; diff no longer recommends decode-only deprecation; versioned old-payload goldens decode through `decodeRaw` in CI.
 - [x] EP-3 (2026-07-23): Generated rungs dispatch on the wire tag into event-specific holes and pass foreign kinds through; genuine old payloads run in the harness; scaffolded workqueues emit versioned job codecs.
-- [ ] EP-4: Four drifted docs corrected; deploy-ordering rules documented (including the replay audit as the standard pre-deploy gate); guide cross-linked.
+- [x] EP-4 (2026-07-23): Four drifted docs and the companion guide corrected; deploy-ordering rules documented and indexed, with the replay audit kept explicitly planned until EP-5 lands.
 - [ ] EP-5: Replay audit library and generated per-context wiring shipped; the no-inverting-edge and stale-seed scenarios are caught against a real store pre-deploy; digests stable across runs.
 - [ ] EP-5: Router/process decide-surface and timer-payload diff advisories fire on fixture pairs with drain-before-deploy guidance; jitsurei reference assembly added.
 - [x] EP-6 (2026-07-23): keiki `EdgeMode` landed (forward-excluded, two-phase inversion-included, dead-edge-clean without a reachability change, same-mode ambiguity-checked; keiki 0.3.0.0, commit `a8d6377`); black-acuity regression green with a replay-only twin and red without (keiro `48ef795`).
@@ -96,6 +96,7 @@ Cross-plan decision for ADR promotion: the snapshot-discriminator contract; the 
 - EP-1 completion (2026-07-23): Hackage serves keiki, keiki-codec-json, and keiki-codec-json-test 0.3.1.0; after refreshing Cabal to index state `2026-07-23T15:51:41Z`, keiro built and passed its full plan-138 acceptance bar without the local dependency overlay. The upstream v0.3.1.0 tag remains a maintainer-owned release-administration follow-up; it does not block dependency resolution or EP-1's shipped behavior.
 - EP-2 completion (2026-07-23): the first full DSL bar found `retiring` could be swallowed as a state name when no command preceded the event; QuickCheck seed 180655211 pinned the ambiguity. Reserving the marker fixed that seed, after which all 24 DSL suites, 227 unit examples, and the v1 `decodeRaw` golden passed. The mutation check proved removing the upcaster fails the golden.
 - EP-3 completion audit (2026-07-23): the hurried partial implementation could not compile because generated `QueueCodec` exported `reservation_workJobCodec` while consumers imported `reservationWorkJobCodec`, and the fresh-skeleton fixture omitted the new generated module. Lower-camel normalization and complete fixture/Cabal wiring repaired both. The audit also corrected an inaccurate real-database acceptance claim: the existing queue suites are pure, so they now pin the exact `{v,t,data}` `JobCodec` boundary and compile it into live `Job` values instead.
+- EP-4 close-out (2026-07-23): the companion evolution guide was nominally excluded from EP-4 edits but still described EP-1/2/3 as future work (`mkCodec` not called, current-shape-only harnesses, two-component snapshot discriminator, unversioned generated queues). Cross-linking corrected reference pages into it would have created contradictory user guidance, so EP-4 performed a targeted shipped-gate truth sweep and recorded the scope reconciliation in plan 141.
 
 
 ## Decision Log
@@ -158,13 +159,15 @@ Cross-plan decision for ADR promotion: the snapshot-discriminator contract; the 
 
 ## Outcomes & Retrospective
 
-- EP-1, EP-2, and EP-3 are complete. EP-2 closed the codec-construction gap, refuses the two
+- EP-1, EP-2, EP-3, EP-4, and EP-6 are complete. EP-2 closed the codec-construction gap, refuses the two
   reachable poisoned DSL shapes, made event retirement an explicit two-stage protocol,
   corrected diff classifications, and established the versioned old-payload golden
   convention. EP-3 now lowers same-source event upcasts into a safe tag dispatcher,
   embeds genuine old-payload goldens in generated harnesses, and emits versioned queue
-  codecs. The remaining initiative work is EP-4 (documentation truth) and EP-5
-  (real-log replay audit and decide advisories).
+  codecs. EP-4 corrected the reference and narrative evolution documentation, added the
+  indexed nine-surface deploy-ordering reference, and distilled rollout constraints into
+  ADR 0004. The remaining initiative work is EP-5 (real-log replay audit, sampled seed
+  witness, and decide/timer advisories).
 
 
 ---
@@ -185,3 +188,10 @@ Revision note (2026-07-23, third pass): Added EP-6 (docs/plans/143 — first-cla
 Revision note (2026-07-23, second pass): EP-5's audit redesigned from "replay every live stream pre-deploy" to the differential/tiered form after the user flagged the scale constraint (stores hold tens of millions of events): replay-impact verdict at diff time, targeted audit over the affected event-type set only, full sweep reserved for one-time cutovers, and a sampled runtime seed-verification witness replacing any scheduled sweep for the manual-bump residual. Plan 142, this MasterPlan's Vision/Decomposition/Decision Log, and the guide's deploy-ordering bullet updated together.
 
 Revision note (2026-07-23): Update pass driven by the fleet-migration completeness question — "after this MasterPlan, can any change to a keiki transducer (aggregate commands or process-manager actions) still silently break register-state reconstruction or replay?" A code-verified audit (Surprises & Discoveries, "Completeness audit" entries) confirmed PM state is transitively covered by the aggregate gates, and found two unclosed classes plus two unassigned guide promises. Changes: added EP-5 (docs/plans/142 — pre-deploy replay audit + decide-surface/timer-payload diff advisories); added the explicit exit criterion to Vision & Scope; updated Decomposition Strategy, Registry (EP-4 gains soft-dep EP-5), Dependency Graph, Integration Points (four-way Scaffold/Diff splits; keiro audit-module ownership), and Progress; corrected the companion guide's stale pointers (decide-surface advisory and old-log replay gate now cite plan 142); cascaded cross-references into plans 138, 139, and 141.
+
+Revision note (2026-07-23, EP-4 closeout): plan 141 completed. The four drifted
+reference docs match the current codec, snapshot, and replay contracts; the new indexed
+`docs/user/deploy-ordering.md` records nine durable rollout surfaces; feature pages link
+to it; and the companion guide's shipped-gate descriptions were reconciled after a stale
+future-tense sweep. Registry and EP-4 progress are complete, ADR 0004 now records the
+durable rollout implications, and EP-5 is the initiative's only remaining child.
