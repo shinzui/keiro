@@ -332,10 +332,10 @@ data Command = Command
     deriving stock (Eq, Show, Generic)
 
 {- | @event Name { … }@ or @event Name = fields(Command)@. EP-2 (evolution) adds
-the version/upcaster/deprecation fields: an unversioned event is @evVersion = 1@,
-@evUpcastFrom = Nothing@, @evDeprecated = False@, reproducing the EP-1 surface.
-These fields live on the shared 'Event' so every node family's events inherit
-schema-versioning for free.
+the version/upcaster/retirement fields: an unversioned event is @evVersion = 1@,
+@evUpcastFrom = Nothing@, @evRetiring = False@, and @evDeprecated = False@,
+reproducing the EP-1 surface. These fields live on the shared 'Event' so every
+node family's events inherit schema-versioning for free.
 -}
 data Event = Event
     { evName :: !Name
@@ -346,9 +346,16 @@ data Event = Event
     {- ^ The source version this shape migrates /from/, paired with the upcaster
     hole. @Just (n-1, …)@ for a @vN@ shape; 'Nothing' for v1.
     -}
+    , evRetiring :: !Bool
+    {- ^ Retirement is in progress. The event must keep at least one live
+    emitting transition while operators terminalize or truncate affected
+    streams; cut over to @deprecated@ plus a replay-only emitting transition
+    afterwards.
+    -}
     , evDeprecated :: !Bool
-    {- ^ Retired from the write path (no transition may @emit@ it) but still
-    decodable from the log.
+    {- ^ Retired from the write path (no live transition may @emit@ it) but
+    still decodable from the log. A replay-only emitting transition must remain
+    while live streams can still contain the event.
     -}
     , evLoc :: !Loc
     }

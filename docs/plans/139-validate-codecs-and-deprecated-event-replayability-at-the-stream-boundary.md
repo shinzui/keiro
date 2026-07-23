@@ -52,7 +52,7 @@ chain for a stored v1 payload.
 ## Progress
 
 - [x] (2026-07-23T17:03:52Z) M1: `validateEventStreamWith` runs `mkCodec`; duplicate-rung and vanished-rung codecs fail at `mkEventStreamOrThrow`; keiro tests green; CHANGELOG entry.
-- [ ] M2: `retiring event` marker (grammar/parser/pretty-print); DSL validator rules `DuplicateUpcasterSource`, `UpcasterChainGap`, `DeprecatedEventReplayHazard`, `EventRetirementInProgress` implemented with fixture specs; `keiro-dsl-test` green.
+- [x] (2026-07-23T17:13:55Z) M2: `retiring event` marker (grammar/parser/pretty-print); DSL validator rules `DuplicateUpcasterSource`, `UpcasterChainGap`, `DeprecatedEventReplayHazard`, `EventRetirementInProgress` implemented with fixture specs; `keiro-dsl-test` green.
 - [ ] M3: diff deprecation reclassified to advisory-with-warning; `Diff.hs:404` message fixed; diff tests (incl. the 830-835 assertion) updated; golden old-payload fixture format defined and the conformance-v2 decodeRaw golden test green; all 24 keiro-dsl suites green.
 - [ ] Close-out: master plan 24 boxes ticked; externally visible contracts recorded in this Decision Log for plan 141 to quote; ADR distillation pass done.
 
@@ -68,6 +68,11 @@ implementation. Provide concise evidence.
   After wiring `mkCodec` into the shared validator, the same 16 examples passed, followed
   by the full `keiro-test` and `keiro-dsl` acceptance run (346 and 214 examples
   respectively, zero failures).
+- Plan 143 had already landed the native `replay-only` transition before this plan began.
+  That makes `deprecated` plus replay-only the safe post-cutover shape, rather than a
+  hazard: the focused DSL suite now has 223 passing examples, and manual CLI checks prove
+  duplicate/gap fixtures exit 1 while retiring, hazardous deprecated, and replay-safe
+  deprecated fixtures exit 0 with distinct machine-readable warnings.
 
 
 ## Decision Log
@@ -83,32 +88,29 @@ implementation. Provide concise evidence.
   new error channel keeps the API shape unchanged.
   Date: 2026-07-23
 
-- Decision: Deprecating an event on a non-terminal aggregate is a *Warning*
-  (`DeprecatedEventReplayHazard`), not an Error.
+- Decision: Deprecating an event on a non-terminal aggregate without a replay-only
+  emitting transition is a *Warning* (`DeprecatedEventReplayHazard`), not an Error.
+  Deprecation with a replay-only emitter is the replay-safe cutover and instead warns
+  `EventRetirementInProgress`, reminding operators to retain the edge until old payloads
+  no longer need hydration.
   Rationale: The validator sees one spec and cannot know whether live streams still contain
-  the event; the legitimate endgame (all affected streams terminal or truncated) looks
-  identical in the spec. An Error would block the correct retirement sequence outright.
-  The warning carries the full hazard statement and the safe ladder (see M2). The *diff*
-  side gets the advisory (cross-spec, sees the deprecation being introduced), so the change
-  is flagged at exactly the moment it is made.
+  the event. An Error would block the legitimate endgame, while treating the native
+  replay-only edge as a hazard would contradict ADR 0002. The diff side gets the matching
+  advisory at the moment the cutover is introduced.
   Date: 2026-07-23
 
-- Decision (reconciled with the companion guide's authored findings): the safe retirement
-  pattern is keeping the transition *with* its emit — the event stays fully live and
-  replayable until affected streams are terminal or truncated. The DSL's existing
-  `DeprecatedEventStillEmitted` error (`keiro-dsl/src/Keiro/Dsl/Validate.hs:1456-1462`)
-  forbids exactly that configuration for a `deprecated event`, so under the DSL the only
-  currently safe move is "do not deprecate yet". This plan therefore introduces a distinct
-  retirement-in-progress marker — `retiring event` — rather than relaxing
-  `DeprecatedEventStillEmitted`.
+- Decision (reconciled with ADR 0002 after plan 143 landed first): retirement has two
+  safe stages. `retiring event` is the pre-cutover marker and requires the original live
+  emitting transition. The cutover is `deprecated event` plus an equivalent
+  `replay-only` emitting transition; the event then leaves the write path without losing
+  its inverting edge. That replay-only edge remains until affected streams are terminal,
+  truncated, or pass the replay audit.
   Rationale: `deprecated` has one clear documented invariant ("retired from the write
-  path", `Grammar.hs:320-323`), which the validator, differ, and existing specs all rely
-  on; permitting emission on a `deprecated` event would silently change its meaning
-  everywhere. A separate `retiring` marker keeps both invariants sharp: `retiring` =
-  intent recorded, event fully live, emitting transition *required*; `deprecated` = off
-  the write path, replay hazard warned. The drop-emit half-measure needs no marker at all
-  because the forced `StateChangingEpsilon` check refuses it loudly at startup — that
-  refusal is precisely what makes the prescription safe to attempt.
+  path"), which the validator, differ, and existing specs rely on. Replay-only emission
+  does not relax that invariant because such an edge cannot execute forward. A separate
+  `retiring` marker keeps the pre-cutover invariant equally sharp. The drop-emit
+  half-measure remains unsound and is refused by the forced `StateChangingEpsilon`
+  boundary check.
   Date: 2026-07-23
 
 - Decision: The sanctioned retained-edge shape (recorded for plan 141 and the generated
@@ -190,10 +192,11 @@ behind `keiro-dsl diff --since <git-ref>`; `Keiro.Dsl.Scaffold` emits generated 
 `Keiro.Dsl.Harness` emits a generated assertion module).
 
 Architectural ground truth. keiki (the pure state-machine library at
-`/Users/shinzui/Keikaku/bokuno/keiki`) has no separate decide/evolve: one edge set is both
-forward stepping and replay. Replay re-inverts each stored event to a command and re-checks
-the edge guard (`keiki/src/Keiki/Core.hs:1223-1228`); when no edge's first output can
-reconstruct the stored event, replay fails and keiro surfaces it as
+`/Users/shinzui/Keikaku/bokuno/keiki`) uses one transducer for forward stepping and
+replay, but ADR 0002 adds a `ReplayOnly` edge mode that is excluded from forward
+execution and included during inversion. Replay re-inverts each stored event to a command;
+when no live or replay-only edge's first output can reconstruct the stored event, replay
+fails and keiro surfaces it as
 `HydrationNoInvertingEdge` (`keiki/src/Keiki/Core.hs:1191-1203`;
 `keiro/src/Keiro/Command.hs:457-462`). There is no lenient replay API — an event without an
 inverting edge is unreplayable, full stop. Upcasters run at decode-time forever: hydration
@@ -244,11 +247,12 @@ stream. `diff` classifies deprecation ADDITIVE ("event deprecated (still decodab
 `Diff.hs:457-459` — decodable, yes; replayable, no) and its removal message recommends the
 unsound path verbatim: "event removed entirely; keep it as a 'deprecated event' so old
 payloads still decode" (`Diff.hs:404`). The diff test at `keiro-dsl/test/Main.hs:830-835`
-asserts deprecation is non-breaking. The genuinely safe retirement pattern (per the
-companion guide) is keeping the transition *with* its emit — the event remains fully
-replayable — but `DeprecatedEventStillEmitted` forbids exactly that for a `deprecated
-event`, so under today's DSL the only safe move while live streams contain the event is
-"do not deprecate yet"; this plan gives that state a first-class marker (`retiring`, M2).
+asserts deprecation is non-breaking. The first safe retirement stage keeps the live
+transition *with* its emit — the event remains fully replayable — and this plan gives
+that state a first-class marker (`retiring`, M2). The second safe stage, available because
+plan 143 landed first, marks the event `deprecated` and changes the emitting transition
+to `replay-only`; this obeys `DeprecatedEventStillEmitted` because replay-only edges are
+not the write path while preserving the inverting edge required by old payloads.
 The drop-emit half-measure *is* caught loudly today: keeping the transition but dropping
 its emit produces a state-changing output-free edge, which the always-forced
 `StateChangingEpsilon` check refuses at startup (`keiki/src/Keiki/Core.hs:2141-2166`;
@@ -277,8 +281,8 @@ distinct enum constructors, so merges stay textual-conflict-free. Conformance fi
 regenerate once per landed plan; the 24-suite keiro-dsl green bar is the shared acceptance
 floor.
 
-Relevant ADRs: only `docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md`
-exists; it is unrelated to this plan.
+Relevant ADRs: `docs/adr/0002-replay-only-edges-are-the-sanctioned-remedy-for-guard-tightening.md`
+defines the native replay-only edge used by the retirement cutover. ADR 0001 is unrelated.
 
 Term definitions. "Rung" — one `(sourceVersion, migration)` entry in a codec's `upcasters`
 list; reading a version-n payload applies rungs n, n+1, … up to the current version.
@@ -379,30 +383,20 @@ expressible; see the Decision Log's landing-order entry), the practical remedy t
 gives is correct: the vanished rung's upcaster must remain declared. This rule is what
 turns the silent cross-release regression into a check-time refusal.
 
-*Retirement in progress (Error + Warning pair).* A `retiring` event with no emitting
-transition is an Error (reuse the retirement code with an "either keep it emitting or mark
-it `deprecated`" message — retiring-without-emission is the unsound intermediate wearing a
-safety label). A `retiring` event *with* an emitting transition yields the
-`EventRetirementInProgress` Warning stating the checklist: "event '<E>' is retiring: it
-stays fully live and replayable. Keep its emitting transition statically reachable —
-guard it on command input operations no longer send; a literal-false guard or orphaned
-source state fails startup as a dead edge — and flip to `deprecated` only after every
-stream containing '<E>' is terminal or truncated." (This wording is the sanctioned
-retained-edge shape from the Decision Log; keep it stable for plan 141 to quote.)
+*Retirement in progress (Error + Warning pair).* A `retiring` event with no *live*
+emitting transition is an Error (reuse the retirement code with an "either keep it
+emitting or cut over to `deprecated` plus replay-only" message). A `retiring` event with a
+live emitting transition yields `EventRetirementInProgress`: keep the live emitter while
+terminalizing/truncating affected streams, then flip to `deprecated` and retain an
+equivalent replay-only emitter for as long as old payloads may be hydrated.
 
-*Deprecation hazard (Warning).* For each `evDeprecated` event of an aggregate that has at
-least one non-terminal state (suppress the warning only when *every* declared state is
-terminal — the one shape where no stream can ever hydrate again), emit
-`DeprecatedEventReplayHazard` at the event's location: "deprecated event '<E>' stays
-decodable but is NOT replayable: hydration of any live stream containing it fails
-(HydrationNoInvertingEdge) because no transition emits (and therefore none can invert) it.
-Safe ladder: (1) mark it `retiring` and KEEP the emitting transition until every affected
-stream is terminal or truncated — the event remains fully replayable; (2) only then flip
-to `deprecated`; (3) never remove or re-point the emitting transition while old payloads
-remain in live streams — that passes every gate and detonates at the first command. (The
-keep-transition-drop-emit half-measure is refused loudly at startup by the forced
-state-changing-epsilon check — you cannot ship it by accident.)" Severity `Warning` (see
-Decision Log); `check` prints it and exits zero.
+*Deprecation hazard (Warning).* For each `evDeprecated` event on an aggregate with a
+non-terminal state and no replay-only emitting transition, emit
+`DeprecatedEventReplayHazard`: the payload remains decodable but hydration fails with
+`HydrationNoInvertingEdge`. If a replay-only emitter exists, emit
+`EventRetirementInProgress` instead: the cutover is replay-safe, and the edge must remain
+until every affected stream is terminal, truncated, or passes the replay audit. Both are
+warnings, so `check` prints them and exits zero.
 
 Fixture specs in `keiro-dsl/test/fixtures/`: `reservation-dup-upcast-source.keiro` (copy
 `reservation-v2.keiro`, additionally bump `TransferReservationConfirmed` to v2 with
@@ -411,12 +405,14 @@ Fixture specs in `keiro-dsl/test/fixtures/`: `reservation-dup-upcast-source.keir
 `reservation-retiring.keiro` (copy `reservation.keiro`, mark
 `TransferReservationConfirmed` as `retiring` while its emitting `Held --
 ConfirmReservation -->` transition stays), and reuse `reservation-deprecated.keiro` for
-the deprecation warning. Tests in `keiro-dsl/test/Main.hs` follow the existing pattern
+the hazard warning. Add `reservation-deprecated-replay-only.keiro` for the replay-safe
+cutover. Tests in `keiro-dsl/test/Main.hs` follow the existing pattern
 (match on codes, not prose): the two new Errors carry their codes and fail `check`; the
 retiring fixture warns `EventRetirementInProgress` and passes `check` (exit zero); a
 retiring event stripped of its emitting transition fails with the retirement Error; the
-deprecated fixture yields the `DeprecatedEventReplayHazard` warning and still passes
-`check`; a spec marking one event both `retiring` and `deprecated` fails to parse. Also
+deprecated fixture yields `DeprecatedEventReplayHazard`, while deprecated plus
+replay-only yields `EventRetirementInProgress` and no hazard; both pass `check`. A spec
+marking one event both `retiring` and `deprecated` fails to parse. Also
 assert `reservation-v2.keiro` itself stays clean — proving the rules do not fire on the
 sound single-bump evolution — and that scaffolding `reservation-retiring.keiro` emits the
 same modules as its unmarked twin (retiring is validator/diff surface only; the generated
@@ -438,16 +434,14 @@ share of `Diff.hs` per the master plan split (deprecation + upcaster-chain rules
 
 Edit `keiro-dsl/src/Keiro/Dsl/Diff.hs`. In `sameVersionEventDiff`'s `deprecationChanges`
 (lines 457-462): replace the `additive … "event deprecated (still decodable)"` arm with
-`advisory (aggName newAgg) "event" (evName newE) DeprecatedEventReplayHazard` and detail:
-"event deprecated: old payloads remain decodable but are no longer replayable — hydration
-of live streams containing them fails at the first command (HydrationNoInvertingEdge).
-Confirm every affected stream is terminal or truncated before deploying." — appending
-"consider a `retiring` stage first" when the old event was not `retiring` (the
-straight-to-deprecated jump). Add the retirement transitions to the same function: live →
+the advisory selected from the new aggregate: `DeprecatedEventReplayHazard` when no
+replay-only transition emits the event, or `EventRetirementInProgress` when such a
+transition makes the cutover replay-safe. Add the retirement transitions to the same
+function: live →
 `retiring` yields an `advisory` with `EventRetirementInProgress` ("retirement started;
 keep the emitting transition until affected streams are terminal or truncated");
 `retiring` → live is a plain additive note (retirement abandoned); `retiring` →
-`deprecated` yields the `DeprecatedEventReplayHazard` advisory above. (Reuse the
+`deprecated` yields the appropriate replay-safe or hazard advisory above. (Reuse the
 validator's codes so tooling correlates the two surfaces.) In `removedEvents`
 (lines 402-407): rewrite the detail from "keep it as a 'deprecated event' so old payloads
 still decode" to "event removed entirely; its stored payloads can neither decode nor
@@ -571,8 +565,10 @@ poisoned fixture specs with the exact codes, warns-and-passes the retiring fixtu
 refuses a retiring event without an emitting transition, and accepts
 `reservation-v2.keiro` unchanged. (4)
 `diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-deprecated.keiro"`
-yields an Advisory carrying `DeprecatedEventReplayHazard` and no Breaking; the removal
-message for a dropped event no longer contains the words "so old payloads still decode".
+yields an Advisory carrying `DeprecatedEventReplayHazard` and no Breaking, while the
+replay-only cutover fixture carries `EventRetirementInProgress` and no hazard; the
+removal message for a dropped event no longer contains the words "so old payloads still
+decode".
 (5) The checked-in v1 golden payload decodes through the current chain in
 `keiro-dsl-conformance-v2`, and breaking the chain makes that suite fail. (6) The full
 24-suite keiro-dsl bar and `keiro-test` are green.
@@ -625,3 +621,11 @@ not a gap in this plan). Companion guide:
 `docs/guides/evolution-and-replayability.md` documents the operator-facing retirement
 procedure this plan's messages point at; plan 141 owns all user-doc edits and will quote
 this plan's Decision Log wording.
+
+
+## Revision Note
+
+- 2026-07-23: Reconciled M2 and M3 with ADR 0002 after plan 143 landed before this
+  plan. The native `replay-only` transition is now the sanctioned post-cutover
+  inverting edge; deprecation is hazardous only when that edge is absent. This changes
+  the implementation details without changing the plan's user-visible purpose.

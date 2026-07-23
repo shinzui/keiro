@@ -45,10 +45,14 @@ data DiagnosticCode
     | GuardAtomOutOfScope
     | StatusMapNotTotal
     | ClockSampled
-    | -- EP-2 (evolution). The first three fire in single-spec @validateSpec@;
-      -- the last two are emitted by the @diff@ path (they need a prior spec) and
-      -- live here so the enum is the single registry of evolution rules.
+    | -- EP-2 (evolution). These codes are shared by single-spec validation and
+      -- the cross-spec diff path, so the enum remains the single registry of
+      -- evolution rules.
       EvtVersionMissingUpcaster
+    | DuplicateUpcasterSource
+    | UpcasterChainGap
+    | DeprecatedEventReplayHazard
+    | EventRetirementInProgress
     | DeprecatedEventStillEmitted
     | WireSchemaVersionMismatch
     | EvtFieldAddedWithoutBump
@@ -1448,13 +1452,26 @@ validateAggregate spec agg =
                        ]
 
     -- EP-2 evolution rules (single-spec; the diff path adds the cross-spec ones).
-    evolutionRules = versionUpcasterRule ++ deprecatedEmitRule ++ wireVersionRule
+    evolutionRules =
+        versionUpcasterRule
+            ++ duplicateUpcasterSourceRule
+            ++ upcasterChainGapRule
+            ++ deprecatedEmitRule
+            ++ eventRetirementRules
+            ++ wireVersionRule
     -- Only live transitions are the write path: a replay-only transition can
     -- never fire forward, so its emits exist purely to invert stored events —
     -- which is exactly where a deprecated event is allowed to remain
     -- (plan 143; supersedes the guarded-but-inert retained-edge pattern).
-    emittedNames = Set.fromList (concatMap tEmits [t | t <- aggTransitions agg, tMode t == TmLive])
+    liveEmittedNames = Set.fromList (concatMap tEmits [t | t <- aggTransitions agg, tMode t == TmLive])
+    replayEmittedNames = Set.fromList (concatMap tEmits [t | t <- aggTransitions agg, tMode t == TmReplayOnly])
     maxEventVersion = maximum (1 : map evVersion (aggEvents agg))
+    upcasterSources =
+        Set.fromList
+            [ source
+            | event <- aggEvents agg
+            , Just (source, _) <- [evUpcastFrom event]
+            ]
 
     -- A non-initial event version must carry a contiguous upcaster (from v-1).
     versionUpcasterRule =
@@ -1465,14 +1482,101 @@ validateAggregate spec agg =
         , maybe True ((/= evVersion e - 1) . fst) (evUpcastFrom e)
         ]
 
+    -- The generated codec currently keys a rung solely by its source version.
+    -- Report each later claimant so every diagnostic has a precise declaration
+    -- location and names the earlier owner(s).
+    duplicateUpcasterSourceRule =
+        [ mkErr (locLine (evLoc event)) DuplicateUpcasterSource $
+            "events '"
+                <> T.intercalate "', '" (map evName previousOwners)
+                <> "' and '"
+                <> evName event
+                <> "' both declare 'upcast from v"
+                <> tInt source
+                <> "'; the generated chain keys rungs by source version, so only one upcaster would run. Give the later-changed event version v"
+                <> tInt (maxEventVersion + 1)
+                <> " (the aggregate's next version), not its own previous version + 1 — aggregate-global schema stamps also mean a same-version re-shape of '"
+                <> evName event
+                <> "' would leave its old payloads stamped current and never migrated"
+        | (eventIndex, event) <- zip [0 :: Int ..] (aggEvents agg)
+        , Just (source, _) <- [evUpcastFrom event]
+        , let previousOwners =
+                [ previous
+                | previous <- take eventIndex (aggEvents agg)
+                , Just (previousSource, _) <- [evUpcastFrom previous]
+                , previousSource == source
+                ]
+        , not (null previousOwners)
+        ]
+
+    -- Aggregate schema stamps are global, so every source version below the
+    -- current maximum needs a permanent rung regardless of which event owns it.
+    upcasterChainGapRule =
+        [ mkErr (locLine (aggLoc agg)) UpcasterChainGap $
+            "no event declares 'upcast from v"
+                <> tInt missing
+                <> "'; stored payloads stamped v"
+                <> tInt missing
+                <> " can never reach v"
+                <> tInt maxEventVersion
+                <> " (GapInUpcasterChain at hydration). A rung, once shipped, must exist forever — restore the upcaster for v"
+                <> tInt missing
+                <> " (re-declare it on the event whose shape changed at v"
+                <> tInt (missing + 1)
+                <> ")"
+        | missing <- [1 .. maxEventVersion - 1]
+        , missing `Set.notMember` upcasterSources
+        ]
+
     -- A deprecated event must have left the write path.
     deprecatedEmitRule =
         [ mkErr (locLine (evLoc e)) DeprecatedEventStillEmitted $
             "deprecated event '" <> evName e <> "' is still emitted by a transition"
         | e <- aggEvents agg
         , evDeprecated e
-        , evName e `Set.member` emittedNames
+        , evName e `Set.member` liveEmittedNames
         ]
+
+    -- Retirement is a two-stage protocol. The pre-cutover marker keeps a live
+    -- emitter. The deprecated stage removes that live emitter but retains a
+    -- replay-only emitter until old payloads no longer need hydration.
+    eventRetirementRules = concatMap eventRetirementRule (aggEvents agg)
+    eventRetirementRule event
+        | evRetiring event =
+            [ mkErr (locLine (evLoc event)) EventRetirementInProgress $
+                "retiring event '" <> evName event <> "' has no live emitting transition; keep it emitting while streams are terminalized or truncated, or cut over to 'deprecated event' with a replay-only emitting transition"
+            | evName event `Set.notMember` liveEmittedNames
+            ]
+                ++ [ Diagnostic
+                        { line = locLine (evLoc event)
+                        , severity = Warning
+                        , code = EventRetirementInProgress
+                        , message =
+                            "event '" <> evName event <> "' is retiring: it stays fully live and replayable. Keep its live emitting transition until every affected stream is terminal or truncated; then flip it to 'deprecated event' and retain an equivalent replay-only emitting transition for as long as old payloads may be hydrated"
+                        }
+                   | evName event `Set.member` liveEmittedNames
+                   ]
+        | evDeprecated event =
+            [ Diagnostic
+                { line = locLine (evLoc event)
+                , severity = Warning
+                , code = DeprecatedEventReplayHazard
+                , message =
+                    "deprecated event '" <> evName event <> "' stays decodable but is not replayable: no replay-only transition emits it, so hydration of a live stream containing it fails with HydrationNoInvertingEdge. Restore an equivalent replay-only emitting transition, or terminalize/truncate every affected stream before deployment"
+                }
+            | any (not . stTerminal) (aggStates agg)
+            , evName event `Set.notMember` replayEmittedNames
+            ]
+                ++ [ Diagnostic
+                        { line = locLine (evLoc event)
+                        , severity = Warning
+                        , code = EventRetirementInProgress
+                        , message =
+                            "deprecated event '" <> evName event <> "' is off the live write path and remains replayable through a replay-only transition; retain that transition until every stream containing the event is terminal, truncated, or passes the replay audit"
+                        }
+                   | evName event `Set.member` replayEmittedNames
+                   ]
+        | otherwise = []
 
     -- The explicit `wire schemaVersion=` (if any) must equal the max event version.
     wireVersionRule = case aggWire agg of

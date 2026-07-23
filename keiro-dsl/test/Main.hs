@@ -191,6 +191,33 @@ main = hspec $ do
         it "rejects a v2 event with no upcaster as EvtVersionMissingUpcaster" $ do
             codes <- diagnosticCodesOf "test/fixtures/reservation-v2-noupcast.keiro"
             codes `shouldContain` [EvtVersionMissingUpcaster]
+        it "rejects duplicate aggregate-global upcaster sources" $ do
+            codes <- errorCodesOf "test/fixtures/reservation-dup-upcast-source.keiro"
+            codes `shouldContain` [DuplicateUpcasterSource]
+        it "rejects a gap in the aggregate-global upcaster chain" $ do
+            codes <- errorCodesOf "test/fixtures/reservation-chain-gap.keiro"
+            codes `shouldContain` [UpcasterChainGap]
+        it "warns while a retiring event keeps its live emitting transition" $ do
+            diagnostics <- diagnosticsOf "test/fixtures/reservation-retiring.keiro"
+            [code d | d <- diagnostics, severity d == Error] `shouldBe` []
+            [code d | d <- diagnostics, severity d == Warning]
+                `shouldContain` [EventRetirementInProgress]
+        it "rejects a retiring event after its live emitting transition disappears" $ do
+            source <- readTestText "test/fixtures/reservation-retiring.keiro"
+            spec <- parseInlineSpec "<retiring-without-emitter>" (T.replace " ; emit TransferReservationConfirmed" "" source)
+            [code d | d <- validateSpec spec, severity d == Error]
+                `shouldContain` [EventRetirementInProgress]
+        it "warns when a deprecated event has no replay-only emitting transition" $ do
+            diagnostics <- diagnosticsOf "test/fixtures/reservation-deprecated.keiro"
+            [code d | d <- diagnostics, severity d == Error] `shouldBe` []
+            [code d | d <- diagnostics, severity d == Warning]
+                `shouldContain` [DeprecatedEventReplayHazard]
+        it "recognises deprecated plus replay-only as the replay-safe cutover" $ do
+            diagnostics <- diagnosticsOf "test/fixtures/reservation-deprecated-replay-only.keiro"
+            [code d | d <- diagnostics, severity d == Error] `shouldBe` []
+            [code d | d <- diagnostics, severity d == Warning]
+                `shouldContain` [EventRetirementInProgress]
+            [code d | d <- diagnostics] `shouldNotContain` [DeprecatedEventReplayHazard]
         it "requires exact, unique status-map event keys" $ do
             dangling <- errorCodesOf "test/fixtures/statusmap-dangling.keiro"
             mapM_ (\expected -> dangling `shouldContain` [expected]) [StatusMapDanglingKey, StatusMapNotTotal]
@@ -275,7 +302,7 @@ main = hspec $ do
                                 [tGuard t | NAggregate a <- specNodes spec, t <- aggTransitions a]
                                     === [Just (complementExpr e)]
 
-    describe "evolution parsing" $
+    describe "evolution parsing" $ do
         it "parses event version and upcaster from reservation-v2.keiro" $ do
             input <- readTestText "test/fixtures/reservation-v2.keiro"
             case parseSpec "test/fixtures/reservation-v2.keiro" input of
@@ -285,6 +312,15 @@ main = hspec $ do
                         evVersion e `shouldBe` 2
                         evUpcastFrom e `shouldBe` Just (1, Hole)
                     [] -> expectationFailure "TransferReservationCreated not found"
+        it "round-trips the retiring marker" $ do
+            spec <- specOf "test/fixtures/reservation-retiring.keiro"
+            parseSpec "<retiring-round-trip>" (renderSpec spec) `shouldBe` Right spec
+            [evRetiring event | NAggregate aggregate <- specNodes spec, event <- aggEvents aggregate, evName event == "TransferReservationConfirmed"]
+                `shouldBe` [True]
+        it "rejects an event marked both retiring and deprecated" $ do
+            source <- readTestText "test/fixtures/reservation-retiring.keiro"
+            let conflicting = T.replace "retiring event TransferReservationConfirmed" "retiring deprecated event TransferReservationConfirmed" source
+            parseSpec "<conflicting-retirement-markers>" conflicting `shouldSatisfy` isLeft
 
     describe "aggregate snapshots (EP-109)" $ do
         it "parses, validates, and round-trips a snapshot policy with codec fixture" $ do
@@ -1379,6 +1415,11 @@ main = hspec $ do
             a <- scaffoldFixture "test/fixtures/reservation.keiro"
             b <- scaffoldFixture "test/fixtures/reservation.keiro"
             map moduleText a `shouldBe` map moduleText b
+        it "keeps retiring as validator-only metadata in generated modules" $ do
+            ordinary <- scaffoldFixture "test/fixtures/reservation.keiro"
+            retiring <- scaffoldFixture "test/fixtures/reservation-retiring.keiro"
+            map (\m -> (modulePath m, kind m, moduleText m)) retiring
+                `shouldBe` map (\m -> (modulePath m, kind m, moduleText m)) ordinary
         it "matches the committed compiling Generated conformance modules (modulo whitespace)" $ do
             mods <- scaffoldFixture "test/fixtures/reservation.keiro"
             mapM_ assertMatchesCommitted [m | m <- mods, kind m == Generated]
@@ -1506,20 +1547,23 @@ test on a parse error).
 -}
 diagnosticCodesOf :: FilePath -> IO [DiagnosticCode]
 diagnosticCodesOf path = do
+    map code <$> diagnosticsOf path
+
+-- | Parse a fixture and return all validator diagnostics.
+diagnosticsOf :: FilePath -> IO [Diagnostic]
+diagnosticsOf path = do
     input <- readTestText path
     case parseSpec path input of
         Left err -> expectationFailure (T.unpack err) >> pure []
-        Right spec -> pure (map code (validateSpec spec))
+        Right spec -> pure (validateSpec spec)
 
 {- | Like 'diagnosticCodesOf' but only the Error-severity codes (warnings, e.g.
 the benign-inversion notices, are excluded).
 -}
 errorCodesOf :: FilePath -> IO [DiagnosticCode]
 errorCodesOf path = do
-    input <- readTestText path
-    case parseSpec path input of
-        Left err -> expectationFailure (T.unpack err) >> pure []
-        Right spec -> pure [code d | d <- validateSpec spec, severity d == Error]
+    diagnostics <- diagnosticsOf path
+    pure [code d | d <- diagnostics, severity d == Error]
 
 {- | Parse two fixtures and diff them (old, new).
 | Plan 143: render an Expr in concrete guard syntax by printing a dummy
@@ -2259,14 +2303,22 @@ genCommand :: Gen Command
 genCommand = Command <$> genName <*> smallList genField <*> pure noLoc
 
 genEvent :: Gen Event
-genEvent =
-    Event
-        <$> genName
-        <*> body
-        <*> choose (1, 3)
-        <*> genMaybe ((,) <$> choose (0, 3) <*> pure Hole)
-        <*> arbitrary
-        <*> pure noLoc
+genEvent = do
+    name <- genName
+    eventBody <- body
+    version <- choose (1, 3)
+    upcast <- genMaybe ((,) <$> choose (0, 3) <*> pure Hole)
+    (retiring, deprecated) <- elements [(False, False), (True, False), (False, True)]
+    pure
+        Event
+            { evName = name
+            , evBody = eventBody
+            , evVersion = version
+            , evUpcastFrom = upcast
+            , evRetiring = retiring
+            , evDeprecated = deprecated
+            , evLoc = noLoc
+            }
   where
     body = oneof [EventFromCommand <$> genName, EventFields <$> smallList genField]
 

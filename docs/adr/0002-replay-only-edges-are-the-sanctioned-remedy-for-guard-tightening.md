@@ -75,7 +75,11 @@ command) pair is a warning pointing at event retirement
 (`ReplayOnlyCommandStillLive`); deprecated events may keep being emitted by
 replay-only transitions, which are not the write path — this supersedes the
 guarded-but-inert pattern as the sanctioned retained-edge shape for event
-retirement (plan 139 aligns its wording when it lands).
+retirement. The retirement protocol is therefore two-stage: a `retiring
+event` first keeps its live emitting transition; the cutover marks the event
+`deprecated` and changes that transition to `replay-only`. The replay-only
+edge remains until affected streams are terminal, truncated, or pass the
+replay audit.
 
 
 ## Consequences
@@ -94,6 +98,10 @@ retirement (plan 139 aligns its wording when it lands).
   replay audit), the twin can be deleted. Deleting it earlier re-creates
   exactly the hydration break it fixed — the rollback hazard is documented in
   the keiki and keiro CHANGELOGs.
+- Event deprecation without a replay-only emitting transition is now surfaced
+  as `DeprecatedEventReplayHazard`; the replay-safe deprecated-plus-replay-only
+  shape remains advisory as `EventRetirementInProgress` until the retained
+  edge can be removed.
 - The keiki `Edge` record is five fields (`mode` added, PVP-major 0.3.0.0);
   every hand-written construction site must supply `mode = Live` to keep its
   prior semantics.

@@ -551,7 +551,11 @@ docEvent e =
         Nothing -> line1
         Just (m, _) -> vsep [line1, indent 2 ("upcast from v" <> pretty m <+> "=" <+> "HOLE")]
   where
-    kw = if evDeprecated e then "deprecated event" else "event"
+    kw = case (evRetiring e, evDeprecated e) of
+        (False, False) -> "event"
+        (True, False) -> "retiring event"
+        (False, True) -> "deprecated event"
+        (True, True) -> "retiring deprecated event"
     nameVer =
         pretty (evName e)
             <> (if evVersion e > 1 then " v" <> pretty (evVersion e) else mempty)

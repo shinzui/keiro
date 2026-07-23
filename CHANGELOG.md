@@ -22,6 +22,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Added
 
+- `keiro-dsl check` now rejects duplicate and incomplete aggregate upcaster
+  chains, supports a mutually exclusive `retiring event` marker, and warns
+  when deprecated events lack the replay-only transition required to hydrate
+  old payloads.
 - `defaultStateCodec` derives a control-state discriminator through Keiki's
   `CanonicalStateShape`; `withFoldFingerprint` composes an explicit fold token
   as `<state-hash>;fold=<fingerprint>`.

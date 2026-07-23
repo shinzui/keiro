@@ -481,7 +481,14 @@ pField = do
 pEvent :: P Event
 pEvent = do
     loc <- getLoc
-    dep <- option False (True <$ keyword "deprecated")
+    (retiring, deprecated) <-
+        option
+            (False, False)
+            ( choice
+                [ (True, False) <$ keyword "retiring"
+                , (False, True) <$ keyword "deprecated"
+                ]
+            )
     keyword "event"
     name <- ident
     ver <- option 1 pVersion
@@ -497,7 +504,8 @@ pEvent = do
             , evBody = body
             , evVersion = ver
             , evUpcastFrom = up
-            , evDeprecated = dep
+            , evRetiring = retiring
+            , evDeprecated = deprecated
             , evLoc = loc
             }
   where
