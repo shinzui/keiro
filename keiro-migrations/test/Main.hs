@@ -27,6 +27,7 @@ import Database.PostgreSQL.Migrate.Internal (
     migrationChecksumBytes,
     planDescription,
  )
+import Database.PostgreSQL.Migrate.Internal qualified as Migrate.Internal
 import Database.PostgreSQL.Migrate.Test (withMigratedDatabase)
 import EphemeralPg qualified as Pg
 import Hasql.Connection qualified as Connection
@@ -37,6 +38,7 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (Statement)
 import Hasql.Statement qualified as Statement
 import Keiro.Migrations
+import Keiro.Migrations qualified as Keiro
 import Keiro.Migrations.History.Codd
 import Kiroku.Store.Migrations qualified as Kiroku
 import Kiroku.Store.Migrations.History.Codd qualified as Kiroku.Codd
@@ -111,6 +113,47 @@ main = hspec $ do
 
         it "passes all 20 embedded native bodies" $ do
             lintViolations config (toList embeddedMigrationEntries) `shouldBe` []
+
+    describe "startup handshake" $ do
+        it "reports the full plan on a fresh database" $ do
+            plan <- requirePlan
+            withKeiroPg $ \database -> do
+                handshake <-
+                    missingMigrations
+                        defaultRunOptions
+                        (connectionProviderFromSettings (Pg.connectionSettings database))
+                        plan
+                        >>= requireRight
+                Keiro.pendingMigrations handshake `shouldBe` planMigrationIds plan
+                length (Keiro.pendingMigrations handshake) `shouldBe` 28
+                Keiro.ledgerIssues handshake `shouldBe` []
+                handshakePassed handshake `shouldBe` False
+
+        it "passes on a fully migrated database" $ do
+            plan <- requirePlan
+            result <- withMigratedDatabase plan $ \connection -> do
+                handshake <-
+                    missingMigrations defaultRunOptions (providerFor connection) plan
+                        >>= requireRight
+                Keiro.pendingMigrations handshake `shouldBe` []
+                Keiro.ledgerIssues handshake `shouldBe` []
+                handshakePassed handshake `shouldBe` True
+            either (expectationFailure . show) pure result
+
+        it "reports the Keiro tail after applying only Kiroku" $ do
+            plan <- requirePlan
+            withKeiroPg $ \database -> do
+                kiroku <- requireRight Kiroku.kirokuMigrations
+                kirokuOnly <- requireRight (migrationPlan (kiroku :| []))
+                let settings = Pg.connectionSettings database
+                    provider = connectionProviderFromSettings settings
+                _ <- runMigrationPlan defaultRunOptions settings kirokuOnly >>= requireRight
+                handshake <-
+                    missingMigrations defaultRunOptions provider plan >>= requireRight
+                Keiro.pendingMigrations handshake `shouldBe` drop 8 (planMigrationIds plan)
+                length (Keiro.pendingMigrations handshake) `shouldBe` 20
+                Keiro.ledgerIssues handshake `shouldBe` []
+                handshakePassed handshake `shouldBe` False
 
     describe "fresh native databases" $ do
         it "applies Kiroku then Keiro, verifies strictly, and is repeatable" $ do
@@ -316,6 +359,15 @@ requirePlan = do
     kiroku <- requireRight Kiroku.kirokuMigrations
     keiro <- requireRight keiroMigrations
     requireRight (frameworkMigrationPlan kiroku keiro)
+
+planMigrationIds :: MigrationPlan -> [MigrationId]
+planMigrationIds plan =
+    [ identifier
+    | ComponentDescription{migrations} <- toList components
+    , Migrate.Internal.MigrationDescription identifier _ _ _ _ <- toList migrations
+    ]
+  where
+    PlanDescription components = planDescription plan
 
 requireRight :: (Show error) => Either error value -> IO value
 requireRight = either failure pure

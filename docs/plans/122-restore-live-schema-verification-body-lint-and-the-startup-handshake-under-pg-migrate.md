@@ -53,7 +53,7 @@ documented in `docs/user/migrations.md`.
 ## Progress
 
 - [x] (2026-07-23T22:42:00Z) Milestone 1: pure lint module ported into the default test suite; unqualified fixture fails; all 20 embedded bodies pass; `embeddedMigrationEntries` exported from the library. Validation: `cabal build keiro-migrations` and `cabal test keiro-migrations-test --test-show-details=direct` passed (14 examples, 0 failures).
-- [ ] Milestone 2: `missingMigrations` and `StartupHandshake` exported from `Keiro.Migrations`; fresh/fully-migrated/half-applied tests green; `docs/user/migrations.md` Application startup section documents the handshake.
+- [x] (2026-07-23T22:49:00Z) Milestone 2: `missingMigrations` and `StartupHandshake` exported from `Keiro.Migrations`; fresh/fully-migrated/half-applied tests green; `docs/user/migrations.md` Application startup section documents the handshake. Validation: `cabal build keiro-migrations` and `cabal test keiro-migrations-test --test-show-details=direct` passed (17 examples, 0 failures).
 - [ ] Milestone 3: `Keiro.Migrations.SchemaCheck` library module with canonical snapshot, comparison, and embedded expected snapshot; checked-in `expected-schema/native/keiro-v18.txt` generated and validated by a suite test with a regeneration mode.
 - [ ] Milestone 4: `keiro-migrate verify-schema` subcommand wired; drifted-database integration test exits with named drifted objects; `docs/user/migrations.md` documents `verify-schema`; suite green end to end.
 
@@ -67,6 +67,14 @@ documented in `docs/user/migrations.md`.
   28 migrations (8 Kiroku plus 20 Keiro), not 18 and 26.
   Evidence: `keiro-migrations/test/Main.hs` already asserts 20 Keiro entries and 28 composed
   outcomes, and both files are present in `keiro-migrations/migrations/manifest`.
+  Date: 2026-07-23
+
+- Discovery: pg-migrate's public `StatusReport` and `VerificationReport` records both
+  export `issues` and `pendingMigrations`; GHC 9.12 rejects qualified selector calls as
+  ambiguous even when the argument has an explicit `StatusReport` signature.
+  Evidence: the first Milestone 2 build failed with GHC-87543 on
+  `Migrate.pendingMigrations report` and `Migrate.issues report`. The adapter now matches
+  the public `StatusReport` constructor and names the two values positionally.
   Date: 2026-07-23
 
 

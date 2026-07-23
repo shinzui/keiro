@@ -64,8 +64,25 @@ command with `--confirm` and an audit reason; never edit ledger rows directly.
 
 ## Application startup
 
-Run migrations as a deployment job before starting application processes, then
-open Kiroku with schema initialization disabled:
+Run migrations as a deployment job before starting application processes. Every
+service replica should also call `missingMigrations` at boot and refuse to serve
+until the database carries the complete migration plan expected by that binary:
+
+```haskell
+import Keiro.Migrations
+
+guardMigrations :: ConnectionProvider -> MigrationPlan -> IO ()
+guardMigrations provider plan = do
+  result <- missingMigrations defaultRunOptions provider plan
+  case result of
+    Right handshake | handshakePassed handshake -> pure ()
+    Right handshake -> fail ("refusing startup: " <> show handshake)
+    Left err -> fail ("migration handshake failed: " <> show err)
+```
+
+This closes the deployment gap where an application replica starts before the
+migration job has reached its database. After the handshake passes, open Kiroku
+with schema initialization disabled:
 
 ```haskell
 withStore
@@ -74,8 +91,9 @@ withStore
   app
 ```
 
-This makes schema ownership deterministic instead of depending on whichever
-application replica starts first.
+The deployment job keeps schema ownership deterministic instead of depending on
+whichever replica starts first; the per-replica handshake proves that the job's
+result is present before serving traffic.
 
 ## Authoring a migration
 
