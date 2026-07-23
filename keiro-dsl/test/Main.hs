@@ -1226,6 +1226,22 @@ main = hspec $ do
             [ckCode k | Breaking k <- stableName] `shouldContain` [Just RouterStableNameChanged]
             [ckCode k | Breaking k <- keyDerivation] `shouldContain` [Just DerivedIdentityChanged]
             [ckCode k | Breaking k <- target] `shouldContain` [Just DerivedIdentityChanged]
+        it "advises on router dispatch-surface changes without making them breaking" $ do
+            cs <- diffFixtures "test/fixtures/incident-paging/incident-paging.keiro" "test/fixtures/incident-paging/incident-paging-dispatch.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckCode k | Advisory k <- cs] `shouldBe` [Just RouterDecideSurfaceChanged]
+        it "advises on process dispatch-surface changes without making them breaking" $ do
+            cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-handle.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckCode k | Advisory k <- cs] `shouldBe` [Just ProcessDecideSurfaceChanged]
+        it "advises on unversioned timer payload changes without making them breaking" $ do
+            cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-payload.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckCode k | Advisory k <- cs] `shouldBe` [Just ProcessTimerPayloadChanged]
+        it "ignores formatting-only process and timer surface rewrites" $ do
+            original <- specOf "test/fixtures/hospital-surge.keiro"
+            formatted <- parseInlineSpec "<formatted-process>" (renderSpec original)
+            diffSpecs original formatted `shouldBe` []
         it "reports a timer window change as a warning" $ do
             cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-window.keiro"
             any isBreaking cs `shouldBe` False

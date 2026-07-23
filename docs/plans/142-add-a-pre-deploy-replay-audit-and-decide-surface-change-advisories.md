@@ -110,9 +110,11 @@ dispatch block prints a `RouterDecideSurfaceChanged` advisory.
       bounded full replay runs asynchronously through the exact seed version,
       emits `keiro.snapshot.seed.divergence` plus structured digests, and never
       writes a snapshot; 352 runtime examples green.
-- [ ] M4: `RouterDecideSurfaceChanged`, `ProcessDecideSurfaceChanged`,
-      `ProcessTimerPayloadChanged` diff advisories implemented with fixture pairs;
-      diff tests green.
+- [x] M4 (2026-07-23T22:14:00Z): `RouterDecideSurfaceChanged`,
+      `ProcessDecideSurfaceChanged`, and `ProcessTimerPayloadChanged` diff
+      advisories compare canonical pretty-printed spec surfaces; fixture pairs,
+      formatting-only negative coverage, the manual CLI path, and all DSL suites
+      are green.
 - [ ] Close-out: CHANGELOG entries; master plan 24 EP-5 boxes ticked; contracts recorded
       here for docs/plans/141 to quote; ADR distillation pass (audit rows in the
       evolution-gate inventory).
@@ -175,6 +177,13 @@ implementation. Provide concise evidence.
   emitted seeded/full SHA-256 digests while the command succeeded at version 3 and the
   snapshot row remained at version 2; rate zero emitted nothing. The full suite passed
   352 examples in 70.3315 seconds.
+
+- Canonical surface rendering kept M4 independent of source layout and parser
+  locations: the new rules compare only router resolve/dispatch declarations,
+  process handles, and timer payloads. The focused suite passed 241 examples,
+  the manual `diff --since HEAD` check printed
+  `ProcessDecideSurfaceChanged` and exited zero, and every Cabal component selected
+  by `cabal test keiro-dsl` passed.
 
 
 ## Decision Log

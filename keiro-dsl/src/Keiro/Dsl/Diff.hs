@@ -35,7 +35,13 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.PrettyPrint (renderTransition)
+import Keiro.Dsl.PrettyPrint (
+    renderHandleSurface,
+    renderResolveSurface,
+    renderRouterDispatchSurface,
+    renderTimerPayloadSurface,
+    renderTransition,
+ )
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
@@ -231,7 +237,11 @@ routerDiff env =
     paired = pairByName nodeRouter rtId env
 
 routerPairDiff :: RouterNode -> RouterNode -> [Change]
-routerPairDiff oldRouter newRouter = stableName ++ keyDerivation ++ target
+routerPairDiff oldRouter newRouter =
+    stableName
+        ++ keyDerivation
+        ++ target
+        ++ routerDecideSurfaceDiff oldRouter newRouter
   where
     nodeName = rtId newRouter
     stableName =
@@ -247,6 +257,26 @@ routerPairDiff oldRouter newRouter = stableName ++ keyDerivation ++ target
         [ breaking nodeName "router-target" (rtTarget newRouter) DerivedIdentityChanged "router target aggregate changed; replay addresses a different persisted stream family"
         | rtTarget oldRouter /= rtTarget newRouter
         ]
+
+routerDecideSurfaceDiff :: RouterNode -> RouterNode -> [Change]
+routerDecideSurfaceDiff oldRouter newRouter =
+    [ advisory
+        (rtId newRouter)
+        "router-decide"
+        (rtId newRouter)
+        RouterDecideSurfaceChanged
+        "router dispatch surface changed: a source event redelivered across the deploy dispatches under the same deterministic ids, so half-old/half-new fan-out merges silently. Drain or pause the router's subscription and replay or discard dead letters before deploying; see docs/user/deploy-ordering.md. Hole-only decide changes are not visible to diff; the same drain rule applies to those too."
+    | oldSurface /= newSurface
+    ]
+  where
+    oldSurface =
+        ( renderResolveSurface (rtResolve oldRouter)
+        , renderRouterDispatchSurface (rtDispatch oldRouter)
+        )
+    newSurface =
+        ( renderResolveSurface (rtResolve newRouter)
+        , renderRouterDispatchSurface (rtDispatch newRouter)
+        )
 
 readModelDiff :: DiffEnv -> [Change]
 readModelDiff env =
@@ -939,6 +969,8 @@ processPairDiff oldProcess newProcess =
         ++ map (fieldChange "field removed; the generated process input decoder changed") (prRemoved fields)
         ++ processIdentityDiff oldProcess newProcess
         ++ processTimerWindowDiff oldProcess newProcess
+        ++ processDecideSurfaceDiff oldProcess newProcess
+        ++ processTimerPayloadDiff oldProcess newProcess
   where
     -- inName is a generated Haskell type name; the wire shape is inFields.
     fields = pairDeclarations fieldName (inFields (procInput oldProcess)) (inFields (procInput newProcess))
@@ -991,6 +1023,30 @@ processTimerWindowDiff oldProcess newProcess =
             <> "; already-scheduled timers keep their persisted deadline"
         )
     | tmFireAt (procTimer oldProcess) /= tmFireAt (procTimer newProcess)
+    ]
+
+processDecideSurfaceDiff :: ProcessNode -> ProcessNode -> [Change]
+processDecideSurfaceDiff oldProcess newProcess =
+    [ advisory
+        (procId newProcess)
+        "process-decide"
+        (procId newProcess)
+        ProcessDecideSurfaceChanged
+        "process dispatch surface changed: a source event redelivered across the deploy dispatches under the same deterministic ids, so half-old/half-new fan-out merges silently. Drain or pause the process subscription and replay or discard dead letters before deploying; see docs/user/deploy-ordering.md. Hole-only decide changes are not visible to diff; the same drain rule applies to those too."
+    | renderHandleSurface (procHandle oldProcess)
+        /= renderHandleSurface (procHandle newProcess)
+    ]
+
+processTimerPayloadDiff :: ProcessNode -> ProcessNode -> [Change]
+processTimerPayloadDiff oldProcess newProcess =
+    [ advisory
+        (procId newProcess)
+        "timer-payload"
+        (tmName (procTimer newProcess))
+        ProcessTimerPayloadChanged
+        "timer payload shape changed: rows scheduled before the deploy carry the old shape, unversioned, and fire under new code — the fire decoder must accept every historically scheduled shape or the timer dead-letters after maxAttempts. Hole-only timer-decoder changes are not visible to diff; the same drain rule applies to those too."
+    | renderTimerPayloadSurface (procTimer oldProcess)
+        /= renderTimerPayloadSurface (procTimer newProcess)
     ]
 
 renderFireAt :: FireAtExpr -> Text

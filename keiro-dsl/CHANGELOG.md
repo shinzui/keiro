@@ -18,6 +18,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `Generated.<Context>.ReplayAudit` module. Its typed target list includes
   every aggregate, validates discovered stream names against the generated
   category, and documents the replay-neutral/targeted/full deployment tiers.
+- `diff` now emits non-breaking, coded advisories when a router resolve or
+  dispatch surface, process handle surface, or unversioned process-timer
+  payload changes. The advisories explain the subscription drain and
+  dead-letter procedure needed to avoid mixed old/new deterministic fan-out
+  during a deployment.
 
 - First-class replay-only transitions for guard evolution (plan 143). A
   `replay-only` prefix on a transition line marks it as serving inversion

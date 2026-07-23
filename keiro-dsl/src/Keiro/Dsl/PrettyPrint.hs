@@ -10,6 +10,10 @@ module Keiro.Dsl.PrettyPrint (
     renderSpec,
     renderTransition,
     renderExpr,
+    renderHandleSurface,
+    renderResolveSurface,
+    renderRouterDispatchSurface,
+    renderTimerPayloadSurface,
 )
 where
 
@@ -21,9 +25,23 @@ import Prettyprinter.Render.Text (renderStrict)
 
 -- | Render a whole spec to text.
 renderSpec :: Spec -> Text
-renderSpec = renderStrict . layoutPretty opts . docSpec
-  where
-    opts = LayoutOptions{layoutPageWidth = Unbounded}
+renderSpec = renderDoc . docSpec
+
+renderHandleSurface :: HandleNode -> Text
+renderHandleSurface = renderDoc . docHandle
+
+renderResolveSurface :: ResolveDecl -> Text
+renderResolveSurface = renderDoc . docResolve
+
+renderRouterDispatchSurface :: RouterDispatchNode -> Text
+renderRouterDispatchSurface = renderDoc . docRouterDispatch
+
+renderTimerPayloadSurface :: TimerNode -> Text
+renderTimerPayloadSurface timer =
+    renderDoc ("payload" <+> braced (map docFieldBinding (tmPayload timer)))
+
+renderDoc :: Doc ann -> Text
+renderDoc = renderStrict . layoutPretty LayoutOptions{layoutPageWidth = Unbounded}
 
 docSpec :: Spec -> Doc ann
 docSpec s =

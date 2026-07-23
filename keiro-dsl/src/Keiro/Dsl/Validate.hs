@@ -195,6 +195,9 @@ data DiagnosticCode
     | ReplayOnlyCommandStillLive
     | AggGuardTightened
     | AggFoldSurfaceChanged
+    | RouterDecideSurfaceChanged
+    | ProcessDecideSurfaceChanged
+    | ProcessTimerPayloadChanged
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

@@ -1,0 +1,37 @@
+context incident-paging
+
+readmodel service_oncall {
+  table = "service_oncall"
+  schema = "incident_paging"
+  columns {
+    responder_id text required
+    service text required
+  }
+  version = 1
+  shape = "fnv1a:1d7aef5c25b434fd"
+  consistency = Eventual
+  feed = subscription
+  subscription = "incident-paging-service-oncall-sub"
+}
+
+router PagingRouter
+  name "jitsurei-paging"
+  input IncidentRaised { incidentId service }
+  key input.incidentId via idText
+  resolve stable via read-model service_oncall row { responderId }
+  target Page
+  projections [ ]
+  dispatch-each SendPage { incidentId=input.incidentId responderId=input.incidentId }
+    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)
+  rejected => deadLetter
+  poison => halt
+
+aggregate Page
+  regs
+  states Pending Delivered!
+
+  command SendPage { incidentId responderId }
+  event PageSent = fields(SendPage)
+
+  Pending -- SendPage --> emit PageSent ; goto Delivered
