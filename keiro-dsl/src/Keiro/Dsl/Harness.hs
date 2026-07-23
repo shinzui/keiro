@@ -17,14 +17,17 @@ body by construction. The emitted module exposes @harnessAssertions ::
 -}
 module Keiro.Dsl.Harness (
     harnessFor,
+    harnessForWithGoldens,
     harnessProcess,
     harnessRouter,
     harnessReadModel,
     harnessWorkflow,
 ) where
 
+import Data.List (find)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.Goldens (GoldenPayload (..))
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.ReadModelShape (deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Scaffold
@@ -33,16 +36,29 @@ import Keiro.Dsl.Scaffold
 it takes the 'Spec' for the shared id\/enum declarations.
 -}
 harnessFor :: Context -> Spec -> Aggregate -> [ScaffoldModule]
-harnessFor ctx spec agg =
+harnessFor = harnessForWithGoldens []
+
+{- | Emit an aggregate harness with checked-in old-payload fixtures embedded
+as string literals. Embedding keeps the generated test independent of runtime
+file paths while retaining the golden file as regeneration source of truth.
+-}
+harnessForWithGoldens :: [GoldenPayload] -> Context -> Spec -> Aggregate -> [ScaffoldModule]
+harnessForWithGoldens goldens ctx spec agg =
     [ ScaffoldModule
         { modulePath = T.unpack (T.replace "." "/" (aGenPrefix a) <> "/Harness.hs")
-        , moduleText = emitHarness a
+        , moduleText = emitHarness relevantGoldens a
         , kind = Generated
         , origin = "aggregate " <> aggName agg <> locSuffix (aggLoc agg)
         }
     ]
   where
     a = resolveAgg ctx spec agg
+    relevantGoldens =
+        [ golden
+        | golden <- goldens
+        , goldenContext golden == specContext spec
+        , goldenAggregate golden == aggName agg
+        ]
 
 {- | Emit a self-contained, firewall-clean facts harness for a process manager,
 pinning the spec's deterministic decisions: the time-injection formula, the
@@ -351,8 +367,8 @@ workflowPatchIds = concatMap go
     go (WfPatch patchId items _) = patchId : workflowPatchIds items
     go _ = []
 
-emitHarness :: Agg -> Text
-emitHarness a =
+emitHarness :: [GoldenPayload] -> Agg -> Text
+emitHarness goldens a =
     nl $
         [ "{-# LANGUAGE OverloadedStrings #-}"
         , generatedBanner
@@ -363,23 +379,25 @@ emitHarness a =
         , "import " <> aHolePrefix a <> ".Holes (" <> lowerFirst nm <> "Transducer)"
         , "import Keiki.Core (defaultValidationOptions, step, validateTransducer)"
         , codecDecodeRawImport
-        , ""
-        , "{- | (label, passed). A driver runs these and exits non-zero on any False,"
-        , "naming the failing assertion. Filling a hole wrongly turns a specific"
-        , "entry False; the scaffold cannot."
-        , "-}"
-        , "harnessAssertions :: [(String, Bool)]"
-        , "harnessAssertions ="
-        , "  [ (\"validateTransducer is empty\", null (validateTransducer defaultValidationOptions " <> lowerFirst nm <> "Transducer))"
-        , "  , (\"clock-free: spec samples no wall clock\", " <> clockFreeLit <> ")"
         ]
+            ++ goldenImports
+            ++ [ ""
+               , "{- | (label, passed). A driver runs these and exits non-zero on any False,"
+               , "naming the failing assertion. Filling a hole wrongly turns a specific"
+               , "entry False; the scaffold cannot."
+               , "-}"
+               , "harnessAssertions :: [(String, Bool)]"
+               , "harnessAssertions ="
+               , "  [ (\"validateTransducer is empty\", null (validateTransducer defaultValidationOptions " <> lowerFirst nm <> "Transducer))"
+               , "  , (\"clock-free: spec samples no wall clock\", " <> clockFreeLit <> ")"
+               ]
             ++ [ "  , (\"golden round-trip: " <> rcName e <> "\", roundTrips sampleEvent" <> rcName e <> ")"
                | e <- aEvents a
                ]
             ++ [ "  , (\"accepts " <> tCommand t <> " from " <> initialVertex a <> "\", accept" <> tCommand t <> ")"
                | t <- initialTransitions a
                ]
-            ++ [ "  , (\"upcaster wired: a v" <> tInt m <> " " <> rcName e <> " payload decodes through the chain\", upcasts" <> rcName e <> ")"
+            ++ [ "  , (" <> tshow (upcastLabel e m) <> ", upcasts" <> rcName e <> ")"
                | e <- upcastEvents
                , Just m <- [rcUpcastFrom e]
                ]
@@ -390,7 +408,7 @@ emitHarness a =
                ]
             ++ concatMap (sampleEventDecl a) (aEvents a)
             ++ concatMap (acceptDecl a) (initialTransitions a)
-            ++ concatMap (upcastDecl a) upcastEvents
+            ++ concatMap (upcastDecl goldens a) upcastEvents
   where
     nm = aName a
     -- Bake the clock-free result computed from the spec at scaffold time.
@@ -401,24 +419,57 @@ emitHarness a =
         if null upcastEvents
             then "import Keiro.Codec (eventType)"
             else "import Keiro.Codec (EventType (..), decodeRaw, eventType)"
+    goldenImports =
+        if any (hasGolden goldens) upcastEvents
+            then
+                [ "import Data.Aeson (eitherDecodeStrict)"
+                , "import Data.Text.Encoding (encodeUtf8)"
+                ]
+            else []
+    upcastLabel event source =
+        case goldenFor goldens event of
+            Just _ -> "golden " <> rcName event <> ".v" <> tInt source <> " decodes"
+            Nothing ->
+                "upcast "
+                    <> rcName event
+                    <> " chain wired (current-shape stand-in; add a golden payload)"
 
-{- | A wiring-proof assertion: feed a current-shape payload tagged at the
-upcaster's source version through @decodeRaw@, which runs the upcaster chain
-then @decode@. Red while the upcaster hole returns @Left@; green once filled.
-(The grammar records only the current event shape, not the per-version field
-delta, so this proves the chain is wired and the hole must be filled rather
-than re-deriving the exact old payload.)
+{- | Decode a genuine embedded old payload when available. Without a golden,
+retain the weaker current-shape wiring assertion and label it honestly.
 -}
-upcastDecl :: Agg -> ResolvedCtor -> [Text]
-upcastDecl a e = case rcUpcastFrom e of
+upcastDecl :: [GoldenPayload] -> Agg -> ResolvedCtor -> [Text]
+upcastDecl goldens a e = case rcUpcastFrom e of
     Nothing -> []
-    Just m ->
-        [ ""
-        , "upcasts" <> rcName e <> " :: Bool"
-        , "upcasts" <> rcName e <> " ="
-        , "  either (const False) (const True)"
-        , "    (decodeRaw " <> lowerFirst (aName a) <> "Codec (EventType " <> tshow (rcName e) <> ") " <> tInt m <> " (encode" <> aName a <> "Event sampleEvent" <> rcName e <> "))"
-        ]
+    Just m -> case goldenFor goldens e of
+        Just golden ->
+            [ ""
+            , "upcasts" <> rcName e <> " :: Bool"
+            , "upcasts" <> rcName e <> " ="
+            , "  case eitherDecodeStrict (encodeUtf8 " <> tshow (goldenJson golden) <> ") of"
+            , "    Left _ -> False"
+            , "    Right payload ->"
+            , "      either (const False) (const True)"
+            , "        (decodeRaw " <> lowerFirst (aName a) <> "Codec (EventType " <> tshow (rcName e) <> ") " <> tInt m <> " payload)"
+            ]
+        Nothing ->
+            [ ""
+            , "upcasts" <> rcName e <> " :: Bool"
+            , "upcasts" <> rcName e <> " ="
+            , "  either (const False) (const True)"
+            , "    (decodeRaw " <> lowerFirst (aName a) <> "Codec (EventType " <> tshow (rcName e) <> ") " <> tInt m <> " (encode" <> aName a <> "Event sampleEvent" <> rcName e <> "))"
+            ]
+
+hasGolden :: [GoldenPayload] -> ResolvedCtor -> Bool
+hasGolden goldens event = case goldenFor goldens event of
+    Just _ -> True
+    Nothing -> False
+
+goldenFor :: [GoldenPayload] -> ResolvedCtor -> Maybe GoldenPayload
+goldenFor goldens event = do
+    source <- rcUpcastFrom event
+    find
+        (\golden -> goldenEvent golden == rcName event && goldenVersion golden == source)
+        goldens
 
 tInt :: Int -> Text
 tInt = T.pack . show

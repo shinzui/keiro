@@ -1482,32 +1482,12 @@ validateAggregate spec agg =
         , maybe True ((/= evVersion e - 1) . fst) (evUpcastFrom e)
         ]
 
-    -- The generated codec currently keys a rung solely by its source version.
-    -- Report each later claimant so every diagnostic has a precise declaration
-    -- location and names the earlier owner(s).
+    -- A generated rung dispatches by event type, so different events may
+    -- deliberately share a source version when they changed in one release.
+    -- Duplicate declarations for one event cannot survive the parser's unique
+    -- event-name rule, so no additional duplicate-source diagnostic is needed.
     duplicateUpcasterSourceRule =
-        [ mkErr (locLine (evLoc event)) DuplicateUpcasterSource $
-            "events '"
-                <> T.intercalate "', '" (map evName previousOwners)
-                <> "' and '"
-                <> evName event
-                <> "' both declare 'upcast from v"
-                <> tInt source
-                <> "'; the generated chain keys rungs by source version, so only one upcaster would run. Give the later-changed event version v"
-                <> tInt (maxEventVersion + 1)
-                <> " (the aggregate's next version), not its own previous version + 1 — aggregate-global schema stamps also mean a same-version re-shape of '"
-                <> evName event
-                <> "' would leave its old payloads stamped current and never migrated"
-        | (eventIndex, event) <- zip [0 :: Int ..] (aggEvents agg)
-        , Just (source, _) <- [evUpcastFrom event]
-        , let previousOwners =
-                [ previous
-                | previous <- take eventIndex (aggEvents agg)
-                , Just (previousSource, _) <- [evUpcastFrom previous]
-                , previousSource == source
-                ]
-        , not (null previousOwners)
-        ]
+        []
 
     -- Aggregate schema stamps are global, so every source version below the
     -- current maximum needs a permanent rung regardless of which event owns it.

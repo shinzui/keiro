@@ -7,7 +7,9 @@ module Keiro.Dsl.ScaffoldRun (
     StaleModule (..),
     ScaffoldReport (..),
     scaffoldModules,
+    scaffoldModulesWithGoldens,
     planScaffold,
+    planScaffoldWithGoldens,
     executeScaffold,
     renderRefusals,
     renderScaffoldReport,
@@ -19,8 +21,9 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
+import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
-import Keiro.Dsl.Harness (harnessFor, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.Harness (harnessForWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
@@ -59,10 +62,13 @@ data ScaffoldReport = ScaffoldReport
 this registry in one place prevents the CLI and tests from drifting apart.
 -}
 scaffoldModules :: Context -> Spec -> [ScaffoldModule]
-scaffoldModules ctx spec =
+scaffoldModules = scaffoldModulesWithGoldens []
+
+scaffoldModulesWithGoldens :: [GoldenPayload] -> Context -> Spec -> [ScaffoldModule]
+scaffoldModulesWithGoldens goldens ctx spec =
     concat
         [ case node of
-            NAggregate agg -> scaffoldAggregate ctx spec agg <> harnessFor ctx spec agg
+            NAggregate agg -> scaffoldAggregate ctx spec agg <> harnessForWithGoldens goldens ctx spec agg
             NProcess process -> scaffoldProcess ctx process <> harnessProcess ctx process
             NRouter router -> scaffoldRouter ctx router <> harnessRouter ctx router
             NContract contract -> scaffoldContract ctx contract
@@ -81,8 +87,11 @@ scaffoldModules ctx spec =
 a refusal has no write set and therefore cannot be accidentally executed.
 -}
 planScaffold :: Context -> Spec -> Either [Refusal] [ScaffoldModule]
-planScaffold ctx spec =
-    let modules = scaffoldModules ctx spec
+planScaffold = planScaffoldWithGoldens []
+
+planScaffoldWithGoldens :: [GoldenPayload] -> Context -> Spec -> Either [Refusal] [ScaffoldModule]
+planScaffoldWithGoldens goldens ctx spec =
+    let modules = scaffoldModulesWithGoldens goldens ctx spec
         breaches = firewallBreaches modules
         refusals =
             collisionRefusals modules

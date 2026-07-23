@@ -8,10 +8,10 @@ module Main (main) where
 
 import Control.Monad (unless)
 import Data.Text (Text)
-import Generated.HospitalCapacity.Reservation_work.Queue (ReservationWorkItem (..), encodeReservationWorkItem, groupKeyFor, parseReservationWorkItem)
+import Generated.HospitalCapacity.Reservation_work.Queue (ReservationWorkItem (..), groupKeyFor)
+import Generated.HospitalCapacity.Reservation_work.QueueCodec (reservationWorkJobCodec)
 import Generated.HospitalCapacity.Reservation_work.QueuePolicy (jobOrdering, jobOutcomeFor, jobTuningFor, queueProvision, retryPolicy)
 import Keiro.Dsl.Validate (derivedQueueTrio)
-import Keiro.PGMQ.Codec (mkJobCodec)
 import Keiro.PGMQ.Job (Job (..), JobOrdering (..), JobOutcome (..), JobTuning (..), RetryPolicy (..), defaultJobTuning, queueProvisionConfigs)
 import Keiro.PGMQ.Runtime (QueueRef (..), queueRef)
 import Pgmq.Config qualified as Config
@@ -37,7 +37,7 @@ main = do
             Job
                 { jobName = "reservation-work"
                 , jobQueue = queueRef "hospital_capacity.reservation_work"
-                , jobCodec = mkJobCodec encodeReservationWorkItem parseReservationWorkItem
+                , jobCodec = reservationWorkJobCodec
                 , jobPolicy = retryPolicy
                 }
         provisionOk = case queueProvisionConfigs queueProvision job of

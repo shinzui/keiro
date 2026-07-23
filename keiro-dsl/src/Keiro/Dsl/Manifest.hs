@@ -16,7 +16,8 @@ spec. The mapping is grounded in the existing per-suite @build-depends@ in
   * intake/emit/publisher (full integration path)
                         => effectful-core, hasql-transaction, keiro, kiroku-store
                                                          (…-intake-full)
-  * workqueue           => aeson, keiro-pgmq, text       (…-queue, …-queue-runtime)
+  * workqueue           => aeson, keiro-core, keiro-pgmq, text
+                                                         (…-queue, …-queue-runtime)
   * dispatch            => aeson, effectful-core, keiro-pgmq, text
                                                          (…-dispatch-full)
   * workflow/operation  => containers, effectful-core, keiro, text
@@ -80,7 +81,7 @@ depsForNode n = case n of
     NIntake{} -> integration
     NEmit{} -> integration
     NPublisher{} -> integration
-    NWorkqueue{} -> ["aeson", "keiro-pgmq", "text"]
+    NWorkqueue{} -> ["aeson", "keiro-core", "keiro-pgmq", "text"]
     NPgmqDispatch{} -> ["aeson", "effectful-core", "keiro-pgmq", "text"]
     NReadModel{} -> ["effectful-core", "hasql-transaction", "keiro", "kiroku-store", "text"]
     NWorkflow{} -> ["containers", "effectful-core", "keiro", "text"]

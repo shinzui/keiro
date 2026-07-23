@@ -42,16 +42,17 @@ The landed inventory is:
 | Change class | Single-spec `check` | Cross-spec `diff` | Runtime boundary / CI |
 |---|---|---|---|
 | Invalid schema version, duplicate event tags, out-of-range rung | Not all are expressible in the DSL | Not required | `mkCodec` fails validated stream construction |
-| Duplicate generated upcaster source | `DuplicateUpcasterSource` Error | Same-spec error is sufficient | `mkCodec` rejects the actual codec |
+| Different event kinds change at the same source version | Allowed; chain continuity still applies | Version bumps remain Additive only with their declared upcasts | Scaffolder merges them into one unique rung that dispatches by `EventType`; `mkCodec` validates the resulting codec |
+| Upcaster accidentally rewrites another event kind at the same aggregate version | Not author-expressible in generated code | No separate classification needed | Generated rung dispatch passes foreign kinds through byte-for-byte; codec-level conformance invokes each owning upcaster |
 | Missing aggregate rung | `UpcasterChainGap` Error | Vanished historical rung is Breaking `UpcasterChainGap` | `mkCodec` rejects startup; versioned JSON golden fails decode |
+| Event payload version bump | Contiguous upcaster required | `diff --emit-goldens` captures the old wire shape while both specs exist | `scaffold --goldens` embeds the fixture and the generated harness exercises `decodeRaw`; a stand-in is labelled as weaker when no golden exists |
 | `retiring` event without a live emitter | `EventRetirementInProgress` Error | Retirement start is Advisory | Generated shape remains the ordinary live machine |
 | Deprecated event without a replay-only emitter | `DeprecatedEventReplayHazard` Warning | Advisory with the same code | Real-log inversion remains plan 142's audit responsibility |
 | Deprecated event with a replay-only emitter | `EventRetirementInProgress` Warning | Replay-safe cutover Advisory | Transducer boundary validates the replay-only edge |
 | Guard tightening | Replay-only edge discipline from ADR 0002 | `AggGuardTightened` prints the retained twin | Real-log relevance remains plan 142's audit responsibility |
 | Fold/control-state change | Snapshot contract from ADR 0003 | `AggFoldSurfaceChanged` Advisory | Snapshot discriminator rejects stale seeds |
+| New scaffolded workqueue payload | No payload-evolution grammar yet | Existing workqueue shape changes keep their normal classifications | Generated `QueueCodec` starts at schema version 1 with a `keiroJobCodec` `{v,t,data}` envelope; existing bare-payload queues must drain before adoption |
 
-Plan 140 must extend this inventory when tag-aware upcaster lowering changes
-which duplicate-source shapes are sound and when generated job codecs land.
 Plan 142 must extend it with replay-impact verdicts, targeted real-log audit
 coverage, and sampled seed verification.
 
@@ -64,6 +65,10 @@ coverage, and sampled seed verification.
   history, such as whether live streams still contain a deprecated event.
 - A decode golden proves decode compatibility only. It must never be described
   as proof that an old event still has an inverting edge or folds identically.
+- Golden synthesis never overwrites an existing file, so hand-captured
+  production payloads remain authoritative.
+- The generated job codec changes payload bytes only. It does not alter the
+  span and acknowledgement contract in ADR 0001.
 - `mkEventStreamUnchecked` remains the explicit emergency-forensics bypass and
   skips every layer at the stream boundary; it is not a production rollout
   workaround.

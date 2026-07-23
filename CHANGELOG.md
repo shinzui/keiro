@@ -22,6 +22,15 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Added
 
+- `keiro-dsl` now lowers same-version event upcasters into one
+  `EventType`-dispatching rung, so unrelated event kinds pass through
+  unchanged, and supports `diff --emit-goldens DIR` plus
+  `scaffold --goldens DIR` to capture and embed genuine old payload shapes in
+  generated conformance harnesses.
+- Scaffolded workqueues now include a `QueueCodec` module with a versioned
+  `keiroJobCodec` envelope from schema version 1. Fresh queues need no migration;
+  drain a queue before replacing an existing bare-payload codec (or use a
+  transitional codec) so in-flight messages are not dead-lettered.
 - `keiro-dsl check` now rejects duplicate and incomplete aggregate upcaster
   chains, supports a mutually exclusive `retiring event` marker, and warns
   when deprecated events lack the replay-only transition required to hydrate

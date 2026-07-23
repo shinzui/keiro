@@ -9,25 +9,26 @@ import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), diffSpecs, isBreaking)
+import Keiro.Dsl.Goldens (emitGoldenPayloads, loadGoldenPayloads)
 import Keiro.Dsl.Grammar (Placement (..), Spec (..))
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.Scaffold (Context (..))
-import Keiro.Dsl.ScaffoldRun (executeScaffold, planScaffold, renderRefusals, renderScaffoldReport)
+import Keiro.Dsl.ScaffoldRun (executeScaffold, planScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
 import Options.Applicative
 import System.Directory (canonicalizePath)
 import System.Exit (ExitCode (..), exitFailure)
-import System.FilePath (makeRelative, takeDirectory)
+import System.FilePath (makeRelative, takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcessWithExitCode)
 
 data Command
     = Parse FilePath
     | Check FilePath Bool
-    | Scaffold FilePath FilePath (Maybe String) Bool Bool
-    | Diff FilePath String
+    | Scaffold FilePath FilePath (Maybe String) Bool Bool (Maybe FilePath)
+    | Diff FilePath String (Maybe FilePath)
     | New String
 
 main :: IO ()
@@ -49,10 +50,10 @@ commands =
                 (info (Check <$> fileArg <*> emitSwitch <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
             <> command
                 "scaffold"
-                (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
+                (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> optional goldensOpt <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
             <> command
                 "diff"
-                (info (Diff <$> fileArg <*> sinceOpt <**> helper) (progDesc "Classify spec changes since a git ref as ADDITIVE/WARNING/BREAKING over the decode and identity surface; exit non-zero on any BREAKING change"))
+                (info (Diff <$> fileArg <*> sinceOpt <*> optional emitGoldensOpt <**> helper) (progDesc "Classify spec changes since a git ref as ADDITIVE/WARNING/BREAKING over the decode and identity surface; exit non-zero on any BREAKING change"))
             <> command
                 "new"
                 (info (New <$> kindArg <**> helper) (progDesc "Print a minimal valid .keiro skeleton for a node kind (aggregate, process, router, contract, intake, emit, publisher, workqueue, dispatch, workflow, operation)"))
@@ -69,6 +70,12 @@ collocateSwitch = switch (long "collocate" <> help "Place the generated layer as
 
 forceGeneratedOverwriteSwitch :: Parser Bool
 forceGeneratedOverwriteSwitch = switch (long "force-generated-overwrite" <> help "Overwrite a Generated path even when the existing file lacks the @generated banner")
+
+goldensOpt :: Parser FilePath
+goldensOpt = strOption (long "goldens" <> metavar "DIR" <> help "Golden-payload root to embed in generated aggregate harnesses")
+
+emitGoldensOpt :: Parser FilePath
+emitGoldensOpt = strOption (long "emit-goldens" <> metavar "DIR" <> help "Write old-shape payload fixtures for event version bumps without overwriting existing files")
 
 emitSwitch :: Parser Bool
 emitSwitch = switch (long "emit" <> help "On success, pretty-print the parsed spec to stdout (folds parse + check into one call)")
@@ -105,7 +112,7 @@ run (Check fp emit) = do
                     if emit
                         then TIO.putStrLn (renderSpec spec)
                         else putStrLn "OK"
-run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite) = do
+run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens) = do
     input <- TIO.readFile fp
     case parseSpec fp input of
         Left err -> do
@@ -118,7 +125,9 @@ run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite) = do
             mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
             when (any ((== Error) . severity) diags) exitFailure
             let ctx = mkContext cliRoot cliCollocate spec
-            case planScaffold ctx spec of
+                goldenRoot = fromMaybe (takeDirectory fp </> "golden-payloads") cliGoldens
+            goldens <- loadGoldenPayloads goldenRoot spec
+            case planScaffoldWithGoldens goldens ctx spec of
                 Left refusals -> do
                     mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
                     exitFailure
@@ -133,7 +142,7 @@ run (New kind) =
     case skeletonFor (T.pack kind) of
         Left err -> hPutStrLn stderr (T.unpack err) >> exitFailure
         Right skel -> TIO.putStr skel
-run (Diff fp ref) = do
+run (Diff fp ref emitGoldensRoot) = do
     -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.
     let dir = takeDirectory fp
     rootRes <- git dir ["rev-parse", "--show-toplevel"]
@@ -151,6 +160,8 @@ run (Diff fp ref) = do
                     case (,) <$> parseSpec (ref <> ":" <> relPath) (T.pack oldText) <*> parseSpec fp newText of
                         Left perr -> hPutStrLn stderr (T.unpack perr) >> exitFailure
                         Right (oldSpec, newSpec) -> do
+                            written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) emitGoldensRoot
+                            mapM_ (putStrLn . ("golden: wrote " <>)) written
                             let changes = diffSpecs oldSpec newSpec
                             mapM_ (putStrLn . renderChange) changes
                             if any isBreaking changes then exitFailure else pure ()

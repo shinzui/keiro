@@ -12,11 +12,9 @@ module HospitalCapacity.ReservationWork.WorkqueueJob (
 import Effectful (Eff)
 import Generated.HospitalCapacity.Reservation_work.Queue (
     ReservationWorkItem,
-    encodeReservationWorkItem,
-    parseReservationWorkItem,
  )
+import Generated.HospitalCapacity.Reservation_work.QueueCodec (reservationWorkJobCodec)
 import Generated.HospitalCapacity.Reservation_work.QueuePolicy (retryPolicy)
-import Keiro.PGMQ.Codec (mkJobCodec)
 import Keiro.PGMQ.Job (Job (..), JobOutcome (..))
 import Keiro.PGMQ.Runtime (queueRef)
 
@@ -26,10 +24,7 @@ reservationWorkJob =
     Job
         { jobName = "reservation-work"
         , jobQueue = queueRef "hospital_capacity.reservation_work"
-        , jobCodec =
-            mkJobCodec
-                encodeReservationWorkItem
-                parseReservationWorkItem
+        , jobCodec = reservationWorkJobCodec
         , jobPolicy = retryPolicy
         }
 

@@ -57,7 +57,7 @@ module Keiro.Dsl.Scaffold (
 ) where
 
 import Data.Char (isAlpha, isAlphaNum, isUpper, toLower, toUpper)
-import Data.List (find)
+import Data.List (find, groupBy, sortOn)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -668,6 +668,12 @@ scaffoldWorkqueue ctx w =
         , kind = Generated
         , origin = nodeOrigin "workqueue" (wqName w) (wqLoc w)
         }
+    , ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/QueueCodec.hs")
+        , moduleText = emitQueueCodec genPrefix w
+        , kind = Generated
+        , origin = nodeOrigin "workqueue" (wqName w) (wqLoc w)
+        }
     ]
   where
     genPrefix = genPrefixFor ctx (pascal (wqName w))
@@ -753,6 +759,49 @@ emitWorkqueueGen genPrefix w =
     lead _ kv = "    , " <> kv
     fieldApps [] = ""
     fieldApps fs = " <$> " <> T.intercalate " <*> " ["o .: " <> tshow (wqfWire f) | f <- fs]
+
+{- | Emit the versioned PGMQ envelope adapter.  The payload record remains
+symbol-free and dependency-light in Queue.hs; this runtime-facing module is
+the opt-in assembly point applications import into their Job values.
+-}
+emitQueueCodec :: Text -> WorkqueueNode -> Text
+emitQueueCodec genPrefix w =
+    nl
+        [ "{-# LANGUAGE OverloadedStrings #-}"
+        , generatedBanner
+        , "{- | Versioned job payload envelope: @{\\\"v\\\",\\\"t\\\",\\\"data\\\"}@."
+        , ""
+        , "Deploy workers before producers when raising its schema version. Do not"
+        , "adopt this codec on a non-empty bare-payload queue without draining it"
+        , "(or supplying a transitional codec), or in-flight messages will"
+        , "dead-letter. This is telemetry-neutral:"
+        , "docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md owns"
+        , "spans and acknowledgement vocabulary."
+        , "-}"
+        , "module " <> genPrefix <> ".QueueCodec (" <> stem <> "PayloadCodec, " <> stem <> "JobCodec) where"
+        , ""
+        , "import Data.List.NonEmpty (NonEmpty (..))"
+        , "import Keiro.Codec (Codec (..), EventType (..))"
+        , "import Keiro.PGMQ.Codec (JobCodec, keiroJobCodec)"
+        , "import " <> genPrefix <> ".Queue (" <> payloadTy <> ", encode" <> payloadTy <> ", parse" <> payloadTy <> ")"
+        , ""
+        , stem <> "PayloadCodec :: Codec " <> payloadTy
+        , stem <> "PayloadCodec ="
+        , "  Codec"
+        , "    { eventTypes = EventType " <> tshow payloadTy <> " :| []"
+        , "    , eventType = \\_ -> EventType " <> tshow payloadTy
+        , "    , schemaVersion = 1"
+        , "    , encode = encode" <> payloadTy
+        , "    , decode = \\_ -> parse" <> payloadTy
+        , "    , upcasters = []"
+        , "    }"
+        , ""
+        , stem <> "JobCodec :: JobCodec " <> payloadTy
+        , stem <> "JobCodec = keiroJobCodec " <> stem <> "PayloadCodec"
+        ]
+  where
+    payloadTy = wqPayloadName w
+    stem = lowerFirst (T.concat (map pascal (T.splitOn "_" (wqName w))))
 
 {- | Emit the pgmq retry policy + JobOutcome disposition compiled against the
 LIVE @Keiro.PGMQ.Job@ runtime (RetryPolicy / JobOutcome / RetryDelay). This pins
@@ -1551,6 +1600,7 @@ emitCodecValue a =
                , "    , upcasters = " <> upcastersExpr a
                , "    }"
                ]
+            ++ upcasterRungDecls a
   where
     eventTypesExpr = case map rcName (aEvents a) of
         [] -> "error \"no events\""
@@ -1564,16 +1614,44 @@ maxEventVersion a = maximum (1 : map rcVersion (aEvents a))
 @upcast from@. The upcaster name is per-event (e.g. @upcastFooV1@) and its
 body is a hole in the hand-owned Holes module.
 -}
-upcasterEntries :: Agg -> [(Int, Text)]
+upcasterEntries :: Agg -> [(Int, Text, Text)]
 upcasterEntries a =
-    [ (m, "upcast" <> rcName e <> "V" <> tshow' m)
+    [ (m, rcName e, "upcast" <> rcName e <> "V" <> tshow' m)
     | e <- aEvents a
     , Just m <- [rcUpcastFrom e]
     ]
 
 upcastersExpr :: Agg -> Text
 upcastersExpr a =
-    "[" <> T.intercalate ", " ["(" <> tshow' m <> ", const " <> fn <> ")" | (m, fn) <- upcasterEntries a] <> "]"
+    "[" <> T.intercalate ", " ["(" <> tshow' m <> ", upcastRungV" <> tshow' m <> ")" | (m, _) <- upcasterRungs a] <> "]"
+
+{- | Group event-specific holes into one migration rung per aggregate-global
+source version.  Event metadata stamps every kind with the aggregate's
+schema version, so a rung must explicitly pass foreign event kinds through.
+-}
+upcasterRungs :: Agg -> [(Int, [(Text, Text)])]
+upcasterRungs a =
+    [ (source, [(eventName, fn) | (_, eventName, fn) <- entries])
+    | entries@((source, _, _) : _) <- groupBy sameSource (sortOn firstSource (upcasterEntries a))
+    ]
+  where
+    firstSource (source, _, _) = source
+    sameSource (source, _, _) (otherSource, _, _) = source == otherSource
+
+upcasterRungDecls :: Agg -> [Text]
+upcasterRungDecls a = concatMap rung (upcasterRungs a)
+  where
+    rung (source, entries) =
+        [ ""
+        , "upcastRungV" <> tshow' source <> " :: EventType -> Value -> Either Text Value"
+        ]
+            ++ [ "upcastRungV" <> tshow' source <> " (EventType " <> tshow eventName <> ") value = " <> fn <> " value"
+               | (eventName, fn) <- entries
+               ]
+            ++ [ "-- Kinds whose shape did not change at this rung pass through unchanged; their"
+               , "-- stamped version is aggregate-global, not their own shape history."
+               , "upcastRungV" <> tshow' source <> " _ value = Right value"
+               ]
 
 {- | When the codec references upcasters, it imports their (hole) definitions
 from the hand-owned Holes module.
@@ -1581,7 +1659,7 @@ from the hand-owned Holes module.
 upcasterImport :: Agg -> Text
 upcasterImport a = case upcasterEntries a of
     [] -> ""
-    es -> "import " <> aHolePrefix a <> ".Holes (" <> T.intercalate ", " (map snd es) <> ")"
+    es -> "import " <> aHolePrefix a <> ".Holes (" <> T.intercalate ", " [fn | (_, _, fn) <- es] <> ")"
 
 emitEncode :: Agg -> Text
 emitEncode a =
@@ -1869,7 +1947,7 @@ emitHoles a =
 holeUpcasterExports :: Agg -> Text
 holeUpcasterExports a = case upcasterEntries a of
     [] -> ""
-    es -> nl ["  , " <> fn | (_, fn) <- es]
+    es -> nl ["  , " <> fn | (_, _, fn) <- es]
 
 holeUpcasterImports :: Agg -> Text
 holeUpcasterImports a = case upcasterEntries a of
@@ -1883,12 +1961,14 @@ holeUpcasterStubs a = case upcasterEntries a of
         nl $
             concat
                 [ [ ""
-                  , "-- HOLE upcaster: bring a " <> fn <> " payload up one version. Decide the"
-                  , "-- default/derivation for any field added at the new version here."
+                  , "-- HOLE upcaster: this hole receives ONLY " <> eventName <> " payloads stored at"
+                  , "-- aggregate schema version " <> tshow' source <> "; other event kinds pass through the"
+                  , "-- generated rung dispatch automatically. Bring this payload up one version and decide"
+                  , "-- the default/derivation for any field added at the new version here."
                   , fn <> " :: Value -> Either Text Value"
                   , fn <> " _ = Left \"HOLE: upcaster not implemented\""
                   ]
-                | (_, fn) <- es
+                | (source, eventName, fn) <- es
                 ]
 
 holeProjectionExport :: Agg -> Text

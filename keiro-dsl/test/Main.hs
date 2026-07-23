@@ -6,14 +6,18 @@ module Main (main) where
 
 import Control.Exception (bracket)
 import Control.Monad (filterM, forM_)
+import Data.Aeson (Value, object, (.=))
 import Data.Either (isLeft)
 import Data.List (partition, sort)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
+import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), FamilyDiff (..), NodeFamily, diffSpecs, familyRegistry, isAdvisory, isBreaking)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldSurface)
+import Keiro.Dsl.Goldens (GoldenPayload (..), goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.Harness (harnessFor, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec, renderTransition)
@@ -191,9 +195,9 @@ main = hspec $ do
         it "rejects a v2 event with no upcaster as EvtVersionMissingUpcaster" $ do
             codes <- diagnosticCodesOf "test/fixtures/reservation-v2-noupcast.keiro"
             codes `shouldContain` [EvtVersionMissingUpcaster]
-        it "rejects duplicate aggregate-global upcaster sources" $ do
+        it "accepts shared upcaster sources for different event kinds" $ do
             codes <- errorCodesOf "test/fixtures/reservation-dup-upcast-source.keiro"
-            codes `shouldContain` [DuplicateUpcasterSource]
+            codes `shouldNotContain` [DuplicateUpcasterSource]
         it "rejects a gap in the aggregate-global upcaster chain" $ do
             codes <- errorCodesOf "test/fixtures/reservation-chain-gap.keiro"
             codes `shouldContain` [UpcasterChainGap]
@@ -1438,6 +1442,77 @@ main = hspec $ do
                 [] -> expectationFailure "exact-status spec has no aggregate"
 
     describe "scaffold" $ do
+        it "synthesizes the exact old wire shape and embeds it in the harness" $ do
+            oldSpec <- specOf "test/fixtures/reservation.keiro"
+            newSpec <- specOf "test/fixtures/reservation-v2.keiro"
+            case goldensForDiff oldSpec newSpec of
+                [golden] -> do
+                    goldenRelativePath golden
+                        `shouldBe` "hospital-capacity/Reservation/TransferReservationCreated.v1.json"
+                    goldenJson golden
+                        `shouldBe` T.unlines
+                            [ "{"
+                            , "  \"kind\": \"TransferReservationCreated\","
+                            , "  \"reservationId\": \"rsv_01hzy3v7q2e8kaw2m5x0d41n9c\","
+                            , "  \"hospitalId\": \"hosp_01hzy3v7q2e8kaw2m5x0d41n9c\","
+                            , "  \"commandId\": \"cmd_01hzy3v7q2e8kaw2m5x0d41n9c\","
+                            , "  \"patientAcuity\": \"red\","
+                            , "  \"divertStatus\": \"open\","
+                            , "  \"lifeCriticalOverride\": true"
+                            , "}"
+                            ]
+                    let aggregate = onlyAggregate newSpec
+                        modules =
+                            harnessForWithGoldens
+                                [golden]
+                                (defaultContext (specContext newSpec))
+                                newSpec
+                                aggregate
+                        harness = generatedTextEndingIn "Harness.hs" modules
+                    harness `shouldSatisfy` T.isInfixOf "golden TransferReservationCreated.v1 decodes"
+                    harness `shouldSatisfy` T.isInfixOf "\\\"reservationId\\\": \\\"rsv_"
+                    harness `shouldSatisfy` (not . T.isInfixOf "current-shape stand-in")
+                goldens -> expectationFailure ("expected one synthesized golden, got " <> show goldens)
+        it "dispatches shared-version upcasters by wire event type and passes foreign kinds through" $ do
+            source <- readTestText "test/fixtures/reservation-dup-upcast-source.keiro"
+            spec <- parseInlineSpec "<shared-upcaster-source>" source
+            case [aggregate | NAggregate aggregate <- specNodes spec] of
+                [aggregate] -> do
+                    let modules = scaffoldAggregate (defaultContext (specContext spec)) spec aggregate
+                        codec = generatedTextEndingIn "Codec.hs" modules
+                        holes = case [moduleText m | m <- modules, "Holes.hs" `T.isSuffixOf` T.pack (modulePath m)] of
+                            [text] -> text
+                            _ -> ""
+                    codec `shouldSatisfy` T.isInfixOf "upcasters = [(1, upcastRungV1)]"
+                    codec `shouldSatisfy` T.isInfixOf "upcastRungV1 (EventType \"TransferReservationCreated\") value = upcastTransferReservationCreatedV1 value"
+                    codec `shouldSatisfy` T.isInfixOf "upcastRungV1 (EventType \"TransferReservationConfirmed\") value = upcastTransferReservationConfirmedV1 value"
+                    codec `shouldSatisfy` T.isInfixOf "upcastRungV1 _ value = Right value"
+                    holes `shouldSatisfy` T.isInfixOf "receives ONLY TransferReservationCreated payloads"
+                _ -> expectationFailure "expected exactly one aggregate"
+        it "keeps foreign payloads byte-for-byte and invokes both same-rung event upcasters" $ do
+            let payloadA = object ["kind" .= ("AmountScaled" :: T.Text), "amount" .= (2 :: Int)]
+                payloadB = object ["kind" .= ("AmountRenamed" :: T.Text), "amount" .= (3 :: Int)]
+                foreignPayload = object ["kind" .= ("AmountObserved" :: T.Text), "amount" .= (7 :: Int)]
+                upcastA _ = Right (object ["kind" .= ("AmountScaled" :: T.Text), "amount" .= (200 :: Int)])
+                upcastB _ = Right (object ["kind" .= ("AmountRenamed" :: T.Text), "amountInCents" .= (300 :: Int)])
+                rung (EventType "AmountScaled") = upcastA
+                rung (EventType "AmountRenamed") = upcastB
+                rung _ = Right
+                codec =
+                    Codec
+                        { eventTypes = EventType "AmountScaled" :| [EventType "AmountRenamed", EventType "AmountObserved"]
+                        , eventType = const (EventType "AmountObserved")
+                        , schemaVersion = 2
+                        , encode = id
+                        , decode = \_ -> Right
+                        , upcasters = [(1, rung)]
+                        } ::
+                        Codec Value
+            decodeRaw codec (EventType "AmountObserved") 1 foreignPayload `shouldBe` Right foreignPayload
+            decodeRaw codec (EventType "AmountScaled") 1 payloadA
+                `shouldBe` Right (object ["kind" .= ("AmountScaled" :: T.Text), "amount" .= (200 :: Int)])
+            decodeRaw codec (EventType "AmountRenamed") 1 payloadB
+                `shouldBe` Right (object ["kind" .= ("AmountRenamed" :: T.Text), "amountInCents" .= (300 :: Int)])
         it "never emits a keiki symbolic operator into a Generated module (firewall)" $ do
             mods <- scaffoldFixture "test/fixtures/reservation.keiro"
             firewallBreaches mods `shouldBe` []

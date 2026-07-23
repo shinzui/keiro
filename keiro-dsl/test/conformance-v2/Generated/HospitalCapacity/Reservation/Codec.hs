@@ -47,8 +47,14 @@ reservationCodec =
         , schemaVersion = 2
         , encode = encodeReservationEvent
         , decode = parseReservationEvent
-        , upcasters = [(1, const upcastTransferReservationCreatedV1)]
+        , upcasters = [(1, upcastRungV1)]
         }
+
+upcastRungV1 :: EventType -> Value -> Either Text Value
+upcastRungV1 (EventType "TransferReservationCreated") value = upcastTransferReservationCreatedV1 value
+-- Kinds whose shape did not change at this rung pass through unchanged; their
+-- stamped version is aggregate-global, not their own shape history.
+upcastRungV1 _ value = Right value
 
 encodeReservationEvent :: ReservationEvent -> Value
 encodeReservationEvent = \case
