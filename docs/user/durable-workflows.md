@@ -99,6 +99,10 @@ newtype PatchId = PatchId { unPatchId :: Text }
   history, so its action runs fresh) rather than reaching for `patch`. Never
   reuse a retired `PatchId`.
 
+Changing a journaled step-result type in place makes resume fail. See
+[Deploy Ordering](deploy-ordering.md#8-treat-workflow-step-results-as-permanent)
+for the rollout and current recovery boundary.
+
 ## Journal stream and tables
 
 ```haskell

@@ -167,7 +167,9 @@ older snapshot write cannot overwrite a newer row.
 
 See
 [Evolution And Replayability](../guides/evolution-and-replayability.md#changing-the-fold-same-events-different-state--and-what-snapshots-do-to-you)
-for the per-change procedure.
+for the per-change procedure and
+[Deploy Ordering](deploy-ordering.md#9-gate-transducer-changes-with-real-log-replay)
+for the rollout gate.
 
 Stream truncation is the exception to ordinary advisory fallback: once older
 events are hidden, a valid snapshot must cover the hidden prefix. Before moving

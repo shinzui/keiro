@@ -167,6 +167,11 @@ The mapping is:
 - `payload` ← `integrationPayload`
 - `headers` ← UTF-8 of `integrationHeaders`
 
+Integration payload compatibility is coordinated across producer and consumer
+deployments. See
+[Deploy Ordering](deploy-ordering.md#7-coordinate-integration-contracts-manually)
+before changing a live integration contract.
+
 ## Schema and storage
 
 The outbox table is created by `keiro-migrate` from the native Keiro component's

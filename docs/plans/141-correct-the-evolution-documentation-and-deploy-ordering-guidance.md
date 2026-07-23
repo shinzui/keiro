@@ -55,7 +55,7 @@ page.
 
 - [x] M1 (2026-07-23T18:16:15Z): `codecs-and-event-evolution.md` and `evolve-events-safely.md` corrected against current `Keiro.Codec`; companion-guide cross-links added; `just website-verify` passed (163 HTML pages).
 - [x] M2 (2026-07-23T18:17:45Z): `snapshots.md` corrected (`Custom`/`Terminality`; three-component discriminator and manual-bump residual documented); `replay-safety.md` now covers evolution over time, retirement, replay-only edges, and the planned real-log audit; `just website-verify` passed (163 HTML pages).
-- [ ] M3: `docs/user/deploy-ordering.md` written; `docs/user/README.md` index updated; guide cross-links landed in all touched docs.
+- [x] M3 (2026-07-23T18:20:16Z): `docs/user/deploy-ordering.md` written with nine current rollout rule groups; `docs/user/README.md` indexed it; feature-doc pointers landed; `just website-verify` passed (163 HTML pages).
 - [ ] Close-out: planned-gate references flipped to present tense for any of plans 138/139/140/142 that landed before this plan closes; master plan 24 EP-4 box ticked; ADR distillation pass.
 
 
@@ -64,7 +64,13 @@ page.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Discovery (2026-07-23): the companion guide that this plan originally excluded from
+  edits still describes the pre-EP-1/2/3 world: it says the startup boundary never calls
+  `mkCodec`, generated harnesses use current-shape stand-ins, generated job queues are
+  unversioned, snapshot compatibility has only two components, and event deprecation
+  passes every gate. Cross-linking the corrected reference docs to that guide would leave
+  mutually contradictory user guidance. The close-out therefore includes a surgical
+  shipped-gate tense/truth sweep of the guide; its change-class structure remains intact.
 
 
 ## Decision Log
@@ -118,6 +124,15 @@ implementation. Provide concise evidence.
   (master plan 16's EP-4), never described as existing.
   Rationale: At authoring time the terminal `WorkflowFailed` state has no recovery API;
   promising one that has not landed is exactly the class of doc drift this plan removes.
+  Date: 2026-07-23
+
+- Decision: Supersede the original "companion guide is cross-linked only" file exclusion
+  for a narrow close-out truth sweep now that plans 138, 139, and 140 have landed.
+  Rationale: The guide explicitly promises to state which gates catch each mistake today,
+  but still presents those three completed plans as future work. Leaving those claims
+  untouched would violate this plan's user-visible outcome and make the new deploy-ordering
+  reference point readers at false operational advice. This revision updates only shipped
+  gate status and links; it does not restructure or replace the guide.
   Date: 2026-07-23
 
 

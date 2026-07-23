@@ -106,6 +106,11 @@ numeric or UUID headers produce `InvalidIntHeader` /
 `InvalidUuidHeader`. Optional headers (schema reference, source event
 id, trace context) are silently absent from the resulting envelope.
 
+The payload decoder is ordinary `FromJSON`, so cross-service schema rollout is
+manual. See
+[Deploy Ordering](deploy-ordering.md#7-coordinate-integration-contracts-manually)
+before changing a producer or consumer shape.
+
 ## Schema
 
 The inbox table is created by `keiro-migrate` from

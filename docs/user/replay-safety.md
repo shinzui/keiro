@@ -216,4 +216,5 @@ idempotency keys, operational monitoring, or deterministic integration design.
 
 See
 [Evolution And Replayability](../guides/evolution-and-replayability.md) for the
-safe procedure for each change class.
+safe procedure for each change class and
+[Deploy Ordering](deploy-ordering.md) for rollout sequencing.

@@ -48,6 +48,8 @@ pieces those modules import.
   runtime schema initialization, and owning application table migrations.
 - [Migration Ownership](migration-ownership.md): framework-owned vs
   application-owned migrations, combined-ledger composition, and operator checks.
+- [Deploy Ordering](deploy-ordering.md): which binaries must roll first for
+  codec, queue, decide, timer, integration, and workflow changes.
 - [Operations](operations.md): database requirements, schema initialization,
   workers, retries, idempotency, and production checklist.
 - [Roadmap](roadmap.md): capability matrix, v1.x workflow substrate, read-side

@@ -105,9 +105,9 @@ Use these rules for event evolution:
 - Keep event names semantic, not implementation-specific.
 
 Aggregate codec bumps cannot use an ordinary mixed-version rolling deployment:
-an old binary rejects a newly written version with `VersionAhead`. The
-deployment cutover procedure is documented in this initiative's deploy-ordering
-reference.
+an old binary rejects a newly written version with `VersionAhead`. See
+[Deploy Ordering](deploy-ordering.md#2-cut-aggregate-codec-bumps-over-without-mixed-versions)
+for the cutover procedure.
 
 ## Validating Codec Configuration
 

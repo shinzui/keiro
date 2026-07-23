@@ -170,6 +170,11 @@ Keiro writes those timers in the same transaction as the manager state append.
 
 Timer ids should be deterministic for replay-safe behavior.
 
+Before deploying a process-manager or router fan-out change, drain its
+redelivery window. Before scheduling a new timer payload shape, deploy every
+firer that can decode both shapes. See
+[Deploy Ordering](deploy-ordering.md#4-drain-process-manager-and-router-decide-changes).
+
 ## Firing Timers
 
 `runTimerWorker` claims one due timer, calls your firing function, and marks the
