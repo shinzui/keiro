@@ -34,8 +34,9 @@ parent = do
   @'awaitStep' (StepName \"child:\<childId\>:result\") arm@. On the miss path it
   re-delivers a completed child's stored result onto the current parent
   generation (attach semantics), throws 'WorkflowChildCancelled' if the child
-  was cancelled meanwhile, and otherwise re-asserts nothing new (the spawn
-  already registered the link). On the hit path
+  was cancelled meanwhile, throws 'WorkflowChildFailed' from the durable child
+  row if it failed, and otherwise re-asserts nothing new (the spawn already
+  registered the link). On the hit path
   it decodes a tagged parent-journal envelope: @{"ok": result}@ returns the
   child result, @{"cancelled": true}@ throws 'WorkflowChildCancelled',
   @{"failed": reason}@ throws 'WorkflowChildFailed', and legacy raw values are
@@ -114,7 +115,7 @@ import Keiro.Workflow.Child.Schema (
     markChildResultTx,
     registerChildTx,
  )
-import Keiro.Workflow.Instance (WorkflowStatus (..), upsertInstanceTx)
+import Keiro.Workflow.Instance (WorkflowStatus (..), lookupInstance, upsertInstanceTx)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
@@ -243,6 +244,16 @@ awaitChild (ChildHandle childNm childWid) = do
                 Just row
                     | (row ^. #status) == ChildCancelled ->
                         throwIO (WorkflowChildCancelled childNm childWid)
+                    | (row ^. #status) == ChildFailed -> do
+                        mInstance <- lookupInstance childNm childWid
+                        let reason =
+                                case row ^. #failureReason of
+                                    Just recorded -> recorded
+                                    Nothing ->
+                                        fromMaybe
+                                            "child workflow failed (reason not recorded)"
+                                            (mInstance >>= (^. #lastError))
+                        throwIO (WorkflowChildFailed childNm childWid reason)
                     | (row ^. #status) == ChildCompleted
                     , Just resultValue <- row ^. #result ->
                         appendJournalEntry

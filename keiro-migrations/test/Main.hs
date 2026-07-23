@@ -48,7 +48,7 @@ import Test.Hspec
 main :: IO ()
 main = hspec $ do
     describe "native Keiro migration definition" $ do
-        it "tracks nineteen native files in manifest order" $ do
+        it "tracks twenty native files in manifest order" $ do
             directory <- findMigrationsDirectory
             manifest <- Text.lines <$> Text.IO.readFile (directory </> "manifest")
             manifest `shouldBe` Text.pack <$> nativeMigrationFiles
@@ -61,7 +61,7 @@ main = hspec $ do
                 bytes <- ByteString.readFile (directory </> nativeName)
                 lookup legacyName lockEntries `shouldBe` Just (checksumText bytes)
 
-        it "builds component keiro with dependency kiroku and nineteen migrations" $ do
+        it "builds component keiro with dependency kiroku and twenty migrations" $ do
             plan <- requirePlan
             let PlanDescription components = planDescription plan
             case toList components of
@@ -74,7 +74,7 @@ main = hspec $ do
                         componentNameText keiroName `shouldBe` "keiro"
                         dependencyName <- requireRight (componentName "kiroku")
                         keiroDependencies `shouldBe` Set.singleton dependencyName
-                        length keiroEntries `shouldBe` 19
+                        length keiroEntries `shouldBe` 20
                 actual -> expectationFailure ("unexpected plan description: " <> show actual)
             validateHistoryMappingTargets plan frameworkCoddHistoryMappings `shouldBe` Right ()
 
@@ -91,12 +91,12 @@ main = hspec $ do
                 assertSchema connection
                 let provider = providerFor connection
                 rerun <- runMigrationPlanWith defaultRunOptions provider plan >>= requireRight
-                reportOutcomes rerun `shouldBe` replicate 27 AlreadyApplied
+                reportOutcomes rerun `shouldBe` replicate 28 AlreadyApplied
                 verified <- verifyMigrationPlanWith defaultRunOptions provider plan >>= requireRight
                 case verified of
                     VerificationReport verificationIssues applied pending unknown -> do
                         verificationIssues `shouldBe` []
-                        length applied `shouldBe` 27
+                        length applied `shouldBe` 28
                         pending `shouldBe` []
                         unknown `shouldBe` []
             either (expectationFailure . show) pure result
@@ -110,7 +110,7 @@ main = hspec $ do
                         (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
                         (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
                 sort [reportOutcomes first, reportOutcomes second]
-                    `shouldBe` sort [replicate 27 AppliedNow, replicate 27 AlreadyApplied]
+                    `shouldBe` sort [replicate 28 AppliedNow, replicate 28 AlreadyApplied]
 
     describe "combined Codd history import" $ do
         it "imports a shared Codd V5 ledger atomically without replaying target SQL" $
@@ -176,6 +176,7 @@ importFixture sourceSchema = do
         keiroCanaryId <- requireRight (migrationId "keiro" "0017-schema-management-comment")
         keiroDeadLettersId <- requireRight (migrationId "keiro" "0018")
         keiroStateShapeId <- requireRight (migrationId "keiro" "0019-keiro-snapshots-state-shape-hash")
+        keiroFailureReasonId <- requireRight (migrationId "keiro" "0020-keiro-workflow-children-failure-reason")
         verifiedBeforeCanaries <- verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
         case verifiedBeforeCanaries of
             VerificationReport verificationIssues _ _ _ ->
@@ -184,18 +185,19 @@ importFixture sourceSchema = do
                                , PendingMigration keiroCanaryId
                                , PendingMigration keiroDeadLettersId
                                , PendingMigration keiroStateShapeId
+                               , PendingMigration keiroFailureReasonId
                                ]
         up <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
         reportOutcomes up
             `shouldBe` replicate 7 AlreadyApplied
                 <> [AppliedNow]
                 <> replicate 16 AlreadyApplied
-                <> [AppliedNow, AppliedNow, AppliedNow]
+                <> [AppliedNow, AppliedNow, AppliedNow, AppliedNow]
         verifiedAfterCanaries <- verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
         case verifiedAfterCanaries of
             VerificationReport verificationIssues _ _ _ -> verificationIssues `shouldBe` []
         rerun <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
-        reportOutcomes rerun `shouldBe` replicate 27 AlreadyApplied
+        reportOutcomes rerun `shouldBe` replicate 28 AlreadyApplied
         second <-
             importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
                 >>= requireRight
@@ -205,7 +207,7 @@ importFixture sourceSchema = do
             sourceRows <- useSession connection (Session.statement () (sourceRowCountStatement sourceSchema))
             sourceRows `shouldBe` 23
             facts <- useSession connection (Session.statement () importFactsStatement)
-            facts `shouldBe` (27, 23, True)
+            facts `shouldBe` (28, 23, True)
 
 nativeMigrationFiles :: [FilePath]
 nativeMigrationFiles =
@@ -228,6 +230,7 @@ nativeMigrationFiles =
     , "0017-schema-management-comment.sql"
     , "0018.sql"
     , "0019-keiro-snapshots-state-shape-hash.sql"
+    , "0020-keiro-workflow-children-failure-reason.sql"
     ]
 
 findMigrationsDirectory :: IO FilePath

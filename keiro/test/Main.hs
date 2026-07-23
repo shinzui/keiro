@@ -29,6 +29,7 @@ import Data.Vector qualified as Vector
 import Data.Word (Word64)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error, throwError)
+import Effectful.Exception qualified as EffException
 import GHC.Conc (ThreadStatus (..), threadStatus)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -213,6 +214,7 @@ import Keiro.Workflow (
     appendJournalEntryReturningId,
     awaitStep,
     awakeableAllocStepPrefix,
+    awakeableStepPrefix,
     continueAsNew,
     currentGeneration,
     defaultWorkflowRunOptions,
@@ -240,6 +242,7 @@ import Keiro.Workflow.Awakeable (
     cancelAwakeable,
     deterministicAwakeableId,
     signalAwakeable,
+    signalAwakeableFrom,
  )
 import Keiro.Workflow.Awakeable.Schema qualified as Awk
 import Keiro.Workflow.Child (
@@ -8463,6 +8466,71 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         completed `shouldBe` Right (Completed "second")
                     other -> expectationFailure ("expected two awakeable ids, got " <> show other)
 
+    describe "Keiro.Workflow awakeable registration" $ around (withFreshStore fixture) $ do
+        it "registers the row before a journaled hand-off can expose the id" $ \storeHandle -> do
+            aidRef <- newIORef Nothing
+            let name = WorkflowName "awakeable-signal-gap"
+                wid = WorkflowId "asg-1"
+            Right Suspended <-
+                Store.runStoreIO storeHandle $
+                    runWorkflow name wid (publishAwakeableBeforeAwait aidRef)
+            aid <- readRequiredAwakeableId aidRef
+            Right (Just pendingRow) <-
+                Store.runStoreIO storeHandle $
+                    Awk.lookupAwakeable (awakeableIdToUuid aid)
+            pendingRow ^. #status `shouldBe` Awk.Pending
+
+            Right signalled <-
+                Store.runStoreIO storeHandle $
+                    signalAwakeable aid ("ok" :: Text)
+            signalled `shouldBe` True
+            Right (Just completedRow) <-
+                Store.runStoreIO storeHandle $
+                    Awk.lookupAwakeable (awakeableIdToUuid aid)
+            completedRow ^. #status `shouldBe` Awk.Completed
+
+            let unknown =
+                    AwakeableId
+                        (uuidLiteral "00000000-0000-0000-0000-0000000002f2")
+            Right unknownSignal <-
+                Store.runStoreIO storeHandle $
+                    signalAwakeable unknown ("forged" :: Text)
+            unknownSignal `shouldBe` False
+
+            completed <-
+                Store.runStoreIO storeHandle $
+                    runWorkflow name wid (awaitPublishedAwakeable aidRef)
+            completed `shouldBe` Right (Completed "ok")
+
+    describe "Keiro.Workflow awakeable signal race" $ around (withFreshStore fixture) $ do
+        it "does not append a value when cancellation wins after the signal pre-read" $ \storeHandle -> do
+            aidRef <- newIORef Nothing
+            let name = WorkflowName "awakeable-cancel-race"
+                wid = WorkflowId "acr-1"
+            Right Suspended <-
+                Store.runStoreIO storeHandle $
+                    runWorkflow name wid (approvalFlowWithId aidRef)
+            aid <- readRequiredAwakeableId aidRef
+            Right (Just stalePendingRow) <-
+                Store.runStoreIO storeHandle $
+                    Awk.lookupAwakeable (awakeableIdToUuid aid)
+            Right cancelled <- Store.runStoreIO storeHandle $ cancelAwakeable aid
+            cancelled `shouldBe` True
+            Right signalled <-
+                Store.runStoreIO storeHandle $
+                    signalAwakeableFrom stalePendingRow ("late" :: Text)
+            signalled `shouldBe` False
+            Right recorded <-
+                Store.runStoreIO storeHandle $
+                    stepExists
+                        name
+                        wid
+                        0
+                        (awakeableStepPrefix <> awakeableIdText aid)
+            recorded `shouldBe` False
+            Store.runStoreIO storeHandle (runWorkflow name wid (approvalFlowWithId aidRef))
+                `shouldThrow` (== WorkflowAwakeableCancelled aid)
+
     describe "Keiro.Workflow.Child" $ do
         -- M2: the reserved spawn/result step-name derivations are stable.
         it "derives the child spawn and result step names" $ do
@@ -8823,6 +8891,58 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 completed <- Store.runStoreIO storeHandle $ runWorkflow parentName parentId body
                 completed `shouldBe` Right (Completed "packed+labelled")
 
+    describe "Keiro.Workflow.Child durable failed delivery" $ around (withFreshStore fixture) $ do
+        it "delivers a persisted child failure after the parent rotates past the failure journal" $ \storeHandle -> do
+            let childWid = WorkflowId "failed-before-rotation"
+                parentName = WorkflowName "parent-failure-rotation"
+                parentId = WorkflowId "p-failure-rotation"
+                registry =
+                    Map.fromList
+                        [ (parentName, WorkflowDef (\_ -> failedChildBeforeRotation childWid))
+                        , (WorkflowName "ship", WorkflowDef (\_ -> liftIO (throwIO SimulatedCrash) *> pure ("" :: Text)))
+                        ]
+                opts = defaultWorkflowResumeOptions & #maxAttempts .~ 1
+            Right Suspended <-
+                Store.runStoreIO storeHandle $
+                    runWorkflow parentName parentId (failedChildBeforeRotation childWid)
+            Right summary <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+            failed summary `shouldBe` 1
+            Right (Just childRow) <-
+                Store.runStoreIO storeHandle $
+                    Child.lookupChild "failed-before-rotation" "ship"
+            childRow ^. #status `shouldBe` Child.ChildFailed
+            childRow ^. #failureReason
+                `shouldSatisfy` maybe False ("SimulatedCrash" `Text.isInfixOf`)
+            Right failedOnGenerationZero <-
+                Store.runStoreIO storeHandle $
+                    stepExists
+                        parentName
+                        parentId
+                        0
+                        (childResultStepName childWid)
+            failedOnGenerationZero `shouldBe` True
+
+            Right ContinuedAsNew <-
+                Store.runStoreIO storeHandle $
+                    runWorkflow parentName parentId (rotatePastFailedChild childWid)
+            Right generation <- Store.runStoreIO storeHandle $ currentGeneration parentName parentId
+            generation `shouldBe` 1
+            Right failedOnGenerationOne <-
+                Store.runStoreIO storeHandle $
+                    stepExists
+                        parentName
+                        parentId
+                        1
+                        (childResultStepName childWid)
+            failedOnGenerationOne `shouldBe` False
+
+            delivered <-
+                Store.runStoreIO storeHandle $
+                    runWorkflow parentName parentId (catchFailedChildAfterRotation childWid)
+            delivered `shouldSatisfy` \case
+                Right (Completed reason) -> "SimulatedCrash" `Text.isInfixOf` reason
+                _ -> False
+
     describe "Keiro.Workflow.Gc" $ around (withFreshStore fixture) $ do
         it "deletes terminal workflow data after retention" $ \storeHandle -> do
             let name = WorkflowName "gc-basic"
@@ -9109,6 +9229,30 @@ approvalFlowWithId ref = do
     v <- await
     step (StepName "use") (pure (v <> "!"))
 
+publishAwakeableBeforeAwait ::
+    forall es.
+    (Workflow :> es, Store :> es, IOE :> es) =>
+    IORef (Maybe AwakeableId) ->
+    Eff es ()
+publishAwakeableBeforeAwait ref = do
+    (aid, _await :: Eff es Text) <- awakeableNamed (StepName "gate")
+    _ <-
+        step (StepName "publish") $ do
+            liftIO (writeIORef ref (Just aid))
+    (_ :: ()) <- awaitStep (StepName "hold") (pure ())
+    pure ()
+
+awaitPublishedAwakeable ::
+    (Workflow :> es, Store :> es, IOE :> es) =>
+    IORef (Maybe AwakeableId) ->
+    Eff es Text
+awaitPublishedAwakeable ref = do
+    (aid, await) <- awakeableNamed (StepName "gate")
+    _ <-
+        step (StepName "publish") $ do
+            liftIO (writeIORef ref (Just aid))
+    await
+
 snapshotUnsignalledAwakeable ::
     (Workflow :> es, Store :> es, IOE :> es) =>
     IORef (Maybe AwakeableId) ->
@@ -9220,6 +9364,32 @@ rotatingParentWorkflow childWid = do
     if seed < 1
         then continueAsNew (seed + 1)
         else pure result
+
+failedChildBeforeRotation ::
+    (Workflow :> es, Store :> es) =>
+    WorkflowId ->
+    Eff es Text
+failedChildBeforeRotation childWid = do
+    _ <- spawnChild (WorkflowName "ship") childWid shipWorkflow
+    awaitStep (StepName "rotation-gate") (pure ())
+
+rotatePastFailedChild ::
+    (Workflow :> es, Store :> es) =>
+    WorkflowId ->
+    Eff es Text
+rotatePastFailedChild childWid = do
+    _ <- spawnChild (WorkflowName "ship") childWid shipWorkflow
+    continueAsNew ()
+
+catchFailedChildAfterRotation ::
+    (Workflow :> es, Store :> es, IOE :> es) =>
+    WorkflowId ->
+    Eff es Text
+catchFailedChildAfterRotation childWid = do
+    child <- spawnChild (WorkflowName "ship") childWid shipWorkflow
+    EffException.catch
+        (awaitChild child)
+        (\(WorkflowChildFailed _ _ reason) -> pure reason)
 
 {- | A workflow that records one step, then suspends on an await — so it has a
 step row but no completion marker (the unfinished-discovery case).

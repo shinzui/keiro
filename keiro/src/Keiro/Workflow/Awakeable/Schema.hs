@@ -29,6 +29,7 @@ module Keiro.Workflow.Awakeable.Schema (
     registerAwakeableTx,
     completeAwakeableTx,
     cancelAwakeableTx,
+    lookupAwakeableStatusTx,
 
     -- * Read-only lookups
     lookupAwakeable,
@@ -105,6 +106,14 @@ cancelAwakeableTx :: UUID -> Tx.Transaction Bool
 cancelAwakeableTx aid =
     Tx.statement aid cancelAwakeableStmt
 
+{- | Read an awakeable's current status inside the caller's transaction.
+Used after a guarded completion loses a row race, so the caller can distinguish
+a winning cancel (no journal append) from a winning signal (idempotent repair).
+-}
+lookupAwakeableStatusTx :: UUID -> Tx.Transaction (Maybe AwakeableStatus)
+lookupAwakeableStatusTx aid =
+    Tx.statement aid lookupAwakeableStatusStmt
+
 -- | Read an awakeable row by id. 'Nothing' if no such awakeable exists.
 lookupAwakeable :: (Store :> es) => UUID -> Eff es (Maybe AwakeableRow)
 lookupAwakeable aid =
@@ -164,6 +173,17 @@ cancelAwakeableStmt =
         """
         (E.param (E.nonNullable E.uuid))
         ((> 0) <$> D.rowsAffected)
+
+lookupAwakeableStatusStmt :: Statement UUID (Maybe AwakeableStatus)
+lookupAwakeableStatusStmt =
+    preparable
+        """
+        SELECT status
+        FROM keiro.keiro_awakeables
+        WHERE awakeable_id = $1
+        """
+        (E.param (E.nonNullable E.uuid))
+        (D.rowMaybe (statusFromText <$> D.column (D.nonNullable D.text)))
 
 lookupAwakeableStmt :: Statement UUID (Maybe AwakeableRow)
 lookupAwakeableStmt =

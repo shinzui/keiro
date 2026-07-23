@@ -16,11 +16,13 @@ approvalFlow = do
   'Keiro.Workflow.step' (StepName \"use\") (pure (decision <> \"!\"))
 @
 
-On the __first__ 'Keiro.Workflow.runWorkflow' this returns 'Suspended' (the run
-parked on @await@) and a @pending@ row appears in @keiro_awakeables@. An
-external caller later runs @'signalAwakeable' aid \"ok\"@, which flips the row
-to @completed@ /and/ appends a @StepRecorded \"awk:\<uuid\>\"@ to the workflow's
-journal. The __next__ run replays past the now-resolved @await@ and 'Completed's.
+The @pending@ row is committed as part of the journaled allocation step,
+before the id can be returned or handed to an external system. On the __first__
+'Keiro.Workflow.runWorkflow' this returns 'Suspended' (the run parked on
+@await@). An external caller later runs
+@'signalAwakeable' aid \"ok\"@, which flips the row to @completed@ /and/
+appends a @StepRecorded \"awk:\<uuid\>\"@ to the workflow's journal. The
+__next__ run replays past the now-resolved @await@ and 'Completed's.
 
 == Contract recap for downstream plans (the v2 MasterPlan)
 
@@ -38,7 +40,8 @@ journal. The __next__ run replays past the now-resolved @await@ and 'Completed's
   and journal append in one transaction for new signals, a double signal
   returns 'False' and does not change the recorded value, and a signal of an
   already-@completed@ awakeable re-appends the journal entry from the stored
-  payload to repair historical wedges.
+  payload to repair historical wedges. A signal that loses a row race to
+  cancellation returns 'False' without appending.
 * 'cancelAwakeable' abandons a still-@pending@ promise; a workflow that
   re-enters its @await@ then throws 'WorkflowAwakeableCancelled', which the
   author can @catch@ for compensation. If uncaught, EP-42's resume worker
@@ -60,6 +63,7 @@ module Keiro.Workflow.Awakeable (
 
     -- * External completion (outside a workflow)
     signalAwakeable,
+    signalAwakeableFrom,
     cancelAwakeable,
 
     -- * Errors
@@ -96,10 +100,12 @@ import Keiro.Workflow (
     step,
  )
 import Keiro.Workflow.Awakeable.Schema (
+    AwakeableRow,
     AwakeableStatus (..),
     cancelAwakeableTx,
     completeAwakeableTx,
     lookupAwakeable,
+    lookupAwakeableStatusTx,
     registerAwakeableTx,
  )
 import Kiroku.Store.Effect (Store)
@@ -184,8 +190,14 @@ awakeableNamed (StepName label) = do
     (name, wid) <- currentWorkflow
     gen <- currentRunGeneration
     aid <-
-        step (StepName (awakeableAllocStepPrefix <> label)) $
-            allocateAwakeableId name wid gen label
+        step (StepName (awakeableAllocStepPrefix <> label)) $ do
+            allocated <- allocateAwakeableId name wid gen label
+            runTransaction $
+                registerAwakeableTx
+                    (awakeableIdToUuid allocated)
+                    (unWorkflowName name)
+                    (unWorkflowId wid)
+            pure allocated
     let
         stepNm = StepName (awakeableStepPrefix <> awakeableIdText aid)
         await = awaitCancellable name wid aid stepNm
@@ -274,50 +286,79 @@ Idempotent and crash-safe:
   from the stored payload to repair rows wedged before that atomic path existed.
   The append path is idempotent (deterministic event id plus step-index check),
   so a re-append collapses to a no-op once the entry is present.
+* If a cancellation wins after this function's initial row read but before its
+  guarded completion, the transaction re-reads the status and appends nothing.
+  The signal returns 'False', so cancellation cannot both trigger compensation
+  and leak a completion value into the workflow journal.
 
 A 'False' return therefore does not mean "nothing happened": the journal may
 still have been repaired. Returns 'False' for an unknown id.
 -}
 signalAwakeable :: (IOE :> es, Store :> es, ToJSON r) => AwakeableId -> r -> Eff es Bool
-signalAwakeable aid result = do
-    mrow <- lookupAwakeable (awakeableIdToUuid aid)
-    case mrow of
+signalAwakeable aid result =
+    lookupAwakeable (awakeableIdToUuid aid) >>= \case
         Nothing -> pure False
-        Just row
-            | row ^. #status == Cancelled -> pure False
-            | otherwise -> do
-                now <- liftIO getCurrentTime
-                let payload =
-                        if row ^. #status == Completed
-                            then row ^. #payload
-                            else Just (toJSON result)
-                case payload of
-                    Nothing -> pure False
-                    Just payloadValue -> do
-                        let ownerName = WorkflowName (row ^. #ownerWorkflowName)
-                            ownerId = WorkflowId (row ^. #ownerWorkflowId)
-                        gen <- currentGeneration ownerName ownerId
-                        appendTx <-
-                            prepareJournalAppend
-                                ownerName
-                                ownerId
-                                gen
-                                StepRecorded
-                                    { stepName = awakeableStepPrefix <> awakeableIdText aid
-                                    , result = payloadValue
-                                    , recordedAt = now
-                                    }
-                        (transitioned, appendOutcome) <-
-                            runTransaction $ do
-                                transitioned <-
-                                    if row ^. #status == Pending
-                                        then completeAwakeableTx (awakeableIdToUuid aid) (toJSON result) now
-                                        else pure False
-                                appendOutcome <- appendTx
-                                condemnOnAppendConflict appendOutcome
-                                pure (transitioned, appendOutcome)
-                        throwOnAppendConflict appendOutcome
-                        pure transitioned
+        Just row -> signalAwakeableFrom row result
+
+{- | The transaction-decision core of 'signalAwakeable', exposed so race
+contracts can deterministically interpose between the initial row read and the
+guarded completion. Normal callers should use 'signalAwakeable'.
+
+The supplied row may be stale. This function therefore trusts it only for the
+owner coordinates and candidate payload; when a pending-to-completed UPDATE
+loses, it re-reads status inside the same transaction and appends only if
+another signal completed the row. A winning cancellation gets no append.
+-}
+signalAwakeableFrom ::
+    (IOE :> es, Store :> es, ToJSON r) =>
+    AwakeableRow ->
+    r ->
+    Eff es Bool
+signalAwakeableFrom row result
+    | row ^. #status == Cancelled = pure False
+    | otherwise = do
+        now <- liftIO getCurrentTime
+        let aid = AwakeableId (row ^. #awakeableId)
+            payload =
+                if row ^. #status == Completed
+                    then row ^. #payload
+                    else Just (toJSON result)
+        case payload of
+            Nothing -> pure False
+            Just payloadValue -> do
+                let ownerName = WorkflowName (row ^. #ownerWorkflowName)
+                    ownerId = WorkflowId (row ^. #ownerWorkflowId)
+                gen <- currentGeneration ownerName ownerId
+                appendTx <-
+                    prepareJournalAppend
+                        ownerName
+                        ownerId
+                        gen
+                        StepRecorded
+                            { stepName = awakeableStepPrefix <> awakeableIdText aid
+                            , result = payloadValue
+                            , recordedAt = now
+                            }
+                (transitioned, appendOutcome) <-
+                    runTransaction $ do
+                        transitioned <-
+                            if row ^. #status == Pending
+                                then completeAwakeableTx (awakeableIdToUuid aid) (toJSON result) now
+                                else pure False
+                        if transitioned || row ^. #status == Completed
+                            then do
+                                outcome <- appendTx
+                                condemnOnAppendConflict outcome
+                                pure (transitioned, Just outcome)
+                            else
+                                lookupAwakeableStatusTx (awakeableIdToUuid aid) >>= \case
+                                    Just Completed -> do
+                                        outcome <- appendTx
+                                        condemnOnAppendConflict outcome
+                                        pure (False, Just outcome)
+                                    _ -> pure (False, Nothing)
+                for_ appendOutcome throwOnAppendConflict
+                pure transitioned
 
 condemnOnAppendConflict :: JournalAppendOutcome -> Tx.Transaction ()
 condemnOnAppendConflict = \case

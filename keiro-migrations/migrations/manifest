@@ -17,3 +17,4 @@
 0017-schema-management-comment.sql
 0018.sql
 0019-keiro-snapshots-state-shape-hash.sql
+0020-keiro-workflow-children-failure-reason.sql

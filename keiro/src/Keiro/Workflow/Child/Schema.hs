@@ -11,8 +11,9 @@ the effectful spawn\/await\/cancel surface.
 * 'lookupChild' \/ 'lookupChildrenOfParent' read rows back (operator
   inspection and the @awaitChild@ arm's cancellation check).
 * 'markChildResultTx' transitions a @running@ row to @completed@ (storing the
-  child's result), and 'markChildCancelledTx' transitions it to @cancelled@;
-  both guard on @status = 'running'@ so a double-resolve is a no-op.
+  child's result), 'markChildCancelledTx' transitions it to @cancelled@, and
+  'markChildFailedTx' transitions it to @failed@ while preserving the reason;
+  all guard on @status = 'running'@ so a double-resolve is a no-op.
 * 'findRunningChildIds' is the resume worker's discovery seed for a zero-step
   child (one that has been spawned but not yet driven, so has no
   @keiro_workflow_steps@ rows for 'findUnfinishedWorkflowIds' to find).
@@ -44,7 +45,7 @@ module Keiro.Workflow.Child.Schema (
 )
 where
 
-import Contravariant.Extras (contrazip2, contrazip4, contrazip5)
+import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -77,7 +78,8 @@ data ChildStatus
 {- | A child link row as stored: the child's (id, name), the parent's (id,
 name), the parent-journal step the parent awaits ('awaitStep' =
 @child:\<childId\>:result@), the live 'status', the child's 'result' (set only
-once 'ChildCompleted'), and the timestamps.
+once 'ChildCompleted'), the terminal 'failureReason' (set only once
+'ChildFailed'), and the timestamps.
 -}
 data ChildRow = ChildRow
     { childId :: !Text
@@ -87,6 +89,7 @@ data ChildRow = ChildRow
     , awaitStep :: !Text
     , status :: !ChildStatus
     , result :: !(Maybe Value)
+    , failureReason :: !(Maybe Text)
     , createdAt :: !UTCTime
     , updatedAt :: !UTCTime
     , completedAt :: !(Maybe UTCTime)
@@ -123,9 +126,13 @@ markChildCancelledTx :: Text -> Text -> Tx.Transaction Bool
 markChildCancelledTx cid cname =
     Tx.statement (cid, cname) markChildCancelledStmt
 
-markChildFailedTx :: Text -> Text -> Tx.Transaction Bool
-markChildFailedTx cid cname =
-    Tx.statement (cid, cname) markChildFailedStmt
+{- | Transition a @running@ child to @failed@, preserving the terminal reason.
+The guarded transition and the parent's failure journal append are performed
+in one caller-owned transaction by the resume worker.
+-}
+markChildFailedTx :: Text -> Text -> Text -> Tx.Transaction Bool
+markChildFailedTx cid cname reason =
+    Tx.statement (cid, cname, reason) markChildFailedStmt
 
 -- | Read a child link row by @(child_id, child_name)@. 'Nothing' if absent.
 lookupChild :: (Store :> es) => Text -> Text -> Eff es (Maybe ChildRow)
@@ -213,18 +220,20 @@ markChildCancelledStmt =
         )
         ((> 0) <$> D.rowsAffected)
 
-markChildFailedStmt :: Statement (Text, Text) Bool
+markChildFailedStmt :: Statement (Text, Text, Text) Bool
 markChildFailedStmt =
     preparable
         """
         UPDATE keiro.keiro_workflow_children
         SET status = 'failed',
+            failure_reason = $3,
             updated_at = now()
         WHERE child_id = $1
           AND child_name = $2
           AND status = 'running'
         """
-        ( contrazip2
+        ( contrazip3
+            (E.param (E.nonNullable E.text))
             (E.param (E.nonNullable E.text))
             (E.param (E.nonNullable E.text))
         )
@@ -235,7 +244,7 @@ lookupChildStmt =
     preparable
         """
         SELECT child_id, child_name, parent_id, parent_name, await_step,
-          status, result, created_at, updated_at, completed_at
+          status, result, failure_reason, created_at, updated_at, completed_at
         FROM keiro.keiro_workflow_children
         WHERE child_id = $1
           AND child_name = $2
@@ -251,7 +260,7 @@ lookupChildrenOfParentStmt =
     preparable
         """
         SELECT child_id, child_name, parent_id, parent_name, await_step,
-          status, result, created_at, updated_at, completed_at
+          status, result, failure_reason, created_at, updated_at, completed_at
         FROM keiro.keiro_workflow_children
         WHERE parent_id = $1
           AND parent_name = $2
@@ -295,6 +304,7 @@ childRowDecoder =
         <*> D.column (D.nonNullable D.text)
         <*> (statusFromText <$> D.column (D.nonNullable D.text))
         <*> D.column (D.nullable D.jsonb)
+        <*> D.column (D.nullable D.text)
         <*> D.column (D.nonNullable D.timestamptz)
         <*> D.column (D.nonNullable D.timestamptz)
         <*> D.column (D.nullable D.timestamptz)

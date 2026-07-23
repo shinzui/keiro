@@ -410,7 +410,7 @@ appendFailedChildAndWakeParent childNm childWid reason now childRow = do
     (childOutcome, parentOutcome) <-
         runTransaction $ do
             childOutcome <- childFailTx
-            _transitioned <- markChildFailedTx (unWorkflowId childWid) (unWorkflowName childNm)
+            _transitioned <- markChildFailedTx (unWorkflowId childWid) (unWorkflowName childNm) reason
             parentOutcome <- parentWakeTx
             condemnOnAppendConflict childOutcome
             condemnOnAppendConflict parentOutcome
