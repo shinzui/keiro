@@ -35,6 +35,7 @@ module Keiro.Workflow.Child.Schema (
     markChildResultTx,
     markChildCancelledTx,
     markChildFailedTx,
+    reviveFailedChildTx,
 
     -- * Read-only lookups
     lookupChild,
@@ -133,6 +134,14 @@ in one caller-owned transaction by the resume worker.
 markChildFailedTx :: Text -> Text -> Text -> Tx.Transaction Bool
 markChildFailedTx cid cname reason =
     Tx.statement (cid, cname, reason) markChildFailedStmt
+
+{- | Revive a @failed@ child link so the resume worker can drive the child
+again. Clears terminal result metadata; the parent journal's already-delivered
+failure sentinel remains immutable history.
+-}
+reviveFailedChildTx :: Text -> Text -> Tx.Transaction Bool
+reviveFailedChildTx cid cname =
+    Tx.statement (cid, cname) reviveFailedChildStmt
 
 -- | Read a child link row by @(child_id, child_name)@. 'Nothing' if absent.
 lookupChild :: (Store :> es) => Text -> Text -> Eff es (Maybe ChildRow)
@@ -234,6 +243,26 @@ markChildFailedStmt =
         """
         ( contrazip3
             (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        ((> 0) <$> D.rowsAffected)
+
+reviveFailedChildStmt :: Statement (Text, Text) Bool
+reviveFailedChildStmt =
+    preparable
+        """
+        UPDATE keiro.keiro_workflow_children
+        SET status = 'running',
+            result = NULL,
+            failure_reason = NULL,
+            completed_at = NULL,
+            updated_at = now()
+        WHERE child_id = $1
+          AND child_name = $2
+          AND status = 'failed'
+        """
+        ( contrazip2
             (E.param (E.nonNullable E.text))
             (E.param (E.nonNullable E.text))
         )

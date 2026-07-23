@@ -82,8 +82,8 @@ Cross-plan decision recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-
 - [x] (2026-07-23 20:57Z) EP-3: Sleep fire payload carries its generation; stale re-fire across rotation test passes.
 - [x] (2026-07-23 20:57Z) EP-3: `wake_after` no longer postponed by re-arm at wake time; prompt-wake test passes.
 - [x] (2026-07-23 20:57Z) EP-3: GC cancels/deletes all sleep timers for terminal instances; orphan-fire resurrection test passes.
-- [ ] EP-4: Patch set recorded atomically in `rotateGeneration`; pre-first-run-append test passes.
-- [ ] EP-4: `resurrectFailedWorkflow` operator API shipped and documented.
+- [x] (2026-07-23 21:04Z) EP-4: Patch set recorded atomically in `rotateGeneration`; pre-first-run-append test passes.
+- [x] (2026-07-23 21:15Z) EP-4: `resurrectFailedWorkflow` operator API shipped and documented.
 - [ ] EP-4: Lease renewal during advance implemented; slow-advance duplicate-execution test passes.
 
 
@@ -99,6 +99,11 @@ Cross-plan decision recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-
   the suspended instance write; the focused recovery test proves its timer
   append recreates a running instance, while an existing terminal row cancels
   the timer without appending.
+- EP-4 milestone 2 (2026-07-23): the existing append lock and step-index check
+  are sufficient to deduplicate concurrent terminal failure writers, so only
+  `WorkflowFailed` can safely use store-generated event ids. Two failures on
+  the same resurrected generation produced distinct journal ids while all 370
+  tests remained green.
 
 
 ## Decision Log
@@ -150,3 +155,8 @@ Cross-plan decision recorded in `docs/adr/0005-workflow-awaits-fall-back-to-the-
   post-GC resurrection without a migration. Focused crash-window tests and all
   366 workflow examples pass; ADR 7 records the durable timer lifecycle.
   EP-4 remains outstanding.
+- EP-4 milestones 1 and 2 now make patch recording immune to pre-first-run wake
+  appends and provide transactional terminal-failure resurrection, including
+  failed-child revival and safe repeated failure on one generation. The full
+  suite passes 370 examples; lease renewal remains before EP-4 and the initiative
+  are complete.

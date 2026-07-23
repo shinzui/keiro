@@ -6999,6 +6999,140 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Right events -> any (\case WorkflowFailed{} -> True; _ -> False) events
                     _ -> False
 
+        it "resurrects a failed workflow and completes without rerunning its journaled prefix" $ \storeHandle -> do
+            shouldCrash <- newIORef True
+            counter <- newIORef (0 :: Int)
+            let name = WorkflowName "resurrect-complete"
+                wid = WorkflowId "rc-1"
+                opts =
+                    defaultWorkflowResumeOptions
+                        & #maxAttempts
+                        .~ 1
+                        & #logEvent
+                        .~ const (pure ())
+                registry = Map.singleton name (WorkflowDef (\_ -> recoverableWorkflow shouldCrash counter))
+            crashed <-
+                try
+                    ( Store.runStoreIO storeHandle $
+                        runWorkflow name wid (recoverableWorkflow shouldCrash counter)
+                    ) ::
+                    IO (Either SomeException (Either Store.StoreError (WorkflowOutcome Int)))
+            case crashed of
+                Left _ -> pure ()
+                Right other -> expectationFailure ("expected a simulated crash, got " <> show other)
+            readIORef counter `shouldReturn` 1
+
+            Right failedPass <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+            failed failedPass `shouldBe` 1
+            Right (Just failedRow) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            failedRow ^. #status `shouldBe` Instance.WfFailed
+
+            writeIORef shouldCrash False
+            resurrected <- Store.runStoreIO storeHandle $ Instance.resurrectFailedWorkflow name wid
+            resurrected `shouldBe` Right Instance.WorkflowResurrected
+            Right (Just revivedRow) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            revivedRow ^. #status `shouldBe` Instance.WfRunning
+            revivedRow ^. #attempts `shouldBe` 0
+            revivedRow ^. #lastError `shouldBe` Nothing
+            revivedRow ^. #nextAttemptAt `shouldBe` Nothing
+
+            Right completedPass <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+            completed completedPass `shouldBe` 1
+            readIORef counter `shouldReturn` 2
+            Right (Just completedRow) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            completedRow ^. #status `shouldBe` Instance.WfCompleted
+
+        it "can fail again in the same generation after resurrection" $ \storeHandle -> do
+            shouldCrash <- newIORef True
+            counter <- newIORef (0 :: Int)
+            let name = WorkflowName "resurrect-refail"
+                wid = WorkflowId "rr-1"
+                opts =
+                    defaultWorkflowResumeOptions
+                        & #maxAttempts
+                        .~ 1
+                        & #logEvent
+                        .~ const (pure ())
+                registry = Map.singleton name (WorkflowDef (\_ -> recoverableWorkflow shouldCrash counter))
+            crashed <-
+                try
+                    ( Store.runStoreIO storeHandle $
+                        runWorkflow name wid (recoverableWorkflow shouldCrash counter)
+                    ) ::
+                    IO (Either SomeException (Either Store.StoreError (WorkflowOutcome Int)))
+            case crashed of
+                Left _ -> pure ()
+                Right other -> expectationFailure ("expected a simulated crash, got " <> show other)
+
+            Right firstFailedPass <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+            failed firstFailedPass `shouldBe` 1
+            firstRevival <- Store.runStoreIO storeHandle $ Instance.resurrectFailedWorkflow name wid
+            firstRevival `shouldBe` Right Instance.WorkflowResurrected
+            Right secondFailedPass <- Store.runStoreIO storeHandle $ resumeWorkflowsOnce opts registry
+            failed secondFailedPass `shouldBe` 1
+            Right (Just refailedRow) <- Store.runStoreIO storeHandle $ Instance.lookupInstance name wid
+            refailedRow ^. #status `shouldBe` Instance.WfFailed
+
+            Right recorded <-
+                Store.runStoreIO storeHandle $
+                    Store.readStreamForward
+                        (workflowGenerationStreamName name wid 0)
+                        (StreamVersion 0)
+                        10
+            let failureIds =
+                    [ event ^. #eventId
+                    | event <- Vector.toList recorded
+                    , Right decoded <- [decodeRecorded workflowJournalCodec event]
+                    , WorkflowFailed{} <- [decoded]
+                    ]
+            case failureIds of
+                [firstFailureId, secondFailureId] ->
+                    firstFailureId `shouldNotBe` secondFailureId
+                other ->
+                    expectationFailure ("expected two failure events, got " <> show other)
+
+            secondRevival <- Store.runStoreIO storeHandle $ Instance.resurrectFailedWorkflow name wid
+            secondRevival `shouldBe` Right Instance.WorkflowResurrected
+
+        it "guards resurrection and revives a failed child link transactionally" $ \storeHandle -> do
+            let runningName = WorkflowName "resurrect-running"
+                runningId = WorkflowId "running-1"
+                missingName = WorkflowName "resurrect-missing"
+                missingId = WorkflowId "missing-1"
+                childName = WorkflowName "resurrect-child"
+                childId = WorkflowId "child-1"
+            now <- getCurrentTime
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry runningName runningId (StepRecorded "seed" (toJSON True) now)
+            runningOutcome <- Store.runStoreIO storeHandle $ Instance.resurrectFailedWorkflow runningName runningId
+            runningOutcome `shouldBe` Right Instance.WorkflowNotFailed
+            missingOutcome <- Store.runStoreIO storeHandle $ Instance.resurrectFailedWorkflow missingName missingId
+            missingOutcome `shouldBe` Right Instance.WorkflowNotFound
+
+            Right childMarkedFailed <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $ do
+                        Child.registerChildTx
+                            "child-1"
+                            "resurrect-child"
+                            "parent-1"
+                            "resurrect-parent"
+                            "child:child-1:result"
+                        Child.markChildFailedTx "child-1" "resurrect-child" "simulated terminal failure"
+            childMarkedFailed `shouldBe` True
+            Right () <-
+                Store.runStoreIO storeHandle $
+                    appendJournalEntry childName childId (WorkflowFailed "simulated terminal failure" now)
+
+            childOutcome <- Store.runStoreIO storeHandle $ Instance.resurrectFailedWorkflow childName childId
+            childOutcome `shouldBe` Right Instance.WorkflowResurrected
+            Right (Just childRow) <- Store.runStoreIO storeHandle $ Child.lookupChild "child-1" "resurrect-child"
+            childRow ^. #status `shouldBe` Child.Running
+            childRow ^. #result `shouldBe` Nothing
+            childRow ^. #failureReason `shouldBe` Nothing
+            childRow ^. #completedAt `shouldBe` Nothing
+
         it "classifies thrown store errors as transient without consuming attempts" $ \storeHandle -> do
             let name = WorkflowName "transient"
                 wid = WorkflowId "tr-1"
@@ -9378,6 +9512,21 @@ crashAfterStep1 counter = do
     _ <- step (StepName "s1") (liftIO (incrementAndRead counter))
     _ <- liftIO (throwIO SimulatedCrash)
     pure (0, 0, 0)
+
+{- | A workflow with one durable side effect before a switchable failure and
+one durable side effect after it. Resurrection tests use the counter to prove
+the recorded prefix never executes again.
+-}
+recoverableWorkflow ::
+    (Workflow :> es, IOE :> es) =>
+    IORef Bool ->
+    IORef Int ->
+    Eff es Int
+recoverableWorkflow shouldCrash counter = do
+    _ <- step (StepName "durable-prefix") (liftIO (incrementAndRead counter))
+    crashing <- liftIO (readIORef shouldCrash)
+    when crashing (liftIO (throwIO SimulatedCrash))
+    step (StepName "durable-tail") (liftIO (incrementAndRead counter))
 
 {- | Awaits an external step, then runs a step that bumps the counter. Used to
 prove the resume worker drives a suspended workflow to completion once its

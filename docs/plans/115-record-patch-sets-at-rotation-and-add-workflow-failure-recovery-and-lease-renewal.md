@@ -37,10 +37,10 @@ This is the plan-authoring-time checklist of the work. Update it at every stoppi
 - [x] (2026-07-23 21:04Z) M1: `rotateGeneration` appends the seed and the patch-set record in one transaction; `runWorkflowWith` passes `activePatches` through.
 - [x] (2026-07-23 21:04Z) M1: generation-0 path (`recordPatchSetIfFresh`) retained and its interplay documented.
 - [x] (2026-07-23 21:04Z) M1: rotation + pre-first-run wake-append test passes (`patch` decides `True`); full suite green (`cabal test keiro-test`: 367 examples, 0 failures).
-- [ ] M2: `resurrectFailedWorkflow` implemented (index-row delete + instance revive + child-link revive, one transaction) with a `ResurrectOutcome` result.
-- [ ] M2: the `WorkflowFailed` marker append switched to a store-generated event id (re-failure after resurrection hazard — see Decision Log).
-- [ ] M2: resurrect-then-complete and resurrect-then-refail tests pass; full suite green.
-- [ ] M2: `docs/guides/durable-workflows.md` gains the failure/retry/resurrection section (backoff math, `maxAttempts` sizing, API usage).
+- [x] (2026-07-23 21:15Z) M2: `resurrectFailedWorkflow` implemented (index-row delete + instance revive + child-link revive, one transaction) with a `ResurrectOutcome` result.
+- [x] (2026-07-23 21:15Z) M2: the `WorkflowFailed` marker append switched to a store-generated event id (re-failure after resurrection hazard — see Decision Log).
+- [x] (2026-07-23 21:15Z) M2: resurrect-then-complete and resurrect-then-refail tests pass; full suite green (`cabal test keiro-test`: 370 examples, 0 failures).
+- [x] (2026-07-23 21:15Z) M2: `docs/guides/durable-workflows.md` gains the failure/retry/resurrection section (backoff math, `maxAttempts` sizing, API usage).
 - [ ] M3: `LeaseHeartbeat` option + `renewInstanceLeaseTx` + step-boundary renewal + `WorkflowLeaseLost` implemented.
 - [ ] M3: resume worker threads its owner/ttl into run options and treats a lost lease as a skip, not a crash.
 - [ ] M3: heartbeat-keeps-exclusivity and lost-lease-stops tests pass; `leaseTtl` haddock and guide updated; full suite green.
@@ -56,6 +56,12 @@ implementation. Provide concise evidence.
   set exists on generation 1 immediately after rotation, before the injected
   wake append. The first generation-1 run and its replay both took the active
   branch. The full suite passed 367 examples.
+- Milestone 2 validation (2026-07-23): a resurrected workflow replayed its
+  journaled prefix and completed by executing only its fresh tail. Re-failing
+  the same generation appended a second `WorkflowFailed` event with a distinct
+  store-generated id, and the instance could be resurrected again. Child-link
+  revival and the not-failed/not-found guards passed in the same focused group;
+  the full suite passed 370 examples.
 
 
 ## Decision Log
@@ -104,6 +110,12 @@ contract as a candidate ADR). Keep task-local execution details here.
   append conflict. Generation 0 and pre-change rotated generations retain the
   fresh-journal compatibility path. A pre-first-run wake append can no longer
   suppress patch recording.
+- Milestone 2 (2026-07-23): terminal workflow failure is now recoverable through
+  `resurrectFailedWorkflow`. One transaction revives the instance and an
+  optional child link while removing only the current generation's derived
+  failure marker; immutable journal history remains intact. Fresh failure event
+  ids make repeated fail/resurrect cycles safe, and the operator guide documents
+  retry timing, attempt sizing, and parent/child consequences.
 
 
 ## Context and Orientation

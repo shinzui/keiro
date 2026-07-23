@@ -8,6 +8,7 @@ leases without scanning journal history.
 module Keiro.Workflow.Instance (
     WorkflowStatus (..),
     WorkflowInstanceRow (..),
+    ResurrectOutcome (..),
     statusToText,
     statusFromText,
     upsertInstanceTx,
@@ -17,6 +18,8 @@ module Keiro.Workflow.Instance (
     releaseInstance,
     recordCrashTx,
     resetInstanceAttempts,
+    reviveFailedInstanceTx,
+    resurrectFailedWorkflow,
 )
 where
 
@@ -28,8 +31,9 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Keiro.Prelude
-import Keiro.Workflow.Schema (currentGeneration)
-import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..))
+import Keiro.Workflow.Child.Schema (reviveFailedChildTx)
+import Keiro.Workflow.Schema (currentGeneration, deleteStepRowTx)
+import Keiro.Workflow.Types (WorkflowId (..), WorkflowName (..), failedStepName)
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -56,6 +60,12 @@ data WorkflowInstanceRow = WorkflowInstanceRow
     , updatedAt :: !UTCTime
     , completedAt :: !(Maybe UTCTime)
     }
+    deriving stock (Generic, Eq, Show)
+
+data ResurrectOutcome
+    = WorkflowResurrected
+    | WorkflowNotFailed
+    | WorkflowNotFound
     deriving stock (Generic, Eq, Show)
 
 upsertInstanceTx :: Text -> Text -> Int32 -> WorkflowStatus -> Maybe Text -> Tx.Transaction ()
@@ -95,6 +105,41 @@ recordCrashTx wid name err =
 resetInstanceAttempts :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es ()
 resetInstanceAttempts (WorkflowName name) (WorkflowId wid) =
     runTransaction (Tx.statement (wid, name) resetInstanceAttemptsStmt)
+
+reviveFailedInstanceTx :: Text -> Text -> Tx.Transaction Bool
+reviveFailedInstanceTx wid name =
+    Tx.statement (wid, name) reviveFailedInstanceStmt
+
+{- | Return a terminally failed workflow to the runnable pool.
+
+The operation removes only the current generation's derived failed-marker index
+row; the append-only 'Keiro.Workflow.WorkflowFailed' journal event remains as
+history. A failed child link is revived in the same transaction. Parent failure
+sentinels already delivered to another journal are not retracted.
+-}
+resurrectFailedWorkflow ::
+    (Store :> es) =>
+    WorkflowName ->
+    WorkflowId ->
+    Eff es ResurrectOutcome
+resurrectFailedWorkflow name@(WorkflowName nameText) wid@(WorkflowId widText) =
+    lookupInstance name wid >>= \case
+        Nothing -> pure WorkflowNotFound
+        Just row
+            | row ^. #status /= WfFailed -> pure WorkflowNotFailed
+            | otherwise -> do
+                gen <- currentGeneration name wid
+                revived <-
+                    runTransaction $ do
+                        instanceRevived <- reviveFailedInstanceTx widText nameText
+                        when instanceRevived $ do
+                            deleteStepRowTx widText nameText gen failedStepName
+                            void (reviveFailedChildTx widText nameText)
+                        pure instanceRevived
+                pure $
+                    if revived
+                        then WorkflowResurrected
+                        else WorkflowNotFailed
 
 statusToText :: WorkflowStatus -> Text
 statusToText = \case
@@ -260,6 +305,29 @@ resetInstanceAttemptsStmt =
             (E.param (E.nonNullable E.text))
         )
         D.noResult
+
+reviveFailedInstanceStmt :: Statement (Text, Text) Bool
+reviveFailedInstanceStmt =
+    preparable
+        """
+        UPDATE keiro.keiro_workflows
+        SET status = 'running',
+            attempts = 0,
+            last_error = NULL,
+            next_attempt_at = NULL,
+            leased_by = NULL,
+            lease_expires_at = NULL,
+            completed_at = NULL,
+            updated_at = now()
+        WHERE workflow_id = $1
+          AND workflow_name = $2
+          AND status = 'failed'
+        """
+        ( contrazip2
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+        )
+        ((> 0) <$> D.rowsAffected)
 
 instanceRowDecoder :: D.Row WorkflowInstanceRow
 instanceRowDecoder =

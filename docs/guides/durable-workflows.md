@@ -130,7 +130,7 @@ shipOrderWorkflow orderId =
 ## Running a workflow
 
 ```haskell
-data WorkflowOutcome a = Completed a | Suspended | Cancelled | ContinuedAsNew
+data WorkflowOutcome a = Completed a | Suspended | Cancelled | Failed | ContinuedAsNew
 runWorkflow :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)
 ```
 
@@ -240,13 +240,55 @@ jitsureiWorkflowRegistry =
 ```
 
 `resumeWorkflowsOnce` runs one discover-and-reinvoke pass and returns a
-`ResumeSummary` (`discovered`/`resumed`/`completed`/`stillSuspended`/`unknownName`);
+`ResumeSummary`
+(`discovered`/`resumed`/`completed`/`stillSuspended`/`unknownName`/`failed`/
+`transientErrors`/`leaseSkipped`);
 `runWorkflowResumeWorker` loops it on a poll interval. Discovery uses the
 `keiro_workflow_steps` index (a "workflows lacking a terminal marker" query) plus
 the running-children union — it does **not** use a kiroku `wf:` prefix
 subscription, so the runtime has no upstream dependency. An unfinished workflow
 whose name is absent from the registry is surfaced as `unknownName`, never
 silently dropped.
+
+### Failure, retries, and resurrection
+
+A synchronous exception escaping a workflow body consumes one workflow attempt.
+The worker schedules retries with exponential delays of 2, 4, 8, 16, 32, then
+64 seconds (capped there). With the default `maxAttempts = 5`, the fifth failure
+is terminal, so there are about 30 seconds of scheduled backoff before it, plus
+polling time and the duration of each workflow attempt. Store errors are
+classified separately as transient and do not consume attempts.
+
+Choose `maxAttempts` for the longest application outage you expect the worker to
+ride through, taking both the backoff sum and the workflow's own runtime into
+account. Once the ceiling is reached, the runtime appends `WorkflowFailed`, sets
+the instance status to `failed`, and excludes it from ordinary resume discovery.
+A direct `runWorkflow` then returns `Failed`.
+
+After repairing the underlying problem, an operator can return the instance to
+the runnable pool through the supported API:
+
+```haskell
+outcome <-
+  resurrectFailedWorkflow
+    (WorkflowName "order-fulfillment")
+    (WorkflowId "order-123")
+
+case outcome of
+  WorkflowResurrected -> pure ()
+  WorkflowNotFailed   -> putStrLn "instance is not terminally failed"
+  WorkflowNotFound    -> putStrLn "instance does not exist"
+```
+
+`resurrectFailedWorkflow` is transactional: it resets attempts, error, retry,
+and lease state; removes the current generation's derived failure-marker index
+row; and revives a failed child link when the instance is a child. It does not
+delete journal history. The old `WorkflowFailed` event remains for audit, and
+the next resume replays every completed step instead of repeating its side
+effects. If the workflow fails again in the same generation, a new failure event
+is appended. A failure sentinel already delivered to a parent journal is also
+immutable; resurrect the parent separately if its own terminal failure should
+be retried.
 
 ## Awakeables in depth
 

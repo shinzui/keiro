@@ -747,6 +747,14 @@ prepareJournalAppend ::
 prepareJournalAppend name wid gen event = do
     let key = journalKey event
         entryId = deterministicJournalId name wid gen key
+        requestedEntryId = case event of
+            -- Resurrection removes the derived failure-marker index row while
+            -- retaining append-only journal history. A later failure on the
+            -- same generation therefore needs a fresh UUIDv7; step locking and
+            -- the in-transaction index check still deduplicate concurrent
+            -- failure writers.
+            WorkflowFailed{} -> Nothing
+            _ -> Just entryId
         row = journalRow name wid gen event
         (status, mLastError) = instanceStatusForEvent event
         journalName = workflowGenerationStreamName name wid gen
@@ -757,7 +765,7 @@ prepareJournalAppend name wid gen event = do
     base <- case encodeForAppendWithMetadata workflowJournalCodec Nothing event of
         Right encoded -> pure encoded
         Left err -> throwIO (WorkflowJournalEncodeError (Text.pack (show err)))
-    let entry = base & #eventId .~ Just entryId :: EventData
+    let entry = base & #eventId .~ requestedEntryId :: EventData
     prepared <- prepareEventsIO [entry]
     now <- liftIO getCurrentTime
     pure $ do

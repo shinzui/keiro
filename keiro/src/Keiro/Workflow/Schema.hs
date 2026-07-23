@@ -19,6 +19,7 @@ module Keiro.Workflow.Schema (
     recordStepTx,
     lookupStepResultTx,
     lockWorkflowStepTx,
+    deleteStepRowTx,
     setWorkflowWakeAfterTx,
     clearWorkflowWakeAfterTx,
 
@@ -87,6 +88,12 @@ lookupStepResultTx wid name gen key =
 lockWorkflowStepTx :: Text -> Tx.Transaction ()
 lockWorkflowStepTx key =
     void (Tx.statement key lockWorkflowStepStmt)
+
+deleteStepRowTx :: Text -> Text -> Int -> Text -> Tx.Transaction ()
+deleteStepRowTx wid name gen key =
+    Tx.statement
+        (wid, name, fromIntegral gen :: Int32, key)
+        deleteStepRowStmt
 
 setWorkflowWakeAfterTx :: WorkflowName -> WorkflowId -> UTCTime -> Tx.Transaction ()
 setWorkflowWakeAfterTx (WorkflowName name) (WorkflowId wid) wakeAfter =
@@ -188,6 +195,24 @@ lockWorkflowStepStmt =
         """
         (E.param (E.nonNullable E.text))
         (D.singleRow (D.column (D.nonNullable D.int4)))
+
+deleteStepRowStmt :: Statement (Text, Text, Int32, Text) ()
+deleteStepRowStmt =
+    preparable
+        """
+        DELETE FROM keiro.keiro_workflow_steps
+        WHERE workflow_id = $1
+          AND workflow_name = $2
+          AND generation = $3
+          AND step_name = $4
+        """
+        ( contrazip4
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.text))
+            (E.param (E.nonNullable E.int4))
+            (E.param (E.nonNullable E.text))
+        )
+        D.noResult
 
 loadStepIndexStmt :: Statement (Text, Text, Int32) [(Text, Value)]
 loadStepIndexStmt =

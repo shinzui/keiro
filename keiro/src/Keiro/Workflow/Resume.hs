@@ -10,6 +10,13 @@ notices: a background worker that, on each pass, asks the database "which
 workflows have steps but no completion?" ('findUnfinishedWorkflowIds') and
 re-invokes each so it proceeds.
 
+Synchronous exceptions are retried with database-backed exponential backoff.
+Once 'maxAttempts' is reached, the worker appends 'WorkflowFailed' and stops
+discovering that instance. The operator-facing counterpart lives in
+"Keiro.Workflow.Instance": 'Keiro.Workflow.Instance.resurrectFailedWorkflow'
+transactionally returns a terminally failed instance to the runnable pool
+without deleting its append-only failure history.
+
 == Why a registry
 
 A workflow's body is application Haskell code — only its /journal/ (the
