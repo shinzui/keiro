@@ -15,6 +15,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   `state_shape_hash` column; existing rows receive the empty sentinel and are
   invalidated once on their next hydration. `keiro-core`, `keiro`, and
   snapshot-enabled generated code now require `keiki >=0.3.1`.
+- Validated event-stream construction now rejects an event codec whose schema
+  version, event tags, or upcaster chain fail `mkCodec`. Restore missing rungs
+  or deduplicate conflicting sources before deployment; for emergency
+  forensics only, `mkEventStreamUnchecked` remains the explicit bypass.
 
 ### Added
 

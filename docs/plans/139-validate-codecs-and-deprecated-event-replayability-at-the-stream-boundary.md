@@ -4,6 +4,7 @@ slug: validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary
 title: "Validate codecs and deprecated-event replayability at the stream boundary"
 kind: exec-plan
 created_at: 2026-07-23T04:18:42Z
+intention: intention_01ky7q57fbevsszaj32g77f6vt
 master_plan: "docs/masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md"
 ---
 
@@ -50,7 +51,7 @@ chain for a stored v1 payload.
 
 ## Progress
 
-- [ ] M1: `validateEventStreamWith` runs `mkCodec`; duplicate-rung and vanished-rung codecs fail at `mkEventStreamOrThrow`; keiro tests green; CHANGELOG entry.
+- [x] (2026-07-23T17:03:52Z) M1: `validateEventStreamWith` runs `mkCodec`; duplicate-rung and vanished-rung codecs fail at `mkEventStreamOrThrow`; keiro tests green; CHANGELOG entry.
 - [ ] M2: `retiring event` marker (grammar/parser/pretty-print); DSL validator rules `DuplicateUpcasterSource`, `UpcasterChainGap`, `DeprecatedEventReplayHazard`, `EventRetirementInProgress` implemented with fixture specs; `keiro-dsl-test` green.
 - [ ] M3: diff deprecation reclassified to advisory-with-warning; `Diff.hs:404` message fixed; diff tests (incl. the 830-835 assertion) updated; golden old-payload fixture format defined and the conformance-v2 decodeRaw golden test green; all 24 keiro-dsl suites green.
 - [ ] Close-out: master plan 24 boxes ticked; externally visible contracts recorded in this Decision Log for plan 141 to quote; ADR distillation pass done.
@@ -61,7 +62,12 @@ chain for a stored v1 payload.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The focused pre-implementation test run supplied the intended red evidence: 16
+  `mkEventStream` examples produced three failures (duplicate source, incomplete chain,
+  and the throwing constructor), while the unchecked-constructor example already passed.
+  After wiring `mkCodec` into the shared validator, the same 16 examples passed, followed
+  by the full `keiro-test` and `keiro-dsl` acceptance run (346 and 214 examples
+  respectively, zero failures).
 
 
 ## Decision Log

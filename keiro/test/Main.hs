@@ -7,7 +7,7 @@ import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, con
 import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar, tryPutMVar)
 import Control.Concurrent.STM (atomically, putTMVar)
-import Control.Exception (Exception, SomeException, displayException, evaluate, finally, throwIO, try)
+import Control.Exception (ErrorCall, Exception, SomeException, displayException, evaluate, finally, throwIO, try)
 import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -713,6 +713,61 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 `shouldBe` []
 
     describe "mkEventStream" $ do
+        it "rejects duplicate upcaster sources at the stream boundary" $ do
+            let duplicateCodec =
+                    counterCodec
+                        { schemaVersion = 3
+                        , upcasters = [(1, const Right), (1, const Right)]
+                        }
+                duplicateStream = counterEventStreamDef{eventCodec = duplicateCodec}
+            case mkEventStream "duplicate-codec" duplicateStream of
+                Left warnings -> do
+                    map eswStreamLabel warnings `shouldSatisfy` all (== "duplicate-codec")
+                    map eswReason warnings `shouldSatisfy` any (Text.isInfixOf "duplicate upcaster source version(s): 1")
+                Right _ -> expectationFailure "expected mkEventStream to reject duplicate upcaster sources"
+
+        it "rejects a missing upcaster rung at the stream boundary" $ do
+            let incompleteCodec =
+                    counterCodec
+                        { schemaVersion = 3
+                        , upcasters = [(2, const Right)]
+                        }
+                incompleteStream = counterEventStreamDef{eventCodec = incompleteCodec}
+            case mkEventStream "incomplete-codec" incompleteStream of
+                Left warnings -> do
+                    map eswStreamLabel warnings `shouldSatisfy` all (== "incomplete-codec")
+                    map eswReason warnings `shouldSatisfy` any (Text.isInfixOf "missing upcaster source version(s): 1")
+                Right _ -> expectationFailure "expected mkEventStream to reject an incomplete upcaster chain"
+
+        it "includes the stream label when throwing for an invalid codec" $ do
+            let incompleteCodec =
+                    counterCodec
+                        { schemaVersion = 3
+                        , upcasters = [(2, const Right)]
+                        }
+                incompleteStream = counterEventStreamDef{eventCodec = incompleteCodec}
+            result <- try @ErrorCall (evaluate (mkEventStreamOrThrow "throwing-incomplete-codec" incompleteStream))
+            case result of
+                Left err -> do
+                    displayException err `shouldSatisfy` isInfixOf "throwing-incomplete-codec"
+                    displayException err `shouldSatisfy` isInfixOf "missing upcaster source version(s): 1"
+                Right _ -> expectationFailure "expected mkEventStreamOrThrow to reject an incomplete upcaster chain"
+
+        it "keeps invalid codecs available through the unchecked escape hatch" $ do
+            let duplicateCodec =
+                    counterCodec
+                        { schemaVersion = 3
+                        , upcasters = [(1, const Right), (1, const Right)]
+                        }
+                incompleteCodec =
+                    counterCodec
+                        { schemaVersion = 3
+                        , upcasters = [(2, const Right)]
+                        }
+            _ <- evaluate (mkEventStreamUnchecked counterEventStreamDef{eventCodec = duplicateCodec})
+            _ <- evaluate (mkEventStreamUnchecked counterEventStreamDef{eventCodec = incompleteCodec})
+            pure ()
+
         it "rejects a hidden-input stream by label" $ do
             let warns = validateEventStream "broken" brokenHiddenInputEventStream
             warns `shouldNotBe` []

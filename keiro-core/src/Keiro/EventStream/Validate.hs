@@ -8,6 +8,10 @@ constructor, and output-free edges do not change durable state. The umbrella
 also checks guard determinism and structural reachability. This module lifts
 keiki's umbrella check ('Keiki.validateTransducer') to the 'EventStream'
 boundary so a service can assert all of its streams are sound before hydration.
+The boundary also validates the event 'Keiro.Codec.Codec' construction
+invariants, so malformed schema versions, duplicate event tags or upcaster
+sources, out-of-range rungs, and incomplete chains fail before the service
+touches stored streams.
 
 Every warning enabled by the selected 'ValidationOptions' makes construction
 fail. This is intentionally stricter than a pure keiki use: events are keiro's
@@ -52,6 +56,7 @@ import Keiki.Core (
     defaultValidationOptions,
     validateTransducer,
  )
+import Keiro.Codec qualified as Codec
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..), StateCodec (..))
 import System.IO.Unsafe (unsafePerformIO)
 
@@ -82,8 +87,9 @@ unvalidated (ValidatedEventStream es) = es
 {- | Run keiki's pure umbrella check over a stream's transducer with the default
 options. This includes hidden-input, head recoverability, inversion ambiguity,
 guarded input reads, state-changing epsilon edges, determinism, and dead-edge
-checks. An empty list means the stream passed every enabled check. Pure; no
-solver.
+checks, plus the event codec's schema and upcaster-chain construction
+invariants. An empty list means the stream passed every enabled check. Pure;
+no solver.
 -}
 validateEventStream ::
     (Bounded s, Enum s, Ord s, Show s) =>
@@ -106,7 +112,8 @@ validateEventStreamWith ::
     EventStream (HsPred rs ci) rs s ci co ->
     [EventStreamWarning]
 validateEventStreamWith opts label es =
-    snapshotWarnings label es
+    codecConfigWarnings label es
+        <> snapshotWarnings label es
         <> initialSnapshotEncodeWarnings label es
         <> [ EventStreamWarning{eswStreamLabel = label, eswReason = renderWarning w}
            | w <- validateTransducer (forceReplayContract opts) (transducer es)
@@ -170,15 +177,54 @@ mkEventStreamOrThrow label es =
                     <> show warns
 
 {- | Wrap an 'EventStream' /without validation/. This skips every keiki and
-keiro check, including the replay-contract checks that 'mkEventStream'
-force-enables. A stream admitted through this function can silently lose state
-changes and fail hydration. Tests and emergency forensics only; never use it
+keiro check, including event-codec construction validation and the
+replay-contract checks that 'mkEventStream' force-enables. A stream admitted
+through this function can silently lose state changes, select the wrong
+upcaster, or fail hydration. Tests and emergency forensics only; never use it
 for production streams. Prefer 'mkEventStream'.
 -}
 mkEventStreamUnchecked ::
     EventStream phi rs s ci co ->
     ValidatedEventStream phi rs s ci co
 mkEventStreamUnchecked = ValidatedEventStream
+
+codecConfigWarnings :: Text -> EventStream phi rs s ci co -> [EventStreamWarning]
+codecConfigWarnings label es =
+    case Codec.mkCodec (eventCodec es) of
+        Right _ -> []
+        Left err ->
+            [ EventStreamWarning
+                { eswStreamLabel = label
+                , eswReason = "event codec misconfigured: " <> renderCodecConfigError err
+                }
+            ]
+
+renderCodecConfigError :: Codec.CodecConfigError -> Text
+renderCodecConfigError = \case
+    Codec.CodecSchemaVersionInvalid version ->
+        "schema version must be at least 1, got " <> showT version
+    Codec.CodecDuplicateEventTypes eventTypes ->
+        "duplicate event type tag(s): "
+            <> Text.intercalate ", " [tag | Codec.EventType tag <- eventTypes]
+    Codec.CodecDuplicateUpcasterSources versions ->
+        "duplicate upcaster source version(s): "
+            <> renderVersions versions
+            <> "; only one rung may own each source version"
+    Codec.CodecUpcasterSourceOutOfRange source target ->
+        "upcaster source version "
+            <> showT source
+            <> " is outside the valid range 1.."
+            <> showT (target - 1)
+            <> " for target schema version "
+            <> showT target
+    Codec.CodecUpcasterChainIncomplete missing target ->
+        "missing upcaster source version(s): "
+            <> renderVersions missing
+            <> "; stored payloads cannot reach target schema version "
+            <> showT target
+  where
+    showT = Text.pack . show
+    renderVersions = Text.intercalate ", " . map showT
 
 {- | Render a keiki warning to a human-readable reason. All eight constructors
 carry @tvwDetail@; the source vertex is @edgeSource . tvwEdge@ (or @tvwSource@
