@@ -366,6 +366,15 @@ Process-manager and router workers can record `keiro.dispatch.failed`,
 `keiro.dispatch.duplicates`, and `keiro.dispatch.poison` through
 `WorkerOptions.metrics`.
 
+## `Keiro.ReplayAudit`
+
+Read-only real-log replay gate. Exports `AuditFull` and affected-event
+`AuditTargeted` modes, resumable `AuditBudget` controls, typed audit targets,
+per-stream `ReplayOk` / `ReplayFailed` / `SeedDivergence` outcomes, stable
+report rendering, and `auditExitCode` (`0` clean, `1` on any failure or
+divergence). Generated DSL services expose one context-wide
+`Generated.<Context>.ReplayAudit.auditTargets` assembly.
+
 ## `Keiro.Migrations` (package `keiro-migrations`)
 
 Native `pg-migrate` component and the standard `keiro-migrate` executable.

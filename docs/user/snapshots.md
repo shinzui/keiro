@@ -90,10 +90,11 @@ A fold change outside those visible surfaces still requires a manual
 `stateCodecVersion` bump. This includes hand-written guard or update function bodies and
 logic changed only in a generated service's hand-owned Holes module. Without that bump,
 an old seed can still match and be served silently; post-append verification may then
-persist stale-derived state at a newer stream version. The planned database-backed replay
-audit in
-[plan 142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md)
-will compare seeded and full replay to detect this residual mistake before deployment.
+persist stale-derived state at a newer stream version. Run the candidate binary's
+`Keiro.ReplayAudit` targeted audit before deployment; it compares accepted seeded state
+with full replay. At runtime, command hydration also samples one in 1000 usable seeds by
+default and emits `keiro.snapshot.seed.divergence` on a mismatch. Configure the rate
+through `RunCommandOptions.seedVerifySampleRate`.
 
 The keiro test suite proves this end to end in
 `keiro/test/Main.hs` under `describe "Keiro.ProcessManager snapshots"`: a manager with

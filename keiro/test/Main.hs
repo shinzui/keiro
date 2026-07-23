@@ -2239,6 +2239,52 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         10
             Vector.length eventsAfterAudit `shouldBe` 1
 
+        it "proves a replay-only twin preserves the stored guard-tightening history" $ \storeHandle -> do
+            let target = stream "divert-audit-replay-only" :: Stream DivertEventStream
+                affected =
+                    ReplayAudit.AffectedSet
+                        { affectedEventTypes = Set.singleton (EventType "DivertConfirmed")
+                        , includeSnapshotStreams = False
+                        }
+                budget = ReplayAudit.defaultAuditBudget & #parallelism .~ 1
+                auditWith candidate =
+                    ReplayAudit.auditStreams
+                        (ReplayAudit.AuditTargeted affected)
+                        budget
+                        ReplayAudit.AuditTarget
+                            { eventStream = candidate
+                            , category = "divert"
+                            , mkStream = Just . Stream.Stream
+                            }
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions permissiveDivertEventStream target (ConfirmDivert True)
+
+            Right withoutTwin <-
+                Store.runStoreIO storeHandle $
+                    auditWith tightenedDivertEventStream
+            withoutTwin ^. #results
+                `shouldBe` [ ReplayAudit.StreamAuditResult
+                                (StreamName "divert-audit-replay-only")
+                                ( ReplayAudit.ReplayFailed
+                                    (HydrationReplayFailed (StreamVersion 1) HydrationNoInvertingEdge)
+                                )
+                           ]
+            ReplayAudit.auditExitCode [withoutTwin] `shouldBe` 1
+
+            Right withTwin <-
+                Store.runStoreIO storeHandle $
+                    auditWith twinDivertEventStream
+            withTwin ^. #results
+                `shouldBe` [ ReplayAudit.StreamAuditResult
+                                (StreamName "divert-audit-replay-only")
+                                ReplayAudit.ReplayOk
+                                    { ReplayAudit.streamVersion = StreamVersion 1
+                                    , ReplayAudit.digest = Nothing
+                                    }
+                           ]
+            ReplayAudit.auditExitCode [withTwin] `shouldBe` 0
+
         it "reports a stale accepted snapshot seed as a divergence" $ \storeHandle -> do
             let target =
                     stream "auditfold-stale" :: Stream SnapshotCounterEventStream

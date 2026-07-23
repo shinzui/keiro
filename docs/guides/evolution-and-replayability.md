@@ -61,7 +61,7 @@ of this guide is the discipline that makes that true.
 
 ## The gates, at a glance
 
-Five gates stand between an evolution mistake and production. Know what each
+Six gates stand between an evolution mistake and production. Know what each
 one actually checks, because none of them checks everything:
 
 1. **The compiler.** Exhaustiveness of pattern matches over your event/command
@@ -73,11 +73,10 @@ one actually checks, because none of them checks everything:
    (event fields and types, enums, wire spec, contract events, workqueue
    payloads, process inputs, workflow inputs/outputs) and the *identity
    surface* (stable names, id prefixes, dedupe keys, queue identities),
-   exiting non-zero on BREAKING. It also advises on spec-visible aggregate
-   fold-surface changes and prints a replay-only twin for guard tightening.
-   Hole bodies remain invisible; process/router decide-surface and timer-payload
-   advisories are planned in
-   [`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md).
+   exiting non-zero on BREAKING. It also emits a replay-impact verdict, advises
+   on spec-visible aggregate fold, process/router decide, and timer-payload
+   changes, and prints a replay-only twin for guard tightening. Hole bodies
+   remain invisible to the differ.
 3. **The generated harness** (DSL services only). Round-trips current-shape
    events, asserts `validateTransducer` is clean, and exercises each supplied
    versioned old-payload golden through `decodeRaw`. Capture old shapes while
@@ -91,7 +90,13 @@ one actually checks, because none of them checks everything:
    `mkCodec`, so invalid versions, duplicate tags/rungs, and incomplete chains
    fail validated construction. It still validates the *new machine in
    isolation*, never the new machine against real old logs.
-5. **Runtime witnesses.** Hydration failures are loud, typed errors
+5. **The real-log replay audit.** `Keiro.ReplayAudit` consumes the affected
+   event types from `diff --replay-impact-out`, discovers only matching streams,
+   and full-replays them through the candidate binary. It reports exact replay
+   failures, accepted-seed divergence, and stable digests; a non-zero
+   `auditExitCode` blocks deployment. `AuditFull` is reserved for one-time
+   cutovers and forensics.
+6. **Runtime witnesses.** Hydration failures are loud, typed errors
    (`HydrationDecodeFailed`, `HydrationReplayFailed` with a
    `HydrationNoInvertingEdge`/`HydrationAmbiguousInversion`/
    `HydrationQueueMismatch`/`HydrationTruncatedChain` reason —
@@ -100,7 +105,9 @@ one actually checks, because none of them checks everything:
    `keiro.snapshot.apply.divergence` and stamps a `keiro.replay.divergence`
    attribute on the command span — **advisory telemetry only**: the command
    still succeeds, and nothing is dead-lettered. If you do not alert on that
-   counter, this witness does not exist for you.
+   counter, this witness does not exist for you. Snapshot hydration also
+   asynchronously verifies one in 1000 accepted seeds by default; disagreement
+   increments `keiro.snapshot.seed.divergence`.
 
 The summary table at the end of this guide maps every change class onto these
 gates.
@@ -349,16 +356,18 @@ The safe procedure today:
    `stateCodecVersion` or update an explicit `withFoldFingerprint` token. The
    changed discriminator forces one full replay per affected stream; schedule
    that performance event.
-3. Rebuild any read models whose projections depend on the changed fold
+3. Run the candidate binary's targeted replay audit against a production-copy
+   database. A seeded/full divergence is a failed deploy gate.
+4. Rebuild any read models whose projections depend on the changed fold
    ([Read Models](../user/read-models-and-projections.md)).
-4. If you cannot bump (emergency), delete the affected `keiro_snapshots` rows;
+5. If you cannot bump (emergency), delete the affected `keiro_snapshots` rows;
    the miss path is benign.
 
 The triple and manual obligation are recorded in
 [ADR 0003](../adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md).
-For invisible changes with a missed manual bump, the planned replay audit's
-seeded-vs-full comparison is the detection backstop:
-[`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md).
+For invisible changes with a missed manual bump, the audit's seeded-vs-full
+comparison is the pre-deploy backstop and
+`keiro.snapshot.seed.divergence` is the sampled runtime backstop.
 
 ## Changing the state shape
 
@@ -532,9 +541,8 @@ The operator-facing reference, with definitions and failure signatures, is
   changes, and expect a full-replay cost spike (see
   [fold changes](#changing-the-fold-same-events-different-state--and-what-snapshots-do-to-you)).
 - **Any transducer change: consult the replay-impact verdict, and audit the
-  affected data before switching traffic** (once
-  [`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md)
-  lands). `diff` either proves the deploy replay-neutral (no old edge or decode
+  affected data before switching traffic.** `diff` either proves the deploy
+  replay-neutral (no old edge or decode
   surface changed — no audit needed, the common case) or names the affected
   event types; run the candidate binary's *targeted* audit — only streams
   containing those types — against a production-copy or staging database.
@@ -558,11 +566,11 @@ DSL-only gates do not exist for hand-authored services.
 | Version bump + upcaster | ADDITIVE only with contiguous declarations | `mkCodec` checks chain; harness decodes old-shape golden | `GapInUpcasterChain`/`UpcasterError` if bypassed | hand-written semantic upcaster bugs | Landed: [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md), [140](../plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md) |
 | Deprecate event, live streams affected | `DeprecatedEventReplayHazard`; safe two-stage retirement advised | ε-variant rejected; replay-only edge validated | `HydrationNoInvertingEdge` if ignored | actual affected streams unknown until audit | Landed gate: [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md); [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit) |
 | Guard/output change vs old logs | `AggFoldSurfaceChanged`; tightening prints replay-only twin | new machine only | `HydrationReplayFailed` (loud/delayed) | inversion-compatible edits can shift state silently | [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (replay audit + digest diff) |
-| Decide change over redelivery window | invisible | — | deduped as benign duplicates | **silent mixed fan-out** | [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (advisory) + drain rule |
+| Decide change over redelivery window | `RouterDecideSurfaceChanged` / `ProcessDecideSurfaceChanged` Advisory | — | deduped as benign duplicates | hole-only edits remain invisible | Landed: [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) + drain rule |
 | Fold change, snapshots enabled | DSL-visible: `AggFoldSurfaceChanged` + new fingerprint | three-component discriminator | full replay on mismatch | **manual-bump residual** for hand-written/Holes-only edits | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md); [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit backstop) |
 | Register slot change | n/a | register shape hash changes | full replay (benign) | mixed-deploy snapshot thrash | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
 | State type `s` structural change | n/a | state shape hash changes | full replay (benign) | same-shape semantic change needs manual bump | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
-| Timer payload shape | input fields BREAKING | — | timer dead-letter (loud/delayed) | hand-written: none | [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (payload-block advisory) |
+| Timer payload shape | `ProcessTimerPayloadChanged` Advisory | — | timer dead-letter (loud/delayed) | hand-written: none | Landed: [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) |
 | Workflow step result type | BREAKING (body) | — | `WorkflowStepDecodeError` → terminal fail, no recovery API | recovery gap | [115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md) |
 | Job payload | workqueue changes keep normal classifications | generated queues use versioned `QueueCodec` | future version retries; malformed shape dead-letters | hand-written `aesonJobCodec` remains unversioned | Landed: [140](../plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md) |
 | Contract field change | BREAKING / advisory | — | consumer dead letters | cross-repo skew unchecked | [24](../masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md) (out of scope, manual rules here) |
@@ -570,7 +578,7 @@ DSL-only gates do not exist for hand-authored services.
 
 The master plan closing the tracked gaps is
 [`docs/masterplans/24`](../masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md).
-Plans 138, 139, 140, and 143 have landed. Plan 142 owns the remaining real-log
-audit, seed witness, and decide/timer advisory rows; until it lands, the rows
-marked **silent** still require the procedures in this guide and
+Plans 138 through 143 have landed. Their remaining manual obligations are
+explicit: bump invisible fold fingerprints, drain hand-owned decide changes,
+and keep cross-service compatibility coordinated according to
 [Deploy Ordering](../user/deploy-ordering.md).

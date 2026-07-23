@@ -29,7 +29,7 @@ boundaries independently defend runtime assembly:
    every resulting `EventStreamWarning` fails validated construction.
 4. Versioned old-payload JSON fixtures exercise `decodeRaw` against the current
    codec in conformance CI.
-5. The database-backed replay audit in plan 142 will cover the distinct
+5. The database-backed replay audit covers the distinct
    question that static fixtures cannot answer: whether real stored histories
    still invert and fold under the candidate binary.
 
@@ -47,14 +47,25 @@ The landed inventory is:
 | Missing aggregate rung | `UpcasterChainGap` Error | Vanished historical rung is Breaking `UpcasterChainGap` | `mkCodec` rejects startup; versioned JSON golden fails decode |
 | Event payload version bump | Contiguous upcaster required | `diff --emit-goldens` captures the old wire shape while both specs exist | `scaffold --goldens` embeds the fixture and the generated harness exercises `decodeRaw`; a stand-in is labelled as weaker when no golden exists |
 | `retiring` event without a live emitter | `EventRetirementInProgress` Error | Retirement start is Advisory | Generated shape remains the ordinary live machine |
-| Deprecated event without a replay-only emitter | `DeprecatedEventReplayHazard` Warning | Advisory with the same code | Real-log inversion remains plan 142's audit responsibility |
+| Deprecated event without a replay-only emitter | `DeprecatedEventReplayHazard` Warning | Advisory with the same code | Targeted real-log audit proves whether stored streams still invert |
 | Deprecated event with a replay-only emitter | `EventRetirementInProgress` Warning | Replay-safe cutover Advisory | Transducer boundary validates the replay-only edge |
-| Guard tightening | Replay-only edge discipline from ADR 0002 | `AggGuardTightened` prints the retained twin | Real-log relevance remains plan 142's audit responsibility |
+| Guard tightening | Replay-only edge discipline from ADR 0002 | `AggGuardTightened` prints the retained twin and affected replay surface | Targeted real-log audit fails without a required twin and passes with it |
 | Fold/control-state change | Snapshot contract from ADR 0003 | `AggFoldSurfaceChanged` Advisory | Snapshot discriminator rejects stale seeds |
 | New scaffolded workqueue payload | No payload-evolution grammar yet | Existing workqueue shape changes keep their normal classifications | Generated `QueueCodec` starts at schema version 1 with a `keiroJobCodec` `{v,t,data}` envelope; existing bare-payload queues must drain before adoption |
+| Replay-impacting aggregate change | — | `replay-neutral`, or deterministic per-aggregate event types and snapshot-stream inclusion | `AuditTargeted` reads only selected streams; replay failure or seed divergence exits 1 |
+| Hole-only or hand-written fold change with a missed version bump | Invisible | Invisible | One in 1000 accepted seeds is full-replayed through its immutable seed version; divergence increments `keiro.snapshot.seed.divergence` |
+| Router/process decide surface | — | `RouterDecideSurfaceChanged` / `ProcessDecideSurfaceChanged` Advisory | Drain the subscription redelivery window; hole-only changes keep the same manual rule |
+| Process timer payload | — | `ProcessTimerPayloadChanged` Advisory | Firers must decode every pending unversioned shape or the timer exhausts attempts and dead-letters |
 
-Plan 142 must extend it with replay-impact verdicts, targeted real-log audit
-coverage, and sampled seed verification.
+The replay-impact machine contract is
+`{"verdict":"replay-neutral"}` or
+`{"verdict":"affected","aggregates":{...}}`; affected event arrays are sorted.
+Generated DSL services expose one context-wide
+`auditTargets :: [SomeAuditTarget]` in declaration order. Audit discovery is
+read-only, indexed, budget-bounded, parallel, and resumable; `AuditFull` is for
+one-time cutovers and forensics. Correctness compares RFC 8785 canonical bytes;
+SHA-256 digests are review identifiers. Any replay failure, rejected discovered
+stream, or seeded/full divergence makes `auditExitCode` return 1.
 
 The same evidence boundaries determine rollout ordering:
 
@@ -74,7 +85,7 @@ The same evidence boundaries determine rollout ordering:
   have no automatic migration boundary. Firers/consumers must learn new shapes
   before producers write them, old decoders remain until backlogs drain, and a
   changed workflow result gets a new step name.
-- Once plan 142 lands, non-neutral transducer changes also require its targeted
+- Non-neutral transducer changes require the targeted
   real-log audit before traffic switches. Full-store replay remains a
   one-time-cutover and forensics mode, not a routine deploy gate.
 

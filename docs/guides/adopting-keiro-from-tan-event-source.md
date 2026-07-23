@@ -44,21 +44,20 @@ discriminator; a spec DSL generates, validates, and diffs the whole machine.
 
 Statements about keiro assume master plan 24
 (`docs/masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md`)
-is implemented; where a gate is still planned, the class is marked *(planned)*
-with the plan path. "Silent" means wrong behaviour with no error, ever.
+is implemented. "Silent" means wrong behaviour with no error, ever.
 
 | Change over a service's lifetime | tan-event-source | keiro |
 |---|---|---|
 | Add a new event type | Safe (old streams unaffected) | Safe; `diff` classifies ADDITIVE |
-| Add a required field to an event with stored history | Old events **fail to decode** — or are **silently dropped** by adapter combinators (see below). No versioning mechanism exists to fix it properly | Version bump + upcaster; `diff` refuses the unbumped variant (BREAKING); chain validated at startup *(planned: docs/plans/139)*; golden old payloads decode in CI *(planned: docs/plans/139/140)* |
+| Add a required field to an event with stored history | Old events **fail to decode** — or are **silently dropped** by adapter combinators (see below). No versioning mechanism exists to fix it properly | Version bump + upcaster; `diff` refuses the unbumped variant (BREAKING); chain validated at startup; golden old payloads decode in CI |
 | Rename / retype / remove a field | Same as above: decode failure or **silent data loss** (unknown keys ignored, fold loses the value — wrong state, no error) | Same versioned path; all variants BREAKING in `diff` without a bump |
-| Event no longer handled by the fold | **Silent no-op**: `lmapMaybeE` folds unmatched events as identity (`src/TanES/Decider.hs:61-65`; same on views, `src/TanES/View.hs:47-51`); wildcard `evolve` arms do the same. State silently wrong | Impossible to express: every stored event must invert through an edge or replay fails loudly (`HydrationNoInvertingEdge`); retirement has a guided procedure *(planned: docs/plans/139)* |
+| Event no longer handled by the fold | **Silent no-op**: `lmapMaybeE` folds unmatched events as identity (`src/TanES/Decider.hs:61-65`; same on views, `src/TanES/View.hs:47-51`); wildcard `evolve` arms do the same. State silently wrong | Impossible to express: every stored event must invert through an edge or replay fails loudly (`HydrationNoInvertingEdge`); retirement has a guided replay-only procedure |
 | `decide` emits an event `evolve` mishandles (drift) | **The worst one. Silent and structurally undetectable**: `decide` and `evolve` are two unrelated functions; nothing checks that an emitted event has the intended fold semantics. The command "succeeds", state is wrong forever | Unrepresentable: emit and write are one edge; validation proves every event inverts, exhaustively, at startup |
-| Change the fold (evolve / edge update) | Reinterprets all history — inherent to event sourcing, identical in both. tan-ES has no snapshots in the library, so no stale-seed variant *in the library* — and no discipline for services that cache state on their own | Same reinterpretation, plus: spec-visible fold changes auto-invalidate snapshots *(planned: docs/plans/138)*; hand-written/hole changes are caught by the sampled runtime witness and the pre-deploy audit *(planned: docs/plans/142)* |
+| Change the fold (evolve / edge update) | Reinterprets all history — inherent to event sourcing, identical in both. tan-ES has no snapshots in the library, so no stale-seed variant *in the library* — and no discipline for services that cache state on their own | Same reinterpretation, plus: spec-visible fold changes auto-invalidate snapshots; hand-written/hole changes are caught by the sampled runtime witness and the pre-deploy audit |
 | Tighten a command guard | **Replay-immune** (replay never consults `decide`). tan-ES genuinely does not have this problem | **Replay-relevant** — the honest concession, treated in its own section below |
 | Unknown event type in a stream (rollback after deploy) | Decode failure or silent skip, service-dependent | Loud typed error (`UnknownEventType` → `HydrationDecodeFailed`); roll-forward rule documented |
-| Old binary meets new-version payload | No versions, so undefined — whatever partial decode does | Loud `VersionAhead`; deploy-ordering rules documented *(planned: docs/plans/141)* |
-| Any of the above, pre-deploy detection | **None. No validator, no differ, no startup check, no audit exists** | `keiro-dsl check` + `diff` verdicts, startup validation, replay-impact verdict + targeted audit against real data *(planned: docs/plans/142)* |
+| Old binary meets new-version payload | No versions, so undefined — whatever partial decode does | Loud `VersionAhead`; deploy-ordering rules documented |
+| Any of the above, pre-deploy detection | **None. No validator, no differ, no startup check, no audit exists** | `keiro-dsl check` + `diff` verdicts, startup validation, replay-impact verdict + targeted audit against real data |
 
 Two rows deserve emphasis for a skeptical audience:
 

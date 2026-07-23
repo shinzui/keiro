@@ -115,9 +115,10 @@ dispatch block prints a `RouterDecideSurfaceChanged` advisory.
       advisories compare canonical pretty-printed spec surfaces; fixture pairs,
       formatting-only negative coverage, the manual CLI path, and all DSL suites
       are green.
-- [ ] Close-out: CHANGELOG entries; master plan 24 EP-5 boxes ticked; contracts recorded
-      here for docs/plans/141 to quote; ADR distillation pass (audit rows in the
-      evolution-gate inventory).
+- [x] Close-out (2026-07-23T22:46:00Z): CHANGELOG and present-tense user
+      guidance updated; plan 143's divert-store residual proved; externally
+      visible contracts frozen here; ADR 0004 distilled; master plan 24
+      registry, progress, and outcomes completed; repository flake checks green.
 
 
 ## Surprises & Discoveries
@@ -370,6 +371,25 @@ implementation. Provide concise evidence.
   deploy-ordering rule (drain on any decide change) is the covering procedure.
   Date: 2026-07-23
 
+- Decision: Freeze the operational wording attached to the three advisory
+  codes. `RouterDecideSurfaceChanged` says: "router dispatch surface changed:
+  a source event redelivered across the deploy dispatches under the same
+  deterministic ids, so half-old/half-new fan-out merges silently. Drain or
+  pause the router's subscription and replay or discard dead letters before
+  deploying; see docs/user/deploy-ordering.md." The process advisory uses the
+  same text with "process" in place of "router".
+  `ProcessTimerPayloadChanged` says: "timer payload shape changed: rows
+  scheduled before the deploy carry the old shape, unversioned, and fire under
+  new code — the fire decoder must accept every historically scheduled shape
+  or the timer dead-letters after maxAttempts". Each emitted message appends
+  the explicit limitation that hole-only changes are invisible and the same
+  drain rule applies.
+  Rationale: These strings are operator guidance consumed by the completed
+  deploy-ordering documentation. The stable diagnostic codes remain the
+  tooling contract; the wording preserves the exact redelivery and pending-row
+  failure modes that make the advisories actionable.
+  Date: 2026-07-23
+
 - Decision: A runtime cross-version dispatch witness (stamping a decide fingerprint on
   dispatched commands and flagging benign-duplicate confirmations whose stored
   fingerprint differs) is explicitly out of scope; recorded as a follow-on candidate.
@@ -392,11 +412,27 @@ implementation. Provide concise evidence.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation. At completion, feed the audit's rows into
-the evolution-gate inventory ADR named by master plan 24: old-log inversion — proved
-neutral or audited differentially pre-deploy; stale seed — detected by the audit at
-cutover and by the sampled runtime witness thereafter; reinterpretation — reviewable via
-digest diff; decide-surface change — advised at diff.)
+The closing gate is shipped. Routine DSL deploys now get a zero-data
+`replay-neutral` proof or a deterministic affected set; generated services get
+one category-safe audit assembly; and the candidate binary can audit only the
+selected real streams under bounded parallelism with resumable checkpoints.
+Replay failures and stale accepted seeds are distinct outcomes with exit 1,
+while stable RFC 8785/SHA-256 digests make successful reinterpretations
+reviewable across binaries. The full sweep remains deliberately opt-in.
+
+The runtime backstop samples accepted seeds through their immutable stream
+version, so a missed manual fold-fingerprint bump becomes
+`keiro.snapshot.seed.divergence` without racing the command append or mutating
+the snapshot row. Router/process decide and timer-payload edits now surface as
+non-breaking coded advisories over normalized AST fragments; formatting-only
+changes do not warn, and hole-only changes retain the documented drain rule.
+
+Acceptance passed at every layer: 353 keiro runtime examples after the
+plan-143 divert-store integration assertion, 241 focused DSL examples, every
+component selected by `cabal test keiro-dsl`, 17 Jitsurei examples including
+targeted `[1,0]` / skipped `[0,1]` and full `[1,1]` audit evidence, the manual
+`diff --since` warning path, and `nix flake check`. ADR 0004 now owns the
+durable gate inventory; transient dependency/API investigations remain here.
 
 
 ## Context and Orientation

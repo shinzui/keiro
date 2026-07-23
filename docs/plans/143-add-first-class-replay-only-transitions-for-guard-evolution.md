@@ -86,14 +86,12 @@ region is rejected; the same machine without the twin → `HydrationNoInvertingE
       `cabal.project.local` (untracked) points at the local keiki checkout.
       Full repo green: keiro-test 338 examples, keiro-dsl-test 201, all
       conformance suites, keiro-migrations 10 — 90 suite PASSes total.
-- [ ] M2 residual: plan 142's replay-audit assertions over the divert store
-      (B-bad `ReplayFailed` / B-good `ReplayOk`) — skipped because plan 142
-      has not landed; activate when both plans are in.
-- [ ] Release residual: keiki 0.3.0.0 is committed and tagged upstream
-      (`chore(release): 0.3.0.0`, tag `v0.3.0.0`, 2026-07-23) but not yet in
-      the package index keiro resolves against (verified: resolution fails
-      without the override), so keiro's untracked `cabal.project.local` stays
-      until the release is published; delete it then.
+- [x] M2 residual (2026-07-23): plan 142's targeted replay audit now runs the
+      same divert history under B-bad (`ReplayFailed
+      HydrationNoInvertingEdge`, exit 1) and B-good (`ReplayOk`, exit 0).
+- [x] Release residual (2026-07-23): Hackage now serves keiki,
+      keiki-codec-json, and keiki-codec-json-test 0.3.1.0; keiro resolves
+      without a local package override and no `cabal.project.local` remains.
 - [x] M3 (2026-07-23, keiro commit `101f549`): DSL `replay-only` marker (a prefix on
       the transition line — the grammar has no `transition` keyword; see Decision
       Log): grammar `tMode`, parser (+ a states-line lookahead fix), pretty-print

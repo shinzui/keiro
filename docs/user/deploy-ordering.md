@@ -87,9 +87,9 @@ Pause the subscription, let in-flight reactions finish, resolve or explicitly
 discard its dead letters, deploy the decide change, and then resume. Apply this
 procedure to changes in router resolution/dispatch, process-manager `handle`
 logic, or any hand-owned hole that changes the target set. The DSL diff
-advisories for these surfaces are planned in
-[plan 142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md);
-the drain rule applies before those advisories land too.
+emits `RouterDecideSurfaceChanged` and `ProcessDecideSurfaceChanged` advisories
+for spec-visible edits. Hole-only decide changes remain invisible to the
+differ, so the drain rule still applies whenever hand-owned logic changes.
 
 The deterministic-id behavior is implemented in
 [`Keiro.Router`](../../keiro/src/Keiro/Router.hs) and
@@ -127,7 +127,9 @@ Deploy all timer firers with a backward-compatible decoder first. Only after
 the old firers are gone may producers schedule the new shape. Keep decoding the
 old shape until every old timer has fired or been cancelled. This is the same
 workers-before-producers rule as a queue, but without a version envelope to
-make skew self-describing.
+make skew self-describing. DSL changes to the timer `payload` block emit the
+`ProcessTimerPayloadChanged` advisory; hand-written payloads retain the same
+manual obligation.
 
 See [`TimerRequest`](../../keiro/src/Keiro/Timer/Types.hs) and
 [`TimerWorkerOptions`](../../keiro/src/Keiro/Timer.hs).
@@ -188,15 +190,14 @@ reinterpret events already in the store. Before switching traffic, exercise
 the candidate binary against a production-copy or staging database containing
 representative history.
 
-The standard automated gate is being delivered by
-[plan 142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md).
-Its differential design will let `keiro-dsl diff` either prove a deploy
-replay-neutral or name a conservative affected event-type set. Routine audits
-will replay only streams containing those types, compare snapshot-seeded state
-with full replay, and emit per-stream digests. The full-store mode is reserved
-for one-time keiki-runtime cutovers and forensics, not routine deployments.
-Until the audit lands, maintain explicit old-log replay tests and run a
-candidate against a production-copy before every transducer change.
+Run `keiro-dsl diff --replay-impact-out FILE`. A `replay-neutral` verdict
+requires no audit. An `affected` verdict names a conservative event-type set;
+run the candidate binary's `Keiro.ReplayAudit` in `AuditTargeted` mode against
+a production-copy or staging database. It replays only streams containing
+those types, compares snapshot-seeded state with full replay, and emits
+per-stream digests. `auditExitCode` returning non-zero means do not deploy.
+Reserve `AuditFull` for one-time keiki-runtime cutovers and forensics, not
+routine deployments.
 
 If this rule is violated, the next live command may fail with
 `HydrationReplayFailed`; worse, an inversion-compatible change or stale snapshot

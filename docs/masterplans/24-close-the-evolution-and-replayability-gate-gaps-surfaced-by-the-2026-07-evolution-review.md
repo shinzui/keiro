@@ -31,7 +31,7 @@ Six child plans. EP-1 (plan 138) owns snapshot staleness: a fold-sensitive discr
 
 Alternatives considered. Folding EP-4 into the guide authoring was rejected: the guide is a new document shipped with this MasterPlan's creation; EP-4 edits existing documents and must track EP-1-3's shipped shapes. Implementing the old-log compatibility harness (tooling gap 4) as a full EP was originally rejected as premature in favour of EP-2's golden fixtures; the 2026-07-23 completeness audit reversed that in database-backed form (see Decision Log) — golden fixtures prove decode-ability of old shapes only, and no gate proved replay-ability of real logs — so EP-5 commits the DB-backed audit while the synthetic generated-fixture harness stays follow-on.
 
-ADR context: ADR 0001 (pgmq telemetry) is tangentially relevant to EP-3's job-codec change; ADR 0002 records replay-only edges; ADR 0003 records the snapshot discriminator; ADR 0004 is the evolution-gate inventory, includes EP-3's landed contracts, and must be extended again as EP-5 lands.
+ADR context: ADR 0001 (pgmq telemetry) is tangentially relevant to EP-3's job-codec change; ADR 0002 records replay-only edges; ADR 0003 records the snapshot discriminator; ADR 0004 is the completed evolution-gate inventory, including EP-5's replay-impact, real-log audit, sampled seed-witness, and decide/timer advisory contracts.
 
 
 ## Exec-Plan Registry
@@ -42,8 +42,8 @@ ADR context: ADR 0001 (pgmq telemetry) is tangentially relevant to EP-3's job-co
 | 2 | Validate codecs and deprecated-event replayability at the stream boundary | docs/plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md | None | None | Complete |
 | 3 | Fix DSL upcaster lowering and adopt versioned job codecs | docs/plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md | None | EP-2 | Complete |
 | 4 | Correct the evolution documentation and deploy-ordering guidance | docs/plans/141-correct-the-evolution-documentation-and-deploy-ordering-guidance.md | None | EP-1, EP-2, EP-3, EP-5 | Complete |
-| 5 | Add a pre-deploy replay audit and decide-surface change advisories | docs/plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md | None | EP-1, EP-2, EP-3 | In Progress |
-| 6 | Add first-class replay-only transitions for guard evolution | docs/plans/143-add-first-class-replay-only-transitions-for-guard-evolution.md | None | EP-1, EP-2, EP-5 | Complete (residuals: keiki release, EP-5 audit assertions) |
+| 5 | Add a pre-deploy replay audit and decide-surface change advisories | docs/plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md | None | EP-1, EP-2, EP-3 | Complete |
+| 6 | Add first-class replay-only transitions for guard evolution | docs/plans/143-add-first-class-replay-only-transitions-for-guard-evolution.md | None | EP-1, EP-2, EP-5 | Complete |
 
 
 ## Dependency Graph
@@ -74,10 +74,10 @@ Cross-plan decision for ADR promotion: the snapshot-discriminator contract; the 
 - [x] EP-2 (2026-07-23): Two-stage retirement (`retiring`, then `deprecated` plus replay-only) is checked/advised; diff no longer recommends decode-only deprecation; versioned old-payload goldens decode through `decodeRaw` in CI.
 - [x] EP-3 (2026-07-23): Generated rungs dispatch on the wire tag into event-specific holes and pass foreign kinds through; genuine old payloads run in the harness; scaffolded workqueues emit versioned job codecs.
 - [x] EP-4 (2026-07-23): Four drifted docs and the companion guide corrected; deploy-ordering rules documented and indexed, with the replay audit kept explicitly planned until EP-5 lands.
-- [ ] EP-5: Replay audit library and generated per-context wiring shipped; the no-inverting-edge and stale-seed scenarios are caught against a real store pre-deploy; digests stable across runs.
-- [ ] EP-5: Router/process decide-surface and timer-payload diff advisories fire on fixture pairs with drain-before-deploy guidance; jitsurei reference assembly added.
+- [x] EP-5 (2026-07-23): Differential replay-impact verdict, read-only targeted/full audit, generated category-safe per-context wiring, and Jitsurei Order/saga reference assembly shipped; no-inverting-edge, stale-seed, stable-digest, budget/resume, and replay-only-twin scenarios pass against a real store.
+- [x] EP-5 (2026-07-23): Sampled immutable-seed runtime verification and `keiro.snapshot.seed.divergence` shipped; router/process decide-surface and timer-payload advisories fire on normalized fixture pairs with drain-before-deploy guidance and no formatting false positives.
 - [x] EP-6 (2026-07-23): keiki `EdgeMode` landed (forward-excluded, two-phase inversion-included, dead-edge-clean without a reachability change, same-mode ambiguity-checked; keiki 0.3.0.0, commit `a8d6377`); black-acuity regression green with a replay-only twin and red without (keiro `48ef795`).
-- [x] EP-6 (2026-07-23): DSL `replay-only` marker round-trips and lowers to `B.replayOnly`; the `AggGuardTightened` advisory prints the paste-ready computed twin (`complementExpr`); guide/adoption-doc procedures in present tense (keiro `101f549`; ADR 0002). Residuals tracked in plan 143: keiki 0.3.0.0 release publication, and the plan-142 audit assertions over the divert store.
+- [x] EP-6 (2026-07-23): DSL `replay-only` marker round-trips and lowers to `B.replayOnly`; the `AggGuardTightened` advisory prints the paste-ready computed twin (`complementExpr`); guide/adoption-doc procedures in present tense (keiro `101f549`; ADR 0002). Hackage 0.3.1.0 publication and plan-142 audit assertions over the divert store close both recorded residuals.
 
 
 ## Surprises & Discoveries
@@ -97,6 +97,7 @@ Cross-plan decision for ADR promotion: the snapshot-discriminator contract; the 
 - EP-2 completion (2026-07-23): the first full DSL bar found `retiring` could be swallowed as a state name when no command preceded the event; QuickCheck seed 180655211 pinned the ambiguity. Reserving the marker fixed that seed, after which all 24 DSL suites, 227 unit examples, and the v1 `decodeRaw` golden passed. The mutation check proved removing the upcaster fails the golden.
 - EP-3 completion audit (2026-07-23): the hurried partial implementation could not compile because generated `QueueCodec` exported `reservation_workJobCodec` while consumers imported `reservationWorkJobCodec`, and the fresh-skeleton fixture omitted the new generated module. Lower-camel normalization and complete fixture/Cabal wiring repaired both. The audit also corrected an inaccurate real-database acceptance claim: the existing queue suites are pure, so they now pin the exact `{v,t,data}` `JobCodec` boundary and compile it into live `Job` values instead.
 - EP-4 close-out (2026-07-23): the companion evolution guide was nominally excluded from EP-4 edits but still described EP-1/2/3 as future work (`mkCodec` not called, current-shape-only harnesses, two-component snapshot discriminator, unversioned generated queues). Cross-linking corrected reference pages into it would have created contradictory user guidance, so EP-4 performed a targeted shipped-gate truth sweep and recorded the scope reconciliation in plan 141.
+- EP-5 close-out (2026-07-23): a full-replay witness started after snapshot hydration can race the command's own append and compare different stream versions. Bounding the shared replay fold at the immutable snapshot version made the runtime witness both asynchronous and sound. The closeout audit also activated EP-6's deferred divert-store assertion: the candidate without the replay-only twin exits 1 with `HydrationNoInvertingEdge`, while the same history under the twin exits 0.
 
 
 ## Decision Log
@@ -137,7 +138,8 @@ Cross-plan decision for ADR promotion: the snapshot-discriminator contract; the 
   boundaries independently defend runtime assembly: single-spec impossibilities are
   Errors from `check`, cross-version hazards are classified by `diff`, constructed codecs
   are revalidated by `mkCodec` inside `validateEventStreamWith`, and old payload fixtures
-  exercise `decodeRaw`. ADR 0004 records the inventory and its remaining EP-5 rows.
+  exercise `decodeRaw`. ADR 0004 records the inventory, including EP-5's
+  replay-impact, real-log audit, sampled witness, and operational advisories.
   Rationale: No one layer has all necessary evidence, and generated code is not the only
   way to construct a stream. Layering the gates prevents both false certainty and a
   generator-only safety claim.
@@ -159,15 +161,23 @@ Cross-plan decision for ADR promotion: the snapshot-discriminator contract; the 
 
 ## Outcomes & Retrospective
 
-- EP-1, EP-2, EP-3, EP-4, and EP-6 are complete. EP-2 closed the codec-construction gap, refuses the two
-  reachable poisoned DSL shapes, made event retirement an explicit two-stage protocol,
-  corrected diff classifications, and established the versioned old-payload golden
-  convention. EP-3 now lowers same-source event upcasts into a safe tag dispatcher,
-  embeds genuine old-payload goldens in generated harnesses, and emits versioned queue
-  codecs. EP-4 corrected the reference and narrative evolution documentation, added the
-  indexed nine-surface deploy-ordering reference, and distilled rollout constraints into
-  ADR 0004. The remaining initiative work is EP-5 (real-log replay audit, sampled seed
-  witness, and decide/timer advisories).
+- All six child plans are complete. Snapshot compatibility is fold-sensitive;
+  constructed codecs fail fast; generated upcasters dispatch safely by wire
+  tag; genuine old payloads decode in CI; fresh workqueues have a versioned
+  envelope; and the reference/deploy-ordering documentation matches the
+  shipped behavior.
+- The original missing fleet-migration bar is now mechanical. `diff` proves
+  replay-neutrality or names affected aggregate/event surfaces; the candidate
+  binary audits only the selected stored streams, returning non-zero on replay
+  failure or stale-seed divergence; stable digests expose silent
+  reinterpretation for review. Full-store replay is restricted to one-time
+  cutovers and forensics.
+- Residuals that static structure cannot observe are explicit rather than
+  hidden. Sampled immutable-seed verification alerts on missed hand-written
+  fold bumps, and decide/timer advisories point at the drain or decoder
+  procedure while stating that hole-only changes retain the manual rule.
+  Workflow journal evolution and cross-repository contract conformance remain
+  the named exclusions owned outside this initiative.
 
 
 ---
@@ -195,3 +205,11 @@ reference docs match the current codec, snapshot, and replay contracts; the new 
 to it; and the companion guide's shipped-gate descriptions were reconciled after a stale
 future-tense sweep. Registry and EP-4 progress are complete, ADR 0004 now records the
 durable rollout implications, and EP-5 is the initiative's only remaining child.
+
+Revision note (2026-07-23, EP-5 and initiative closeout): plan 142 completed.
+The replay-audit core, replay-impact verdict, generated target assembly,
+Jitsurei reference, sampled seed witness, and decide/timer advisories are
+shipped and validated. Plan 143's deferred audit and release residuals are
+closed, present-tense user guidance and ADR 0004 record the durable contracts,
+all registry/progress rows are complete, and the fleet-migration exit criterion
+is satisfied.

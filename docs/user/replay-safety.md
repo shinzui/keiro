@@ -202,13 +202,20 @@ Keiro's evolution gates make the detectable parts explicit:
   upcasters protect decoding, but a decode golden does not prove that the
   decoded event still inverts or folds identically.
 
-Real stored histories are the evidence static checks lack. The differential,
-database-backed audit planned in
-[plan 142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md)
-will replay only streams affected by a non-neutral diff, compare full replay
-with snapshot-seeded replay, and emit reviewable state digests. Until it lands,
-use explicit old-log replay tests and a production-copy database before
-deploying any transducer change.
+Real stored histories are the evidence static checks lack. Run `keiro-dsl diff`
+with `--replay-impact-out FILE`: `replay-neutral` requires no data access;
+`affected` names the conservative event-type set for the candidate binary's
+`Keiro.ReplayAudit.AuditTargeted` run. Generated services expose the typed
+`auditTargets :: [SomeAuditTarget]` assembly from
+`Generated.<Context>.ReplayAudit`.
+
+The audit discovers affected streams server-side, full-replays them without
+writing events or snapshots, compares any accepted snapshot seed with full
+replay, and reports stable state digests. `auditExitCode` is `1` when any
+stream fails replay, any target rejects a discovered stream name, or seeded
+state diverges; otherwise it is `0`. Use `AuditFull` only for a one-time
+runtime cutover or forensics. The durable contract is recorded in
+[ADR 0004](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md).
 
 In short: `ValidatedEventStream` makes unsafe aggregate replay shape
 unrepresentable at the command boundary. It does not replace codec tests,
