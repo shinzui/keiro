@@ -366,6 +366,69 @@ main = hspec $ do
                     Left CoddStrictSourceHasUnselected{} -> True
                     _ -> False
 
+    describe "poisoned-ledger recovery" $ do
+        it "up before import poisons the ledger and the documented recovery restores the cutover" $ do
+            plan <- requirePlan
+            withKeiroPg $ \database -> do
+                let settings = Pg.connectionSettings database
+                    provider = connectionProviderFromSettings settings
+                withConnection settings $ \connection -> do
+                    applyLegacyPayloads connection
+                    installCoddLedger connection "codd" False False
+
+                incident <- runMigrationPlan defaultRunOptions settings plan
+                incident `shouldSatisfy` isLeft
+                assertPoisonedLedger settings
+
+                config <-
+                    requireRight
+                        (frameworkCoddSourceConfig provider True "poisoned-ledger recovery fixture" Confirmed)
+                blockedImport <-
+                    importCoddHistory
+                        defaultImportOptions
+                        config
+                        provider
+                        plan
+                        frameworkCoddHistoryMappings
+                blockedImport `shouldSatisfy` \case
+                    Left (CoddTargetImportFailed HistoryImportConflict{}) -> True
+                    _ -> False
+
+                assertPoisonedLedger settings
+                withConnection settings $ \connection ->
+                    useSession connection (Session.script "DROP SCHEMA pgmigrate CASCADE;")
+
+                recoveredImport <-
+                    importCoddHistory
+                        defaultImportOptions
+                        config
+                        provider
+                        plan
+                        frameworkCoddHistoryMappings
+                        >>= requireRight
+                importOutcomes recoveredImport `shouldBe` replicate 23 Imported
+
+                expectedPending <- postCoddImportPendingIssues
+                verifiedBeforeUp <-
+                    verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
+                case verifiedBeforeUp of
+                    VerificationReport verificationIssues _ _ _ ->
+                        verificationIssues `shouldBe` expectedPending
+
+                up <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
+                reportOutcomes up
+                    `shouldBe` replicate 7 AlreadyApplied
+                        <> [AppliedNow]
+                        <> replicate 16 AlreadyApplied
+                        <> replicate 4 AppliedNow
+
+                verifiedAfterUp <-
+                    verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
+                case verifiedAfterUp of
+                    VerificationReport verificationIssues _ _ _ ->
+                        verificationIssues `shouldBe` []
+                withConnection settings assertSchema
+
 assertBlockedCoddPreflight :: Text -> Expectation
 assertBlockedCoddPreflight sourceSchema =
     withKeiroPg $ \database -> do
@@ -398,21 +461,11 @@ importFixture sourceSchema = do
             importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
                 >>= requireRight
         importOutcomes first `shouldBe` replicate 23 Imported
-        kirokuCanaryId <- requireRight (migrationId "kiroku" "0008-schema-management-comment")
-        keiroCanaryId <- requireRight (migrationId "keiro" "0017-schema-management-comment")
-        keiroDeadLettersId <- requireRight (migrationId "keiro" "0018")
-        keiroStateShapeId <- requireRight (migrationId "keiro" "0019-keiro-snapshots-state-shape-hash")
-        keiroFailureReasonId <- requireRight (migrationId "keiro" "0020-keiro-workflow-children-failure-reason")
+        expectedPending <- postCoddImportPendingIssues
         verifiedBeforeCanaries <- verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
         case verifiedBeforeCanaries of
             VerificationReport verificationIssues _ _ _ ->
-                verificationIssues
-                    `shouldBe` [ PendingMigration kirokuCanaryId
-                               , PendingMigration keiroCanaryId
-                               , PendingMigration keiroDeadLettersId
-                               , PendingMigration keiroStateShapeId
-                               , PendingMigration keiroFailureReasonId
-                               ]
+                verificationIssues `shouldBe` expectedPending
         up <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
         reportOutcomes up
             `shouldBe` replicate 7 AlreadyApplied
@@ -434,6 +487,30 @@ importFixture sourceSchema = do
             sourceRows `shouldBe` 23
             facts <- useSession connection (Session.statement () importFactsStatement)
             facts `shouldBe` (28, 23, True)
+
+postCoddImportPendingIssues :: IO [VerificationIssue]
+postCoddImportPendingIssues =
+    traverse pendingMigration pendingNames
+  where
+    pendingMigration (component, name) =
+        PendingMigration <$> requireRight (migrationId component name)
+
+    pendingNames =
+        [ ("kiroku", "0008-schema-management-comment")
+        , ("keiro", "0017-schema-management-comment")
+        , ("keiro", "0018")
+        , ("keiro", "0019-keiro-snapshots-state-shape-hash")
+        , ("keiro", "0020-keiro-workflow-children-failure-reason")
+        ]
+
+assertPoisonedLedger :: Settings.Settings -> Expectation
+assertPoisonedLedger settings =
+    withConnection settings $ \connection -> do
+        facts <-
+            useSession
+                connection
+                (Session.statement () poisonedLedgerFactsStatement)
+        facts `shouldBe` (5, 5, 0)
 
 nativeMigrationFiles :: [FilePath]
 nativeMigrationFiles =
@@ -720,6 +797,26 @@ importFactsStatement =
                 <$> column Decoders.int8
                 <*> column Decoders.int8
                 <*> column Decoders.bool
+            )
+        )
+  where
+    column = Decoders.column . Decoders.nonNullable
+
+poisonedLedgerFactsStatement :: Statement () (Int64, Int64, Int64)
+poisonedLedgerFactsStatement =
+    Statement.preparable
+        """
+        SELECT
+          (SELECT count(*) FROM pgmigrate.migrations),
+          (SELECT count(*) FROM pgmigrate.migrations WHERE component = 'kiroku'),
+          (SELECT count(*) FROM pgmigrate.history_imports)
+        """
+        Encoders.noParams
+        ( Decoders.singleRow
+            ( (,,)
+                <$> column Decoders.int8
+                <*> column Decoders.int8
+                <*> column Decoders.int8
             )
         )
   where
