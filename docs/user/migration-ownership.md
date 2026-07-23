@@ -35,6 +35,16 @@ an untyped migration set.
 The manifest `keiro-migrations/migrations/manifest` is the source of migration
 order. Each immutable SQL file has a stable component-local identifier. Do not
 edit or reorder shipped entries; append a new migration for every correction.
+At compile time, the manifest embedder checks order, directory membership, and
+the exact SQL payloads. On GHC 9.12 the embedding module loads
+`RecompilePlugin`, which reruns that check whenever Cabal invokes GHC; it cannot
+help a build that Cabal declares up to date without invoking the compiler.
+
+The default migration suite supplies the independent review-time gate. It reads
+`migrations.native.lock` and the migrations directory at test runtime and
+requires the lockfile, manifest, directory membership, and every SHA-256 payload
+to agree. At deploy time, pg-migrate adds a third layer: the `pgmigrate` ledger
+keys applied history by checksum and fails closed on divergence.
 
 ## Application Components
 
@@ -67,10 +77,18 @@ cabal run keiro-migrate -- new \
 cabal run keiro-migrate -- check keiro-migrations/migrations/manifest
 ```
 
-Review the new SQL and manifest append together. Prefer idempotent DDL where it
-does not weaken correctness, qualify every object as `<schema>.<object>`, and
-use a nontransactional migration only when PostgreSQL forbids the operation in
-a transaction.
+Every new Keiro migration is a three-file review diff: the immutable SQL file,
+its appended `migrations/manifest` line, and its appended
+`migrations.native.lock` SHA-256 line in the same order. Review that all three
+agree. Prefer idempotent DDL where it does not weaken correctness, qualify every
+object as `<schema>.<object>`, and use a nontransactional migration only when
+PostgreSQL forbids the operation in a transaction. Run
+`cabal test keiro-migrations-test`; the named mismatch explains whether the
+lockfile, directory membership, or payload needs attention.
+
+`migrations.lock` without `.native` is frozen codd-cutover evidence. Never add
+native entries to it: strict history import relies on its exact legacy filename
+set.
 
 ## Importing Existing Codd History
 

@@ -10,7 +10,7 @@ import Data.ByteString qualified as ByteString
 import Data.Either (isLeft)
 import Data.Foldable (toList)
 import Data.Int (Int64)
-import Data.List (findIndex, sort)
+import Data.List (findIndex, sort, (\\))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
@@ -45,9 +45,9 @@ import Kiroku.Store.Migrations qualified as Kiroku
 import Kiroku.Store.Migrations.History.Codd qualified as Kiroku.Codd
 import Lint
 import Numeric qualified
-import System.Directory (doesDirectoryExist, doesFileExist)
+import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.Environment (lookupEnv)
-import System.FilePath ((</>))
+import System.FilePath (takeExtension, (</>))
 import Test.Hspec
 
 main :: IO ()
@@ -88,6 +88,41 @@ main = hspec $ do
             keiro <- requireRight keiroMigrations
             migrationPlan (keiro :| []) `shouldSatisfy` isLeft
             frameworkMigrationPlan keiro kiroku `shouldSatisfy` isLeft
+
+    describe "native checksum lockfile" $ do
+        it "matches the manifest, directory membership, and every payload byte" $ do
+            directory <- findMigrationsDirectory
+            lockPath <- findNativeLockfile
+            lockEntries <- parseLockfile <$> Text.IO.readFile lockPath
+            manifestNames <-
+                fmap Text.unpack . Text.lines
+                    <$> Text.IO.readFile (directory </> "manifest")
+            directoryNames <-
+                sort
+                    . filter ((== ".sql") . takeExtension)
+                    <$> listDirectory directory
+            let lockNames = fst <$> lockEntries
+            assertFileList
+                "migrations.native.lock entries differ from migrations/manifest"
+                manifestNames
+                lockNames
+            assertFileList
+                "migrations directory entries differ from migrations/manifest"
+                (sort manifestNames)
+                directoryNames
+            forM_ lockEntries $ \(filename, expectedChecksum) -> do
+                actualChecksum <-
+                    checksumText
+                        <$> ByteString.readFile (directory </> filename)
+                unless (actualChecksum == expectedChecksum) $
+                    expectationFailure
+                        ( "migrations.native.lock checksum mismatch for "
+                            <> filename
+                            <> "\nexpected: "
+                            <> Text.unpack expectedChecksum
+                            <> "\nactual:   "
+                            <> Text.unpack actualChecksum
+                        )
 
     describe "migration body lint" $ do
         let config = LintConfig{requiredQualifier = "keiro.", exemptFiles = []}
@@ -380,6 +415,13 @@ findLockfile :: IO FilePath
 findLockfile =
     findFile ["keiro-migrations/migrations.lock", "migrations.lock"]
 
+findNativeLockfile :: IO FilePath
+findNativeLockfile =
+    findFile
+        [ "keiro-migrations/migrations.native.lock"
+        , "migrations.native.lock"
+        ]
+
 findNativeExpectedSchema :: IO FilePath
 findNativeExpectedSchema =
     findFile
@@ -408,6 +450,26 @@ filterM predicate = foldr step (pure [])
         matches <- predicate value
         values <- remaining
         pure (if matches then value : values else values)
+
+assertFileList :: String -> [FilePath] -> [FilePath] -> Expectation
+assertFileList message expected actual =
+    unless (actual == expected) $
+        expectationFailure
+            ( message
+                <> "\nmissing:    "
+                <> show (expected \\ actual)
+                <> "\nunexpected: "
+                <> show (actual \\ expected)
+                <> orderDifference
+            )
+  where
+    orderDifference
+        | sort expected == sort actual =
+            "\norder differs\nexpected: "
+                <> show expected
+                <> "\nactual:   "
+                <> show actual
+        | otherwise = ""
 
 snapshotMismatch :: FilePath -> Text -> Text -> String
 snapshotMismatch path expected actual =

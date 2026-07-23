@@ -290,6 +290,7 @@ extra-source-files:
   migrations/*.sql
   migrations/manifest
   migrations.lock
+  migrations.native.lock
   sql-migrations/*.sql
 
 source-repository head

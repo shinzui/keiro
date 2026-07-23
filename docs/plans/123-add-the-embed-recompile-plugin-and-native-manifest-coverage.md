@@ -49,7 +49,7 @@ gate) runs. The master plan sizes this plan at roughly an afternoon; keep it tha
 ## Progress
 
 - [x] (2026-07-23T23:16:24Z) Milestone 1: `RecompilePlugin` pragma and comment added to keiro's embed module; stale-embed hazard reproduced pre-fix and shown caught post-fix; the no-GHC residual reproduced; default migration suite passed (20 examples, 0 failures).
-- [ ] Milestone 2: `migrations.native.lock` checked in covering all 20 native files; suite test asserts lockfile/manifest/directory/bytes four-way agreement; `docs/user/migration-ownership.md` manifest statement updated; suite green.
+- [x] (2026-07-23T23:23:10Z) Milestone 2: `migrations.native.lock` checked in covering all 20 native files; default suite enforces lockfile/manifest/directory/bytes agreement; ownership guide documents compile/test/deploy layers and the three-file authoring diff; 21 examples passed. Tampering with 0017 failed naming its checksum mismatch, an unlisted 0099 file failed as `unexpected`, and cleanup restored green. Deterministic regeneration matched byte-for-byte; lockfile SHA-256 is `db8deb4fa8062c5677d7ab1134a3167a46f94f09af5b979dfb9e498ae15a111d`.
 
 
 ## Surprises & Discoveries
@@ -79,6 +79,22 @@ gate) runs. The master plan sizes this plan at roughly an afternoon; keep it tha
   changing no Haskell source printed `Up to date` and exited zero. This confirms the
   documented residual: the plugin protects every build in which Cabal invokes GHC, while
   the native lockfile test must protect test runs where Cabal invokes no compiler.
+  Date: 2026-07-23
+
+- Discovery: The runtime directory check closes the plugin's residual without forcing a
+  library rebuild. After a green test build, adding only
+  `0099-membership-drill.sql` caused Cabal to rerun the already-built test executable, not
+  the library, and failed with:
+
+  ```text
+  migrations directory entries differ from migrations/manifest
+  missing:    []
+  unexpected: ["0099-membership-drill.sql"]
+  ```
+
+  Appending a tamper comment to 0017 independently failed with
+  `migrations.native.lock checksum mismatch for
+  0017-schema-management-comment.sql` and printed both hashes.
   Date: 2026-07-23
 
 

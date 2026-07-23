@@ -13,6 +13,12 @@ describe or compare the live PostgreSQL schema. The old codd build had also supp
 schema-shape check, a migration-body lint, and a service-startup handshake. Those checks
 survived only behind Keiro's disabled `legacy-codd-tools` flag after the runner swap.
 
+The swap also weakened two build-time checks. GHC 9.12 cannot register a migration
+directory as a Template Haskell dependency, so an incremental build could omit a newly
+added, unlisted SQL file while retaining a stale embedded component. Keiro's legacy
+`migrations.lock` cannot cover native files because strict codd-history import treats its
+exact legacy filename set as transition evidence.
+
 Ledger integrity and live-schema integrity answer different questions. A valid ledger proves
 that the expected migration history was recorded. It cannot detect an index dropped by hand,
 a column altered after migration, or a partially restored schema. Conversely, a schema
@@ -59,10 +65,17 @@ The other restored checks remain separate and run in the default build:
   `search_path`.
 - `missingMigrations` uses pg-migrate's public status report to power a strict application
   startup handshake.
+- The embedding module loads pg-migrate-embed's `RecompilePlugin`, forcing manifest
+  membership validation whenever Cabal invokes GHC.
+- `migrations.native.lock` pins every native component file by SHA-256, manifest order, and
+  directory membership in the default test suite. The legacy `migrations.lock` remains
+  frozen codd-cutover evidence.
 
 No check replaces another. Operators use `verify` for ledger integrity and `verify-schema`
-for live objects; services use the startup handshake; CI runs the lint and regenerates the
-expected schema in a fresh database.
+for live objects; services use the startup handshake; CI runs the lint, the native lockfile
+gate, and the expected-schema comparison against a fresh database. Every new native
+migration is therefore a three-file review diff: SQL payload, manifest entry, and
+native-lock entry.
 
 
 ## Consequences
@@ -82,11 +95,19 @@ unstable internal module.
 Because the three restored gates are in the normal cabal components, regressions no longer
 depend on anyone remembering to enable `legacy-codd-tools`.
 
+The recompilation plugin has an explicit limit: it cannot act when Cabal decides the
+package is up to date and never invokes GHC. The default suite reads the directory and
+native lockfile at test runtime, so the review-time gate still detects an unlisted file in
+that case. At deployment, pg-migrate's checksum-keyed ledger remains the final independent
+backstop.
+
 
 ## References
 
 - [docs/plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md](../plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md)
   — implementation plan and negative-path evidence.
+- [docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md](../plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md)
+  — build- and review-time integrity implementation and incremental-build reproduction.
 - [docs/masterplans/19-restore-the-migration-integrity-gates-under-pg-migrate-surfaced-by-the-2026-07-migration-review.md](../masterplans/19-restore-the-migration-integrity-gates-under-pg-migrate-surfaced-by-the-2026-07-migration-review.md)
   — initiative scope and the remaining build-integrity and cutover gates.
 - [docs/user/migrations.md](../user/migrations.md)
