@@ -172,6 +172,28 @@ implementation. Provide concise evidence.
   the exact default is fixed during implementation and recorded here.
   Date: 2026-07-23
 
+- Decision: The replay-impact verdict's guard rule is sharpened from "guard text
+  changed → affected" to residue satisfiability: an edge whose guard changed is
+  affected only when `old-guard ∧ complement(new-guard)` is satisfiable; an
+  unsatisfiable residue (loosening, refactor, equivalence) is proved replay-neutral.
+  Rationale: Raised by the user's golden-test question (2026-07-23). Golden replay
+  traces cannot soundly detect guard tightening — detection requires a checked-in
+  trace to land inside the removed region, which is defined by a *future* predicate
+  over command dimensions the trace generator had no reason to vary (in the
+  black-acuity example the old guard never mentioned `patientAcuity`). The sound
+  equivalent is symbolic: DSL guards are fully spec-visible (`Expr` atoms are
+  registers, fields, enums, spec-level rules — `Grammar.hs:238-258`), so residue
+  satisfiability is decidable over the comparison fragment, and the complement is the
+  same `complementExpr` docs/plans/143 builds for the twin. A satisfiable residue is
+  *exactly* the region to paste as the replay-only twin or to target-audit.
+  Implementation note: start with a conservative satisfiability check (unsat only for
+  syntactic equivalence and recognizable complement/subsumption shapes; anything else
+  → affected) and record its precision limits here — over-approximation keeps the
+  verdict sound while the checker sharpens. Golden traces stay valuable for the
+  variants where one trace per edge *is* sound coverage (edge removal, re-pointing,
+  output-template changes) and are already implied by docs/plans/140's harness work.
+  Date: 2026-07-23
+
 - Decision: The audit calls the hydrate *primitives* (`hydrateFull`, `hydrateSeeded`),
   never the public `hydrate`.
   Rationale: `hydrate` deliberately masks a failing seeded replay by falling back to full
