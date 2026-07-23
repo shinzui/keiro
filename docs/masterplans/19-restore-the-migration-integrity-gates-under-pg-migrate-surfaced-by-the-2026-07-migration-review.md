@@ -48,7 +48,7 @@ preflight policy remains an ADR candidate for EP-3.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Restore live schema verification, body lint, and the startup handshake under pg-migrate | docs/plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md | None | None | Complete |
-| 2 | Add the embed recompile plugin and native manifest coverage | docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md | None | None | In Progress |
+| 2 | Add the embed recompile plugin and native manifest coverage | docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md | None | None | Complete |
 | 3 | Guard up against codd-ledgered databases and mount the codd import in the CLI | docs/plans/124-guard-up-against-codd-ledgered-databases-and-mount-the-codd-import-in-the-cli.md | None | EP-1 | Not Started |
 
 
@@ -75,8 +75,8 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
 - [x] (2026-07-23) EP-1: Live schema-drift verification restored in the default build; drifted-database test and operator drill exit nonzero naming the dropped index.
 - [x] (2026-07-23) EP-1: Body lint runs over all 20 embedded entries in the default test suite; an unqualified fixture migration fails it.
 - [x] (2026-07-23) EP-1: Native `missingMigrations` exported and documented; fresh-database handshake test returns all 28 composed migrations.
-- [ ] EP-2: `RecompilePlugin` pragma added; stale-embed reproduction documented or test-pinned.
-- [ ] EP-2: Native manifest coverage decision recorded and implemented (lockfile in CI or documented acceptance).
+- [x] (2026-07-23) EP-2: `RecompilePlugin` pragma added; pre-fix stale embed, post-fix compiler failure, and the no-GHC residual reproduced and documented.
+- [x] (2026-07-23) EP-2: Native manifest coverage implemented with a 20-file lock enforced against manifest order, directory membership, and payload bytes in the default suite.
 - [ ] EP-3: `up` preflight refuses codd-ledgered databases without override; both trap variants covered by integration tests.
 - [ ] EP-3: codd-import subcommand mounted in keiro-migrate; cutover runbook corrected (sentinel fixup step, fixup header, recovery procedure).
 
@@ -94,6 +94,10 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
   The canonical snapshot query must pin a local `pg_catalog` search path or an unchanged
   sequence-backed default can appear drifted solely because verification uses a different
   login role.
+- EP-2 implementation (2026-07-23), confirms the cross-gate boundary: the GHC 9.12
+  recompilation plugin catches directory changes only when Cabal invokes GHC. A test run
+  can execute without a library rebuild, so the runtime directory/lockfile comparison is
+  an independent and necessary backstop rather than duplicate coverage.
 
 
 ## Decision Log
@@ -118,14 +122,22 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
   canonicalization rule.
   Date: 2026-07-23
 
+- Decision: Preserve `migrations.lock` as exact codd-import evidence and put native
+  review-time checksums in `migrations.native.lock`.
+  Rationale: Extending the legacy file would invalidate strict codd-history import.
+  The separate 20-file native lock can match the active manifest and directory exactly,
+  closes the plugin's no-GHC residual during tests, and fails review before pg-migrate's
+  deploy-time checksum gate is needed.
+  Date: 2026-07-23
+
 
 ## Outcomes & Retrospective
 
-EP-1 is complete. Keiro's default build once again enforces migration-body qualification,
-offers a strict startup handshake, and detects live PostgreSQL 18 schema drift independently
-of pg-migrate's ledger verification. The full repository verification passed, the negative
-schema-drift paths name the altered objects, and the work required no pg-migrate changes.
-ADR 0002 captures the durable boundary.
+EP-1 and EP-2 are complete. Keiro's default workflow now enforces migration-body
+qualification, offers a strict startup handshake, detects live PostgreSQL 18 schema drift,
+forces manifest revalidation whenever GHC runs, and pins all 20 native migration payloads
+at review time. Both child plans passed repository-wide verification and required no
+pg-migrate changes. ADR 0002 captures the durable layered-gate boundary.
 
-EP-2 and EP-3 remain. The initiative is not complete until stale-embed/native-manifest
-coverage and the codd-ledger cutover guard/import workflow are delivered.
+EP-3 remains. The initiative is not complete until the codd-ledger cutover guard, mounted
+history import, and corrected operator workflow are delivered.

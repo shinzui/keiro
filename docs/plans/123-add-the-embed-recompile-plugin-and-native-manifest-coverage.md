@@ -50,6 +50,7 @@ gate) runs. The master plan sizes this plan at roughly an afternoon; keep it tha
 
 - [x] (2026-07-23T23:16:24Z) Milestone 1: `RecompilePlugin` pragma and comment added to keiro's embed module; stale-embed hazard reproduced pre-fix and shown caught post-fix; the no-GHC residual reproduced; default migration suite passed (20 examples, 0 failures).
 - [x] (2026-07-23T23:23:10Z) Milestone 2: `migrations.native.lock` checked in covering all 20 native files; default suite enforces lockfile/manifest/directory/bytes agreement; ownership guide documents compile/test/deploy layers and the three-file authoring diff; 21 examples passed. Tampering with 0017 failed naming its checksum mismatch, an unlisted 0099 file failed as `unexpected`, and cleanup restored green. Deterministic regeneration matched byte-for-byte; lockfile SHA-256 is `db8deb4fa8062c5677d7ab1134a3167a46f94f09af5b979dfb9e498ae15a111d`.
+- [x] (2026-07-23T23:27:20Z) Final validation and closure: `just verify` passed, including 372 `keiro-test` examples, 58 `keiro-pgmq-test` examples (2 expected pending), 17 `jitsurei-test` examples, diagram freshness, and 21 `keiro-migrations-test` examples. Both the Keiro and pg-migrate worktrees were clean before closure.
 
 
 ## Surprises & Discoveries
@@ -144,7 +145,22 @@ gate) runs. The master plan sizes this plan at roughly an afternoon; keep it tha
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Both build-integrity gaps are closed in the default workflow. The embedding module now
+loads pg-migrate-embed's GHC 9.12 `RecompilePlugin`; the manual reproduction proved the
+pre-fix stale embed, the plugin-forced `UnlistedSqlFiles` failure, and the residual case
+where Cabal never invokes GHC. The independently executed lockfile spec closes that
+residual at test time.
+
+`migrations.native.lock` pins all 20 current Keiro migration payloads in manifest order.
+The default suite requires the lockfile, manifest, on-disk SQL membership, and SHA-256
+payloads to agree. Negative drills proved that a changed 0017 payload and an unlisted 0099
+file both fail with the offending filename; deterministic regeneration reproduced the
+checked-in bytes. The ownership guide now makes every new migration a three-file review
+diff and preserves `migrations.lock` as frozen codd-import evidence.
+
+The implementation added no dependency, changed no public library API, and required no
+pg-migrate edit. Repository-wide verification passed. The durable compile/test/deploy gate
+inventory is recorded in ADR 0002.
 
 
 ## Context and Orientation

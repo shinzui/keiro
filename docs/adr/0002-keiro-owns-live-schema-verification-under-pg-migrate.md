@@ -92,7 +92,7 @@ They must retain `Settings`, own a Hasql session and call `snapshotSchema`, or w
 future public pg-migrate extension point. That constraint is preferable to depending on an
 unstable internal module.
 
-Because the three restored gates are in the normal cabal components, regressions no longer
+Because the restored gates are in the normal cabal components, regressions no longer
 depend on anyone remembering to enable `legacy-codd-tools`.
 
 The recompilation plugin has an explicit limit: it cannot act when Cabal decides the
