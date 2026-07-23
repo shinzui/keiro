@@ -33,6 +33,7 @@ where
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Text (Text)
 import GHC.Generics (Generic)
+import Keiki.Shape (CanonicalStateShape)
 
 newtype OrderId = OrderId Text
     deriving stock (Generic, Eq, Ord, Show)
@@ -145,6 +146,8 @@ data OrderState
     | Cancelled
     deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
     deriving anyclass (FromJSON, ToJSON)
+
+instance CanonicalStateShape OrderState
 
 orderIdText :: OrderId -> Text
 orderIdText (OrderId value) = value

@@ -61,6 +61,7 @@ import Data.List (find)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Validate (sagaCategoryError)
@@ -268,6 +269,7 @@ data Agg = Agg
     , aWire :: !WireSpec
     , aProjection :: !(Maybe ProjectionSpec)
     , aSnapshot :: !(Maybe SnapshotSpec)
+    , aFoldFingerprint :: !Text
     , aReadModels :: ![ReadModelNode]
     , aGenPrefix :: !Text
     -- ^ e.g. @Generated.HospitalCapacity.Reservation@
@@ -307,6 +309,7 @@ resolveAgg ctx spec agg =
         , aWire = fromMaybe defaultWire (aggWire agg)
         , aProjection = aggProjection agg
         , aSnapshot = aggSnapshot agg
+        , aFoldFingerprint = aggregateFoldFingerprint spec agg
         , aReadModels = [readModel | NReadModel readModel <- specNodes spec]
         , aGenPrefix = genPrefixFor ctx nm
         , aHolePrefix = holePrefixFor ctx nm
@@ -1333,7 +1336,7 @@ emitDomain a =
                , "import GHC.Generics (Generic)"
                , "import Keiki.Core (RegFile (..))"
                ]
-            ++ ["import Keiki.Shape (CanonicalTypeName)" | hasSnapshot a]
+            ++ ["import Keiki.Shape (CanonicalStateShape, CanonicalTypeName)" | hasSnapshot a]
             ++ [ "import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)"
                , ""
                , sectionsOf
@@ -1390,7 +1393,13 @@ emitVertex a =
         , "  deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)"
         ]
             ++ ["  deriving anyclass (ToJSON, FromJSON)" | hasSnapshot a]
-            ++ ["instance CanonicalTypeName " <> aVertexType a | hasSnapshot a]
+            ++ [ line
+               | hasSnapshot a
+               , line <-
+                    [ "instance CanonicalStateShape " <> aVertexType a
+                    , "instance CanonicalTypeName " <> aVertexType a
+                    ]
+               ]
 
 emitRecord :: ResolvedCtor -> Text
 emitRecord rc =
@@ -1651,7 +1660,7 @@ emitEventStream a =
                , "import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)"
                ]
             ++ ["import Data.Text (Text)" | hasSnapshot a]
-            ++ ["import Keiro.Snapshot.Codec (defaultStateCodec)" | hasSnapshot a]
+            ++ ["import Keiro.Snapshot.Codec (defaultStateCodec, withFoldFingerprint)" | hasSnapshot a]
             ++ [ "import Keiro.Stream qualified as Stream"
                , ""
                , "-- The validated aggregate stream category (hole-kind 5: referenced, never retyped)."
@@ -1675,8 +1684,9 @@ emitEventStream a =
                , "    , eventCodec = " <> lowerFirst (aName a) <> "Codec"
                , "    , resolveStreamName = Stream.streamName"
                , "    , snapshotPolicy = " <> snapshotPolicyExpr a
-               , "    , stateCodec = " <> stateCodecExpr a
-               , "    }"
+               ]
+            ++ stateCodecFieldLines a
+            ++ [ "    }"
                , ""
                ]
             ++ snapshotFixtureLines a
@@ -1697,7 +1707,27 @@ snapshotPolicyExpr aggregate = case aSnapshot aggregate of
 stateCodecExpr :: Agg -> Text
 stateCodecExpr aggregate = case aSnapshot aggregate of
     Nothing -> "Nothing"
-    Just snapshot -> "Just (defaultStateCodec " <> tshow' (snapCodecVersion snapshot) <> ")"
+    Just snapshot ->
+        "Just (withFoldFingerprint "
+            <> tshow (aFoldFingerprint aggregate)
+            <> " (defaultStateCodec "
+            <> tshow' (snapCodecVersion snapshot)
+            <> "))"
+
+stateCodecFieldLines :: Agg -> [Text]
+stateCodecFieldLines aggregate = case aSnapshot aggregate of
+    Nothing -> ["    , stateCodec = Nothing"]
+    Just _ ->
+        [ "    -- The snapshot discriminator composes: the spec's state-codec version (bump it"
+        , "    -- in the spec's `state-codec version=` clause), keiki's register and"
+        , "    -- control-state shape hashes, and this fold fingerprint derived from the"
+        , "    -- spec's transition surface (guards, writes, emits, states, register"
+        , "    -- initials, referenced rules). Spec-visible fold changes invalidate old"
+        , "    -- snapshots automatically. Fold changes made ONLY in the hand-owned Holes"
+        , "    -- module are invisible here: bump `state-codec version=` manually or old"
+        , "    -- snapshots will be served stale."
+        , "    , stateCodec = " <> stateCodecExpr aggregate
+        ]
 
 snapshotFixtureLines :: Agg -> [Text]
 snapshotFixtureLines aggregate = case aSnapshot aggregate of

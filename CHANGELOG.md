@@ -6,6 +6,25 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- `StateCodec` gains a `stateShapeHash` compatibility field, and aggregate
+  snapshot lookup now requires codec version, register-layout hash, and
+  control-state/fold hash to match. Migration
+  `0019-keiro-snapshots-state-shape-hash.sql` adds the corresponding
+  `state_shape_hash` column; existing rows receive the empty sentinel and are
+  invalidated once on their next hydration. `keiro-core`, `keiro`, and
+  snapshot-enabled generated code now require `keiki >=0.3.1`.
+
+### Added
+
+- `defaultStateCodec` derives a control-state discriminator through Keiki's
+  `CanonicalStateShape`; `withFoldFingerprint` composes an explicit fold token
+  as `<state-hash>;fold=<fingerprint>`.
+- `keiro-dsl` derives a deterministic fingerprint from aggregate states,
+  register initials, transitions, and referenced rules, lowers it into
+  generated snapshot codecs, and emits the non-breaking
+  `AggFoldSurfaceChanged` advisory when that replay surface evolves.
 - `keiro`: `Keiro.version` now reports the current package version. It had
   been left at `"0.1.0.0"` since the initial scaffold while the package
   shipped 0.2.0.0 and 0.3.0.0; keep it in lockstep with `keiro/keiro.cabal`

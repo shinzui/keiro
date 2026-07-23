@@ -1,14 +1,14 @@
 {- | The @keiro_snapshots@ table: persistence for aggregate snapshots.
 
 One row per stream holds the latest snapshot of its folded state as JSONB,
-tagged with the 'stateCodecVersion' and 'regfileShapeHash' that produced it.
-'lookupSnapshot' fetches the newest row matching a given version and shape
-hash (so incompatible snapshots are simply not found). Within one codec
-version and shape hash, 'writeSnapshotRow' keeps only the highest stream
-version, so a late or out-of-order write cannot regress the snapshot.
+tagged with the 'stateCodecVersion', 'regfileShapeHash', and 'stateShapeHash'
+that produced it. 'lookupSnapshot' fetches the newest row matching all three
+discriminators (so incompatible snapshots are simply not found). Within one
+discriminator tuple, 'writeSnapshotRow' keeps only the highest stream version,
+so a late or out-of-order write cannot regress the snapshot.
 
-A write with a /different/ codec version or shape hash deliberately replaces
-the row even at a lower stream version. This lets a rolled-back deployment
+A write with a /different/ discriminator deliberately replaces the row even
+at a lower stream version. This lets a rolled-back deployment
 reclaim the single snapshot slot instead of being locked out by a newer codec
 forever. During a mixed-version deployment, however, writers with incompatible
 codecs can thrash that row and each side will miss the other's snapshot. The
@@ -30,7 +30,7 @@ module Keiro.Snapshot.Schema (
 )
 where
 
-import Contravariant.Extras (contrazip3, contrazip5)
+import Contravariant.Extras (contrazip4, contrazip6)
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -44,7 +44,7 @@ import Prelude qualified
 
 {- | A snapshot row as read back from @keiro_snapshots@: the stored 'state'
 JSON, the 'streamVersion' it captures, the 'stateCodecVersion' and
-'regfileShapeHash' that gate compatibility, and the create/update
+'regfileShapeHash' and 'stateShapeHash' that gate compatibility, and the create/update
 timestamps.
 -}
 data SnapshotRow = SnapshotRow
@@ -53,6 +53,7 @@ data SnapshotRow = SnapshotRow
     , state :: !Value
     , stateCodecVersion :: !Int
     , regfileShapeHash :: !Text
+    , stateShapeHash :: !Text
     , createdAt :: !UTCTime
     , updatedAt :: !UTCTime
     }
@@ -67,30 +68,32 @@ data SnapshotWrite = SnapshotWrite
     , state :: !Value
     , stateCodecVersion :: !Int
     , regfileShapeHash :: !Text
+    , stateShapeHash :: !Text
     }
     deriving stock (Generic, Eq, Show)
 
-{- | Fetch the latest snapshot for a stream that matches the given codec
-version and register-file shape hash. Returns 'Nothing' when no compatible
-snapshot exists, so an incompatible one is treated as absent.
+{- | Fetch the latest snapshot for a stream that matches all three codec
+discriminators. Returns 'Nothing' when no compatible snapshot exists, so an
+incompatible one is treated as absent.
 -}
 lookupSnapshot ::
     (Store :> es) =>
     StreamId ->
     Int ->
     Text ->
+    Text ->
     Eff es (Maybe SnapshotRow)
-lookupSnapshot streamId version shapeHash =
+lookupSnapshot streamId version shapeHash stateShapeHash =
     runTransaction
         $ Tx.statement
-            (streamIdToInt streamId, Prelude.fromIntegral version, shapeHash)
+            (streamIdToInt streamId, Prelude.fromIntegral version, shapeHash, stateShapeHash)
             lookupSnapshotStmt
 
-{- | Upsert a snapshot row for its stream. For the same codec version and shape
-hash, the write only takes effect when its 'streamVersion' is at least the
-stored one. An incompatible codec version or shape hash replaces the row even
-at a lower version so codec rollback can make progress; see the module header
-for the mixed-deployment performance caveat.
+{- | Upsert a snapshot row for its stream. For the same discriminator tuple,
+the write only takes effect when its 'streamVersion' is at least the stored
+one. Any incompatible discriminator replaces the row even at a lower version
+so codec rollback can make progress; see the module header for the
+mixed-deployment performance caveat.
 -}
 writeSnapshotRow ::
     (Store :> es) =>
@@ -100,48 +103,53 @@ writeSnapshotRow snapshot =
     runTransaction
         $ Tx.statement (snapshotWriteParams snapshot) writeSnapshotStmt
 
-lookupSnapshotStmt :: Statement (Int64, Int64, Text) (Maybe SnapshotRow)
+lookupSnapshotStmt :: Statement (Int64, Int64, Text, Text) (Maybe SnapshotRow)
 lookupSnapshotStmt =
     preparable
         """
-        SELECT stream_id, stream_version, state, state_codec_version, regfile_shape_hash, created_at, updated_at
+        SELECT stream_id, stream_version, state, state_codec_version, regfile_shape_hash, state_shape_hash, created_at, updated_at
         FROM keiro.keiro_snapshots
         WHERE stream_id = $1
           AND state_codec_version = $2
           AND regfile_shape_hash = $3
+          AND state_shape_hash = $4
         ORDER BY stream_version DESC
         LIMIT 1
         """
-        ( contrazip3
+        ( contrazip4
             (E.param (E.nonNullable E.int8))
             (E.param (E.nonNullable E.int8))
+            (E.param (E.nonNullable E.text))
             (E.param (E.nonNullable E.text))
         )
         (D.rowMaybe snapshotRowDecoder)
 
-writeSnapshotStmt :: Statement (Int64, Int64, Value, Int64, Text) ()
+writeSnapshotStmt :: Statement (Int64, Int64, Value, Int64, Text, Text) ()
 writeSnapshotStmt =
     preparable
         """
         INSERT INTO keiro.keiro_snapshots
-          (stream_id, stream_version, state, state_codec_version, regfile_shape_hash)
+          (stream_id, stream_version, state, state_codec_version, regfile_shape_hash, state_shape_hash)
         VALUES
-          ($1, $2, $3, $4, $5)
+          ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (stream_id) DO UPDATE
           SET stream_version = EXCLUDED.stream_version,
               state = EXCLUDED.state,
               state_codec_version = EXCLUDED.state_codec_version,
               regfile_shape_hash = EXCLUDED.regfile_shape_hash,
+              state_shape_hash = EXCLUDED.state_shape_hash,
               updated_at = now()
           WHERE keiro_snapshots.stream_version <= EXCLUDED.stream_version
              OR keiro_snapshots.state_codec_version <> EXCLUDED.state_codec_version
              OR keiro_snapshots.regfile_shape_hash <> EXCLUDED.regfile_shape_hash
+             OR keiro_snapshots.state_shape_hash <> EXCLUDED.state_shape_hash
         """
-        ( contrazip5
+        ( contrazip6
             (E.param (E.nonNullable E.int8))
             (E.param (E.nonNullable E.int8))
             (E.param (E.nonNullable E.jsonb))
             (E.param (E.nonNullable E.int8))
+            (E.param (E.nonNullable E.text))
             (E.param (E.nonNullable E.text))
         )
         D.noResult
@@ -154,6 +162,7 @@ snapshotRowDecoder =
         <*> D.column (D.nonNullable D.jsonb)
         <*> (Prelude.fromIntegral <$> D.column (D.nonNullable D.int8))
         <*> D.column (D.nonNullable D.text)
+        <*> D.column (D.nonNullable D.text)
         <*> D.column (D.nonNullable D.timestamptz)
         <*> D.column (D.nonNullable D.timestamptz)
 
@@ -163,11 +172,12 @@ streamIdToInt (StreamId value) = value
 streamVersionToInt :: StreamVersion -> Int64
 streamVersionToInt (StreamVersion value) = value
 
-snapshotWriteParams :: SnapshotWrite -> (Int64, Int64, Value, Int64, Text)
+snapshotWriteParams :: SnapshotWrite -> (Int64, Int64, Value, Int64, Text, Text)
 snapshotWriteParams snapshot =
     ( streamIdToInt (snapshot ^. #streamId)
     , streamVersionToInt (snapshot ^. #streamVersion)
     , snapshot ^. #state
     , Prelude.fromIntegral (snapshot ^. #stateCodecVersion)
     , snapshot ^. #regfileShapeHash
+    , snapshot ^. #stateShapeHash
     )

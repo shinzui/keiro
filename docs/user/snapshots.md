@@ -78,9 +78,11 @@ Choose a policy by how the manager's state stream grows and ends:
 Snapshots remain advisory for managers exactly as for aggregates: a missing, corrupt, or
 shape-incompatible snapshot falls back to full replay of the manager state stream, and a
 stored manager-event decode failure still fails the reaction. When you change the
-manager's register-file or state shape, the `shapeHash` changes automatically (with
-`defaultStateCodec`) and older snapshots are ignored safely; bump `stateCodecVersion`
-yourself for an encoding change the shape hash does not capture.
+manager's register layout or control-state shape, `defaultStateCodec` invalidates older
+snapshots automatically; for DSL-generated services, spec-visible fold changes do too.
+Fold changes the discriminator cannot see — hand-written update/guard bodies or Holes-only
+edits — require bumping `stateCodecVersion` yourself.
+<!-- plan 141: full rewrite -->
 
 The keiro test suite proves this end to end in
 `keiro/test/Main.hs` under `describe "Keiro.ProcessManager snapshots"`: a manager with

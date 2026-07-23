@@ -5,6 +5,7 @@ fixtures and generated runtime values cannot silently disagree.
 module Keiro.Dsl.ReadModelShape (
     canonicalShape,
     deriveShapeHash,
+    fnv1a64,
     registryNameFor,
     subscriptionNameFor,
 ) where
@@ -33,9 +34,14 @@ canonicalShape readModel =
 -- | A fixed-width FNV-1a-64 digest over the canonical shape's UTF-8 bytes.
 deriveShapeHash :: ReadModelNode -> Text
 deriveShapeHash readModel =
-    "fnv1a:" <> T.justifyRight 16 '0' (T.pack (showHex digest ""))
+    "fnv1a:" <> fnv1a64 (canonicalShape readModel)
+
+-- | A fixed-width FNV-1a-64 digest over a 'Text' value's UTF-8 bytes.
+fnv1a64 :: Text -> Text
+fnv1a64 input =
+    T.justifyRight 16 '0' (T.pack (showHex digest ""))
   where
-    digest = foldl' step offsetBasis (concatMap utf8Bytes (T.unpack (canonicalShape readModel)))
+    digest = foldl' step offsetBasis (concatMap utf8Bytes (T.unpack input))
     step hash byte = (hash `xor` byte) * fnvPrime
 
 -- | The runtime registry identity derived from context and notation name.

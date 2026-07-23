@@ -15,7 +15,7 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
-import Keiki.Shape (CanonicalTypeName)
+import Keiki.Shape (CanonicalStateShape, CanonicalTypeName)
 
 newtype TransferReservationId = TransferReservationId Text
     deriving stock (Generic, Eq, Ord, Show)
@@ -76,6 +76,7 @@ divertStatusText = \case
 data ReservationVertex = ReservationUnrequested | ReservationHeld | ReservationConfirmed | ReservationExpired | ReservationAdmitted | ReservationReleased
     deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
     deriving anyclass (ToJSON, FromJSON)
+instance CanonicalStateShape ReservationVertex
 instance CanonicalTypeName ReservationVertex
 
 data RequestTransferReservationData = RequestTransferReservationData

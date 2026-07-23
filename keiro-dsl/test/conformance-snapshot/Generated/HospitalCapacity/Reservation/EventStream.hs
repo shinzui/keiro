@@ -15,7 +15,7 @@ import HospitalCapacity.Reservation.Holes (reservationTransducer)
 import Keiki.Core (HsPred)
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
-import Keiro.Snapshot.Codec (defaultStateCodec)
+import Keiro.Snapshot.Codec (defaultStateCodec, withFoldFingerprint)
 import Keiro.Stream qualified as Stream
 
 -- The validated aggregate stream category (hole-kind 5: referenced, never retyped).
@@ -39,7 +39,15 @@ reservationEventStreamDef =
         , eventCodec = reservationCodec
         , resolveStreamName = Stream.streamName
         , snapshotPolicy = Every 100
-        , stateCodec = Just (defaultStateCodec 1)
+        , -- The snapshot discriminator composes: the spec's state-codec version (bump it
+          -- in the spec's `state-codec version=` clause), keiki's register and
+          -- control-state shape hashes, and this fold fingerprint derived from the
+          -- spec's transition surface (guards, writes, emits, states, register
+          -- initials, referenced rules). Spec-visible fold changes invalidate old
+          -- snapshots automatically. Fold changes made ONLY in the hand-owned Holes
+          -- module are invisible here: bump `state-codec version=` manually or old
+          -- snapshots will be served stale.
+          stateCodec = Just (withFoldFingerprint "2367ef6fadf0e751" (defaultStateCodec 1))
         }
 
 reservationSnapshotFixture :: (Int, Text)

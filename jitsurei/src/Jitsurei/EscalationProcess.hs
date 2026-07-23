@@ -82,6 +82,7 @@ import Jitsurei.Timers (jitsureiTimerWorkerOptions)
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, RegFile (..), SymTransducer)
 import Keiki.Generics.TH (deriveAggregate)
+import Keiki.Shape (CanonicalStateShape)
 import Keiro.Codec (Codec (..))
 import Keiro.Command (CommandError, RunCommandOptions, runCommand)
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
@@ -139,6 +140,8 @@ data EscalationState
     | Settled
     deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
     deriving anyclass (FromJSON, ToJSON)
+
+instance CanonicalStateShape EscalationState
 
 type EscalationRegs = '[]
 

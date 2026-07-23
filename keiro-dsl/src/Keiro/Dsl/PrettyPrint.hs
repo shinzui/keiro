@@ -9,6 +9,7 @@ to the identical AST.
 module Keiro.Dsl.PrettyPrint (
     renderSpec,
     renderTransition,
+    renderExpr,
 )
 where
 
@@ -568,6 +569,13 @@ renderTransition =
     renderStrict
         . layoutPretty LayoutOptions{layoutPageWidth = Unbounded}
         . docTransition
+
+-- | Render one expression in canonical concrete syntax.
+renderExpr :: Expr -> Text
+renderExpr =
+    renderStrict
+        . layoutPretty LayoutOptions{layoutPageWidth = Unbounded}
+        . docExpr 0
 
 docTransition :: Transition -> Doc ann
 docTransition t =

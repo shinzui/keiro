@@ -52,12 +52,12 @@ library
   build-depends:
     , aeson         >=2.2
     , aeson-casing  >=0.2
-    , base          >=4.21 && <5
+    , base          >=4.21  && <5
     , bytestring    >=0.11
     , deepseq       >=1.5
     , generic-lens  >=2.2
-    , keiki         >=0.3  && <0.4
-    , kiroku-store  >=0.3  && <0.4
+    , keiki         >=0.3.1 && <0.4
+    , kiroku-store  >=0.3   && <0.4
     , lens          >=5.2
     , scientific    >=0.3
     , text          >=2.1

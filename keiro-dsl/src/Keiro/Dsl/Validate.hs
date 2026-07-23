@@ -190,6 +190,7 @@ data DiagnosticCode
       ReplayOnlyEmitsNothing
     | ReplayOnlyCommandStillLive
     | AggGuardTightened
+    | AggFoldSurfaceChanged
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

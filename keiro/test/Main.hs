@@ -43,6 +43,7 @@ import Keiki.Core (
     Update (..),
     WireCtor (..),
     inpCtor,
+    lit,
     matchInCtor,
     oNil,
     pack,
@@ -52,6 +53,8 @@ import Keiki.Core (
  )
 import Keiki.Core qualified as Keiki
 import Keiki.Generics (emptyRegFile)
+import Keiki.Operators qualified as K
+import Keiki.Shape (CanonicalStateShape)
 import Keiro
 import Keiro qualified as KeiroRoot
 import Keiro.Connection (ensureProjectionSchema, qualifyTable, withProjectionSchema)
@@ -1789,6 +1792,109 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             lookup "keiro.snapshot.read.misses" scalars `shouldBe` Just (IntNumber 3)
             lookup "keiro.snapshot.decode.failures" scalars `shouldBe` Nothing
 
+        it "invalidates a snapshot when the control-state shape changes" $ \storeHandle -> do
+            let targetStreamName = StreamName "snapshot-state-shape-change"
+                target = stream "snapshot-state-shape-change" :: Stream SnapshotCounterEventStream
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 2)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions snapshotCounterEventStream target (Add 3)
+            lookupResult <-
+                Store.runStoreIO storeHandle $
+                    lookupSnapshotSeed
+                        targetStreamName
+                        (defaultStateCodec @SnapshotCounterRegs @CounterStateV2 1)
+            case lookupResult of
+                Right (SnapshotUnavailable SnapshotNotFound) -> pure ()
+                _ -> expectationFailure "expected the changed control-state shape to miss the stored snapshot"
+
+        it "uses the fold fingerprint as a snapshot discriminator" $ \storeHandle -> do
+            let targetStreamName = StreamName "snapshot-fold-fingerprint-lookup"
+                target = stream "snapshot-fold-fingerprint-lookup" :: Stream SnapshotCounterEventStream
+                foldV1Codec =
+                    withFoldFingerprint
+                        "fold-v1"
+                        (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
+                foldV2Codec =
+                    withFoldFingerprint
+                        "fold-v2"
+                        (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 2)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 3)
+            sameFingerprint <- Store.runStoreIO storeHandle $ lookupSnapshotSeed targetStreamName foldV1Codec
+            case sameFingerprint of
+                Right (SnapshotHit seed) -> seed ^. #streamVersion `shouldBe` StreamVersion 2
+                _ -> expectationFailure "expected an equal fold fingerprint to reuse the snapshot"
+            changedFingerprint <- Store.runStoreIO storeHandle $ lookupSnapshotSeed targetStreamName foldV2Codec
+            case changedFingerprint of
+                Right (SnapshotUnavailable SnapshotNotFound) -> pure ()
+                _ -> expectationFailure "expected a changed fold fingerprint to miss the snapshot"
+
+        it "full-replays under a changed fold and persists the new discriminator" $ \storeHandle -> do
+            let targetStreamName = "snapshot-fold-fingerprint-e2e"
+                target = stream targetStreamName :: Stream SnapshotCounterEventStream
+                candidateCodec =
+                    withFoldFingerprint
+                        "fold-v2"
+                        (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 2)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 3)
+            case Keiki.applyEventsEither
+                foldV2SnapshotCounterTransducer
+                (Counting, RCons (Proxy @"lastAmount") 0 RNil)
+                [CounterAdded 2, CounterAdded 3] of
+                Right (_, RCons _ fullReplayLastAmount RNil) ->
+                    fullReplayLastAmount `shouldBe` 4
+                Left failure ->
+                    expectationFailure ("expected full replay under fold v2, got " <> show failure)
+            candidateResult <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV2SnapshotCounterEventStream target (Add 104)
+            case candidateResult of
+                Right (Right result) -> do
+                    result ^. #streamVersion `shouldBe` StreamVersion 3
+                    result ^. #eventsAppended `shouldBe` 1
+                other -> expectationFailure ("expected changed-fold full replay to accept probe command, got " <> show other)
+            Right storedStateShape <-
+                Store.runStoreIO storeHandle $
+                    Store.runTransaction $
+                        Tx.statement targetStreamName snapshotStateShapeForStreamStmt
+            storedStateShape `shouldBe` Just (candidateCodec ^. #stateShapeHash)
+
+        it "pins the manual-contract hazard when fold logic changes without a discriminator bump" $ \storeHandle -> do
+            let targetStreamName = StreamName "snapshot-fold-manual-contract"
+                target = stream "snapshot-fold-manual-contract" :: Stream SnapshotCounterEventStream
+                unchangedCodec =
+                    withFoldFingerprint
+                        "fold-v1"
+                        (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 2)
+            Right (Right _) <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 3)
+            staleSeed <- Store.runStoreIO storeHandle $ lookupSnapshotSeed targetStreamName unchangedCodec
+            case staleSeed of
+                Right (SnapshotHit seed) ->
+                    case seed ^. #registers of
+                        RCons _ staleLastAmount RNil -> staleLastAmount `shouldBe` 3
+                _ -> expectationFailure "expected the unchanged discriminator to serve the stale seed"
+            residualResult <-
+                Store.runStoreIO storeHandle $
+                    runCommand defaultRunCommandOptions foldV2WithoutFingerprintBumpEventStream target (Add 104)
+            residualResult `shouldBe` Right (Left CommandRejected)
+
         it "falls back after operator truncation" $ \storeHandle -> do
             (exporter, metricsRef) <- inMemoryMetricExporter
             (provider, _env) <-
@@ -1902,6 +2008,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                             , state = (rollbackCodec ^. #encode) (Counting, RCons (Proxy @"lastAmount") 2 RNil)
                             , stateCodecVersion = rollbackCodec ^. #stateCodecVersion
                             , regfileShapeHash = rollbackCodec ^. #shapeHash
+                            , stateShapeHash = rollbackCodec ^. #stateShapeHash
                             }
             Right snapshotVersionAfter <-
                 Store.runStoreIO storeHandle $
@@ -7391,6 +7498,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                         ]
             (workflowStateCodec ^. #decode) ((workflowStateCodec ^. #encode) m) `shouldBe` Right m
             (workflowStateCodec ^. #shapeHash) `shouldBe` "keiro.workflow.stepmap.v1"
+            (workflowStateCodec ^. #stateShapeHash) `shouldBe` "keiro.workflow.stepmap.v1"
             (workflowStateCodec ^. #stateCodecVersion) `shouldBe` 1
 
     describe "Keiro.Workflow.Types journal codec" $ do
@@ -9161,6 +9269,16 @@ data CounterState
     deriving stock (Generic, Eq, Show, Enum, Bounded, Ord)
     deriving anyclass (FromJSON, ToJSON)
 
+instance CanonicalStateShape CounterState
+
+data CounterStateV2
+    = CountingV2
+    | PausedV2
+    deriving stock (Generic, Eq, Show, Enum, Bounded, Ord)
+    deriving anyclass (FromJSON, ToJSON)
+
+instance CanonicalStateShape CounterStateV2
+
 data DrainState
     = Draining
     | Drained
@@ -9170,6 +9288,8 @@ data PartialSnapshotState
     = SnapshotEncodable
     | SnapshotEncodeBomb
     deriving stock (Generic, Eq, Show, Enum, Bounded, Ord)
+
+instance CanonicalStateShape PartialSnapshotState
 
 instance ToJSON PartialSnapshotState where
     toJSON SnapshotEncodable = Aeson.String "encodable"
@@ -9386,6 +9506,95 @@ snapshotCounterTransducer =
                             (#lastAmount :: IndexN "lastAmount" SnapshotCounterRegs Int)
                             (inpCtor addCtor #amount)
                     , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
+                    , target = Counting
+                    , mode = Keiki.Live
+                    }
+                ]
+        , initial = Counting
+        , initialRegs = RCons (Proxy @"lastAmount") 0 RNil
+        , isFinal = \_ -> False
+        }
+
+foldV1SnapshotCounterEventStream :: ValidatedSnapshotCounterEventStream
+foldV1SnapshotCounterEventStream =
+    mkEventStreamOrThrow "snapshot-counter-fold-v1" foldV1SnapshotCounterEventStreamDef
+
+foldV1SnapshotCounterEventStreamDef :: SnapshotCounterEventStream
+foldV1SnapshotCounterEventStreamDef =
+    snapshotCounterEventStreamDef
+        { transducer = foldV1SnapshotCounterTransducer
+        , stateCodec =
+            Just (withFoldFingerprint "fold-v1" (defaultStateCodec @SnapshotCounterRegs @CounterState 1))
+        }
+
+foldV2SnapshotCounterEventStream :: ValidatedSnapshotCounterEventStream
+foldV2SnapshotCounterEventStream =
+    mkEventStreamOrThrow "snapshot-counter-fold-v2" foldV2SnapshotCounterEventStreamDef
+
+foldV2SnapshotCounterEventStreamDef :: SnapshotCounterEventStream
+foldV2SnapshotCounterEventStreamDef =
+    foldV1SnapshotCounterEventStreamDef
+        { transducer = foldV2SnapshotCounterTransducer
+        , snapshotPolicy = Every 1
+        , stateCodec =
+            Just (withFoldFingerprint "fold-v2" (defaultStateCodec @SnapshotCounterRegs @CounterState 1))
+        }
+
+foldV2WithoutFingerprintBumpEventStream :: ValidatedSnapshotCounterEventStream
+foldV2WithoutFingerprintBumpEventStream =
+    mkEventStreamOrThrow
+        "snapshot-counter-fold-v2-without-fingerprint-bump"
+        foldV2WithoutFingerprintBumpEventStreamDef
+
+foldV2WithoutFingerprintBumpEventStreamDef :: SnapshotCounterEventStream
+foldV2WithoutFingerprintBumpEventStreamDef =
+    foldV2SnapshotCounterEventStreamDef
+        { stateCodec =
+            Just (withFoldFingerprint "fold-v1" (defaultStateCodec @SnapshotCounterRegs @CounterState 1))
+        }
+
+foldV1SnapshotCounterTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
+foldV1SnapshotCounterTransducer =
+    foldSnapshotCounterTransducer
+        (inpCtor addCtor #amount)
+
+foldV2SnapshotCounterTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
+foldV2SnapshotCounterTransducer =
+    foldSnapshotCounterTransducer
+        (inpCtor addCtor #amount K..+ lit 1)
+
+foldSnapshotCounterTransducer ::
+    Keiki.Term SnapshotCounterRegs CounterCommand AddFields Int ->
+    SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
+foldSnapshotCounterTransducer nextLastAmount =
+    SymTransducer
+        { edgesOut = \case
+            Counting ->
+                [ Edge
+                    { guard =
+                        PAnd
+                            (matchInCtor addCtor)
+                            (inpCtor addCtor #amount K..< lit 100)
+                    , update =
+                        USet
+                            (#lastAmount :: IndexN "lastAmount" SnapshotCounterRegs Int)
+                            nextLastAmount
+                    , output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)]
+                    , target = Counting
+                    , mode = Keiki.Live
+                    }
+                , Edge
+                    { guard =
+                        PAnd
+                            (matchInCtor addCtor)
+                            ( PAnd
+                                (inpCtor addCtor #amount K..>= lit 100)
+                                ( inpCtor addCtor #amount
+                                    .== (proj (#lastAmount :: Keiki.Index SnapshotCounterRegs Int) K..+ lit 100)
+                                )
+                            )
+                    , update = UKeep
+                    , output = [pack addCtor counterAuditedCtor (inpCtor addCtor #amount *: oNil)]
                     , target = Counting
                     , mode = Keiki.Live
                     }
@@ -10322,6 +10531,18 @@ snapshotVersionForStreamStmt =
         """
         (E.param (E.nonNullable E.text))
         (D.rowMaybe (StreamVersion <$> D.column (D.nonNullable D.int8)))
+
+snapshotStateShapeForStreamStmt :: Statement Text (Maybe Text)
+snapshotStateShapeForStreamStmt =
+    preparable
+        """
+        SELECT ks.state_shape_hash
+        FROM keiro.keiro_snapshots ks
+        JOIN streams s ON s.stream_id = ks.stream_id
+        WHERE s.stream_name = $1
+        """
+        (E.param (E.nonNullable E.text))
+        (D.rowMaybe (D.column (D.nonNullable D.text)))
 
 corruptSnapshotStateStmt :: Statement (Text, Value) ()
 corruptSnapshotStateStmt =

@@ -86,6 +86,7 @@ workflowStateCodec =
     StateCodec
         { stateCodecVersion = workflowStateCodecVersion
         , shapeHash = workflowStateShapeHash
+        , stateShapeHash = workflowStateShapeHash
         , encode = toJSON
         , decode = \value -> case fromJSON value of
             Success m -> Right m
@@ -122,7 +123,12 @@ lookupWorkflowSnapshot journalName = do
     case mStreamId of
         Nothing -> pure (Left SnapshotNoStream)
         Just streamId -> do
-            mRow <- lookupSnapshot streamId workflowStateCodecVersion workflowStateShapeHash
+            mRow <-
+                lookupSnapshot
+                    streamId
+                    workflowStateCodecVersion
+                    workflowStateShapeHash
+                    workflowStateShapeHash
             pure $ case mRow of
                 Nothing -> Left SnapshotNotFound
                 Just row ->

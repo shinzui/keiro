@@ -4,6 +4,7 @@ slug: gate-snapshot-staleness-on-fold-changes
 title: "Gate snapshot staleness on fold changes"
 kind: exec-plan
 created_at: 2026-07-23T04:18:42Z
+intention: intention_01ky7q57fbevsszaj32g77f6vt
 master_plan: "docs/masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md"
 ---
 
@@ -46,11 +47,12 @@ full replay, and the freshly persisted snapshot carries the new discriminator.
 
 ## Progress
 
-- [ ] M1: keiki `Keiki.Shape` gains a generic control-state shape hash; keiki suite green; keiki version bumped to 0.2.1.0.
-- [ ] M1: keiro `StateCodec` gains `stateShapeHash`; snapshot schema, lookup, and write use it; migration `0019-keiro-snapshots-state-shape-hash.sql` (renumber at landing if a sibling claimed 0019 first) lands with reconciled `keiro-migrations-test`.
-- [ ] M1: `defaultStateCodec` fills the new field from keiki; `withFoldFingerprint` combinator added; stale-fold and state-shape-change tests pass in `keiro-test`.
-- [ ] M2: `keiro-dsl` computes the fold fingerprint from the spec and lowers it into the generated `stateCodec`; fingerprint-change unit tests pass.
-- [ ] M2: `keiro-dsl diff` emits the `AggFoldSurfaceChanged` advisory; diff tests updated; conformance fixtures regenerated; all 24 keiro-dsl suites green.
+- [x] M1 (2026-07-23 15:16Z): keiki `Keiki.Shape` gains a generic control-state shape hash; keiki suite green; keiki version bumped to 0.3.1.0 (`4aa903f`).
+- [ ] M1: publish the lockstep keiki, keiki-codec-json, and keiki-codec-json-test 0.3.1.0 release and verify Hackage serves it before removing the local overlay.
+- [x] M1 (2026-07-23 15:16Z): keiro `StateCodec` gains `stateShapeHash`; snapshot schema, lookup, and write use it; migration `0019-keiro-snapshots-state-shape-hash.sql` lands with reconciled `keiro-migrations-test`.
+- [x] M1 (2026-07-23 15:16Z): `defaultStateCodec` fills the new field from keiki; `withFoldFingerprint` combinator added; stale-fold and state-shape-change tests pass in `keiro-test`.
+- [x] M2 (2026-07-23 15:16Z): `keiro-dsl` computes the fold fingerprint from the spec and lowers it into the generated `stateCodec`; fingerprint-change unit tests pass.
+- [x] M2 (2026-07-23 15:20Z): `keiro-dsl diff` emits the `AggFoldSurfaceChanged` advisory; diff tests updated; conformance fixtures regenerated; all 24 keiro-dsl suites green.
 - [ ] M3: `docs/user/snapshots.md:80-83` factual fix landed (minimal, coordinated with plan 141); verifyAndSnapshot decision recorded; CHANGELOG entries written; master plan 24 progress boxes ticked.
 
 
@@ -59,7 +61,35 @@ full replay, and the freshly persisted snapshot carries the new discriminator.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Dependency verification (2026-07-23): the plan's authored keiki baseline was stale after
+  EP-6 landed first. Mori locates the live checkout at
+  `/Users/shinzui/Keikaku/bokuno/keiki`; Hackage's authoritative
+  `preferred.json` and upstream tags both report `0.3.0.0` as current, and keiro already
+  requires `keiki >=0.3 && <0.4`. Therefore this additive shape API releases as `0.3.1.0`
+  and downstream lower bounds become `>=0.3.1`.
+
+- Release discovery (2026-07-23): keiki's release runbook requires `keiki`,
+  `keiki-codec-json`, and `keiki-codec-json-test` to carry the same version and publish
+  together. The implementation commit bumps the source package that owns the API; the
+  coordinated sibling bumps and irreversible Hackage upload remain a distinct,
+  user-authorized release step.
+
+- DSL model mismatch (2026-07-23): rule declarations belong to `Spec`, not `Aggregate`, so
+  the authored `Aggregate -> Text` fingerprint interface could not satisfy its own
+  requirement to include referenced rule bodies. The implemented interface takes both
+  `Spec` and `Aggregate`, and follows referenced rules transitively in declaration order.
+
+- Fixture regeneration (2026-07-23): the scaffold command emits every aggregate module,
+  including Harness and Projection files that this snapshot conformance vertical does not
+  track. After discarding those newly emitted extras and formatter-only churn, the semantic
+  fixture diff contains EventStream's fingerprint/comment plus Domain's required
+  `CanonicalStateShape` instance.
+
+- Full local acceptance (2026-07-23): `cabal build all` passed; `cabal test keiro-test
+  keiro-migrations-test keiro-dsl` passed with 342 keiro examples, 10 migration examples,
+  and all 24 keiro-dsl suites. The new snapshot group proves control-state and fingerprint
+  misses, full-replay recovery and discriminator replacement, and the equal-discriminator
+  manual-contract hazard.
 
 
 ## Decision Log
@@ -120,6 +150,27 @@ implementation. Provide concise evidence.
   anything beyond the minimal correction would collide with plan 141's pass.
   Date: 2026-07-23
 
+- Decision: Release the additive keiki shape API as `0.3.1.0`, superseding the authored
+  `0.2.1.0` target, and tighten keiro's keiki lower bounds to `>=0.3.1 && <0.4`.
+  Rationale: EP-6 already published the breaking `0.3.0.0` line. Hackage and the upstream
+  tag set agree on that baseline, so continuing the current minor line is the only PVP- and
+  dependency-correct choice.
+  Date: 2026-07-23
+
+- Decision: `aggregateFoldSurface` and `aggregateFoldFingerprint` take
+  `Spec -> Aggregate -> Text`, rather than the authored `Aggregate -> Text`.
+  Rationale: Rules are spec-level declarations. Supplying the spec is the smallest honest
+  interface that lets the canonical surface include the bodies of rules reached from an
+  aggregate's guards and writes; the implementation follows nested rule references too.
+  Date: 2026-07-23
+
+- Decision: Transition mode (`Live` versus `ReplayOnly`) participates in the fold
+  fingerprint alongside source, command, guard, writes, emits, and target.
+  Rationale: EP-6 landed before this plan and established that a mode flip changes replay
+  attribution. ADR 0002 explicitly requires the fingerprint to include it; omitting the
+  field would leave a newly discovered stale-seed path.
+  Date: 2026-07-23
+
 
 ## Outcomes & Retrospective
 
@@ -137,8 +188,8 @@ process managers, workflows), `keiro-dsl` (the `.keiro` spec toolchain: parser, 
 scaffolder, differ, harness), `keiro-migrations` (the framework's SQL migrations), plus
 test-support and example packages. The sibling repository
 `/Users/shinzui/Keikaku/bokuno/keiki` contains keiki, the pure symbolic state-machine
-library keiro builds on; keiro consumes it as a released package (`keiki >=0.2 && <0.3` in
-`keiro/keiro.cabal:115` and `keiro-core/keiro-core.cabal:59`; currently 0.2.0.0).
+library keiro builds on; keiro consumes it as a released package (`keiki >=0.3 && <0.4` in
+`keiro/keiro.cabal:115` and `keiro-core/keiro-core.cabal:59`; currently 0.3.0.0).
 
 Architectural ground truth this plan depends on: keiki has no separate decide/evolve
 functions — one edge set is both forward stepping and replay. Replay re-inverts each stored
@@ -250,16 +301,16 @@ names* — not field semantics, not function bodies. Add unit tests to keiki's s
 (`test/`, cabal target `keiki-test`) proving: an enum's hash changes when a constructor is
 added, removed, or renamed; a record constructor's hash changes when a field's type name
 changes; and the hash is stable across runs. Bump keiki's version in `keiki.cabal` from
-0.2.0.0 to 0.2.1.0 (PVP minor: additions only) and add a CHANGELOG entry. Before relying on
+0.3.0.0 to 0.3.1.0 (PVP minor: additions only) and add a CHANGELOG entry. Before relying on
 the bump downstream, verify the currently released keiki version against the authoritative
-package registry (the local corpus may lag) — keiro's bound `>=0.2 && <0.3` already admits
-0.2.1.0, but keiro's cabal files must be tightened to `>=0.2.1` where the new symbol is
+package registry (the local corpus may lag) — keiro's bound `>=0.3 && <0.4` already admits
+0.3.1.0, but keiro's cabal files must be tightened to `>=0.3.1` where the new symbol is
 used.
 
 Then keiro (working tree `/Users/shinzui/Keikaku/bokuno/keiro`). During development, point
 keiro at the local keiki checkout by creating `cabal.project.local` at the repo root
 containing exactly `packages: ../keiki` (this file is not checked in; delete it once keiki
-0.2.1.0 is released and published to the registry).
+0.3.1.0 is released and published to the registry).
 
 Edit `keiro-core/src/Keiro/EventStream.hs`: add `stateShapeHash :: !Text` to the
 `StateCodec` record, and extend the record haddock (currently lines 88-101) to document the
@@ -354,9 +405,10 @@ spec is told exactly what to think about.
 
 Add a small module `keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs` (register it in
 `keiro-dsl.cabal`'s library stanza) exporting
-`aggregateFoldFingerprint :: Aggregate -> Text` and
-`aggregateFoldSurface :: Aggregate -> Text` (the canonical pre-hash text, exposed for
-tests and diff). The canonical text concatenates, in order: each state name with its
+`aggregateFoldFingerprint :: Spec -> Aggregate -> Text` and
+`aggregateFoldSurface :: Spec -> Aggregate -> Text` (the canonical pre-hash text, exposed
+for tests and diff). The `Spec` argument supplies the spec-level rule declarations. The
+canonical text concatenates, in order: each state name with its
 terminal flag, in declaration order; each register as `name:type=initialExpr`; each
 transition (`Keiro.Dsl.Grammar.Transition`, fields `tSource`, `tCommand`, `tGuard`,
 `tWrites`, `tEmits`, `tGoto`) as
@@ -431,9 +483,10 @@ cabal run -v0 keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation-snapshot
   --out keiro-dsl/test/conformance-snapshot
 ```
 
-then inspect `git diff` — only the `Generated/…/EventStream.hs` file should change (the
-`stateCodec` expression and the new comment). Conformance fixtures regenerate once per
-landed plan, per master plan 24.
+then inspect `git diff` — `Generated/…/EventStream.hs` changes for the `stateCodec`
+expression and comment, while `Generated/…/Domain.hs` gains the M1
+`CanonicalStateShape` instance. Conformance fixtures regenerate once per landed plan, per
+master plan 24.
 
 Acceptance: all 24 keiro-dsl test suites green (the shared bar from master plan 15). From
 the repo root, `cabal test keiro-dsl` runs every suite of the package; the full list for
@@ -465,7 +518,7 @@ Keep the edit to that paragraph; plan 141 owns the full section rewrite and will
 this wording (coordinate by leaving a `<!-- plan 141: full rewrite -->` HTML comment
 adjacent so the later pass finds it).
 
-Write CHANGELOG entries: keiki `CHANGELOG.md` (0.2.1.0: `CanonicalStateShape`,
+Write CHANGELOG entries: keiki `CHANGELOG.md` (0.3.1.0: `CanonicalStateShape`,
 `stateShapeCanonical`, `stateShapeHash` in `Keiki.Shape`), keiro repo `CHANGELOG.md` under
 Unreleased with a breaking marker (`StateCodec` gains `stateShapeHash`; snapshot
 discriminator gains `state_shape_hash`; one-time snapshot invalidation on upgrade;
@@ -550,7 +603,7 @@ default, safe to re-apply and safe on tables of any size (Postgres adds a
 non-volatile-default column without a table rewrite). Scaffolding overwrites only
 `@generated`-bannered files; re-running it is a no-op when nothing changed. If the keiki
 release stalls, keiro development continues against `cabal.project.local`; do not merge
-keiro's use of the new keiki symbols until keiki 0.2.1.0 is actually published and the
+keiro's use of the new keiki symbols until keiki 0.3.1.0 is actually published and the
 registry serves it (then delete `cabal.project.local` and re-run the full bar). Rolling
 back the keiro change on a migrated database is safe: old binaries ignore the extra column
 entirely (their statements name columns explicitly), and the incompatibility disjunction in
@@ -560,13 +613,13 @@ rollback affordance.
 
 ## Interfaces and Dependencies
 
-At the end of M1 the following must exist. In keiki 0.2.1.0, module `Keiki.Shape`:
+At the end of M1 the following must exist. In keiki 0.3.1.0, module `Keiki.Shape`:
 
 ```haskell
 class CanonicalStateShape a where
   stateShapeCanonical :: Proxy a -> Text
   default stateShapeCanonical
-    :: (Generic a, GStateShape (Rep a)) => Proxy a -> Text
+    :: GStateShape (Rep a) => Proxy a -> Text
 
 stateShapeHash :: forall a. (CanonicalStateShape a) => Proxy a -> Text
 ```
@@ -597,13 +650,20 @@ withFoldFingerprint :: Text -> StateCodec state -> StateCodec state
 At the end of M2, in keiro-dsl, `Keiro.Dsl.FoldFingerprint`:
 
 ```haskell
-aggregateFoldSurface :: Aggregate -> Text
-aggregateFoldFingerprint :: Aggregate -> Text   -- 16 hex chars, FNV-1a-64
+aggregateFoldSurface :: Spec -> Aggregate -> Text
+aggregateFoldFingerprint :: Spec -> Aggregate -> Text   -- 16 hex chars, FNV-1a-64
 ```
 
 plus `DiagnosticCode` constructor `AggFoldSurfaceChanged` and the `transitionSurfaceDiff`
-rule wired into `aggregatePairDiff`. Dependencies: keiki ≥0.2.1 (registry-published before
+rule wired into `aggregatePairDiff`. Dependencies: keiki ≥0.3.1 (registry-published before
 merge), no new third-party packages anywhere. Companion guide for readers:
 `docs/guides/evolution-and-replayability.md` (authored alongside master plan 24) describes
 the operational procedure per change class; this plan implements the snapshot gate it
 cites.
+
+---
+
+Revision note (2026-07-23): Updated the keiki baseline and target after implementation
+preflight verified that EP-6 had already published `0.3.0.0`. The additive state-shape API
+now targets `0.3.1.0`, and every downstream-bound and release reference was updated
+consistently.

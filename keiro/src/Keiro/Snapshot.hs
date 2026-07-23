@@ -7,15 +7,15 @@ stream (returning a 'SnapshotSeed' the command runner replays /forward/
 from), and 'writeSnapshot' persists one after an append when the stream's
 'Keiro.EventStream.SnapshotPolicy' fires.
 
-Compatibility is gated by the version and register-file shape hash of the
-'StateCodec': a snapshot is only loaded when both match the current codec, so a
-change to the snapshot encoding or to the register layout transparently
-falls back to a full replay rather than decoding stale bytes. The JSON
-encoding lives in "Keiro.Snapshot.Codec" and the SQL storage in
-"Keiro.Snapshot.Schema", both re-exported here.
+Compatibility is gated by the version, register-file shape hash, and
+control-state shape/fold hash of the 'StateCodec': a snapshot is only loaded
+when all three match the current codec, so an incompatible encoding, register
+layout, or folded-state interpretation transparently falls back to a full
+replay. The JSON encoding lives in "Keiro.Snapshot.Codec" and the SQL storage
+in "Keiro.Snapshot.Schema", both re-exported here.
 
-Snapshot version non-regression applies only while the codec version and shape
-hash stay the same. A writer with either discriminant changed may replace a
+Snapshot version non-regression applies only while all three discriminators
+stay the same. A writer with any discriminant changed may replace a
 higher-version row, allowing codec rollback to recover. In a mixed-version
 deployment incompatible writers can therefore thrash the one row per stream
 and repeatedly force full replay; this affects performance, not correctness.
@@ -87,7 +87,12 @@ lookupSnapshotSeed streamName codec = do
     case streamId of
         Nothing -> pure (SnapshotUnavailable SnapshotNoStream)
         Just foundStreamId -> do
-            row <- lookupSnapshot foundStreamId (codec ^. #stateCodecVersion) (codec ^. #shapeHash)
+            row <-
+                lookupSnapshot
+                    foundStreamId
+                    (codec ^. #stateCodecVersion)
+                    (codec ^. #shapeHash)
+                    (codec ^. #stateShapeHash)
             pure $ case row of
                 Nothing -> SnapshotUnavailable SnapshotNotFound
                 Just snapshot ->
@@ -104,7 +109,7 @@ lookupSnapshotSeed streamName codec = do
 {- | Load the latest snapshot compatible with @codec@ for the named stream.
 
 Returns 'Nothing' — meaning "replay from the beginning" — when the stream
-has no id yet, has no snapshot at the codec's version and shape hash, or has
+has no id yet, has no snapshot matching all three codec discriminators, or has
 a snapshot whose bytes fail to decode. Decode failure is treated as a benign
 miss rather than an error, so a corrupt or stale snapshot never blocks
 hydration.
@@ -129,9 +134,9 @@ encodeSnapshotStrict codec state =
 
 {- | Upsert a JSON value that has already been encoded and forced. Keeping this
 separate from 'writeSnapshot' lets post-commit callers prove encoding is safe
-before they touch the store. For a fixed codec version and shape hash, stale
-versions are ignored. A different codec version or shape hash may replace a
-higher-version row to permit codec rollback; see the module header.
+before they touch the store. For fixed codec discriminators, stale versions
+are ignored. Any changed discriminator may replace a higher-version row to
+permit codec rollback; see the module header.
 -}
 writeSnapshotEncoded ::
     (Store :> es) =>
@@ -148,14 +153,15 @@ writeSnapshotEncoded streamId streamVersion codec encoded =
             , state = encoded
             , stateCodecVersion = codec ^. #stateCodecVersion
             , regfileShapeHash = codec ^. #shapeHash
+            , stateShapeHash = codec ^. #stateShapeHash
             }
 
 {- | Encode @state@ with @codec@ and upsert it as the snapshot for the given
 stream at @streamVersion@. This compatibility helper preserves the historical
 lazy encoding behavior; post-commit advisory paths should call
 'encodeSnapshotStrict' first and pass the result to 'writeSnapshotEncoded'. For
-a fixed codec version and shape hash stale writes are ignored, while an
-incompatible codec may replace a newer row to permit rollback.
+fixed codec discriminators stale writes are ignored, while an incompatible
+codec may replace a newer row to permit rollback.
 -}
 writeSnapshot ::
     (Store :> es) =>

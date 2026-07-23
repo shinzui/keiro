@@ -11,6 +11,7 @@ import Data.List (partition, sort)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), FamilyDiff (..), NodeFamily, diffSpecs, familyRegistry, isAdvisory, isBreaking)
+import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldSurface)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
@@ -314,7 +315,9 @@ main = hspec $ do
                         ordinaryStream = generatedTextEndingIn "EventStream.hs" ordinaryModules
                     snapshotDomain `shouldSatisfy` T.isInfixOf "deriving anyclass (ToJSON, FromJSON)"
                     snapshotStream `shouldSatisfy` T.isInfixOf "snapshotPolicy = Every 100"
-                    snapshotStream `shouldSatisfy` T.isInfixOf "stateCodec = Just (defaultStateCodec 1)"
+                    snapshotStream `shouldSatisfy` T.isInfixOf "stateCodec = Just (withFoldFingerprint"
+                    snapshotStream `shouldSatisfy` T.isInfixOf "Spec-visible fold changes invalidate old"
+                    snapshotStream `shouldSatisfy` T.isInfixOf "module are invisible here"
                     snapshotStream `shouldSatisfy` T.isInfixOf "reservationSnapshotFixture = (1, \"7eb3a94f62f947231375d44083e2a1c8029d91ffe0329107d55092ed3430efcc\")"
                     ordinaryDomain `shouldNotSatisfy` T.isInfixOf "DeriveAnyClass"
                     ordinaryStream `shouldSatisfy` T.isInfixOf "snapshotPolicy = Never"
@@ -322,6 +325,32 @@ main = hspec $ do
                     ordinaryStream `shouldSatisfy` T.isInfixOf "reservationCategory = Stream.categoryUnsafe \"reservation\""
                     firewallBreaches snapshotModules `shouldBe` []
                 _ -> expectationFailure "expected one aggregate in each snapshot test spec"
+
+    describe "aggregate fold fingerprints (plan 138)" $ do
+        it "is deterministic across repeated parses and formatting-only changes" $ do
+            source <- readTestText "test/fixtures/reservation.keiro"
+            first <- parseInlineSpec "<first>" source
+            second <- parseInlineSpec "<second>" ("\n\n" <> renderSpec first <> "\n")
+            aggregateFoldFingerprint first (onlyAggregate first)
+                `shouldBe` aggregateFoldFingerprint second (onlyAggregate second)
+        it "changes for transition writes, guards, and referenced rule bodies" $ do
+            base <- specOf "test/fixtures/reservation.keiro"
+            writeChanged <- specOf "test/fixtures/reservation-foldchange.keiro"
+            guardChanged <- specOf "test/fixtures/reservation-guard-tightened.keiro"
+            source <- readTestText "test/fixtures/reservation.keiro"
+            ruleChanged <- parseInlineSpec "<rule-change>" (T.replace "RedTag => true" "RedTag => false" source)
+            let baseFingerprint = aggregateFoldFingerprint base (onlyAggregate base)
+            aggregateFoldFingerprint writeChanged (onlyAggregate writeChanged) `shouldNotBe` baseFingerprint
+            aggregateFoldFingerprint guardChanged (onlyAggregate guardChanged) `shouldNotBe` baseFingerprint
+            aggregateFoldFingerprint ruleChanged (onlyAggregate ruleChanged) `shouldNotBe` baseFingerprint
+        it "ignores wire and projection changes" $ do
+            base <- specOf "test/fixtures/reservation.keiro"
+            wireChanged <- specOf "test/fixtures/reservation-wire.keiro"
+            source <- readTestText "test/fixtures/reservation.keiro"
+            projectionChanged <- parseInlineSpec "<projection-change>" (T.replace "projection transfer_decisions" "projection renamed_projection" source)
+            let surface = aggregateFoldSurface base (onlyAggregate base)
+            aggregateFoldSurface wireChanged (onlyAggregate wireChanged) `shouldBe` surface
+            aggregateFoldSurface projectionChanged (onlyAggregate projectionChanged) `shouldBe` surface
 
     describe "process/timer (EP-3)" $ do
         it "parses the hospital-surge process + nested timer" $ do
@@ -875,6 +904,10 @@ main = hspec $ do
         it "classifies an effective wire convention change as WireSpecChanged" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-wire.keiro"
             [ckCode k | Breaking k <- cs] `shouldContain` [Just WireSpecChanged]
+        it "advises when the aggregate fold surface changes" $ do
+            cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-foldchange.keiro"
+            any isBreaking cs `shouldBe` False
+            [ckCode k | Advisory k <- cs] `shouldContain` [Just AggFoldSurfaceChanged]
         it "keeps deprecation additive and reports un-deprecation as EventUndeprecated" $ do
             deprecated <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-deprecated.keiro"
             any isBreaking deprecated `shouldBe` False
@@ -1376,6 +1409,11 @@ generatedTextEndingIn :: T.Text -> [ScaffoldModule] -> T.Text
 generatedTextEndingIn suffix modules = case [moduleText m | m <- modules, kind m == Generated, suffix `T.isSuffixOf` T.pack (modulePath m)] of
     contents : _ -> contents
     [] -> ""
+
+onlyAggregate :: Spec -> Aggregate
+onlyAggregate spec = case [aggregate | NAggregate aggregate <- specNodes spec] of
+    [aggregate] -> aggregate
+    aggregates -> error ("expected one aggregate, got " <> show (length aggregates))
 
 loweringAggregateSpec :: T.Text
 loweringAggregateSpec =

@@ -87,21 +87,29 @@ data SnapshotPolicy state
 
 {- | How to serialize and deserialize a stream's snapshot state.
 
-'stateCodecVersion' and 'shapeHash' together gate snapshot reuse: a stored
-snapshot is only loaded when both match the current codec, so a change to
-the snapshot encoding or to the shape of the folded state invalidates older
-snapshots and forces a clean rehydration from events.
+'stateCodecVersion', 'shapeHash', and 'stateShapeHash' together gate snapshot
+reuse: a stored snapshot is only loaded when all three match the current
+codec, so incompatible encodings, register layouts, and control-state shapes
+invalidate older snapshots and force a clean rehydration from events.
 
 * 'stateCodecVersion' — bumped when the snapshot encoding changes
-  incompatibly.
-* 'shapeHash' — a digest of the folded-state shape; protects against
-  silently loading a snapshot whose structure no longer matches.
+  incompatibly, and whenever fold logic changes in a way the structural hashes
+  and any composed fold fingerprint cannot see.
+* 'shapeHash' — a digest of the register-file layout.
+* 'stateShapeHash' — a digest of the control-state shape, optionally composed
+  with a fold fingerprint.
 * 'encode' \/ 'decode' — the JSON serialization of the @(state,
   registers)@ pair.
+
+Hand-written guard and update function bodies are not structurally
+inspectable. Changing them without also changing a composed fold fingerprint
+MUST bump 'stateCodecVersion'; otherwise an old snapshot can still match and
+be served as a stale hydration seed.
 -}
 data StateCodec state = StateCodec
     { stateCodecVersion :: !Int
     , shapeHash :: !Text
+    , stateShapeHash :: !Text
     , encode :: !(state -> Value)
     , decode :: !(Value -> Either Text state)
     }

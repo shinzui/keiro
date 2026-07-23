@@ -4,6 +4,7 @@ slug: close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-ev
 title: "Close the evolution and replayability gate gaps surfaced by the 2026-07 evolution review"
 kind: master-plan
 created_at: 2026-07-23T04:18:29Z
+intention: intention_01ky7q57fbevsszaj32g77f6vt
 ---
 
 # Close the evolution and replayability gate gaps surfaced by the 2026-07 evolution review
@@ -37,7 +38,7 @@ ADR context: `docs/adr/0001` (pgmq telemetry) is tangentially relevant to EP-3's
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Gate snapshot staleness on fold changes | docs/plans/138-gate-snapshot-staleness-on-fold-changes.md | None | None | Not Started |
+| 1 | Gate snapshot staleness on fold changes | docs/plans/138-gate-snapshot-staleness-on-fold-changes.md | None | None | In Progress |
 | 2 | Validate codecs and deprecated-event replayability at the stream boundary | docs/plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md | None | None | Not Started |
 | 3 | Fix DSL upcaster lowering and adopt versioned job codecs | docs/plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md | None | EP-2 | Not Started |
 | 4 | Correct the evolution documentation and deploy-ordering guidance | docs/plans/141-correct-the-evolution-documentation-and-deploy-ordering-guidance.md | None | EP-1, EP-2, EP-3, EP-5 | Not Started |

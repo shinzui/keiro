@@ -16,3 +16,4 @@
 0016-keiro-inbox-drop-received-idx.sql
 0017-schema-management-comment.sql
 0018.sql
+0019-keiro-snapshots-state-shape-hash.sql

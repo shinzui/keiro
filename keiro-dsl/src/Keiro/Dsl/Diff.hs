@@ -33,6 +33,7 @@ import Data.List (find, (\\))
 import Data.Maybe (isJust, isNothing, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.PrettyPrint (renderTransition)
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
@@ -169,9 +170,8 @@ runFamily :: DiffEnv -> FamilyDiff -> [Change]
 runFamily env (DiffFamily f) = f env
 runFamily _ (OutOfDiffScope _) = []
 
--- Rules are intentionally outside the decode/identity axes: they alter guard
--- behaviour but neither interpret stored bytes nor derive persisted keys.
--- Shared id and enum declarations become diffed in Milestones 2 and 4.
+-- Rules are outside the decode and persisted-identity axes, but referenced
+-- rule bodies are compared as part of each aggregate's replay fold surface.
 sharedDeclarationDiff :: DiffEnv -> [Change]
 sharedDeclarationDiff env = enumDiff env ++ idDiff env
 
@@ -343,19 +343,37 @@ renderScope (RmCategory categoryName) = "category '" <> categoryName <> "'"
 
 aggregateDiff :: DiffEnv -> [Change]
 aggregateDiff env =
-    concatMap (uncurry aggregatePairDiff) (prMatched paired)
+    concatMap
+        (\(oldAggregate, newAggregate) -> aggregatePairDiff (deOld env) (deNew env) oldAggregate newAggregate)
+        (prMatched paired)
         ++ concatMap addedAggregateDiff (prAdded paired)
         ++ concatMap removedAggregateDiff (prRemoved paired)
   where
     paired = pairByName nodeAggregate aggName env
 
-aggregatePairDiff :: Aggregate -> Aggregate -> [Change]
-aggregatePairDiff oldAgg newAgg =
+aggregatePairDiff :: Spec -> Spec -> Aggregate -> Aggregate -> [Change]
+aggregatePairDiff oldSpec newSpec oldAgg newAgg =
     concatMap (eventDiff oldAgg newAgg) (aggEvents newAgg)
         ++ removedEvents oldAgg newAgg
         ++ wireDiff oldAgg newAgg
         ++ projectionDiff oldAgg newAgg
         ++ guardTighteningDiff oldAgg newAgg
+        ++ transitionSurfaceDiff oldSpec newSpec oldAgg newAgg
+
+{- | Report replay-fold evolution. Regenerated scaffold code carries the new
+fingerprint and invalidates old snapshots, so this remains advisory.
+-}
+transitionSurfaceDiff :: Spec -> Spec -> Aggregate -> Aggregate -> [Change]
+transitionSurfaceDiff oldSpec newSpec oldAgg newAgg
+    | aggregateFoldSurface oldSpec oldAgg == aggregateFoldSurface newSpec newAgg = []
+    | otherwise =
+        [ advisory
+            (aggName newAgg)
+            "transitions"
+            (aggName newAgg)
+            AggFoldSurfaceChanged
+            "aggregate fold surface changed: replay now interprets the existing log under the new fold. Old snapshots are invalidated automatically once the regenerated fold fingerprint deploys; if the change is fold-neutral confirm it, otherwise re-scaffold and redeploy, and bump `state-codec version=` for any accompanying Holes-only change."
+        ]
 
 {- | Plan 143: guard changes are replay-relevant. Hydration re-inverts each
 stored event and re-checks the edge guard, so a stored event legally appended
