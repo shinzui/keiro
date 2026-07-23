@@ -4,6 +4,7 @@ slug: add-first-class-replay-only-transitions-for-guard-evolution
 title: "Add first-class replay-only transitions for guard evolution"
 kind: exec-plan
 created_at: 2026-07-23T12:58:14Z
+intention: intention_01ky7hw0hdehzstvt0ec42jbaz
 master_plan: "docs/masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md"
 ---
 
@@ -63,10 +64,15 @@ region is rejected; the same machine without the twin → `HydrationNoInvertingE
 
 ## Progress
 
-- [ ] M1: keiki `EdgeMode` (`Live` / `ReplayOnly`) landed: excluded from forward
-      stepping, included in inversion, exempt from dead-edge reachability, still
-      subject to ambiguity checks; keiki suite green; version bumped (PVP-major:
-      `Edge` record change).
+- [x] M1 (2026-07-23, keiki commit `a8d6377`): keiki `EdgeMode` (`Live` /
+      `ReplayOnly`) landed: excluded from forward stepping, included in
+      (two-phase) inversion, dead-edge-clean by construction (see Surprises —
+      no reachability change was needed), same-mode-scoped ambiguity checks;
+      new `ReplayOnlySpec` (22 examples) reproduces black-acuity at the keiki
+      level; all four repo suites green (keiki-test 520, jitsurei 122,
+      keiki-codec-json 102+13); version 0.3.0.0 (PVP-major: `Edge` record
+      change), sibling packages rebound to `^>=0.3`; `Keiki.Builder.replayOnly`
+      shipped alongside.
 - [ ] M2: keiro black-acuity end-to-end test green (with-twin replays, without-twin
       fails, forward command in removed region rejected); `EventStream` construction
       surface passes the mode through; keiro-test green against local keiki.
@@ -83,7 +89,35 @@ region is rejected; the same machine without the twin → `HydrationNoInvertingE
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The dead-edge check needed **no code change** for M1, contrary to the plan's
+  step-5 instruction to "skip ReplayOnly edges". `checkDeadEdges` flags only
+  (a) edges whose *source vertex* is unreachable by target-pointer traversal
+  and (b) literal-`PBot` guards — it never tests forward-firability of the
+  edge itself — and `reachableVertices` already traverses replay-only edges'
+  targets. Both flags remain *correct* for replay-only edges: an
+  unreachable-source replay-only edge is dead for replay too (replay starts
+  from the same `initial`), and a `PBot` guard can never model a solved
+  command, so it cannot invert. The planned test ("a machine whose only path
+  to a vertex is a replay-only edge passes") passes on the unchanged check —
+  `ReplayOnlySpec` pins it. Keeping the traversal unchanged is load-bearing:
+  a vertex reachable only through a replay-only edge stays live for replay
+  continuation (an old stream replays through the twin, then serves new
+  commands from that vertex).
+- The plan's M1 step-6 test list says "an ambiguous live/replay-only pair is
+  still flagged", contradicting its own two-phase Decision Log entry (cross-
+  mode pairs are resolved by phase order and must NOT be flagged — flagging
+  them is precisely what would refuse every live+twin machine at keiro's
+  boundary). The Decision Log governs; the shipped tests assert cross-mode
+  pairs are unflagged and *same-mode* pairs (live/live and
+  replay-only/replay-only) are still flagged.
+- keiki's test tree constructs `Edge` at 60+ sites (record and positional
+  syntax mixed), and `-Wmissing-fields` is a warning, not an error, under the
+  repo's `-Wall`. The record change was driven to completeness by building
+  everything with `--ghc-options=-Werror=missing-fields`; positional
+  construction sites (`Edge g u o t`) fail loudly as arity errors either way.
+  The keiki repo also runs a `treefmt` pre-commit hook that reformats and
+  fails the commit if anything changed — commit twice (the second commit sees
+  stable formatting).
 
 
 ## Decision Log
@@ -152,6 +186,46 @@ implementation. Provide concise evidence.
   boolean atom. So `old ∧ ¬new` is printable as a parse-valid guard today, keeping
   the advisory paste-ready without touching the expression grammar (and keeping the
   fold-fingerprint and validator surfaces unchanged for unrelated specs).
+  Date: 2026-07-23
+
+- Decision: M1 validator audit table (plan step 5's include/exempt call per
+  check, as shipped in keiki 0.3.0.0):
+  `delta`/`omega`/`step`/`stepEither` — filter `mode e == Live` (forward path);
+  `applyEvent`/`applyEventStreamingEither` — two-phase live-then-replay-only,
+  ambiguity judged per phase, rejection summaries enumerate all edges;
+  `checkTransitionDeterminism`/`checkTransitionDeterminismPure`/
+  `determinismWarnings`/`isSingleValuedSym` — Live/Live pairs only (only live
+  edges compete in forward dispatch; a replay-only overlap cannot cause
+  forward ambiguity);
+  `inversionAmbiguityWarnings` — same-mode pairs only (cross-mode resolved by
+  phase order);
+  `hiddenInputWarnings`/`checkHiddenInputs`/`headRecoverabilityWarnings` —
+  unchanged (recovering inputs from outputs is a replay-only edge's whole job);
+  `guardImpliesInputReadWarnings` — unchanged (guard/update/output input reads
+  are evaluated during inversion too; crash-safety still applies);
+  `stateChangingEpsilonWarnings` — unchanged (an ε replay-only edge can never
+  be selected by inversion either — the Settled arm requires a head output —
+  so it is inert on both paths; the DSL-level `ReplayOnlyEmitsNothing` error
+  in M3 is the proper gate for that authoring mistake);
+  `opaqueGuardWarnings` — unchanged (opaque guards under-verify replay-only
+  edges identically);
+  `checkDeadEdges`/`reachableVertices`/`checkDeadEdgesSym` — unchanged (see
+  Surprises: both flag reasons remain genuine defects for replay-only edges,
+  and traversal must keep following replay-only targets).
+  Also shipped: `EdgeMode` `Semigroup`/`Monoid` (`Live` identity, `ReplayOnly`
+  absorbing) as the composition rule — `compose`'s product/chain edges,
+  `alternative`'s arm lifts, the profunctor rewrites, and `withSymPred` all
+  propagate mode; `Keiki.Builder` gained a `peMode` field on `PartialEdge` and
+  the `replayOnly` body combinator (chosen over a smart constructor: existing
+  sites set `mode = Live` explicitly, keeping the diff mechanical and grep-able).
+  Date: 2026-07-23
+
+- Decision: The plan's red-then-green checkpoint (write the keiro B-bad test
+  before M1) was resequenced: M1 landed first, and the B-bad failing evidence
+  is captured during M2 before the twin is wired. Machine B-bad uses no new
+  keiki feature, so the failing transcript is byte-identical either way, and
+  the keiki-level `ReplayOnlySpec` already pins the same reproduction
+  (`machineBBad` → `ReplayNoInvertingEdge`) upstream.
   Date: 2026-07-23
 
 - Decision: Replay-only edges do not stack indefinitely by default guidance — the
