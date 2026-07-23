@@ -38,7 +38,7 @@ ADR context: `docs/adr/0001` (pgmq telemetry) is tangentially relevant to EP-3's
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Gate snapshot staleness on fold changes | docs/plans/138-gate-snapshot-staleness-on-fold-changes.md | None | None | In Progress |
+| 1 | Gate snapshot staleness on fold changes | docs/plans/138-gate-snapshot-staleness-on-fold-changes.md | None | None | Complete |
 | 2 | Validate codecs and deprecated-event replayability at the stream boundary | docs/plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md | None | None | Not Started |
 | 3 | Fix DSL upcaster lowering and adopt versioned job codecs | docs/plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md | None | EP-2 | Not Started |
 | 4 | Correct the evolution documentation and deploy-ordering guidance | docs/plans/141-correct-the-evolution-documentation-and-deploy-ordering-guidance.md | None | EP-1, EP-2, EP-3, EP-5 | Not Started |
@@ -68,8 +68,8 @@ Cross-plan decision for ADR promotion: the snapshot-discriminator contract; the 
 
 ## Progress
 
-- [ ] EP-1: Fold-sensitive snapshot discriminator shipped (DSL fingerprint + state-shape hash + documented manual contract); stale-fold test fails before, passes after.
-- [ ] EP-1: Diff advisory on transition writes/guard changes; snapshots.md corrected.
+- [x] EP-1 (2026-07-23): Fold-sensitive snapshot discriminator shipped (DSL fingerprint + state-shape hash + documented manual contract); stale-fold test fails before, passes after.
+- [x] EP-1 (2026-07-23): Diff advisory on transition writes/guard changes; snapshots.md corrected; ADR 0003 records the durable contract.
 - [ ] EP-2: `mkCodec` runs at the stream boundary; duplicate-rung and vanished-rung evolutions fail at startup and are refused by new validator rules.
 - [ ] EP-2: Deprecation of live-stream events refused/guided; diff message no longer recommends the unsound path; golden old-payload fixtures decode in CI.
 - [ ] EP-3: Upcaster holes receive the wire tag with a documented every-kind contract; harness runs genuine old payloads; scaffolder emits versioned job codecs.
@@ -93,6 +93,7 @@ Cross-plan decision for ADR promotion: the snapshot-discriminator contract; the 
 - Completeness audit (2026-07-23), grounds EP-5: a process manager's durable state is an ordinary aggregate — the saga aggregate — advanced through the identical `runCommandWithSql` → `hydrate` path (`keiro/src/Keiro/ProcessManager.hs:183-194,471-477`; DSL `process` nodes reference it via `SagaRef`, `keiro-dsl/src/Keiro/Dsl/Grammar.hs:438-446,559-575`, and declare no events or snapshot block of their own). So EP-1-3's aggregate-keyed gates cover PM state *transitively*, and the exit criterion can be stated for both transducer uses without widening those plans. Routers are stateless (no stream, no snapshot); workflow journals use a separate fixed codec (`workflowJournalCodec`, `keiro/src/Keiro/Workflow/Types.hs:204-223`; sentinel-hash `workflowStateCodec`, `keiro/src/Keiro/Workflow/Snapshot.hs:64-93`) outside every EP-1-3 gate — owned by MasterPlan 16's discipline, not this initiative.
 - Completeness audit (2026-07-23), fixed by EP-5: two promises the companion guide made on this MasterPlan's behalf were unassigned — the process/router mapping-change `diff` advisory ("in scope for masterplan 24"), which no child plan implemented (`routerPairDiff` never inspects `rtResolve`/`rtDispatch`, `keiro-dsl/src/Keiro/Dsl/Diff.hs:232-248`; `processPairDiff` skips the `handle` surface and the timer `payload` block, `Diff.hs:810-869`), and old-log guard compatibility ("golden replay fixtures … captured as part of docs/plans/139"), which EP-2's goldens do not actually deliver — they exercise `decodeRaw` only, proving decode-ability, never inversion or guard re-check against stored histories. Both now live in EP-5 (plan 142), and the guide's pointers were corrected in the same revision.
 - Completeness audit (2026-07-23): the silent-shift variant of a decide-surface edit — a guard/output change that makes a stored event invert *unambiguously to a different edge*, so replay succeeds with different register writes and no error — is undetectable by any static or startup gate even in principle (there is no oracle for "which interpretation was intended"). EP-5's digest mode is the answer: run the audit under the deployed binary and the candidate, diff the per-stream digests, and every reinterpretation — intended or not — becomes a reviewable line.
+- EP-1 completion (2026-07-23): Hackage serves keiki, keiki-codec-json, and keiki-codec-json-test 0.3.1.0; after refreshing Cabal to index state `2026-07-23T15:51:41Z`, keiro built and passed its full plan-138 acceptance bar without the local dependency overlay. The upstream v0.3.1.0 tag remains a maintainer-owned release-administration follow-up; it does not block dependency resolution or EP-1's shipped behavior.
 
 
 ## Decision Log

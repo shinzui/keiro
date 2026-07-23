@@ -48,12 +48,12 @@ full replay, and the freshly persisted snapshot carries the new discriminator.
 ## Progress
 
 - [x] M1 (2026-07-23 15:16Z): keiki `Keiki.Shape` gains a generic control-state shape hash; keiki suite green; keiki version bumped to 0.3.1.0 (`4aa903f`).
-- [ ] M1: publish the lockstep keiki, keiki-codec-json, and keiki-codec-json-test 0.3.1.0 release and verify Hackage serves it before removing the local overlay.
+- [x] M1 (2026-07-23 16:52Z): lockstep keiki, keiki-codec-json, and keiki-codec-json-test 0.3.1.0 releases published; Hackage tarballs return HTTP 200; local overlay removed; overlay-free build green.
 - [x] M1 (2026-07-23 15:16Z): keiro `StateCodec` gains `stateShapeHash`; snapshot schema, lookup, and write use it; migration `0019-keiro-snapshots-state-shape-hash.sql` lands with reconciled `keiro-migrations-test`.
 - [x] M1 (2026-07-23 15:16Z): `defaultStateCodec` fills the new field from keiki; `withFoldFingerprint` combinator added; stale-fold and state-shape-change tests pass in `keiro-test`.
 - [x] M2 (2026-07-23 15:16Z): `keiro-dsl` computes the fold fingerprint from the spec and lowers it into the generated `stateCodec`; fingerprint-change unit tests pass.
 - [x] M2 (2026-07-23 15:20Z): `keiro-dsl diff` emits the `AggFoldSurfaceChanged` advisory; diff tests updated; conformance fixtures regenerated; all 24 keiro-dsl suites green.
-- [ ] M3: `docs/user/snapshots.md:80-83` factual fix landed (minimal, coordinated with plan 141); verifyAndSnapshot decision recorded; CHANGELOG entries written; master plan 24 progress boxes ticked.
+- [x] M3 (2026-07-23 16:52Z): `docs/user/snapshots.md:80-83` factual fix landed (minimal, coordinated with plan 141); verifyAndSnapshot decision recorded; CHANGELOG entries and ADR 0003 written; master plan 24 progress boxes ticked.
 
 
 ## Surprises & Discoveries
@@ -90,6 +90,16 @@ implementation. Provide concise evidence.
   and all 24 keiro-dsl suites. The new snapshot group proves control-state and fingerprint
   misses, full-replay recovery and discriminator replacement, and the equal-discriminator
   manual-contract hazard.
+
+- Published-dependency acceptance (2026-07-23): Hackage's authoritative `preferred.json`
+  lists 0.3.1.0 for keiki, keiki-codec-json, and keiki-codec-json-test, and all three
+  release tarballs return HTTP 200. The machine's initial Cabal index predated the upload
+  and could see only keiki-codec-json 0.2.0.0; `cabal update` advanced the index state to
+  `2026-07-23T15:51:41Z`, after which an overlay-free `cabal build all` downloaded and
+  compiled the published 0.3.1.0 packages and the full acceptance bar passed. The upstream
+  tag list still ends at v0.3.0.0; the keiki release runbook reserves tag pushing for the
+  maintainer, so v0.3.1.0 remains a release-administration follow-up rather than a code or
+  Hackage-publication blocker.
 
 
 ## Decision Log
@@ -174,9 +184,25 @@ implementation. Provide concise evidence.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation. Before marking the plan complete, distill
-the snapshot-discriminator contract — what invalidates a snapshot and why — into a new ADR
-under docs/adr/, as master plan 24 requests.)
+Completed 2026-07-23. Snapshot compatibility is now a three-component contract:
+codec version, register-layout hash, and control-state/fold hash. Existing rows are
+invalidated once by migration 0019, `defaultStateCodec` derives the control-state
+component, and generated DSL streams compose a deterministic fingerprint of every
+spec-visible replay surface. The diff advisory makes replay-relevant transition edits
+visible at review time, while the retained equal-discriminator test keeps the manual
+version-bump obligation for hand-written and Holes-only changes explicit.
+
+The implementation and documentation shipped in keiro commit `fc7591b`; the upstream
+keiki state-shape API shipped in `4aa903f`, with the coordinated 0.3.1.0 release preparation
+in `e71e5ac`. Hackage serves all three 0.3.1.0 packages, and the overlay-free acceptance bar
+passed with 342 keiro examples, 10 migration examples, and all 24 keiro-dsl suites.
+`docs/adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md` now holds
+the durable contract and the `verifyAndSnapshot` rationale.
+
+Two deliberate residuals remain outside this plan's completion. The upstream v0.3.1.0 git
+tag still needs the maintainer-owned push described by keiki's release runbook. Invisible
+fold-body changes still require the documented manual `stateCodecVersion` bump; plan 142's
+seeded-versus-full replay witness is the detection backstop when that contract is missed.
 
 
 ## Context and Orientation
