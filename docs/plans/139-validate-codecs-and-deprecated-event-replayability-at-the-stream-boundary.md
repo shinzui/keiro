@@ -54,7 +54,7 @@ chain for a stored v1 payload.
 - [x] (2026-07-23T17:03:52Z) M1: `validateEventStreamWith` runs `mkCodec`; duplicate-rung and vanished-rung codecs fail at `mkEventStreamOrThrow`; keiro tests green; CHANGELOG entry.
 - [x] (2026-07-23T17:13:55Z) M2: `retiring event` marker (grammar/parser/pretty-print); DSL validator rules `DuplicateUpcasterSource`, `UpcasterChainGap`, `DeprecatedEventReplayHazard`, `EventRetirementInProgress` implemented with fixture specs; `keiro-dsl-test` green.
 - [x] (2026-07-23T17:22:41Z) M3: diff deprecation reclassified to advisory-with-warning; `Diff.hs:404` message fixed; diff tests (incl. the 830-835 assertion) updated; golden old-payload fixture format defined and the conformance-v2 decodeRaw golden test green; all 24 keiro-dsl suites green.
-- [ ] Close-out: master plan 24 boxes ticked; externally visible contracts recorded in this Decision Log for plan 141 to quote; ADR distillation pass done.
+- [x] (2026-07-23T17:27:11Z) Close-out: master plan 24 boxes ticked; externally visible contracts recorded in this Decision Log for plan 141 to quote; ADR distillation pass done.
 
 
 ## Surprises & Discoveries
@@ -190,9 +190,25 @@ implementation. Provide concise evidence.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation. At completion, feed the evolution-gate
-inventory rows this plan changes — what is now caught where — into the candidate ADR named
-by master plan 24.)
+Completed. Validated stream construction now runs `mkCodec`, so malformed hand-written
+and generated codecs fail before hydration; the unchecked constructor remains the explicit
+forensics-only escape hatch. The DSL refuses duplicate and missing aggregate rungs,
+classifies a vanished historical rung as Breaking, and no longer recommends decode-only
+deprecation as a replay remedy.
+
+The operator contract for plan 141 is two-stage retirement: `retiring event` requires its
+live emitter; the replay-safe cutover is `deprecated event` plus an equivalent
+`replay-only` emitter, retained until affected streams are terminal, truncated, or pass
+the replay audit. A deprecated event without that edge warns
+`DeprecatedEventReplayHazard` in both `check` and `diff`.
+
+The shared old-payload convention is
+`test/golden-payloads/<context>/<Aggregate>/<Event>.v<N>.json`; the first genuine v1
+payload now decodes through `decodeRaw` in CI, and the mutation check proved the assertion
+fails when its rung disappears. This remains a decode proof, not a real-log inversion
+proof; plan 142 owns the latter. Plan 140 consumes the path convention and may relax
+`DuplicateUpcasterSource` only in the same change that makes its tag-aware lowering sound.
+ADR 0004 records this layered gate inventory.
 
 
 ## Context and Orientation
@@ -622,8 +638,10 @@ two also consumed by `Diff.hs` in M3). At the end of M3, the golden fixture conv
 the first fixture, and `conformance-v2/Main.hs` decodes every golden through
 `Keiro.Codec.decodeRaw :: Codec e -> EventType -> Int -> Value -> Either CodecError e`.
 
-Dependencies: no new packages. Coordination: plan 138 (one `DiagnosticCode` constructor +
-one Diff rule, disjoint), plan 140 (consumes the golden path convention from its generated
+Dependencies: no package new to `keiro-dsl`; the v2 conformance component adds the
+package's existing `directory` dependency so it can enumerate goldens. Coordination:
+plan 138 (one `DiagnosticCode` constructor + one Diff rule, disjoint), plan 140 (consumes
+the golden path convention from its generated
 harness; relaxes `DuplicateUpcasterSource` when its dispatch lowering lands — soft
 dependency EP-3→EP-2 in master plan 24's registry), plan 142 (adds its own disjoint
 `Diff.hs` share — decide-surface advisories — and owns the *replay* half of old-log
@@ -639,6 +657,8 @@ this plan's Decision Log wording.
 
 ## Revision Note
 
+- 2026-07-23: Completed all milestones and closeout. Promoted the layered gate
+  inventory to ADR 0004 and marked EP-2 complete in master plan 24.
 - 2026-07-23: Reconciled M2 and M3 with ADR 0002 after plan 143 landed before this
   plan. The native `replay-only` transition is now the sanctioned post-cutover
   inverting edge; deprecation is hazardous only when that edge is absent. This changes

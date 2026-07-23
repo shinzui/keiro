@@ -1,0 +1,71 @@
+# 4. Evolution changes are gated at the earliest sound boundary
+
+Date: 2026-07-23
+
+Status: Accepted
+
+
+## Context
+
+Event-sourced evolution crosses several evidence boundaries. A single `.keiro`
+spec can prove that a codec shape is internally impossible, but it cannot know
+which rungs existed in the previous release or whether production streams still
+contain a retired event. A cross-spec diff can see declarations disappear, but
+it cannot guarantee that hand-written runtime assembly matches either spec.
+Startup validation can inspect the actual codec and transducer, but it cannot
+prove that a genuine historical payload still decodes or inverts. Treating any
+one of these layers as the complete evolution gate created the gaps found by
+the July 2026 review.
+
+
+## Decision
+
+Evolution checks live at the earliest boundary with enough evidence, and later
+boundaries independently defend runtime assembly:
+
+1. `keiro-dsl check` rejects properties provably invalid in one spec.
+2. `keiro-dsl diff` classifies hazards that require old and new declarations.
+3. `validateEventStreamWith` validates the actual runtime codec and transducer;
+   every resulting `EventStreamWarning` fails validated construction.
+4. Versioned old-payload JSON fixtures exercise `decodeRaw` against the current
+   codec in conformance CI.
+5. The database-backed replay audit in plan 142 will cover the distinct
+   question that static fixtures cannot answer: whether real stored histories
+   still invert and fold under the candidate binary.
+
+Machine-readable `DiagnosticCode` values correlate `check` and `diff`.
+Human-readable text explains the operational remedy, but tooling depends on
+the code rather than prose.
+
+The landed inventory is:
+
+| Change class | Single-spec `check` | Cross-spec `diff` | Runtime boundary / CI |
+|---|---|---|---|
+| Invalid schema version, duplicate event tags, out-of-range rung | Not all are expressible in the DSL | Not required | `mkCodec` fails validated stream construction |
+| Duplicate generated upcaster source | `DuplicateUpcasterSource` Error | Same-spec error is sufficient | `mkCodec` rejects the actual codec |
+| Missing aggregate rung | `UpcasterChainGap` Error | Vanished historical rung is Breaking `UpcasterChainGap` | `mkCodec` rejects startup; versioned JSON golden fails decode |
+| `retiring` event without a live emitter | `EventRetirementInProgress` Error | Retirement start is Advisory | Generated shape remains the ordinary live machine |
+| Deprecated event without a replay-only emitter | `DeprecatedEventReplayHazard` Warning | Advisory with the same code | Real-log inversion remains plan 142's audit responsibility |
+| Deprecated event with a replay-only emitter | `EventRetirementInProgress` Warning | Replay-safe cutover Advisory | Transducer boundary validates the replay-only edge |
+| Guard tightening | Replay-only edge discipline from ADR 0002 | `AggGuardTightened` prints the retained twin | Real-log relevance remains plan 142's audit responsibility |
+| Fold/control-state change | Snapshot contract from ADR 0003 | `AggFoldSurfaceChanged` Advisory | Snapshot discriminator rejects stale seeds |
+
+Plan 140 must extend this inventory when tag-aware upcaster lowering changes
+which duplicate-source shapes are sound and when generated job codecs land.
+Plan 142 must extend it with replay-impact verdicts, targeted real-log audit
+coverage, and sampled seed verification.
+
+
+## Consequences
+
+- Hand-written streams receive the same codec fail-fast behavior as generated
+  streams; generator validation is defense in depth, not the sole gate.
+- `check` may warn rather than reject when the missing fact is operational
+  history, such as whether live streams still contain a deprecated event.
+- A decode golden proves decode compatibility only. It must never be described
+  as proof that an old event still has an inverting edge or folds identically.
+- `mkEventStreamUnchecked` remains the explicit emergency-forensics bypass and
+  skips every layer at the stream boundary; it is not a production rollout
+  workaround.
+- The inventory is amended when a later child plan changes a gate's ownership
+  or closes one of the named audit residuals.
