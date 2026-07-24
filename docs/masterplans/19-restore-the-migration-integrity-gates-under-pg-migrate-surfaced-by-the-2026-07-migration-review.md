@@ -39,8 +39,9 @@ Alternatives considered. One plan per finding (seven plans) was rejected as far 
 
 ADR context: `docs/adr/0002-keiro-owns-live-schema-verification-under-pg-migrate.md`
 now records EP-1's separation of ledger and live-schema verification and its default-build
-gate inventory. EP-2 extends that record with build- and review-time integrity; the cutover
-preflight policy remains an ADR candidate for EP-3.
+gate inventory. EP-2 extends that record with build- and review-time integrity.
+`docs/adr/0003-keiro-guards-fresh-native-history-over-codd-ledgers.md` records EP-3's
+cutover preflight, override, import, and recovery boundary.
 
 
 ## Exec-Plan Registry
@@ -49,7 +50,7 @@ preflight policy remains an ADR candidate for EP-3.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Restore live schema verification, body lint, and the startup handshake under pg-migrate | docs/plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md | None | None | Complete |
 | 2 | Add the embed recompile plugin and native manifest coverage | docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md | None | None | Complete |
-| 3 | Guard up against codd-ledgered databases and mount the codd import in the CLI | docs/plans/124-guard-up-against-codd-ledgered-databases-and-mount-the-codd-import-in-the-cli.md | None | EP-1 | In Progress |
+| 3 | Guard up against codd-ledgered databases and mount the codd import in the CLI | docs/plans/124-guard-up-against-codd-ledgered-databases-and-mount-the-codd-import-in-the-cli.md | None | EP-1 | Complete |
 
 
 ## Dependency Graph
@@ -77,8 +78,8 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
 - [x] (2026-07-23) EP-1: Native `missingMigrations` exported and documented; fresh-database handshake test returns all 28 composed migrations.
 - [x] (2026-07-23) EP-2: `RecompilePlugin` pragma added; pre-fix stale embed, post-fix compiler failure, and the no-GHC residual reproduced and documented.
 - [x] (2026-07-23) EP-2: Native manifest coverage implemented with a 20-file lock enforced against manifest order, directory membership, and payload bytes in the default suite.
-- [ ] EP-3: `up` preflight refuses codd-ledgered databases without override; both trap variants covered by integration tests.
-- [ ] EP-3: codd-import subcommand mounted in keiro-migrate; cutover runbook corrected (sentinel fixup step, fixup header, recovery procedure).
+- [x] (2026-07-24) EP-3: `up` preflight refuses both codd ledger shapes without override; four preflight states and the dominant poisoned-ledger recovery are covered by integration tests, with both trap variants covered by the runbook.
+- [x] (2026-07-24) EP-3: codd-import subcommand mounted in keiro-migrate; confirmation, 23-row import, idempotent rerun, and JSON were drilled; the cutover runbook, sentinel fixup header, and ADR 0003 are complete.
 
 
 ## Surprises & Discoveries
@@ -98,6 +99,15 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
   recompilation plugin catches directory changes only when Cabal invokes GHC. A test run
   can execute without a library rebuild, so the runtime directory/lockfile comparison is
   an independent and necessary backstop rather than duplicate coverage.
+- EP-3 implementation (2026-07-24), confirms the public connection boundary again:
+  Keiro's preflight cannot run an application-defined session through pg-migrate's opaque
+  `ConnectionProvider`, so it accepts Hasql settings and mirrors `up`'s command-line over
+  environment precedence. The pre-lock check is sufficient because it detects
+  pre-existing cutover state, not a native-runner race.
+- EP-3 implementation (2026-07-24), sharpens the recovery evidence: the current
+  28-migration plan leaves exactly five audit-less Kiroku rows before its accidental 0006
+  tripwire, and a recovered 23-row codd import leaves five legitimate native canaries
+  pending (Kiroku 0008 and Keiro 0017 through 0020).
 
 
 ## Decision Log
@@ -130,14 +140,39 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
   deploy-time checksum gate is needed.
   Date: 2026-07-23
 
+- Decision: Keep the codd cutover guard in Keiro as a Settings-based read-only preflight
+  before `up`, blocking exactly when either codd ledger exists and native history is
+  absent or empty; permit bypass only through an up-only explicit override.
+  Rationale: pg-migrate has no public in-lock connection hook, the guarded state predates
+  the command, and a completed import must allow normal `up`. ADR 0003 records the
+  check-before-lock rationale, exact boundary, and Kiroku parity follow-up.
+  Date: 2026-07-24
+
+- Decision: Mount a Keiro-shaped strict `import-codd-history` command over the compiled-in
+  combined mapping instead of requiring pg-migrate-import-codd's application-defined
+  mapping artifact.
+  Rationale: Keiro already embeds the authoritative 23 source filenames, payloads,
+  manifest, and target mappings. A second disk format would create divergence rather than
+  remove bespoke code.
+  Date: 2026-07-24
+
 
 ## Outcomes & Retrospective
 
-EP-1 and EP-2 are complete. Keiro's default workflow now enforces migration-body
+All three child plans are complete. Keiro's default workflow now enforces migration-body
 qualification, offers a strict startup handshake, detects live PostgreSQL 18 schema drift,
 forces manifest revalidation whenever GHC runs, and pins all 20 native migration payloads
-at review time. Both child plans passed repository-wide verification and required no
-pg-migrate changes. ADR 0002 captures the durable layered-gate boundary.
+at review time. The one-time cutover path now refuses fresh native history over both codd
+ledger shapes, exposes a strict compiled-in history import, proves the dominant
+poisoned-ledger recovery, documents both incident variants, and finishes with independent
+ledger and live-schema checks.
 
-EP-3 remains. The initiative is not complete until the codd-ledger cutover guard, mounted
-history import, and corrected operator workflow are delivered.
+The implementation required no pg-migrate or Kiroku source changes. ADR 0002 captures the
+durable layered-gate boundary, while ADR 0003 captures the cutover policy and accepted
+pre-lock interval. The remaining cross-repository follow-up is intentionally outside this
+initiative: mirror the preflight in Kiroku's standalone migration CLI.
+
+Final `just verify` passed with 372 core examples, 58 PGMQ examples (two expected
+pending), 17 jitsurei examples, diagram freshness, and 26 migration examples. The
+initiative restored every lost or weakened gate identified by the July 2026 review and
+replaced the bespoke cutover path with a tested operator workflow.

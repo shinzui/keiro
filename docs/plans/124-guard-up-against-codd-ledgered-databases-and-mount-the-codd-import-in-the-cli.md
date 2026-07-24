@@ -52,7 +52,7 @@ integration test in the default suite.
 - [x] Milestone 1: `preflightFreshLedgerOverCodd` in the library; `up` path refuses codd-ledgered databases without the override; preflight behavior covered by integration tests (blocked on `codd` and `codd_schema` fixtures, clear on empty and imported databases). Completed 2026-07-23: all 25 default migration examples pass; the scratch CLI drill exited 1 naming `codd.sql_migrations`, rejected override use with `status`, and the override reached and completed the 28-migration runner.
 - [x] Milestone 2: `keiro-migrate import-codd-history` subcommand mounted over `frameworkCoddSourceConfig`/`frameworkCoddHistoryMappings`; manual transcript recorded. Completed 2026-07-23: help exposes all six planned options; the 23-row scratch ledger failed with `CoddConfirmationRequired` before confirmation, imported all 23 mappings with confirmation, reported all 23 as already imported on rerun, and emitted pg-migrate-cli JSON schema version 1.
 - [x] Milestone 3: end-to-end recovery test for the dominant trap (up → poisoned ledger → recovery → import succeeds → verify green → up green). Completed 2026-07-23: the focused example reproduces five audit-less Kiroku rows, proves the import conflict before cleanup, rechecks the destructive-operation precondition, drops only the ephemeral native ledger, imports 23 rows, applies the five current canaries, and finishes verified with the expected live schema.
-- [ ] Milestone 4: cutover runbook rewritten (preflight, sentinel fixup step, import subcommand, recovery procedure for both variants, post-cutover validation reference); fixup header comment corrected; suite green.
+- [x] Milestone 4: cutover runbook rewritten (preflight, sentinel fixup step, import subcommand, recovery procedure for both variants, post-cutover validation reference); fixup header comment corrected; suite green. Completed 2026-07-24: the runbook is a CLI-driven linear cutover with guarded cleanup SQL and `verify-schema`; the comparison query was pasted through psql successfully; the fixup diff is comment-only; ADR 0003 records the policy; and `just verify` passed.
 
 
 ## Surprises & Discoveries
@@ -159,7 +159,32 @@ integration test in the default suite.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All four milestones are complete. `keiro-migrate up` now performs a read-only preflight
+using the exact connection settings the command will use, refuses absent or empty native
+history over either codd ledger name, and requires an up-only explicit override to bypass
+the refusal. The library behavior is covered on current, legacy, empty, and imported
+database states.
+
+`keiro-migrate import-codd-history` now provides the fleet-wide cutover path over the
+compiled-in 23-entry combined mapping. The operator drill proved confirmation is required,
+the first import reports all 23 entries as imported, a rerun reports all 23 as already
+imported, and JSON uses pg-migrate-cli schema version 1. No pg-migrate or Kiroku source
+change was required.
+
+The dominant incident is reproduced end to end in the default suite: mistaken apply
+creates exactly five audit-less Kiroku rows, import refuses the conflict, the documented
+precondition is rechecked, ephemeral native history is removed, import succeeds, the five
+current canaries apply, and both ledger and live-schema verification finish cleanly. The
+runbook also covers the older successful-apply variant, ordering removal of a proven-empty
+parallel `keiro` schema before the relocation script.
+
+Repository-wide `just verify` passed: 372 core examples, 58 PGMQ examples with two
+expected pending, 17 jitsurei examples, diagram freshness, and 26 migration examples. The
+only unavailable supplemental check was the retired `legacy-codd-tools` suite because the
+default Cabal project cannot resolve `codd-extras`; the fixup's executable SQL was
+unchanged, and its comment-only diff is explicit. ADR 0003 preserves the exact blocking
+boundary, Settings-based API, pre-lock rationale, override scope, and Kiroku parity
+follow-up.
 
 
 ## Context and Orientation
