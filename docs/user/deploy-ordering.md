@@ -170,18 +170,20 @@ with a stable `patch` decision.
 
 The resume worker defaults to five attempts. A step-result decode crash consumes
 that budget and then appends `WorkflowFailed`, after which the instance is
-terminally failed and leaves discovery. A supported resurrection API is planned
-in
-[plan 115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md);
-do not rely on it until that plan lands.
+terminally failed and leaves discovery. Deploy the corrected binary first, then
+return the instance to the runnable pool with
+`Keiro.Workflow.Instance.resurrectFailedWorkflow`; it resets retry and lease
+state transactionally and preserves the append-only failure history. Do not
+repair a failed instance with manual SQL.
 
 See
-[`Keiro.Workflow.Resume`](../../keiro/src/Keiro/Workflow/Resume.hs) and
-[Durable Workflows](durable-workflows.md#versioning-and-rotation).
+[`Keiro.Workflow.Resume`](../../keiro/src/Keiro/Workflow/Resume.hs),
+[Durable Workflows](durable-workflows.md#versioning-and-rotation), and
+[Failure, retries, and resurrection](../guides/durable-workflows.md#failure-retries-and-resurrection).
 
 If this rule is violated, resume repeatedly crashes on the journaled result and
-the workflow becomes `WorkflowFailed`; recovery currently requires
-operator-owned intervention.
+the workflow becomes `WorkflowFailed`; recovery then requires a code fix
+followed by an explicit operator-driven resurrection.
 
 ## 9. Gate Transducer Changes With Real-Log Replay
 
