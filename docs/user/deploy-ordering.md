@@ -66,8 +66,8 @@ workqueues start with a schema-version-1 `QueueCodec` backed by
 `aesonJobCodec` payloads and the `{v,t,data}` envelope; drain it first or use a
 temporary decoder that accepts both shapes.
 
-See
-[`Keiro.PGMQ.Codec`](../../keiro-pgmq/src/Keiro/PGMQ/Codec.hs) and
+See [Work Queues](work-queues.md#payload-codecs-and-evolution),
+[`Keiro.PGMQ.Codec`](../../keiro-pgmq/src/Keiro/PGMQ/Codec.hs), and
 [`RetryPolicy`](../../keiro-pgmq/src/Keiro/PGMQ/Job.hs).
 
 If this rule is violated, future-version bodies burn through retries and reach

@@ -128,12 +128,13 @@ pagingRouter = Router
         | responder <- responders
         ]
   , targetEventStream = pageEventStream
-  , targetProjections = []
+  , targetProjections = const []
   }
 ```
 
 This is the recipient list: examine the message, look up the recipients, forward
-to each. `targetProjections = []` keeps this router append-only; use a non-empty
+to each. `targetProjections` is a function of the target stream;
+`const []` keeps this router append-only. Return a non-empty
 list when the page aggregate has inline read models that must be updated in the
 same transaction as a router-dispatched command. No memory, no timers — so it is
 a router, not a process manager.
@@ -179,8 +180,9 @@ handle = \case
 The full `ProcessManager` record also has `targetEventStream` and
 `targetProjections`. The projections belong to the target aggregate, not to the
 process manager's private saga stream. Existing process managers that do not
-need read-model writes on target dispatch should set `targetProjections = []`;
-non-empty lists run in the same transaction as each dispatched target command.
+need read-model writes on target dispatch should set
+`targetProjections = const []`; a returned non-empty list runs in the same
+transaction as each dispatched target command.
 Use a non-empty list when the next process-manager decision, guard, or immediate
 user read needs read-your-own-writes for the target aggregate. Keep the list
 empty when dispatch is only advancing another aggregate and async projection
@@ -205,13 +207,17 @@ the process manager remembers one incident and shepherds it.
 If nobody acknowledges in time, a timer worker fires the escalation:
 
 ```haskell
-runEscalationTimerWorker options now =
-  runTimerWorker now $ \timer -> do
+runEscalationTimerWorker metrics options now =
+  runTimerWorkerWith metrics jitsureiTimerWorkerOptions now $ \timer -> do
     -- ... derive the incident id from the due timer ...
     _ <- runCommand options incidentEventStream (incidentStream incidentId)
            (EscalateIncident (EscalateIncidentData { incidentId = incidentId }))
     pure (Just firedEventId)
 ```
+
+`metrics` is the opt-in `Maybe KeiroMetrics` handle every keiro worker takes, and
+`jitsureiTimerWorkerOptions` is the example's validated retry/stale-claim policy
+(see [Run And Operate Jitsurei](run-and-operate-jitsurei.md)).
 
 `incidentEventStream` is the validated stream value. The raw
 `incidentEventStreamDef` remains available only for construction and validation;

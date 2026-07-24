@@ -16,7 +16,7 @@ and total rules. The current grammar covers:
 - effectful routers backed by a read model or a typed resolver hole;
 - integration contracts, inbox intake, outbox emits, and publishers;
 - PGMQ work queues, ordering/group keys, provisioning, retry/DLQ policy, and
-  read-model-driven dispatch;
+  read-model-driven dispatch (see [Work Queues](work-queues.md));
 - first-class read models, schemas, columns, consistency, scope, and feed;
 - durable workflows, named operations, patches, and continue-as-new.
 

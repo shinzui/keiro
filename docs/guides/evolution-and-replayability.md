@@ -228,8 +228,8 @@ The safe procedure today:
 `DeprecatedEventReplayHazard` warns about a deprecated event with no replay-only
 emitter. The safe retained shape reports `EventRetirementInProgress` to keep
 the eventual cleanup visible. Whether real streams still exercise the old edge
-remains the database-backed responsibility of
-[`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md).
+is a database-backed question, answered by the targeted replay audit
+(`Keiro.ReplayAudit`, gate 5 above).
 
 ## Changing decisions: guards, outputs, and dispatch
 
@@ -261,10 +261,8 @@ ambiguity). The procedure when you tighten a guard:
    computes the removed region — `old-guard ∧ ¬new-guard`, expressed inside
    the guard grammar — and prints a **paste-ready** `replay-only` twin
    carrying that region with the old transition's writes/emits/goto.
-3. Decide: if stored streams may exercise the removed region (the replay
-   audit of
-   [`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md)
-   answers this against real data once landed), paste the twin — history
+3. Decide: if stored streams may exercise the removed region (the targeted
+   replay audit answers this against real data), paste the twin — history
    stays replayable and the retired rule remains visible in the spec. If no
    stored data is affected (or you choose truncation), skip the twin.
 4. The scaffolder lowers the marker to `B.replayOnly` in the transducer
@@ -285,10 +283,8 @@ guarded-but-inert retained-edge contortion as the sanctioned shape.
 twin; the endgame mirrors upcasters (rungs live *while payloads at their
 version persist*, not forever). Once every stream containing the removed
 region's events is terminal or truncated — the same condition as event
-retirement, and exactly what the replay audit of
-[`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md)
-proves — delete the twin. Deleting it earlier re-creates exactly the break it
-fixed.
+retirement, and exactly what the targeted replay audit proves — delete the
+twin. Deleting it earlier re-creates exactly the break it fixed.
 
 Output-template changes and guard *loosening* have no computed remedy: treat
 them like schema edits (new event or new event version for the new
@@ -308,22 +304,22 @@ half-old/half-new fan-out. Dead-letter replay
 (`keiro/src/Keiro/DeadLetter/Replay.hs`) has the same property by design: it
 re-runs the *current* handler against the stored source event.
 
-> **What is and is not gated.** Guard changes are now flagged at `diff` time:
-> the `AggGuardTightened` advisory prints the computed `replay-only` twin
-> (plan 143, above). What no gate yet *proves* is whether stored data
-> actually exercises a removed region: the golden payloads of
+> **What is and is not gated.** Guard changes are flagged at `diff` time: the
+> `AggGuardTightened` advisory prints the computed `replay-only` twin (plan
+> 143, above). Whether stored data *actually exercises* a removed region is
+> answered by the pre-deploy replay audit, not by goldens: the golden payloads
+> of
 > [`docs/plans/139`](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md)
-> prove old shapes still *decode*, never that they still *invert* — the
-> pre-deploy replay audit that replays real streams through the candidate
-> binary (and whose digest mode makes even an inversion that silently *shifts
-> to a different edge* reviewable) is
-> [`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md).
-> Decide-change redelivery mixing has no gate either; the `diff` advisory on
-> process/router mapping changes is also
-> [`docs/plans/142`](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md).
-> Until those land: drain PM/router redelivery and replay any dead letters
-> **before** deploying a decide change (see
-> [Deploy ordering](#deploy-ordering-rules)).
+> prove old shapes still *decode*, never that they still *invert*. Run
+> `Keiro.ReplayAudit` in `AuditTargeted` mode over the affected event types from
+> `diff --replay-impact-out`; its digest mode makes even an inversion that
+> silently *shifts to a different edge* reviewable.
+> Decide-change **redelivery mixing** is the residual gap: `diff` emits
+> `RouterDecideSurfaceChanged` / `ProcessDecideSurfaceChanged` advisories for
+> spec-visible edits, hole-only decide changes stay invisible, and nothing
+> proves a redelivery window is empty. So the manual rule stands: drain
+> PM/router redelivery and replay any dead letters **before** deploying a decide
+> change (see [Deploy ordering](#deploy-ordering-rules)).
 
 ## Changing the fold: same events, different state — and what snapshots do to you
 
@@ -409,12 +405,14 @@ indirectly; hand-written timer payloads have no gate.
 **Workflow journals.** Step *results* are persisted as raw JSON under the step
 name. Changing a journaled step's result type makes replay throw
 `WorkflowStepDecodeError`; the resume worker counts each throw as a crash, and
-after the default five attempts the instance is **terminally failed with no
-supported recovery API today** (`resurrectFailedWorkflow` is a deliverable of
-[`docs/plans/115`](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md)
-under
-[`docs/masterplans/16`](../masterplans/16-harden-the-durable-execution-engine-surfaced-by-the-2026-07-durable-execution-review.md);
-until it lands, recovery is manual SQL). The workflow snapshot's fixed sentinel
+after the default five attempts the instance is terminally failed and leaves
+resume discovery. Recovery is supported and transactional: deploy the corrected
+binary, then call `Keiro.Workflow.Instance.resurrectFailedWorkflow` to return
+the instance to the runnable pool (never manual SQL) — see
+[Deploy Ordering](../user/deploy-ordering.md#8-treat-workflow-step-results-as-permanent)
+and
+[Failure, retries, and resurrection](durable-workflows.md#failure-retries-and-resurrection).
+The workflow snapshot's fixed sentinel
 shape hash (`keiro.workflow.stepmap.v1`) deliberately does not protect per-step
 types — the step decode is the intended failure point. The safe procedure is
 never to change a journaled result type in place: **rename the step**
@@ -500,14 +498,14 @@ the evolution-relevant rules in brief:
   accumulated journal shape debt is dropped at each rotation. Changing the
   *seed type* is BREAKING in `diff` (the next generation must decode the
   previous generation's seed).
-- **Known runtime bug (until
-  [`docs/plans/115`](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md)
-  lands):** the patch set is recorded only when a generation's journal looks
-  fresh. An asynchronous append racing a `continueAsNew` rotation (a duplicate
-  awakeable signal, a child completion) defeats that check, after which
-  **every `patch` call in that instance silently decides `False` forever**.
-  If you combine `patch` with `continueAsNew` today, audit rotated instances'
-  `__workflow_patches__` records after deploys.
+- **`patch` × `continueAsNew`:** a rotated generation records its active patch
+  set *atomically inside the rotation*, in the same transaction as the carried
+  seed
+  ([`docs/plans/115`](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md)),
+  so an asynchronous append racing the rotation — a duplicate awakeable signal,
+  a child completion — can no longer make every later `patch` call in that
+  instance decide `False`. Generation 0 still records its set on the first run,
+  which has no rotation moment.
 
 ## Deploy-ordering rules
 
@@ -571,10 +569,10 @@ DSL-only gates do not exist for hand-authored services.
 | Register slot change | n/a | register shape hash changes | full replay (benign) | mixed-deploy snapshot thrash | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
 | State type `s` structural change | n/a | state shape hash changes | full replay (benign) | same-shape semantic change needs manual bump | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
 | Timer payload shape | `ProcessTimerPayloadChanged` Advisory | — | timer dead-letter (loud/delayed) | hand-written: none | Landed: [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) |
-| Workflow step result type | BREAKING (body) | — | `WorkflowStepDecodeError` → terminal fail, no recovery API | recovery gap | [115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md) |
+| Workflow step result type | BREAKING (body) | — | `WorkflowStepDecodeError` → terminal fail; `resurrectFailedWorkflow` after a code fix | operator must notice the failed instance | Landed: [115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md) |
 | Job payload | workqueue changes keep normal classifications | generated queues use versioned `QueueCodec` | future version retries; malformed shape dead-letters | hand-written `aesonJobCodec` remains unversioned | Landed: [140](../plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md) |
 | Contract field change | BREAKING / advisory | — | consumer dead letters | cross-repo skew unchecked | [24](../masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md) (out of scope, manual rules here) |
-| Workflow body reorder without patch | BREAKING | — | wrong journaled pairing | hand-written ordinals: **silent** | [115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md) (patch race) |
+| Workflow body reorder without patch | BREAKING | — | wrong journaled pairing | hand-written ordinals: **silent** | Landed: [115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md) (patch/rotation race); ordinal pairing is the author's rule |
 
 The master plan closing the tracked gaps is
 [`docs/masterplans/24`](../masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md).

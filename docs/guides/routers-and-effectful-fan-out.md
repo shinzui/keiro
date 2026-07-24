@@ -60,20 +60,20 @@ data Router input targetPhi targetRs targetState targetCi targetCo es = Router
   , resolve :: !(input -> Eff es [PMCommand targetCi])
     -- THE seam: effectfully compute the data-dependent target set
   , targetEventStream :: !(ValidatedEventStream targetPhi targetRs targetState targetCi targetCo)
-  , targetProjections :: ![InlineProjection targetCo]
+  , targetProjections :: !(Stream targetCi -> [InlineProjection targetCo])
   }
 ```
 
 `resolve` is where the read-model query happens. Everything else mirrors the
-target half of a process manager. `targetProjections` are inline projections for
-the target aggregate's events; pass `[]` for append-only dispatch, or pass the
-same projections your command path uses when the router must keep target read
-models current in the dispatch transaction.
+target half of a process manager. `targetProjections` selects inline projections
+per target stream; return `[]` (typically as `const []`) for append-only
+dispatch, or return the same projections your command path uses when the router
+must keep target read models current in the dispatch transaction.
 
 Use `targetProjections` only when the router, or an immediate reader after the
 router runs, depends on the target aggregate's read model reflecting the
-dispatched command right away. Keep `targetProjections = []` for ordinary fan-out
-where eventual consistency is acceptable. Do not move expensive reporting,
+dispatched command right away. Keep `targetProjections = const []` for ordinary
+fan-out where eventual consistency is acceptable. Do not move expensive reporting,
 analytics, integration publishing, or broad denormalization work into this
 field; inline projections run inside the append transaction, so slow or failing
 projection SQL slows or fails the dispatch itself.
@@ -142,7 +142,7 @@ agentQualRouter = Router
         | target <- targets
         ]
   , targetEventStream = chapterEventStream
-  , targetProjections = []
+  , targetProjections = const []
   }
 ```
 
@@ -203,7 +203,7 @@ and dispatching it. Use `runRouterWorkerWith` to override poison-message
 handling, transient retry delay, or dispatch metrics. Its ack policy:
 
 - a message that fails to decode follows the configured `PoisonPolicy` (default:
-  `AckHalt`);
+  `PoisonHalt`, which finalizes the message `AckHalt`);
 - after dispatch, if every target is `PMCommandAppended` or `PMCommandDuplicate`
   the message is `AckOk`;
 - if any target is `PMCommandFailed`, transient store failures are `AckRetry`

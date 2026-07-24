@@ -63,6 +63,6 @@ Run the example tests from the repository root:
 cabal test jitsurei-test
 ```
 
-You should see sixteen examples pass. If a guide claim is not backed by one of
+You should see seventeen examples pass. If a guide claim is not backed by one of
 those tests or by a linked `jitsurei/src/` module, treat that as a documentation
 bug.

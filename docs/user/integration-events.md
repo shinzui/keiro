@@ -105,6 +105,8 @@ populated:
 | `keiro-correlation-id`         | `correlationId`                         |
 | `traceparent`                  | `traceContext.traceparent` (W3C)        |
 | `tracestate`                   | `traceContext.tracestate`  (W3C)        |
+| `keiro-occurred-at`            | `occurredAt` (ISO 8601; always emitted) |
+| `keiro-attributes`             | `attributes` (JSON-encoded)             |
 
 ## JSON convenience helpers
 

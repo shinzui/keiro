@@ -42,9 +42,10 @@ discriminator; a spec DSL generates, validates, and diffs the whole machine.
 
 ## The comparison, change class by change class
 
-Statements about keiro assume master plan 24
-(`docs/masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md`)
-is implemented. "Silent" means wrong behaviour with no error, ever.
+Statements about keiro describe master plan 24
+(`docs/masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md`),
+which is complete: plans 138 through 143 have landed. "Silent" means wrong
+behaviour with no error, ever.
 
 | Change over a service's lifetime | tan-event-source | keiro |
 |---|---|---|

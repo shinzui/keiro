@@ -241,6 +241,9 @@ names below are the canonical `keiro.*` names; they are defined and reconciled i
 
 ### Metric catalogue
 
+This is the complete set of instruments `newKeiroMetrics` builds. Every one is a
+no-op until the corresponding worker or runner is given the handle.
+
 Outbox publisher (`Keiro.Outbox`):
 
 - `keiro.outbox.backlog` — Gauge, `{event}` — claimable rows waiting in `keiro_outbox`,
@@ -251,6 +254,9 @@ Outbox publisher (`Keiro.Outbox`):
   retried. A sustained rise signals a failing destination.
 - `keiro.outbox.deadlettered` — Counter, `{event}` — rows that exhausted their attempts.
   Any increase should page.
+- `keiro.outbox.reclaimed` — Counter, `{event}` — rows reclaimed from a crashed or
+  stalled publisher by `outboxMaintenancePass`. A sustained rate means workers are
+  dying mid-publish.
 
 Inbox (`Keiro.Inbox`):
 
@@ -260,6 +266,8 @@ Inbox (`Keiro.Inbox`):
   spike can indicate an upstream redelivery storm.
 - `keiro.inbox.failed` — Counter, `{message}` — handler failures (retried or dead). Alert
   on a rising rate.
+- `keiro.inbox.poisoned` — Counter, `{message}` — messages dead-lettered after exhausting
+  handler attempts. Any increase should page.
 - `keiro.inbox.backlog` — Gauge, `{message}` — unprocessed/retained inbox rows, recorded
   each poll pass. Alert on unbounded growth (also a GC-cadence signal).
 
@@ -274,6 +282,9 @@ Timer worker (`Keiro.Timer`):
 - `keiro.timer.stuck` — Gauge, `{timer}` — rows parked in `Firing` past the threshold (the
   recovery runbook's target), recorded each poll pass. Any non-zero value should be
   investigated. (The terminal `Dead` state is distinct and not counted here.)
+- `keiro.timer.requeued` — Counter, `{timer}` — timers returned from `Firing` to
+  `Scheduled` after a stale claim. A rising rate means `requeueStuckAfter` is shorter than
+  real handler runtimes, or workers are crashing mid-fire.
 
 Async projection path (`Keiro.Projection` / `Keiro.ReadModel`):
 
@@ -282,6 +293,63 @@ Async projection path (`Keiro.Projection` / `Keiro.ReadModel`):
 - `keiro.projection.wait.timeouts` — Counter, `{timeout}` — position-wait calls that timed
   out before the projection caught up. A rising rate means read-after-write waits are not
   being satisfied in time.
+
+Command runners (`Keiro.Command`, opt in via `RunCommandOptions.metrics`):
+
+- `keiro.command.conflicts` — Counter, `{conflict}` — optimistic-concurrency conflicts
+  observed.
+- `keiro.command.retries` — Counter, `{retry}` — retry attempts started after a conflict.
+  Compare against conflicts to spot retry storms on hot streams.
+- `keiro.command.duplicates` — Counter, `{event}` — appends rejected as duplicate
+  deterministic event ids.
+
+Snapshots (`Keiro.Snapshot`, recorded on the command path):
+
+- `keiro.snapshot.read.hits` — Counter, `{read}` — lookups that yielded a usable seed.
+- `keiro.snapshot.read.misses` — Counter, `{read}` — lookups that fell back to full replay.
+- `keiro.snapshot.decode.failures` — Counter, `{failure}` — matching rows whose bytes
+  failed to decode.
+- `keiro.snapshot.encode.failures` — Counter, `{failure}` — post-commit encodes that failed
+  and were swallowed.
+- `keiro.snapshot.write.failures` — Counter, `{failure}` — post-commit writes that failed
+  and were swallowed.
+- `keiro.snapshot.apply.divergence` — Counter, `{failure}` — just-appended batches that
+  failed to replay from the pre-command state. Any increase should page: the stream is
+  poisoned and its next hydration will fail.
+- `keiro.snapshot.seed.divergence` — Counter, `{failure}` — sampled seeds whose encoded
+  state disagreed with a full replay. Any non-zero value should page (see
+  [Snapshots](snapshots.md)).
+
+Process-manager and router dispatch (`WorkerOptions.metrics`):
+
+- `keiro.dispatch.failed` — Counter, `{command}` — dispatched commands that failed.
+- `keiro.dispatch.duplicates` — Counter, `{command}` — dispatches skipped as duplicate
+  deterministic event ids (normal under redelivery).
+- `keiro.dispatch.poison` — Counter, `{message}` — worker messages classified as poison.
+- `keiro.dispatch.deadlettered` — Counter, `{command}` — rejected dispatches handled by the
+  dead-letter or skip policy.
+- `keiro.subscription.deadlettered` — Counter, `{event}` — Kiroku source events
+  dead-lettered by explicit disposition or retry exhaustion (recorded through
+  `Keiro.Telemetry.kirokuEventBridge`).
+
+Durable workflows (`WorkflowRunOptions.metrics` / `WorkflowResumeOptions`):
+
+- `keiro.workflow.steps.executed` — Counter, `{step}` — steps that ran their action.
+- `keiro.workflow.steps.replayed` — Counter, `{step}` — steps short-circuited to a recorded
+  result.
+- `keiro.workflow.active` — Gauge, `{workflow}` — runs in progress in this process.
+- `keiro.workflow.journal.length` — Histogram, `{event}` — journal length at completion; a
+  climbing distribution is the signal to enable snapshots or `continueAsNew`.
+- `keiro.workflow.resumed` — Counter, `{workflow}` — re-invocations by the resume worker.
+- `keiro.workflow.failed` — Counter, `{workflow}` — instances marked terminally failed.
+  Any increase should page; recovery needs `resurrectFailedWorkflow`.
+- `keiro.workflow.resume.errors` — Counter, `{error}` — transient store errors in the
+  resume worker (these do not consume workflow attempts).
+- `keiro.workflow.lease.skipped` — Counter, `{workflow}` — instances skipped because
+  another worker holds the lease. A high rate against a small pool suggests `leaseTtl` is
+  sized too long.
+- `keiro.workflow.awakeables.pending` — Gauge, `{awakeable}` — awakeables awaiting a
+  signal, recorded each resume pass.
 
 These names are owned by the metrics foundation plan
 (`docs/plans/33-add-an-opentelemetry-metrics-surface-to-keiro-telemetry.md`) and recorded

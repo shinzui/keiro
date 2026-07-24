@@ -45,6 +45,10 @@ The current library includes:
   `runShardedSubscriptionGroup`): a pool of identical workers leases kiroku
   consumer-group buckets to drain a high-volume category disjointly, with
   automatic, coordinator-free failover when a worker dies;
+- Postgres-native work queues (`keiro-pgmq`): typed PGMQ jobs with retry and
+  dead-letter policy, continuous workers or bounded drains, per-group FIFO
+  delivery, standard/unlogged/partitioned provisioning, DLQ redrive and
+  archive-then-purge retention, and a one-span-per-delivery tracing contract;
 - durable rejected-dispatch records plus idempotent replay of Kiroku
   subscription dead letters;
 - native `pg-migrate` components for Kiroku and Keiro framework tables, composed

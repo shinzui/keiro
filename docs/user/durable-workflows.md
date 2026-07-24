@@ -149,7 +149,8 @@ defaultWorkflowResumeOptions :: WorkflowResumeOptions
 (via the `keiro_workflow_steps` index, unioned with running children) and
 re-invokes each through its registered `WorkflowDef`, short-circuiting journaled
 steps. It returns a `ResumeSummary`
-(`discovered`/`resumed`/`completed`/`stillSuspended`/`unknownName`).
+(`discovered`/`resumed`/`completed`/`stillSuspended`/`unknownName`/`failed`/
+`transientErrors`/`leaseSkipped`).
 `runWorkflowResumeWorker` loops it on a poll interval. No `wf:` prefix
 subscription is used, so there is no upstream dependency.
 

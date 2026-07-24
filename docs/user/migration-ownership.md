@@ -74,7 +74,8 @@ cabal run keiro-migrate -- new \
   --manifest keiro-migrations/migrations/manifest \
   --description "add workflow lookup index"
 
-cabal run keiro-migrate -- check keiro-migrations/migrations/manifest
+cabal run keiro-migrate -- check \
+  --manifest keiro-migrations/migrations/manifest
 ```
 
 Every new Keiro migration is a three-file review diff: the immutable SQL file,
@@ -94,9 +95,17 @@ set.
 
 Kiroku and Keiro historically shared one Codd ledger. During cutover,
 `Keiro.Migrations.History.Codd` combines all seven Kiroku and sixteen Keiro
-mappings into one `HistoryImport`. The adapter verifies the old
+mappings into one `frameworkCoddHistoryMappings` set, which `importCoddHistory`
+turns into a single `HistoryImport`. The adapter verifies the old
 `migrations.lock` checksums and exact source payloads before recording either
 target prefix.
+
+Most operators should drive this through the CLI rather than the library:
+`keiro-migrate import-codd-history --reason TEXT --confirm` uses the same
+checked-in mapping and evidence. See
+[Upgrading To The Keiro Schema](upgrading-to-the-keiro-schema.md#3b-import-the-combined-history).
+The Haskell entry point below is for services that embed the cutover in their
+own tooling.
 
 ```haskell
 config <-

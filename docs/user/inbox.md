@@ -113,8 +113,8 @@ before changing a producer or consumer shape.
 
 ## Schema
 
-The inbox table is created by `keiro-migrate` from
-`2026-05-17-02-00-00-keiro-inbox.sql`:
+The inbox table is created by `keiro-migrate` from the native Keiro component's
+embedded `0003-keiro-inbox.sql` migration:
 
 ```sql
 CREATE TABLE keiro_inbox (

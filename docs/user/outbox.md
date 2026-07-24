@@ -69,6 +69,11 @@ beyond an inline emit should go through the canonical
 `IntegrationProducer` path so the row carries `sourceEventId` and
 `sourceGlobalPosition`.
 
+For work this service owes *itself* rather than a public event another
+context consumes, reach for a [work queue](work-queues.md) instead — but
+note the tradeoff: a PGMQ enqueue is not atomic with the event append,
+while an outbox row is.
+
 ## Ordering policy
 
 The publisher worker enforces a configurable ordering policy at claim
@@ -196,13 +201,20 @@ CREATE TABLE keiro_outbox (
 );
 ```
 
-Two supporting indexes:
+The supporting indexes:
 
 - `keiro_outbox_pending_idx` on `(status, next_attempt_at, created_at)`
   — backs the claim query's filter.
 - `keiro_outbox_head_of_line_idx` on `(source, message_key, created_at)`
   partial `WHERE status NOT IN ('sent', 'dead') AND message_key IS NOT NULL`
   — backs the per-key head-of-line predicate.
+- `keiro_outbox_claim_order_idx` on `(created_at, outbox_id)` partial
+  `WHERE status IN ('pending', 'failed')` — backs the claim ordering.
+- `keiro_outbox_source_order_idx` on `(source, created_at, outbox_id)` partial
+  `WHERE status NOT IN ('sent', 'dead')` — backs the `PerSourceStream`
+  head-of-line predicate.
+- `keiro_outbox_sent_gc_idx` on `(published_at)` partial `WHERE status = 'sent'`
+  — backs `garbageCollectSent`.
 
 The enqueue `ON CONFLICT` target is `(source, message_id)`, so a retried
 attempt that reuses the same `messageId` is idempotent at the row level —

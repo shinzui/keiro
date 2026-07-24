@@ -38,7 +38,10 @@ in `CHANGELOG.md`. See `docs/user/production-status.md` for adoption posture.
 | Inbox deduplication | Available now | `Keiro.Inbox` + `keiro_inbox`: claim/retry/release/dead transitions, GC, and Shibuya + Kafka adapters. |
 | Integration events | Available now | `Keiro.Integration.Event`: canonical cross-context envelope with W3C trace context and Kafka header helpers. |
 | OpenTelemetry tracing | Available now | `Keiro.Telemetry`: Internal (command), Producer (outbox), and Consumer spans; opt-in via `RunCommandOptions.tracer`. |
-| Worker metrics | Available now | `Keiro.Telemetry` exposes opt-in OpenTelemetry metrics for outbox, inbox, timer, and async-projection workers (backlog, lag, duplicate, dead-letter, and stuck-timer instruments). |
+| Worker metrics | Available now | `Keiro.Telemetry` exposes opt-in OpenTelemetry metrics for the outbox, inbox, timer, and async-projection workers plus the command, snapshot, dispatch, and workflow paths. The full catalogue is in [Operations](operations.md#metric-catalogue). |
+| Push delivery and subscription sharding | Available now | `Keiro.Wake` wakes poll-loop workers from Kiroku's existing notifier (no new connections, durable poll fallback); `Keiro.Subscription.Shard` leases consumer-group buckets across a worker pool with coordinator-free failover. |
+| Pre-deploy replay audit | Available now | `Keiro.ReplayAudit` replays real streams through a candidate binary in `AuditTargeted` or `AuditFull` mode and blocks a deploy on `auditExitCode`. |
+| Postgres work queues | Available now | `keiro-pgmq`: PGMQ-backed job queues with retry/DLQ policy and the versioned `keiroJobCodec` envelope. See [Work Queues](work-queues.md). |
 | Typed service specifications | Available now | `keiro-dsl` checks, scaffolds, emits conformance harnesses, and classifies persistence-aware evolution across aggregate, coordination, integration, queue, read-model, and workflow nodes. |
 | Exactly-once async projections | Planned v1.x / upstream-dependent | Blocks on transactional Shibuya/Kiroku checkpoint handling. |
 | Prefix subscriptions | Planned v1.x / upstream-dependent | Needed for `pm:` and future `wf:` stream families at scale. |
@@ -241,7 +244,7 @@ subscriptions.
 |---|---|---|---|
 | Exactly-once async projections | Upstream-dependent | Needs transactional Shibuya/Kiroku checkpoint handling | User SQL and checkpoint advancement commit together. |
 | Prefix subscriptions | Upstream-dependent | Needs Kiroku subscription target beyond exact category | `pm:`, future `wf:`, and multi-stream families become easier to observe. |
-| LISTEN/NOTIFY waits | Planned | Adds long-lived DB connections | `PositionWait` can wake by notification instead of polling. |
+| LISTEN/NOTIFY waits for `PositionWait` | Planned | Mechanism shipped (`Keiro.Wake`); `Keiro.ReadModel` waits are not wired to it yet | `PositionWait` can wake by notification instead of polling. |
 
 ### Exactly-once async projections
 
@@ -279,16 +282,22 @@ manager. Prefix subscriptions are the scaling and operability improvement.
 
 ### Position waits and push delivery
 
-Position waits currently use polling. A later v1 improvement can add
-LISTEN/NOTIFY-backed wakeups.
+The push mechanism itself has shipped: `Keiro.Wake` duplicates the broadcast
+channel of Kiroku's existing per-store listener, so a worker can wait for an
+append notification with a durable poll fallback and **no new database
+connections**. The workflow resume worker and the sharded-subscription worker
+already use it.
 
-Benefits:
+What remains is wiring it into `Keiro.ReadModel`: `PositionWait` still polls.
+
+Benefits when it lands:
 
 - lower read-after-write latency for `PositionWait`;
 - fewer polling queries under high request volume.
 
-Tradeoff: LISTEN/NOTIFY consumes long-lived database connections and complicates
-connection-pool sizing. It is useful, but not required for correctness.
+The correctness rule stays the same either way: a Postgres `NOTIFY` is
+best-effort, so push is an optimization over a durable poll, never a replacement
+for one.
 
 ## Phase 4: Adoption And API Ergonomics
 

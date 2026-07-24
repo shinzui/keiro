@@ -6,10 +6,11 @@ introduced by keiro ExecPlan
 [`docs/plans/84-enforce-replay-safety-with-a-validatedeventstream-at-the-keiro-command-boundary.md`](../plans/84-enforce-replay-safety-with-a-validatedeventstream-at-the-keiro-command-boundary.md).
 
 It is written to be followed with no prior context beyond your own repository.
-The registered downstream projects at the time this guide was written are
-`danwa`, `kanmon`, `kawa`, `keiro-runtime-docs`, `keiro-runtime-jitsurei`,
-`keiro-runtime-patterns`, `kikan`, `kioku`, `kizashi`, `kotei`, `mori-app`, and
-`shikigami`; `mori-app` also has a package-level dependency on keiro.
+The registered downstream projects (from `mori registry dependents shinzui/keiro`)
+are `danwa`, `kanmon`, `kawa`, `keiro-runtime-docs`, `keiro-runtime-jitsurei`,
+`keiro-runtime-patterns`, `kikan`, `kioku`, `kizashi`, `kotei`, `meibo`,
+`mori-app`, and `shikigami`; `mori-app` also has a package-level dependency on
+keiro. Re-run that command before starting a fleet migration — the list drifts.
 
 For the conceptual guarantee behind the migration, see
 [Replayability Safety](../user/replay-safety.md).

@@ -168,32 +168,27 @@ convert its `crHeaders` via `headersToList` and decode the byte pairs
 to `Text`. This is the path the cross-context tests model; the
 service controls its own offset commits and per-record decoding.
 
-**Option B — `shibuya-kafka-adapter`, with a caveat to know about.**
-The adapter handles polling, supervision, ack semantics, and
-OpenTelemetry attributes for you. It also normalizes
-`ConsumerRecord` into a Shibuya `Envelope` via
-`consumerRecordToEnvelope`. That conversion **only preserves
-`traceparent` and `tracestate` headers** — the keiro-specific headers
-that `integrationEventFromKafka` needs
-(`keiro-message-id`, `keiro-source-event-id`, `keiro-event-type`,
-`content-type`, schema-reference headers, etc.) are dropped at
-the adapter boundary.
+**Option B — `shibuya-kafka-adapter`.** The adapter handles polling,
+supervision, ack semantics, and OpenTelemetry attributes for you. It
+normalizes `ConsumerRecord` into a Shibuya `Envelope` via
+`consumerRecordToEnvelope`, which preserves **every** Kafka header
+verbatim (ordered, duplicates kept) on `Envelope.headers ::
+Maybe Headers`, where `Headers = [(ByteString, ByteString)]`.
+`Nothing` means the adapter does not surface headers at all; `Just []`
+means the record carried none. The W3C trace headers appear there in
+addition to their parsed form in `traceContext`.
 
-So `shibuya-kafka-adapter`'s `Handler es (Maybe ByteString)` cannot
-reach `integrationEventFromKafka` today without going around the
-adapter for headers. If you want both Shibuya's supervision *and*
-keiro's typed inbox, you have two options:
+A Shibuya handler is `Handler es msg = Message es msg -> Eff es
+AckDecision`, so a keiro inbox handler reads
+`message.envelope.headers`, decodes the byte pairs to `Text`, and
+builds a `KafkaInboundRecord` for `integrationEventFromKafka` — the
+keiro-specific headers (`keiro-message-id`, `keiro-source-event-id`,
+`keiro-event-type`, `content-type`, schema-reference headers) all
+survive the adapter boundary.
 
-1. **Upstream patch.** Extend `shibuya-kafka-adapter` to surface the
-   full header set on the envelope (for example, by adding a
-   `kafkaHeaders :: [(Text, Text)]` field to its envelope or by
-   passing all headers through `attributes`). This is the right
-   long-term fix and is a small upstream change. Until that lands,
-   prefer option 2 for integration-event consumers.
-2. **Use `kafka-effectful` directly for integration-event consumers.**
-   Reserve `shibuya-kafka-adapter` for handlers that consume raw
-   bytes and do not need the keiro envelope (raw-text pipelines,
-   non-EP-19 topics, etc.).
+Choose Option A when the service wants to own its offset commits and
+per-record decoding; choose Option B when you want Shibuya's
+supervision and ack semantics as well as keiro's typed inbox.
 
 The simulator in `test/Main.hs` shows the conversion at the
 `KafkaInboundRecord` boundary — search for `kafkaTopicAccept` for

@@ -19,9 +19,9 @@ Top-level convenience module. Re-exports:
 
 It also exports `version` (the library version string).
 
-Read-model, projection, process-manager, timer, outbox, inbox, integration-event,
-and telemetry APIs are exposed as direct modules and are not re-exported from
-`Keiro`.
+Read-model, projection, process-manager, timer, workflow, wake, subscription-shard,
+outbox, inbox, integration-event, replay-audit, and telemetry APIs are exposed as
+direct modules and are not re-exported from `Keiro`.
 
 ## `Keiro.Stream`
 
@@ -31,16 +31,24 @@ Types and functions:
 - `stream`
 - `streamName`
 - `mapStreamName`
+- `StreamCategory (..)`, `CategoryError (..)`, `category`, `categoryUnsafe`,
+  `categoryName`, `categoryText`
+- `StreamIdSegment (..)`, `entityStream`, `entityStreamId`
 
-Use it to construct typed stream names.
+Use it to construct typed stream names. Prefer `entityStream`/`entityStreamId`
+over raw `stream` for aggregates: they build `<category>-<id>` names through a
+validated `StreamCategory`, which is what Kiroku category subscriptions key on.
 
 ## `Keiro.Codec`
 
 Types and functions:
 
 - `Codec (..)`
+- `EventType`
 - `Upcaster`
 - `CodecError (..)`
+- `CodecConfigError (..)`
+- `mkCodec`
 - `encodeForAppend`
 - `encodeForAppendWithMetadata`
 - `decodeRecorded`
@@ -50,7 +58,9 @@ Types and functions:
 - `metadataFor`
 
 Use it to encode domain events into Kiroku event data and decode recorded
-events during hydration or projection handling.
+events during hydration or projection handling. Prefer `mkCodec` over the raw
+`Codec` constructor; `validateEventStreamWith` runs it anyway when building a
+`ValidatedEventStream`.
 
 ## `Keiro.EventStream`
 
@@ -96,6 +106,12 @@ Types and functions:
 - `runCommand`
 - `runCommandWithSql`
 - `runCommandWithSqlEvents`
+- `commandErrorClass`
+- `Hydrated (..)`, `hydrate`, `hydrateFull`, `hydrateSeeded`
+
+The `hydrate*` helpers expose the read-only half of the cycle (rebuild
+`(state, registers)` at a version) for tooling and diagnostics; `commandErrorClass`
+maps a `CommandError` onto a stable class string for metrics and logs.
 
 Use it for the canonical load, streaming replay, decide, append command cycle.
 Commands may append zero, one, or many produced events as one store batch.
@@ -179,6 +195,7 @@ Types and functions:
 - `ConsistencyMode (..)`
 - `StrongScope (..)`
 - `PositionWaitOptions (..)`
+- `defaultStrongWaitOptions`
 - `ReadModelError (..)`
 - `runQuery`
 - `runQueryWith`
@@ -201,6 +218,7 @@ Types and functions:
 - `markRebuilding`
 - `markLive`
 - `markAbandoned`
+- `transitionReadModelTx`
 
 Use it for metadata initialization and rebuild lifecycle coordination.
 
@@ -271,6 +289,7 @@ Types and functions:
 - `runRouterOnce`
 - `runRouterWorkerWith`
 - `runRouterWorker`
+- `deterministicRouterCommandId`
 
 Use it for stateless, effectful fan-out (content-based router / recipient list).
 Unlike a process manager, a router resolves its targets *effectfully* (for
@@ -291,11 +310,87 @@ Types and functions:
 - `TimerRow (..)`
 - `TimerStatus (..)`
 - `scheduleTimerTx`
+- `scheduleTimerOnceTx`
 - `claimDueTimer`
 - `markTimerFired`
-- `runTimerWorker`
+- `countDueTimers`
+- `countStuckTimers`
+- recovery: `StuckTimerFilter (..)`, `anyStuckTimer`, `findStuckTimers`,
+  `requeueStuckTimers`, `requeueStuckTimer`, `cancelTimer`, `deadLetterTimer`
+- worker: `TimerWorkerOptions (..)`, `TimerWorkerConfigError (..)`,
+  `defaultTimerWorkerOptions`, `mkTimerWorkerOptions`, `runTimerWorker`,
+  `runTimerWorkerWith`
 
-Use it for durable timer storage and polling workers.
+Use it for durable timer storage and polling workers. `runTimerWorker` is
+`runTimerWorkerWith` at `defaultTimerWorkerOptions`; both take an opt-in
+`Maybe KeiroMetrics` as their first argument. The recovery group is the supported
+stuck-row runbook — see
+[Operations](operations.md#stuck-row-recovery-runbook).
+
+## `Keiro.Workflow` and the workflow module family
+
+The durable-execution runtime. It is **not** re-exported from `Keiro`; import the
+modules directly, the same way you import `Keiro.Timer` or `Keiro.Outbox`.
+
+- `Keiro.Workflow` — the `Workflow` effect, `step`, `awaitStep`, `patch`,
+  `continueAsNew`, `restoreSeed`, `runWorkflow`, `runWorkflowWith`,
+  `WorkflowRunOptions (..)`, `defaultWorkflowRunOptions`, `WorkflowOutcome (..)`,
+  the journal codec (`workflowJournalCodec`, `WorkflowJournalEvent (..)`), and
+  `workflowStreamName`.
+- `Keiro.Workflow.Sleep` — `sleepNamed` / `sleep` and `runWorkflowTimerWorker`.
+- `Keiro.Workflow.Awakeable` — `awakeableNamed` / `awakeable`,
+  `deterministicAwakeableId`, `signalAwakeable`, `cancelAwakeable`.
+- `Keiro.Workflow.Child` — `spawnChild`, `awaitChild`, `cancelChild`.
+- `Keiro.Workflow.Resume` — `resumeWorkflowsOnce`, `runWorkflowResumeWorker`,
+  `runWorkflowResumeWorkerPush`, `WorkflowResumeOptions (..)`,
+  `defaultWorkflowResumeOptions`, `WorkflowRegistry`, `WorkflowDef (..)`,
+  `ResumeSummary (..)`.
+- `Keiro.Workflow.Instance` — instance rows, lease state, and the supported
+  operator recovery API `resurrectFailedWorkflow`.
+- `Keiro.Workflow.Snapshot` — `workflowStateCodec`, the fixed-shape-hash snapshot
+  discriminant for the accumulated step-result map.
+- `Keiro.Workflow.Types` — `WorkflowName`, `WorkflowId`, `StepName`, `PatchId`,
+  `AwakeableId`, `ChildHandle`, and the reserved step-name prefixes.
+- `Keiro.Workflow.Gc` — `WorkflowGcPolicy (..)`, `WorkflowGcSummary (..)`,
+  `gcWorkflowsOnce`, `runWorkflowGcWorker`: the operator-scheduled retention
+  sweep over terminal instances.
+- `Keiro.Workflow.Schema`, `.Awakeable.Schema`, `.Child.Schema` — the SQL layer
+  over `keiro_workflows`, `keiro_workflow_steps`, `keiro_awakeables`, and
+  `keiro_workflow_children`, for operational tooling.
+
+Use it for long-running processes that read as one function with in-line waits.
+See [Durable Workflows](durable-workflows.md) for the authoring surface and the
+[guide](../guides/durable-workflows.md) for a worked example.
+
+## `Keiro.Wake`
+
+Types and functions:
+
+- `WakeSignal (..)` — a newtype over its one field,
+  `waitForWake :: Int -> IO WakeReason` (the argument is the fallback timeout in
+  microseconds)
+- `WakeReason (..)` — `WokenByNotify` or `WokenByTimeout`
+- `wakeSignalFromStore`
+- `neverWake`
+
+Use it to replace a worker's fixed poll sleep with "wait until an append
+notification arrives or a fallback timeout elapses". It duplicates the broadcast
+channel of Kiroku's existing per-store listener, so push adds no new database
+connections, and the fallback keeps correctness on a dropped notification.
+
+## `Keiro.Subscription.Shard`
+
+Types and functions:
+
+- `WorkerId (..)`, `freshWorkerId`
+- `acquireOwnedBuckets`, `renewOwnedBuckets`, `relinquish`
+- `ensureShards`, `ownershipSnapshot`
+- `Keiro.Subscription.Shard.Worker` adds `runShardedSubscriptionGroup`
+- `Keiro.Subscription.Shard.Schema` holds the `keiro_subscription_shards` SQL
+
+Use it to run a pool of identical workers over one Kiroku consumer group: each
+bucket is leased, so the pool re-divides automatically when a worker joins,
+leaves, or dies, with no external coordinator.
 
 ## `Keiro.DeadLetter`
 
@@ -342,7 +437,9 @@ Transactional outbox. Re-exports `Keiro.Outbox.Types` and exports
 `IntegrationProducer (..)`, `IntegrationEventDraft (..)`, `mintIntegrationEvent`,
 `draftToEvent`, `enqueueProducerEventTx`, `PublishOutcome (..)`,
 `publishClaimedOutbox`, `outboxMaintenancePass`, and `sampleOutboxBacklog`.
-`Keiro.Outbox.Kafka` adds the Kafka producer adapter.
+`IntegrationProducerConfigError (..)`, `mkIntegrationProducer`,
+`requeueStuckOutbox`, `countOutboxBacklog`, and `garbageCollectSent` complete the
+surface. `Keiro.Outbox.Kafka` adds the Kafka producer adapter.
 
 Use it to commit side-effect intents in the write transaction and publish them
 asynchronously with per-key ordering, backoff, dead-lettering, and a separate
@@ -351,9 +448,13 @@ maintenance pass for crashed-worker reclamation and backlog sampling.
 ## `Keiro.Inbox`
 
 Idempotent inbox. Re-exports `Keiro.Inbox.Types` and exports
-`lookupInbox`, `listInbox`, `garbageCollectCompleted`,
-`runInboxTransaction`, and `runInboxTransactionWithKey`. `Keiro.Inbox.Kafka` adds
-the Kafka consumer adapter.
+`lookupInbox`, `listInbox`, `garbageCollectCompleted`, `countInboxBacklog`,
+`sampleInboxBacklog`, `markFailedTx`, `runInboxTransaction`,
+`runInboxTransactionWithKey`, `runInboxTransactionWith`,
+`runInboxTransactionBatch`, and the bounded-retry family
+(`runInboxTransactionWithRetries`, `runInboxTransactionWithRetriesWith`,
+`runInboxTransactionWithRetriesKey`). `Keiro.Inbox.Kafka` adds the Kafka consumer
+adapter.
 
 Use it to deduplicate inbound integration events by `(source, dedupe_key)`.
 
@@ -368,11 +469,18 @@ Process-manager and router workers can record `keiro.dispatch.failed`,
 
 ## `Keiro.ReplayAudit`
 
-Read-only real-log replay gate. Exports `AuditFull` and affected-event
-`AuditTargeted` modes, resumable `AuditBudget` controls, typed audit targets,
-per-stream `ReplayOk` / `ReplayFailed` / `SeedDivergence` outcomes, stable
-report rendering, and `auditExitCode` (`0` clean, `1` on any failure or
-divergence). Generated DSL services expose one context-wide
+Read-only real-log replay gate. Exports:
+
+- `AuditMode (..)` — `AuditFull` and affected-event `AuditTargeted`, plus
+  `AffectedSet`
+- `AuditBudget (..)` / `defaultAuditBudget` — resumable scan controls
+- `AuditTarget (..)`, `SomeAuditTarget (..)`, `streamInCategory` — typed targets
+- `AuditOutcome (..)` (`ReplayOk` / `ReplayFailed` / `SeedDivergence`),
+  `StreamAuditResult (..)`, `AuditReport (..)`
+- `auditStream`, `auditStreams`, `renderAuditReport`, and `auditExitCode`
+  (`0` clean, `1` on any failure or divergence)
+
+Generated DSL services expose one context-wide
 `Generated.<Context>.ReplayAudit.auditTargets` assembly.
 
 ## `Keiro.Migrations` (package `keiro-migrations`)
@@ -384,6 +492,25 @@ Kiroku/Keiro import mapping used during cutover.
 
 Use it to compose Kiroku first and Keiro second, apply or strictly verify the
 plan, and import an existing shared Codd ledger without replaying SQL.
+
+## `Keiro.PGMQ.*` (package `keiro-pgmq`)
+
+Postgres-native work queues over PGMQ, used by DSL `workqueue` / `dispatch`
+nodes and available directly:
+
+- `Keiro.PGMQ` — the umbrella module.
+- `Keiro.PGMQ.Job` — `Job (..)`, `RetryPolicy (..)`, `defaultRetryPolicy`,
+  `mkRetryPolicy`, `JobPolling (..)`, `JobOrdering (..)`, `JobTuning (..)`, and
+  the job runner.
+- `Keiro.PGMQ.Codec` — `aesonJobCodec` (raw) and `keiroJobCodec` (the versioned
+  `{v,t,data}` envelope whose `JobPayloadFromFuture` result drives the
+  workers-before-producers rollout rule).
+- `Keiro.PGMQ.Dlq` — dead-letter queue provisioning and `redriveDlq`.
+- `Keiro.PGMQ.Runtime` / `Keiro.PGMQ.Metrics` — worker wiring and instruments.
+
+See [Work Queues](work-queues.md) for the authoring and operations reference,
+and [Deploy Ordering](deploy-ordering.md#3-upgrade-versioned-job-workers-before-producers)
+for the queue-payload rollout rules.
 
 ## `Keiro.Dsl.*` (package `keiro-dsl`)
 

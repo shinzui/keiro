@@ -42,6 +42,9 @@ pieces those modules import.
 - [Idempotent Inbox](inbox.md): how the receiving bounded context
   deduplicates Kafka redeliveries, dedupe policies, and the
   transactional handler wrapper.
+- [Work Queues](work-queues.md): typed PGMQ background jobs — the `Job`
+  declaration, workers versus one-shot drains, retry and dead-letter policy,
+  FIFO groups, provisioning, and DLQ operations.
 - [Dead Letters And Replay](dead-letters.md): rejected dispatch records and
   idempotent operator replay of subscription dead letters.
 - [Database Migrations](migrations.md): running `keiro-migrate`, disabling
@@ -87,14 +90,24 @@ The v1 library includes:
   `Keiro.Integration.Event`;
 - a transactional outbox through `Keiro.Outbox` and an idempotent inbox through
   `Keiro.Inbox`, each with a Kafka adapter;
-- OpenTelemetry command/producer/consumer spans through `Keiro.Telemetry`.
+- named-step durable workflows — steps, durable sleep, awakeables, child
+  workflows, a resume worker, journal snapshots, `continueAsNew`, and `patch` —
+  through the `Keiro.Workflow*` modules;
+- LISTEN/NOTIFY push delivery for poll-loop workers through `Keiro.Wake`, and
+  leased consumer-group sharding for category subscriptions through
+  `Keiro.Subscription.Shard`;
+- the pre-deploy real-log replay gate through `Keiro.ReplayAudit`;
+- Postgres-native work queues through the `keiro-pgmq` package (see
+  [Work Queues](work-queues.md));
+- OpenTelemetry command/producer/consumer spans and opt-in worker metrics
+  through `Keiro.Telemetry`.
 - checked `.keiro` specifications, safe scaffolding, conformance harnesses, and
   persistence-aware diffs through the `keiro-dsl` package.
 
 The top-level `Keiro` module re-exports the core stream, codec, event-stream,
 command, router, and snapshot APIs. Import read-model, projection,
-process-manager, timer, outbox, inbox, integration-event, and telemetry modules
-directly.
+process-manager, timer, workflow, outbox, inbox, integration-event, replay-audit,
+and telemetry modules directly.
 
 ## What this guide assumes
 
