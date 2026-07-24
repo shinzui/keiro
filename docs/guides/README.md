@@ -37,6 +37,9 @@ are adopting:
   Together](coordinating-incident-response-with-routers-and-process-managers.md)
   pairs a router (page the on-call roster) with a process manager (escalation
   saga + timer) reacting to the same event, and explains when to reach for each.
+- [Work Queues](work-queues.md) walks the shipment-notice queue: a versioned job
+  payload, per-order FIFO delivery, an idempotent handler, the retry-versus-poison
+  decision, and why a queue is not an outbox.
 - [Snapshots And Hydration](snapshots-and-hydration.md) enables advisory
   snapshots for the order stream.
 - [Run And Operate Jitsurei](run-and-operate-jitsurei.md) collects build,

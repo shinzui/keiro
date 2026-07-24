@@ -6,6 +6,7 @@ where
 import Control.Lens ((^.))
 import Data.Aeson (object)
 import Data.Aeson qualified as Aeson
+import Data.Int (Int64)
 import Data.Maybe (isJust)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -14,17 +15,24 @@ import Data.Time (UTCTime (..), addUTCTime, secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID (UUID, fromString)
 import Data.Vector qualified as Vector
+import Effectful (Eff, IOE, (:>))
+import Effectful.Error.Static (Error)
+import Effectful.Reader.Static (Reader)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
+import Hasql.Pool qualified as Pool
+import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Jitsurei
 import Keiro
 import Keiro.Connection (withProjectionSchema)
+import Keiro.PGMQ.Job (Job (..))
+import Keiro.PGMQ.Runtime (JobRuntime (..), QueueRef (..), runJobEff, withJobRuntime)
 import Keiro.ProcessManager
 import Keiro.Projection
 import Keiro.ReadModel
 import Keiro.ReplayAudit
-import Keiro.Test.Postgres (StoreRunner (..), withFreshResourceStore, withFreshResourceStoreWith, withMigratedSuite)
+import Keiro.Test.Postgres (Fixture, StoreRunner (..), withFreshDatabase, withFreshResourceStore, withFreshResourceStoreWith, withMigratedSuiteWith)
 import Keiro.Timer
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Types (
@@ -35,11 +43,29 @@ import Kiroku.Store.Types (
     StreamName (..),
     StreamVersion (..),
  )
+import Pgmq.Effectful (Pgmq, PgmqRuntimeError)
+import Pgmq.Effectful qualified as Pgmq
+import Pgmq.Migration qualified as PgmqMigration
+import Pgmq.Types (QueueName)
+import Shibuya.Adapter.Pgmq (PgmqAdapterEnv)
+import Shibuya.Telemetry.Effect (Tracing)
 import Test.Hspec
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
+-- | The effect stack 'runJobEff' interprets for the shipment-notice queue.
+type QueueStack = '[Reader PgmqAdapterEnv, Pgmq, Tracing, Error PgmqRuntimeError, IOE]
+
+{- | The work-queue examples need PGMQ's schema, so its native pg-migrate
+component joins the framework plan applied to the suite's template database —
+one ledger over kiroku, keiro, and pgmq.
+-}
+withJitsureiSuite :: (Fixture -> IO a) -> IO a
+withJitsureiSuite action = do
+    pgmq <- either (fail . show) pure PgmqMigration.pgmqMigrations
+    withMigratedSuiteWith [pgmq] action
+
 main :: IO ()
-main = withMigratedSuite $ \fixture -> hspec $ do
+main = withJitsureiSuite $ \fixture -> hspec $ do
     describe "Jitsurei codec evolution" $ do
         it "upcasts a v1 OrderPlaced payload into the current event shape" $
             decodeRaw
@@ -650,6 +676,112 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                     Store.readStreamForward (StreamName "incident-inc-4") (StreamVersion 0) 10
             let events = either (const []) id (traverse (decodeRecorded incidentCodec) (Vector.toList recorded))
             any isIncidentEscalated events `shouldBe` False
+
+    describe "Jitsurei shipment notices" $ do
+        it "maps OrderShipped to a notice and ignores every other order event" $ do
+            shipmentNoticeFor (OrderShipped sampleShipped)
+                `shouldBe` Just sampleNotice
+            shipmentNoticeFor (OrderPacked (OrderPackedData{orderId = sampleOrderId}))
+                `shouldBe` Nothing
+
+        around (withFreshDatabase fixture) $ do
+            it "drains an enqueued notice into the notices table, idempotently" $ \connStr ->
+                withJobRuntime connStr Nothing $ \runtime -> do
+                    let pool = runtime.runtimePool
+                    -- First delivery: the notice is sent and recorded.
+                    handled <- runQueue runtime $ do
+                        ensureShipmentNoticeQueue pool
+                        _ <- enqueueShipmentNotice sampleNotice
+                        drainShipmentNotices pool 10
+                    handled `shouldBe` 1
+                    noticeCount pool `shouldReturn` 1
+                    recordedNotice pool sampleOrderId
+                        `shouldReturn` Just ("UPS", "TRACK-100")
+
+                    -- At-least-once redelivery: the same notice is handled again
+                    -- and the ON CONFLICT DO NOTHING write leaves one row.
+                    redelivered <- runQueue runtime $ do
+                        _ <- enqueueShipmentNotice sampleNotice
+                        drainShipmentNotices pool 10
+                    redelivered `shouldBe` 1
+                    noticeCount pool `shouldReturn` 1
+
+            it "dead-letters a notice that can never be sent" $ \connStr ->
+                withJobRuntime connStr Nothing $ \runtime -> do
+                    let pool = runtime.runtimePool
+                        unsendable = ShipmentNotice{orderId = sampleOrderId, carrier = Carrier "UPS", trackingId = TrackingId "  "}
+                    handled <- runQueue runtime $ do
+                        ensureShipmentNoticeQueue pool
+                        _ <- enqueueShipmentNotice unsendable
+                        drainShipmentNotices pool 10
+                    handled `shouldBe` 1
+                    -- The handler returned Dead, so nothing was written, the main
+                    -- queue is empty, and the row is parked in the DLQ.
+                    noticeCount pool `shouldReturn` 0
+                    mainQueueDepth runtime `shouldReturn` 0
+                    dlqDepth runtime `shouldReturn` 1
+
+            it "preserves per-order order and drains every grouped notice" $ \connStr ->
+                withJobRuntime connStr Nothing $ \runtime -> do
+                    let pool = runtime.runtimePool
+                        second = ShipmentNotice{orderId = sampleOrderId, carrier = Carrier "DHL", trackingId = TrackingId "TRACK-101"}
+                    handled <- runQueue runtime $ do
+                        ensureShipmentNoticeQueue pool
+                        _ <- enqueueShipmentNotice sampleNotice
+                        _ <- enqueueShipmentNotice second
+                        drainShipmentNotices pool 10
+                    handled `shouldBe` 2
+                    -- Both share one FIFO group (the order id), so the first
+                    -- delivered wins the ON CONFLICT DO NOTHING insert.
+                    noticeCount pool `shouldReturn` 1
+                    recordedNotice pool sampleOrderId
+                        `shouldReturn` Just ("UPS", "TRACK-100")
+                    mainQueueDepth runtime `shouldReturn` 0
+
+-- | Interpret a queue action against the runtime, failing the test on a PGMQ error.
+runQueue :: JobRuntime -> Eff QueueStack a -> IO a
+runQueue runtime act = do
+    result <- runJobEff runtime act
+    either (\err -> fail ("PGMQ runtime error: " <> show err)) pure result
+
+noticeCount :: Pool.Pool -> IO Int64
+noticeCount pool =
+    either (fail . show) pure
+        =<< Pool.use pool (Session.statement () countShipmentNotices)
+
+recordedNotice :: Pool.Pool -> OrderId -> IO (Maybe (Text, Text))
+recordedNotice pool orderId =
+    either (fail . show) pure
+        =<< Pool.use pool (Session.statement (orderIdText orderId) lookupShipmentNotice)
+
+mainQueueDepth :: JobRuntime -> IO Int64
+mainQueueDepth runtime =
+    runQueue runtime (queueLength (shipmentNoticeJob.jobQueue.physicalName))
+
+dlqDepth :: JobRuntime -> IO Int64
+dlqDepth runtime =
+    runQueue runtime (queueLength (shipmentNoticeJob.jobQueue.dlqName))
+
+queueLength :: (Pgmq :> es) => QueueName -> Eff es Int64
+queueLength name = do
+    metrics <- Pgmq.queueMetrics name
+    pure metrics.queueLength
+
+sampleShipped :: OrderShippedData
+sampleShipped =
+    OrderShippedData
+        { orderId = sampleOrderId
+        , carrier = Carrier "UPS"
+        , trackingId = TrackingId "TRACK-100"
+        }
+
+sampleNotice :: ShipmentNotice
+sampleNotice =
+    ShipmentNotice
+        { orderId = sampleOrderId
+        , carrier = Carrier "UPS"
+        , trackingId = TrackingId "TRACK-100"
+        }
 
 sampleOrderId :: OrderId
 sampleOrderId = OrderId "order-100"

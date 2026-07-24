@@ -461,16 +461,35 @@ captured physical/DLQ/table names must match the logical-name derivation.
 changes as BREAKING. See
 [Typed Specifications](typed-spec-toolchain.md).
 
-## Testing
+## A worked example
 
-`keiro-pgmq`'s own suite is the executable reference for everything above —
-enqueue and drain, retry and delay, dead-lettering and redrive, FIFO groups,
-provisioning kinds, context and lease extension, and the span contract:
+[`jitsurei`](../../jitsurei/src/Jitsurei/ShipmentNotices.hs) has a complete
+work queue in the order-fulfillment domain: when an order ships, a versioned job
+payload goes into a per-order FIFO group, and an idempotent handler records the
+notice. [Work Queues](../guides/work-queues.md) walks it end to end — the
+retry-versus-poison decision, the effect-stack boundary, and the
+queue-or-outbox question — and the `Jitsurei shipment notices` block in
+[`jitsurei/test/Main.hs`](../../jitsurei/test/Main.hs) proves it:
 
 ```bash
-cabal test keiro-pgmq-test
+cabal test jitsurei-test
 ```
 
-It runs against an ephemeral PostgreSQL database through the same
-`keiro-test-support` fixture your own suites should use, with PGMQ's migration
-component appended to the framework plan.
+## Testing your own queues
+
+Use the `keiro-test-support` fixture with PGMQ's migration component appended, so
+one template database carries kiroku, keiro, and pgmq:
+
+```haskell
+main = do
+  pgmq <- either (fail . show) pure PgmqMigration.pgmqMigrations
+  withMigratedSuiteWith [pgmq] $ \fixture ->
+    hspec $ around (withFreshDatabase fixture) $ do
+      it "drains" $ \connStr ->
+        withJobRuntime connStr Nothing $ \runtime -> ...
+```
+
+`keiro-pgmq`'s own suite (`cabal test keiro-pgmq-test`) is the exhaustive
+reference for the surface this page documents — every producer variant, retry and
+delay, dead-lettering and redrive, provisioning kinds, lease extension, and the
+span contract.

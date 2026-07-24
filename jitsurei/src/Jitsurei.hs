@@ -12,6 +12,7 @@ module Jitsurei (
     module Jitsurei.Paging,
     module Jitsurei.ReadModels,
     module Jitsurei.ReplayAudit,
+    module Jitsurei.ShipmentNotices,
     module Jitsurei.Snapshots,
     module Jitsurei.Timers,
 )
@@ -30,5 +31,6 @@ import Jitsurei.OrderStream
 import Jitsurei.Paging
 import Jitsurei.ReadModels
 import Jitsurei.ReplayAudit
+import Jitsurei.ShipmentNotices
 import Jitsurei.Snapshots
 import Jitsurei.Timers
