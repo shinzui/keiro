@@ -11,7 +11,7 @@ user-invocable: true
 
 # ExecPlan Skill
 
-You are managing execution plans (ExecPlans) — self-contained living documents that guide implementation of features and system changes. Before doing anything, read the full specification at [PLANS.md](PLANS.md) and follow it to the letter.
+You are managing execution plans (ExecPlans) — self-contained living documents that guide implementation of features and system changes. Before doing anything, read the full specification at [PLANS.md](PLANS.md) and follow it to the letter. For any ADR discovery, citation, creation, update, or validation, also read and follow [ADR.md](ADR.md).
 
 ExecPlans live in the `docs/plans/` directory at the repository root. Each plan is a single Markdown file named with a sequential number prefix followed by a slug derived from its title (e.g., `docs/plans/1-add-template-engine.md`). Each plan begins with a YAML frontmatter block — `id`, `slug`, `title`, `kind: exec-plan`, `created_at`, optional `intention`, optional `master_plan` — so tooling can identify it without parsing prose.
 
@@ -25,13 +25,10 @@ When you write commands, transcripts, diffs, or code into a plan, use fenced cod
 
 ## Architecture Decision Records
 
-Architecture Decision Records (ADRs) live in `docs/adr/`. They hold durable project context: architectural decisions, rejected alternatives, cross-cutting constraints, and other project-level judgments that should survive beyond one plan.
-
-When creating a plan, inspect `docs/adr/` if it exists. Scan filenames and headings first, then read only ADRs that are relevant to the planned work. Do not bulk-read unrelated ADRs. Summarize any relevant ADRs in the plan's Context and Orientation section by path, and say when no relevant ADR exists.
-
-When implementing a plan, update or create ADRs in the same change whenever the implementation changes durable project context. Keep task-local details in the ExecPlan; promote only durable facts and decisions to ADRs.
-
-At completion, distill durable context: review the plan's Decision Log, Surprises & Discoveries, and Outcomes & Retrospective, then promote project-level decisions or lessons into `docs/adr/`. Leave execution notes, transient blockers, and task-local retrospectives in the plan.
+Architecture Decision Records (ADRs) hold durable project context. Follow `ADR.md` for the
+conditional local-filesystem versus profiled-OKF workflow, stable `ADR-N` allocation, strict
+validation, and local versus cross-repository references. Plans remain self-contained: summarize
+the relevant decision context in the plan even when you also cite the ADR.
 
 
 ## Git Trailers
@@ -67,7 +64,7 @@ Create a new ExecPlan. The remaining arguments describe the feature or change.
 
 1. Research the codebase thoroughly before writing anything. Use Glob, Grep, and Read to understand the current state of the repository — file structure, key modules, build system, test infrastructure, and any existing patterns relevant to the planned work.
 
-2. Inspect `docs/adr/` if it exists. Scan ADR filenames and headings, then read only ADRs relevant to this plan. Carry any relevant ADR context into the plan's Context and Orientation section with repository-relative links. If no relevant ADR exists, note that explicitly in the same section.
+2. Follow the discovery workflow in `ADR.md`. Scan ADR filenames and headings, then read only ADRs relevant to this plan. Carry relevant local ADR context into Context and Orientation with repository-relative links; use Mori's exact canonical handle for a cross-repository ADR. If no relevant ADR exists, note that explicitly in the same section.
 
 3. Run the init script to create the file with frontmatter and skeleton:
 

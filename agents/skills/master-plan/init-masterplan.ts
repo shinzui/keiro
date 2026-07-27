@@ -119,9 +119,10 @@ boundary: what is included and what is explicitly excluded.
 Explain how and why the initiative was decomposed into these specific work streams.
 Describe the principles that guided the decomposition (functional concerns, dependency
 minimization, independent verifiability). State alternatives considered and why they
-were rejected. If docs/adr/ exists, scan filenames and headings, read only ADRs relevant
-to this initiative, and cite the relevant ADRs here by repository-relative path. If no
-relevant ADR exists, say so.
+were rejected. Follow the exec-plan skill's ADR.md workflow: scan local filenames and
+headings, read only ADRs relevant to this initiative, and cite them by repository-relative
+path. Cite a cross-repository ADR only with the exact canonical handle returned by Mori.
+If no relevant ADR exists, say so.
 
 
 ## Exec-Plan Registry

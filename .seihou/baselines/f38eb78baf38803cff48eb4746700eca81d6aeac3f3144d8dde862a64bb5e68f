@@ -16,11 +16,11 @@ When researching a design with challenging requirements or significant unknowns,
 
 ## Relationship to ADRs
 
-Architecture Decision Records (ADRs) live in `docs/adr/`. ADRs are durable project memory: architectural decisions, rejected alternatives, cross-cutting constraints, and lessons that remain useful after one plan is complete.
+Architecture Decision Records (ADRs) are durable project memory: architectural decisions, rejected alternatives, cross-cutting constraints, and lessons that remain useful after one plan is complete. The shared operational contract is in `ADR.md` beside this specification.
 
-An ExecPlan is active execution memory. It must contain enough context to restart and finish the work, including relevant ADR context, but it should not become the long-term home for durable project judgment. During plan creation, inspect `docs/adr/` when it exists, scan filenames and headings, and read only ADRs relevant to the work. Do not bulk-load unrelated ADRs. In the plan's Context and Orientation section, list the relevant ADRs consulted by repository-relative path, or state that no relevant ADR was found.
+An ExecPlan is active execution memory. It must contain enough context to restart and finish the work, including relevant ADR context, but it should not become the long-term home for durable project judgment. During plan creation, follow `ADR.md`: inspect the local corpus when it exists, scan filenames and headings, and read only ADRs relevant to the work. In Context and Orientation, cite local ADRs by repository-relative path and cross-repository ADRs by Mori's exact project-and-bundle-scoped handle, or state that no relevant ADR was found.
 
-During implementation, update or create ADRs whenever the work changes durable project context. At completion, distill the plan: review Decision Log, Surprises & Discoveries, and Outcomes & Retrospective, then promote project-level decisions, constraints, gotchas, and architectural lessons into `docs/adr/`. Leave task-local execution notes and transient details in the plan.
+During implementation, update or create ADRs whenever the work changes durable project context. Honor the repository's existing ADR convention; when `docs/adr/` is a profile-governed OKF bundle, preserve or allocate its stable handle and run strict profile enforcement as specified in `ADR.md`. At completion, distill the plan: review Decision Log, Surprises & Discoveries, and Outcomes & Retrospective, then promote project-level decisions, constraints, gotchas, and architectural lessons into `docs/adr/`. Leave task-local execution notes and transient details in the plan.
 
 
 ## Non-Negotiable Requirements
@@ -60,7 +60,7 @@ Anchor the plan with observable outcomes. State what the user can do after imple
 
 Specify repository context explicitly. Name files with full repository-relative paths, name functions and modules precisely, and describe where new files should be created. If touching multiple areas, include a short orientation paragraph that explains how those parts fit together so a novice can navigate confidently. When running commands, show the working directory and exact command line. When outcomes depend on environment, state the assumptions and provide alternatives when reasonable.
 
-If relevant ADRs exist under `docs/adr/`, summarize the parts that matter for this plan and link each ADR by repository-relative path. If no relevant ADR exists, say so. Do not require the implementer to read unrelated ADRs to understand the plan.
+If relevant local ADRs exist under `docs/adr/`, summarize the parts that matter and link each by repository-relative path. Cite cross-repository ADRs with an exact canonical Mori handle discovered through the registry. If no relevant ADR exists, say so. Do not require the implementer to read unrelated ADRs to understand the plan.
 
 Be idempotent and safe. Write the steps so they can be run multiple times without causing damage or drift. If a step can fail halfway, include how to retry or adapt. If a migration or destructive operation is necessary, spell out backups or safe fallbacks. Prefer additive, testable changes that can be validated as you go.
 

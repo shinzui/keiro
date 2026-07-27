@@ -32,9 +32,9 @@ When you write commands, transcripts, diffs, or code into a MasterPlan or any ch
 
 ## Architecture Decision Records
 
-Architecture Decision Records (ADRs) live in `docs/adr/`. They hold durable project context: architectural decisions, rejected alternatives, cross-cutting constraints, and other project-level judgments that should survive beyond one plan.
+Architecture Decision Records (ADRs) hold durable project context. Before any ADR discovery, citation, creation, update, or validation, read and follow `agents/skills/exec-plan/ADR.md`, the shared contract installed by the exec-plan dependency.
 
-When creating a MasterPlan, inspect `docs/adr/` if it exists. Scan filenames and headings first, then read only ADRs relevant to the initiative. Do not bulk-read unrelated ADRs. Carry relevant ADR context into the MasterPlan and into any child ExecPlans whose work depends on it.
+When creating a MasterPlan, use that guide to inspect the local corpus and any relevant Mori-indexed cross-repository decisions. Read only ADRs relevant to the initiative. Carry their context into the MasterPlan and into any child ExecPlans whose work depends on it; use repository-relative links locally and exact canonical Mori handles across repositories.
 
 When implementing or updating a MasterPlan, update or create ADRs in the same change whenever the initiative changes durable project context. MasterPlans should especially identify cross-plan decisions that deserve ADR records: architecture boundaries, decomposition rationale that will matter later, shared interface ownership, durable integration constraints, and deliberate exclusions.
 
@@ -73,7 +73,7 @@ Create a new MasterPlan and all its child ExecPlans. The remaining arguments des
 
 1. Research the codebase thoroughly before writing anything. Use Glob, Grep, and Read to understand the repository: file structure, key modules, build system, test infrastructure, dependency management, and existing patterns. A MasterPlan coordinates multiple plans, so you need both broad and deep understanding of the codebase. The research must be proportional to the initiative's scope.
 
-2. Inspect `docs/adr/` if it exists. Scan ADR filenames and headings, then read only ADRs relevant to this initiative. Carry relevant ADR context into the MasterPlan and any child ExecPlans affected by it. If no relevant ADR exists, note that explicitly in the MasterPlan.
+2. Follow `agents/skills/exec-plan/ADR.md`. Scan local ADR filenames and headings, search Mori when cross-repository decisions may apply, and read only relevant records. Carry the context into the MasterPlan and affected child ExecPlans, using repository-relative links locally and exact Mori handles across repositories. If no relevant ADR exists, note that explicitly in the MasterPlan.
 
 3. Identify the natural work streams. Group by functional concern, not by file. Each work stream should produce an independently verifiable behavior. Aim for two to seven child plans per the decomposition principles in MASTERPLAN.md. If you identify more than seven, introduce phases to group them into implementation waves.
 
