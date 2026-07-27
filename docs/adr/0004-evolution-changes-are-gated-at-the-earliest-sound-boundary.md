@@ -1,3 +1,13 @@
+---
+type: Architecture Decision Record
+title: Evolution changes are gated at the earliest sound boundary
+description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
+timestamp: 2026-07-23T19:51:44Z
+docId: ADR-4
+status: Accepted
+date: 2026-07-23
+---
+
 # 4. Evolution changes are gated at the earliest sound boundary
 
 Date: 2026-07-23

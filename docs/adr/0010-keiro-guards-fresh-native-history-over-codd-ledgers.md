@@ -1,4 +1,14 @@
-# 3. Keiro guards fresh native history over codd ledgers
+---
+type: Architecture Decision Record
+title: Keiro guards fresh native history over codd ledgers
+description: A Keiro read-only preflight blocks keiro-migrate up from initializing fresh native history over an existing codd ledger.
+timestamp: 2026-07-23T23:59:17Z
+docId: ADR-10
+status: Accepted
+date: 2026-07-23
+---
+
+# 10. Keiro guards fresh native history over codd ledgers
 
 Date: 2026-07-23
 

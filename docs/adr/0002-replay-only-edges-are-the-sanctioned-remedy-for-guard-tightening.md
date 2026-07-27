@@ -1,3 +1,13 @@
+---
+type: Architecture Decision Record
+title: Replay-only edges are the sanctioned remedy for guard tightening
+description: Retired guards keep an inverting edge through keiki's ReplayOnly edge mode instead of the guarded-but-inert command-flag hack.
+timestamp: 2026-07-23T17:14:35Z
+docId: ADR-2
+status: Accepted
+date: 2026-07-23
+---
+
 # 2. Replay-only edges are the sanctioned remedy for guard tightening
 
 Date: 2026-07-23

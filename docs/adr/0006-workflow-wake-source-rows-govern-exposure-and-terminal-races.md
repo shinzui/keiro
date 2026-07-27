@@ -1,3 +1,13 @@
+---
+type: Architecture Decision Record
+title: Workflow wake-source rows govern exposure and terminal races
+description: Wake-source rows are the durable authority for exposure and terminal lifecycle while generation-scoped journal entries deliver their results.
+timestamp: 2026-07-23T20:36:44Z
+docId: ADR-6
+status: Accepted
+date: 2026-07-23
+---
+
 # 6. Workflow wake-source rows govern exposure and terminal races
 
 Date: 2026-07-23

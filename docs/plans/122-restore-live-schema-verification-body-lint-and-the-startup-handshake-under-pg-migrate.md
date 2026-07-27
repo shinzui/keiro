@@ -56,7 +56,7 @@ documented in `docs/user/migrations.md`.
 - [x] (2026-07-23T22:49:00Z) Milestone 2: `missingMigrations` and `StartupHandshake` exported from `Keiro.Migrations`; fresh/fully-migrated/half-applied tests green; `docs/user/migrations.md` Application startup section documents the handshake. Validation: `cabal build keiro-migrations` and `cabal test keiro-migrations-test --test-show-details=direct` passed (17 examples, 0 failures).
 - [x] (2026-07-23T23:02:00Z) Milestone 3: `Keiro.Migrations.SchemaCheck` library module with canonical snapshot, comparison, and embedded expected snapshot; checked-in `expected-schema/native/keiro-v18.txt` generated and validated by a suite test with a regeneration mode. Validation: the full suite passed (19 examples); the snapshot contains 300 lines including `keiro_dead_letters`, `state_shape_hash`, and `failure_reason`; deleting line 1 failed with the exact expected/actual object names; regeneration restored the same SHA-256 `a78c933c490b3672c2ad2d907b18d024e7b06e128cbcd44ee11f5b027445eca3`.
 - [x] (2026-07-23T23:12:00Z) Milestone 4: `keiro-migrate verify-schema` subcommand wired; drifted-database integration test exits with named drifted objects; `docs/user/migrations.md` documents `verify-schema`; suite green end to end. Validation: `cabal test keiro-migrations-test --test-show-details=direct` passed (20 examples); CLI help lists `verify-schema`; a local scratch database returned exit 0 with `schema verification succeeded`, then exit 1 naming `keiro_outbox_pending_idx` after that index was dropped; the scratch database was removed.
-- [x] (2026-07-23T23:26:00Z) Final validation and closure: `just verify` passed, including 372 `keiro-test` examples, 58 `keiro-pgmq-test` examples (2 expected pending), 17 `jitsurei-test` examples, diagram freshness, and 20 `keiro-migrations-test` examples. The sibling pg-migrate worktree remained clean. The durable live-schema boundary is recorded in ADR 0002.
+- [x] (2026-07-23T23:26:00Z) Final validation and closure: `just verify` passed, including 372 `keiro-test` examples, 58 `keiro-pgmq-test` examples (2 expected pending), 17 `jitsurei-test` examples, diagram freshness, and 20 `keiro-migrations-test` examples. The sibling pg-migrate worktree remained clean. The durable live-schema boundary is recorded in ADR 0009.
 
 
 ## Surprises & Discoveries
@@ -205,7 +205,7 @@ deparsing is role-sensitive unless `search_path` is fixed; the canonical query n
 locally.
 
 Repository-wide verification passed. The implementation required no schema migration,
-no dependency-bound change, and no edit to the pg-migrate checkout. ADR 0002 records the
+no dependency-bound change, and no edit to the pg-migrate checkout. ADR 0009 records the
 separation between ledger verification and Keiro-owned live-schema verification so future
 work does not collapse the two contracts.
 

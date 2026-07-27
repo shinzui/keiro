@@ -1,3 +1,13 @@
+---
+type: Architecture Decision Record
+title: Workflow failure history is immutable and derived terminal state is revivable
+description: Terminal workflow failure history stays append-only immutable while its derived runnable-state projections are explicitly revivable.
+timestamp: 2026-07-23T21:27:22Z
+docId: ADR-8
+status: Accepted
+date: 2026-07-23
+---
+
 # 8. Workflow failure history is immutable and derived terminal state is revivable
 
 Date: 2026-07-23

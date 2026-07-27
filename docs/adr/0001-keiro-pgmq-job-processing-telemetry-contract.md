@@ -1,3 +1,13 @@
+---
+type: Architecture Decision Record
+title: keiro-pgmq job processing emits one process span per delivery on both execution paths
+description: Both keiro-pgmq job-execution paths emit exactly one process span per delivery under a shared observable contract rather than a shared implementation.
+timestamp: 2026-07-22T18:31:41Z
+docId: ADR-1
+status: Accepted
+date: 2026-07-22
+---
+
 # 1. keiro-pgmq job processing emits one process span per delivery on both execution paths
 
 Date: 2026-07-22

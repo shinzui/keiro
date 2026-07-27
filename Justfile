@@ -12,8 +12,16 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify
+verify: process-compose-check jitsurei haskell-verify adr-validate
     cabal test keiro-migrations-test
+
+# Strict OKF enforcement for the architecture-decision bundle (docs/adr,
+# registered as OKF bundle "adrs" in mori.dhall). Fails on any profile
+# deviation, missing required/recommended frontmatter, malformed/duplicate
+# docId, or stale log.md.
+[group('docs')]
+adr-validate:
+    okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
 
 [group('haskell')]
 haskell-build:

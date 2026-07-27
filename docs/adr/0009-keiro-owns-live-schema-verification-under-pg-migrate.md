@@ -1,4 +1,14 @@
-# 2. Keiro owns live schema verification under pg-migrate
+---
+type: Architecture Decision Record
+title: Keiro owns live schema verification under pg-migrate
+description: Keiro owns live-schema verification as a separate keiro-migrate verify-schema gate, distinct from pg-migrate's ledger-integrity verify.
+timestamp: 2026-07-23T23:28:34Z
+docId: ADR-9
+status: Accepted
+date: 2026-07-23
+---
+
+# 9. Keiro owns live schema verification under pg-migrate
 
 Date: 2026-07-23
 

@@ -37,10 +37,10 @@ EP-3 (plan 124) makes the cutover safe: a preflight on the `up` path that refuse
 
 Alternatives considered. One plan per finding (seven plans) was rejected as far too granular — MIG-4 is one pragma. Two plans (gates vs cutover) was rejected because EP-1 is test-infrastructure-heavy while EP-2 is a build-system change with a policy decision; keeping them separate lets EP-2 land in an afternoon. Doing the preflight in pg-migrate core rather than keiro-migrations is left as an open design choice inside EP-3 (a keiro-side preflight needs no upstream release; an upstream `preApplyCheck` hook would serve kiroku-store-migrations too) — the plan records the tradeoff and decides.
 
-ADR context: `docs/adr/0002-keiro-owns-live-schema-verification-under-pg-migrate.md`
+ADR context: `docs/adr/0009-keiro-owns-live-schema-verification-under-pg-migrate.md`
 now records EP-1's separation of ledger and live-schema verification and its default-build
 gate inventory. EP-2 extends that record with build- and review-time integrity.
-`docs/adr/0003-keiro-guards-fresh-native-history-over-codd-ledgers.md` records EP-3's
+`docs/adr/0010-keiro-guards-fresh-native-history-over-codd-ledgers.md` records EP-3's
 cutover preflight, override, import, and recovery boundary.
 
 
@@ -79,7 +79,7 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
 - [x] (2026-07-23) EP-2: `RecompilePlugin` pragma added; pre-fix stale embed, post-fix compiler failure, and the no-GHC residual reproduced and documented.
 - [x] (2026-07-23) EP-2: Native manifest coverage implemented with a 20-file lock enforced against manifest order, directory membership, and payload bytes in the default suite.
 - [x] (2026-07-24) EP-3: `up` preflight refuses both codd ledger shapes without override; four preflight states and the dominant poisoned-ledger recovery are covered by integration tests, with both trap variants covered by the runbook.
-- [x] (2026-07-24) EP-3: codd-import subcommand mounted in keiro-migrate; confirmation, 23-row import, idempotent rerun, and JSON were drilled; the cutover runbook, sentinel fixup header, and ADR 0003 are complete.
+- [x] (2026-07-24) EP-3: codd-import subcommand mounted in keiro-migrate; confirmation, 23-row import, idempotent rerun, and JSON were drilled; the cutover runbook, sentinel fixup header, and ADR 0010 are complete.
 
 
 ## Surprises & Discoveries
@@ -128,7 +128,7 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
   separate Keiro-owned PostgreSQL 18 snapshot gate.
   Rationale: The gates prove different properties, pg-migrate intentionally does not inspect
   live objects, and its opaque provider cannot run an application-defined Hasql session.
-  ADR 0002 records the snapshot scope, public API boundary, and role-independent
+  ADR 0009 records the snapshot scope, public API boundary, and role-independent
   canonicalization rule.
   Date: 2026-07-23
 
@@ -144,7 +144,7 @@ Cross-plan decision for ADR promotion: the gate-survival table from the review (
   before `up`, blocking exactly when either codd ledger exists and native history is
   absent or empty; permit bypass only through an up-only explicit override.
   Rationale: pg-migrate has no public in-lock connection hook, the guarded state predates
-  the command, and a completed import must allow normal `up`. ADR 0003 records the
+  the command, and a completed import must allow normal `up`. ADR 0010 records the
   check-before-lock rationale, exact boundary, and Kiroku parity follow-up.
   Date: 2026-07-24
 
@@ -167,8 +167,8 @@ ledger shapes, exposes a strict compiled-in history import, proves the dominant
 poisoned-ledger recovery, documents both incident variants, and finishes with independent
 ledger and live-schema checks.
 
-The implementation required no pg-migrate or Kiroku source changes. ADR 0002 captures the
-durable layered-gate boundary, while ADR 0003 captures the cutover policy and accepted
+The implementation required no pg-migrate or Kiroku source changes. ADR 0009 captures the
+durable layered-gate boundary, while ADR 0010 captures the cutover policy and accepted
 pre-lock interval. The remaining cross-repository follow-up is intentionally outside this
 initiative: mirror the preflight in Kiroku's standalone migration CLI.
 

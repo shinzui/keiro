@@ -1,6 +1,6 @@
 let Schema =
-      https://raw.githubusercontent.com/shinzui/mori-schema/1f70781427426c09673d46f8e6733b7e7d0abedc/package.dhall
-        sha256:3b79aae9216456678300441ca8616b64a4b4fa520a1286dfcc418f60899d5d4a
+      https://raw.githubusercontent.com/shinzui/mori-schema/93104153ecf8817547229a867302a70a25c4b3d8/package.dhall
+        sha256:5e00bba267f27069df1d3caadfec2ec6a8c4e797ce652d78c09528f981b71b42
 
 in  Schema.Project::{
     , project = Schema.ProjectIdentity::{
@@ -52,5 +52,14 @@ in  Schema.Project::{
       , "shinzui/shibuya"
       , "hasql/hasql"
       , "effectful/effectful"
+      ]
+    , okfBundles =
+      [ Schema.OkfBundle::{
+        , name = "adrs"
+        , path = "docs/adr"
+        , profile = Some "docs/adr/profile.dhall"
+        , okfVersion = "0.1"
+        , description = Some "Durable architecture decisions"
+        }
       ]
     }

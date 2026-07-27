@@ -1,3 +1,13 @@
+---
+type: Architecture Decision Record
+title: Workflow sleep timers are generation-owned lifecycle state
+description: The workflow generation that first arms a sleep owns that timer, its fire_at/wake_after hint, and its completion.
+timestamp: 2026-07-23T20:59:32Z
+docId: ADR-7
+status: Accepted
+date: 2026-07-23
+---
+
 # 7. Workflow sleep timers are generation-owned lifecycle state
 
 Date: 2026-07-23

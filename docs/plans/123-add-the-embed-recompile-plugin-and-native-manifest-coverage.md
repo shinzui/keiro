@@ -160,7 +160,7 @@ diff and preserves `migrations.lock` as frozen codd-import evidence.
 
 The implementation added no dependency, changed no public library API, and required no
 pg-migrate edit. Repository-wide verification passed. The durable compile/test/deploy gate
-inventory is recorded in ADR 0002.
+inventory is recorded in ADR 0009.
 
 
 ## Context and Orientation
@@ -171,7 +171,7 @@ checkouts are read-only references: pg-migrate at `/Users/shinzui/Keikaku/bokuno
 (the local source of the pinned `pg-migrate` 1.1.0.0 family) and kiroku at
 `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`.
 
-`docs/adr/0002-keiro-owns-live-schema-verification-under-pg-migrate.md` is relevant.
+`docs/adr/0009-keiro-owns-live-schema-verification-under-pg-migrate.md` is relevant.
 It separates pg-migrate's ledger guarantee from Keiro-owned default-build gates and states
 that the checks are defense in depth rather than substitutes for one another. This plan
 extends that inventory with compile-time directory revalidation and review-time native

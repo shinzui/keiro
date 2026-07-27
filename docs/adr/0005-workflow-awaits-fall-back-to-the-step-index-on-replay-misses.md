@@ -1,3 +1,13 @@
+---
+type: Architecture Decision Record
+title: Workflow awaits fall back to the step index on replay misses
+description: On an await replay-map miss the workflow interpreter falls back to the generation-scoped step index before arming and suspending.
+timestamp: 2026-07-23T20:14:43Z
+docId: ADR-5
+status: Accepted
+date: 2026-07-23
+---
+
 # 5. Workflow awaits fall back to the step index on replay misses
 
 Date: 2026-07-23

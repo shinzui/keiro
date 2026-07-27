@@ -1,3 +1,13 @@
+---
+type: Architecture Decision Record
+title: Snapshot compatibility is a three-component discriminator
+description: Snapshot compatibility is gated on state codec version, register-layout hash, and control-state/replay-fold hash together.
+timestamp: 2026-07-23T16:27:28Z
+docId: ADR-3
+status: Accepted
+date: 2026-07-23
+---
+
 # 3. Snapshot compatibility is a three-component discriminator
 
 Date: 2026-07-23
