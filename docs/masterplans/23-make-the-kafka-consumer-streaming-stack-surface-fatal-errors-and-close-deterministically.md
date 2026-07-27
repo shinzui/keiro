@@ -34,7 +34,7 @@ ADR context: no relevant ADR in keiro's `docs/adr/`. Candidate ADR: the consumer
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Surface librdkafka fatal errors through the consumer stack | docs/plans/135-surface-librdkafka-fatal-errors-through-the-consumer-stack.md | None | None | In Progress |
+| 1 | Surface librdkafka fatal errors through the consumer stack | docs/plans/135-surface-librdkafka-fatal-errors-through-the-consumer-stack.md | None | None | Complete (2026-07-27) |
 | 2 | Classify poll and commit errors and fix traced-context hygiene | docs/plans/136-classify-poll-and-commit-errors-and-fix-traced-context-hygiene.md | None | EP-1 | Not Started |
 | 3 | Guarantee deterministic consumer close in hw-kafka-streamly | docs/plans/137-guarantee-deterministic-consumer-close-in-hw-kafka-streamly.md | None | None | Not Started |
 
@@ -57,8 +57,10 @@ Cross-plan decision for ADR promotion: the fatal-observability contract and the 
 
 ## Progress
 
-- [ ] EP-1: hw-kafka-client fork surfaces consumer-queue fatals (and destroys dropped messages, stops unconditional watchdog resets); upstream PR filed; pin recipe documented.
-- [ ] EP-1: `isFatal` gains `RdKafkaRespErrFatal` + SASL arms; taxonomy test updated; fenced-consumer path terminates loudly in Sync mode.
+- [x] EP-1: hw-kafka-client fork surfaces consumer fatals (and destroys the messages its background loop consumes); pin recipe documented — done 2026-07-27. Pin: `shinzui/hw-kafka-client` @ `5259ddf3c8811b662470b773f8c3d7ed52602c7e`. Two deviations from the plan, both recorded in plan 135's Decision Log: the fatal is surfaced by reading `rd_kafka_fatal_error` directly per poll rather than through a `KafkaConf` fatal sink, and the *generic* `RdKafkaRespErrFatal` is reported rather than the resolved cause. The unconditional watchdog reset is **documented, not fixed** — that was the plan's Route A decision, not a shortfall.
+- [ ] EP-1: Upstream PR — written but **deliberately not filed** (user direction, 2026-07-27). Text preserved in plan 135; submitting later is one `gh pr create` command. Treat the pin as long-lived.
+- [x] EP-1: `isFatal` gains `RdKafkaRespErrFatal` + SASL arms; taxonomy test updated (20 fatal + 3 non-fatal, plus a `skipNonFatal` regression case); fenced-consumer path terminates loudly in Sync mode — done 2026-07-27. Fail-then-pass demonstrated: `3 out of 61 tests failed` with only the test change, `All 61 tests passed` with the source change.
+- [x] EP-1: ADR-11 written — `docs/adr/0011-kafka-consumer-fatal-errors-are-surfaced-in-band-in-both-poll-modes.md`, strict-validated. This is the fatal-observability contract the Integration Points section called for; EP-2 and EP-3 extend it rather than starting their own.
 - [ ] EP-2: Poll errors classified (EOF/auto-offset-reset in-band or swallowed; fatals thrown); `NoOffset` commits succeed; context save/attach/detach correct with new-root for headerless; total header decoding; first consumer-interpreter tests pass.
 - [ ] EP-3: Deterministic-close bracket shipped; worked example fixed; GC-deferral documented on legacy entry points; zombie-consumer regression test.
 
@@ -69,6 +71,10 @@ Cross-plan decision for ADR promotion: the fatal-observability contract and the 
 - Verification (2026-07-23): KSC-3 hardened — `error_cb` cannot see consumer fatals (return-as-message short-circuits before the error branch), hw-kafka-client has no `rd_kafka_fatal_error` binding, and the Async loop leaks every message it voids; "no layer observes by default" became "no layer can observe".
 - Verification (2026-07-23): KSC-2's symptom is Sync-mode-only; in the default Async mode the fatal never reaches the stream — the two findings are one hole with two halves, fixed across EP-1's two components.
 - Plan authoring (2026-07-23), affects EP-2: KSC-4's auto-offset-reset trigger is narrower than stated — librdkafka emits `ERR__AUTO_OFFSET_RESET` as a consumer error only under `auto.offset.reset=error` or a failed reset; a successful retention-loss reset only logs. The classification fix is unchanged; docs/plans/136 states the accurate trigger.
+- EP-1 implementation (2026-07-27), **affects EP-2**: the fatal is surfaced as the *generic* `KafkaResponseError RdKafkaRespErrFatal`, identically in both poll modes, not as the resolved original cause. Plan 135 had left this open and flagged that EP-2's classifier depends on the answer. Consequence for EP-2: classify `RdKafkaRespErrFatal` and add **no** per-cause arms (no `FencedInstanceId` arm, etc.) — an enumeration of causes would silently regress whenever librdkafka adds a new one. The cause and its description remain available from the fork's new `Kafka.Consumer.consumerFatalError`.
+- EP-1 implementation (2026-07-27), affects EP-2 and EP-3: the upstream fix needed **no** change to `KafkaConf` or any other internal type, because `rd_kafka_fatal_error` turned out to be cheap enough to call on every poll (an atomic read with an early return when no fatal is raised). The plan's fatal-sink `IORef` design was dropped. Anything in EP-2/EP-3 that assumed a new `KafkaConf` field should drop that assumption; the fork's only new export is `consumerFatalError`, and no exported function changed type.
+- EP-1 implementation (2026-07-27), **affects EP-3**, which builds the same repo: `hw-kafka-streamly` was unbuildable as checked out. Its `cabal.project` pinned `with-compiler: ghc-9.12.2`, which is not installed, while the repo's own devShell provides GHC 9.12.4 (`nix/haskell.nix:40`, `ghc9124`) — flake-input drift the pin never followed. Fixed in EP-1 by repointing the pin at `ghc-9.12.4`. EP-3 gets a working repo.
+- EP-1 implementation (2026-07-27), affects every repo in the stack: the pin is **not** yet adopted by `kafka-effectful` or `shibuya-kafka-adapter`, per this MasterPlan's Integration Points (EP-1 owns the recipe, consumers adopt on next build). Until a repo adopts it, that repo keeps async-mode fatal blindness even if its own classifier is correct — so EP-2's kafka-effectful work should adopt the pin, which requires *creating* a `cabal.project` there since the repo has none.
 - Plan authoring (2026-07-23), affects EP-1: the `rd_kafka_queue_poll` alternative for avoiding watchdog resets is refuted — any poll of a consumer-flagged queue resets `max.poll.interval.ms` (librdkafka `rdkafka_queue.c:134-138`); docs/plans/135 documents the watchdog defect in the primary route and records the main-queue/forward route (needing a new binding) as PR follow-up.
 
 
@@ -81,6 +87,14 @@ Cross-plan decision for ADR promotion: the fatal-observability contract and the 
 - Decision: KSC-6's span-timing observation (zero-duration process span) is fixed as part of EP-2's context hygiene, but reshaping the span to cover user processing is out of scope.
   Rationale: Covering processing requires an API change (handler-wrapping) that belongs to a telemetry initiative, not a correctness fix; the ADR-0001-style contract for this stack can note it.
   Date: 2026-07-23
+
+- Decision: Fork `hw-kafka-client` and prepare the upstream PR, but do not submit it.
+  Rationale: User direction on 2026-07-27, when the fork question was raised directly during EP-1. Before proceeding, the whole fatal-blindness chain was re-verified from librdkafka and binding sources (recorded in plan 135's Surprises & Discoveries) — every link held, including the decisive one that `RD_KAFKA_OP_CONSUMER_ERR` returns to the application *before* the branch that would call `error_cb`, which is why no downstream workaround can exist. A fork-free alternative was weighed and rejected: forcing `CallbackPollModeSync` everywhere would surface the fatal in-band with only our own `isFatal` fix, but Sync mode disables `pollMessageBatch`, which `kafka-effectful` exposes and uses, and it leaves the upstream rkmessage leak in place. The pin is the deliverable; the PR is an exit strategy that can be exercised at any time.
+  Date: 2026-07-27
+
+- Decision: Write the fatal-observability ADR at the end of EP-1 rather than deferring it to whichever child plan finishes last.
+  Rationale: The MasterPlan named this as the candidate cross-plan ADR, and plan 135's own Validation step suggested the last plan complete it. But EP-1 alone establishes the durable obligations — the in-band contract, the generic-code rule, and a fork pin every repo in the stack must carry — and an unwritten obligation is an invisible one. `ADR-11` is written now and explicitly names EP-2 and EP-3 as pending extensions to be folded in when they land.
+  Date: 2026-07-27
 
 
 ## Outcomes & Retrospective

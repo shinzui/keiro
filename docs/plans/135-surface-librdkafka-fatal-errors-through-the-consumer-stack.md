@@ -71,14 +71,32 @@ table) and `docs/plans/137-guarantee-deterministic-consumer-close-in-hw-kafka-st
       surface consumer fatal errors and stop leaking polled messages" --body-file
       PR_BODY.md` from the fork clone. Left unchecked as a standing reminder, not as
       incomplete work.
-- [ ] M2: `isFatal` in `hw-kafka-streamly` gains `RdKafkaRespErrFatal` and
+- [x] M2: `isFatal` in `hw-kafka-streamly` gains `RdKafkaRespErrFatal` and
       `RdKafkaRespErrSaslAuthenticationFailed` arms; `StreamTest.hs` taxonomy pins
-      updated (20 fatal + 3 non-fatal); tests pass.
-- [ ] M3: Fork pin applied to `hw-kafka-streamly/cabal.project`; pin stanzas for
-      `kafka-effectful` and `shibuya-kafka-adapter` documented here for adoption on
-      their next build; CHANGELOG entries written.
-- [ ] Optional demo: fenced-consumer end-to-end repro against local Redpanda executed
-      and transcript captured here.
+      updated (20 fatal + 3 non-fatal); tests pass — done 2026-07-27. Fail-then-pass
+      demonstrated: with only the test change applied, exactly three cases failed
+      (`fatal: RdKafkaRespErrFatal`, `fatal: RdKafkaRespErrSaslAuthenticationFailed`,
+      `keeps a librdkafka fatal error` → `3 out of 61 tests failed`); with the source
+      change applied, `All 61 tests passed`.
+- [x] M3: Fork pin applied to `hw-kafka-streamly/cabal.project` — done 2026-07-27.
+      `cabal build all` resolves the fork (`HEAD is now at 5259ddf fix(consumer):
+      surface consumer fatal errors and stop leaking polled messages`) and the suite
+      still passes under the pin.
+- [x] M3: Pin stanzas for `kafka-effectful` and `shibuya-kafka-adapter` documented
+      below for adoption on their next build — done 2026-07-27; both repos' current
+      state re-verified (see Surprises & Discoveries).
+- [x] M3: CHANGELOG entry written — done 2026-07-27, in
+      `hw-kafka-streamly/CHANGELOG.md` under a new `## Unreleased` heading. Not
+      applicable to the fork; see Decision Log.
+- [x] ADR distillation: `docs/adr/0011-kafka-consumer-fatal-errors-are-surfaced-in-band-in-both-poll-modes.md`
+      (`ADR-11`) written 2026-07-27; `okf validate --strict --profile-enforce
+      --log-enforce` → `OK: 11 concepts`; `log.md` entry appended with `okf log add`.
+      Written now rather than deferred to the last sibling plan because EP-1 alone
+      establishes the durable contract and the fork-pin obligation; the record names
+      plans 136 and 137 as pending extensions.
+- [ ] Optional demo (not gating): fenced-consumer end-to-end repro against local
+      Redpanda. Not executed — see Outcomes & Retrospective for why and for exactly how
+      to run it if the evidence is wanted.
 
 
 ## Surprises & Discoveries
@@ -185,6 +203,35 @@ sources on disk; treat these as the evidence base for the design below.
 - Implementation (2026-07-27): `haskell-works/hw-kafka-client` has **no** `CHANGELOG.md`
   (`README.md` is the only top-level Markdown file), so M1's CHANGELOG instruction does
   not apply upstream. See Decision Log.
+- Blocker found and fixed (2026-07-27), **affects sibling plan 137**, which builds the
+  same repo: `hw-kafka-streamly` could not build at all. Its `cabal.project` pinned
+  `with-compiler: ghc-9.12.2`, but that compiler is not installed and the repo's own Nix
+  devShell provides `ghc9124` (`nix/haskell.nix:40`), i.e. GHC 9.12.4. Symptom:
+
+  ```text
+  Error: [Cabal-5490]
+  Cannot find the program 'ghc'. User-specified path 'ghc-9.12.2' does not refer to an
+  executable and the program is not on the system path.
+  ```
+
+  Flake-input drift moved the devShell's compiler without the pin following. Repointed
+  the pin at `ghc-9.12.4`; `dist-newstyle/build/aarch64-osx/` confirms the repo had last
+  been built with 9.12.2. Anyone picking up plan 137 gets a working repo now.
+- Verified for M3 (2026-07-27), both propagation claims still hold: `kafka-effectful` has
+  no `cabal.project` (only `kafka-effectful.cabal`), so adopting the pin there means
+  creating one; `shibuya-project/shibuya-kafka-adapter/cabal.project` exists and already
+  carries an `hs-opentelemetry` `source-repository-package` block with a `subdir:` list,
+  which is the in-repo precedent for the stanza shape. Note that block pins
+  hs-opentelemetry's `instrumentation/hw-kafka-client` sub-package — that is an
+  *instrumentation wrapper*, not `hw-kafka-client` itself, so it does not conflict with
+  this pin.
+- Design discovery (2026-07-27) that simplified the whole upstream patch:
+  `rd_kafka_fatal_error` is a public `RD_EXPORT` symbol (`src/rdkafka.h:846-848`) whose
+  no-fatal path is a single atomic read with an early return, taking no locks and writing
+  nothing to the caller's buffer (`src/rdkafka.c:868-878`). That makes it cheap enough to
+  call on every poll, which in turn made the plan's `KafkaConf` fatal-sink `IORef`
+  unnecessary. See Decision Log — the patch ended up at 144 insertions across 3 files
+  with no internal type changes.
 
 
 ## Decision Log
@@ -305,6 +352,26 @@ sources on disk; treat these as the evidence base for the design below.
   Date: 2026-07-27
 
 
+- Decision: Repoint `hw-kafka-streamly/cabal.project` at `ghc-9.12.4`.
+  Rationale: Not optional scope — the repo was unbuildable as checked out, because the
+  pinned `ghc-9.12.2` is not installed and the repo's own devShell provides 9.12.4
+  (`nix/haskell.nix:40`, `ghc9124`). Matching the pin to the devShell is the minimal fix
+  and keeps the two sources of truth agreeing. Recorded because it is a change to a file
+  this plan otherwise only appends a pin to, and because sibling plan 137 builds the same
+  repo and would have hit the same wall.
+  Date: 2026-07-27
+
+- Decision: Write ADR-11 now, at the end of EP-1, rather than deferring it to whichever
+  sibling plan finishes last as this plan's Validation step 5 suggested.
+  Rationale: EP-1 on its own establishes the durable, cross-repository obligations — the
+  in-band fatal contract, the generic-code-not-cause rule, and the fork pin that every
+  repo building the stack must carry. Deferring the record while the pin is already
+  landing risks the obligation being invisible to the next contributor. The ADR names
+  plans 136 and 137 as pending extensions and asks to be revised when they land, which
+  preserves the coordination intent without leaving the contract unwritten.
+  Date: 2026-07-27
+
+
 ## Upstream PR text (prepared, not submitted)
 
 Preserved here so the plan stays self-contained and restartable: the working copy in the
@@ -328,7 +395,68 @@ injectable.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-07-27. A fenced or otherwise fatally-dead consumer is now observable in
+both callback poll modes, and the stream terminates on it instead of polling forever.
+
+What shipped. In `shinzui/hw-kafka-client` @ `5259ddf3c8811b662470b773f8c3d7ed52602c7e`
+(branch `fix/async-consumer-fatal-observability`, based on `v5.3.0`): a binding for
+`rd_kafka_fatal_error`, which the package previously lacked; a fatal pre-check in
+`pollMessage` and `pollMessageBatch` that reports
+`Left (KafkaResponseError RdKafkaRespErrFatal)` before polling and keeps reporting it; a
+new exported `consumerFatalError` returning the underlying cause and librdkafka's
+description; message destruction in `pollConsumerEvents'`, ending the leak; and a haddock
+warning on `CallbackPollModeAsync` that `max.poll.interval.ms` cannot detect a stuck
+application in that mode. No exported function changed type and `KafkaConf` is untouched.
+In `hw-kafka-streamly`: two new `isFatal` arms with an explanatory haddock, three new test
+cases, a `## Unreleased` CHANGELOG section, the fork pin, and a compiler-pin repair. In
+keiro: this plan and `docs/adr/0011-...md` (`ADR-11`).
+
+Evidence. Fork: `cabal build hw-kafka-client` clean, `cabal test test:tests` →
+`7 examples, 0 failures`. Streamly, tests-first: `3 out of 61 tests failed` naming exactly
+the three new cases, then `All 61 tests passed` after the source fix, then still passing
+with the pin resolving to the fork commit (`HEAD is now at 5259ddf`).
+
+What went differently from the plan, and why it was better. The plan specified a fatal-sink
+`IORef` on `KafkaConf`, anticipating that GHC exhaustiveness errors would drive fixes
+across eleven positional pattern sites. Reading `rd_kafka_fatal_error`'s implementation
+during M1 showed the sink was unnecessary: the C call is an atomic read with an early
+return when no fatal is raised, so it can simply be called on every poll. That removed the
+type change entirely, removed the shared mutable state, and closed a race the sink design
+had — the application polling the side queue before the background loop dequeues the error
+op. The general lesson: the plan's design was chosen before anyone had read the cost of the
+C function it was working around.
+
+The plan also left open whether to report the original fatal cause or the generic wrapper.
+Reporting the generic `RdKafkaRespErrFatal` turned out to be the load-bearing choice: it
+makes both poll modes deliver an identical value, so `isFatal` needs one arm instead of an
+open-ended list of causes that would silently regress whenever librdkafka added a new one.
+**Sibling plan 136 should classify `RdKafkaRespErrFatal` and needs no per-cause arms.**
+
+What remains. The upstream PR is written but deliberately unsubmitted (user direction); to
+submit, run `gh pr create --repo haskell-works/hw-kafka-client --title "fix(consumer):
+surface consumer fatal errors and stop leaking polled messages" --body-file PR_BODY.md`
+from `/Users/shinzui/Keikaku/bokuno/hw-kafka-client`. Until then the pin should be assumed
+long-lived. `kafka-effectful` and `shibuya-kafka-adapter` have **not** been edited — per
+MasterPlan 23's Integration Points this plan owns the recipe and consumers adopt it on
+their next build; their stanzas are recorded in Plan of Work above, and `kafka-effectful`
+needs a `cabal.project` created since it has none. Until each adopts the pin, that repo
+keeps async-mode fatal blindness even though its `isFatal` is now correct.
+
+The optional fenced-consumer demo was not run. It needs Docker for `rpk container start`,
+two coordinated OS processes, and a scratch program; the plan marks it evidence rather than
+gating, and the causal chain is already proven from librdkafka's own sources at the level
+of individual dispatch branches (see Surprises & Discoveries). It is worth running before
+any production rollout that depends on the async-mode path. To do it: `just process-up` and
+`just create-topic` in `/Users/shinzui/Keikaku/bokuno/hw-kafka-streamly`, then two
+processes subscribing to `jitsurei-topic` with the same `groupId` and the same
+`group.instance.id` in `extraProps`; the first process's stream should end with
+`Left (KafkaResponseError RdKafkaRespErrFatal)` within one poll interval, and
+`consumerFatalError` should report `RdKafkaRespErrFencedInstanceId`. Tear down with
+`just process-down`.
+
+A note for whoever picks up plan 137: `hw-kafka-streamly` was unbuildable when this plan
+started, for reasons unrelated to it (a stale compiler pin). That is fixed, so the repo
+builds clean.
 
 
 ## Context and Orientation
