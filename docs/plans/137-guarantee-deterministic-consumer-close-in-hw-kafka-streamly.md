@@ -4,6 +4,7 @@ slug: guarantee-deterministic-consumer-close-in-hw-kafka-streamly
 title: "Guarantee deterministic consumer close in hw-kafka-streamly"
 kind: exec-plan
 created_at: 2026-07-23T04:18:42Z
+intention: intention_01kyhskznseyk9f76y9z8ddt1q
 master_plan: "docs/masterplans/23-make-the-kafka-consumer-streaming-stack-surface-fatal-errors-and-close-deterministically.md"
 ---
 
@@ -55,14 +56,36 @@ downstream can break.
 
 ## Progress
 
-- [ ] M1: `withKafkaConsumerStream` (and the injectable internal helper) implemented;
-      module worked example rewritten to use it; GC-deferral warnings added to
-      `kafkaStream` and `kafkaStreamAutoClose` haddocks.
-- [ ] M2: Zombie regression test added (close-flag determinism under `take`
-      abandonment, against a real broker-less consumer) and green; failure mode
-      demonstrated against a bracketIO-based variant and transcript captured.
-- [ ] M3: CHANGELOG updated; deprecation posture recorded; release coordinated with
-      plan 135; optional broker-backed group-membership verification executed.
+- [x] M1: `withKafkaConsumerStream`, `withKafkaConsumerStreamOn` and the injectable
+      internal helper `withConsumerStreamVia` implemented (helper exported from
+      `Kafka.Streamly.Stream` under an "Internal — exported for tests" section, not a
+      separate `.Internal` module — see Decision Log); module worked example rewritten;
+      module header's "Three tiers" section rewritten to four tiers with the
+      `with`-functions first; GC-deferral warnings added to `kafkaStream` and
+      `kafkaStreamAutoClose` — done 2026-07-27. `cabal build all` clean,
+      `cabal haddock hw-kafka-streamly` succeeds.
+- [x] M1: Jitsurei sweep — done 2026-07-27, and it was **not** the partial sweep the
+      plan expected. *Every* example abandoned its stream, so all five were migrated:
+      `StreamlyConsumer.hs`, `ErrorHandling.hs` (all three patterns), `ConcurrentConsume.hs`,
+      `ConsumeProduce.hs`, `TransformPipeline.hs` (all three patterns), plus the
+      description line in `Main.hs`. See Surprises & Discoveries and Decision Log for
+      why none was left on the legacy API.
+- [x] M2: Zombie regression test added and green — done 2026-07-27.
+      `test/Kafka/Streamly/WithStreamTest.hs` with three cases; `All 64 tests passed`.
+      Red state captured: reimplementing the helper with `Stream.bracketIO` fails both
+      scope cases with `expected: 1 / but got: 0`; transcript in Surprises & Discoveries.
+- [x] M3: CHANGELOG updated (Added / Fixed / Changed); deprecation posture recorded
+      (no `DEPRECATED` pragma, per Decision Log) — done 2026-07-27.
+- [x] M3: Release coordination — this plan lands **second** in `hw-kafka-streamly`, so
+      it cuts the release. Verified plan 135's contributions are present before
+      tagging: `isFatal` carries the `RdKafkaRespErrFatal` and
+      `RdKafkaRespErrSaslAuthenticationFailed` arms, `StreamTest.hs` pins 20 fatal + 3
+      non-fatal plus the `skipNonFatal` regression case, and `cabal.project` carries the
+      fork pin at `5259ddf3c8811b662470b773f8c3d7ed52602c7e`. Both plans' changes sit
+      under one `## Unreleased` heading.
+- [ ] M3 optional: broker-backed group-membership verification — **skipped**, reason
+      recorded in Outcomes & Retrospective. Not gating; the plan marks it
+      evidence-grade.
 
 
 ## Surprises & Discoveries
@@ -97,6 +120,41 @@ Findings from plan-authoring verification (2026-07-23):
   defect is exclusively the abandonment/downstream-exception path. (Verified
   against the 0.3.x/0.4.0 `bracketIO` docs and `gbracket` implementation notes —
   the GC hook is `newIOFinalizer`.)
+- Implementation (2026-07-27): **the leak was worse than the plan assumed.** The plan
+  expected to migrate "any example that abandons a stream … leaving at least one
+  deliberately-full-consumption example on the legacy API". There was no such example
+  to leave. All five jitsurei programs, and the module's own worked example, took a
+  fixed number of records and abandoned the stream — so every worked example in the
+  repository demonstrated the leaking shape. `ErrorHandling.hs` was the worst case: it
+  builds three consumers in one process, all abandoned, and its Pattern 3 additionally
+  throws downstream of the stream via `throwLeft`, which is the *other* documented
+  GC-deferral case. Anyone who copied any example got a zombie.
+- Implementation (2026-07-27): the red-state experiment confirms the fix is load-bearing
+  and that the test observes the right thing. Reimplementing `withConsumerStreamVia`
+  with `Stream.bracketIO` — the shape the legacy functions use — fails both scope tests:
+
+  ```text
+    WithStream
+      closes the consumer on abandonment, before the scope returns: FAIL
+        test/Kafka/Streamly/WithStreamTest.hs:108:
+        expected: 1
+         but got: 0
+      closes exactly once when the continuation throws:             FAIL
+        test/Kafka/Streamly/WithStreamTest.hs:129:
+        expected: 1
+         but got: 0
+      the legacy stream-level bracket defers close under take:      OK
+
+  2 out of 64 tests failed (0.23s)
+  ```
+
+  Note the third case still passes there, because it asserts the deferral rather than
+  the close. With the real scope-based implementation: `All 64 tests passed`.
+- Implementation (2026-07-27): the exception path was *also* broken under the old
+  shape, which the plan did not claim. The second test — continuation throws after
+  reading one element — reports `expected: 1 / but got: 0` under `bracketIO` too. So
+  abandonment was not the only leaking path in a `with`-shaped API built on stream
+  brackets; an exception in the consuming continuation leaked as well.
 - The zombie cannot even be collected by the rd_kafka handle's own GC finalizer
   while the loop runs: hw-kafka-client's finalizer
   (`src/Kafka/Internal/RdKafka.chs:860-877`, `rd_kafka_destroy_flags` with
@@ -161,9 +219,91 @@ Findings from plan-authoring verification (2026-07-23):
   Date: 2026-07-23
 
 
+- Decision: Export `withConsumerStreamVia` from `Kafka.Streamly.Stream` under an
+  "Internal — exported for tests" section rather than creating a
+  `Kafka.Streamly.Stream.Internal` module. The plan allowed either.
+  Rationale: One module, one import path, and it matches the convention sibling plan 136
+  used in kafka-effectful (`withConsumerSpan` exported the same way), so the two repos
+  read alike. The function is genuinely useful beyond tests — it is the seam for any
+  caller who wants the scope guarantee with a custom acquire or close — and no
+  registered project depends on this package, so if the export is later regretted,
+  moving it is a minor PVP bump that breaks nobody.
+  Date: 2026-07-27
+
+- Decision: Migrate *every* jitsurei example to the scoped API, leaving none on the
+  legacy path, contrary to the plan's instruction to leave at least one
+  full-consumption example on `kafkaStream`.
+  Rationale: The premise did not hold — there was no full-consumption example. Every
+  one of the five took a fixed number of records and abandoned the stream, so "leaving
+  one on the legacy API" would have meant knowingly shipping a worked example that
+  leaks a consumer, in a package whose entire purpose is to be copied. A Kafka stream
+  also has no natural completion to demonstrate: `kafkaStreamNoClose` terminates only on
+  a fatal error, so a genuinely-drained example cannot be written without staging a
+  fatal. The legacy functions remain exercised: they still compile, and
+  `WithStreamTest`'s third case runs the exact legacy `bracketIO` shape and asserts its
+  deferral.
+  Date: 2026-07-27
+
+- Decision: Skip the optional broker-backed group-membership verification.
+  Rationale: The plan marks it evidence-grade rather than gating. It needs Docker for
+  `rpk container start`, a scratch program, and two coordinated shells, and what it
+  would demonstrate — that the member disappears at scope exit — is already established
+  more precisely by the unit test, which observes the close action itself with no GC
+  involved, plus the red-state experiment showing the old shape does not close. The
+  causal chain from "close ran" to "group membership released" is `closeConsumer`'s
+  documented behaviour in hw-kafka-client, not something this plan changes. Exact steps
+  are retained in Milestone 3 for anyone who wants the transcript before a production
+  rollout.
+  Date: 2026-07-27
+
+
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-07-27. A partially-consumed Kafka stream now closes its consumer
+deterministically, and the examples that used to demonstrate the leak demonstrate the
+fix instead.
+
+What shipped, all in `/Users/shinzui/Keikaku/bokuno/hw-kafka-streamly`:
+`withKafkaConsumerStream` and `withKafkaConsumerStreamOn` built on an exported
+`withConsumerStreamVia`, all using a plain `Control.Exception.bracket` in `IO`; the
+module header rewritten from three tiers to four with the `with`-functions first;
+GC-deferral warnings on `kafkaStream` and `kafkaStreamAutoClose` that explain why an
+abandoned Kafka consumer starves partitions rather than merely lingering; the module
+worked example and all five jitsurei programs migrated; a new `WithStreamTest` module
+with three cases; and CHANGELOG entries covering this plan and sibling plan 135, which
+this plan's release carries.
+
+Evidence: `All 64 tests passed`. The red-state experiment — reimplementing the helper
+with `Stream.bracketIO` — fails both scope cases with `expected: 1 / but got: 0`, so the
+tests demonstrably pin the fix rather than passing vacuously. No `performGC` appears
+anywhere in the suite; its absence is the assertion.
+
+Two things the implementation found that the plan did not anticipate. First, the leak
+was universal rather than incidental: every worked example in the repository abandoned
+its stream, so the plan's instruction to leave one on the legacy API had no valid
+target, and `ErrorHandling.hs` alone leaked three consumers per run. Second, the
+exception path leaked too — a continuation that throws after reading an element also
+fails to close under a stream-level bracket, which the plan's framing (abandonment) did
+not cover; the scope-based bracket fixes both for the same reason.
+
+The legacy functions are deliberately not deprecated. They are correct when the stream
+is drained, sibling plan 135 documents behaviour in terms of them, and a pragma would
+have warned on every internal use in the same release that changes `isFatal`. The
+posture to revisit: once the `with`-API has a consumer in the wild — there are none
+registered today — reconsider the pragma and record the outcome here.
+
+Release: this plan lands second in `hw-kafka-streamly`, so it cuts the release. Plan
+135's contributions were verified present first — the two new `isFatal` arms, the
+`StreamTest.hs` pins at 20 fatal + 3 non-fatal plus the `skipNonFatal` regression case,
+and the `cabal.project` fork pin at `5259ddf3c8811b662470b773f8c3d7ed52602c7e`. Both
+plans' changes sit under one `## Unreleased` heading; the API addition makes this at
+least a minor PVP bump.
+
+Left undone deliberately: the broker-backed verification (see Decision Log for why, and
+Milestone 3 for the exact steps if it is ever wanted). `WithStreamTest`'s third case is
+a canary — if a future streamly release makes `bracketIO` prompt under abandonment it
+will start failing, and the right response is to celebrate, record it here, and revisit
+the warnings rather than to weaken the test.
 
 
 ## Context and Orientation

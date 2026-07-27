@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Kafka consumer fatal errors are surfaced in-band in both poll modes
-description: A raised librdkafka consumer fatal is reported as Left RdKafkaRespErrFatal from every poll in both callback poll modes, via a pinned hw-kafka-client fork, while routine partition conditions never kill a consumer.
-timestamp: 2026-07-27T12:00:00Z
+description: A raised librdkafka consumer fatal is reported in-band from every poll in both callback poll modes, routine partition conditions never kill a consumer, and consumer close is scope-sequenced rather than left to the garbage collector.
+timestamp: 2026-07-27T18:00:00Z
 docId: ADR-11
 status: Accepted
 date: 2026-07-27
@@ -110,6 +110,28 @@ per package (`Kafka.Effectful.Consumer.Classify`, `Kafka.Streamly.Stream.isFatal
 two interpreters within a package cannot drift and the two packages can be diffed against
 each other.
 
+**Consumer close is scope-sequenced, never left to the garbage collector.** Observing that
+a consumer is dead is worthless if the dead consumer stays open, and a stream-level
+bracket cannot guarantee otherwise: a stream is pulled by its downstream, so when the
+downstream stops pulling — a `take`, an early-terminating fold, an exception thrown
+downstream — the bracket has no execution point left and streamly falls back to a
+garbage-collector finalizer. The supported pattern is therefore a `with`-style scope
+(`withKafkaConsumerStream`) whose close is an ordinary `Control.Exception.bracket` in
+`IO`, which no consumption pattern can defer.
+
+A Kafka consumer is not an ordinary resource, which is what makes this a decision rather
+than a preference. An unclosed consumer is not idle: hw-kafka-client's background loop
+keeps polling every 100 ms, which keeps group membership alive, keeps partitions assigned
+to a process nobody is reading them from, and keeps resetting the same
+`max.poll.interval.ms` watchdog discussed above — so the partitions are starved with no
+rebalance to recover them. Nor is the collection self-healing: a quiet process may never
+run the GC, process exit runs no finalizers at all, and the `rd_kafka` handle's own
+finalizer cannot fire while the poll loop still holds the handle. Only `closeConsumer`
+stops that loop.
+
+The GC-deferring entry points are documented rather than removed, because they are
+correct when a stream is drained to termination.
+
 **Trace context is per-record.** In the traced interpreter, a record's extracted context is
 installed only for the duration of its own span and is then detached. Extraction starts
 from an *empty* context rather than the ambient thread-local one, which is what makes "no
@@ -155,11 +177,17 @@ processing of it, so it is effectively a zero-duration marker at the point of de
 This is a deliberate exclusion, not an oversight: covering processing requires a
 handler-wrapping API, which is a telemetry design question rather than a correctness fix.
 
-This contract is established by `docs/plans/135-surface-librdkafka-fatal-errors-through-the-consumer-stack.md`
-and extended by `docs/plans/136-classify-poll-and-commit-errors-and-fix-traced-context-hygiene.md`,
-both under `docs/masterplans/23-make-the-kafka-consumer-streaming-stack-surface-fatal-errors-and-close-deterministically.md`.
-One sibling plan remains and this record should be revised when it lands:
-`docs/plans/137-guarantee-deterministic-consumer-close-in-hw-kafka-streamly.md` adds
-deterministic close, without which a stream that correctly observes a fatal may still leave
-the dead consumer open — heartbeating and holding its partitions — until garbage collection
-runs.
+Documentation that shows consumption must show it inside a scope. This is not a style
+note: before this decision, every worked example in `hw-kafka-streamly` — the module
+haddock and all five example programs — took a fixed number of records and abandoned the
+stream, so every example a user might copy leaked a consumer.
+
+This contract is established by MasterPlan 23
+(`docs/masterplans/23-make-the-kafka-consumer-streaming-stack-surface-fatal-errors-and-close-deterministically.md`)
+across its three child plans:
+`docs/plans/135-surface-librdkafka-fatal-errors-through-the-consumer-stack.md` (fatal
+observability and the fork pin),
+`docs/plans/136-classify-poll-and-commit-errors-and-fix-traced-context-hygiene.md` (the
+converse obligation and per-record trace context), and
+`docs/plans/137-guarantee-deterministic-consumer-close-in-hw-kafka-streamly.md`
+(scope-sequenced close). All three are complete.

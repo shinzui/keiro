@@ -36,7 +36,7 @@ ADR context: no relevant ADR in keiro's `docs/adr/`. Candidate ADR: the consumer
 |---|-------|------|-----------|-----------|--------|
 | 1 | Surface librdkafka fatal errors through the consumer stack | docs/plans/135-surface-librdkafka-fatal-errors-through-the-consumer-stack.md | None | None | Complete (2026-07-27) |
 | 2 | Classify poll and commit errors and fix traced-context hygiene | docs/plans/136-classify-poll-and-commit-errors-and-fix-traced-context-hygiene.md | None | EP-1 | Complete (2026-07-27) |
-| 3 | Guarantee deterministic consumer close in hw-kafka-streamly | docs/plans/137-guarantee-deterministic-consumer-close-in-hw-kafka-streamly.md | None | None | Not Started |
+| 3 | Guarantee deterministic consumer close in hw-kafka-streamly | docs/plans/137-guarantee-deterministic-consumer-close-in-hw-kafka-streamly.md | None | None | Complete (2026-07-27) |
 
 
 ## Dependency Graph
@@ -64,7 +64,11 @@ Cross-plan decision for ADR promotion: the fatal-observability contract and the 
 - [x] EP-2: Poll errors classified (EOF/auto-offset-reset/unknown-topic swallowed; fatals thrown); `NoOffset` commits succeed; context extract-into-empty with bracketed attach/detach, giving new-root for headerless; lenient header decoding plus propagator-field filtering; first consumer-interpreter tests pass — done 2026-07-27. Policy centralised in a new exposed module `Kafka.Effectful.Consumer.Classify` that both interpreters import, so their taxonomies cannot drift. Additive `pollMessageEither` added for callers needing the swallowed conditions. Evidence: suite went 21 → `5 out of 28 tests failed` (regression tests against unfixed code, each naming its defect) → `All 44 tests passed`.
 - [x] EP-2: Fork pin adopted in `kafka-effectful` via a new `cabal.project` — done 2026-07-27, going beyond the plan's "optional" because the classifier cannot observe a fatal in async mode without it. Suite passes against the fork.
 - [x] EP-2: ADR-11 extended with the converse obligation (routine conditions must not kill a consumer) and the per-record trace-context rule; re-validated strictly.
-- [ ] EP-3: Deterministic-close bracket shipped; worked example fixed; GC-deferral documented on legacy entry points; zombie-consumer regression test.
+- [x] EP-3: Deterministic-close bracket shipped (`withKafkaConsumerStream`, `withKafkaConsumerStreamOn`, on an exported `withConsumerStreamVia`); worked example fixed; GC-deferral documented on legacy entry points, which stay undeprecated; zombie-consumer regression test — done 2026-07-27. `All 64 tests passed`; red-state experiment (helper reimplemented with `Stream.bracketIO`) fails both scope cases with `expected: 1 / but got: 0`.
+- [x] EP-3: **All five** jitsurei examples migrated, not just some — every worked example in the repository abandoned its stream, so there was no full-consumption example to leave on the legacy API as the plan assumed.
+- [x] EP-3: Release cut from `hw-kafka-streamly` carrying both EP-1's and EP-3's changes under one `## Unreleased` heading; EP-1's contributions verified present first (the two `isFatal` arms, the 20+3 `StreamTest` pins, the fork pin).
+- [x] EP-3: ADR-11 gains the scope-sequenced-close rule; strict validation passes (`OK: 11 concepts`).
+- [ ] EP-3 optional: broker-backed group-membership verification — skipped, with reason and exact steps recorded in plan 137. Not gating.
 
 
 ## Surprises & Discoveries
@@ -79,6 +83,8 @@ Cross-plan decision for ADR promotion: the fatal-observability contract and the 
 - EP-1 implementation (2026-07-27), affects every repo in the stack: the pin is **not** yet adopted by `kafka-effectful` or `shibuya-kafka-adapter`, per this MasterPlan's Integration Points (EP-1 owns the recipe, consumers adopt on next build). Until a repo adopts it, that repo keeps async-mode fatal blindness even if its own classifier is correct — so EP-2's kafka-effectful work should adopt the pin, which requires *creating* a `cabal.project` there since the repo has none.
 - EP-2 implementation (2026-07-27): the review behind this MasterPlan was accurate to the level of individual values, which is worth recording as evidence that its remaining claims (EP-3's) can be trusted. The headerless record did not merely lose its parent — it inherited the previous record's *exact* trace id `0af7651916cd43dd8448eb211c80319c`. The non-UTF-8 case produced the precise warning the KSC-1 refutation predicted (`Propagator extract failed: Cannot decode byte '\xc3'`) and a freshly generated root trace id in place of the inbound one. The brokerless `commitAllOffsets` returned exactly `RdKafkaRespErrNoOffset` with no platform variance, so neither documented fallback was needed.
 - EP-2 implementation (2026-07-27), affects EP-3 and any future work on this stack: a pin is **not** inherited through a dependency edge. `cabal.project` governs builds of the repository that declares it, so `shibuya-kafka-adapter` and `shikigami` do not get the fork by depending on `kafka-effectful` — each needs its own stanza. ADR-11 now states this explicitly; the earlier phrasing ("consumers adopt it when they next build") was ambiguous about whether adoption was automatic.
+- EP-3 implementation (2026-07-27): KSC-7's blast radius was larger than the review stated. The finding named the module's worked example as "exactly that case"; in fact **every** worked example in `hw-kafka-streamly` was that case — the module haddock plus all five jitsurei programs took a fixed number of records and abandoned the stream, and `ErrorHandling.hs` alone built three abandoned consumers per run. There was no full-consumption example to leave on the legacy API, so EP-3 migrated all of them. Anyone who had copied any example was leaking a consumer.
+- EP-3 implementation (2026-07-27): the exception path leaked too, which KSC-7 did not claim. A continuation that throws after reading an element also fails to close under a stream-level bracket — the red-state experiment reports `expected: 1 / but got: 0` for that case as well as for the abandonment case. Abandonment was the headline, not the whole defect; scope-sequenced close fixes both for the same reason.
 - EP-2 implementation (2026-07-27): two test-harness traps in this stack, worth knowing for EP-3. `inSpan''` takes a fast path that skips context modification entirely when the tracer provider has no span processors, so any span-context assertion against a processor-less provider passes vacuously. And tasty runs test cases concurrently, so a tracer provider shared across cases via `withResource` races on its in-memory span list. Both are avoided by building a provider per test case.
 - Plan authoring (2026-07-23), affects EP-1: the `rd_kafka_queue_poll` alternative for avoiding watchdog resets is refuted — any poll of a consumer-flagged queue resets `max.poll.interval.ms` (librdkafka `rdkafka_queue.c:134-138`); docs/plans/135 documents the watchdog defect in the primary route and records the main-queue/forward route (needing a new binding) as PR follow-up.
 
@@ -108,4 +114,60 @@ Cross-plan decision for ADR promotion: the fatal-observability contract and the 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Complete 2026-07-27. All three child plans landed in one session. The consumer half of
+the Kafka stack now behaves the way the producer half was made to in MasterPlan 18: a
+dead consumer is loud, a healthy one survives routine broker events, and a finished one
+is actually closed.
+
+What the initiative delivered, by repository. In a new fork
+`shinzui/hw-kafka-client` @ `5259ddf3c8811b662470b773f8c3d7ed52602c7e`: consumer fatals
+are reported in-band from `pollMessage`/`pollMessageBatch` in both poll modes, the
+previously-unbound `rd_kafka_fatal_error` is exposed through a new `consumerFatalError`,
+the background loop no longer leaks every message it consumes, and the async-mode
+watchdog defect is documented. In `hw-kafka-streamly`: `isFatal` classifies
+`RdKafkaRespErrFatal` and `RdKafkaRespErrSaslAuthenticationFailed`;
+`withKafkaConsumerStream`/`withKafkaConsumerStreamOn` guarantee close on scope exit; all
+worked examples migrated; the fork pinned; a stale `ghc-9.12.2` pin repaired that had
+made the repo unbuildable. In `kafka-effectful`: a new pure
+`Kafka.Effectful.Consumer.Classify` both interpreters route through, benign poll
+conditions swallowed, `NoOffset` commits succeeded, per-record trace-context isolation,
+lenient and filtered header decoding, `pollMessageEither`, the fork pinned, and the
+first tests these interpreters have ever had. In keiro: three plans and `ADR-11`.
+
+Test counts, all green: `hw-kafka-client` 7, `hw-kafka-streamly` 64 (from 61),
+`kafka-effectful` 44 (from 21). Every fix was pinned by a test observed failing first —
+`3 out of 61` for the taxonomy, `5 out of 28` for the interpreters, and a deliberate
+red-state experiment for deterministic close.
+
+What went well. Re-verifying the fatal-blindness chain from librdkafka's own sources
+before forking a third-party library was the right order of operations: it confirmed the
+finding at the level of individual dispatch branches, and the reading turned up
+`rd_kafka_fatal_error`'s implementation cost, which replaced EP-1's planned `KafkaConf`
+fatal sink with a smaller, race-free, mode-independent design. Writing regression tests
+before fixes paid off three times over, and the predictions were exact enough — down to
+inherited trace ids and warning text — to raise confidence in the review's remaining
+claims.
+
+What the decomposition got wrong, mildly. The soft dependency EP-2 had on EP-1 turned out
+to matter more than "re-sync the table": EP-1 settled *what value* a fatal carries, which
+determined whether EP-2's classifier needed one arm or an open-ended list. Sequencing
+EP-1 first made that free; had they run in parallel, EP-2 would likely have shipped
+per-cause arms that silently regress whenever librdkafka adds a cause. The Integration
+Points section was also too weak on the pin — "consumers adopt when they next build"
+reads as though adoption were automatic, when in fact a cabal pin is not inherited
+through a dependency edge and each repository needs its own stanza.
+
+What remains, and who owns it. The upstream PR against `haskell-works/hw-kafka-client` is
+written but deliberately unsubmitted (user direction); until it merges the pin should be
+assumed long-lived, and its text is preserved in plan 135. `shibuya-kafka-adapter` and
+`shikigami` have not adopted the pin, so they keep async-mode fatal blindness even though
+the libraries beneath them are now correct — the recipe is in plan 135 and the obligation
+is recorded in ADR-11. The shibuya adapter's hand-rolled `NoOffset` catch is now
+dead-but-harmless and can be deleted opportunistically. Two deliberate exclusions stand:
+the async-mode `max.poll.interval.ms` watchdog is documented rather than restored (Route B
+would move rebalance callbacks onto the application thread), and the traced consumer span
+still covers only record receipt rather than processing (that needs a handler-wrapping
+API and belongs to a telemetry initiative). The broker-backed fenced-consumer and
+group-membership demonstrations were not run; both are evidence-grade rather than gating,
+and exact steps are retained in plans 135 and 137 for anyone who wants them before a
+production rollout.
