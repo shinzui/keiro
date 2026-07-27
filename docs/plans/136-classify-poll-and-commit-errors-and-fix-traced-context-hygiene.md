@@ -75,7 +75,7 @@ consumer interpreters and the new test suite; nothing else touches them.
       was a direct comparison rather than a deferred re-check.
 - [x] Fork pin adopted: `cabal.project` created with plan 135's
       `source-repository-package` stanza; suite passes against the fork
-      (`HEAD is now at 5259ddf`). Not strictly required by this plan's tests, but
+      (`HEAD is now at 6caed63`). Not strictly required by this plan's tests, but
       without it this repo's classifier can never see a fatal error in the default
       async poll mode — see Decision Log.
 
@@ -298,7 +298,7 @@ After the fixes: `All 44 tests passed` (the suite was 21 tests before this plan)
   hw-kafka-client discards the fatal inside its background loop before any Haskell code
   runs, so `classifyPollError` never sees it. Shipping a classifier that cannot observe
   the condition it exists to classify would be the same defect one layer up. The suite
-  passes against the pin (`HEAD is now at 5259ddf`). Recorded in the `cabal.project`
+  passes against the pin (`HEAD is now at 6caed63`). Recorded in the `cabal.project`
   comment: this pin governs builds of this repository only — a downstream package
   depending on kafka-effectful does not inherit it and must add its own stanza.
   Date: 2026-07-27
@@ -343,7 +343,7 @@ CHANGELOG updates; and a `cabal.project` adopting plan 135's fork pin.
 
 Evidence: 21 tests before this plan, `5 out of 28 tests failed` with the regression
 tests added against unfixed code, `All 44 tests passed` after — and still passing with
-the fork pin resolving to `5259ddf`.
+the fork pin resolving to `6caed63`.
 
 What the red state taught. The plan's predictions were accurate to the level of
 individual values, which is worth recording because it means the review behind

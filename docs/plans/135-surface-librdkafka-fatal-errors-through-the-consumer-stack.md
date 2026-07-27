@@ -61,7 +61,7 @@ table) and `docs/plans/137-guarantee-deterministic-consumer-close-in-hw-kafka-st
       `cabal build hw-kafka-client` clean (no new warnings); `cabal test test:tests` →
       `7 examples, 0 failures` / `Test suite tests: PASS`. Branch
       `fix/async-consumer-fatal-observability` pushed to `shinzui/hw-kafka-client`.
-      **Pin commit: `5259ddf3c8811b662470b773f8c3d7ed52602c7e`.**
+      **Pin commit: `6caed636898a78e9f6e5a9c93eeb5562cbb2580a`.**
 - [x] M1: Upstream PR text written — done 2026-07-27. Full text embedded below under
       "Upstream PR text (prepared, not submitted)" and staged in the fork clone at
       `/Users/shinzui/Keikaku/bokuno/hw-kafka-client/PR_BODY.md` (git-excluded via
@@ -79,7 +79,7 @@ table) and `docs/plans/137-guarantee-deterministic-consumer-close-in-hw-kafka-st
       `keeps a librdkafka fatal error` → `3 out of 61 tests failed`); with the source
       change applied, `All 61 tests passed`.
 - [x] M3: Fork pin applied to `hw-kafka-streamly/cabal.project` — done 2026-07-27.
-      `cabal build all` resolves the fork (`HEAD is now at 5259ddf fix(consumer):
+      `cabal build all` resolves the fork (`HEAD is now at 6caed63 fix(consumer):
       surface consumer fatal errors and stop leaking polled messages`) and the suite
       still passes under the pin.
 - [x] M3: Pin stanzas for `kafka-effectful` and `shibuya-kafka-adapter` documented
@@ -200,6 +200,46 @@ sources on disk; treat these as the evidence base for the design below.
   its `brew install librdkafka` fallback were both unnecessary. Note the ambient GHC is
   9.12.4 while `hw-kafka-streamly/cabal.project` pins `with-compiler: ghc-9.12.2`; the
   fork builds under both.
+- Correction (2026-07-27, found by the user asking why the fork was behind upstream):
+  branching from the `v5.3.0` tag as this plan instructed left the fork **12 commits
+  behind `upstream/main`** (upstream's default branch is `main`, not `master` as this
+  plan's fallback wording assumed). Ten of the twelve are admin-client features, CI and
+  docs. Two are consumer fixes we were silently forgoing:
+  - `17451f5` "Clean-up partition list on storeoffsetMessage and storeOffsets" switches
+    both from `toNativeTopicPartitionListNoDispose` to `toNativeTopicPartitionList`.
+    Verified the difference in `src/Kafka/Consumer/Convert.hs:106-127`: the disposing
+    variant calls `newRdKafkaTopicPartitionListT`, which attaches
+    `rdKafkaTopicPartitionListDestroyF` (`RdKafka.chs:278-282`); the `NoDispose` variant
+    calls raw `rdKafkaTopicPartitionListNew` with no finalizer. **It is a memory-leak
+    fix** — the same class of bug as this plan's own, on a path `kafka-effectful`
+    exposes as `StoreOffsets`/`StoreOffsetMessage`.
+  - `56be4a6` adds a `Set.null ts` guard so `newConsumer` does not call `subscribe` with
+    an empty topic set.
+  Upstream also rewrote `newConsumer` in the same file this patch edits, so a PR from
+  the tag would have presented badly.
+- Mitigating fact found in the same check (2026-07-27): `upstream/main` is **still
+  version 5.3.0** — `git show upstream/main:hw-kafka-client.cabal` reports the same
+  version as the tag. So those twelve commits are unreleased work sitting under an
+  unbumped version number, including a whole new `Kafka.Topic` admin module and +232
+  lines of `RdKafka.chs` bindings. Pinning `main` therefore means our repos consume
+  unreleased API while cabal still calls it 5.3.0. That is the real cost of the rebase
+  and it is recorded in both `cabal.project` comments.
+- Correction (2026-07-27) to this plan's Context and Orientation, which calls
+  `/Users/shinzui/Keikaku/hub/haskell/hw-kafka-client-project/hw-kafka-client` a
+  "read-only reference copy (version 5.3.0, the version all our repos resolve today)".
+  **It is not a faithful 5.3.0.** The vendored subtree was taken from upstream
+  `56be4a6` (main's HEAD), but a later corpus-local commit, `3599eb1` (2026-03-27),
+  re-added `produceMessageBatch` to `hw-kafka-client/src/Kafka/Producer.hs` so the
+  `hw-kafka-conduit` cookbook examples in that project would compile. Upstream had
+  deleted that function in `72e6f6d` (October 2021), before the `v5.3.0` tag, and it is
+  absent from Hackage 5.3.0 and from upstream `main`.
+  This is a *local patch*, not upstream lag, so "sync the corpus" neither explains nor
+  fixes it — and it should not be removed, since the conduit examples depend on it. It
+  had already misled two repositories into believing upstream ships a batch produce
+  (`kafka-effectful`'s interpreter comment, `hw-kafka-streamly`'s release masterplan);
+  both are corrected, and the vendored function now carries a "LOCAL ADDITION — NOT
+  UPSTREAM" haddock. When reading the corpus as an API reference, diff against
+  `upstream/main` in the real fork clone before trusting a symbol's existence.
 - Implementation (2026-07-27): `haskell-works/hw-kafka-client` has **no** `CHANGELOG.md`
   (`README.md` is the only top-level Markdown file), so M1's CHANGELOG instruction does
   not apply upstream. See Decision Log.
@@ -287,7 +327,9 @@ sources on disk; treat these as the evidence base for the design below.
   are kept unchanged.
   Date: 2026-07-23
 
-- Decision: The fork is a clean fork of `haskell-works/hw-kafka-client` on GitHub
+- Decision (**superseded 2026-07-27** — see the rebase-onto-main entry above; the fork
+  location still stands, only the base branch changed): The fork is a clean fork of
+  `haskell-works/hw-kafka-client` on GitHub
   (`shinzui/hw-kafka-client`), branched from the `v5.3.0` release tag (falling back to
   the latest master if the tag does not build with our toolchain), not the local corpus
   repo.
@@ -300,6 +342,26 @@ sources on disk; treat these as the evidence base for the design below.
   which would force a `subdir:` stanza and tie the pin to a non-canonical repo).
   Date: 2026-07-23
 
+
+- Decision (2026-07-27, **supersedes** the "branch from the `v5.3.0` tag" decision
+  below): rebase the fork branch onto `upstream/main` and repin. New pin commit
+  `6caed636898a78e9f6e5a9c93eeb5562cbb2580a`; the old tag-based
+  `5259ddf3c8811b662470b773f8c3d7ed52602c7e` is superseded and force-replaced on the
+  branch.
+  Rationale: the original decision justified the base by "5.3.0 is the version all our
+  repos resolve today", which is a good argument for what we *ship* and a poor one for
+  what we *propose upstream* — and I applied it to both without checking what upstream
+  had moved on to. The check (prompted by the user) found two consumer fixes we were
+  forgoing, one of them a partition-list memory leak on a path kafka-effectful exposes,
+  and an upstream rewrite of `newConsumer` in the same file this patch edits. The rebase
+  was tested on a scratch branch first: it applies with **zero conflicts**, builds
+  clean, and `cabal test test:tests` gives `7 examples, 0 failures`. Accepted cost,
+  recorded in both `cabal.project` comments: `main` is still labelled 5.3.0, so we now
+  consume unreleased upstream work (a new `Kafka.Topic` admin module and +232 lines of
+  bindings) under an unchanged version number. Judged worth it — we had already accepted
+  being off-Hackage by pinning at all, the additions are additive and untouched by our
+  code, and the branch is now PR-ready at any time.
+  Date: 2026-07-27
 
 - Decision: Prepare the upstream PR but do not submit it.
   Rationale: User direction, 2026-07-27, when asked whether the initiative should fork a
@@ -398,7 +460,7 @@ injectable.
 Completed 2026-07-27. A fenced or otherwise fatally-dead consumer is now observable in
 both callback poll modes, and the stream terminates on it instead of polling forever.
 
-What shipped. In `shinzui/hw-kafka-client` @ `5259ddf3c8811b662470b773f8c3d7ed52602c7e`
+What shipped. In `shinzui/hw-kafka-client` @ `6caed636898a78e9f6e5a9c93eeb5562cbb2580a`
 (branch `fix/async-consumer-fatal-observability`, based on `v5.3.0`): a binding for
 `rd_kafka_fatal_error`, which the package previously lacked; a fatal pre-check in
 `pollMessage` and `pollMessageBatch` that reports
@@ -414,7 +476,7 @@ keiro: this plan and `docs/adr/0011-...md` (`ADR-11`).
 Evidence. Fork: `cabal build hw-kafka-client` clean, `cabal test test:tests` →
 `7 examples, 0 failures`. Streamly, tests-first: `3 out of 61 tests failed` naming exactly
 the three new cases, then `All 61 tests passed` after the source fix, then still passing
-with the pin resolving to the fork commit (`HEAD is now at 5259ddf`).
+with the pin resolving to the fork commit (`HEAD is now at 6caed63`).
 
 What went differently from the plan, and why it was better. The plan specified a fatal-sink
 `IORef` on `KafkaConf`, anticipating that GHC exhaustiveness errors would drive fixes

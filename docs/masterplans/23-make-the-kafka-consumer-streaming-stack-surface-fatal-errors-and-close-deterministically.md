@@ -57,7 +57,7 @@ Cross-plan decision for ADR promotion: the fatal-observability contract and the 
 
 ## Progress
 
-- [x] EP-1: hw-kafka-client fork surfaces consumer fatals (and destroys the messages its background loop consumes); pin recipe documented — done 2026-07-27. Pin: `shinzui/hw-kafka-client` @ `5259ddf3c8811b662470b773f8c3d7ed52602c7e`. Two deviations from the plan, both recorded in plan 135's Decision Log: the fatal is surfaced by reading `rd_kafka_fatal_error` directly per poll rather than through a `KafkaConf` fatal sink, and the *generic* `RdKafkaRespErrFatal` is reported rather than the resolved cause. The unconditional watchdog reset is **documented, not fixed** — that was the plan's Route A decision, not a shortfall.
+- [x] EP-1: hw-kafka-client fork surfaces consumer fatals (and destroys the messages its background loop consumes); pin recipe documented — done 2026-07-27. Pin: `shinzui/hw-kafka-client` @ `6caed636898a78e9f6e5a9c93eeb5562cbb2580a`. Two deviations from the plan, both recorded in plan 135's Decision Log: the fatal is surfaced by reading `rd_kafka_fatal_error` directly per poll rather than through a `KafkaConf` fatal sink, and the *generic* `RdKafkaRespErrFatal` is reported rather than the resolved cause. The unconditional watchdog reset is **documented, not fixed** — that was the plan's Route A decision, not a shortfall.
 - [ ] EP-1: Upstream PR — written but **deliberately not filed** (user direction, 2026-07-27). Text preserved in plan 135; submitting later is one `gh pr create` command. Treat the pin as long-lived.
 - [x] EP-1: `isFatal` gains `RdKafkaRespErrFatal` + SASL arms; taxonomy test updated (20 fatal + 3 non-fatal, plus a `skipNonFatal` regression case); fenced-consumer path terminates loudly in Sync mode — done 2026-07-27. Fail-then-pass demonstrated: `3 out of 61 tests failed` with only the test change, `All 61 tests passed` with the source change.
 - [x] EP-1: ADR-11 written — `docs/adr/0011-kafka-consumer-fatal-errors-are-surfaced-in-band-in-both-poll-modes.md`, strict-validated. This is the fatal-observability contract the Integration Points section called for; EP-2 and EP-3 extend it rather than starting their own.
@@ -120,7 +120,7 @@ dead consumer is loud, a healthy one survives routine broker events, and a finis
 is actually closed.
 
 What the initiative delivered, by repository. In a new fork
-`shinzui/hw-kafka-client` @ `5259ddf3c8811b662470b773f8c3d7ed52602c7e`: consumer fatals
+`shinzui/hw-kafka-client` @ `6caed636898a78e9f6e5a9c93eeb5562cbb2580a`: consumer fatals
 are reported in-band from `pollMessage`/`pollMessageBatch` in both poll modes, the
 previously-unbound `rd_kafka_fatal_error` is exposed through a new `consumerFatalError`,
 the background loop no longer leaks every message it consumes, and the async-mode

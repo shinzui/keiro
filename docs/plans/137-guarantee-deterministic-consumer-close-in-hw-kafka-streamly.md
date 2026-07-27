@@ -81,7 +81,7 @@ downstream can break.
       tagging: `isFatal` carries the `RdKafkaRespErrFatal` and
       `RdKafkaRespErrSaslAuthenticationFailed` arms, `StreamTest.hs` pins 20 fatal + 3
       non-fatal plus the `skipNonFatal` regression case, and `cabal.project` carries the
-      fork pin at `5259ddf3c8811b662470b773f8c3d7ed52602c7e`. Both plans' changes sit
+      fork pin at `6caed636898a78e9f6e5a9c93eeb5562cbb2580a`. Both plans' changes sit
       under one `## Unreleased` heading.
 - [ ] M3 optional: broker-backed group-membership verification — **skipped**, reason
       recorded in Outcomes & Retrospective. Not gating; the plan marks it
@@ -295,7 +295,7 @@ registered today — reconsider the pragma and record the outcome here.
 Release: this plan lands second in `hw-kafka-streamly`, so it cuts the release. Plan
 135's contributions were verified present first — the two new `isFatal` arms, the
 `StreamTest.hs` pins at 20 fatal + 3 non-fatal plus the `skipNonFatal` regression case,
-and the `cabal.project` fork pin at `5259ddf3c8811b662470b773f8c3d7ed52602c7e`. Both
+and the `cabal.project` fork pin at `6caed636898a78e9f6e5a9c93eeb5562cbb2580a`. Both
 plans' changes sit under one `## Unreleased` heading; the API addition makes this at
 least a minor PVP bump.
 
