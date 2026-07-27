@@ -4,6 +4,7 @@ slug: classify-poll-and-commit-errors-and-fix-traced-context-hygiene
 title: "Classify poll and commit errors and fix traced-context hygiene"
 kind: exec-plan
 created_at: 2026-07-23T04:18:42Z
+intention: intention_01kyhskznseyk9f76y9z8ddt1q
 master_plan: "docs/masterplans/23-make-the-kafka-consumer-streaming-stack-surface-fatal-errors-and-close-deterministically.md"
 ---
 
@@ -56,16 +57,27 @@ consumer interpreters and the new test suite; nothing else touches them.
 
 ## Progress
 
-- [ ] M1: Poll-error classification added (pure classifier + both interpreters);
+- [x] M1: Poll-error classification added (pure classifier + both interpreters);
       `NoOffset` commits succeed in both interpreters; `pollMessageEither` added;
-      `Effect.hs` docs updated.
-- [ ] M2: Traced-context hygiene fixed (extract into empty context, attach/detach with
+      `Effect.hs` docs updated — done 2026-07-27. New exposed module
+      `Kafka.Effectful.Consumer.Classify`; both interpreters import it (verified:
+      `grep -l "Consumer.Classify"` lists both files). `pollMessageEither` re-exported
+      from `Kafka.Effectful` and `Kafka.Effectful.Consumer`.
+- [x] M2: Traced-context hygiene fixed (extract into empty context, attach/detach with
       token, per-record isolation in batch); header decoding total and filtered to
-      propagator fields.
-- [ ] M3: First consumer-interpreter test suite added and green; each regression test
-      verified to fail against the pre-fix code (red-state transcript captured).
-- [ ] Post-135 sync: classifier compared against `hw-kafka-streamly` `isFatal` after
-      plan 135 lands; result recorded in Decision Log.
+      propagator fields — done 2026-07-27.
+- [x] M3: First consumer-interpreter test suite added and green; each regression test
+      verified to fail against the pre-fix code — done 2026-07-27. Red-state transcript
+      captured verbatim in Surprises & Discoveries: `5 out of 28 tests failed` before
+      the fixes, `All 44 tests passed` after (baseline before this plan was 21).
+- [x] Post-135 sync: classifier compared against `hw-kafka-streamly` `isFatal` — done
+      2026-07-27; agreement recorded in Decision Log. Plan 135 landed first, so this
+      was a direct comparison rather than a deferred re-check.
+- [x] Fork pin adopted: `cabal.project` created with plan 135's
+      `source-repository-package` stanza; suite passes against the fork
+      (`HEAD is now at 5259ddf`). Not strictly required by this plan's tests, but
+      without it this repo's classifier can never see a fatal error in the default
+      async poll mode — see Decision Log.
 
 
 ## Surprises & Discoveries
@@ -109,6 +121,59 @@ Findings from plan-authoring verification (2026-07-23):
   `commitAllOffsets` with no assignment yields `RdKafkaRespErrNoOffset`. M3 uses
   this; if it yields a different error on some platform, fall back to the pure
   classifier tests and record what was observed here.
+- Implementation (2026-07-27): **the brokerless repro works exactly as predicted.**
+  `newConsumer` against `localhost:1` succeeds, librdkafka logs connection refusals
+  in the background, `pollMessage` returns a swallowed timeout, and
+  `commitAllOffsets` returns precisely `RdKafkaRespErrNoOffset`. No platform
+  variance, no flakiness, and the two cases run in about 0.12 s each. The fallback
+  in Idempotence and Recovery was not needed.
+
+### Red state (2026-07-27) — every defect reproduced before fixing
+
+Captured by writing the tests first and running them against the unfixed source, per
+Concrete Steps. `5 out of 28 tests failed`, and each failure names its defect:
+
+```text
+    ConsumerSpan
+      a record with a traceparent gets the remote trace id:      OK
+      a headerless record after a traced record starts a new root: FAIL
+        headerless record must not inherit the previous record's trace id,
+        got "0af7651916cd43dd8448eb211c80319c"
+      the caller's ambient context is restored:                  FAIL
+        thread-local context must not retain the last record's context
+        expected: False
+         but got: True
+      a non-UTF-8 header does not poison extraction:             FAIL
+        inbound trace id must survive an undecodable sibling header
+        expected: "0af7651916cd43dd8448eb211c80319c"
+         but got: "9af7e59ce7c4bffbbe2e84b7718da262"
+      each record in a batch is isolated from its neighbours:    FAIL
+        middle record must be a new root, not a continuation
+  Kafka.Effectful.Consumer
+    Interpreter (brokerless)
+      pollMessage returns Nothing on timeout:                    OK
+      commitAllOffsets succeeds when there is nothing to commit: FAIL
+        expected: Right ()
+         but got: Left (KafkaResponseError RdKafkaRespErrNoOffset)
+
+5 out of 28 tests failed (2.50s)
+```
+
+Two details worth keeping. The headerless record did not merely lose its parent — it
+inherited the *previous record's exact trace id*, which is the KSC-6 claim confirmed
+literally. And the non-UTF-8 case emitted the predicted warning during the run,
+proving the KSC-1 refutation was right about the mechanism (caught, not crashed) and
+right about the cost:
+
+```text
+OpenTelemetry [WARN] Propagator extract failed: Cannot decode byte '\xc3':
+Data.Text.Encoding: Invalid UTF-8 stream
+```
+
+The span in that case got trace id `9af7e59ce7c4bffbbe2e84b7718da262` — a freshly
+generated root — rather than the inbound one, exactly as the plan predicted.
+
+After the fixes: `All 44 tests passed` (the suite was 21 tests before this plan).
 
 
 ## Decision Log
@@ -204,9 +269,107 @@ Findings from plan-authoring verification (2026-07-23):
   Date: 2026-07-23
 
 
+- Decision (post-135 sync, the Progress item): `classifyPollError`'s `PollThrow`
+  coverage agrees with the corrected `hw-kafka-streamly` `isFatal` table. No divergence
+  to justify.
+  Rationale: Plan 135 landed before this plan started, so the comparison is direct
+  rather than deferred. That plan added exactly two arms — `RdKafkaRespErrFatal` and
+  `RdKafkaRespErrSaslAuthenticationFailed` — bringing `isFatal` to 20 fatal arms. Both
+  fall into `PollThrow` here via the catch-all, and `ClassifyTest` pins them by name so
+  the agreement is asserted rather than assumed. The two tables are not identical and
+  should not be: `isFatal` answers "should the stream terminate", while
+  `classifyPollError` answers "should the interpreter throw", and the latter
+  additionally has to name the three benign codes that `isFatal` simply leaves
+  non-fatal. The overlap that matters — everything `isFatal` calls fatal must throw
+  here — holds, because `PollThrow` is the catch-all and the benign set is disjoint
+  from the fatal set.
+  Plan 135's open question is also resolved and needs no action here: it ships the
+  *generic* `RdKafkaRespErrFatal` in both poll modes rather than the resolved original
+  cause, so no per-cause arms are needed. Had it shipped resolved causes, `PollThrow`'s
+  catch-all would have covered them anyway.
+  Date: 2026-07-27
+
+- Decision: Adopt plan 135's fork pin in this repository by creating `cabal.project`,
+  rather than leaving adoption to a later build as the plan's Interfaces section
+  allowed.
+  Rationale: This plan's own tests do not need the pin, which is why it was optional.
+  But the classifier's central claim — that a fatal error throws — is simply false in
+  this repo without it: in the default `CallbackPollModeAsync`, upstream
+  hw-kafka-client discards the fatal inside its background loop before any Haskell code
+  runs, so `classifyPollError` never sees it. Shipping a classifier that cannot observe
+  the condition it exists to classify would be the same defect one layer up. The suite
+  passes against the pin (`HEAD is now at 5259ddf`). Recorded in the `cabal.project`
+  comment: this pin governs builds of this repository only — a downstream package
+  depending on kafka-effectful does not inherit it and must add its own stanza.
+  Date: 2026-07-27
+
+- Decision: Filter extraction headers against `propagatorFields` case-insensitively,
+  not with the plain `elem` the plan sketched.
+  Rationale: Found while implementing. `TextMap` normalises keys to lower case for
+  lookup (`textMapInsert` stores `T.toLower k`), and the existing `PropagationTest` has
+  a case-insensitivity case asserting that a header spelled `TraceParent` resolves as
+  `traceparent`. A case-sensitive filter would have dropped such a header *before* the
+  propagator ever saw it, silently regressing behaviour that a test already pinned —
+  and the test would still have passed, because it exercises `kafkaHeadersToTextMap`
+  directly rather than through the filter. Both sides are lower-cased before comparison.
+  Date: 2026-07-27
+
+- Decision: Keep the tests' tracer providers per-test-case rather than sharing one via
+  `withResource`, as the plan's sketch implied.
+  Rationale: Two reasons found while writing them. tasty runs test cases concurrently,
+  so a single shared in-memory span reference would race between cases and make span
+  counts nondeterministic. And `inSpan''` takes a fast path that skips context
+  modification entirely when the tracer provider has no span processors — so a
+  processor-less provider would have made every assertion here vacuously pass. Only
+  `initializeGlobalTracerProvider` (needed for the global propagator lookup) is shared.
+  Date: 2026-07-27
+
+
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-07-27. All three defects are fixed, each pinned by a test that was
+observed failing first, and the consumer interpreters have their first test coverage.
+
+What shipped, all in `/Users/shinzui/Keikaku/bokuno/kafka-effectful`: a new exposed
+module `Kafka.Effectful.Consumer.Classify` holding the in-band error policy as pure
+functions (`PollErrorDisposition`, `classifyPollError`, `isBenignCommitError`); both
+interpreters rewritten to route through it, so a benign partition condition returns
+`Nothing` instead of killing the consumer and an idle commit succeeds; the additive
+`pollMessageEither` operation with re-exports; `withConsumerSpan` rewritten to extract
+into an empty context and bracket its attach with the matching detach; lenient header
+decoding plus propagator-field filtering in `Propagation.hs`; three new test modules
+(`ClassifyTest`, `InterpreterTest`, `ConsumerSpanTest`) wired into the suite; README and
+CHANGELOG updates; and a `cabal.project` adopting plan 135's fork pin.
+
+Evidence: 21 tests before this plan, `5 out of 28 tests failed` with the regression
+tests added against unfixed code, `All 44 tests passed` after — and still passing with
+the fork pin resolving to `5259ddf`.
+
+What the red state taught. The plan's predictions were accurate to the level of
+individual values, which is worth recording because it means the review behind
+MasterPlan 23 was reading the code correctly rather than pattern-matching. The
+headerless record did not just lose its parent, it inherited the previous record's exact
+trace id. The non-UTF-8 case produced the precise warning text the KSC-1 refutation
+predicted, and a freshly generated root trace id in place of the inbound one. The
+brokerless `commitAllOffsets` returned exactly `RdKafkaRespErrNoOffset` with no platform
+variance, so neither documented fallback was needed.
+
+Blast radius, verified by reading the call sites rather than assuming. `shikigami`'s two
+poll loops (`shikigami-core/src/Shikigami/Trigger/Consumer.hs:91,118`) are
+`Nothing -> loop; Just record -> ...` — precisely the loop shape that benefits from
+swallowing benign conditions, and they compile unchanged because `pollMessage`'s type
+did not change. `shibuya-kafka-adapter`'s hand-rolled `NoOffset` catch
+(`Shibuya/Adapter/Kafka.hs:186-189`) is now dead but harmless; left for that repo to
+remove opportunistically. Nothing was removed from the public surface.
+
+What remains. Neither downstream repo has adopted the fork pin, so each keeps
+async-mode fatal blindness until it does — the recipe is in this plan and in plan 135,
+and `docs/adr/0011-...md` records the obligation. The zero-duration process span is
+unchanged and now explicitly documented as such in the module header; reshaping it to
+cover user processing needs a handler-wrapping API and belongs to a telemetry
+initiative, per MasterPlan 23's Decision Log. This is a behaviour change, so the next
+release should be at least a minor PVP bump; the CHANGELOG entry sits under
+`## Unreleased`.
 
 
 ## Context and Orientation
