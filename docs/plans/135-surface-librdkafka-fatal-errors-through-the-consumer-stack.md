@@ -52,11 +52,25 @@ table) and `docs/plans/137-guarantee-deterministic-consumer-close-in-hw-kafka-st
 
 ## Progress
 
-- [ ] M1: Fork `haskell-works/hw-kafka-client`, branch, and implement the Async-mode fix
-      (fatal sink + message destruction in `pollConsumerEvents'`, `rd_kafka_fatal_error`
-      binding, sink check in `pollMessage`/`pollMessageBatch`).
-- [ ] M1: Fork builds and its unit test suite passes; upstream PR text written and PR
-      opened; exact pin commit recorded in this plan.
+- [x] M1: Fork `haskell-works/hw-kafka-client`, branch, and implement the Async-mode fix
+      — done 2026-07-27. Shipped as a *direct fatal-state read* rather than the planned
+      `KafkaConf` fatal sink (see Decision Log): `rd_kafka_fatal_error` binding added,
+      `pollMessage`/`pollMessageBatch` pre-check it, `pollConsumerEvents'` destroys the
+      message it consumes, `consumerFatalError` added, async watchdog caveat documented.
+- [x] M1: Fork builds and its unit test suite passes — done 2026-07-27.
+      `cabal build hw-kafka-client` clean (no new warnings); `cabal test test:tests` →
+      `7 examples, 0 failures` / `Test suite tests: PASS`. Branch
+      `fix/async-consumer-fatal-observability` pushed to `shinzui/hw-kafka-client`.
+      **Pin commit: `5259ddf3c8811b662470b773f8c3d7ed52602c7e`.**
+- [x] M1: Upstream PR text written — done 2026-07-27. Full text embedded below under
+      "Upstream PR text (prepared, not submitted)" and staged in the fork clone at
+      `/Users/shinzui/Keikaku/bokuno/hw-kafka-client/PR_BODY.md` (git-excluded via
+      `.git/info/exclude` so it is not part of the patch).
+- [ ] M1: PR **deliberately not opened** — see Decision Log (2026-07-27). To submit
+      later: `gh pr create --repo haskell-works/hw-kafka-client --title "fix(consumer):
+      surface consumer fatal errors and stop leaking polled messages" --body-file
+      PR_BODY.md` from the fork clone. Left unchecked as a standing reminder, not as
+      incomplete work.
 - [ ] M2: `isFatal` in `hw-kafka-streamly` gains `RdKafkaRespErrFatal` and
       `RdKafkaRespErrSaslAuthenticationFailed` arms; `StreamTest.hs` taxonomy pins
       updated (20 fatal + 3 non-fatal); tests pass.
@@ -98,11 +112,79 @@ sources on disk; treat these as the evidence base for the design below.
 - `hw-kafka-client` has no binding for `rd_kafka_fatal_error` (grep of
   `src/Kafka/Internal/RdKafka.chs` finds none) and none for
   `rd_kafka_queue_get_consumer` (needed only by the rejected alternative design).
+- Implementation-time re-verification (2026-07-27), performed in the fresh fork clone
+  and the librdkafka corpus before writing a line of the patch, because forking a
+  third-party library is a durable commitment and the whole plan rests on this chain.
+  Every link held, and several plan citations are now pinned to the exact lines in the
+  `v5.3.0` tag (which differ slightly from the corpus checkout the plan was authored
+  against — see the line-number note below).
+  - Fenced static member raises a *fatal*: `rd_kafka_set_fatal_error` is called on
+    `RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID` from three cgrp sites —
+    `src/rdkafka_cgrp.c:2517-2521` (JoinGroup response), `:1974-1977` (SyncGroup
+    failure), `:3908-3911` (heartbeat error handler).
+  - For a high-level consumer that fatal goes to the consumer queue and *not* to
+    `error_cb`. `src/rdkafka.c:936-952`, verbatim: "For the high-level consumer we
+    propagate the error as a consumer error so it is returned from consumer_poll(),
+    while for all other client types (the producer) we propagate to the standard error
+    handler (typically error_cb)." The consumer branch calls
+    `rd_kafka_consumer_err(rk->rk_cgrp->rkcg_q, ..., RD_KAFKA_RESP_ERR__FATAL, ...)`.
+  - `rd_kafka_consumer_poll` delegates to `rd_kafka_consume0(rk, rkcg->rkcg_q, ...)`
+    (`src/rdkafka.c:5134-5144`), which dispatches with `RD_KAFKA_Q_CB_RETURN`
+    (`src/rdkafka.c:5046`). In the dispatcher, `RD_KAFKA_OP_CONSUMER_ERR` under that
+    cb_type executes `return RD_KAFKA_OP_RES_PASS; /* return as message_t to
+    application */` *before* the `RD_KAFKA_OP_ERR` fallthrough
+    (`src/rdkafka.c:5897-5912`). This is the proof that an installed `error_cb` can
+    never observe a consumer fatal.
+  - The binding then throws it away: `pollConsumerEvents'` is
+    `void $ rdKafkaConsumerPoll (getRdKafka k) tm` at `src/Kafka/Consumer.hs:432-435`
+    in the `v5.3.0` tag, and in Async mode nothing else drains the consumer queue.
+  - The leak is confirmed in the *generated* code, not just inferred from the `.chs`:
+    `dist-newstyle/.../Kafka/Internal/RdKafka.hs:1809-1815` marshals the result with
+    `C2HSImp.newForeignPtr_ res` — no finalizer. The finalizer-attaching alternative
+    `pollRdKafkaConsumer` (`src/Kafka/Internal/RdKafka.chs:597-601`) is defined and
+    **never called anywhere in the package** (`grep -rn pollRdKafkaConsumer src/`
+    returns only its own definition).
+  - The watchdog claim holds. `RD_KAFKA_Q_F_CONSUMER` (`src/rdkafka_queue.h:79-83`)
+    documents itself as "If this flag is set, this queue might contain fetched messages
+    from partitions. Polling this queue will reset the max.poll.interval.ms timer. Once
+    set, this flag is never reset.", and `rd_kafka_consume0` brackets every call with
+    `rd_kafka_app_poll_start` / `rd_kafka_app_polled` (`src/rdkafka.c:5039`, `:5056`).
+  - The Sync-mode half holds too. `fromMessagePtr` yields
+    `Left (KafkaResponseError RdKafkaRespErrFatal)`
+    (`src/Kafka/Consumer/Convert.hs:160-161`), and `isFatal`
+    (`hw-kafka-streamly/src/Kafka/Streamly/Stream.hs:184-203`) has exactly 18 arms,
+    none of them `RdKafkaRespErrFatal`, followed by `_ -> False`; `skipNonFatal` is
+    `Stream.filter (either isFatal (const True))`, so it discards the fatal.
+- Line-number drift (2026-07-27): this plan was authored against the corpus checkout
+  `/Users/shinzui/Keikaku/hub/haskell/hw-kafka-client-project/hw-kafka-client`, whose
+  `src/Kafka/Consumer.hs` line numbers run about 20 lines ahead of the `v5.3.0` tag the
+  fork is branched from. In the fork, `newConsumer` is at 114-143 (plan said 115-165),
+  `pollMessage` at 145-154 (plan said 167-176), `pollMessageBatch` at 156-171 (plan said
+  183-193), `pollConsumerEvents` haddock at 302-319 (plan said 335-341), and
+  `pollConsumerEvents'` at 432-435 (plan said 454-457). Content is identical in every
+  case; only the offsets moved. Use the fork's numbers when reading the patch.
 - One citation in the review had a path imprecision: the "NoOffset is not an error"
   documentation lives at `src/Kafka/Consumer/Callbacks.hs:37-39` (the `Consumer`
   subdirectory), not `src/Kafka/Callbacks.hs`. Content verified as cited. (That finding
   belongs to sibling plan 136; recorded here because the verification happened while
   reading this repo.)
+- Implementation (2026-07-27): the test suite is named `tests`, not
+  `hw-kafka-client-test` as this plan's Concrete Steps and Validation sections say, and
+  the bare name is ambiguous with a cwd-package filter. The command that works is
+  `cabal test test:tests`; use that everywhere this plan says
+  `cabal test hw-kafka-client-test`. (`integration-tests` is the broker-backed suite,
+  gated behind the `it` cabal flag and `buildable: False` by default, as the plan
+  correctly notes.)
+- Implementation (2026-07-27): the fork needed no nix dev shell. Plain
+  `cabal build hw-kafka-client` works from the ambient toolchain — GHC 9.12.4,
+  cabal 3.16.1.0, librdkafka 2.13.0 (`pkg-config --modversion rdkafka`) — and cabal
+  builds the `c2hs` build-tool dependency itself, so the plan's `nix develop` step and
+  its `brew install librdkafka` fallback were both unnecessary. Note the ambient GHC is
+  9.12.4 while `hw-kafka-streamly/cabal.project` pins `with-compiler: ghc-9.12.2`; the
+  fork builds under both.
+- Implementation (2026-07-27): `haskell-works/hw-kafka-client` has **no** `CHANGELOG.md`
+  (`README.md` is the only top-level Markdown file), so M1's CHANGELOG instruction does
+  not apply upstream. See Decision Log.
 
 
 ## Decision Log
@@ -170,6 +252,78 @@ sources on disk; treat these as the evidence base for the design below.
   (the package lives in the `hw-kafka-client/` subdirectory of the corpus project,
   which would force a `subdir:` stanza and tie the pin to a non-canonical repo).
   Date: 2026-07-23
+
+
+- Decision: Prepare the upstream PR but do not submit it.
+  Rationale: User direction, 2026-07-27, when asked whether the initiative should fork a
+  third-party library at all. The fork and pin are the deliverable our stack depends on;
+  submitting is a separate, reversible act that can happen whenever we choose. The full
+  PR text is written and preserved (embedded in this plan and staged in the fork clone)
+  so submitting later costs one command and no rediscovery. This does *not* change the
+  Idempotence and Recovery posture: the pin is correct regardless of the PR's fate.
+  Date: 2026-07-27
+
+- Decision: Surface the fatal by reading librdkafka's fatal state directly on every poll,
+  rather than by adding a fatal-sink `IORef` field to `KafkaConf` as the plan specified.
+  Rationale: Discovered while implementing that `rd_kafka_fatal_error` is public
+  (`RD_EXPORT`, `src/rdkafka.h:846-848`) and, when no fatal has been raised, is *just* an
+  atomic read with an early return — no lock, no string copy (`src/rdkafka.c:868-878`).
+  So the per-poll cost is negligible, and reading it directly is better than the sink on
+  four counts. It is authoritative rather than derived: it does not depend on the
+  background loop having already dequeued the `CONSUMER_ERR` op, closing a real race
+  where the application polls the side queue before the loop observes the message. It
+  works identically in both callback poll modes with one code path. It adds no shared
+  mutable state and touches no internal type, so the patch does not perturb the eleven
+  positional `KafkaConf` pattern sites the plan anticipated having to fix — a materially
+  smaller and more reviewable upstream diff (144 insertions across 3 files, no type
+  changes). And it makes the fatal permanent for free, since librdkafka's own state is
+  permanent. The plan's Interfaces section is superseded accordingly: `KafkaConf` is
+  unchanged.
+  Date: 2026-07-27
+
+- Decision: `pollMessage`/`pollMessageBatch` report the *generic*
+  `KafkaResponseError RdKafkaRespErrFatal`, not the resolved original cause. The cause is
+  exposed separately through a new `consumerFatalError :: MonadIO m => KafkaConsumer ->
+  m (Maybe (KafkaError, Text))`.
+  Rationale: The plan left this open and asked for whichever shipped to be recorded,
+  because sibling plan 136's classifier depends on it. Reporting the generic code gives
+  both poll modes an *identical* value — Sync mode already receives exactly
+  `RdKafkaRespErrFatal` from `fromMessagePtr` — so M2's `isFatal` needs exactly one new
+  arm and callers never discriminate by poll mode. Reporting the original cause would
+  instead have required `isFatal` to enumerate every possible fatal cause
+  (`FencedInstanceId`, and whatever librdkafka adds later), which is open-ended and would
+  silently regress the moment a new cause appeared. The description is not lost: it is
+  available from `consumerFatalError` alongside the cause. **Sibling plan 136 should
+  classify `RdKafkaRespErrFatal` and needs no per-cause arms.**
+  Date: 2026-07-27
+
+- Decision: No CHANGELOG entry in the fork.
+  Rationale: `haskell-works/hw-kafka-client` has no `CHANGELOG.md` (the repo's only
+  top-level Markdown file is `README.md`). Introducing one as part of a bug-fix PR is
+  unrelated noise. The plan's M1 CHANGELOG instruction is therefore not applicable
+  upstream; the `hw-kafka-streamly` CHANGELOG entry in M2 is unaffected and still owed.
+  Date: 2026-07-27
+
+
+## Upstream PR text (prepared, not submitted)
+
+Preserved here so the plan stays self-contained and restartable: the working copy in the
+fork clone is git-excluded and would be lost if the clone were deleted. Title:
+
+```text
+fix(consumer): surface consumer fatal errors and stop leaking polled messages
+```
+
+Body: see `/Users/shinzui/Keikaku/bokuno/hw-kafka-client/PR_BODY.md`. It presents, in
+order, the delivery-mechanics evidence (the librdkafka citations reproduced in Surprises
+& Discoveries above, with the two decisive quotes shown as C excerpts), the leak
+explanation including the never-called `pollRdKafkaConsumer` precedent already in the
+tree, the four changes with the rationale for reading fatal state directly and for
+reporting the generic code, an explicit "what this PR does not fix" section covering the
+`max.poll.interval.ms` watchdog with the `RD_KAFKA_Q_F_CONSUMER` quote and Route B
+offered as follow-up, and the testing note that the fenced-consumer scenario is the
+end-to-end check because the unit suite has no broker and the poll action is not
+injectable.
 
 
 ## Outcomes & Retrospective
