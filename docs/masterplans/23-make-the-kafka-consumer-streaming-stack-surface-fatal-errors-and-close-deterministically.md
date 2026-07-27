@@ -4,6 +4,7 @@ slug: make-the-kafka-consumer-streaming-stack-surface-fatal-errors-and-close-det
 title: "Make the Kafka consumer streaming stack surface fatal errors and close deterministically"
 kind: master-plan
 created_at: 2026-07-23T04:18:29Z
+intention: intention_01kyhskznseyk9f76y9z8ddt1q
 ---
 
 # Make the Kafka consumer streaming stack surface fatal errors and close deterministically
@@ -33,7 +34,7 @@ ADR context: no relevant ADR in keiro's `docs/adr/`. Candidate ADR: the consumer
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Surface librdkafka fatal errors through the consumer stack | docs/plans/135-surface-librdkafka-fatal-errors-through-the-consumer-stack.md | None | None | Not Started |
+| 1 | Surface librdkafka fatal errors through the consumer stack | docs/plans/135-surface-librdkafka-fatal-errors-through-the-consumer-stack.md | None | None | In Progress |
 | 2 | Classify poll and commit errors and fix traced-context hygiene | docs/plans/136-classify-poll-and-commit-errors-and-fix-traced-context-hygiene.md | None | EP-1 | Not Started |
 | 3 | Guarantee deterministic consumer close in hw-kafka-streamly | docs/plans/137-guarantee-deterministic-consumer-close-in-hw-kafka-streamly.md | None | None | Not Started |
 

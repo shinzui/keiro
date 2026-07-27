@@ -4,6 +4,7 @@ slug: surface-librdkafka-fatal-errors-through-the-consumer-stack
 title: "Surface librdkafka fatal errors through the consumer stack"
 kind: exec-plan
 created_at: 2026-07-23T04:18:42Z
+intention: intention_01kyhskznseyk9f76y9z8ddt1q
 master_plan: "docs/masterplans/23-make-the-kafka-consumer-streaming-stack-surface-fatal-errors-and-close-deterministically.md"
 ---
 
