@@ -54,7 +54,10 @@ Experiment B) for the capability requested by
 
 ## Progress
 
-- [ ] Milestone 1: comparison engine and report model in `Keiro.Dsl.CodecCompare` with unit tests.
+- [x] 2026-07-28: Milestone 1 completed: `Keiro.Dsl.CodecCompare` exposes RFC 8785
+      classification, structured pointer-addressed differences, invalid-input and branch-gap
+      reporting, stable JSON/human rendering, success semantics, and atomic report writing;
+      `keiro-dsl-test` passes 294 examples.
 - [ ] Milestone 2: opt-in scaffolded comparison runner, hand-owned runner executable, and the
       generalized Experiment B conformance fixture (historical quirky codec vs generated codec).
 - [ ] Milestone 3: structural-versus-opaque coverage report in `check`/`diff`, new
@@ -72,6 +75,12 @@ Experiment B) for the capability requested by
   and the current snapshot cache uses consumer JSON. Ratios across all four surfaces would be
   fabricated evidence; the revised report names supported roots, cache boundaries, and
   unsupported surfaces separately.
+- Mori has no registered upstream Aeson project, so dependency discovery stopped there rather
+  than consulting a package-store checkout. Hackage currently lists Aeson 2.2.5.0 as the newest
+  release inside Keiro's existing `<2.3` line (2.3.1.0 is newest overall), upstream publishes
+  matching `v2.2.5.0` and `v2.3.1.0` tags, and the upstream source marks
+  `Data.Aeson.RFC8785.encodeCanonical` as available since 2.2.1.0. The library bound is therefore
+  `aeson >=2.2.1 && <2.3`.
 
 
 ## Decision Log
@@ -153,10 +162,25 @@ Experiment B) for the capability requested by
   version/upcaster work, nothing else.
   Date: 2026-07-28
 
+- Decision: Keep comparison branch-inventory types in `Keiro.Dsl.CodecCompare`; generated code
+  will construct `DeclaredBranch` and `ObservedBranch` by traversing the landed
+  `Keiro.Dsl.TypeGraph` total algebras.
+  Rationale: Plan 150 landed the checked graph and complete folds, but deliberately did not
+  publish the placeholder branch-inventory types assumed by this draft. The comparison engine
+  owns the migration-evidence vocabulary while the generator remains responsible for deriving
+  it exhaustively from the schema authority.
+  Date: 2026-07-28
+
 
 ## Outcomes & Retrospective
 
 (To be filled during and after implementation.)
+
+Milestone 1 delivered the pure comparison boundary independently of generated consumer code.
+The engine has only parity and explicit-version-work verdicts, treats rejection by the selected
+historical codec as invalid corpus/provenance input, reports typed and historical branch gaps
+separately, and carries the authority framing in both JSON and human output. The package build
+and the 294-example unit suite pass.
 
 
 ## Context and Orientation

@@ -31,6 +31,7 @@ library
   import:          warnings, shared
   hs-source-dirs:  src
   exposed-modules:
+    Keiro.Dsl.CodecCompare
     Keiro.Dsl.Diff
     Keiro.Dsl.DiffReport
     Keiro.Dsl.ExplainBindings
@@ -53,8 +54,8 @@ library
     Keiro.Dsl.Validate
 
   build-depends:
-    , aeson               >=2.2  && <2.3
-    , base                >=4.21 && <5
+    , aeson               >=2.2.1 && <2.3
+    , base                >=4.21  && <5
     , bytestring          >=0.12
     , containers          >=0.6
     , directory           >=1.3

@@ -16,6 +16,7 @@ import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
+import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingObligations, renderBindingObligations)
@@ -47,6 +48,56 @@ import Test.QuickCheck
 
 main :: IO ()
 main = hspec $ do
+    describe "historical codec comparison" $ do
+        it "treats object-key order as RFC 8785 parity" $ do
+            let historical = object ["z" .= (1 :: Int), "a" .= (2 :: Int)]
+                generated = object ["a" .= (2 :: Int), "z" .= (1 :: Int)]
+            classifyObservation (EncodeObservation "ordered-object" historical generated)
+                `shouldBe` Right JsonParity
+        it "classifies an omitted key versus explicit null as version work at that pointer" $ do
+            let historical = object []
+                generated = object ["description" .= Aeson.Null]
+            classifyObservation (EncodeObservation "absent-description" historical generated)
+                `shouldBe` Right (RequiresVersionWork (EncodedValueDifference (JsonPointer "/description") historical generated))
+        it "classifies generated rejection of a historical value as version work" $
+            classifyObservation
+                ( DecodeObservation
+                    "legacy.json"
+                    (object ["tag" .= ("legacy" :: T.Text)])
+                    (DecodedShape (object ["tag" .= ("legacy" :: T.Text)]))
+                    (DecodeFailed "unknown tag")
+                )
+                `shouldBe` Right (RequiresVersionWork (GeneratedDecodeRejected "unknown tag"))
+        it "treats historical-codec rejection as invalid input rather than parity" $
+            classifyObservation
+                ( DecodeObservation
+                    "corrupt.json"
+                    Aeson.Null
+                    (DecodeFailed "not historical data")
+                    (DecodeFailed "not generated data")
+                )
+                `shouldBe` Left (HistoricalCodecRejected "corrupt.json" "not historical data")
+        it "reports uncovered union arms separately by corpus origin" $ do
+            let canonical = DeclaredBranch HistoricalGolden (JsonPointer "/location") (UnionArm "canonical")
+                local = DeclaredBranch HistoricalGolden (JsonPointer "/location") (UnionArm "local_file")
+                report = compareReport comparisonProvenance [] [] [canonical, local] [ObservedBranch HistoricalGolden (JsonPointer "/location") (UnionArm "local_file")]
+            crCoverageGaps report
+                `shouldBe` [CoverageGap HistoricalGolden (JsonPointer "/location") (UnionArm "canonical")]
+            reportSucceeded report `shouldBe` False
+        it "round-trips the stable machine report" $ do
+            let observation = EncodeObservation "parity" (object ["a" .= (1 :: Int)]) (object ["a" .= (1 :: Int)])
+                report = compareReport comparisonProvenance [] [observation] [] []
+            Aeson.eitherDecode (Aeson.encode report) `shouldBe` Right report
+        it "atomically writes and replaces the machine report" $
+            withTempDirectory "keiro-dsl-codec-compare" $ \out -> do
+                let path = out </> "report.json"
+                    firstReport = compareReport comparisonProvenance [] [] [] []
+                    secondReport = compareReport comparisonProvenance [HistoricalGoldenUnreadable "bad.json" "bad JSON"] [] [] []
+                writeCompareReportAtomic path firstReport `shouldReturn` Right ()
+                Aeson.eitherDecodeFileStrict path `shouldReturn` Right firstReport
+                writeCompareReportAtomic path secondReport `shouldReturn` Right ()
+                Aeson.eitherDecodeFileStrict path `shouldReturn` Right secondReport
+
     describe "parse . pretty round-trip" $
         do
             it "re-parses any generated spec to an equal AST (modulo source locations)" $
@@ -2227,6 +2278,17 @@ main = hspec $ do
             plainMods <- scaffoldFixture "test/fixtures/reservation.keiro"
             let plainHoles = [moduleText m | m <- plainMods, kind m == HoleStub]
             plainHoles `shouldSatisfy` all (not . T.isInfixOf "B.replayOnly")
+
+comparisonProvenance :: CompareProvenance
+comparisonProvenance =
+    CompareProvenance
+        { cpHistoricalCodecIdentity = "example.historical"
+        , cpHistoricalCodecVersion = "legacy-v1"
+        , cpCanonicalType = CanonicalTypeId "example.Artifact.v1"
+        , cpBindingSymbol = QualifiedValueName "Example.Bindings.artifactBinding"
+        , cpBindingVersion = BindingVersion "1"
+        , cpWireFingerprint = "deadbeef"
+        }
 
 syntheticGenerated :: FilePath -> T.Text -> ScaffoldModule
 syntheticGenerated path contents =
