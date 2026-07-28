@@ -54,13 +54,18 @@ the final vertex and every register value." It is EP-4 of MasterPlan 25
 Use a checklist to summarize granular steps. Every stopping point must be documented here,
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 
-- [ ] M1: `sampleValue` takes the field name; `Text` samples become per-field-distinct.
-- [ ] M1: `emitHarness` emits `forwardReplay<Command>` blocks and splices their labelled
-      assertions into `harnessAssertions`.
-- [ ] M1: Firewall `restrictedImports` allowlist extended for the new `Keiki.Core` imports.
-- [ ] M1: New `keiro-dsl-test` expectations for the emitted text land and pass.
-- [ ] M1: All committed generated aggregate harnesses regenerated; every `keiro-dsl` test
-      suite is green.
+- [x] 2026-07-28: M1 `sampleValue` takes the field name; `Text` samples are
+      per-field-distinct.
+- [x] 2026-07-28: Mori-first Keiki API verification, ADR contract discovery, `cabal build all`,
+      `keiro-dsl-test` (241 examples), and `keiro-dsl-conformance` baseline completed green.
+- [x] 2026-07-28: M1 `emitHarness` emits `forwardReplay<Command>` blocks and splices their
+      labelled assertions into `harnessAssertions`.
+- [x] 2026-07-28: M1 firewall `restrictedImports` allowlist extended for replay and indexed
+      register access.
+- [x] 2026-07-28: M1 `keiro-dsl-test` emission, register-free, replay-only, and canonical
+      register expectations pass (243 examples).
+- [x] 2026-07-28: M1 all committed aggregate harnesses synchronized; all 24 `keiro-dsl`
+      test suites pass.
 - [ ] M2: `replay-divergence.keiro` fixture, `keiro-dsl-conformance-replay` suite, honest
       Holes with a dormant dishonest wire ctor, all green at baseline.
 - [ ] M2: `keiro-dsl/test/replay-mutation-test.sh` demonstrates that the mutation turns only the
@@ -72,7 +77,14 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Observation: Four legacy aggregate harness copies under `conformance-process` and
+  `conformance-process-runtime` come from the now-invalid empty aggregate declarations in
+  `hospital-surge.keiro`; the current scaffolder refuses that spec with two `AggregateEmpty`
+  errors before writing anything. They have no qualifying transitions, so M1 synchronized
+  their unconditional generated pragmas directly while the executable process harnesses
+  continued to validate normally. Evidence: the complete 24-suite run passed, including
+  `keiro-dsl-conformance-process` and `keiro-dsl-conformance-process-runtime`.
+  Date: 2026-07-28
 
 
 ## Decision Log

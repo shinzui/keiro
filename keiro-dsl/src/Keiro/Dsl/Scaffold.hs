@@ -157,8 +157,8 @@ firewallSurface =
         , forbiddenQualifiers = ["B"]
         , forbiddenImports = ["Keiki.Builder", "Keiki.Operators", "Keiki.Symbolic"]
         , -- Generated aggregate modules use the first two names; generated
-          -- harnesses use the final three to validate and step filled holes.
-          restrictedImports = [("Keiki.Core", ["RegFile", "HsPred", "defaultValidationOptions", "step", "validateTransducer"])]
+          -- harnesses validate, step, and replay filled holes register by register.
+          restrictedImports = [("Keiki.Core", ["RegFile", "HsPred", "applyEventsEither", "defaultValidationOptions", "step", "validateTransducer", "!"])]
         }
 
 {- | Scan generated modules for firewall breaches, returning every offending

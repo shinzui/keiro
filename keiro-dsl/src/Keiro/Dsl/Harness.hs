@@ -14,6 +14,13 @@ body by construction. The emitted module exposes @harnessAssertions ::
      stepping a sample command lands on the declared @goto@ vertex. This is the
      check a wrong guard fails — flipping @./=@ to @.==@ in the filled body turns
      it red while leaving the scaffold untouched.
+  5. a forward/replay equality check per live, event-emitting transition out of
+     the initial state: emitted events cross the generated codec boundary, then
+     replay must reconstruct the forward vertex and every declared register.
+
+@Text@ samples include their field name so same-typed field swaps remain visible
+to the replay check. Other sample kinds remain uniform until fixture bindings can
+supply a wider, consumer-owned corpus.
 -}
 module Keiro.Dsl.Harness (
     harnessFor,
@@ -370,14 +377,16 @@ workflowPatchIds = concatMap go
 emitHarness :: [GoldenPayload] -> Agg -> Text
 emitHarness goldens a =
     nl $
-        [ "{-# LANGUAGE OverloadedStrings #-}"
+        [ "{-# LANGUAGE DataKinds #-}"
+        , "{-# LANGUAGE OverloadedLabels #-}"
+        , "{-# LANGUAGE OverloadedStrings #-}"
         , generatedBanner
         , "module " <> aGenPrefix a <> ".Harness (harnessAssertions) where"
         , ""
         , "import " <> aGenPrefix a <> ".Domain"
         , "import " <> aGenPrefix a <> ".Codec (encode" <> nm <> "Event, parse" <> nm <> "Event" <> codecValueImport <> ")"
         , "import " <> aHolePrefix a <> ".Holes (" <> lowerFirst nm <> "Transducer)"
-        , "import Keiki.Core (defaultValidationOptions, step, validateTransducer)"
+        , "import Keiki.Core (" <> T.intercalate ", " coreImports <> ")"
         , codecDecodeRawImport
         ]
             ++ goldenImports
@@ -397,23 +406,46 @@ emitHarness goldens a =
             ++ [ "  , (\"accepts " <> tCommand t <> " from " <> initialVertex a <> "\", accept" <> tCommand t <> ")"
                | t <- initialTransitions a
                ]
-            ++ [ "  , (" <> tshow (upcastLabel e m) <> ", upcasts" <> rcName e <> ")"
-               | e <- upcastEvents
-               , Just m <- [rcUpcastFrom e]
-               ]
             ++ [ "  ]"
-               , ""
+               ]
+            ++ [ "  ++ forwardReplay" <> tCommand t
+               | t <- replayTransitions
+               ]
+            ++ ( if null upcastEvents
+                    then []
+                    else
+                        [ "  ++ [ " <> T.intercalate "\n     , " upcastAssertions
+                        , "     ]"
+                        ]
+               )
+            ++ [ ""
                , "roundTrips :: " <> nm <> "Event -> Bool"
                , "roundTrips e = parse" <> nm <> "Event (eventType " <> lowerFirst nm <> "Codec e) (encode" <> nm <> "Event e) == Right e"
                ]
             ++ concatMap (sampleEventDecl a) (aEvents a)
             ++ concatMap (acceptDecl a) (initialTransitions a)
+            ++ concatMap (forwardReplayDecl a) replayTransitions
             ++ concatMap (upcastDecl goldens a) upcastEvents
   where
     nm = aName a
     -- Bake the clock-free result computed from the spec at scaffold time.
     clockFreeLit = if specIsClockFree a then "True" else "False"
     upcastEvents = [e | e <- aEvents a, rcUpcastFrom e /= Nothing]
+    replayTransitions =
+        [ t
+        | t <- initialTransitions a
+        , tMode t == TmLive
+        , not (null (tEmits t))
+        ]
+    coreImports =
+        ["applyEventsEither" | not (null replayTransitions)]
+            ++ ["defaultValidationOptions", "step", "validateTransducer"]
+            ++ ["(!)" | not (null replayTransitions) && not (null (aRegs a))]
+    upcastAssertions =
+        [ "(" <> tshow (upcastLabel e m) <> ", upcasts" <> rcName e <> ")"
+        | e <- upcastEvents
+        , Just m <- [rcUpcastFrom e]
+        ]
     codecValueImport = ", " <> lowerFirst nm <> "Codec"
     codecDecodeRawImport =
         if null upcastEvents
@@ -502,7 +534,8 @@ initialTransitions a = case map stName (aStates a) of
     [] -> []
 
 {- | @sampleEvent<Ctor> :: <Agg>Event@ — a sample built from per-field sample
-values (enum→first constructor, Bool→False, id→placeholder, Text→\"sample\").
+values (enum→first constructor, Bool→False, id→placeholder,
+Text→\"sample-<fieldName>\").
 -}
 sampleEventDecl :: Agg -> ResolvedCtor -> [Text]
 sampleEventDecl a e =
@@ -525,20 +558,58 @@ acceptDecl a t =
         (c : _) -> "(" <> ctorExpr a c <> ")"
         [] -> "(error \"no command\")"
 
+forwardReplayDecl :: Agg -> Transition -> [Text]
+forwardReplayDecl a t =
+    [ ""
+    , "-- forward/replay equality (plan 147): cross the persisted codec boundary,"
+    , "-- replay the emitted chain, and compare the final vertex and every register."
+    , helperName <> " :: [(String, Bool)]"
+    , helperName <> " ="
+    , "  case step " <> transducer <> " (" <> initial <> ", " <> initialRegs <> ") " <> cmdSample <> " of"
+    , "    Nothing -> [(prefix <> \"forward step accepted\", False)]"
+    , "    Just (forwardVertex, " <> forwardRegsName <> ", emitted) ->"
+    , "      case mapM (\\event -> parse" <> nm <> "Event (eventType " <> codec <> " event) (encode" <> nm <> "Event event)) emitted of"
+    , "        Left _ -> [(prefix <> \"emitted chain decodes\", False)]"
+    , "        Right decodedEvents ->"
+    , "          case applyEventsEither " <> transducer <> " (" <> initial <> ", " <> initialRegs <> ") decodedEvents of"
+    , "            Left _ -> [(prefix <> \"replay succeeds\", False)]"
+    , "            Right (replayVertex, " <> replayRegsName <> ") ->"
+    , "              [ (prefix <> \"final vertex\", replayVertex == forwardVertex)"
+    ]
+        ++ [ "              , (prefix <> \"register " <> regName reg <> "\", (replayRegs ! #" <> regName reg <> ") == (forwardRegs ! #" <> regName reg <> "))"
+           | reg <- aRegs a
+           ]
+        ++ [ "              ]"
+           , "  where"
+           , "    prefix = \"forward/replay equality: " <> tCommand t <> " from " <> initial <> " -- \""
+           ]
+  where
+    nm = aName a
+    helperName = "forwardReplay" <> tCommand t
+    transducer = lowerFirst nm <> "Transducer"
+    codec = lowerFirst nm <> "Codec"
+    initial = initialVertex a
+    initialRegs = "initial" <> nm <> "Regs"
+    forwardRegsName = if null (aRegs a) then "_forwardRegs" else "forwardRegs"
+    replayRegsName = if null (aRegs a) then "_replayRegs" else "replayRegs"
+    cmdSample = case [c | c <- aCommands a, rcName c == tCommand t] of
+        (c : _) -> "(" <> ctorExpr a c <> ")"
+        [] -> "(error \"no command\")"
+
 -- | @(<Ctor> (<Ctor>Data v1 v2 …))@ with positional sample field values.
 ctorExpr :: Agg -> ResolvedCtor -> Text
 ctorExpr a rc =
     "(" <> rcName rc <> " (" <> rcName rc <> "Data" <> args <> "))"
   where
-    args = T.concat [" " <> sampleValue a ty | (_, ty) <- rcFields rc]
+    args = T.concat [" " <> sampleValue a fieldName ty | (fieldName, ty) <- rcFields rc]
 
-sampleValue :: Agg -> Text -> Text
-sampleValue a ty = case fieldCat a ty of
+sampleValue :: Agg -> Text -> Text -> Text
+sampleValue a fieldName ty = case fieldCat a ty of
     IdCat -> "(" <> ty <> " \"sample\")"
     EnumCat -> maybe ("(error \"no enum ctor\")") id (firstEnumCtor a ty)
     OtherCat
         | ty == "Bool" -> "False"
         | ty == "Int" -> "0"
-        | ty == "Text" -> "\"sample\""
+        | ty == "Text" -> tshow ("sample-" <> fieldName)
         | ty == aVertexType a -> initialVertex a
         | otherwise -> "(error \"sample: unsupported type " <> ty <> "\")"

@@ -1655,10 +1655,31 @@ main = hspec $ do
             -- 5 Generated (Domain/Codec/EventStream/Projection/Harness) + 1 Holes.
             length mods `shouldBe` 6
             firewallBreaches mods `shouldBe` []
+            let harness = generatedTextEndingIn "Harness.hs" mods
+            harness `shouldSatisfy` T.isInfixOf "prefix = \"forward/replay equality: PlaceOrder from OrderNotStarted -- \""
+            harness `shouldSatisfy` T.isInfixOf "prefix <> \"final vertex\""
+            harness `shouldNotSatisfy` T.isInfixOf "prefix <> \"register "
+        it "emits forward/replay checks with field-distinct Text samples" $ do
+            spec <- parseInlineSpec "<forward-replay-samples>" (T.replace "command Bump { count:Int }" "command Bump { count:Int noteText:Text echo:Text }" loweringAggregateSpec)
+            case [aggregate | NAggregate aggregate <- specNodes spec] of
+                aggregate : _ -> do
+                    let ctx = defaultContext (specContext spec)
+                        harness = generatedTextEndingIn "Harness.hs" (harnessFor ctx spec aggregate)
+                    harness `shouldSatisfy` T.isInfixOf "\"sample-noteText\" \"sample-echo\""
+                    harness `shouldSatisfy` T.isInfixOf "prefix = \"forward/replay equality: Bump from CounterPending -- \""
+                    harness `shouldSatisfy` T.isInfixOf "prefix <> \"register note\""
+                [] -> expectationFailure "forward/replay sample spec has no aggregate"
+        it "emits the canonical reservation register checks" $ do
+            mods <- scaffoldFixture "test/fixtures/reservation.keiro"
+            let harness = generatedTextEndingIn "Harness.hs" mods
+            harness `shouldSatisfy` T.isInfixOf "prefix = \"forward/replay equality: RequestTransferReservation from ReservationUnrequested -- \""
+            harness `shouldSatisfy` T.isInfixOf "prefix <> \"register reservationState\""
         it "lowers a replay-only transition to B.replayOnly in the holes skeleton (plan 143)" $ do
             twinMods <- scaffoldFixture "test/fixtures/reservation-guard-tightened-twin.keiro"
             let twinHoles = [moduleText m | m <- twinMods, kind m == HoleStub]
             twinHoles `shouldSatisfy` any (T.isInfixOf "B.replayOnly")
+            let twinHarness = generatedTextEndingIn "Harness.hs" twinMods
+            T.count "forwardReplayRequestTransferReservation ::" twinHarness `shouldBe` 1
             plainMods <- scaffoldFixture "test/fixtures/reservation.keiro"
             let plainHoles = [moduleText m | m <- plainMods, kind m == HoleStub]
             plainHoles `shouldSatisfy` all (not . T.isInfixOf "B.replayOnly")
