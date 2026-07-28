@@ -254,6 +254,13 @@ data DiagnosticCode
     | MappedModeCrossed
     | MappedDeclAdded
     | MappedDeclRemoved
+    | -- MasterPlan 25 / EP-152 reporting and migration-evidence codes.
+      CoverageOpaqueSurface
+    | CoverageOpaqueBoundaryAdded
+    | CoverageOpaqueGateExceeded
+    | CodecCompareDifference
+    | CodecCompareCoverageGap
+    | CodecCompareInvalidInput
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

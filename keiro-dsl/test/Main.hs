@@ -10,6 +10,7 @@ import Control.Exception (bracket)
 import Control.Monad (filterM, forM, forM_, unless)
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft, isRight)
 import Data.List (partition, sort)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -19,6 +20,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
 import Keiro.Dsl.CodecCompare
+import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingObligations, renderBindingObligations)
@@ -139,6 +141,83 @@ main = hspec $ do
             spec <- specOf "test/fixtures/structural-conformance.keiro"
             codecComparisonModule (defaultContext (specContext spec)) spec "VendorGeometry"
                 `shouldSatisfy` either (T.isInfixOf "is opaque") (const False)
+
+    describe "structural/opaque coverage reporting" $ do
+        it "reports mapped private-event roots and consumer-json register boundaries without a percentage" $ do
+            spec <- specOf "test/fixtures/structural-conformance.keiro"
+            report <- shouldResolveCoverage "structural-conformance.keiro" spec
+            Coverage.privateEventPayloads (Coverage.coverageSummary report)
+                `shouldBe` Coverage.CoverageCounts 2 1 1 0
+            Coverage.snapshotRegisters (Coverage.coverageSummary report)
+                `shouldBe` Coverage.CoverageCounts 2 1 1 0
+            map Coverage.opaqueMappedType (Coverage.coverageOpaqueBoundaries report)
+                `shouldBe` ["VendorGeometry"]
+            map Coverage.snapshotEncoding (Coverage.coverageSnapshotBoundaries report)
+                `shouldBe` ["consumer-json-cache", "consumer-json-cache"]
+            map Coverage.snapshotInvalidation (Coverage.coverageSnapshotBoundaries report)
+                `shouldBe` ["tracked-by-mapped-wire-fingerprint", "tracked-by-mapped-wire-fingerprint"]
+            map Coverage.findingCode (Coverage.coverageFindings report)
+                `shouldBe` [CoverageOpaqueSurface]
+            map Coverage.findingSeverity (Coverage.coverageFindings report)
+                `shouldBe` [Warning]
+            case Aeson.toJSON report of
+                Aeson.Object values ->
+                    forM_ ["spec", "roots", "opaqueBoundaries", "snapshotBoundaries", "unsupportedSurfaces"] $
+                        \key -> KeyMap.member key values `shouldBe` True
+                value -> expectationFailure ("coverage report was not an object: " <> show value)
+        it "reports explicit Json leaves by their complete persisted path" $ do
+            spec <- withMetadataJson <$> specOf "test/fixtures/structural-conformance.keiro"
+            report <- shouldResolveCoverage "structural-conformance-json.keiro" spec
+            Coverage.jsonBoundaries (Coverage.privateEventPayloads (Coverage.coverageSummary report))
+                `shouldBe` 1
+            map Coverage.jsonPath (Coverage.coverageJsonBoundaries report)
+                `shouldBe` ["ArtifactCatalog event ArtifactRecorded .artifact : ArtifactInfo .metadata : ArtifactMetadata .note"]
+        it "keeps a zero-opaque spec advisory-free and makes rejection explicitly opt-in" $ do
+            original <- specOf "test/fixtures/structural-conformance.keiro"
+            clear <- shouldResolveCoverage "structural-only.keiro" (withoutVendorGeometry original)
+            Coverage.opaqueRoots (Coverage.privateEventPayloads (Coverage.coverageSummary clear)) `shouldBe` 0
+            Coverage.coverageOpaqueBoundaries clear `shouldBe` []
+            Coverage.coverageFindings clear `shouldBe` []
+            opaque <- shouldResolveCoverage "structural-conformance.keiro" original
+            Coverage.coverageSucceeded opaque `shouldBe` True
+            let gated = Coverage.failOnOpaque opaque
+            Coverage.coverageSucceeded gated `shouldBe` False
+            map Coverage.findingCode (Coverage.coverageFindings gated)
+                `shouldBe` [CoverageOpaqueSurface, CoverageOpaqueGateExceeded]
+            map Coverage.findingSeverity (Coverage.coverageFindings gated)
+                `shouldBe` [Warning, Error]
+        it "diffs named opaque boundaries and fails only an explicitly gated increase" $ do
+            newSpec <- specOf "test/fixtures/structural-conformance.keiro"
+            report <- case Coverage.coverageDiffReport "structural-conformance.keiro" "HEAD" (withoutVendorGeometry newSpec) newSpec of
+                Left err -> expectationFailure (show err) >> fail "unreachable"
+                Right value -> pure value
+            fmap Coverage.opaqueBoundaryDelta (Coverage.coverageDelta report) `shouldBe` Just 1
+            fmap (map Coverage.opaqueMappedType . Coverage.addedOpaqueBoundaries) (Coverage.coverageDelta report)
+                `shouldBe` Just ["VendorGeometry"]
+            map Coverage.findingCode (Coverage.coverageFindings report)
+                `shouldBe` [CoverageOpaqueSurface, CoverageOpaqueBoundaryAdded]
+            Coverage.coverageSucceeded report `shouldBe` True
+            let gated = Coverage.failOnOpaqueIncrease report
+            Coverage.coverageSucceeded gated `shouldBe` False
+            map Coverage.findingCode (Coverage.coverageFindings gated)
+                `shouldBe` [CoverageOpaqueSurface, CoverageOpaqueBoundaryAdded, CoverageOpaqueGateExceeded]
+        it "appends the six stable coverage and comparison registry codes" $
+            map
+                show
+                [ CoverageOpaqueSurface
+                , CoverageOpaqueBoundaryAdded
+                , CoverageOpaqueGateExceeded
+                , CodecCompareDifference
+                , CodecCompareCoverageGap
+                , CodecCompareInvalidInput
+                ]
+                `shouldBe` [ "CoverageOpaqueSurface"
+                           , "CoverageOpaqueBoundaryAdded"
+                           , "CoverageOpaqueGateExceeded"
+                           , "CodecCompareDifference"
+                           , "CodecCompareCoverageGap"
+                           , "CodecCompareInvalidInput"
+                           ]
 
     describe "parse . pretty round-trip" $
         do
@@ -2861,6 +2940,44 @@ shouldResolveTypeGraph :: Spec -> IO TypeGraph
 shouldResolveTypeGraph spec = case resolveTypeGraph spec of
     Left errors -> expectationFailure ("type graph failed: " <> show errors) >> error "unreachable"
     Right graph -> pure graph
+
+shouldResolveCoverage :: FilePath -> Spec -> IO Coverage.CoverageReport
+shouldResolveCoverage path spec = case Coverage.coverageReport path spec of
+    Left errors -> expectationFailure ("coverage graph failed: " <> show errors) >> error "unreachable"
+    Right report -> pure report
+
+withoutVendorGeometry :: Spec -> Spec
+withoutVendorGeometry spec =
+    spec
+        { specMapped = filter (not . isVendorGeometry) (specMapped spec)
+        , specNodes = map stripNode (specNodes spec)
+        }
+  where
+    isVendorGeometry MappedOpaque{moName = "VendorGeometry"} = True
+    isVendorGeometry _ = False
+    stripNode (NAggregate aggregate) =
+        NAggregate
+            aggregate
+                { aggRegs = filter ((/= "VendorGeometry") . regType) (aggRegs aggregate)
+                , aggCommands = map stripCommand (aggCommands aggregate)
+                , aggEvents = map stripEvent (aggEvents aggregate)
+                }
+    stripNode node = node
+    stripCommand command = command{cmdFields = filter ((/= Just "VendorGeometry") . fieldType) (cmdFields command)}
+    stripEvent event = event{evBody = case evBody event of EventFields fields -> EventFields (filter ((/= Just "VendorGeometry") . fieldType) fields); body -> body}
+
+withMetadataJson :: Spec -> Spec
+withMetadataJson spec = spec{specMapped = map updateDeclaration (specMapped spec)}
+  where
+    updateDeclaration declaration@MappedStructural{msName = "ArtifactMetadata", msShape = ShapeRecord constructor unknownFields fields} =
+        declaration
+            { msShape =
+                ShapeRecord
+                    constructor
+                    unknownFields
+                    [if wfHaskell field == "note" then field{wfType = TJson} else field | field <- fields]
+            }
+    updateDeclaration declaration = declaration
 
 expressionTags :: TypeExprAlgebra [T.Text]
 expressionTags =

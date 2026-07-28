@@ -63,8 +63,11 @@ Experiment B) for the capability requested by
       corpus prove omitted-key and legacy-tag differences while covering every optional/null and
       five-arm union branch; `keiro-dsl-test` passes 297 examples and
       `keiro-dsl-conformance-codec-compare` passes all eight assertions.
-- [ ] Milestone 3: structural-versus-opaque coverage report in `check`/`diff`, new
-      DiagnosticCodes appended, optional gate flag.
+- [x] 2026-07-28: Milestone 3 completed: `Keiro.Dsl.Coverage` reports named private-event,
+      explicit-`Json`, opaque, and consumer-JSON register boundaries; `check` and `diff` write
+      stable JSON and human summaries; diff records previous counts/deltas; the two rejection
+      policies remain opt-in; six registry codes were appended; `keiro-dsl-test` passes 302
+      examples.
 - [ ] Milestone 4: documentation — brownfield-guide shadow-comparison section, evolution-guide
       update, new coverage-policy ADR, ADR 0004 inventory amendment if a gate row was added.
 - [ ] Final: Proposal Test answers recorded, ADR distillation pass, plan marked complete.
@@ -89,6 +92,10 @@ Experiment B) for the capability requested by
   input (which preserves missing/null evidence) and the successfully decoded value re-encoded by
   the generated codec (which supplies the canonical semantic arm); the raw spelling mismatch
   remains a comparison failure.
+- A mapped register is a consumer-JSON cache boundary even when its aggregate currently has no
+  snapshot policy. The report therefore inventories every mapped register, carries
+  `snapshotEnabled` separately, and never calls its wire fingerprint structural snapshot-codec
+  coverage.
 
 
 ## Decision Log
@@ -197,6 +204,16 @@ Experiment B) for the capability requested by
   codec, generated runner, binding, fixtures, and generated codec together.
   Date: 2026-07-28
 
+- Decision: Put coverage traversal and stable report types in the new exposed
+  `Keiro.Dsl.Coverage` module, with explicit total `TypeExprAlgebra`, `MappedShapeAlgebra`, and
+  `MappedDeclAlgebra` values for nested `Json` and mode discovery.
+  Rationale: Coverage is a reporting boundary rather than validation or compatibility
+  classification. Keeping it separate makes the report reusable by both `check` and `diff`, while
+  the total folds ensure a future resolved-expression constructor cannot be silently omitted.
+  Event roots and register-cache roots remain separate inventories, and only the former produces
+  opaque-surface policy findings.
+  Date: 2026-07-28
+
 
 ## Outcomes & Retrospective
 
@@ -213,6 +230,13 @@ fallback. Scaffold refuses opaque or unreachable declarations and protects the e
 output with its own banner, while the compiled consumer fixture demonstrates that omitted optional
 keys and a legacy union tag are never accepted as parity. The complete corpus has no coverage gaps;
 the deliberately incomplete corpus proves the missing-arm gate fires.
+
+Milestone 3 made adoption drift visible without redefining soundness. A report request emits named
+roots and boundaries plus advisory codes, while an ordinary `check` or `diff` performs no coverage
+work and retains its prior output/exit behavior. The check gate rejects existing opaque private
+event boundaries only when asked; the diff gate rejects only newly added named boundaries. A live
+CLI mutation added a second opaque event root and produced
+`CoverageOpaqueBoundaryAdded`/`CoverageOpaqueGateExceeded`, then the fixture was restored.
 
 
 ## Context and Orientation

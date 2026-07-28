@@ -9,6 +9,7 @@ import Data.Aeson qualified as Aeson
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
+import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), CompatibilitySurface, diffSpecs, gateWith, gatedBreaking)
 import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, renderExplainBlock, renderFinding)
 import Keiro.Dsl.ExplainBindings (bindingObligations, renderBindingObligations)
@@ -30,10 +31,20 @@ import System.Process (readProcessWithExitCode)
 
 data Command
     = Parse FilePath
-    | Check FilePath Bool Bool
+    | Check FilePath Bool Bool (Maybe CheckCoverageOptions)
     | Scaffold FilePath FilePath (Maybe String) Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
-    | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath)
+    | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath) (Maybe DiffCoverageOptions)
     | New String
+
+data CheckCoverageOptions = CheckCoverageOptions
+    { checkCoveragePath :: !FilePath
+    , checkFailOnOpaque :: !Bool
+    }
+
+data DiffCoverageOptions = DiffCoverageOptions
+    { diffCoveragePath :: !FilePath
+    , diffFailOnOpaqueIncrease :: !Bool
+    }
 
 main :: IO ()
 main = run =<< execParser opts
@@ -51,13 +62,13 @@ commands =
             (info (Parse <$> fileArg <**> helper) (progDesc "Parse a .keiro file and pretty-print it back"))
             <> command
                 "check"
-                (info (Check <$> fileArg <*> emitSwitch <*> explainBindingsSwitch <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
+                (info (Check <$> fileArg <*> emitSwitch <*> explainBindingsSwitch <*> checkCoverageOptions <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
             <> command
                 "scaffold"
                 (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> optional goldensOpt <*> codecComparisonOpts <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
             <> command
                 "diff"
-                (info (Diff <$> fileArg <*> sinceOpt <*> optional emitGoldensOpt <*> optional replayImpactOutOpt <*> many gateOpt <*> explainSwitch <*> optional reportOutOpt <**> helper) (progDesc "Classify spec changes since a git ref as per-surface compatibility vectors; exit non-zero on any gated BREAKING surface"))
+                (info (Diff <$> fileArg <*> sinceOpt <*> optional emitGoldensOpt <*> optional replayImpactOutOpt <*> many gateOpt <*> explainSwitch <*> optional reportOutOpt <*> diffCoverageOptions <**> helper) (progDesc "Classify spec changes since a git ref as per-surface compatibility vectors; exit non-zero on any gated BREAKING surface"))
             <> command
                 "new"
                 (info (New <$> kindArg <**> helper) (progDesc "Print a minimal valid .keiro skeleton for a node kind (aggregate, process, router, contract, intake, emit, publisher, workqueue, dispatch, workflow, operation)"))
@@ -101,6 +112,25 @@ explainSwitch = switch (long "explain" <> help "Print containing paths, failing 
 reportOutOpt :: Parser FilePath
 reportOutOpt = strOption (long "report-out" <> metavar "FILE" <> help "Write the full keiro-dsl/diff-report/1 compatibility report as JSON")
 
+coverageReportOpt :: Parser FilePath
+coverageReportOpt = strOption (long "coverage-report" <> metavar "FILE" <> help "Write reporting-only structural/opaque mapped-root coverage as JSON")
+
+checkCoverageOptions :: Parser (Maybe CheckCoverageOptions)
+checkCoverageOptions =
+    optional
+        ( CheckCoverageOptions
+            <$> coverageReportOpt
+            <*> switch (long "fail-on-opaque" <> help "Fail when a private persisted root contains an opaque boundary (requires --coverage-report)")
+        )
+
+diffCoverageOptions :: Parser (Maybe DiffCoverageOptions)
+diffCoverageOptions =
+    optional
+        ( DiffCoverageOptions
+            <$> coverageReportOpt
+            <*> switch (long "fail-on-opaque-increase" <> help "Fail when diff adds a named opaque boundary (requires --coverage-report)")
+        )
+
 emitSwitch :: Parser Bool
 emitSwitch = switch (long "emit" <> help "On success, pretty-print the parsed spec to stdout (folds parse + check into one call)")
 
@@ -124,7 +154,7 @@ run (Parse fp) = do
             hPutStrLn stderr (T.unpack err)
             exitFailure
         Right spec -> TIO.putStrLn (renderSpec spec)
-run (Check fp emit explainBindings) = do
+run (Check fp emit explainBindings coverageOptions) = do
     input <- TIO.readFile fp
     case parseSpec fp input of
         Left err -> do
@@ -143,7 +173,10 @@ run (Check fp emit explainBindings) = do
                                 hPutStrLn stderr ("validated spec did not resolve its mapped type graph: " <> show graphErrors)
                                 exitFailure
                             Right obligations -> TIO.putStrLn (renderBindingObligations (specContext spec) obligations)
-                        else when (not emit) (putStrLn "OK")
+                        else pure ()
+                    coverageOk <- runCheckCoverage fp spec coverageOptions
+                    when (coverageOk && not emit && not explainBindings) (putStrLn "OK")
+                    when (not coverageOk) exitFailure
 run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest) = do
     input <- TIO.readFile fp
     case parseSpec fp input of
@@ -181,7 +214,7 @@ run (New kind) =
     case skeletonFor (T.pack kind) of
         Left err -> hPutStrLn stderr (T.unpack err) >> exitFailure
         Right skel -> TIO.putStr skel
-run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut) = do
+run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions) = do
     -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.
     let dir = takeDirectory fp
     rootRes <- git dir ["rev-parse", "--show-toplevel"]
@@ -210,7 +243,8 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
                             TIO.putStrLn (renderReplayImpact impact)
                             mapM_ (`Aeson.encodeFile` impact) replayImpactOut
                             mapM_ (\path -> Aeson.encodeFile path (diffReport effectiveGate changes)) reportOut
-                            if any (gatedBreaking effectiveGate) changes then exitFailure else pure ()
+                            coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
+                            if any (gatedBreaking effectiveGate) changes || not coverageOk then exitFailure else pure ()
 
 shouldExplain :: Change -> Bool
 shouldExplain Additive{} = False
@@ -261,6 +295,36 @@ writeComparison (Just (_, path)) (Just comparisonModule) = do
     TIO.writeFile path (moduleText comparisonModule)
     TIO.hPutStrLn stderr ("comparison generated " <> T.pack path <> " (migration evidence only)")
 writeComparison _ _ = hPutStrLn stderr "internal error: incomplete codec-comparison output" >> exitFailure
+
+runCheckCoverage :: FilePath -> Spec -> Maybe CheckCoverageOptions -> IO Bool
+runCheckCoverage _ _ Nothing = pure True
+runCheckCoverage specPath spec (Just options) =
+    case Coverage.coverageReport specPath spec of
+        Left graphErrors -> do
+            hPutStrLn stderr ("validated spec did not resolve its mapped type graph for coverage: " <> show graphErrors)
+            pure False
+        Right baseReport -> do
+            let report = if checkFailOnOpaque options then Coverage.failOnOpaque baseReport else baseReport
+            emitCoverageReport (checkCoveragePath options) report
+
+runDiffCoverage :: FilePath -> T.Text -> Spec -> Spec -> Maybe DiffCoverageOptions -> IO Bool
+runDiffCoverage _ _ _ _ Nothing = pure True
+runDiffCoverage specPath reference oldSpec newSpec (Just options) =
+    case Coverage.coverageDiffReport specPath reference oldSpec newSpec of
+        Left graphErrors -> do
+            hPutStrLn stderr ("diff specs did not resolve their mapped type graph for coverage: " <> show graphErrors)
+            pure False
+        Right baseReport -> do
+            let report = if diffFailOnOpaqueIncrease options then Coverage.failOnOpaqueIncrease baseReport else baseReport
+            emitCoverageReport (diffCoveragePath options) report
+
+emitCoverageReport :: FilePath -> Coverage.CoverageReport -> IO Bool
+emitCoverageReport path report = do
+    mapM_ (TIO.hPutStrLn stderr . Coverage.renderCoverageFinding (Coverage.coverageSpec report)) (Coverage.coverageFindings report)
+    TIO.putStr (Coverage.renderCoverageSummary report)
+    Coverage.writeCoverageReport path report
+    putStrLn ("coverage report written to " <> path)
+    pure (Coverage.coverageSucceeded report)
 
 {- | Fold the spec's @module@/@layout@ clauses with the CLI overrides to a
 'Context'. Precedence is CLI flag > spec clause > built-in default.

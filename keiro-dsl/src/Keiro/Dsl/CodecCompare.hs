@@ -53,6 +53,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.TypeGraph (BindingVersion (..), CanonicalTypeId (..), QualifiedValueName (..))
+import Keiro.Dsl.Validate (DiagnosticCode (..))
 import System.Directory (createDirectoryIfMissing, doesFileExist, removeFile, renameFile)
 import System.FilePath (takeDirectory, takeFileName)
 import System.IO (Handle, hClose, openBinaryTempFile)
@@ -369,13 +370,13 @@ renderCompareReport report =
           , "observations: " <> tshow (length observations)
           , "  encode parity: " <> ratio FromBinding
           , "  structural decode agreement: " <> ratio HistoricalGolden
-          , "requires explicit version/upcaster work: " <> tshow (length differences) <> " observations  [CodecCompareDifference]"
+          , "requires explicit version/upcaster work: " <> tshow (length differences) <> " observations  [" <> codeText CodecCompareDifference <> "]"
           ]
             <> concatMap renderDifference differences
-            <> [ "input issues: " <> tshow (length (crInputIssues report)) <> "  [CodecCompareInvalidInput]"
+            <> [ "input issues: " <> tshow (length (crInputIssues report)) <> "  [" <> codeText CodecCompareInvalidInput <> "]"
                ]
             <> map ("  " <>) (map renderInputIssue (crInputIssues report))
-            <> [ "coverage gaps: " <> tshow (length (crCoverageGaps report)) <> "  [CodecCompareCoverageGap]"
+            <> [ "coverage gaps: " <> tshow (length (crCoverageGaps report)) <> "  [" <> codeText CodecCompareCoverageGap <> "]"
                ]
             <> map ("  " <>) (map renderCoverageGap (crCoverageGaps report))
             <> [ if reportSucceeded report
@@ -520,6 +521,9 @@ escapePointerSegment = T.replace "/" "~1" . T.replace "~" "~0"
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show
 
+codeText :: DiagnosticCode -> Text
+codeText = T.pack . show
+
 originName :: FixtureOrigin -> Text
 originName HistoricalGolden = "historical-golden"
 originName FromBinding = "typed-fixture"
@@ -598,7 +602,7 @@ instance ToJSON FixtureVerdict where
     toJSON (RequiresVersionWork difference) =
         object
             [ "verdict" .= ("requires-version-work" :: Text)
-            , "code" .= ("CodecCompareDifference" :: Text)
+            , "code" .= codeText CodecCompareDifference
             , "difference" .= difference
             ]
 
@@ -616,14 +620,14 @@ instance ToJSON CompareInputIssue where
         HistoricalCodecRejected path reason -> issueObject "historical-codec-rejected" path reason
         HistoricalCodecProvenanceInvalid reason ->
             object
-                [ "code" .= ("CodecCompareInvalidInput" :: Text)
+                [ "code" .= codeText CodecCompareInvalidInput
                 , "kind" .= ("historical-codec-provenance-invalid" :: Text)
                 , "reason" .= reason
                 ]
       where
         issueObject kind path reason =
             object
-                [ "code" .= ("CodecCompareInvalidInput" :: Text)
+                [ "code" .= codeText CodecCompareInvalidInput
                 , "kind" .= (kind :: Text)
                 , "path" .= path
                 , "reason" .= reason
@@ -665,7 +669,7 @@ instance FromJSON ObservedBranch where
 instance ToJSON CoverageGap where
     toJSON gap =
         object
-            [ "code" .= ("CodecCompareCoverageGap" :: Text)
+            [ "code" .= codeText CodecCompareCoverageGap
             , "origin" .= cgOrigin gap
             , "pointer" .= cgPointer gap
             , "branch" .= cgKind gap
