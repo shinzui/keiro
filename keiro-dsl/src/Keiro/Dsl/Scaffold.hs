@@ -26,6 +26,7 @@ module Keiro.Dsl.Scaffold (
     genPrefixFor,
     holePrefixFor,
     scaffoldReplayAudit,
+    scaffoldStructural,
     scaffoldAggregate,
     scaffoldProcess,
     scaffoldRouter,
@@ -57,15 +58,18 @@ module Keiro.Dsl.Scaffold (
     generatedBanner,
 ) where
 
-import Data.Char (isAlpha, isAlphaNum, isUpper, toLower, toUpper)
-import Data.List (find, groupBy, sortOn)
+import Data.Char (isAlpha, isAlphaNum, isUpper, ord, toLower, toUpper)
+import Data.List (find, groupBy, nub, sort, sortOn)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
+import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (sagaCategoryError)
+import Numeric (showHex)
 import Text.Read (readMaybe)
 
 {- | One emitted module: its on-disk path (relative to the scaffold @--out@
@@ -158,7 +162,23 @@ firewallSurface =
         , forbiddenImports = ["Keiki.Builder", "Keiki.Operators", "Keiki.Symbolic"]
         , -- Generated aggregate modules use the first two names; generated
           -- harnesses validate, step, and replay filled holes register by register.
-          restrictedImports = [("Keiki.Core", ["RegFile", "HsPred", "applyEventsEither", "defaultValidationOptions", "step", "validateTransducer", "!"])]
+          restrictedImports =
+            [
+                ( "Keiki.Core"
+                ,
+                    [ "RegFile"
+                    , "HsPred"
+                    , "FieldProjection"
+                    , "FieldWitness"
+                    , "fieldWitness"
+                    , "applyEventsEither"
+                    , "defaultValidationOptions"
+                    , "step"
+                    , "validateTransducer"
+                    , "!"
+                    ]
+                )
+            ]
         }
 
 {- | Scan generated modules for firewall breaches, returning every offending
@@ -272,6 +292,7 @@ data Agg = Agg
     , aSnapshot :: !(Maybe SnapshotSpec)
     , aFoldFingerprint :: !Text
     , aReadModels :: ![ReadModelNode]
+    , aTypeGraph :: !(Maybe TypeGraph)
     , aGenPrefix :: !Text
     -- ^ e.g. @Generated.HospitalCapacity.Reservation@
     , aHolePrefix :: !Text
@@ -312,6 +333,7 @@ resolveAgg ctx spec agg =
         , aSnapshot = aggSnapshot agg
         , aFoldFingerprint = aggregateFoldFingerprint spec agg
         , aReadModels = [readModel | NReadModel readModel <- specNodes spec]
+        , aTypeGraph = either (const Nothing) Just (resolveTypeGraph spec)
         , aGenPrefix = genPrefixFor ctx nm
         , aHolePrefix = holePrefixFor ctx nm
         }
@@ -358,6 +380,335 @@ resolveAgg ctx spec agg =
 --------------------------------------------------------------------------------
 -- Entry point
 --------------------------------------------------------------------------------
+
+{- | Emit the context-level private structural stratum. Shape modules contain
+only generated wire representations. The projection facade contains only
+schema-derived Keiki field witnesses; neither layer owns consumer behavior.
+-}
+scaffoldStructural :: Context -> Spec -> [ScaffoldModule]
+scaffoldStructural ctx spec = case resolveTypeGraph spec of
+    Left _ -> []
+    Right graph -> map (shapeModule ctx graph) structural <> projectionModules
+      where
+        structural =
+            [ (declaration, shape)
+            | ResolvedStructural declaration shape <- Map.elems (tgDeclarations graph)
+            ]
+        projectionModules =
+            [ ScaffoldModule
+                { modulePath = T.unpack (T.replace "." "/" (structuralProjectionModule ctx) <> ".hs")
+                , moduleText = emitStructuralProjections ctx graph
+                , kind = Generated
+                , origin = "context " <> specContext spec <> " mapped structural facade"
+                }
+            | not (null (projectionSpecs graph))
+            ]
+
+shapeModule :: Context -> TypeGraph -> (StructuralDecl, ResolvedMappedShape) -> ScaffoldModule
+shapeModule ctx graph (declaration, shape) =
+    ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" (structuralShapeModule ctx (sdName declaration)) <> ".hs")
+        , moduleText = emitShape ctx graph declaration shape
+        , kind = Generated
+        , origin = nodeOrigin "mapped structural" (sdName declaration) (sdLoc declaration)
+        }
+
+structuralPrefix :: Context -> Text
+structuralPrefix ctx = case placement ctx of
+    GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> ".Structural"
+    CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Generated.Structural"
+
+structuralShapeModule :: Context -> Name -> Text
+structuralShapeModule ctx name = structuralPrefix ctx <> ".Shape." <> name
+
+structuralProjectionModule :: Context -> Text
+structuralProjectionModule ctx = structuralPrefix ctx <> "Projections"
+
+emitShape :: Context -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Text
+emitShape ctx graph declaration shape =
+    nl $
+        languagePragmas
+            <> [ generatedBanner
+               , "module " <> moduleName <> " (" <> shapeType <> " (..)) where"
+               , ""
+               ]
+            <> map ("import " <>) imports
+            <> ["" | not (null imports)]
+            <> [shapeDeclaration]
+  where
+    moduleName = structuralShapeModule ctx (sdName declaration)
+    shapeType = sdName declaration <> "Shape"
+    requirements = shapeRequirements ctx graph shape
+    languagePragmas = ["{-# LANGUAGE DuplicateRecordFields #-}" | shapeHasRecord shape]
+    imports =
+        sort . nub $
+            ["Data.Aeson (Value)" | ReqJson `elem` requirements]
+                <> ["Data.Map.Strict (Map)" | ReqMap `elem` requirements]
+                <> ["Data.Text (Text)" | ReqText `elem` requirements]
+                <> ["Data.Time (UTCTime)" | ReqTime `elem` requirements]
+                <> ["Numeric.Natural (Natural)" | ReqNatural `elem` requirements]
+                <> [m <> " qualified" | ReqModule m <- requirements]
+    shapeDeclaration =
+        foldMappedShape
+            MappedShapeAlgebra
+                { onRecord = \constructor _ fields ->
+                    nl $
+                        ["data " <> shapeType <> " = " <> constructor]
+                            <> recordFields
+                                [ (rwfHaskell field, renderShapeType ctx graph (rwfType field))
+                                | field <- fields
+                                ]
+                            <> ["  deriving stock (Eq, Show)"]
+                , onEnum = \entries ->
+                    "data "
+                        <> shapeType
+                        <> " = "
+                        <> T.intercalate " | " (map weCtor entries)
+                        <> "\n  deriving stock (Eq, Show)"
+                , onUnion = \_ arms ->
+                    nl $
+                        case arms of
+                            [] -> ["data " <> shapeType <> " = " <> shapeType <> "Empty", "  deriving stock (Eq, Show)"]
+                            firstArm : rest ->
+                                ["data " <> shapeType <> " = " <> renderArm firstArm]
+                                    <> ["  | " <> renderArm arm | arm <- rest]
+                                    <> ["  deriving stock (Eq, Show)"]
+                }
+            shape
+    renderArm arm = rwaCtor arm <> maybe "" ((" !" <>) . renderShapeType ctx graph) (rwaPayload arm)
+
+data ShapeRequirement
+    = ReqJson
+    | ReqMap
+    | ReqText
+    | ReqTime
+    | ReqNatural
+    | ReqModule !Text
+    deriving stock (Eq, Ord, Show)
+
+shapeHasRecord :: ResolvedMappedShape -> Bool
+shapeHasRecord =
+    foldMappedShape
+        MappedShapeAlgebra
+            { onRecord = \_ _ _ -> True
+            , onEnum = const False
+            , onUnion = \_ _ -> False
+            }
+
+shapeRequirements :: Context -> TypeGraph -> ResolvedMappedShape -> [ShapeRequirement]
+shapeRequirements ctx graph =
+    foldMappedShape
+        MappedShapeAlgebra
+            { onRecord = \_ _ fields -> concatMap (exprRequirements ctx graph . rwfType) fields
+            , onEnum = const []
+            , onUnion = \_ arms -> concatMap (maybe [] (exprRequirements ctx graph) . rwaPayload) arms
+            }
+
+exprRequirements :: Context -> TypeGraph -> ResolvedTypeExpr -> [ShapeRequirement]
+exprRequirements ctx graph =
+    foldTypeExpr
+        TypeExprAlgebra
+            { onText = [ReqText]
+            , onInt = []
+            , onBool = []
+            , onNatural = [ReqNatural]
+            , onTime = [ReqTime]
+            , onJson = [ReqJson]
+            , onOptional = id
+            , onList = id
+            , onMap = (ReqMap :) . (ReqText :)
+            , onRef = \key -> case Map.lookup key (tgDeclarations graph) of
+                Just (ResolvedStructural declaration _) -> [ReqModule (structuralShapeModule ctx (sdName declaration))]
+                Just (ResolvedOpaque declaration) -> [ReqModule (hsModule (odHaskell declaration))]
+                Nothing -> []
+            }
+
+renderShapeType :: Context -> TypeGraph -> ResolvedTypeExpr -> Text
+renderShapeType ctx graph =
+    foldTypeExpr
+        TypeExprAlgebra
+            { onText = "Text"
+            , onInt = "Int"
+            , onBool = "Bool"
+            , onNatural = "Natural"
+            , onTime = "UTCTime"
+            , onJson = "Value"
+            , onOptional = \value -> "Maybe (" <> value <> ")"
+            , onList = \value -> "[" <> value <> "]"
+            , onMap = \value -> "Map Text (" <> value <> ")"
+            , onRef = \key -> case Map.lookup key (tgDeclarations graph) of
+                Just (ResolvedStructural nested _) ->
+                    structuralShapeModule ctx (sdName nested) <> "." <> sdName nested <> "Shape"
+                Just (ResolvedOpaque opaque) ->
+                    hsModule (odHaskell opaque) <> "." <> hsType (odHaskell opaque)
+                Nothing -> "()"
+            }
+
+data StructuralProjection = StructuralProjection
+    { spTag :: !Text
+    , spWitness :: !Text
+    , spPointer :: !Text
+    , spOwner :: !HaskellSource
+    , spResult :: !Text
+    , spCanonical :: !CanonicalTypeId
+    , spBinding :: !QualifiedValueName
+    , spSelectors :: ![(Text, Text)]
+    }
+    deriving stock (Eq, Show)
+
+projectionSpecs :: TypeGraph -> [StructuralProjection]
+projectionSpecs graph =
+    sortOn spTag . concat $
+        [ projectionsForRoot graph declaration shape
+        | ResolvedStructural declaration shape <- Map.elems (tgDeclarations graph)
+        ]
+
+projectionsForRoot :: TypeGraph -> StructuralDecl -> ResolvedMappedShape -> [StructuralProjection]
+projectionsForRoot graph root rootShape = case rootShape of
+    RRecord _ _ fields -> concatMap (walkField [] []) fields
+    REnum{} -> []
+    RUnion{} -> []
+  where
+    walkField keys selectors field
+        | rwfPresence field /= PRequired = []
+        | otherwise = case projectionScalar (rwfType field) of
+            Just result -> [mkProjection (keys <> [rwfKey field]) (selectors <> [(shapeModuleForOwner, rwfHaskell field)]) result]
+            Nothing -> case rwfType field of
+                RRef key -> case Map.lookup key (tgDeclarations graph) of
+                    Just (ResolvedStructural nested (RRecord _ _ nestedFields)) ->
+                        concatMap
+                            (walkNested nested (keys <> [rwfKey field]) (selectors <> [(shapeModuleForOwner, rwfHaskell field)]))
+                            nestedFields
+                    _ -> []
+                _ -> []
+      where
+        shapeModuleForOwner = "__SHAPE__." <> sdName root
+
+    walkNested owner keys selectors field
+        | rwfPresence field /= PRequired = []
+        | otherwise = case projectionScalar (rwfType field) of
+            Just result -> [mkProjection (keys <> [rwfKey field]) (selectors <> [(shapeModuleFor owner, rwfHaskell field)]) result]
+            Nothing -> case rwfType field of
+                RRef key -> case Map.lookup key (tgDeclarations graph) of
+                    Just (ResolvedStructural nested (RRecord _ _ nestedFields)) ->
+                        concatMap
+                            (walkNested nested (keys <> [rwfKey field]) (selectors <> [(shapeModuleFor owner, rwfHaskell field)]))
+                            nestedFields
+                    _ -> []
+                _ -> []
+
+    -- Context is supplied when rendering; this marker is replaced there.
+    shapeModuleFor declaration = "__SHAPE__." <> sdName declaration
+    mkProjection keys selectors result =
+        StructuralProjection
+            { spTag = projectionTag (sdName root) pointer
+            , spWitness = lowerFirst (projectionTag (sdName root) pointer) <> "Witness"
+            , spPointer = pointer
+            , spOwner = sdHaskell root
+            , spResult = result
+            , spCanonical = sdCanonical root
+            , spBinding = sdBinding root
+            , spSelectors = selectors
+            }
+      where
+        pointer = T.concat ["/" <> escapePointer key | key <- keys]
+
+projectionScalar :: ResolvedTypeExpr -> Maybe Text
+projectionScalar = \case
+    RText -> Just "Text"
+    RInt -> Just "Int"
+    RBool -> Just "Bool"
+    RTime -> Just "UTCTime"
+    RNatural -> Nothing
+    RJson -> Nothing
+    ROptional{} -> Nothing
+    RList{} -> Nothing
+    RMap{} -> Nothing
+    RRef{} -> Nothing
+
+escapePointer :: Text -> Text
+escapePointer = T.replace "/" "~1" . T.replace "~" "~0"
+
+projectionTag :: Name -> Text -> Text
+projectionTag owner pointer = "StructuralProjection" <> encodeIdentifier (owner <> pointer)
+
+encodeIdentifier :: Text -> Text
+encodeIdentifier = T.concatMap (\character -> "C" <> T.pack (showHex (ord character) "") <> "Z")
+
+emitStructuralProjections :: Context -> TypeGraph -> Text
+emitStructuralProjections ctx graph =
+    nl $
+        [ "{-# LANGUAGE DataKinds #-}"
+        , "{-# LANGUAGE TypeApplications #-}"
+        , "{-# LANGUAGE TypeFamilies #-}"
+        , generatedBanner
+        , "-- Equality witnesses are emitted for Text, Int, Bool, and UTCTime."
+        , "-- Only Int and UTCTime belong to Keiki's v1 ordered subset."
+        , "module " <> moduleName
+        , "  ( " <> T.intercalate "\n  , " (map spWitness specs)
+        , "  ) where"
+        , ""
+        , "import Data.Text (Text)"
+        , "import Data.Time (UTCTime)"
+        , "import Keiro.Codec.Structural (bindingToShape)"
+        , "import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)"
+        ]
+            <> map ("import " <>) imports
+            <> concatMap renderProjection specs
+  where
+    moduleName = structuralProjectionModule ctx
+    specs = map (resolveProjectionModules ctx) (projectionSpecs graph)
+    imports =
+        sort . nub $
+            [hsModule (spOwner spec) <> " qualified" | spec <- specs]
+                <> [qualifiedModule (spBinding spec) <> " qualified" | spec <- specs]
+                <> [shapeModuleName <> " qualified" | spec <- specs, (shapeModuleName, _) <- spSelectors spec]
+    renderProjection spec =
+        [ ""
+        , "data " <> spTag spec
+        , ""
+        , "instance FieldProjection " <> spTag spec <> " where"
+        , "  type FieldName " <> spTag spec <> " = " <> tshow (spPointer spec)
+        , "  type FieldOwner " <> spTag spec <> " = " <> renderHaskellSource (spOwner spec)
+        , "  type FieldResult " <> spTag spec <> " = " <> spResult spec
+        , "  fieldShapeId _ = " <> tshow (unCanonicalTypeId (spCanonical spec))
+        , "  projectFieldValue _ owner = " <> renderGetter spec
+        , ""
+        , spWitness spec <> " :: FieldWitness " <> spTag spec
+        , spWitness spec <> " = fieldWitness @" <> spTag spec
+        ]
+    renderGetter spec =
+        foldl
+            (\value (shapeModuleName, selector) -> shapeModuleName <> "." <> selector <> " (" <> value <> ")")
+            ("bindingToShape " <> unQualifiedValueName (spBinding spec) <> " owner")
+            (spSelectors spec)
+
+resolveProjectionModules :: Context -> StructuralProjection -> StructuralProjection
+resolveProjectionModules ctx spec =
+    spec
+        { spSelectors =
+            [ (replaceModule marker, selector)
+            | (marker, selector) <- spSelectors spec
+            ]
+        }
+  where
+    replaceModule marker
+        | Just name <- T.stripPrefix "__SHAPE__." marker = structuralShapeModule ctx name
+        | otherwise = structuralShapeModule ctx (lastSegment marker)
+
+qualifiedModule :: QualifiedValueName -> Text
+qualifiedModule = fst . splitQualified . unQualifiedValueName
+
+renderHaskellSource :: HaskellSource -> Text
+renderHaskellSource source = hsModule source <> "." <> hsType source
+
+splitQualified :: Text -> (Text, Text)
+splitQualified value =
+    let (prefix, name) = T.breakOnEnd "." value
+     in (T.dropEnd 1 prefix, name)
+
+lastSegment :: Text -> Text
+lastSegment = snd . T.breakOnEnd "."
 
 {- | Emit all modules for one aggregate. The 'Spec' is needed for the shared
 id\/enum declarations.
@@ -1447,15 +1798,16 @@ emitDomain a =
                , "import Keiki.Core (RegFile (..))"
                ]
             ++ ["import Keiki.Shape (CanonicalStateShape, CanonicalTypeName)" | hasSnapshot a]
+            ++ map ("import " <>) (domainConsumerImports a)
             ++ [ "import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)"
                , ""
                , sectionsOf
                     [ map (emitId a) (aIds a)
                     , map (emitEnum a) (aEnums a)
                     , [emitVertex a]
-                    , map (emitRecord) (aCommands a)
+                    , map (emitRecord a) (aCommands a)
                     , [emitSum (aName a <> "Command") (aCommands a)]
-                    , map (emitRecord) (aEvents a)
+                    , map (emitRecord a) (aEvents a)
                     , [emitSum (aName a <> "Event") (aEvents a)]
                     , [emitRegsType a, emitInitialRegs a]
                     ,
@@ -1511,12 +1863,12 @@ emitVertex a =
                     ]
                ]
 
-emitRecord :: ResolvedCtor -> Text
-emitRecord rc =
+emitRecord :: Agg -> ResolvedCtor -> Text
+emitRecord a rc =
     nl $
         [ "data " <> rcName rc <> "Data = " <> rcName rc <> "Data"
         ]
-            ++ recordFields (rcFields rc)
+            ++ recordFields [(name, renderDomainType a fieldType) | (name, fieldType) <- rcFields rc]
             ++ ["  deriving stock (Generic, Eq, Show)"]
 
 recordFields :: [(Text, Text)] -> [Text]
@@ -1550,12 +1902,12 @@ emitRegsType :: Agg -> Text
 emitRegsType a =
     nl $
         ["type " <> aName a <> "Regs ="]
-            ++ regListLines (aRegs a)
+            ++ regListLines a (aRegs a)
 
-regListLines :: [RegDecl] -> [Text]
-regListLines [] = ["  '[]"]
-regListLines rs =
-    [ lead i <> "'(" <> tshow (regName r) <> ", " <> regType r <> ")"
+regListLines :: Agg -> [RegDecl] -> [Text]
+regListLines _ [] = ["  '[]"]
+regListLines a rs =
+    [ lead i <> "'(" <> tshow (regName r) <> ", " <> renderDomainType a (regType r) <> ")"
     | (i, r) <- zip [(0 :: Int) ..] rs
     ]
         ++ ["   ]"]
@@ -1583,6 +1935,9 @@ emitInitialRegs a =
 -- | The Haskell initial value for a register, by the category of its type.
 regInitialValue :: Agg -> RegDecl -> Text
 regInitialValue a r
+    | Just declaration <- mappedDeclFor a (regType r) = case mappedInitial declaration of
+        Just initialValue -> unQualifiedValueName initialValue
+        Nothing -> "(error \"mapped register initial rejected before generation\")"
     | regType r `elem` idNames = "(" <> regType r <> " \"\")"
     | regType r == aVertexType a = maybe "(error \"invalid vertex initial\")" (vertexCtor a) (bareInitial r)
     | regType r == "Text" = maybe "(error \"Text initial must be quoted\")" tshow (textInitial r)
@@ -1596,13 +1951,53 @@ regInitialValue a r
         RegInitText value -> Just value
         RegInitBare _ -> Nothing
 
+domainConsumerImports :: Agg -> [Text]
+domainConsumerImports a =
+    sort . nub $
+        [ hsModule (mappedHaskell declaration) <> " qualified"
+        | declaration <- mappedUses a
+        ]
+            <> [ qualifiedModule initialValue <> " qualified"
+               | declaration <- mappedUses a
+               , initialValue <- maybeToListText (mappedInitial declaration)
+               ]
+
+mappedUses :: Agg -> [ResolvedMappedDecl]
+mappedUses a =
+    [ declaration
+    | fieldType <-
+        map snd (concatMap rcFields (aCommands a <> aEvents a))
+            <> map regType (aRegs a)
+    , declaration <- maybeToListText (mappedDeclFor a fieldType)
+    ]
+
+mappedDeclFor :: Agg -> Text -> Maybe ResolvedMappedDecl
+mappedDeclFor a name = do
+    graph <- aTypeGraph a
+    Map.lookup (MappedKey name) (tgDeclarations graph)
+
+mappedHaskell :: ResolvedMappedDecl -> HaskellSource
+mappedHaskell (ResolvedStructural declaration _) = sdHaskell declaration
+mappedHaskell (ResolvedOpaque declaration) = odHaskell declaration
+
+mappedInitial :: ResolvedMappedDecl -> Maybe QualifiedValueName
+mappedInitial (ResolvedStructural declaration _) = sdInitial declaration
+mappedInitial (ResolvedOpaque declaration) = odInitial declaration
+
+renderDomainType :: Agg -> Text -> Text
+renderDomainType a fieldType =
+    maybe fieldType (renderHaskellSource . mappedHaskell) (mappedDeclFor a fieldType)
+
+maybeToListText :: Maybe value -> [value]
+maybeToListText = maybe [] pure
+
 --------------------------------------------------------------------------------
 -- Codec module
 --------------------------------------------------------------------------------
 
 emitCodec :: Agg -> Text
 emitCodec a =
-    nl
+    nl $
         [ "{-# LANGUAGE OverloadedRecordDot #-}"
         , "{-# LANGUAGE OverloadedStrings #-}"
         , generatedBanner
@@ -1613,25 +2008,59 @@ emitCodec a =
         , ") where"
         , ""
         , "import " <> aGenPrefix a <> ".Domain"
-        , "import Data.Aeson (Value, object, withObject, (.:), (.=))"
-        , "import Data.Aeson.Types (Parser, parseEither)"
-        , "import Data.List.NonEmpty (NonEmpty (..))"
-        , "import Data.Text (Text)"
-        , "import qualified Data.Text as T"
-        , "import Keiro.Codec (Codec (..), EventType (..))"
-        , upcasterImport a
-        , ""
-        , emitEnumParsers a
-        , ""
-        , emitCodecValue a
-        , ""
-        , emitEncode a
-        , ""
-        , emitDecode a
-        , ""
-        , "mapLeftText :: Either String b -> Either Text b"
-        , "mapLeftText = either (Left . T.pack) Right"
         ]
+            ++ ( if hasMappedCodec a
+                    then
+                        [ "import Control.Monad (unless)"
+                        , "import Data.Aeson (Value (..), object, parseJSON, toJSON, withObject, withText, (.:), (.=))"
+                        , "import Data.Aeson.Key qualified as Key"
+                        , "import Data.Aeson.KeyMap qualified as KeyMap"
+                        ]
+                    else ["import Data.Aeson (Value, object, withObject, (.:), (.=))"]
+               )
+            ++ [ "import Data.Aeson.Types (Parser, parseEither)"
+               , "import Data.List.NonEmpty (NonEmpty (..))"
+               ]
+            ++ ( if hasMappedCodec a
+                    then ["import Data.Map.Strict (Map)", "import Data.Map.Strict qualified as Map"]
+                    else []
+               )
+            ++ [ "import Data.Text (Text)"
+               , "import qualified Data.Text as T"
+               ]
+            ++ ["import Keiro.Codec.Structural (bindingFromShape, bindingToShape)" | hasMappedCodec a]
+            ++ [ "import Keiro.Codec (Codec (..), EventType (..))"
+               , upcasterImport a
+               ]
+            ++ [nl (map ("import " <>) (codecMappedImports a)) | hasMappedCodec a]
+            ++ [ ""
+               , emitEnumParsers a
+               ]
+            ++ [emitMappedCodecs a | hasMappedCodec a]
+            ++ [ ""
+               , emitCodecValue a
+               , ""
+               , emitEncode a
+               , ""
+               , emitDecode a
+               , ""
+               , "mapLeftText :: Either String b -> Either Text b"
+               , "mapLeftText = either (Left . T.pack) Right"
+               ]
+            ++ ( if hasMappedCodec a
+                    then
+                        [ ""
+                        , "rejectUnknownFields :: String -> [Text] -> KeyMap.KeyMap Value -> Parser ()"
+                        , "rejectUnknownFields label allowed objectValue ="
+                        , "  unless (null extras) (fail (label <> \" contains unknown fields: \" <> show extras))"
+                        , "  where"
+                        , "    extras = filter (`notElem` allowed) (map Key.toText (KeyMap.keys objectValue))"
+                        ]
+                    else []
+               )
+
+hasMappedCodec :: Agg -> Bool
+hasMappedCodec = not . null . codecMappedDeclarations
 
 emitEnumParsers :: Agg -> Text
 emitEnumParsers a = sectionsOf [[emitEnumParser e | e <- aEnums a]]
@@ -1746,6 +2175,8 @@ emitEncode a =
             <> case fieldCat a ty of
                 IdCat -> lowerFirst ty <> "Text payload." <> n
                 EnumCat -> lowerFirst ty <> "Text payload." <> n
+                MappedStructuralCat declaration _ -> "encode" <> sdName declaration <> "Mapped payload." <> n
+                MappedOpaqueCat{} -> "toJSON payload." <> n
                 _ -> "payload." <> n
 
 emitDecode :: Agg -> Text
@@ -1771,7 +2202,282 @@ emitDecode a =
     decodeField (n, ty) = case fieldCat a ty of
         IdCat -> "(" <> ty <> " <$> o .: " <> tshow n <> ")"
         EnumCat -> "(o .: " <> tshow n <> " >>= parse" <> ty <> ")"
+        MappedStructuralCat declaration _ -> "(o .: " <> tshow n <> " >>= parse" <> sdName declaration <> "Mapped)"
+        MappedOpaqueCat{} -> "o .: " <> tshow n
         _ -> "o .: " <> tshow n
+
+codecMappedImports :: Agg -> [Text]
+codecMappedImports a = case aTypeGraph a of
+    Nothing -> []
+    Just graph ->
+        sort . nub $
+            [ structuralShapeModule (aContext a) (sdName declaration) <> " qualified"
+            | ResolvedStructural declaration _ <- codecMappedDeclarations a
+            ]
+                <> [ hsModule (sdHaskell declaration) <> " qualified"
+                   | ResolvedStructural declaration _ <- codecMappedDeclarations a
+                   ]
+                <> [ qualifiedModule (sdBinding declaration) <> " qualified"
+                   | ResolvedStructural declaration _ <- codecMappedDeclarations a
+                   ]
+                <> [ hsModule (odHaskell declaration) <> " qualified"
+                   | ResolvedOpaque declaration <- codecMappedDeclarations a
+                   ]
+                <> [ hsModule (odHaskell declaration) <> " qualified"
+                   | ResolvedStructural _ shape <- codecMappedDeclarations a
+                   , key <- directShapeRefs shape
+                   , Just (ResolvedOpaque declaration) <- [Map.lookup key (tgDeclarations graph)]
+                   ]
+
+codecMappedDeclarations :: Agg -> [ResolvedMappedDecl]
+codecMappedDeclarations a = case aTypeGraph a of
+    Nothing -> []
+    Just graph ->
+        mapMaybe (\key -> Map.lookup key (tgDeclarations graph)) (sort (Map.keys selected))
+      where
+        roots =
+            [ MappedKey fieldType
+            | event <- aEvents a
+            , (_, fieldType) <- rcFields event
+            , Map.member (MappedKey fieldType) (tgDeclarations graph)
+            ]
+        selected =
+            Map.fromList
+                [ (key, ())
+                | root <- roots
+                , key <- root : maybe [] (Map.keys . Map.fromSet (const ())) (Map.lookup root (tgReachability graph))
+                ]
+
+directShapeRefs :: ResolvedMappedShape -> [MappedKey]
+directShapeRefs =
+    foldMappedShape
+        MappedShapeAlgebra
+            { onRecord = \_ _ fields -> concatMap (exprRefs . rwfType) fields
+            , onEnum = const []
+            , onUnion = \_ arms -> concatMap (maybe [] exprRefs . rwaPayload) arms
+            }
+
+exprRefs :: ResolvedTypeExpr -> [MappedKey]
+exprRefs =
+    foldTypeExpr
+        TypeExprAlgebra
+            { onText = []
+            , onInt = []
+            , onBool = []
+            , onNatural = []
+            , onTime = []
+            , onJson = []
+            , onOptional = id
+            , onList = id
+            , onMap = id
+            , onRef = pure
+            }
+
+emitMappedCodecs :: Agg -> Text
+emitMappedCodecs a = case aTypeGraph a of
+    Nothing -> ""
+    Just graph ->
+        T.intercalate
+            "\n\n"
+            [ emitStructuralCodec a graph declaration shape
+            | ResolvedStructural declaration shape <- codecMappedDeclarations a
+            ]
+
+emitStructuralCodec :: Agg -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Text
+emitStructuralCodec a graph declaration shape =
+    nl
+        [ "encode" <> name <> "Mapped :: " <> consumerType <> " -> Value"
+        , "encode" <> name <> "Mapped = encode" <> name <> "Shape . bindingToShape " <> binding
+        , ""
+        , "parse" <> name <> "Mapped :: Value -> Parser " <> consumerType
+        , "parse" <> name <> "Mapped value = bindingFromShape " <> binding <> " <$> parse" <> name <> "Shape value"
+        , ""
+        , "encode" <> name <> "Shape :: " <> shapeType <> " -> Value"
+        , emitShapeEncoder a graph declaration shape
+        , ""
+        , "parse" <> name <> "Shape :: Value -> Parser " <> shapeType
+        , emitShapeDecoder a graph declaration shape
+        ]
+  where
+    name = sdName declaration
+    consumerType = renderHaskellSource (sdHaskell declaration)
+    shapeType = structuralShapeModule (aContext a) name <> "." <> name <> "Shape"
+    binding = unQualifiedValueName (sdBinding declaration)
+
+emitShapeEncoder :: Agg -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Text
+emitShapeEncoder a graph declaration =
+    foldMappedShape
+        MappedShapeAlgebra
+            { onRecord = \_ _ fields ->
+                nl $
+                    ["encode" <> name <> "Shape shape =", "  object"]
+                        <> objectEntries
+                            [ tshow (rwfKey field)
+                                <> " .= "
+                                <> encodeShapeExpr a graph (rwfType field) (shapeModuleName <> "." <> rwfHaskell field <> " shape")
+                            | field <- fields
+                            ]
+            , onEnum = \entries ->
+                nl $
+                    ["encode" <> name <> "Shape = \\case"]
+                        <> ["  " <> shapeModuleName <> "." <> weCtor entry <> " -> String " <> tshow (weTag entry) | entry <- entries]
+            , onUnion = \encoding arms ->
+                nl $
+                    ["encode" <> name <> "Shape = \\case"]
+                        <> concatMap (unionEncodeArm encoding) arms
+            }
+  where
+    name = sdName declaration
+    shapeModuleName = structuralShapeModule (aContext a) name
+    unionEncodeArm encoding arm =
+        [ "  " <> shapeModuleName <> "." <> rwaCtor arm <> payloadPattern <> " ->"
+        , "    object"
+        ]
+            <> objectEntries
+                ( [tshow (ueTagField encoding) <> " .= (" <> tshow (rwaTag arm) <> " :: Text)"]
+                    <> [ tshow (ueContentsField encoding) <> " .= " <> encodeShapeExpr a graph payload "payload"
+                       | payload <- maybeToListText (rwaPayload arm)
+                       ]
+                )
+      where
+        payloadPattern = maybe "" (const " payload") (rwaPayload arm)
+
+emitShapeDecoder :: Agg -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Text
+emitShapeDecoder a graph declaration =
+    foldMappedShape
+        MappedShapeAlgebra
+            { onRecord = \constructor unknownFields fields ->
+                nl $
+                    [ "parse" <> name <> "Shape = withObject " <> tshow (name <> "Shape") <> " $ \\objectValue -> do"
+                    ]
+                        <> rejectLine "  " unknownFields (map rwfKey fields) "objectValue"
+                        <> [ "  " <> shapeModuleName <> "." <> constructor
+                           , "    <$> " <> T.intercalate "\n    <*> " (map (decodeRecordField a graph) fields)
+                           ]
+            , onEnum = \entries ->
+                nl $
+                    [ "parse" <> name <> "Shape = withText " <> tshow (name <> "Shape") <> " $ \\tag -> case tag of"
+                    ]
+                        <> ["  " <> tshow (weTag entry) <> " -> pure " <> shapeModuleName <> "." <> weCtor entry | entry <- entries]
+                        <> ["  _ -> fail " <> tshow ("unknown " <> name <> " wire value")]
+            , onUnion = \encoding arms ->
+                nl $
+                    [ "parse" <> name <> "Shape = withObject " <> tshow (name <> "Shape") <> " $ \\objectValue -> do"
+                    , "  tag <- objectValue .: " <> tshow (ueTagField encoding) <> " :: Parser Text"
+                    , "  case tag of"
+                    ]
+                        <> concatMap (unionDecodeArm encoding) arms
+                        <> ["    _ -> fail " <> tshow ("unknown " <> name <> " union tag")]
+            }
+  where
+    name = sdName declaration
+    shapeModuleName = structuralShapeModule (aContext a) name
+    rejectLine _ IgnoreUnknown _ _ = []
+    rejectLine indent RejectUnknown allowed objectName =
+        [indent <> "rejectUnknownFields " <> tshow name <> " " <> renderTextList allowed <> " " <> objectName]
+    unionDecodeArm encoding arm =
+        ["    " <> tshow (rwaTag arm) <> " -> do"]
+            <> rejectLine "      " (ueUnknownFields encoding) allowed "objectValue"
+            <> [ case rwaPayload arm of
+                    Nothing -> "      pure " <> shapeModuleName <> "." <> rwaCtor arm
+                    Just payload ->
+                        "      "
+                            <> shapeModuleName
+                            <> "."
+                            <> rwaCtor arm
+                            <> " <$> (objectValue .: "
+                            <> tshow (ueContentsField encoding)
+                            <> " >>= ("
+                            <> decodeShapeExpr a graph payload
+                            <> "))"
+               ]
+      where
+        allowed = ueTagField encoding : [ueContentsField encoding | rwaPayload arm /= Nothing]
+
+decodeRecordField :: Agg -> TypeGraph -> ResolvedWireField -> Text
+decodeRecordField a graph field = case rwfPresence field of
+    PRequired ->
+        "((objectValue .: " <> key <> " :: Parser Value) >>= (" <> decoder <> "))"
+    POptional ->
+        "(case KeyMap.lookup (Key.fromText "
+            <> key
+            <> ") objectValue of Nothing -> "
+            <> missing
+            <> "; Just presentValue -> "
+            <> "("
+            <> decoder
+            <> ") presentValue)"
+  where
+    key = tshow (rwfKey field)
+    decoder = decodeShapeExpr a graph (rwfType field)
+    missing = case rwfOnMissing field of
+        Nothing -> "fail " <> tshow ("missing optional field without default: " <> rwfKey field)
+        Just onMissing -> "pure " <> renderMissingDefault a graph (rwfType field) onMissing
+
+encodeShapeExpr :: Agg -> TypeGraph -> ResolvedTypeExpr -> Text -> Text
+encodeShapeExpr _a graph expression value =
+    foldTypeExpr
+        TypeExprAlgebra
+            { onText = \v -> "toJSON (" <> v <> ")"
+            , onInt = \v -> "toJSON (" <> v <> ")"
+            , onBool = \v -> "toJSON (" <> v <> ")"
+            , onNatural = \v -> "toJSON (" <> v <> ")"
+            , onTime = \v -> "toJSON (" <> v <> ")"
+            , onJson = id
+            , onOptional = \encode v -> "maybe Null (\\item -> " <> encode "item" <> ") (" <> v <> ")"
+            , onList = \encode v -> "toJSON (map (\\item -> " <> encode "item" <> ") (" <> v <> "))"
+            , onMap = \encode v -> "toJSON (Map.map (\\item -> " <> encode "item" <> ") (" <> v <> "))"
+            , onRef = \key v -> case Map.lookup key (tgDeclarations graph) of
+                Just (ResolvedStructural nested _) -> "encode" <> sdName nested <> "Shape (" <> v <> ")"
+                Just (ResolvedOpaque _) -> "toJSON (" <> v <> ")"
+                Nothing -> "toJSON (" <> v <> ")"
+            }
+        expression
+        value
+
+decodeShapeExpr :: Agg -> TypeGraph -> ResolvedTypeExpr -> Text
+decodeShapeExpr _a graph =
+    foldTypeExpr
+        TypeExprAlgebra
+            { onText = "parseJSON"
+            , onInt = "parseJSON"
+            , onBool = "parseJSON"
+            , onNatural = "parseJSON"
+            , onTime = "parseJSON"
+            , onJson = "pure"
+            , onOptional = \decode -> "\\value -> case value of Null -> pure Nothing; other -> Just <$> " <> decode <> " other"
+            , onList = \decode -> "\\value -> (parseJSON value :: Parser [Value]) >>= traverse (" <> decode <> ")"
+            , onMap = \decode -> "\\value -> (parseJSON value :: Parser (Map Text Value)) >>= traverse (" <> decode <> ")"
+            , onRef = \key -> case Map.lookup key (tgDeclarations graph) of
+                Just (ResolvedStructural nested _) -> "parse" <> sdName nested <> "Shape"
+                Just (ResolvedOpaque _) -> "parseJSON"
+                Nothing -> "parseJSON"
+            }
+
+renderMissingDefault :: Agg -> TypeGraph -> ResolvedTypeExpr -> OnMissing -> Text
+renderMissingDefault a graph expression = \case
+    OmNull -> "Nothing"
+    OmText value -> tshow value
+    OmInt value -> T.pack (show value)
+    OmBool value -> if value then "True" else "False"
+    OmEmptyList -> "[]"
+    OmEmptyMap -> "Map.empty"
+    OmCtor constructor -> case expression of
+        RRef key -> case Map.lookup key (tgDeclarations graph) of
+            Just (ResolvedStructural declaration _) -> structuralShapeModule (aContext a) (sdName declaration) <> "." <> constructor
+            _ -> constructor
+        _ -> constructor
+
+objectEntries :: [Text] -> [Text]
+objectEntries entries =
+    [lead index <> entry | (index, entry) <- zip [(0 :: Int) ..] entries]
+        <> ["      ]"]
+  where
+    lead 0 = "      [ "
+    lead _ = "      , "
+
+renderTextList :: [Text] -> Text
+renderTextList values = "[" <> T.intercalate ", " (map tshow values) <> "]"
 
 --------------------------------------------------------------------------------
 -- EventStream module
@@ -2111,12 +2817,20 @@ onCmdBlock a t =
 -- Field categories and shared helpers
 --------------------------------------------------------------------------------
 
-data FieldCat = IdCat | EnumCat | OtherCat
+data FieldCat
+    = IdCat
+    | EnumCat
+    | MappedStructuralCat !StructuralDecl !ResolvedMappedShape
+    | MappedOpaqueCat !OpaqueDecl
+    | OtherCat
+    deriving stock (Eq, Show)
 
 fieldCat :: Agg -> Text -> FieldCat
 fieldCat a ty
     | ty `elem` map idName (aIds a) = IdCat
     | ty `elem` map enumName (aEnums a) = EnumCat
+    | Just (ResolvedStructural declaration shape) <- mappedDeclFor a ty = MappedStructuralCat declaration shape
+    | Just (ResolvedOpaque declaration) <- mappedDeclFor a ty = MappedOpaqueCat declaration
     | otherwise = OtherCat
 
 -- | The first constructor of a declared enum, used to build sample values.
@@ -2158,6 +2872,9 @@ scaffoldRefusals spec =
     publishers = [publisher | NPublisher publisher <- specNodes spec]
     idTypes = map idName (specIds spec)
     enumTypes = map enumName (specEnums spec)
+    mappedTypes = case resolveTypeGraph spec of
+        Left _ -> []
+        Right graph -> map unMappedKey (Map.keys (tgDeclarations graph))
     enumCtorsFor ty = case [map fst (enumCtors enum) | enum <- specEnums spec, enumName enum == ty] of
         ctors : _ -> ctors
         [] -> []
@@ -2197,7 +2914,7 @@ scaffoldRefusals spec =
         concatMap cmdFields (aggCommands aggregate)
             <> concat [fields | event <- aggEvents aggregate, EventFields fields <- [evBody event]]
     supportedType aggregate ty =
-        ty `elem` (["Text", "Int", "Bool", aggName aggregate <> "Vertex"] <> idTypes <> enumTypes)
+        ty `elem` (["Text", "Int", "Bool", aggName aggregate <> "Vertex"] <> idTypes <> enumTypes <> mappedTypes)
     contractRefusals contract =
         [ "ContractEmpty: contract '" <> ctrName contract <> "' must declare at least one event"
         | null (ctrEvents contract)

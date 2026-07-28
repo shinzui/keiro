@@ -8,6 +8,12 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Added
 
+- Structural consumer-type scaffolding now emits private
+  `Generated.<Context>.Structural.Shape.*` wire representations, generates
+  structural codecs from declared keys/defaults/tags, delegates opaque values
+  only at their declared JSON boundary, imports consumer types into aggregate
+  domains, and exposes eligible total scalar getters through a narrow Keiki
+  0.4 `StructuralProjections` witness facade.
 - `Keiro.Dsl.ReplayImpact` and `diff --replay-impact-out FILE`. Diffs now
   print whether stored-data replay is unchanged and can emit a stable JSON
   affected set for targeted auditing. New aggregates, events, transitions,

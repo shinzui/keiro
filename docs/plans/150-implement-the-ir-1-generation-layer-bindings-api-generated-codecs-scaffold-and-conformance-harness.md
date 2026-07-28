@@ -69,8 +69,12 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-28: Milestone 1 completed: `Keiro.Codec.Structural` exposes the stability-noted
       total binding API and fixtures from `keiro-core`, `keiro` re-exports it explicitly, and
       `keiro-test` passes 376 examples including both laws and both delegation paths.
-- [ ] Milestone 2: generated per-declaration `Structural.Shape.*` stratum, structural/opaque codecs, and eligible-field
-      `StructuralProjections` facade with pinned goldens and Keiki agreement tests.
+- [x] 2026-07-28: Milestone 2 completed: the context-level `Structural.Shape.*` stratum,
+      consumer-typed aggregate domain, declared structural and opaque codec lowering, mapped
+      register initials, fixture-backed aggregate samples, and eligible-field
+      `StructuralProjections` facade are registered in the single scaffold module registry.
+      The 268-example `keiro-dsl-test` suite passes, including emitted shape/codec/facade pins;
+      Milestone 5 owns the compiled end-to-end binding/witness and byte-golden evidence as planned.
 - [ ] Milestone 3: scaffold integration — preflight import-plan diagnostic, manifest consumer
       packages/modules, binding identities and drift in scaffold records, Keiki constraint
       enforcement (initial values from use sites, Eq/Show/codec constraints, first-event invertibility).
@@ -106,6 +110,11 @@ implementation. Provide concise evidence.
   whose only direct runtime dependency is `keiro`; importing `Keiro.Codec.Structural` there also
   proves Cabal's explicit re-export rather than accidentally compiling through a transitive
   `keiro-core` module.
+- Inspecting the first real mapped scaffold exposed two generator-only hazards before a compiled
+  consumer suite existed: nested `Parser` lambdas required explicit parentheses under applicative
+  composition, and unconditional mapped-codec imports would have changed every legacy generated
+  `Codec.hs`. The emitter now gates the expanded import/helper surface on actual mapped event use;
+  every pre-existing committed scaffold pin remains unchanged.
 
 
 ## Decision Log
@@ -239,6 +248,12 @@ Milestone 1 published the downstream integration point without waiting for gener
 `StructuralBinding` is total in both directions, `FixtureCases` is a non-empty labelled corpus,
 and the JSON helpers permit only consumer-to-generated delegation. The full runtime suite passed
 376 examples after the new module was imported through `keiro`'s explicit re-export.
+
+Milestone 2 establishes the private generated ring. Checked `Keiro.Dsl.TypeGraph` declarations
+drive one leaf shape module per structural declaration, aggregate domains name only consumer
+types, codecs own every declared structural key/tag/default and stop at opaque boundaries, and
+Keiki field witnesses are generated only for required total scalar record paths. Mapped samples
+come from declared `FixtureCases`; mapped register initials come only from declared symbols.
 
 
 ## Context and Orientation
@@ -1015,9 +1030,11 @@ Consumed from plan 149 (hard dependency, keiro-dsl library): the `mapped structu
 `CheckedMappedDecl` API (never the raw parser AST), the resolved type-expression graph (every
 field/register type as a resolved expression), the total folds/algebras
 (this plan supplies shape, codec, sample/coverage, manifest, harness, and projection algebras),
-and the structural/opaque `DiagnosticCode` constructors. Exact module names are whatever
-149 landed (expected under `Keiro.Dsl.Grammar` and a new resolved-graph module); record
-them here when Milestone 2 begins.
+and the structural/opaque `DiagnosticCode` constructors. Plan 149 landed the exact checked API in
+`Keiro.Dsl.TypeGraph`: `TypeGraph`, `ResolvedMappedDecl`, `ResolvedMappedShape`,
+`ResolvedTypeExpr`, `StructuralDecl`, `OpaqueDecl`, `resolveTypeGraph`, `tgUseSites`, the three
+total algebra records and folds, and `wireFingerprint`. Generation imports that module directly;
+it never lowers from the raw optional parser declarations.
 
 Published by this plan (stability-noted; consumed by plans 151 and 152):
 

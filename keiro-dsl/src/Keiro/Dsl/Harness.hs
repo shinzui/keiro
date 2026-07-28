@@ -38,6 +38,7 @@ import Keiro.Dsl.Goldens (GoldenPayload (..))
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.ReadModelShape (deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Scaffold
+import Keiro.Dsl.TypeGraph (OpaqueDecl (..), QualifiedValueName (..), StructuralDecl (..))
 
 {- | Emit the harness test module for one aggregate. Like 'scaffoldAggregate',
 it takes the 'Spec' for the shared id\/enum declarations.
@@ -389,6 +390,7 @@ emitHarness goldens a =
         , "import Keiki.Core (" <> T.intercalate ", " coreImports <> ")"
         , codecDecodeRawImport
         ]
+            ++ mappedHarnessImports a
             ++ goldenImports
             ++ [ ""
                , "{- | (label, passed). A driver runs these and exits non-zero on any False,"
@@ -607,9 +609,42 @@ sampleValue :: Agg -> Text -> Text -> Text
 sampleValue a fieldName ty = case fieldCat a ty of
     IdCat -> "(" <> ty <> " \"sample\")"
     EnumCat -> maybe ("(error \"no enum ctor\")") id (firstEnumCtor a ty)
+    MappedStructuralCat declaration _ -> fixtureSample (sdFixtures declaration)
+    MappedOpaqueCat declaration -> fixtureSample (odFixtures declaration)
     OtherCat
         | ty == "Bool" -> "False"
         | ty == "Int" -> "0"
         | ty == "Text" -> tshow ("sample-" <> fieldName)
         | ty == aVertexType a -> initialVertex a
         | otherwise -> "(error \"sample: unsupported type " <> ty <> "\")"
+
+mappedHarnessImports :: Agg -> [Text]
+mappedHarnessImports aggregate
+    | null fixtures = []
+    | otherwise =
+        [ "import Data.List.NonEmpty qualified as NonEmpty"
+        , "import Keiro.Codec.Structural (FixtureCases (..))"
+        ]
+            ++ map (\moduleName -> "import " <> moduleName <> " qualified") modules
+  where
+    fixtures =
+        [ qualified
+        | fieldType <- map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate))
+        , qualified <- case fieldCat aggregate fieldType of
+            MappedStructuralCat declaration _ -> [sdFixtures declaration]
+            MappedOpaqueCat declaration -> [odFixtures declaration]
+            _ -> []
+        ]
+    modules = unique [fst (splitQualifiedHarness (unQualifiedValueName qualified)) | qualified <- fixtures]
+
+fixtureSample :: QualifiedValueName -> Text
+fixtureSample qualified =
+    "(snd (NonEmpty.head (fixtureCases " <> unQualifiedValueName qualified <> ")))"
+
+splitQualifiedHarness :: Text -> (Text, Text)
+splitQualifiedHarness value =
+    let (prefix, name) = T.breakOnEnd "." value
+     in (T.dropEnd 1 prefix, name)
+
+unique :: (Eq value) => [value] -> [value]
+unique = foldr (\value values -> if value `elem` values then values else value : values) []

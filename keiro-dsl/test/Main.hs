@@ -1599,6 +1599,46 @@ main = hspec $ do
                     specModuleRoot spec `shouldBe` Nothing
                     specLayout spec `shouldBe` Nothing
 
+    describe "structural scaffold" $ do
+        it "emits one private shape module per structural declaration and one context facade" $ do
+            spec <- specOf "test/fixtures/consumer-types.keiro"
+            let modules = scaffoldModules (defaultContext (specContext spec)) spec
+                paths = map modulePath modules
+            paths
+                `shouldContain` [ "Generated/ConsumerDemo/Structural/Shape/ArtifactInfo.hs"
+                                , "Generated/ConsumerDemo/Structural/Shape/ArtifactKind.hs"
+                                , "Generated/ConsumerDemo/Structural/Shape/ArtifactLocation.hs"
+                                , "Generated/ConsumerDemo/StructuralProjections.hs"
+                                ]
+            paths `shouldNotContain` ["Generated/ConsumerDemo/Structural/Shape/VendorGeometry.hs"]
+            firewallBreaches modules `shouldBe` []
+        it "keeps consumer types in Domain while the generated Codec owns keys, tags, and defaults" $ do
+            spec <- specOf "test/fixtures/consumer-types.keiro"
+            let modules = scaffoldModules (defaultContext (specContext spec)) spec
+                domain = generatedTextEndingIn "Catalog/Domain.hs" modules
+                codec = generatedTextEndingIn "Catalog/Codec.hs" modules
+            domain `shouldSatisfy` T.isInfixOf "Example.Artifact.Domain.ArtifactInfo"
+            domain `shouldSatisfy` T.isInfixOf "Vendor.Geometry.Geometry"
+            domain `shouldSatisfy` T.isInfixOf "Example.Artifact.KeiroBindings.emptyArtifactInfo"
+            codec `shouldSatisfy` T.isInfixOf "\"location\" .= encodeArtifactLocationShape"
+            codec `shouldSatisfy` T.isInfixOf "\"local_file\""
+            codec `shouldSatisfy` T.isInfixOf "Nothing -> pure Generated.ConsumerDemo.Structural.Shape.ArtifactKind.Guide"
+            codec `shouldSatisfy` T.isInfixOf "rejectUnknownFields \"ArtifactInfo\""
+            codec `shouldSatisfy` T.isInfixOf "toJSON payload.geometry"
+            codec `shouldSatisfy` (not . T.isInfixOf "vendor.geometry.json")
+        it "generates shape-only nested types and schema-derived Keiki witnesses" $ do
+            spec <- specOf "test/fixtures/consumer-types.keiro"
+            let modules = scaffoldModules (defaultContext (specContext spec)) spec
+                shape = generatedTextEndingIn "Structural/Shape/ArtifactInfo.hs" modules
+                facade = generatedTextEndingIn "StructuralProjections.hs" modules
+            shape `shouldSatisfy` T.isInfixOf "data ArtifactInfoShape = ArtifactInfo"
+            shape `shouldSatisfy` T.isInfixOf "ArtifactKind.ArtifactKindShape"
+            shape `shouldSatisfy` (not . T.isInfixOf "KeiroBindings")
+            facade `shouldSatisfy` T.isInfixOf "type FieldName"
+            facade `shouldSatisfy` T.isInfixOf "= \"/key\""
+            facade `shouldSatisfy` T.isInfixOf "fieldShapeId _ = \"example.artifact.ArtifactInfo.v1\""
+            facade `shouldSatisfy` T.isInfixOf "bindingToShape Example.Artifact.KeiroBindings.artifactInfoBinding owner"
+
     describe "manifest (M2)" $ do
         it "lists exactly the modules the scaffolder produced" $ do
             mods <- scaffoldFixture "test/fixtures/reservation.keiro"

@@ -66,7 +66,8 @@ scaffoldModules = scaffoldModulesWithGoldens []
 
 scaffoldModulesWithGoldens :: [GoldenPayload] -> Context -> Spec -> [ScaffoldModule]
 scaffoldModulesWithGoldens goldens ctx spec =
-    scaffoldReplayAudit ctx spec
+    scaffoldStructural ctx spec
+        <> scaffoldReplayAudit ctx spec
         <> concat
             [ case node of
                 NAggregate agg -> scaffoldAggregate ctx spec agg <> harnessForWithGoldens goldens ctx spec agg
