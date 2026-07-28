@@ -1,0 +1,87 @@
+context structural-conformance
+
+mapped structural record ArtifactInfo {
+  haskell package=keiro-dsl module=Conformance.Structural.Domain type=ArtifactInfo
+  binding = "Conformance.Structural.Bindings.artifactInfoBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural.ArtifactInfo.v1"
+  fixtures = "Conformance.Structural.Bindings.artifactInfoCases"
+  initial = "Conformance.Structural.Bindings.emptyArtifactInfo"
+  wire object constructor=ArtifactInfo unknown-fields=reject {
+    artifactKey  as "artifact_key"  : Text             required
+    displayName  as "display_name"  : Text             required
+    artifactHash as "artifact_hash" : Optional Text    optional on-missing=null
+    artifactKind as "artifact_kind" : ArtifactKind     optional on-missing=Guide
+    location     as "location"      : ArtifactLocation required
+    metadata     as "metadata"      : ArtifactMetadata required
+    active       as "active"        : Bool             optional on-missing=false
+    tags         as "tags"          : List Text        optional on-missing=[]
+  }
+}
+
+mapped structural record ArtifactMetadata {
+  haskell package=keiro-dsl module=Conformance.Structural.Domain type=ArtifactMetadata
+  binding = "Conformance.Structural.Bindings.artifactMetadataBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural.ArtifactMetadata.v1"
+  fixtures = "Conformance.Structural.Bindings.artifactMetadataCases"
+  wire object constructor=ArtifactMetadata unknown-fields=ignore {
+    note as "note" : Optional Text required
+  }
+}
+
+mapped structural enum ArtifactKind {
+  haskell package=keiro-dsl module=Conformance.Structural.Domain type=ArtifactKind
+  binding = "Conformance.Structural.Bindings.artifactKindBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural.ArtifactKind.v1"
+  fixtures = "Conformance.Structural.Bindings.artifactKindCases"
+  wire string {
+    Guide as "guide"
+    Reference as "reference"
+  }
+}
+
+mapped structural union ArtifactLocation {
+  haskell package=keiro-dsl module=Conformance.Structural.Domain type=ArtifactLocation
+  binding = "Conformance.Structural.Bindings.artifactLocationBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural.ArtifactLocation.v1"
+  fixtures = "Conformance.Structural.Bindings.artifactLocationCases"
+  wire tagged-object tag="tag" contents="contents" unknown-fields=reject {
+    LocalFile as "local_file" : Text
+    LocalDir as "local_dir" : Text
+    RepoPath as "repo_path" : Text
+    LocUrl as "url" : Text
+    Canonical as "canonical"
+  }
+}
+
+mapped opaque VendorGeometry {
+  haskell package=keiro-dsl module=Conformance.Structural.Domain type=Geometry
+  codec = "vendor.geometry.json"
+  version = "3"
+  fixtures = "Conformance.Structural.Bindings.geometryCases"
+  initial = "Conformance.Structural.Bindings.emptyGeometry"
+}
+
+aggregate ArtifactCatalog
+  regs
+    currentArtifact ArtifactInfo = initial
+    currentGeometry VendorGeometry = initial
+    acceptedCount Int = 0
+  states Empty Observed!
+
+  command ObserveArtifact { artifact:ArtifactInfo geometry:VendorGeometry accepted:Bool }
+  event ArtifactRecorded = fields(ObserveArtifact)
+  event ArtifactAccepted { accepted:Bool }
+
+  Empty -- ObserveArtifact -->
+    write currentArtifact := artifact
+    write currentGeometry := geometry
+    write acceptedCount := acceptedCount
+    emit ArtifactRecorded
+    emit ArtifactAccepted
+    goto Observed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

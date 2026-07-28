@@ -1711,6 +1711,39 @@ main = hspec $ do
             let commandOnly = removeMappedRegisterRequirements spec
             planScaffold (defaultContext (specContext commandOnly)) commandOnly `shouldSatisfy` isRight
 
+    describe "structural harness" $ do
+        it "emits every structural, wire-policy, projection, and replay assertion family" $ do
+            spec <- specOf "test/fixtures/consumer-types.keiro"
+            let aggregate = onlyAggregate spec
+                ctx = defaultContext (specContext spec)
+                harness = generatedTextEndingIn "Harness.hs" (harnessFor ctx spec aggregate)
+            mapM_
+                (\needle -> harness `shouldSatisfy` T.isInfixOf needle)
+                [ "binding domain round-trip: example.artifact.ArtifactInfo.v1/"
+                , "binding shape round-trip: example.artifact.ArtifactInfo.v1/"
+                , "mapped codec round-trip: ArtifactObserved/artifact/"
+                , "fixture coverage: example.artifact.ArtifactLocation.v1"
+                , "wire policy missing default: example.artifact.ArtifactInfo.v1/description"
+                , "wire policy explicit null: example.artifact.ArtifactInfo.v1/description"
+                , "wire policy unknown fields: example.artifact.ArtifactInfo.v1"
+                , "wire union arm: example.artifact.ArtifactLocation.v1/local_file"
+                , "canonical identity: example.artifact.ArtifactInfo.v1"
+                , "projection witness agreement: example.artifact.ArtifactInfo.v1/key"
+                , "forward/replay equality: ObserveArtifact from CatalogEmpty -- "
+                , "register currentArtifact"
+                ]
+        it "keeps opaque assertions at the declared codec boundary" $ do
+            spec <- specOf "test/fixtures/consumer-types.keiro"
+            let aggregate = onlyAggregate spec
+                ctx = defaultContext (specContext spec)
+                modules = scaffoldAggregate ctx spec aggregate <> harnessFor ctx spec aggregate
+                harness = generatedTextEndingIn "Harness.hs" modules
+                codec = generatedTextEndingIn "Codec.hs" modules
+            harness `shouldSatisfy` T.isInfixOf "opaque codec round-trip: vendor.geometry.json@3/"
+            harness `shouldNotSatisfy` T.isInfixOf "wire policy unknown fields: vendor.geometry.json"
+            harness `shouldNotSatisfy` T.isInfixOf "fixture coverage: vendor.geometry"
+            codec `shouldNotSatisfy` T.isInfixOf "encodeVendorGeometryShape"
+
     describe "manifest (M2)" $ do
         it "lists exactly the modules the scaffolder produced" $ do
             mods <- scaffoldFixture "test/fixtures/reservation.keiro"

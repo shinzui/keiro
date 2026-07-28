@@ -46,7 +46,11 @@ module Keiro.Dsl.Scaffold (
     -- * Internal resolution, shared with "Keiro.Dsl.Harness"
     Agg (..),
     ResolvedCtor (..),
+    StructuralProjection (..),
     resolveAgg,
+    projectionSpecs,
+    resolveProjectionModules,
+    codecMappedDeclarations,
     FieldCat (..),
     fieldCat,
     vertexCtor,
@@ -171,6 +175,7 @@ firewallSurface =
                     , "FieldProjection"
                     , "FieldWitness"
                     , "fieldWitness"
+                    , "fieldWitnessAgrees"
                     , "applyEventsEither"
                     , "defaultValidationOptions"
                     , "step"
@@ -533,9 +538,9 @@ renderShapeType ctx graph =
             , onNatural = "Natural"
             , onTime = "UTCTime"
             , onJson = "Value"
-            , onOptional = \value -> "Maybe (" <> value <> ")"
-            , onList = \value -> "[" <> value <> "]"
-            , onMap = \value -> "Map Text (" <> value <> ")"
+            , onOptional = \value -> "(Maybe (" <> value <> "))"
+            , onList = \value -> "([" <> value <> "])"
+            , onMap = \value -> "(Map Text (" <> value <> "))"
             , onRef = \key -> case Map.lookup key (tgDeclarations graph) of
                 Just (ResolvedStructural nested _) ->
                     structuralShapeModule ctx (sdName nested) <> "." <> sdName nested <> "Shape"
@@ -2005,10 +2010,12 @@ emitCodec a =
         , "    " <> lowerFirst (aName a) <> "Codec,"
         , "    parse" <> aName a <> "Event,"
         , "    encode" <> aName a <> "Event,"
-        , ") where"
-        , ""
-        , "import " <> aGenPrefix a <> ".Domain"
         ]
+            ++ concatMap mappedExports (codecMappedDeclarations a)
+            ++ [ ") where"
+               , ""
+               , "import " <> aGenPrefix a <> ".Domain"
+               ]
             ++ ( if hasMappedCodec a
                     then
                         [ "import Control.Monad (unless)"
@@ -2058,6 +2065,12 @@ emitCodec a =
                         ]
                     else []
                )
+  where
+    mappedExports (ResolvedStructural declaration _) =
+        [ "    encode" <> sdName declaration <> "Mapped,"
+        , "    decode" <> sdName declaration <> "Mapped,"
+        ]
+    mappedExports ResolvedOpaque{} = []
 
 hasMappedCodec :: Agg -> Bool
 hasMappedCodec = not . null . codecMappedDeclarations
@@ -2291,6 +2304,9 @@ emitStructuralCodec a graph declaration shape =
         , ""
         , "parse" <> name <> "Mapped :: Value -> Parser " <> consumerType
         , "parse" <> name <> "Mapped value = bindingFromShape " <> binding <> " <$> parse" <> name <> "Shape value"
+        , ""
+        , "decode" <> name <> "Mapped :: Value -> Either Text " <> consumerType
+        , "decode" <> name <> "Mapped = mapLeftText . parseEither parse" <> name <> "Mapped"
         , ""
         , "encode" <> name <> "Shape :: " <> shapeType <> " -> Value"
         , emitShapeEncoder a graph declaration shape

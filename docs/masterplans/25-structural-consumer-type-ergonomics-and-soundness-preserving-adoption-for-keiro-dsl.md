@@ -297,8 +297,9 @@ is implemented and released.
 - [x] 2026-07-28: EP-5 `diff --explain` remediation output landed; consumer-neutral private/public scenarios pass
 - [x] 2026-07-28: EP-6 resolved type-expression graph, grammar, parser/pretty round trips, and total traversal algebras landed
 - [x] 2026-07-28: EP-6 `check` negative fixtures, recursive root-aware `diff`, replay impact, exhaustive mutation proof, and nested weak-golden synthesis landed
-- [ ] EP-7: Total `StructuralBinding` API, generated codecs, Keiki 0.4 projection facade, and scaffold integration landed
-- [ ] EP-7: Conformance package passes both binding laws, structural-codec, fixture-coverage, projection, and forward/replay tests
+- [x] 2026-07-28: EP-7 total `StructuralBinding` API, generated codecs, Keiki 0.4 projection facade, and scaffold integration landed
+- [x] 2026-07-28: EP-7 conformance package passes both binding laws, structural-codec, fixture-coverage, projection, and forward/replay tests; all three mutations go red and the 2x benchmark budget passes
+- [ ] EP-7 release preparation: confirm the proposed shared `0.4.0.0` version/changelog edit; annotated tags and publication remain assigned to the initiative release train
 - [ ] EP-8: Binding skeleton scaffolds with typed holes and re-scaffold hole reporting landed
 - [ ] EP-8: Exact-match nominal bindings and `check --explain-bindings` landed; general conformance scenario passes
 - [ ] EP-9: Explicit historical-codec comparison over a finite corpus landed
@@ -465,9 +466,16 @@ Recorded during child-plan drafting (2026-07-28):
 EP-6 completed the IR-1 spec layer. Structural and opaque consumer mappings now have one checked
 graph that drives validation, compatibility classification, replay impact, and weak-golden
 synthesis, with total traversal algebras and an exhaustive mutation proof guarding nested
-coverage. The generation boundary remains deliberately unimplemented here; EP-7 is now ready and
-owns bindings, codecs, shape modules, projection facades, scaffold integration, and executable
-conformance.
+coverage. At that intermediate boundary EP-7 became ready and took ownership of bindings, codecs,
+shape modules, projection facades, scaffold integration, and executable conformance.
+
+EP-7's generation boundary is implemented and verified: the published total binding API, acyclic
+shape stratum, declared-wire codecs, projection facade, scaffold preflight/manifest/record, mapped
+snapshot invalidation, fixture-driven harness, compiled structural/opaque acceptance ring, payload
+golden, mutation suite, and benchmark budget all pass. ADR 0012 is Accepted and ADR 0004 owns the
+new conformance gates. The registry remains In Progress only at the release skill's confirmation
+gate: the proposed shared `0.4.0.0` preparation is recorded in plan 150, while tags and publication
+are deferred to the initiative release train.
 
 
 ---

@@ -120,6 +120,41 @@ test-suite keiro-dsl-conformance
     , keiro
     , text   >=2.1
 
+-- Plan 150 / IR-1: compiled structural consumer bindings, declared-wire
+-- codecs, generated projection witnesses, opaque boundaries, fixture branch
+-- coverage, current payload goldens, and mapped-register replay equality.
+test-suite keiro-dsl-conformance-structural
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-structural
+  main-is:        Main.hs
+  other-modules:
+    Conformance.Structural.Bindings
+    Conformance.Structural.Domain
+    Generated.StructuralConformance.ArtifactCatalog.Codec
+    Generated.StructuralConformance.ArtifactCatalog.Domain
+    Generated.StructuralConformance.ArtifactCatalog.EventStream
+    Generated.StructuralConformance.ArtifactCatalog.Harness
+    Generated.StructuralConformance.ArtifactCatalog.Projection
+    Generated.StructuralConformance.ReplayAudit
+    Generated.StructuralConformance.Structural.Shape.ArtifactInfo
+    Generated.StructuralConformance.Structural.Shape.ArtifactKind
+    Generated.StructuralConformance.Structural.Shape.ArtifactLocation
+    Generated.StructuralConformance.Structural.Shape.ArtifactMetadata
+    Generated.StructuralConformance.StructuralProjections
+    StructuralConformance.ArtifactCatalog.Holes
+
+  build-depends:
+    , aeson       >=2.2  && <2.3
+    , base        >=4.21 && <5
+    , bytestring  >=0.12
+    , containers  >=0.6
+    , deepseq     >=1.5
+    , keiki       >=0.4  && <0.5
+    , keiro
+    , text        >=2.1
+    , time        >=1.12
+
 -- Plan 147 M2: a dedicated honest-wire baseline plus a dormant idempotent
 -- dishonest WireCtor used by replay-mutation-test.sh to prove that generated
 -- forward/replay register comparisons catch state divergence missed by the
@@ -144,6 +179,32 @@ test-suite keiro-dsl-conformance-replay
     , keiki  >=0.4  && <0.5
     , keiro
     , text   >=2.1
+
+benchmark keiro-dsl-codec-bench
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench/structural-codec test/conformance-structural
+  main-is:        Main.hs
+  other-modules:
+    Conformance.Structural.Bindings
+    Conformance.Structural.Domain
+    Generated.StructuralConformance.ArtifactCatalog.Codec
+    Generated.StructuralConformance.ArtifactCatalog.Domain
+    Generated.StructuralConformance.Structural.Shape.ArtifactInfo
+    Generated.StructuralConformance.Structural.Shape.ArtifactKind
+    Generated.StructuralConformance.Structural.Shape.ArtifactLocation
+    Generated.StructuralConformance.Structural.Shape.ArtifactMetadata
+
+  build-depends:
+    , aeson        >=2.2  && <2.3
+    , base         >=4.21 && <5
+    , containers   >=0.6
+    , deepseq      >=1.5
+    , keiki        >=0.4  && <0.5
+    , keiro
+    , tasty-bench  >=0.5  && <0.6
+    , text         >=2.1
+    , time         >=1.12
 
 -- EP-109 M2: snapshot-enabled aggregate scaffolding compiled against the live
 -- defaultStateCodec and stream-construction guards, with the captured codec

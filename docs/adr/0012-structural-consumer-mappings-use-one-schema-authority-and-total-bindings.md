@@ -2,9 +2,9 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural shapes own private-event wire policy; consumer bindings are total isomorphisms, snapshots remain a separately invalidated cache boundary, and Keiki projections are generated from the same schema authority.
-timestamp: 2026-07-28T19:50:11Z
+timestamp: 2026-07-28T21:25:25Z
 docId: ADR-12
-status: Proposed
+status: Accepted
 date: 2026-07-28
 ---
 
@@ -12,7 +12,7 @@ date: 2026-07-28
 
 Date: 2026-07-28
 
-Status: Proposed
+Status: Accepted
 
 
 ## Context
@@ -138,6 +138,15 @@ Private event/register schemas and public contract DTOs remain separate
 ownership domains. Structural private types are not reused in a public
 contract merely to demonstrate a compatibility-vector scenario.
 
+The implementation gate is a generated, fixture-driven conformance harness. It checks both
+binding laws, canonical identity, declared branch coverage, missing/null/unknown-field policy,
+generated codec round trips, pinned event payload bytes, projection witness/getter agreement,
+and forward-versus-replay equality for every register. Opaque declarations receive only
+boundary codec assertions. Mapping provenance is persisted in the scaffold record, so changing
+the declared wire, binding, initial value, or projection identity produces visible drift rather
+than silently reusing a generated ring. These checks are finite evidence, not a replacement for
+the totality and ownership requirements above.
+
 
 ## Consequences
 
@@ -167,3 +176,8 @@ contract merely to demonstrate a compatibility-vector scenario.
   authority.
 - Wire fingerprints ignore consumer-side naming, while binding/source provenance remains
   separately diff-visible; neither policy implies that Keiro inspects arbitrary Haskell.
+- The compiled structural conformance fixture and its mutation suite demonstrate that a
+  transposed binding, an uncovered union arm, and a mapped value omitted from the first event all
+  turn their owning gate red. The generated structural codec remained within 1.04x of a
+  policy-equivalent hand-written Aeson baseline in the representative benchmark matrix, so the
+  sanctioned fusion optimization is not required for this implementation.

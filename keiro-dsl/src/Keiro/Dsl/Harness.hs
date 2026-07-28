@@ -32,13 +32,14 @@ module Keiro.Dsl.Harness (
 ) where
 
 import Data.List (find)
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Goldens (GoldenPayload (..))
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.ReadModelShape (deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Scaffold
-import Keiro.Dsl.TypeGraph (OpaqueDecl (..), QualifiedValueName (..), StructuralDecl (..))
+import Keiro.Dsl.TypeGraph
 
 {- | Emit the harness test module for one aggregate. Like 'scaffoldAggregate',
 it takes the 'Spec' for the shared id\/enum declarations.
@@ -381,15 +382,17 @@ emitHarness goldens a =
         [ "{-# LANGUAGE DataKinds #-}"
         , "{-# LANGUAGE OverloadedLabels #-}"
         , "{-# LANGUAGE OverloadedStrings #-}"
-        , generatedBanner
-        , "module " <> aGenPrefix a <> ".Harness (harnessAssertions) where"
-        , ""
-        , "import " <> aGenPrefix a <> ".Domain"
-        , "import " <> aGenPrefix a <> ".Codec (encode" <> nm <> "Event, parse" <> nm <> "Event" <> codecValueImport <> ")"
-        , "import " <> aHolePrefix a <> ".Holes (" <> lowerFirst nm <> "Transducer)"
-        , "import Keiki.Core (" <> T.intercalate ", " coreImports <> ")"
-        , codecDecodeRawImport
         ]
+            ++ ["{-# LANGUAGE TypeApplications #-}" | hasMappedHarness a]
+            ++ [ generatedBanner
+               , "module " <> aGenPrefix a <> ".Harness (harnessAssertions) where"
+               , ""
+               , "import " <> aGenPrefix a <> ".Domain"
+               , "import " <> aGenPrefix a <> ".Codec (encode" <> nm <> "Event, parse" <> nm <> "Event" <> codecValueImport <> mappedCodecHarnessExports a <> ")"
+               , "import " <> aHolePrefix a <> ".Holes (" <> lowerFirst nm <> "Transducer)"
+               , "import Keiki.Core (" <> T.intercalate ", " coreImports <> ")"
+               , codecDecodeRawImport
+               ]
             ++ mappedHarnessImports a
             ++ goldenImports
             ++ [ ""
@@ -410,6 +413,7 @@ emitHarness goldens a =
                ]
             ++ [ "  ]"
                ]
+            ++ ["  ++ mappedConformanceAssertions" | hasMappedHarness a]
             ++ [ "  ++ forwardReplay" <> tCommand t
                | t <- replayTransitions
                ]
@@ -428,6 +432,7 @@ emitHarness goldens a =
             ++ concatMap (acceptDecl a) (initialTransitions a)
             ++ concatMap (forwardReplayDecl a) replayTransitions
             ++ concatMap (upcastDecl goldens a) upcastEvents
+            ++ mappedHarnessDeclarations a
   where
     nm = aName a
     -- Bake the clock-free result computed from the spec at scaffold time.
@@ -442,6 +447,7 @@ emitHarness goldens a =
     coreImports =
         ["applyEventsEither" | not (null replayTransitions)]
             ++ ["defaultValidationOptions", "step", "validateTransducer"]
+            ++ ["fieldWitnessAgrees" | not (null (mappedProjectionSpecs a))]
             ++ ["(!)" | not (null replayTransitions) && not (null (aRegs a))]
     upcastAssertions =
         [ "(" <> tshow (upcastLabel e m) <> ", upcasts" <> rcName e <> ")"
@@ -622,20 +628,42 @@ mappedHarnessImports :: Agg -> [Text]
 mappedHarnessImports aggregate
     | null fixtures = []
     | otherwise =
-        [ "import Data.List.NonEmpty qualified as NonEmpty"
-        , "import Keiro.Codec.Structural (FixtureCases (..))"
+        [ "import Data.Aeson qualified as Aeson"
+        , "import Data.Aeson.Key qualified as AesonKey"
+        , "import Data.Aeson.KeyMap qualified as AesonKeyMap"
+        , "import Data.Either (isLeft, isRight)"
+        , "import Data.List (nub)"
+        , "import Data.List.NonEmpty qualified as NonEmpty"
+        , "import Data.Maybe (isJust, isNothing)"
+        , "import Data.Proxy (Proxy (..))"
+        , "import Data.Text qualified as T"
+        , "import Keiki.Shape (CanonicalTypeName (..))"
+        , "import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)"
         ]
-            ++ map (\moduleName -> "import " <> moduleName <> " qualified") modules
+            ++ map (\moduleName -> "import " <> moduleName <> " qualified") (unique (modules <> bindingModules <> shapeModules <> consumerModules))
+            ++ ["import " <> structuralProjectionModuleName (aContext aggregate) <> " qualified as StructuralProjections" | not (null (mappedProjectionSpecs aggregate))]
   where
-    fixtures =
-        [ qualified
-        | fieldType <- map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate))
-        , qualified <- case fieldCat aggregate fieldType of
-            MappedStructuralCat declaration _ -> [sdFixtures declaration]
-            MappedOpaqueCat declaration -> [odFixtures declaration]
-            _ -> []
-        ]
+    fixtures = [mappedFixtures declaration | declaration <- mappedHarnessDeclarationsResolved aggregate]
     modules = unique [fst (splitQualifiedHarness (unQualifiedValueName qualified)) | qualified <- fixtures]
+    bindingModules =
+        [ fst (splitQualifiedHarness (unQualifiedValueName (sdBinding declaration)))
+        | ResolvedStructural declaration _ <- mappedHarnessDeclarationsResolved aggregate
+        ]
+    shapeModules =
+        [ structuralShapeModuleName (aContext aggregate) (sdName declaration)
+        | ResolvedStructural declaration _ <- mappedHarnessDeclarationsResolved aggregate
+        ]
+    consumerModules =
+        [ hsModule (sdHaskell declaration)
+        | ResolvedStructural declaration _ <- mappedHarnessDeclarationsResolved aggregate
+        ]
+
+mappedCodecHarnessExports :: Agg -> Text
+mappedCodecHarnessExports aggregate =
+    T.concat
+        [ ", encode" <> sdName declaration <> "Mapped, decode" <> sdName declaration <> "Mapped"
+        | ResolvedStructural declaration _ <- codecMappedDeclarations aggregate
+        ]
 
 fixtureSample :: QualifiedValueName -> Text
 fixtureSample qualified =
@@ -648,3 +676,405 @@ splitQualifiedHarness value =
 
 unique :: (Eq value) => [value] -> [value]
 unique = foldr (\value values -> if value `elem` values then values else value : values) []
+
+hasMappedHarness :: Agg -> Bool
+hasMappedHarness = not . null . mappedHarnessDeclarationsResolved
+
+mappedHarnessDeclarationsResolved :: Agg -> [ResolvedMappedDecl]
+mappedHarnessDeclarationsResolved aggregate = case aTypeGraph aggregate of
+    Nothing -> []
+    Just graph -> Map.elems (tgDeclarations graph)
+
+mappedProjectionSpecs :: Agg -> [StructuralProjection]
+mappedProjectionSpecs aggregate = case aTypeGraph aggregate of
+    Nothing -> []
+    Just graph -> map (resolveProjectionModules (aContext aggregate)) (projectionSpecs graph)
+
+structuralShapeModuleName :: Context -> Name -> Text
+structuralShapeModuleName context name = case placement context of
+    GeneratedPrefix -> root <> "Generated." <> contextSegment <> ".Structural.Shape." <> name
+    CollocatedLeaf -> root <> contextSegment <> ".Generated.Structural.Shape." <> name
+  where
+    root = if T.null (moduleRoot context) then "" else moduleRoot context <> "."
+    contextSegment = pascalFromKebab (contextName context)
+
+structuralProjectionModuleName :: Context -> Text
+structuralProjectionModuleName context = case placement context of
+    GeneratedPrefix -> root <> "Generated." <> contextSegment <> ".StructuralProjections"
+    CollocatedLeaf -> root <> contextSegment <> ".Generated.StructuralProjections"
+  where
+    root = if T.null (moduleRoot context) then "" else moduleRoot context <> "."
+    contextSegment = pascalFromKebab (contextName context)
+
+mappedHarnessDeclarations :: Agg -> [Text]
+mappedHarnessDeclarations aggregate
+    | not (hasMappedHarness aggregate) = []
+    | otherwise =
+        [ ""
+        , "mappedConformanceAssertions :: [(String, Bool)]"
+        , "mappedConformanceAssertions ="
+        , "  concat"
+        , "    [ " <> T.intercalate "\n    , " assertionLists
+        , "    ]"
+        , ""
+        , "validFixtureLabels :: NonEmpty.NonEmpty (T.Text, value) -> Bool"
+        , "validFixtureLabels cases ="
+        , "  all (not . T.null) labels && length labels == length (nub labels)"
+        , "  where"
+        , "    labels = map fst (NonEmpty.toList cases)"
+        ]
+            ++ concatMap (bindingAssertionDecl aggregate) structural
+            ++ concatMap (opaqueAssertionDecl aggregate) opaque
+            ++ concatMap (coverageDecl aggregate) structural
+            ++ concatMap (mappedEventAssertionDecl aggregate) mappedEventFields
+            ++ wirePolicyAssertionDecls aggregate structuralWire
+            ++ projectionAssertionDecls aggregate structural
+            ++ wirePolicyHelpers structuralWire
+  where
+    declarations = mappedHarnessDeclarationsResolved aggregate
+    structural = [(declaration, shape) | ResolvedStructural declaration shape <- declarations]
+    opaque = [declaration | ResolvedOpaque declaration <- declarations]
+    structuralWire = [(declaration, shape) | ResolvedStructural declaration shape <- codecMappedDeclarations aggregate]
+    mappedEventFields =
+        [ (event, fieldName, fieldType, declaration)
+        | event <- aEvents aggregate
+        , (fieldName, fieldType) <- rcFields event
+        , declaration <- maybeToListHarness (mappedDeclaration aggregate fieldType)
+        ]
+    assertionLists =
+        [lowerFirst (sdName declaration) <> "BindingAssertions" | (declaration, _) <- structural]
+            <> [lowerFirst (odName declaration) <> "OpaqueAssertions" | declaration <- opaque]
+            <> [ "[(\"fixture coverage: "
+                    <> unCanonicalTypeId (sdCanonical declaration)
+                    <> "\", coverage"
+                    <> sdName declaration
+                    <> ")]"
+               | (declaration, _) <- structural
+               ]
+            <> [ mappedEventAssertionName event fieldName <> "Assertions"
+               | (event, fieldName, _, _) <- mappedEventFields
+               ]
+            <> ["structuralWirePolicyAssertions" | not (null structuralWire)]
+            <> ["structuralProjectionAssertions" | not (null (mappedProjectionSpecs aggregate))]
+
+mappedDeclaration :: Agg -> Text -> Maybe ResolvedMappedDecl
+mappedDeclaration aggregate name = do
+    graph <- aTypeGraph aggregate
+    Map.lookup (MappedKey name) (tgDeclarations graph)
+
+bindingAssertionDecl :: Agg -> (StructuralDecl, ResolvedMappedShape) -> [Text]
+bindingAssertionDecl _aggregate (declaration, _shape) =
+    [ ""
+    , valueName <> " :: [(String, Bool)]"
+    , valueName <> " ="
+    , "  (\"fixture labels: " <> canonical <> "\", validFixtureLabels cases) :"
+    , "  (\"canonical identity: " <> canonical <> "\", canonicalTypeName (Proxy @" <> consumerType <> ") == " <> tshow canonical <> ") :"
+    , "  concat"
+    , "    [ [ (\"binding domain round-trip: " <> canonical <> "/\" <> T.unpack label, bindingDomainRoundTrip " <> binding <> " value)"
+    , "      , (\"binding shape round-trip: " <> canonical <> "/\" <> T.unpack label, bindingShapeRoundTrip " <> binding <> " (bindingToShape " <> binding <> " value))"
+    , "      ]"
+    , "    | (label, value) <- NonEmpty.toList cases"
+    , "    ]"
+    , "  where"
+    , "    cases = fixtureCases " <> fixtures
+    ]
+  where
+    valueName = lowerFirst (sdName declaration) <> "BindingAssertions"
+    canonical = unCanonicalTypeId (sdCanonical declaration)
+    consumerType = hsModule (sdHaskell declaration) <> "." <> hsType (sdHaskell declaration)
+    binding = unQualifiedValueName (sdBinding declaration)
+    fixtures = unQualifiedValueName (sdFixtures declaration)
+
+opaqueAssertionDecl :: Agg -> OpaqueDecl -> [Text]
+opaqueAssertionDecl _aggregate declaration =
+    [ ""
+    , valueName <> " :: [(String, Bool)]"
+    , valueName <> " ="
+    , "  (\"opaque boundary fixtures: " <> label <> "\", validFixtureLabels cases) :"
+    , "  [ (\"opaque codec round-trip: " <> label <> "/\" <> T.unpack caseLabel, case Aeson.fromJSON (Aeson.toJSON value) of Aeson.Success decoded -> decoded == value; Aeson.Error _ -> False)"
+    , "  | (caseLabel, value) <- NonEmpty.toList cases"
+    , "  ]"
+    , "  where"
+    , "    cases = fixtureCases " <> fixtures
+    ]
+  where
+    valueName = lowerFirst (odName declaration) <> "OpaqueAssertions"
+    label = unCodecIdentity (odCodecIdentity declaration) <> "@" <> unCodecVersion (odCodecVersion declaration)
+    fixtures = unQualifiedValueName (odFixtures declaration)
+
+coverageDecl :: Agg -> (StructuralDecl, ResolvedMappedShape) -> [Text]
+coverageDecl aggregate (declaration, shape) =
+    [ ""
+    , "coverage" <> sdName declaration <> " :: Bool"
+    , "coverage" <> sdName declaration <> " = " <> coverageExpression aggregate declaration shape
+    ]
+
+coverageExpression :: Agg -> StructuralDecl -> ResolvedMappedShape -> Text
+coverageExpression aggregate declaration shape = case obligations of
+    [] -> "True"
+    _ -> T.intercalate " && " obligations <> "\n  where\n    shapes = map (bindingToShape " <> binding <> " . snd) (NonEmpty.toList (fixtureCases " <> fixtures <> "))"
+  where
+    shapeModule = structuralShapeModuleName (aContext aggregate) (sdName declaration)
+    binding = unQualifiedValueName (sdBinding declaration)
+    fixtures = unQualifiedValueName (sdFixtures declaration)
+    obligations = case shape of
+        RRecord _ _ fields -> concatMap (recordFieldObligation shapeModule) fields
+        REnum entries ->
+            [ "any (\\case " <> shapeModule <> "." <> weCtor entry <> " -> True; _ -> False) shapes"
+            | entry <- entries
+            ]
+        RUnion _ arms -> concatMap (unionArmObligations shapeModule) arms
+
+recordFieldObligation :: Text -> ResolvedWireField -> [Text]
+recordFieldObligation shapeModule field = case rwfType field of
+    ROptional _ ->
+        [ "any (isNothing . " <> selector <> ") shapes"
+        , "any (isJust . " <> selector <> ") shapes"
+        ]
+    _ -> []
+  where
+    selector = shapeModule <> "." <> rwfHaskell field
+
+unionArmObligations :: Text -> ResolvedWireArm -> [Text]
+unionArmObligations shapeModule arm =
+    ["any (\\case " <> patternText <> " -> True; _ -> False) shapes"] <> optionalPayload
+  where
+    constructor = shapeModule <> "." <> rwaCtor arm
+    patternText = constructor <> maybe "" (const "{}") (rwaPayload arm)
+    optionalPayload = case rwaPayload arm of
+        Just (ROptional _) ->
+            [ "any (\\case " <> constructor <> " Nothing -> True; _ -> False) shapes"
+            , "any (\\case " <> constructor <> " (Just _) -> True; _ -> False) shapes"
+            ]
+        _ -> []
+
+mappedEventAssertionDecl :: Agg -> (ResolvedCtor, Text, Text, ResolvedMappedDecl) -> [Text]
+mappedEventAssertionDecl aggregate (event, fieldName, _fieldType, declaration) =
+    [ ""
+    , valueName <> "Assertions :: [(String, Bool)]"
+    , valueName <> "Assertions ="
+    , "  [ (\"mapped codec round-trip: " <> rcName event <> "/" <> fieldName <> "/\" <> T.unpack label, roundTrips " <> eventExpression <> ")"
+    , "  | (label, mappedValue) <- NonEmpty.toList (fixtureCases " <> fixtures <> ")"
+    , "  ]"
+    ]
+  where
+    valueName = mappedEventAssertionName event fieldName
+    fixtures = unQualifiedValueName (mappedFixtures declaration)
+    eventExpression = ctorExprWithOverride aggregate event fieldName "mappedValue"
+
+mappedEventAssertionName :: ResolvedCtor -> Text -> Text
+mappedEventAssertionName event fieldName = lowerFirst (rcName event) <> pascal fieldName
+
+wirePolicyAssertionDecls :: Agg -> [(StructuralDecl, ResolvedMappedShape)] -> [Text]
+wirePolicyAssertionDecls _aggregate [] = []
+wirePolicyAssertionDecls aggregate declarations =
+    [ ""
+    , "structuralWirePolicyAssertions :: [(String, Bool)]"
+    , "structuralWirePolicyAssertions ="
+    , "  [ " <> T.intercalate "\n  , " assertions
+    , "  ]"
+    ]
+  where
+    assertions = concatMap (wirePolicyAssertions aggregate) declarations
+
+wirePolicyAssertions :: Agg -> (StructuralDecl, ResolvedMappedShape) -> [Text]
+wirePolicyAssertions aggregate (declaration, shape) = case shape of
+    RRecord _ unknownFields fields ->
+        concatMap (recordMissingAssertions aggregate declaration) [field | field <- fields, rwfPresence field == POptional]
+            <> [unknownFieldAssertion declaration unknownFields]
+    REnum entries -> map (enumArmAssertion declaration) entries <> [enumUnknownAssertion declaration]
+    RUnion encoding arms ->
+        map (unionArmAssertion declaration encoding) arms
+            <> [unknownFieldAssertion declaration (ueUnknownFields encoding)]
+
+recordMissingAssertions :: Agg -> StructuralDecl -> ResolvedWireField -> [Text]
+recordMissingAssertions aggregate declaration field =
+    [ "(\"wire policy missing default: "
+        <> canonical
+        <> "/"
+        <> rwfKey field
+        <> "\", case "
+        <> decoder
+        <> " (deleteObjectField "
+        <> tshow (rwfKey field)
+        <> " ("
+        <> encodedSample
+        <> ")) of Left _ -> False; Right decoded -> objectField "
+        <> tshow (rwfKey field)
+        <> " ("
+        <> encoder
+        <> " decoded) == Just ("
+        <> missingExpectedValue aggregate field
+        <> "))"
+    , "(\"wire policy explicit null: "
+        <> canonical
+        <> "/"
+        <> rwfKey field
+        <> "\", "
+        <> nullExpectation
+        <> " ("
+        <> decoder
+        <> " (insertObjectField "
+        <> tshow (rwfKey field)
+        <> " Aeson.Null ("
+        <> encodedSample
+        <> "))))"
+    ]
+  where
+    canonical = unCanonicalTypeId (sdCanonical declaration)
+    encoder = "encode" <> sdName declaration <> "Mapped"
+    decoder = "decode" <> sdName declaration <> "Mapped"
+    fixtures = unQualifiedValueName (sdFixtures declaration)
+    encodedSample = encoder <> " (snd (NonEmpty.head (fixtureCases " <> fixtures <> ")))"
+    nullExpectation = case rwfType field of
+        ROptional _ -> "isRight"
+        _ -> "isLeft"
+
+missingExpectedValue :: Agg -> ResolvedWireField -> Text
+missingExpectedValue aggregate field = case rwfOnMissing field of
+    Just OmNull -> "Aeson.Null"
+    Just (OmText value) -> "Aeson.String " <> tshow value
+    Just (OmInt value) -> "Aeson.toJSON (" <> T.pack (show value) <> " :: Int)"
+    Just (OmBool value) -> if value then "Aeson.Bool True" else "Aeson.Bool False"
+    Just OmEmptyList -> "Aeson.toJSON ([] :: [Aeson.Value])"
+    Just OmEmptyMap -> "Aeson.Object mempty"
+    Just (OmCtor constructor) -> case (aTypeGraph aggregate, rwfType field) of
+        (Just graph, RRef key) -> case Map.lookup key (tgDeclarations graph) of
+            Just (ResolvedStructural _ (REnum entries)) -> case find ((== constructor) . weCtor) entries of
+                Just entry -> "Aeson.String " <> tshow (weTag entry)
+                Nothing -> "error \"missing enum default constructor\""
+            _ -> "error \"non-enum constructor default\""
+        _ -> "error \"non-reference constructor default\""
+    Nothing -> "error \"optional field lacks on-missing policy\""
+
+unknownFieldAssertion :: StructuralDecl -> UnknownFields -> Text
+unknownFieldAssertion declaration policy =
+    "(\"wire policy unknown fields: "
+        <> unCanonicalTypeId (sdCanonical declaration)
+        <> "\", all (\\(_, value) -> "
+        <> expectation
+        <> " (decode"
+        <> sdName declaration
+        <> "Mapped (insertObjectField \"__keiro_unknown\" (Aeson.Bool True) (encode"
+        <> sdName declaration
+        <> "Mapped value)))) (NonEmpty.toList (fixtureCases "
+        <> unQualifiedValueName (sdFixtures declaration)
+        <> ")))"
+  where
+    expectation = case policy of
+        RejectUnknown -> "isLeft"
+        IgnoreUnknown -> "isRight"
+
+enumArmAssertion :: StructuralDecl -> WireEnum -> Text
+enumArmAssertion declaration entry =
+    "(\"wire enum arm: "
+        <> unCanonicalTypeId (sdCanonical declaration)
+        <> "/"
+        <> weTag entry
+        <> "\", any (\\(_, value) -> encode"
+        <> sdName declaration
+        <> "Mapped value == Aeson.String "
+        <> tshow (weTag entry)
+        <> " && decode"
+        <> sdName declaration
+        <> "Mapped (Aeson.String "
+        <> tshow (weTag entry)
+        <> ") == Right value) (NonEmpty.toList (fixtureCases "
+        <> unQualifiedValueName (sdFixtures declaration)
+        <> ")))"
+
+enumUnknownAssertion :: StructuralDecl -> Text
+enumUnknownAssertion declaration =
+    "(\"wire enum unknown tag: "
+        <> unCanonicalTypeId (sdCanonical declaration)
+        <> "\", isLeft (decode"
+        <> sdName declaration
+        <> "Mapped (Aeson.String \"__keiro_unknown\")))"
+
+unionArmAssertion :: StructuralDecl -> UnionEncoding -> ResolvedWireArm -> Text
+unionArmAssertion declaration encoding arm =
+    "(\"wire union arm: "
+        <> unCanonicalTypeId (sdCanonical declaration)
+        <> "/"
+        <> rwaTag arm
+        <> "\", any (\\(_, value) -> objectField "
+        <> tshow (ueTagField encoding)
+        <> " (encode"
+        <> sdName declaration
+        <> "Mapped value) == Just (Aeson.String "
+        <> tshow (rwaTag arm)
+        <> ") && decode"
+        <> sdName declaration
+        <> "Mapped (encode"
+        <> sdName declaration
+        <> "Mapped value) == Right value) (NonEmpty.toList (fixtureCases "
+        <> unQualifiedValueName (sdFixtures declaration)
+        <> ")))"
+
+wirePolicyHelpers :: [(StructuralDecl, ResolvedMappedShape)] -> [Text]
+wirePolicyHelpers [] = []
+wirePolicyHelpers _ =
+    [ ""
+    , "deleteObjectField :: T.Text -> Aeson.Value -> Aeson.Value"
+    , "deleteObjectField key (Aeson.Object objectValue) = Aeson.Object (AesonKeyMap.delete (AesonKey.fromText key) objectValue)"
+    , "deleteObjectField _ value = value"
+    , ""
+    , "insertObjectField :: T.Text -> Aeson.Value -> Aeson.Value -> Aeson.Value"
+    , "insertObjectField key inserted (Aeson.Object objectValue) = Aeson.Object (AesonKeyMap.insert (AesonKey.fromText key) inserted objectValue)"
+    , "insertObjectField _ _ value = value"
+    , ""
+    , "objectField :: T.Text -> Aeson.Value -> Maybe Aeson.Value"
+    , "objectField key (Aeson.Object objectValue) = AesonKeyMap.lookup (AesonKey.fromText key) objectValue"
+    , "objectField _ _ = Nothing"
+    ]
+
+mappedFixtures :: ResolvedMappedDecl -> QualifiedValueName
+mappedFixtures (ResolvedStructural declaration _) = sdFixtures declaration
+mappedFixtures (ResolvedOpaque declaration) = odFixtures declaration
+
+ctorExprWithOverride :: Agg -> ResolvedCtor -> Text -> Text -> Text
+ctorExprWithOverride aggregate constructor target replacement =
+    "(" <> rcName constructor <> " (" <> rcName constructor <> "Data" <> arguments <> "))"
+  where
+    arguments =
+        T.concat
+            [ " " <> if fieldName == target then replacement else sampleValue aggregate fieldName fieldType
+            | (fieldName, fieldType) <- rcFields constructor
+            ]
+
+projectionAssertionDecls :: Agg -> [(StructuralDecl, ResolvedMappedShape)] -> [Text]
+projectionAssertionDecls aggregate structural
+    | null specs = []
+    | otherwise =
+        [ ""
+        , "structuralProjectionAssertions :: [(String, Bool)]"
+        , "structuralProjectionAssertions ="
+        , "  [ " <> T.intercalate "\n  , " (map assertion specs)
+        , "  ]"
+        ]
+  where
+    specs = mappedProjectionSpecs aggregate
+    assertion spec =
+        "(\"projection witness agreement: "
+            <> unCanonicalTypeId (spCanonical spec)
+            <> spPointer spec
+            <> "\", all (\\(_, owner) -> fieldWitnessAgrees StructuralProjections."
+            <> spWitness spec
+            <> " (\\referenceOwner -> "
+            <> projectionGetter "referenceOwner" spec
+            <> ") owner) (NonEmpty.toList (fixtureCases "
+            <> ownerFixtures spec
+            <> ")))"
+    ownerFixtures spec = case find (\(declaration, _) -> sdCanonical declaration == spCanonical spec) structural of
+        Just (declaration, _) -> unQualifiedValueName (sdFixtures declaration)
+        Nothing -> "error \"projection owner fixtures missing\""
+
+projectionGetter :: Text -> StructuralProjection -> Text
+projectionGetter owner spec =
+    foldl
+        (\value (shapeModule, selector) -> shapeModule <> "." <> selector <> " (" <> value <> ")")
+        ("bindingToShape " <> unQualifiedValueName (spBinding spec) <> " " <> owner)
+        (spSelectors spec)
+
+maybeToListHarness :: Maybe value -> [value]
+maybeToListHarness = maybe [] pure

@@ -1,0 +1,1 @@
+{"accepted":false,"artifact":{"active":true,"artifact_hash":null,"artifact_key":"artifact-local-file","artifact_kind":"guide","display_name":"Local file","location":{"contents":"/tmp/artifact.txt","tag":"local_file"},"metadata":{"note":null},"tags":["conformance","artifact-local-file"]},"geometry":{"geometryWkt":"POINT (1 2)"},"kind":"ArtifactRecorded"}

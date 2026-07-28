@@ -82,12 +82,22 @@ This section must always reflect the actual current state of the work.
       wire/binding/initial identities invalidate the fold fingerprint. `keiro-dsl-test` passes
       275 examples across the `structural manifest`, `structural scaffold record`, and
       `structural import plan` groups.
-- [ ] Milestone 4: harness generation — both binding laws, codec round trips, branch-coverage
-      obligations, defaults/null/unknown-field/union-arm cases, upcaster goldens, forward-versus-replay
-      equality over mapped registers.
-- [ ] Milestone 5: `keiro-dsl-conformance-structural` package, opaque fixture, mutation scripts,
-      benchmarks with budget, ADR work, release notes.
-- [ ] ADR distillation pass and plan completion.
+- [x] 2026-07-28: Milestone 4 completed: generated harnesses exercise both binding laws,
+      canonical identity, mapped event/codec round trips, fixture branch coverage, every declared
+      missing/null/unknown/enum/union policy, projection witness agreement, and plan 147's
+      forward-versus-replay comparison over every register. `keiro-dsl-test` passes 277 examples.
+- [x] 2026-07-28: Milestone 5 implementation completed: the compiled structural/opaque fixture,
+      committed scaffold ring and payload golden, projection guard/key checks, three falsifying
+      mutations, and six encode/decode benchmark comparisons all pass. The generated codec's
+      worst observed policy-equivalent ratio is 1.04x, inside the adopted 2x budget.
+- [x] 2026-07-28: ADR 0012 accepted from observed implementation evidence; ADR 0004 amended with
+      the structural binding, generated-codec golden, fixture-coverage, and mapping-drift gates;
+      the OKF update log and strict 12-record validation pass.
+- [ ] Release preparation: proposed shared PVP major `0.4.0.0` and per-package tag plan recorded
+      below. The release skill requires user confirmation before the five package versions,
+      internal bounds, and changelogs are edited; actual tags/uploads remain deferred to the
+      initiative release train.
+- [ ] Plan completion after the release-preparation confirmation gate.
 
 
 ## Surprises & Discoveries
@@ -123,6 +133,26 @@ implementation. Provide concise evidence.
   `mapping ` row contains one Aeson JSON object, malformed or duplicate known rows fail parsing,
   and unrelated future rows remain ignored. This preserves the v1 record's intended
   forward-compatible line protocol while making binding/codec drift visible.
+- Compiling the first complete mapped ring caught two Haskell-only emitter defects that textual
+  pins could not: strict nested types rendered as invalid `!Maybe` syntax, and the fixture-label
+  helper expected a wrapper after `fixtureCases` had already projected its `NonEmpty` payload.
+  The generator now parenthesizes nested `Maybe`/list/map fields and accepts the projected corpus.
+- The generated-module firewall intentionally forbids `Keiki.Symbolic` and symbolic operators in
+  generated modules, including `Harness.hs`. The generated harness therefore owns schema-derived
+  witness/getter agreement and validates a real projection-guarded Holes transducer; the hand-owned
+  conformance driver adds `symIsBot` evidence that repeated uses of the same generated witness and
+  base share one structured key. Keiki 0.4's release tests remain the authority for rejecting
+  update/output projections, unrepresentable computed `ProjBase` values, and checked-composition
+  loss, while Keiro's coordinated migration exhaustively renders those warnings.
+- A first benchmark baseline appeared to make generated decoding roughly 2.3x slower because it
+  silently accepted unknown fields while the declared generated codec rejected them. After the
+  hand-written Aeson baseline enforced the identical policy, generated/baseline ratios were:
+  encode small 1.02x, nested union 1.04x, large list 1.01x; decode small 1.01x, nested union
+  0.98x, large list 0.97x. No fusion work is justified.
+- The mutation suite demonstrates independent ownership: transposing two binding fields fails the
+  domain law, deleting the canonical union fixture fails coverage/arm assertions, and moving the
+  scalar event before the mapped event fails validation or mapped-register replay equality. The
+  trap restores both hand-owned files and proves the baseline green again.
 
 
 ## Decision Log
@@ -244,6 +274,26 @@ implementation. Provide concise evidence.
   and siblings) key off `cabal test <suite>`.
   Date: 2026-07-28
 
+- Decision: Keep solver-backed projection-key evidence outside the generated-module firewall.
+  Generated `Harness.hs` stays on the same narrow `Keiki.Core` allowlist as every other generated
+  module and proves witness provenance plus validation of the consumer's real projection guard.
+  The compiled conformance driver may import `Keiki.Symbolic` to assert that two reads using the
+  same generated witness and input base are unsatisfiably unequal. Unsupported update/output,
+  computed-base, and checked-composition cases remain Keiki's release-contract tests; Keiro tests
+  its warning migration and does not duplicate an alternate symbolic validator.
+  Rationale: Relaxing the firewall for a test emitter would make the generated ring depend on an
+  implementation surface it is designed not to expose. The conformance suite still exercises the
+  generated tag against the released implementation, while dependency ownership stays explicit.
+  Date: 2026-07-28
+
+- Decision: Adopt a 2x throughput budget against a hand-written Aeson baseline that implements the
+  same key/tag/default/unknown-field policy, measured for small, nested-union, and 2,000-record
+  list fixtures in both directions. Do not implement direct-`Encoding` fusion while the worst
+  observed ratio is 1.04x.
+  Rationale: A weaker baseline confounds policy work with adapter overhead; the like-for-like
+  measurements show no material regression and preserve the simpler single-authority path.
+  Date: 2026-07-28
+
 
 ## Outcomes & Retrospective
 
@@ -269,6 +319,33 @@ preflight rejects generated-namespace ownership violations, and successful repor
 same plan. Mapping changes are deliberately report-only because plan 149's `diff` owns their
 compatibility classification. Snapshot fold fingerprints now include mapped wire, binding,
 canonical/codec, and initial identity for mapped register roots.
+
+Milestone 4 turns each mapped declaration into executable finite evidence. Structural fixtures
+drive both binding directions, canonical identity, all declared branch obligations, direct wire
+policy probes, containing-event round trips, generated projection witnesses, and the existing
+forward/replay assertion over mapped and scalar registers. Opaque fixtures stop at their consumer
+JSON boundary. Legacy specs retain byte-identical generated output because the expanded imports
+and declarations are conditional on mapped use.
+
+Milestone 5 compiles the whole adoption path against consumer-owned domain and binding modules.
+The real CLI-produced ring, one hand-owned Holes transducer, manifest, scaffold record, and current
+payload golden pass together; three red/green mutations prove the main gates are discriminating.
+The policy-equivalent benchmark matrix stayed between 0.97x and 1.04x of hand-written Aeson, so
+the planned fusion escape hatch was unnecessary. ADR 0012 is Accepted and ADR 0004 records the
+new gate ownership.
+
+Release preparation is intentionally separated from irreversible publication. Hackage and
+upstream tags were rechecked for the dependency line (Keiki and keiki-codec-json 0.4.0.0) and for
+the current Keiro release (0.3.0.0); tasty-bench 0.5 is the released benchmark dependency. Since
+the repository has breaking API/semantic changes since `keiro-0.3.0.0`, the release skill's PVP
+rule proposes a shared major bump to `0.4.0.0` for `keiro-core`, `keiro`, `keiro-pgmq`,
+`keiro-migrations`, and `keiro-dsl`, with every `keiro-core` internal bound tightened to
+`^>=0.4.0.0`. After user confirmation, the five package and root changelogs will receive a dated
+`0.4.0.0` section. The release-train tag plan is one annotated tag per package at the single
+release commit (`keiro-core-0.4.0.0`, `keiro-0.4.0.0`, `keiro-pgmq-0.4.0.0`,
+`keiro-migrations-0.4.0.0`, `keiro-dsl-0.4.0.0`), followed by dependency-order publication only
+after the mandatory release gates and Hackage dependency audit. No tag, push, or upload is part of
+this child-plan implementation turn.
 
 
 ## Context and Orientation
