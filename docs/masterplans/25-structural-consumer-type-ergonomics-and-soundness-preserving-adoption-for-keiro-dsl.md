@@ -169,8 +169,8 @@ request's origin but do not constrain the reusable Keiro API beyond the local de
 | 3 | Give hand-written services first-class fold-fingerprint snapshot invalidation | docs/plans/146-give-hand-written-services-first-class-fold-fingerprint-snapshot-invalidation.md | None | None | Complete |
 | 4 | Generate forward-versus-replay equality assertions in the DSL harness | docs/plans/147-generate-forward-versus-replay-equality-assertions-in-the-dsl-harness.md | None | None | Complete |
 | 5 | Report evolution as a compatibility vector with remediation explanations | docs/plans/148-report-evolution-as-a-compatibility-vector-with-remediation-explanations.md | None | None | Complete |
-| 6 | Implement the IR-1 spec layer: resolved type graph, structural and opaque declarations, check and diff | docs/plans/149-implement-the-ir-1-spec-layer-resolved-type-graph-structural-and-opaque-declarations-check-and-diff.md | EP-5 | None | In Progress |
-| 7 | Implement the IR-1 generation layer: total bindings, codecs, Keiki projection facade, scaffold, and conformance harness | docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md | EP-6, Keiki 0.4 | EP-4 | Not Started |
+| 6 | Implement the IR-1 spec layer: resolved type graph, structural and opaque declarations, check and diff | docs/plans/149-implement-the-ir-1-spec-layer-resolved-type-graph-structural-and-opaque-declarations-check-and-diff.md | EP-5 | None | Complete |
+| 7 | Implement the IR-1 generation layer: total bindings, codecs, Keiki projection facade, scaffold, and conformance harness | docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md | EP-6, Keiki 0.4 | EP-4 | Ready |
 | 8 | Reduce binding boilerplate: skeleton scaffolds, exact nominal derivation, and explain-bindings | docs/plans/151-reduce-binding-boilerplate-skeleton-scaffolds-derived-nominal-bindings-and-explain-bindings.md | EP-7 | None | Not Started |
 | 9 | Gather migration evidence with historical codec comparison and supported-root coverage reporting | docs/plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md | EP-7 | EP-8 | Not Started |
 
@@ -295,8 +295,8 @@ is implemented and released.
 - [x] 2026-07-28: EP-4 mutation test proves a divergent fold fails the assertion; ADR 0004 inventory amended
 - [x] 2026-07-28: EP-5 compatibility-vector output and per-surface classification landed behind stable codes
 - [x] 2026-07-28: EP-5 `diff --explain` remediation output landed; consumer-neutral private/public scenarios pass
-- [ ] EP-6: Resolved type-expression graph, grammar, and parser/pretty round trips landed
-- [ ] EP-6: `check` negative fixtures and recursive `diff` classification with use-site paths landed
+- [x] 2026-07-28: EP-6 resolved type-expression graph, grammar, parser/pretty round trips, and total traversal algebras landed
+- [x] 2026-07-28: EP-6 `check` negative fixtures, recursive root-aware `diff`, replay impact, exhaustive mutation proof, and nested weak-golden synthesis landed
 - [ ] EP-7: Total `StructuralBinding` API, generated codecs, Keiki 0.4 projection facade, and scaffold integration landed
 - [ ] EP-7: Conformance package passes both binding laws, structural-codec, fixture-coverage, projection, and forward/replay tests
 - [ ] EP-8: Binding skeleton scaffolds with typed holes and re-scaffold hole reporting landed
@@ -459,7 +459,12 @@ Recorded during child-plan drafting (2026-07-28):
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-6 completed the IR-1 spec layer. Structural and opaque consumer mappings now have one checked
+graph that drives validation, compatibility classification, replay impact, and weak-golden
+synthesis, with total traversal algebras and an exhaustive mutation proof guarding nested
+coverage. The generation boundary remains deliberately unimplemented here; EP-7 is now ready and
+owns bindings, codecs, shape modules, projection facades, scaffold integration, and executable
+conformance.
 
 
 ---

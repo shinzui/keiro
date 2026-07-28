@@ -30,6 +30,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Added
 
+- `keiro-dsl` now accepts checked structural and opaque consumer-type declarations with nested
+  records, enums, tagged unions, collections, optional/default policies, canonical identities,
+  binding or codec provenance, and register initials. Its resolved type graph drives stable
+  validation diagnostics, root-aware compatibility vectors, replay impact, and deterministic
+  `--emit-goldens` weak stand-ins without treating consumer JSON instances as wire authority.
 - Durable workflows can be returned from terminal failure with
   `Keiro.Workflow.Instance.resurrectFailedWorkflow`. The transactional API
   resets retry/lease state, removes only the derived current-generation failure

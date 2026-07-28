@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-07-28T18:32:17Z
+timestamp: 2026-07-28T19:50:11Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -67,6 +67,10 @@ The landed inventory is:
 | Hole-only or hand-written fold change with a missed version bump | Invisible | Invisible | One in 1000 accepted seeds is full-replayed through its immutable seed version; divergence increments `keiro.snapshot.seed.divergence` |
 | Router/process decide surface | — | `RouterDecideSurfaceChanged` / `ProcessDecideSurfaceChanged` Advisory | Drain the subscription redelivery window; hole-only changes keep the same manual rule |
 | Process timer payload | — | `ProcessTimerPayloadChanged` Advisory | Firers must decode every pending unversioned shape or the timer exhausts attempts and dead-letters |
+| Invalid mapped declaration (missing provenance, ambiguous or recursive reference, non-injective nullability, invalid default, encoding collision, unsupported guard, or missing register initial) | Stable mapped diagnostic at the owning declaration or use site | Not required | Correct the single-spec contract before generation; opaque mode remains an explicit, separately checked boundary |
+| Mapped structural wire change | Single-spec shape remains valid | Recursive mapped diagnostic at every complete command, event, and register root path; event history, old-binary rollout, snapshot hydration, and consumer build are classified independently | Version and upcast affected events, rebuild affected snapshots, and recompile affected consumers according to the finding's compatibility vector |
+| Mapped source, binding, fixture, canonical identity, or opaque-codec provenance change | Required facts and identities are checked | Declaration-level build or identity finding; opaque codec-version changes remain historical-read hazards even when no structural shape is visible | Recompile consumers, bump binding provenance, or migrate the declared opaque codec as directed; no Haskell source inspection is claimed |
+| Synthesized mapped old-payload golden | — | `diff --emit-goldens` traverses the complete checked old shape and labels synthesized output as a weak stand-in | Replace it with a hand-captured historical payload when available; emission never overwrites existing evidence |
 | Private enum constructor addition | — | One `EnumCtorAdded` finding per containing event/register path; event use is old-binary/new-event breaking and register use is snapshot-hydration advisory | Deploy consumers before producers and invalidate/rebuild affected snapshots |
 | Snapshot-cache invalidation | Snapshot contract from ADR 0003 | `snapshot-hydration=advisory` identifies rebuild rather than event upcast work | The three-component discriminator rejects stale seeds; bump `state-codec version=` for invisible hand-owned changes |
 | Public contract change | Single-spec ownership checks only | Existing contract codes classify `public-consumer` independently from private history and identity | Deploy compatible consumers before producers or revise/version the contract |

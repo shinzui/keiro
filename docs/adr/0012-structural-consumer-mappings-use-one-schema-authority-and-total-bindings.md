@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural shapes own private-event wire policy; consumer bindings are total isomorphisms, snapshots remain a separately invalidated cache boundary, and Keiki projections are generated from the same schema authority.
-timestamp: 2026-07-28T14:55:04Z
+timestamp: 2026-07-28T19:50:11Z
 docId: ADR-12
 status: Proposed
 date: 2026-07-28
@@ -80,6 +80,20 @@ mapped declaration because those inner values may already encode as JSON null. T
 and contents keys must be distinct. Parser declarations may be incomplete for useful diagnostics,
 but the resolved graph exposes only checked declarations with all mandatory facts present.
 
+The landed spec layer exposes total folds over checked mapped declarations, structural shapes,
+and nested type expressions. Adding a new constructor therefore requires every checker, differ,
+fingerprinter, golden synthesizer, and later generation consumer to handle it at compile time.
+The graph records transitive reachability and every complete command, event, and register root
+path. Its wire fingerprint contains only schema authority facts; Haskell selector and source
+names remain consumer-build provenance rather than wire identity. Recursive diff expands a leaf
+change through those root paths so event migration, snapshot invalidation, and consumer build are
+not conflated.
+
+Spec-only golden synthesis runs the same total folds over the checked old shape. Such a payload is
+explicitly labelled a synthesized weak stand-in because no consumer codec or historical bytes ran.
+It is useful for scaffolding and shape coverage, but a hand-captured historical payload is stronger
+evidence and is never overwritten.
+
 The generated code also checks that each consumer `CanonicalTypeName` value
 equals the declaration's `canonical-type`. Keiro does not generate orphan
 instances for this purpose.
@@ -151,3 +165,5 @@ contract merely to demonstrate a compatibility-vector scenario.
 - Generated codecs and projection facades may use consumer constructors and
   getters, but consumer JSON instances never become the private-event wire
   authority.
+- Wire fingerprints ignore consumer-side naming, while binding/source provenance remains
+  separately diff-visible; neither policy implies that Keiro inspects arbitrary Haskell.

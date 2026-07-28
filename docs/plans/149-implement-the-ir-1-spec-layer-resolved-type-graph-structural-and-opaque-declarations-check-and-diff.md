@@ -77,10 +77,10 @@ plus mutation tests proving that an unvisited nested field or union arm makes th
 - [x] 2026-07-28T19:36:36Z: Milestone 4 `Keiro.Dsl.MappedDiff` recursive differ landed and is wired into shared-declaration diff, expanding complete command/event/register use paths.
 - [x] 2026-07-28T19:36:36Z: Milestone 4 Evolution Contract landed with all mapped codes, context-sensitive compatibility vectors/remedies, 17 fixture variants, remaining-row AST tests, and an end-to-end merge-gate stage.
 - [x] 2026-07-28T19:36:36Z: Milestone 4 replay impact now fingerprints transitively reachable mapped wire shapes for events and registers; nested changes name `ArtifactObserved` and require Catalog snapshot auditing while Haskell-only changes remain replay-neutral.
-- [ ] Milestone 5: `Keiro.Dsl.Goldens` synthesizes nested old-shape fixtures through a complete algebra; `--emit-goldens` end-to-end test.
-- [ ] Milestone 5: exhaustive wire-mutation coverage suite (every field, arm, and enum spelling) green; deliberate differ-arm deletion demonstrated red.
-- [ ] Milestone 5: ADR 0004 inventory amended; ADR 0012 reconciled with the landed spec layer; `just adr-validate` green; CHANGELOG updated.
-- [ ] Final: Outcomes & Retrospective written; ADR distillation pass done; masterplan registry row updated.
+- [x] 2026-07-28T19:50:11Z: Milestone 5 `Keiro.Dsl.Goldens` synthesizes deterministic nested old-shape fixtures through the complete checked algebras, labels them weak stand-ins, and never overwrites captured evidence; CLI stage 11 passes.
+- [x] 2026-07-28T19:50:11Z: Milestone 5 exhaustive wire-mutation coverage visits every record field, enum spelling, union arm, and opaque codec version at every complete root path; deleting the union-tag comparator made the focused test fail before restoration.
+- [x] 2026-07-28T19:50:11Z: Milestone 5 ADR 0004 inventory amended; ADR 0012 reconciled with the landed spec layer; CHANGELOG updated; strict `just adr-validate` passes all 12 concepts.
+- [x] 2026-07-28T19:50:11Z: Final outcomes and ADR distillation written; masterplan registry and progress updated; repository-wide `just verify` passes.
 
 
 ## Surprises & Discoveries
@@ -113,6 +113,15 @@ implementation. Provide concise evidence.
   unknown-field fact) keeps recursive comparison independent; `Diff` remains the sole owner of
   compatibility vectors and report labels. The 262-example suite and CLI merge-gate stage cover
   the composed seam.
+- A passing fixture matrix alone did not demonstrate that every structural ingredient reaches the
+  differ. The exhaustive mutation suite derives mutations from the checked graph and demands the
+  exact complete root-path set for each one. Evidence: temporarily deleting the union-tag
+  comparator made the focused test fail at `test/Main.hs:1254` with an empty finding list; after
+  restoration it passes, as do all 265 examples.
+- A synthesized mapped golden can be structurally complete without being historical evidence.
+  The emitter now attaches `SynthesizedWeakStandIn`, prints that qualification at the CLI, and
+  refuses to overwrite a file-owned capture; the nested v1-to-v2 integration case demonstrates
+  all three properties.
 
 
 ## Decision Log
@@ -289,7 +298,22 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+EP-6 delivered the full IR-1 spec boundary without crossing into generated bindings or codecs.
+Mapped structural records, enums, unions, and opaque declarations parse and pretty-print; a
+checked resolved graph makes mandatory provenance, recursive reachability, complete use paths,
+and wire fingerprints available to downstream work. `check` owns invalid facts visible within
+one spec. `diff` recursively classifies every old/new change at its command, event, register, or
+declaration boundary, and replay impact follows the same transitive graph.
+
+The final evidence is 265 passing `keiro-dsl-test` examples, the 11-stage CLI diff gate, and a
+deliberate mutation that proved the exhaustive traversal test goes red when a comparator arm is
+removed. Nested old-shape goldens are deterministic and complete, but are labelled weak stand-ins
+and never overwrite captured payloads. ADR 0004 now records the resulting gate ownership, while
+ADR 0012 records total folds, root-path expansion, wire-only fingerprints, and evidence strength.
+
+The intended seam remains intact: EP-7 receives checked declarations and total algebras but still
+owns `StructuralBinding`, generated codecs and shape modules, projection facades, scaffold
+integration, and conformance execution. No generated-code claim was added here.
 
 
 ## Context and Orientation
