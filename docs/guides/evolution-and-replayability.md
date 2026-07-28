@@ -112,6 +112,10 @@ one actually checks, because none of them checks everything:
 The summary table at the end of this guide maps every change class onto these
 gates.
 
+For the authoring-path view—what every validated service keeps, what requires a
+spec, and what hand-written services must replace—read
+[The Guarantee Ledger](dsl-guarantees-and-hand-written-services.md).
+
 ## Adding a new event type
 
 The one genuinely easy change. Old streams do not contain the new event, so

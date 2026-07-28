@@ -19,6 +19,9 @@ are adopting:
   guarantee that keeps unchecked streams out of command runners.
 - [Typed Specifications With `keiro-dsl`](../user/typed-spec-toolchain.md)
   covers the spec/check/scaffold/diff loop for generated service surfaces.
+- [The Guarantee Ledger](dsl-guarantees-and-hand-written-services.md) explains
+  which guarantees every validated service gets below the DSL, which exist only
+  with a spec, and what a hand-written service must supply for itself.
 - [Migrating To `ValidatedEventStream`](migrating-to-validated-event-stream.md)
   is the compiler-driven source migration for services that still build bare
   `EventStream` values at runner boundaries.

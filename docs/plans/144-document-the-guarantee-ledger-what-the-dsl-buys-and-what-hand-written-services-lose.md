@@ -54,17 +54,24 @@ It is documentation-only: no Haskell code, no `.keiro` specs, and no generated f
 
 ## Progress
 
-- [ ] Milestone 1: guarantee ledger guide drafted at `docs/guides/dsl-guarantees-and-hand-written-services.md` with all named sections and verified `file:line` citations.
-- [ ] Milestone 2: IR-1 justification reframed (Context/Status prose only; constraints untouched; frontmatter `timestamp` advanced).
-- [ ] Milestone 3: cross-links landed in `docs/guides/README.md` and `docs/guides/evolution-and-replayability.md`; all links verified to resolve.
-- [ ] Proposal Test passage answered in this plan's Validation and Acceptance against the finished guide.
-- [ ] Final citation re-verification pass against the working tree at completion time.
-- [ ] ADR distillation pass considered (expected outcome: no new ADR; see Decision Log).
+- [x] 2026-07-28T16:57:09Z: Milestone 1 complete: guarantee ledger drafted at `docs/guides/dsl-guarantees-and-hand-written-services.md` with all named sections and current `file:line` citations.
+- [x] 2026-07-28T16:57:09Z: Milestone 2 complete: IR-1 justification reframed in Status/Context only; normative constraints and review provenance remain untouched, and frontmatter `timestamp` advanced.
+- [x] 2026-07-28T16:57:09Z: Milestone 3 complete: cross-links landed in `docs/guides/README.md` and `docs/guides/evolution-and-replayability.md`; the relative-link check reports no missing targets.
+- [x] 2026-07-28T16:58:52Z: Proposal Test passage in Validation and Acceptance re-applied to the finished guide; authority, compatibility direction, and documentation completeness all pass.
+- [x] 2026-07-28T16:58:52Z: Final citation re-verification pass relocated every named declaration in the current Keiro and Mori-registered Keiki trees.
+- [x] 2026-07-28T16:58:52Z: ADR distillation pass complete; no ADR changed because the guide renders accepted ADRs 0002, 0003, and 0004 without introducing a new architectural decision.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Observation: The draft plan's shorthand said a hand-written service must bump
+  `stateCodecVersion` after every fold-semantic change, but the current runtime already exposes
+  `withFoldFingerprint`; the actual asymmetry is automatic DSL derivation versus a manually
+  maintained token or version in hand-written code.
+  Evidence: `keiro/src/Keiro/Snapshot/Codec.hs:11-15,56-69` documents both manual choices, while
+  `keiro-dsl/src/Keiro/Dsl/Scaffold.hs:1846-1869` emits the spec-derived fingerprint and its
+  Holes-only caveat. The ledger uses this narrower wording and still labels EP-3's additional
+  helper as future work.
 
 
 ## Decision Log
@@ -142,10 +149,38 @@ It is documentation-only: no Haskell code, no `.keiro` specs, and no generated f
   event codec executes snapshots would be factually wrong.
   Date: 2026-07-28
 
+- Decision: Describe the present hand-written snapshot obligation as maintaining either an
+  explicit `withFoldFingerprint` token or `stateCodecVersion`, while still describing EP-3's
+  `FoldVersion`/`defaultStateCodecWithFold` API as future work.
+  Rationale: This is the narrow claim the current runtime and ADR 0003 support. Saying no helper
+  exists would erase `withFoldFingerprint`; saying EP-3 already exists would promote a roadmap
+  item into an enforcement claim.
+  Date: 2026-07-28
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed EP-1 on 2026-07-28. The new guarantee ledger separates replay safety below the DSL from
+spec-only cross-version evidence, ranks the concrete losses of the hand-written path by silence,
+and documents the DSL's Holes/upcaster and snapshot-codec boundaries without treating either
+authoring path as unsound. IR-1 now argues for strict structural mappings from
+no-false-confidence, and the guide is reachable from both the guide index and evolution guide.
+
+The citation audit caught only line drift in the Mori-registered Keiki source and the manual
+snapshot-fingerprint wording recorded above; no underlying guarantee contradicted the plan. The
+final validation evidence was:
+
+```text
+ADR strict validation: OK: 12 concepts
+Improvement-request strict validation: OK: 1 concepts
+Missing relative links: none
+Non-doc working-tree changes: none
+git diff --check: clean
+```
+
+No durable architectural context was created or changed, so the ADR distillation pass leaves
+ADRs 0002, 0003, and 0004 untouched. EP-3 remains responsible for making the already-possible
+manual fold token harder to omit; this guide deliberately describes that API as not yet landed.
 
 
 ## Context and Orientation

@@ -4,7 +4,7 @@ title: Support structural consumer-owned types in keiro-dsl
 description: >-
   Let checked Keiro specifications bind nested consumer-owned Haskell domain types to truthful
   structural wire contracts without lossy surrogates or duplicate business models.
-timestamp: 2026-07-28T00:11:06Z
+timestamp: 2026-07-28T16:54:33Z
 requestId: IR-1
 status: proposed
 origin: mori://shinzui/mori
@@ -38,6 +38,13 @@ declaration cannot truthfully claim structural control while delegating the same
 arbitrary consumer `ToJSON` or `FromJSON` instance. This revision separates structurally checked
 bindings from deliberately opaque external codecs.
 
+That separation does not mean hand-written services lose replay soundness. Keiki validation and
+Keiro's validated-stream boundary protect the machine that actually runs in either authoring
+path; the DSL adds cross-version evolution evidence on top. The stricter mapping contract exists
+so that extra layer never reports confidence about a wire shape the runtime does not execute. The
+[guarantee ledger](../guides/dsl-guarantees-and-hand-written-services.md) states the boundary in
+adopter-facing terms.
+
 The originating Mori EP-171 still contains the earlier passthrough-codec assumptions and must be
 aligned with this revised contract before implementation or downstream cutover work begins.
 
@@ -56,6 +63,14 @@ only when Keiro also treats their wire representation as opaque. Otherwise `keir
 --since` can classify a declared shape that is unrelated to the codec that actually runs, and a
 generated harness can certify selected round trips without proving that the declaration describes
 the consumer's wire format.
+
+Replay soundness is already enforced below the DSL for every service by Keiki's
+`validateTransducer` and Keiro-core's `ValidatedEventStream` boundary. The DSL's distinct
+contribution is comparing versions of a declared contract before deployment. IR-1 is strict
+because a structural diff over a schema the executed codec does not honor creates false
+confidence, which is worse than the sanctioned hand-written path making no structural diff claim
+at all. See [The Guarantee Ledger](../guides/dsl-guarantees-and-hand-written-services.md) for the
+full layered account.
 
 Generating duplicate business records inside the scaffold is also undesirable. Consumers already
 own domain types, invariants, optics, and construction policy. Keiro should describe and check the
