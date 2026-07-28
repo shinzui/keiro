@@ -353,9 +353,9 @@ The safe procedure today:
    `AggFoldSurfaceChanged`. Spec-visible changes automatically change the fold
    fingerprint.
 2. For every hand-written or Holes-only fold edit, bump
-   `stateCodecVersion` or update an explicit `withFoldFingerprint` token. The
-   changed discriminator forces one full replay per affected stream; schedule
-   that performance event.
+   `stateCodecVersion` or bump the stream's `FoldVersion` token through
+   `defaultStateCodecWithFold`. The changed discriminator forces one full
+   replay per affected stream; schedule that performance event.
 3. Run the candidate binary's targeted replay audit against a production-copy
    database. A seeded/full divergence is a failed deploy gate.
 4. Rebuild any read models whose projections depend on the changed fold
@@ -539,8 +539,9 @@ The operator-facing reference, with definitions and failure signatures, is
   redelivered source events silently mix old and new fan-out under the same
   deterministic ids.
 - **Fold changes with snapshots:** the generated fold fingerprint handles
-  spec-visible edits; bump `stateCodecVersion` for hand-written/Holes-only
-  changes, and expect a full-replay cost spike (see
+  spec-visible edits; bump the stream's `FoldVersion` through
+  `defaultStateCodecWithFold` (or manually bump `stateCodecVersion`) for
+  hand-written/Holes-only changes, and expect a full-replay cost spike (see
   [fold changes](#changing-the-fold-same-events-different-state--and-what-snapshots-do-to-you)).
 - **Any transducer change: consult the replay-impact verdict, and audit the
   affected data before switching traffic.** `diff` either proves the deploy

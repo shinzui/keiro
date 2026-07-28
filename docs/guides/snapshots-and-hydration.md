@@ -23,7 +23,15 @@ snapshotOrderEventStreamDef :: OrderEventStream
 snapshotOrderEventStreamDef =
   orderEventStreamDef
     { snapshotPolicy = Every 2
-    , stateCodec = Just (defaultStateCodec @OrderRegs @OrderState 1)
+    -- Bump the FoldVersion in the same edit that changes orderTransducer's guards, emissions, or targets.
+    , stateCodec =
+        Just
+          ( defaultStateCodecWithFold
+              @OrderRegs
+              @OrderState
+              (FoldVersion "order-fold-v1")
+              1
+          )
     }
 
 snapshotOrderEventStream :: ValidatedOrderEventStream
@@ -36,6 +44,24 @@ by two. The default state codec serializes the Haskell state and the Keiki
 register file. This example uses an empty register file, but the shape hash is
 still part of the snapshot lookup so incompatible register/state shapes are
 ignored safely.
+
+## Hand-written folds need a hand-owned fold version
+
+Snapshot compatibility must cover event-folding behavior as well as JSON and
+type shapes. The DSL can derive that identity from a declarative spec, but a
+hand-written service's guards, register updates, emitted outputs, targets, and
+called helper functions are opaque compiled Haskell. For hand-written streams,
+`defaultStateCodecWithFold` is therefore the default recipe: give it a visible
+`FoldVersion` token such as `FoldVersion "order-fold-v1"`, and change that token
+in the same edit that changes the fold.
+
+A changed token makes existing rows ordinary cache misses. Each affected
+stream pays for one full replay and can then repopulate its snapshot; it never
+serves the old seed as current state. Bare `defaultStateCodec` remains legal if
+the service manually bumps `stateCodecVersion` for every invisible fold change,
+but that is the easier obligation to forget. The three-component compatibility
+contract and its safe miss behavior are recorded in
+[ADR 0003](../adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md).
 
 Snapshots are advisory. If the row is missing, corrupt, or shape-incompatible,
 Keiro falls back to full replay. Stored event decode failures still fail the

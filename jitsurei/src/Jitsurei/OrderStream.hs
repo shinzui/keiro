@@ -25,7 +25,7 @@ import Keiki.Generics.TH (deriveAggregate)
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
-import Keiro.Snapshot (defaultStateCodec)
+import Keiro.Snapshot (FoldVersion (..), defaultStateCodecWithFold)
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 import Kiroku.Store.Types (EventType (..))
@@ -62,7 +62,15 @@ snapshotOrderEventStreamDef :: OrderEventStream
 snapshotOrderEventStreamDef =
     orderEventStreamDef
         { snapshotPolicy = Every 2
-        , stateCodec = Just (defaultStateCodec @OrderRegs @OrderState 1)
+        , -- Bump the FoldVersion in the same edit that changes orderTransducer's guards, emissions, or targets.
+          stateCodec =
+            Just
+                ( defaultStateCodecWithFold
+                    @OrderRegs
+                    @OrderState
+                    (FoldVersion "order-fold-v1")
+                    1
+                )
         }
 
 snapshotOrderEventStream :: ValidatedOrderEventStream

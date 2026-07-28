@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-07-28
+* **Update**: Name defaultStateCodecWithFold and FoldVersion as the first-class hand-written fold-discriminator contract.
 * **Added**: Record one private-event schema authority, total structural bindings, explicit snapshot-cache invalidation, and schema-derived Keiki projection provenance.
 
 ## 2026-07-27

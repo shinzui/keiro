@@ -86,10 +86,11 @@ at-least-once: a worker can repeat the fire action after a crash.
 
 The escalation manager demonstrates the recommended terminal-manager snapshot
 shape. `Settled` is terminal, the manager event stream uses `OnTerminal`, and
-`defaultStateCodec` persists its state at codec version 1. The jitsurei test
-suite proves that the second reaction writes a version-2 snapshot for the
-manager's `esc-<incident>` stream. Use `Every n` instead for a manager that
-keeps reacting for a long time rather than reaching a terminal state.
+`defaultStateCodecWithFold` persists its state at codec version 1 with the
+hand-owned token `FoldVersion "escalation-fold-v1"`. The jitsurei test suite
+proves that the second reaction writes a version-2 snapshot for the manager's
+`esc-<incident>` stream. Use `Every n` instead for a manager that keeps reacting
+for a long time rather than reaching a terminal state.
 
 The broad local verification path is:
 

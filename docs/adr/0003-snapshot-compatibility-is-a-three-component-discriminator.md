@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Snapshot compatibility is a three-component discriminator
 description: Snapshot compatibility is gated on state codec version, register-layout hash, and control-state/replay-fold hash together.
-timestamp: 2026-07-23T16:27:28Z
+timestamp: 2026-07-28T17:26:13Z
 docId: ADR-3
 status: Accepted
 date: 2026-07-23
@@ -58,8 +58,10 @@ form:
 The manual clause remains load-bearing. A change outside those derived
 surfaces — notably a hand-written update or guard, or logic changed only in a
 generated service's hand-owned Holes module — must bump `stateCodecVersion`.
-Hand-written services may instead supply and maintain their own explicit fold
-token through `withFoldFingerprint`.
+Hand-written services should instead use `defaultStateCodecWithFold` with an
+explicit, hand-owned `FoldVersion`; that first-class helper composes the token
+through `withFoldFingerprint` while making the ownership and bump obligation
+visible at the codec call site.
 
 `verifyAndSnapshot` keeps its existing behavior. After append, it applies the
 new events to the state hydration accepted and may persist that result. This is
@@ -79,7 +81,8 @@ construction.
 - Upgrading a migrated database incurs a one-time full replay per stream whose
   old snapshot is encountered; persisted events remain the source of truth.
 - Invisible hand-written fold changes remain an explicit operational contract:
-  bump `stateCodecVersion`, or supply a maintained fold fingerprint.
+  bump the stream's `FoldVersion` through `defaultStateCodecWithFold`, or
+  manually bump `stateCodecVersion` when using the lower-level codec API.
 - Fingerprint collisions retain the old stale-seed failure mode, but FNV-1a-64
   is acceptable here as a deterministic change detector rather than a security
   boundary.

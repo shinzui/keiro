@@ -94,7 +94,7 @@ import Keiro.ProcessManager (
     ProcessManagerResult,
     runProcessManagerOnce,
  )
-import Keiro.Snapshot (defaultStateCodec)
+import Keiro.Snapshot (FoldVersion (..), defaultStateCodecWithFold)
 import Keiro.Stream (Stream)
 import Keiro.Stream qualified as Stream
 import Keiro.Telemetry (KeiroMetrics)
@@ -166,7 +166,15 @@ escalationEventStreamDef =
         , eventCodec = escalationCodec
         , resolveStreamName = Stream.streamName
         , snapshotPolicy = OnTerminal
-        , stateCodec = Just (defaultStateCodec @EscalationRegs @EscalationState 1)
+        , -- Bump the FoldVersion in the same edit that changes escalationTransducer's guards, emissions, or targets.
+          stateCodec =
+            Just
+                ( defaultStateCodecWithFold
+                    @EscalationRegs
+                    @EscalationState
+                    (FoldVersion "escalation-fold-v1")
+                    1
+                )
         }
 
 escalationEventStream :: ValidatedEscalationEventStream

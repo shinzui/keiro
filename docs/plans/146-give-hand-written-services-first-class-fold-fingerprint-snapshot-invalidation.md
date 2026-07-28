@@ -54,23 +54,27 @@ document it as the default recipe.
 Use a checklist to summarize granular steps. Every stopping point must be documented here,
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 
-- [ ] Milestone 1: `FoldVersion` and `defaultStateCodecWithFold` added to
+- [x] 2026-07-28 10:20 PDT: Milestone 1: `FoldVersion` and `defaultStateCodecWithFold` added to
       `keiro/src/Keiro/Snapshot/Codec.hs` with Haddocks; module header and
-      `defaultStateCodec` Haddock revised to steer hand-written services to the helper.
-- [ ] Milestone 1: keiro test suite exercises the helper — discriminator-shape unit
+      `defaultStateCodec` Haddock revised to steer hand-written services to the helper;
+      `cabal build keiro:lib:keiro` passed.
+- [x] 2026-07-28 10:24 PDT: Milestone 1: keiro test suite exercises the helper — discriminator-shape unit
       expectation, stale-seed rejection with full-replay fallback, and the existing
-      fold-fingerprint stream fixtures repointed through the helper.
-- [ ] Milestone 2: `jitsurei` adoption — `snapshotOrderEventStreamDef` in
+      fold-fingerprint stream fixtures repointed through the helper; `cabal test
+      keiro-test` passed all 373 examples.
+- [x] 2026-07-28 10:25 PDT: Milestone 2: `jitsurei` adoption — `snapshotOrderEventStreamDef` in
       `jitsurei/src/Jitsurei/OrderStream.hs` and `escalationEventStreamDef` in
       `jitsurei/src/Jitsurei/EscalationProcess.hs` construct their codecs with
-      `defaultStateCodecWithFold`; `cabal test jitsurei-test` passes.
-- [ ] Milestone 3: guides updated — `docs/guides/snapshots-and-hydration.md` documents the
+      `defaultStateCodecWithFold`; no bare `defaultStateCodec` use remains under
+      `jitsurei/src`, and all 21 `jitsurei-test` examples passed.
+- [x] 2026-07-28 10:27 PDT: Milestone 3: guides updated — `docs/guides/snapshots-and-hydration.md` documents the
       helper as the default hand-written recipe, `docs/guides/run-and-operate-jitsurei.md`
       names it in the escalation paragraph, and the manual-bump step in
       `docs/guides/evolution-and-replayability.md` references it.
-- [ ] Completion: ADR distillation pass — amend
+- [x] 2026-07-28 10:33 PDT: Completion: ADR distillation pass — amended
       `docs/adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md` so the
-      hand-written escape-hatch sentence names the first-class helper; run `just verify`.
+      hand-written escape-hatch sentence names the first-class helper, updated the profiled
+      bundle log, and passed `just verify`.
 
 
 ## Surprises & Discoveries
@@ -78,7 +82,7 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+(None. The existing discriminator and replay paths behaved as documented.)
 
 
 ## Decision Log
@@ -151,7 +155,20 @@ implementation. Provide concise evidence.
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion. Before
 marking the plan complete, distill durable project context into docs/adr/.
 
-(To be filled during and after implementation.)
+Completed on 2026-07-28. `keiro` now exports `FoldVersion` and
+`defaultStateCodecWithFold`, a first-class hand-written-service entry point that composes an
+explicit fold identity through the existing `withFoldFingerprint` discriminator machinery.
+The snapshot tests exercise the helper directly, reject a stale seed after a token change,
+prove command execution falls back to full replay, and retain the negative example showing
+that an unbumped token can still admit stale state. Both snapshot-bearing `jitsurei` streams
+now carry visible hand-owned tokens beside their fold definitions.
+
+The three operator guides present the helper as the default hand-written recipe, and the ADR
+distillation pass amended ADR 0003 plus its OKF log entry rather than creating a second
+decision record. Validation passed through `cabal build keiro:lib:keiro`, all 373
+`keiro-test` examples, all 21 `jitsurei-test` examples, strict ADR validation, formatting,
+and the full `just verify` gate (including 58 `keiro-pgmq-test` examples with two documented
+pending cases and 26 `keiro-migrations-test` examples). No scope remains in this ExecPlan.
 
 
 ## Context and Orientation

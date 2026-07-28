@@ -1876,13 +1876,17 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let targetStreamName = StreamName "snapshot-fold-fingerprint-lookup"
                 target = stream "snapshot-fold-fingerprint-lookup" :: Stream SnapshotCounterEventStream
                 foldV1Codec =
-                    withFoldFingerprint
-                        "fold-v1"
-                        (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
+                    defaultStateCodecWithFold
+                        @SnapshotCounterRegs
+                        @CounterState
+                        (FoldVersion "fold-v1")
+                        1
                 foldV2Codec =
-                    withFoldFingerprint
-                        "fold-v2"
-                        (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
+                    defaultStateCodecWithFold
+                        @SnapshotCounterRegs
+                        @CounterState
+                        (FoldVersion "fold-v2")
+                        1
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
                     runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 2)
@@ -1898,13 +1902,27 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                 Right (SnapshotUnavailable SnapshotNotFound) -> pure ()
                 _ -> expectationFailure "expected a changed fold fingerprint to miss the snapshot"
 
+        it "composes the hand-owned fold version into the state discriminator" $ \_storeHandle -> do
+            let plain = defaultStateCodec @SnapshotCounterRegs @CounterState 1
+                withFold =
+                    defaultStateCodecWithFold
+                        @SnapshotCounterRegs
+                        @CounterState
+                        (FoldVersion "fold-v1")
+                        1
+            withFold ^. #stateShapeHash `shouldBe` (plain ^. #stateShapeHash <> ";fold=fold-v1")
+            withFold ^. #stateCodecVersion `shouldBe` plain ^. #stateCodecVersion
+            withFold ^. #shapeHash `shouldBe` plain ^. #shapeHash
+
         it "full-replays under a changed fold and persists the new discriminator" $ \storeHandle -> do
             let targetStreamName = "snapshot-fold-fingerprint-e2e"
                 target = stream targetStreamName :: Stream SnapshotCounterEventStream
                 candidateCodec =
-                    withFoldFingerprint
-                        "fold-v2"
-                        (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
+                    defaultStateCodecWithFold
+                        @SnapshotCounterRegs
+                        @CounterState
+                        (FoldVersion "fold-v2")
+                        1
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
                     runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 2)
@@ -1937,9 +1955,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             let targetStreamName = StreamName "snapshot-fold-manual-contract"
                 target = stream "snapshot-fold-manual-contract" :: Stream SnapshotCounterEventStream
                 unchangedCodec =
-                    withFoldFingerprint
-                        "fold-v1"
-                        (defaultStateCodec @SnapshotCounterRegs @CounterState 1)
+                    defaultStateCodecWithFold
+                        @SnapshotCounterRegs
+                        @CounterState
+                        (FoldVersion "fold-v1")
+                        1
             Right (Right _) <-
                 Store.runStoreIO storeHandle $
                     runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 2)
@@ -10776,7 +10796,13 @@ foldV1SnapshotCounterEventStreamDef =
     snapshotCounterEventStreamDef
         { transducer = foldV1SnapshotCounterTransducer
         , stateCodec =
-            Just (withFoldFingerprint "fold-v1" (defaultStateCodec @SnapshotCounterRegs @CounterState 1))
+            Just
+                ( defaultStateCodecWithFold
+                    @SnapshotCounterRegs
+                    @CounterState
+                    (FoldVersion "fold-v1")
+                    1
+                )
         }
 
 foldV2SnapshotCounterEventStream :: ValidatedSnapshotCounterEventStream
@@ -10789,7 +10815,13 @@ foldV2SnapshotCounterEventStreamDef =
         { transducer = foldV2SnapshotCounterTransducer
         , snapshotPolicy = Every 1
         , stateCodec =
-            Just (withFoldFingerprint "fold-v2" (defaultStateCodec @SnapshotCounterRegs @CounterState 1))
+            Just
+                ( defaultStateCodecWithFold
+                    @SnapshotCounterRegs
+                    @CounterState
+                    (FoldVersion "fold-v2")
+                    1
+                )
         }
 
 foldV2WithoutFingerprintBumpEventStream :: ValidatedSnapshotCounterEventStream
@@ -10802,7 +10834,13 @@ foldV2WithoutFingerprintBumpEventStreamDef :: SnapshotCounterEventStream
 foldV2WithoutFingerprintBumpEventStreamDef =
     foldV2SnapshotCounterEventStreamDef
         { stateCodec =
-            Just (withFoldFingerprint "fold-v1" (defaultStateCodec @SnapshotCounterRegs @CounterState 1))
+            Just
+                ( defaultStateCodecWithFold
+                    @SnapshotCounterRegs
+                    @CounterState
+                    (FoldVersion "fold-v1")
+                    1
+                )
         }
 
 foldV1SnapshotCounterTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
