@@ -25,8 +25,8 @@ construction and destruction case already present as an explicitly marked hole, 
 fills in semantic logic instead of discovering, by trial and error, which symbols the generated
 ring expects; re-running the scaffolder after a spec change reports which holes are newly
 required without ever overwriting functions the author already completed. Second, when the
-consumer's Haskell record corresponds unambiguously to the declared shape (same field count,
-matching names modulo a declared prefix convention, compatible field types), a `GHC.Generics`
+consumer's Haskell type corresponds exactly to the declared shape (same constructor and field
+counts and order, exact constructor and selector names, and identical field types), a `GHC.Generics`
 derivation supplies the whole binding and the author writes nothing at all. Third,
 `keiro-dsl check --explain-bindings` prints an authoring report listing every binding symbol the
 spec requires, its expected Haskell type signature, the package and module that must own it, and
@@ -38,8 +38,9 @@ restated here because it governs every deliverable below: skeletons and derivati
 **only nominal construction and destruction** of the consumer's type. Wire keys, union tags,
 presence requirements, nullability, and on-missing defaults remain exclusively in the `.keiro`
 spec, executed by the Keiro-generated codec that plan 150 lands. A wrong skeleton fill or a
-wrong derived binding fails the generated conformance harness (codec goldens plus branch
-coverage); it cannot silently alter the wire contract. This plan is EP-8 of the MasterPlan at
+wrong binding is constrained by exact generic correspondence and exercised by both binding laws,
+codec goldens, and branch coverage. Passing those finite cases is evidence, not a universal
+proof; the generated wire policy remains unchanged. This plan is EP-8 of the MasterPlan at
 `docs/masterplans/25-structural-consumer-type-ergonomics-and-soundness-preserving-adoption-for-keiro-dsl.md`
 and implements the low-risk ergonomics of sections 1 and 2 of
 `docs/research/14-structural-consumer-type-tradeoffs.md`, plus one deliberately promoted
@@ -64,12 +65,12 @@ This section must always reflect the actual current state of the work.
 - [ ] Milestone 1: binding-skeleton emitter added to the scaffold module set as create-once `HoleStub` modules, one per structural mapped type.
 - [ ] Milestone 1: scaffold record extended with per-binding required-symbol entries; re-scaffold prints a newly-required-holes report without touching completed hand-owned files.
 - [ ] Milestone 1: unit tests for skeleton emission, create-once semantics, and the newly-required-holes report.
-- [ ] Milestone 2: `GHC.Generics` derivation of nominal bindings with a declared prefix convention landed beside the `StructuralBinding` API.
-- [ ] Milestone 2: ambiguity cases (renamed field, arity mismatch, incompatible type) fail derivation at compile time with a diagnostic naming the skeleton path; negative compile fixtures prove it.
-- [ ] Milestone 3: `keiro-dsl check --explain-bindings` implemented over the resolved type graph; output covers binding, fixture, generator, and initial-value obligations.
+- [ ] Milestone 2: opt-in `GHC.Generics` derivation for exact constructor/selector/type correspondence landed beside the `StructuralBinding` API.
+- [ ] Milestone 2: ambiguity cases (renamed/reordered field, arity mismatch, incompatible type) fail derivation at compile time with a diagnostic naming the skeleton path; negative compile fixtures demonstrate it.
+- [ ] Milestone 3: `keiro-dsl check --explain-bindings` implemented over the resolved type graph; output covers binding, fixtures, and use-site-scoped initial-value obligations.
 - [ ] Milestone 4: Experiment A end-to-end scenario in the conformance suite; before/after line counts recorded; goldens byte-identical.
-- [ ] Milestone 4: mutation tests — a deliberately wrong derived binding and a deliberately wrong skeleton fill each fail the conformance harness.
-- [ ] Milestone 4: brownfield guide appended at its named anchor points; evolution guide cross-linked if it mentions binding drift; ADR distillation pass done; `just verify` green.
+- [ ] Milestone 4: mutation tests — a deliberately wrong hand-supplied binding and a deliberately wrong skeleton fill each fail the finite conformance cases; exact derivation rejects renamed/mismatched shapes at compile time.
+- [ ] Milestone 4: brownfield guide appended at its named anchor points; evolution guide cross-linked if it mentions mapping drift; ADR distillation pass done; `just verify` green.
 
 
 ## Surprises & Discoveries
@@ -77,10 +78,12 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet. NOTE to the implementer: this plan was authored while plan 150 — this plan's hard
-dependency — was specified but not yet implemented. Any divergence between plan 150's landed
-API/module layout and the assumptions stated in Context and Orientation MUST be recorded here
-with evidence, and the affected sections of this plan revised before proceeding.)
+- Prefix stripping and pairwise coercion made a same-typed field permutation look derivable;
+  finite fixtures could miss it. Derivation is now exact-name/exact-type only, with every other
+  case routed to the explicit skeleton and both binding laws retained as finite evidence.
+- This plan was authored while plan 150 — its hard dependency — was specified but not yet
+  implemented. Any later drift from plan 150's revised total API/module layout must still be
+  recorded here before implementation.
 
 
 ## Decision Log
@@ -93,13 +96,21 @@ Record every decision made while working on the plan.
   Template Haskell derivation of nominal bindings while wire policy stays in DSL" in the
   medium-risk tier because it requires new checked machinery. The MasterPlan (Decision Log,
   2026-07-28) promotes it because the risk is bounded by construction: the derivation supplies
-  only nominal construction/destruction; wire keys, union tags, presence, nullability, and
-  defaults stay exclusively in the `.keiro` spec; and a wrong derived binding fails the
-  generated conformance harness (codec goldens plus branch coverage from plan 150) rather than
-  silently altering the wire contract. Binding boilerplate is the strongest force pushing
+  only exact nominal construction/destruction; wire keys, union tags, presence, nullability, and
+  defaults stay exclusively in the `.keiro` spec. Exact generic constraints reject renamed or
+  mismatched representations, while the generated harness exercises finite semantic cases.
+  Binding boilerplate is the strongest force pushing
   consumers into opaque mode — the outcome the design most needs to avoid — so the ergonomic
   payoff justifies carrying the checked-machinery cost inside this soundness envelope. The
   negative proof (Proposal Test question 10) is a mandatory acceptance item, not an afterthought.
+  Date: 2026-07-28
+
+- Decision: Derivation accepts only exact constructor/field order, exact constructor and selector names, and identical field
+  types. It performs no prefix stripping,
+  coercion, positional matching, or same-typed-field guess. Both binding laws must pass.
+  Rationale: Finite fixtures and goldens are evidence, not proof that a heuristic permutation is
+  correct for all values. Exact representation correspondence is maintainable across consumers;
+  every renamed/refined shape falls back to the explicit skeleton.
   Date: 2026-07-28
 
 - Decision: Use `GHC.Generics`, not Template Haskell, for the nominal derivation.
@@ -159,7 +170,7 @@ Record every decision made while working on the plan.
   landed code). This plan therefore targets the deliverables the MasterPlan's Integration Points
   section contractually assigns to plan 150 — the `StructuralBinding` runtime API published in a
   dedicated module with a stability note, generated codecs that own wire keys and tags, the
-  generated-module import discipline, manifest consumer-package fields, and binding-drift
+  generated-module import discipline, manifest consumer-package fields, and mapping-drift
   entries in scaffold records — and instructs the implementer to first read plan 150's final
   state and the landed API module, recording any drift in Surprises & Discoveries before
   writing code.
@@ -235,7 +246,7 @@ independently defend assembly. The `docs/adr/` directory is a profile-governed O
 The MasterPlan (`docs/masterplans/25-structural-consumer-type-ergonomics-and-soundness-preserving-adoption-for-keiro-dsl.md`)
 implements IR-1
 (`docs/improvement-requests/support-structural-consumer-owned-types-in-keiro-dsl.md`): a
-consumer with an existing Haskell domain type — say a `DocInfo` record or a `DocLocation`
+consumer with an existing Haskell domain type — say an `ArtifactInfo` record or an `ArtifactLocation`
 tagged union — declares it in the `.keiro` spec as a **structural mapped type**, naming its
 Cabal package, module, Haskell type, a stable canonical identity, a typed binding, a fixture,
 and an explicit wire representation (field keys, presence, nullability, on-missing defaults,
@@ -254,20 +265,18 @@ MasterPlan's Integration Points section assigns to plan 150; the concrete module
 plan 150's to fix):
 
 1. The `StructuralBinding` runtime API, published in a dedicated module with a stability note.
-   The research note's semantic sketch (section 1 of
-   `docs/research/14-structural-consumer-type-tradeoffs.md`) is a record of a total `toShape`
-   and a partial `fromShape`:
+   ADR 0012 defines a total isomorphism:
 
    ```haskell
    data StructuralBinding domain shape = StructuralBinding
        { toShape :: domain -> shape
-       , fromShape :: shape -> Either BindingError domain
+       , fromShape :: shape -> domain
        }
    ```
 
    Plan 150 specifies this as `Keiro.Codec.Structural` (in `keiro-core`), with prefixed,
    stability-noted field names — `bindingToShape :: a -> shape` and
-   `bindingFromShape :: shape -> Either Text a` — plus `FixtureCases a` (a non-empty list of
+   `bindingFromShape :: shape -> a` — plus `FixtureCases a` (a non-empty list of
    labeled fixture values, never derived from `Arbitrary`/`Default`); this plan uses those
    names throughout and Milestone 0 re-confirms them against the landed module. The skeleton
    emitter (Milestone 1) emits values of this type; the generic derivation
@@ -281,13 +290,13 @@ plan 150's to fix):
    layout — importing only the consumer's domain module, the shape-type module, and the binding
    API, never the generated codec modules.
 
-3. The scaffold-record binding-drift entries: IR-1's Validation and Scaffolding Contract
+3. The scaffold-record mapping-drift entries: IR-1's Validation and Scaffolding Contract
    requires "scaffold records retain binding identities so a subsequent run can report binding
    drift". Milestone 1's newly-required-holes report extends exactly this mechanism.
 
-4. The generated conformance harness for structural types: binding round trips, generated JSON
+4. The generated conformance harness for structural types: both binding laws, generated JSON
    codec round trips against pinned goldens, missing-field/null/unknown-field/every-union-arm
-   coverage from declared fixtures and generators, and forward-versus-replay equality. This
+   coverage from the one declared fixture set, and forward-versus-replay equality. This
    harness is the soundness backstop for everything this plan generates or derives.
 
 5. The IR-1 conformance package: hand-owned sample types plus bindings under
@@ -324,12 +333,10 @@ Acceptance.
 Local: `docs/adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md` is
 directly relevant — this plan must not move any rejection authority into the new report or the
 derivation, and must re-confirm at completion that the gate inventory needs no amendment (see
-Decision Log). Plan 149 allocates and creates a new ADR recording codec authority for
-consumer-owned types (single generated authority; a consumer instance may delegate to the
-generated codec, never the reverse), which plan 150 extends and moves to Accepted; its number
-is allocated when plan 149 runs, so this plan cites it as
-**the codec-authority ADR created by plan 149/150** — Milestone 0 must resolve the concrete
-`docs/adr/NNNN-...` path and update this plan's citations. `docs/adr/0002-...` and
+Decision Log). Proposed
+`docs/adr/0012-structural-consumer-mappings-use-one-schema-authority-and-total-bindings.md`
+records the single generated authority, total two-law binding, snapshot boundary, and Keiki
+projection provenance; plan 150 may move it to Accepted after implementation. `docs/adr/0002-...` and
 `docs/adr/0003-...` were scanned and are not relevant to binding authoring. Cross-repository:
 the originating request is Mori's `mori://shinzui/mori/plans/171-extend-keiro-dsl-for-structural-mori-domain-contracts`
 and Mori's ADR `mori://shinzui/mori/okf/adrs/concepts/ADR-6` (cited by IR-1); neither
@@ -345,8 +352,8 @@ EP-2's guide"), leaves named anchor points for later plans. Plan 145 names this 
 `docs/guides/brownfield-migration-and-transducer-modeling.md` placed at the end of the
 guide's Part A. At authoring time plan 145 is also not yet implemented, so the implementer
 re-confirms the path and anchor name against plan 145's final state during Milestone 4. `docs/guides/evolution-and-replayability.md` exists today and mentions
-hand-written semantic drift but not binding drift; if, by the time this plan runs, plan 150 has
-added binding-drift reporting to that guide, Milestone 4 cross-links `--explain-bindings` and
+hand-written semantic drift but not mapping drift; if, by the time this plan runs, plan 150 has
+added mapping-drift reporting to that guide, Milestone 4 cross-links `--explain-bindings` and
 the skeleton workflow there as well.
 
 ### Terms used in this plan
@@ -379,8 +386,7 @@ landed `StructuralBinding` API module, the structural scaffold emitter, the scaf
 binding entries, and the IR-1 conformance package it created. Confirm the five consumed
 deliverables listed in Context and Orientation; record every mismatch in Surprises &
 Discoveries and revise the later milestones in place (Revision Protocol note at the bottom of
-the file). Resolve the concrete path of the codec-authority ADR created by plan 149/150 and
-replace the placeholder citation in this plan. Then write, by hand and without any of this
+the file). Re-read ADR 0012 against the landed API. Then write, by hand and without any of this
 plan's tooling, complete bindings, fixtures, and (if the spec uses them as registers) initial
 values for the three Experiment A shapes — a three-field record, a five-arm tagged union, and a
 record containing a nested optional value — against a small `.keiro` spec added to the IR-1
@@ -447,31 +453,35 @@ genericStructuralBinding
     => StructuralBinding domain shape
 ```
 
-together with a declared prefix convention: the derivation compares field names after stripping
-a stated prefix from the shape side (for example `shapeKey` corresponds to `key`), with the
-prefix supplied as a type-level symbol or via a small options record — pick the encoding that
-yields the clearest type errors and record the choice in the Decision Log. `GNominalBinding` is
-a closed type-class hierarchy over `GHC.Generics` representations that succeeds only when the
-two representations have the same constructor count, the same field count per constructor,
-matching selector names modulo the prefix, and pairwise-coercible-or-equal field types
-(recursing through the binding API for nested mapped types per plan 150's design). Every
-ambiguous or mismatched case — a renamed field, an arity mismatch, an incompatible field type,
+together with no correspondence options: `GNominalBinding` is a closed type-class hierarchy over
+`GHC.Generics` representations that succeeds only when the two representations have the same
+constructor count, exact constructor names, the same field count per constructor, exact selector
+names in the same order, and identical field types. A nested domain/shape pair whose field types differ uses the
+explicit skeleton, where the author can call its nested `StructuralBinding` value directly;
+the generic API has no implicit global binding registry. Every
+ambiguous or mismatched case — a renamed/reordered field, an arity mismatch, an incompatible field type,
 a missing selector — must fail at compile time via `GHC.TypeLits.TypeError` with a message that
 names the mismatching fields and directs the author to the skeleton path ("no unambiguous
 correspondence for field `contentHash`; fill the binding by hand in the scaffolded module
-<module name>"). The derivation must never guess.
+<module name>"). The derivation must never guess, strip prefixes, coerce values, or accept a
+positional-only correspondence whose metadata differs.
+
+This exact-name contract depends on plan 149's mandatory record `constructor=` metadata and plan
+150's per-declaration shape modules: `<MappedName>Shape` uses the declared consumer constructor
+name, and the binding module imports the shape qualified. If the declaration lies about that name,
+generic derivation fails at compile time; the DSL does not inspect the consumer source.
 
 State the soundness constraint in the module's Haddock header verbatim, because consumers will
 read it there: the derivation supplies only nominal construction and destruction; wire keys,
 union tags, presence, nullability, and defaults remain exclusively in the `.keiro` spec and the
-generated codec; a wrong derived binding fails the generated conformance harness and cannot
-silently alter the wire contract.
+generated codec. Exact representation mismatches fail at compile time; both binding laws and
+finite codec cases remain required evidence against implementation defects and semantic mistakes.
 
 Tests: positive — the Experiment A three-field record derives and passes the full harness;
 negative — compile-fail fixtures (the repository has no compile-fail harness today; add
 minimal ones as separate `should-not-compile` sources exercised by a test that invokes GHC, or
 follow whatever convention plan 150 established for its negative fixtures — decide and record)
-for renamed field, arity mismatch, and incompatible type, each asserting the diagnostic text
+for renamed/reordered field, arity mismatch, and incompatible type, each asserting the diagnostic text
 mentions the skeleton path. Acceptance: the record's hand-written binding from Milestone 0 is
 deleted and replaced by one `genericStructuralBinding` line, and the harness (goldens included)
 still passes byte-identically.
@@ -484,14 +494,15 @@ command tree is plain optparse-applicative; follow the pattern of `--emit`). Imp
 computation in the library (working name `Keiro.Dsl.ExplainBindings`, a new module under
 `keiro-dsl/src/Keiro/Dsl/`) so tests can exercise it without the CLI: walk the resolved type
 graph and, for every structural mapped type, produce one entry per required symbol — the
-binding, the fixture, the generator (when a `fixture-generator` is declared), and the initial
+binding, the one non-empty fixtures binding, and the initial
 value (only when the resolved graph shows the type used as a register; section 2 of the
 research note: compute the requirement from use sites, never demand meaningless defaults
 globally) — each entry carrying the symbol name as declared in the spec, the expected Haskell
 type signature rendered against the shape and consumer types (for example
-`docInfoBinding :: StructuralBinding DocInfo DocInfoShape`), the owning package and module from
-the declaration, and the reason category (`binding`, `fixture`, `generator`, `initial-value`)
-with the use-site path that induces it. Output is deterministic, human-readable text grouped by
+`artifactInfoBinding :: StructuralBinding ArtifactInfo ArtifactInfoShape`), the owning package and module from
+the declaration, and the reason category (`binding`, `fixtures`, `initial-value`)
+with the use-site path that induces it. The binding entry also prints the declaration's mandatory
+`binding-version`, so implementation drift has a visible provenance obligation. Output is deterministic, human-readable text grouped by
 owning module; validation still runs first and the report is refused for an invalid spec
 (reuse the existing gate in the `check` path: never explain a spec that does not check). The
 report changes no exit-code semantics for valid specs and adds no `DiagnosticCode`.
@@ -501,9 +512,9 @@ to discover by hand, with signatures that match the ones the baseline actually w
 with no structural types it prints an explicit "no binding obligations" line; golden tests pin
 the output text.
 
-### Milestone 4 — Experiment A end-to-end, mutation proof, documentation, distillation
+### Milestone 4 — Experiment A end-to-end, mutation evidence, documentation, distillation
 
-Scope: prove the whole plan and document it. In the IR-1 conformance package, wire the full
+Scope: exercise the whole plan and document it. In the IR-1 conformance package, wire the full
 Experiment A scenario as an automated test: scaffold the spec (skeletons included), derive the
 record binding, fill the union and nested-optional skeletons with only semantic logic, run the
 generated harness, and assert the generated bytes match the pinned goldens from Milestone 0's
@@ -516,9 +527,9 @@ anchor — the `binding-authoring-tooling` `appended-by` comment in
 final state): one section on the skeleton
 workflow (scaffold, fill, re-scaffold, read the new-holes report), one on derivation and its
 refusal behavior, one on `--explain-bindings`; and cross-link from
-`docs/guides/evolution-and-replayability.md` if it now mentions binding drift. Re-confirm the
+`docs/guides/evolution-and-replayability.md` if it now mentions mapping drift. Re-confirm the
 ADR 0004 gate-inventory decision (no amendment expected), perform the ADR distillation pass
-(expected outcome: an amendment or note on the codec-authority ADR created by plan 149/150
+(expected outcome: an amendment or note on ADR 0012
 recording that derivation and skeletons are nominal-only conveniences under the same single
 authority — create nothing new unless a durable decision emerged), run `just adr-validate` if
 any ADR changed, and finish with `just verify` green.
@@ -562,10 +573,10 @@ the exact wording is fixed by Milestone 1's tests, but the shape to verify is: s
 `Skipped`, a newly-required-holes section naming exactly the added obligation:
 
 ```text
-hole    skipped   Expa/Bindings/DocInfoBinding.hs
+hole    skipped   Example/Bindings/ArtifactInfoBinding.hs
 newly required holes since last scaffold:
-  Expa/Bindings/DocInfoBinding.hs
-    bindingToShape.description :: Maybe Text   (binding; field added to DocInfo wire object)
+  Example/Bindings/ArtifactInfoBinding.hs
+    bindingToShape.description :: Maybe Text   (binding; field added to ArtifactInfo wire object)
 ```
 
 Run the authoring report:
@@ -579,12 +590,13 @@ Expected shape of the output (signatures rendered from the landed API; pinned by
 ```text
 binding obligations for context expa
   Expa.Bindings (package expa-conformance)
-    docInfoBinding :: StructuralBinding DocInfo DocInfoShape
-      reason: binding — structural mapped record DocInfo (used by event DocObserved)
-    sampleDocInfo :: DocInfo
+    artifactInfoBinding :: StructuralBinding ArtifactInfo ArtifactInfoShape
+      reason: binding — structural mapped record ArtifactInfo (used by event ArtifactObserved)
+      provenance: binding-version "1"
+    sampleArtifactInfo :: ArtifactInfo
       reason: fixture — conformance harness coverage
-    initialDocInfo :: DocInfo
-      reason: initial-value — DocInfo is register 'doc' of aggregate Expa
+    initialArtifactInfo :: ArtifactInfo
+      reason: initial-value — ArtifactInfo is register 'artifact' of aggregate Example
 ```
 
 After any ADR edit, and before declaring the plan complete:
@@ -645,16 +657,16 @@ authority. The generic derivation reads only `GHC.Generics` metadata of the two 
 it cannot mention a wire identity because the binding API gives it no vocabulary to do so — its
 output is a `StructuralBinding`, whose only capabilities are constructing and destructing the
 consumer value. `--explain-bindings` is read-only over the resolved graph. The delegation
-direction fixed by the codec-authority ADR created by plan 149/150 (consumer instances may
+direction fixed by ADR 0012 (consumer instances may
 delegate to the generated codec, never the reverse) is untouched: this plan adds no code path
 in which a consumer `ToJSON`/`FromJSON` instance is consulted. Reviewers should verify
 mechanically at Milestone 4: the derivation module imports neither `Data.Aeson` encoding
 internals nor any generated codec module, and the skeleton emitter's import list names only
-the consumer domain module, the shape module, and the binding API.
+the consumer domain module, that declaration's `Structural.Shape.*` module, and the binding API.
 
 **2. Replay.** Unchanged. Bindings do not touch event emission; forward register updates are
 reconstructed from emitted private events exactly as plan 150's forward-versus-replay harness
-assertion proves, and that assertion runs unchanged over Experiment A.
+assertion checks for the declared finite cases, and that assertion runs unchanged over Experiment A.
 
 **3. Visibility.** No new Keiki claim is made. Derived and skeleton bindings are construction
 plumbing outside the symbolic language; no guard or update syntax is added.
@@ -668,12 +680,10 @@ for structural mapped types on the surfaces IR-1 permits, and nothing here expor
 type publicly.
 
 **6. Completeness.** Skeleton emission, obligation computation, and `--explain-bindings` all
-traverse the resolved type graph through the same total traversal registry IR-1 mandates
-("adding a new type-expression constructor cannot silently omit a subsystem"); Milestone 1 and
-3 tests must include the exhaustiveness pattern plan 149/150 established so a new constructor
-breaks compilation of the new traversals too.
+traverse the resolved type graph through plan 149's exported total folds/algebras. Milestones 1
+and 3 must construct complete algebras so a new constructor breaks their compilation too.
 
-**7. Migration.** No migration surface changes: generated bytes are proven byte-identical to
+**7. Migration.** No migration surface changes: the exercised generated bytes remain byte-identical to
 pinned goldens (acceptance item 4), and scaffold records with binding lines remain readable by
 older parsers (unknown-line tolerance) while new code tolerates their absence.
 
@@ -688,8 +698,8 @@ Generics-induced runtime overhead on the union path, record measurements in Surp
 Discoveries and fall back to skeleton-only for that shape — never to an alternate codec.
 
 **10. Negative proof (in depth).** Two mutation tests, added to the IR-1 conformance suite in
-Milestone 4, prove the harness actually guards the new machinery. (a) **Wrong derived
-binding:** add a fixture pair of types engineered so the generic correspondence is judged
+Milestone 4, demonstrate that the harness guards the new machinery; they are falsification
+evidence, not a proof beyond their cases. (a) **Wrong binding/derivation implementation:** add a fixture pair of types engineered so the generic correspondence is judged
 unambiguous but semantically wrong — two fields of the same Haskell type (`Text`) whose values
 are swapped by a deliberately perverse hand-supplied binding standing in for a hypothetical
 buggy derivation (and, additionally, a compile-fail fixture proving the real derivation
@@ -698,11 +708,12 @@ harness against the perverse binding: the codec golden comparison must fail (the
 carries the swapped values) and/or the round-trip assertion must fail. The test asserts the
 harness exits non-zero with the golden mismatch named. (b) **Wrong skeleton fill:** fill the
 five-arm union skeleton mapping one arm's payload to the wrong constructor. The branch-coverage
-assertion plan 150 generates (every union arm exercised from declared fixtures/generators) plus
+assertion plan 150 generates (every union arm exercised from declared `FixtureCases`) plus
 the golden comparison must fail on exactly that arm; the test asserts the failure names the
 arm. Both tests demonstrate the load-bearing claim made throughout this plan: a wrong nominal
-binding — derived or hand-filled — cannot silently alter the wire contract, because the
-generated conformance harness, not the binding author, is the gate. If either mutation passes
+binding can be detected by the declared finite evidence. The generated conformance harness is
+the required gate, but its passing result must not be described as proof for values outside the
+fixture/shape cases. If either mutation passes
 the harness, this plan's machinery is unsound and must not ship; that is the failure condition
 this question exists to make observable.
 
@@ -743,7 +754,7 @@ Protocol), and only then continue — the plan file itself is the recovery point
 must be Complete. Consumed from it, exactly: the `StructuralBinding` API module (its dedicated
 module path and stability note), the generated shape types and codec modules with their import
 discipline, the structural scaffold entry point in `scaffoldModules`, the scaffold-record
-binding-identity entries, the generated conformance harness (binding round trips, codec
+binding-identity entries, the generated conformance harness (both binding laws, codec
 goldens, branch coverage, forward-versus-replay equality), and the IR-1 conformance package.
 Soft context: plan 149's resolved type graph (consumed transitively through plan 150) is the
 data source for `--explain-bindings`.
@@ -778,9 +789,22 @@ Directions tiers, Experiment A, and the Proposal Test),
 `docs/masterplans/25-structural-consumer-type-ergonomics-and-soundness-preserving-adoption-for-keiro-dsl.md`
 (EP-8 registry entry, Integration Points, Decision Log),
 `docs/adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md`, and the
-codec-authority ADR created by plan 149/150 (concrete path resolved in Milestone 0).
+`docs/adr/0012-structural-consumer-mappings-use-one-schema-authority-and-total-bindings.md`.
 
 
 ---
 
 Revision note: Aligned cross-plan references during MasterPlan 25 consistency review, 2026-07-28.
+
+Revision note: Narrowed generic derivation to exact constructor/selector/type correspondence,
+adopted ADR 0012's total two-law binding, collapsed the dual fixture interface into one
+non-empty fixture set, replaced traversal-registry assumptions with total folds, and qualified
+finite harness evidence, 2026-07-28.
+
+Revision note: Removed the signature-inexpressible implicit nested-binding exception: version 1
+generic derivation requires identical field types, while differing nested domain/shape fields use
+the explicit skeleton and named nested binding values, 2026-07-28.
+
+Revision note: Coupled opt-in generic derivation to plan 150's per-declaration shape module and
+plan 149's explicit constructor metadata, avoiding global constructor mangling and heuristic
+name matching for non-Mori consumers, 2026-07-28.

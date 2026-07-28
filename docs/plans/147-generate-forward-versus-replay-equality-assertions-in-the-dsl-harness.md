@@ -18,7 +18,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 ## Purpose / Big Picture
 
 Every aggregate scaffolded by `keiro-dsl` today ships a generated test module (the
-"harness") that proves the hand-filled transducer is valid, clock-free, that each event's
+"harness") that checks the sampled hand-filled transducer is valid and clock-free, that each sampled event's
 codec round-trips, that each initial-state command lands on its declared vertex, and that
 old payload versions still decode. What no generated assertion proves is the central promise
 of event sourcing: that the events an aggregate emits are, by themselves, enough to rebuild
@@ -29,14 +29,17 @@ verification inside the command runner (`keiro/src/Keiro/Command.hs`) that incre
 `keiro.replay.divergence` counter but never fails anything.
 
 After this plan, every generated aggregate harness ALSO steps the transducer forward from
-its initial state through its fixture commands, collects the emitted event chain, pushes
+its initial state through each generated fixture command that the harness can construct and
+whose guard accepts, collects the emitted event chain, pushes
 that chain through the generated wire codec (encode then parse), structurally replays the
 decoded chain with keiki's replay entry point, and asserts that the replayed final vertex
 equals the forward final vertex AND that every declared register equals its forward value.
 A developer sees it working by running `cabal test keiro-dsl-conformance` from the repo
-root and watching new `PASS  forward/replay equality: …` lines; a mutation script proves
+root and watching new `PASS  forward/replay equality: …` lines; a mutation script demonstrates
 the assertion has teeth by making a deliberately dishonest wire constructor turn exactly
-those lines red while every pre-existing assertion stays green.
+those lines red while every pre-existing assertion stays green. A passing run is finite
+conformance evidence for those command/initial-vertex cases; it does not prove equality for
+all command values, non-initial vertices, or histories not represented by the fixtures.
 
 This implements, ahead of the consumer-owned-types work, the forward/replay clause of the
 "Conformance Harness Contract" in
@@ -60,7 +63,7 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
       suite is green.
 - [ ] M2: `replay-divergence.keiro` fixture, `keiro-dsl-conformance-replay` suite, honest
       Holes with a dormant dishonest wire ctor, all green at baseline.
-- [ ] M2: `keiro-dsl/test/replay-mutation-test.sh` proves the mutation turns only the
+- [ ] M2: `keiro-dsl/test/replay-mutation-test.sh` demonstrates that the mutation turns only the
       forward/replay assertions red.
 - [ ] M3: ADR 0004 gate-inventory row added, `log.md` updated via `okf log add`, strict OKF
       validation passes.
@@ -159,8 +162,9 @@ generated type signatures.
 **Transducers, registers, replay.** The behavioural core comes from the `keiki` library
 (a dependency; source readable at `/Users/shinzui/Keikaku/bokuno/keiki`, but always verify
 symbols against the version the build resolves — `keiro` itself already imports the entry
-points named below, so they exist in the pinned keiki, which IR-1 records as released
-`0.3.1.0`). A `SymTransducer` is a state machine whose nodes are "vertices" (the
+points named below. Keiki's current release is `0.4.0.0`; the repository remains on its
+pre-EP-7 `>=0.3.1 && <0.4` bound until plan 150 coordinates the upgrade, and this plan uses
+the replay APIs common to both lines). A `SymTransducer` is a state machine whose nodes are "vertices" (the
 lifecycle states), whose edges consume a command and emit zero or more events, and whose
 mutable state beyond the vertex lives in a typed "register file" (`RegFile`, a heterogeneous
 list of named slots defined in `Keiki.Core`). The entry points that matter here, all in
@@ -186,7 +190,8 @@ list of named slots defined in `Keiki.Core`). The entry points that matter here,
 - Inversion is driven by declared structure: each emitted event is described by an `OPack`
   tying an `InCtor` (how to rebuild the command) to a `WireCtor co fields` — a record
   `WireCtor { wcName, wcMatch :: co -> Maybe fields, wcBuild :: fields -> co }` — plus one
-  term per event field. `validateTransducer` proves replayability statically, but its own
+  term per event field. `validateTransducer` validates its declared replayability conditions
+  statically, but its own
   documentation scopes the guarantee: it holds "subject to honest 'InCtor' and 'WireCtor'
   implementations". Those values are ordinarily derived by Template Haskell
   (`deriveAggregateCtorsAll` / `deriveWireCtorsAll` in the generated `Domain.hs`), but the
@@ -252,7 +257,7 @@ compiling the module) are the `Main.hs` files of `conformance`, `conformance-v2`
 fixtures whose file names describe the defect (`reservation-chain-gap.keiro`,
 `duplicate-names.keiro`, `aggregate-bad-refs.keiro`, …). Negative behaviour is organized
 two ways: invalid specs asserted through `check` diagnostics in `keiro-dsl-test`, and
-behaviour mutations proven by shell scripts that sed a hand-owned file and expect a
+behavior mutations exercised by shell scripts that sed a hand-owned file and expect a
 specific red assertion — `keiro-dsl/test/mutation-test.sh` is the model this plan follows
 (baseline green, one-line sed in `Holes.hs`, expect the suite to fail, restore on exit).
 
@@ -502,7 +507,7 @@ assert the baseline `cabal test keiro-dsl-conformance-replay` is green; sed
 failure; additionally capture the driver output and require BOTH that a line matching
 `FAIL  forward/replay equality: WriteNote .* register note` is present AND that
 `PASS  validateTransducer is empty` and the accept `PASS` line are still present — that
-second grep is the literal proof of "fails with this assertion and passes without it".
+second grep is the literal observation for "fails with this assertion and passes without it".
 Exit 0 only when all three conditions hold.
 
 Acceptance for M2: `cabal test keiro-dsl-conformance-replay` green;
@@ -725,10 +730,9 @@ touches a database or any destructive operation.
 
 Libraries and modules, with the surface that must exist at each milestone's end:
 
-- `keiki` (resolved by the build; IR-1 records the released baseline as `0.3.1.0`, and
-  `keiro/src/Keiro/Command.hs` already imports the replay surface, so no bound change is
-  expected — verify before touching bounds, per the compatibility-baseline discipline in
-  IR-1). Consumed from `Keiki.Core`: `step`, `applyEventsEither`, `validateTransducer`,
+- `keiki` (resolved by the build; upstream current is `0.4.0.0`, while plan 150 owns the
+  coordinated repository migration from the current `<0.4` bounds; this plan does not change
+  bounds). Consumed from `Keiki.Core`: `step`, `applyEventsEither`, `validateTransducer`,
   `defaultValidationOptions`, `RegFile`, `(!)`, the `IsLabel` instance for `Index`, and
   (Holes-side only, M2) `WireCtor (..)`.
 - `keiro-dsl` internals: `Keiro.Dsl.Harness` (all emission changes), `Keiro.Dsl.Scaffold`
@@ -751,6 +755,13 @@ conformance-CI forward/replay row and `docs/adr/log.md` the corresponding entry.
 Downstream consumer of these interfaces: plan 150
 (`docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md`)
 extends the per-register comparison rows to structurally mapped registers and widens
-fixture coverage via fixture/generator bindings; it depends on the label convention, the
+fixture evidence via the one declared non-empty `FixtureCases` binding; it depends on the label convention, the
 `forwardReplay<Command>` naming, the register-list traversal, and `Eq`-based comparison —
 none of which this plan may specialize to today's scalar register kinds.
+
+
+---
+
+Revision note: Qualified forward/replay assertions as finite evidence over generated,
+guard-accepted initial-state cases rather than proof for every command value and vertex, and
+aligned downstream fixtures with the single `FixtureCases` API, 2026-07-28.

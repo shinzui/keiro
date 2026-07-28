@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-07-28
+* **Added**: Record one private-event schema authority, total structural bindings, explicit snapshot-cache invalidation, and schema-derived Keiki projection provenance.
+
 ## 2026-07-27
 * **Update**: Add the scope-sequenced close rule: an unclosed Kafka consumer keeps polling and starves its partitions, so close must never be deferred to the garbage collector.
 * **Update**: Extend the consumer contract with the converse obligation: routine partition conditions and idle commits must not kill a consumer, and trace context is per-record.

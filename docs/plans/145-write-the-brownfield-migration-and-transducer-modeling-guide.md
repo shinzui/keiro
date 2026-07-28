@@ -82,15 +82,16 @@ Record every decision made while working on the plan.
   Date: 2026-07-28
 
 - Decision: Teach the shadow-comparison step (Part B) as a *manual technique* today and
-  leave a named anchor for the `keiro-dsl codec compare` command.
-  Rationale: The dedicated command is delivered by
+  leave a named anchor for plan 152's scaffolded comparison-runner workflow.
+  Rationale: The generated runner and reusable comparison engine are delivered by
   `docs/plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md`
   (EP-9), which hard-depends on the IR-1 generation layer (EP-7) and does not exist yet.
   The MasterPlan's Integration Points section commits EP-8/EP-9 to appending their tooling
   sections to this guide as part of their own acceptance, "so the guides never describe
-  tooling that does not exist." The manual technique (encode with both codecs over a golden
-  corpus, compare bytes and semantic JSON) is valid today and remains valid after the
-  command lands.
+  tooling that does not exist." The manual technique (decode historical goldens and compare
+  both encoders as parsed JSON `Value` semantics) is valid today and remains valid after the
+  runner lands. Raw bytes remain provenance for the historical corpus, but Keiro's codec API
+  does not own whitespace or object-key order.
   Date: 2026-07-28
 
 - Decision: Position the new guide as the *how* companion to
@@ -137,6 +138,15 @@ Record every decision made while working on the plan.
   may compromise soundness") and by the research note
   `docs/research/14-structural-consumer-type-tradeoffs.md`, whose central conclusion is that
   the constraints stay and only their cost falls.
+  Date: 2026-07-28
+
+
+- Decision: Teach generated Keiki 0.4 field projections as an optional Holes-level tool after
+  plan 150, while keeping explicit decision scalars as the default modeling advice and clearly
+  denying checked nested `.keiro` syntax.
+  Rationale: The upstream prerequisite now exists, but the current DSL does not lower guard text
+  into the executable transducer. This distinction is useful to all consumers and prevents both
+  needless scalar duplication and false claims of DSL enforcement.
   Date: 2026-07-28
 
 
@@ -196,7 +206,7 @@ draws on, all verified present in the tree today:
   `RaiseIncident` is accepted. This is the lifecycle-vertex pattern in compiled form —
   the aggregate models absence as a vertex, not as a record full of dummy values.
 
-### The normative inputs this plan implements
+### The requirement inputs this plan translates into local guidance
 
 The guide is EP-2 of MasterPlan 25 and implements specific sections of two documents. The
 guide itself must cite both by these repository-relative paths and say which sections it
@@ -205,15 +215,20 @@ implements; this plan does the same:
 **`docs/research/14-structural-consumer-type-tradeoffs.md`** (the research note). The guide
 implements its sections 4, 5, 6, and 12:
 
-- *Section 4 ("Whole-Value Semantics Give Up Ad Hoc Nested Keiki Logic")* — guards must
-  decide from solver-visible scalar fields. A command may carry a rich payload (e.g. a
+- *Section 4 ("Whole-Value Semantics Give Up Ad Hoc Nested Keiki Logic")* — guards should
+  default to explicit solver-visible scalar fields. A command may carry a rich payload (e.g. a
   `DocInfo` record) that is copied wholesale into events and registers for replay and
   projection, but the transducer's guard compares an explicit scalar such as a
   `contentHash :: Text` field carried beside it (`when register.contentHash !=
   command.contentHash`). Promoting frequently guarded values to explicit scalars is
-  usually the better domain model, not a workaround: identity, revision, lifecycle, and
+  usually the better domain model: identity, revision, lifecycle, and
   content hash are decision state; the full payload is event/projection data. An opaque
   Haskell predicate over a payload is never hidden behind checked syntax.
+  After plan 150, a hand-written Hole may instead use a generated Keiki 0.4
+  `FieldProjection` witness for a genuine scalar field when its base/result satisfy Keiki's
+  guard-only/direct-base/curated-registry rules. This is a typed Holes API, not nested `.keiro`
+  syntax; the current DSL still renders guard intent as comments rather than exact executable
+  lowering.
 - *Section 5 ("Separate Artifact Streams Give Up Monolithic Atomicity")* — stable entities
   get independently keyed streams (one stream per entity), not one monolithic stream
   holding a catalog map of every entity. A reconciler dispatches per-entity observations;
@@ -266,7 +281,7 @@ keiro's stream boundary renders it as the `HeadUnrecoverable` warning case in
   guard may no longer invert, and the next command on such a stream fails
   `HydrationReplayFailed HydrationNoInvertingEdge`. The sanctioned remedy is a
   `replay-only` twin transition carrying the removed guard region (`old-guard ∧
-  ¬new-guard`): keiki 0.3's `EdgeMode = Live | ReplayOnly` with two-phase inversion (live
+  ¬new-guard`): Keiki 0.4's `EdgeMode = Live | ReplayOnly` with two-phase inversion (live
   edges tried first), `keiro-dsl diff` printing a paste-ready twin via the
   `AggGuardTightened` advisory, and retirement of the twin once the replay audit proves no
   live stream exercises the removed region. Part A's guard-evolution chapter teaches this.
@@ -326,10 +341,10 @@ The new guide complements — and links to, rather than restates — the followi
   consumers, being migrated onto keiro; opposed to *greenfield* (built on keiro from day
   one).
 - *Golden* — a checked-in file containing a genuine wire payload (captured from
-  production), used as a fixture to prove the current code still decodes historical bytes.
+  production), used as finite evidence that the current code still decodes that historical value.
 - *Shadow comparison* — running the old (historical) codec and the new (keiro-owned) codec
-  over the same corpus during development, comparing encoded bytes, semantic JSON
-  equality, and decode results, before the new codec takes authority.
+  over the same corpus during development, comparing parsed/canonical JSON meaning and decode
+  results, before the new codec takes authority.
 - *Upcaster* — a pure function from an old payload version's JSON to the next version's
   JSON, registered in the codec and run at decode time forever (payloads are never
   rewritten).
@@ -366,13 +381,15 @@ both execution and replay (state the fact and its consequence — every modeling
 also a replay choice), and the layered-gate summary or EP-1 ledger link per the Decision
 Log's soft-dependency decision.
 
-**"Decision scalars versus payload data"** (research §4). Teach the split: guards decide
-from solver-visible scalar fields; payloads are copied wholesale for replay and
+**"Decision scalars versus payload data"** (research §4). Teach the default split: guards decide
+from explicit solver-visible scalar fields; payloads are copied wholesale for replay and
 projection. Show the shape in DSL-flavored `text` fences (the research note's
 `when register.contentHash != command.contentHash` example with the full `doc` payload
 carried beside it), and the doctrine that promoting frequently guarded values to explicit
 scalars (identity, revision, lifecycle, content hash) is the better domain model.
-Explicitly state the negative rule: an opaque Haskell predicate over a payload must never
+Then describe plan 150's optional generated Keiki 0.4 projection facade for scalar nested
+decisions in hand-written Holes, including its guards-only/direct-base/curated-result limits and
+the fact that `.keiro` has no checked nested-path lowering yet. Explicitly state the negative rule: an opaque Haskell predicate over a payload must never
 masquerade as a checked guard — if a predicate cannot be expressed over scalars, it is
 opaque, named as such, and audited (IR-1's opaque-guard diagnostic contract). Use
 `Jitsurei.OrderStream`'s command records (`PlaceOrderData` with `orderId`, `sku`,
@@ -456,8 +473,7 @@ identically).
 **"Shadow comparison of old and new codecs"** (research §12, second doctrine). The
 manual technique, today: with the corpus in place, write a temporary test that (1)
 decodes each golden with the *new* codec, (2) encodes representative domain values with
-*both* codecs and compares bytes, falling back to semantic JSON equality where byte
-differences are legal (key order), and (3) classifies every difference as either exact
+*both* codecs and compares parsed/canonical JSON meaning, and (3) classifies every difference as either exact
 parity or explicit version/upcaster work — there is no third bucket called "close
 enough". Use `orderCodec`'s v1/v2 split as the worked classification: `qty` vs
 `quantity` is not parity; it is version work, and `upcastOrderPlacedV1` is what that
@@ -509,7 +525,7 @@ come" note so readers are not confused by the comment-only anchor:
 ```text
 <!-- appended-by: docs/plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md
      anchor: codec-compare-tooling
-     (the `keiro-dsl codec compare` section lands here; the manual technique above remains valid) -->
+     (the scaffolded comparison-runner section lands here; the manual technique above remains valid) -->
 ```
 
 placed at the end of "Shadow comparison of old and new codecs", and
@@ -531,8 +547,8 @@ pass. At the end of the milestone the plan's acceptance criteria all hold. Accep
 commands in Concrete Steps succeed with the expected output; the Validation section's gate
 questions are answered in this plan file.
 
-Edit `docs/guides/README.md`: insert one bullet after the
-"[Migrating To `ValidatedEventStream`](migrating-to-validated-event-stream.md)" entry
+Edit `docs/guides/README.md`: insert one bullet after the literal
+`[Migrating To ValidatedEventStream](migrating-to-validated-event-stream.md)` entry
 (keeping the index's adoption-path ordering — this guide follows the stream migration it
 links to):
 
@@ -707,3 +723,10 @@ Plan-level dependencies: none hard. Soft dependency on EP-1
 if its guarantee-ledger guide exists in `docs/guides/` at implementation time, link it for
 the layered-gate exposition; otherwise carry the temporary summary paragraph described in
 the Decision Log, to be replaced by EP-1.
+
+
+---
+
+Revision note: Updated modeling guidance for released Keiki 0.4 projections: explicit decision
+scalars remain the default, eligible projections are a generated Holes-level API, and checked
+nested `.keiro` syntax remains unavailable without exact lowering, 2026-07-28.

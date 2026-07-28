@@ -125,6 +125,24 @@ It is documentation-only: no Haskell code, no `.keiro` specs, and no generated f
   Date: 2026-07-28
 
 
+- Decision: The ledger must distinguish a checked spec fact from executable generated behavior.
+  It states that current `.keiro` guard/write text is rendered as comments into create-once Holes;
+  `validateTransducer` validates the hand-written Keiki value that actually runs, not an exact
+  lowering of those comments. Keiki 0.4 projections exposed through plan 150's generated facade
+  are validated when used in Holes, but do not make nested `.keiro` paths checked syntax.
+  Rationale: This is an unrelated DSL audit finding and a central false-confidence boundary. A
+  guide about guarantees must not imply spec/runtime equivalence that the scaffolder does not
+  implement.
+  Date: 2026-07-28
+
+- Decision: The ledger treats generated structural private-event codecs and snapshot cache
+  encoding as different surfaces. Mapped schema changes can feed snapshot invalidation while the
+  cache still serializes consumer register values through `ToJSON`/`FromJSON`.
+  Rationale: `Keiro.Snapshot.Codec.defaultStateCodec` uses `RegFileToJSON`; saying the structural
+  event codec executes snapshots would be factually wrong.
+  Date: 2026-07-28
+
+
 ## Outcomes & Retrospective
 
 (To be filled during and after implementation.)
@@ -189,7 +207,7 @@ existing ADR covers the ledger's subject itself; this plan is expected to produc
 
 ### Ground truth the ledger asserts, with evidence
 
-**Replay soundness is enforced below the DSL and is therefore universal.** Keiki's
+**Replay-structure validation is enforced below the DSL at every validated stream boundary.** Keiki's
 `validateTransducer` (exported from `/Users/shinzui/Keikaku/bokuno/keiki/src/Keiki/Core.hs`;
 the warning vocabulary begins at line 1793 and the function itself at lines 1948-1953)
 structurally rejects transducers whose logs could not be replayed: `HiddenInput` (an edge
@@ -586,3 +604,10 @@ ADRs cited: `docs/adr/0004-evolution-changes-are-gated-at-the-earliest-sound-bou
 tool dependency is `git` (and optionally `just` for the `adr-validate` regression check);
 there is no markdown link-check tooling in the repository, so link validation is the manual
 procedure in Concrete Steps.
+
+
+---
+
+Revision note: Added the checked-spec-versus-executed-Holes boundary, Keiki 0.4 projection-facade
+scope, and the separate snapshot consumer-JSON cache boundary to the guarantee ledger plan,
+2026-07-28.

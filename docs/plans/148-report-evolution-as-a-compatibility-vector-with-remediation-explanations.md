@@ -32,34 +32,37 @@ Contract of `docs/improvement-requests/support-structural-consumer-owned-types-i
 (IR-1): usage-aware, per-surface classification with rollout advisories.
 
 After this plan, every diff finding carries a **compatibility vector**: an explicit
-per-surface classification over five named surfaces (private-history-read,
-old-binary-read-new-events, snapshot-hydration, public-consumer, persisted-identity) plus a
+per-surface classification over six named surfaces (private-history-read,
+old-binary-read-new-events, snapshot-hydration, public-consumer, persisted-identity,
+consumer-build) plus a
 rollout advisory (for example `producer-last`, `stop-the-world`, `drain-required`). A new
 `diff --explain` mode prints, for each finding, the containing path, the compatibility
 direction that fails, and the available remedies (version bump, upcaster, deployment order,
 contract revision, replay-only edge). A new `--report-out` flag writes the full report as
-JSON for tooling. The observable acceptance is the research note's Experiment D: adding one
-union arm to an enum used by a private event, a snapshot-captured register, and a public
-contract produces three findings with three containing paths and *distinct* per-surface
-results, and no universal "additive" label hides the public-consumer risk.
+JSON for tooling. Observable acceptance uses repository-native changes on separately owned
+surfaces: a private event/schema addition, a snapshot/fold change, and an existing public
+contract change produce context-specific vectors and containing paths. It does not introduce a
+nominal enum-to-`Text` contract shortcut merely to reproduce Mori's Experiment D.
 
 The hard constraint is **no weakening**: anything classified `BREAKING` today remains
 `BREAKING`; the vector refines the existing three-way classification, it never relaxes it;
 `diff` continues to exit non-zero exactly when a surface the operator gates on is breaking,
-and the default gate reproduces today's behavior bit for bit.
+and the default gate reproduces today's blocking behavior bit for bit. A formerly additive
+finding may become `WARNING` when the newly explicit direction or rollout constraint exposes a
+real obligation, but never the reverse.
 
 
 ## Progress
 
-- [ ] Milestone 1: vector core — `CompatibilitySurface`, `SurfaceVerdict`, `RolloutAdvisory`,
-      `CompatibilityVector` types in `Keiro.Dsl.Diff`; `ckVector` on `ChangeKind`; per-code
-      vector registry with totality test; label-derivation invariant test green.
-- [ ] Milestone 2: per-use-site enum findings (`EnumCtorAdded`) and the minimal `enum`
-      contract-field grammar extension (`CEnum`), with parser/pretty-printer round trip,
-      `ContractEnumUnresolved` validation, and scaffold lowering.
+- [ ] Milestone 1: vector core — `CompatibilitySurface`, `SurfaceVerdict`, `RolloutConstraint`,
+      `CompatibilityVector` and opaque `ChangeContext` types in `Keiro.Dsl.Diff`; mandatory
+      codes/`ckVector` on `ChangeKind`; per-code registry and label-derivation invariant green.
+- [ ] Milestone 2: coarse multi-use findings split into exact context-sensitive findings;
+      private-event, snapshot-invalidation, and existing public-contract fixtures cover distinct
+      vectors without changing `ContractType`.
 - [ ] Milestone 3: CLI — vector rendering, `--gate`, `--explain`, `--report-out`; remediation
-      registry with totality test; golden output tests; Experiment D fixture pair; diff-test.sh
-      extended with the Experiment D scenario and the no-weakening negative test.
+      registry with totality test; golden output tests; consumer-neutral fixture matrix;
+      diff-test.sh extended with the matrix and the no-weakening negative test.
 - [ ] Milestone 4: docs and ADR — `docs/guides/evolution-and-replayability.md` and
       `docs/guides/evolve-events-safely.md` updated; ADR 0004 inventory amended; `docs/adr/log.md`
       updated via okf; strict `just adr-validate` green; Proposal Test answers recorded.
@@ -68,7 +71,12 @@ and the default gate reproduces today's behavior bit for bit.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The research scenario's public enum arm is not expressible in current `ContractType`, but
+  adding `CEnum` and lowering it to `Text` would erase nominal/public ownership for an unrelated
+  fixture. Existing contract changes already exercise the public-consumer vector.
+- A vector keyed only by `DiagnosticCode` cannot classify the same code differently at distinct
+  roots, and a `Map` with defaults hides newly added surfaces. The revised API carries explicit
+  `ChangeContext`, mandatory codes, explicit record fields, and a set of rollout constraints.
 
 
 ## Decision Log
@@ -76,14 +84,16 @@ and the default gate reproduces today's behavior bit for bit.
 - Decision: The vector is carried on every finding and the headline label
   (`ADDITIVE`/`WARNING`/`BREAKING`) is *derived* from the vector under a gate — a set of
   surfaces whose breaking verdicts block the merge. The default gate is
-  {private-history-read, snapshot-hydration, public-consumer, persisted-identity}, i.e.
-  exactly the surfaces today's classification already blocks on; old-binary-read-new-events
+  {private-history-read, snapshot-hydration, public-consumer, persisted-identity,
+  consumer-build}. The first four are the surfaces today's classification already blocks on;
+  consumer-build is included so a future source-incompatible finding cannot pass by default,
+  while no existing finding is breaking on that new surface. Old-binary-read-new-events
   is deliberately outside the default gate because today's differ never blocks on
   rolling-deploy direction. A breaking verdict on a non-gated surface is shown in the
-  rendered vector (and promotes an otherwise-clean finding to at most `WARNING` only where
-  this plan explicitly introduces a new finding), but never flips an existing headline. This
-  is what makes "the vector refines, never relaxes" checkable: existing headlines and exit
-  codes are preserved by construction, and operators opt into stricter gating with `--gate`.
+  rendered vector and promotes an otherwise-clean finding to `WARNING`; a rollout constraint
+  does the same. This is what makes "the vector refines, never relaxes" checkable: no existing
+  finding is demoted and default exit codes are preserved, while operators opt into stricter
+  gating with `--gate`.
   Rationale: hard constraint (a) of the MasterPlan scope; research note section 7 says the
   fix is better explanation and policy, "not weaker classification".
   Date: 2026-07-28
@@ -94,7 +104,16 @@ and the default gate reproduces today's behavior bit for bit.
   WorkflowStableNameChanged, …) is about re-keying persisted identities, not decoding.
   Folding those into private-history-read would blur the direction question the vector
   exists to answer. The vector shape is append-extensible (see the JSON decision below), so
-  adding a surface now proves the extension mechanism plan 149 will rely on.
+  adding a surface now exercises the extension mechanism plan 149 will rely on.
+  Date: 2026-07-28
+
+- Decision: Add a sixth, compile-forcing `consumer-build` surface for source and generated-code
+  compatibility. It is an explicit field and a valid `--gate` value, not an entry defaulted into
+  a map. Existing findings use `VNotApplicable` unless they already impose a source rebuild;
+  plan 149 adds mapping-specific rows.
+  Rationale: Binding symbols, constructors, modules, and canonical names can change without
+  changing persisted bytes. Overloading those obligations onto persisted identity would make the
+  vector less reusable for consumers with independently owned domain packages.
   Date: 2026-07-28
 
 - Decision: Do not touch the replay-impact JSON contract
@@ -108,42 +127,41 @@ and the default gate reproduces today's behavior bit for bit.
   byte-compatible.
   Date: 2026-07-28
 
-- Decision: Extend the contract grammar minimally with an enum-typed field
-  (`CEnum Name` in `ContractType`), lowered to `Text` in the scaffolded contract payload ADT
-  exactly like `CTypeId`. Rationale: Experiment D requires "a union used by … a public
-  contract", and today `ContractType` is only `CTypeId | CText | CInt`
-  (`keiro-dsl/src/Keiro/Dsl/Grammar.hs` line 668), so the scenario is inexpressible without
-  it. Lowering to `Text` keeps the scaffold change one line and adds no new codec authority;
-  the wire value is the enum's declared wire spelling. The full structural type-expression
-  grammar belongs to plan 149 (EP-6); this plan owns only the output shape and this one
-  minimal use-site.
+- Decision: Do not extend `ContractType` with `CEnum Name -> Text` for this plan. Exercise
+  public-consumer dimensions using the contract changes already modeled by the DSL.
+  Rationale: Private structural types and public DTOs are independently owned. Erasing a nominal
+  enum to `Text` solely to satisfy a research scenario is an API distortion and creates an
+  unrelated grammar/scaffold commitment.
   Date: 2026-07-28
 
-- Decision: Per-code vector and remediation registries (`vectorFor`, `remediationFor`) keyed
-  by `DiagnosticCode`, with unit tests enforcing totality over every code the differ can
-  emit — the same registry-coverage style `familyRegistry` already uses. New codes
-  (`EnumCtorAdded`, `ContractEnumUnresolved`) are appended at the end of the shared
+- Decision: Context-sensitive vector and remediation registries
+  (`classifyCompatibility`, `remediationFor`) keyed by `ChangeContext` plus `DiagnosticCode`,
+  with unit tests enforcing totality over every code/context the differ can
+  emit — the same registry-coverage style `familyRegistry` already uses. New codes such as
+  `EnumCtorAdded` and codes for currently uncoded additive findings are appended at the end of the shared
   `DiagnosticCode` enum in `keiro-dsl/src/Keiro/Dsl/Validate.hs`; no existing code is
-  renamed, reused, or reordered (constraint (b); ADR 0004 says tooling depends on the code,
+  renamed, reused, or reordered. Every finding, including additive findings, has a stable code;
+  no generic all-compatible default is permitted (constraint (b); ADR 0004 says tooling depends on the code,
   not prose).
   Date: 2026-07-28
 
 - Decision: Enum-constructor additions are reported per use site (one finding per containing
   path) instead of one finding with a usage suffix, using the new `EnumCtorAdded` code. The
-  private-event-use finding stays `ADDITIVE` (its breaking verdict is on the non-gated
-  old-binary-read-new-events surface); the snapshot-register-use finding is `WARNING`
-  (snapshot-hydration advisory: consider a state-codec version bump); the contract-use
-  finding is `BREAKING` without a contract schemaVersion bump and `WARNING` with one,
-  mirroring the existing contract field-add rule. The last two headlines are new findings on
-  newly explicit or newly expressible surfaces, not relabelings of an existing breaking or
-  passing verdict, so the no-weakening constraint holds.
+  private-event-use finding becomes `WARNING`: its breaking verdict is on the non-gated
+  old-binary-read-new-events surface and its rollout constraint is actionable. The
+  snapshot-register-use finding is also `WARNING`
+  (snapshot-hydration advisory: invalidate/rebuild the cache). Public-contract changes retain
+  their existing contract codes and independently classified public-consumer paths; an enum is
+  not reused across the private/public boundary. This is an intentional additive-to-advisory
+  strengthening; existing breaking findings and default blocking behavior do not weaken.
   Date: 2026-07-28
 
-- Decision: Rollout-advisory vocabulary is taken from ADR 0004's rollout-ordering section
-  and `docs/user/deploy-ordering.md`, not invented: `any`, `stop-the-world` (single-version
+- Decision: Rollout constraints are a zero-or-more `Set`, with vocabulary taken from ADR 0004's
+  rollout-ordering section and `docs/user/deploy-ordering.md`: `stop-the-world` (single-version
   aggregate codec cutover), `workers-first` (queue workers before producers),
   `drain-required` (router/process decide surfaces need a drained redelivery window),
-  `producer-last` (consumers/firers must learn new shapes before producers write them).
+  `producer-last` (consumers/firers must learn new shapes before producers write them). An empty
+  set means no ordering constraint; there is no `RolloutAny` value that competes with others.
   Date: 2026-07-28
 
 
@@ -261,14 +279,16 @@ name so new surfaces and deeper paths append without breaking consumers.
 
 Definitions used below:
 
-- **Surface**: one persistence/compatibility question asked of a change. The five surfaces:
+- **Surface**: one compatibility question asked of a change. The six surfaces:
   *private-history-read* (can the new binary decode and replay already-stored private
   events), *old-binary-read-new-events* (during a rolling deploy, can a still-running old
   binary decode what the new binary emits), *snapshot-hydration* (can persisted snapshot
   seeds still hydrate, or do they need a version bump/rebuild), *public-consumer* (can
   independent consumers of a declared contract keep decoding), *persisted-identity* (do
   replays/retries still derive the same persisted stream, dedupe, dispatch, and outbox
-  identities).
+  identities), and *consumer-build* (must generated/consumer Haskell be updated or recompiled
+  even though wire identity is unchanged). The build surface is explicit so later consumer-owned
+  mapping diagnostics do not overload persisted identity.
 - **Verdict**: per surface, one of `compatible`, `advisory`, `breaking`, `n/a`.
 - **Gate**: the set of surfaces whose `breaking` verdict makes the process exit non-zero.
 - **Rollout advisory**: a deployment-ordering obligation attached to the whole finding.
@@ -276,12 +296,13 @@ Definitions used below:
 
 ## Plan of Work
 
-### Milestone 1 — the vector core inside `Keiro.Dsl.Diff` (no CLI change yet)
+### Milestone 1 — the vector core and current-finding migration inside `Keiro.Dsl.Diff`
 
 Scope: introduce the vector types, attach a vector to every `Change` the differ already
-produces, and prove — by tests — that headline labels are exactly derivable from vectors
-under the default gate. At the end of this milestone the library computes vectors and the
-whole existing test corpus passes unchanged; nothing user-visible differs yet.
+produces, and assert in tests that headline labels are exactly derivable from vectors
+under the default gate. At the end of this milestone the library computes vectors, existing
+breaking/advisory headlines are not demoted, and enum additions with a rolling-deploy obligation
+are deliberately promoted to advisory; default exit behavior is unchanged.
 
 In `keiro-dsl/src/Keiro/Dsl/Diff.hs` add and export:
 
@@ -292,42 +313,62 @@ data CompatibilitySurface
     | SnapshotHydration
     | PublicConsumer
     | PersistedIdentity
+    | ConsumerBuild
     deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 data SurfaceVerdict = VCompatible | VAdvisory | VBreaking | VNotApplicable
-    deriving stock (Eq, Ord, Show)
-
-data RolloutAdvisory
-    = RolloutAny | RolloutStopTheWorld | RolloutWorkersFirst
-    | RolloutDrainRequired | RolloutProducerLast
     deriving stock (Eq, Show)
 
+data RolloutConstraint
+    = RolloutStopTheWorld | RolloutWorkersFirst
+    | RolloutDrainRequired | RolloutProducerLast
+    deriving stock (Eq, Ord, Show)
+
 data CompatibilityVector = CompatibilityVector
-    { cvVerdicts :: !(Map CompatibilitySurface SurfaceVerdict)  -- total over [minBound..]
-    , cvRollout :: !RolloutAdvisory
+    { cvPrivateHistoryRead :: !SurfaceVerdict
+    , cvOldBinaryReadNewEvents :: !SurfaceVerdict
+    , cvSnapshotHydration :: !SurfaceVerdict
+    , cvPublicConsumer :: !SurfaceVerdict
+    , cvPersistedIdentity :: !SurfaceVerdict
+    , cvConsumerBuild :: !SurfaceVerdict
+    , cvRollout :: !(Set RolloutConstraint)
     }
     deriving stock (Eq, Show)
 ```
 
-Represent verdicts as a `Map` (total by smart constructor over `[minBound .. maxBound]`) so
-plan 149 can append surfaces without touching every construction site; provide
-`mkVector :: [(CompatibilitySurface, SurfaceVerdict)] -> RolloutAdvisory -> CompatibilityVector`
-that fills unmentioned surfaces with `VNotApplicable`, and `uniformVector` for the trivial
-all-compatible case.
+Use explicit fields so adding a surface breaks every construction site and JSON encoder at
+compile time. `VNotApplicable` remains explicit. Rollout is zero-or-more constraints;
+`Set.empty` means no rollout ordering. Provide named smart constructors for recurring fully
+specified vectors, but no default that silently fills missing surfaces.
 
-Extend `ChangeKind` with two fields: `ckVector :: !CompatibilityVector` and
+Also introduce the `ChangeContext` record in this milestone, keep its constructor private, and
+expose the named surface/ownership smart constructors and read-only accessors described in
+Milestone 2. The classifier therefore never has a phase in which it accepts an unstructured or
+contradictory bag of facts.
+
+For every pre-existing diff code, classify `ConsumerBuild` explicitly as `VNotApplicable` unless
+the finding already names a generated/source compatibility obligation; those codes use
+`VAdvisory` and `RemedyRecompileConsumers`. This preserves today's headlines while making the
+extension point compile-forcing. Plan 149 adds its mapping-specific source/binding rows on this
+surface.
+
+Make `ckCode :: !DiagnosticCode` mandatory (remove its current `Maybe`), and extend
+`ChangeKind` with `ckVector :: !CompatibilityVector` and
 `ckPaths :: ![Text]` (containing root-to-leaf paths; for existing findings this is the
 single path already implied by `ckNode`/`ckFacet`/`ckSubject`, e.g.
-`"Reservation.event.ReservationMade.qty"` — construct it in one place). Keep the three
-helper constructors' signatures working by giving them defaulting behavior: `breaking` and
-`advisory` look their vector up from the code registry; `additive` uses `uniformVector`.
-Add `additiveCoded :: Name -> Text -> Text -> DiagnosticCode -> Text -> Change` for the new
-coded additive findings of Milestone 2.
+`"Reservation.event.ReservationMade.qty"` — construct it in one place). Change the three
+helper constructors to receive a `ChangeContext` and mandatory `DiagnosticCode`; remove the
+uncoded `additive` path. Existing call sites become compile failures until their context and
+code are explicit.
+
+Do not derive or use `Ord SurfaceVerdict`: `VNotApplicable` is not a severity above or below
+the other verdicts. `deriveLabel` performs the explicit case analysis below, preventing a later
+consumer from accidentally using constructor order as policy.
 
 Add the per-code vector registry:
 
 ```haskell
-vectorFor :: DiagnosticCode -> CompatibilityVector
+classifyCompatibility :: ChangeContext -> DiagnosticCode -> CompatibilityVector
 ```
 
 Populate it for every code the differ emits, translating the knowledge already in the prose.
@@ -343,7 +384,7 @@ prose states the surface and the ADR 0004 rollout section states the ordering):
 - Identity re-keying (`DerivedIdentityChanged`, `IdPrefixChanged`, `DedupeIdentityChanged`,
   `QueueIdentityChanged`, `RouterStableNameChanged`, `WorkflowStableNameChanged`,
   `WorkflowShapeChanged`, `WorkflowBodyChanged`, `WorkflowPatchRemoved`,
-  `WorkflowContinueSeedChanged`): persisted-identity `VBreaking`, rollout `RolloutAny`
+  `WorkflowContinueSeedChanged`): persisted-identity `VBreaking`, rollout `Set.empty`
   (ordering does not fix re-keying; the remedy is not deploying it).
 - Contract surface (`ContractEventRemoved`, `ContractFieldChanged`,
   `ContractDiscriminatorChanged`, `ContractTopicChanged`,
@@ -355,8 +396,8 @@ prose states the surface and the ADR 0004 rollout section states the ordering):
   `WqGroupKeyChanged`: persisted-identity or private-history-read `VBreaking` per prose,
   rollout `RolloutWorkersFirst`.
 - Advisories: `AggFoldSurfaceChanged` → snapshot-hydration `VAdvisory`,
-  private-history-read `VAdvisory` (replay reinterprets the log), rollout `RolloutAny`.
-  `AggGuardTightened` → private-history-read `VAdvisory`, rollout `RolloutAny` (remedy is
+  private-history-read `VAdvisory` (replay reinterprets the log), rollout `Set.empty`.
+  `AggGuardTightened` → private-history-read `VAdvisory`, rollout `Set.empty` (remedy is
   the replay-only twin, ADR 0002). `RouterDecideSurfaceChanged`,
   `ProcessDecideSurfaceChanged` → all surfaces `VCompatible`, rollout
   `RolloutDrainRequired`. `ProcessTimerPayloadChanged` → private-history-read `VAdvisory`
@@ -368,7 +409,7 @@ prose states the surface and the ADR 0004 rollout section states the ordering):
 - Read models (`ReadModelVersionDecreased`, `ReadModelShapeChangedWithoutBump`,
   `ReadModelFeedChanged`, `ReadModelConsistencyWeakened`): these break rebuild/served-shape
   or caller guarantees over persisted projection state — persisted-identity or
-  private-history-read `VBreaking` per the emission site, rollout `RolloutAny`.
+  private-history-read `VBreaking` per the emission site, rollout `Set.empty`.
 
 Add the derivation and gate:
 
@@ -379,107 +420,77 @@ gatedBreaking :: Set CompatibilitySurface -> Change -> Bool
 ```
 
 `deriveLabel gate v` is `Breaking` iff any gated surface is `VBreaking`; else `Advisory` iff
-any surface (gated or not) is `VAdvisory` or the rollout is not `RolloutAny` or a non-gated
+any surface (gated or not) is `VAdvisory` or the rollout set is non-empty or a non-gated
 surface is `VBreaking`; else `Additive`. Do **not** rewrite the differ to construct changes
 through `deriveLabel` — the existing constructors stay authoritative for this milestone.
 Instead enforce coherence by test (below), so any registry row that would relabel an
 existing finding fails loudly. Exception carve-out: because `RouterDecideSurfaceChanged`
 etc. are already `Advisory` and their vectors carry `RolloutDrainRequired`, derivation
-matches; for existing `Additive` findings the uniform vector derives `Additive`. Where a
+matches. Where a
 registry row cannot match an existing headline under this rule, fix the row, not the rule.
 
 Tests in `keiro-dsl/test/Main.hs`:
 
 - *Registry totality*: for every fixture pair already exercised by the suite (reuse the
   `diffFixtures` helper and the in-memory `modifyRouter`/`modifyProcess`-style cases), every
-  produced `Change` with a code has a `vectorFor` row that is not the placeholder, and
+  produced `Change` has a mandatory code and its `ChangeContext`/code pair classifies, and
   every `Change` satisfies `deriveLabel defaultGate (ckVector k) == constructorOf change`.
-  This is the machine-checked **no-weakening invariant**: the vector cannot relabel any
-  existing finding under the default gate.
+  This is the machine-checked **no-weakening invariant** after the intentional enum-addition
+  strengthening: the vector cannot demote any existing finding under the default gate.
 - *Gate monotonicity property* (QuickCheck over vectors): enlarging the gate never turns
   `Breaking` into a lesser label — `deriveLabel g v == Breaking` implies
   `deriveLabel (g <> g') v == Breaking`.
 
 Acceptance: `cabal test keiro-dsl-test` passes; `bash keiro-dsl/test/diff-test.sh` still
-passes with zero behavioral change (nothing renders vectors yet).
+passes after updating the enum-addition expectation from `ADDITIVE` to `WARNING`; all existing
+non-zero exits remain non-zero and all existing zero exits remain zero.
 
-### Milestone 2 — per-use-site enum findings and the minimal contract-enum grammar
+### Milestone 2 — per-use-site context refinement and mandatory-code completion
 
-Scope: make the union-arm scenario expressible and reported per containing path. At the end,
-`diffSpecs` reports one `EnumCtorAdded` finding per use site of a changed enum, and a
-`.keiro` contract event field may be typed as a declared enum.
+Scope: refine every classification to the exact facts from its containing use site and split
+findings that currently summarize multiple uses while preserving the mandatory stable codes
+introduced in Milestone 1. Use the opaque `ChangeContext` record introduced in Milestone 1, containing the root/path, direction,
+snapshot-cache participation, record unknown-field policy when applicable, public/private
+ownership, schema-version facts, and rollout environment facts already present in the old/new
+specs. Complete its named smart constructors/accessors for private
+event, snapshot, queue, public-contract, persisted-identity, and consumer-build contexts, so later
+consumers cannot manufacture contradictory ownership/surface facts. `classifyCompatibility`
+consumes this context plus the code; it is not a global lookup that assumes one vector for every
+emission site of a code.
 
-Grammar (`keiro-dsl/src/Keiro/Dsl/Grammar.hs`): extend
-`data ContractType = CTypeId !Text | CText | CInt` with `| CEnum !Name`. Parser
-(`keiro-dsl/src/Keiro/Dsl/Parser.hs`): where contract field types parse `typeid "…"`,
-`text`, `int`, accept `enum <Name>`. Pretty-printer
-(`keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`): render it back as `enum <Name>`; add a
-parse→print→parse round-trip case to the unit suite (the suite already has round-trip
-patterns to copy). Validation (`keiro-dsl/src/Keiro/Dsl/Validate.hs`): append
-`ContractEnumUnresolved` to the *end* of `DiagnosticCode` and reject, with `Error`
-severity, a `CEnum` naming no declared enum. Scaffold
-(`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, `emitPayloadAdt` around line 545): lower `CEnum _`
-to `"Text"` exactly like `CTypeId`; the wire value is the enum's declared wire spelling
-(state this in a comment). Diff (`renderContractType` in Diff.hs): render
-`"enum '<Name>'"` so a `CTypeId`→`CEnum` retype is reported as the `ContractFieldChanged`
-breaking type change it is.
+Rework additive emission helpers to construct one context per use site. For enum-arm additions already supported by
+the DSL, emit one finding per private event/register use site with complete paths. An event use
+is compatible for new-binary/private-history reads but breaking for old-binary/new-event reads;
+a snapshot-register use is explicitly invalidate/rebuild Advisory. Public-consumer coverage
+uses existing contract field/event/schema change codes and fixtures. `ContractType`, parser,
+pretty-printer, and scaffold output are unchanged.
 
-Enum diff rework (`enumPairDiff` and `addedEnumDiff` in Diff.hs): for constructor
-*additions*, replace the single usage-suffixed Additive finding with one finding per use
-site, using a new appended code `EnumCtorAdded` and a use-site enumeration that extends the
-existing `enumUsages` with contract use sites
-(`<Contract>.event.<CtrEvent>.<field>` for every `CEnum` field naming the enum). Register
-use sites additionally check whether the aggregate captures snapshots (the aggregate's
-snapshot/state-codec declaration — see how `transitionSurfaceDiff`'s prose refers to
-`state-codec version=`); if the aggregate declares no snapshot, the register use site's
-snapshot-hydration verdict is `VNotApplicable` and the finding stays `ADDITIVE`. The three
-finding shapes (all `ckCode = Just EnumCtorAdded`, each with its own `ckPaths`):
+Tests enumerate every emitted code/context pair; fail if a finding lacks a code or classification.
+Add explicit cases showing that an additive field can still break old-binary reads when the old
+record rejects unknown fields, and that a snapshot finding describes cache rebuild rather than
+an event upcaster. Existing breaking findings remain breaking under the default gate.
 
-- event-field use: `additiveCoded`, vector {private-history-read `VCompatible`,
-  old-binary-read-new-events `VBreaking`, rest n/a}, rollout `RolloutProducerLast`. Detail:
-  the new binary decodes all old history, but an old replica cannot decode the new arm once
-  a new replica emits it; deploy all readers before any emitter, or stop-the-world.
-- snapshot-captured register use: `advisory` with vector {snapshot-hydration `VAdvisory`,
-  old-binary-read-new-events `VBreaking`, rest n/a}, rollout `RolloutProducerLast`. Detail:
-  the serialized snapshot state can now contain the new arm; bump `state-codec version=` if
-  the captured shape changes meaning, per ADR 0003.
-- contract-field use: if the containing contract's schemaVersion increased in this diff,
-  `advisory` (public-consumer `VAdvisory`); otherwise `breaking` (public-consumer
-  `VBreaking`). Rollout `RolloutProducerLast`. Detail: a closed consumer of the declared
-  contract may reject the new arm indefinitely; bump schemaVersion and coordinate the
-  cross-service rollout, or revise the contract.
+Acceptance: `cabal test keiro-dsl-test` and existing contract conformance tests pass with no
+contract grammar or generated DTO change.
 
-An enum with *no* use sites keeps a single `additiveCoded` finding with the uniform vector,
-so pure declarations do not vanish from the report. Constructor removal/respelling handling
-is untouched (still Breaking — no weakening).
-
-Tests: unit cases in `keiro-dsl/test/Main.hs` matching on `EnumCtorAdded` plus surface
-verdicts for each of the three use-site kinds; a `ContractEnumUnresolved` rejection case; a
-no-weakening case asserting `EnumCtorRemoved` is still `Breaking` with
-private-history-read `VBreaking`.
-
-Acceptance: `cabal test keiro-dsl-test` and `cabal test keiro-dsl-conformance-contract`
-pass (the latter proves scaffolded contract modules still compile; the `CEnum` lowering is
-additive so existing pinned scaffold output is byte-identical).
-
-### Milestone 3 — CLI rendering, `--gate`, `--explain`, `--report-out`, goldens, Experiment D
+### Milestone 3 — CLI rendering, `--gate`, `--explain`, `--report-out`, goldens, consumer-neutral matrix
 
 Scope: make the vector visible and actionable. At the end, the CLI prints vectors, an
 operator can gate on extra surfaces, `--explain` prints remediation blocks, `--report-out`
-writes machine JSON, and the Experiment D scenario is a checked-in fixture pair with golden
-output plus a diff-test.sh scenario.
+writes machine JSON, and the private-event/snapshot/public-contract matrix is checked in with
+golden output plus a diff-test.sh scenario.
 
 In `keiro-dsl/app/Main.hs`, extend the `Diff` command with `--gate SURFACE` (a `many`
-`strOption`; accepted spellings are the kebab-case surface names
-`private-history-read`, `old-binary-read-new-events`, `snapshot-hydration`,
-`public-consumer`, `persisted-identity`; unknown spellings are a usage error listing the
-valid set), `--explain` (switch) and `--report-out FILE` (option). Behavior:
+  `strOption`; accepted spellings are the kebab-case surface names
+  `private-history-read`, `old-binary-read-new-events`, `snapshot-hydration`,
+  `public-consumer`, `persisted-identity`, `consumer-build`; unknown spellings are a usage
+  error listing the valid set), `--explain` (switch) and `--report-out FILE` (option). Behavior:
 
 - The headline line grammar is unchanged (`ADDITIVE:`/`WARNING:`/`BREAKING:` … `[Code]`).
   After any finding whose vector is not uniformly `VCompatible`/`VNotApplicable`, print one
   indented continuation line:
   `    vector: private-history-read=compatible old-binary-read-new-events=breaking … rollout=producer-last`
-  (omit `n/a` surfaces for readability; always print rollout when not `any`). Adding lines
+  (omit `n/a` surfaces for readability; print rollout only when the set is non-empty). Adding lines
   is safe for `diff-test.sh`, which greps substrings.
 - Exit: non-zero iff any change is breaking on the *effective* gate = `defaultGate` plus
   the `--gate` surfaces. With no `--gate` flags this is exactly `any isBreaking changes` —
@@ -490,30 +501,36 @@ valid set), `--explain` (switch) and `--report-out FILE` (option). Behavior:
   remedies from a new registry in Diff.hs:
 
 ```haskell
-data Remedy = RemedyVersionBump | RemedyUpcaster | RemedyDeploymentOrder RolloutAdvisory
+data Remedy = RemedyVersionBump | RemedyUpcaster | RemedyDeploymentOrder RolloutConstraint
             | RemedyContractRevision | RemedyReplayOnlyEdge | RemedyStateCodecBump
+            | RemedyRecompileConsumers | RemedyRunConformance
             | RemedyDoNotDeploy Text  -- rename/re-key class: revert or migrate operationally
-remediationFor :: DiagnosticCode -> [Remedy]
+remediationFor :: ChangeContext -> DiagnosticCode -> NonEmpty Remedy
 ```
 
   Render each remedy as one imperative line; `RemedyReplayOnlyEdge` cites
   `docs/adr/0002-replay-only-edges-are-the-sanctioned-remedy-for-guard-tightening.md`.
-  Totality test: every code the differ can emit has a non-empty remedy list.
+  `RemedyRecompileConsumers` and `RemedyRunConformance` are intentionally generic extension
+  points for later source-binding diagnostics such as plan 149's checked consumer mappings; they
+  do not weaken or replace a version/upcaster remedy on a wire break.
+  Totality test: every code the differ can emit reaches a registry arm; non-emptiness is carried
+  by the result type rather than re-established by every caller.
 - `--report-out FILE`: write JSON (new `ToJSON` instances in Diff.hs or a small
   `Keiro.Dsl.DiffReport` module — prefer the new module to keep Diff.hs pure):
 
 ```json
 {
   "schema": "keiro-dsl/diff-report/1",
-  "gate": ["private-history-read", "snapshot-hydration", "public-consumer", "persisted-identity"],
+  "gate": ["private-history-read", "snapshot-hydration", "public-consumer", "persisted-identity", "consumer-build"],
   "breaking": true,
   "findings": [
     { "label": "breaking", "node": "ReservationFeed", "facet": "contract-field",
-      "subject": "ReservationChanged.status", "code": "EnumCtorAdded",
+      "subject": "ReservationChanged.status", "code": "ContractFieldChanged",
       "paths": ["ReservationFeed.event.ReservationChanged.status"],
       "vector": { "private-history-read": "n/a", "old-binary-read-new-events": "n/a",
                   "snapshot-hydration": "n/a", "public-consumer": "breaking",
-                  "persisted-identity": "n/a", "rollout": "producer-last" },
+                  "persisted-identity": "n/a", "consumer-build": "n/a",
+                  "rollout": ["producer-last"] },
       "detail": "…", "remedies": ["bump the contract schemaVersion", "revise the contract"] }
   ]
 }
@@ -523,27 +540,17 @@ remediationFor :: DiagnosticCode -> [Remedy]
   `paths` entries are append-only. This is the shape plan 149 adopts for recursive nested
   classification. The `--replay-impact-out` file is untouched.
 
-Fixtures and goldens: create `keiro-dsl/test/fixtures/experimentd.keiro` — one spec with an
-enum (say `ReservationStatus { Pending=pending Confirmed=confirmed }`) used by (1) an event
-field of an aggregate, (2) a register of the same aggregate with snapshots enabled, and (3)
-a `CEnum` field of a contract event — and `experimentd-armadd.keiro`, identical plus the
-arm `Archived=archived` and no schemaVersion bump. Model both on the existing
-`reservation*.keiro` fixtures so they parse and check cleanly (run
-`cabal run keiro-dsl -- check` on each while authoring). Add a golden test to
-`keiro-dsl/test/Main.hs`: diff the pair, render the full report (headline lines, vector
-lines, and the `--explain` blocks via the same pure rendering functions the CLI uses —
-factor rendering out of `app/Main.hs` into the library so the test and the CLI share it),
-and compare against a checked-in golden file
-`keiro-dsl/test/fixtures/experimentd.diff.golden` (follow the suite's existing
-file-comparison style; on mismatch print a diff). The golden must show three `EnumCtorAdded`
-findings with three distinct paths and distinct vectors, exactly one of them `BREAKING`
-(the contract path).
+Fixtures and goldens: create a consumer-neutral matrix from existing fixture families: an enum
+arm addition used by a private event and snapshot register, plus an existing public-contract
+field/schema change in a separate contract-owned type. Render the full report through pure
+library functions shared with the CLI and pin it under
+`keiro-dsl/test/fixtures/compatibility-vector.diff.golden`. The golden must show complete paths,
+context-sensitive vectors, snapshot invalidate/rebuild prose, and a public-consumer finding
+without sharing a private enum type across the boundary.
 
-Extend `keiro-dsl/test/diff-test.sh` with two scenarios: (a) Experiment D — commit
-`experimentd.keiro`, swap in `experimentd-armadd.keiro`, assert exit non-zero, assert the
-output contains all three paths and the substrings `public-consumer=breaking` and
-`old-binary-read-new-events=breaking`, and assert the event-path finding line begins
-`ADDITIVE:` (no universal label, no hidden risk); (b) the no-weakening negative test —
+Extend `keiro-dsl/test/diff-test.sh` with two scenarios: (a) the consumer-neutral matrix —
+assert the output contains all roots and the substrings `public-consumer=breaking`,
+`snapshot-hydration=advisory`, and `old-binary-read-new-events=breaking`; (b) the no-weakening negative test —
 re-assert that the existing `reservation-fieldadd.keiro` swap still exits non-zero with
 `BREAKING` and `EvtFieldAddedWithoutBump` *and* additionally that running with
 `--gate old-binary-read-new-events` also exits non-zero (gates only ever add).
@@ -561,7 +568,7 @@ vector, ADR 0004's inventory records the output change, and strict OKF validatio
   vector with a rollout advisory, keeps the ADDITIVE/WARNING/BREAKING headline, exits
   non-zero on the gated surfaces (default gate = today's behavior, `--gate` adds surfaces),
   and offers `--explain` and `--report-out`. Add a short subsection (near the
-  guard-tightening walkthrough at ~line 260) showing the Experiment D transcript excerpt.
+  guard-tightening walkthrough at ~line 260) showing the consumer-neutral transcript excerpt.
   Sweep the rest of the guide's `ADDITIVE`/`WARNING`/`BREAKING` mentions (the summary table
   around lines 560–575 keeps its labels — they are still the headlines) and adjust prose
   that claims the label is the whole answer.
@@ -575,14 +582,13 @@ vector, ADR 0004's inventory records the output change, and strict OKF validatio
   editing the operator doc).
 - ADR 0004 (`docs/adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md`),
   per its amendment protocol: (1) in the Decision section after the inventory table, add a
-  paragraph defining the compatibility-vector output contract — five surfaces, verdict
-  values, rollout vocabulary (cross-reference its own rollout-ordering bullets), default
+  paragraph defining the compatibility-vector output contract — six surfaces, verdict
+  values, rollout-constraint vocabulary (zero-or-more; cross-reference its own rollout-ordering bullets), default
   gate, `--gate` semantics, the `keiro-dsl/diff-report/1` JSON schema id with
   append-only/ignore-unknown rules, and the statement that headlines and codes remain the
-  machine contract with vectors as a refinement; (2) add an inventory row for "Union-arm
-  addition at a classified use site" (check: `ContractEnumUnresolved` Error for dangling
-  references; diff: per-use-site `EnumCtorAdded` vectors; runtime: old binaries reject
-  unknown arms at decode). Update the frontmatter `timestamp` to the amendment time (keep
+  machine contract with vectors as a refinement; (2) add inventory rows for context-sensitive
+  private enum-arm additions, snapshot-cache invalidation, and existing public-contract changes.
+  Update the frontmatter `timestamp` to the amendment time (keep
   `docId: ADR-4` and `date` of original acceptance; follow the file's existing style).
 - Maintain the reserved log: add a `docs/adr/log.md` entry for the amendment using
   `okf log add` (run `okf log add --help` for exact arguments; match the existing entry
@@ -622,37 +628,10 @@ bash keiro-dsl/test/diff-test.sh
 Expected final line: `PASS: diff --since gates the decode and identity surface` (extend the
 message if you touch the script's summary).
 
-Contract-scaffold conformance after Milestone 2's `CEnum` lowering:
-
-```bash
-cabal test keiro-dsl-conformance-contract
-```
-
-Manual Experiment D run while developing Milestone 3 (mirrors what diff-test.sh automates —
-a throwaway git repo so `--since HEAD` has a baseline):
-
-```bash
-EXE="$(cabal list-bin keiro-dsl)"
-DEMO="$(mktemp -d)"; git -C "$DEMO" init -q
-cp keiro-dsl/test/fixtures/experimentd.keiro "$DEMO/svc.keiro"
-git -C "$DEMO" add svc.keiro
-git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm baseline
-cp keiro-dsl/test/fixtures/experimentd-armadd.keiro "$DEMO/svc.keiro"
-"$EXE" diff --since HEAD --explain --report-out "$DEMO/report.json" "$DEMO/svc.keiro"; echo "exit=$?"
-```
-
-Expected output shape (abbreviated; exact text is pinned by the golden):
-
-```text
-ADDITIVE: Reservation event ReservationMade.status: new enum arm 'Archived' … [EnumCtorAdded]
-    vector: private-history-read=compatible old-binary-read-new-events=breaking rollout=producer-last
-WARNING: Reservation reg status: new enum arm captured by the snapshot state codec … [EnumCtorAdded]
-    vector: snapshot-hydration=advisory old-binary-read-new-events=breaking rollout=producer-last
-BREAKING: ReservationFeed contract-field ReservationChanged.status: new enum arm without a schemaVersion bump … [EnumCtorAdded]
-    vector: public-consumer=breaking rollout=producer-last
-…explain blocks…
-exit=1
-```
+Run the consumer-neutral matrix through the checked-in unit and shell fixtures. The abbreviated
+output must contain separate private event, snapshot invalidate/rebuild, and public contract
+findings, and the JSON report must preserve all context facts and zero-or-more rollout
+constraints. No grammar or scaffold conformance test is added by this milestone.
 
 ADR validation after Milestone 4 (strict OKF profile enforcement, including log freshness):
 
@@ -669,7 +648,7 @@ Commit per milestone with conventional-commit messages on the current branch, e.
 
 ```text
 feat(dsl): attach per-surface compatibility vectors to diff findings
-feat(dsl): report enum arm additions per use site and allow enum contract fields
+feat(dsl): classify diff findings from explicit use-site context
 feat(dsl): render vectors and add diff --gate/--explain/--report-out
 docs(adr): record the compatibility-vector diff output contract in ADR 0004
 ```
@@ -680,19 +659,18 @@ docs(adr): record the compatibility-vector diff output contract in ADR 0004
 **Soundness gate — the Proposal Test.** The research note's ten questions
 (`docs/research/14-structural-consumer-type-tradeoffs.md`, "A Proposal Test for Future
 Keiro Improvements") are answered for this change; questions 4 and 10 are the point of the
-plan. 1 *Authority*: no codec changes hands; the spec remains the wire authority; `CEnum`
-lowers to the declared wire spelling through the same generated payload ADT. 2 *Replay*:
+plan. 1 *Authority*: no codec or contract grammar changes hands; each private/public owner keeps
+its existing schema authority. 2 *Replay*:
 the differ and replay-impact computation are read-only over specs; the replay-impact
 contract is untouched. 3 *Visibility*: no new guard/update syntax; nothing is hidden behind
 checked DSL syntax. 4 *Compatibility direction*: this is the deliverable — the report now
 distinguishes old-history reads (private-history-read), rolling deploys
 (old-binary-read-new-events), snapshots (snapshot-hydration), queues (rollout
 `workers-first` + private-history-read on `Wq*` codes), and public consumers
-(public-consumer), verified by the Experiment D golden. 5 *Ownership*: private and public
-findings stay separate — the contract-use finding is a distinct finding on a distinct path;
-no type is shared across the boundary. 6 *Completeness*: registry totality tests fail the
-build if any emitted code lacks a vector or remedy row, mirroring `familyRegistry`'s
-coverage discipline; a new `DiagnosticCode` without registry rows fails
+(public-consumer), verified by the consumer-neutral golden. 5 *Ownership*: private and public
+findings stay separate and no type is shared across the boundary. 6 *Completeness*: explicit
+vector fields make a new surface break constructors/encoders, while totality tests fail the
+build if any emitted context/code pair lacks a vector or remedy; a new `DiagnosticCode` without rows fails
 `keiro-dsl-test`. 7 *Migration*: no stored bytes change; the JSON extension is a new file
 (`--report-out`) and the existing replay-impact file is byte-compatible. 8 *Recovery*: the
 feature is report-only; a bad deploy of the tool cannot corrupt data, and `--gate` only
@@ -710,19 +688,16 @@ whole exercised corpus that `deriveLabel defaultGate . ckVector` reproduces ever
 constructor label, so a registry row that would demote any Breaking finding fails the
 suite. The gate-monotonicity QuickCheck property asserts gating can only add breakage.
 
-**Observable acceptance (Experiment D).** Running the Milestone 3 manual transcript (or
-`bash keiro-dsl/test/diff-test.sh`) shows: three `EnumCtorAdded` findings with three
-distinct containing paths (`…event.….status`, `….reg.status`,
-`…contract….ReservationChanged.status`); distinct vectors per the transcript above; exit
-code 1 driven by the public-consumer surface; and the event-path finding still headlined
-`ADDITIVE` while its vector line exposes `old-binary-read-new-events=breaking` — i.e. no
-universal label, no hidden risk. `report.json` validates against the documented shape
-(spot-check with `jq .findings[].vector "$DEMO/report.json"`).
+**Observable acceptance.** Running `bash keiro-dsl/test/diff-test.sh` shows distinct findings
+and paths for a private event addition, snapshot-cache invalidation, and an independently owned
+public contract change. The event vector exposes old-binary/new-event risk, the snapshot vector
+says invalidate/rebuild, the contract vector exposes public-consumer risk, and the JSON contains
+the explicit context and rollout-constraint array.
 
 **Regression.** `cabal test keiro-dsl-test`, `cabal test keiro-dsl-conformance-contract`,
 and `bash keiro-dsl/test/diff-test.sh` all pass. `just adr-validate` exits 0 after the ADR
-amendment. Existing golden/pinned scaffold output is unchanged (the `CEnum` arm is new; no
-existing fixture uses it).
+amendment. Existing golden/pinned scaffold output is unchanged because this plan adds no grammar
+or scaffold feature.
 
 
 ## Idempotence and Recovery
@@ -734,9 +709,8 @@ checked-in text: if a rendering change is intentional, regenerate the golden by 
 new rendered output after eyeballing the diff, and say why in a commit message. The ADR
 amendment is a text edit plus `okf log add`; if `okf log add` is run twice, remove the
 duplicate log entry and re-run `just adr-validate` (validation catches both staleness and
-malformed entries). If Milestone 2's grammar change causes unexpected conformance breakage,
-it can be reverted independently of Milestone 1 — the vector core does not depend on
-`CEnum`; only the Experiment D contract leg does.
+malformed entries). Milestone 2 changes classification metadata only; it can be reverted
+independently of the vector core and never requires a contract grammar rollback.
 
 
 ## Interfaces and Dependencies
@@ -746,18 +720,18 @@ No new package dependencies. Everything lands in the existing `keiro-dsl` packag
 already-depended `optparse-applicative`.
 
 At the end of Milestone 1, `Keiro.Dsl.Diff` additionally exports:
-`CompatibilitySurface(..)`, `SurfaceVerdict(..)`, `RolloutAdvisory(..)`,
-`CompatibilityVector(..)`, `mkVector`, `uniformVector`, `vectorFor`, `defaultGate`,
-`deriveLabel`, `gatedBreaking`, and `ChangeKind` gains `ckVector :: CompatibilityVector`
-and `ckPaths :: [Text]`.
+`CompatibilitySurface(..)`, `SurfaceVerdict(..)`, `RolloutConstraint(..)`, abstract
+`ChangeContext` plus its named smart constructors/accessors,
+`CompatibilityVector(..)`, `classifyCompatibility`, `defaultGate`,
+`deriveLabel`, `gatedBreaking`, and `ChangeKind` makes `ckCode :: DiagnosticCode` mandatory and
+gains `ckVector :: CompatibilityVector` and `ckPaths :: [Text]`.
 
-At the end of Milestone 2, `Keiro.Dsl.Grammar.ContractType` has the `CEnum !Name`
-constructor; `Keiro.Dsl.Validate.DiagnosticCode` has appended constructors `EnumCtorAdded`
-and `ContractEnumUnresolved` (append-only; nothing renamed or reordered);
-`Keiro.Dsl.Diff` exports `additiveCoded`.
+At the end of Milestone 2, `ContractType` is unchanged; `DiagnosticCode` has appended
+`EnumCtorAdded` and codes for every formerly uncoded additive finding (append-only), and every
+change constructor requires `ChangeContext` and a code.
 
 At the end of Milestone 3, a new module `Keiro.Dsl.DiffReport` (added to the library's
-`exposed-modules`) owns `remediationFor :: DiagnosticCode -> [Remedy]`, the pure renderers
+`exposed-modules`) owns `remediationFor :: ChangeContext -> DiagnosticCode -> NonEmpty Remedy`, the pure renderers
 shared by CLI and tests (`renderFinding`, `renderVectorLine`, `renderExplainBlock`), the
 surface-name spellings (`surfaceName :: CompatibilitySurface -> Text` and its inverse used
 by `--gate`), and the `ToJSON` report encoding with schema id `keiro-dsl/diff-report/1`.
@@ -766,3 +740,19 @@ by `--gate`), and the `ToJSON` report encoding with schema id `keiro-dsl/diff-re
 ignore-unknown-keys, append-only) is the integration point consumed by
 `docs/plans/149-implement-the-ir-1-spec-layer-resolved-type-graph-structural-and-opaque-declarations-check-and-diff.md`,
 which owns recursive nested traversal while this plan owns the output shape.
+
+
+---
+
+Revision note: Removed the Mori-specific `CEnum -> Text` grammar shortcut; made vectors explicit
+records, rollout constraints zero-or-more, classification context-sensitive, and codes mandatory
+for additive findings; snapshots now report invalidate/rebuild, 2026-07-28.
+
+Revision note: Added reusable recompile-consumer and run-conformance remedies so later mapped
+consumer-type diagnostics can remain explicit without inventing a second remediation API; added
+an explicit compile-forcing `consumer-build` surface instead of overloading persisted identity,
+2026-07-28.
+
+Revision note: Removed accidental verdict ordering, made all six surfaces and rollout arrays
+explicit in the CLI/JSON contract, and promoted enum additions with rolling-deploy risk from
+additive to advisory without changing default blocking behavior, 2026-07-28.

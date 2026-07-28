@@ -1,14 +1,14 @@
 ---
 id: 152
 slug: prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting
-title: "Prove migrations with shadow codec comparison and structural coverage reporting"
+title: "Gather migration evidence with historical codec comparison and supported-root coverage reporting"
 kind: exec-plan
 created_at: 2026-07-28T10:49:00Z
 intention: "intention_01kym5dc4ve69sxsjtzd81pbbz"
 master_plan: "docs/masterplans/25-structural-consumer-type-ergonomics-and-soundness-preserving-adoption-for-keiro-dsl.md"
 ---
 
-# Prove migrations with shadow codec comparison and structural coverage reporting
+# Gather migration evidence with historical codec comparison and supported-root coverage reporting
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -19,7 +19,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 Today a team migrating an existing event-sourced service onto `keiro-dsl`'s structural
 consumer-owned types has no tool that tells them whether the codec Keiro will generate
-produces the same bytes — or at least the same meaning — as the hand-written Aeson codec
+produces the same JSON meaning as the historical codec
 that wrote their history. They either eyeball JSON, or they cut over on faith. Separately,
 once the opaque escape hatch exists (an "opaque external-codec type" is a declaration where
 Keiro stores and round-trips a value using the consumer's own `ToJSON`/`FromJSON` instances
@@ -28,19 +28,22 @@ persisted wire surface is actually structurally declared versus opaque. Years la
 of the surface could be opaque and the `diff` gate would be theater — every review would
 pass because Keiro was honestly claiming nothing.
 
-After this plan, two things exist. First, `keiro-dsl codec compare` takes a `.keiro` spec,
-a `--type` selection, and a fixture corpus directory, encodes domain values with both the
-historical consumer codec and the generated structural codec, decodes the corpus with both,
-and reports byte equality, semantic JSON equality (RFC 8785 canonical form), decode
-differences, and missing coverage (declared union arms and optional/null branches with no
-fixture). Every difference is classified as exact parity or as explicit version/upcaster
-work — never "close enough". The command's own output states, verbatim, that a passing
+After this plan, two things exist. First, scaffold can emit a non-production comparison runner
+module for one structural mapped type. A hand-owned test or small executable compiles that module
+with the consumer package, passes an explicit `HistoricalCodec a` value and a historical-golden
+directory, and receives a `CompareReport`. The runner encodes declared typed fixture cases with
+both codecs, decodes the parsed historical JSON corpus with both, and reports canonical JSON equality, decode
+differences, and missing historical coverage (declared union arms and optional/null branches
+with no decodable historical golden; plan 150 separately enforces typed-case coverage). Every
+difference is classified as exact parity or as explicit version/upcaster
+work — never "close enough". The runner's rendered output states, verbatim, that a passing
 comparison is migration evidence only and that the generated codec is the sole wire
 authority after cutover. Second, `check` (and `diff`) can emit a machine-readable
-structural-versus-opaque coverage report per persisted surface (aggregate events,
-snapshots, queue payloads, contracts) so CI can watch drift toward opaque — "opaque creep"
-— as a number, with an optional, off-by-default gate flag for operators who choose a
-threshold. You can see both working by running the transcripts in Concrete Steps against
+structural-versus-opaque report for the roots the mapped type graph actually supports: private
+aggregate event payloads, plus mapped snapshot registers explicitly labeled as a consumer-JSON
+cache/invalidation boundary. Queue payloads and public contracts are reported as unsupported,
+not assigned invented coverage. An optional, off-by-default policy gate can reject opaque roots
+or opaque growth. You can see both working by running the transcripts in Concrete Steps against
 the conformance fixtures this plan adds.
 
 This plan implements the shadow-comparison and coverage-reporting improvements from
@@ -52,7 +55,7 @@ Experiment B) for the capability requested by
 ## Progress
 
 - [ ] Milestone 1: comparison engine and report model in `Keiro.Dsl.CodecCompare` with unit tests.
-- [ ] Milestone 2: `keiro-dsl codec compare` CLI command, generated comparison driver, and the
+- [ ] Milestone 2: opt-in scaffolded comparison runner, hand-owned runner executable, and the
       generalized Experiment B conformance fixture (historical quirky codec vs generated codec).
 - [ ] Milestone 3: structural-versus-opaque coverage report in `check`/`diff`, new
       DiagnosticCodes appended, optional gate flag.
@@ -63,7 +66,12 @@ Experiment B) for the capability requested by
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Keiro's codec abstraction returns `Value`, so byte parity is not an owned contract; comparison
+  is canonical JSON/decode evidence through an explicit historical codec value.
+- The mapped graph covers private event/register roots, not queue payloads or public contracts,
+  and the current snapshot cache uses consumer JSON. Ratios across all four surfaces would be
+  fabricated evidence; the revised report names supported roots, cache boundaries, and
+  unsupported surfaces separately.
 
 
 ## Decision Log
@@ -81,30 +89,34 @@ Experiment B) for the capability requested by
   keeps the algorithm identical to the replay audit without inverting the package layering.
   Date: 2026-07-28
 
-- Decision: `codec compare` is split into a pure classification engine in the `keiro-dsl`
-  library, a generated comparison driver module that the consumer compiles, and a thin CLI
-  orchestrator — mirroring how `scaffold`/harness already work.
-  Rationale: The historical codec is an arbitrary consumer `ToJSON`/`FromJSON` instance in
-  the consumer's Haskell code. The `keiro-dsl` executable cannot call arbitrary Haskell at
-  runtime; the only honest way to execute both codecs is generated code compiled against the
+- Decision: Historical comparison is split into a pure classification engine in the
+  `keiro-dsl` library and an opt-in generated runner module that the consumer compiles. The
+  `keiro-dsl` executable emits that module through scaffold; it does not pretend it can receive
+  or execute a Haskell value across a process boundary.
+  Rationale: Historical behavior must be supplied as an explicit `HistoricalCodec a` record,
+  not rediscovered through global `ToJSON`/`FromJSON` instances that may have changed since the
+  bytes were written. The `keiro-dsl` executable cannot call arbitrary Haskell at runtime, so
+  a thin CLI "orchestrator" would require an unspecified build/plugin protocol and would be a
+  misleading public API. The honest execution boundary is generated code compiled against the
   consumer package, exactly as the conformance harness already executes fixture bindings.
   The engine (corpus loading, canonical comparison, classification, report rendering) stays
   in the library so it is unit-testable without any consumer package.
   Date: 2026-07-28
 
-- Decision: The coverage report is reporting-first; the only rejection is behind an explicit
-  opt-in flag (`--max-opaque-share`), and the default behavior never fails a build.
+- Decision: The coverage report is reporting-first; rejection is behind explicit opt-in policy
+  (`--fail-on-opaque` for one spec or `--fail-on-opaque-increase` for diff), and default behavior
+  never fails a build.
   Rationale: How much opacity is acceptable is an operator policy choice, not a soundness
   fact. Research note section 3 is explicit that conformance evidence must not upgrade the
   claim, and symmetrically a coverage number must not silently become a new rejection —
   that would punish honest opaque declarations and push authors toward dishonest structural
-  ones. The report makes drift visible; thresholds belong to the operator. This decision is
+  ones. The report makes named-boundary drift visible; rejection policy belongs to the operator. This decision is
   the seed of the new ADR in Milestone 4.
   Date: 2026-07-28
 
-- Decision: Draft this plan against IR-1's specified generation-layer API (the
-  `StructuralBinding` binding type, generated structural codecs, fixture and generator
-  bindings, and the conformance-harness contract) as its hard dependency
+- Decision: Draft this plan against the local generation-layer API (the total
+  `StructuralBinding` binding type, generated structural codecs, one non-empty fixture
+  binding, and the conformance-harness contract) as its hard dependency
   `docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md`
   will land it, and require the implementer to read plan 150's landed state before writing
   any code.
@@ -114,6 +126,20 @@ Experiment B) for the capability requested by
   API in a dedicated module with a stability note before EP-8/EP-9 begin"); the landed API
   is authoritative and this plan must be revised to match it, recording any divergence in
   this Decision Log.
+  Date: 2026-07-28
+
+- Decision: Compare `Value` semantics, not serialization bytes. `HistoricalCodec a` encodes to
+  and decodes from `Value`; the engine canonicalizes Values for deterministic paths/digests.
+  Rationale: Keiro's codec abstraction returns `Value`, so it does not own whitespace or object
+  key ordering. Claiming byte equality would test a chosen final renderer rather than either
+  codec's API contract.
+  Date: 2026-07-28
+
+- Decision: Coverage reports only actual mapped-graph roots. Private event payloads are counted
+  structurally/opaquely; mapped snapshot registers are a cache boundary with invalidation status,
+  not structural codec coverage; queue payloads and public contracts are unsupported/not-applicable.
+  Rationale: The proposed graph does not model those other surfaces, and current snapshots use
+  consumer JSON instances. A broad percentage would manufacture evidence and blur ownership.
   Date: 2026-07-28
 
 - Decision: The acceptance scenario generalizes research-note Experiment B instead of using
@@ -156,11 +182,14 @@ Terms used throughout, in plain language:
 - An *opaque external-codec type* is the honest alternative: Keiro stores and round-trips
   the value using the consumer's own codec identity and version, and makes no claim about
   the JSON below the boundary.
-- The *historical consumer codec* is whatever hand-written `ToJSON`/`FromJSON` instance
-  wrote a service's existing history before migration.
-- A *fixture corpus* is a directory of JSON files: real historical goldens (bytes captured
-  from production or tests) and/or values produced by the declared fixture/generator
-  bindings from IR-1's harness contract.
+- The *historical consumer codec* is an explicit `HistoricalCodec a` value that reconstructs
+  the writer/reader behavior relevant to the selected release; it is not a lookup of today's
+  global instances.
+- A *historical corpus* is a directory of JSON files captured from production or old tests; it
+  exercises decoding. The declaration's one non-empty `FixtureCases a` binding is a separate,
+  typed corpus compiled into the runner and exercises both encoders. Successful decodes are
+  normalized through the structural binding and generated shape encoder before comparison, so
+  the API does not require an `Eq a` instance merely for migration tooling.
 - *Semantic JSON equality* means equality of RFC 8785 canonical bytes — JSON with sorted
   object keys and normalized number/string forms, so two encodings that differ only in key
   order or whitespace compare equal, while a real difference (a missing key versus an
@@ -171,7 +200,7 @@ Terms used throughout, in plain language:
 Hard dependency. This plan builds directly on the IR-1 generation layer delivered by
 `docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md`
 (the MasterPlan's EP-7): the `StructuralBinding` API and its published module, the generated
-structural codecs, the fixture and generator bindings, and the conformance-harness
+structural codecs, the fixtures binding, and the conformance-harness
 architecture that compiles generated modules against consumer types (the existing pattern
 is visible in the `keiro-dsl-conformance` test-suite in `keiro-dsl/keiro-dsl.cabal`, whose
 `Generated.*` modules under `keiro-dsl/test/conformance/` are pinned byte-identical to
@@ -188,18 +217,20 @@ Soft dependency. `docs/plans/151-reduce-binding-boilerplate-skeleton-scaffolds-d
 use its skeleton scaffolder to author this plan's conformance fixtures; if not, write the
 bindings by hand — nothing here requires EP-8 to compile.
 
-Normative sources, both checked in and both required reading:
+Background requirement sources, checked in and translated through ADR 0012 and the local APIs:
 
 - `docs/research/14-structural-consumer-type-tradeoffs.md`. Section 1 ("We Give Up Arbitrary
-  Codec Reuse in Structural Mode") motivates and sketches the `codec compare` command,
-  including its report contents (byte equality, semantic JSON equality, decode differences,
+  Codec Reuse in Structural Mode") motivates and sketches a `codec compare` command. This plan
+  preserves the behavior but moves execution into a consumer-compiled runner because a standalone
+  executable cannot receive a Haskell codec value. The research requirements include semantic
+  JSON equality, decode differences,
   missing coverage) and the authority rule: "Passing the comparison is migration evidence;
   the generated codec remains the authority after cutover." Section 3 ("Opaque Mode Gives Up
   Nested Compatibility Knowledge") states the rule this plan must never violate:
   "Support conformance evidence without upgrading the claim" — fixture corpora and passing
   comparisons may justify operator trust "but must not silently change an opaque diagnostic
   into a structural guarantee." Section 12 ("Existing History Makes Structural Adoption a
-  Migration") defines the migration discipline the command serves: import real goldens, run
+  Migration") defines the migration discipline the runner serves: import real goldens, run
   shadow comparison, version rather than normalize silently, retain legacy decoders only at
   the version boundary. Experiment B ("Historical shadow comparison") supplies the
   acceptance scenario and its success criterion: "differences are classified as exact parity
@@ -209,7 +240,7 @@ Normative sources, both checked in and both required reading:
   (IR-1). Its Design Principles (one wire-schema authority; bindings typed and explicit),
   Conformance Harness Contract (fixture bindings, branch and union-arm coverage), and Out of
   Scope list ("Proving that an arbitrary external `ToJSON` or `FromJSON` instance matches a
-  structural declaration" is out of scope — which is exactly why `codec compare` produces
+  structural declaration" is out of scope — which is exactly why the comparison runner produces
   evidence over a finite corpus, not a proof) bound this plan's claims.
 
 Relevant local ADRs (filenames scanned in `docs/adr/`; only these are relevant):
@@ -237,7 +268,7 @@ implement this plan.
 
 Documentation surfaces this plan touches: the brownfield migration guide created by
 `docs/plans/145-write-the-brownfield-migration-and-transducer-modeling-guide.md` (EP-2; the
-MasterPlan states EP-9 appends its command's section to that guide, and plan 145 leaves a
+MasterPlan states EP-9 appends its comparison-workflow section to that guide, and plan 145 leaves a
 named anchor point for it — the `codec-compare-tooling` `appended-by` comment in
 `docs/guides/brownfield-migration-and-transducer-modeling.md`, at the end of its "Shadow
 comparison of old and new codecs" chapter),
@@ -262,8 +293,8 @@ strict OKF check over `docs/adr`; `just verify` is the full repository gate
 ## Plan of Work
 
 The work proceeds in four milestones. Each is independently verifiable and the plan's story
-is: first make comparison classification a pure, testable fact; then wire it to real codecs
-through generated code and prove the Experiment B scenario; then make opacity measurable;
+is: first make comparison classification a pure, testable fact; then wire it to explicit real
+codecs through generated code and gather finite corpus evidence; then make opacity measurable;
 then write down the policy and teach the migration path.
 
 ### Milestone 1 — The comparison engine as a pure library
@@ -275,68 +306,86 @@ feed the engine two lists of encode/decode results and a coverage inventory and 
 deterministic, machine-readable report; `cabal test keiro-dsl-test` exercises it.
 
 Define, in prose here and in Haskell there: a `CompareInput` per fixture (fixture path,
-origin — historical golden or generated-from-binding — historical encoding bytes, generated
-encoding bytes, historical decode outcome, generated decode outcome, and for decode
+origin — historical golden or generated-from-binding — parsed historical/generated `Value`,
+historical decode outcome, generated decode outcome, and for decode
 outcomes a re-encode of the decoded value so semantic decode agreement is checkable); a
-`FixtureVerdict` with exactly three constructors: `ExactParity` (bytes equal),
-`SemanticParity` (bytes differ, RFC 8785 canonical forms equal — report the byte
-difference but classify as parity of meaning, still listed so the operator sees it), and
-`RequiresVersionWork` (canonical forms differ, or decode outcomes disagree) carrying a
-human explanation of the first divergent JSON path. There is deliberately no
+`FixtureVerdict` with exactly two constructors: `JsonParity` (canonical Values equal) and
+`RequiresVersionWork` (canonical Values differ, or decode outcomes disagree) carrying a
+structured `ComparisonDifference` with the first divergent JSON Pointer and reason. Human
+prose is rendered from that value rather than stored as the machine contract. There is deliberately no
 "close enough" constructor; Experiment B's success criterion is that every difference is
-parity or explicit version/upcaster work. Coverage is a separate list of
+parity or explicit version/upcaster work. A historical golden that the declared historical
+codec itself cannot decode is not a compatibility verdict: it is a fatal `CompareInputIssue`
+identifying a corrupt corpus or wrong historical codec version. It must never be called parity
+merely because the generated decoder also rejects it. Coverage is a separate list of origin-tagged
 `CoverageGap` values naming each declared union arm, optional-field presence branch, and
-null branch that no fixture in the corpus exercised (the declared branches come from the
+null branch that the historical corpus did not exercise; typed `FixtureCases` coverage remains
+plan 150's conformance failure and is also shown separately in the report (the declared branches come from the
 resolved type-expression graph plan 149 lands, consumed here through plan 150's generation
 layer; the engine takes the branch inventory as
 input so it stays pure). The report renderer produces both the human transcript shown in
 Concrete Steps and a JSON document (via aeson) with stable field names; the JSON top level
-carries `"authority"` prose stating the migration-evidence-only framing so even
-machine-consumed reports carry the claim boundary.
+carries `"authority"` prose stating the migration-evidence-only framing and a mandatory
+`CompareProvenance` object containing the historical codec id/version, structural canonical
+type, binding symbol/version, and generated wire fingerprint. The pure report constructor
+receives this provenance explicitly; it must not recover it from global instances or free-form
+observation labels.
 
-Semantic equality uses `Data.Aeson.RFC8785.encodeCanonical` from aeson (see Decision Log:
+Deterministic comparison/digests use `Data.Aeson.RFC8785.encodeCanonical` from aeson (see Decision Log:
 same algorithm as the runtime's `Keiro.ReplayDigest.canonicalJsonBytes`, without a
 package-layering inversion; raise keiro-dsl's aeson lower bound to `>=2.2.1` if the module
 is not present at the current `>=2.2` bound). Unit tests in `keiro-dsl/test/` cover: key
-order and whitespace differences classify as `SemanticParity`; omitted-key versus
-explicit-`null` classifies as `RequiresVersionWork`; a decode disagreement (one codec
-rejects, the other accepts) classifies as `RequiresVersionWork`; an uncovered union arm
-produces a `CoverageGap`; and the JSON report round-trips.
+order and whitespace disappear while parsing and classify as `JsonParity`; omitted-key versus
+explicit-`null` classifies as `RequiresVersionWork`; a historical-accepts/generated-rejects
+decode disagreement classifies as `RequiresVersionWork`; an uncovered union arm
+produces a `CoverageGap`; a historical decoder failure produces `CompareInputIssue` and no
+fixture verdict; and the JSON report round-trips.
 
-### Milestone 2 — The `codec compare` command and the Experiment B fixture
+### Milestone 2 — The scaffolded comparison runner and the Experiment B fixture
 
-Scope: the CLI subcommand, the generated comparison driver, and the conformance proof. At
+Scope: opt-in runner generation, a hand-owned runner executable, and finite conformance evidence. At
 the end of this milestone the transcripts in Concrete Steps work against a repo-local
 fixture, and `cabal test keiro-dsl-conformance-codec-compare` passes.
 
-The command is `keiro-dsl codec compare SPEC --type NAME --fixtures DIR
-[--report PATH] [--driver-out PATH]`, added to the subcommand tree in
-`keiro-dsl/app/Main.hs` as a two-level command (`codec` group with `compare` under it, so
-future codec tooling has a home). Because the historical codec is arbitrary consumer
-Haskell, the executable cannot run it directly; the command therefore has two halves.
-The spec-side half (runnable by the CLI alone) parses and validates the spec, resolves
-`--type` to a structural mapped declaration (rejecting opaque declarations with a clear
-message — comparing against an opaque declaration is meaningless because Keiro claims
-nothing to compare against, and silently accepting it would be the forbidden upgrade path),
-scans the fixture corpus, computes the declared-branch inventory, and reports coverage gaps
-that need no codec execution. The execution half is a generated create-once comparison
-driver module (emitted like scaffold output, named per plan 150's generated-module
-conventions, e.g. `Generated.<Service>.<Type>.CodecCompare`) that imports the consumer type,
-its historical instances, the generated structural codec, and the `StructuralBinding`, runs
-every fixture through both codecs, and feeds `Keiro.Dsl.CodecCompare` to print the report
-and exit non-zero when any verdict is `RequiresVersionWork` or any `CoverageGap` exists.
-How the driver names the historical codec follows plan 150's landed convention for naming
-consumer symbols (binding-style declaration or driver parameter); read the landed state and
-match it. In this repository the driver runs inside a conformance test-suite; downstream
-consumers compile the emitted driver in their own package, exactly as they compile scaffold
-output.
+Extend `keiro-dsl scaffold` with opt-in `--codec-comparison NAME --comparison-out FILE` (the
+two options are required together). It resolves `NAME` to one
+structural mapped declaration and rejects an opaque declaration with a clear message: Keiro has
+no structural claim to compare below an opaque boundary. It emits a deterministic, machine-owned
+module such as `Generated.<Context>.Structural.CodecCompare.<MappedName>`, imports that type's
+consumer type, generated codec, binding, shape module, and declared `FixtureCases`, and embeds the
+declared branch inventory. It exports a runner roughly shaped as
+`compareWithHistorical :: HistoricalCodec Domain -> FilePath -> IO CompareReport`; the path is a
+directory of historical JSON goldens. The runner uses typed fixture cases for encode observations,
+uses historical goldens for decode observations, normalizes successful decoder results through
+`bindingToShape` plus the generated shape encoder, and feeds only those observations to the pure
+engine. This avoids an unnecessary `Eq Domain` constraint and makes the compared semantics exactly
+the structure Keiro claims.
 
-CRITICAL FRAMING, stated here and emitted by the command itself in both human and JSON
+The generated module constructs `CompareProvenance` from the supplied historical codec and the
+checked declaration/generated fingerprint, then returns a report; it does not call `exitFailure`. A tiny hand-owned test or
+executable chooses rendering, report paths, and process exit through library helpers such as
+`reportSucceeded`. Provide `writeCompareReportAtomic` for the normal JSON-file path (temporary
+file in the destination directory, then rename) so an interrupted evidence run never leaves a
+valid-looking partial report. In this repository that caller lives in the
+`keiro-dsl-conformance-codec-compare` test-suite. Downstream consumers compile the emitted module
+in a test/tool component with a development dependency on `keiro-dsl`; it is not added to their
+production library's exposed modules or import graph. The `HistoricalCodec` value is supplied by
+that hand-owned caller, never by a `.keiro` symbol or a global instance lookup.
+
+The comparison module is explicit tooling output, not part of the production generated ring: it
+is not added to the production manifest or scaffold record, and ordinary scaffold runs neither
+create nor report it as stale. The writer may overwrite exactly the `--comparison-out` file after
+the same preflight checks as other generation, marks it machine-owned in the banner, and refuses
+an existing file without that exact generated-tool ownership marker or an output path equal to a
+hand-owned Holes/binding/caller path. This keeps opting into development
+tooling from changing a consumer library's dependency surface.
+
+CRITICAL FRAMING, stated here and emitted by the report renderer in both human and JSON
 output: a passing comparison is MIGRATION EVIDENCE ONLY. The generated structural codec is
-the sole wire authority after cutover. The command must never be wired as a runtime
+the sole wire authority after cutover. The runner must never be wired as a runtime
 fallback path, must never select which codec runs, and must never upgrade an opaque
 declaration to structural (research note section 3: conformance evidence must not upgrade
-the claim). The driver imports both codecs solely to compare them; nothing it emits is
+the claim). The runner imports both codecs solely to compare them; nothing it emits is
 importable by production code paths, and the generated module carries a header comment
 saying so.
 
@@ -344,21 +393,21 @@ The acceptance scenario generalizes Experiment B (see Decision Log). Add a new t
 `keiro-dsl-conformance-codec-compare` to `keiro-dsl/keiro-dsl.cabal` (modeled on the
 existing `keiro-dsl-conformance` stanza) with hand-owned fixture code under
 `keiro-dsl/test/conformance-codec-compare/`: a record type with an optional field, a
-five-arm tagged union (mirroring IR-1's `DocLocation` example), and a deliberately quirky
-hand-written historical Aeson codec that (a) omits the optional key when `Nothing` rather
+five-arm tagged union chosen as a consumer-neutral branch-coverage example, and a deliberately quirky
+hand-written `HistoricalCodec` value that (a) omits the optional key when `Nothing` rather
 than emitting `null`, (b) tolerates and drops unknown fields on decode, and (c) uses
 constructor-spelled union tags that differ from the spec's declared wire tags for exactly
 one arm. A `.keiro` spec under the same directory declares the structural shape matching
 the historical wire contract for everything except that one arm and the null policy. The
-fixture corpus contains historical goldens covering missing fields, explicit nulls,
+historical corpus contains goldens covering missing fields, explicit nulls,
 unknown fields, and every union arm. The suite asserts: the arms and fields where the
-historical contract was faithfully transcribed report `ExactParity` or `SemanticParity`;
+historical contract was faithfully transcribed report `JsonParity`;
 the omitted-versus-null field and the renamed-tag arm report `RequiresVersionWork` with
 the divergent path named; removing one arm's fixture from the corpus produces a
 `CoverageGap` and a non-zero exit; and the report never contains any third category. This
-is also the plan's negative proof (Proposal Test question 10): the suite pins a corpus
-where the historical codec genuinely differs and asserts the command refuses to call it
-parity — if classification were incomplete or lenient, this test fails.
+is also the plan's required negative/falsification evidence (Proposal Test question 10): the
+suite pins a corpus where the historical codec genuinely differs and asserts the runner refuses
+to call it parity — if classification were incomplete or lenient, this test fails.
 
 ### Milestone 3 — Structural-versus-opaque coverage reporting
 
@@ -367,34 +416,36 @@ optional gate flag. At the end of this milestone
 `keiro-dsl check SPEC --coverage-report PATH` writes a JSON document CI can track, and the
 default behavior of `check`/`diff` on any existing spec is unchanged.
 
-Walk the resolved type-expression graph (plan 149's graph, `Keiro.Dsl.TypeGraph`; IR-1
-requires one total
-traversal registry, so extend that registry rather than writing an ad hoc walk — IR-1:
-"All consumers of the graph must use one total traversal registry so adding a new
-type-expression constructor cannot silently omit a subsystem"). For each persisted surface
-— aggregate events, snapshots, queue payloads, and contracts, keyed per stream/root —
-count declared types and fields (including nested mapped types, and counting an explicit
-`Json` leaf inside a structural declaration as opaque at that leaf) under each mode:
-structural, opaque, and the pre-IR-1 primitive scalars (which count as structural — they
-are fully declared). Emit per-surface and per-root counts plus an `opaqueShare` ratio, and
-a repo-level rollup, as JSON with stable field names. Add `--coverage-report PATH` to both
+Walk the resolved type-expression graph using plan 149's exported total fold/algebra; this
+module constructs a complete coverage algebra so a new expression constructor breaks its
+compilation. Report only roots present in that graph:
+
+- private aggregate event payloads: root counts and the canonical identities/paths of
+  structural declarations, opaque declarations, and explicit `Json` boundaries;
+- mapped aggregate registers: root counts plus `snapshotEncoding = consumer-json-cache` and
+  the generated fingerprint/invalidation status, never a structural snapshot-codec claim;
+- queue payloads and public contracts: `support = unsupported`/`not-applicable`, with no ratio.
+
+Do not combine arbitrary type and field counts into one percentage. Emit stable per-root counts,
+opaque-boundary paths, and unsupported surfaces as JSON. Add `--coverage-report PATH` to both
 `check` and `diff` in `keiro-dsl/app/Main.hs` (on `diff`, the report additionally carries
 the previous ref's numbers and the delta, so CI can alert on drift direction, not just
 level). Also print a one-line human summary per surface when the flag is given.
 
-This is reporting, NOT a new rejection. Policy thresholds are an operator choice. Add an
-optional `--max-opaque-share RATIO` flag (accepted only together with `--coverage-report`);
-only when the operator passes it does an exceeded ratio become an Error diagnostic and a
-non-zero exit. The default emits Advisory-severity diagnostics only.
+This is reporting, NOT a new rejection. Add optional `--fail-on-opaque` to `check` and
+`--fail-on-opaque-increase` to `diff`, accepted only with `--coverage-report`. These policies
+operate on named roots/boundaries rather than ratios. The default emits Advisory diagnostics only.
 
 Append to the end of the `DiagnosticCode` enum in `keiro-dsl/src/Keiro/Dsl/Validate.hs`
 (the shared append-only registry beginning near line 39; per ADR 0004, tests and tooling
 match on codes, not prose): `CoverageOpaqueSurface` (advisory: this persisted root contains
-opaque declarations; carries the counts), `CoverageOpaqueShareIncreased` (advisory, diff
-only: the opaque share of a surface grew since the compared ref), and
-`CoverageOpaqueGateExceeded` (error, emitted only under `--max-opaque-share`). For the
-comparison command, also append `CodecCompareDifference` (a fixture classified as
-`RequiresVersionWork`) and `CodecCompareCoverageGap` (a declared branch with no fixture) so
+opaque declarations; carries the roots), `CoverageOpaqueBoundaryAdded` (advisory, diff
+only: a named opaque boundary appeared since the compared ref), and
+`CoverageOpaqueGateExceeded` (error, emitted only under an explicit policy flag). For the
+comparison report, also append `CodecCompareDifference` (an observation classified as
+`RequiresVersionWork`), `CodecCompareCoverageGap` (a declared branch with no fixture), and
+`CodecCompareInvalidInput` (the chosen historical codec cannot decode one of its alleged
+goldens) so
 the compare report's machine consumers key on registry codes too. Do not rename or reuse
 any existing constructor. Unit tests pin each new code's trigger and severity, and pin that
 a spec with zero opaque declarations produces a report with zero opaque counts and no
@@ -414,20 +465,21 @@ in `docs/guides/brownfield-migration-and-transducer-modeling.md`, at the end of 
 "Shadow comparison of old and new codecs" chapter (if plan 145 has not landed yet, do not block — add the
 section to a new appendix file only as a last resort and record the deviation in the
 Decision Log, since the MasterPlan sequences EP-2 well before EP-9). The section walks the
-migration discipline of research-note section 12 with the real command: capture goldens
-first, declare the shape from the historical wire contract, run `codec compare`, then
+migration discipline of research-note section 12 with the real generated-runner workflow:
+capture goldens first, declare the shape from the historical wire contract, scaffold the
+comparison module, run the consumer-owned comparison executable, then
 either cut over on parity or write an explicit version bump and upcaster for every
 `RequiresVersionWork` fixture — never normalize silently, and retain the legacy decoder
 only as upcaster input at the version boundary, never as a second authority.
 
 Update `docs/guides/evolution-and-replayability.md`: in "The gates, at a glance" and "Gate
 coverage summary", add the coverage report as an observability aid (explicitly labeled as
-reporting, not a gate, unless the operator opts into `--max-opaque-share`), and mention
-`codec compare` in the persisted-payloads discussion as the migration-evidence tool.
+reporting, not a gate, unless the operator opts into an explicit named-root policy flag), and mention
+the scaffolded comparison runner in the persisted-payloads discussion as the migration-evidence tool.
 
 Create the new ADR recording the structural-versus-opaque coverage policy: reporting-first;
-opaque is honest and permitted; thresholds are operator policy via an explicit flag; a
-passing shadow comparison never upgrades a claim; the comparison command is migration
+opaque is honest and permitted; named-root rejection is operator policy via an explicit flag; a
+passing shadow comparison never upgrades a claim; the comparison runner is migration
 evidence only and never a runtime authority. Follow `.claude/skills/exec-plan/ADR.md`
 exactly: allocate the docId with `okf id next docs/adr --profile docs/adr/profile.dhall ADR`
 (do not guess or count files), write the record at the bundle root with the required
@@ -435,12 +487,12 @@ frontmatter (`type: Architecture Decision Record`, `title`, one-sentence `descri
 `docId`, `status`, `date`, `timestamp`), maintain the reserved `docs/adr/log.md` with
 `okf log add`, and run the strict validation shown in Concrete Steps.
 
-Amend ADR 0004's gate-inventory table: the optional `--max-opaque-share` gate is a new gate
-row (change class "opaque-share drift beyond declared policy"; single-spec `check` emits
+Amend ADR 0004's gate-inventory table: the optional named-root opaque policy is a new gate
+row (change class "opaque root present/growth beyond declared policy"; single-spec `check` emits
 the report and, under the flag, `CoverageOpaqueGateExceeded`; cross-spec `diff` adds the
 delta; no runtime boundary — the runtime is unaffected). Update ADR 0004's `timestamp`,
 add a log entry, and re-run strict validation. Follow conventional commits for every
-commit (e.g. `feat(dsl): add codec compare shadow comparison`, `docs(adr): record
+commit (e.g. `feat(dsl): add historical codec comparison runner`, `docs(adr): record
 structural-versus-opaque coverage policy`); commit directly to the current branch.
 
 
@@ -474,47 +526,52 @@ Finished in ... seconds
 ... examples, 0 failures
 ```
 
-Milestone 2's command, against the conformance fixture (paths are targets; keep them in
-sync with what you create):
+Milestone 2's generated-runner workflow, against the conformance fixture (paths are targets;
+keep them in sync with what you create):
 
 ```bash
-cabal run keiro-dsl -- codec compare \
-  keiro-dsl/test/conformance-codec-compare/docstore.keiro \
-  --type DocRef \
-  --fixtures keiro-dsl/test/conformance-codec-compare/fixtures/doc-ref \
-  --report /tmp/doc-ref-compare.json
+cabal run keiro-dsl -- scaffold \
+  keiro-dsl/test/conformance-codec-compare/artifact-store.keiro \
+  --out keiro-dsl/test/conformance-codec-compare \
+  --codec-comparison ArtifactRef \
+  --comparison-out keiro-dsl/test/conformance-codec-compare/Generated/ArtifactStore/Structural/CodecCompare/ArtifactRef.hs
+cabal run keiro-dsl-codec-compare-artifact-ref -- \
+  --historical-goldens keiro-dsl/test/conformance-codec-compare/fixtures/artifact-ref \
+  --report /tmp/artifact-ref-compare.json
 ```
+
+The second executable is the repo-local, hand-owned `Main` that supplies the explicit
+`HistoricalCodec ArtifactRef`; scaffold generates its imported comparison module but never edits
+the caller.
 
 Expected output shape (values illustrative; the framing lines are mandatory and verbatim
 in intent):
 
 ```text
-codec compare: DocRef (structural, canonical-type "keiro.conformance.DocRef.v1")
-corpus: 12 fixtures (9 historical goldens, 3 from fixture bindings)
-  byte equality:     9/12
-  semantic equality: 10/12 (RFC 8785 canonical form)
-  decode agreement:  11/12
-semantic parity (bytes differ, meaning equal): 1 fixture
-  fixtures/doc-ref/key-order.json — object key order only
-requires explicit version/upcaster work: 2 fixtures  [CodecCompareDifference]
-  fixtures/doc-ref/legacy-missing-description.json
+codec comparison: ArtifactRef (canonical-type "keiro.conformance.ArtifactRef.v1", binding-version "1")
+historical codec: "keiro.conformance.ArtifactRef.aeson" version "legacy-v3"
+observations: 12 (9 historical decode goldens, 3 typed encode cases)
+  encode parity: 2/3 (RFC 8785 canonical form)
+  structural decode agreement: 8/9
+requires explicit version/upcaster work: 2 observations  [CodecCompareDifference]
+  typed-case/absent-description [encode] at /description
     historical encoder omits "description" when absent; generated codec emits null
-  fixtures/doc-ref/arm-canonical.json
+  fixtures/artifact-ref/arm-canonical.json [decode] at /tag
     union tag "Canonical" (historical) vs declared wire tag "canonical"
-coverage gaps: 1  [CodecCompareCoverageGap]
-  union DocLocation arm "loc_url": no fixture exercises this arm
-result: NOT PARITY — 2 differences, 1 coverage gap
+coverage gaps: 0
+result: NOT PARITY — 2 differences
 This comparison is MIGRATION EVIDENCE ONLY. After cutover the generated structural
-codec is the sole wire authority. This command is never a runtime fallback and never
+codec is the sole wire authority. This runner is never a runtime fallback and never
 upgrades an opaque declaration to structural. Resolve each difference with an explicit
 version bump and upcaster, or correct the declaration to match the historical wire
 contract; "close enough" is not an outcome.
 ```
 
-The command exits `1` on that transcript (differences or gaps present) and `0` only when
-every fixture is `ExactParity`/`SemanticParity` and no coverage gap exists; on the passing
-case the same authority framing block still prints. `/tmp/doc-ref-compare.json` contains
-the machine report with an `"authority"` field carrying the same statement.
+The hand-owned executable exits `1` on that transcript (differences present) and `0` only when
+every applicable observation is `JsonParity`, no input issue exists, and no coverage gap exists; on the passing
+case the same authority framing block still prints. `/tmp/artifact-ref-compare.json` contains
+the machine report with an `"authority"` field carrying the same statement, a structured
+`"provenance"` object, and per-difference `"pointer"`/`"reason"` fields.
 
 Run the Experiment B conformance suite:
 
@@ -530,25 +587,25 @@ Milestone 3's coverage report:
 
 ```bash
 cabal run keiro-dsl -- check \
-  keiro-dsl/test/conformance-codec-compare/docstore.keiro \
+  keiro-dsl/test/conformance-codec-compare/artifact-store.keiro \
   --coverage-report /tmp/coverage.json
 ```
 
 Expected human summary (shape, not exact numbers):
 
 ```text
-structural/opaque coverage (reporting only; thresholds are operator policy):
-  aggregate-events docstore/Doc: 5 types (4 structural, 1 opaque), 21 fields (19/2), opaque share 0.10
-  snapshots        docstore/Doc: 2 types (2 structural, 0 opaque), opaque share 0.00
+structural/opaque boundaries (reporting only):
+  private-event-payloads artifact-store/Artifact: 5 mapped roots (4 structural, 1 opaque)
+  snapshot-registers     artifact-store/Artifact: 2 mapped roots; encoding=consumer-json-cache; invalidation=tracked
+  queue-payloads: unsupported
+  public-contracts: not-applicable (separately owned grammar)
 coverage report written to /tmp/coverage.json
 ```
 
-And the JSON document has stable keys: top-level `spec`, `surfaces` (map of surface kind to
-per-root entries with `structural`/`opaque` count objects and `opaqueShare`), and `rollup`.
-With `--max-opaque-share 0.05` the same invocation exits non-zero and prints a
-`CoverageOpaqueGateExceeded` error naming the offending root; without the flag it never
-fails. On `diff`, the same flag pair adds `previous`, `delta`, and (when share grew)
-`CoverageOpaqueShareIncreased` advisories.
+And the JSON document has stable keys: top-level `spec`, `roots`, `opaqueBoundaries`,
+`snapshotBoundaries`, and `unsupportedSurfaces`. With `--fail-on-opaque` the same invocation
+exits non-zero and names each offending root; without it the report never fails. On `diff`,
+`--fail-on-opaque-increase` adds previous roots/delta and fails only on new opaque boundaries.
 
 Milestone 4's ADR workflow:
 
@@ -572,21 +629,22 @@ just verify
 
 Acceptance is behavioral. The plan is done when all of the following are observable:
 
-1. Running the `codec compare` transcript in Concrete Steps against the conformance fixture
-   produces the report shown: byte, semantic, and decode tallies; each difference named
-   with its divergent JSON path; every fixture classified as exact parity, semantic parity,
-   or requires-version-work; coverage gaps listed per declared branch; the mandatory
+1. Running the scaffold-plus-consumer-runner transcript in Concrete Steps against the conformance fixture
+   produces the report shown: canonical JSON and decode tallies; each difference named
+   with its divergent JSON Pointer; every applicable observation classified as JSON parity or
+   requires-version-work; historical and typed-case coverage listed separately; the mandatory
    authority framing printed; exit code `1` because differences exist. Deleting the two
    quirky behaviors from the historical codec and re-running yields `0` with the framing
    still printed.
 2. `cabal test keiro-dsl-test` and `cabal test keiro-dsl-conformance-codec-compare` pass,
    and the latter fails if you weaken classification (e.g. temporarily make
    omitted-key-versus-null compare equal) — run that mutation once, observe the failure,
-   revert.
+   revert. A golden that the supplied historical codec rejects yields
+   `CodecCompareInvalidInput`, never `JsonParity` or `RequiresVersionWork`.
 3. The coverage-report transcript works on the fixture spec; the JSON is stable and
    machine-readable; the default run never exits non-zero because of coverage; with
-   `--max-opaque-share` below the fixture's actual share it exits non-zero with
-   `CoverageOpaqueGateExceeded`.
+   `--fail-on-opaque` it exits non-zero with `CoverageOpaqueGateExceeded`; diff's
+   `--fail-on-opaque-increase` reacts only to newly introduced opaque boundaries.
 4. `keiro-dsl check`/`diff` behavior on existing specs without the new flags is
    byte-identical to before (pin with the existing test suites; `cabal test
    keiro-dsl-test` includes the diff fixtures).
@@ -603,19 +661,19 @@ against the landed code.
 
 1. **Authority (in depth).** The `.keiro` spec owns the wire schema and the generated
    structural codec from plan 150 is the executed codec — before, during, and after this
-   plan. `codec compare` adds no authority: it is a read-only comparator that executes both
-   codecs side by side in a generated driver whose output is a report, never a value used
+   plan. The generated comparison runner adds no authority: it is a read-only comparator that executes both
+   codecs side by side and returns a report, never a value used
    by production code. The comparison must never become a second authority, in any of the
-   ways that could sneak in: the driver module is create-once, documented as
+   ways that could sneak in: the runner module is machine-owned and regenerated, documented as
    non-production, and exports nothing the scaffold's production modules import; the
-   command never selects which codec runs at runtime and has no "fallback to historical on
+   runner never selects which codec runs at runtime and has no "fallback to historical on
    mismatch" mode; a passing report changes no spec, no diagnostic, and no generated code —
    in particular it never flips an opaque declaration to structural or suppresses an opaque
-   diagnostic (research note section 3). The command refuses `--type` selections that
+   diagnostic (research note section 3). Scaffold refuses `--codec-comparison` selections that
    resolve to opaque declarations rather than "helpfully" comparing them, because
    accepting them is the first step of the silent-upgrade path. Verification: code review
-   of the driver's import graph plus the conformance suite's assertion that an opaque
-   `--type` selection is rejected with a message naming this rule.
+   of the runner's import graph plus the conformance suite's assertion that an opaque
+   name an opaque declaration, with a message naming this rule.
 2. **Replay.** Unaffected. This plan generates no events, edges, or registers; replay
    semantics are exactly plan 150's. The coverage walk is a read-only traversal of the
    resolved graph.
@@ -624,48 +682,49 @@ against the landed code.
 4. **Compatibility direction.** The compare report distinguishes encode differences (what
    the new codec would write) from decode differences over the historical corpus (whether
    the new binary reads old bytes), which is the private-history direction; the coverage
-   report is keyed per surface (events, snapshots, queues, contracts) so opacity is never
-   averaged across surfaces with different compatibility questions.
+   report covers private events and names the snapshot consumer-JSON cache boundary; queues and
+   contracts are explicitly unsupported/not-applicable rather than averaged into a false score.
 5. **Ownership.** Private and public surfaces stay separately owned; the coverage report
    reports them as separate surface kinds and the comparator operates on one declared type
    at a time without bridging contracts.
-6. **Completeness.** The coverage walk and the compare branch inventory both hang off the
-   single total traversal registry IR-1 mandates for the resolved type graph, so a new
-   type-expression constructor that misses them is a compile error or registry-totality
-   test failure, not a silent omission. The new DiagnosticCodes live in the shared
+6. **Completeness.** The coverage walk and compare branch inventory each construct plan 149's
+   exported total algebra, so a new type-expression constructor that misses them is a compile
+   error. The new DiagnosticCodes live in the shared
    append-only registry with pinned tests.
-7. **Migration (in depth).** This plan is the migration-proof machinery for IR-1
-   adoption, so the answer must be concrete: existing bytes are proven compatible only by
-   evidence over a real corpus — historical goldens captured before the declaration was
+7. **Migration (in depth).** This plan is migration-evidence tooling. Existing JSON behavior is
+   assessed only over a real corpus — historical goldens captured before the declaration was
    written (research note section 12: derive the declaration from the historical wire
-   contract, not from Haskell spelling) plus generator-driven values covering every
-   declared arm and branch, with coverage gaps reported as first-class failures so a
+   contract, not from Haskell spelling), with historical coverage and the independently
+   required typed fixture-case coverage reported separately as first-class failures so a
    passing run cannot rest on an unexercised arm. Tags and defaults are compared through
    actual encode/decode execution of both codecs, not by inspecting declarations. When the
    corpus shows any difference, the only sanctioned path is Experiment B's: an explicit
    version bump and upcaster for each difference, with the legacy decoder retained solely
-   as upcaster input at the version boundary. The command's report and the brownfield
+   as upcaster input at the version boundary. The runner's report and the brownfield
    guide both state this; "close enough" is unrepresentable in the verdict type. And the
    limits are honest: a corpus is evidence, not proof (IR-1's Out of Scope: proving an
    arbitrary instance matches a declaration is out of scope), which is exactly why passing
    comparison never upgrades any claim.
-8. **Recovery.** The command and the report are read-only over specs and fixtures; a
-   half-finished run leaves no state beyond a partial report file, and re-running
-   overwrites it. The generated driver is create-once and re-emitting it is idempotent
-   under the scaffolder's existing no-overwrite rules. Nothing here touches runtime
+8. **Recovery.** Comparison execution and reporting are read-only over specs and fixtures; the
+   report helper writes by atomic replacement, so interruption leaves either the previous complete
+   report or no report. Re-running overwrites it. The generated runner is deterministic and safe to overwrite; the hand-owned
+   caller that supplies `HistoricalCodec` is separate. Nothing here touches runtime
    deployment, so the old release path is untouched.
 9. **Performance.** The comparator runs at development/CI time, not on any hot path; corpus
    size bounds its cost linearly. No production overhead is introduced, so no benchmark
    gate is required; if a consumer's corpus grows large, the report's per-fixture cost is
    the two codec executions they were going to need evidence for anyway.
-10. **Negative proof (in depth).** The Experiment B conformance suite is the negative
-    proof, and it must be present before the plan is accepted: a fixture corpus where the
+10. **Negative proof (in depth).** The Experiment B conformance suite supplies the required
+    negative/falsification evidence, not a universal proof, and it must be present before the
+    plan is accepted: a fixture corpus where the
     historical codec genuinely differs (omitted-key-versus-null on one field; a wire tag
-    that differs on one union arm) and the suite asserts the command classifies both as
+    that differs on one union arm) and the suite asserts the runner classifies both as
     `RequiresVersionWork`, names the divergent paths, exits non-zero, and never emits
     parity for them. A second negative asserts an uncovered declared arm yields
     `CodecCompareCoverageGap` and non-zero exit, so a green run cannot be produced by
-    starving the corpus. A third asserts the opaque-selection refusal (question 1). The
+    starving the corpus. A third asserts the opaque-selection refusal (question 1). A fourth
+    gives the runner a golden rejected by the historical codec and asserts
+    `CodecCompareInvalidInput`, preventing two decoder failures from being mistaken for parity. The
     mutation check in acceptance item 2 (weaken canonical comparison, watch the suite
     fail) demonstrates the suite actually guards the classification rather than the
     transcript text. If any of these can be made to pass while the machinery is
@@ -674,16 +733,15 @@ against the landed code.
 
 ## Idempotence and Recovery
 
-Every step is safe to repeat. `codec compare` reads specs and fixtures and writes only its
-report file (and, with `--driver-out`, the create-once driver, which follows the
-scaffolder's existing rule of never overwriting an existing file — re-running reports
-rather than clobbers). `check --coverage-report` overwrites its output file
+Every step is safe to repeat. Scaffold deterministically overwrites only the machine-owned
+comparison module, and the hand-owned runner reads fixtures and writes only its report file.
+`check --coverage-report` overwrites its output file
 deterministically. Test suites are hermetic. The ADR steps are the only ones with ordering
 sensitivity: allocate the docId with `okf id next` immediately before writing the file, and
 if validation fails after a partial edit, fix frontmatter and re-run `okf validate` — no
 state is corrupted by retries. If a milestone stalls, earlier milestones remain
-independently valuable and shippable (the engine without the CLI is still a tested
-library; the compare command without coverage reporting is still complete evidence
+independently valuable and shippable (the engine without generated-runner integration is still a tested
+library; the generated comparison runner without coverage reporting is still useful finite-evidence
 tooling); record the stopping point in Progress.
 
 
@@ -695,48 +753,104 @@ if needed; megaparsec, containers, text, filepath, directory as already declared
 optparse-applicative in the executable. No dependency on the `keiro` package is added to
 the `keiro-dsl` library or executable; the new conformance suite may depend on `keiro`
 and `keiki` like the existing `keiro-dsl-conformance` suite does. From plan 150 (read its
-landed Interfaces section for authoritative names): the `StructuralBinding` API module
+landed Interfaces section for authoritative names): the total `StructuralBinding` API module
 (`Keiro.Codec.Structural`), the generated structural codec entry points, and the
-fixture/generator binding conventions (`FixtureCases`); and from plan 149 (consumed via
-plan 150): the resolved type-expression graph (`Keiro.Dsl.TypeGraph`) and its total
-traversal registry.
+single-fixtures convention (`FixtureCases`); and from plan 149 (consumed via plan 150): the
+resolved type-expression graph (`Keiro.Dsl.TypeGraph`) and its total folds/algebras.
 
 At the end of Milestone 1, `Keiro.Dsl.CodecCompare` (new module,
 `keiro-dsl/src/Keiro/Dsl/CodecCompare.hs`) exposes at minimum:
 
 ```haskell
 data FixtureOrigin = HistoricalGolden | FromBinding
-data DecodeOutcome = Decoded Value | DecodeFailed Text
-data CompareInput = CompareInput
-  { fixturePath :: FilePath
-  , origin :: FixtureOrigin
-  , historicalBytes :: ByteString
-  , generatedBytes :: ByteString
-  , historicalDecode :: DecodeOutcome
-  , generatedDecode :: DecodeOutcome
+data DecodeOutcome = DecodedShape Value | DecodeFailed Text
+newtype JsonPointer = JsonPointer Text
+data ComparisonDifference
+  = EncodedValueDifference JsonPointer Value Value
+  | DecodedValueDifference JsonPointer Value Value
+  | GeneratedDecodeRejected Text
+data HistoricalCodec a = HistoricalCodec
+  { hcIdentity :: Text
+  , hcVersion :: Text
+  , hcEncode :: a -> Value
+  , hcDecode :: Value -> Either Text a
   }
-data FixtureVerdict = ExactParity | SemanticParity | RequiresVersionWork Text
-data CoverageGap -- declared branch (union arm / presence / null) with no fixture
-data CompareReport -- verdicts, gaps, tallies, authority framing; ToJSON with stable keys
-classifyFixture :: CompareInput -> FixtureVerdict
-compareReport :: [CompareInput] -> [DeclaredBranch] -> CompareReport
+data CompareObservation
+  = EncodeObservation
+      { coCaseName :: Text
+      , coHistoricalValue :: Value
+      , coGeneratedValue :: Value
+      }
+  | DecodeObservation
+      { coFixturePath :: FilePath
+      , coInputValue :: Value
+      , coHistoricalDecode :: DecodeOutcome
+      , coGeneratedDecode :: DecodeOutcome
+      }
+data FixtureVerdict = JsonParity | RequiresVersionWork ComparisonDifference
+data CompareInputIssue
+  = HistoricalGoldenUnreadable FilePath Text
+  | HistoricalCodecRejected FilePath Text
+  | HistoricalCodecProvenanceInvalid Text
+data CoverageGap -- origin plus declared branch (union arm / presence / null) with no observation
+data CompareProvenance = CompareProvenance
+  { cpHistoricalCodecIdentity :: Text
+  , cpHistoricalCodecVersion :: Text
+  , cpCanonicalType :: CanonicalTypeId
+  , cpBindingSymbol :: QualifiedValueName
+  , cpBindingVersion :: BindingVersion
+  , cpWireFingerprint :: Text
+  }
+data CompareReport -- provenance, verdicts, input issues, gaps, tallies,
+                   -- authority framing; ToJSON with stable keys
+data ReportWriteError = ReportWriteError FilePath Text
+classifyObservation :: CompareObservation -> Either CompareInputIssue FixtureVerdict
+compareReport :: CompareProvenance -> [CompareInputIssue] -> [CompareObservation] -> [DeclaredBranch] -> [ObservedBranch] -> CompareReport
 renderCompareReport :: CompareReport -> Text  -- the human transcript
+reportSucceeded :: CompareReport -> Bool
+writeCompareReportAtomic :: FilePath -> CompareReport -> IO (Either ReportWriteError ())
 ```
 
-(`DeclaredBranch` is the branch-inventory type computed from plan 149's resolved graph;
-adopt the landed graph's naming.) At the end of Milestone 2, `keiro-dsl/app/Main.hs` has
-the `codec compare` subcommand and the scaffolding side emits the generated driver module;
+`hcIdentity` and `hcVersion` are mandatory report provenance, not dispatch keys; the hand-owned
+caller still supplies the functions directly. The runner rejects blank identity/version as
+`HistoricalCodecProvenanceInvalid` before classifying observations. Up-front corpus read/parse
+failures are passed to `compareReport` as input issues, so they cannot disappear merely because
+no `CompareObservation` was constructed. (`DeclaredBranch`/`ObservedBranch` are the branch-inventory types computed from plan 149's
+resolved graph; adopt the landed graph's naming. A generated runner turns each successful
+decode into `DecodedShape` through `bindingToShape` and the generated shape encoder.) At the
+end of Milestone 2, scaffold accepts opt-in
+`--codec-comparison NAME --comparison-out FILE` and emits a generated
+module exporting approximately
+`compareWithHistorical :: HistoricalCodec Domain -> FilePath -> IO CompareReport`;
 the new test-suite `keiro-dsl-conformance-codec-compare` exists in
 `keiro-dsl/keiro-dsl.cabal`. At the end of Milestone 3, `Keiro.Dsl.Validate` carries the
-five appended `DiagnosticCode` constructors (`CoverageOpaqueSurface`,
-`CoverageOpaqueShareIncreased`, `CoverageOpaqueGateExceeded`, `CodecCompareDifference`,
-`CodecCompareCoverageGap`), and the coverage walk lives with the graph traversal (either a
-new `Keiro.Dsl.Coverage` module or inside the module plan 149 gives the resolved graph —
-choose whichever keeps the traversal-registry totality check covering it, and record the
-choice in the Decision Log). At the end of Milestone 4, the new ADR exists under
+six appended `DiagnosticCode` constructors (`CoverageOpaqueSurface`,
+`CoverageOpaqueBoundaryAdded`, `CoverageOpaqueGateExceeded`, `CodecCompareDifference`,
+`CodecCompareCoverageGap`, `CodecCompareInvalidInput`), and the coverage walk lives with the
+graph traversal (either a new `Keiro.Dsl.Coverage` module or inside the module plan 149 gives
+the resolved graph; record the choice in the Decision Log). The selected module must construct
+a complete plan-149 algebra so a new resolved-type constructor breaks coverage compilation. At
+the end of Milestone 4, the new ADR exists under
 `docs/adr/` with its OKF-allocated docId, and ADR 0004 carries the amended inventory row.
 
 
 ---
 
 Revision note: Aligned cross-plan references during MasterPlan 25 consistency review, 2026-07-28.
+
+Revision note: Replaced global historical instances with an explicit `HistoricalCodec`, limited
+comparison to `Value` semantics, qualified finite-corpus evidence, and narrowed coverage to
+private event roots plus an explicit consumer-JSON snapshot boundary; unsupported queues and
+contracts are no longer assigned fabricated ratios, 2026-07-28.
+
+Revision note: Replaced the unexecutable standalone `codec compare` API with an opt-in
+consumer-compiled runner, separated typed encode cases from historical decode goldens, and
+normalized successful decodes through the declared structural shape, 2026-07-28.
+
+Revision note: Classified historical-codec failures on alleged historical goldens as invalid
+comparison input rather than parity, and made runner ownership, output collision refusal, and
+codec/binding provenance explicit for reusable consumer migrations, 2026-07-28.
+
+Revision note: Made comparison differences structured and JSON-pointer-addressed, passed report
+provenance explicitly into the pure engine, and added atomic report writing so CI consumers do
+not parse prose or observe interrupted partial output, 2026-07-28.

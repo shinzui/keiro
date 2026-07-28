@@ -33,9 +33,10 @@ alone. After this plan, a user can:
 
 - write `mapped structural record`, `mapped structural enum`, `mapped structural union`, and
   `mapped opaque` declarations in a `.keiro` file, with nested type expressions (`Optional`,
-  `List`, `Map`, `Natural`, `Timestamp`, `Json`, nominal references to other mapped types, ids,
-  and enums) and explicit per-field wire metadata (wire key, presence, nullability, on-missing
-  default) and per-union encoding metadata (strategy, tag/contents fields, stable per-arm tags);
+  `List`, `Map`, `Natural`, existing `Time`/`UTCTime`, `Json`, and nominal references to other
+  mapped declarations) and explicit per-field wire metadata (wire key, presence, nullability,
+  mandatory on-missing policy for optional fields), record-level unknown-field policy, and
+  per-union encoding metadata (strategy, tag/contents fields, stable per-arm tags);
 - run `keiro-dsl parse` and get the declaration pretty-printed back, with the round trip
   `parseSpec . renderSpec == Right` holding for every new construct;
 - run `keiro-dsl check` and have every rejection in IR-1's Validation and Scaffolding Contract
@@ -68,17 +69,17 @@ plus mutation tests proving that an unvisited nested field or union arm makes th
 - [ ] Milestone 1: parser support for `mapped` declarations and type expressions in `Keiro.Dsl.Parser`.
 - [ ] Milestone 1: pretty-printer support in `Keiro.Dsl.PrettyPrint`; property and fixture round trips green in `keiro-dsl-test`.
 - [ ] Milestone 1: `test/fixtures/consumer-types.keiro` canonical fixture committed; QuickCheck `genSpec` extended with mapped declarations.
-- [ ] Milestone 2: `Keiro.Dsl.TypeGraph` module with `resolveTypeGraph`, use-site index, root-to-leaf paths, and the total `typeExprRegistry`.
-- [ ] Milestone 2: registry closedness enforced (family enum coverage test + `-Werror` incomplete-pattern pragmas on the new modules).
+- [ ] Milestone 2: `Keiro.Dsl.TypeGraph` module with `resolveTypeGraph`, use-site index, root-to-leaf paths, and exported total folds/algebras for `TypeExpr` and `MappedShape`.
+- [ ] Milestone 2: compile-time traversal completeness enforced by algebra fields and fold definitions, plus `-Werror` incomplete-pattern pragmas on the new modules.
 - [ ] Milestone 3: all new `DiagnosticCode` constructors appended; `validateSpec` wired to the resolved graph.
 - [ ] Milestone 3: every IR-1 check rejection implemented with a negative fixture under `keiro-dsl/test/fixtures/` and a test asserting its code.
 - [ ] Milestone 3: guard-semantics rules (whole-value copy only; `Natural` guard rejection; mapped equality/ordering guard rejection) landed with fixtures.
 - [ ] Milestone 4: `Keiro.Dsl.MappedDiff` recursive differ with per-root use-site paths; wired into `diffSpecs` shared-declaration phase.
 - [ ] Milestone 4: full Evolution Contract classification matrix implemented and covered by evolution fixture pairs.
 - [ ] Milestone 4: `Keiro.Dsl.ReplayImpact` extended so nested mapped breaks name affected event types and snapshot streams in the JSON output.
-- [ ] Milestone 5: `Keiro.Dsl.Goldens` synthesizes nested old-shape fixtures through the registry; `--emit-goldens` end-to-end test.
+- [ ] Milestone 5: `Keiro.Dsl.Goldens` synthesizes nested old-shape fixtures through a complete algebra; `--emit-goldens` end-to-end test.
 - [ ] Milestone 5: exhaustive wire-mutation coverage suite (every field, arm, and enum spelling) green; deliberate differ-arm deletion demonstrated red.
-- [ ] Milestone 5: ADR 0004 inventory amended; new codec-authority ADR created via okf; `just adr-validate` green; CHANGELOG updated.
+- [ ] Milestone 5: ADR 0004 inventory amended; ADR 0012 reconciled with the landed spec layer; `just adr-validate` green; CHANGELOG updated.
 - [ ] Final: Outcomes & Retrospective written; ADR distillation pass done; masterplan registry row updated.
 
 
@@ -87,7 +88,12 @@ plus mutation tests proving that an unvisited nested field or union arm makes th
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The proposed `TypeExprFamily` registry could be bypassed by a new ad hoc traversal and therefore
+  did not satisfy its compile-failure claim. Exported algebra records/folds make constructor
+  additions fail every subsystem construction site.
+- `Timestamp` duplicated the existing DSL `Time`/`UTCTime` concept; optional fields lacked total
+  missing-key construction; unknown-field behavior was unstated; and direct refs to existing
+  ids/enums would cycle the generated leaf stratum. The revised grammar resolves all four.
 
 
 ## Decision Log
@@ -141,37 +147,32 @@ implementation. Provide concise evidence.
   implementation time, not assumed from memory.
   Date: 2026-07-28
 
-- Decision: Emit the existing three-way `Additive | Advisory (WARNING) | Breaking`
-  classification, with one stable `DiagnosticCode` per distinct change class (field-add-without-
-  default, arm-added, mode-crossing, and so on — the full list is in Milestone 4).
-  Rationale: The soft dependency, plan `docs/plans/148-report-evolution-as-a-compatibility-vector-with-remediation-explanations.md`,
-  has not landed (it is fully drafted but not implemented as of 2026-07-28). Choosing one code
-  per change class means plan 148's per-surface compatibility vector (five surfaces including
-  `persisted-identity`; report schema `keiro-dsl/diff-report/1`) can later attach dimensions to
-  codes without renaming or splitting any code — the adoption is purely additive, as the
-  masterplan's dependency section requires. If 148 lands mid-implementation, adopt its vector
-  output shape for the new mapped codes directly. Note also that plan 148 owns the minimal
-  `CEnum` contract-field grammar extension to `ContractType`; this plan leaves `ContractType`
-  untouched — contract nodes keep their own field grammar, and mapped declarations never
-  appear in contracts.
+- Decision: Hard-depend on plan 148's context-sensitive compatibility API. Emit one stable
+  `DiagnosticCode` per distinct mapped change class (field-add-without-default, arm-added,
+  mode-crossing, source change, and so on — the full list is in Milestone 4), and add an explicit
+  `CompatibilityVector` plus non-empty `remediationFor` row for every
+  `ChangeContext`/code pair. The three-way `Additive | Advisory | Breaking` labels in this plan
+  are derived headlines, not a parallel classifier.
+  Rationale: Plan 148 has no all-compatible default; adding mapped codes without vector and
+  remediation rows would fail totality and could silently omit a surface. A hard dependency keeps
+  the six current surfaces (`private-history-read`, `old-binary-read-new-events`,
+  `snapshot-hydration`, `public-consumer`, `persisted-identity`, `consumer-build`) explicit and makes plan 149's
+  root-specific expansion reusable by other consumers. This plan leaves `ContractType` untouched:
+  public contract nodes keep their own field grammar and mapped private types never appear in
+  contracts. Plan 148 no longer adds a `CEnum -> Text` shortcut solely for a research fixture.
   Date: 2026-07-28
 
-- Decision: The total-traversal guarantee (G6) is implemented by replicating the
-  `familyRegistry` technique from `keiro-dsl/src/Keiro/Dsl/Diff.hs` at the type-expression
-  level, strengthened to a genuine compile error: all case analyses over `TypeExpr` live in the
-  new registry-owning modules, which carry
-  `{-# OPTIONS_GHC -Werror=incomplete-patterns -Werror=incomplete-uni-patterns #-}`, and a
-  closed `TypeExprFamily` enum with `Enum`/`Bounded` instances is covered by a registry unit
-  test (`sort (map fst typeExprRegistry) == [minBound .. maxBound]`).
-  Rationale: The instruction and IR-1 both require that adding a new type-expression
-  constructor "must be a compile error until every subsystem handles it". `familyRegistry`
-  achieves closedness today via a total `familyOf` case plus a coverage unit test
-  (`keiro-dsl/test/Main.hs` line ~1000); `-Wall` alone makes an omitted arm only a warning, so
-  the module-scoped `-Werror` pragmas upgrade it to an error without risking latent warnings
-  elsewhere in the package.
+- Decision: The total-traversal guarantee is implemented with exported algebra records and
+  folds (`TypeExprAlgebra`/`foldTypeExpr` and `MappedShapeAlgebra`/`foldMappedShape`), with all
+  subsystems constructing a complete algebra. The defining modules also use
+  `-Werror=incomplete-patterns` for the folds themselves.
+  Rationale: A registry totality test proves only that registry keys are present; it cannot make
+  an independently written traversal fail to compile. Adding an AST constructor changes the
+  algebra and fold, forcing codec, validation, diff, golden, coverage, and projection consumers
+  to update at compile time.
   Date: 2026-07-28
 
-- Decision: Timestamps (`Timestamp` type expression) are pinned to Haskell
+- Decision: Reuse the DSL's existing `Time` spelling for the type expression and pin it to Haskell
   `Data.Time.Clock.UTCTime` with the RFC 3339 / ISO-8601 UTC wire format aeson emits for
   `UTCTime` (e.g. `"2026-01-01T00:00:00Z"`); `Natural` is pinned to Haskell
   `Numeric.Natural.Natural` with a JSON-number representation, decode rejecting negative and
@@ -190,13 +191,54 @@ implementation. Provide concise evidence.
   invent `Default` instances or emit a latent `error`".
   Date: 2026-07-28
 
-- Decision: This plan creates the new codec-authority ADR (status Proposed, completed by plan
-  150) and amends ADR 0004's gate inventory; both via the strict okf workflow, with the docId
-  allocated by `okf id next docs/adr --profile docs/adr/profile.dhall ADR` — never by counting
-  files.
-  Rationale: Required by the masterplan's Integration Points ("Cross-plan decisions expected to
-  become new ADRs: codec authority for consumer-owned types … EP-6/EP-7") and by
-  `.claude/skills/exec-plan/ADR.md`'s handle-allocation rule.
+- Decision: Reconcile and amend proposed ADR 0012 rather than allocating a codec-authority ADR;
+  amend ADR 0004's gate inventory through the strict okf workflow.
+  Rationale: MasterPlan 25 now records the shared authority, total-binding, snapshot-boundary,
+  and projection-provenance decisions before either implementation plan begins.
+  Date: 2026-07-28
+
+- Decision: Every structural record declares its consumer constructor, and every record and tagged-object envelope declares
+  `unknown-fields = reject|ignore`; every `optional`
+  field declares `on-missing`; generated encoders always emit every declared key (using JSON
+  null for `Optional Nothing`), while presence policy governs decoding only. A mapped
+  declaration has one mandatory non-empty `fixtures = Module.symbol` of type `FixtureCases a`.
+  Rationale: Old/new compatibility depends on unknown-key behavior, a missing optional key needs
+  a total construction rule, one fixture interface avoids divergent sample/generator APIs, and
+  explicit constructor metadata lets per-type generated shapes support exact generic bindings
+  without inspecting consumer source or guessing a `Mk` convention.
+  Date: 2026-07-28
+
+- Decision: Structural nullability must remain injective. Reject `Optional T` when `T` can itself
+  encode as top-level JSON null: `Json`, another `Optional`, or an opaque mapped declaration whose
+  external codec is unconstrained. Also reject a tagged-object union whose tag and contents keys
+  are identical, and reject duplicate Haskell-side field names before generation.
+  Rationale: `Nothing` and `Just Null` (or `Nothing` and `Just Nothing`) otherwise have the same
+  wire representation, so generated decode cannot satisfy the shape round-trip law. Equal tag and
+  contents keys collapse two required envelope facts into one JSON object member. These are
+  structural encoding defects that `check` can reject for every consumer; fixture tests alone
+  would only expose selected collisions.
+  Date: 2026-07-28
+
+- Decision: Separate the parser-facing declaration from the checked API. The raw `MappedDecl`
+  stores mandatory facts as `Maybe`; `resolveTypeGraph` first produces `CheckedMappedDecl` with
+  mandatory, validation-specific newtypes for canonical identities, qualified value symbols,
+  structural binding versions, and
+  opaque codec identity/version. Generation, diff, coverage, and projection consumers receive
+  only checked declarations.
+  Rationale: A non-optional raw field cannot represent the missing-ingredient diagnostics this
+  plan promises without an empty-string sentinel. Conversely, exposing `Maybe` throughout every
+  downstream consumer makes partial handling easy. Phase separation keeps parse/pretty total and
+  makes invalid incompleteness unrepresentable after `check`. `TypeGraph` owns typed graph errors;
+  `Validate` maps them to stable diagnostic codes so the two modules do not import each other.
+  Date: 2026-07-28
+
+- Decision: Version 1 `TRef` resolves only other mapped declarations. Existing DSL IDs and enums
+  are deferred until those existing leaves themselves move below aggregate `Domain` modules;
+  plan 150's per-declaration `Structural.Shape.*` stratum cannot safely import types that remain
+  generated above it without recreating a `Domain -> Bindings -> Structural.Shape -> Domain` cycle.
+  Rationale: A nominal reference that cannot be generated without a module cycle is not a valid
+  spec-layer promise. This restriction is general and can be relaxed additively after the leaf
+  architecture exists.
   Date: 2026-07-28
 
 
@@ -306,7 +348,7 @@ remain the authority on intent:
   types, opaque external-codec types, type expressions and wire semantics), "Evolution
   Contract", and "Validation and Scaffolding Contract" sections as they apply to `.keiro` text,
   and the spec-layer bullets of its "Acceptance" section. The Conformance Harness Contract and
-  the scaffold/manifest/binding-drift portions belong to plan 150.
+  the scaffold/manifest/mapping-drift portions belong to plan 150.
 - **The research note** — `docs/research/14-structural-consumer-type-tradeoffs.md`. Its
   guarantees G1–G6 are the invariants; sections 3 (opaque mode), 4 (whole-value semantics), 7
   (usage-aware evolution), 11 (recursion rejection), and 12 (migration/goldens) directly shape
@@ -362,18 +404,18 @@ and Mori's decision `mori://shinzui/mori/okf/adrs/concepts/ADR-6`.
 
 ### Compatibility baseline and dependency verification
 
-IR-1's verified baseline (2026-07-28): `keiki` released and tagged at `0.3.1.0`; `keiro-dsl`
-released and tagged at `0.3.0.0`; the local checkout contains unreleased post-`0.3.0.0` DSL
-work. Before choosing any dependency bound or declaring anything released, **re-verify against
-Hackage and upstream release tags** — per the repository's global guidance, use `mori` to
+Verified dependency state (2026-07-28): Hackage and upstream tag `v0.4.0.0` identify Keiki
+0.4.0.0 as the released typed-projection API; `keiro-dsl` remains released at `0.3.0.0` and the
+local checkout contains unreleased post-`0.3.0.0` DSL work. Before choosing any later bound or
+declaring anything released, re-verify Hackage and upstream tags — use `mori` to
 locate sources and docs but treat the package registry and upstream tags as authoritative for
 versions (a mori corpus checkout may lag upstream or carry local patches). Note that
 `keiro-dsl` does **not** depend on `keiki` (see `build-depends` in `keiro-dsl/keiro-dsl.cabal`:
 aeson, base, containers, directory, filepath, megaparsec, parser-combinators, prettyprinter,
 text) and this plan adds **no new dependency**. The one keiki-facing fact this plan encodes —
-the curated symbolic set used by the guard-semantics rules (Milestone 3) — must be verified by
-reading keiki `0.3.1.0` source located via `mori registry show shinzui/keiki --full` at
-implementation time, and the verified finding recorded in Surprises & Discoveries.
+the curated symbolic set used by the guard-semantics rules (Milestone 3) was verified against
+Keiki 0.4.0.0 source located via `mori registry show shinzui/keiki --full`; re-check it if the
+bound advances.
 
 ### Terms used in this plan
 
@@ -383,13 +425,14 @@ implementation time, and the verified finding recorded in Surprises & Discoverie
 - **Type expression**: the sublanguage of nested types usable inside structural wire shapes
   and (by nominal reference) in command/event/register positions.
 - **Resolved type graph**: the single post-name-resolution data structure over all mapped
-  declarations, ids, and enums, plus the index of every use site, that all subsystems traverse.
+  declarations plus the index of every aggregate use site that all subsystems traverse. Existing
+  DSL ids and enums are not legal nested mapped references in version 1.
 - **Use site / root**: a place a mapped type is reachable from a persisted or public surface.
   In this plan's scope the roots are aggregate command fields (decode surface for new
   commands), aggregate event fields (private history), and registers (snapshot state). A
   **root-to-leaf path** names the root and every intermediate declaration/field/arm down to
   the changed leaf, e.g.
-  `Reservation event TransferReservationCreated .doc : DocInfo .location : DocLocation arm "local_file"`.
+  `Catalog event ArtifactObserved .artifact : ArtifactInfo .location : ArtifactLocation arm "local_file"`.
 - **Wire identity**: the wire-visible facts of a leaf — wire key, presence, nullability,
   on-missing default, type expression, union encoding, arm tag, enum spelling — as opposed to
   Haskell-side facts (package/module/type/binding symbol), which are source-compatibility
@@ -416,39 +459,42 @@ Milestone 3 — that is acceptable mid-plan state, and the canonical fixture is 
 shared declaration appearing after `rule` declarations and before nodes. Four forms:
 
 ```text
-mapped structural record DocInfo {
-  haskell package=mori-core module=Mori.Config.Types type=DocInfo
-  binding = "Mori.Modules.Project.Domain.KeiroBindings.docInfo"
-  canonical-type = "mori.project.DocInfo.v1"
-  fixture = "Mori.Modules.Project.Domain.KeiroBindings.sampleDocInfo"
-  initial = "Mori.Modules.Project.Domain.KeiroBindings.emptyDocInfo"
-  wire object {
+mapped structural record ArtifactInfo {
+  haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactInfo
+  binding = "Example.Artifact.KeiroBindings.artifactInfoBinding"
+  binding-version = "1"
+  canonical-type = "example.artifact.ArtifactInfo.v1"
+  fixtures = "Example.Artifact.KeiroBindings.artifactInfoCases"
+  initial = "Example.Artifact.KeiroBindings.emptyArtifactInfo"
+  wire object constructor=ArtifactInfo unknown-fields=reject {
     key         as "key"         : Text                  required
-    kind        as "kind"        : DocKind               required
+    kind        as "kind"        : ArtifactKind          required
     description as "description" : Optional Text         optional on-missing=null
-    location    as "location"    : DocLocation           required
+    location    as "location"    : ArtifactLocation      required
     tags        as "tags"        : List Text             optional on-missing=[]
     attributes  as "attributes"  : Map Text              optional on-missing={}
     revision    as "revision"    : Natural               required
-    observedAt  as "observedAt"  : Timestamp             required
-    extra       as "extra"       : Json                  optional
+    observedAt  as "observedAt"  : Time                  required
+    extra       as "extra"       : Json                  required
   }
 }
 
-mapped structural enum DocKind {
-  haskell package=mori-core module=Mori.Config.Types type=DocKind
-  binding = "Mori.Modules.Project.Domain.KeiroBindings.docKind"
-  canonical-type = "mori.config.DocKind.v1"
-  fixture = "Mori.Modules.Project.Domain.KeiroBindings.sampleDocKind"
+mapped structural enum ArtifactKind {
+  haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactKind
+  binding = "Example.Artifact.KeiroBindings.artifactKindBinding"
+  binding-version = "1"
+  canonical-type = "example.artifact.ArtifactKind.v1"
+  fixtures = "Example.Artifact.KeiroBindings.artifactKindCases"
   wire string { Guide as "guide"  Reference as "reference" }
 }
 
-mapped structural union DocLocation {
-  haskell package=mori-core module=Mori.Config.Types type=DocLocation
-  binding = "Mori.Modules.Project.Domain.KeiroBindings.docLocation"
-  canonical-type = "mori.config.DocLocation.v1"
-  fixture = "Mori.Modules.Project.Domain.KeiroBindings.sampleDocLocation"
-  wire tagged-object tag="tag" contents="contents" {
+mapped structural union ArtifactLocation {
+  haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactLocation
+  binding = "Example.Artifact.KeiroBindings.artifactLocationBinding"
+  binding-version = "1"
+  canonical-type = "example.artifact.ArtifactLocation.v1"
+  fixtures = "Example.Artifact.KeiroBindings.artifactLocationCases"
+  wire tagged-object tag="tag" contents="contents" unknown-fields=reject {
     LocalFile as "local_file" : Text
     RepoPath  as "repo_path"  : Text
     Canonical as "canonical"  : Text
@@ -459,20 +505,28 @@ mapped structural union DocLocation {
 mapped opaque VendorGeometry {
   haskell package=vendor-geometry module=Vendor.Geometry type=Geometry
   codec = "vendor.geometry.json" version = "3"
-  fixture = "Vendor.Geometry.KeiroBindings.sampleGeometry"
+  fixtures = "Vendor.Geometry.KeiroBindings.geometryCases"
 }
 ```
 
 Semantics, fixed here: the `haskell` line names the Cabal package, Haskell module, and Haskell
 type generated code will import (plan 150 consumes them; this plan validates and diffs them).
 `binding` is the qualified symbol of the typed construction/destruction binding (structural
-only). `canonical-type` is the stable application-owned type identity for snapshot shape and
-diagnostics. `fixture` is the qualified symbol of a sample-value binding. `initial` is
+only). `binding-version` is a mandatory application-owned provenance token that changes whenever
+the implementation's domain↔shape semantics change, even if the symbol and type stay fixed; it is
+diff-visible and participates in mapped-register snapshot invalidation. `canonical-type` is the stable application-owned type identity for diagnostics and
+snapshot invalidation. `fixtures` is the qualified symbol of one non-empty `FixtureCases a`
+binding; its first case is the deterministic sample and the complete set supplies branch
+evidence. `initial` is
 optional; it is the qualified symbol of the initial register value and is required by `check`
 exactly when the resolved graph shows the type used as a register type. In a record row,
+the `wire object constructor=<Name>` fact names the consumer record constructor and the data
+constructor generated for the shape type; keeping the generated module type-specific permits
+that exact name without cross-declaration collisions. It is Haskell/source identity, not wire
+identity. In each row,
 `name` is the Haskell-side field name, `"wire"` after `as` is the wire key, the type
-expression follows `:`, then a mandatory presence token (`required` | `optional`), then an
-optional `on-missing=<default>` decode policy, legal only with `optional`. `Optional T` means
+expression follows `:`, then a mandatory presence token (`required` | `optional`), then a
+mandatory `on-missing=<default>` decode policy when the field is `optional`. `Optional T` means
 JSON null is a legal value (nullability), which is deliberately distinct from the presence
 token (missing key); the four combinations are all expressible. Defaults are decode policy,
 not documentation: `on-missing=null` (only for `Optional` types), `on-missing="text"`,
@@ -481,38 +535,50 @@ not documentation: `on-missing=null` (only for `Optional` types), `on-missing="t
 encoding strategy this plan supports (matching IR-1's example; others reject in Milestone 3),
 `tag`/`contents` name the discriminator and payload keys, each arm is
 `HaskellCtor as "wire_tag" [: TypeExpr]` with a stable wire tag and an optional single payload
-type (absent = unit arm). Enum arms are `Ctor as "wire"` only. The opaque form has no
+type (absent = unit arm). The encoder always emits both tagged-object keys; a unit arm uses
+`contents: null`, and the decoder requires that canonical representation. Enum arms are
+`Ctor as "wire"` only. Each record and tagged-object
+envelope declares `unknown-fields=reject|ignore`. Generated encoders emit every declared key, representing
+`Optional Nothing` as JSON null; presence policy affects decoding only. The opaque form has no
 `binding`, no `wire`, and a mandatory `codec` identity plus `version` (a version or
 fingerprint string).
 
-Type expressions: `Text | Int | Bool | Natural | Timestamp | Json | Optional <T> |
+Type expressions: `Text | Int | Bool | Natural | Time | Json | Optional <T> |
 List <T> | Map <T> | <Name>`, with parentheses for nesting (`List (Optional Text)`).
 `Map <T>` always has text keys. A bare `<Name>` is a nominal reference resolved (in Milestone
-2) against mapped declarations, id declarations, and enum declarations — this is how "existing
-DSL IDs and enums by nominal match" and "nested mapped types" enter, and how aggregate
+2) against mapped declarations only in version 1. Existing DSL IDs and enums are deferred until
+a shared generated-leaf stratum prevents module cycles. This is how nested mapped types enter,
+and how aggregate
 command/event fields and registers reference a mapped type today without any use-site grammar
-change (`doc : DocInfo` in a command; `docInfo DocInfo = initial` as a register, where the
+change (`artifact : ArtifactInfo` in a command; `artifactInfo ArtifactInfo = initial` as a register, where the
 bare initial token `initial` defers to the declaration's `initial` symbol).
 
 Edits:
 
 1. `keiro-dsl/src/Keiro/Dsl/Grammar.hs` — add, in a new "Consumer-owned mapped types (EP-149)"
-   section: `TypeExpr` (constructors `TText`, `TInt`, `TBool`, `TNatural`, `TTimestamp`,
+   section: `TypeExpr` (constructors `TText`, `TInt`, `TBool`, `TNatural`, `TTime`,
    `TJson`, `TOptional !TypeExpr`, `TList !TypeExpr`, `TMap !TypeExpr`, `TRef !Name`),
-   `Presence (PRequired | POptional)`, `OnMissing (OmNull | OmText !Text | OmInt !Int |
+   `Presence (PRequired | POptional)`, `UnknownFields (RejectUnknown | IgnoreUnknown)`,
+   `OnMissing (OmNull | OmText !Text | OmInt !Integer |
    OmBool !Bool | OmEmptyList | OmEmptyMap | OmCtor !Name)`, `WireField { wfHaskell :: !Name,
    wfKey :: !Text, wfType :: !TypeExpr, wfPresence :: !Presence, wfOnMissing :: !(Maybe
    OnMissing), wfLoc :: !Loc }`, `UnionEncoding (TaggedObject { ueTagField :: !Text,
-   ueContentsField :: !Text })`, `WireArm { waCtor :: !Name, waTag :: !Text, waPayload ::
-   !(Maybe TypeExpr), waLoc :: !Loc }`, `MappedShape (ShapeRecord ![WireField] | ShapeEnum
-   ![(Name, Text)] | ShapeUnion !UnionEncoding ![WireArm])`, `HaskellSource { hsPackage ::
+   ueContentsField :: !Text, ueUnknownFields :: !UnknownFields })`,
+   `WireEnum { weCtor :: !Name, weTag :: !Text, weLoc :: !Loc }`,
+   `WireArm { waCtor :: !Name, waTag :: !Text, waPayload ::
+   !(Maybe TypeExpr), waLoc :: !Loc }`, `MappedShape (ShapeRecord !Name !UnknownFields ![WireField] |
+   ShapeEnum ![WireEnum] | ShapeUnion !UnionEncoding ![WireArm])`, `HaskellSource { hsPackage ::
    !Text, hsModule :: !Text, hsType :: !Name }`, and `MappedDecl` with two constructors
-   (`MappedStructural { msName :: !Name, msHaskell :: !HaskellSource, msBinding :: !Text,
-   msCanonical :: !Text, msFixture :: !Text, msInitial :: !(Maybe Text), msShape ::
+   (`MappedStructural { msName :: !Name, msHaskell :: !(Maybe HaskellSource), msBinding :: !(Maybe Text),
+   msBindingVersion :: !(Maybe Text),
+   msCanonical :: !(Maybe Text), msFixtures :: !(Maybe Text), msInitial :: !(Maybe Text), msShape ::
    !MappedShape, msLoc :: !Loc }` and `MappedOpaque { moName :: !Name, moHaskell ::
-   !HaskellSource, moCodecId :: !Text, moCodecVersion :: !Text, moFixture :: !Text,
+   !(Maybe HaskellSource), moCodecId :: !(Maybe Text), moCodecVersion :: !(Maybe Text), moFixtures :: !(Maybe Text),
    moInitial :: !(Maybe Text), moLoc :: !Loc }`), all with `Eq`/`Show`/`Generic` stock
-   deriving and export-list entries. Add `specMapped :: ![MappedDecl]` to `Spec` (this touches
+   deriving and export-list entries. The parser-facing `MappedDecl` is deliberately a raw AST:
+   mandatory facts that `check` diagnoses are stored as `Maybe` (`msHaskell`, `msBinding`, `msBindingVersion`,
+   `msCanonical`, `msFixtures`, and the opaque `moHaskell`/`moCodecId`/`moCodecVersion`/
+   `moFixtures`). Do not use empty-text sentinels. Add `specMapped :: ![MappedDecl]` to `Spec` (this touches
    every `Spec` construction site: the parser partition, `genSpec` in tests, and any literal
    `Spec` in tests/skeletons — the compiler will enumerate them).
 2. `keiro-dsl/src/Keiro/Dsl/Parser.hs` — add a `TIMapped MappedDecl` top-level item and its
@@ -535,7 +601,7 @@ Edits:
    parenthesized type expressions.
 5. New fixture `keiro-dsl/test/fixtures/consumer-types.keiro` — a full positive spec: context,
    the four mapped declarations above (record, enum, union, opaque), and an aggregate whose
-   command, event, and register use `DocInfo` and `VendorGeometry` nominally, with an event
+   command, event, and register use `ArtifactInfo` and `VendorGeometry` nominally, with an event
    carrying scalar decision fields beside the mapped payload (modeling the research note's
    section 4 guidance).
 
@@ -543,7 +609,7 @@ Acceptance: `cabal test keiro-dsl-test` green including the extended property;
 `cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/consumer-types.keiro` prints the spec
 back and a second `parse` of that output succeeds (demonstrated in Concrete Steps).
 
-### Milestone 2 — The resolved type graph and the total traversal registry
+### Milestone 2 — The resolved type graph and compile-forcing total folds
 
 Scope: one new module, `keiro-dsl/src/Keiro/Dsl/TypeGraph.hs` (added to `exposed-modules` in
 `keiro-dsl/keiro-dsl.cabal`), that every later consumer traverses. This is guarantee G6 made
@@ -551,10 +617,28 @@ mechanical, and the artifact plan 150's generation layer will consume.
 
 The module provides:
 
-- `data ResolvedRef = RefMapped !MappedDecl | RefId !IdDecl | RefEnum !EnumDecl | RefBuiltin
-  !Name` — what a `TRef`/field-type `Name` resolves to (`RefBuiltin` covers the legacy
-  `Text`/`Int`/`Bool`/`Time` spellings so aggregate fields keep working unchanged).
-- `resolveTypeGraph :: Spec -> Either [Diagnostic] TypeGraph` — name resolution over all
+- `newtype QualifiedValueName`, `newtype CanonicalTypeId`, `newtype BindingVersion`,
+  `newtype CodecIdentity`, and `newtype CodecVersion`, each with a smart constructor used by validation; plus
+  `CheckedMappedDecl` mirroring the structural/opaque constructors but with every mandatory raw
+  fact present and wrapped. There is no checked constructor that represents a missing binding,
+  fixture symbol, canonical identity, binding version, or opaque codec identity/version.
+- `data MappedDeclError` and `data TypeGraphError`, owned by `Keiro.Dsl.TypeGraph` and independent
+  of `Keiro.Dsl.Validate`; `checkMappedDecl :: MappedDecl -> Either (NonEmpty MappedDeclError)
+  CheckedMappedDecl`. Graph resolution calls this for every raw declaration before building
+  indexes. Later subsystems never consume raw `MappedDecl` values.
+- `newtype MappedKey`, `ResolvedTypeExpr`, `ResolvedWireField`, `ResolvedWireArm`,
+  `ResolvedMappedShape`, `StructuralDecl`, `OpaqueDecl`, and
+  `ResolvedMappedDecl = ResolvedStructural StructuralDecl ResolvedMappedShape |
+  ResolvedOpaque OpaqueDecl`. Its constructors are distinct from the parser AST:
+  `ResolvedTypeExpr = RText | RInt | RBool | RNatural | RTime | RJson |
+  ROptional ResolvedTypeExpr | RList ResolvedTypeExpr | RMap ResolvedTypeExpr |
+  RRef MappedKey`, and `ResolvedMappedShape` has explicit `RRecord`, `REnum`, and `RUnion`
+  constructors carrying resolved fields/arms. `TypeGraph` owns
+  `Map MappedKey ResolvedMappedDecl`. There is no generic
+  `ResolvedRef`: built-ins are distinct `ResolvedTypeExpr` constructors, while the only legal v1
+  nominal reference is `RRef MappedKey`. Existing DSL ids/enums fail resolution until their
+  generated leaves move below aggregate `Domain`.
+- `resolveTypeGraph :: Spec -> Either (NonEmpty TypeGraphError) TypeGraph` — name resolution over all
   mapped declarations and all node use sites, cycle detection (recursion rejection, including
   mutual recursion through any `TypeExpr` position, reported as `MappedRecursiveType` with the
   cycle path in the message), and the use-site index. `TypeGraph` carries the resolution map,
@@ -568,48 +652,45 @@ The module provides:
   `renderUsePath :: UsePath -> Text` producing the human-readable path used in diagnostics and
   diff subjects. One rendering function, used by `check`, `diff`, and replay impact, so paths
   are identical everywhere.
-- The **registry**, replicating the `familyRegistry` technique from
-  `keiro-dsl/src/Keiro/Dsl/Diff.hs` (lines ~153–166) one level down:
+- The **total folds**, which are the sole traversal entry points exported to later subsystems:
 
 ```haskell
-data TypeExprFamily
-    = TefText | TefInt | TefBool | TefNatural | TefTimestamp | TefJson
-    | TefOptional | TefList | TefMap | TefRef
-    deriving stock (Eq, Ord, Show, Enum, Bounded)
-
--- Total by construction: one explicit arm per TypeExpr constructor, no wildcard.
-typeExprFamily :: TypeExpr -> TypeExprFamily
-
--- One entry per family; every subsystem's handling is a field, so a new
--- constructor cannot reach one subsystem and silently miss another.
-data TypeExprSupport = TypeExprSupport
-    { tesGuard :: !GuardSupport        -- Milestone 3: symbolic / not-symbolic
-    , tesWireForm :: !WireForm         -- JSON category (string/number/bool/array/object/any)
-    , tesGolden :: !(GoldenSynth)      -- Milestone 5: old-shape sample synthesis
-    , tesDiffLeaf :: !(DiffLeaf)       -- Milestone 4: wire-identity comparison at this leaf
-    , tesScaffoldNote :: !Text         -- non-empty note for plan 150's consumers (manifest,
-                                       -- codec, harness) — the explicit hand-off contract
+data TypeExprAlgebra a = TypeExprAlgebra
+    { onText :: a, onInt :: a, onBool :: a, onNatural :: a, onTime :: a, onJson :: a
+    , onOptional :: a -> a, onList :: a -> a, onMap :: a -> a
+    , onRef :: MappedKey -> a
     }
 
-typeExprRegistry :: [(TypeExprFamily, TypeExprSupport)]
+foldTypeExpr :: TypeExprAlgebra a -> ResolvedTypeExpr -> a
+
+data MappedShapeAlgebra a = MappedShapeAlgebra
+  { onRecord :: Name -> UnknownFields -> [ResolvedWireField] -> a
+    , onEnum :: [WireEnum] -> a
+    , onUnion :: UnionEncoding -> [ResolvedWireArm] -> a
+  }
+
+foldMappedShape :: MappedShapeAlgebra a -> ResolvedMappedShape -> a
+
+data MappedDeclAlgebra a = MappedDeclAlgebra
+  { onStructuralDecl :: StructuralDecl -> ResolvedMappedShape -> a
+  , onOpaqueDecl :: OpaqueDecl -> a
+  }
+
+foldMappedDecl :: MappedDeclAlgebra a -> ResolvedMappedDecl -> a
 ```
 
-Closedness enforcement, exactly as decided in the Decision Log: (a) `typeExprFamily` and every
-other case analysis over `TypeExpr`, `MappedShape`, `OnMissing`, and `MappedDecl` live in
-`TypeGraph.hs` (or the Milestone 4 `MappedDiff.hs`), and both modules carry
-`{-# OPTIONS_GHC -Werror=incomplete-patterns -Werror=incomplete-uni-patterns #-}` so a new
-constructor is a **compile error** in the registry-owning modules; (b) `Validate`, `Diff`,
-`Goldens`, and `ReplayImpact` consume type expressions only through `TypeGraph`/`MappedDiff`
-functions, never by matching `TypeExpr` themselves (enforce by convention and review; the
-module boundary makes violations visible in imports); (c) a unit test in
-`keiro-dsl/test/Main.hs` mirrors the family test at line ~1000:
-`sort (map fst typeExprRegistry) == ([minBound .. maxBound] :: [TypeExprFamily])` and every
-`tesScaffoldNote` is non-empty.
+Closedness enforcement: all three fold definitions use one explicit arm per constructor and the
+module carries `-Werror=incomplete-patterns`. `Validate`, `MappedDiff`, `Goldens`,
+`ReplayImpact`, plan 150's codec/harness/projection generation, and plan 152's coverage each
+define a complete algebra value. Adding an algebra field breaks every construction site at
+compile time, which is the promised failure mode; a runtime registry test is not substituted
+for this property. Direct AST matching outside the defining module is rejected in review.
 
-Acceptance: unit tests for resolution (a `TRef` to each of mapped/id/enum/builtin), for cycle
+Acceptance: unit tests for resolution (nested mapped and every builtin; ids/enums reject), for cycle
 detection (direct, mutual, through `List`/`Optional`/`Map`/arm payload), for use-path
 completeness on `consumer-types.keiro` (the expected path set is written out in the test), and
-the registry coverage test. `cabal test keiro-dsl-test` green.
+each subsystem's fold behavior. A deliberate temporary `TypeExpr` constructor addition must
+produce compile errors in all named algebra construction sites. `cabal test keiro-dsl-test` green.
 
 ### Milestone 3 — `check` rejections and negative fixtures
 
@@ -619,7 +700,8 @@ Contract for the spec layer. IR-1's list, verbatim, with the parenthesized owner
 > `keiro-dsl check` must reject: unresolved or ambiguous type and binding names (graph
 > resolution); duplicate record wire keys, duplicate union arm names, or duplicate union wire
 > tags (shape rules); recursive structural mappings and unbounded structural recursion (graph
-> cycle detection); unsupported map keys or unsupported wire encodings (shape rules); missing
+> cycle detection); unsupported wire encodings (non-text map keys are unrepresentable in the
+> unary `Map T` grammar); missing
 > package/module/type, binding, stable type identity, fixture, or required initial value
 > (ingredient rules; initial value demanded only at register use sites); invalid Haskell
 > package, module, type, and binding names (lexical rules below); conflicting imports,
@@ -637,41 +719,58 @@ Edits:
 1. `keiro-dsl/src/Keiro/Dsl/Validate.hs` — append to `DiagnosticCode` (at the end of the
    enum; append-only) the single-spec codes: `MappedUnresolvedName`, `MappedAmbiguousName`
    (a name declared as more than one of mapped/id/enum, or two mapped declarations sharing a
-   name), `MappedDuplicateWireKey`, `MappedDuplicateArmName`, `MappedDuplicateWireTag`,
-   `MappedRecursiveType`, `MappedUnsupportedMapKey`, `MappedUnsupportedEncoding`,
-   `MappedMissingIngredient` (with the missing ingredient — package/module/type, binding,
-   canonical-type, fixture — named in the message), `MappedMissingInitialValue`,
-   `MappedInvalidHaskellName`, `MappedImportConflict`, `MappedDefaultIllTyped`,
+   name), `MappedDuplicateFieldName`, `MappedDuplicateWireKey`, `MappedDuplicateArmName`,
+   `MappedDuplicateWireTag`, `MappedNonInjectiveNullability`,
+   `MappedRecursiveType`, `MappedUnsupportedEncoding`,
+   `MappedMissingIngredient` (with the missing ingredient — complete `haskell` source line, binding,
+   binding-version, canonical-type, fixture, or opaque codec identity/version — named in the message),
+   `MappedMissingInitialValue`,
+   `MappedInvalidHaskellName`, `MappedInvalidIdentity`, `MappedImportConflict`, `MappedDefaultIllTyped`,
    `MappedGuardUnsupported`. Add a `validateMapped :: Spec -> [Diagnostic]` pass invoked from
-   `validateSpec` that first runs `resolveTypeGraph` (its `Left` diagnostics flow straight
-   through) and then the graph-dependent rules.
+   `validateSpec` that first runs `resolveTypeGraph`, maps every `TypeGraphError` to its stable
+   `DiagnosticCode`, and then runs the graph-dependent rules. `TypeGraph` must not import
+   `Validate`; keeping its typed errors local avoids a module cycle.
 2. Rule details fixed here so the implementer decides nothing silently:
    - *Lexical Haskell-name rules* (`MappedInvalidHaskellName`): package names match Cabal's
      grammar (alphanumeric/hyphen words, no leading/trailing hyphen, at least one letter per
      word); module names are dot-separated `Upper` identifiers; the Haskell type is an `Upper`
-     identifier; binding/fixture/initial symbols are a module path plus a `lower`-initial
+     identifier; a record constructor and every enum/union constructor are `Upper` identifiers;
+     binding/fixture/initial symbols are a module path plus a `lower`-initial
      identifier. Reuse the identifier-hygiene helpers from the EP-105 rules
      (`IdentHaskellKeyword`, `IdentNotConstructorSafe`) where they fit.
+   - *Identity rules* (`MappedInvalidIdentity`): canonical identities, structural binding
+     versions, and opaque codec identity/version strings must be non-empty and contain no ASCII control characters; their
+     contents otherwise remain application-owned rather than imposing a Mori-specific namespace
+     convention.
    - *Conflict rules* (`MappedImportConflict`): two mapped declarations naming the same
      Haskell `module.type` with different spec names or different canonical identities; two
      declarations with the same `canonical-type` string; a mapped declaration whose spec name
-     collides with a built-in type name (`Text`, `Int`, `Bool`, `Time`, plus the new
-     `Natural`, `Timestamp`, `Json`, `Optional`, `List`, `Map` keywords), an id, or an enum
+     collides with a built-in type name (`Text`, `Int`, `Bool`, `Time`, `Natural`, `Json`,
+     `Optional`, `List`, or `Map`), an id, or an enum
      (also `MappedAmbiguousName`). Generated-path collisions proper are plan 150's scaffold
      concern; the spec-layer conflict rules cover everything decidable from text.
    - *Default typing* (`MappedDefaultIllTyped`): `on-missing=null` only for `TOptional` types;
      `on-missing=[]` only for `TList`; `on-missing={}` only for `TMap`; text/int/bool
-     literals only for the matching scalar; `OmCtor` only for enum-typed fields naming a
-     declared constructor; `on-missing` on a `required` field is ill-formed; a negative
-     integer default for `TNatural` is ill-typed.
+     literals only for the matching scalar; `OmCtor` only for a mapped structural enum naming a
+     declared constructor; `on-missing` on a `required` field is ill-formed. Parse integer
+     defaults as `Integer`, then reject values outside `Int` bounds for `TInt` and negative
+     values for `TNatural` before code generation.
+   - *Injective structural encoding*: `MappedNonInjectiveNullability` rejects `ROptional`
+     whose immediate resolved argument is `RJson`, `ROptional _`, or `RRef` to an opaque mapped
+     declaration. `MappedUnsupportedEncoding` rejects a tagged-object envelope whose tag and
+     contents keys are equal. `MappedDuplicateFieldName` rejects two record rows with the same
+     Haskell selector even when their wire keys differ. These checks recurse through the total
+     type-expression/shape folds and report the complete declaration path and relevant source
+     locations.
    - *Guard rules* (`MappedGuardUnsupported`, error severity): resolve every guard atom and
      comparison operand (the existing scope-check machinery in `Validate.hs` already resolves
      atoms against registers/command fields); when an operand's declared type resolves through
-     the graph to a type expression whose `tesGuard` is not symbolic — any mapped record,
+     the graph to a type expression classified as non-symbolic by the guard-support algebra — any mapped record,
      union, or opaque type, any `List`/`Map`/`Json`, and `TNatural` — reject the guard. The
-     symbolic set to encode in `tesGuard` (verify against keiki 0.3.1.0 source via mori before
-     hard-coding, and record the verification in Surprises & Discoveries): `Text`, `Int`,
-     `Bool`, `Timestamp`/`Time` (UTCTime is curated), ids, and declared enums. Writes and
+     symbolic set to encode in that algebra (verified against Keiki 0.4.0.0 source via Mori;
+     re-check if the bound advances): `Text`, `Int`,
+     `Bool` and `Time` (`UTCTime` is curated). Mapped values as wholes, ids, and declared enums
+     remain rejected; generated field projections belong to plan 150's Holes facade. Writes and
      emits of whole mapped values (`write reg := field`, event fields typed by mapped names)
      remain legal — that is the whole-value contract. Any *nested* access spelling does not
      exist in the grammar, so nested guards are unrepresentable rather than rejected — state
@@ -682,15 +781,19 @@ Edits:
      given — reuse the existing code for the out-of-scope spelling).
 3. Negative fixtures, one fault each, following the existing naming convention (flat files in
    `keiro-dsl/test/fixtures/`): `mapped-unresolved.keiro`, `mapped-ambiguous.keiro`,
-   `mapped-dup-wirekey.keiro`, `mapped-dup-armname.keiro`, `mapped-dup-tag.keiro`,
+   `mapped-dup-fieldname.keiro`, `mapped-dup-wirekey.keiro`, `mapped-dup-armname.keiro`,
+   `mapped-dup-tag.keiro`,
    `mapped-recursive.keiro` (direct), `mapped-recursive-mutual.keiro`,
-   `mapped-bad-encoding.keiro`, `mapped-missing-binding.keiro`,
+   `mapped-bad-encoding.keiro`, `mapped-union-key-collision.keiro`,
+   `mapped-optional-json.keiro`, `mapped-optional-optional.keiro`,
+   `mapped-optional-opaque.keiro`, `mapped-missing-binding.keiro`,
+   `mapped-missing-binding-version.keiro`,
    `mapped-missing-canonical.keiro`, `mapped-missing-fixture.keiro`,
    `mapped-missing-initial.keiro` (mapped register, no `initial`),
-   `mapped-bad-haskell-name.keiro`, `mapped-import-conflict.keiro`,
+   `mapped-bad-haskell-name.keiro`, `mapped-empty-identity.keiro`, `mapped-import-conflict.keiro`,
    `mapped-illtyped-default.keiro`, `mapped-guard.keiro` (equality guard over a mapped
-   value), `mapped-guard-natural.keiro` (ordering guard over a `Natural` field — proves the
-   curated-set asymmetry: the same spec with a `Timestamp` comparison must pass). Each gets a
+   value), `mapped-guard-natural.keiro` (ordering guard over a `Natural` field — demonstrates the
+   curated-set asymmetry: the same spec with a `Time` comparison must pass). Each gets a
    test in the `describe "mapped types (EP-149)"` validator block asserting the exact
    `DiagnosticCode` (match on code, not prose, per ADR 0004).
 
@@ -705,7 +808,7 @@ Scope: cross-spec classification implementing IR-1's Evolution Contract, in a ne
 `-Werror` incomplete-pattern pragma) called from `sharedDeclarationDiff` in `Diff.hs`, plus
 the replay-impact extension. The differ pairs mapped declarations by spec name (reusing the
 `pairDeclarations` style used by `enumDiff`/`idDiff`), computes leaf-level wire-identity
-changes through the registry's `tesDiffLeaf` comparators, and then **expands every change to
+changes through a complete diff algebra, and then **expands every change to
 every containing root** using both specs' `TypeGraph` use-site indexes, emitting one `Change`
 per (root, path) with `ckNode` = the aggregate, `ckFacet` = the root surface kind, `ckSubject`
 = the rendered root-to-leaf path, and `ckCode` = the class code. Wire identities are compared,
@@ -716,20 +819,28 @@ IR-1's Evolution Contract, restated as the classification matrix to implement (e
 appended `DiagnosticCode`, its classification, and the obligation text the change's
 `ckDetail` must carry):
 
-- `MappedFieldAddedWithDefault` — Additive for private-history read: a field added with an
-  explicit `on-missing` default that preserves old meaning. Detail names the default.
+For every row below, classification text about decoding/history applies to private event roots.
+If the changed declaration is reachable from a mapped register, emit an additional
+snapshot-hydration Advisory whose sole remedy is invalidate/rebuild via the discriminator and
+generated fingerprint; never prescribe an event upcaster for cached register JSON.
+
+- `MappedFieldAddedWithDefault` — Additive for the new-binary/private-history direction when an
+  explicit `on-missing` default preserves old meaning. The old-binary/new-payload direction is
+  compatible only when the old record's `unknown-fields=ignore`; otherwise it is breaking.
+  Detail names both facts.
 - `MappedFieldAddedNoDefault` — Breaking: adding a field without an on-missing default means
-  old stored payloads no longer decode under the declared shape; the containing event or
-  snapshot requires a versioned migration (version bump + upcaster at the root).
+  old stored payloads no longer decode under the declared shape; the containing event requires
+  a versioned migration. A snapshot root is invalidate/rebuild Advisory, not an event upcaster.
 - `MappedFieldRemoved` — Breaking at every private-event root (replay-relevant field removal
   is replay-affecting even when a tolerant JSON decoder would ignore the historical key — the
-  detail must say this) and at snapshot roots.
+  detail must say this). A mapped-register use emits a separate snapshot invalidate/rebuild
+  Advisory.
 - `MappedFieldTypeChanged`, `MappedPresenceChanged`, `MappedNullabilityChanged`,
   `MappedDefaultRemoved`, `MappedDefaultChanged`, `MappedWireKeyChanged`,
-  `MappedUnionEncodingChanged`, `MappedEnumSpellingChanged` — Breaking (removing an
+  `MappedUnionEncodingChanged` — Breaking (removing an
   on-missing default, changing a field's wire type, presence, or nullability, changing union
   encoding, renaming a wire identity: all breaking unless an outer migration handles it; the
-  detail names the remedy — version bump + upcaster at each affected root).
+  detail names the remedy — version bump + upcaster at each affected private-event root).
 - `MappedArmAdded` — **not universally additive**: Advisory (WARNING) at private-history
   roots with a rollout advisory in the detail ("backward-readable for existing history, but
   an older binary cannot read the new arm once emitted; deploy readers before writers").
@@ -737,26 +848,55 @@ appended `DiagnosticCode`, its classification, and the obligation text the chang
   public boundary from IR-1's Usage Boundaries; contract nodes keep their own field grammar),
   so the closed-public-consumer Breaking case is recorded in the detail text as the rule that
   applies if a future surface exposes the union publicly — and the research note's Experiment
-  D (one arm addition producing distinct per-root results) is re-verified against nested
-  paths here with an evolution fixture whose union is used by an event root and a snapshot
-  register root, asserting two distinct classifications/paths.
+  D is only origin context. A consumer-neutral fixture uses the union at an event root and a
+  snapshot register root, asserting event rollout risk separately from cache invalidation.
 - `MappedArmRemoved`, `MappedArmTagChanged` — Breaking at every root still decoding history.
-- `MappedHaskellBindingChanged` — Advisory, reported separately as a source/build
-  compatibility change (package, module, type, binding, fixture, or initial symbol changed;
-  wire unchanged). Either may gate a release, but it must never be conflated with a wire
-  break.
-- `MappedCanonicalTypeChanged` — Breaking at snapshot roots (the identity a snapshot shape
-  pins), Advisory elsewhere.
+- `MappedEnumValueAdded` — the same directional rollout Advisory as `MappedArmAdded`: existing
+  history remains readable, but older binaries cannot decode the new spelling after it is emitted.
+- `MappedEnumValueRemoved`, `MappedEnumSpellingChanged` — Breaking at every root still decoding
+  history. (`MappedEnumSpellingChanged` is not folded into add+remove, so remediation can name the
+  exact constructor and old/new wire spellings.)
+- `MappedHaskellSourceChanged` / `MappedRecordConstructorChanged` — source/build Advisories when
+  package, module, type, or declared record constructor changes without a wire-identity change;
+  remediation is `RemedyRecompileConsumers`.
+- `MappedBindingChanged` — Advisory with `RemedyRunConformance` when the binding symbol or
+  mandatory `binding-version` changes. The declared wire shape is unchanged, but binding behavior
+  is opaque to `diff`; never describe this as proven wire parity. The generated
+  two-law/codec/golden harness remains a mandatory release gate. Changing binding semantics
+  without bumping `binding-version` violates the declaration contract.
+- `MappedFixturesChanged` — tooling-evidence Advisory; it changes neither wire policy nor runtime
+  dispatch, but the full conformance suite must run because evidence coverage changed.
+- `MappedInitialChanged` — aggregate-behavior Advisory with `RemedyRunConformance`; it changes new
+  stream initialization and snapshot fingerprints, not historical event decoding.
+
+Vector rule for these non-wire codes: Haskell source/constructor changes put `VAdvisory` only on
+`ConsumerBuild`; declared event bytes and runtime directions remain compatible or not applicable.
+A binding change additionally puts `VAdvisory` on each reachable private-history and
+old-binary/new-event direction because the domain interpretation or emitted shape may have
+changed invisibly, and on reachable snapshot hydration because the fingerprint must invalidate
+the cache. It does not fabricate persisted-identity impact: mapped declarations cannot occupy
+stream/dedupe identity positions in version 1. Fixture-only changes put `VAdvisory` on
+`ConsumerBuild` and `VCompatible`/`VNotApplicable` on runtime surfaces. Initial changes put
+`VAdvisory` on `ConsumerBuild` and reachable snapshot hydration, with private-history reads
+compatible. No source/evidence code receives a public-consumer verdict because mapped
+declarations are private in v1.
+- `MappedCanonicalTypeChanged` — `VAdvisory` on `ConsumerBuild` and reachable snapshot hydration:
+  it changes generated nominal/projection provenance and forces discriminator/fingerprint
+  invalidation, but declared event bytes and persisted identities are unchanged. Wire changes are
+  classified by their own rows.
 - `MappedOpaqueCodecChanged` — Breaking: opaque codec identity or version changed; Keiro
   cannot inspect the internal claim.
 - `MappedModeCrossed` — Breaking in both directions (structural→opaque and opaque→structural).
+- `MappedDeclAdded` — Additive by itself; use-site changes (new field/event/register) retain their
+  own existing codes and vectors rather than inheriting a blanket declaration verdict.
 - `MappedDeclRemoved` — Breaking at every root that still references it in the old spec
   (paired with the unresolved-name error in single-spec check of the new spec if uses
-  remain).
+  remain); source-only Advisory when the old type graph proves there was no persisted root.
 
-A nested breaking change propagates to **every** containing private event and snapshot root;
-each emitted `Change` is per-root so each root's obligation (its own version bump, upcaster,
-or deployment note) appears once per root, as IR-1 demands. The `diff` exit-code invariant is
+A nested breaking change propagates to every containing private event root. Every containing
+mapped register also gets a separate snapshot invalidate/rebuild Advisory because the current
+cache codec is consumer JSON, not the generated event codec. Each emitted `Change` is per-root
+so event migration and cache invalidation obligations cannot be confused. The `diff` exit-code invariant is
 preserved: non-zero only when a Breaking change exists.
 
 Replay impact: extend `matchedAggregateImpact`/`decodeSurfaceAffected` in
@@ -772,11 +912,15 @@ Evolution fixture pairs (new files, diffed in-memory via the existing `diffFixtu
 `consumer-types.keiro` as the base plus `consumer-types-fieldadd-default.keiro`,
 `consumer-types-fieldadd-nodefault.keiro`, `consumer-types-fieldremove.keiro`,
 `consumer-types-wirekey.keiro`, `consumer-types-haskell-rename.keiro` (Haskell rename, wire
-pinned — must produce *no* wire change, only `MappedHaskellBindingChanged`),
+pinned — must produce *no* wire change, only `MappedHaskellSourceChanged`),
+`consumer-types-binding-change.keiro`, `consumer-types-fixtures-change.keiro`,
+`consumer-types-initial-change.keiro`,
 `consumer-types-armadd.keiro`, `consumer-types-tagchange.keiro`,
+`consumer-types-enumadd.keiro`, `consumer-types-enumremove.keiro`,
+`consumer-types-enumspelling.keiro`,
 `consumer-types-encoding.keiro`, `consumer-types-opaque-version.keiro`,
 `consumer-types-mode-cross.keiro`, `consumer-types-nested-propagation.keiro` (a leaf change
-in `DocLocation` reached through `DocInfo` from two roots — asserts two complete paths).
+in `ArtifactLocation` reached through `ArtifactInfo` from two roots — asserts two complete paths).
 Tests assert codes, classifications, and rendered paths, and a replay-impact test asserts the
 JSON names the affected event types and snapshot flag.
 
@@ -792,14 +936,17 @@ Scope: golden synthesis for nested shapes, the negative-proof suite IR-1's accep
 demands, and the durable-memory obligations.
 
 Goldens: extend `keiro-dsl/src/Keiro/Dsl/Goldens.hs` so `renderGolden`/`sampleValue`
-synthesize nested old-shape JSON through the **old** spec's `TypeGraph` and the registry's
-`tesGolden` synthesizers (moving JSON construction to `aeson` `Value` with stable key order
+synthesize nested old-shape JSON through the **old** spec's `TypeGraph` and a complete golden
+algebra (moving JSON construction to `aeson` `Value` with stable key order
 rather than growing the manual text builder). Sample policy, fixed here for determinism:
 required fields present; `optional` fields with an `on-missing` default *omitted* (so the
 fixture exercises the old decode policy); `Optional` values non-null; unions use the first
 declared arm; lists carry one element; maps carry one `"sample"` key; `Natural` is `1`;
-`Timestamp` is `"2026-01-01T00:00:00Z"`; `Json` is `{}`; ids/enums keep the existing sample
-conventions. Trigger stays the same as today (an event whose version increases while both
+`Time` is `"2026-01-01T00:00:00Z"`; `Json` is `{}`; nested mapped values recurse through this
+same structural synthesis. This spec-only command cannot import or execute the consumer's
+`FixtureCases` symbol. Every synthesized file is therefore labeled in output/metadata as a weak
+stand-in for capture while both specs exist; plan 150's compiled fixtures/goldens are the
+authoritative conformance evidence. Trigger stays the same as today (an event whose version increases while both
 specs are available) — now including events whose fields reach mapped declarations, so the
 synthesized fixture contains the complete nested old shape. The never-overwrite rule is
 already structural in `emitGoldenPayloads` (`writeIfMissing`); add a test proving a
@@ -828,22 +975,17 @@ ADR work, per `.claude/skills/exec-plan/ADR.md`:
    at `diff` with per-root propagation; mapped single-spec rejections gated at `check`;
    nested replay impact feeding the targeted audit; goldens extended to nested shapes),
    advance its `timestamp`, and record the amendment in `docs/adr/log.md` via `okf log add`.
-2. Create the new codec-authority ADR: allocate the handle first —
+2. Reconcile the landed design with proposed ADR 0012; do not allocate another handle. Inspect
+   it and validate the bundle:
 
    ```bash
-   okf id list docs/adr --profile docs/adr/profile.dhall
-   okf id next docs/adr --profile docs/adr/profile.dhall ADR
+   okf show docs/adr ADR-12 --profile docs/adr/profile.dhall
+   okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
    ```
 
-   — then write `docs/adr/<NNNN>-consumer-owned-types-have-a-single-generated-codec-authority.md`
-   with the allocated `docId`, status `Proposed` (plan 150 moves it to Accepted when the
-   generated codec exists), recording: structural mode's wire schema is owned by the spec and
-   its (future) generated codec — the executed codec must come from the declaration, and a
-   consumer instance may delegate to the generated codec, never the reverse; opaque mode pins
-   an external codec identity/version and never silently upgrades to a structural claim; the
-   spec layer's `check`/`diff` therefore classify only declared wire identities and treat
-   opaque interiors and all Haskell-symbol facts as out of wire scope. Cite IR-1, the
-   research note, and `mori://shinzui/mori/okf/adrs/concepts/ADR-6`. Update `log.md`.
+   Amend ADR 0012 only for implementation-discovered durable facts. Plan 150 may move it to
+   Accepted after the generated codec, total binding laws, projection facade, and snapshot
+   invalidation are observed.
 3. Run the strict validation both times:
 
    ```bash
@@ -882,8 +1024,8 @@ Expected (abridged) Milestone 1 transcript:
 $ cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/consumer-types.keiro
 context consumer-demo
 ...
-mapped structural record DocInfo {
-  haskell package=mori-core module=Mori.Config.Types type=DocInfo
+mapped structural record ArtifactInfo {
+  haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactInfo
   ...
 }
 ```
@@ -909,14 +1051,14 @@ cat "$DEMO/impact.json"
 Expected (abridged) Milestone 4 transcript:
 
 ```text
-BREAKING: Catalog event DocObserved .doc : DocInfo field "contentHash": field added without
+BREAKING: Catalog event ArtifactObserved .artifact : ArtifactInfo field "contentHash": field added without
   an on-missing default; old stored payloads no longer decode under the declared shape —
   bump the containing event version and supply an upcaster [MappedFieldAddedNoDefault]
 replay-affected: run the candidate binary's targeted replay audit for Catalog
-  events=[DocObserved] snapshots=yes
+  events=[ArtifactObserved] snapshots=yes
 exit=1
 $ cat "$DEMO/impact.json"
-{"verdict":"affected","aggregates":{"Catalog":{"eventTypes":["DocObserved"],"includeSnapshotStreams":true}}}
+{"verdict":"affected","aggregates":{"Catalog":{"eventTypes":["ArtifactObserved"],"includeSnapshotStreams":true}}}
 ```
 
 ```bash
@@ -938,17 +1080,20 @@ proceeds; treat divergences as documentation bugs to fix here.
 ### Behavior-level acceptance (IR-1's spec-layer acceptance bullets, restated as observables)
 
 1. **Round trips**: for every construct — structural record/enum/union, opaque declaration,
-   every type expression (`Optional`, `List`, `Map`, `Natural`, `Timestamp`, `Json`, nominal
+   every type expression (`Optional`, `List`, `Map`, `Natural`, `Time`, `Json`, nominal
    refs), explicit wire metadata, every `on-missing` form, JSON leaves — the QuickCheck
-   property and the fixture tests prove `parseSpec "<gen>" (renderSpec s) == Right s`.
+   property and the fixture tests assert `parseSpec "<gen>" (renderSpec s) == Right s` over
+   the generated cases.
    Command: `cabal test keiro-dsl-test` (round-trip describe blocks).
-2. **Negative fixtures**: each of the seventeen `mapped-*.keiro` fixtures makes
+2. **Negative fixtures**: each named `mapped-*.keiro` fixture makes
    `keiro-dsl check` exit non-zero with its exact expected `DiagnosticCode` — covering
-   unresolved, ambiguous, recursive, duplicate (wire key/arm/tag), unsupported (encoding, map
-   key), binding-incomplete (missing binding/canonical/fixture/initial), guard-opaque
+   unresolved, ambiguous, recursive, duplicate (Haskell field/wire key/arm/tag), unsupported
+   (encoding and tag/content key collision), non-injective optional/null encodings,
+   binding-incomplete (missing binding/binding-version/canonical/fixture/initial), invalid identity, guard-opaque
    (mapped-value and `Natural` guards), and import/package-collision faults.
-3. **Evolution fixtures**: the fixture pairs distinguish wire changes, Haskell-binding
-   (source-compat) changes, replay-affecting changes, rollout advisories (union arm add), and
+3. **Evolution fixtures**: the fixture pairs distinguish wire changes, Haskell source changes,
+   binding/fixture/initial changes whose behavior is opaque to `diff`, replay-affecting changes, rollout advisories
+   (union or enum value add), and
    breaking changes with stable codes and complete root-to-leaf usage paths; a Haskell rename
    with a pinned wire key produces no wire change; nested breaks propagate to every containing
    root with per-root obligations; the replay-impact JSON names affected event types and
@@ -989,16 +1134,15 @@ Improvements"):
    predicate hides behind checked syntax.
 4. **Compatibility direction** — The classification matrix distinguishes old-history reads
    (defaults gate additivity), rolling deploys (arm-add rollout advisory), snapshots
-   (canonical-type and register roots), and source compatibility (binding changes reported
-   separately); codes are one-per-class so plan 148's per-surface vector adopts them
-   additively.
+   (canonical-type and register roots), and source/evidence compatibility (source, binding,
+   fixture, and initial changes reported separately); every code/context pair extends plan 148's
+   per-surface vector and remediation registries explicitly.
 5. **Ownership** — Mapped types are usable only at private roots (commands, events,
    registers); contract nodes keep their own field grammar, so a private domain type cannot
    become a public contract by reuse.
-6. **Completeness** — The `typeExprRegistry` with module-scoped
-   `-Werror=incomplete-patterns`, the registry coverage unit test, and the exhaustive
-   wire-mutation suite make an omitted parser/pretty/check/diff/golden case a compile error
-   or a red test.
+6. **Completeness** — The exported total folds/algebras with module-scoped
+   `-Werror=incomplete-patterns`, plus the exhaustive wire-mutation suite, make an omitted
+   parser/pretty/check/diff/golden case a compile error or a red test.
 7. **Migration** — Wire identities, not Haskell names, are compared; defaults are decode
    policy; version bumps with upcasters at each affected root are the named remedy; goldens
    synthesize the old nested shape while both specs exist and never overwrite hand-captured
@@ -1007,8 +1151,8 @@ Improvements"):
    migration. Every step is re-runnable; a bad state is recovered by `git checkout` of the
    touched sources. `--emit-goldens` is idempotent by the never-overwrite rule.
 9. **Performance** — Text-tool only; graph resolution is linear in spec size with a
-   cycle-detection DFS. No runtime codec exists yet to benchmark; the registry's
-   `tesScaffoldNote` hand-off explicitly leaves encoder fusion to plan 150 with the research
+   cycle-detection DFS. No runtime codec exists yet to benchmark; the exported fold/algebra
+   hand-off explicitly leaves encoder fusion to plan 150 with the research
    note's "never optimize by restoring dual authority" constraint.
 10. **Negative proof** — Milestone 5's mutation suites are the constructive proof: an
     unvisited nested field or union arm makes the diff or check suite fail, demonstrated red
@@ -1022,9 +1166,9 @@ Every step is additive source editing plus test runs; all commands are safe to r
 clean up via `trap`). `diff --emit-goldens` never overwrites existing files, so re-running it
 is safe by construction. The `DiagnosticCode` enum is append-only — if a code lands with a
 wrong name before release, the fix is a new code plus deprecating the old one in prose, not a
-rename. ADR edits are guarded by `just adr-validate`; if `okf id next` was consumed but the
-ADR is abandoned, do not reuse the handle — allocate again next time (gaps are legal, reuse is
-not). If a milestone is interrupted, the Progress section's done/remaining split plus the last
+rename. ADR edits are guarded by `just adr-validate`; this plan amends already allocated
+ADR 0012 and consumes no new handle. If a milestone is interrupted, the Progress section's
+done/remaining split plus the last
 green commit are sufficient to resume; nothing in this plan mutates state outside the working
 tree.
 
@@ -1041,52 +1185,79 @@ No new package dependencies. Existing dependencies used: `megaparsec`/`parser-co
 (parser), `prettyprinter` (rendering), `aeson` (golden synthesis, replay-impact JSON),
 `containers`, `text`. Tooling: `cabal`, `just`, `okf` (ADR bundle), `git` (diff CLI), `mori`
 (dependency source lookup for the keiki curated-set verification). Version-bound changes: none
-expected; if any bound must move, first re-verify released versions against Hackage and
-upstream tags (baseline: keiki `0.3.1.0`, keiro-dsl `0.3.0.0`, local checkout ahead of the
-released tag).
+expected in this spec-only plan. Plan 150 owns the already-verified coordinated Keiki migration:
+Hackage and upstream tags both identify `0.4.0.0` as the released projection API.
+Hard plan dependency: plan 148's landed `ChangeContext`, `CompatibilityVector`,
+`classifyCompatibility`, `remediationFor`, and `RemedyRunConformance`/
+`RemedyRecompileConsumers` surface; re-read its landed names before Milestone 4 and record any
+coordinated rename in both plans.
 
 Module-level interface contract at the end of each milestone (full paths; signatures are the
 minimum that must exist — implementers may add, not subtract):
 
 Milestone 1, `Keiro.Dsl.Grammar` (`keiro-dsl/src/Keiro/Dsl/Grammar.hs`): `TypeExpr`,
-`Presence`, `OnMissing`, `WireField`, `UnionEncoding`, `WireArm`, `MappedShape`,
-`HaskellSource`, `MappedDecl` (all exported, `Eq`/`Show`/`Generic`); `Spec` gains
+`Presence`, `UnknownFields`, `OnMissing`, `WireField`, `UnionEncoding`, `WireEnum`, `WireArm`, `MappedShape`,
+`HaskellSource`, raw `MappedDecl` (all exported, `Eq`/`Show`/`Generic`); `Spec` gains
 `specMapped :: ![MappedDecl]`. `Keiro.Dsl.Parser.parseSpec` and
 `Keiro.Dsl.PrettyPrint.renderSpec` keep their signatures and cover the new syntax.
 
 Milestone 2, `Keiro.Dsl.TypeGraph` (new file `keiro-dsl/src/Keiro/Dsl/TypeGraph.hs`):
 
 ```haskell
-resolveTypeGraph :: Spec -> Either [Diagnostic] TypeGraph
-data ResolvedRef = RefMapped !MappedDecl | RefId !IdDecl | RefEnum !EnumDecl | RefBuiltin !Name
+resolveTypeGraph :: Spec -> Either (NonEmpty TypeGraphError) TypeGraph
+checkMappedDecl :: MappedDecl -> Either (NonEmpty MappedDeclError) CheckedMappedDecl
+data ResolvedTypeExpr
+data ResolvedMappedShape
+data ResolvedMappedDecl
 data UseSite   -- root surface + referenced declaration (constructors in Milestone 2 text)
 usePaths :: TypeGraph -> Name -> [UsePath]
 renderUsePath :: UsePath -> Text
-data TypeExprFamily  -- Eq, Ord, Show, Enum, Bounded
-typeExprFamily :: TypeExpr -> TypeExprFamily
-data TypeExprSupport -- tesGuard, tesWireForm, tesGolden, tesDiffLeaf, tesScaffoldNote
-typeExprRegistry :: [(TypeExprFamily, TypeExprSupport)]
+data TypeExprAlgebra a
+foldTypeExpr :: TypeExprAlgebra a -> ResolvedTypeExpr -> a
+data MappedShapeAlgebra a
+foldMappedShape :: MappedShapeAlgebra a -> ResolvedMappedShape -> a
+data MappedDeclAlgebra a
+foldMappedDecl :: MappedDeclAlgebra a -> ResolvedMappedDecl -> a
 wireFingerprint :: TypeGraph -> Name -> Text   -- wire-identity-only fingerprint (Milestone 4 uses it)
 ```
 
-Milestone 3, `Keiro.Dsl.Validate`: `DiagnosticCode` extended (append-only) with the fourteen
+Milestone 3, `Keiro.Dsl.Validate`: `DiagnosticCode` extended (append-only) with the
 single-spec codes named in Milestone 3; `validateSpec` unchanged in signature, now covering
 mapped rules through `resolveTypeGraph`.
 
 Milestone 4, `Keiro.Dsl.MappedDiff` (new file `keiro-dsl/src/Keiro/Dsl/MappedDiff.hs`):
 `mappedDiff :: DiffEnv -> [Change]`, invoked from `Keiro.Dsl.Diff.sharedDeclarationDiff`;
-`DiagnosticCode` extended with the seventeen diff codes named in Milestone 4;
+`DiagnosticCode` extended with the diff codes named in Milestone 4;
 `Keiro.Dsl.ReplayImpact.replayImpact` unchanged in signature, decode surfaces now including
 `wireFingerprint` of reachable mapped declarations.
 
 Milestone 5, `Keiro.Dsl.Goldens`: `goldensForDiff`/`emitGoldenPayloads` unchanged in
-signature, synthesis now registry-driven for nested shapes. Consumed-by contract: plan 150
-builds its scaffold planning, manifests, codecs, and harness on `Keiro.Dsl.TypeGraph`
-(`resolveTypeGraph`, `typeExprRegistry`, `usePaths`, `wireFingerprint`) and the
-`MappedDecl` grammar — treat their exported names as stable once this plan completes; breaking
+signature, synthesis now fold/algebra-driven for nested shapes. Consumed-by contract: plan 150
+builds its scaffold planning, manifests, codecs, projection facade, and harness on
+`Keiro.Dsl.TypeGraph` (`resolveTypeGraph`, the exported folds/algebras, `usePaths`,
+`wireFingerprint`) and `CheckedMappedDecl`; raw `MappedDecl` remains a parser/pretty-print AST.
+Treat the checked graph's exported names as stable once this plan completes; breaking
 them afterward requires coordinating with plan 150.
 
 
 ---
 
 Revision note: Aligned cross-plan references during MasterPlan 25 consistency review, 2026-07-28.
+
+Revision note: Revalidated the spec API for general consumers: reuse `Time`, require one
+non-empty fixture set, explicit optional defaults and unknown-field policy, restrict v1
+references to mapped declarations, replace registry totality with compile-forcing folds, treat
+snapshots as invalidate/rebuild roots, and consume ADR 0012, 2026-07-28.
+
+Revision note: Gave enum wire entries their own source-located `WireEnum` type so diagnostics and
+future consumers do not lose provenance through an unstructured `(Name, Text)` tuple,
+2026-07-28.
+
+Revision note: Added raw-to-checked declaration phase separation with typed graph errors and
+resolved folds, removed an unreachable non-text-map-key diagnostic, and made non-injective null
+encodings, duplicate Haskell fields, and union envelope-key collisions static rejections,
+2026-07-28.
+
+Revision note: Made record-constructor metadata and application-owned `binding-version`
+mandatory, so exact generic derivation and semantic binding changes remain explicit, reviewable,
+and consumer-neutral, 2026-07-28.
