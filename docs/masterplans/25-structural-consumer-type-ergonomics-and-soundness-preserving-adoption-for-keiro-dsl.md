@@ -165,7 +165,7 @@ request's origin but do not constrain the reusable Keiro API beyond the local de
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Document the guarantee ledger: what the DSL buys and what hand-written services lose | docs/plans/144-document-the-guarantee-ledger-what-the-dsl-buys-and-what-hand-written-services-lose.md | None | None | Complete |
-| 2 | Write the brownfield migration and transducer modeling guide | docs/plans/145-write-the-brownfield-migration-and-transducer-modeling-guide.md | None | EP-1 | In Progress |
+| 2 | Write the brownfield migration and transducer modeling guide | docs/plans/145-write-the-brownfield-migration-and-transducer-modeling-guide.md | None | EP-1 | Complete |
 | 3 | Give hand-written services first-class fold-fingerprint snapshot invalidation | docs/plans/146-give-hand-written-services-first-class-fold-fingerprint-snapshot-invalidation.md | None | None | Not Started |
 | 4 | Generate forward-versus-replay equality assertions in the DSL harness | docs/plans/147-generate-forward-versus-replay-equality-assertions-in-the-dsl-harness.md | None | None | Not Started |
 | 5 | Report evolution as a compatibility vector with remediation explanations | docs/plans/148-report-evolution-as-a-compatibility-vector-with-remediation-explanations.md | None | None | Not Started |
@@ -287,8 +287,8 @@ is implemented and released.
 - [x] 2026-07-28: Reconciled master/child dependencies and interfaces; strict ADR validation, ADR-12 inspection, offline link checking, and diff hygiene passed
 - [x] 2026-07-28: EP-1 guarantee ledger guide drafted (layered gates, DSL benefits, hand-written losses ranked by silence)
 - [x] 2026-07-28: EP-1 IR-1 justification reframed and cross-linked; evolution guide cross-links landed
-- [ ] EP-2: Transducer modeling chapters drafted (decision scalars, registers, lifecycle vertices)
-- [ ] EP-2: Brownfield migration path drafted (goldens first, versioned cutover, upcasters, audit)
+- [x] 2026-07-28: EP-2 transducer modeling chapters drafted (decision scalars, registers, lifecycle vertices)
+- [x] 2026-07-28: EP-2 brownfield migration path drafted (goldens first, versioned cutover, upcasters, audit)
 - [ ] EP-3: Fold-fingerprint helper API landed in keiro with tests
 - [ ] EP-3: jitsurei adopts the helper; guides and ADR 0003 references updated
 - [ ] EP-4: Forward-versus-replay equality assertion generated for aggregate harnesses

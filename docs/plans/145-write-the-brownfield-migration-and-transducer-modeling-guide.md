@@ -52,11 +52,11 @@ This section must always reflect the actual current state of the work.
 
 - [x] 2026-07-28T17:11:48Z — Milestone 1: Part A (transducer modeling) chapters drafted in the new guide file.
 - [x] 2026-07-28T17:11:48Z — Milestone 1: All Part A code examples verified against `jitsurei/src/Jitsurei/` sources.
-- [ ] Milestone 2: Part B (brownfield migration path) chapters drafted.
-- [ ] Milestone 2: Anchor comments for plans 151 and 152 placed and named.
-- [ ] Milestone 3: Guide registered in `docs/guides/README.md`.
-- [ ] Milestone 3: Link check passes; cited-symbol check passes; Proposal Test passage recorded.
-- [ ] Outcomes & Retrospective written; ADR distillation pass done (expected outcome: no new ADR — see Validation).
+- [x] 2026-07-28T17:14:55Z — Milestone 2: Part B (brownfield migration path) chapters drafted.
+- [x] 2026-07-28T17:14:55Z — Milestone 2: Anchor comments for plans 151 and 152 placed and named.
+- [x] 2026-07-28T17:14:55Z — Milestone 3: Guide registered in `docs/guides/README.md`.
+- [x] 2026-07-28T17:14:55Z — Milestone 3: Link check passes; cited-symbol check passes; Proposal Test passage recorded.
+- [x] 2026-07-28T17:14:55Z — Outcomes & Retrospective written; ADR distillation pass done (no new ADR required).
 
 
 ## Surprises & Discoveries
@@ -156,6 +156,32 @@ Record every decision made while working on the plan.
   needless scalar duplication and false claims of DSL enforcement.
   Date: 2026-07-28
 
+- Decision: Accept the completed guide after a clean chapter-by-chapter Proposal Test pass.
+  The pass found no doctrine requiring rework:
+  - Decision scalars versus payload data keeps symbolic visibility explicit, labels opaque
+    predicates, and denies checked nested syntax until exact lowering exists.
+  - Guard evolution keeps replay consequences visible, uses the scalar-computable replay-only
+    remedy, and requires audit evidence before retirement.
+  - Inventory separates private and public ownership and enumerates every persisted surface and
+    rare wire variant rather than trusting current Haskell types.
+  - Golden capture happens before declaration, treats production bytes as authoritative, and
+    states that finite decode fixtures are not replay or fold proof.
+  - Shadow comparison is development evidence only, compares semantic JSON, and forbids a live
+    second codec authority or a "close enough" classification.
+  - Versioning preserves append-only history through explicit aggregate rungs and upcasters;
+    silent normalization and event rewriting are prohibited.
+  - Legacy decoders survive only at their version boundary or in tests, never as a current-value
+    encoder or fallback decoder.
+  - Validated stream migration makes replay/completeness failures block construction and excludes
+    `mkEventStreamUnchecked` from production migration.
+  - Pre-cutover audit and deploy ordering define safe retry before cutover, surface-specific
+    rollout constraints, exclusive codec ownership, and roll-forward recovery after the first
+    new-version write.
+  Rationale: Together these answers the Proposal Test's authority, replay, visibility,
+  compatibility-direction, ownership, completeness, migration, recovery, performance, and
+  negative-proof questions without claiming that finite documentation examples are proofs.
+  Date: 2026-07-28
+
 
 ## Outcomes & Retrospective
 
@@ -164,7 +190,25 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Completed on 2026-07-28. The new
+`docs/guides/brownfield-migration-and-transducer-modeling.md` guide delivers both planned halves:
+Part A teaches scalar-first transducer modeling, head invertibility, lifecycle vertices,
+per-entity streams, and replay-only guard evolution; Part B gives an evidence-producing sequence
+from wire inventory and production goldens through codec comparison, explicit versioning,
+validated construction, full replay audit, and coordinated cutover. `docs/guides/README.md`
+registers the guide, and the stable plan-151/152 append anchors are present.
+
+Mechanical acceptance passed: all fourteen required headings were found, both named anchors were
+found exactly once, all relative file targets resolved, every cited Haskell symbol was located in
+the current Keiro/Keiki/jitsurei sources, all fenced examples have language-tagged openings, and
+`git diff --check` was clean. A full read-through confirmed that the guide links to the tan-ES
+comparison, evolution gate table, and compiler-driven `ValidatedEventStream` procedure rather
+than duplicating them. Strict ADR bundle validation reported `OK: 12 concepts`.
+
+The ADR distillation pass found no new durable architectural decision. The guide applies existing
+ADRs 0002, 0003, and 0004 and the MasterPlan's already-recorded exclusions; source-layout drift and
+documentation filenames remain task-local execution knowledge recorded in Surprises &
+Discoveries.
 
 
 ## Context and Orientation

@@ -227,3 +227,209 @@ lands.
 <!-- appended-by: docs/plans/151-reduce-binding-boilerplate-skeleton-scaffolds-derived-nominal-bindings-and-explain-bindings.md
      anchor: binding-authoring-tooling
      (binding skeleton scaffolds and `check --explain-bindings` sections land here) -->
+
+
+## Part B: The migration path
+
+Stored bytes are facts. Haskell types, current encoders, and remembered design
+intent are evidence about those facts, but none can replace inspecting the
+values production actually persisted. The migration path therefore advances by
+evidence: inventory every durable surface, capture representative bytes, derive
+the new declaration from those bytes, compare codecs, make every difference an
+explicit version step, validate the runtime assembly, replay real histories,
+and only then switch traffic.
+
+Keep the old release deployable until the cutover. Before the first new-version
+event is written, a failed check means the team fixes the candidate and repeats
+the evidence-producing step while production continues unchanged.
+
+
+### Inventory the existing wire shapes
+
+Start with storage, not source types. Enumerate every persisted or externally
+consumed surface owned by the service:
+
+- private event payloads and their metadata version and event-type tags;
+- database rows imported into aggregate state;
+- queue jobs and timers that may wait across a deployment;
+- snapshots and other cached state;
+- public messages consumed by another service; and
+- workflow inputs, results, or journals if the service uses them.
+
+For each shape, record where the bytes live, which component writes them, every
+known reader, retention time, and the actual serialized form. Sample real
+values into a corpus such as `test/goldens/legacy/<shape>/`. Include rare but
+meaningful variants: every observed union tag, absent optional keys, explicit
+`null`, pre-fix bug-era payloads, and the oldest supported schema version.
+Scrub sensitive data without changing keys, tags, nullability, number/string
+choices, or other structural facts.
+
+Do not infer the wire contract from constructor spelling. Aeson options can
+change field and constructor names, an encoder may omit `Nothing`, generic sum
+encodings choose a tag/contents layout, and old releases may have persisted
+shapes that today's type no longer admits. Treat public messages separately
+from private events even when their current records look alike: they have
+different owners and compatibility directions.
+
+
+### Capture goldens before declaring the spec
+
+Capture the corpus from production before writing a `.keiro` declaration or a
+replacement codec. Then derive the proposed wire declaration from the
+historical contract. Reversing that order invites a common failure: declare
+what today's Haskell value looks like, synthesize fixtures from the declaration,
+and accidentally prove the new codec agrees only with itself.
+
+A golden is finite evidence. It proves that the candidate decoder still reads
+that exact historical case. It does not prove that every possible historical
+value was sampled, that the decoded event still has an inverting edge, or that
+the event folds to the same state. Keep hand-captured production goldens
+authoritative; generated tooling may add missing fixtures but must never
+overwrite them. This boundary is recorded in
+[`docs/adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md`](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md).
+
+Use the `decodeRaw` pattern in
+[Evolve Events Safely](evolve-events-safely.md) to turn each event golden into
+a test. `Jitsurei.OrderStream` carries a real historical rung:
+
+```haskell
+decodeRaw orderCodec (EventType "OrderPlaced") 1
+  (object ["orderId" .= ("order-100" :: Text), "qty" .= (3 :: Int)])
+```
+
+That test exercises `orderCodec`'s version-1 input through
+`upcastOrderPlacedV1` and then through the current decoder.
+
+
+### Shadow comparison of old and new codecs
+
+With the corpus fixed, run the historical and candidate codecs side by side in
+development tests. This is comparison evidence, not dual production authority.
+For every historical golden, require the candidate codec to decode it through
+the appropriate version boundary. For representative domain values, encode
+with both codecs and compare parsed or RFC 8785-canonical JSON meaning. Keep the
+original raw bytes as corpus provenance, but do not mistake object-key order or
+insignificant whitespace for codec semantics unless another consumer actually
+owns those byte-level details.
+
+Classify every difference into exactly one of two buckets:
+
+- parity: both codecs represent the same contract and the candidate can take
+  over without a new rung; or
+- explicit migration work: a new schema version and upcaster preserve the old
+  rung while the candidate owns the new representation.
+
+There is no “close enough” bucket. The `OrderPlaced` example demonstrates the
+second classification. Version 1 used `qty` and did not require `sku`; version
+2 uses `quantity`, and `upcastOrderPlacedV1` supplies `"UNKNOWN"` when the old
+payload lacks `sku`:
+
+```json
+{"orderId":"order-100","qty":3}
+```
+
+The rename is not formatting. It is versioned compatibility work. A finite
+shadow corpus cannot prove universal equivalence, so combine it with generated
+round trips, negative fixtures, runtime validation, and the real-log audit.
+
+The scaffolded comparison runner does not exist yet. Plan 152 will append its
+consumer-compiled workflow here after implementation; the manual comparison
+above remains valid.
+
+<!-- appended-by: docs/plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md
+     anchor: codec-compare-tooling
+     (the scaffolded comparison-runner section lands here; the manual technique above remains valid) -->
+
+
+### Version, never silently normalize
+
+When the desired representation differs from history, increment the aggregate
+codec version and add an explicit upcaster. Never rewrite stored events and
+never relabel a structural difference as normalization. Kiroku is append-only,
+Keiro ships no event-payload migration tool, and upcasters run at decode time
+for as long as their source-version payloads can exist.
+
+`orderCodec` is the worked example: its aggregate-wide `schemaVersion` is 2,
+and its source-1 rung applies `upcastOrderPlacedV1` for `OrderPlaced` while the
+codec's event-type-aware boundary preserves other event kinds. In a codec with
+several event kinds, versions still belong to the aggregate rather than each
+constructor. Choose the next version as the aggregate's current maximum plus
+one, keep every rung contiguous, and dispatch inside a shared rung by event
+type when only one payload kind changes. See
+[Evolve Events Safely](evolve-events-safely.md) for the code and
+[Changing an existing event's payload fields](evolution-and-replayability.md#changing-an-existing-events-payload-fields)
+for the post-adoption procedure.
+
+
+### Legacy decoders only at the version boundary
+
+The old decoder has one legitimate afterlife: it reads its own historical
+version as part of an upcaster rung. It must not remain a fallback for malformed
+current-version values or an alternate encoder “kept just in case.” Such a
+fallback creates two live interpretations of the same current payload and
+hides defects that should fail loudly.
+
+Apply the dual-authority test after cutover: exactly one codec writes current
+values, and exactly one contiguous version chain reads stored values. If
+production can choose the legacy codec to encode a current value, or can route
+a current-version decode through it after the authoritative decoder rejects the
+payload, migration is incomplete. Historical-codec code used only by tests and
+the old-version rung is comparison and compatibility machinery, not a second
+authority.
+
+
+### Migrate the stream boundary to ValidatedEventStream
+
+Once the wire contract and version chain are explicit, assemble the ported
+transducer, initial state, codec, and stream-name resolver as an `EventStream`
+and admit it through `mkEventStream` or `mkEventStreamOrThrow`. Follow
+[Migrating to `ValidatedEventStream`](migrating-to-validated-event-stream.md)
+for the compiler-driven source edits; this chapter adds only the brownfield
+interpretation.
+
+This is often the first time a legacy model meets Keiki's replay checks. A
+construction failure such as `HeadUnrecoverable`, inversion ambiguity,
+nondeterminism, or a dead edge is evidence of a porting mistake or a latent
+legacy bug, not ceremony to suppress. Fix the model or use the linked guide's
+narrow, documented path for a confirmed conservative determinism/reachability
+warning. Head recoverability and state-changing output-free checks cannot be
+disabled at Keiro's durable boundary.
+
+`mkEventStreamUnchecked` is for tests and emergency forensics. It skips every
+Keiki and Keiro check, including codec-chain validation, and is never a
+migration step or a production rollout workaround.
+
+
+### Pre-cutover replay audit and deploy ordering
+
+Run a one-time `AuditFull` with the candidate binary against a production-copy
+database before switching traffic. `Keiro.ReplayAudit` full-replays every
+accepted stream, reports replay failures and snapshot-seed divergence, and
+returns a non-zero `auditExitCode` if any report fails. Non-zero means do not
+cut over: keep the old release in service, repair the candidate or its explicit
+migration boundary, refresh the copy if needed, and repeat the audit. `AuditFull`
+is appropriate here because a first runtime cutover has no trustworthy
+spec-derived affected set; routine later changes should use the narrower
+replay-impact verdict and `AuditTargeted`.
+
+The final traffic switch follows the rollout rules in
+[`docs/adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md`](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md)
+and [Deploy Ordering](../user/deploy-ordering.md):
+
+- An aggregate codec has one version for writing and decoding, so do not run
+  old and new codec versions as mixed writers for the same stream category.
+  Use a stop-the-world or blue/green cutover with exclusive ownership.
+- After the first new-version event is appended, rollback is roll-forward-only.
+  The old release cannot decode that event and returns `VersionAhead`.
+- Keep queue, timer, workflow, and public-message rollout rules separate; their
+  consumers may need to deploy or drain before producers switch.
+
+Snapshot misses and full replay are an expected one-time cost, not evidence
+that event history should be rewritten. Snapshot compatibility is the triple of
+state-codec version, register-layout shape, and control-state/fold identity
+defined by
+[`docs/adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md`](../adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md).
+See [Snapshots And Hydration](snapshots-and-hydration.md) for the fallback and
+metrics. Once the cutover succeeds, use
+[Evolution And Replayability](evolution-and-replayability.md) for every later
+schema, decision, fold, queue, contract, or workflow change.

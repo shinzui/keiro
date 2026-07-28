@@ -25,6 +25,10 @@ are adopting:
 - [Migrating To `ValidatedEventStream`](migrating-to-validated-event-stream.md)
   is the compiler-driven source migration for services that still build bare
   `EventStream` values at runner boundaries.
+- [Brownfield Migration And Transducer Modeling](brownfield-migration-and-transducer-modeling.md)
+  is for migrating an existing service onto keiro: modeling decisions as
+  solver-visible scalars, lifecycle vertices, one stream per entity, and the
+  goldens-first shadow-compared versioned migration path.
 - [Evolve Events Safely](evolve-events-safely.md) shows the event codec and the
   version-1-to-version-2 upcaster.
 - [Project Read Models](project-read-models.md) builds the inline order summary
