@@ -165,7 +165,7 @@ request's origin but do not constrain the reusable Keiro API beyond the local de
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Document the guarantee ledger: what the DSL buys and what hand-written services lose | docs/plans/144-document-the-guarantee-ledger-what-the-dsl-buys-and-what-hand-written-services-lose.md | None | None | Complete |
-| 2 | Write the brownfield migration and transducer modeling guide | docs/plans/145-write-the-brownfield-migration-and-transducer-modeling-guide.md | None | EP-1 | Not Started |
+| 2 | Write the brownfield migration and transducer modeling guide | docs/plans/145-write-the-brownfield-migration-and-transducer-modeling-guide.md | None | EP-1 | In Progress |
 | 3 | Give hand-written services first-class fold-fingerprint snapshot invalidation | docs/plans/146-give-hand-written-services-first-class-fold-fingerprint-snapshot-invalidation.md | None | None | Not Started |
 | 4 | Generate forward-versus-replay equality assertions in the DSL harness | docs/plans/147-generate-forward-versus-replay-equality-assertions-in-the-dsl-harness.md | None | None | Not Started |
 | 5 | Report evolution as a compatibility vector with remediation explanations | docs/plans/148-report-evolution-as-a-compatibility-vector-with-remediation-explanations.md | None | None | Not Started |

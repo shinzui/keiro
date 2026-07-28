@@ -50,8 +50,8 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: Part A (transducer modeling) chapters drafted in the new guide file.
-- [ ] Milestone 1: All Part A code examples verified against `jitsurei/src/Jitsurei/` sources.
+- [x] 2026-07-28T17:11:48Z — Milestone 1: Part A (transducer modeling) chapters drafted in the new guide file.
+- [x] 2026-07-28T17:11:48Z — Milestone 1: All Part A code examples verified against `jitsurei/src/Jitsurei/` sources.
 - [ ] Milestone 2: Part B (brownfield migration path) chapters drafted.
 - [ ] Milestone 2: Anchor comments for plans 151 and 152 placed and named.
 - [ ] Milestone 3: Guide registered in `docs/guides/README.md`.
@@ -64,7 +64,14 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- The EP-1 guarantee ledger landed as
+  `docs/guides/dsl-guarantees-and-hand-written-services.md`, rather than the provisional
+  `guarantees-of-the-keiro-dsl.md` name assumed during early planning. Evidence:
+  `docs/guides/README.md` registers the former path. The new guide links the landed path.
+
+- `PlaceOrderData` is defined in `jitsurei/src/Jitsurei/Domain.hs`, while
+  `jitsurei/src/Jitsurei/OrderStream.hs` imports and uses it in `orderTransducer`. The guide
+  cites both modules instead of implying the record declaration lives in `OrderStream.hs`.
 
 
 ## Decision Log
