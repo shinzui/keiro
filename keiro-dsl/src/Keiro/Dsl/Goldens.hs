@@ -6,6 +6,7 @@ are available. Existing files are never overwritten: a hand-captured
 production payload is always more authoritative than a synthesized sample.
 -}
 module Keiro.Dsl.Goldens (
+    GoldenEvidence (..),
     GoldenPayload (..),
     goldensForDiff,
     emitGoldenPayloads,
@@ -13,14 +14,24 @@ module Keiro.Dsl.Goldens (
     goldenRelativePath,
 ) where
 
+import Data.Aeson (Value (..))
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Aeson.Text qualified as AesonText
 import Data.List (find)
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
+import Data.Text.Lazy qualified as TL
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Scaffold (Agg (..), ResolvedCtor (..), defaultContext, resolveAgg)
+import Keiro.Dsl.TypeGraph
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist)
 import System.FilePath (dropTrailingPathSeparator, takeDirectory, takeFileName, (</>))
+
+data GoldenEvidence = SynthesizedWeakStandIn | FileOwnedFixture
+    deriving stock (Eq, Show)
 
 data GoldenPayload = GoldenPayload
     { goldenContext :: !Text
@@ -28,6 +39,7 @@ data GoldenPayload = GoldenPayload
     , goldenEvent :: !Text
     , goldenVersion :: !Int
     , goldenJson :: !Text
+    , goldenEvidence :: !GoldenEvidence
     }
     deriving stock (Eq, Show)
 
@@ -42,6 +54,7 @@ goldensForDiff oldSpec newSpec =
         , goldenEvent = evName oldEvent
         , goldenVersion = evVersion oldEvent
         , goldenJson = renderGolden oldSpec oldResolved oldResolvedEvent
+        , goldenEvidence = SynthesizedWeakStandIn
         }
     | oldAggregate <- aggregates oldSpec
     , Just newAggregate <- [find ((== aggName oldAggregate) . aggName) (aggregates newSpec)]
@@ -95,6 +108,7 @@ loadGoldenPayloads root spec = do
                         , goldenEvent = evName event
                         , goldenVersion = sourceVersion
                         , goldenJson = ""
+                        , goldenEvidence = FileOwnedFixture
                         }
                 path = contextRoot </> aggregateRelativePath golden
             exists <- doesFileExist path
@@ -128,43 +142,87 @@ resolveContextRoot root contextName = do
                     then root
                     else nested
 
-data SampleValue = SampleText !Text | SampleInt !Int | SampleBool !Bool
-
 renderGolden :: Spec -> Agg -> ResolvedCtor -> Text
 renderGolden spec aggregate event =
-    T.unlines $
-        ["{"]
-            <> zipWith renderEntry [0 :: Int ..] entries
-            <> ["}"]
+    TL.toStrict (AesonText.encodeToLazyText (Object (KeyMap.fromList entries))) <> "\n"
   where
+    graph = either (const Nothing) Just (resolveTypeGraph spec)
     entries =
-        ("kind", SampleText (rcName event))
-            : [(fieldName, sampleValue spec aggregate fieldType) | (fieldName, fieldType) <- rcFields event]
-    lastIndex = length entries - 1
-    renderEntry index (fieldName, value) =
-        "  "
-            <> quote fieldName
-            <> ": "
-            <> renderSample value
-            <> if index == lastIndex then "" else ","
+        (Key.fromText "kind", String (rcName event))
+            : [(Key.fromText fieldName, sampleValue graph spec aggregate fieldType) | (fieldName, fieldType) <- rcFields event]
 
-sampleValue :: Spec -> Agg -> Text -> SampleValue
-sampleValue spec _aggregate fieldType
+sampleValue :: Maybe TypeGraph -> Spec -> Agg -> Text -> Value
+sampleValue graph spec _aggregate fieldType
     | Just identifier <- find ((== fieldType) . idName) (specIds spec) =
-        SampleText (idPrefix identifier <> "_01hzy3v7q2e8kaw2m5x0d41n9c")
+        String (idPrefix identifier <> "_01hzy3v7q2e8kaw2m5x0d41n9c")
     | Just enum <- find ((== fieldType) . enumName) (specEnums spec)
     , (_, wireValue) : _ <- enumCtors enum =
-        SampleText wireValue
-    | fieldType == "Int" = SampleInt 1
-    | fieldType == "Bool" = SampleBool True
-    | fieldType == "Time" = SampleText "2026-01-01T00:00:00Z"
-    | otherwise = SampleText "sample"
+        String wireValue
+    | Just resolved <- graph
+    , Just declaration <- Map.lookup (MappedKey fieldType) (tgDeclarations resolved) =
+        sampleMappedDeclaration resolved declaration
+    | fieldType == "Int" = Number 1
+    | fieldType == "Bool" = Bool True
+    | fieldType `elem` ["Time", "UTCTime"] = String "2026-01-01T00:00:00Z"
+    | otherwise = String "sample"
 
-renderSample :: SampleValue -> Text
-renderSample (SampleText value) = quote value
-renderSample (SampleInt value) = T.pack (show value)
-renderSample (SampleBool True) = "true"
-renderSample (SampleBool False) = "false"
+sampleMappedDeclaration :: TypeGraph -> ResolvedMappedDecl -> Value
+sampleMappedDeclaration graph =
+    foldMappedDecl
+        MappedDeclAlgebra
+            { onStructuralDecl = \_ -> sampleMappedShape graph
+            , onOpaqueDecl = const emptyObject
+            }
 
-quote :: Text -> Text
-quote = T.pack . show
+sampleMappedShape :: TypeGraph -> ResolvedMappedShape -> Value
+sampleMappedShape graph =
+    foldMappedShape
+        MappedShapeAlgebra
+            { onRecord = \_ _ fields ->
+                Object . KeyMap.fromList $
+                    [ (Key.fromText (rwfKey field), sampleMappedExpression graph (rwfType field))
+                    | field <- fields
+                    , includeField field
+                    ]
+            , onEnum = \entries -> case entries of
+                firstEntry : _ -> String (weTag firstEntry)
+                [] -> String "sample"
+            , onUnion = \encoding arms -> case arms of
+                firstArm : _ ->
+                    Object . KeyMap.fromList $
+                        [(Key.fromText (ueTagField encoding), String (rwaTag firstArm))]
+                            <> [ (Key.fromText (ueContentsField encoding), sampleMappedExpression graph payload)
+                               | payload <- maybeToList (rwaPayload firstArm)
+                               ]
+                [] -> emptyObject
+            }
+  where
+    includeField field = case rwfPresence field of
+        PRequired -> True
+        POptional -> isNothingValue (rwfOnMissing field)
+
+sampleMappedExpression :: TypeGraph -> ResolvedTypeExpr -> Value
+sampleMappedExpression graph =
+    foldTypeExpr
+        TypeExprAlgebra
+            { onText = String "sample"
+            , onInt = Number 1
+            , onBool = Bool True
+            , onNatural = Number 1
+            , onTime = String "2026-01-01T00:00:00Z"
+            , onJson = emptyObject
+            , onOptional = id
+            , onList = \value -> Array (pure value)
+            , onMap = \value -> Object (KeyMap.singleton (Key.fromText "sample") value)
+            , onRef = \key -> maybe emptyObject (sampleMappedDeclaration graph) (Map.lookup key (tgDeclarations graph))
+            }
+
+emptyObject :: Value
+emptyObject = Object KeyMap.empty
+
+maybeToList :: Maybe a -> [a]
+maybeToList = maybe [] pure
+
+isNothingValue :: Maybe a -> Bool
+isNothingValue Nothing = True
+isNothingValue Just{} = False

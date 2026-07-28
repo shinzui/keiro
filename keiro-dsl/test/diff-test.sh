@@ -187,4 +187,28 @@ else
   echo "FAIL: Haskell-only mapped rename incorrectly blocked the merge"; exit 1
 fi
 
-echo "PASS: diff --since gates compatibility surfaces, including nested mapped types, without weakening existing breaks"
+echo "== 11) mapped version bump emits a nested weak stand-in without overwriting evidence =="
+cp "$FIX/consumer-types-v2.keiro" "$DEMO/svc.keiro"
+GOLDEN_ROOT="$DEMO/golden-payloads"
+GOLDEN_PATH="$GOLDEN_ROOT/consumer-demo/Catalog/ArtifactObserved.v1.json"
+if output="$("$EXE" diff --since HEAD --emit-goldens "$GOLDEN_ROOT" "$DEMO/svc.keiro" 2>&1)" \
+    && [[ "$output" == *"golden: wrote synthesized weak stand-in"* \
+    && -s "$GOLDEN_PATH" ]] \
+    && grep -q '"location":{"contents":"sample","tag":"local_file"}' "$GOLDEN_PATH"; then
+  echo "$output"
+  echo "ok: nested old shape emitted and explicitly labelled weak evidence"
+else
+  echo "$output"
+  echo "FAIL: mapped version bump did not emit the labelled nested golden"; exit 1
+fi
+printf 'hand captured\n' > "$GOLDEN_PATH"
+if output="$("$EXE" diff --since HEAD --emit-goldens "$GOLDEN_ROOT" "$DEMO/svc.keiro" 2>&1)" \
+    && [[ "$output" != *"golden: wrote"* \
+    && "$(cat "$GOLDEN_PATH")" == "hand captured" ]]; then
+  echo "ok: existing hand-captured evidence was preserved and omitted from writes"
+else
+  echo "$output"
+  echo "FAIL: golden emission overwrote or re-reported existing evidence"; exit 1
+fi
+
+echo "PASS: diff --since gates compatibility surfaces, nested mapped types, and golden evidence without weakening existing breaks"

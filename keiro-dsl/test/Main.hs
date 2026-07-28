@@ -5,7 +5,7 @@ of the canonical Reservation fixture.
 module Main (main) where
 
 import Control.Exception (bracket)
-import Control.Monad (filterM, forM_)
+import Control.Monad (filterM, forM, forM_)
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Either (isLeft)
@@ -19,7 +19,7 @@ import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldSurface)
-import Keiro.Dsl.Goldens (GoldenPayload (..), goldenRelativePath, goldensForDiff)
+import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
@@ -1240,6 +1240,25 @@ main = hspec $ do
             map (ckCode . kindOfChange) (diffSpecs withB onlyA) `shouldContain` [MappedDeclRemoved]
             diffSpecs base (mapArtifactNamedField "key" (\field -> field{wfHaskell = "renamedKey"}) base)
                 `shouldBe` []
+        it "visits every mapped wire mutation and reports every complete root path" $ do
+            base <- specOf "test/fixtures/consumer-types.keiro"
+            let mutations = mappedWireMutations base
+            mutations `shouldSatisfy` (not . null)
+            visited <- fmap Set.unions . forM mutations $ \mutation -> do
+                let changes =
+                        [ change
+                        | change <- diffSpecs base (mmCandidate mutation)
+                        , ckCode (kindOfChange change) == mmCode mutation
+                        ]
+                    actualSubjects = Set.fromList (map (ckSubject . kindOfChange) changes)
+                changes `shouldSatisfy` any (not . isAdditiveChange)
+                actualSubjects `shouldBe` mmExpectedSubjects mutation
+                pure actualSubjects
+            visited `shouldBe` Set.unions (map mmExpectedSubjects mutations)
+        it "reports the exact ingredient code when every required mapped fact is deleted" $ do
+            base <- specOf "test/fixtures/consumer-types.keiro"
+            forM_ (mappedIngredientMutations base) $ \(candidate, expectedCode) ->
+                errorCodes candidate `shouldContain` [expectedCode]
         it "classifies a field added without a version bump as BREAKING" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-fieldadd.keiro"
             any isBreaking cs `shouldBe` True
@@ -1804,17 +1823,8 @@ main = hspec $ do
                     goldenRelativePath golden
                         `shouldBe` "hospital-capacity/Reservation/TransferReservationCreated.v1.json"
                     goldenJson golden
-                        `shouldBe` T.unlines
-                            [ "{"
-                            , "  \"kind\": \"TransferReservationCreated\","
-                            , "  \"reservationId\": \"rsv_01hzy3v7q2e8kaw2m5x0d41n9c\","
-                            , "  \"hospitalId\": \"hosp_01hzy3v7q2e8kaw2m5x0d41n9c\","
-                            , "  \"commandId\": \"cmd_01hzy3v7q2e8kaw2m5x0d41n9c\","
-                            , "  \"patientAcuity\": \"red\","
-                            , "  \"divertStatus\": \"open\","
-                            , "  \"lifeCriticalOverride\": true"
-                            , "}"
-                            ]
+                        `shouldBe` "{\"commandId\":\"cmd_01hzy3v7q2e8kaw2m5x0d41n9c\",\"divertStatus\":\"open\",\"hospitalId\":\"hosp_01hzy3v7q2e8kaw2m5x0d41n9c\",\"kind\":\"TransferReservationCreated\",\"lifeCriticalOverride\":true,\"patientAcuity\":\"red\",\"reservationId\":\"rsv_01hzy3v7q2e8kaw2m5x0d41n9c\"}\n"
+                    goldenEvidence golden `shouldBe` SynthesizedWeakStandIn
                     let aggregate = onlyAggregate newSpec
                         modules =
                             harnessForWithGoldens
@@ -1824,9 +1834,32 @@ main = hspec $ do
                                 aggregate
                         harness = generatedTextEndingIn "Harness.hs" modules
                     harness `shouldSatisfy` T.isInfixOf "golden TransferReservationCreated.v1 decodes"
-                    harness `shouldSatisfy` T.isInfixOf "\\\"reservationId\\\": \\\"rsv_"
+                    harness `shouldSatisfy` T.isInfixOf "\\\"reservationId\\\":\\\"rsv_"
                     harness `shouldSatisfy` (not . T.isInfixOf "current-shape stand-in")
                 goldens -> expectationFailure ("expected one synthesized golden, got " <> show goldens)
+        it "synthesizes complete nested mapped old shapes deterministically and never overwrites captured evidence" $ do
+            oldSpec <- specOf "test/fixtures/consumer-types.keiro"
+            newSpec <- specOf "test/fixtures/consumer-types-v2.keiro"
+            case goldensForDiff oldSpec newSpec of
+                [golden] -> do
+                    goldenEvidence golden `shouldBe` SynthesizedWeakStandIn
+                    goldenJson golden `shouldSatisfy` T.isInfixOf "\"artifact\":{"
+                    goldenJson golden `shouldSatisfy` T.isInfixOf "\"location\":{\"contents\":\"sample\",\"tag\":\"local_file\"}"
+                    goldenJson golden `shouldSatisfy` T.isInfixOf "\"labels\":[\"sample\"]"
+                    goldenJson golden `shouldSatisfy` T.isInfixOf "\"revision\":1"
+                    goldenJson golden `shouldSatisfy` T.isInfixOf "\"observedAt\":\"2026-01-01T00:00:00Z\""
+                    goldensForDiff oldSpec newSpec `shouldBe` [golden]
+                    withTempDirectory "keiro-golden-preserve" $ \root -> do
+                        let target = root </> goldenRelativePath golden
+                        createDirectoryIfMissing True (takeDirectory target)
+                        TIO.writeFile target "hand captured\n"
+                        emitGoldenPayloads root oldSpec newSpec `shouldReturn` []
+                        TIO.readFile target `shouldReturn` "hand captured\n"
+                    withTempDirectory "keiro-golden-write" $ \root -> do
+                        let target = root </> goldenRelativePath golden
+                        emitGoldenPayloads root oldSpec newSpec `shouldReturn` [target]
+                        TIO.readFile target `shouldReturn` goldenJson golden
+                goldens -> expectationFailure ("expected one nested synthesized golden, got " <> show goldens)
         it "dispatches shared-version upcasters by wire event type and passes foreign kinds through" $ do
             source <- readTestText "test/fixtures/reservation-dup-upcast-source.keiro"
             spec <- parseInlineSpec "<shared-upcaster-source>" source
@@ -2475,6 +2508,199 @@ changeMappedCanonical :: MappedDecl -> MappedDecl
 changeMappedCanonical declaration@MappedStructural{} =
     declaration{msCanonical = Just "example.artifact.ArtifactInfo.v2"}
 changeMappedCanonical declaration = declaration
+
+data MappedMutation = MappedMutation
+    { mmCandidate :: !Spec
+    , mmCode :: !DiagnosticCode
+    , mmExpectedSubjects :: !(Set.Set T.Text)
+    }
+    deriving stock (Show)
+
+mappedWireMutations :: Spec -> [MappedMutation]
+mappedWireMutations spec = case resolveTypeGraph spec of
+    Left _ -> []
+    Right graph -> concatMap (uncurry (declarationMutations graph)) (zip [0 :: Int ..] (specMapped spec))
+  where
+    declarationMutations graph declarationIndex declaration = case declaration of
+        MappedStructural{msName = declarationName, msShape = shape} -> case shape of
+            ShapeRecord _ _ fields ->
+                concat
+                    [ [ mutation
+                            graph
+                            declarationName
+                            MappedWireKeyChanged
+                            (fieldSubject field{wfKey = wfKey field <> "__mutated"})
+                            (mutateRecordField declarationIndex fieldIndex (\value -> value{wfKey = wfKey value <> "__mutated"}) spec)
+                      , mutation
+                            graph
+                            declarationName
+                            MappedPresenceChanged
+                            (fieldSubject field)
+                            (mutateRecordField declarationIndex fieldIndex (\value -> value{wfPresence = flipPresence (wfPresence value)}) spec)
+                      ]
+                        <> [ mutation
+                                graph
+                                declarationName
+                                defaultCode
+                                (fieldSubject field)
+                                (mutateRecordField declarationIndex fieldIndex (\value -> value{wfOnMissing = changedDefault}) spec)
+                           | oldDefault <- maybeToListTest (wfOnMissing field)
+                           , let (changedDefault, defaultCode) = mutateDefault oldDefault
+                           ]
+                    | (fieldIndex, field) <- zip [0 :: Int ..] fields
+                    ]
+            ShapeEnum entries ->
+                [ mutation
+                    graph
+                    declarationName
+                    MappedEnumSpellingChanged
+                    (enumSubject entry{weTag = weTag entry <> "__mutated"})
+                    (mutateEnumEntry declarationIndex entryIndex (\value -> value{weTag = weTag value <> "__mutated"}) spec)
+                | (entryIndex, entry) <- zip [0 :: Int ..] entries
+                ]
+            ShapeUnion _ arms ->
+                [ mutation
+                    graph
+                    declarationName
+                    MappedArmTagChanged
+                    (armSubject arm{waTag = waTag arm <> "__mutated"})
+                    (mutateUnionArm declarationIndex armIndex (\value -> value{waTag = waTag value <> "__mutated"}) spec)
+                | (armIndex, arm) <- zip [0 :: Int ..] arms
+                ]
+        MappedOpaque{moName = declarationName, moCodecVersion = version} ->
+            [ mutation
+                graph
+                declarationName
+                MappedOpaqueCodecChanged
+                "codec"
+                ( updateMappedAt
+                    declarationIndex
+                    ( \case
+                        value@MappedOpaque{} -> value{moCodecVersion = fmap (<> "__mutated") version}
+                        value -> value
+                    )
+                    spec
+                )
+            ]
+
+    mutation graph declarationName diagnosticCode leaf candidate =
+        MappedMutation
+            { mmCandidate = candidate
+            , mmCode = diagnosticCode
+            , mmExpectedSubjects =
+                Set.fromList
+                    [ renderUsePath path <> " " <> leaf
+                    | path <- usePaths graph declarationName
+                    ]
+            }
+
+fieldSubject :: WireField -> T.Text
+fieldSubject field = ".field " <> wfHaskell field <> "[\"" <> wfKey field <> "\"]"
+
+enumSubject :: WireEnum -> T.Text
+enumSubject entry = ".enum " <> weCtor entry <> "[\"" <> weTag entry <> "\"]"
+
+armSubject :: WireArm -> T.Text
+armSubject arm = ".arm " <> waCtor arm <> "[\"" <> waTag arm <> "\"]"
+
+flipPresence :: Presence -> Presence
+flipPresence PRequired = POptional
+flipPresence POptional = PRequired
+
+mutateDefault :: OnMissing -> (Maybe OnMissing, DiagnosticCode)
+mutateDefault = \case
+    OmNull -> (Nothing, MappedDefaultRemoved)
+    OmText value -> (Just (OmText (value <> "__mutated")), MappedDefaultChanged)
+    OmInt value -> (Just (OmInt (value + 1)), MappedDefaultChanged)
+    OmBool value -> (Just (OmBool (not value)), MappedDefaultChanged)
+    OmEmptyList -> (Nothing, MappedDefaultRemoved)
+    OmEmptyMap -> (Nothing, MappedDefaultRemoved)
+    OmCtor constructor -> (Just (OmCtor (constructor <> "Mutated")), MappedDefaultChanged)
+
+mutateRecordField :: Int -> Int -> (WireField -> WireField) -> Spec -> Spec
+mutateRecordField declarationIndex fieldIndex transform =
+    updateMappedAt declarationIndex $ \case
+        declaration@MappedStructural{msShape = ShapeRecord constructor unknownFields fields} ->
+            declaration{msShape = ShapeRecord constructor unknownFields (updateAt fieldIndex transform fields)}
+        declaration -> declaration
+
+mutateEnumEntry :: Int -> Int -> (WireEnum -> WireEnum) -> Spec -> Spec
+mutateEnumEntry declarationIndex entryIndex transform =
+    updateMappedAt declarationIndex $ \case
+        declaration@MappedStructural{msShape = ShapeEnum entries} ->
+            declaration{msShape = ShapeEnum (updateAt entryIndex transform entries)}
+        declaration -> declaration
+
+mutateUnionArm :: Int -> Int -> (WireArm -> WireArm) -> Spec -> Spec
+mutateUnionArm declarationIndex armIndex transform =
+    updateMappedAt declarationIndex $ \case
+        declaration@MappedStructural{msShape = ShapeUnion encoding arms} ->
+            declaration{msShape = ShapeUnion encoding (updateAt armIndex transform arms)}
+        declaration -> declaration
+
+updateMappedAt :: Int -> (MappedDecl -> MappedDecl) -> Spec -> Spec
+updateMappedAt declarationIndex transform spec =
+    spec{specMapped = updateAt declarationIndex transform (specMapped spec)}
+
+updateAt :: Int -> (a -> a) -> [a] -> [a]
+updateAt target transform values =
+    [if index == target then transform value else value | (index, value) <- zip [0 :: Int ..] values]
+
+maybeToListTest :: Maybe a -> [a]
+maybeToListTest = maybe [] pure
+
+isAdditiveChange :: Change -> Bool
+isAdditiveChange Additive{} = True
+isAdditiveChange Advisory{} = False
+isAdditiveChange Breaking{} = False
+
+mappedIngredientMutations :: Spec -> [(Spec, DiagnosticCode)]
+mappedIngredientMutations spec =
+    [ (mapMappedStructural "ArtifactInfo" clearStructuralHaskell spec, MappedMissingIngredient)
+    , (mapMappedStructural "ArtifactInfo" clearStructuralBinding spec, MappedMissingIngredient)
+    , (mapMappedStructural "ArtifactInfo" clearStructuralBindingVersion spec, MappedMissingIngredient)
+    , (mapMappedStructural "ArtifactInfo" clearStructuralCanonical spec, MappedMissingIngredient)
+    , (mapMappedStructural "ArtifactInfo" clearStructuralFixtures spec, MappedMissingIngredient)
+    , (mapMappedStructural "ArtifactInfo" clearStructuralInitial spec, MappedMissingInitialValue)
+    , (mapMappedDeclaration "VendorGeometry" clearOpaqueHaskell spec, MappedMissingIngredient)
+    , (mapMappedDeclaration "VendorGeometry" clearOpaqueCodec spec, MappedMissingIngredient)
+    , (mapMappedDeclaration "VendorGeometry" clearOpaqueCodecVersion spec, MappedMissingIngredient)
+    , (mapMappedDeclaration "VendorGeometry" clearOpaqueFixtures spec, MappedMissingIngredient)
+    ]
+  where
+    clearStructuralHaskell declaration@MappedStructural{} = declaration{msHaskell = Nothing}
+    clearStructuralHaskell declaration = declaration
+    clearStructuralBinding declaration@MappedStructural{} = declaration{msBinding = Nothing}
+    clearStructuralBinding declaration = declaration
+    clearStructuralBindingVersion declaration@MappedStructural{} = declaration{msBindingVersion = Nothing}
+    clearStructuralBindingVersion declaration = declaration
+    clearStructuralCanonical declaration@MappedStructural{} = declaration{msCanonical = Nothing}
+    clearStructuralCanonical declaration = declaration
+    clearStructuralFixtures declaration@MappedStructural{} = declaration{msFixtures = Nothing}
+    clearStructuralFixtures declaration = declaration
+    clearStructuralInitial declaration@MappedStructural{} = declaration{msInitial = Nothing}
+    clearStructuralInitial declaration = declaration
+    clearOpaqueHaskell declaration@MappedOpaque{} = declaration{moHaskell = Nothing}
+    clearOpaqueHaskell declaration = declaration
+    clearOpaqueCodec declaration@MappedOpaque{} = declaration{moCodecId = Nothing}
+    clearOpaqueCodec declaration = declaration
+    clearOpaqueCodecVersion declaration@MappedOpaque{} = declaration{moCodecVersion = Nothing}
+    clearOpaqueCodecVersion declaration = declaration
+    clearOpaqueFixtures declaration@MappedOpaque{} = declaration{moFixtures = Nothing}
+    clearOpaqueFixtures declaration = declaration
+
+mapMappedDeclaration :: Name -> (MappedDecl -> MappedDecl) -> Spec -> Spec
+mapMappedDeclaration target transform spec =
+    spec
+        { specMapped =
+            [ if mappedDeclarationName declaration == target then transform declaration else declaration
+            | declaration <- specMapped spec
+            ]
+        }
+
+mappedDeclarationName :: MappedDecl -> Name
+mappedDeclarationName MappedStructural{msName = name} = name
+mappedDeclarationName MappedOpaque{moName = name} = name
 
 statusMapSpec :: T.Text -> T.Text
 statusMapSpec marker =

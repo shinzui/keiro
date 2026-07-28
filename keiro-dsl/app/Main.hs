@@ -176,7 +176,7 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
                         Left perr -> hPutStrLn stderr (T.unpack perr) >> exitFailure
                         Right (oldSpec, newSpec) -> do
                             written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) emitGoldensRoot
-                            mapM_ (putStrLn . ("golden: wrote " <>)) written
+                            mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
                             let changes = diffSpecs oldSpec newSpec
                                 impact = replayImpact oldSpec newSpec
                                 effectiveGate = gateWith gatedSurfaces
