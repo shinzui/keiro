@@ -1,0 +1,76 @@
+context consumer-demo
+
+mapped structural record ArtifactInfo {
+  haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactInfo
+  binding = "Example.Artifact.KeiroBindings.artifactInfoBinding"
+  binding-version = "1"
+  canonical-type = "example.artifact.ArtifactInfo.v1"
+  fixtures = "Example.Artifact.KeiroBindings.artifactInfoCasesV2"
+  initial = "Example.Artifact.KeiroBindings.emptyArtifactInfo"
+  wire object constructor=ArtifactInfo unknown-fields=reject {
+    key         as "key"         : Text                 required
+    kind        as "kind"        : ArtifactKind         optional on-missing=Guide
+    description as "description" : Optional Text        optional on-missing=null
+    count       as "count"       : Int                  optional on-missing=0
+    active      as "active"      : Bool                 optional on-missing=false
+    location    as "location"    : ArtifactLocation     required
+    tags        as "tags"        : List Text            optional on-missing=[]
+    labels      as "labels"      : List (Optional Text) required
+    attributes  as "attributes"  : Map Text             optional on-missing={}
+    revision    as "revision"    : Natural              required
+    observedAt  as "observedAt"  : Time                 required
+    extra       as "extra"       : Json                 required
+  }
+}
+
+mapped structural enum ArtifactKind {
+  haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactKind
+  binding = "Example.Artifact.KeiroBindings.artifactKindBinding"
+  binding-version = "1"
+  canonical-type = "example.artifact.ArtifactKind.v1"
+  fixtures = "Example.Artifact.KeiroBindings.artifactKindCases"
+  wire string {
+    Guide as "guide"
+    Reference as "reference"
+  }
+}
+
+mapped structural union ArtifactLocation {
+  haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactLocation
+  binding = "Example.Artifact.KeiroBindings.artifactLocationBinding"
+  binding-version = "1"
+  canonical-type = "example.artifact.ArtifactLocation.v1"
+  fixtures = "Example.Artifact.KeiroBindings.artifactLocationCases"
+  wire tagged-object tag="tag" contents="contents" unknown-fields=reject {
+    LocalFile as "local_file" : Text
+    RepoPath as "repo_path" : Text
+    Canonical as "canonical" : Text
+    Unknown as "unknown"
+  }
+}
+
+mapped opaque VendorGeometry {
+  haskell package=vendor-geometry module=Vendor.Geometry type=Geometry
+  codec = "vendor.geometry.json"
+  version = "3"
+  fixtures = "Vendor.Geometry.KeiroBindings.geometryCases"
+  initial = "Vendor.Geometry.KeiroBindings.emptyGeometry"
+}
+
+aggregate Catalog
+  regs
+    currentArtifact ArtifactInfo = initial
+    currentGeometry VendorGeometry = initial
+  states Empty Observed!
+
+  command ObserveArtifact { artifact:ArtifactInfo geometry:VendorGeometry accepted:Bool }
+  event ArtifactObserved = fields(ObserveArtifact)
+
+  Empty -- ObserveArtifact -->
+    guard accepted
+    write currentArtifact := artifact
+    write currentGeometry := geometry
+    emit ArtifactObserved
+    goto Observed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

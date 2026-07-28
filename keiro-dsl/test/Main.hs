@@ -1092,6 +1092,16 @@ main = hspec $ do
             formatted <- parseInlineSpec "<formatted>" (renderSpec old)
             ReplayImpact.replayImpact old formatted `shouldBe` ReplayNeutral
 
+        it "names mapped nested event and snapshot roots while ignoring Haskell-only changes" $ do
+            nested <- replayImpactFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-nested-propagation.keiro"
+            case nested of
+                ReplayAffected aggregates ->
+                    Map.lookup "Catalog" aggregates
+                        `shouldBe` Just AggregateImpact{eventTypes = Set.singleton "ArtifactObserved", includeSnapshotStreams = True}
+                ReplayNeutral -> expectationFailure "expected nested mapped wire change to affect replay"
+            sourceOnly <- replayImpactFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-haskell-rename.keiro"
+            sourceOnly `shouldBe` ReplayNeutral
+
         it "generates one context target for every aggregate, including the process saga" $ do
             spec <- specOf "test/fixtures/surge-service.keiro"
             case scaffoldReplayAudit (defaultContext (specContext spec)) spec of
@@ -1157,6 +1167,79 @@ main = hspec $ do
         it "rejects unknown --gate values with the valid surface list" $ do
             parseSurfaceName "mystery-surface"
                 `shouldSatisfy` either (T.isInfixOf "old-binary-read-new-events" . T.pack) (const False)
+        it "covers the mapped evolution matrix with stable codes and non-empty remedies" $ do
+            let cases =
+                    [ ("consumer-types-fieldadd-default.keiro", MappedFieldAddedWithDefault)
+                    , ("consumer-types-fieldadd-nodefault.keiro", MappedFieldAddedNoDefault)
+                    , ("consumer-types-fieldremove.keiro", MappedFieldRemoved)
+                    , ("consumer-types-wirekey.keiro", MappedWireKeyChanged)
+                    , ("consumer-types-haskell-rename.keiro", MappedHaskellSourceChanged)
+                    , ("consumer-types-binding-change.keiro", MappedBindingChanged)
+                    , ("consumer-types-fixtures-change.keiro", MappedFixturesChanged)
+                    , ("consumer-types-initial-change.keiro", MappedInitialChanged)
+                    , ("consumer-types-armadd.keiro", MappedArmAdded)
+                    , ("consumer-types-tagchange.keiro", MappedArmTagChanged)
+                    , ("consumer-types-enumadd.keiro", MappedEnumValueAdded)
+                    , ("consumer-types-enumremove.keiro", MappedEnumValueRemoved)
+                    , ("consumer-types-enumspelling.keiro", MappedEnumSpellingChanged)
+                    , ("consumer-types-encoding.keiro", MappedUnionEncodingChanged)
+                    , ("consumer-types-opaque-version.keiro", MappedOpaqueCodecChanged)
+                    , ("consumer-types-mode-cross.keiro", MappedModeCrossed)
+                    , ("consumer-types-nested-propagation.keiro", MappedArmTagChanged)
+                    ]
+            forM_ cases $ \(fixture, expectedCode) -> do
+                changes <- diffFixtures "test/fixtures/consumer-types.keiro" ("test/fixtures/" <> fixture)
+                map (ckCode . kindOfChange) changes `shouldContain` [expectedCode]
+                forM_ changes $ \change ->
+                    remediationFor (ckContext (kindOfChange change)) (ckCode (kindOfChange change))
+                        `shouldSatisfy` (not . null)
+        it "separates mapped event migration, snapshot invalidation, and directional rollout" $ do
+            breakingAdd <- diffFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-fieldadd-nodefault.keiro"
+            let noDefault = [change | change <- breakingAdd, ckCode (kindOfChange change) == MappedFieldAddedNoDefault]
+            [ckFacet kind | Breaking kind <- noDefault] `shouldContain` ["mapped-event"]
+            [ckFacet kind | Advisory kind <- noDefault] `shouldContain` ["mapped-register"]
+            defaulted <- diffFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-fieldadd-default.keiro"
+            [change | change <- defaulted, isBreaking change] `shouldBe` []
+            let eventDefaults = [kind | Advisory kind <- defaulted, ckCode kind == MappedFieldAddedWithDefault, ckFacet kind == "mapped-event"]
+            eventDefaults `shouldSatisfy` any ((== VBreaking) . verdictFor OldBinaryReadNewEvents . ckVector)
+            armAdded <- diffFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-armadd.keiro"
+            [change | change <- armAdded, isBreaking change] `shouldBe` []
+            [kind | Advisory kind <- armAdded, ckCode kind == MappedArmAdded, ckFacet kind == "mapped-event"]
+                `shouldSatisfy` any ((== VBreaking) . verdictFor OldBinaryReadNewEvents . ckVector)
+        it "propagates a nested mapped leaf to complete command, event, and register paths" $ do
+            changes <- diffFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-nested-propagation.keiro"
+            let subjects =
+                    [ ckSubject kind
+                    | change <- changes
+                    , let kind = kindOfChange change
+                    , ckCode kind == MappedArmTagChanged
+                    ]
+            subjects
+                `shouldContain` [ "Catalog command ObserveArtifact .artifact : ArtifactInfo .location : ArtifactLocation .arm RepoPath[\"repository_path\"]"
+                                , "Catalog event ArtifactObserved .artifact : ArtifactInfo .location : ArtifactLocation .arm RepoPath[\"repository_path\"]"
+                                , "Catalog register currentArtifact : ArtifactInfo .location : ArtifactLocation .arm RepoPath[\"repository_path\"]"
+                                ]
+        it "classifies every remaining mapped field and declaration evolution row" $ do
+            base <- specOf "test/fixtures/consumer-types.keiro"
+            let mutationCodes =
+                    [ (mapArtifactNamedField "key" (\field -> field{wfType = TInt}) base, MappedFieldTypeChanged)
+                    , (mapArtifactNamedField "key" (\field -> field{wfPresence = POptional, wfOnMissing = Just (OmText "")}) base, MappedPresenceChanged)
+                    , (mapArtifactNamedField "key" (\field -> field{wfType = TOptional TText}) base, MappedNullabilityChanged)
+                    , (mapArtifactNamedField "description" (\field -> field{wfOnMissing = Nothing}) base, MappedDefaultRemoved)
+                    , (mapArtifactNamedField "count" (\field -> field{wfOnMissing = Just (OmInt 1)}) base, MappedDefaultChanged)
+                    , (mapMappedStructural "ArtifactInfo" renameMappedRecordConstructor base, MappedRecordConstructorChanged)
+                    , (mapMappedStructural "ArtifactInfo" changeMappedCanonical base, MappedCanonicalTypeChanged)
+                    ]
+            forM_ mutationCodes $ \(candidate, expectedCode) ->
+                map (ckCode . kindOfChange) (diffSpecs base candidate) `shouldContain` [expectedCode]
+            let declarationA = completeStructural "A" (recordShape [TText])
+                declarationB = completeStructural "B" (recordShape [TInt])
+                onlyA = mappedSpec [declarationA]
+                withB = mappedSpec [declarationA, declarationB]
+            map (ckCode . kindOfChange) (diffSpecs onlyA withB) `shouldContain` [MappedDeclAdded]
+            map (ckCode . kindOfChange) (diffSpecs withB onlyA) `shouldContain` [MappedDeclRemoved]
+            diffSpecs base (mapArtifactNamedField "key" (\field -> field{wfHaskell = "renamedKey"}) base)
+                `shouldBe` []
         it "classifies a field added without a version bump as BREAKING" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-fieldadd.keiro"
             any isBreaking cs `shouldBe` True
@@ -2352,7 +2435,10 @@ recordShape types =
         ]
 
 mapArtifactField :: (WireField -> WireField) -> Spec -> Spec
-mapArtifactField transform spec = spec{specMapped = map updateDeclaration (specMapped spec)}
+mapArtifactField = mapArtifactNamedField "key"
+
+mapArtifactNamedField :: Name -> (WireField -> WireField) -> Spec -> Spec
+mapArtifactNamedField target transform spec = spec{specMapped = map updateDeclaration (specMapped spec)}
   where
     updateDeclaration declaration@MappedStructural{msName = "ArtifactInfo", msShape = ShapeRecord constructor unknownFields fields} =
         declaration
@@ -2360,9 +2446,35 @@ mapArtifactField transform spec = spec{specMapped = map updateDeclaration (specM
                 ShapeRecord
                     constructor
                     unknownFields
-                    [if wfKey field == "key" then transform field else field | field <- fields]
+                    [if wfHaskell field == target then transform field else field | field <- fields]
             }
     updateDeclaration declaration = declaration
+
+mapMappedStructural :: Name -> (MappedDecl -> MappedDecl) -> Spec -> Spec
+mapMappedStructural target transform spec =
+    spec
+        { specMapped =
+            [ case declaration of
+                MappedStructural{msName = name}
+                    | name == target -> transform declaration
+                _ -> declaration
+            | declaration <- specMapped spec
+            ]
+        }
+
+renameRecordConstructor :: MappedShape -> MappedShape
+renameRecordConstructor (ShapeRecord _ unknownFields fields) = ShapeRecord "ArtifactInfoV2" unknownFields fields
+renameRecordConstructor shape = shape
+
+renameMappedRecordConstructor :: MappedDecl -> MappedDecl
+renameMappedRecordConstructor declaration@MappedStructural{msShape = shape} =
+    declaration{msShape = renameRecordConstructor shape}
+renameMappedRecordConstructor declaration = declaration
+
+changeMappedCanonical :: MappedDecl -> MappedDecl
+changeMappedCanonical declaration@MappedStructural{} =
+    declaration{msCanonical = Just "example.artifact.ArtifactInfo.v2"}
+changeMappedCanonical declaration = declaration
 
 statusMapSpec :: T.Text -> T.Text
 statusMapSpec marker =

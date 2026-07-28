@@ -227,6 +227,33 @@ data DiagnosticCode
     | MappedImportConflict
     | MappedDefaultIllTyped
     | MappedGuardUnsupported
+    | -- MasterPlan 25 / EP-149 mapped evolution codes.
+      MappedFieldAddedWithDefault
+    | MappedFieldAddedNoDefault
+    | MappedFieldRemoved
+    | MappedFieldTypeChanged
+    | MappedPresenceChanged
+    | MappedNullabilityChanged
+    | MappedDefaultRemoved
+    | MappedDefaultChanged
+    | MappedWireKeyChanged
+    | MappedUnionEncodingChanged
+    | MappedArmAdded
+    | MappedArmRemoved
+    | MappedArmTagChanged
+    | MappedEnumValueAdded
+    | MappedEnumValueRemoved
+    | MappedEnumSpellingChanged
+    | MappedHaskellSourceChanged
+    | MappedRecordConstructorChanged
+    | MappedBindingChanged
+    | MappedFixturesChanged
+    | MappedInitialChanged
+    | MappedCanonicalTypeChanged
+    | MappedOpaqueCodecChanged
+    | MappedModeCrossed
+    | MappedDeclAdded
+    | MappedDeclRemoved
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

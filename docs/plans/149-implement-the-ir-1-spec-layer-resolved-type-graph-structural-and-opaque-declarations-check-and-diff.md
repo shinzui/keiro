@@ -74,9 +74,9 @@ plus mutation tests proving that an unvisited nested field or union arm makes th
 - [x] 2026-07-28T19:21:45Z: Milestone 3 appended all single-spec mapped `DiagnosticCode` constructors and wired raw declaration checks plus the resolved graph into `validateSpec`.
 - [x] 2026-07-28T19:21:45Z: Milestone 3 validation contract landed with 24 one-fault negative fixtures, exact-code assertions, numeric default-bound coverage, and canonical `check` output `OK`; 257 examples pass.
 - [x] 2026-07-28T19:21:45Z: Milestone 3 guard semantics landed: whole-value writes/copies remain legal, mapped and `Natural` guard operands reject, and the parallel `Time` guard fixture passes.
-- [ ] Milestone 4: `Keiro.Dsl.MappedDiff` recursive differ with per-root use-site paths; wired into `diffSpecs` shared-declaration phase.
-- [ ] Milestone 4: full Evolution Contract classification matrix implemented and covered by evolution fixture pairs.
-- [ ] Milestone 4: `Keiro.Dsl.ReplayImpact` extended so nested mapped breaks name affected event types and snapshot streams in the JSON output.
+- [x] 2026-07-28T19:36:36Z: Milestone 4 `Keiro.Dsl.MappedDiff` recursive differ landed and is wired into shared-declaration diff, expanding complete command/event/register use paths.
+- [x] 2026-07-28T19:36:36Z: Milestone 4 Evolution Contract landed with all mapped codes, context-sensitive compatibility vectors/remedies, 17 fixture variants, remaining-row AST tests, and an end-to-end merge-gate stage.
+- [x] 2026-07-28T19:36:36Z: Milestone 4 replay impact now fingerprints transitively reachable mapped wire shapes for events and registers; nested changes name `ArtifactObserved` and require Catalog snapshot auditing while Haskell-only changes remain replay-neutral.
 - [ ] Milestone 5: `Keiro.Dsl.Goldens` synthesizes nested old-shape fixtures through a complete algebra; `--emit-goldens` end-to-end test.
 - [ ] Milestone 5: exhaustive wire-mutation coverage suite (every field, arm, and enum spelling) green; deliberate differ-arm deletion demonstrated red.
 - [ ] Milestone 5: ADR 0004 inventory amended; ADR 0012 reconciled with the landed spec layer; `just adr-validate` green; CHANGELOG updated.
@@ -108,6 +108,11 @@ implementation. Provide concise evidence.
   resolved graph. `validateMapped` therefore runs raw fact checks first and reserves all recursive
   shape/default/nullability work for the resolved folds. The 24 fixture matrix demonstrates that
   each one-fault input retains its intended single diagnostic.
+- Making `MappedDiff` import the ordinary `Change` type would create a `Diff` module cycle.
+  Returning typed mapped findings (code, detail, declaration leaf, complete use paths, and the old
+  unknown-field fact) keeps recursive comparison independent; `Diff` remains the sole owner of
+  compatibility vectors and report labels. The 262-example suite and CLI merge-gate stage cover
+  the composed seam.
 
 
 ## Decision Log
@@ -139,6 +144,16 @@ implementation. Provide concise evidence.
   nodes; they own no stream, no persisted surface of their own. Every persisted consequence is
   expressed at a containing root (event, snapshot register), which is exactly what IR-1's
   Evolution Contract requires the differ to report.
+  Date: 2026-07-28
+
+- Decision: A mapped change expands command roots as `ConsumerBuild` advisories, event roots as
+  private-history findings, and register roots as separate snapshot-invalidation advisories.
+  Declaration evidence/source facts remain declaration-level build findings unless their contract
+  explicitly depends on a persisted root.
+  Rationale: command payloads are in-memory consumer API surfaces rather than stored bytes, while
+  `fields(Command)` events and mapped registers own distinct persisted obligations. Keeping three
+  findings preserves every graph path without prescribing an event upcaster for cached register
+  JSON or falsely treating a command shape as private history.
   Date: 2026-07-28
 
 - Decision: Recursive structural mappings are rejected (`MappedRecursiveType`), including

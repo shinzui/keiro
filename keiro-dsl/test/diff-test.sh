@@ -156,4 +156,35 @@ else
   echo "FAIL: compatibility matrix omitted a surface, path, explanation, or report"; exit 1
 fi
 
-echo "PASS: diff --since gates compatibility surfaces without weakening existing breaks"
+echo "== 10) mapped nested wire changes block while Haskell-only changes do not =="
+cp "$FIX/consumer-types.keiro" "$DEMO/svc.keiro"
+git -C "$DEMO" add svc.keiro
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "mapped consumer baseline"
+cp "$FIX/consumer-types-fieldadd-nodefault.keiro" "$DEMO/svc.keiro"
+if output="$("$EXE" diff --since HEAD "$DEMO/svc.keiro" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: mapped field-add without default was not flagged breaking"; exit 1
+elif [[ "$output" == *"[MappedFieldAddedNoDefault]"* \
+    && "$output" == *"Catalog event ArtifactObserved"* \
+    && "$output" == *"Catalog register currentArtifact"* ]]; then
+  echo "$output"
+  echo "ok: mapped field change names event migration and snapshot invalidation roots"
+else
+  echo "$output"
+  echo "FAIL: mapped field change omitted its code or complete root paths"; exit 1
+fi
+cp "$FIX/consumer-types-haskell-rename.keiro" "$DEMO/svc.keiro"
+if output="$("$EXE" diff --since HEAD "$DEMO/svc.keiro" 2>&1)"; then
+  if [[ "$output" == *"[MappedHaskellSourceChanged]"* ]]; then
+    echo "$output"
+    echo "ok: Haskell-only rename is advisory and does not block"
+  else
+    echo "$output"
+    echo "FAIL: Haskell-only rename omitted its source/build advisory"; exit 1
+  fi
+else
+  echo "$output"
+  echo "FAIL: Haskell-only mapped rename incorrectly blocked the merge"; exit 1
+fi
+
+echo "PASS: diff --since gates compatibility surfaces, including nested mapped types, without weakening existing breaks"

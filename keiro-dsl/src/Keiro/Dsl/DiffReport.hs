@@ -92,6 +92,15 @@ remediationFor :: ChangeContext -> DiagnosticCode -> NonEmpty Remedy
 remediationFor context code
     | code == AggGuardTightened = RemedyReplayOnlyEdge :| [RemedyRunConformance]
     | code == AggFoldSurfaceChanged = RemedyStateCodecBump :| [RemedyRunConformance]
+    | code `elem` mappedWireCodes = mappedWireRemedy
+    | code `elem` [MappedFieldAddedWithDefault, MappedArmAdded, MappedEnumValueAdded] = mappedAdditionRemedy
+    | code `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged] =
+        RemedyRecompileConsumers :| [RemedyRunConformance]
+    | code == MappedBindingChanged = mappedConformanceRemedy
+    | code == MappedFixturesChanged = RemedyRunConformance :| []
+    | code == MappedInitialChanged = mappedSnapshotConformanceRemedy
+    | code == MappedCanonicalTypeChanged = mappedCanonicalRemedy
+    | code == MappedDeclAdded = RemedyRunConformance :| []
     | code `elem` eventDecodeCodes =
         RemedyVersionBump :| [RemedyUpcaster, RemedyDeploymentOrder RolloutStopTheWorld]
     | code `elem` contractCodes =
@@ -116,6 +125,42 @@ remediationFor context code
     snapshotRemedy
         | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump
         | otherwise = RemedyRunConformance
+    mappedWireRemedy
+        | cvPrivateHistoryRead vector == VBreaking =
+            RemedyVersionBump :| [RemedyUpcaster, RemedyDeploymentOrder RolloutStopTheWorld]
+        | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
+        | otherwise = RemedyRecompileConsumers :| [RemedyRunConformance]
+    mappedAdditionRemedy
+        | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
+        | Just rollout <- firstRollout = RemedyDeploymentOrder rollout :| [RemedyRunConformance]
+        | otherwise = RemedyRunConformance :| []
+    mappedConformanceRemedy
+        | cvSnapshotHydration vector == VAdvisory = RemedyRunConformance :| [RemedyStateCodecBump]
+        | otherwise = RemedyRunConformance :| []
+    mappedSnapshotConformanceRemedy
+        | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
+        | otherwise = RemedyRunConformance :| []
+    mappedCanonicalRemedy
+        | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump :| [RemedyRecompileConsumers, RemedyRunConformance]
+        | otherwise = RemedyRecompileConsumers :| [RemedyRunConformance]
+    mappedWireCodes =
+        [ MappedFieldAddedNoDefault
+        , MappedFieldRemoved
+        , MappedFieldTypeChanged
+        , MappedPresenceChanged
+        , MappedNullabilityChanged
+        , MappedDefaultRemoved
+        , MappedDefaultChanged
+        , MappedWireKeyChanged
+        , MappedUnionEncodingChanged
+        , MappedArmRemoved
+        , MappedArmTagChanged
+        , MappedEnumValueRemoved
+        , MappedEnumSpellingChanged
+        , MappedOpaqueCodecChanged
+        , MappedModeCrossed
+        , MappedDeclRemoved
+        ]
     eventDecodeCodes =
         [ EvtFieldAddedWithoutBump
         , EvtFieldRemovedSameVersion

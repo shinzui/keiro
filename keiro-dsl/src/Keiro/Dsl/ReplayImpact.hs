@@ -28,6 +28,7 @@ import Data.Text qualified as Text
 import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.PrettyPrint (renderTransition)
+import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), resolveTypeGraph, wireFingerprint)
 
 -- | The smallest conservative audit input for one aggregate.
 data AggregateImpact = AggregateImpact
@@ -92,11 +93,14 @@ matchedAggregateImpact oldSpec newSpec oldAggregate newAggregate =
             decodeAffected
                 <> transitionAffected
                 <> if nonTransitionFoldChanged then oldEventTypes else Set.empty
-        , includeSnapshotStreams = transitionFoldChanged || nonTransitionFoldChanged
+        , includeSnapshotStreams = transitionFoldChanged || nonTransitionFoldChanged || mappedRegisterChanged
         }
   where
     oldEventTypes = Set.fromList (evName <$> aggEvents oldAggregate)
-    decodeAffected = decodeSurfaceAffected oldAggregate newAggregate
+    decodeAffected = decodeSurfaceAffected oldSpec newSpec oldAggregate newAggregate
+    mappedRegisterChanged =
+        mappedRegisterSurface oldSpec oldAggregate
+            /= mappedRegisterSurface newSpec newAggregate
     (transitionAffected, transitionFoldChanged) =
         changedTransitionEvents (aggTransitions oldAggregate) (aggTransitions newAggregate)
     nonTransitionFoldChanged =
@@ -107,8 +111,8 @@ matchedAggregateImpact oldSpec newSpec oldAggregate newAggregate =
                     { aggTransitions = aggTransitions oldAggregate
                     }
 
-decodeSurfaceAffected :: Aggregate -> Aggregate -> Set Name
-decodeSurfaceAffected oldAggregate newAggregate =
+decodeSurfaceAffected :: Spec -> Spec -> Aggregate -> Aggregate -> Set Name
+decodeSurfaceAffected oldSpec newSpec oldAggregate newAggregate =
     removedOrChanged <> wireAffected
   where
     newEvents = Map.fromList [(evName event, event) | event <- aggEvents newAggregate]
@@ -116,7 +120,7 @@ decodeSurfaceAffected oldAggregate newAggregate =
         Set.fromList
             [ evName oldEvent
             | oldEvent <- aggEvents oldAggregate
-            , maybe True ((/= eventDecodeSurface oldEvent) . eventDecodeSurface) (Map.lookup (evName oldEvent) newEvents)
+            , maybe True ((/= eventSurface oldSpec oldAggregate oldEvent) . eventSurface newSpec newAggregate) (Map.lookup (evName oldEvent) newEvents)
             ]
     wireAffected
         | aggWire oldAggregate == aggWire newAggregate = Set.empty
@@ -125,6 +129,38 @@ decodeSurfaceAffected oldAggregate newAggregate =
 eventDecodeSurface :: Event -> (EventBody, Int, Maybe (Int, Hole))
 eventDecodeSurface event =
     (evBody event, evVersion event, evUpcastFrom event)
+
+eventSurface :: Spec -> Aggregate -> Event -> ((EventBody, Int, Maybe (Int, Hole)), [(Name, Text)])
+eventSurface spec aggregate event =
+    (eventDecodeSurface event, mappedFieldSurface spec aggregate event)
+
+mappedFieldSurface :: Spec -> Aggregate -> Event -> [(Name, Text)]
+mappedFieldSurface spec aggregate event = case resolveTypeGraph spec of
+    Left _ -> []
+    Right graph ->
+        [ (fieldName field, wireFingerprint graph typeName)
+        | field <- eventFields aggregate event
+        , typeName <- maybeToList (fieldType field)
+        , Map.member (MappedKey typeName) (tgDeclarations graph)
+        ]
+
+mappedRegisterSurface :: Spec -> Aggregate -> [(Name, Name, Text)]
+mappedRegisterSurface spec aggregate = case resolveTypeGraph spec of
+    Left _ -> []
+    Right graph ->
+        [ (regName register, regType register, wireFingerprint graph (regType register))
+        | register <- aggRegs aggregate
+        , Map.member (MappedKey (regType register)) (tgDeclarations graph)
+        ]
+
+eventFields :: Aggregate -> Event -> [Field]
+eventFields aggregate event = case evBody event of
+    EventFields fields -> fields
+    EventFromCommand commandName ->
+        concat [cmdFields command | command <- aggCommands aggregate, cmdName command == commandName]
+
+maybeToList :: Maybe a -> [a]
+maybeToList = maybe [] pure
 
 changedTransitionEvents :: [Transition] -> [Transition] -> (Set Name, Bool)
 changedTransitionEvents oldTransitions newTransitions =

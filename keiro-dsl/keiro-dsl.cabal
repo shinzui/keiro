@@ -38,6 +38,7 @@ library
     Keiro.Dsl.Grammar
     Keiro.Dsl.Harness
     Keiro.Dsl.Manifest
+    Keiro.Dsl.MappedDiff
     Keiro.Dsl.Parser
     Keiro.Dsl.PrettyPrint
     Keiro.Dsl.ReadModelShape

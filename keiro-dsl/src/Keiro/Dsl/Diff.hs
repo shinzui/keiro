@@ -58,6 +58,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped, renderMappedSubject)
 import Keiro.Dsl.PrettyPrint (
     renderHandleSurface,
     renderResolveSurface,
@@ -66,6 +67,7 @@ import Keiro.Dsl.PrettyPrint (
     renderTransition,
  )
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
+import Keiro.Dsl.TypeGraph (UsePath (..), UseSite (..))
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
 -- | A classified spec change.
@@ -245,6 +247,13 @@ load-bearing for codes such as 'EnumCtorAdded' that vary by use site.
 -}
 classifyCompatibility :: ChangeContext -> DiagnosticCode -> CompatibilityVector
 classifyCompatibility context code
+    | code == MappedFieldAddedWithDefault = mappedFieldAdditionVector context
+    | code `elem` [MappedArmAdded, MappedEnumValueAdded] = mappedDirectionalAdditionVector context
+    | code `elem` mappedWireBreakingCodes = mappedWireBreakingVector context
+    | code `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged] = mappedBuildVector
+    | code == MappedBindingChanged = mappedBindingVector context
+    | code `elem` [MappedInitialChanged, MappedCanonicalTypeChanged] = mappedSnapshotBuildVector context
+    | code == MappedDeclAdded = compatibleVector
     | code `elem` privateDecodeCodes = privateDecodeBreakingVector
     | code `elem` identityCodes = persistedIdentityBreakingVector
     | code `elem` publicBreakingCodes = publicBreakingVector
@@ -327,6 +336,109 @@ classifyCompatibility context code
         , ContractTopicAdded
         , WorkflowEvolutionGuardAdded
         ]
+
+mappedWireBreakingCodes :: [DiagnosticCode]
+mappedWireBreakingCodes =
+    [ MappedFieldAddedNoDefault
+    , MappedFieldRemoved
+    , MappedFieldTypeChanged
+    , MappedPresenceChanged
+    , MappedNullabilityChanged
+    , MappedDefaultRemoved
+    , MappedDefaultChanged
+    , MappedWireKeyChanged
+    , MappedUnionEncodingChanged
+    , MappedArmRemoved
+    , MappedArmTagChanged
+    , MappedEnumValueRemoved
+    , MappedEnumSpellingChanged
+    , MappedOpaqueCodecChanged
+    , MappedModeCrossed
+    , MappedDeclRemoved
+    ]
+
+mappedFieldAdditionVector :: ChangeContext -> CompatibilityVector
+mappedFieldAdditionVector context = case contextKind context of
+    ContextPrivateEvent ->
+        compatibleVector
+            { cvOldBinaryReadNewEvents = oldBinaryVerdict
+            , cvRollout = rollout
+            }
+      where
+        rejectsUnknown = contextOriginalLabel context == LabelBreaking
+        oldBinaryVerdict = if rejectsUnknown then VBreaking else VCompatible
+        rollout = if rejectsUnknown then Set.singleton RolloutProducerLast else Set.empty
+    ContextSnapshot -> mappedSnapshotVector
+    ContextConsumerBuild -> mappedBuildVector
+    _ -> compatibleVector
+
+mappedDirectionalAdditionVector :: ChangeContext -> CompatibilityVector
+mappedDirectionalAdditionVector context = case contextKind context of
+    ContextPrivateEvent ->
+        compatibleVector
+            { cvOldBinaryReadNewEvents = VBreaking
+            , cvRollout = Set.singleton RolloutProducerLast
+            }
+    ContextSnapshot -> mappedSnapshotVector
+    ContextConsumerBuild -> mappedBuildVector
+    _ -> compatibleVector
+
+mappedWireBreakingVector :: ChangeContext -> CompatibilityVector
+mappedWireBreakingVector context = case contextKind context of
+    ContextPrivateEvent ->
+        CompatibilityVector
+            VBreaking
+            VBreaking
+            VNotApplicable
+            VNotApplicable
+            VNotApplicable
+            VNotApplicable
+            (Set.singleton RolloutStopTheWorld)
+    ContextSnapshot -> mappedSnapshotVector
+    ContextConsumerBuild -> mappedBuildVector
+    _ -> mappedBuildVector
+
+mappedBuildVector :: CompatibilityVector
+mappedBuildVector =
+    CompatibilityVector
+        VCompatible
+        VCompatible
+        VNotApplicable
+        VNotApplicable
+        VNotApplicable
+        VAdvisory
+        Set.empty
+
+mappedSnapshotVector :: CompatibilityVector
+mappedSnapshotVector =
+    CompatibilityVector
+        VCompatible
+        VCompatible
+        VAdvisory
+        VNotApplicable
+        VNotApplicable
+        VNotApplicable
+        Set.empty
+
+mappedBindingVector :: ChangeContext -> CompatibilityVector
+mappedBindingVector context = case contextKind context of
+    ContextPrivateEvent ->
+        CompatibilityVector
+            VAdvisory
+            VAdvisory
+            VNotApplicable
+            VNotApplicable
+            VNotApplicable
+            VAdvisory
+            Set.empty
+    ContextSnapshot ->
+        mappedSnapshotVector{cvConsumerBuild = VAdvisory}
+    _ -> mappedBuildVector
+
+mappedSnapshotBuildVector :: ChangeContext -> CompatibilityVector
+mappedSnapshotBuildVector context = case contextKind context of
+    ContextSnapshot -> mappedSnapshotVector{cvConsumerBuild = VAdvisory}
+    _ -> mappedBuildVector
 
 surfaceForContext :: ChangeContext -> CompatibilitySurface
 surfaceForContext context = case contextKind context of
@@ -496,7 +608,71 @@ runFamily _ (OutOfDiffScope _) = []
 -- Rules are outside the decode and persisted-identity axes, but referenced
 -- rule bodies are compared as part of each aggregate's replay fold surface.
 sharedDeclarationDiff :: DiffEnv -> [Change]
-sharedDeclarationDiff env = enumDiff env ++ idDiff env
+sharedDeclarationDiff env = enumDiff env ++ idDiff env ++ mappedDeclarationDiff env
+
+mappedDeclarationDiff :: DiffEnv -> [Change]
+mappedDeclarationDiff env = concatMap mappedFindingChanges (diffMapped (deOld env) (deNew env))
+
+mappedFindingChanges :: MappedFinding -> [Change]
+mappedFindingChanges finding
+    | mfCode finding == MappedDeclAdded = [mappedDeclarationChange LabelAdditive finding]
+    | mfCode finding `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged] =
+        [mappedBuildChange finding]
+    | mfCode finding `elem` [MappedInitialChanged, MappedCanonicalTypeChanged] =
+        mappedBuildChange finding : map (mappedUseChange finding) registerPaths
+    | null paths = [mappedBuildChange finding]
+    | otherwise = map (mappedUseChange finding) paths
+  where
+    paths = mfUsePaths finding
+    registerPaths = [path | path@UsePath{upRoot = RootRegister{}} <- paths]
+
+mappedBuildChange :: MappedFinding -> Change
+mappedBuildChange finding =
+    mappedChange context (mfDeclaration finding) "mapped-build" subject finding
+  where
+    subject = declarationSubject finding
+    renderedPaths = map (\path -> renderMappedSubject path (mfLeaf finding)) (mfUsePaths finding)
+    context = (consumerBuildContext (mfDeclaration finding) renderedPaths){contextOriginalLabel = LabelAdvisory}
+
+mappedDeclarationChange :: Label -> MappedFinding -> Change
+mappedDeclarationChange label finding =
+    mappedChange context (mfDeclaration finding) "mapped-declaration" (declarationSubject finding) finding
+  where
+    context = ChangeContext (mfDeclaration finding) [] ContextGeneral label
+
+mappedUseChange :: MappedFinding -> UsePath -> Change
+mappedUseChange finding path =
+    mappedChange context root facet subject finding
+  where
+    subject = renderMappedSubject path (mfLeaf finding)
+    (root, facet, kind) = case upRoot path of
+        RootCommandField aggregate _ _ _ -> (aggregate, "mapped-command", ContextConsumerBuild)
+        RootEventField aggregate _ _ _ -> (aggregate, "mapped-event", ContextPrivateEvent)
+        RootRegister aggregate _ _ -> (aggregate, "mapped-register", ContextSnapshot)
+    context = ChangeContext root [subject] kind (mappedContextHint finding kind)
+
+mappedContextHint :: MappedFinding -> ContextKind -> Label
+mappedContextHint finding kind = case kind of
+    ContextSnapshot -> LabelAdvisory
+    ContextConsumerBuild -> LabelAdvisory
+    ContextPrivateEvent
+        | mfCode finding == MappedFieldAddedWithDefault -> case mfOldUnknownFields finding of
+            Just IgnoreUnknown -> LabelAdditive
+            _ -> LabelBreaking
+        | mfCode finding `elem` [MappedArmAdded, MappedEnumValueAdded] -> LabelAdvisory
+        | mfCode finding `elem` [MappedBindingChanged, MappedInitialChanged, MappedCanonicalTypeChanged] -> LabelAdvisory
+        | otherwise -> LabelBreaking
+    _ -> LabelAdvisory
+
+mappedChange :: ChangeContext -> Name -> Text -> Text -> MappedFinding -> Change
+mappedChange context node facet subject finding =
+    mkChange label context node facet subject (mfCode finding) (mfDetail finding)
+  where
+    label = deriveLabel defaultGate (classifyCompatibility context (mfCode finding))
+
+declarationSubject :: MappedFinding -> Text
+declarationSubject finding =
+    mfDeclaration finding <> if T.null (mfLeaf finding) then "" else " " <> mfLeaf finding
 
 nodeAggregate :: Node -> Maybe Aggregate
 nodeAggregate (NAggregate a) = Just a
