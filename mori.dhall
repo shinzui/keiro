@@ -55,6 +55,14 @@ in  Schema.Project::{
       ]
     , okfBundles =
       [ Schema.OkfBundle::{
+        , name = "improvement-requests"
+        , path = "docs/improvement-requests"
+        , profile = Some "mori/improvement-requests-profile.dhall"
+        , okfVersion = "0.1"
+        , description = Some
+            "Cross-repository improvement requests owned by Keiro"
+        }
+      , Schema.OkfBundle::{
         , name = "adrs"
         , path = "docs/adr"
         , profile = Some "docs/adr/profile.dhall"
