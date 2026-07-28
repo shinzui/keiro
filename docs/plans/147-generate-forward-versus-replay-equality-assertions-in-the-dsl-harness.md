@@ -66,10 +66,11 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
       register expectations pass (243 examples).
 - [x] 2026-07-28: M1 all committed aggregate harnesses synchronized; all 24 `keiro-dsl`
       test suites pass.
-- [ ] M2: `replay-divergence.keiro` fixture, `keiro-dsl-conformance-replay` suite, honest
-      Holes with a dormant dishonest wire ctor, all green at baseline.
-- [ ] M2: `keiro-dsl/test/replay-mutation-test.sh` demonstrates that the mutation turns only the
-      forward/replay assertions red.
+- [x] 2026-07-28: M2 `replay-divergence.keiro`, `keiro-dsl-conformance-replay`, and honest
+      Holes with a dormant idempotent dishonest wire ctor pass at baseline.
+- [x] 2026-07-28: M2 `keiro-dsl/test/replay-mutation-test.sh` turns exactly the
+      forward/replay `note` register assertion red while validator, codec, accept, and final
+      vertex remain green.
 - [ ] M3: ADR 0004 gate-inventory row added, `log.md` updated via `okf log add`, strict OKF
       validation passes.
 - [ ] M3: Living sections finalized; MasterPlan 25 progress entries for EP-4 ticked.
@@ -84,6 +85,15 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
   their unconditional generated pragmas directly while the executable process harnesses
   continued to validate normally. Evidence: the complete 24-suite run passed, including
   `keiro-dsl-conformance-process` and `keiro-dsl-conformance-process-runtime`.
+  Date: 2026-07-28
+
+- Observation: A simple two-field `wcBuild` swap cannot isolate register divergence on Keiki
+  0.3.1. `solveOutput` applies the active `wcBuild` to the fields returned by `wcMatch` and
+  compares that rebuilt event with the observation, so a non-idempotent swap fails at the
+  generated `replay succeeds` check. An idempotent dishonest build that copies `echo` into
+  both wire fields survives the rebuild check but reconstructs the wrong command and register.
+  Evidence: `replay-mutation-test.sh` reports the final vertex green and exactly the `note`
+  register red.
   Date: 2026-07-28
 
 
@@ -113,8 +123,9 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
   types.
   Date: 2026-07-28
 
-- Decision: The mutation vector is a deliberately dishonest `WireCtor` (a `wcBuild` that
-  swaps two same-typed field values) in the hand-owned Holes module of a dedicated
+- Decision: The mutation vector is a deliberately dishonest `WireCtor` (an idempotent
+  `wcBuild` that copies the second same-typed field into both event fields) in the hand-owned
+  Holes module of a dedicated
   conformance package, switched on by a one-line sed, not a guard or write mutation.
   Rationale: With honest TH-derived `InCtor`/`WireCtor` values, forward/replay equality is
   close to a theorem — replay re-executes the same transducer on the command recovered from
@@ -126,7 +137,9 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
   that disclaimed region — which is also exactly the risk class consumer-owned structural
   bindings (plan 150) introduce, since bindings are hand-owned code on the same boundary.
   The mutation test therefore mutates the wire constructor, the one hand-ownable artifact
-  whose dishonesty every pre-existing assertion provably misses.
+  whose dishonesty every pre-existing assertion provably misses. The idempotent rewrite is
+  required because Keiki rebuilds and equality-checks the observed event during inversion;
+  a simple swap would fail replay before reaching the state comparison.
   Date: 2026-07-28
 
 - Decision: Generate forward/replay assertions only for initial-state transitions whose
@@ -453,13 +466,13 @@ context replay-divergence
 
 aggregate Note
   regs
-    note NoteText = ""
-  states Empty Written!
+    note Text = ""
+  states Empty Recorded!
 
   command WriteNote { noteText:Text echo:Text }
   event NoteWritten = fields(WriteNote)
 
-  Empty -- WriteNote --> write note := noteText ; emit NoteWritten ; goto Written
+  Empty -- WriteNote --> write note := noteText ; emit NoteWritten ; goto Recorded
 
   wire kind=ctorName fields=camelCase schemaVersion=1
 ```
@@ -485,14 +498,13 @@ dormant dishonest twin beside it:
 -- The honest generated wire ctor, behind an indirection the mutation test flips.
 emitWire = wireNoteWritten
 
--- DISHONEST twin for the mutation test: builds the event with the two Text
--- field values swapped relative to the declared field terms, while wcMatch
--- stays honest. validateTransducer cannot see wcBuild's body; only the
--- forward/replay equality assertion catches this.
-dishonestWireNoteWritten = wireNoteWritten { wcBuild = wcBuild wireNoteWritten . swapFields }
+-- DISHONEST twin for the mutation test: copies echo into both event fields
+-- while wcMatch stays honest. The rewrite is idempotent, so Keiki's event
+-- rebuild check accepts it; only the forward/replay register comparison fails.
+dishonestWireNoteWritten = wireNoteWritten { wcBuild = wcBuild wireNoteWritten . duplicateEcho }
 ```
 
-where `swapFields` swaps the two `Text` components of the wire ctor's field tuple (the
+where `duplicateEcho (_noteText, (echo, ())) = (echo, (echo, ()))` operates on the
 tuple is nested-pair shaped, `(f1, (f2, ()))`-style per `OutFields` in `Keiki.Core`;
 verify the exact shape from the TH-derived value or a type hole, and import
 `WireCtor (..)` — this is a Holes module, so the firewall does not constrain it). The
@@ -503,14 +515,13 @@ Why the mutation is invisible to every pre-existing assertion, and visible to th
 `validateTransducer` inspects declared structure only — empty. The accept assertion checks
 the vertex — unchanged. The round trips exercise `sampleEvent<Ctor>` against the generated
 codec — Holes is not involved. Forward, the emitted event carries
-`noteText = "sample-echo", echo = "sample-noteText"` (swapped by `wcBuild`); replay's
-honest `wcMatch` hands inversion the swapped values, inversion assigns them to the
-structurally declared command slots, the recovered command has its two fields exchanged,
-re-execution writes `note := "sample-echo"`, and
+`noteText = "sample-echo", echo = "sample-echo"`; replay's honest `wcMatch` hands those
+values to inversion, the recovered command writes `note := "sample-echo"`, and the
+idempotent rebuild produces the same observed event, so replay succeeds. The
 `forward/replay equality: WriteNote from NoteEmpty -- register note` compares
 `"sample-echo"` with the forward `"sample-noteText"` and goes red. This is precisely why
 M1's per-field-distinct `Text` samples are load-bearing: with uniform `"sample"` values the
-swap would be byte-invisible.
+dishonesty would be byte-invisible.
 
 Write `keiro-dsl/test/replay-mutation-test.sh` (mark executable) modeled line-for-line on
 `keiro-dsl/test/mutation-test.sh`: back up the Holes file with `mktemp`, restore on EXIT;
@@ -636,7 +647,7 @@ Expected mutation-script transcript:
 ```text
 == baseline: harness is green ==
 ok: baseline green
-== mutate: swap emitWire to the dishonest wire ctor ==
+== mutate: switch emitWire to the dishonest wire ctor ==
 == rebuild + run harness (expect the forward/replay assertion red) ==
 ok: forward/replay register assertion went red; validateTransducer and accept stayed green
 PASS: forward/replay equality has teeth (mutation caught)
@@ -777,3 +788,8 @@ none of which this plan may specialize to today's scalar register kinds.
 Revision note: Qualified forward/replay assertions as finite evidence over generated,
 guard-accepted initial-state cases rather than proof for every command value and vertex, and
 aligned downstream fixtures with the single `FixtureCases` API, 2026-07-28.
+
+Revision note: Replaced the planned non-idempotent field swap with an idempotent dishonest
+wire build after Keiki source inspection showed that `solveOutput` rebuilds and compares the
+observed event before register comparison; updated the M2 fixture, rationale, and acceptance
+transcript to preserve the intended register-only negative proof, 2026-07-28.

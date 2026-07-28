@@ -1,0 +1,13 @@
+context replay-divergence
+
+aggregate Note
+  regs
+    note Text = ""
+  states Empty Recorded!
+
+  command WriteNote { noteText:Text echo:Text }
+  event NoteWritten = fields(WriteNote)
+
+  Empty -- WriteNote --> write note := noteText ; emit NoteWritten ; goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

@@ -114,6 +114,31 @@ test-suite keiro-dsl-conformance
     , keiro
     , text   >=2.1
 
+-- Plan 147 M2: a dedicated honest-wire baseline plus a dormant idempotent
+-- dishonest WireCtor used by replay-mutation-test.sh to prove that generated
+-- forward/replay register comparisons catch state divergence missed by the
+-- pre-existing validator, codec round-trip, and accept assertions.
+test-suite keiro-dsl-conformance-replay
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-replay
+  main-is:        Main.hs
+  other-modules:
+    Generated.ReplayDivergence.Note.Codec
+    Generated.ReplayDivergence.Note.Domain
+    Generated.ReplayDivergence.Note.EventStream
+    Generated.ReplayDivergence.Note.Harness
+    Generated.ReplayDivergence.Note.Projection
+    Generated.ReplayDivergence.ReplayAudit
+    ReplayDivergence.Note.Holes
+
+  build-depends:
+    , aeson  >=2.2
+    , base   >=4.21  && <5
+    , keiki  >=0.3.1 && <0.4
+    , keiro
+    , text   >=2.1
+
 -- EP-109 M2: snapshot-enabled aggregate scaffolding compiled against the live
 -- defaultStateCodec and stream-construction guards, with the captured codec
 -- identity checked against keiki's regFileShapeHash.

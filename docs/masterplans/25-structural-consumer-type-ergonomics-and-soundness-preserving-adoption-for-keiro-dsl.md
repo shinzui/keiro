@@ -319,6 +319,12 @@ Recorded during child-plan drafting (2026-07-28):
   EP-4 (plan 147) makes `Text` samples per-field distinct (`"sample-<fieldName>"`). Also,
   keiki's `RegFile` has no `Eq` instance, so register comparison uses per-register indexed
   lookups (`regs ! #name`) rather than whole-file equality.
+- Keiki 0.3.1's `solveOutput` rebuilds an observed event with the active `wcBuild` before
+  accepting inversion. A simple dishonest field swap therefore fails replay before state
+  comparison. EP-4's negative proof uses an idempotent dishonest build (copy the second
+  same-typed field into both wire fields), which survives that rebuild check while causing a
+  register-only forward/replay divergence. EP-7 should reuse the idempotent pattern when
+  mutation-testing consumer-owned structural bindings.
 - Keiki 0.4.0.0 is the current Hackage release and upstream `v0.4.0.0` tag. It implements
   typed field projections, but deliberately limits validated uses to guards with direct
   register/matched-input bases and curated scalar results; computed bases cross a
