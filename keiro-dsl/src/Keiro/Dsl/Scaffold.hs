@@ -27,6 +27,7 @@ module Keiro.Dsl.Scaffold (
     holePrefixFor,
     scaffoldReplayAudit,
     scaffoldStructural,
+    bindingSkeletonModules,
     scaffoldAggregate,
     scaffoldProcess,
     scaffoldRouter,
@@ -68,6 +69,7 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind (..), bindingObligations)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
@@ -393,7 +395,7 @@ schema-derived Keiki field witnesses; neither layer owns consumer behavior.
 scaffoldStructural :: Context -> Spec -> [ScaffoldModule]
 scaffoldStructural ctx spec = case resolveTypeGraph spec of
     Left _ -> []
-    Right graph -> map (shapeModule ctx graph) structural <> projectionModules
+    Right graph -> map (shapeModule ctx graph) structural <> projectionModules <> bindingSkeletonModules ctx spec graph
       where
         structural =
             [ (declaration, shape)
@@ -408,6 +410,141 @@ scaffoldStructural ctx spec = case resolveTypeGraph spec of
                 }
             | not (null (projectionSpecs graph))
             ]
+
+{- | Emit one create-once consumer module per distinct qualified obligation
+owner. Multiple mapped declarations may intentionally share a leaf binding
+module, so grouping happens by module rather than by declaration.
+-}
+bindingSkeletonModules :: Context -> Spec -> TypeGraph -> [ScaffoldModule]
+bindingSkeletonModules ctx spec graph = case bindingObligations spec of
+    Left _ -> []
+    Right obligations ->
+        [ emitBindingSkeleton ctx graph owner entries
+        | (owner, entries) <- Map.toAscList (Map.fromListWith (<>) [(obligationModule obligation, [obligation]) | obligation <- obligations])
+        ]
+
+emitBindingSkeleton :: Context -> TypeGraph -> Text -> [BindingObligation] -> ScaffoldModule
+emitBindingSkeleton ctx graph owner obligations =
+    ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" owner <> ".hs")
+        , moduleText =
+            nl $
+                [ "{-# LANGUAGE LambdaCase #-}"
+                , ""
+                , "-- This is a HAND-OWNED structural binding skeleton. keiro-dsl creates it once"
+                , "-- and never overwrites it. Fill each HOLE and run the generated harness."
+                , "module " <> owner <> " ("
+                ]
+                    <> exportLines
+                    <> [") where", ""]
+                    <> map ("import " <>) imports
+                    <> [""]
+                    <> intercalateBlank (map renderObligation obligations)
+        , kind = HoleStub
+        , origin = "mapped structural binding skeleton " <> owner
+        }
+  where
+    exportLines =
+        [ (if index == (0 :: Int) then "    " else "  , ") <> obligationSymbol obligation
+        | (index, obligation) <- zip [0 ..] obligations
+        ]
+    imports =
+        sort . nub $
+            [ hsModule (sdHaskell declaration) <> " qualified"
+            | obligation <- obligations
+            , Just (declaration, _) <- [structuralFor obligation]
+            ]
+                <> [ structuralShapeModule ctx (sdName declaration) <> " qualified"
+                   | obligation <- obligations
+                   , obligationKind obligation == BindingValue
+                   , Just (declaration, _) <- [structuralFor obligation]
+                   ]
+                <> [ "Keiro.Codec.Structural (FixtureCases, StructuralBinding (..))"
+                   | any ((`elem` [BindingValue, FixtureValue]) . obligationKind) obligations
+                   ]
+    renderObligation obligation = case structuralFor obligation of
+        Nothing -> ["-- HOLE: declaration disappeared before skeleton rendering"]
+        Just (declaration, shape) -> case obligationKind obligation of
+            BindingValue -> renderBinding ctx declaration shape obligation
+            FixtureValue ->
+                [ "-- HOLE: provide deterministic labelled conformance fixtures for " <> sdName declaration
+                , obligationSignature obligation
+                , obligationSymbol obligation <> " = error " <> tshow ("HOLE: fill " <> sdName declaration <> " fixtures")
+                ]
+            InitialValue ->
+                [ "-- HOLE: provide the initial register value for " <> sdName declaration
+                , obligationSignature obligation
+                , obligationSymbol obligation <> " = error " <> tshow ("HOLE: fill " <> sdName declaration <> " initial value")
+                ]
+    structuralFor obligation = case Map.lookup (MappedKey (obligationMappedName obligation)) (tgDeclarations graph) of
+        Just (ResolvedStructural declaration shape) -> Just (declaration, shape)
+        _ -> Nothing
+    intercalateBlank [] = []
+    intercalateBlank (section : rest) = section <> concatMap ("" :) rest
+
+renderBinding :: Context -> StructuralDecl -> ResolvedMappedShape -> BindingObligation -> [Text]
+renderBinding ctx declaration shape obligation =
+    [ "-- HOLE: complete both total directions; wire policy remains in the generated codec."
+    , obligationSymbol obligation <> " :: StructuralBinding " <> domainType <> " " <> shapeType
+    , obligationSymbol obligation <> " ="
+    , "  StructuralBinding"
+    , "    { bindingToShape = \\case"
+    ]
+        <> indentCases (bindingCases True)
+        <> ["    , bindingFromShape = \\case"]
+        <> indentCases (bindingCases False)
+        <> ["    }"]
+  where
+    domainModule = hsModule (sdHaskell declaration)
+    domainType = domainModule <> "." <> hsType (sdHaskell declaration)
+    shapeModuleName = structuralShapeModule ctx (sdName declaration)
+    shapeType = shapeModuleName <> "." <> sdName declaration <> "Shape"
+    domainCtor constructor = domainModule <> "." <> constructor
+    shapeCtor constructor = shapeModuleName <> "." <> constructor
+    indentCases = map ("      " <>)
+    bindingCases toShapeDirection =
+        foldMappedShape
+            MappedShapeAlgebra
+                { onRecord = \constructor _ fields -> [recordCase toShapeDirection constructor fields]
+                , onEnum = \entries -> map (enumCase toShapeDirection . weCtor) entries
+                , onUnion = \_ arms -> map (unionCase toShapeDirection) arms
+                }
+            shape
+    recordCase toShapeDirection constructor fields =
+        sourceCtor
+            <> arguments variables
+            <> " -> "
+            <> targetCtor
+            <> arguments (map (holeFor toShapeDirection . rwfHaskell) fields)
+      where
+        variables = map (("_" <>) . (<> "Value") . rwfHaskell) fields
+        sourceCtor = if toShapeDirection then domainCtor constructor else shapeCtor constructor
+        targetCtor = if toShapeDirection then shapeCtor constructor else domainCtor constructor
+    enumCase toShapeDirection constructor =
+        sourceCtor <> " -> " <> holeFor toShapeDirection constructor
+      where
+        sourceCtor = if toShapeDirection then domainCtor constructor else shapeCtor constructor
+    unionCase toShapeDirection arm =
+        sourceCtor
+            <> maybe "" (const " _payloadValue") (rwaPayload arm)
+            <> " -> "
+            <> case rwaPayload arm of
+                Nothing -> holeFor toShapeDirection (rwaCtor arm)
+                Just _ -> targetCtor <> " " <> holeFor toShapeDirection (rwaCtor arm <> ".payload")
+      where
+        sourceCtor = if toShapeDirection then domainCtor (rwaCtor arm) else shapeCtor (rwaCtor arm)
+        targetCtor = if toShapeDirection then shapeCtor (rwaCtor arm) else domainCtor (rwaCtor arm)
+    arguments [] = ""
+    arguments values = " " <> T.unwords values
+    holeFor toShapeDirection fieldName =
+        "(error "
+            <> tshow
+                ( "HOLE: fill "
+                    <> sdName declaration
+                    <> (if toShapeDirection then " bindingToShape." else " bindingFromShape.")
+                    <> fieldName
+                )
+            <> ")"
 
 shapeModule :: Context -> TypeGraph -> (StructuralDecl, ResolvedMappedShape) -> ScaffoldModule
 shapeModule ctx graph (declaration, shape) =
@@ -444,13 +581,16 @@ emitShape ctx graph declaration shape =
     moduleName = structuralShapeModule ctx (sdName declaration)
     shapeType = sdName declaration <> "Shape"
     requirements = shapeRequirements ctx graph shape
-    languagePragmas = ["{-# LANGUAGE DuplicateRecordFields #-}" | shapeHasRecord shape]
+    languagePragmas =
+        ["{-# LANGUAGE DeriveGeneric #-}"]
+            <> ["{-# LANGUAGE DuplicateRecordFields #-}" | shapeHasRecord shape]
     imports =
         sort . nub $
             ["Data.Aeson (Value)" | ReqJson `elem` requirements]
                 <> ["Data.Map.Strict (Map)" | ReqMap `elem` requirements]
                 <> ["Data.Text (Text)" | ReqText `elem` requirements]
                 <> ["Data.Time (UTCTime)" | ReqTime `elem` requirements]
+                <> ["GHC.Generics (Generic)"]
                 <> ["Numeric.Natural (Natural)" | ReqNatural `elem` requirements]
                 <> [m <> " qualified" | ReqModule m <- requirements]
     shapeDeclaration =
@@ -463,21 +603,21 @@ emitShape ctx graph declaration shape =
                                 [ (rwfHaskell field, renderShapeType ctx graph (rwfType field))
                                 | field <- fields
                                 ]
-                            <> ["  deriving stock (Eq, Show)"]
+                            <> ["  deriving stock (Eq, Generic, Show)"]
                 , onEnum = \entries ->
                     "data "
                         <> shapeType
                         <> " = "
                         <> T.intercalate " | " (map weCtor entries)
-                        <> "\n  deriving stock (Eq, Show)"
+                        <> "\n  deriving stock (Eq, Generic, Show)"
                 , onUnion = \_ arms ->
                     nl $
                         case arms of
-                            [] -> ["data " <> shapeType <> " = " <> shapeType <> "Empty", "  deriving stock (Eq, Show)"]
+                            [] -> ["data " <> shapeType <> " = " <> shapeType <> "Empty", "  deriving stock (Eq, Generic, Show)"]
                             firstArm : rest ->
                                 ["data " <> shapeType <> " = " <> renderArm firstArm]
                                     <> ["  | " <> renderArm arm | arm <- rest]
-                                    <> ["  deriving stock (Eq, Show)"]
+                                    <> ["  deriving stock (Eq, Generic, Show)"]
                 }
             shape
     renderArm arm = rwaCtor arm <> maybe "" ((" !" <>) . renderShapeType ctx graph) (rwaPayload arm)

@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-07-28
+* **Update**: Record create-once binding skeletons and exact nominal generic derivation as downstream conveniences under ADR 0012 (plan 151).
 * **Update**: Amend ADR 0004 with structural binding, mapped-codec golden, fixture-coverage, and scaffold-drift gate ownership (plan 150).
 * **Update**: Accept ADR 0012 after structural binding, codec, projection, replay, mutation, and benchmark conformance landed (plan 150).
 * **Update**: Record the landed checked graph, total traversal algebras, root-path expansion, wire-only fingerprints, and synthesized-evidence policy.

@@ -171,7 +171,7 @@ request's origin but do not constrain the reusable Keiro API beyond the local de
 | 5 | Report evolution as a compatibility vector with remediation explanations | docs/plans/148-report-evolution-as-a-compatibility-vector-with-remediation-explanations.md | None | None | Complete |
 | 6 | Implement the IR-1 spec layer: resolved type graph, structural and opaque declarations, check and diff | docs/plans/149-implement-the-ir-1-spec-layer-resolved-type-graph-structural-and-opaque-declarations-check-and-diff.md | EP-5 | None | Complete |
 | 7 | Implement the IR-1 generation layer: total bindings, codecs, Keiki projection facade, scaffold, and conformance harness | docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md | EP-6, Keiki 0.4 | EP-4 | Complete |
-| 8 | Reduce binding boilerplate: skeleton scaffolds, exact nominal derivation, and explain-bindings | docs/plans/151-reduce-binding-boilerplate-skeleton-scaffolds-derived-nominal-bindings-and-explain-bindings.md | EP-7 | None | Not Started |
+| 8 | Reduce binding boilerplate: skeleton scaffolds, exact nominal derivation, and explain-bindings | docs/plans/151-reduce-binding-boilerplate-skeleton-scaffolds-derived-nominal-bindings-and-explain-bindings.md | EP-7 | None | Complete |
 | 9 | Gather migration evidence with historical codec comparison and supported-root coverage reporting | docs/plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md | EP-7 | EP-8 | Not Started |
 
 
@@ -300,8 +300,8 @@ is implemented and released.
 - [x] 2026-07-28: EP-7 total `StructuralBinding` API, generated codecs, Keiki 0.4 projection facade, and scaffold integration landed
 - [x] 2026-07-28: EP-7 conformance package passes both binding laws, structural-codec, fixture-coverage, projection, and forward/replay tests; all three mutations go red and the 2x benchmark budget passes
 - [x] 2026-07-28: EP-7 shared `0.4.0.0` release preparation approved and completed; all mandatory release gates pass, while annotated tags, pushes, and publication remain assigned to the initiative release train
-- [ ] EP-8: Binding skeleton scaffolds with typed holes and re-scaffold hole reporting landed
-- [ ] EP-8: Exact-match nominal bindings and `check --explain-bindings` landed; general conformance scenario passes
+- [x] 2026-07-28: EP-8 create-once binding skeletons, granular scaffold-record obligations, and exact newly-required-hole reporting landed
+- [x] 2026-07-28: EP-8 exact nominal bindings and `check --explain-bindings` landed; the conformance ring, four mutations, strict ADR validation, and `just verify` pass
 - [ ] EP-9: Explicit historical-codec comparison over a finite corpus landed
 - [ ] EP-9: Supported-root structural/opaque and snapshot-boundary report landed; guides updated; ADR distillation complete
 
@@ -364,6 +364,12 @@ Recorded during child-plan drafting (2026-07-28):
   spec provides evidence. EP-6 must make that policy an explicit structural-declaration fact and
   feed it into EP-5's `ChangeContext`; inheriting an implicit reject/ignore default would make
   nested classifications unsound.
+- EP-7's conformance fixture intentionally shares one hand-owned binding module across four
+  structural declarations. EP-8 therefore groups create-once skeletons by the qualified symbol's
+  owning module while retaining field/arm-granular obligations in the scaffold record.
+- Exact generic representations cannot reveal the module containing the binding value. EP-8 keeps
+  the successful API free of a forgeable promoted-path argument and uses GHC's exact invocation
+  source span, plus a stable custom error directing the author to that scaffolded module.
 
 
 ## Decision Log
@@ -478,6 +484,16 @@ packages and their changelogs/bounds are aligned, and `nix fmt`, `just verify`, 
 `nix flake check` pass. EP-7 is therefore Complete. Tags, pushes, the final Hackage dependency
 audit, and publication remain deferred to the initiative release train.
 
+EP-8 completed the soundness-preserving authoring layer. Scaffolding emits compiling create-once
+binding skeletons grouped by owner, persists granular obligations, skips hand-owned files, and
+reports exactly what a later shape change adds. Exact `GHC.Generics` derivation removes nominal
+boilerplate only when constructor names/order, selector names/order, arity, and field types match;
+four compile-fail fixtures prove the refusal cases. `check --explain-bindings` now reports every
+binding, fixture, and register-initial obligation with use paths and binding-version provenance.
+The landed conformance bindings fell from 56 to 30 semantic lines, goldens stayed unchanged, all
+four structural mutations turn red, and `just verify` passes. ADR 0012 records these as downstream
+conveniences under its existing single-authority and total-binding rules; EP-8 is Complete.
+
 
 ---
 
@@ -499,3 +515,7 @@ unambiguous JSON, and comparison reports carry structured differences and explic
 Revision note: Closed EP-7 after the approved shared `0.4.0.0` release preparation and passing
 release gates; EP-8 and EP-9 are now hard-dependency-ready while publication remains deferred,
 2026-07-28.
+
+Revision note: Closed EP-8 after landing owner-grouped create-once binding skeletons, granular
+new-hole reporting, exact nominal derivation, binding explanations, and passing full verification;
+EP-9 may now consume its fixture conveniences, 2026-07-28.

@@ -6,6 +6,13 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+### New Features
+
+- Adds `Keiro.Codec.Structural.Generic.genericStructuralBinding`, an opt-in
+  nominal adapter that accepts only exact constructor, selector, arity, order,
+  and field-type correspondence and otherwise emits a compile-time direction
+  to the scaffolded binding module.
+
 ## 0.4.0.0 — 2026-07-28
 
 ### Breaking Changes

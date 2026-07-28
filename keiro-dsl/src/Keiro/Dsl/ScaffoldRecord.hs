@@ -16,6 +16,7 @@ import Data.List (nub)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
+import Keiro.Dsl.ExplainBindings (BindingHole (..))
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
 import Keiro.Dsl.Scaffold (ModuleKind (..))
 import System.FilePath (isAbsolute, splitDirectories)
@@ -26,6 +27,7 @@ data ScaffoldRecord = ScaffoldRecord
     , recLayout :: !Text
     , recFiles :: ![(ModuleKind, FilePath)]
     , recMappings :: ![MappingIdentity]
+    , recBindingObligations :: ![BindingHole]
     }
     deriving stock (Eq, Show)
 
@@ -39,12 +41,15 @@ renderRecord record =
         ]
             <> map renderFile (recFiles record)
             <> map renderMapping (recMappings record)
+            <> map renderBindingObligation (recBindingObligations record)
   where
     rootLabel = if T.null (recModuleRoot record) then "(none)" else recModuleRoot record
     renderFile (Generated, path) = "generated " <> T.pack path
     renderFile (HoleStub, path) = "hole " <> T.pack path
     renderMapping mapping =
         "mapping " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode mapping))
+    renderBindingObligation obligation =
+        "binding " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode obligation))
 
 {- | Parse a v1 record. The version header and the three required fields must
 be present exactly once. Unknown lines are ignored for forward compatibility;
@@ -59,7 +64,8 @@ parseRecord contents = case T.lines contents of
             layout <- exactlyOne "layout: " rows
             files <- traverse parseFile (filter isFileRow rows)
             mappings <- traverse parseMapping (filter ("mapping " `T.isPrefixOf`) rows)
-            if hasDuplicateMappingNames mappings
+            bindingEntries <- traverse parseBindingObligation (filter ("binding " `T.isPrefixOf`) rows)
+            if hasDuplicateMappingNames mappings || hasDuplicateBindingObligations bindingEntries
                 then Nothing
                 else
                     pure
@@ -69,6 +75,7 @@ parseRecord contents = case T.lines contents of
                             , recLayout = layout
                             , recFiles = files
                             , recMappings = mappings
+                            , recBindingObligations = bindingEntries
                             }
     _ -> Nothing
   where
@@ -88,9 +95,22 @@ parseRecord contents = case T.lines contents of
     parseMapping row = do
         payload <- T.stripPrefix "mapping " row
         Aeson.decodeStrict' (Text.encodeUtf8 payload)
+    parseBindingObligation row = do
+        payload <- T.stripPrefix "binding " row
+        Aeson.decodeStrict' (Text.encodeUtf8 payload)
     hasDuplicateMappingNames mappings =
         let names = map mappingSpecName mappings
          in length names /= length (nub names)
+    hasDuplicateBindingObligations obligations =
+        let keys = map bindingKey obligations
+         in length keys /= length (nub keys)
+    bindingKey hole =
+        ( holeMappedName hole
+        , holeModule hole
+        , holeSymbol hole
+        , holeKind hole
+        , holePath hole
+        )
 
 recordFileName :: Text -> FilePath
 recordFileName context = "keiro-dsl-scaffold-record." <> T.unpack context <> ".txt"

@@ -220,9 +220,72 @@ complement or a precise affected surface. The durable decision is
 the operational sequence is in
 [Changing decisions: guards, outputs, and dispatch](evolution-and-replayability.md#changing-decisions-guards-outputs-and-dispatch).
 
-Binding-authoring tooling does not exist yet. Plan 151 will append the
-create-once skeleton and explanation workflow here after its implementation
-lands.
+### Author structural bindings from create-once skeletons
+
+For each `mapped structural` declaration, the spec names the Haskell module and
+symbol that own its `StructuralBinding`, fixture corpus, and—when a register
+uses the type—initial value. Run the ordinary scaffold command:
+
+```bash
+cabal run keiro-dsl -- scaffold service.keiro --out src
+```
+
+The first run creates a hand-owned skeleton at every distinct owning module.
+If several mapped types intentionally share one binding module, the scaffolder
+puts all of their obligations in that one file. Each total binding direction is
+laid out with every declared record field or union/enum constructor and an
+explicit `HOLE:` body. Fixture and register-initial symbols receive the same
+create-once treatment. Fill the semantic construction and destruction logic,
+then run the generated conformance harness. Never copy wire keys, tags,
+presence, nullability, or defaults into the binding: those remain in the
+`.keiro` declaration and its generated codec.
+
+Re-running scaffold skips every existing skeleton. The scaffold record retains
+one entry per binding field or constructor and per fixture/initial obligation,
+so a declaration change prints a `newly required holes since last scaffold`
+section naming the exact symbol and field to add by hand. The tool reports the
+change but never parses, rewrites, or decides whether an existing Haskell body
+is complete. GHC and the generated harness remain the enforcement boundaries.
+
+
+### Derive only exact nominal bindings
+
+When consumer and generated shape representations have the same constructor
+count and order, identical constructor and selector names, identical field
+order, and identical field types, opt into the zero-policy generic adapter:
+
+```haskell
+import Keiro.Codec.Structural.Generic (genericStructuralBinding)
+
+artifactMetadataBinding :: StructuralBinding ArtifactMetadata ArtifactMetadataShape
+artifactMetadataBinding = genericStructuralBinding
+```
+
+This derives construction and destruction only. It cannot inspect or change
+the JSON schema. Renamed or reordered fields, arity differences, and field-type
+differences fail compilation with a message directing the author to the
+scaffolded binding module. There is deliberately no prefix stripping,
+coercion, or positional guess. Use the explicit skeleton whenever the consumer
+model is refined or intentionally differs from the generated shape, and retain
+both binding-law and codec/golden conformance cases even for a derived binding.
+
+
+### Explain every consumer-owned obligation before scaffolding
+
+To inspect the application boundary without writing files, run:
+
+```bash
+cabal run keiro-dsl -- check service.keiro --explain-bindings
+```
+
+After normal validation succeeds, the report groups obligations by owning
+package and module. It lists the binding and fixture signatures for every
+structural declaration, the declared `binding-version`, all aggregate use-site
+paths, and an initial-value signature only when a command/event path reaches a
+register of that type. A spec with no structural mappings says so explicitly.
+The report is an authoring aid, not a new compatibility or release gate;
+`check`, `diff`, GHC, and the conformance harness retain their existing
+authority.
 
 <!-- appended-by: docs/plans/151-reduce-binding-boilerplate-skeleton-scaffolds-derived-nominal-bindings-and-explain-bindings.md
      anchor: binding-authoring-tooling

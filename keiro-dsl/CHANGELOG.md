@@ -6,6 +6,14 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### New Features
+
+- Structural scaffolding now creates hand-owned binding/fixture/initial
+  skeletons grouped by their declared owner modules, persists granular hole
+  obligations for non-overwriting re-scaffold reports, derives `Generic` for
+  private shape types, and provides `check --explain-bindings` for deterministic
+  package/module/signature/use-site reports.
+
 ## 0.4.0.0 — 2026-07-28
 
 ### New Features

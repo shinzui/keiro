@@ -33,6 +33,7 @@ library
   exposed-modules:
     Keiro.Dsl.Diff
     Keiro.Dsl.DiffReport
+    Keiro.Dsl.ExplainBindings
     Keiro.Dsl.FoldFingerprint
     Keiro.Dsl.Goldens
     Keiro.Dsl.Grammar
@@ -91,6 +92,7 @@ test-suite keiro-dsl-test
     , hspec       >=2.11
     , keiro-core
     , keiro-dsl
+    , process     >=1.6
     , QuickCheck  >=2.14
     , text        >=2.1
 

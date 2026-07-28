@@ -6,6 +6,13 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### New Features
+
+- Structural consumer mappings gain create-once binding skeletons, granular
+  newly-required-hole reporting, exact opt-in `GHC.Generics` bindings, and
+  `keiro-dsl check --explain-bindings`; wire policy remains exclusively in the
+  checked declaration and generated codec.
+
 ## 0.4.0.0 — 2026-07-28
 
 ### Breaking Changes

@@ -11,6 +11,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.Diff (Change (..), CompatibilitySurface, diffSpecs, gateWith, gatedBreaking)
 import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, renderExplainBlock, renderFinding)
+import Keiro.Dsl.ExplainBindings (bindingObligations, renderBindingObligations)
 import Keiro.Dsl.Goldens (emitGoldenPayloads, loadGoldenPayloads)
 import Keiro.Dsl.Grammar (Placement (..), Spec (..))
 import Keiro.Dsl.Parser (parseSpec)
@@ -29,7 +30,7 @@ import System.Process (readProcessWithExitCode)
 
 data Command
     = Parse FilePath
-    | Check FilePath Bool
+    | Check FilePath Bool Bool
     | Scaffold FilePath FilePath (Maybe String) Bool Bool (Maybe FilePath)
     | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath)
     | New String
@@ -50,7 +51,7 @@ commands =
             (info (Parse <$> fileArg <**> helper) (progDesc "Parse a .keiro file and pretty-print it back"))
             <> command
                 "check"
-                (info (Check <$> fileArg <*> emitSwitch <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
+                (info (Check <$> fileArg <*> emitSwitch <*> explainBindingsSwitch <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
             <> command
                 "scaffold"
                 (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> optional goldensOpt <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
@@ -95,6 +96,9 @@ reportOutOpt = strOption (long "report-out" <> metavar "FILE" <> help "Write the
 emitSwitch :: Parser Bool
 emitSwitch = switch (long "emit" <> help "On success, pretty-print the parsed spec to stdout (folds parse + check into one call)")
 
+explainBindingsSwitch :: Parser Bool
+explainBindingsSwitch = switch (long "explain-bindings" <> help "On success, list the consumer-owned binding, fixture, and register-initial symbols required by structural mapped types")
+
 sinceOpt :: Parser String
 sinceOpt = strOption (long "since" <> metavar "GIT-REF" <> help "Git ref to diff the spec against (e.g. HEAD, a tag, a branch)")
 
@@ -112,7 +116,7 @@ run (Parse fp) = do
             hPutStrLn stderr (T.unpack err)
             exitFailure
         Right spec -> TIO.putStrLn (renderSpec spec)
-run (Check fp emit) = do
+run (Check fp emit explainBindings) = do
     input <- TIO.readFile fp
     case parseSpec fp input of
         Left err -> do
@@ -123,10 +127,15 @@ run (Check fp emit) = do
             mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
             if any ((== Error) . severity) diags
                 then exitFailure
-                else
-                    if emit
-                        then TIO.putStrLn (renderSpec spec)
-                        else putStrLn "OK"
+                else do
+                    when emit (TIO.putStrLn (renderSpec spec))
+                    if explainBindings
+                        then case bindingObligations spec of
+                            Left graphErrors -> do
+                                hPutStrLn stderr ("validated spec did not resolve its mapped type graph: " <> show graphErrors)
+                                exitFailure
+                            Right obligations -> TIO.putStrLn (renderBindingObligations (specContext spec) obligations)
+                        else when (not emit) (putStrLn "OK")
 run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens) = do
     input <- TIO.readFile fp
     case parseSpec fp input of

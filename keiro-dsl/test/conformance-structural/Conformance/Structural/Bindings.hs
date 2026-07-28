@@ -23,41 +23,16 @@ import Generated.StructuralConformance.Structural.Shape.ArtifactKind qualified a
 import Generated.StructuralConformance.Structural.Shape.ArtifactLocation qualified as LocationShape
 import Generated.StructuralConformance.Structural.Shape.ArtifactMetadata qualified as MetadataShape
 import Keiro.Codec.Structural (FixtureCases (..), StructuralBinding (..))
+import Keiro.Codec.Structural.Generic (genericStructuralBinding)
 
 artifactKindBinding :: StructuralBinding Domain.ArtifactKind KindShape.ArtifactKindShape
-artifactKindBinding =
-    StructuralBinding
-        { bindingToShape = \case
-            Domain.Guide -> KindShape.Guide
-            Domain.Reference -> KindShape.Reference
-        , bindingFromShape = \case
-            KindShape.Guide -> Domain.Guide
-            KindShape.Reference -> Domain.Reference
-        }
+artifactKindBinding = genericStructuralBinding
 
 artifactLocationBinding :: StructuralBinding Domain.ArtifactLocation LocationShape.ArtifactLocationShape
-artifactLocationBinding =
-    StructuralBinding
-        { bindingToShape = \case
-            Domain.LocalFile path -> LocationShape.LocalFile path
-            Domain.LocalDir path -> LocationShape.LocalDir path
-            Domain.RepoPath path -> LocationShape.RepoPath path
-            Domain.LocUrl url -> LocationShape.LocUrl url
-            Domain.Canonical -> LocationShape.Canonical
-        , bindingFromShape = \case
-            LocationShape.LocalFile path -> Domain.LocalFile path
-            LocationShape.LocalDir path -> Domain.LocalDir path
-            LocationShape.RepoPath path -> Domain.RepoPath path
-            LocationShape.LocUrl url -> Domain.LocUrl url
-            LocationShape.Canonical -> Domain.Canonical
-        }
+artifactLocationBinding = genericStructuralBinding
 
 artifactMetadataBinding :: StructuralBinding Domain.ArtifactMetadata MetadataShape.ArtifactMetadataShape
-artifactMetadataBinding =
-    StructuralBinding
-        { bindingToShape = \value -> MetadataShape.ArtifactMetadata value.note
-        , bindingFromShape = \(MetadataShape.ArtifactMetadata note) -> Domain.ArtifactMetadata note
-        }
+artifactMetadataBinding = genericStructuralBinding
 
 artifactInfoBinding :: StructuralBinding Domain.ArtifactInfo InfoShape.ArtifactInfoShape
 artifactInfoBinding =

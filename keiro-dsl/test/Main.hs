@@ -5,7 +5,7 @@ of the canonical Reservation fixture.
 module Main (main) where
 
 import Control.Exception (bracket)
-import Control.Monad (filterM, forM, forM_)
+import Control.Monad (filterM, forM, forM_, unless)
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Either (isLeft, isRight)
@@ -18,6 +18,7 @@ import Data.Text.IO qualified as TIO
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
+import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingObligations, renderBindingObligations)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldSurface)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
@@ -31,14 +32,16 @@ import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
-import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), StaleModule (..), executeScaffold, planScaffold, renderRefusals, renderScaffoldReport, scaffoldModules)
+import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), StaleModule (..), WriteDisposition (..), executeScaffold, planScaffold, renderRefusals, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, validateSpec)
 import System.Directory (createDirectory, createDirectoryIfMissing, doesFileExist, getTemporaryDirectory, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
+import System.Exit (ExitCode (..))
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hClose, openTempFile)
+import System.Process (readProcessWithExitCode)
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
 
@@ -1620,6 +1623,59 @@ main = hspec $ do
                                 ]
             paths `shouldNotContain` ["Generated/ConsumerDemo/Structural/Shape/VendorGeometry.hs"]
             firewallBreaches modules `shouldBe` []
+        it "emits one create-once binding skeleton per owning module and derives Generic for private shapes" $ do
+            spec <- specOf "test/fixtures/consumer-types.keiro"
+            let modules = scaffoldModules (defaultContext (specContext spec)) spec
+                skeletons = [moduleValue | moduleValue <- modules, kind moduleValue == HoleStub, modulePath moduleValue == "Example/Artifact/KeiroBindings.hs"]
+                shape = generatedTextEndingIn "Structural/Shape/ArtifactInfo.hs" modules
+            case skeletons of
+                [skeleton] -> do
+                    moduleText skeleton `shouldSatisfy` T.isInfixOf "artifactInfoBinding :: StructuralBinding"
+                    moduleText skeleton `shouldSatisfy` T.isInfixOf "artifactKindBinding :: StructuralBinding"
+                    moduleText skeleton `shouldSatisfy` T.isInfixOf "artifactLocationBinding :: StructuralBinding"
+                    moduleText skeleton `shouldSatisfy` T.isInfixOf "HOLE: fill ArtifactInfo bindingToShape.key"
+                _ -> expectationFailure ("expected exactly one shared binding skeleton, got " <> show (map modulePath skeletons))
+            shape `shouldSatisfy` T.isInfixOf "deriving stock (Eq, Generic, Show)"
+            shape `shouldSatisfy` T.isInfixOf "import GHC.Generics (Generic)"
+        it "never overwrites an existing binding skeleton" $
+            withTempDirectory "keiro-dsl-binding-create-once" $ \out -> do
+                spec <- specOf "test/fixtures/consumer-types.keiro"
+                let ctx = defaultContext (specContext spec)
+                    bindingPath = out </> "Example/Artifact/KeiroBindings.hs"
+                _ <- executePlannedScaffold out "consumer-types.keiro" ctx spec
+                TIO.writeFile bindingPath "hand-owned binding\n"
+                second <- executePlannedScaffold out "consumer-types.keiro" ctx spec
+                TIO.readFile bindingPath `shouldReturn` "hand-owned binding\n"
+                reportDispositions second
+                    `shouldSatisfy` any (\(moduleValue, disposition) -> modulePath moduleValue == "Example/Artifact/KeiroBindings.hs" && disposition == Skipped)
+        it "fresh binding skeletons compile at the application boundary" $
+            withTempDirectory "keiro-dsl-binding-compiles" $ \out -> do
+                spec <- specOf "test/fixtures/structural-conformance.keiro"
+                let ctx = defaultContext (specContext spec)
+                    bindingSource = out </> "Conformance/Structural/Bindings.hs"
+                    ghcOutput = out </> ".ghc"
+                _ <- executePlannedScaffold out "structural-conformance.keiro" ctx spec
+                createDirectoryIfMissing True ghcOutput
+                (exitCode, standardOutput, standardError) <-
+                    readProcessWithExitCode
+                        "cabal"
+                        [ "exec"
+                        , "--"
+                        , "ghc"
+                        , "-XGHC2024"
+                        , "-XOverloadedStrings"
+                        , "-fno-code"
+                        , "-fforce-recomp"
+                        , "-outputdir"
+                        , ghcOutput
+                        , "-i" <> out
+                        , "-itest/conformance-structural"
+                        , "-i../keiro-core/src"
+                        , bindingSource
+                        ]
+                        ""
+                unless (exitCode == ExitSuccess) $
+                    expectationFailure (standardOutput <> standardError)
         it "keeps consumer types in Domain while the generated Codec owns keys, tags, and defaults" $ do
             spec <- specOf "test/fixtures/consumer-types.keiro"
             let modules = scaffoldModules (defaultContext (specContext spec)) spec
@@ -1671,8 +1727,11 @@ main = hspec $ do
                 length (consumerMappings (reportConsumerPlan first)) `shouldBe` 4
                 recordText <- TIO.readFile (out </> recordFileName (specContext spec))
                 let mappingRows = filter (T.isPrefixOf "mapping ") (T.lines recordText)
+                    bindingRows = filter (T.isPrefixOf "binding ") (T.lines recordText)
                 length mappingRows `shouldBe` 4
+                bindingRows `shouldSatisfy` (not . null)
                 fmap recMappings (parseRecord recordText) `shouldSatisfy` maybe False ((== 4) . length)
+                fmap recBindingObligations (parseRecord recordText) `shouldSatisfy` maybe False ((== length bindingRows) . length)
                 let bumped = spec{specMapped = map bumpArtifactBindingVersion (specMapped spec)}
                 second <- executePlannedScaffold out "consumer-types.keiro" ctx bumped
                 reportMappingDrift second
@@ -1681,6 +1740,27 @@ main = hspec $ do
                 case mappingRows of
                     row : _ -> parseRecord (recordText <> row <> "\n") `shouldBe` Nothing
                     [] -> expectationFailure "expected mapping rows"
+                case bindingRows of
+                    row : _ -> parseRecord (recordText <> row <> "\n") `shouldBe` Nothing
+                    [] -> expectationFailure "expected binding rows"
+        it "reports exactly the newly added binding field without rewriting the shared skeleton" $
+            withTempDirectory "keiro-dsl-binding-drift" $ \out -> do
+                spec <- specOf "test/fixtures/consumer-types.keiro"
+                let ctx = defaultContext (specContext spec)
+                _ <- executePlannedScaffold out "consumer-types.keiro" ctx spec
+                let extended = spec{specMapped = map addArtifactSummaryField (specMapped spec)}
+                second <- executePlannedScaffold out "consumer-types.keiro" ctx extended
+                reportNewHoles second
+                    `shouldBe` [ BindingHole
+                                    { holeMappedName = "ArtifactInfo"
+                                    , holeModule = "Example.Artifact.KeiroBindings"
+                                    , holeSymbol = "artifactInfoBinding"
+                                    , holeKind = BindingValue
+                                    , holePath = Just "summary"
+                                    , holeSignature = "artifactInfoBinding.summary :: Text"
+                                    }
+                               ]
+                renderScaffoldReport second `shouldSatisfy` any (T.isInfixOf "artifactInfoBinding.summary :: Text")
         it "rejects malformed known mapping JSON while ignoring unrelated future rows" $ do
             spec <- specOf "test/fixtures/consumer-types.keiro"
             withTempDirectory "keiro-dsl-mapping-malformed" $ \out -> do
@@ -1710,6 +1790,46 @@ main = hspec $ do
             spec <- specOf "test/fixtures/consumer-types.keiro"
             let commandOnly = removeMappedRegisterRequirements spec
             planScaffold (defaultContext (specContext commandOnly)) commandOnly `shouldSatisfy` isRight
+
+    describe "binding explanations" $ do
+        it "lists binding, fixture, and use-site-scoped initial obligations deterministically" $ do
+            spec <- specOf "test/fixtures/consumer-types.keiro"
+            obligations <- either (\errors -> expectationFailure (show errors) >> pure []) pure (bindingObligations spec)
+            length obligations `shouldBe` 7
+            obligations
+                `shouldSatisfy` any
+                    ( \obligation ->
+                        obligationKind obligation == BindingValue
+                            && obligationSymbol obligation == "artifactInfoBinding"
+                            && obligationBindingVersion obligation == Just "1"
+                    )
+            obligations
+                `shouldSatisfy` any
+                    ( \obligation ->
+                        obligationKind obligation == InitialValue
+                            && obligationSymbol obligation == "emptyArtifactInfo"
+                            && any (T.isInfixOf "Catalog register currentArtifact") (obligationUseSites obligation)
+                    )
+            let rendered = renderBindingObligations (specContext spec) obligations
+            rendered `shouldSatisfy` T.isInfixOf "binding obligations for context consumer-demo"
+            rendered `shouldSatisfy` T.isInfixOf "artifactInfoBinding :: StructuralBinding Example.Artifact.Domain.ArtifactInfo ArtifactInfoShape"
+            rendered `shouldSatisfy` T.isInfixOf "provenance: binding-version \"1\""
+        it "states explicitly when a spec has no structural obligations" $ do
+            spec <- specOf "test/fixtures/reservation.keiro"
+            obligations <- either (\errors -> expectationFailure (show errors) >> pure []) pure (bindingObligations spec)
+            renderBindingObligations (specContext spec) obligations
+                `shouldBe` "no binding obligations for context hospital-capacity"
+
+    describe "exact generic structural bindings" $ do
+        forM_
+            [ ("renamed-field", "selector mismatch")
+            , ("reordered-field", "selector mismatch")
+            , ("arity-mismatch", "no exact nominal correspondence")
+            , ("incompatible-type", "no exact nominal correspondence")
+            ]
+            $ \(fixture, diagnostic) ->
+                it ("rejects " <> fixture <> " and directs the author to the scaffolded module") $
+                    expectGenericCompileFailure fixture diagnostic
 
     describe "structural harness" $ do
         it "emits every structural, wire-policy, projection, and replay assertion family" $ do
@@ -1892,6 +2012,7 @@ main = hspec $ do
                             , recLayout = "prefixed"
                             , recFiles = [(kind m, modulePath m) | (m, _) <- reportDispositions report]
                             , recMappings = []
+                            , recBindingObligations = []
                             }
                 parseRecord (T.replace "spec: " "future-field: retained\nspec: " contents) `shouldBe` parseRecord contents
                 parseRecord (T.replace "record v1" "record v2" contents) `shouldBe` Nothing
@@ -2439,6 +2560,51 @@ bumpArtifactBindingVersion :: MappedDecl -> MappedDecl
 bumpArtifactBindingVersion declaration@MappedStructural{msName = "ArtifactInfo"} =
     declaration{msBindingVersion = Just "2"}
 bumpArtifactBindingVersion declaration = declaration
+
+addArtifactSummaryField :: MappedDecl -> MappedDecl
+addArtifactSummaryField declaration@MappedStructural{msName = "ArtifactInfo", msShape = ShapeRecord constructor unknownFields fields} =
+    declaration
+        { msShape =
+            ShapeRecord
+                constructor
+                unknownFields
+                ( fields
+                    <> [ WireField
+                            { wfHaskell = "summary"
+                            , wfKey = "summary"
+                            , wfType = TText
+                            , wfPresence = PRequired
+                            , wfOnMissing = Nothing
+                            , wfLoc = Loc 0
+                            }
+                       ]
+                )
+        }
+addArtifactSummaryField declaration = declaration
+
+expectGenericCompileFailure :: FilePath -> String -> Expectation
+expectGenericCompileFailure fixture expectedDiagnostic = do
+    let fixtureDir = "../keiro-core/test/compile-fail" </> fixture
+        fixtureSource = fixtureDir </> "Fixture.hs"
+    (exitCode, standardOutput, standardError) <-
+        readProcessWithExitCode
+            "cabal"
+            [ "exec"
+            , "--"
+            , "ghc"
+            , "-XGHC2024"
+            , "-fno-code"
+            , "-fforce-recomp"
+            , "-i../keiro-core/src"
+            , "-i" <> fixtureDir
+            , fixtureSource
+            ]
+            ""
+    exitCode `shouldSatisfy` (/= ExitSuccess)
+    let compilerOutput = standardOutput <> standardError
+    compilerOutput `shouldContain` expectedDiagnostic
+    compilerOutput `shouldContain` "Run keiro-dsl scaffold and fill the binding by hand at this error location in the scaffolded module."
+    compilerOutput `shouldContain` fixtureSource
 
 moveArtifactBindingIntoGenerated :: MappedDecl -> MappedDecl
 moveArtifactBindingIntoGenerated declaration@MappedStructural{msName = "ArtifactInfo"} =

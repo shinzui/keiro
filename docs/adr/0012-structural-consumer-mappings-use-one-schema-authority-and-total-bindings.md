@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural shapes own private-event wire policy; consumer bindings are total isomorphisms, snapshots remain a separately invalidated cache boundary, and Keiki projections are generated from the same schema authority.
-timestamp: 2026-07-28T21:25:25Z
+timestamp: 2026-07-28T22:36:14Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -113,6 +113,16 @@ binding path. Structural records declare the consumer constructor explicitly; th
 shape type uses that constructor name and binding modules import it qualified. Shape modules
 never import binding or Holes modules.
 
+Binding-authoring conveniences remain downstream of this shape boundary. The scaffolder emits
+create-once, hand-owned skeletons grouped by the modules named by qualified binding, fixture, and
+register-initial symbols; a shared leaf module may own several declarations. Scaffold records
+persist field/constructor-level hole obligations so later declaration changes are reported
+without parsing or rewriting consumer Haskell. An opt-in `GHC.Generics` binding is available only
+when constructor order and names, selector order and names, arity, and field types correspond
+exactly. A mismatch is a compile-time refusal directing the author to the explicit skeleton; the
+derivation never strips prefixes, coerces values, guesses a permutation, or acquires wire-policy
+capabilities.
+
 For every eligible scalar leaf path in a structural mapped record, the generation layer may
 emit a narrow projection facade containing one canonical nominal tag type,
 `FieldProjection` instance, and `FieldWitness`. It derives the concrete getter
@@ -157,6 +167,9 @@ the totality and ownership requirements above.
   and mutation tests are finite evidence; exact generic derivation can establish stronger
   representation correspondence. Documentation must not call a passing finite harness a proof
   for all values.
+- Skeletons and exact generic derivation reduce application-boundary boilerplate without becoming
+  compatibility gates or schema authorities. GHC and conformance evidence check consumer code;
+  `check` and `diff` continue to reason only from the declared and resolved schema.
 - Consumers with refined domain constructors may need a richer structural
   declaration or must choose opaque mode until such a declaration exists.
 - Binding implementation changes require an explicit `binding-version` bump, conformance run,

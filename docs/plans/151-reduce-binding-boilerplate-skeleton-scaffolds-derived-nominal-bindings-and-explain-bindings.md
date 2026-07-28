@@ -60,17 +60,17 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 0: read plan 150's final state and the landed `StructuralBinding` API module; record any drift from this plan's assumptions in Surprises & Discoveries and adjust the plan.
-- [ ] Milestone 0: write the hand-written baseline bindings for the Experiment A shapes and record the "before" line counts in this plan.
-- [ ] Milestone 1: binding-skeleton emitter added to the scaffold module set as create-once `HoleStub` modules, one per structural mapped type.
-- [ ] Milestone 1: scaffold record extended with per-binding required-symbol entries; re-scaffold prints a newly-required-holes report without touching completed hand-owned files.
-- [ ] Milestone 1: unit tests for skeleton emission, create-once semantics, and the newly-required-holes report.
-- [ ] Milestone 2: opt-in `GHC.Generics` derivation for exact constructor/selector/type correspondence landed beside the `StructuralBinding` API.
-- [ ] Milestone 2: ambiguity cases (renamed/reordered field, arity mismatch, incompatible type) fail derivation at compile time with a diagnostic naming the skeleton path; negative compile fixtures demonstrate it.
-- [ ] Milestone 3: `keiro-dsl check --explain-bindings` implemented over the resolved type graph; output covers binding, fixtures, and use-site-scoped initial-value obligations.
-- [ ] Milestone 4: Experiment A end-to-end scenario in the conformance suite; before/after line counts recorded; goldens byte-identical.
-- [ ] Milestone 4: mutation tests — a deliberately wrong hand-supplied binding and a deliberately wrong skeleton fill each fail the finite conformance cases; exact derivation rejects renamed/mismatched shapes at compile time.
-- [ ] Milestone 4: brownfield guide appended at its named anchor points; evolution guide cross-linked if it mentions mapping drift; ADR distillation pass done; `just verify` green.
+- [x] 2026-07-28: Milestone 0 reconciled plan 150's completed state with the landed `Keiro.Codec.Structural`, structural shape stratum, mapping rows, harness, and `keiro-dsl-conformance-structural` suite.
+- [x] 2026-07-28: Milestone 0 baseline pinned by the existing compiled Experiment A fixture: four hand-written structural bindings total 56 non-blank, non-comment lines (enum 10, five-arm union 16, nested-optional record 6, containing record 24); the baseline conformance suite passes.
+- [x] 2026-07-28: Milestone 1 binding-skeleton emitter added as create-once `HoleStub` modules, grouped by distinct obligation-owning module so shared binding modules remain valid.
+- [x] 2026-07-28: Milestone 1 scaffold record extended with field/arm-granular binding obligations; re-scaffold reports newly required holes without touching completed hand-owned files.
+- [x] 2026-07-28: Milestone 1 tests cover skeleton text, immediate compilation, create-once semantics, record compatibility, and exactly-one-field new-hole reporting.
+- [x] 2026-07-28: Milestone 2 opt-in `GHC.Generics` derivation for exact constructor/selector/type correspondence landed beside the `StructuralBinding` API.
+- [x] 2026-07-28: Milestone 2 renamed/reordered field, arity mismatch, and incompatible-type fixtures fail compilation with exact mismatch text, a scaffold direction, and the binding call-site path.
+- [x] 2026-07-28: Milestone 3 `keiro-dsl check --explain-bindings` implemented over the resolved type graph; output covers binding, fixtures, and use-site-scoped initial-value obligations.
+- [x] 2026-07-28: Milestone 4 completed in the landed structural conformance ring: binding lines fell from 56 to 30, the full harness passes, and no golden payload changed.
+- [x] 2026-07-28: Milestone 4 mutations prove a wrong hand-supplied record mapping and a wrong one-way union skeleton fill turn structural gates red; exact derivation rejects all four mismatch fixtures at compile time.
+- [x] 2026-07-28: Milestone 4 brownfield guide appended at its named anchor; the evolution guide had no mapping-drift section to cross-link; ADR 0012 distillation, strict ADR validation, and `just verify` are green.
 
 
 ## Surprises & Discoveries
@@ -84,6 +84,22 @@ implementation. Provide concise evidence.
 - This plan was authored while plan 150 — its hard dependency — was specified but not yet
   implemented. Any later drift from plan 150's revised total API/module layout must still be
   recorded here before implementation.
+- Plan 150 landed the expected API names and conformance suite, but its valid fixture places four
+  binding values, four fixture corpora, and one initial value in the shared module
+  `Conformance.Structural.Bindings`. A skeleton-per-declaration emitter would therefore create
+  four `ScaffoldModule` values at one path and trip the existing collision gate. Skeleton output
+  must aggregate declarations by the module that owns each qualified obligation; this still
+  creates every required symbol once and preserves create-once ownership.
+- The landed generated shape modules preserve the declared constructor and selector metadata but
+  derive only `Eq` and `Show`. Exact nominal derivation therefore also requires the generator to
+  add `Generic` to this private shape stratum; no wire behavior or generated business type changes.
+- A path literal cannot be recovered from a `Generic domain`/`Generic shape` constraint, and
+  adding a type-level path argument would burden every successful call solely for failure text.
+  GHC already prints the invocation source span, so the stable `TypeError` directs the author to
+  fill the binding at that error location; compile-fail tests assert both the message and file path.
+- Reordering two emitted events was not a valid replay falsifier because the final replayed state
+  was unchanged. The retained Plan-150 mutation now omits the mapped-state event entirely, which
+  fails validation/replay; the two Plan-151 binding mutations remain independently load-bearing.
 
 
 ## Decision Log
@@ -186,6 +202,23 @@ Record every decision made while working on the plan.
   at Milestone 4 (if implementation did add or change a gate, amend the inventory then).
   Date: 2026-07-28
 
+- Decision: Emit one create-once skeleton file per distinct owning module, aggregating all
+  binding, fixture, and register-initial obligations whose qualified symbols name that module.
+  Rationale: Plan 150's compiled conformance fixture demonstrates that multiple structural
+  declarations may intentionally share one leaf binding module. Grouping by the declared owner
+  avoids path collisions, preserves the exact module/symbol contract, and still never parses or
+  overwrites consumer Haskell. A newly required symbol is reported individually even when its
+  owner file already contains other completed bindings.
+  Date: 2026-07-28
+
+- Decision: Keep the successful generic API path-free and use GHC's source span as the exact
+  scaffolded binding location in mismatch diagnostics.
+  Rationale: Neither generic representation contains the module that owns the binding value.
+  Requiring a promoted path argument would add ceremony to every sound derivation and allow the
+  supplied path to lie. The compiler-reported invocation path is exact by construction; the custom
+  error explains that this is the scaffolded module to fill, and compile-fail tests pin both facts.
+  Date: 2026-07-28
+
 
 ## Outcomes & Retrospective
 
@@ -194,7 +227,23 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Plan 151 completed the authoring layer without changing schema authority. Scaffolding now creates
+one hand-owned binding skeleton per obligation-owning module, records granular field/arm and
+fixture/initial obligations, and reports only obligations added since the previous successful
+scaffold. Fresh skeletons compile, existing files are skipped, and adding one record field yields
+one new-hole entry.
+
+`genericStructuralBinding` derives only exact nominal correspondences. The conformance enum,
+five-arm union, and nested-optional metadata record now use it; the containing record remains
+explicit because its nested domain and generated shape field types intentionally differ. This
+reduced hand-written binding code from 56 to 30 non-blank, non-comment lines. Four compile-fail
+fixtures reject renamed/reordered fields, arity mismatch, and incompatible types, while the
+finite harness and mutation script retain independent evidence against semantic mistakes.
+
+`check --explain-bindings` reports deterministic, owner-grouped signatures, use paths, and
+binding-version provenance after validation. The brownfield guide documents all three workflows.
+ADR 0012 records them as downstream nominal conveniences under the existing single-authority and
+total-binding decision; ADR 0004 was not amended because no gate ownership changed.
 
 
 ## Context and Orientation
@@ -551,21 +600,18 @@ cabal build keiro-dsl
 cabal test keiro-dsl-test
 ```
 
-Run the IR-1 conformance suite created by plan 150 (resolve the exact suite name from
-`keiro-dsl/keiro-dsl.cabal` after plan 150 lands; the existing suites follow the
-`keiro-dsl-conformance*` naming, e.g. `cabal test keiro-dsl-conformance`):
+Run the IR-1 conformance suite created by plan 150 and its mutation proof:
 
 ```bash
-grep -n "test-suite" keiro-dsl/keiro-dsl.cabal
-cabal test <the-ir1-conformance-suite>
+cabal test keiro-dsl-conformance-structural --test-show-details=direct
+bash keiro-dsl/test/structural-mutation-test.sh
 ```
 
-Exercise the scaffolder against the Experiment A fixture spec (path fixed in Milestone 0;
-shown here with a placeholder):
+Exercise the scaffolder against the landed Experiment A conformance fixture:
 
 ```bash
-cabal run keiro-dsl -- check keiro-dsl/test/conformance-structural/experiment-a.keiro
-cabal run keiro-dsl -- scaffold keiro-dsl/test/conformance-structural/experiment-a.keiro --out /tmp/expa-scaffold
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/structural-conformance.keiro
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/structural-conformance.keiro --out /tmp/expa-scaffold --goldens keiro-dsl/test/golden-payloads
 ```
 
 Expected (abridged) transcript for a second scaffold run after adding a field to the spec —
@@ -573,30 +619,30 @@ the exact wording is fixed by Milestone 1's tests, but the shape to verify is: s
 `Skipped`, a newly-required-holes section naming exactly the added obligation:
 
 ```text
-hole    skipped   Example/Bindings/ArtifactInfoBinding.hs
-newly required holes since last scaffold:
-  Example/Bindings/ArtifactInfoBinding.hs
-    bindingToShape.description :: Maybe Text   (binding; field added to ArtifactInfo wire object)
+hole       Conformance.Structural.Bindings  (skipped: already present)
+newly required holes since last scaffold: 1
+  Conformance.Structural.Bindings
+    artifactInfoBinding.summary :: Text (binding)
 ```
 
 Run the authoring report:
 
 ```bash
-cabal run keiro-dsl -- check keiro-dsl/test/conformance-structural/experiment-a.keiro --explain-bindings
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/structural-conformance.keiro --explain-bindings
 ```
 
 Expected shape of the output (signatures rendered from the landed API; pinned by golden test):
 
 ```text
-binding obligations for context expa
-  Expa.Bindings (package expa-conformance)
-    artifactInfoBinding :: StructuralBinding ArtifactInfo ArtifactInfoShape
-      reason: binding — structural mapped record ArtifactInfo (used by event ArtifactObserved)
+binding obligations for context structural-conformance
+  Conformance.Structural.Bindings (package keiro-dsl)
+    artifactInfoBinding :: StructuralBinding Conformance.Structural.Domain.ArtifactInfo ArtifactInfoShape
+      reason: binding — structural mapped type ArtifactInfo (... use paths ...)
       provenance: binding-version "1"
-    sampleArtifactInfo :: ArtifactInfo
-      reason: fixture — conformance harness coverage
-    initialArtifactInfo :: ArtifactInfo
-      reason: initial-value — ArtifactInfo is register 'artifact' of aggregate Example
+    artifactInfoCases :: FixtureCases Conformance.Structural.Domain.ArtifactInfo
+      reason: fixtures — structural mapped type ArtifactInfo (... use paths ...)
+    emptyArtifactInfo :: Conformance.Structural.Domain.ArtifactInfo
+      reason: initial-value — structural mapped type ArtifactInfo (ArtifactCatalog register currentArtifact : ArtifactInfo)
 ```
 
 After any ADR edit, and before declaring the plan complete:
@@ -618,18 +664,19 @@ pinned transcripts as milestones land.
 
 The acceptance scenario is Experiment A of
 `docs/research/14-structural-consumer-type-tradeoffs.md`, run as an automated conformance test
-and as a manual walkthrough. The fixture spec declares three structural mapped types: a
-three-field record (unambiguous correspondence — derivable), a five-arm tagged union, and a
-record containing a nested optional value. Acceptance is all of the following, observed:
+and as a manual walkthrough. Plan 150's landed fixture is the generalised Experiment A: an enum,
+a five-arm tagged union, a nested-optional record, and a containing record whose nested
+domain/shape field types differ. Acceptance is all of the following, observed:
 
 1. `keiro-dsl scaffold` into an empty output directory emits one create-once binding skeleton
-   module per type; the conformance package compiles immediately; the generated harness fails
-   with `HOLE:`-labelled failures for the unfilled union and nested-optional bindings.
-2. The three-field record's binding is a single `genericStructuralBinding` expression; the
-   author writes zero construction/destruction lines for it.
-3. The author fills only the semantic lines of the union and nested-optional skeletons. The
+   per distinct owning module; the skeleton and generated private shapes compile immediately,
+   and every unfinished body is labelled `HOLE:` for the generated harness.
+2. The exact enum, five-arm union, and nested-optional record bindings are each a single
+   `genericStructuralBinding` expression; the author writes zero construction/destruction lines
+   for them. The containing record stays explicit because nested field types differ.
+3. The author fills only semantic construction lines for the containing record. The
    "before" hand-written line count from Milestone 0 and the "after" count are both recorded
-   here (fill in the numbers at Milestone 4: before = ___ lines, after = ___ lines); the
+   here (before = 56 lines across the four landed structural bindings; after = 30 lines); the
    "after" lines must consist solely of semantic construction logic — any line restating a
    wire key, tag, default, or presence rule is a failure of this acceptance.
 4. The full harness passes and the emitted JSON is byte-identical to the goldens pinned by the
@@ -774,10 +821,11 @@ is deliberately not used (Decision Log). No runtime services are involved; the d
 suites in `just verify` are unaffected by this plan but must still pass.
 
 **End-of-milestone signatures that must exist:** after Milestone 1,
-`emitBindingSkeleton` and `reportNewHoles` as above; after Milestone 2,
+`bindingSkeletonModules` and `reportNewHoles` as above; after Milestone 2,
 `genericStructuralBinding :: (Generic domain, Generic shape, GNominalBinding (Rep domain) (Rep shape)) => StructuralBinding domain shape`
 (constraint spelling may differ per Milestone 2's encoding decision — record the final form
-here); after Milestone 3, `explainBindings` and the `--explain-bindings` flag; after
+here); after Milestone 3, `bindingObligations`, `renderBindingObligations`, and the
+`--explain-bindings` flag; after
 Milestone 4, no new signatures — only tests, documentation, and distillation.
 
 **Normative references cited by this plan:**
@@ -808,3 +856,10 @@ the explicit skeleton and named nested binding values, 2026-07-28.
 Revision note: Coupled opt-in generic derivation to plan 150's per-declaration shape module and
 plan 149's explicit constructor metadata, avoiding global constructor mangling and heuristic
 name matching for non-Mori consumers, 2026-07-28.
+
+Revision note: Reconciled the plan with completed plan 150, adopted obligation-owner grouping for
+shared binding modules, and recorded the passing 56-line compiled baseline, 2026-07-28.
+
+Revision note: Recorded the implemented call-site diagnostic contract, generalised Experiment A
+to plan 150's landed four-type conformance ring, and captured the measured 30-line result and
+passing mutation evidence, 2026-07-28.

@@ -41,6 +41,7 @@ library
   exposed-modules:
     Keiro.Codec
     Keiro.Codec.Structural
+    Keiro.Codec.Structural.Generic
     Keiro.EventStream
     Keiro.EventStream.Validate
     Keiro.Integration.Event

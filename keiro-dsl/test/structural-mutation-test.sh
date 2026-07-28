@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Falsification evidence for plan 150's structural consumer conformance gates.
+# Falsification evidence for plans 150 and 151's structural consumer gates.
 set -euo pipefail
 
 BINDINGS="keiro-dsl/test/conformance-structural/Conformance/Structural/Bindings.hs"
@@ -32,8 +32,8 @@ expect_red() {
     echo "FAIL: $mutation was not caught"
     exit 1
   fi
-  echo "$output"
   if ! printf '%s\n' "$output" | grep -Eq "$expected"; then
+    echo "$output"
     echo "FAIL: $mutation failed, but not through its expected structural gate"
     exit 1
   fi
@@ -50,22 +50,24 @@ rm -f "$BINDINGS.sed-bak"
 expect_red "binding transpose" '^FAIL  binding domain round-trip: conformance\.structural\.ArtifactInfo\.v1/'
 restore_bindings
 
+echo "== mutate skeleton fill: swap two union constructors in an explicit binding =="
+sed -i.sed-bak 's/^artifactLocationBinding = genericStructuralBinding$/artifactLocationBinding = StructuralBinding { bindingToShape = \\case { Domain.LocalFile path -> LocationShape.LocalDir path; Domain.LocalDir path -> LocationShape.LocalFile path; Domain.RepoPath path -> LocationShape.RepoPath path; Domain.LocUrl url -> LocationShape.LocUrl url; Domain.Canonical -> LocationShape.Canonical }, bindingFromShape = \\case { LocationShape.LocalFile path -> Domain.LocalFile path; LocationShape.LocalDir path -> Domain.LocalDir path; LocationShape.RepoPath path -> Domain.RepoPath path; LocationShape.LocUrl url -> Domain.LocUrl url; LocationShape.Canonical -> Domain.Canonical } }/' "$BINDINGS"
+rm -f "$BINDINGS.sed-bak"
+expect_red "wrong skeleton union fill" '^FAIL  binding domain round-trip: conformance\.structural\.ArtifactLocation\.v1/local-file$|^FAIL  binding domain round-trip: conformance\.structural\.ArtifactLocation\.v1/local-dir$'
+restore_bindings
+
 echo "== mutate fixtures: remove the canonical union case =="
 sed -i.sed-bak '/("canonical", Domain\.Canonical)/d' "$BINDINGS"
 rm -f "$BINDINGS.sed-bak"
 expect_red "missing union fixture" '^FAIL  fixture coverage: conformance\.structural\.ArtifactLocation\.v1$|^FAIL  wire union arm: conformance\.structural\.ArtifactLocation\.v1/canonical$'
 restore_bindings
 
-echo "== mutate event order: put the scalar-only event before the mapped event =="
-sed -i.sed-bak 's/^        B\.emit wireArtifactRecorded .*$/        -- STRUCTURAL_MUTATION_RECORDED/' "$HOLES"
+echo "== mutate event stream: omit the mapped-state event =="
+sed -i.sed-bak '/^[[:space:]]*B\.emit wireArtifactRecorded /d' "$HOLES"
 rm -f "$HOLES.sed-bak"
-sed -i.sed-bak 's/^        B\.emit wireArtifactAccepted .*$/        B.emit wireArtifactAccepted ArtifactAcceptedTermFields{accepted = d.accepted}\n        B.emit wireArtifactRecorded ArtifactRecordedTermFields{artifact = d.artifact, geometry = d.geometry, accepted = d.accepted}/' "$HOLES"
-rm -f "$HOLES.sed-bak"
-sed -i.sed-bak '/STRUCTURAL_MUTATION_RECORDED/d' "$HOLES"
-rm -f "$HOLES.sed-bak"
-expect_red "first-event mapped-state omission" '^FAIL  validateTransducer is empty$|^FAIL  forward/replay equality: ObserveArtifact from ArtifactCatalogEmpty -- register currentArtifact$'
+expect_red "mapped-state event omission" '^FAIL  validateTransducer is empty$|^FAIL  forward/replay equality: ObserveArtifact from ArtifactCatalogEmpty -- replay succeeds$'
 restore_holes
 
 echo "== restored baseline: structural conformance is green =="
 run_suite >/dev/null
-echo "PASS: all three structural mutations were caught and the baseline was restored"
+echo "PASS: all four structural mutations were caught and the baseline was restored"

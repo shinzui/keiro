@@ -22,6 +22,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
+import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHoles)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
@@ -69,6 +70,7 @@ data ScaffoldReport = ScaffoldReport
     , reportConsumerPlan :: !ConsumerPlan
     , reportConstraintPlan :: ![Text]
     , reportMappingDrift :: ![MappingDrift]
+    , reportNewHoles :: ![BindingHole]
     }
     deriving stock (Eq, Show)
 
@@ -120,7 +122,7 @@ dependencyRefusals :: Context -> Spec -> [ScaffoldModule] -> [Refusal]
 dependencyRefusals ctx spec modules = collisionWithConsumers <> namespaceCycles
   where
     plan = consumerPlan spec
-    generatedByName = Map.fromList [(moduleNameOf (modulePath moduleValue), moduleValue) | moduleValue <- modules]
+    generatedByName = Map.fromList [(moduleNameOf (modulePath moduleValue), moduleValue) | moduleValue <- modules, kind moduleValue == Generated]
     collisionWithConsumers =
         [ PathCollision
             (modulePath generated)
@@ -190,6 +192,8 @@ executeScaffold out forceGeneratedOverwrite specPath ctx spec modules = do
             stale <- maybe (pure []) (existingStale out modules) previousRecord
             let currentConsumerPlan = consumerPlan spec
                 drift = maybe [] (mappingDrift (consumerMappings currentConsumerPlan) . recMappings) previousRecord
+                currentObligations = either (const []) id (bindingHoles spec)
+                newHoles = maybe [] (newBindingObligations currentObligations . recBindingObligations) previousRecord
             createDirectoryIfMissing True out
             dispositions <- mapM (writeModule out) modules
             let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
@@ -209,6 +213,7 @@ executeScaffold out forceGeneratedOverwrite specPath ctx spec modules = do
                         , reportConsumerPlan = currentConsumerPlan
                         , reportConstraintPlan = constraintPlan spec currentConsumerPlan
                         , reportMappingDrift = drift
+                        , reportNewHoles = newHoles
                         }
 
 constraintPlan :: Spec -> ConsumerPlan -> [Text]
@@ -244,6 +249,15 @@ mappingDrift current previous =
     oldByName = Map.fromList [(mappingSpecName mapping, mapping) | mapping <- previous]
     newByName = Map.fromList [(mappingSpecName mapping, mapping) | mapping <- current]
 
+newBindingObligations :: [BindingHole] -> [BindingHole] -> [BindingHole]
+newBindingObligations current previous =
+    [ obligation
+    | obligation <- current
+    , obligation `Set.notMember` previousSet
+    ]
+  where
+    previousSet = Set.fromList previous
+
 readRecord :: FilePath -> IO (Maybe ScaffoldRecord)
 readRecord path = do
     exists <- doesFileExist path
@@ -266,6 +280,7 @@ currentRecord specPath ctx spec modules =
         , recLayout = case placement ctx of GeneratedPrefix -> "prefixed"; CollocatedLeaf -> "collocated"
         , recFiles = [(kind m, modulePath m) | m <- modules]
         , recMappings = consumerMappings (consumerPlan spec)
+        , recBindingObligations = either (const []) id (bindingHoles spec)
         }
 
 missingGeneratedBanners :: FilePath -> [ScaffoldModule] -> IO [FilePath]
@@ -335,6 +350,7 @@ renderScaffoldReport report =
            ]
         <> previousSpecNote
         <> constraintSection
+        <> newHolesSection
         <> mappingDriftSection
         <> staleSection
   where
@@ -371,6 +387,15 @@ renderScaffoldReport report =
     constraintSection = case reportConstraintPlan report of
         [] -> []
         constraints -> "constraint plan:" : map ("  " <>) constraints
+    newHolesSection = case reportNewHoles report of
+        [] -> []
+        obligations ->
+            ["newly required holes since last scaffold: " <> tshow (length obligations)]
+                <> concatMap obligationLines obligations
+    obligationLines hole =
+        [ "  " <> holeModule hole
+        , "    " <> holeSignature hole <> " (" <> obligationKindLabel (holeKind hole) <> ")"
+        ]
     previousSpecNote = case reportPreviousSpecPath report of
         Just previous
             | previous /= T.pack (reportSpecPath report) ->
@@ -398,6 +423,11 @@ renderScaffoldReport report =
     staleLine stale = case staleKind stale of
         Generated -> "  generated " <> T.pack (stalePath stale) <> "  (safe to delete; still on disk)"
         HoleStub -> "  hole      " <> T.pack (stalePath stale) <> "  (hand-owned — review before deleting)"
+
+obligationKindLabel :: BindingObligationKind -> Text
+obligationKindLabel BindingValue = "binding"
+obligationKindLabel FixtureValue = "fixtures"
+obligationKindLabel InitialValue = "initial-value"
 
 renderBracketed :: [Text] -> Text
 renderBracketed values = "[" <> T.intercalate ", " values <> "]"
