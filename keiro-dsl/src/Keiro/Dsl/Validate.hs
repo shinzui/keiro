@@ -198,6 +198,16 @@ data DiagnosticCode
     | RouterDecideSurfaceChanged
     | ProcessDecideSurfaceChanged
     | ProcessTimerPayloadChanged
+    | -- MasterPlan 25 / EP-5: append-only codes for findings that were
+      -- formerly additive but uncoded.
+      DeclarationAdded
+    | VersionBumped
+    | CompatibilityStrengthened
+    | EnumCtorAdded
+    | EventRetirementAbandoned
+    | ContractEventAdded
+    | ContractTopicAdded
+    | WorkflowEvolutionGuardAdded
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

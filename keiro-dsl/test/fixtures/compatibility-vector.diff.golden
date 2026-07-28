@@ -1,0 +1,8 @@
+WARNING: PatientAcuity enum-constructor BlackTag: new constructor with wire spelling 'black' is used by Reservation.reg.patientAcuity; invalidate or rebuild snapshots before values using the new arm hydrate [EnumCtorAdded]
+    vector: private-history-read=compatible old-binary-read-new-events=compatible snapshot-hydration=advisory
+WARNING: PatientAcuity enum-constructor BlackTag: new constructor with wire spelling 'black' is used by Reservation.event.TransferReservationCreated.patientAcuity; deploy consumers before producers emit the new arm [EnumCtorAdded]
+    vector: private-history-read=compatible old-binary-read-new-events=breaking rollout=producer-last
+WARNING: Reservation transitions Reservation: aggregate fold surface changed: replay now interprets the existing log under the new fold. Old snapshots are invalidated automatically once the regenerated fold fingerprint deploys; if the change is fold-neutral confirm it, otherwise re-scaffold and redeploy, and bump `state-codec version=` for any accompanying Holes-only change. [AggFoldSurfaceChanged]
+    vector: private-history-read=advisory old-binary-read-new-events=compatible snapshot-hydration=advisory
+BREAKING: emergency contract-field IncidentTransferNeedDeclared.incidentNote: field added without a schemaVersion bump; older in-flight messages do not contain it [ContractFieldChanged]
+    vector: public-consumer=breaking rollout=producer-last

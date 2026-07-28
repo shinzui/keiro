@@ -31,6 +31,7 @@ library
   hs-source-dirs:  src
   exposed-modules:
     Keiro.Dsl.Diff
+    Keiro.Dsl.DiffReport
     Keiro.Dsl.FoldFingerprint
     Keiro.Dsl.Goldens
     Keiro.Dsl.Grammar

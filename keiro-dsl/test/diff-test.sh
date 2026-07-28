@@ -28,6 +28,11 @@ if "$EXE" diff --since HEAD "$DEMO/svc.keiro"; then
 else
   echo "ok: flagged breaking, gate blocks the merge"
 fi
+if "$EXE" diff --since HEAD --gate old-binary-read-new-events "$DEMO/svc.keiro"; then
+  echo "FAIL: adding a gate weakened the field-add result"; exit 1
+else
+  echo "ok: extra gates only add strictness"
+fi
 
 echo "== 2) v2 + upcaster must be ADDITIVE (exit 0) =="
 cp "$FIX/reservation-v2.keiro" "$DEMO/svc.keiro"
@@ -129,4 +134,26 @@ else
   echo "FAIL: timer window warning incorrectly blocked the merge"; exit 1
 fi
 
-echo "PASS: diff --since gates the decode and identity surface"
+echo "== 9) compatibility matrix must expose private, snapshot, and public surfaces =="
+cp "$FIX/compatibility-vector-old.keiro" "$DEMO/svc.keiro"
+git -C "$DEMO" add svc.keiro
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "compatibility-vector baseline"
+cp "$FIX/compatibility-vector-new.keiro" "$DEMO/svc.keiro"
+REPORT="$DEMO/compatibility-report.json"
+if output="$("$EXE" diff --since HEAD --explain --report-out "$REPORT" "$DEMO/svc.keiro" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: public contract break in the compatibility matrix did not block"; exit 1
+elif [[ "$output" == *"old-binary-read-new-events=breaking"* \
+    && "$output" == *"snapshot-hydration=advisory"* \
+    && "$output" == *"public-consumer=breaking"* \
+    && "$output" == *"Reservation.event.TransferReservationCreated.patientAcuity"* \
+    && -s "$REPORT" ]] \
+    && grep -q '"schema":"keiro-dsl/diff-report/1"' "$REPORT"; then
+  echo "$output"
+  echo "ok: compatibility vector, explanations, paths, and JSON report are explicit"
+else
+  echo "$output"
+  echo "FAIL: compatibility matrix omitted a surface, path, explanation, or report"; exit 1
+fi
+
+echo "PASS: diff --since gates compatibility surfaces without weakening existing breaks"

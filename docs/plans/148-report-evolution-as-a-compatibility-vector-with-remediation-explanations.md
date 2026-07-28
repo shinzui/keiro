@@ -54,18 +54,19 @@ real obligation, but never the reverse.
 
 ## Progress
 
-- [ ] Milestone 1: vector core — `CompatibilitySurface`, `SurfaceVerdict`, `RolloutConstraint`,
+- [x] 2026-07-28: Milestone 1: vector core — `CompatibilitySurface`, `SurfaceVerdict`, `RolloutConstraint`,
       `CompatibilityVector` and opaque `ChangeContext` types in `Keiro.Dsl.Diff`; mandatory
       codes/`ckVector` on `ChangeKind`; per-code registry and label-derivation invariant green.
-- [ ] Milestone 2: coarse multi-use findings split into exact context-sensitive findings;
+- [x] 2026-07-28: Milestone 2: coarse multi-use findings split into exact context-sensitive findings;
       private-event, snapshot-invalidation, and existing public-contract fixtures cover distinct
       vectors without changing `ContractType`.
-- [ ] Milestone 3: CLI — vector rendering, `--gate`, `--explain`, `--report-out`; remediation
+- [x] 2026-07-28: Milestone 3: CLI — vector rendering, `--gate`, `--explain`, `--report-out`; remediation
       registry with totality test; golden output tests; consumer-neutral fixture matrix;
       diff-test.sh extended with the matrix and the no-weakening negative test.
-- [ ] Milestone 4: docs and ADR — `docs/guides/evolution-and-replayability.md` and
+- [x] 2026-07-28: Milestone 4 documentation and ADR edits — `docs/guides/evolution-and-replayability.md` and
       `docs/guides/evolve-events-safely.md` updated; ADR 0004 inventory amended; `docs/adr/log.md`
-      updated via okf; strict `just adr-validate` green; Proposal Test answers recorded.
+      updated via okf; Proposal Test answers recorded.
+- [ ] Milestone 4 validation — strict `just adr-validate`, unit, conformance, shell, and diff-hygiene gates green.
 - [ ] ADR distillation pass completed before marking the plan complete.
 
 
@@ -77,6 +78,14 @@ real obligation, but never the reverse.
 - A vector keyed only by `DiagnosticCode` cannot classify the same code differently at distinct
   roots, and a `Map` with defaults hides newly added surfaces. The revised API carries explicit
   `ChangeContext`, mandatory codes, explicit record fields, and a set of rollout constraints.
+- The current aggregate-event grammar has no explicit unknown-field decode policy. Generated
+  event fields are strict when reading old history, while Aeson object decoders ignore extra
+  keys in the opposite direction. The implementation therefore records old-binary risk only
+  where the present spec provides evidence (the typed enum event use in the compatibility
+  matrix) instead of manufacturing a reject/ignore fact.
+- Adding `containers` to the executable solely to union requested gates would have violated this
+  plan's no-new-dependency constraint. `gateWith` now owns that union in the library, where
+  `containers` was already a dependency, and the CLI consumes the resulting opaque `Set`.
 
 
 ## Decision Log
@@ -162,6 +171,23 @@ real obligation, but never the reverse.
   `drain-required` (router/process decide surfaces need a drained redelivery window),
   `producer-last` (consumers/firers must learn new shapes before producers write them). An empty
   set means no ordering constraint; there is no `RolloutAny` value that competes with others.
+  Date: 2026-07-28
+
+- Decision: Reuse a small append-only code vocabulary for previously uncoded additive findings
+  (`DeclarationAdded`, `VersionBumped`, `CompatibilityStrengthened`, and the narrower enum,
+  contract, retirement, and workflow-evolution codes) rather than allocate one code per prose
+  sentence. Every finding still carries a mandatory code, and context plus code selects the
+  vector; this keeps codes stable when details improve without collapsing the distinct
+  compatibility surfaces.
+  Rationale: The machine contract needs a stable change class, not a unique identifier for each
+  emission site. Use-site paths and `ChangeContext` carry the site-specific facts.
+  Date: 2026-07-28
+
+- Decision: Keep ADDITIVE headline lines byte-compatible by omitting their newly mandatory code
+  from text output; advisory and breaking lines retain their existing bracketed codes, while the
+  JSON report includes a code for every finding.
+  Rationale: Existing shell consumers may parse the additive line grammar. Mandatory internal
+  codes and JSON completeness do not require changing that stable text surface.
   Date: 2026-07-28
 
 

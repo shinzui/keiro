@@ -7,6 +7,7 @@ module Main (main) where
 import Control.Exception (bracket)
 import Control.Monad (filterM, forM_)
 import Data.Aeson (Value, object, (.=))
+import Data.Aeson qualified as Aeson
 import Data.Either (isLeft)
 import Data.List (partition, sort)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -15,7 +16,8 @@ import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
-import Keiro.Dsl.Diff (Change (..), ChangeKind (..), FamilyDiff (..), NodeFamily, diffSpecs, familyRegistry, isAdvisory, isBreaking)
+import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
+import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldSurface)
 import Keiro.Dsl.Goldens (GoldenPayload (..), goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
@@ -999,10 +1001,61 @@ main = hspec $ do
         it "covers every node family exactly once and explains exclusions" $ do
             sort (map fst familyRegistry) `shouldBe` ([minBound .. maxBound] :: [NodeFamily])
             [reason | (_, OutOfDiffScope reason) <- familyRegistry, T.null reason] `shouldBe` []
+        it "derives every exercised headline from its vector under the default gate" $ do
+            changes <-
+                concat
+                    <$> mapM
+                        (uncurry diffFixtures)
+                        [ ("test/fixtures/reservation.keiro", "test/fixtures/reservation-fieldadd.keiro")
+                        , ("test/fixtures/reservation.keiro", "test/fixtures/reservation-v2.keiro")
+                        , ("test/fixtures/reservation.keiro", "test/fixtures/reservation-enumadd.keiro")
+                        , ("test/fixtures/contract.keiro", "test/fixtures/contract-fieldadd.keiro")
+                        , ("test/fixtures/reservation-work.keiro", "test/fixtures/reservation-work-rename.keiro")
+                        ]
+            forM_ changes $ \change ->
+                do
+                    deriveLabel defaultGate (ckVector (kindOfChange change))
+                        `shouldBe` labelOfChange change
+                    gatedBreaking defaultGate change `shouldBe` isBreaking change
+        it "never removes a breaking result when the gate grows" $
+            property $
+                forAll genCompatibilityVector $ \compatibility ->
+                    forAll genSurfaceSet $ \gate ->
+                        forAll genSurfaceSet $ \extra ->
+                            deriveLabel gate compatibility == LabelBreaking ==>
+                                deriveLabel (gate <> extra) compatibility == LabelBreaking
+        it "renders the consumer-neutral matrix with separate private, snapshot, and public surfaces" $ do
+            changes <- diffFixtures "test/fixtures/compatibility-vector-old.keiro" "test/fixtures/compatibility-vector-new.keiro"
+            golden <- readTestText "test/fixtures/compatibility-vector.diff.golden"
+            let rendered = T.intercalate "\n" (map renderFinding changes)
+                explained = T.intercalate "\n" (map renderExplainBlock changes)
+                reportJson = T.pack (show (Aeson.toJSON (diffReport defaultGate changes)))
+            T.stripEnd rendered `shouldBe` T.stripEnd golden
+            rendered `shouldSatisfy` T.isInfixOf "Reservation.event.TransferReservationCreated.patientAcuity"
+            rendered `shouldSatisfy` T.isInfixOf "old-binary-read-new-events=breaking"
+            rendered `shouldSatisfy` T.isInfixOf "snapshot-hydration=advisory"
+            rendered `shouldSatisfy` T.isInfixOf "public-consumer=breaking"
+            explained `shouldSatisfy` T.isInfixOf "invalidate and rebuild snapshots"
+            reportJson `shouldSatisfy` T.isInfixOf "keiro-dsl/diff-report/1"
+            reportJson `shouldSatisfy` T.isInfixOf "Reservation.event.TransferReservationCreated.patientAcuity"
+            let eventEnumFindings =
+                    [ change
+                    | change@(Advisory kind) <- changes
+                    , ckCode kind == EnumCtorAdded
+                    , verdictFor OldBinaryReadNewEvents (ckVector kind) == VBreaking
+                    ]
+            eventEnumFindings `shouldSatisfy` all (not . gatedBreaking defaultGate)
+            eventEnumFindings `shouldSatisfy` all (gatedBreaking (gateWith [OldBinaryReadNewEvents]))
+            forM_ changes $ \change ->
+                remediationFor (ckContext (kindOfChange change)) (ckCode (kindOfChange change))
+                    `shouldSatisfy` (not . null)
+        it "rejects unknown --gate values with the valid surface list" $ do
+            parseSurfaceName "mystery-surface"
+                `shouldSatisfy` either (T.isInfixOf "old-binary-read-new-events" . T.pack) (const False)
         it "classifies a field added without a version bump as BREAKING" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-fieldadd.keiro"
             any isBreaking cs `shouldBe` True
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtFieldAddedWithoutBump]
+            [ckCode k | Breaking k <- cs] `shouldContain` [EvtFieldAddedWithoutBump]
         it "classifies the same field wrapped as v2 + upcaster as ADDITIVE" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-v2.keiro"
             any isBreaking cs `shouldBe` False
@@ -1012,55 +1065,58 @@ main = hspec $ do
             any isBreaking cs `shouldBe` False
         it "classifies a direct event field type change as EvtFieldTypeChanged" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-fieldtype.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtFieldTypeChanged]
+            [ckCode k | Breaking k <- cs] `shouldContain` [EvtFieldTypeChanged]
         it "resolves fields(Command) before comparing event field types" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-cmdfieldtype.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtFieldTypeChanged]
+            [ckCode k | Breaking k <- cs] `shouldContain` [EvtFieldTypeChanged]
         it "uses EvtFieldRemovedSameVersion for an unchanged-version removal" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-fieldremove.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtFieldRemovedSameVersion]
+            [ckCode k | Breaking k <- cs] `shouldContain` [EvtFieldRemovedSameVersion]
         it "uses EvtVersionDecreased for a version decrease" $ do
             cs <- diffFixtures "test/fixtures/reservation-v2.keiro" "test/fixtures/reservation.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtVersionDecreased]
+            [ckCode k | Breaking k <- cs] `shouldContain` [EvtVersionDecreased]
         it "rejects a v1 to v3 jump whose only upcaster starts at v2" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-v3-dangling.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just EvtVersionMissingUpcaster]
+            [ckCode k | Breaking k <- cs] `shouldContain` [EvtVersionMissingUpcaster]
         it "classifies a vanished historical upcaster rung as UpcasterChainGap" $ do
             cs <- diffFixtures "test/fixtures/reservation-v2.keiro" "test/fixtures/reservation-chain-gap.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just UpcasterChainGap]
+            [ckCode k | Breaking k <- cs] `shouldContain` [UpcasterChainGap]
         it "classifies an enum constructor removal as EnumCtorRemoved" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-enumdrop.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just EnumCtorRemoved]
+            [ckCode k | Breaking k <- cs] `shouldContain` [EnumCtorRemoved]
         it "classifies an enum wire-spelling change as EnumWireSpellingChanged" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-enumwire.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just EnumWireSpellingChanged]
-        it "classifies an enum constructor addition as additive" $ do
+            [ckCode k | Breaking k <- cs] `shouldContain` [EnumWireSpellingChanged]
+        it "classifies an enum constructor addition per use site as advisory" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-enumadd.keiro"
             any isBreaking cs `shouldBe` False
-            [ckSubject k | Additive k <- cs] `shouldContain` ["BlackTag"]
+            let enumFindings = [k | Advisory k <- cs, ckCode k == EnumCtorAdded]
+            [ckSubject k | k <- enumFindings] `shouldContain` ["BlackTag"]
+            [verdictFor SnapshotHydration (ckVector k) | k <- enumFindings]
+                `shouldContain` [VAdvisory]
         it "classifies an effective wire convention change as WireSpecChanged" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-wire.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just WireSpecChanged]
+            [ckCode k | Breaking k <- cs] `shouldContain` [WireSpecChanged]
         it "advises when the aggregate fold surface changes" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-foldchange.keiro"
             any isBreaking cs `shouldBe` False
-            [ckCode k | Advisory k <- cs] `shouldContain` [Just AggFoldSurfaceChanged]
+            [ckCode k | Advisory k <- cs] `shouldContain` [AggFoldSurfaceChanged]
         it "advises on hazardous deprecation and reports un-deprecation" $ do
             deprecated <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-deprecated.keiro"
             any isBreaking deprecated `shouldBe` False
-            [ckCode k | Advisory k <- deprecated] `shouldContain` [Just DeprecatedEventReplayHazard]
+            [ckCode k | Advisory k <- deprecated] `shouldContain` [DeprecatedEventReplayHazard]
             restored <- diffFixtures "test/fixtures/reservation-deprecated.keiro" "test/fixtures/reservation.keiro"
             any isAdvisory restored `shouldBe` True
-            [ckCode k | Advisory k <- restored] `shouldContain` [Just EventUndeprecated]
+            [ckCode k | Advisory k <- restored] `shouldContain` [EventUndeprecated]
         it "recognises replay-only deprecation as a replay-safe retirement cutover" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-deprecated-replay-only.keiro"
             any isBreaking cs `shouldBe` False
-            [ckCode k | Advisory k <- cs] `shouldContain` [Just EventRetirementInProgress]
-            [ckCode k | Advisory k <- cs] `shouldNotContain` [Just DeprecatedEventReplayHazard]
+            [ckCode k | Advisory k <- cs] `shouldContain` [EventRetirementInProgress]
+            [ckCode k | Advisory k <- cs] `shouldNotContain` [DeprecatedEventReplayHazard]
         it "advises when event retirement starts" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-retiring.keiro"
             any isBreaking cs `shouldBe` False
-            [ckCode k | Advisory k <- cs] `shouldContain` [Just EventRetirementInProgress]
+            [ckCode k | Advisory k <- cs] `shouldContain` [EventRetirementInProgress]
         it "does not recommend decode-only deprecation for an event removal" $ do
             old <- specOf "test/fixtures/reservation.keiro"
             let new =
@@ -1080,14 +1136,14 @@ main = hspec $ do
                             | node <- specNodes old
                             ]
                         }
-                removals = [change | change@(Breaking kind) <- diffSpecs old new, ckCode kind == Just EvtRemovedNotDeprecated]
+                removals = [change | change@(Breaking kind) <- diffSpecs old new, ckCode kind == EvtRemovedNotDeprecated]
             removals `shouldSatisfy` (not . null)
             [ckDetail kind | Breaking kind <- removals]
                 `shouldSatisfy` all (not . T.isInfixOf "so old payloads still decode")
         it "prints a paste-ready replay-only twin when a guard tightens (plan 143)" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-guard-tightened.keiro"
             any isBreaking cs `shouldBe` False
-            let advisories = [k | Advisory k <- cs, ckCode k == Just AggGuardTightened]
+            let advisories = [k | Advisory k <- cs, ckCode k == AggGuardTightened]
             map ckSubject advisories `shouldBe` ["Unrequested -- RequestTransferReservation"]
             detail <- case advisories of
                 [k] -> pure (ckDetail k)
@@ -1103,75 +1159,75 @@ main = hspec $ do
                 Right pastedSpec -> do
                     [code d | d <- validateSpec pastedSpec, severity d == Error] `shouldBe` []
                     base <- specOf "test/fixtures/reservation.keiro"
-                    [k | Advisory k <- diffSpecs base pastedSpec, ckCode k == Just AggGuardTightened]
+                    [k | Advisory k <- diffSpecs base pastedSpec, ckCode k == AggGuardTightened]
                         `shouldBe` []
         it "omits the twin advisory when the twin is already present (plan 143)" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-guard-tightened-twin.keiro"
-            [k | Advisory k <- cs, ckCode k == Just AggGuardTightened] `shouldBe` []
+            [k | Advisory k <- cs, ckCode k == AggGuardTightened] `shouldBe` []
         it "classifies a removed contract event as ContractEventRemoved" $ do
             cs <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-eventdrop.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just ContractEventRemoved]
+            [ckCode k | Breaking k <- cs] `shouldContain` [ContractEventRemoved]
         it "classifies contract field type changes and unversioned additions as ContractFieldChanged" $ do
             changed <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-fieldtype.keiro"
-            [ckCode k | Breaking k <- changed] `shouldContain` [Just ContractFieldChanged]
+            [ckCode k | Breaking k <- changed] `shouldContain` [ContractFieldChanged]
             added <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-fieldadd.keiro"
-            [ckCode k | Breaking k <- added] `shouldContain` [Just ContractFieldChanged]
+            [ckCode k | Breaking k <- added] `shouldContain` [ContractFieldChanged]
         it "reports a field addition with a contract version bump as an advisory" $ do
             cs <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-bump-fieldadd.keiro"
             any isBreaking cs `shouldBe` False
-            [ckCode k | Advisory k <- cs] `shouldContain` [Just ContractSchemaVersionBumped]
+            [ckCode k | Advisory k <- cs] `shouldContain` [ContractSchemaVersionBumped]
         it "classifies a contract schema version decrease separately" $ do
             cs <- diffFixtures "test/fixtures/contract-bump-fieldadd.keiro" "test/fixtures/contract.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just ContractSchemaVersionDecreased]
+            [ckCode k | Breaking k <- cs] `shouldContain` [ContractSchemaVersionDecreased]
         it "classifies contract topic and discriminator changes separately" $ do
             topic <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-topic.keiro"
-            [ckCode k | Breaking k <- topic] `shouldContain` [Just ContractTopicChanged]
+            [ckCode k | Breaking k <- topic] `shouldContain` [ContractTopicChanged]
             discriminator <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-discriminator.keiro"
-            [ckCode k | Breaking k <- discriminator] `shouldContain` [Just ContractDiscriminatorChanged]
+            [ckCode k | Breaking k <- discriminator] `shouldContain` [ContractDiscriminatorChanged]
         it "classifies a new contract event as additive" $ do
             cs <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-eventadd.keiro"
             any isBreaking cs `shouldBe` False
             [ckSubject k | Additive k <- cs] `shouldContain` ["IncidentTransferNeedCancelled"]
         it "classifies workqueue wire names, types, and required additions as WqPayloadFieldChanged" $ do
             wire <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-wirename.keiro"
-            [ckCode k | Breaking k <- wire] `shouldContain` [Just WqPayloadFieldChanged]
+            [ckCode k | Breaking k <- wire] `shouldContain` [WqPayloadFieldChanged]
             fieldTypeChange <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-fieldtype.keiro"
-            [ckCode k | Breaking k <- fieldTypeChange] `shouldContain` [Just WqPayloadFieldChanged]
+            [ckCode k | Breaking k <- fieldTypeChange] `shouldContain` [WqPayloadFieldChanged]
             required <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-reqfield.keiro"
-            [ckCode k | Breaking k <- required] `shouldContain` [Just WqPayloadFieldChanged]
+            [ckCode k | Breaking k <- required] `shouldContain` [WqPayloadFieldChanged]
         it "classifies a new optional workqueue payload field as additive" $ do
             cs <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-optfield.keiro"
             any isBreaking cs `shouldBe` False
             [ckSubject k | Additive k <- cs] `shouldContain` ["note"]
         it "classifies workqueue ordering changes as breaking delivery-contract changes" $ do
             cs <- diffFixtures "test/fixtures/workqueue-policy-base.keiro" "test/fixtures/workqueue-ordering-change.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just WqOrderingChanged]
-            [ckDetail k | Breaking k <- cs, ckCode k == Just WqOrderingChanged]
+            [ckCode k | Breaking k <- cs] `shouldContain` [WqOrderingChanged]
+            [ckDetail k | Breaking k <- cs, ckCode k == WqOrderingChanged]
                 `shouldSatisfy` any (T.isInfixOf "delivery-order contract")
         it "classifies workqueue provision changes as operational migrations" $ do
             cs <- diffFixtures "test/fixtures/workqueue-policy-base.keiro" "test/fixtures/workqueue-provision-change.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just WqProvisionChanged]
-            [ckDetail k | Breaking k <- cs, ckCode k == Just WqProvisionChanged]
+            [ckCode k | Breaking k <- cs] `shouldContain` [WqProvisionChanged]
+            [ckDetail k | Breaking k <- cs, ckCode k == WqProvisionChanged]
                 `shouldSatisfy` any (T.isInfixOf "migrate the existing queue operationally")
         it "classifies workqueue group-key changes as breaking repartitioning" $ do
             cs <- diffFixtures "test/fixtures/workqueue-policy-base.keiro" "test/fixtures/workqueue-group-key-change.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just WqGroupKeyChanged]
-            [ckDetail k | Breaking k <- cs, ckCode k == Just WqGroupKeyChanged]
+            [ckCode k | Breaking k <- cs] `shouldContain` [WqGroupKeyChanged]
+            [ckDetail k | Breaking k <- cs, ckCode k == WqGroupKeyChanged]
                 `shouldSatisfy` any (T.isInfixOf "re-partitioned")
         it "classifies a process input type change as ProcessInputChanged" $ do
             cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-inputtype.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just ProcessInputChanged]
+            [ckCode k | Breaking k <- cs] `shouldContain` [ProcessInputChanged]
         it "classifies workflow input and output changes as WorkflowShapeChanged" $ do
             input <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-inputfield.keiro"
-            [ckCode k | Breaking k <- input] `shouldContain` [Just WorkflowShapeChanged]
+            [ckCode k | Breaking k <- input] `shouldContain` [WorkflowShapeChanged]
             output <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-output.keiro"
-            [ckCode k | Breaking k <- output] `shouldContain` [Just WorkflowShapeChanged]
+            [ckCode k | Breaking k <- output] `shouldContain` [WorkflowShapeChanged]
         it "classifies workflow relabeling and appends as WorkflowBodyChanged" $ do
             relabeled <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-body.keiro"
-            [ckCode k | Breaking k <- relabeled] `shouldContain` [Just WorkflowBodyChanged]
+            [ckCode k | Breaking k <- relabeled] `shouldContain` [WorkflowBodyChanged]
             appended <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-stepadd.keiro"
-            [ckCode k | Breaking k <- appended] `shouldContain` [Just WorkflowBodyChanged]
-            [ckDetail k | Breaking k <- appended, ckCode k == Just WorkflowBodyChanged]
+            [ckCode k | Breaking k <- appended] `shouldContain` [WorkflowBodyChanged]
+            [ckDetail k | Breaking k <- appended, ckCode k == WorkflowBodyChanged]
                 `shouldSatisfy` any (T.isInfixOf "new patch guard")
         it "classifies a body addition wholly guarded by a new patch as additive" $ do
             cs <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-evolution-diff.keiro"
@@ -1180,64 +1236,64 @@ main = hspec $ do
             [ckSubject k | Additive k <- cs, ckFacet k == "workflow-continue-as-new"] `shouldContain` ["RolloverSeed"]
         it "classifies removing an existing patch as breaking" $ do
             cs <- diffFixtures "test/fixtures/workflow-evolution-diff.keiro" "test/fixtures/workflow-continue.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just WorkflowPatchRemoved]
-            [ckDetail k | Breaking k <- cs, ckCode k == Just WorkflowPatchRemoved]
+            [ckCode k | Breaking k <- cs] `shouldContain` [WorkflowPatchRemoved]
+            [ckDetail k | Breaking k <- cs, ckCode k == WorkflowPatchRemoved]
                 `shouldSatisfy` any (T.isInfixOf "cannot prove")
         it "classifies terminal continueAsNew append as additive and seed drift as breaking" $ do
             appended <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-continue.keiro"
             any isBreaking appended `shouldBe` False
             [ckFacet k | Additive k <- appended] `shouldContain` ["workflow-continue-as-new"]
             changed <- diffFixtures "test/fixtures/workflow-continue.keiro" "test/fixtures/workflow-continue-seed-v2.keiro"
-            [ckCode k | Breaking k <- changed] `shouldContain` [Just WorkflowContinueSeedChanged]
-            [ckDetail k | Breaking k <- changed, ckCode k == Just WorkflowContinueSeedChanged]
+            [ckCode k | Breaking k <- changed] `shouldContain` [WorkflowContinueSeedChanged]
+            [ckDetail k | Breaking k <- changed, ckCode k == WorkflowContinueSeedChanged]
                 `shouldSatisfy` any (T.isInfixOf "restoreSeed")
         it "classifies a workflow stable-name change as WorkflowStableNameChanged" $ do
             cs <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-rename.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just WorkflowStableNameChanged]
+            [ckCode k | Breaking k <- cs] `shouldContain` [WorkflowStableNameChanged]
         it "classifies workflow id-derivation changes as DerivedIdentityChanged" $ do
             cs <- diffFixtures "test/fixtures/workflow.keiro" "test/fixtures/workflow-idfield.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just DerivedIdentityChanged]
+            [ckCode k | Breaking k <- cs] `shouldContain` [DerivedIdentityChanged]
         it "classifies an id prefix change as IdPrefixChanged" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-idprefix.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just IdPrefixChanged]
+            [ckCode k | Breaking k <- cs] `shouldContain` [IdPrefixChanged]
         it "classifies intake dedupe key and policy changes as DedupeIdentityChanged" $ do
             policy <- diffFixtures "test/fixtures/intake.keiro" "test/fixtures/intake-dedupepolicy.keiro"
-            [ckCode k | Breaking k <- policy] `shouldContain` [Just DedupeIdentityChanged]
+            [ckCode k | Breaking k <- policy] `shouldContain` [DedupeIdentityChanged]
             key <- diffFixtures "test/fixtures/intake.keiro" "test/fixtures/intake-dedupekey.keiro"
-            [ckCode k | Breaking k <- key] `shouldContain` [Just DedupeIdentityChanged]
+            [ckCode k | Breaking k <- key] `shouldContain` [DedupeIdentityChanged]
         it "reports intake decode-posture changes as warnings" $ do
             cs <- diffFixtures "test/fixtures/intake.keiro" "test/fixtures/intake-decode.keiro"
             any isBreaking cs `shouldBe` False
-            [ckCode k | Advisory k <- cs] `shouldContain` [Just DecodePostureChanged]
-            [ckCode k | Advisory k <- cs] `shouldContain` [Just IntakePersistenceChanged]
+            [ckCode k | Advisory k <- cs] `shouldContain` [DecodePostureChanged]
+            [ckCode k | Advisory k <- cs] `shouldContain` [IntakePersistenceChanged]
         it "classifies process and timer derivation changes as DerivedIdentityChanged" $ do
             processName <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-procname.keiro"
-            [ckCode k | Breaking k <- processName] `shouldContain` [Just DerivedIdentityChanged]
+            [ckCode k | Breaking k <- processName] `shouldContain` [DerivedIdentityChanged]
             timerId <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-timerid.keiro"
-            [ckCode k | Breaking k <- timerId] `shouldContain` [Just DerivedIdentityChanged]
+            [ckCode k | Breaking k <- timerId] `shouldContain` [DerivedIdentityChanged]
             base <- specOf "test/fixtures/hospital-surge.keiro"
             let categoryChange = diffSpecs base (modifyProcess "HospitalSurge" (\process -> process{procSaga = (procSaga process){sagaCategory = "hospitalSurgeV2"}}) base)
-            [ckCode k | Breaking k <- categoryChange] `shouldContain` [Just DerivedIdentityChanged]
+            [ckCode k | Breaking k <- categoryChange] `shouldContain` [DerivedIdentityChanged]
         it "classifies router stable names, keys, and targets as identity-bearing" $ do
             base <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
             let stableName = diffSpecs base (modifyRouter "PagingRouter" (\router -> router{rtName = "paging-v2"}) base)
                 keyDerivation = diffSpecs base (modifyRouter "PagingRouter" (\router -> router{rtKey = (rtKey router){corrVia = "otherIdText"}}) base)
                 target = diffSpecs base (modifyRouter "PagingRouter" (\router -> router{rtTarget = "OtherPage"}) base)
-            [ckCode k | Breaking k <- stableName] `shouldContain` [Just RouterStableNameChanged]
-            [ckCode k | Breaking k <- keyDerivation] `shouldContain` [Just DerivedIdentityChanged]
-            [ckCode k | Breaking k <- target] `shouldContain` [Just DerivedIdentityChanged]
+            [ckCode k | Breaking k <- stableName] `shouldContain` [RouterStableNameChanged]
+            [ckCode k | Breaking k <- keyDerivation] `shouldContain` [DerivedIdentityChanged]
+            [ckCode k | Breaking k <- target] `shouldContain` [DerivedIdentityChanged]
         it "advises on router dispatch-surface changes without making them breaking" $ do
             cs <- diffFixtures "test/fixtures/incident-paging/incident-paging.keiro" "test/fixtures/incident-paging/incident-paging-dispatch.keiro"
             any isBreaking cs `shouldBe` False
-            [ckCode k | Advisory k <- cs] `shouldBe` [Just RouterDecideSurfaceChanged]
+            [ckCode k | Advisory k <- cs] `shouldBe` [RouterDecideSurfaceChanged]
         it "advises on process dispatch-surface changes without making them breaking" $ do
             cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-handle.keiro"
             any isBreaking cs `shouldBe` False
-            [ckCode k | Advisory k <- cs] `shouldBe` [Just ProcessDecideSurfaceChanged]
+            [ckCode k | Advisory k <- cs] `shouldBe` [ProcessDecideSurfaceChanged]
         it "advises on unversioned timer payload changes without making them breaking" $ do
             cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-payload.keiro"
             any isBreaking cs `shouldBe` False
-            [ckCode k | Advisory k <- cs] `shouldBe` [Just ProcessTimerPayloadChanged]
+            [ckCode k | Advisory k <- cs] `shouldBe` [ProcessTimerPayloadChanged]
         it "ignores formatting-only process and timer surface rewrites" $ do
             original <- specOf "test/fixtures/hospital-surge.keiro"
             formatted <- parseInlineSpec "<formatted-process>" (renderSpec original)
@@ -1245,32 +1301,32 @@ main = hspec $ do
         it "reports a timer window change as a warning" $ do
             cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-window.keiro"
             any isBreaking cs `shouldBe` False
-            [ckCode k | Advisory k <- cs] `shouldContain` [Just TimerWindowChanged]
+            [ckCode k | Advisory k <- cs] `shouldContain` [TimerWindowChanged]
         it "reports emit-map changes as warnings and derive changes as breaking" $ do
             mapping <- diffFixtures "test/fixtures/emit.keiro" "test/fixtures/emit-mapchange.keiro"
             any isBreaking mapping `shouldBe` False
-            [ckCode k | Advisory k <- mapping] `shouldContain` [Just EmitMappingChanged]
+            [ckCode k | Advisory k <- mapping] `shouldContain` [EmitMappingChanged]
             derive <- diffFixtures "test/fixtures/emit.keiro" "test/fixtures/emit-derive.keiro"
-            [ckCode k | Breaking k <- derive] `shouldContain` [Just DerivedIdentityChanged]
+            [ckCode k | Breaking k <- derive] `shouldContain` [DerivedIdentityChanged]
         it "classifies publisher outbox identity and ordering independently" $ do
             outbox <- diffFixtures "test/fixtures/emit.keiro" "test/fixtures/emit-outboxfield.keiro"
-            [ckCode k | Breaking k <- outbox] `shouldContain` [Just DerivedIdentityChanged]
+            [ckCode k | Breaking k <- outbox] `shouldContain` [DerivedIdentityChanged]
             ordering <- diffFixtures "test/fixtures/emit.keiro" "test/fixtures/emit-ordering.keiro"
             any isBreaking ordering `shouldBe` False
-            [ckCode k | Advisory k <- ordering] `shouldContain` [Just PublisherPolicyChanged]
+            [ckCode k | Advisory k <- ordering] `shouldContain` [PublisherPolicyChanged]
         it "classifies workqueue names as QueueIdentityChanged" $ do
             cs <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-rename.keiro"
-            [ckCode k | Breaking k <- cs] `shouldContain` [Just QueueIdentityChanged]
+            [ckCode k | Breaking k <- cs] `shouldContain` [QueueIdentityChanged]
         it "classifies pgmq dispatch dedupe and retargeting independently" $ do
             dedupe <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-dedupkey.keiro"
-            [ckCode k | Breaking k <- dedupe] `shouldContain` [Just DedupeIdentityChanged]
+            [ckCode k | Breaking k <- dedupe] `shouldContain` [DedupeIdentityChanged]
             retarget <- diffFixtures "test/fixtures/reservation-work.keiro" "test/fixtures/reservation-work-retarget.keiro"
             any isBreaking retarget `shouldBe` False
-            [ckCode k | Advisory k <- retarget] `shouldContain` [Just DispatchRetargeted]
+            [ckCode k | Advisory k <- retarget] `shouldContain` [DispatchRetargeted]
         it "reports aggregate projection changes as warnings" $ do
             cs <- diffFixtures "test/fixtures/reservation.keiro" "test/fixtures/reservation-projection.keiro"
             any isBreaking cs `shouldBe` False
-            [ckCode k | Advisory k <- cs] `shouldContain` [Just ProjectionChanged]
+            [ckCode k | Advisory k <- cs] `shouldContain` [ProjectionChanged]
         it "classifies read-model version and unversioned shape changes" $ do
             base <- specOf "test/fixtures/readmodel-runtime.keiro"
             let versionTwo = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmVersion = 2}) base
@@ -1279,8 +1335,8 @@ main = hspec $ do
                 decreased = diffSpecs versionTwo base
                 unversioned = diffSpecs base changedShape
                 bumped = diffSpecs base bumpedShape
-            [ckCode k | Breaking k <- decreased] `shouldContain` [Just ReadModelVersionDecreased]
-            [ckCode k | Breaking k <- unversioned] `shouldContain` [Just ReadModelShapeChangedWithoutBump]
+            [ckCode k | Breaking k <- decreased] `shouldContain` [ReadModelVersionDecreased]
+            [ckCode k | Breaking k <- unversioned] `shouldContain` [ReadModelShapeChangedWithoutBump]
             any isBreaking bumped `shouldBe` False
             [ckFacet k | Additive k <- bumped] `shouldContain` ["read-model-version"]
         it "classifies read-model registry, table, subscription, and removal identities" $ do
@@ -1290,16 +1346,16 @@ main = hspec $ do
                 renamed = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmName = "reservation_decisions"}) base
                 removed = removeReadModel "transfer_decisions" base
             mapM_
-                (\changes -> [ckCode k | Breaking k <- changes] `shouldContain` [Just DerivedIdentityChanged])
+                (\changes -> [ckCode k | Breaking k <- changes] `shouldContain` [DerivedIdentityChanged])
                 [diffSpecs base tableChanged, diffSpecs base subscriptionChanged, diffSpecs base renamed, diffSpecs base removed]
         it "classifies read-model feed flips and consistency/scope weakening as breaking" $ do
             base <- specOf "test/fixtures/readmodel-runtime.keiro"
             let feedChanged = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmFeed = RmInline}) base
                 consistencyWeakened = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmConsistency = Eventual}) base
                 entireLog = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmScope = Just RmEntireLog}) base
-            [ckCode k | Breaking k <- diffSpecs base feedChanged] `shouldContain` [Just ReadModelFeedChanged]
-            [ckCode k | Breaking k <- diffSpecs base consistencyWeakened] `shouldContain` [Just ReadModelConsistencyWeakened]
-            [ckCode k | Breaking k <- diffSpecs entireLog base] `shouldContain` [Just ReadModelConsistencyWeakened]
+            [ckCode k | Breaking k <- diffSpecs base feedChanged] `shouldContain` [ReadModelFeedChanged]
+            [ckCode k | Breaking k <- diffSpecs base consistencyWeakened] `shouldContain` [ReadModelConsistencyWeakened]
+            [ckCode k | Breaking k <- diffSpecs entireLog base] `shouldContain` [ReadModelConsistencyWeakened]
         it "classifies Eventual to Strong read-model consistency as additive" $ do
             strong <- specOf "test/fixtures/readmodel-runtime.keiro"
             let eventual = modifyReadModel "transfer_decisions" (\readModel -> readModel{rmConsistency = Eventual}) strong
@@ -1862,6 +1918,38 @@ diffFixtures oldP newP = do
     case (,) <$> parseSpec oldP old <*> parseSpec newP new of
         Left err -> expectationFailure (T.unpack err) >> pure []
         Right (o, n) -> pure (diffSpecs o n)
+
+kindOfChange :: Change -> ChangeKind
+kindOfChange (Additive kind) = kind
+kindOfChange (Advisory kind) = kind
+kindOfChange (Breaking kind) = kind
+
+labelOfChange :: Change -> Label
+labelOfChange Additive{} = LabelAdditive
+labelOfChange Advisory{} = LabelAdvisory
+labelOfChange Breaking{} = LabelBreaking
+
+genSurfaceSet :: Gen (Set.Set CompatibilitySurface)
+genSurfaceSet = Set.fromList <$> listOf (elements [minBound .. maxBound])
+
+genCompatibilityVector :: Gen CompatibilityVector
+genCompatibilityVector =
+    CompatibilityVector
+        <$> genVerdict
+        <*> genVerdict
+        <*> genVerdict
+        <*> genVerdict
+        <*> genVerdict
+        <*> genVerdict
+        <*> (Set.fromList <$> listOf (elements rolloutConstraints))
+  where
+    genVerdict = elements [VCompatible, VAdvisory, VBreaking, VNotApplicable]
+    rolloutConstraints =
+        [ RolloutStopTheWorld
+        , RolloutWorkersFirst
+        , RolloutDrainRequired
+        , RolloutProducerLast
+        ]
 
 replayImpactFixtures :: FilePath -> FilePath -> IO ReplayImpact
 replayImpactFixtures oldPath newPath = do

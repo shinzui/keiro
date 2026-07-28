@@ -9,7 +9,8 @@ import Data.Aeson qualified as Aeson
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Keiro.Dsl.Diff (Change (..), ChangeKind (..), diffSpecs, isBreaking)
+import Keiro.Dsl.Diff (Change (..), CompatibilitySurface, diffSpecs, gateWith, gatedBreaking)
+import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, renderExplainBlock, renderFinding)
 import Keiro.Dsl.Goldens (emitGoldenPayloads, loadGoldenPayloads)
 import Keiro.Dsl.Grammar (Placement (..), Spec (..))
 import Keiro.Dsl.Parser (parseSpec)
@@ -30,7 +31,7 @@ data Command
     = Parse FilePath
     | Check FilePath Bool
     | Scaffold FilePath FilePath (Maybe String) Bool Bool (Maybe FilePath)
-    | Diff FilePath String (Maybe FilePath) (Maybe FilePath)
+    | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath)
     | New String
 
 main :: IO ()
@@ -55,7 +56,7 @@ commands =
                 (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> optional goldensOpt <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
             <> command
                 "diff"
-                (info (Diff <$> fileArg <*> sinceOpt <*> optional emitGoldensOpt <*> optional replayImpactOutOpt <**> helper) (progDesc "Classify spec changes since a git ref as ADDITIVE/WARNING/BREAKING over the decode and identity surface; exit non-zero on any BREAKING change"))
+                (info (Diff <$> fileArg <*> sinceOpt <*> optional emitGoldensOpt <*> optional replayImpactOutOpt <*> many gateOpt <*> explainSwitch <*> optional reportOutOpt <**> helper) (progDesc "Classify spec changes since a git ref as per-surface compatibility vectors; exit non-zero on any gated BREAKING surface"))
             <> command
                 "new"
                 (info (New <$> kindArg <**> helper) (progDesc "Print a minimal valid .keiro skeleton for a node kind (aggregate, process, router, contract, intake, emit, publisher, workqueue, dispatch, workflow, operation)"))
@@ -81,6 +82,15 @@ emitGoldensOpt = strOption (long "emit-goldens" <> metavar "DIR" <> help "Write 
 
 replayImpactOutOpt :: Parser FilePath
 replayImpactOutOpt = strOption (long "replay-impact-out" <> metavar "FILE" <> help "Write the replay-neutral or affected audit input as JSON")
+
+gateOpt :: Parser CompatibilitySurface
+gateOpt = option (eitherReader parseSurfaceName) (long "gate" <> metavar "SURFACE" <> help "Also fail on a breaking verdict for this compatibility surface (repeatable)")
+
+explainSwitch :: Parser Bool
+explainSwitch = switch (long "explain" <> help "Print containing paths, failing directions, and remediation choices")
+
+reportOutOpt :: Parser FilePath
+reportOutOpt = strOption (long "report-out" <> metavar "FILE" <> help "Write the full keiro-dsl/diff-report/1 compatibility report as JSON")
 
 emitSwitch :: Parser Bool
 emitSwitch = switch (long "emit" <> help "On success, pretty-print the parsed spec to stdout (folds parse + check into one call)")
@@ -147,7 +157,7 @@ run (New kind) =
     case skeletonFor (T.pack kind) of
         Left err -> hPutStrLn stderr (T.unpack err) >> exitFailure
         Right skel -> TIO.putStr skel
-run (Diff fp ref emitGoldensRoot replayImpactOut) = do
+run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut) = do
     -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.
     let dir = takeDirectory fp
     rootRes <- git dir ["rev-parse", "--show-toplevel"]
@@ -169,19 +179,19 @@ run (Diff fp ref emitGoldensRoot replayImpactOut) = do
                             mapM_ (putStrLn . ("golden: wrote " <>)) written
                             let changes = diffSpecs oldSpec newSpec
                                 impact = replayImpact oldSpec newSpec
-                            mapM_ (putStrLn . renderChange) changes
+                                effectiveGate = gateWith gatedSurfaces
+                            mapM_ (TIO.putStrLn . renderFinding) changes
+                            when explain $
+                                mapM_ (TIO.putStrLn . renderExplainBlock) (filter shouldExplain changes)
                             TIO.putStrLn (renderReplayImpact impact)
                             mapM_ (`Aeson.encodeFile` impact) replayImpactOut
-                            if any isBreaking changes then exitFailure else pure ()
+                            mapM_ (\path -> Aeson.encodeFile path (diffReport effectiveGate changes)) reportOut
+                            if any (gatedBreaking effectiveGate) changes then exitFailure else pure ()
 
-renderChange :: Change -> String
-renderChange c = case c of
-    Additive k -> "ADDITIVE: " <> body k
-    Advisory k -> "WARNING: " <> body k <> codeSuffix k
-    Breaking k -> "BREAKING: " <> body k <> codeSuffix k
-  where
-    body k = T.unpack (ckNode k) <> " " <> T.unpack (ckFacet k) <> " " <> T.unpack (ckSubject k) <> ": " <> T.unpack (ckDetail k)
-    codeSuffix k = maybe "" (\dc -> " [" <> show dc <> "]") (ckCode k)
+shouldExplain :: Change -> Bool
+shouldExplain Additive{} = False
+shouldExplain Advisory{} = True
+shouldExplain Breaking{} = True
 
 -- | Run git in a directory, returning trimmed stdout or stderr.
 git :: FilePath -> [String] -> IO (Either String String)
