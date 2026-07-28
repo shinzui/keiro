@@ -60,10 +60,12 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Confirm plan 149 is Complete and its deliverables (grammar constructors, resolved
-      type-expression graph module, total folds/algebras, diagnostic codes) are merged.
-- [ ] Coordinate every Keiro/keiro-dsl/jitsurei Keiki bound and exhaustive match to
-      `keiki >=0.4 && <0.5`; all tests green before projection generation begins.
+- [x] 2026-07-28: Confirmed plan 149 is Complete and its deliverables (grammar constructors,
+      resolved type-expression graph module, total folds/algebras, diagnostic codes) are merged.
+- [x] 2026-07-28: Coordinated every Keiro/keiro-dsl/jitsurei Keiki bound to
+      `keiki >=0.4 && <0.5`, moved the snapshot companion to `keiki-codec-json >=0.4 && <0.5`,
+      rendered all three new projection warnings explicitly, and passed the package builds plus
+      `keiro-dsl-test` (265 examples) and `keiro-test` (373 examples).
 - [ ] Milestone 1: `Keiro.Codec.Structural` binding API module with stability note and unit tests.
 - [ ] Milestone 2: generated per-declaration `Structural.Shape.*` stratum, structural/opaque codecs, and eligible-field
       `StructuralProjections` facade with pinned goldens and Keiki agreement tests.
@@ -91,6 +93,13 @@ implementation. Provide concise evidence.
   binding and fingerprint-driven cache invalidation.
 - `Keiro.Codec` reaches generated consumers through `keiro`'s explicit Cabal re-export. The new
   module must be added to the same re-export list; dependency transitivity is insufficient.
+- The Keiki 0.4 migration also requires `keiki-codec-json` 0.4: the 0.3.1 codec package pins
+  `keiki ^>=0.3`, so changing only the direct Keiki bounds cannot solve. Hackage and upstream
+  tag `v0.4.0.0` publish both compatible packages.
+- Keiro's stream-boundary renderer exhaustively matched Keiki validation warnings. Keiki 0.4
+  therefore exposed one deliberate migration site: `ProjectionResultUnsupported`,
+  `ProjectionOrderingUnsupported`, and `ProjectionOutsideGuard` now receive explicit,
+  provenance-preserving text instead of being hidden by a wildcard.
 
 
 ## Decision Log

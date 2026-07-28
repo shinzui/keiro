@@ -170,7 +170,7 @@ request's origin but do not constrain the reusable Keiro API beyond the local de
 | 4 | Generate forward-versus-replay equality assertions in the DSL harness | docs/plans/147-generate-forward-versus-replay-equality-assertions-in-the-dsl-harness.md | None | None | Complete |
 | 5 | Report evolution as a compatibility vector with remediation explanations | docs/plans/148-report-evolution-as-a-compatibility-vector-with-remediation-explanations.md | None | None | Complete |
 | 6 | Implement the IR-1 spec layer: resolved type graph, structural and opaque declarations, check and diff | docs/plans/149-implement-the-ir-1-spec-layer-resolved-type-graph-structural-and-opaque-declarations-check-and-diff.md | EP-5 | None | Complete |
-| 7 | Implement the IR-1 generation layer: total bindings, codecs, Keiki projection facade, scaffold, and conformance harness | docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md | EP-6, Keiki 0.4 | EP-4 | Ready |
+| 7 | Implement the IR-1 generation layer: total bindings, codecs, Keiki projection facade, scaffold, and conformance harness | docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md | EP-6, Keiki 0.4 | EP-4 | In Progress |
 | 8 | Reduce binding boilerplate: skeleton scaffolds, exact nominal derivation, and explain-bindings | docs/plans/151-reduce-binding-boilerplate-skeleton-scaffolds-derived-nominal-bindings-and-explain-bindings.md | EP-7 | None | Not Started |
 | 9 | Gather migration evidence with historical codec comparison and supported-root coverage reporting | docs/plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md | EP-7 | EP-8 | Not Started |
 
@@ -330,6 +330,9 @@ Recorded during child-plan drafting (2026-07-28):
   register/matched-input bases and curated scalar results; computed bases cross a
   `NonStructuralProjectionBoundary`. Current Keiro package bounds (`>=0.3.1 && <0.4`) exclude
   this API and require a coordinated dependency and exhaustive-match migration.
+- The coordinated migration includes `keiki-codec-json >=0.4 && <0.5`, not only `keiki`:
+  `keiki-codec-json` 0.3.1 pins `keiki ^>=0.3`, while the 0.4.0.0 companion release pins the
+  projection-bearing core. EP-7 verified both against Hackage and upstream tag `v0.4.0.0`.
 - The current scaffolder does not execute `.keiro` guard/write syntax: it writes intent as
   comments in create-once Holes, and the generated-module firewall rejects general Keiki
   symbolic operators. A generated projection facade is sound for those hand-written Holes;

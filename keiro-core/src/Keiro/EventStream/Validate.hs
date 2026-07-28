@@ -226,7 +226,7 @@ renderCodecConfigError = \case
     showT = Text.pack . show
     renderVersions = Text.intercalate ", " . map showT
 
-{- | Render a keiki warning to a human-readable reason. All eight constructors
+{- | Render a keiki warning to a human-readable reason. Every constructor
 carry @tvwDetail@; the source vertex is @edgeSource . tvwEdge@ (or @tvwSource@
 for pair warnings).
 -}
@@ -248,6 +248,57 @@ renderWarning w = case w of
         "possibly-dead @" <> showT (edgeSource e) <> ": " <> Text.pack d
     OpaqueGuard{tvwEdge = e, tvwDetail = d} ->
         "opaque-guard @" <> showT (edgeSource e) <> ": " <> Text.pack d
+    ProjectionResultUnsupported
+        { tvwEdge = e
+        , tvwProjectionPath = path
+        , tvwProjectionShape = shape
+        , tvwProjectionResultType = resultType
+        , tvwDetail = d
+        } ->
+            "projection-result-unsupported @"
+                <> showT (edgeSource e)
+                <> " ["
+                <> Text.pack path
+                <> ", shape "
+                <> Text.pack shape
+                <> ", result "
+                <> Text.pack resultType
+                <> "]: "
+                <> Text.pack d
+    ProjectionOrderingUnsupported
+        { tvwEdge = e
+        , tvwProjectionPath = path
+        , tvwProjectionShape = shape
+        , tvwProjectionResultType = resultType
+        , tvwDetail = d
+        } ->
+            "projection-ordering-unsupported @"
+                <> showT (edgeSource e)
+                <> " ["
+                <> Text.pack path
+                <> ", shape "
+                <> Text.pack shape
+                <> ", result "
+                <> Text.pack resultType
+                <> "]: "
+                <> Text.pack d
+    ProjectionOutsideGuard
+        { tvwEdge = e
+        , tvwProjectionPath = path
+        , tvwProjectionShape = shape
+        , tvwProjectionLocation = location
+        , tvwDetail = d
+        } ->
+            "projection-outside-guard @"
+                <> showT (edgeSource e)
+                <> " ["
+                <> Text.pack path
+                <> ", shape "
+                <> Text.pack shape
+                <> ", location "
+                <> Text.pack location
+                <> "]: "
+                <> Text.pack d
   where
     showT = Text.pack . show
 
