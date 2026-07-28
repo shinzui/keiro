@@ -68,8 +68,10 @@ Experiment B) for the capability requested by
       stable JSON and human summaries; diff records previous counts/deltas; the two rejection
       policies remain opt-in; six registry codes were appended; `keiro-dsl-test` passes 302
       examples.
-- [ ] Milestone 4: documentation — brownfield-guide shadow-comparison section, evolution-guide
-      update, new coverage-policy ADR, ADR 0004 inventory amendment if a gate row was added.
+- [x] 2026-07-28: Milestone 4 completed: the brownfield and evolution guides document the
+      consumer-compiled comparison and reporting-first coverage workflows; OKF allocated and
+      validated ADR 0013; ADR 0004's gate inventory and bundle log record the new evidence
+      boundaries; strict OKF validation and `just adr-validate` pass for 13 concepts.
 - [ ] Final: Proposal Test answers recorded, ADR distillation pass, plan marked complete.
 
 
@@ -96,6 +98,10 @@ Experiment B) for the capability requested by
   snapshot policy. The report therefore inventories every mapped register, carries
   `snapshotEnabled` separately, and never calls its wire fingerprint structural snapshot-codec
   coverage.
+- The brownfield guide's plan-145/plan-152 anchors had landed exactly where expected, but retained
+  two future-tense statements from before plans 150 and 152. The implementation replaced those
+  statements with the actual structural projection and comparison workflows instead of creating
+  a supplemental appendix.
 
 
 ## Decision Log
@@ -214,6 +220,13 @@ Experiment B) for the capability requested by
   opaque-surface policy findings.
   Date: 2026-07-28
 
+- Decision: Record reporting-first coverage as accepted ADR 0013 and amend ADR 0004's earliest
+  sound-boundary inventory rather than broadening ADR 0012.
+  Rationale: ADR 0012 owns the schema-authority and total-binding contract. Whether named opaque
+  boundaries become an organization-specific rejection is a distinct operator policy. ADR 0004
+  remains the correct inventory of which evidence boundary performs each advisory or gate.
+  Date: 2026-07-28
+
 
 ## Outcomes & Retrospective
 
@@ -237,6 +250,13 @@ work and retains its prior output/exit behavior. The check gate rejects existing
 event boundaries only when asked; the diff gate rejects only newly added named boundaries. A live
 CLI mutation added a second opaque event root and produced
 `CoverageOpaqueBoundaryAdded`/`CoverageOpaqueGateExceeded`, then the fixture was restored.
+
+Milestone 4 replaced the guide's pre-implementation placeholders with commands that compile the
+generated comparison module against an explicit historical codec, explain the deliberate failing
+Experiment B transcript, and preserve the single-authority/upcaster boundary. The evolution guide
+now distinguishes coverage reporting from historical equivalence and replay evidence. ADR 0013
+makes the opt-in policy durable, and ADR 0004 locates it beside the other earliest-sound-boundary
+gates.
 
 
 ## Context and Orientation

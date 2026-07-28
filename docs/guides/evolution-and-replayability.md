@@ -78,7 +78,12 @@ one actually checks, because none of them checks everything:
    surfaces. `--explain` prints containing paths, failing directions, and
    remedies, while `--report-out FILE` writes the
    `keiro-dsl/diff-report/1` JSON contract. The separate replay-impact verdict
-   is unchanged. The differ also advises on spec-visible aggregate fold,
+   is unchanged. An explicit `--coverage-report FILE` on `check` inventories
+   structural, opaque, and `Json` private-event roots plus consumer-JSON
+   register cache boundaries; on `diff` it adds the previous inventory and
+   named delta. Reporting is advisory. `--fail-on-opaque` and
+   `--fail-on-opaque-increase` are separate opt-in policies and are accepted
+   only with that report. The differ also advises on spec-visible aggregate fold,
    process/router decide, and timer-payload changes, and prints a replay-only
    twin for guard tightening. Hole bodies remain invisible to it.
 3. **The generated harness** (DSL services only). Round-trips current-shape
@@ -86,7 +91,10 @@ one actually checks, because none of them checks everything:
    versioned old-payload golden through `decodeRaw`. Capture old shapes while
    both specs exist with `keiro-dsl diff --emit-goldens`, then pass them to
    `scaffold --goldens`; generated files never overwrite a hand-captured
-   production payload.
+   production payload. For brownfield structural adoption, an opt-in generated
+   comparison module compiles beside an explicit consumer-owned historical
+   codec and classifies finite evidence as parity or required version/upcaster
+   work. It is never a runtime fallback or a new schema authority.
 4. **`mkEventStream` / `mkEventStreamOrThrow`** at startup
    ([Replayability Safety](../user/replay-safety.md)). Runs keiki's structural
    replay-safety checks with head-recoverability and state-changing-ε
@@ -141,6 +149,44 @@ those paths and the matching deployment, upcaster, state-codec, contract, or
 replay-only-edge remedies. Use `--report-out` for policy tooling, and make JSON
 readers ignore unknown keys because surface keys and containing paths are
 append-only.
+
+### Track structural adoption without redefining soundness
+
+Coverage of a persisted payload is not one scalar. A private event rooted in a
+checked structural declaration has generated wire authority; an opaque root is
+honest but not structurally inspectable; an explicit `Json` leaf is a named
+boundary inside an otherwise structural graph. A mapped register is different
+again: snapshots still use consumer JSON and are a rebuildable cache protected
+by the mapped wire/binding fingerprint. Queue payloads and public contracts are
+not roots in this graph, so the report labels them unsupported/not-applicable
+instead of manufacturing a percentage.
+
+Request the stable machine inventory only when a CI or migration workflow uses
+it:
+
+```bash
+cabal run keiro-dsl -- check service.keiro \
+  --coverage-report build/keiro-coverage.json
+
+cabal run keiro-dsl -- diff service.keiro --since HEAD^ \
+  --coverage-report build/keiro-coverage-diff.json
+```
+
+The top-level JSON keys include `spec`, `roots`, `opaqueBoundaries`,
+`snapshotBoundaries`, and `unsupportedSurfaces`; diff also includes `previous`
+and `delta`. Named opaque roots emit `CoverageOpaqueSurface` advisories, and a
+new boundary emits `CoverageOpaqueBoundaryAdded`. These do not fail the command.
+Teams that have chosen a stricter adoption policy may add `--fail-on-opaque` to
+`check`, or `--fail-on-opaque-increase` to `diff`; only then does
+`CoverageOpaqueGateExceeded` become an error. Keeping rejection opt-in avoids
+rewarding a dishonest structural declaration merely to satisfy a percentage.
+
+Coverage says which authority mode is declared; it does not prove that a
+brownfield declaration matches historical bytes. Use the finite historical
+codec comparison workflow in
+[Brownfield Migration and Transducer Modeling](brownfield-migration-and-transducer-modeling.md#shadow-comparison-of-old-and-new-codecs),
+then use versions/upcasters and the real-log replay audit for the distinct
+questions of decode migration and stored-history replay.
 
 ## Adding a new event type
 
@@ -603,6 +649,7 @@ DSL-only gates do not exist for hand-authored services.
 | Workflow step result type | BREAKING (body) | — | `WorkflowStepDecodeError` → terminal fail; `resurrectFailedWorkflow` after a code fix | operator must notice the failed instance | Landed: [115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md) |
 | Job payload | workqueue changes keep normal classifications | generated queues use versioned `QueueCodec` | future version retries; malformed shape dead-letters | hand-written `aesonJobCodec` remains unversioned | Landed: [140](../plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md) |
 | Contract field change | BREAKING / advisory | — | consumer dead letters | cross-repo skew unchecked | [24](../masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md) (out of scope, manual rules here) |
+| Structural/opaque adoption coverage | Reporting-only named roots by default; optional existing-level or increase gate | Generated binding/codec conformance plus finite historical comparison | No runtime codec selector is added | Finite evidence cannot prove universal historical equivalence | Landed: [152](../plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md) |
 | Workflow body reorder without patch | BREAKING | — | wrong journaled pairing | hand-written ordinals: **silent** | Landed: [115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md) (patch/rotation race); ordinal pairing is the author's rule |
 
 The master plan closing the tracked gaps is

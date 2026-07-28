@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-07-28
+* **Update**: Amend ADR 0004 with reporting-only coverage, opt-in opacity gates, and consumer-compiled historical codec evidence ownership (plan 152).
+* **Added**: Record reporting-first mapped-type coverage, named structural/opaque boundaries, and explicit operator-owned opacity gates (plan 152).
 * **Update**: Record create-once binding skeletons and exact nominal generic derivation as downstream conveniences under ADR 0012 (plan 151).
 * **Update**: Amend ADR 0004 with structural binding, mapped-codec golden, fixture-coverage, and scaffold-drift gate ownership (plan 150).
 * **Update**: Accept ADR 0012 after structural binding, codec, projection, replay, mutation, and benchmark conformance landed (plan 150).

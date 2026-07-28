@@ -13,9 +13,9 @@ The doctrine here translates sections 4, 5, 6, and 12 of
 and the modeling constraints in
 [`docs/improvement-requests/support-structural-consumer-owned-types-in-keiro-dsl.md`](../improvement-requests/support-structural-consumer-owned-types-in-keiro-dsl.md).
 Those documents motivate the constraints; the runtime, the accepted ADRs, and
-the code that executes remain authoritative. This guide does not document the
-future structural/opaque declaration grammar because that tooling has not
-landed.
+the code that executes remain authoritative. The structural/opaque declaration
+grammar, total consumer bindings, generated private-event codecs, and migration
+evidence tooling described below are now part of `keiro-dsl`.
 
 The migration has two halves. Part A turns domain choices into a transducer
 whose forward execution and replay agree. Part B starts from genuine historical
@@ -82,11 +82,11 @@ data PlaceOrderData = PlaceOrderData
 ```
 
 Keiki 0.4 also has typed `FieldProjection` witnesses consumed through
-`regProj` and `inpProj`. Keiro does not yet generate those witnesses from a
-consumer-owned structural mapping. After
-[`docs/plans/150`](../plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md)
-lands, a hand-written Holes module may use its generated facade for a genuine
-scalar field. That facility is deliberately narrow: projections are guard-only,
+`regProj` and `inpProj`. Keiro generates those witnesses from a consumer-owned
+structural mapping through the API landed by
+[`docs/plans/150`](../plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md).
+A hand-written Holes module may use the generated facade for a genuine scalar
+field. That facility is deliberately narrow: projections are guard-only,
 start from a direct register or matched-input field, and return a result in
 Keiki's curated symbolic registry. It does not create checked nested `.keiro`
 paths, because the current scaffolder renders guard intent as comments rather
@@ -395,13 +395,54 @@ The rename is not formatting. It is versioned compatibility work. A finite
 shadow corpus cannot prove universal equivalence, so combine it with generated
 round trips, negative fixtures, runtime validation, and the real-log audit.
 
-The scaffolded comparison runner does not exist yet. Plan 152 will append its
-consumer-compiled workflow here after implementation; the manual comparison
-above remains valid.
+The scaffolded comparison runner turns that discipline into consumer-compiled
+evidence. Use it only after capturing the historical corpus and transcribing
+the actual historical contract into a `mapped structural` declaration:
+
+```bash
+cabal run keiro-dsl -- scaffold service.keiro --out src \
+  --codec-comparison ArtifactInfo \
+  --comparison-out src/Generated/MyService/Structural/CodecCompare/ArtifactInfo.hs
+```
+
+`--comparison-out` must be the exact generated module path under `--out`.
+Ordinary scaffold runs do not create this module, list it in the production
+manifest/scaffold record, or report it as stale. The writer refuses to replace
+a file without its dedicated migration-evidence banner, and it refuses opaque
+or non-persisted selections. Comparison can add evidence to a structural claim;
+it can never upgrade an opaque declaration.
+
+The generated module exports `compareWithHistorical`. Compile it in a
+consumer-owned test/executable beside an explicit `HistoricalCodec a` value;
+do not recover historical behavior from today's global `ToJSON`/`FromJSON`
+instances. The repository's complete five-arm example can be run as:
+
+```bash
+cabal run keiro-dsl-codec-compare-artifact-info -- \
+  --historical-goldens keiro-dsl/test/conformance-codec-compare/fixtures/artifact-info \
+  --report /tmp/artifact-info-codec-comparison.json
+```
+
+That deliberate negative example exits 1: its historical codec omits a null
+key and spells one union tag differently. The report classifies both as
+`CodecCompareDifference`, names the first divergent JSON pointer, proves every
+declared optional/null/union branch was exercised, and carries historical-codec,
+binding, canonical-type, and wire-fingerprint provenance. Invalid alleged
+goldens and missing branches use `CodecCompareInvalidInput` and
+`CodecCompareCoverageGap`; neither can disappear into a parity result.
+
+For a real migration, continue only when every observation is RFC
+8785-canonical JSON parity and the branch inventory is complete. Otherwise,
+either correct a mistranscribed declaration to match the existing wire contract
+or add an explicit schema version and upcaster for every difference. Never
+silently normalize a mismatch. After cutover, the generated structural codec is
+the sole wire authority. The historical decoder may remain only inside the
+version boundary that reads its own old rung—never as a runtime fallback or a
+second codec selector.
 
 <!-- appended-by: docs/plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md
      anchor: codec-compare-tooling
-     (the scaffolded comparison-runner section lands here; the manual technique above remains valid) -->
+     (the scaffolded comparison-runner section landed here; the manual technique above remains valid) -->
 
 
 ### Version, never silently normalize

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-07-28T21:25:25Z
+timestamp: 2026-07-28T23:53:01Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -73,6 +73,7 @@ The landed inventory is:
 | Structural binding correctness | The declaration names one total binding and a non-empty fixture corpus | Binding-version and canonical-identity changes are consumer-build findings | Generated conformance checks domain→shape→domain and shape→domain→shape for every fixture; a transposed-field mutation must fail |
 | Generated mapped-payload codec | The resolved graph rejects non-injective and ambiguous wire shapes | Recursive mapped changes classify every containing event/register root and rollout surface | Generated conformance round-trips every fixture and containing event, then compares current encoded bytes with a committed JSON golden |
 | Structural fixture branch coverage | The checked declaration requires a non-empty fixture symbol but cannot execute consumer code | Fixture provenance changes are visible consumer-build changes | Generated conformance requires every enum/union arm and both optional branches; missing/null/unknown-field cases are separately schema-generated, and an omitted-arm mutation must fail |
+| Structural adoption coverage and brownfield codec evidence | `check --coverage-report` emits named structural, opaque, and `Json` private-event roots plus separate consumer-JSON register cache boundaries; `--fail-on-opaque` is an explicit local policy | `diff --coverage-report` emits previous counts and named deltas; `CoverageOpaqueBoundaryAdded` is advisory unless `--fail-on-opaque-increase` is selected | A consumer-compiled historical-codec comparison classifies finite fixtures as canonical JSON parity or explicit version/upcaster work; it never becomes a runtime fallback or upgrades opaque mode |
 | Scaffold mapping drift | Mapping facts are internally validated before generation | `diff` classifies wire, canonical, binding-version, codec-version, and consumer-build changes | The scaffold record persists canonical mapping rows and reports binding/wire/initial/projection drift before generated files are accepted |
 | Synthesized mapped old-payload golden | — | `diff --emit-goldens` traverses the complete checked old shape and labels synthesized output as a weak stand-in | Replace it with a hand-captured historical payload when available; emission never overwrites existing evidence |
 | Private enum constructor addition | — | One `EnumCtorAdded` finding per containing event/register path; event use is old-binary/new-event breaking and register use is snapshot-hydration advisory | Deploy consumers before producers and invalidate/rebuild affected snapshots |
