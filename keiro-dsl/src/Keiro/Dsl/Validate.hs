@@ -288,7 +288,7 @@ validateNames spec =
                 ++ concatMap (\field -> fieldNameRule "workqueue payload field" (wqfName field) (wqLoc workqueue)) (wqPayload workqueue)
         NPgmqDispatch dispatch -> pascalizedNodeName "dispatch" (pdName dispatch) (pdLoc dispatch)
         NReadModel readModel -> pascalizedNodeName "readmodel" (rmName readModel) (rmLoc readModel)
-        NWorkflow workflow -> constructorName "workflow name" (wfId workflow) (wfLoc workflow)
+        NWorkflow workflow -> constructorName "workflow name" (wfId workflow) (workflowNodeLoc workflow)
         NOperation _ -> []
 
     aggregateNames aggregate =
@@ -475,7 +475,7 @@ nodeIdentity (NPublisher p) = ("publisher", pubName p, pubLoc p)
 nodeIdentity (NWorkqueue w) = ("workqueue", wqName w, wqLoc w)
 nodeIdentity (NPgmqDispatch d) = ("dispatch", pdName d, pdLoc d)
 nodeIdentity (NReadModel r) = ("readmodel", rmName r, rmLoc r)
-nodeIdentity (NWorkflow w) = ("workflow", wfId w, wfLoc w)
+nodeIdentity (NWorkflow w) = ("workflow", wfId w, workflowNodeLoc w)
 nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
 
 validateNode :: Spec -> Node -> [Diagnostic]
@@ -530,7 +530,7 @@ validateWorkflow w = duplicateLabels ++ sleepFields ++ patchDuplicates ++ patchI
     idField = case wfIdField w of
         Just field
             | field `notElem` inputFields ->
-                [ mkErr (locLine (wfLoc w)) WorkflowIdFieldUnresolved $
+                [ mkErr (locLine (workflowNodeLoc w)) WorkflowIdFieldUnresolved $
                     "workflow '" <> wfId w <> "' derives its id from undeclared input field '" <> field <> "'"
                 ]
         _ -> []

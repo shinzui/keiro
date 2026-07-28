@@ -65,10 +65,10 @@ plus mutation tests proving that an unvisited nested field or union arm makes th
 
 ## Progress
 
-- [ ] Milestone 1: grammar constructors (`TypeExpr`, `MappedDecl`, wire metadata) added to `Keiro.Dsl.Grammar`; `Spec` carries `specMapped`.
-- [ ] Milestone 1: parser support for `mapped` declarations and type expressions in `Keiro.Dsl.Parser`.
-- [ ] Milestone 1: pretty-printer support in `Keiro.Dsl.PrettyPrint`; property and fixture round trips green in `keiro-dsl-test`.
-- [ ] Milestone 1: `test/fixtures/consumer-types.keiro` canonical fixture committed; QuickCheck `genSpec` extended with mapped declarations.
+- [x] 2026-07-28T18:56:47Z: Milestone 1 grammar constructors (`TypeExpr`, `MappedDecl`, wire metadata) added to `Keiro.Dsl.Grammar`; `Spec` carries `specMapped`.
+- [x] 2026-07-28T18:56:47Z: Milestone 1 parser support for `mapped` declarations and type expressions added to `Keiro.Dsl.Parser`.
+- [x] 2026-07-28T18:56:47Z: Milestone 1 pretty-printer support landed; 249 `keiro-dsl-test` examples and generated/fixture round trips pass.
+- [x] 2026-07-28T18:56:47Z: Milestone 1 `test/fixtures/consumer-types.keiro` canonical fixture landed; QuickCheck `genSpec` now covers mapped declarations and bounded nested type expressions.
 - [ ] Milestone 2: `Keiro.Dsl.TypeGraph` module with `resolveTypeGraph`, use-site index, root-to-leaf paths, and exported total folds/algebras for `TypeExpr` and `MappedShape`.
 - [ ] Milestone 2: compile-time traversal completeness enforced by algebra fields and fold definitions, plus `-Werror` incomplete-pattern pragmas on the new modules.
 - [ ] Milestone 3: all new `DiagnosticCode` constructors appended; `validateSpec` wired to the resolved graph.
@@ -94,6 +94,10 @@ implementation. Provide concise evidence.
 - `Timestamp` duplicated the existing DSL `Time`/`UTCTime` concept; optional fields lacked total
   missing-key construction; unknown-field behavior was unstated; and direct refs to existing
   ids/enums would cycle the generated leaf stratum. The revised grammar resolves all four.
+- `WireField.wfLoc`, required by the planned public AST, shares its field label with the existing
+  `WorkflowNode.wfLoc`. Enabling `DuplicateRecordFields` preserves both contracts, while the new
+  `wireFieldLoc` and `workflowNodeLoc` accessors keep internal call sites unambiguous. Evidence:
+  the full library and 249-example `keiro-dsl-test` suite compile and pass with both fields.
 
 
 ## Decision Log

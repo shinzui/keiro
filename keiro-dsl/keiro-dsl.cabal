@@ -23,6 +23,7 @@ common warnings
 common shared
   default-language:   GHC2024
   default-extensions:
+    DuplicateRecordFields
     LambdaCase
     OverloadedStrings
 

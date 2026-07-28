@@ -262,13 +262,13 @@ harnessWorkflow ctx w =
         { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/WorkflowFacts.hs")
         , moduleText = emitWorkflowFacts genPrefix w
         , kind = Generated
-        , origin = "workflow " <> wfId w <> locSuffix (wfLoc w)
+        , origin = "workflow " <> wfId w <> locSuffix (workflowNodeLoc w)
         }
     , ScaffoldModule
         { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/WorkflowRuntime.hs")
         , moduleText = emitWorkflowRuntime genPrefix w
         , kind = Generated
-        , origin = "workflow " <> wfId w <> locSuffix (wfLoc w)
+        , origin = "workflow " <> wfId w <> locSuffix (workflowNodeLoc w)
         }
     ]
   where

@@ -49,7 +49,8 @@ main = hspec $ do
                     forAll genSpec $ \s ->
                         let families = map nodeTag (specNodes s)
                             roundTrip = parseSpec "<gen>" (renderSpec s) === Right s
-                         in foldr (\family -> cover 1 (family `elem` families) family) roundTrip allNodeTags
+                         in cover 5 (not (null (specMapped s))) "mapped" $
+                                foldr (\family -> cover 1 (family `elem` families) family) roundTrip allNodeTags
             it "round-trips an aggregate with no states" $
                 parseSpec "<empty-states>" (renderSpec emptyStatesSpec) `shouldBe` Right emptyStatesSpec
             it "separates transition emit clauses from following nodes" $ do
@@ -59,6 +60,24 @@ main = hspec $ do
                         concatMap tEmits (aggTransitions first) `shouldBe` ["Changed"]
                         aggStates second `shouldBe` []
                     nodes -> expectationFailure ("unexpected node sequence: " <> show (map nodeTag nodes))
+
+    describe "mapped types (EP-149)" $ do
+        it "round-trips the canonical structural and opaque consumer fixture" $ do
+            source <- TIO.readFile "test/fixtures/consumer-types.keiro"
+            spec <- parseInlineSpec "test/fixtures/consumer-types.keiro" source
+            parseSpec "<consumer-types-round-trip>" (renderSpec spec) `shouldBe` Right spec
+            length (specMapped spec) `shouldBe` 4
+        it "preserves every missing-value policy, nested type expression, and unit union arm" $ do
+            source <- TIO.readFile "test/fixtures/consumer-types.keiro"
+            spec <- parseInlineSpec "test/fixtures/consumer-types.keiro" source
+            let fields = [field | MappedStructural{msShape = ShapeRecord _ _ recordFields} <- specMapped spec, field <- recordFields]
+                arms = [arm | MappedStructural{msShape = ShapeUnion _ unionArms} <- specMapped spec, arm <- unionArms]
+            [value | field <- fields, Just value <- [wfOnMissing field]]
+                `shouldBe` [OmCtor "Guide", OmNull, OmInt 0, OmBool False, OmEmptyList, OmEmptyMap]
+            [wfType field | field <- fields, wfHaskell field == "labels"]
+                `shouldBe` [TList (TOptional TText)]
+            [waCtor arm | arm <- arms, waPayload arm == Nothing]
+                `shouldBe` ["Unknown"]
 
     describe "string literal integrity" $ do
         it "parses an escaped emit-map value as exactly one row" $ do
@@ -2285,7 +2304,7 @@ misplacedDispatchIdSpec =
     T.replace
         "    schedule timer\n\n  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)\n"
         "    dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)\n    schedule timer\n"
-        (renderSpec (Spec "svc" Nothing Nothing [] [] [] [NProcess (processWithLiteral "literal")]))
+        (renderSpec (Spec "svc" Nothing Nothing [] [] [] [] [NProcess (processWithLiteral "literal")]))
 
 lineNumberContaining :: T.Text -> T.Text -> Int
 lineNumberContaining needle = go 1 . T.lines
@@ -2395,7 +2414,7 @@ timerDecimalSpec value =
     T.replace
         "max-attempts 5"
         ("max-attempts " <> value)
-        (renderSpec (Spec "svc" Nothing Nothing [] [] [] [NProcess (processWithLiteral "literal")]))
+        (renderSpec (Spec "svc" Nothing Nothing [] [] [] [] [NProcess (processWithLiteral "literal")]))
 
 identifierHygieneSpec :: T.Text
 identifierHygieneSpec =
@@ -2448,6 +2467,7 @@ emptyStatesSpec =
         "svc"
         Nothing
         Nothing
+        []
         []
         []
         []
@@ -2514,6 +2534,7 @@ escapedSpec value =
         "escape"
         Nothing
         Nothing
+        []
         []
         []
         []
@@ -3011,16 +3032,99 @@ genRule =
         <*> nonEmptyList ((,) <$> genName <*> genExpr)
         <*> pure noLoc
 
-genSpec :: Gen Spec
-genSpec =
-    Spec
+genMappedDecls :: Gen [MappedDecl]
+genMappedDecls = do
+    count <- choose (0, 4 :: Int)
+    let names = take count ["MappedA", "MappedB", "MappedC", "MappedD"]
+    traverse (genMappedDecl names) names
+
+genMappedDecl :: [Name] -> Name -> Gen MappedDecl
+genMappedDecl names name =
+    oneof
+        [ MappedStructural name
+            <$> genMaybe genHaskellSource
+            <*> genMaybe genAdversarialText
+            <*> genMaybe genAdversarialText
+            <*> genMaybe genAdversarialText
+            <*> genMaybe genAdversarialText
+            <*> genMaybe genAdversarialText
+            <*> genMappedShape names
+            <*> pure noLoc
+        , MappedOpaque name
+            <$> genMaybe genHaskellSource
+            <*> genMaybe genAdversarialText
+            <*> genMaybe genAdversarialText
+            <*> genMaybe genAdversarialText
+            <*> genMaybe genAdversarialText
+            <*> pure noLoc
+        ]
+
+genHaskellSource :: Gen HaskellSource
+genHaskellSource =
+    HaskellSource
         <$> genWire
-        <*> genMaybe genModuleRoot
-        <*> genMaybe (elements [GeneratedPrefix, CollocatedLeaf])
-        <*> smallList genId
-        <*> smallList genEnum
-        <*> smallList genRule
-        <*> smallList genNode
+        <*> genModuleRoot
+        <*> genName
+
+genMappedShape :: [Name] -> Gen MappedShape
+genMappedShape names =
+    oneof
+        [ ShapeRecord
+            <$> genName
+            <*> elements [RejectUnknown, IgnoreUnknown]
+            <*> smallList (genWireField names)
+        , ShapeEnum <$> smallList (WireEnum <$> genName <*> genAdversarialText <*> pure noLoc)
+        , ShapeUnion
+            <$> (TaggedObject <$> genAdversarialText <*> genAdversarialText <*> elements [RejectUnknown, IgnoreUnknown])
+            <*> smallList (WireArm <$> genName <*> genAdversarialText <*> genMaybe (genTypeExpr names) <*> pure noLoc)
+        ]
+
+genWireField :: [Name] -> Gen WireField
+genWireField names =
+    WireField
+        <$> genName
+        <*> genAdversarialText
+        <*> genTypeExpr names
+        <*> elements [PRequired, POptional]
+        <*> genMaybe genOnMissing
+        <*> pure noLoc
+
+genTypeExpr :: [Name] -> Gen TypeExpr
+genTypeExpr names = sized (go . min 3)
+  where
+    go 0 = base
+    go depth =
+        frequency
+            [ (4, base)
+            , (1, TOptional <$> go (depth - 1))
+            , (1, TList <$> go (depth - 1))
+            , (1, TMap <$> go (depth - 1))
+            ]
+    base = elements ([TText, TInt, TBool, TNatural, TTime, TJson] ++ map TRef names)
+
+genOnMissing :: Gen OnMissing
+genOnMissing =
+    oneof
+        [ pure OmNull
+        , OmText <$> genAdversarialText
+        , OmInt <$> choose (-10, 10)
+        , OmBool <$> arbitrary
+        , pure OmEmptyList
+        , pure OmEmptyMap
+        , OmCtor <$> genName
+        ]
+
+genSpec :: Gen Spec
+genSpec = do
+    contextName <- genWire
+    moduleRoot <- genMaybe genModuleRoot
+    layout <- genMaybe (elements [GeneratedPrefix, CollocatedLeaf])
+    ids <- smallList genId
+    enums <- smallList genEnum
+    rules <- smallList genRule
+    mapped <- genMappedDecls
+    nodes <- smallList genNode
+    pure (Spec contextName moduleRoot layout ids enums rules mapped nodes)
   where
     genNode =
         oneof

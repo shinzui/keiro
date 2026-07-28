@@ -14,6 +14,7 @@ where
 
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
 import Data.Char (isAlpha, isAlphaNum, isAscii, isDigit, isUpper)
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Void (Void)
@@ -118,6 +119,7 @@ reservedWords =
     , "id"
     , "enum"
     , "rule"
+    , "mapped"
     , "ex"
     , "aggregate"
     , "regs"
@@ -233,6 +235,7 @@ data TopItem
     = TIId IdDecl
     | TIEnum EnumDecl
     | TIRule RuleDecl
+    | TIMapped MappedDecl
     | TINode Node
 
 pSpec :: P Spec
@@ -250,6 +253,7 @@ pSpec = do
             , specIds = [d | TIId d <- items]
             , specEnums = [d | TIEnum d <- items]
             , specRules = [d | TIRule d <- items]
+            , specMapped = [d | TIMapped d <- items]
             , specNodes = [n | TINode n <- items]
             }
 
@@ -286,6 +290,7 @@ pTopItem =
         [ TIId <$> pIdDecl
         , TIEnum <$> pEnumDecl
         , TIRule <$> pRuleDecl
+        , TIMapped <$> pMappedDecl
         , TINode . NRouter <$> pRouter
         , TINode . NProcess <$> pProcess
         , TINode . NContract <$> pContract
@@ -349,6 +354,243 @@ pRuleDecl = do
         _ <- symbol "=>"
         e <- pExpr
         pure (c, e)
+
+--------------------------------------------------------------------------------
+-- Consumer-owned mapped types (EP-149)
+--------------------------------------------------------------------------------
+
+data MappedKind = MappedRecord | MappedEnum | MappedUnion
+
+data MappedClause
+    = MCHaskell HaskellSource
+    | MCBinding Text
+    | MCBindingVersion Text
+    | MCCanonical Text
+    | MCFixtures Text
+    | MCInitial Text
+    | MCCodec Text
+    | MCCodecVersion Text
+    | MCShape MappedShape
+
+pMappedDecl :: P MappedDecl
+pMappedDecl = do
+    loc <- getLoc
+    keyword "mapped"
+    choice [pStructural loc, pOpaque loc]
+  where
+    pStructural loc = do
+        keyword "structural"
+        kind <-
+            choice
+                [ MappedRecord <$ keyword "record"
+                , MappedEnum <$ keyword "enum"
+                , MappedUnion <$ keyword "union"
+                ]
+        name <- ident
+        clauses <- braces (many (pStructuralClause kind))
+        hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
+        binding <- oneClause "binding" (\case MCBinding value -> Just value; _ -> Nothing) clauses
+        bindingVersion <- oneClause "binding-version" (\case MCBindingVersion value -> Just value; _ -> Nothing) clauses
+        canonical <- oneClause "canonical-type" (\case MCCanonical value -> Just value; _ -> Nothing) clauses
+        fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
+        initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
+        shape <- requiredClause "wire" (\case MCShape value -> Just value; _ -> Nothing) clauses
+        pure
+            MappedStructural
+                { msName = name
+                , msHaskell = hs
+                , msBinding = binding
+                , msBindingVersion = bindingVersion
+                , msCanonical = canonical
+                , msFixtures = fixtures
+                , msInitial = initial
+                , msShape = shape
+                , msLoc = loc
+                }
+
+    pOpaque loc = do
+        keyword "opaque"
+        name <- ident
+        clauses <- braces (many pOpaqueClause)
+        hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
+        codec <- oneClause "codec" (\case MCCodec value -> Just value; _ -> Nothing) clauses
+        version <- oneClause "version" (\case MCCodecVersion value -> Just value; _ -> Nothing) clauses
+        fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
+        initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
+        pure
+            MappedOpaque
+                { moName = name
+                , moHaskell = hs
+                , moCodecId = codec
+                , moCodecVersion = version
+                , moFixtures = fixtures
+                , moInitial = initial
+                , moLoc = loc
+                }
+
+pStructuralClause :: MappedKind -> P MappedClause
+pStructuralClause kind =
+    choice
+        [ MCHaskell <$> pHaskellSource
+        , MCBindingVersion <$> pQuotedFact "binding-version"
+        , MCBinding <$> pQuotedFact "binding"
+        , MCCanonical <$> pQuotedFact "canonical-type"
+        , MCFixtures <$> pQuotedFact "fixtures"
+        , MCInitial <$> pQuotedFact "initial"
+        , MCShape <$> pMappedShape kind
+        ]
+
+pOpaqueClause :: P MappedClause
+pOpaqueClause =
+    choice
+        [ MCHaskell <$> pHaskellSource
+        , MCCodec <$> pQuotedFact "codec"
+        , MCCodecVersion <$> pQuotedFact "version"
+        , MCFixtures <$> pQuotedFact "fixtures"
+        , MCInitial <$> pQuotedFact "initial"
+        ]
+
+pHaskellSource :: P HaskellSource
+pHaskellSource = do
+    keyword "haskell"
+    keyword "package"
+    _ <- symbol "="
+    packageName <- wireWord
+    keyword "module"
+    _ <- symbol "="
+    moduleName <- pModulePrefix
+    keyword "type"
+    _ <- symbol "="
+    typeName <- ident
+    pure HaskellSource{hsPackage = packageName, hsModule = moduleName, hsType = typeName}
+
+pQuotedFact :: Text -> P Text
+pQuotedFact factName = keyword factName *> symbol "=" *> stringLit
+
+pMappedShape :: MappedKind -> P MappedShape
+pMappedShape kind = do
+    keyword "wire"
+    case kind of
+        MappedRecord -> do
+            keyword "object"
+            keyword "constructor"
+            _ <- symbol "="
+            constructor <- ident
+            unknownFields <- pUnknownFieldsFact
+            fields <- braces (many pWireField)
+            pure (ShapeRecord constructor unknownFields fields)
+        MappedEnum -> do
+            keyword "string"
+            ShapeEnum <$> braces (many pWireEnum)
+        MappedUnion -> do
+            keyword "tagged-object"
+            keyword "tag"
+            _ <- symbol "="
+            tagField <- stringLit
+            keyword "contents"
+            _ <- symbol "="
+            contentsField <- stringLit
+            unknownFields <- pUnknownFieldsFact
+            arms <- braces (many pWireArm)
+            pure (ShapeUnion (TaggedObject tagField contentsField unknownFields) arms)
+
+pUnknownFieldsFact :: P UnknownFields
+pUnknownFieldsFact = do
+    keyword "unknown-fields"
+    _ <- symbol "="
+    choice [RejectUnknown <$ keyword "reject", IgnoreUnknown <$ keyword "ignore"]
+
+pWireField :: P WireField
+pWireField = do
+    loc <- getLoc
+    haskellName <- ident
+    keyword "as"
+    wireKey <- stringLit
+    _ <- symbol ":"
+    fieldType <- pMappedTypeExpr
+    presence <- choice [PRequired <$ keyword "required", POptional <$ keyword "optional"]
+    onMissing <- optional (keyword "on-missing" *> symbol "=" *> pOnMissing)
+    pure
+        WireField
+            { wfHaskell = haskellName
+            , wfKey = wireKey
+            , wfType = fieldType
+            , wfPresence = presence
+            , wfOnMissing = onMissing
+            , wfLoc = loc
+            }
+
+pWireEnum :: P WireEnum
+pWireEnum = do
+    loc <- getLoc
+    constructor <- ident
+    keyword "as"
+    wireTag <- stringLit
+    pure WireEnum{weCtor = constructor, weTag = wireTag, weLoc = loc}
+
+pWireArm :: P WireArm
+pWireArm = do
+    loc <- getLoc
+    constructor <- ident
+    keyword "as"
+    wireTag <- stringLit
+    payload <- optional (symbol ":" *> pMappedTypeExpr)
+    pure WireArm{waCtor = constructor, waTag = wireTag, waPayload = payload, waLoc = loc}
+
+pMappedTypeExpr :: P TypeExpr
+pMappedTypeExpr =
+    choice
+        [ TOptional <$> (keyword "Optional" *> pTypeArgument)
+        , TList <$> (keyword "List" *> pTypeArgument)
+        , TMap <$> (keyword "Map" *> pTypeArgument)
+        , TText <$ keyword "Text"
+        , TInt <$ keyword "Int"
+        , TBool <$ keyword "Bool"
+        , TNatural <$ keyword "Natural"
+        , TTime <$ (keyword "Time" <|> keyword "UTCTime")
+        , TJson <$ keyword "Json"
+        , TRef <$> ident
+        ]
+  where
+    pTypeArgument = parens pMappedTypeExpr <|> pTypeAtom
+    pTypeAtom =
+        choice
+            [ TText <$ keyword "Text"
+            , TInt <$ keyword "Int"
+            , TBool <$ keyword "Bool"
+            , TNatural <$ keyword "Natural"
+            , TTime <$ (keyword "Time" <|> keyword "UTCTime")
+            , TJson <$ keyword "Json"
+            , TRef <$> ident
+            ]
+
+pOnMissing :: P OnMissing
+pOnMissing =
+    choice
+        [ OmNull <$ keyword "null"
+        , OmEmptyList <$ (symbol "[" *> symbol "]")
+        , OmEmptyMap <$ (symbol "{" *> symbol "}")
+        , OmBool True <$ keyword "true"
+        , OmBool False <$ keyword "false"
+        , OmText <$> stringLit
+        , OmInt <$> integerLiteral
+        , OmCtor <$> ident
+        ]
+
+integerLiteral :: P Integer
+integerLiteral = lexeme (L.signed (pure ()) L.decimal)
+
+oneClause :: String -> (MappedClause -> Maybe a) -> [MappedClause] -> P (Maybe a)
+oneClause clauseName select clauses =
+    case mapMaybe select clauses of
+        [] -> pure Nothing
+        [value] -> pure (Just value)
+        _ -> fail ("duplicate " <> clauseName <> " clause in mapped declaration")
+
+requiredClause :: String -> (MappedClause -> Maybe a) -> [MappedClause] -> P a
+requiredClause clauseName select clauses = do
+    found <- oneClause clauseName select clauses
+    maybe (fail ("missing " <> clauseName <> " clause in mapped structural declaration")) pure found
 
 --------------------------------------------------------------------------------
 -- Aggregate node

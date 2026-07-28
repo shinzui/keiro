@@ -15,6 +15,20 @@ module Keiro.Dsl.Grammar (
     EnumDecl (..),
     RuleDecl (..),
 
+    -- * Consumer-owned mapped types (EP-149)
+    TypeExpr (..),
+    Presence (..),
+    UnknownFields (..),
+    OnMissing (..),
+    WireField (..),
+    wireFieldLoc,
+    UnionEncoding (..),
+    WireEnum (..),
+    WireArm (..),
+    MappedShape (..),
+    HaskellSource (..),
+    MappedDecl (..),
+
     -- * The eight hole-kind types
     Derivation (..),
     DerivStrategy (..),
@@ -114,6 +128,7 @@ module Keiro.Dsl.Grammar (
     -- * The workflow/operation nodes (EP-6)
     WfBodyItem (..),
     WorkflowNode (..),
+    workflowNodeLoc,
     OperationShape (..),
     OperationNode (..),
 
@@ -179,6 +194,111 @@ data RuleDecl = RuleDecl
     , ruleCases :: ![(Name, Expr)]
     , ruleLoc :: !Loc
     }
+    deriving stock (Eq, Show, Generic)
+
+-- Consumer-owned mapped types (EP-149). The parser-facing declarations keep
+-- required facts optional so `keiro-dsl check` can report stable, located
+-- diagnostics for omissions. Keiro.Dsl.TypeGraph turns valid values into a
+-- checked representation before downstream consumers inspect them.
+
+data TypeExpr
+    = TText
+    | TInt
+    | TBool
+    | TNatural
+    | TTime
+    | TJson
+    | TOptional !TypeExpr
+    | TList !TypeExpr
+    | TMap !TypeExpr
+    | TRef !Name
+    deriving stock (Eq, Show, Generic)
+
+data Presence = PRequired | POptional
+    deriving stock (Eq, Show, Generic)
+
+data UnknownFields = RejectUnknown | IgnoreUnknown
+    deriving stock (Eq, Show, Generic)
+
+data OnMissing
+    = OmNull
+    | OmText !Text
+    | OmInt !Integer
+    | OmBool !Bool
+    | OmEmptyList
+    | OmEmptyMap
+    | OmCtor !Name
+    deriving stock (Eq, Show, Generic)
+
+data WireField = WireField
+    { wfHaskell :: !Name
+    , wfKey :: !Text
+    , wfType :: !TypeExpr
+    , wfPresence :: !Presence
+    , wfOnMissing :: !(Maybe OnMissing)
+    , wfLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+wireFieldLoc :: WireField -> Loc
+wireFieldLoc WireField{wfLoc = loc} = loc
+
+data UnionEncoding = TaggedObject
+    { ueTagField :: !Text
+    , ueContentsField :: !Text
+    , ueUnknownFields :: !UnknownFields
+    }
+    deriving stock (Eq, Show, Generic)
+
+data WireEnum = WireEnum
+    { weCtor :: !Name
+    , weTag :: !Text
+    , weLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+data WireArm = WireArm
+    { waCtor :: !Name
+    , waTag :: !Text
+    , waPayload :: !(Maybe TypeExpr)
+    , waLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+data MappedShape
+    = ShapeRecord !Name !UnknownFields ![WireField]
+    | ShapeEnum ![WireEnum]
+    | ShapeUnion !UnionEncoding ![WireArm]
+    deriving stock (Eq, Show, Generic)
+
+data HaskellSource = HaskellSource
+    { hsPackage :: !Text
+    , hsModule :: !Text
+    , hsType :: !Name
+    }
+    deriving stock (Eq, Show, Generic)
+
+data MappedDecl
+    = MappedStructural
+        { msName :: !Name
+        , msHaskell :: !(Maybe HaskellSource)
+        , msBinding :: !(Maybe Text)
+        , msBindingVersion :: !(Maybe Text)
+        , msCanonical :: !(Maybe Text)
+        , msFixtures :: !(Maybe Text)
+        , msInitial :: !(Maybe Text)
+        , msShape :: !MappedShape
+        , msLoc :: !Loc
+        }
+    | MappedOpaque
+        { moName :: !Name
+        , moHaskell :: !(Maybe HaskellSource)
+        , moCodecId :: !(Maybe Text)
+        , moCodecVersion :: !(Maybe Text)
+        , moFixtures :: !(Maybe Text)
+        , moInitial :: !(Maybe Text)
+        , moLoc :: !Loc
+        }
     deriving stock (Eq, Show, Generic)
 
 -- The eight hole-kind types. EP-1 only exercises hole-kinds 1–3 against the
@@ -976,6 +1096,9 @@ data WorkflowNode = WorkflowNode
     }
     deriving stock (Eq, Show, Generic)
 
+workflowNodeLoc :: WorkflowNode -> Loc
+workflowNodeLoc WorkflowNode{wfLoc = loc} = loc
+
 -- | The four operation shapes.
 data OperationShape
     = -- | @command on <Agg> stream from <field> via <fn> project [ … ]@
@@ -1030,7 +1153,7 @@ data Placement
     deriving stock (Eq, Show, Generic)
 
 {- | A whole @.keiro@ file: one context name, an optional module-placement
-override (the @module@/@layout@ clauses), the shared id/enum/rule declarations,
+override (the @module@/@layout@ clauses), the shared id/enum/rule/mapped declarations,
 and the list of nodes. 'specModuleRoot' and 'specLayout' are 'Nothing' when the
 spec omits the clauses, reproducing the historical default.
 -}
@@ -1041,6 +1164,7 @@ data Spec = Spec
     , specIds :: ![IdDecl]
     , specEnums :: ![EnumDecl]
     , specRules :: ![RuleDecl]
+    , specMapped :: ![MappedDecl]
     , specNodes :: ![Node]
     }
     deriving stock (Eq, Show, Generic)

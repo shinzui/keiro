@@ -56,6 +56,8 @@ docSpec s =
             ++ blankAfter (specEnums s)
             ++ map docRule (specRules s)
             ++ blankAfter (specRules s)
+            ++ map docMapped (specMapped s)
+            ++ blankAfter (specMapped s)
             ++ map docNode (specNodes s)
   where
     blankAfter xs = if null xs then [] else [mempty]
@@ -81,6 +83,121 @@ docRule d =
         ]
   where
     cas (c, e) = pretty c <+> "=>" <+> docExpr 0 e
+
+docMapped :: MappedDecl -> Doc ann
+docMapped MappedStructural{msName = name, msHaskell = haskell, msBinding = binding, msBindingVersion = bindingVersion, msCanonical = canonical, msFixtures = fixtures, msInitial = initial, msShape = shape} =
+    vsep $
+        ["mapped structural" <+> docShapeKind shape <+> pretty name <+> "{"]
+            ++ maybe [] (pure . indent 2 . docHaskellSource) haskell
+            ++ maybe [] (pure . indent 2 . docQuotedFact "binding") binding
+            ++ maybe [] (pure . indent 2 . docQuotedFact "binding-version") bindingVersion
+            ++ maybe [] (pure . indent 2 . docQuotedFact "canonical-type") canonical
+            ++ maybe [] (pure . indent 2 . docQuotedFact "fixtures") fixtures
+            ++ maybe [] (pure . indent 2 . docQuotedFact "initial") initial
+            ++ [indent 2 (docMappedShape shape), "}"]
+docMapped MappedOpaque{moName = name, moHaskell = haskell, moCodecId = codec, moCodecVersion = version, moFixtures = fixtures, moInitial = initial} =
+    vsep $
+        ["mapped opaque" <+> pretty name <+> "{"]
+            ++ maybe [] (pure . indent 2 . docHaskellSource) haskell
+            ++ maybe [] (pure . indent 2 . docQuotedFact "codec") codec
+            ++ maybe [] (pure . indent 2 . docQuotedFact "version") version
+            ++ maybe [] (pure . indent 2 . docQuotedFact "fixtures") fixtures
+            ++ maybe [] (pure . indent 2 . docQuotedFact "initial") initial
+            ++ ["}"]
+
+docShapeKind :: MappedShape -> Doc ann
+docShapeKind (ShapeRecord _ _ _) = "record"
+docShapeKind (ShapeEnum _) = "enum"
+docShapeKind (ShapeUnion _ _) = "union"
+
+docHaskellSource :: HaskellSource -> Doc ann
+docHaskellSource source =
+    "haskell"
+        <+> ("package=" <> pretty (hsPackage source))
+        <+> ("module=" <> pretty (hsModule source))
+        <+> ("type=" <> pretty (hsType source))
+
+docQuotedFact :: Doc ann -> Text -> Doc ann
+docQuotedFact label value = label <+> "=" <+> dquoted value
+
+docMappedShape :: MappedShape -> Doc ann
+docMappedShape (ShapeRecord constructor unknownFields fields) =
+    vsep $
+        [ "wire object"
+            <+> ("constructor=" <> pretty constructor)
+            <+> ("unknown-fields=" <> docUnknownFields unknownFields)
+            <+> "{"
+        ]
+            ++ map (indent 2 . docWireField) fields
+            ++ ["}"]
+docMappedShape (ShapeEnum entries) =
+    vsep $ ["wire string {"] ++ map (indent 2 . docWireEnum) entries ++ ["}"]
+docMappedShape (ShapeUnion encoding arms) =
+    vsep $
+        [ "wire tagged-object"
+            <+> ("tag=" <> dquoted (ueTagField encoding))
+            <+> ("contents=" <> dquoted (ueContentsField encoding))
+            <+> ("unknown-fields=" <> docUnknownFields (ueUnknownFields encoding))
+            <+> "{"
+        ]
+            ++ map (indent 2 . docWireArm) arms
+            ++ ["}"]
+
+docUnknownFields :: UnknownFields -> Doc ann
+docUnknownFields RejectUnknown = "reject"
+docUnknownFields IgnoreUnknown = "ignore"
+
+docWireField :: WireField -> Doc ann
+docWireField field =
+    pretty (wfHaskell field)
+        <+> "as"
+        <+> dquoted (wfKey field)
+        <+> ":"
+        <+> docTypeExpr (wfType field)
+        <+> docPresence (wfPresence field)
+        <> maybe mempty (\value -> " on-missing=" <> docOnMissing value) (wfOnMissing field)
+
+docPresence :: Presence -> Doc ann
+docPresence PRequired = "required"
+docPresence POptional = "optional"
+
+docOnMissing :: OnMissing -> Doc ann
+docOnMissing OmNull = "null"
+docOnMissing (OmText value) = dquoted value
+docOnMissing (OmInt value) = pretty value
+docOnMissing (OmBool True) = "true"
+docOnMissing (OmBool False) = "false"
+docOnMissing OmEmptyList = "[]"
+docOnMissing OmEmptyMap = "{}"
+docOnMissing (OmCtor constructor) = pretty constructor
+
+docWireEnum :: WireEnum -> Doc ann
+docWireEnum entry = pretty (weCtor entry) <+> "as" <+> dquoted (weTag entry)
+
+docWireArm :: WireArm -> Doc ann
+docWireArm arm =
+    pretty (waCtor arm)
+        <+> "as"
+        <+> dquoted (waTag arm)
+        <> maybe mempty (\payload -> " : " <> docTypeExpr payload) (waPayload arm)
+
+docTypeExpr :: TypeExpr -> Doc ann
+docTypeExpr TText = "Text"
+docTypeExpr TInt = "Int"
+docTypeExpr TBool = "Bool"
+docTypeExpr TNatural = "Natural"
+docTypeExpr TTime = "Time"
+docTypeExpr TJson = "Json"
+docTypeExpr (TOptional value) = "Optional" <+> docTypeArgument value
+docTypeExpr (TList value) = "List" <+> docTypeArgument value
+docTypeExpr (TMap value) = "Map" <+> docTypeArgument value
+docTypeExpr (TRef name) = pretty name
+
+docTypeArgument :: TypeExpr -> Doc ann
+docTypeArgument value@TOptional{} = parens (docTypeExpr value)
+docTypeArgument value@TList{} = parens (docTypeExpr value)
+docTypeArgument value@TMap{} = parens (docTypeExpr value)
+docTypeArgument value = docTypeExpr value
 
 docNode :: Node -> Doc ann
 docNode (NAggregate a) = docAggregate a
