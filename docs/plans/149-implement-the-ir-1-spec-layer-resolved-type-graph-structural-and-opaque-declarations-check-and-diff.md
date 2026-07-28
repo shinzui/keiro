@@ -69,8 +69,8 @@ plus mutation tests proving that an unvisited nested field or union arm makes th
 - [x] 2026-07-28T18:56:47Z: Milestone 1 parser support for `mapped` declarations and type expressions added to `Keiro.Dsl.Parser`.
 - [x] 2026-07-28T18:56:47Z: Milestone 1 pretty-printer support landed; 249 `keiro-dsl-test` examples and generated/fixture round trips pass.
 - [x] 2026-07-28T18:56:47Z: Milestone 1 `test/fixtures/consumer-types.keiro` canonical fixture landed; QuickCheck `genSpec` now covers mapped declarations and bounded nested type expressions.
-- [ ] Milestone 2: `Keiro.Dsl.TypeGraph` module with `resolveTypeGraph`, use-site index, root-to-leaf paths, and exported total folds/algebras for `TypeExpr` and `MappedShape`.
-- [ ] Milestone 2: compile-time traversal completeness enforced by algebra fields and fold definitions, plus `-Werror` incomplete-pattern pragmas on the new modules.
+- [x] 2026-07-28T19:09:15Z: Milestone 2 `Keiro.Dsl.TypeGraph` module landed with checked declarations, resolved expressions, ambiguity/unresolved-name/recursion rejection, root reachability, exact use-site paths, and deterministic wire fingerprints.
+- [x] 2026-07-28T19:09:15Z: Milestone 2 total traversal algebras and folds landed; package-wide `-Werror=missing-fields` plus module-local `-Werror=incomplete-patterns` make constructor/algebra omissions compile failures.
 - [ ] Milestone 3: all new `DiagnosticCode` constructors appended; `validateSpec` wired to the resolved graph.
 - [ ] Milestone 3: every IR-1 check rejection implemented with a negative fixture under `keiro-dsl/test/fixtures/` and a test asserting its code.
 - [ ] Milestone 3: guard-semantics rules (whole-value copy only; `Natural` guard rejection; mapped equality/ordering guard rejection) landed with fixtures.
@@ -98,6 +98,11 @@ implementation. Provide concise evidence.
   `WorkflowNode.wfLoc`. Enabling `DuplicateRecordFields` preserves both contracts, while the new
   `wireFieldLoc` and `workflowNodeLoc` accessors keep internal call sites unambiguous. Evidence:
   the full library and 249-example `keiro-dsl-test` suite compile and pass with both fields.
+- GHC treats an omitted record field in an algebra construction as `-Wmissing-fields`, not an
+  incomplete-pattern warning. Making that warning fatal package-wide is required for the stated
+  compile-time traversal guarantee. Evidence: a temporary `onProbe` field added to
+  `TypeExprAlgebra` made `cabal build keiro-dsl` fail at the reachability algebra construction;
+  after restoring the algebra, all 254 examples pass.
 
 
 ## Decision Log
@@ -169,7 +174,8 @@ implementation. Provide concise evidence.
 - Decision: The total-traversal guarantee is implemented with exported algebra records and
   folds (`TypeExprAlgebra`/`foldTypeExpr` and `MappedShapeAlgebra`/`foldMappedShape`), with all
   subsystems constructing a complete algebra. The defining modules also use
-  `-Werror=incomplete-patterns` for the folds themselves.
+  `-Werror=incomplete-patterns` for the folds themselves, and the package uses
+  `-Werror=missing-fields` for every algebra construction site.
   Rationale: A registry totality test proves only that registry keys are present; it cannot make
   an independently written traversal fail to compile. Adding an AST constructor changes the
   algebra and fold, forcing codec, validation, diff, golden, coverage, and projection consumers

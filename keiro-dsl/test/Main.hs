@@ -32,6 +32,7 @@ import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), d
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
 import Keiro.Dsl.ScaffoldRun (Refusal (..), ScaffoldReport (..), StaleModule (..), executeScaffold, planScaffold, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
+import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, validateSpec)
 import System.Directory (createDirectory, createDirectoryIfMissing, doesFileExist, getTemporaryDirectory, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
@@ -78,6 +79,50 @@ main = hspec $ do
                 `shouldBe` [TList (TOptional TText)]
             [waCtor arm | arm <- arms, waPayload arm == Nothing]
                 `shouldBe` ["Unknown"]
+
+    describe "mapped type graph (EP-149)" $ do
+        it "resolves checked declarations, transitive reachability, and every aggregate root path" $ do
+            source <- TIO.readFile "test/fixtures/consumer-types.keiro"
+            spec <- parseInlineSpec "test/fixtures/consumer-types.keiro" source
+            graph <- shouldResolveTypeGraph spec
+            Map.size (tgDeclarations graph) `shouldBe` 4
+            Map.lookup (MappedKey "ArtifactInfo") (tgReachability graph)
+                `shouldBe` Just (Set.fromList [MappedKey "ArtifactKind", MappedKey "ArtifactLocation"])
+            map renderUsePath (usePaths graph "ArtifactLocation")
+                `shouldBe` [ "Catalog command ObserveArtifact .artifact : ArtifactInfo .location : ArtifactLocation"
+                           , "Catalog event ArtifactObserved .artifact : ArtifactInfo .location : ArtifactLocation"
+                           , "Catalog register currentArtifact : ArtifactInfo .location : ArtifactLocation"
+                           ]
+        it "resolves every builtin through the complete expression algebra" $ do
+            source <- TIO.readFile "test/fixtures/consumer-types.keiro"
+            spec <- parseInlineSpec "test/fixtures/consumer-types.keiro" source
+            graph <- shouldResolveTypeGraph spec
+            case Map.lookup (MappedKey "ArtifactInfo") (tgDeclarations graph) of
+                Just (ResolvedStructural _ (RRecord _ _ fields)) ->
+                    Set.fromList (concatMap (foldTypeExpr expressionTags . rwfType) fields)
+                        `shouldBe` Set.fromList ["text", "int", "bool", "natural", "time", "json", "optional", "list", "map", "ref:ArtifactKind", "ref:ArtifactLocation"]
+                declaration -> expectationFailure ("unexpected ArtifactInfo declaration: " <> show declaration)
+        it "rejects direct, mutual, wrapped, and union-arm recursion" $ do
+            let direct = mappedSpec [completeStructural "A" (recordShape [TRef "A"])]
+                mutual = mappedSpec [completeStructural "A" (recordShape [TRef "B"]), completeStructural "B" (recordShape [TRef "A"])]
+                wrapped = mappedSpec [completeStructural "A" (recordShape [TList (TOptional (TRef "A"))])]
+                throughArm = mappedSpec [completeStructural "A" (ShapeUnion (TaggedObject "tag" "contents" RejectUnknown) [WireArm "Again" "again" (Just (TRef "A")) noLoc])]
+            map (hasTypeGraphError isRecursive . resolveTypeGraph) [direct, mutual, wrapped, throughArm]
+                `shouldBe` replicate 4 True
+        it "keeps existing ids and enums outside the mapped-reference namespace" $ do
+            let spec =
+                    (mappedSpec [completeStructural "A" (recordShape [TRef "ExistingId"])])
+                        { specIds = [IdDecl "ExistingId" "id" noLoc]
+                        }
+            resolveTypeGraph spec `shouldSatisfy` hasTypeGraphError isUnresolved
+        it "fingerprints wire identity while ignoring Haskell selector names" $ do
+            source <- TIO.readFile "test/fixtures/consumer-types.keiro"
+            base <- parseInlineSpec "test/fixtures/consumer-types.keiro" source
+            baseGraph <- shouldResolveTypeGraph base
+            haskellRenameGraph <- shouldResolveTypeGraph (mapArtifactField (\field -> field{wfHaskell = "renamedKey"}) base)
+            wireRenameGraph <- shouldResolveTypeGraph (mapArtifactField (\field -> field{wfKey = "renamed_key"}) base)
+            wireFingerprint haskellRenameGraph "ArtifactInfo" `shouldBe` wireFingerprint baseGraph "ArtifactInfo"
+            wireFingerprint wireRenameGraph "ArtifactInfo" `shouldNotBe` wireFingerprint baseGraph "ArtifactInfo"
 
     describe "string literal integrity" $ do
         it "parses an escaped emit-map value as exactly one row" $ do
@@ -2198,6 +2243,85 @@ parseInlineSpec :: FilePath -> T.Text -> IO Spec
 parseInlineSpec sourceName src = case parseSpec sourceName src of
     Left err -> expectationFailure (T.unpack err) >> error "unreachable"
     Right spec -> pure spec
+
+shouldResolveTypeGraph :: Spec -> IO TypeGraph
+shouldResolveTypeGraph spec = case resolveTypeGraph spec of
+    Left errors -> expectationFailure ("type graph failed: " <> show errors) >> error "unreachable"
+    Right graph -> pure graph
+
+expressionTags :: TypeExprAlgebra [T.Text]
+expressionTags =
+    TypeExprAlgebra
+        { onText = ["text"]
+        , onInt = ["int"]
+        , onBool = ["bool"]
+        , onNatural = ["natural"]
+        , onTime = ["time"]
+        , onJson = ["json"]
+        , onOptional = ("optional" :)
+        , onList = ("list" :)
+        , onMap = ("map" :)
+        , onRef = \key -> ["ref:" <> unMappedKey key]
+        }
+
+hasTypeGraphError :: (TypeGraphError -> Bool) -> Either (NonEmpty TypeGraphError) TypeGraph -> Bool
+hasTypeGraphError predicate = \case
+    Left errors -> any predicate errors
+    Right _ -> False
+
+isRecursive :: TypeGraphError -> Bool
+isRecursive TGRecursive{} = True
+isRecursive _ = False
+
+isUnresolved :: TypeGraphError -> Bool
+isUnresolved TGUnresolvedRef{} = True
+isUnresolved _ = False
+
+mappedSpec :: [MappedDecl] -> Spec
+mappedSpec declarations = Spec "mapped-test" Nothing Nothing [] [] [] declarations []
+
+completeStructural :: Name -> MappedShape -> MappedDecl
+completeStructural name shape =
+    MappedStructural
+        { msName = name
+        , msHaskell = Just (HaskellSource "mapped-test" "Example.Mapped" name)
+        , msBinding = Just ("Example.Mapped." <> T.toLower name <> "Binding")
+        , msBindingVersion = Just "1"
+        , msCanonical = Just ("example.mapped." <> name)
+        , msFixtures = Just ("Example.Mapped." <> T.toLower name <> "Cases")
+        , msInitial = Nothing
+        , msShape = shape
+        , msLoc = noLoc
+        }
+
+recordShape :: [TypeExpr] -> MappedShape
+recordShape types =
+    ShapeRecord
+        "MappedRecord"
+        RejectUnknown
+        [ WireField
+            { wfHaskell = "field" <> T.pack (show index)
+            , wfKey = "field" <> T.pack (show index)
+            , wfType = fieldType
+            , wfPresence = PRequired
+            , wfOnMissing = Nothing
+            , wfLoc = noLoc
+            }
+        | (index, fieldType) <- zip [(1 :: Int) ..] types
+        ]
+
+mapArtifactField :: (WireField -> WireField) -> Spec -> Spec
+mapArtifactField transform spec = spec{specMapped = map updateDeclaration (specMapped spec)}
+  where
+    updateDeclaration declaration@MappedStructural{msName = "ArtifactInfo", msShape = ShapeRecord constructor unknownFields fields} =
+        declaration
+            { msShape =
+                ShapeRecord
+                    constructor
+                    unknownFields
+                    [if wfKey field == "key" then transform field else field | field <- fields]
+            }
+    updateDeclaration declaration = declaration
 
 statusMapSpec :: T.Text -> T.Text
 statusMapSpec marker =

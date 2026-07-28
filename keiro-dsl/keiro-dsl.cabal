@@ -18,7 +18,7 @@ tested-with:     GHC >=9.12 && <9.13
 extra-doc-files: CHANGELOG.md
 
 common warnings
-  ghc-options: -Wall
+  ghc-options: -Wall -Werror=missing-fields
 
 common shared
   default-language:   GHC2024
@@ -46,6 +46,7 @@ library
     Keiro.Dsl.ScaffoldRecord
     Keiro.Dsl.ScaffoldRun
     Keiro.Dsl.Skeleton
+    Keiro.Dsl.TypeGraph
     Keiro.Dsl.Validate
 
   build-depends:
