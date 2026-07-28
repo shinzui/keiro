@@ -15,6 +15,12 @@ subscription or queue and lets in-flight work finish before binaries switch. A
 again because of a crash before checkpoint, a visibility timeout, or a consumer
 rebalance.
 
+`keiro-dsl diff` names these procedures in compatibility vectors as
+`stop-the-world`, `workers-first`, `drain-required`, and `producer-last`.
+Multiple names may appear when one finding crosses more than one durable
+boundary; an absent rollout entry means compatibility is not conditional on a
+deployment order.
+
 ## 1. Start From The Durable Boundary
 
 Inventory every durable value whose decoder or decision logic changes. Include

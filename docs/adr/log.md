@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-07-28
+* **Update**: Record the compatibility-vector refinement of the diff classification contract.
 * **Update**: Record the generated-harness forward/replay equality assertion as the conformance-CI gate for forward-versus-replay state divergence (plan 147).
 * **Update**: Name defaultStateCodecWithFold and FoldVersion as the first-class hand-written fold-discriminator contract.
 * **Added**: Record one private-event schema authority, total structural bindings, explicit snapshot-cache invalidation, and schema-derived Keiki projection provenance.

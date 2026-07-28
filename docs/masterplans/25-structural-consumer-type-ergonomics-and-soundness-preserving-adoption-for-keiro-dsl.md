@@ -168,7 +168,7 @@ request's origin but do not constrain the reusable Keiro API beyond the local de
 | 2 | Write the brownfield migration and transducer modeling guide | docs/plans/145-write-the-brownfield-migration-and-transducer-modeling-guide.md | None | EP-1 | Complete |
 | 3 | Give hand-written services first-class fold-fingerprint snapshot invalidation | docs/plans/146-give-hand-written-services-first-class-fold-fingerprint-snapshot-invalidation.md | None | None | Complete |
 | 4 | Generate forward-versus-replay equality assertions in the DSL harness | docs/plans/147-generate-forward-versus-replay-equality-assertions-in-the-dsl-harness.md | None | None | Complete |
-| 5 | Report evolution as a compatibility vector with remediation explanations | docs/plans/148-report-evolution-as-a-compatibility-vector-with-remediation-explanations.md | None | None | In Progress |
+| 5 | Report evolution as a compatibility vector with remediation explanations | docs/plans/148-report-evolution-as-a-compatibility-vector-with-remediation-explanations.md | None | None | Complete |
 | 6 | Implement the IR-1 spec layer: resolved type graph, structural and opaque declarations, check and diff | docs/plans/149-implement-the-ir-1-spec-layer-resolved-type-graph-structural-and-opaque-declarations-check-and-diff.md | EP-5 | None | Not Started |
 | 7 | Implement the IR-1 generation layer: total bindings, codecs, Keiki projection facade, scaffold, and conformance harness | docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md | EP-6, Keiki 0.4 | EP-4 | Not Started |
 | 8 | Reduce binding boilerplate: skeleton scaffolds, exact nominal derivation, and explain-bindings | docs/plans/151-reduce-binding-boilerplate-skeleton-scaffolds-derived-nominal-bindings-and-explain-bindings.md | EP-7 | None | Not Started |
@@ -293,8 +293,8 @@ is implemented and released.
 - [x] 2026-07-28: EP-3 jitsurei adoption, guides, ADR 0003 amendment, and full verification completed
 - [x] 2026-07-28: EP-4 forward-versus-replay equality assertion generated for aggregate harnesses
 - [x] 2026-07-28: EP-4 mutation test proves a divergent fold fails the assertion; ADR 0004 inventory amended
-- [ ] EP-5: Compatibility-vector output and per-surface classification landed behind stable codes
-- [ ] EP-5: `diff --explain` remediation output landed; consumer-neutral private/public scenarios pass
+- [x] 2026-07-28: EP-5 compatibility-vector output and per-surface classification landed behind stable codes
+- [x] 2026-07-28: EP-5 `diff --explain` remediation output landed; consumer-neutral private/public scenarios pass
 - [ ] EP-6: Resolved type-expression graph, grammar, and parser/pretty round trips landed
 - [ ] EP-6: `check` negative fixtures and recursive `diff` classification with use-site paths landed
 - [ ] EP-7: Total `StructuralBinding` API, generated codecs, Keiki 0.4 projection facade, and scaffold integration landed
@@ -355,6 +355,11 @@ Recorded during child-plan drafting (2026-07-28):
 - The `Justfile` has no keiro-dsl test recipes — `just haskell-test` does not cover
   `keiro-dsl-test` or the conformance suites — so the child plans state `cabal test`
   commands directly rather than relying on `just` recipes.
+- EP-5 found that the current aggregate-event grammar has no explicit unknown-field decode
+  policy. Its compatibility registry therefore records old-binary risk only where the present
+  spec provides evidence. EP-6 must make that policy an explicit structural-declaration fact and
+  feed it into EP-5's `ChangeContext`; inheriting an implicit reject/ignore default would make
+  nested classifications unsound.
 
 
 ## Decision Log
@@ -415,6 +420,13 @@ Recorded during child-plan drafting (2026-07-28):
   constraints, and non-empty remediation values directly. A soft dependency would require a
   temporary second classifier and a later conversion where the same mapped change could acquire
   two answers.
+  Date: 2026-07-28
+
+- Decision: EP-6 will supply explicit unknown-field policy evidence when it extends EP-5's
+  `ChangeContext`; EP-5 does not infer that policy for the current aggregate-event grammar.
+  Rationale: A compatibility vector must describe observable decoder behavior. Treating absent
+  grammar evidence as reject or ignore would overstate one deployment direction and give EP-6 a
+  misleading default at recursive use sites.
   Date: 2026-07-28
 
 - Decision: Treat Keiki 0.4.0.0's public API and tests, not Keiki IR-1 prose, as the dependency

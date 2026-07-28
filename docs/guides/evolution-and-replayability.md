@@ -69,14 +69,18 @@ one actually checks, because none of them checks everything:
 2. **`keiro-dsl check` and `keiro-dsl diff --since <git-ref>`** (DSL services
    only). `check` validates a single spec (contiguous upcaster holes, no
    emitted deprecated events, disposition tables). `diff` compares the spec
-   against a git ref and classifies changes over the *persisted decode surface*
-   (event fields and types, enums, wire spec, contract events, workqueue
-   payloads, process inputs, workflow inputs/outputs) and the *identity
-   surface* (stable names, id prefixes, dedupe keys, queue identities),
-   exiting non-zero on BREAKING. It also emits a replay-impact verdict, advises
-   on spec-visible aggregate fold, process/router decide, and timer-payload
-   changes, and prints a replay-only twin for guard tightening. Hole bodies
-   remain invisible to the differ.
+   against a git ref and gives every finding a compatibility vector over
+   `private-history-read`, `old-binary-read-new-events`,
+   `snapshot-hydration`, `public-consumer`, `persisted-identity`, and
+   `consumer-build`, plus any rollout constraints. The familiar
+   ADDITIVE/WARNING/BREAKING headline remains. The default gate preserves the
+   previous blocking behavior; repeat `--gate SURFACE` to add stricter
+   surfaces. `--explain` prints containing paths, failing directions, and
+   remedies, while `--report-out FILE` writes the
+   `keiro-dsl/diff-report/1` JSON contract. The separate replay-impact verdict
+   is unchanged. The differ also advises on spec-visible aggregate fold,
+   process/router decide, and timer-payload changes, and prints a replay-only
+   twin for guard tightening. Hole bodies remain invisible to it.
 3. **The generated harness** (DSL services only). Round-trips current-shape
    events, asserts `validateTransducer` is clean, and exercises each supplied
    versioned old-payload golden through `decodeRaw`. Capture old shapes while
@@ -115,6 +119,28 @@ gates.
 For the authoring-path view—what every validated service keeps, what requires a
 spec, and what hand-written services must replace—read
 [The Guarantee Ledger](dsl-guarantees-and-hand-written-services.md).
+
+### Reading compatibility vectors and remedies
+
+The headline answers the configured merge-gate question; the vector explains
+*why* and shows risks outside that gate. For example, adding an enum arm used
+by a private event is safe for the candidate binary reading old history but
+unsafe for an old replica reading an event emitted by the candidate. The
+default headline is WARNING because the rolling-deploy direction is visible
+but not gated by default:
+
+```text
+WARNING: PatientAcuity enum-constructor BlackTag: ... [EnumCtorAdded]
+    vector: private-history-read=compatible old-binary-read-new-events=breaking rollout=producer-last
+```
+
+The same arm used in a snapshot register produces a separate containing-path
+finding with `snapshot-hydration=advisory`; an independently owned contract
+field change reports `public-consumer=breaking`. Run with `--explain` to see
+those paths and the matching deployment, upcaster, state-codec, contract, or
+replay-only-edge remedies. Use `--report-out` for policy tooling, and make JSON
+readers ignore unknown keys because surface keys and containing paths are
+append-only.
 
 ## Adding a new event type
 

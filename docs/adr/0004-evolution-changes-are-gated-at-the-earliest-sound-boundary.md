@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-07-28T18:05:05Z
+timestamp: 2026-07-28T18:32:17Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -67,6 +67,24 @@ The landed inventory is:
 | Hole-only or hand-written fold change with a missed version bump | Invisible | Invisible | One in 1000 accepted seeds is full-replayed through its immutable seed version; divergence increments `keiro.snapshot.seed.divergence` |
 | Router/process decide surface | — | `RouterDecideSurfaceChanged` / `ProcessDecideSurfaceChanged` Advisory | Drain the subscription redelivery window; hole-only changes keep the same manual rule |
 | Process timer payload | — | `ProcessTimerPayloadChanged` Advisory | Firers must decode every pending unversioned shape or the timer exhausts attempts and dead-letters |
+| Private enum constructor addition | — | One `EnumCtorAdded` finding per containing event/register path; event use is old-binary/new-event breaking and register use is snapshot-hydration advisory | Deploy consumers before producers and invalidate/rebuild affected snapshots |
+| Snapshot-cache invalidation | Snapshot contract from ADR 0003 | `snapshot-hydration=advisory` identifies rebuild rather than event upcast work | The three-component discriminator rejects stale seeds; bump `state-codec version=` for invisible hand-owned changes |
+| Public contract change | Single-spec ownership checks only | Existing contract codes classify `public-consumer` independently from private history and identity | Deploy compatible consumers before producers or revise/version the contract |
+
+Every cross-spec finding carries a compatibility vector over six surfaces:
+`private-history-read`, `old-binary-read-new-events`,
+`snapshot-hydration`, `public-consumer`, `persisted-identity`, and
+`consumer-build`. Each verdict is `compatible`, `advisory`, `breaking`, or
+`n/a`. Rollout constraints are a zero-or-more set using the vocabulary below:
+`stop-the-world`, `workers-first`, `drain-required`, and `producer-last`. The
+default gate contains every surface except `old-binary-read-new-events`, which
+preserves the previous merge-blocking behavior; repeated `--gate` flags only
+add surfaces. ADDITIVE/WARNING/BREAKING headlines and append-only
+`DiagnosticCode` values remain the stable text contract, while the vector is
+their context-sensitive refinement. `--report-out` writes schema
+`keiro-dsl/diff-report/1`; object keys and containing paths are append-only and
+readers must ignore unknown keys. The existing replay-impact JSON contract is
+unchanged.
 
 The replay-impact machine contract is
 `{"verdict":"replay-neutral"}` or

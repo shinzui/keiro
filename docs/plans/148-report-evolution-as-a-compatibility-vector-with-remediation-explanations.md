@@ -66,8 +66,11 @@ real obligation, but never the reverse.
 - [x] 2026-07-28: Milestone 4 documentation and ADR edits — `docs/guides/evolution-and-replayability.md` and
       `docs/guides/evolve-events-safely.md` updated; ADR 0004 inventory amended; `docs/adr/log.md`
       updated via okf; Proposal Test answers recorded.
-- [ ] Milestone 4 validation — strict `just adr-validate`, unit, conformance, shell, and diff-hygiene gates green.
-- [ ] ADR distillation pass completed before marking the plan complete.
+- [x] 2026-07-28: Milestone 4 validation — strict `just adr-validate`, unit, conformance, shell,
+      and diff-hygiene gates green; the final unit run reported 247 examples and zero failures.
+- [x] 2026-07-28: ADR distillation pass completed. The durable six-surface vector, default-gate,
+      output-schema, rollout, and headline-compatibility decisions were incorporated into ADR 0004;
+      no additional ADR was warranted.
 
 
 ## Surprises & Discoveries
@@ -193,7 +196,23 @@ real obligation, but never the reverse.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-5 is complete. Every diff finding now carries a stable diagnostic code, explicit use-site
+context, a six-surface compatibility vector, and zero-or-more rollout constraints. The CLI renders
+those dimensions, accepts repeatable `--gate` selections without weakening the default gate,
+explains non-compatible findings through a total remediation registry, and writes the append-only
+`keiro-dsl/diff-report/1` JSON schema. The existing replay-impact artifact remains unchanged.
+
+The consumer-neutral fixture matrix proved that one enum addition can be advisory for snapshot
+hydration and breaking for old binaries reading new private events, while an independent contract
+change remains owned by the public-consumer surface. Text goldens preserve the established
+additive headline grammar, and JSON carries codes and paths for every finding.
+
+Validation finished with 247 unit examples and zero failures, the DSL conformance contract passing
+for both events, the diff shell integration printing its final PASS line, strict ADR validation
+accepting all 12 concepts, and `git diff --check` clean. The only intentionally deferred context
+fact is an explicit unknown-field decode policy: the present aggregate-event grammar does not model
+one, so EP-6 must populate that fact from its structural declarations rather than inherit an
+invented default.
 
 
 ## Context and Orientation

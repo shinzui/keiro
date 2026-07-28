@@ -81,3 +81,7 @@ The codec test lives in
 For the full operational procedure, including deployment ordering and replay
 checks, see
 [Evolution And Replayability](evolution-and-replayability.md).
+For DSL-authored services, its
+[compatibility-vector section](evolution-and-replayability.md#reading-compatibility-vectors-and-remedies)
+also explains the per-surface `keiro-dsl diff` output and `--explain`
+remediation blocks.
