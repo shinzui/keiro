@@ -1,6 +1,7 @@
-{- | Versioned, dependency-free persistence for the files produced by one
-successful scaffold run. Unknown header fields are ignored so v1 readers can
-consume records extended by later tool versions.
+{- | Versioned persistence for the files and mapped consumer identities used by
+one successful scaffold run. Unknown header fields are ignored so v1 readers
+can consume records extended by later tool versions. Mapping rows are canonical
+single-line JSON after a @mapping @ prefix; old readers ignore that row kind.
 -}
 module Keiro.Dsl.ScaffoldRecord (
     ScaffoldRecord (..),
@@ -9,8 +10,13 @@ module Keiro.Dsl.ScaffoldRecord (
     recordFileName,
 ) where
 
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy qualified as BL
+import Data.List (nub)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as Text
+import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
 import Keiro.Dsl.Scaffold (ModuleKind (..))
 import System.FilePath (isAbsolute, splitDirectories)
 
@@ -19,6 +25,7 @@ data ScaffoldRecord = ScaffoldRecord
     , recModuleRoot :: !Text
     , recLayout :: !Text
     , recFiles :: ![(ModuleKind, FilePath)]
+    , recMappings :: ![MappingIdentity]
     }
     deriving stock (Eq, Show)
 
@@ -31,10 +38,13 @@ renderRecord record =
         , "layout: " <> recLayout record
         ]
             <> map renderFile (recFiles record)
+            <> map renderMapping (recMappings record)
   where
     rootLabel = if T.null (recModuleRoot record) then "(none)" else recModuleRoot record
     renderFile (Generated, path) = "generated " <> T.pack path
     renderFile (HoleStub, path) = "hole " <> T.pack path
+    renderMapping mapping =
+        "mapping " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode mapping))
 
 {- | Parse a v1 record. The version header and the three required fields must
 be present exactly once. Unknown lines are ignored for forward compatibility;
@@ -48,13 +58,18 @@ parseRecord contents = case T.lines contents of
             rootLabel <- exactlyOne "module-root: " rows
             layout <- exactlyOne "layout: " rows
             files <- traverse parseFile (filter isFileRow rows)
-            pure
-                ScaffoldRecord
-                    { recSpecPath = specPath
-                    , recModuleRoot = if rootLabel == "(none)" then "" else rootLabel
-                    , recLayout = layout
-                    , recFiles = files
-                    }
+            mappings <- traverse parseMapping (filter ("mapping " `T.isPrefixOf`) rows)
+            if hasDuplicateMappingNames mappings
+                then Nothing
+                else
+                    pure
+                        ScaffoldRecord
+                            { recSpecPath = specPath
+                            , recModuleRoot = if rootLabel == "(none)" then "" else rootLabel
+                            , recLayout = layout
+                            , recFiles = files
+                            , recMappings = mappings
+                            }
     _ -> Nothing
   where
     exactlyOne prefix rows = case [value | row <- rows, Just value <- [T.stripPrefix prefix row]] of
@@ -70,6 +85,12 @@ parseRecord contents = case T.lines contents of
          in if null path || isAbsolute path || ".." `elem` splitDirectories path
                 then Nothing
                 else Just (fileKind, path)
+    parseMapping row = do
+        payload <- T.stripPrefix "mapping " row
+        Aeson.decodeStrict' (Text.encodeUtf8 payload)
+    hasDuplicateMappingNames mappings =
+        let names = map mappingSpecName mappings
+         in length names /= length (nub names)
 
 recordFileName :: Text -> FilePath
 recordFileName context = "keiro-dsl-scaffold-record." <> T.unpack context <> ".txt"

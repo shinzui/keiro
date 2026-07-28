@@ -14,6 +14,12 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   only at their declared JSON boundary, imports consumer types into aggregate
   domains, and exposes eligible total scalar getters through a narrow Keiki
   0.4 `StructuralProjections` witness facade.
+- Scaffold preflight now reports consumer packages/modules, refuses consumer
+  modules inside the generated namespace before writing, includes consumer
+  requirements in manifests, persists canonical structural/opaque mapping
+  identities as forward-compatible JSON rows, and reports mapping drift on
+  subsequent runs. Mapped register wire/binding/initial identities now
+  participate in the aggregate fold fingerprint.
 - `Keiro.Dsl.ReplayImpact` and `diff --replay-impact-out FILE`. Diffs now
   print whether stored-data replay is unchanged and can emit a stable JSON
   affected set for targeted auditing. New aggregates, events, transitions,

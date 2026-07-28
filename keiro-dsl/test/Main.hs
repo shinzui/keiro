@@ -8,7 +8,7 @@ import Control.Exception (bracket)
 import Control.Monad (filterM, forM, forM_)
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
-import Data.Either (isLeft)
+import Data.Either (isLeft, isRight)
 import Data.List (partition, sort)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
@@ -23,6 +23,7 @@ import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPay
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
+import Keiro.Dsl.MappedConsumer (ConsumerPlan (..))
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
@@ -30,7 +31,7 @@ import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
-import Keiro.Dsl.ScaffoldRun (Refusal (..), ScaffoldReport (..), StaleModule (..), executeScaffold, planScaffold, renderScaffoldReport, scaffoldModules)
+import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), StaleModule (..), executeScaffold, planScaffold, renderRefusals, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, validateSpec)
@@ -502,6 +503,13 @@ main = hspec $ do
             let surface = aggregateFoldSurface base (onlyAggregate base)
             aggregateFoldSurface wireChanged (onlyAggregate wireChanged) `shouldBe` surface
             aggregateFoldSurface projectionChanged (onlyAggregate projectionChanged) `shouldBe` surface
+        it "invalidates mapped-register snapshots when binding or wire identity changes" $ do
+            base <- specOf "test/fixtures/consumer-types.keiro"
+            bindingChanged <- specOf "test/fixtures/consumer-types-binding-change.keiro"
+            wireChanged <- specOf "test/fixtures/consumer-types-wirekey.keiro"
+            let baseFingerprint = aggregateFoldFingerprint base (onlyAggregate base)
+            aggregateFoldFingerprint bindingChanged (onlyAggregate bindingChanged) `shouldNotBe` baseFingerprint
+            aggregateFoldFingerprint wireChanged (onlyAggregate wireChanged) `shouldNotBe` baseFingerprint
 
     describe "process/timer (EP-3)" $ do
         it "parses the hospital-surge process + nested timer" $ do
@@ -1639,6 +1647,70 @@ main = hspec $ do
             facade `shouldSatisfy` T.isInfixOf "fieldShapeId _ = \"example.artifact.ArtifactInfo.v1\""
             facade `shouldSatisfy` T.isInfixOf "bindingToShape Example.Artifact.KeiroBindings.artifactInfoBinding owner"
 
+    describe "structural manifest" $ do
+        it "lists consumer packages and every domain, binding, fixture, and initial module" $ do
+            spec <- specOf "test/fixtures/consumer-types.keiro"
+            let modules = scaffoldModules (defaultContext (specContext spec)) spec
+                manifest = renderManifest "consumer-types.keiro" modules spec
+            mapM_ (\packageName -> manifestDependencies spec `shouldContain` [packageName]) ["artifact-domain", "vendor-geometry"]
+            manifest `shouldSatisfy` T.isInfixOf "consumer-packages:\n    artifact-domain\n    vendor-geometry"
+            mapM_
+                (\moduleName -> manifest `shouldSatisfy` T.isInfixOf moduleName)
+                [ "Example.Artifact.Domain"
+                , "Example.Artifact.KeiroBindings"
+                , "Vendor.Geometry"
+                , "Vendor.Geometry.KeiroBindings"
+                ]
+
+    describe "structural scaffold record" $ do
+        it "round-trips canonical mapping rows and reports binding drift on the next run" $
+            withTempDirectory "keiro-dsl-mapping-record" $ \out -> do
+                spec <- specOf "test/fixtures/consumer-types.keiro"
+                let ctx = defaultContext (specContext spec)
+                first <- executePlannedScaffold out "consumer-types.keiro" ctx spec
+                length (consumerMappings (reportConsumerPlan first)) `shouldBe` 4
+                recordText <- TIO.readFile (out </> recordFileName (specContext spec))
+                let mappingRows = filter (T.isPrefixOf "mapping ") (T.lines recordText)
+                length mappingRows `shouldBe` 4
+                fmap recMappings (parseRecord recordText) `shouldSatisfy` maybe False ((== 4) . length)
+                let bumped = spec{specMapped = map bumpArtifactBindingVersion (specMapped spec)}
+                second <- executePlannedScaffold out "consumer-types.keiro" ctx bumped
+                reportMappingDrift second
+                    `shouldSatisfy` any (\drift -> driftSpecName drift == "ArtifactInfo" && driftPrevious drift /= driftCurrent drift)
+                renderScaffoldReport second `shouldSatisfy` any (T.isInfixOf "mapping drift:")
+                case mappingRows of
+                    row : _ -> parseRecord (recordText <> row <> "\n") `shouldBe` Nothing
+                    [] -> expectationFailure "expected mapping rows"
+        it "rejects malformed known mapping JSON while ignoring unrelated future rows" $ do
+            spec <- specOf "test/fixtures/consumer-types.keiro"
+            withTempDirectory "keiro-dsl-mapping-malformed" $ \out -> do
+                report <- executePlannedScaffold out "consumer-types.keiro" (defaultContext (specContext spec)) spec
+                recordText <- TIO.readFile (reportRecordPath report)
+                parseRecord (recordText <> "mapping {not-json}\n") `shouldBe` Nothing
+                parseRecord (recordText <> "future-row retained\n") `shouldBe` parseRecord recordText
+
+    describe "structural import plan" $ do
+        it "reports the successful dependency plan in the scaffold report" $
+            withTempDirectory "keiro-dsl-dependency-plan" $ \out -> do
+                spec <- specOf "test/fixtures/consumer-types.keiro"
+                report <- executePlannedScaffold out "consumer-types.keiro" (defaultContext (specContext spec)) spec
+                renderScaffoldReport report
+                    `shouldSatisfy` any (T.isInfixOf "dependency plan: consumer packages [artifact-domain, vendor-geometry]")
+        it "refuses a binding module inside the generated namespace with the exact cycle" $ do
+            spec <- specOf "test/fixtures/consumer-types.keiro"
+            let cyclic = spec{specMapped = map moveArtifactBindingIntoGenerated (specMapped spec)}
+            case planScaffold (defaultContext (specContext cyclic)) cyclic of
+                Left refusals -> do
+                    refusals `shouldSatisfy` any isImportCycle
+                    renderRefusals refusals `shouldSatisfy` any (T.isInfixOf "Generated.ConsumerDemo.Bindings")
+                Right _ -> expectationFailure "expected an import-cycle refusal"
+        it "refuses missing mapped register initials but permits command/event-only use" $ do
+            missing <- specOf "test/fixtures/mapped-missing-initial.keiro"
+            planScaffold (defaultContext (specContext missing)) missing `shouldSatisfy` isLoweringRefusal
+            spec <- specOf "test/fixtures/consumer-types.keiro"
+            let commandOnly = removeMappedRegisterRequirements spec
+            planScaffold (defaultContext (specContext commandOnly)) commandOnly `shouldSatisfy` isRight
+
     describe "manifest (M2)" $ do
         it "lists exactly the modules the scaffolder produced" $ do
             mods <- scaffoldFixture "test/fixtures/reservation.keiro"
@@ -1786,6 +1858,7 @@ main = hspec $ do
                             , recModuleRoot = ""
                             , recLayout = "prefixed"
                             , recFiles = [(kind m, modulePath m) | (m, _) <- reportDispositions report]
+                            , recMappings = []
                             }
                 parseRecord (T.replace "spec: " "future-field: retained\nspec: " contents) `shouldBe` parseRecord contents
                 parseRecord (T.replace "record v1" "record v2" contents) `shouldBe` Nothing
@@ -2328,6 +2401,44 @@ assertSkeletonMatchesCommitted kind root = case skeletonFor kind of
                 normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText m)
   where
     kindOf = Keiro.Dsl.Scaffold.kind
+
+bumpArtifactBindingVersion :: MappedDecl -> MappedDecl
+bumpArtifactBindingVersion declaration@MappedStructural{msName = "ArtifactInfo"} =
+    declaration{msBindingVersion = Just "2"}
+bumpArtifactBindingVersion declaration = declaration
+
+moveArtifactBindingIntoGenerated :: MappedDecl -> MappedDecl
+moveArtifactBindingIntoGenerated declaration@MappedStructural{msName = "ArtifactInfo"} =
+    declaration{msBinding = Just "Generated.ConsumerDemo.Bindings.artifactInfoBinding"}
+moveArtifactBindingIntoGenerated declaration = declaration
+
+removeMappedRegisterRequirements :: Spec -> Spec
+removeMappedRegisterRequirements spec =
+    spec
+        { specMapped = map removeInitial (specMapped spec)
+        , specNodes = map removeRegisters (specNodes spec)
+        }
+  where
+    removeInitial declaration@MappedStructural{} = declaration{msInitial = Nothing}
+    removeInitial declaration@MappedOpaque{} = declaration{moInitial = Nothing}
+    removeRegisters (NAggregate aggregate) =
+        NAggregate
+            aggregate
+                { aggRegs = []
+                , aggTransitions = [transition{tWrites = []} | transition <- aggTransitions aggregate]
+                }
+    removeRegisters node = node
+
+isImportCycle :: Refusal -> Bool
+isImportCycle ImportCycle{} = True
+isImportCycle _ = False
+
+isLoweringRefusal :: Either [Refusal] modules -> Bool
+isLoweringRefusal (Left refusals) = any isLowering refusals
+  where
+    isLowering LoweringRefusal{} = True
+    isLowering _ = False
+isLoweringRefusal (Right _) = False
 
 -- | Parse a fixture into a 'Spec', failing the test on a parse error.
 specOf :: FilePath -> IO Spec

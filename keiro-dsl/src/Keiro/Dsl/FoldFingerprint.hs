@@ -9,6 +9,7 @@ module Keiro.Dsl.FoldFingerprint (
 ) where
 
 import Data.List (find)
+import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -16,6 +17,7 @@ import Data.Text qualified as T
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (fnv1a64)
+import Keiro.Dsl.TypeGraph
 
 -- | The sixteen-hex-digit identity of an aggregate's replay fold.
 aggregateFoldFingerprint :: Spec -> Aggregate -> Text
@@ -33,6 +35,7 @@ aggregateFoldSurface spec aggregate =
         "\n"
         ( map stateSegment (aggStates aggregate)
             ++ map registerSegment (aggRegs aggregate)
+            ++ mappedRegisterSegments
             ++ map transitionSegment (aggTransitions aggregate)
             ++ map ruleSegment referencedRules
         )
@@ -41,6 +44,33 @@ aggregateFoldSurface spec aggregate =
         [ rule
         | rule <- specRules spec
         , ruleName rule `Set.member` referencedRuleNames spec aggregate
+        ]
+    mappedRegisterSegments = case resolveTypeGraph spec of
+        Left _ -> []
+        Right graph ->
+            [ mappedRegisterSegment graph declaration
+            | register <- aggRegs aggregate
+            , Just declaration <- [Map.lookup (MappedKey (regType register)) (tgDeclarations graph)]
+            ]
+
+mappedRegisterSegment :: TypeGraph -> ResolvedMappedDecl -> Text
+mappedRegisterSegment graph (ResolvedStructural declaration _) =
+    T.intercalate
+        "|"
+        [ "mapped-register:" <> sdName declaration
+        , "wire=" <> wireFingerprint graph (sdName declaration)
+        , "canonical=" <> unCanonicalTypeId (sdCanonical declaration)
+        , "binding=" <> unQualifiedValueName (sdBinding declaration)
+        , "binding-version=" <> unBindingVersion (sdBindingVersion declaration)
+        , "initial=" <> maybe "(missing)" unQualifiedValueName (sdInitial declaration)
+        ]
+mappedRegisterSegment _ (ResolvedOpaque declaration) =
+    T.intercalate
+        "|"
+        [ "mapped-register:" <> odName declaration
+        , "codec=" <> unCodecIdentity (odCodecIdentity declaration)
+        , "codec-version=" <> unCodecVersion (odCodecVersion declaration)
+        , "initial=" <> maybe "(missing)" unQualifiedValueName (odInitial declaration)
         ]
 
 stateSegment :: StateDecl -> Text

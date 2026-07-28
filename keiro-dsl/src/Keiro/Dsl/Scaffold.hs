@@ -2875,6 +2875,9 @@ scaffoldRefusals spec =
     mappedTypes = case resolveTypeGraph spec of
         Left _ -> []
         Right graph -> map unMappedKey (Map.keys (tgDeclarations graph))
+    mappedDeclaration typeName = case resolveTypeGraph spec of
+        Left _ -> Nothing
+        Right graph -> Map.lookup (MappedKey typeName) (tgDeclarations graph)
     enumCtorsFor ty = case [map fst (enumCtors enum) | enum <- specEnums spec, enumName enum == ty] of
         ctors : _ -> ctors
         [] -> []
@@ -2909,6 +2912,10 @@ scaffoldRefusals spec =
             <> [ "RegInitialInvalidLiteral: aggregate '" <> aggName aggregate <> "' Int register '" <> regName reg <> "' must start at an integer literal"
                | regType reg == "Int"
                , case regInitial reg of RegInitBare value -> (readMaybe (T.unpack value) :: Maybe Int) == Nothing; RegInitText _ -> True
+               ]
+            <> [ "MappedRegisterInitialMissing: aggregate '" <> aggName aggregate <> "' register '" <> regName reg <> "' requires the mapped declaration's initial symbol"
+               | Just declaration <- [mappedDeclaration (regType reg)]
+               , mappedInitial declaration == Nothing
                ]
     aggregateFields aggregate =
         concatMap cmdFields (aggCommands aggregate)

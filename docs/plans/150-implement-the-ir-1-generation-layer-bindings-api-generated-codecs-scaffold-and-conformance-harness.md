@@ -75,9 +75,13 @@ This section must always reflect the actual current state of the work.
       `StructuralProjections` facade are registered in the single scaffold module registry.
       The 268-example `keiro-dsl-test` suite passes, including emitted shape/codec/facade pins;
       Milestone 5 owns the compiled end-to-end binding/witness and byte-golden evidence as planned.
-- [ ] Milestone 3: scaffold integration — preflight import-plan diagnostic, manifest consumer
-      packages/modules, binding identities and drift in scaffold records, Keiki constraint
-      enforcement (initial values from use sites, Eq/Show/codec constraints, first-event invertibility).
+- [x] 2026-07-28: Milestone 3 completed: one checked `ConsumerPlan` drives dependency
+      preflight, consumer manifest blocks, and canonical mapping identities; generated-namespace
+      imports/collisions refuse before writes; scaffold records round-trip structural/opaque JSON
+      rows and reports drift; mapped register initials are defended at scaffold time; and mapped
+      wire/binding/initial identities invalidate the fold fingerprint. `keiro-dsl-test` passes
+      275 examples across the `structural manifest`, `structural scaffold record`, and
+      `structural import plan` groups.
 - [ ] Milestone 4: harness generation — both binding laws, codec round trips, branch-coverage
       obligations, defaults/null/unknown-field/union-arm cases, upcaster goldens, forward-versus-replay
       equality over mapped registers.
@@ -115,6 +119,10 @@ implementation. Provide concise evidence.
   composition, and unconditional mapped-codec imports would have changed every legacy generated
   `Codec.hs`. The emitter now gates the expanded import/helper surface on actual mapped event use;
   every pre-existing committed scaffold pin remains unchanged.
+- The scaffold record did not need a version bump to persist mapping identity. A known
+  `mapping ` row contains one Aeson JSON object, malformed or duplicate known rows fail parsing,
+  and unrelated future rows remain ignored. This preserves the v1 record's intended
+  forward-compatible line protocol while making binding/codec drift visible.
 
 
 ## Decision Log
@@ -254,6 +262,13 @@ drive one leaf shape module per structural declaration, aggregate domains name o
 types, codecs own every declared structural key/tag/default and stop at opaque boundaries, and
 Keiki field witnesses are generated only for required total scalar record paths. Mapped samples
 come from declared `FixtureCases`; mapped register initials come only from declared symbols.
+
+Milestone 3 makes the ring operationally inspectable before it writes. `ConsumerPlan` is the
+single derivation for manifest packages/modules and persisted mapping identities; dependency
+preflight rejects generated-namespace ownership violations, and successful reports print the
+same plan. Mapping changes are deliberately report-only because plan 149's `diff` owns their
+compatibility classification. Snapshot fold fingerprints now include mapped wire, binding,
+canonical/codec, and initial identity for mapped register roots.
 
 
 ## Context and Orientation

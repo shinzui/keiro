@@ -36,6 +36,7 @@ import Data.List (nub, sort)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
 import Keiro.Dsl.Scaffold (ScaffoldModule (..))
 
 {- | Render a Cabal-pasteable manifest from the modules a scaffold run produced
@@ -57,6 +58,20 @@ renderManifest specName mods spec =
                , "build-depends:"
                ]
             ++ map ("    , " <>) (manifestDependencies spec)
+            ++ consumerBlocks
+  where
+    plan = consumerPlan spec
+    consumerBlocks
+        | null (consumerMappings plan) = []
+        | otherwise =
+            [ ""
+            , "consumer-packages:"
+            ]
+                ++ map ("    " <>) (consumerPackages plan)
+                ++ [ ""
+                   , "consumer-modules:"
+                   ]
+                ++ map ("    " <>) (consumerModules plan)
 
 {- | The dotted module name recovered from a 'ScaffoldModule' path: drop the
 trailing @.hs@ and replace @/@ with @.@.
@@ -69,7 +84,7 @@ in the spec. @base@ is always included.
 -}
 manifestDependencies :: Spec -> [Text]
 manifestDependencies spec =
-    sort (nub ("base" : concatMap depsForNode (specNodes spec)))
+    sort (nub ("base" : consumerPackages (consumerPlan spec) <> concatMap depsForNode (specNodes spec)))
 
 -- | The dependencies a single node kind implies (see the module header table).
 depsForNode :: Node -> [Text]

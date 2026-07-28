@@ -5,6 +5,7 @@ module Keiro.Dsl.ScaffoldRun (
     Refusal (..),
     WriteDisposition (..),
     StaleModule (..),
+    MappingDrift (..),
     ScaffoldReport (..),
     scaffoldModules,
     scaffoldModulesWithGoldens,
@@ -25,8 +26,10 @@ import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
+import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
+import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..), resolveTypeGraph)
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath (takeDirectory, (</>))
 
@@ -35,6 +38,7 @@ data Refusal
     | FirewallBreach ![(FilePath, Text, Int)]
     | LoweringRefusal ![Text]
     | MissingGeneratedBanner ![FilePath]
+    | ImportCycle ![Text]
     deriving stock (Eq, Show)
 
 data WriteDisposition = Overwritten | Created | Skipped
@@ -43,6 +47,13 @@ data WriteDisposition = Overwritten | Created | Skipped
 data StaleModule = StaleModule
     { staleKind :: !ModuleKind
     , stalePath :: !FilePath
+    }
+    deriving stock (Eq, Show)
+
+data MappingDrift = MappingDrift
+    { driftSpecName :: !Text
+    , driftPrevious :: !(Maybe MappingIdentity)
+    , driftCurrent :: !(Maybe MappingIdentity)
     }
     deriving stock (Eq, Show)
 
@@ -55,6 +66,9 @@ data ScaffoldReport = ScaffoldReport
     , reportRecordPath :: !FilePath
     , reportPreviousSpecPath :: !(Maybe Text)
     , reportStale :: ![StaleModule]
+    , reportConsumerPlan :: !ConsumerPlan
+    , reportConstraintPlan :: ![Text]
+    , reportMappingDrift :: ![MappingDrift]
     }
     deriving stock (Eq, Show)
 
@@ -97,9 +111,57 @@ planScaffoldWithGoldens goldens ctx spec =
         breaches = firewallBreaches modules
         refusals =
             collisionRefusals modules
+                <> dependencyRefusals ctx spec modules
                 <> [FirewallBreach breaches | not (null breaches)]
                 <> [LoweringRefusal lowering | let lowering = scaffoldRefusals spec, not (null lowering)]
      in if null refusals then Right modules else Left refusals
+
+dependencyRefusals :: Context -> Spec -> [ScaffoldModule] -> [Refusal]
+dependencyRefusals ctx spec modules = collisionWithConsumers <> namespaceCycles
+  where
+    plan = consumerPlan spec
+    generatedByName = Map.fromList [(moduleNameOf (modulePath moduleValue), moduleValue) | moduleValue <- modules]
+    collisionWithConsumers =
+        [ PathCollision
+            (modulePath generated)
+            [origin generated, "consumer module " <> consumerModule]
+        | consumerModule <- consumerModules plan
+        , Just generated <- [Map.lookup consumerModule generatedByName]
+        ]
+    namespaceCycles =
+        [ ImportCycle [importer, consumerModule, importer]
+        | consumerModule <- consumerModules plan
+        , generatedNamespaceOwned ctx consumerModule
+        , importer <- take 1 (importersOf consumerModule modules <> [contextGeneratedRoot ctx])
+        ]
+
+generatedNamespaceOwned :: Context -> Text -> Bool
+generatedNamespaceOwned ctx consumerModule = case placement ctx of
+    GeneratedPrefix -> contextGeneratedRoot ctx `T.isPrefixOf` consumerModule
+    CollocatedLeaf ->
+        (root <> contextSegment <> ".") `T.isPrefixOf` consumerModule
+            && ".Generated" `T.isInfixOf` consumerModule
+  where
+    root = if T.null (moduleRoot ctx) then "" else moduleRoot ctx <> "."
+    contextSegment = pascalFromKebab (contextName ctx)
+
+contextGeneratedRoot :: Context -> Text
+contextGeneratedRoot ctx = case placement ctx of
+    GeneratedPrefix -> root <> "Generated." <> contextSegment
+    CollocatedLeaf -> root <> contextSegment <> ".Generated"
+  where
+    root = if T.null (moduleRoot ctx) then "" else moduleRoot ctx <> "."
+    contextSegment = pascalFromKebab (contextName ctx)
+
+importersOf :: Text -> [ScaffoldModule] -> [Text]
+importersOf imported =
+    map (moduleNameOf . modulePath)
+        . filter (any (importsModule imported) . T.lines . moduleText)
+
+importsModule :: Text -> Text -> Bool
+importsModule expected line = case T.words (T.strip line) of
+    "import" : rest -> expected `elem` rest
+    _ -> False
 
 collisionRefusals :: [ScaffoldModule] -> [Refusal]
 collisionRefusals modules =
@@ -126,11 +188,13 @@ executeScaffold out forceGeneratedOverwrite specPath ctx spec modules = do
             let recordPath = out </> recordFileName (specContext spec)
             previousRecord <- readRecord recordPath
             stale <- maybe (pure []) (existingStale out modules) previousRecord
+            let currentConsumerPlan = consumerPlan spec
+                drift = maybe [] (mappingDrift (consumerMappings currentConsumerPlan) . recMappings) previousRecord
             createDirectoryIfMissing True out
             dispositions <- mapM (writeModule out) modules
             let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
             TIO.writeFile manifestPath (renderManifest (T.pack specPath) modules spec)
-            TIO.writeFile recordPath (renderRecord (currentRecord specPath ctx modules))
+            TIO.writeFile recordPath (renderRecord (currentRecord specPath ctx spec modules))
             pure $
                 Right
                     ScaffoldReport
@@ -142,7 +206,43 @@ executeScaffold out forceGeneratedOverwrite specPath ctx spec modules = do
                         , reportRecordPath = recordPath
                         , reportPreviousSpecPath = recSpecPath <$> previousRecord
                         , reportStale = stale
+                        , reportConsumerPlan = currentConsumerPlan
+                        , reportConstraintPlan = constraintPlan spec currentConsumerPlan
+                        , reportMappingDrift = drift
                         }
+
+constraintPlan :: Spec -> ConsumerPlan -> [Text]
+constraintPlan spec plan = case resolveTypeGraph spec of
+    Left _ -> []
+    Right graph ->
+        let registerRoots =
+                Set.fromList
+                    [ key
+                    | RootRegister _ _ key <- tgUseSites graph
+                    ]
+         in map (constraintFor registerRoots) (consumerMappings plan)
+  where
+    constraintFor registerRoots mapping =
+        mappingSpecName mapping
+            <> ": "
+            <> T.intercalate ", " (baseConstraints mapping <> registerConstraints registerRoots mapping)
+    baseConstraints StructuralMapping{} = ["Eq", "Show", "CanonicalTypeName", "StructuralBinding"]
+    baseConstraints OpaqueMapping{} = ["Eq", "Show", "ToJSON", "FromJSON"]
+    registerConstraints roots mapping
+        | MappedKey (mappingSpecName mapping) `Set.member` roots = ["register initial", "snapshot ToJSON", "snapshot FromJSON"]
+        | otherwise = []
+
+mappingDrift :: [MappingIdentity] -> [MappingIdentity] -> [MappingDrift]
+mappingDrift current previous =
+    [ MappingDrift name old new
+    | name <- Set.toAscList (Map.keysSet oldByName <> Map.keysSet newByName)
+    , let old = Map.lookup name oldByName
+    , let new = Map.lookup name newByName
+    , old /= new
+    ]
+  where
+    oldByName = Map.fromList [(mappingSpecName mapping, mapping) | mapping <- previous]
+    newByName = Map.fromList [(mappingSpecName mapping, mapping) | mapping <- current]
 
 readRecord :: FilePath -> IO (Maybe ScaffoldRecord)
 readRecord path = do
@@ -158,13 +258,14 @@ existingStale out modules record = fmap concat $ mapM stillExists removed
         exists <- doesFileExist (out </> path)
         pure [StaleModule fileKind path | exists]
 
-currentRecord :: FilePath -> Context -> [ScaffoldModule] -> ScaffoldRecord
-currentRecord specPath ctx modules =
+currentRecord :: FilePath -> Context -> Spec -> [ScaffoldModule] -> ScaffoldRecord
+currentRecord specPath ctx spec modules =
     ScaffoldRecord
         { recSpecPath = T.pack specPath
         , recModuleRoot = moduleRoot ctx
         , recLayout = case placement ctx of GeneratedPrefix -> "prefixed"; CollocatedLeaf -> "collocated"
         , recFiles = [(kind m, modulePath m) | m <- modules]
+        , recMappings = consumerMappings (consumerPlan spec)
         }
 
 missingGeneratedBanners :: FilePath -> [ScaffoldModule] -> IO [FilePath]
@@ -215,6 +316,11 @@ renderRefusals = concatMap render
         ]
             <> map ("  " <>) (map T.pack paths)
             <> ["  (adopted as hand code? move it, or re-run with --force-generated-overwrite)", "nothing was written"]
+    render (ImportCycle path) =
+        [ "error: generated/consumer import cycle -- refusing to scaffold; nothing was written"
+        , "  " <> T.intercalate " -> " path
+        , "  keep bindings in a leaf module that imports only Structural.Shape.* and Keiro.Codec.Structural"
+        ]
 
 renderScaffoldReport :: ScaffoldReport -> [Text]
 renderScaffoldReport report =
@@ -223,9 +329,13 @@ renderScaffoldReport report =
         <> map moduleLine dispositions
         <> [ "firewall: OK (" <> tshow generatedCount <> " generated modules scanned, 0 forbidden operators)"
            , harnessLine
+           , dependencyLine
            , "manifest: " <> T.pack (reportManifestPath report)
+           , "record:   " <> T.pack (reportRecordPath report)
            ]
         <> previousSpecNote
+        <> constraintSection
+        <> mappingDriftSection
         <> staleSection
   where
     ctx = reportContext report
@@ -253,6 +363,14 @@ renderScaffoldReport report =
     harnessLine = case harnesses of
         [] -> "harness:  (none emitted)"
         _ -> "harness:  run `cabal test <your-component>` over " <> T.unwords harnesses
+    dependencyLine =
+        "dependency plan: consumer packages "
+            <> renderBracketed (consumerPackages (reportConsumerPlan report))
+            <> ", consumer modules "
+            <> renderBracketed (consumerModules (reportConsumerPlan report))
+    constraintSection = case reportConstraintPlan report of
+        [] -> []
+        constraints -> "constraint plan:" : map ("  " <>) constraints
     previousSpecNote = case reportPreviousSpecPath report of
         Just previous
             | previous /= T.pack (reportSpecPath report) ->
@@ -260,6 +378,16 @@ renderScaffoldReport report =
                 , "      specs sharing context " <> contextName ctx <> " in one --out also share " <> T.pack (reportManifestPath report)
                 ]
         _ -> []
+    mappingDriftSection = case reportMappingDrift report of
+        [] -> []
+        drifts ->
+            ["mapping drift: " <> tshow (length drifts) <> " declaration(s) changed since the previous scaffold:"]
+                <> concatMap driftLines drifts
+    driftLines drift =
+        [ "  " <> driftSpecName drift
+        , "    previous: " <> maybe "(absent)" renderMappingIdentity (driftPrevious drift)
+        , "    current:  " <> maybe "(absent)" renderMappingIdentity (driftCurrent drift)
+        ]
     staleSection = case reportStale report of
         [] -> []
         stale ->
@@ -270,6 +398,33 @@ renderScaffoldReport report =
     staleLine stale = case staleKind stale of
         Generated -> "  generated " <> T.pack (stalePath stale) <> "  (safe to delete; still on disk)"
         HoleStub -> "  hole      " <> T.pack (stalePath stale) <> "  (hand-owned — review before deleting)"
+
+renderBracketed :: [Text] -> Text
+renderBracketed values = "[" <> T.intercalate ", " values <> "]"
+
+renderMappingIdentity :: MappingIdentity -> Text
+renderMappingIdentity StructuralMapping{mappingPackage, mappingModule, mappingType, mappingBindingSymbol, mappingBindingVersion} =
+    "structural "
+        <> mappingPackage
+        <> ":"
+        <> mappingModule
+        <> "."
+        <> mappingType
+        <> " binding="
+        <> mappingBindingSymbol
+        <> " version="
+        <> mappingBindingVersion
+renderMappingIdentity OpaqueMapping{mappingPackage, mappingModule, mappingType, mappingCodecIdentity, mappingCodecVersion} =
+    "opaque "
+        <> mappingPackage
+        <> ":"
+        <> mappingModule
+        <> "."
+        <> mappingType
+        <> " codec="
+        <> mappingCodecIdentity
+        <> " version="
+        <> mappingCodecVersion
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show
