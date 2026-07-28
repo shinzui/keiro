@@ -71,9 +71,9 @@ plus mutation tests proving that an unvisited nested field or union arm makes th
 - [x] 2026-07-28T18:56:47Z: Milestone 1 `test/fixtures/consumer-types.keiro` canonical fixture landed; QuickCheck `genSpec` now covers mapped declarations and bounded nested type expressions.
 - [x] 2026-07-28T19:09:15Z: Milestone 2 `Keiro.Dsl.TypeGraph` module landed with checked declarations, resolved expressions, ambiguity/unresolved-name/recursion rejection, root reachability, exact use-site paths, and deterministic wire fingerprints.
 - [x] 2026-07-28T19:09:15Z: Milestone 2 total traversal algebras and folds landed; package-wide `-Werror=missing-fields` plus module-local `-Werror=incomplete-patterns` make constructor/algebra omissions compile failures.
-- [ ] Milestone 3: all new `DiagnosticCode` constructors appended; `validateSpec` wired to the resolved graph.
-- [ ] Milestone 3: every IR-1 check rejection implemented with a negative fixture under `keiro-dsl/test/fixtures/` and a test asserting its code.
-- [ ] Milestone 3: guard-semantics rules (whole-value copy only; `Natural` guard rejection; mapped equality/ordering guard rejection) landed with fixtures.
+- [x] 2026-07-28T19:21:45Z: Milestone 3 appended all single-spec mapped `DiagnosticCode` constructors and wired raw declaration checks plus the resolved graph into `validateSpec`.
+- [x] 2026-07-28T19:21:45Z: Milestone 3 validation contract landed with 24 one-fault negative fixtures, exact-code assertions, numeric default-bound coverage, and canonical `check` output `OK`; 257 examples pass.
+- [x] 2026-07-28T19:21:45Z: Milestone 3 guard semantics landed: whole-value writes/copies remain legal, mapped and `Natural` guard operands reject, and the parallel `Time` guard fixture passes.
 - [ ] Milestone 4: `Keiro.Dsl.MappedDiff` recursive differ with per-root use-site paths; wired into `diffSpecs` shared-declaration phase.
 - [ ] Milestone 4: full Evolution Contract classification matrix implemented and covered by evolution fixture pairs.
 - [ ] Milestone 4: `Keiro.Dsl.ReplayImpact` extended so nested mapped breaks name affected event types and snapshot streams in the JSON output.
@@ -103,6 +103,11 @@ implementation. Provide concise evidence.
   compile-time traversal guarantee. Evidence: a temporary `onProbe` field added to
   `TypeExprAlgebra` made `cabal build keiro-dsl` fail at the reachability algebra construction;
   after restoring the algebra, all 254 examples pass.
+- Graph construction intentionally stops at missing mandatory declaration facts, so lexical and
+  identity checks that should still be visible on an incomplete declaration cannot depend on a
+  resolved graph. `validateMapped` therefore runs raw fact checks first and reserves all recursive
+  shape/default/nullability work for the resolved folds. The 24 fixture matrix demonstrates that
+  each one-fault input retains its intended single diagnostic.
 
 
 ## Decision Log
@@ -154,6 +159,16 @@ implementation. Provide concise evidence.
   opaque-guard marker can be added later additively without changing any accepted spec. The
   curated-set table must be re-verified against keiki source (located via mori) at
   implementation time, not assumed from memory.
+  Date: 2026-07-28
+
+- Decision: Activate the stricter mapped guard-domain audit when a spec opts into mapped
+  declarations. Existing unmapped specs retain their established enum/id guard behavior; a mapped
+  spec is audited against the IR-1 curated scalar set (`Text`, `Int`, `Bool`, `Time`) across all
+  typed register and command-field operands.
+  Rationale: IR-1 introduces the new consumer-type soundness boundary and must not retroactively
+  reinterpret older specs outside that boundary. Within the boundary, ids, enums, `Natural`, JSON
+  containers, and all mapped values remain rejected while whole-value writes and event copies stay
+  legal.
   Date: 2026-07-28
 
 - Decision: Hard-depend on plan 148's context-sensitive compatibility API. Emit one stable

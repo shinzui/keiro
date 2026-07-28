@@ -1,0 +1,12 @@
+context mapped-ambiguous
+
+mapped structural record Text {
+  haskell package=example-domain module=Example.Domain type=TextValue
+  binding = "Example.Bindings.textBinding"
+  binding-version = "1"
+  canonical-type = "example.Text.v1"
+  fixtures = "Example.Bindings.textCases"
+  wire object constructor=TextValue unknown-fields=reject {
+    value as "value" : Text required
+  }
+}

@@ -1,0 +1,19 @@
+context mapped-guard-time
+
+mapped structural record Evidence {
+  haskell package=example-domain module=Example.Domain type=Evidence
+  binding = "Example.Bindings.evidenceBinding"
+  binding-version = "1"
+  canonical-type = "example.Evidence.v1"
+  fixtures = "Example.Bindings.evidenceCases"
+  wire object constructor=Evidence unknown-fields=reject {
+    value as "value" : Text required
+  }
+}
+
+aggregate Holder
+  regs
+    marker Bool = placeholder
+  states Empty Done!
+  command Compare { value:Time }
+  Empty -- Compare --> guard value < value ; goto Done

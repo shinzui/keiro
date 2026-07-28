@@ -1,0 +1,17 @@
+context mapped-missing-initial
+
+mapped structural record Thing {
+  haskell package=example-domain module=Example.Domain type=Thing
+  binding = "Example.Bindings.thingBinding"
+  binding-version = "1"
+  canonical-type = "example.Thing.v1"
+  fixtures = "Example.Bindings.thingCases"
+  wire object constructor=Thing unknown-fields=reject {
+    value as "value" : Text required
+  }
+}
+
+aggregate Holder
+  regs
+    current Thing = initial
+  states Empty!

@@ -1,0 +1,23 @@
+context mapped-import-conflict
+
+mapped structural record FirstThing {
+  haskell package=example-domain module=Example.Domain type=Thing
+  binding = "Example.Bindings.firstBinding"
+  binding-version = "1"
+  canonical-type = "example.First.v1"
+  fixtures = "Example.Bindings.firstCases"
+  wire object constructor=Thing unknown-fields=reject {
+    value as "value" : Text required
+  }
+}
+
+mapped structural record SecondThing {
+  haskell package=example-domain module=Example.Domain type=Thing
+  binding = "Example.Bindings.secondBinding"
+  binding-version = "1"
+  canonical-type = "example.Second.v1"
+  fixtures = "Example.Bindings.secondCases"
+  wire object constructor=Thing unknown-fields=reject {
+    value as "value" : Text required
+  }
+}

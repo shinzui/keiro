@@ -1,0 +1,13 @@
+context mapped-dup-armname
+
+mapped structural union Choice {
+  haskell package=example-domain module=Example.Domain type=Choice
+  binding = "Example.Bindings.choiceBinding"
+  binding-version = "1"
+  canonical-type = "example.Choice.v1"
+  fixtures = "Example.Bindings.choiceCases"
+  wire tagged-object tag="tag" contents="contents" unknown-fields=reject {
+    One as "one" : Text
+    One as "other" : Text
+  }
+}

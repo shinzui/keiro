@@ -21,6 +21,7 @@ module Keiro.Dsl.Validate (
 import Data.Bits (xor)
 import Data.Char (isControl, isSpace, ord)
 import Data.List (sortOn)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
@@ -30,6 +31,7 @@ import Data.Text qualified as T
 import Data.Word (Word64)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
+import Keiro.Dsl.TypeGraph
 import Numeric (showHex)
 
 data Severity = Error | Warning
@@ -208,6 +210,23 @@ data DiagnosticCode
     | ContractEventAdded
     | ContractTopicAdded
     | WorkflowEvolutionGuardAdded
+    | -- MasterPlan 25 / EP-149 (consumer-owned mapped types).
+      MappedUnresolvedName
+    | MappedAmbiguousName
+    | MappedDuplicateFieldName
+    | MappedDuplicateWireKey
+    | MappedDuplicateArmName
+    | MappedDuplicateWireTag
+    | MappedNonInjectiveNullability
+    | MappedRecursiveType
+    | MappedUnsupportedEncoding
+    | MappedMissingIngredient
+    | MappedMissingInitialValue
+    | MappedInvalidHaskellName
+    | MappedInvalidIdentity
+    | MappedImportConflict
+    | MappedDefaultIllTyped
+    | MappedGuardUnsupported
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -247,7 +266,487 @@ line for stable, readable output.
 -}
 validateSpec :: Spec -> [Diagnostic]
 validateSpec spec =
-    sortOn line (validateNames spec ++ specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
+    sortOn line (validateNames spec ++ validateMapped spec ++ specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
+
+{- | Validate consumer-owned mapped declarations without inspecting consumer
+Haskell. Symbol-shaped facts are checked lexically here; GHC remains the
+authority for whether the named packages, modules, values, types, and
+instances actually exist with the promised types.
+-}
+validateMapped :: Spec -> [Diagnostic]
+validateMapped spec =
+    mappedLexicalRules spec
+        ++ mappedIdentityRules spec
+        ++ mappedConflictRules spec
+        ++ case resolveTypeGraph spec of
+            Left errors -> concatMap (typeGraphDiagnostic spec) (NE.toList errors)
+            Right graph -> mappedGraphRules spec graph
+
+typeGraphDiagnostic :: Spec -> TypeGraphError -> [Diagnostic]
+typeGraphDiagnostic spec = \case
+    TGDeclError name declarationError ->
+        [ mkErr (mappedLine spec name) diagnosticCode $
+            "mapped declaration '" <> name <> "': " <> declarationErrorMessage declarationError
+        ]
+      where
+        diagnosticCode = case declarationError of
+            MissingHaskellSource{} -> MappedMissingIngredient
+            MissingStructuralBinding{} -> MappedMissingIngredient
+            MissingStructuralBindingVersion{} -> MappedMissingIngredient
+            MissingCanonicalType{} -> MappedMissingIngredient
+            MissingFixtureCases{} -> MappedMissingIngredient
+            MissingOpaqueCodecIdentity{} -> MappedMissingIngredient
+            MissingOpaqueCodecVersion{} -> MappedMissingIngredient
+            EmptyQualifiedValueName{} -> MappedInvalidHaskellName
+            EmptyCanonicalTypeId{} -> MappedInvalidIdentity
+            EmptyBindingVersion{} -> MappedInvalidIdentity
+            EmptyCodecIdentity{} -> MappedInvalidIdentity
+            EmptyCodecVersion{} -> MappedInvalidIdentity
+    TGAmbiguousName name origins ->
+        [ mkErr (mappedLine spec name) MappedAmbiguousName $
+            "type name '" <> name <> "' is ambiguous across " <> T.intercalate ", " origins
+        ]
+    TGUnresolvedRef owner missing loc ->
+        [ mkErr (locLine loc) MappedUnresolvedName $
+            "mapped declaration '" <> owner <> "' references unresolved mapped type '" <> missing <> "'"
+        ]
+    TGRecursive names ->
+        [ mkErr (mappedLine spec (headOr "<mapped>" names)) MappedRecursiveType $
+            "recursive structural mapping is unsupported: " <> T.intercalate " -> " (names <> take 1 names)
+        ]
+
+declarationErrorMessage :: MappedDeclError -> Text
+declarationErrorMessage = \case
+    MissingHaskellSource _ -> "missing complete haskell package/module/type ingredient"
+    MissingStructuralBinding _ -> "missing binding ingredient; GHC will verify the named value and its type"
+    MissingStructuralBindingVersion _ -> "missing binding-version ingredient"
+    MissingCanonicalType _ -> "missing canonical-type ingredient"
+    MissingFixtureCases _ -> "missing fixtures ingredient; GHC will verify the named FixtureCases value"
+    MissingOpaqueCodecIdentity _ -> "missing opaque codec identity ingredient"
+    MissingOpaqueCodecVersion _ -> "missing opaque codec version ingredient"
+    EmptyQualifiedValueName _ -> "a binding, fixture, or initial symbol is empty; GHC will verify a syntactically valid qualified value"
+    EmptyCanonicalTypeId _ -> "canonical-type must be non-empty"
+    EmptyBindingVersion _ -> "binding-version must be non-empty"
+    EmptyCodecIdentity _ -> "opaque codec identity must be non-empty"
+    EmptyCodecVersion _ -> "opaque codec version must be non-empty"
+
+mappedLine :: Spec -> Name -> Int
+mappedLine spec name =
+    maybe 1 (locLine . mappedLoc) (firstMatching ((== name) . mappedName) (specMapped spec))
+
+mappedName :: MappedDecl -> Name
+mappedName MappedStructural{msName = name} = name
+mappedName MappedOpaque{moName = name} = name
+
+mappedLoc :: MappedDecl -> Loc
+mappedLoc MappedStructural{msLoc = loc} = loc
+mappedLoc MappedOpaque{moLoc = loc} = loc
+
+mappedHaskell :: MappedDecl -> Maybe HaskellSource
+mappedHaskell MappedStructural{msHaskell = source} = source
+mappedHaskell MappedOpaque{moHaskell = source} = source
+
+mappedCanonical :: MappedDecl -> Maybe Text
+mappedCanonical MappedStructural{msCanonical = canonical} = canonical
+mappedCanonical MappedOpaque{} = Nothing
+
+mappedLexicalRules :: Spec -> [Diagnostic]
+mappedLexicalRules spec = concatMap declarationRules (specMapped spec)
+  where
+    declarationRules declaration =
+        constructorRule "mapped declaration name" (mappedName declaration) declaration
+            ++ maybe [] (haskellRules declaration) (mappedHaskell declaration)
+            ++ qualifiedFacts declaration
+            ++ shapeConstructorRules declaration
+
+    haskellRules declaration source =
+        [ invalid declaration $ "Haskell package '" <> hsPackage source <> "' does not follow Cabal package-name grammar"
+        | not (cabalPackageName (hsPackage source))
+        ]
+            ++ [ invalid declaration $ "Haskell module '" <> hsModule source <> "' must be dot-separated Upper identifiers"
+               | not (moduleNameSafe (hsModule source))
+               ]
+            ++ [ invalid declaration $ "Haskell type '" <> hsType source <> "' must be an Upper identifier"
+               | not (constructorSafe (hsType source))
+               ]
+
+    qualifiedFacts MappedStructural{msBinding = binding, msFixtures = fixtures, msInitial = initial, msLoc = loc} =
+        concatMap (qualifiedRule loc) [("binding", binding), ("fixtures", fixtures), ("initial", initial)]
+    qualifiedFacts MappedOpaque{moFixtures = fixtures, moInitial = initial, moLoc = loc} =
+        concatMap (qualifiedRule loc) [("fixtures", fixtures), ("initial", initial)]
+
+    qualifiedRule loc (category, value) = case value of
+        Just symbol
+            | not (T.null symbol) && not (qualifiedValueSafe symbol) ->
+                [ mkErr (locLine loc) MappedInvalidHaskellName $
+                    category <> " symbol '" <> symbol <> "' must be a module path plus a lower-initial value; GHC will verify that it exists with the promised type"
+                ]
+        _ -> []
+
+    shapeConstructorRules declaration = case declaration of
+        MappedStructural{msShape = ShapeRecord constructor _ fields} ->
+            constructorRule "record constructor" constructor declaration
+                ++ [ invalidAt (wireFieldLoc field) $ "record selector '" <> wfHaskell field <> "' must be a lower-initial Haskell identifier"
+                   | field <- fields
+                   , not (lowerIdentifierSafe (wfHaskell field))
+                   ]
+        MappedStructural{msShape = ShapeEnum entries} ->
+            [ invalidAt (weLoc entry) $ "enum constructor '" <> weCtor entry <> "' must be an Upper identifier"
+            | entry <- entries
+            , not (constructorSafe (weCtor entry))
+            ]
+        MappedStructural{msShape = ShapeUnion _ arms} ->
+            [ invalidAt (waLoc arm) $ "union constructor '" <> waCtor arm <> "' must be an Upper identifier"
+            | arm <- arms
+            , not (constructorSafe (waCtor arm))
+            ]
+        MappedOpaque{} -> []
+
+    constructorRule category value declaration =
+        [ invalid declaration $ category <> " '" <> value <> "' must be an Upper identifier"
+        | not (constructorSafe value)
+        ]
+    invalid declaration detail = invalidAt (mappedLoc declaration) detail
+    invalidAt loc detail =
+        mkErr (locLine loc) MappedInvalidHaskellName (detail <> "; this is a syntax check only, and GHC will verify the consumer declaration")
+
+mappedIdentityRules :: Spec -> [Diagnostic]
+mappedIdentityRules spec =
+    [ mkErr (locLine (mappedLoc declaration)) MappedInvalidIdentity $
+        "mapped declaration '" <> mappedName declaration <> "' has an identity/version containing an ASCII control character"
+    | declaration <- specMapped spec
+    , value <- identityValues declaration
+    , T.any asciiControl value
+    ]
+  where
+    identityValues MappedStructural{msBindingVersion = bindingVersion, msCanonical = canonical} = present [bindingVersion, canonical]
+    identityValues MappedOpaque{moCodecId = codecIdentity, moCodecVersion = codecVersion} = present [codecIdentity, codecVersion]
+    present = foldr (maybe id (:)) []
+
+mappedConflictRules :: Spec -> [Diagnostic]
+mappedConflictRules spec = sourceCollisions ++ canonicalCollisions ++ packageCollisions
+  where
+    declarations = specMapped spec
+    sourceFacts = [(declaration, source) | declaration <- declarations, source <- maybeToList (mappedHaskell declaration)]
+    sourceCollisions =
+        [ conflict declaration $
+            "Haskell target '" <> hsModule source <> "." <> hsType source <> "' is claimed by more than one mapped declaration"
+        | (declaration, source) <- duplicatesBy (\(_, value) -> (hsModule value, hsType value)) sourceFacts
+        ]
+    canonicalFacts = [(declaration, canonical) | declaration <- declarations, canonical <- maybeToList (mappedCanonical declaration), not (T.null canonical)]
+    canonicalCollisions =
+        [ conflict declaration $ "canonical-type '" <> canonical <> "' is claimed by more than one mapped declaration"
+        | (declaration, canonical) <- duplicatesBy snd canonicalFacts
+        ]
+    moduleFacts = [(declaration, hsModule source, hsPackage source) | (declaration, source) <- sourceFacts]
+    packageCollisions =
+        [ conflict declaration $
+            "Haskell module '" <> moduleName <> "' is declared from conflicting packages '" <> oldPackage <> "' and '" <> packageName <> "'"
+        | (index, (declaration, moduleName, packageName)) <- zip [0 :: Int ..] moduleFacts
+        , (_, oldModule, oldPackage) <- take index moduleFacts
+        , oldModule == moduleName
+        , oldPackage /= packageName
+        ]
+    conflict declaration detail = mkErr (locLine (mappedLoc declaration)) MappedImportConflict detail
+    maybeToList = maybe [] pure
+
+mappedGraphRules :: Spec -> TypeGraph -> [Diagnostic]
+mappedGraphRules spec graph =
+    concatMap declarationRules (Map.elems (tgDeclarations graph))
+        ++ mappedRegisterInitialRules spec graph
+        ++ if null (specMapped spec) then [] else mappedGuardRules spec graph
+  where
+    declarationRules =
+        foldMappedDecl
+            MappedDeclAlgebra
+                { onStructuralDecl = \declaration shape ->
+                    foldMappedShape (shapeRules declaration) shape
+                , onOpaqueDecl = const []
+                }
+
+    shapeRules declaration =
+        MappedShapeAlgebra
+            { onRecord = \_ _ fields ->
+                [ mappedError (rwfLoc field) MappedDuplicateFieldName declaration $
+                    "record selector '" <> rwfHaskell field <> "' is declared more than once"
+                | field <- duplicatesBy rwfHaskell fields
+                ]
+                    ++ [ mappedError (rwfLoc field) MappedDuplicateWireKey declaration $
+                            "record wire key '" <> rwfKey field <> "' is declared more than once"
+                       | field <- duplicatesBy rwfKey fields
+                       ]
+                    ++ [ mappedError (rwfLoc field) MappedUnsupportedEncoding declaration "record wire keys must be non-empty"
+                       | field <- fields
+                       , T.null (rwfKey field)
+                       ]
+                    ++ concatMap (fieldRules declaration) fields
+            , onEnum = \entries ->
+                [ mappedError (weLoc entry) MappedDuplicateArmName declaration $
+                    "enum constructor '" <> weCtor entry <> "' is declared more than once"
+                | entry <- duplicatesBy weCtor entries
+                ]
+                    ++ [ mappedError (weLoc entry) MappedDuplicateWireTag declaration $
+                            "enum wire spelling '" <> weTag entry <> "' is declared more than once"
+                       | entry <- duplicatesBy weTag entries
+                       ]
+                    ++ [ mappedError (weLoc entry) MappedUnsupportedEncoding declaration "enum wire spellings must be non-empty"
+                       | entry <- entries
+                       , T.null (weTag entry)
+                       ]
+            , onUnion = \encoding arms ->
+                [ mappedError (sdLoc declaration) MappedUnsupportedEncoding declaration "tagged-object tag and contents keys must be distinct"
+                | ueTagField encoding == ueContentsField encoding
+                ]
+                    ++ [ mappedError (sdLoc declaration) MappedUnsupportedEncoding declaration "tagged-object tag and contents keys must be non-empty"
+                       | T.null (ueTagField encoding) || T.null (ueContentsField encoding)
+                       ]
+                    ++ [ mappedError (rwaLoc arm) MappedDuplicateArmName declaration $
+                            "union constructor '" <> rwaCtor arm <> "' is declared more than once"
+                       | arm <- duplicatesBy rwaCtor arms
+                       ]
+                    ++ [ mappedError (rwaLoc arm) MappedDuplicateWireTag declaration $
+                            "union wire tag '" <> rwaTag arm <> "' is declared more than once"
+                       | arm <- duplicatesBy rwaTag arms
+                       ]
+                    ++ [ mappedError (rwaLoc arm) MappedUnsupportedEncoding declaration "union wire tags must be non-empty"
+                       | arm <- arms
+                       , T.null (rwaTag arm)
+                       ]
+                    ++ concatMap (armRules declaration) arms
+            }
+
+    fieldRules declaration field =
+        defaultRules declaration field
+            ++ [ mappedError (rwfLoc field) MappedNonInjectiveNullability declaration $
+                    "field '" <> rwfHaskell field <> "' contains Optional around a null-capable Json, Optional, or opaque mapped value"
+               | hasNonInjectiveOptional graph (rwfType field)
+               ]
+
+    armRules declaration arm =
+        [ mappedError (rwaLoc arm) MappedNonInjectiveNullability declaration $
+            "union arm '" <> rwaCtor arm <> "' contains Optional around a null-capable Json, Optional, or opaque mapped value"
+        | payload <- maybeToList (rwaPayload arm)
+        , hasNonInjectiveOptional graph payload
+        ]
+
+    defaultRules declaration field = case (rwfPresence field, rwfOnMissing field) of
+        (PRequired, Just _) -> [illTyped "required fields cannot declare on-missing"]
+        (POptional, Nothing) ->
+            [ mappedError (rwfLoc field) MappedMissingIngredient declaration $
+                "optional field '" <> rwfHaskell field <> "' is missing its on-missing policy"
+            ]
+        (POptional, Just value)
+            | not (defaultMatches graph (rwfType field) value) -> [illTyped "on-missing value does not match the field type or numeric bounds"]
+        _ -> []
+      where
+        illTyped detail =
+            mappedError (rwfLoc field) MappedDefaultIllTyped declaration $
+                "field '" <> rwfHaskell field <> "': " <> detail
+
+    mappedError loc diagnosticCode declaration detail =
+        mkErr (locLine loc) diagnosticCode $
+            "mapped declaration '" <> sdName declaration <> "' " <> detail
+    maybeToList = maybe [] pure
+
+data DefaultType
+    = DefaultText
+    | DefaultInt
+    | DefaultBool
+    | DefaultNatural
+    | DefaultOptional
+    | DefaultList
+    | DefaultMap
+    | DefaultEnum !(Set Name)
+    | DefaultOther
+
+defaultMatches :: TypeGraph -> ResolvedTypeExpr -> OnMissing -> Bool
+defaultMatches graph expression value = case (defaultType graph expression, value) of
+    (DefaultText, OmText _) -> True
+    (DefaultInt, OmInt integer) -> integer >= toInteger (minBound :: Int) && integer <= toInteger (maxBound :: Int)
+    (DefaultBool, OmBool _) -> True
+    (DefaultNatural, OmInt integer) -> integer >= 0
+    (DefaultOptional, OmNull) -> True
+    (DefaultList, OmEmptyList) -> True
+    (DefaultMap, OmEmptyMap) -> True
+    (DefaultEnum constructors, OmCtor constructor) -> constructor `Set.member` constructors
+    _ -> False
+
+defaultType :: TypeGraph -> ResolvedTypeExpr -> DefaultType
+defaultType graph =
+    foldTypeExpr
+        TypeExprAlgebra
+            { onText = DefaultText
+            , onInt = DefaultInt
+            , onBool = DefaultBool
+            , onNatural = DefaultNatural
+            , onTime = DefaultOther
+            , onJson = DefaultOther
+            , onOptional = const DefaultOptional
+            , onList = const DefaultList
+            , onMap = const DefaultMap
+            , onRef = referencedDefaultType graph
+            }
+
+referencedDefaultType :: TypeGraph -> MappedKey -> DefaultType
+referencedDefaultType graph key = case Map.lookup key (tgDeclarations graph) of
+    Nothing -> DefaultOther
+    Just declaration ->
+        foldMappedDecl
+            MappedDeclAlgebra
+                { onStructuralDecl = \_ shape ->
+                    foldMappedShape
+                        MappedShapeAlgebra
+                            { onRecord = \_ _ _ -> DefaultOther
+                            , onEnum = DefaultEnum . Set.fromList . map weCtor
+                            , onUnion = \_ _ -> DefaultOther
+                            }
+                        shape
+                , onOpaqueDecl = const DefaultOther
+                }
+            declaration
+
+data NullabilityFacts = NullabilityFacts
+    { nfTopNull :: !Bool
+    , nfBadOptional :: !Bool
+    }
+
+hasNonInjectiveOptional :: TypeGraph -> ResolvedTypeExpr -> Bool
+hasNonInjectiveOptional graph =
+    nfBadOptional
+        . foldTypeExpr
+            TypeExprAlgebra
+                { onText = nonNull
+                , onInt = nonNull
+                , onBool = nonNull
+                , onNatural = nonNull
+                , onTime = nonNull
+                , onJson = nullable
+                , onOptional = \child -> NullabilityFacts True (nfTopNull child || nfBadOptional child)
+                , onList = nestedNonNull
+                , onMap = nestedNonNull
+                , onRef = \key -> if mappedRefIsOpaque graph key then nullable else nonNull
+                }
+  where
+    nonNull = NullabilityFacts False False
+    nullable = NullabilityFacts True False
+    nestedNonNull child = NullabilityFacts False (nfBadOptional child)
+
+mappedRefIsOpaque :: TypeGraph -> MappedKey -> Bool
+mappedRefIsOpaque graph key = case Map.lookup key (tgDeclarations graph) of
+    Nothing -> False
+    Just declaration ->
+        foldMappedDecl
+            MappedDeclAlgebra
+                { onStructuralDecl = \_ _ -> False
+                , onOpaqueDecl = const True
+                }
+            declaration
+
+mappedRegisterInitialRules :: Spec -> TypeGraph -> [Diagnostic]
+mappedRegisterInitialRules spec graph =
+    concatMap aggregateRules [aggregate | NAggregate aggregate <- specNodes spec]
+  where
+    aggregateRules aggregate = concatMap registerRule (aggRegs aggregate)
+    registerRule register = case Map.lookup (MappedKey (regType register)) (tgDeclarations graph) of
+        Nothing -> []
+        Just declaration -> case regInitial register of
+            RegInitBare "initial"
+                | mappedInitial declaration == Nothing ->
+                    [ mkErr (locLine (regLoc register)) MappedMissingInitialValue $
+                        "mapped register '" <> regName register <> "' requires declaration '" <> regType register <> "' to name an explicit initial value"
+                    ]
+                | otherwise -> []
+            _ ->
+                [ mkErr (locLine (regLoc register)) RegisterInitialOutOfScope $
+                    "mapped register '" <> regName register <> "' must use the bare initial token; the declaration-owned symbol is verified by GHC"
+                ]
+    mappedInitial =
+        foldMappedDecl
+            MappedDeclAlgebra
+                { onStructuralDecl = \declaration _ -> sdInitial declaration
+                , onOpaqueDecl = odInitial
+                }
+
+{- | Mapped values support whole-value writes and event copies, but guards may
+only operate on Keiki's curated scalar set. Nested access has no spelling in
+the grammar, so it is unrepresentable rather than silently accepted.
+-}
+mappedGuardRules :: Spec -> TypeGraph -> [Diagnostic]
+mappedGuardRules spec graph =
+    [ mkErr (locLine (tLoc transition)) MappedGuardUnsupported $
+        "guard operand '" <> operand <> "' has non-symbolic type '" <> operandType <> "'; mapped values support whole-value copy, while guards are limited to Text, Int, Bool, and Time"
+    | NAggregate aggregate <- specNodes spec
+    , transition <- aggTransitions aggregate
+    , guardExpression <- maybe [] pure (tGuard transition)
+    , operand <- dedup (exprNames guardExpression)
+    , operandType <- maybeToList (guardOperandType aggregate transition operand)
+    , not (guardTypeSupported graph operandType)
+    ]
+  where
+    maybeToList = maybe [] pure
+
+guardOperandType :: Aggregate -> Transition -> Name -> Maybe Name
+guardOperandType aggregate transition operand =
+    case [regType register | register <- aggRegs aggregate, regName register == operand] of
+        value : _ -> Just value
+        [] -> case [fieldType field | command <- aggCommands aggregate, cmdName command == tCommand transition, field <- cmdFields command, fieldName field == operand] of
+            value : _ -> value
+            [] -> Nothing
+
+guardTypeSupported :: TypeGraph -> Name -> Bool
+guardTypeSupported graph typeName =
+    typeName `Set.member` Set.fromList ["Text", "Int", "Bool", "Time", "UTCTime"]
+        && Map.notMember (MappedKey typeName) (tgDeclarations graph)
+
+cabalPackageName :: Text -> Bool
+cabalPackageName packageName =
+    not (null components) && all validComponent components
+  where
+    components = T.splitOn "-" packageName
+    validComponent component =
+        not (T.null component)
+            && T.all asciiAlphaNum component
+            && T.any asciiLetter component
+
+moduleNameSafe :: Text -> Bool
+moduleNameSafe moduleName =
+    not (null components) && all constructorSafe components
+  where
+    components = T.splitOn "." moduleName
+
+qualifiedValueSafe :: Text -> Bool
+qualifiedValueSafe qualified = case reverse (T.splitOn "." qualified) of
+    value : reversedModule ->
+        not (null reversedModule)
+            && lowerIdentifierSafe value
+            && all constructorSafe reversedModule
+    [] -> False
+
+lowerIdentifierSafe :: Text -> Bool
+lowerIdentifierSafe name = case T.uncons name of
+    Just (first, rest) -> asciiLower first && T.all asciiAlphaNumOrUnderscore rest && name `Set.notMember` haskellKeywords
+    Nothing -> False
+
+asciiAlphaNum :: Char -> Bool
+asciiAlphaNum c = asciiLetter c || (c >= '0' && c <= '9')
+
+asciiLetter :: Char -> Bool
+asciiLetter c = asciiUpper c || asciiLower c
+
+asciiControl :: Char -> Bool
+asciiControl c = ord c < 32 || ord c == 127
+
+firstMatching :: (a -> Bool) -> [a] -> Maybe a
+firstMatching predicate = \case
+    [] -> Nothing
+    value : rest
+        | predicate value -> Just value
+        | otherwise -> firstMatching predicate rest
+
+headOr :: a -> [a] -> a
+headOr fallback = \case
+    [] -> fallback
+    value : _ -> value
 
 {- | Reject names that would make the scaffolder emit illegal Haskell. The
 parser enforces the ASCII alphabet; this pass applies the category-specific

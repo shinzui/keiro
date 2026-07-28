@@ -1,0 +1,12 @@
+context mapped-recursive
+
+mapped structural record Loop {
+  haskell package=example-domain module=Example.Domain type=Loop
+  binding = "Example.Bindings.loopBinding"
+  binding-version = "1"
+  canonical-type = "example.Loop.v1"
+  fixtures = "Example.Bindings.loopCases"
+  wire object constructor=Loop unknown-fields=reject {
+    next as "next" : Loop required
+  }
+}

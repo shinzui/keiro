@@ -79,6 +79,47 @@ main = hspec $ do
                 `shouldBe` [TList (TOptional TText)]
             [waCtor arm | arm <- arms, waPayload arm == Nothing]
                 `shouldBe` ["Unknown"]
+        it "rejects every mapped validation fixture with its stable diagnostic code" $ do
+            let cases =
+                    [ ("mapped-unresolved.keiro", MappedUnresolvedName)
+                    , ("mapped-ambiguous.keiro", MappedAmbiguousName)
+                    , ("mapped-dup-fieldname.keiro", MappedDuplicateFieldName)
+                    , ("mapped-dup-wirekey.keiro", MappedDuplicateWireKey)
+                    , ("mapped-dup-armname.keiro", MappedDuplicateArmName)
+                    , ("mapped-dup-tag.keiro", MappedDuplicateWireTag)
+                    , ("mapped-recursive.keiro", MappedRecursiveType)
+                    , ("mapped-recursive-mutual.keiro", MappedRecursiveType)
+                    , ("mapped-bad-encoding.keiro", MappedUnsupportedEncoding)
+                    , ("mapped-union-key-collision.keiro", MappedUnsupportedEncoding)
+                    , ("mapped-optional-json.keiro", MappedNonInjectiveNullability)
+                    , ("mapped-optional-optional.keiro", MappedNonInjectiveNullability)
+                    , ("mapped-optional-opaque.keiro", MappedNonInjectiveNullability)
+                    , ("mapped-missing-binding.keiro", MappedMissingIngredient)
+                    , ("mapped-missing-binding-version.keiro", MappedMissingIngredient)
+                    , ("mapped-missing-canonical.keiro", MappedMissingIngredient)
+                    , ("mapped-missing-fixture.keiro", MappedMissingIngredient)
+                    , ("mapped-missing-initial.keiro", MappedMissingInitialValue)
+                    , ("mapped-bad-haskell-name.keiro", MappedInvalidHaskellName)
+                    , ("mapped-empty-identity.keiro", MappedInvalidIdentity)
+                    , ("mapped-import-conflict.keiro", MappedImportConflict)
+                    , ("mapped-illtyped-default.keiro", MappedDefaultIllTyped)
+                    , ("mapped-guard.keiro", MappedGuardUnsupported)
+                    , ("mapped-guard-natural.keiro", MappedGuardUnsupported)
+                    ]
+            forM_ cases $ \(fixture, expected) ->
+                errorCodesOf ("test/fixtures/" <> fixture) `shouldReturn` [expected]
+        it "keeps Time in Keiki's curated guard set while rejecting Natural" $
+            errorCodesOf "test/fixtures/mapped-guard-time.keiro" `shouldReturn` []
+        it "rejects required defaults, missing optional policies, Int overflow, and negative Natural defaults" $ do
+            let invalidFields =
+                    [ WireField "requiredDefault" "requiredDefault" TText PRequired (Just (OmText "x")) noLoc
+                    , WireField "missingPolicy" "missingPolicy" TText POptional Nothing noLoc
+                    , WireField "overflow" "overflow" TInt POptional (Just (OmInt (toInteger (maxBound :: Int) + 1))) noLoc
+                    , WireField "negativeNatural" "negativeNatural" TNatural POptional (Just (OmInt (-1))) noLoc
+                    ]
+                declaration = completeStructural "Defaults" (ShapeRecord "Defaults" RejectUnknown invalidFields)
+            errorCodes (mappedSpec [declaration])
+                `shouldBe` [MappedDefaultIllTyped, MappedMissingIngredient, MappedDefaultIllTyped, MappedDefaultIllTyped]
 
     describe "mapped type graph (EP-149)" $ do
         it "resolves checked declarations, transitive reachability, and every aggregate root path" $ do

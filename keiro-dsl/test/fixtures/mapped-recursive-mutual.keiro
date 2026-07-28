@@ -1,0 +1,23 @@
+context mapped-recursive-mutual
+
+mapped structural record LeftThing {
+  haskell package=example-domain module=Example.Domain type=LeftThing
+  binding = "Example.Bindings.leftBinding"
+  binding-version = "1"
+  canonical-type = "example.Left.v1"
+  fixtures = "Example.Bindings.leftCases"
+  wire object constructor=LeftThing unknown-fields=reject {
+    right as "right" : RightThing required
+  }
+}
+
+mapped structural record RightThing {
+  haskell package=example-domain module=Example.Domain type=RightThing
+  binding = "Example.Bindings.rightBinding"
+  binding-version = "1"
+  canonical-type = "example.Right.v1"
+  fixtures = "Example.Bindings.rightCases"
+  wire object constructor=RightThing unknown-fields=reject {
+    left as "left" : Optional LeftThing required
+  }
+}

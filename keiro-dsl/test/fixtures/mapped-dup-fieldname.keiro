@@ -1,0 +1,13 @@
+context mapped-dup-fieldname
+
+mapped structural record Thing {
+  haskell package=example-domain module=Example.Domain type=Thing
+  binding = "Example.Bindings.thingBinding"
+  binding-version = "1"
+  canonical-type = "example.Thing.v1"
+  fixtures = "Example.Bindings.thingCases"
+  wire object constructor=Thing unknown-fields=reject {
+    value as "first" : Text required
+    value as "second" : Text required
+  }
+}

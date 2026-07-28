@@ -1,0 +1,13 @@
+context mapped-dup-wirekey
+
+mapped structural record Thing {
+  haskell package=example-domain module=Example.Domain type=Thing
+  binding = "Example.Bindings.thingBinding"
+  binding-version = "1"
+  canonical-type = "example.Thing.v1"
+  fixtures = "Example.Bindings.thingCases"
+  wire object constructor=Thing unknown-fields=reject {
+    first  as "value" : Text required
+    second as "value" : Text required
+  }
+}

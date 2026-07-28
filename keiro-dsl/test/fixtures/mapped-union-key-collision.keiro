@@ -1,0 +1,12 @@
+context mapped-union-key-collision
+
+mapped structural union Choice {
+  haskell package=example-domain module=Example.Domain type=Choice
+  binding = "Example.Bindings.choiceBinding"
+  binding-version = "1"
+  canonical-type = "example.Choice.v1"
+  fixtures = "Example.Bindings.choiceCases"
+  wire tagged-object tag="kind" contents="kind" unknown-fields=reject {
+    One as "one" : Text
+  }
+}
