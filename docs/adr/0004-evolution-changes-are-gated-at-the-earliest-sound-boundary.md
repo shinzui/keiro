@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-07-23T19:51:44Z
+timestamp: 2026-07-28T18:05:05Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -61,6 +61,7 @@ The landed inventory is:
 | Deprecated event with a replay-only emitter | `EventRetirementInProgress` Warning | Replay-safe cutover Advisory | Transducer boundary validates the replay-only edge |
 | Guard tightening | Replay-only edge discipline from ADR 0002 | `AggGuardTightened` prints the retained twin and affected replay surface | Targeted real-log audit fails without a required twin and passes with it |
 | Fold/control-state change | Snapshot contract from ADR 0003 | `AggFoldSurfaceChanged` Advisory | Snapshot discriminator rejects stale seeds |
+| Forward/replay state divergence (dishonest wire/inversion boundary, later mapped-register bindings) | `validateTransducer` in the generated harness proves the declared structure; honesty of `WireCtor`/`InCtor` is not spec-expressible | Not required | Generated harness steps fixture commands forward, decodes the emitted chain through the generated codec, replays via `applyEventsEither`, and compares final vertex and every register in conformance CI; the DB-backed replay audit and the advisory post-append verification remain the stored-history and production gates |
 | New scaffolded workqueue payload | No payload-evolution grammar yet | Existing workqueue shape changes keep their normal classifications | Generated `QueueCodec` starts at schema version 1 with a `keiroJobCodec` `{v,t,data}` envelope; existing bare-payload queues must drain before adoption |
 | Replay-impacting aggregate change | — | `replay-neutral`, or deterministic per-aggregate event types and snapshot-stream inclusion | `AuditTargeted` reads only selected streams; replay failure or seed divergence exits 1 |
 | Hole-only or hand-written fold change with a missed version bump | Invisible | Invisible | One in 1000 accepted seeds is full-replayed through its immutable seed version; divergence increments `keiro.snapshot.seed.divergence` |

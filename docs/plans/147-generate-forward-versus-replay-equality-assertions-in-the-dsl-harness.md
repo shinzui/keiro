@@ -71,9 +71,13 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 - [x] 2026-07-28: M2 `keiro-dsl/test/replay-mutation-test.sh` turns exactly the
       forward/replay `note` register assertion red while validator, codec, accept, and final
       vertex remain green.
-- [ ] M3: ADR 0004 gate-inventory row added, `log.md` updated via `okf log add`, strict OKF
-      validation passes.
-- [ ] M3: Living sections finalized; MasterPlan 25 progress entries for EP-4 ticked.
+- [x] 2026-07-28: M3 ADR 0004 gate-inventory row added, `log.md` updated via
+      `okf log add`, and strict profiled OKF validation passes.
+- [x] 2026-07-28: M3 living sections finalized; MasterPlan 25 registry and progress entries
+      for EP-4 marked complete.
+- [x] 2026-07-28: Final validation passed: all 25 `keiro-dsl` suites (243 DSL examples),
+      the negative mutation and restored honest replay suite, `cabal build all`, `nix fmt`,
+      strict profiled ADR validation, and diff hygiene.
 
 
 ## Surprises & Discoveries
@@ -167,7 +171,25 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-4 delivered a generated forward-versus-replay witness for every sampled, guard-accepted
+initial-state transition that is live and emits events. The harness steps the command forward,
+round-trips the emitted chain through the generated codec, replays it with
+`applyEventsEither`, and reports separate equality results for the final vertex and every
+declared register. Register-free aggregates retain the vertex assertion, while replay-only and
+non-emitting transitions are intentionally outside this finite witness.
+
+The dedicated `replay-divergence.keiro` conformance package and executable mutation script prove
+the new register comparison is independently effective. Its idempotent dishonest `WireCtor`
+passes Keiki's rebuild check and leaves validation, codec, acceptance, and final-vertex assertions
+green, but the generated `note` register assertion turns red. This is the same honesty boundary
+that EP-7 will exercise for consumer-owned structural bindings.
+
+The implementation also made same-typed `Text` fixture fields distinguishable and established
+stable per-transition/per-register labels for later harness extensions. Coverage remains finite:
+it uses generated initial-state fixture commands rather than proving every command value or
+multi-step history. EP-7 owns mapped-value fixtures and can extend the assertion without changing
+its semantics. The ADR distillation pass amended ADR 0004's existing landed inventory; no new ADR
+was needed because the earliest-sound-boundary policy itself did not change.
 
 
 ## Context and Orientation

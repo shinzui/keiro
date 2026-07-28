@@ -167,7 +167,7 @@ request's origin but do not constrain the reusable Keiro API beyond the local de
 | 1 | Document the guarantee ledger: what the DSL buys and what hand-written services lose | docs/plans/144-document-the-guarantee-ledger-what-the-dsl-buys-and-what-hand-written-services-lose.md | None | None | Complete |
 | 2 | Write the brownfield migration and transducer modeling guide | docs/plans/145-write-the-brownfield-migration-and-transducer-modeling-guide.md | None | EP-1 | Complete |
 | 3 | Give hand-written services first-class fold-fingerprint snapshot invalidation | docs/plans/146-give-hand-written-services-first-class-fold-fingerprint-snapshot-invalidation.md | None | None | Complete |
-| 4 | Generate forward-versus-replay equality assertions in the DSL harness | docs/plans/147-generate-forward-versus-replay-equality-assertions-in-the-dsl-harness.md | None | None | In Progress |
+| 4 | Generate forward-versus-replay equality assertions in the DSL harness | docs/plans/147-generate-forward-versus-replay-equality-assertions-in-the-dsl-harness.md | None | None | Complete |
 | 5 | Report evolution as a compatibility vector with remediation explanations | docs/plans/148-report-evolution-as-a-compatibility-vector-with-remediation-explanations.md | None | None | Not Started |
 | 6 | Implement the IR-1 spec layer: resolved type graph, structural and opaque declarations, check and diff | docs/plans/149-implement-the-ir-1-spec-layer-resolved-type-graph-structural-and-opaque-declarations-check-and-diff.md | EP-5 | None | Not Started |
 | 7 | Implement the IR-1 generation layer: total bindings, codecs, Keiki projection facade, scaffold, and conformance harness | docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md | EP-6, Keiki 0.4 | EP-4 | Not Started |
@@ -291,8 +291,8 @@ is implemented and released.
 - [x] 2026-07-28: EP-2 brownfield migration path drafted (goldens first, versioned cutover, upcasters, audit)
 - [x] 2026-07-28: EP-3 fold-fingerprint helper API landed in keiro with discriminator and full-replay tests
 - [x] 2026-07-28: EP-3 jitsurei adoption, guides, ADR 0003 amendment, and full verification completed
-- [ ] EP-4: Forward-versus-replay equality assertion generated for aggregate harnesses
-- [ ] EP-4: Mutation test proves a divergent fold fails the assertion; ADR 0004 inventory amended
+- [x] 2026-07-28: EP-4 forward-versus-replay equality assertion generated for aggregate harnesses
+- [x] 2026-07-28: EP-4 mutation test proves a divergent fold fails the assertion; ADR 0004 inventory amended
 - [ ] EP-5: Compatibility-vector output and per-surface classification landed behind stable codes
 - [ ] EP-5: `diff --explain` remediation output landed; consumer-neutral private/public scenarios pass
 - [ ] EP-6: Resolved type-expression graph, grammar, and parser/pretty round trips landed
