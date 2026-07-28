@@ -158,6 +158,40 @@ test-suite keiro-dsl-conformance-structural
     , text        >=2.1
     , time        >=1.12
 
+-- Plan 152 / Experiment B: a consumer-owned historical codec and finite JSON
+-- corpus compared with the generated structural codec. The comparison module
+-- is opt-in tooling output and is not part of the production scaffold record.
+test-suite keiro-dsl-conformance-codec-compare
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs:
+    test/conformance-codec-compare test/conformance-structural
+
+  main-is:        Main.hs
+  other-modules:
+    Conformance.CodecCompare.Historical
+    Conformance.Structural.Bindings
+    Conformance.Structural.Domain
+    Generated.StructuralConformance.ArtifactCatalog.Codec
+    Generated.StructuralConformance.ArtifactCatalog.Domain
+    Generated.StructuralConformance.Structural.CodecCompare.ArtifactInfo
+    Generated.StructuralConformance.Structural.Shape.ArtifactInfo
+    Generated.StructuralConformance.Structural.Shape.ArtifactKind
+    Generated.StructuralConformance.Structural.Shape.ArtifactLocation
+    Generated.StructuralConformance.Structural.Shape.ArtifactMetadata
+
+  build-depends:
+    , aeson       >=2.2.1 && <2.3
+    , base        >=4.21  && <5
+    , containers  >=0.6
+    , deepseq     >=1.5
+    , directory   >=1.3
+    , filepath    >=1.4
+    , keiki       >=0.4   && <0.5
+    , keiro
+    , keiro-dsl
+    , text        >=2.1
+
 -- Plan 147 M2: a dedicated honest-wire baseline plus a dormant idempotent
 -- dishonest WireCtor used by replay-mutation-test.sh to prove that generated
 -- forward/replay register comparisons catch state divergence missed by the

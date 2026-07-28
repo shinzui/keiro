@@ -1,0 +1,6 @@
+{
+  "artifact_key": "artifact-local",
+  "display_name": "Local file",
+  "location": {"tag": "local_file", "contents": "/tmp/artifact.txt"},
+  "metadata": {"note": null}
+}

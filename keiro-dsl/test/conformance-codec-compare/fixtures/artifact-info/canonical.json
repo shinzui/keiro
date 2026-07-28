@@ -1,0 +1,10 @@
+{
+  "artifact_key": "artifact-canonical",
+  "display_name": "Canonical",
+  "artifact_hash": "sha256:03",
+  "artifact_kind": "guide",
+  "location": {"tag": "Canonical"},
+  "metadata": {"note": "legacy tag"},
+  "active": true,
+  "tags": ["legacy"]
+}

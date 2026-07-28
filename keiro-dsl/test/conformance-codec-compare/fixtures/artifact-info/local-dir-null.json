@@ -1,0 +1,10 @@
+{
+  "artifact_key": "artifact-directory",
+  "display_name": "Local directory",
+  "artifact_hash": null,
+  "artifact_kind": "reference",
+  "location": {"tag": "local_dir", "contents": "/tmp/artifacts"},
+  "metadata": {"note": "directory"},
+  "active": true,
+  "tags": ["legacy"]
+}

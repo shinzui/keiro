@@ -58,8 +58,11 @@ Experiment B) for the capability requested by
       classification, structured pointer-addressed differences, invalid-input and branch-gap
       reporting, stable JSON/human rendering, success semantics, and atomic report writing;
       `keiro-dsl-test` passes 294 examples.
-- [ ] Milestone 2: opt-in scaffolded comparison runner, hand-owned runner executable, and the
-      generalized Experiment B conformance fixture (historical quirky codec vs generated codec).
+- [x] 2026-07-28: Milestone 2 completed: scaffold emits an explicitly requested,
+      non-production comparison module; the consumer-owned runner and generalized Experiment B
+      corpus prove omitted-key and legacy-tag differences while covering every optional/null and
+      five-arm union branch; `keiro-dsl-test` passes 297 examples and
+      `keiro-dsl-conformance-codec-compare` passes all eight assertions.
 - [ ] Milestone 3: structural-versus-opaque coverage report in `check`/`diff`, new
       DiagnosticCodes appended, optional gate flag.
 - [ ] Milestone 4: documentation — brownfield-guide shadow-comparison section, evolution-guide
@@ -81,6 +84,11 @@ Experiment B) for the capability requested by
   matching `v2.2.5.0` and `v2.3.1.0` tags, and the upstream source marks
   `Data.Aeson.RFC8785.encodeCanonical` as available since 2.2.1.0. The library bound is therefore
   `aeson >=2.2.1 && <2.3`.
+- A historical union-arm spelling can differ from the generated spelling while still proving
+  that the same semantic arm was exercised. Historical coverage therefore observes both the raw
+  input (which preserves missing/null evidence) and the successfully decoded value re-encoded by
+  the generated codec (which supplies the canonical semantic arm); the raw spelling mismatch
+  remains a comparison failure.
 
 
 ## Decision Log
@@ -171,6 +179,24 @@ Experiment B) for the capability requested by
   it exhaustively from the schema authority.
   Date: 2026-07-28
 
+- Decision: Reuse the plan-150 `ArtifactInfo` structural conformance ring for Experiment B and
+  place its comparison runner outside the ordinary scaffold module/manifest/record inventory.
+  Rationale: The landed fixture already has the exact required optional fields, defaults, nullable
+  fields, and five-arm union plus real generated bindings and mapped codecs. A second near-identical
+  model would test duplication rather than integration. Keeping the opt-in output out of the
+  production inventory makes its migration-evidence-only authority mechanically visible.
+  Date: 2026-07-28
+
+- Decision: Compile the hand-owned runner as the sole executable of a small local conformance
+  package rooted at `keiro-dsl/test`, while keeping the assertions as a
+  `keiro-dsl` test-suite.
+  Rationale: Adding a second executable to the `keiro-dsl` package makes Cabal interpret the
+  established `cabal run keiro-dsl -- ...` command as an ambiguous package target. The separate
+  local package preserves that public developer workflow and still lets
+  `cabal run keiro-dsl-codec-compare-artifact-info` compile exactly the consumer-owned historical
+  codec, generated runner, binding, fixtures, and generated codec together.
+  Date: 2026-07-28
+
 
 ## Outcomes & Retrospective
 
@@ -181,6 +207,12 @@ The engine has only parity and explicit-version-work verdicts, treats rejection 
 historical codec as invalid corpus/provenance input, reports typed and historical branch gaps
 separately, and carries the authority framing in both JSON and human output. The package build
 and the 294-example unit suite pass.
+
+Milestone 2 connected that engine to real generated/consumer code without adding a runtime
+fallback. Scaffold refuses opaque or unreachable declarations and protects the explicitly named
+output with its own banner, while the compiled consumer fixture demonstrates that omitted optional
+keys and a legacy union tag are never accepted as parity. The complete corpus has no coverage gaps;
+the deliberately incomplete corpus proves the missing-arm gate fires.
 
 
 ## Context and Orientation

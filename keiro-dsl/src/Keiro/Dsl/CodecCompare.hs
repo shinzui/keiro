@@ -19,6 +19,9 @@ module Keiro.Dsl.CodecCompare (
     DeclaredBranch (..),
     ObservedBranch (..),
     CoverageGap (..),
+    BranchSchema (..),
+    BranchField (..),
+    BranchArm (..),
     CompareProvenance (..),
     ClassifiedObservation (..),
     CompareReport (..),
@@ -26,6 +29,8 @@ module Keiro.Dsl.CodecCompare (
     authorityStatement,
     canonicalJsonBytes,
     classifyObservation,
+    declaredBranchesFor,
+    observedBranchesFor,
     compareReport,
     renderCompareReport,
     reportSucceeded,
@@ -131,6 +136,32 @@ data CoverageGap = CoverageGap
     , cgKind :: !BranchKind
     }
     deriving stock (Eq, Ord, Show)
+
+{- | A codec-independent branch description embedded into generated
+comparison runners. The generator constructs it through the checked type
+graph's total algebras, so this module never has to interpret a consumer type.
+-}
+data BranchSchema
+    = BranchScalar
+    | BranchOptional !BranchSchema
+    | BranchList !BranchSchema
+    | BranchMap !BranchSchema
+    | BranchRecord ![BranchField]
+    | BranchUnion !Text !Text ![BranchArm]
+    deriving stock (Eq, Show)
+
+data BranchField = BranchField
+    { bfWireKey :: !Text
+    , bfPresenceOptional :: !Bool
+    , bfSchema :: !BranchSchema
+    }
+    deriving stock (Eq, Show)
+
+data BranchArm = BranchArm
+    { baWireTag :: !Text
+    , baPayloadSchema :: !(Maybe BranchSchema)
+    }
+    deriving stock (Eq, Show)
 
 data CompareProvenance = CompareProvenance
     { cpHistoricalCodecIdentity :: !Text
@@ -245,6 +276,76 @@ coverageGaps declared observed =
     observedKeys = Set.fromList (map observedBranchKey observed)
     branchKey branch = (dbOrigin branch, dbPointer branch, dbKind branch)
     observedBranchKey branch = (obOrigin branch, obPointer branch, obKind branch)
+
+declaredBranchesFor :: FixtureOrigin -> BranchSchema -> [DeclaredBranch]
+declaredBranchesFor origin = Set.toAscList . go ""
+  where
+    declared pointer kind = Set.singleton (DeclaredBranch origin (JsonPointer pointer) kind)
+    go pointer schema = case schema of
+        BranchScalar -> Set.empty
+        BranchOptional nested ->
+            declared pointer OptionalPresent
+                <> declared pointer ExplicitNull
+                <> go pointer nested
+        BranchList nested -> go (appendPointer pointer "*") nested
+        BranchMap nested -> go (appendPointer pointer "*") nested
+        BranchRecord fields ->
+            Set.unions
+                [ presenceBranches pointer field <> go (appendPointer pointer (bfWireKey field)) (bfSchema field)
+                | field <- fields
+                ]
+        BranchUnion _tagField contentsField arms ->
+            Set.unions
+                [ declared pointer (UnionArm (baWireTag arm))
+                    <> maybe Set.empty (go (appendPointer pointer contentsField)) (baPayloadSchema arm)
+                | arm <- arms
+                ]
+    presenceBranches pointer field
+        | bfPresenceOptional field =
+            let fieldPointer = appendPointer pointer (bfWireKey field)
+             in case origin of
+                    HistoricalGolden -> declared fieldPointer OptionalMissing <> declared fieldPointer OptionalPresent
+                    FromBinding -> declared fieldPointer OptionalPresent
+        | otherwise = Set.empty
+
+observedBranchesFor :: FixtureOrigin -> BranchSchema -> Value -> [ObservedBranch]
+observedBranchesFor origin schema = Set.toAscList . go "" schema
+  where
+    observed pointer kind = Set.singleton (ObservedBranch origin (JsonPointer pointer) kind)
+    go pointer branchSchema value = case branchSchema of
+        BranchScalar -> Set.empty
+        BranchOptional nested -> case value of
+            Null -> observed pointer ExplicitNull
+            _ -> observed pointer OptionalPresent <> go pointer nested value
+        BranchList nested -> case value of
+            Array values -> Set.unions [go (appendPointer pointer "*") nested item | item <- toList values]
+            _ -> Set.empty
+        BranchMap nested -> case value of
+            Object values -> Set.unions [go (appendPointer pointer "*") nested item | item <- KeyMap.elems values]
+            _ -> Set.empty
+        BranchRecord fields -> case value of
+            Object values -> Set.unions (map (observeField pointer values) fields)
+            _ -> Set.empty
+        BranchUnion tagField contentsField arms -> case value of
+            Object values -> case KeyMap.lookup (Key.fromText tagField) values of
+                Just (String tag) -> case filter ((== tag) . baWireTag) arms of
+                    arm : _ ->
+                        observed pointer (UnionArm tag)
+                            <> case (baPayloadSchema arm, KeyMap.lookup (Key.fromText contentsField) values) of
+                                (Just nested, Just payload) -> go (appendPointer pointer contentsField) nested payload
+                                _ -> Set.empty
+                    [] -> Set.empty
+                _ -> Set.empty
+            _ -> Set.empty
+    observeField pointer values field =
+        let fieldPointer = appendPointer pointer (bfWireKey field)
+         in case KeyMap.lookup (Key.fromText (bfWireKey field)) values of
+                Nothing
+                    | bfPresenceOptional field -> observed fieldPointer OptionalMissing
+                    | otherwise -> Set.empty
+                Just fieldValue ->
+                    (if bfPresenceOptional field then observed fieldPointer OptionalPresent else Set.empty)
+                        <> go fieldPointer (bfSchema field) fieldValue
 
 reportSucceeded :: CompareReport -> Bool
 reportSucceeded report =

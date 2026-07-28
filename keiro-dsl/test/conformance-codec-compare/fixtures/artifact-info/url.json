@@ -1,0 +1,10 @@
+{
+  "artifact_key": "artifact-url",
+  "display_name": "URL",
+  "artifact_hash": "sha256:02",
+  "artifact_kind": "reference",
+  "location": {"tag": "url", "contents": "https://example.test/artifact"},
+  "metadata": {"note": null},
+  "active": false,
+  "tags": []
+}

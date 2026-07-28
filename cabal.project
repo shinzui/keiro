@@ -6,6 +6,7 @@ packages:
   keiro-test-support
   jitsurei
   keiro-dsl
+  keiro-dsl/test
 
 source-repository-package
   type: git

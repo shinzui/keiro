@@ -17,21 +17,21 @@ import Keiro.Dsl.Grammar (Placement (..), Spec (..))
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec)
 import Keiro.Dsl.ReplayImpact (renderReplayImpact, replayImpact)
-import Keiro.Dsl.Scaffold (Context (..))
+import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule)
 import Keiro.Dsl.ScaffoldRun (executeScaffold, planScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
 import Options.Applicative
-import System.Directory (canonicalizePath)
+import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
 import System.Exit (ExitCode (..), exitFailure)
-import System.FilePath (makeRelative, takeDirectory, (</>))
+import System.FilePath (makeRelative, normalise, takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcessWithExitCode)
 
 data Command
     = Parse FilePath
     | Check FilePath Bool Bool
-    | Scaffold FilePath FilePath (Maybe String) Bool Bool (Maybe FilePath)
+    | Scaffold FilePath FilePath (Maybe String) Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
     | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath)
     | New String
 
@@ -54,7 +54,7 @@ commands =
                 (info (Check <$> fileArg <*> emitSwitch <*> explainBindingsSwitch <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
             <> command
                 "scaffold"
-                (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> optional goldensOpt <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
+                (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> optional goldensOpt <*> codecComparisonOpts <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
             <> command
                 "diff"
                 (info (Diff <$> fileArg <*> sinceOpt <*> optional emitGoldensOpt <*> optional replayImpactOutOpt <*> many gateOpt <*> explainSwitch <*> optional reportOutOpt <**> helper) (progDesc "Classify spec changes since a git ref as per-surface compatibility vectors; exit non-zero on any gated BREAKING surface"))
@@ -77,6 +77,14 @@ forceGeneratedOverwriteSwitch = switch (long "force-generated-overwrite" <> help
 
 goldensOpt :: Parser FilePath
 goldensOpt = strOption (long "goldens" <> metavar "DIR" <> help "Golden-payload root to embed in generated aggregate harnesses")
+
+codecComparisonOpts :: Parser (Maybe (String, FilePath))
+codecComparisonOpts =
+    optional
+        ( (,)
+            <$> strOption (long "codec-comparison" <> metavar "MAPPED-NAME" <> help "Emit a non-production historical-codec comparison module for one structural mapped type (requires --comparison-out)")
+            <*> strOption (long "comparison-out" <> metavar "FILE" <> help "Exact generated comparison-module path under --out (requires --codec-comparison)")
+        )
 
 emitGoldensOpt :: Parser FilePath
 emitGoldensOpt = strOption (long "emit-goldens" <> metavar "DIR" <> help "Write old-shape payload fixtures for event version bumps without overwriting existing files")
@@ -136,7 +144,7 @@ run (Check fp emit explainBindings) = do
                                 exitFailure
                             Right obligations -> TIO.putStrLn (renderBindingObligations (specContext spec) obligations)
                         else when (not emit) (putStrLn "OK")
-run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens) = do
+run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest) = do
     input <- TIO.readFile fp
     case parseSpec fp input of
         Left err -> do
@@ -151,17 +159,24 @@ run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens) = 
             let ctx = mkContext cliRoot cliCollocate spec
                 goldenRoot = fromMaybe (takeDirectory fp </> "golden-payloads") cliGoldens
             goldens <- loadGoldenPayloads goldenRoot spec
-            case planScaffoldWithGoldens goldens ctx spec of
-                Left refusals -> do
+            case (planScaffoldWithGoldens goldens ctx spec, traverse (\(name, _) -> codecComparisonModule ctx spec (T.pack name)) comparisonRequest) of
+                (Left refusals, _) -> do
                     mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
                     exitFailure
-                Right modules -> do
-                    result <- executeScaffold out forceGeneratedOverwrite fp ctx spec modules
-                    case result of
-                        Left refusals -> do
-                            mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
-                            exitFailure
-                        Right report -> mapM_ (TIO.hPutStrLn stderr) (renderScaffoldReport report)
+                (_, Left comparisonError) -> TIO.hPutStrLn stderr comparisonError >> exitFailure
+                (Right modules, Right comparisonModule) -> do
+                    comparisonReady <- preflightComparison out comparisonRequest comparisonModule
+                    case comparisonReady of
+                        Left comparisonError -> TIO.hPutStrLn stderr comparisonError >> exitFailure
+                        Right () -> do
+                            result <- executeScaffold out forceGeneratedOverwrite fp ctx spec modules
+                            case result of
+                                Left refusals -> do
+                                    mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
+                                    exitFailure
+                                Right report -> do
+                                    mapM_ (TIO.hPutStrLn stderr) (renderScaffoldReport report)
+                                    writeComparison comparisonRequest comparisonModule
 run (New kind) =
     case skeletonFor (T.pack kind) of
         Left err -> hPutStrLn stderr (T.unpack err) >> exitFailure
@@ -212,6 +227,40 @@ git dir args = do
 
 trim :: String -> String
 trim = f . f where f = reverse . dropWhile (`elem` (" \t\r\n" :: String))
+
+preflightComparison :: FilePath -> Maybe (String, FilePath) -> Maybe ScaffoldModule -> IO (Either T.Text ())
+preflightComparison _ Nothing Nothing = pure (Right ())
+preflightComparison out (Just (_, requestedPath)) (Just comparisonModule) = do
+    let expectedPath = normalise (out </> modulePath comparisonModule)
+        actualPath = normalise requestedPath
+    if actualPath /= expectedPath
+        then
+            pure
+                ( Left
+                    ( "--comparison-out must match the generated module path under --out: expected "
+                        <> T.pack expectedPath
+                    )
+                )
+        else do
+            exists <- doesFileExist actualPath
+            if not exists
+                then pure (Right ())
+                else do
+                    existing <- TIO.readFile actualPath
+                    pure
+                        ( if codecComparisonBanner `elem` T.lines existing
+                            then Right ()
+                            else Left ("refusing to overwrite non-comparison output: " <> T.pack actualPath)
+                        )
+preflightComparison _ _ _ = pure (Left "internal error: incomplete codec-comparison option pair")
+
+writeComparison :: Maybe (String, FilePath) -> Maybe ScaffoldModule -> IO ()
+writeComparison Nothing Nothing = pure ()
+writeComparison (Just (_, path)) (Just comparisonModule) = do
+    createDirectoryIfMissing True (takeDirectory path)
+    TIO.writeFile path (moduleText comparisonModule)
+    TIO.hPutStrLn stderr ("comparison generated " <> T.pack path <> " (migration evidence only)")
+writeComparison _ _ = hPutStrLn stderr "internal error: incomplete codec-comparison output" >> exitFailure
 
 {- | Fold the spec's @module@/@layout@ clauses with the CLI overrides to a
 'Context'. Precedence is CLI flag > spec clause > built-in default.

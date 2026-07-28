@@ -1,0 +1,43 @@
+cabal-version: 3.0
+name:          keiro-dsl-codec-compare-artifact-info
+version:       0.1.0.0
+license:       BSD-3-Clause
+build-type:    Simple
+
+-- This consumer-owned executable is intentionally a separate local package.
+-- Keeping the keiro-dsl package at one executable preserves the established
+-- `cabal run keiro-dsl -- ...` command while still exercising the generated
+-- comparison module through an independently compiled consumer boundary.
+executable keiro-dsl-codec-compare-artifact-info
+  default-language:   GHC2024
+  default-extensions:
+    DuplicateRecordFields
+    LambdaCase
+    OverloadedStrings
+
+  ghc-options:        -Wall -Werror=missing-fields
+  hs-source-dirs:     conformance-codec-compare conformance-structural
+  main-is:            RunnerMain.hs
+  other-modules:
+    Conformance.CodecCompare.Historical
+    Conformance.Structural.Bindings
+    Conformance.Structural.Domain
+    Generated.StructuralConformance.ArtifactCatalog.Codec
+    Generated.StructuralConformance.ArtifactCatalog.Domain
+    Generated.StructuralConformance.Structural.CodecCompare.ArtifactInfo
+    Generated.StructuralConformance.Structural.Shape.ArtifactInfo
+    Generated.StructuralConformance.Structural.Shape.ArtifactKind
+    Generated.StructuralConformance.Structural.Shape.ArtifactLocation
+    Generated.StructuralConformance.Structural.Shape.ArtifactMetadata
+
+  build-depends:
+    , aeson       >=2.2.1 && <2.3
+    , base        >=4.21  && <5
+    , containers  >=0.6
+    , deepseq     >=1.5
+    , directory   >=1.3
+    , filepath    >=1.4
+    , keiki       >=0.4   && <0.5
+    , keiro
+    , keiro-dsl
+    , text        >=2.1

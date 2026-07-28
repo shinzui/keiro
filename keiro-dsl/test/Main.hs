@@ -1,3 +1,5 @@
+{-# LANGUAGE ImportQualifiedPost #-}
+
 {- | Test driver for keiro-dsl. EP-1 milestone 1 tests: the @parse . pretty@
 round-trip property over generated specs, and a unit test pinning the shape
 of the canonical Reservation fixture.
@@ -31,7 +33,7 @@ import Keiro.Dsl.PrettyPrint (renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
 import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), StaleModule (..), WriteDisposition (..), executeScaffold, planScaffold, renderRefusals, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
@@ -84,6 +86,26 @@ main = hspec $ do
             crCoverageGaps report
                 `shouldBe` [CoverageGap HistoricalGolden (JsonPointer "/location") (UnionArm "canonical")]
             reportSucceeded report `shouldBe` False
+        it "derives optional, null, and union-arm observations from a generated branch schema" $ do
+            let schema =
+                    BranchRecord
+                        [ BranchField "description" True (BranchOptional BranchScalar)
+                        , BranchField "location" False (BranchUnion "tag" "contents" [BranchArm "local" (Just BranchScalar), BranchArm "canonical" Nothing])
+                        ]
+                historical = object ["location" .= object ["tag" .= ("canonical" :: T.Text)]]
+            observedBranchesFor HistoricalGolden schema historical
+                `shouldBe` [ ObservedBranch HistoricalGolden (JsonPointer "/description") OptionalMissing
+                           , ObservedBranch HistoricalGolden (JsonPointer "/location") (UnionArm "canonical")
+                           ]
+            let declared = declaredBranchesFor HistoricalGolden schema
+            forM_
+                [ DeclaredBranch HistoricalGolden (JsonPointer "/description") OptionalMissing
+                , DeclaredBranch HistoricalGolden (JsonPointer "/description") OptionalPresent
+                , DeclaredBranch HistoricalGolden (JsonPointer "/description") ExplicitNull
+                , DeclaredBranch HistoricalGolden (JsonPointer "/location") (UnionArm "local")
+                , DeclaredBranch HistoricalGolden (JsonPointer "/location") (UnionArm "canonical")
+                ]
+                (\branch -> declared `shouldContain` [branch])
         it "round-trips the stable machine report" $ do
             let observation = EncodeObservation "parity" (object ["a" .= (1 :: Int)]) (object ["a" .= (1 :: Int)])
                 report = compareReport comparisonProvenance [] [observation] [] []
@@ -97,6 +119,26 @@ main = hspec $ do
                 Aeson.eitherDecodeFileStrict path `shouldReturn` Right firstReport
                 writeCompareReportAtomic path secondReport `shouldReturn` Right ()
                 Aeson.eitherDecodeFileStrict path `shouldReturn` Right secondReport
+
+    describe "historical codec comparison scaffold" $ do
+        it "emits an opt-in non-production runner without entering the ordinary module registry" $ do
+            spec <- specOf "test/fixtures/structural-conformance.keiro"
+            let ctx = defaultContext (specContext spec)
+                planned = codecComparisonModule ctx spec "ArtifactInfo"
+                ordinary = scaffoldModules ctx spec
+            case planned of
+                Left err -> expectationFailure (T.unpack err)
+                Right comparisonModule -> do
+                    modulePath comparisonModule
+                        `shouldBe` "Generated/StructuralConformance/Structural/CodecCompare/ArtifactInfo.hs"
+                    moduleText comparisonModule `shouldSatisfy` T.isInfixOf codecComparisonBanner
+                    moduleText comparisonModule `shouldSatisfy` T.isInfixOf "Generated.StructuralConformance.ArtifactCatalog.Codec qualified as GeneratedCodec"
+                    moduleText comparisonModule `shouldSatisfy` T.isInfixOf "branchSchema = BranchRecord"
+                    map modulePath ordinary `shouldNotContain` [modulePath comparisonModule]
+        it "refuses opaque selections rather than upgrading their claim" $ do
+            spec <- specOf "test/fixtures/structural-conformance.keiro"
+            codecComparisonModule (defaultContext (specContext spec)) spec "VendorGeometry"
+                `shouldSatisfy` either (T.isInfixOf "is opaque") (const False)
 
     describe "parse . pretty round-trip" $
         do
@@ -1199,8 +1241,10 @@ main = hspec $ do
                 forAll genCompatibilityVector $ \compatibility ->
                     forAll genSurfaceSet $ \gate ->
                         forAll genSurfaceSet $ \extra ->
-                            deriveLabel gate compatibility == LabelBreaking ==>
-                                deriveLabel (gate <> extra) compatibility == LabelBreaking
+                            deriveLabel gate compatibility
+                                == LabelBreaking
+                                    ==> deriveLabel (gate <> extra) compatibility
+                                == LabelBreaking
         it "renders the consumer-neutral matrix with separate private, snapshot, and public surfaces" $ do
             changes <- diffFixtures "test/fixtures/compatibility-vector-old.keiro" "test/fixtures/compatibility-vector-new.keiro"
             golden <- readTestText "test/fixtures/compatibility-vector.diff.golden"
