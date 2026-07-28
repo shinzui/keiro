@@ -170,7 +170,7 @@ request's origin but do not constrain the reusable Keiro API beyond the local de
 | 4 | Generate forward-versus-replay equality assertions in the DSL harness | docs/plans/147-generate-forward-versus-replay-equality-assertions-in-the-dsl-harness.md | None | None | Complete |
 | 5 | Report evolution as a compatibility vector with remediation explanations | docs/plans/148-report-evolution-as-a-compatibility-vector-with-remediation-explanations.md | None | None | Complete |
 | 6 | Implement the IR-1 spec layer: resolved type graph, structural and opaque declarations, check and diff | docs/plans/149-implement-the-ir-1-spec-layer-resolved-type-graph-structural-and-opaque-declarations-check-and-diff.md | EP-5 | None | Complete |
-| 7 | Implement the IR-1 generation layer: total bindings, codecs, Keiki projection facade, scaffold, and conformance harness | docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md | EP-6, Keiki 0.4 | EP-4 | In Progress |
+| 7 | Implement the IR-1 generation layer: total bindings, codecs, Keiki projection facade, scaffold, and conformance harness | docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md | EP-6, Keiki 0.4 | EP-4 | Complete |
 | 8 | Reduce binding boilerplate: skeleton scaffolds, exact nominal derivation, and explain-bindings | docs/plans/151-reduce-binding-boilerplate-skeleton-scaffolds-derived-nominal-bindings-and-explain-bindings.md | EP-7 | None | Not Started |
 | 9 | Gather migration evidence with historical codec comparison and supported-root coverage reporting | docs/plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md | EP-7 | EP-8 | Not Started |
 
@@ -299,7 +299,7 @@ is implemented and released.
 - [x] 2026-07-28: EP-6 `check` negative fixtures, recursive root-aware `diff`, replay impact, exhaustive mutation proof, and nested weak-golden synthesis landed
 - [x] 2026-07-28: EP-7 total `StructuralBinding` API, generated codecs, Keiki 0.4 projection facade, and scaffold integration landed
 - [x] 2026-07-28: EP-7 conformance package passes both binding laws, structural-codec, fixture-coverage, projection, and forward/replay tests; all three mutations go red and the 2x benchmark budget passes
-- [ ] EP-7 release preparation: confirm the proposed shared `0.4.0.0` version/changelog edit; annotated tags and publication remain assigned to the initiative release train
+- [x] 2026-07-28: EP-7 shared `0.4.0.0` release preparation approved and completed; all mandatory release gates pass, while annotated tags, pushes, and publication remain assigned to the initiative release train
 - [ ] EP-8: Binding skeleton scaffolds with typed holes and re-scaffold hole reporting landed
 - [ ] EP-8: Exact-match nominal bindings and `check --explain-bindings` landed; general conformance scenario passes
 - [ ] EP-9: Explicit historical-codec comparison over a finite corpus landed
@@ -473,9 +473,10 @@ EP-7's generation boundary is implemented and verified: the published total bind
 shape stratum, declared-wire codecs, projection facade, scaffold preflight/manifest/record, mapped
 snapshot invalidation, fixture-driven harness, compiled structural/opaque acceptance ring, payload
 golden, mutation suite, and benchmark budget all pass. ADR 0012 is Accepted and ADR 0004 owns the
-new conformance gates. The registry remains In Progress only at the release skill's confirmation
-gate: the proposed shared `0.4.0.0` preparation is recorded in plan 150, while tags and publication
-are deferred to the initiative release train.
+new conformance gates. The user approved the shared `0.4.0.0` preparation, all five publishable
+packages and their changelogs/bounds are aligned, and `nix fmt`, `just verify`, and
+`nix flake check` pass. EP-7 is therefore Complete. Tags, pushes, the final Hackage dependency
+audit, and publication remain deferred to the initiative release train.
 
 
 ---
@@ -493,4 +494,8 @@ Revision note: Tightened unrelated DSL contracts as part of the same review: EP-
 dependency of the mapped differ, compatibility JSON covers all six surfaces with rollout arrays,
 resolved AST constructors are distinct from parser constructors, scaffold mapping rows are
 unambiguous JSON, and comparison reports carry structured differences and explicit provenance,
+2026-07-28.
+
+Revision note: Closed EP-7 after the approved shared `0.4.0.0` release preparation and passing
+release gates; EP-8 and EP-9 are now hard-dependency-ready while publication remains deferred,
 2026-07-28.

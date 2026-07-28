@@ -6,7 +6,35 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
-_No unreleased changes._
+## 0.4.0.0 — 2026-07-28
+
+### Breaking Changes
+
+- `keiro-migrate up` now refuses to initialize an absent or empty native
+  `pgmigrate` ledger over a detected Codd ledger. Import the verified Codd
+  history first, or use `--allow-fresh-ledger-over-codd` only when deliberately
+  abandoning that history.
+
+### New Features
+
+- Adds the read-only `missingMigrations` startup handshake so every application
+  replica can reject pending, corrupt, or unknown migration history before
+  serving traffic.
+- Adds a canonical PostgreSQL 18 schema snapshot and `keiro-migrate
+  verify-schema`, which reports missing, unexpected, or changed objects in the
+  live `keiro` schema.
+- Adds `keiro-migrate import-codd-history`, with exact Kiroku/Keiro payload
+  mappings, advisory locking, confirmation, structured reports, and recovery
+  coverage for interrupted or poisoned imports.
+
+### Bug Fixes
+
+- Embedded migration changes now force GHC recompilation through
+  `pg-migrate-embed`, preventing an incremental build from retaining stale SQL
+  or manifest bytes.
+- Default conformance again lints every embedded migration for schema
+  qualification and forbidden `search_path` dependence, and pins the native
+  payload lock against accidental edits.
 
 ## 0.3.0.0 — 2026-07-14
 

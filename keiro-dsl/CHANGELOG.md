@@ -6,7 +6,15 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
-### Added
+## 0.4.0.0 — 2026-07-28
+
+### New Features
+
+- Adds checked `mapped structural` and `mapped opaque` declarations with a
+  resolved, total type-expression graph. Validation rejects recursive,
+  ambiguous, non-injective, or incomplete mappings; recursive diff findings
+  carry six-surface compatibility vectors and complete command/event/register
+  use-site paths.
 
 - Structural consumer-type scaffolding now emits private
   `Generated.<Context>.Structural.Shape.*` wire representations, generates
@@ -20,6 +28,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   identities as forward-compatible JSON rows, and reports mapping drift on
   subsequent runs. Mapped register wire/binding/initial identities now
   participate in the aggregate fold fingerprint.
+- Generated harnesses exercise both structural binding laws, declared codec
+  policy and current payload goldens, enum/union/optional fixture coverage,
+  canonical projection witness agreement, and forward-versus-replay equality
+  over every mapped and scalar register. The committed structural conformance
+  suite includes opaque-boundary checks and three falsifying mutations.
 - `Keiro.Dsl.ReplayImpact` and `diff --replay-impact-out FILE`. Diffs now
   print whether stored-data replay is unchanged and can emit a stable JSON
   affected set for targeted auditing. New aggregates, events, transitions,
@@ -56,7 +69,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   auto-applied.
 - `Keiro.Dsl.PrettyPrint.renderTransition` renders one transition in
   concrete `.keiro` syntax (used by the advisory).
-- Requires `keiki >=0.3` (the `EdgeMode` release).
+- Requires `keiki >=0.4 && <0.5`, including `EdgeMode` and the typed structural
+  projection contracts.
 
 ## 0.3.0.0 — 2026-07-14
 

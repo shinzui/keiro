@@ -57,4 +57,4 @@ Keep in lockstep with the @version:@ field in @keiro/keiro.cabal@ when
 cutting a release.
 -}
 version :: Text
-version = "0.3.0.0"
+version = "0.4.0.0"

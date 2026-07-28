@@ -370,7 +370,7 @@ main :: IO ()
 main = withMigratedSuite $ \fixture -> hspec $ do
     describe "Keiro" $ do
         it "exposes the scaffold version" $
-            KeiroRoot.version `shouldBe` ("0.3.0.0" :: Text)
+            KeiroRoot.version `shouldBe` ("0.4.0.0" :: Text)
 
     describe "Keiro.Telemetry metrics" $ do
         it "records instrument names and values through an SDK meter" $ do

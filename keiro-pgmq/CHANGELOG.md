@@ -6,7 +6,9 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## [Unreleased]
 
-### Fixed
+## 0.4.0.0 — 2026-07-28
+
+### Bug Fixes
 
 - One-shot job processing (`runJobOnce` and `runJobOnceWithContext`) now continues the
   producer's trace instead of leaving a hole between the enqueue and settlement spans.

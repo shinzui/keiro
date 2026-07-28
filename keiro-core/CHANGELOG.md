@@ -6,15 +6,24 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
-### Added
+## 0.4.0.0 — 2026-07-28
+
+### Breaking Changes
+
+- `StateCodec` includes the control-state/fold shape discriminator used with
+  the register-layout hash; stale snapshot seeds are invalidated when either
+  executable state shape changes.
+- Validated event-stream construction rejects invalid event codec schemas,
+  tags, and upcaster chains at assembly. `mkEventStreamUnchecked` remains the
+  explicit emergency-forensics bypass.
+- Requires Keiki 0.4 and handles its typed projection terms and validation
+  findings explicitly.
+
+### New Features
 
 - Adds the stable `Keiro.Codec.Structural` integration surface for generated
   structural codecs: total `StructuralBinding` values, deterministic labelled
   `FixtureCases`, both binding-law helpers, and one-way JSON delegation helpers.
-
-### Changed
-
-- Requires Keiki 0.4 and renders its projection validation findings explicitly.
 
 ## 0.3.0.0 — 2026-07-14
 

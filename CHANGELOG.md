@@ -6,6 +6,8 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.4.0.0 — 2026-07-28
+
 ### Breaking Changes
 
 - `Keiro.Timer.scheduleTimerOnceTx` now returns `Bool`: `True` when the
@@ -22,19 +24,25 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   `0019-keiro-snapshots-state-shape-hash.sql` adds the corresponding
   `state_shape_hash` column; existing rows receive the empty sentinel and are
   invalidated once on their next hydration. `keiro-core`, `keiro`, and
-  snapshot-enabled generated code now require `keiki >=0.3.1`.
+  snapshot-enabled generated code now require `keiki >=0.4 && <0.5`.
 - Validated event-stream construction now rejects an event codec whose schema
   version, event tags, or upcaster chain fail `mkCodec`. Restore missing rungs
   or deduplicate conflicting sources before deployment; for emergency
   forensics only, `mkEventStreamUnchecked` remains the explicit bypass.
+- The package set now requires Keiki 0.4 (and keiki-codec-json 0.4 where used).
+  Exhaustive term and validation handling must account for typed structural
+  field projections and their guard-only/direct-base restrictions.
 
-### Added
+### New Features
 
 - `keiro-dsl` now accepts checked structural and opaque consumer-type declarations with nested
   records, enums, tagged unions, collections, optional/default policies, canonical identities,
   binding or codec provenance, and register initials. Its resolved type graph drives stable
   validation diagnostics, root-aware compatibility vectors, replay impact, and deterministic
   `--emit-goldens` weak stand-ins without treating consumer JSON instances as wire authority.
+- `keiro-core` publishes `Keiro.Codec.Structural`, and `keiro` re-exports it,
+  providing total structural bindings, deterministic labelled fixture corpora,
+  both round-trip law helpers, and one-way generated JSON delegation.
 - Durable workflows can be returned from terminal failure with
   `Keiro.Workflow.Instance.resurrectFailedWorkflow`. The transactional API
   resets retry/lease state, removes only the derived current-generation failure
@@ -72,7 +80,7 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   shipped 0.2.0.0 and 0.3.0.0; keep it in lockstep with `keiro/keiro.cabal`
   when cutting a release.
 
-### Fixed
+### Bug Fixes
 
 - Active workflow patch sets are now recorded atomically with the seed when
   `continueAsNew` opens a generation, so an asynchronous wake append before the

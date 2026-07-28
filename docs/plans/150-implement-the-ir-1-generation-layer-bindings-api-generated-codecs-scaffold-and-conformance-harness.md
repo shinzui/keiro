@@ -93,11 +93,11 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-28: ADR 0012 accepted from observed implementation evidence; ADR 0004 amended with
       the structural binding, generated-codec golden, fixture-coverage, and mapping-drift gates;
       the OKF update log and strict 12-record validation pass.
-- [ ] Release preparation: proposed shared PVP major `0.4.0.0` and per-package tag plan recorded
-      below. The release skill requires user confirmation before the five package versions,
-      internal bounds, and changelogs are edited; actual tags/uploads remain deferred to the
-      initiative release train.
-- [ ] Plan completion after the release-preparation confirmation gate.
+- [x] 2026-07-28: Release preparation approved and completed for shared PVP major `0.4.0.0`:
+      all five package versions, internal `keiro-core` bounds, runtime version evidence, and
+      package/root changelogs are aligned; `nix fmt`, `just verify`, and `nix flake check` pass.
+      Annotated tags, pushes, and Hackage uploads remain deferred to the initiative release train.
+- [x] 2026-07-28: Plan completed after the release-preparation confirmation gate.
 
 
 ## Surprises & Discoveries
@@ -334,18 +334,18 @@ The policy-equivalent benchmark matrix stayed between 0.97x and 1.04x of hand-wr
 the planned fusion escape hatch was unnecessary. ADR 0012 is Accepted and ADR 0004 records the
 new gate ownership.
 
-Release preparation is intentionally separated from irreversible publication. Hackage and
+Release preparation remains intentionally separated from irreversible publication. Hackage and
 upstream tags were rechecked for the dependency line (Keiki and keiki-codec-json 0.4.0.0) and for
-the current Keiro release (0.3.0.0); tasty-bench 0.5 is the released benchmark dependency. Since
-the repository has breaking API/semantic changes since `keiro-0.3.0.0`, the release skill's PVP
-rule proposes a shared major bump to `0.4.0.0` for `keiro-core`, `keiro`, `keiro-pgmq`,
-`keiro-migrations`, and `keiro-dsl`, with every `keiro-core` internal bound tightened to
-`^>=0.4.0.0`. After user confirmation, the five package and root changelogs will receive a dated
-`0.4.0.0` section. The release-train tag plan is one annotated tag per package at the single
-release commit (`keiro-core-0.4.0.0`, `keiro-0.4.0.0`, `keiro-pgmq-0.4.0.0`,
-`keiro-migrations-0.4.0.0`, `keiro-dsl-0.4.0.0`), followed by dependency-order publication only
-after the mandatory release gates and Hackage dependency audit. No tag, push, or upload is part of
-this child-plan implementation turn.
+the previous Keiro release (0.3.0.0); tasty-bench 0.5 is the released benchmark dependency. The
+user approved the release skill's shared PVP major `0.4.0.0` for `keiro-core`, `keiro`,
+`keiro-pgmq`, `keiro-migrations`, and `keiro-dsl`. All five package versions, every internal
+`keiro-core` bound, runtime version evidence, and the five package plus root changelogs are now
+aligned. The mandatory `nix fmt`, `just verify`, and `nix flake check` gates pass. The release-train
+tag plan remains one annotated tag per package at the single release commit
+(`keiro-core-0.4.0.0`, `keiro-0.4.0.0`, `keiro-pgmq-0.4.0.0`,
+`keiro-migrations-0.4.0.0`, `keiro-dsl-0.4.0.0`), followed by dependency-order publication after
+the Hackage dependency audit. No tag, push, or upload is part of this child-plan implementation
+turn.
 
 
 ## Context and Orientation
@@ -1189,3 +1189,7 @@ conformance evidence matches what a domain value can actually represent, 2026-07
 Revision note: Encoded scaffold-record mapping rows as canonical one-line JSON objects so
 application-owned identity/version strings remain unambiguous and the record can evolve through
 ignore-unknown object fields, 2026-07-28.
+
+Revision note: Completed the approved shared `0.4.0.0` release preparation, recorded passing
+release gates, and closed EP-7 while deferring tags, pushes, and publication to the initiative
+release train, 2026-07-28.

@@ -6,7 +6,24 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
-### Added
+## 0.4.0.0 — 2026-07-28
+
+### Breaking Changes
+
+- `Keiro.Timer.scheduleTimerOnceTx` now returns `Bool`: `True` when this call
+  armed the timer and `False` when an existing row won the first-arm race.
+- `Keiro.Workflow.Child.Schema.ChildRow` gains `failureReason`, and
+  `markChildFailedTx` takes the terminal reason as its third argument.
+- Snapshot hydration now requires codec version, register-layout hash, and
+  control-state/fold hash to match; snapshots written without the new state
+  discriminator are invalidated and rebuilt.
+- Validated event-stream assembly rejects invalid codec schema versions, event
+  tags, or upcaster chains. `mkEventStreamUnchecked` is the explicit
+  emergency-forensics bypass.
+- Requires Keiki and keiki-codec-json 0.4, including the typed structural field
+  projection validation contracts.
+
+### New Features
 
 - Adds the read-only `Keiro.ReplayAudit` API for full or affected-event targeted
   replay checks. Audits report hydration failures, compare accepted snapshot
@@ -23,8 +40,32 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   the witness.
 - Re-exports `Keiro.Codec.Structural` from `keiro-core`, so generated consumers
   retain a single direct `keiro` dependency for the stable binding API.
+- Adds `Keiro.Workflow.Instance.resurrectFailedWorkflow`, which revives a
+  terminally failed workflow while preserving append-only failure history and
+  resetting only derived current-generation failure state.
+- Adds `WorkflowRunOptions.leaseHeartbeat`, plus `LeaseHeartbeat` and
+  `WorkflowLeaseLost`, so resume workers renew ownership at fresh action and
+  await boundaries without charging lease loss as a crash attempt.
+- `defaultStateCodec` derives a control-state discriminator, and
+  `withFoldFingerprint` appends an application-owned fold token for changes
+  that are invisible to register layout alone.
 
-### Changed
+### Bug Fixes
+
+- Active workflow patch sets are persisted atomically with a new generation's
+  seed, closing the race where an early wake could silently select old patch
+  branches.
+- Sleep timers are generation-pinned, re-arms no longer postpone an existing
+  wake, firing clears the wake hint atomically, and workflow GC removes
+  surviving scheduled timers so stale fires cannot resurrect collected runs.
+- Await lookup falls back from a journal snapshot to the authoritative step
+  index, preventing completions appended during a run from being hidden by its
+  snapshot.
+- Failed child links preserve their terminal reason across parent generation
+  rotation, and awakeable registration/signal races no longer lose a valid
+  completion or fire compensation after cancellation wins.
+
+### Other Changes
 
 - Adopts Keiki 0.4 and keiki-codec-json 0.4, including typed field-projection
   validation contracts.
