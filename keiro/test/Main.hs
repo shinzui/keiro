@@ -58,6 +58,13 @@ import Keiki.Operators qualified as K
 import Keiki.Shape (CanonicalStateShape)
 import Keiro
 import Keiro qualified as KeiroRoot
+import Keiro.Codec.Structural (
+    StructuralBinding (..),
+    bindingDomainRoundTrip,
+    bindingShapeRoundTrip,
+    decodeViaBinding,
+    encodeViaBinding,
+ )
 import Keiro.Connection (ensureProjectionSchema, qualifyTable, withProjectionSchema)
 import Keiro.DeadLetter (
     DispatchDeadLetter (..),
@@ -667,6 +674,34 @@ main = withMigratedSuite $ \fixture -> hspec $ do
                             }
             decodeRecorded orderCodec encoded
                 `shouldBe` Left (UnknownEventType (EventType "OrderCancelled") [EventType "OrderPlaced"])
+
+    describe "Keiro.Codec.Structural" $ do
+        let pairBinding :: StructuralBinding (Int, Bool) (Bool, Int)
+            pairBinding =
+                StructuralBinding
+                    { bindingToShape = \(amount, enabled) -> (enabled, amount)
+                    , bindingFromShape = \(enabled, amount) -> (amount, enabled)
+                    }
+            encodePairShape (enabled, amount) =
+                object ["enabled" Aeson..= enabled, "amount" Aeson..= amount]
+            decodePairShape value =
+                case parseEither (withObject "PairShape" $ \objectValue -> (,) <$> objectValue .: "enabled" <*> objectValue .: "amount") value of
+                    Left err -> Left (Text.pack err)
+                    Right shape -> Right shape
+
+        it "checks both total binding laws" $ do
+            bindingDomainRoundTrip pairBinding (7, True) `shouldBe` True
+            bindingShapeRoundTrip pairBinding (False, 9) `shouldBe` True
+
+        it "delegates encoding to the generated shape codec" $
+            encodeViaBinding pairBinding encodePairShape (7, True)
+                `shouldBe` object ["enabled" Aeson..= True, "amount" Aeson..= (7 :: Int)]
+
+        it "propagates only shape decode failures before total construction" $ do
+            let encoded = object ["enabled" Aeson..= False, "amount" Aeson..= (9 :: Int)]
+            decodeViaBinding pairBinding decodePairShape encoded `shouldBe` Right (9, False)
+            decodeViaBinding pairBinding (const (Left "shape-error")) Aeson.Null
+                `shouldBe` Left "shape-error"
 
     describe "Keiro.EventStream" $ do
         it "constructs an author-facing EventStream contract" $ do

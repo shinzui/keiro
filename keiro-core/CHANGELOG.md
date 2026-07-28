@@ -6,7 +6,15 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+
+- Adds the stable `Keiro.Codec.Structural` integration surface for generated
+  structural codecs: total `StructuralBinding` values, deterministic labelled
+  `FixtureCases`, both binding-law helpers, and one-way JSON delegation helpers.
+
+### Changed
+
+- Requires Keiki 0.4 and renders its projection validation findings explicitly.
 
 ## 0.3.0.0 — 2026-07-14
 

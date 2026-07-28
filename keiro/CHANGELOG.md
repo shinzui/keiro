@@ -21,9 +21,13 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   `keiro.snapshot.seed.divergence` plus a structured digest log without
   blocking the command or writing a snapshot; set the rate to `0` to disable
   the witness.
+- Re-exports `Keiro.Codec.Structural` from `keiro-core`, so generated consumers
+  retain a single direct `keiro` dependency for the stable binding API.
 
 ### Changed
 
+- Adopts Keiki 0.4 and keiki-codec-json 0.4, including typed field-projection
+  validation contracts.
 - Adopts keiki 0.3 (`EdgeMode`, plan 143): a `ReplayOnly` edge is excluded
   from forward stepping and serves two-phase inversion, so a tightened guard
   can retain its removed region (`old ∧ ¬new`) as a replay-only twin and

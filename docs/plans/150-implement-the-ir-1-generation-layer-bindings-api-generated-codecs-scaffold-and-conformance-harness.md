@@ -66,7 +66,9 @@ This section must always reflect the actual current state of the work.
       `keiki >=0.4 && <0.5`, moved the snapshot companion to `keiki-codec-json >=0.4 && <0.5`,
       rendered all three new projection warnings explicitly, and passed the package builds plus
       `keiro-dsl-test` (265 examples) and `keiro-test` (373 examples).
-- [ ] Milestone 1: `Keiro.Codec.Structural` binding API module with stability note and unit tests.
+- [x] 2026-07-28: Milestone 1 completed: `Keiro.Codec.Structural` exposes the stability-noted
+      total binding API and fixtures from `keiro-core`, `keiro` re-exports it explicitly, and
+      `keiro-test` passes 376 examples including both laws and both delegation paths.
 - [ ] Milestone 2: generated per-declaration `Structural.Shape.*` stratum, structural/opaque codecs, and eligible-field
       `StructuralProjections` facade with pinned goldens and Keiki agreement tests.
 - [ ] Milestone 3: scaffold integration — preflight import-plan diagnostic, manifest consumer
@@ -100,6 +102,10 @@ implementation. Provide concise evidence.
   therefore exposed one deliberate migration site: `ProjectionResultUnsupported`,
   `ProjectionOrderingUnsupported`, and `ProjectionOutsideGuard` now receive explicit,
   provenance-preserving text instead of being hidden by a wildcard.
+- `keiro-core` has no test-suite stanza. Milestone 1 therefore pins the API in `keiro-test`,
+  whose only direct runtime dependency is `keiro`; importing `Keiro.Codec.Structural` there also
+  proves Cabal's explicit re-export rather than accidentally compiling through a transitive
+  `keiro-core` module.
 
 
 ## Decision Log
@@ -229,7 +235,10 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Milestone 1 published the downstream integration point without waiting for generator work.
+`StructuralBinding` is total in both directions, `FixtureCases` is a non-empty labelled corpus,
+and the JSON helpers permit only consumer-to-generated delegation. The full runtime suite passed
+376 examples after the new module was imported through `keiro`'s explicit re-export.
 
 
 ## Context and Orientation

@@ -89,6 +89,7 @@ library
   other-modules:      Keiro.ReplayDigest
   reexported-modules:
     keiro-core:Keiro.Codec,
+    keiro-core:Keiro.Codec.Structural,
     keiro-core:Keiro.EventStream,
     keiro-core:Keiro.EventStream.Validate,
     keiro-core:Keiro.Integration.Event,
