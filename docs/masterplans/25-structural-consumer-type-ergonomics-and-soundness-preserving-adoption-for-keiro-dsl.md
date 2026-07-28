@@ -60,8 +60,11 @@ private and public contracts remain separately owned.
 
 Explicitly excluded, per IR-1's Out of Scope section and the research note's research-grade
 list: solver-visible bounded collections, membership, and element updates; recursive structural
-mappings; symbolic field projections in Keiki (the research note's Experiment C — Keiki-side
-work tracked separately); proof-carrying external codecs; atomic multi-stream aggregate
+mappings; symbolic field projections in Keiki (the research note's Experiment C — filed as
+Keiki improvement request IR-1,
+`docs/improvement-requests/support-typed-symbolic-field-projections-over-mapped-consumer-values.md`
+in the `shinzui/keiki` repository, 2026-07-28); proof-carrying external codecs; atomic
+multi-stream aggregate
 generations; external-decider or event-mirror modes; and implementing Mori's Project/
 ProjectArtifact transducers (that is downstream Mori work, per IR-1, after the capability is
 released and tagged).
@@ -343,6 +346,17 @@ Recorded during child-plan drafting (2026-07-28):
   Rationale: Both are valuable for existing specs today, both de-risk Phase 2 by establishing
   the harness-assertion and diff-output extension points first, and both are independently
   verifiable without consumer-owned types.
+  Date: 2026-07-28
+
+
+- Decision: File the Keiki-side prerequisite for checked nested guards now, as Keiki
+  improvement request IR-1 (`docs/improvement-requests/support-typed-symbolic-field-projections-over-mapped-consumer-values.md`
+  in `shinzui/keiki`), while keeping it excluded from this MasterPlan's scope.
+  Rationale: The research note's Experiment C sequencing rule (guarantee G4) requires the Keiki
+  term, evaluator, symbolic translation, and validator support to exist before any DSL syntax
+  claims the capability; filing the request records it durably without expanding this
+  initiative. Keiki already has the pattern to extend (`TInpCtorField`, `TArith`, the curated
+  `Sym` registry and `SymEnv` path memoization), which the request cites as prior art.
   Date: 2026-07-28
 
 
