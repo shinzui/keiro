@@ -1,3 +1,13 @@
+---
+type: Research Document
+title: Shibuya Subscription Engine — Current State Survey
+description: Survey Shibuya's adapters, checkpointing, concurrency, failure, lifecycle, and observability behavior.
+timestamp: "2026-05-04T14:43:01-07:00"
+researchId: RES-4
+status: active
+scope: Shibuya subscription capabilities and gaps relevant to Keiro projections and process managers.
+---
+
 # Shibuya Subscription Engine — Current State Survey
 
 Survey author: research subagent (Explore), 2026-05-04. Source trees:

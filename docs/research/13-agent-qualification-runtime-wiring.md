@@ -1,3 +1,13 @@
+---
+type: Research Document
+title: Case study — wiring the AgentQualification decomposition onto keiro
+description: Map the AgentQualification decomposition onto Keiro streams, routing, process managers, read models, and integration edges.
+timestamp: "2026-05-21T22:11:48-07:00"
+researchId: RES-14
+status: active
+scope: A concrete runtime-wiring case study used to expose Keiro capability gaps and integration choices.
+---
+
 # Case study — wiring the `AgentQualification` decomposition onto keiro
 
 Status: worked sketch / validation note. Not a scheduled plan. Companion to

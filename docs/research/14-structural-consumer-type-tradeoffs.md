@@ -1,3 +1,13 @@
+---
+type: Research Document
+title: "Structural Consumer Types: What Keiro Gives Up and How to Recover It Safely"
+description: Evaluate the costs of structural and opaque consumer-owned types and identify safe ergonomic improvements.
+timestamp: "2026-07-28T04:14:04-07:00"
+researchId: RES-15
+status: active
+scope: The structural and opaque consumer-owned type constraints proposed by Keiro DSL improvement request IR-1.
+---
+
 # Structural Consumer Types: What Keiro Gives Up and How to Recover It Safely
 
 **Date:** 2026-07-28

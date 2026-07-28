@@ -1,3 +1,13 @@
+---
+type: Research Document
+title: keiro snapshot strategy and hydration acceleration
+description: Design advisory snapshots, compatibility checks, policies, read/write paths, retention, and operations.
+timestamp: "2026-05-17T08:37:26-07:00"
+researchId: RES-10
+status: active
+scope: Snapshot storage and accelerated hydration for Keiro event streams and workflows.
+---
+
 # keiro snapshot strategy and hydration acceleration
 
 > **Corrections note (2026-05-14) — keiki-side gaps closed.** §3 ("Snapshot codec"), §13 / §15 (the upstream-gap enumeration), and §18 ("Summary") all describe the `RegFile rs <-> Aeson.Value` helper and the `regfile_shape_hash` derivation as keiki-side gaps that EP-6 must consolidate. Both have shipped upstream:

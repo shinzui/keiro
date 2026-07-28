@@ -136,8 +136,9 @@ must be on `PATH` (the Nix dev shell provides one).
   [`docs/guides/README.md`](docs/guides/README.md) and use the `jitsurei`
   package as their executable source.
 - Motivation and comparison to adjacent systems: [`docs/why-keiro.md`](docs/why-keiro.md).
-- Design history and implementation plans live under `docs/research/`,
-  `docs/masterplans/`, and `docs/plans/`.
+- Profile-governed design research starts at
+  [`docs/research/index.md`](docs/research/index.md); implementation plans live
+  under `docs/masterplans/` and `docs/plans/`.
 
 ## Status
 

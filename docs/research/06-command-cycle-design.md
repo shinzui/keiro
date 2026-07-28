@@ -1,3 +1,13 @@
+---
+type: Research Document
+title: Command Cycle Design — keiro
+description: Derive Keiro's command-cycle contract, API, transaction behavior, retries, idempotency, and telemetry.
+timestamp: "2026-05-19T14:37:23-07:00"
+researchId: RES-7
+status: active
+scope: Keiro's single-stream command execution path over Kiroku and Keiki.
+---
+
 # Command Cycle Design — keiro
 
 Author: ExecPlan EP-1 (`docs/plans/1-command-cycle-design-and-spike.md`). Date: 2026-05-05.

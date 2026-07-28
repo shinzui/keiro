@@ -1,3 +1,13 @@
+---
+type: Research Document
+title: Workflow Engine and Durable Execution Roadmap — keiro
+description: Define Keiro's v1 workflow scope and the path to named-step durable execution in v2.
+timestamp: "2026-05-17T08:37:26-07:00"
+researchId: RES-11
+status: active
+scope: Workflow primitives, durable execution, storage, operations, and staged delivery across Keiro versions.
+---
+
 # Workflow Engine and Durable Execution Roadmap — keiro
 
 Author: ExecPlan EP-5 (`docs/plans/5-workflow-engine-and-durable-execution-roadmap.md`). Date: 2026-05-06.

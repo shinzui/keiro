@@ -1,3 +1,13 @@
+---
+type: Research Document
+title: Subscriptions, Projections, and Process Managers — keiro
+description: Design Keiro's projection, process-manager, inbox, outbox, concurrency, failure, and observability surfaces.
+timestamp: "2026-05-17T08:37:26-07:00"
+researchId: RES-9
+status: active
+scope: Keiro's synchronous and asynchronous read-side and event-driven coordination architecture.
+---
+
 # Subscriptions, Projections, and Process Managers — keiro
 
 Author: ExecPlan EP-3 (`docs/plans/3-subscriptions-projections-and-process-managers.md`). Date: 2026-05-05.

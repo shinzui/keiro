@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify adr-validate
+verify: process-compose-check jitsurei haskell-verify adr-validate research-validate
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -22,6 +22,13 @@ verify: process-compose-check jitsurei haskell-verify adr-validate
 [group('docs')]
 adr-validate:
     okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
+
+# Strict OKF enforcement for the research bundle (docs/research, registered as
+# OKF bundle "research" in mori.dhall). Stable RES-N handles and review
+# provenance follow the shared documentation.researchDocuments profile.
+[group('docs')]
+research-validate:
+    okf validate docs/research --strict --profile docs/research/profile.dhall --profile-enforce --log-enforce
 
 [group('haskell')]
 haskell-build:

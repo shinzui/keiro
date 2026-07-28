@@ -1,3 +1,13 @@
+---
+type: Research Document
+title: Research Overview — 経路 (keiro)
+description: Synthesize the Keiro research corpus and index its supporting surveys and designs.
+timestamp: "2026-07-28T04:14:04-07:00"
+researchId: RES-1
+status: active
+scope: Keiro's architectural foundations, dependency capabilities, and implementation direction.
+---
+
 # Research Overview — 経路 (keiro)
 
 This directory holds the research backing the design of 経路 (keiro), a Haskell event-sourcing and workflow-engine framework intended to replace an in-production system. Each numbered document is a self-contained survey or design note. Read them in order on first pass; thereafter use this index to jump.

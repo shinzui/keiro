@@ -1,3 +1,13 @@
+---
+type: Research Document
+title: Read Model Query API and Lifecycle Design
+description: Design typed read-model queries, consistency modes, lifecycle operations, and their substrate contracts.
+timestamp: "2026-07-13T11:55:18-07:00"
+researchId: RES-13
+status: active
+scope: Keiro's read-model query surface, consistency guarantees, rebuilds, and operational lifecycle.
+---
+
 # Read Model Query API and Lifecycle Design
 
 This document fixes how applications *query* state derived from events: the typed `ReadModel q r` wrapper exposed by `Keiro.ReadModel`, the read-after-write consistency-mode taxonomy (`Strong` / `Eventual` / `PositionWait`), the schema-evolution and rebuild-from-zero protocol, the multi-stream read-model story, the idempotency-token propagation pattern, and the relationship between read models, snapshots, and projections (three primitives with overlapping mechanisms but distinct purposes). The reader is assumed to have read `docs/research/01-kiroku-read-side.md`, `docs/research/06-command-cycle-design.md` (EP-1's design), `docs/research/08-subscription-and-process-manager-design.md` (EP-3's design — *the* closest neighbour), and `docs/research/09-snapshot-strategy.md` (EP-4's snapshot design — for the read-model-vs-snapshot distinction). Where a key fact from those documents matters here it is repeated; the reader who has not seen them should still be able to follow this design.

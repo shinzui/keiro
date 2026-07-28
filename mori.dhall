@@ -69,5 +69,13 @@ in  Schema.Project::{
         , okfVersion = "0.1"
         , description = Some "Durable architecture decisions"
         }
+      , Schema.OkfBundle::{
+        , name = "research"
+        , path = "docs/research"
+        , profile = Some "docs/research/profile.dhall"
+        , okfVersion = "0.1"
+        , description = Some
+            "Technical research, surveys, audits, evaluations, and design explorations"
+        }
       ]
     }

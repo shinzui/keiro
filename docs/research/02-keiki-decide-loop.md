@@ -1,3 +1,13 @@
+---
+type: Research Document
+title: Keiki Functional Core — Current State Survey
+description: Survey Keiki's symbolic transducer, decide, evolve, composition, codec, and testing surfaces.
+timestamp: "2026-05-14T11:10:30-07:00"
+researchId: RES-3
+status: active
+scope: Keiki capabilities and gaps relevant to Keiro's functional command core.
+---
+
 # Keiki Functional Core — Current State Survey
 
 Survey author: research subagent (Explore), 2026-05-04. Source tree: `/Users/shinzui/Keikaku/bokuno/keiki`.

@@ -1,3 +1,13 @@
+---
+type: Research Document
+title: Hindsight Library Evaluation for Keiro EP-2 Codec Layer
+description: Evaluate whether Keiro should adopt, borrow from, or reject Hindsight's type-level event-versioning design.
+timestamp: "2026-05-19T14:37:23-07:00"
+researchId: RES-17
+status: active
+scope: Hindsight's API and design tradeoffs relative to the Keiro EP-2 codec layer.
+---
+
 # Hindsight Library Evaluation for Keiro EP-2 Codec Layer
 
 **Date:** 2025-05-05  
@@ -366,4 +376,3 @@ vs. hindsight's type-level `Symbol` → runtime `Text` bridge (Events.hs:240–2
 3. **Implement one multi-version event spike** (e.g., UserCreated V0→V1→V2) using the value-level approach to validate the design
 4. **Measure boilerplate:** Count lines per event, compare to pure value-level baseline
 5. **Decide:** If boilerplate is acceptable and test generation is sufficient, proceed with value-level approach. If not, revisit type-level for future iteration.
-

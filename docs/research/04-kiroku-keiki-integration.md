@@ -1,3 +1,13 @@
+---
+type: Research Document
+title: Kiroku × Keiki Integration — Current State of the Command Cycle
+description: Evaluate how Kiroku and Keiki compose into Keiro's command cycle and identify the remaining integration gaps.
+timestamp: "2026-05-13T21:34:54-07:00"
+researchId: RES-5
+status: active
+scope: The read-decide-append transaction boundary between Kiroku, Keiki, and Keiro.
+---
+
 # Kiroku × Keiki Integration — Current State of the Command Cycle
 
 Survey author: research subagent (Explore), 2026-05-04.
