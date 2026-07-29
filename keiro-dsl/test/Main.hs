@@ -45,7 +45,7 @@ import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), 
 import Keiro.Dsl.Workspace
 import Keiro.Dsl.WorkspaceRecord
 import Keiro.Dsl.WorkspaceScaffold
-import System.Directory (createDirectory, createDirectoryIfMissing, doesFileExist, getTemporaryDirectory, removeFile, removePathForcibly)
+import System.Directory (createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath (takeDirectory, (</>))
@@ -2863,6 +2863,165 @@ main = hspec $ do
                     TIO.writeFile atRoot "{}\n"
                     goldenRootDivergence workspaceGoldens workspace `shouldReturn` []
 
+        describe "workspace scaffold" $ do
+            it "writes workspace-keyed history and no context-keyed file at all" $
+                withWorkspaceFixture "keiro-dsl-workspace-history" id $ \_ out workspace -> do
+                    report <- executePlannedWorkspaceScaffold out workspace
+                    wsrRecordPath report
+                        `shouldBe` out </> "keiro-dsl-scaffold-record.workspace.demo-project.txt"
+                    wsrBuildManifestPath report
+                        `shouldBe` out </> "keiro-dsl-manifest.workspace.demo-project.txt"
+                    doesFileExist (out </> recordFileName "demo-project") `shouldReturn` False
+                    doesFileExist (out </> "keiro-dsl-manifest.demo-project.txt") `shouldReturn` False
+                    contents <- TIO.readFile (wsrRecordPath report)
+                    case parseWorkspaceRecord contents of
+                        Nothing -> expectationFailure ("workspace record did not parse:\n" <> T.unpack contents)
+                        Just record -> do
+                            wrService record `shouldBe` "demo-project"
+                            wrManifest record `shouldBe` "service.keiro-workspace"
+                            wrMembers record
+                                `shouldBe` [ "domain/project-artifact.keiro"
+                                           , "domain/project.keiro"
+                                           , "domain/shared.keiro"
+                                           ]
+                            -- Context-level modules are ownerless; everything
+                            -- else names the member that produced it.
+                            [wrmPath row | row <- wrModules record, wrmOwner row == Nothing]
+                                `shouldSatisfy` \ownerless ->
+                                    length ownerless == 2
+                                        && any (T.isSuffixOf "StructuralProjections.hs" . T.pack) ownerless
+                                        && any (T.isSuffixOf "ReplayAudit.hs" . T.pack) ownerless
+                            [ wrmOwner row
+                              | row <- wrModules record
+                              , "Project/Generated/Domain.hs" `T.isSuffixOf` T.pack (wrmPath row)
+                              ]
+                                `shouldBe` [Just "domain/project.keiro"]
+            it "is idempotent: an unchanged second run rewrites nothing and reports nothing" $
+                withWorkspaceFixture "keiro-dsl-workspace-idempotent" id $ \_ out workspace -> do
+                    first <- executePlannedWorkspaceScaffold out workspace
+                    before <- treeSnapshot out
+                    second <- executePlannedWorkspaceScaffold out workspace
+                    after <- treeSnapshot out
+                    after `shouldBe` before
+                    map thd3 (wsrDispositions second)
+                        `shouldSatisfy` all (`elem` [Unchanged, Skipped])
+                    wsrStale second `shouldBe` []
+                    wsrOwnershipMoves second `shouldBe` []
+                    wsrMappingDrift second `shouldBe` []
+                    wsrNewHoles second `shouldBe` []
+                    -- The first run had to write; the claim is not vacuous.
+                    map thd3 (wsrDispositions first) `shouldSatisfy` any (== Overwritten)
+                    renderWorkspaceScaffoldReport second
+                        `shouldSatisfy` all (not . T.isPrefixOf "stale:")
+            it "produces byte-identical output for members listed in reverse order" $
+                withWorkspaceFixture "keiro-dsl-workspace-order-a" id $ \_ outA workspaceA ->
+                    withWorkspaceFixture "keiro-dsl-workspace-order-b" reverse $ \_ outB workspaceB -> do
+                        _ <- executePlannedWorkspaceScaffold outA workspaceA
+                        _ <- executePlannedWorkspaceScaffold outB workspaceB
+                        treeB <- treeSnapshot outB
+                        treeA <- treeSnapshot outA
+                        treeB `shouldBe` treeA
+                        map fst treeA `shouldSatisfy` elem "keiro-dsl-scaffold-record.workspace.demo-project.txt"
+            it "reports stale files only for the member that changed" $
+                withWorkspaceFixture "keiro-dsl-workspace-stale" id $ \root out workspace -> do
+                    first <- executePlannedWorkspaceScaffold out workspace
+                    let siblingPaths =
+                            [ modulePath m
+                            | (m, provenance, _) <- wsrDispositions first
+                            , provenance == MemberOwned "domain/project-artifact.keiro"
+                            ]
+                    siblingsBefore <- traverse (TIO.readFile . (out </>)) siblingPaths
+                    renamed <- renameMemberAggregate root "domain/project.keiro" "Project" "Ledger"
+                    second <- executePlannedWorkspaceScaffold out renamed
+                    let stalePaths = map stalePath (wsrStale second)
+                    stalePaths `shouldSatisfy` (not . null)
+                    stalePaths `shouldSatisfy` all (T.isInfixOf "/Project/" . T.pack)
+                    -- Nothing the sibling member owns is stale, and nothing it
+                    -- owns changed on disk: no cross-member false positives.
+                    stalePaths `shouldSatisfy` all (`notElem` siblingPaths)
+                    siblingsAfter <- traverse (TIO.readFile . (out </>)) siblingPaths
+                    siblingsAfter `shouldBe` siblingsBefore
+                    forM_ stalePaths $ \path -> doesFileExist (out </> path) `shouldReturn` True
+                    renderWorkspaceScaffoldReport second
+                        `shouldSatisfy` any (T.isInfixOf "keiro-dsl never deletes files.")
+            it "reports an aggregate moved between members as an ownership move, not stale churn" $
+                withWorkspaceFixture "keiro-dsl-workspace-move" id $ \root out workspace -> do
+                    _ <- executePlannedWorkspaceScaffold out workspace
+                    before <- treeSnapshot out
+                    moved <- moveArtifactAggregate root
+                    second <- executePlannedWorkspaceScaffold out moved
+                    wsrStale second `shouldBe` []
+                    let moves = wsrOwnershipMoves second
+                    moves `shouldSatisfy` (not . null)
+                    moves
+                        `shouldSatisfy` all
+                            ( \move ->
+                                omPrevious move == Just "domain/project-artifact.keiro"
+                                    && omCurrent move == Just "domain/project.keiro"
+                            )
+                    map omPath moves
+                        `shouldSatisfy` any (T.isInfixOf "ProjectArtifact" . T.pack)
+                    -- An ownership move is not a content change: every module's
+                    -- bytes, and the build manifest, are untouched.
+                    map thd3 (wsrDispositions second)
+                        `shouldSatisfy` all (`elem` [Unchanged, Skipped])
+                    after <- treeSnapshot out
+                    map fst after `shouldBe` map fst before
+                    [(path, text) | (path, text) <- after, not ("scaffold-record" `T.isInfixOf` T.pack path)]
+                        `shouldBe` [(path, text) | (path, text) <- before, not ("scaffold-record" `T.isInfixOf` T.pack path)]
+                    renderWorkspaceScaffoldReport second
+                        `shouldSatisfy` any (T.isInfixOf "changed owning member")
+            it "leaves the tree, record, and manifest untouched when any member refuses" $
+                withWorkspaceFixture "keiro-dsl-workspace-atomic" id $ \_ out workspace -> do
+                    _ <- executePlannedWorkspaceScaffold out workspace
+                    before <- treeSnapshot out
+                    let broken = withCaseVariantAggregate workspace
+                    case planWorkspaceScaffold "goldens" (workspaceContext broken) broken of
+                        Right _ -> expectationFailure "expected the broken workspace to refuse"
+                        Left refusals -> refusals `shouldSatisfy` any isPathCollision
+                    treeSnapshot out `shouldReturn` before
+                    -- A fresh output directory is never even created.
+                    withTempDirectory "keiro-dsl-workspace-atomic-fresh" $ \fresh -> do
+                        let target = fresh </> "out"
+                        case planWorkspaceScaffold "goldens" (workspaceContext broken) broken of
+                            Right _ -> expectationFailure "expected the broken workspace to refuse"
+                            Left _ -> doesDirectoryExist target `shouldReturn` False
+            it "refuses the whole workspace for one bannerless Generated target, changing nothing" $
+                withWorkspaceFixture "keiro-dsl-workspace-banner" id $ \_ out workspace -> do
+                    plan <- shouldPlanWorkspaceSpec workspace
+                    let generated = [m | (m, _) <- wpModules plan, kind m == Generated]
+                    case generated of
+                        [] -> expectationFailure "workspace fixture has no Generated module"
+                        target : _ -> do
+                            let path = out </> modulePath target
+                            createDirectoryIfMissing True (takeDirectory path)
+                            TIO.writeFile path "hand owned\n"
+                            before <- treeSnapshot out
+                            refused <- executeWorkspaceScaffold out False plan
+                            refused `shouldSatisfy` isMissingBannerRefusal
+                            treeSnapshot out `shouldReturn` before
+                            forced <- executeWorkspaceScaffold out True plan
+                            forced `shouldSatisfy` isSuccessfulScaffold
+                            TIO.readFile path `shouldReturn` moduleText target
+            it "scaffolds a whole workspace through the CLI" $
+                withTempDirectory "keiro-dsl-workspace-cli" $ \out -> do
+                    (exitCode, stdoutText, stderrText) <-
+                        runKeiroDsl ["scaffold", canonicalWorkspacePath, "--out", out]
+                    unless (exitCode == ExitSuccess) (expectationFailure (stdoutText <> stderrText))
+                    stderrText `shouldContain` "workspace: demo-project"
+                    doesFileExist (out </> "keiro-dsl-scaffold-record.workspace.demo-project.txt")
+                        `shouldReturn` True
+                    tree <- treeSnapshot out
+                    length [path | (path, _) <- tree, "StructuralProjections.hs" `T.isSuffixOf` T.pack path]
+                        `shouldBe` 1
+                    length [path | (path, _) <- tree, "ReplayAudit.hs" `T.isSuffixOf` T.pack path]
+                        `shouldBe` 1
+                    (secondCode, _, secondErr) <-
+                        runKeiroDsl ["scaffold", canonicalWorkspacePath, "--out", out]
+                    secondCode `shouldBe` ExitSuccess
+                    secondErr `shouldSatisfy` (not . isInfixOfString "(overwritten)")
+                    treeSnapshot out `shouldReturn` tree
+
 comparisonProvenance :: CompareProvenance
 comparisonProvenance =
     CompareProvenance
@@ -3400,6 +3559,128 @@ writeGoldenWorkspace root = do
             expectationFailure (T.unpack (T.intercalate "\n" (renderWorkspaceFailure manifestPath failure)))
                 >> error "unreachable"
         Right workspace -> pure workspace
+
+{- | Materialize the canonical fixture workspace in a fresh temporary directory
+and hand the callback its root, a sibling output directory, and the composed
+workspace. Working on a copy is what lets a test edit a member and re-scaffold.
+
+The manifest's @spec@ lines are passed through the given function first, so a
+caller can list the same members in a different order; the manifest __file
+name__ stays the same, which is what makes two runs comparable byte for byte.
+-}
+withWorkspaceFixture ::
+    String ->
+    ([FilePath] -> [FilePath]) ->
+    (FilePath -> FilePath -> WorkspaceSpec -> IO a) ->
+    IO a
+withWorkspaceFixture template orderMembers act =
+    withTempDirectory template $ \base -> do
+        let root = base </> "workspace"
+            out = base </> "out"
+            members =
+                [ "domain/project-artifact.keiro"
+                , "domain/project.keiro"
+                , "domain/shared.keiro"
+                ]
+        createDirectoryIfMissing True (root </> "domain")
+        forM_ members $ \relative -> do
+            source <- readTestText ("test/fixtures/workspace" </> relative)
+            TIO.writeFile (root </> relative) source
+        TIO.writeFile
+            (root </> "service.keiro-workspace")
+            ( T.unlines
+                ( ["service demo-project", "module Demo.Modules.Project", "layout collocated"]
+                    <> ["spec " <> T.pack relative | relative <- orderMembers members]
+                )
+            )
+        workspace <- loadTempWorkspace root
+        act root out workspace
+
+-- | Compose a workspace that a test just wrote to disk.
+loadTempWorkspace :: FilePath -> IO WorkspaceSpec
+loadTempWorkspace root = do
+    let manifestPath = root </> "service.keiro-workspace"
+    loaded <- loadWorkspace (fileContentSource root) manifestPath
+    case loaded of
+        Left failure ->
+            expectationFailure (T.unpack (T.intercalate "\n" (renderWorkspaceFailure manifestPath failure)))
+                >> error "unreachable"
+        Right workspace -> pure workspace
+
+-- | Plan an already-composed workspace, failing the test on a refusal.
+shouldPlanWorkspaceSpec :: WorkspaceSpec -> IO WorkspacePlan
+shouldPlanWorkspaceSpec workspace =
+    case planWorkspaceScaffold "goldens" (workspaceContext workspace) workspace of
+        Left refusals -> expectationFailure ("unexpected workspace plan refusal: " <> show refusals) >> error "unreachable"
+        Right plan -> pure plan
+
+-- | Plan then execute a whole-workspace scaffold, failing loudly on either.
+executePlannedWorkspaceScaffold :: FilePath -> WorkspaceSpec -> IO WorkspaceScaffoldReport
+executePlannedWorkspaceScaffold out workspace = do
+    plan <- shouldPlanWorkspaceSpec workspace
+    result <- executeWorkspaceScaffold out False plan
+    case result of
+        Left refusals -> expectationFailure ("unexpected workspace execution refusal: " <> show refusals) >> error "unreachable"
+        Right report -> pure report
+
+{- | Rename one member's aggregate in place and recompose. Only the
+@aggregate \<Name\>@ header is rewritten, so declarations that merely share the
+prefix (@ProjectId@, @ProjectSummary@) are untouched.
+-}
+renameMemberAggregate :: FilePath -> FilePath -> T.Text -> T.Text -> IO WorkspaceSpec
+renameMemberAggregate root member from to = do
+    source <- TIO.readFile (root </> member)
+    TIO.writeFile (root </> member) (T.replace ("aggregate " <> from <> "\n") ("aggregate " <> to <> "\n") source)
+    loadTempWorkspace root
+
+{- | Move the @ProjectArtifact@ aggregate from the artifact member into the
+project member, and recompose.
+
+It is prepended, so the merged spec's node order — and therefore every emitted
+byte, including the replay-audit assembly's aggregate list — is exactly what it
+was. That isolates the change to ownership, which is the point of the test.
+-}
+moveArtifactAggregate :: FilePath -> IO WorkspaceSpec
+moveArtifactAggregate root = do
+    artifact <- TIO.readFile (root </> "domain/project-artifact.keiro")
+    project <- TIO.readFile (root </> "domain/project.keiro")
+    case T.breakOn "aggregate ProjectArtifact" artifact of
+        (kept, moved) | not (T.null moved) -> do
+            TIO.writeFile (root </> "domain/project-artifact.keiro") kept
+            TIO.writeFile
+                (root </> "domain/project.keiro")
+                (T.replace "aggregate Project\n" (moved <> "\naggregate Project\n") project)
+            loadTempWorkspace root
+        _ -> expectationFailure "artifact member has no ProjectArtifact aggregate" >> error "unreachable"
+
+{- | Every regular file under a directory, as @(relative path, contents)@ sorted
+by path — the comparison unit for "byte-identical output".
+-}
+treeSnapshot :: FilePath -> IO [(FilePath, T.Text)]
+treeSnapshot root = do
+    exists <- doesDirectoryExist root
+    if not exists then pure [] else sort <$> walk ""
+  where
+    walk relative = do
+        entries <- listDirectory (root </> relative)
+        fmap concat . forM (sort entries) $ \entry -> do
+            let child = if null relative then entry else relative </> entry
+            isDirectory <- doesDirectoryExist (root </> child)
+            if isDirectory
+                then walk child
+                else do
+                    contents <- TIO.readFile (root </> child)
+                    pure [(child, contents)]
+
+thd3 :: (a, b, c) -> c
+thd3 (_, _, value) = value
+
+isPathCollision :: Refusal -> Bool
+isPathCollision PathCollision{} = True
+isPathCollision _ = False
+
+isInfixOfString :: String -> String -> Bool
+isInfixOfString needle haystack = T.isInfixOf (T.pack needle) (T.pack haystack)
 
 -- | Load a workspace fixture expecting a compose refusal, and return it.
 shouldRefuseWorkspace :: FilePath -> IO (NonEmpty WorkspaceDiagnostic)

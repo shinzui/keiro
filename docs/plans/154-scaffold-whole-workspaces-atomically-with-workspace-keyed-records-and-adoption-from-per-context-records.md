@@ -98,17 +98,21 @@ This section must always reflect the actual current state of the work.
       set *and refusal set* identical to the single-file path; obligations computed from
       the complete merged graph and spanning members. — 2026-07-29
 - [x] M1 commit with the mandated trailers. — 2026-07-29
-- [ ] M2: Add `executeWorkspaceScaffold`, `WorkspaceScaffoldReport`, `OwnershipMove`,
-      `Unchanged` disposition, and `renderWorkspaceScaffoldReport` to `ScaffoldRun.hs`.
-- [ ] M2: Wire the workspace branch of the `Scaffold` command in `keiro-dsl/app/Main.hs`
+- [x] M2: Add `executeWorkspaceScaffold`, `WorkspaceScaffoldReport`, `OwnershipMove`, and
+      `renderWorkspaceScaffoldReport` to `WorkspaceScaffold.hs`, and the `Unchanged`
+      disposition to `ScaffoldRun.hs` (where `WriteDisposition` lives). — 2026-07-29
+- [x] M2: Wire the workspace branch of the `Scaffold` command in `keiro-dsl/app/Main.hs`
       through EP-1's dispatch (validation gate, context precedence, goldens, plan, execute).
-- [ ] M2: Filesystem tests: whole-workspace stale detection without cross-member false
+      — 2026-07-29
+- [x] M2: Filesystem tests: whole-workspace stale detection without cross-member false
       positives; idempotent second run reports zero changes; member reorder produces
       byte-identical trees/record/manifest; any-member failure leaves tree, record, and
-      manifest untouched; ownership move reported when a node moves between members.
-- [ ] M2: Regression guard: full existing `keiro-dsl-test` suite passes unchanged; single-file
-      record names and bytes pinned.
-- [ ] M2 commit with the mandated trailers.
+      manifest untouched; ownership move reported when a node moves between members; plus a
+      bannerless-target refusal test and an end-to-end CLI test. — 2026-07-29
+- [x] M2: Regression guard: full existing `keiro-dsl-test` suite passes unchanged
+      (359 examples, 0 failures); single-file record names and bytes pinned by the
+      pre-existing `structural scaffold record` and `scaffold gates` groups. — 2026-07-29
+- [x] M2 commit with the mandated trailers. — 2026-07-29
 - [ ] M3: Adoption path: legacy per-context record discovery, claim rules (record-attributed
       or banner-attributed only), `MigrationReport`, persisted
       `keiro-dsl-migration-report.workspace.<service>.txt`, `superseded-by:` marker append.
@@ -330,6 +334,23 @@ implementation. Provide concise evidence.
   actually owes (MasterPlan 26 Decision Log) is *detection before the first write*, which a
   preflight satisfies exactly as the pre-existing banner check does. Carrying the root in the
   refusal lets the message name where to move the files.
+  Date: 2026-07-29
+
+- Decision: `wsrMigration` is added to `WorkspaceScaffoldReport` in M3, when
+  `MigrationReport` exists, rather than being introduced in M2 as a permanently-`Nothing`
+  field of a stub type.
+  Rationale: the plan sketched the field in M2's record for completeness, but a record field
+  whose type has no inhabitants yet is a placeholder, not a contract. Adding it with its type
+  in one change keeps every intermediate commit honest.
+  Date: 2026-07-29
+
+- Decision: The ownership-move test moves the aggregate to the *front* of the receiving
+  member so that the merged spec's node order is unchanged.
+  Rationale: the replay-audit assembly lists aggregates in merged-spec order, so moving a node
+  to the end of another member would legitimately change one generated file and muddy the
+  "an ownership move is not a content change" claim. Prepending isolates the change to
+  ownership, and the test then asserts every disposition is `Unchanged`/`Skipped`, which is
+  the strongest form of that claim.
   Date: 2026-07-29
 
 - Decision: The workspace record stores the manifest's **file name** (`manifest:`), not the

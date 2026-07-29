@@ -39,19 +39,45 @@ module Keiro.Dsl.WorkspaceScaffold (
 
     -- * Golden payload roots
     goldenRootDivergence,
+
+    -- * Execution
+    OwnershipMove (..),
+    WorkspaceScaffoldReport (..),
+    executeWorkspaceScaffold,
+    renderWorkspaceScaffoldReport,
 ) where
 
-import Data.List (nub)
+import Data.List (nub, sortOn)
+import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
+import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHoles)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessForWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
+import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
 import Keiro.Dsl.Scaffold
-import Keiro.Dsl.ScaffoldRun (Refusal (..), pureRefusals)
+import Keiro.Dsl.ScaffoldRun (
+    MappingDrift (..),
+    Refusal (..),
+    StaleModule (..),
+    WriteDisposition (..),
+    constraintPlan,
+    mappingDrift,
+    missingGeneratedBanners,
+    newBindingObligations,
+    obligationKindLabel,
+    pureRefusals,
+    renderMappingIdentity,
+    staleAgainst,
+ )
 import Keiro.Dsl.Validate (nodeIdentity)
 import Keiro.Dsl.Workspace (WorkspaceMember (..), WorkspaceSpec (..), declarationOwner, nodeOwner)
-import System.Directory (doesFileExist)
-import System.FilePath (takeDirectory, (</>))
+import Keiro.Dsl.WorkspaceRecord
+import System.Directory (createDirectoryIfMissing, doesFileExist)
+import System.FilePath (takeDirectory, takeFileName, (</>))
 
 --------------------------------------------------------------------------------
 -- Planning
@@ -236,3 +262,323 @@ upcastFixtures spec =
     ]
   where
     fixtureName event sourceVersion = T.unpack (evName event) <> ".v" <> show sourceVersion <> ".json"
+
+--------------------------------------------------------------------------------
+-- Execution
+--------------------------------------------------------------------------------
+
+{- | A module the workspace still produces, but from a different member file
+than last time. 'Nothing' on either side means context-level.
+
+An ownership move is deliberately __not__ a stale entry and __not__ a new file:
+the path is still produced, so nothing is orphaned. Reporting it separately is
+what stops "I moved this aggregate to another file" from looking like "another
+spec's leftovers". Whole-workspace diffing must classify it identically.
+-}
+data OwnershipMove = OwnershipMove
+    { omPath :: !FilePath
+    , omPrevious :: !(Maybe FilePath)
+    , omCurrent :: !(Maybe FilePath)
+    }
+    deriving stock (Eq, Show)
+
+-- | What one successful whole-workspace scaffold did.
+data WorkspaceScaffoldReport = WorkspaceScaffoldReport
+    { wsrManifestPath :: !FilePath
+    , wsrOutDir :: !FilePath
+    , wsrService :: !Text
+    , wsrContext :: !Context
+    , wsrMembers :: ![FilePath]
+    , wsrDispositions :: ![(ScaffoldModule, ModuleProvenance, WriteDisposition)]
+    , wsrBuildManifestPath :: !FilePath
+    , wsrRecordPath :: !FilePath
+    , wsrPreviousManifest :: !(Maybe Text)
+    {- ^ The manifest file name the previous workspace record was written from,
+    when it differs from this run's.
+    -}
+    , wsrStale :: ![StaleModule]
+    , wsrOwnershipMoves :: ![OwnershipMove]
+    , wsrConsumerPlan :: !ConsumerPlan
+    , wsrConstraintPlan :: ![Text]
+    , wsrMappingDrift :: ![MappingDrift]
+    , wsrNewHoles :: ![BindingHole]
+    }
+    deriving stock (Eq, Show)
+
+{- | Execute a planned whole-workspace scaffold.
+
+The shape mirrors 'Keiro.Dsl.ScaffoldRun.executeScaffold' step for step, with
+three differences that matter:
+
+  * Both preflights — stranded golden fixtures and Generated paths lacking the
+    @-- \@generated@ banner — are evaluated over the __complete__ workspace set
+    before the output directory is created or any file is touched. A bannerless
+    file under any member's subtree therefore refuses the whole run, and a
+    refused run leaves the tree, the record, and the build manifest untouched.
+
+  * History is read from and written to the workspace-keyed record, so stale
+    detection compares whole workspaces. A module produced by a sibling member
+    is in the current set and can no longer be a false positive — the defect
+    that made two same-context specs report each other's files as stale.
+
+  * A Generated module whose bytes already match is reported 'Unchanged' and
+    not rewritten, which is what makes idempotence observable rather than
+    merely claimed.
+-}
+executeWorkspaceScaffold :: FilePath -> Bool -> WorkspacePlan -> IO (Either [Refusal] WorkspaceScaffoldReport)
+executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
+    stranded <- goldenRootDivergence (wpGoldenRoot plan) workspace
+    bannerless <- if forceGeneratedOverwrite then pure [] else missingGeneratedBanners out modules
+    case stranded <> [MissingGeneratedBanner bannerless | not (null bannerless)] of
+        refusals@(_ : _) -> pure (Left refusals)
+        [] -> do
+            previous <- readWorkspaceRecord recordPath
+            stale <- staleAgainst out (map modulePath modules) (previousFiles previous)
+            let currentPlan = consumerPlan merged
+                drift = maybe [] (mappingDrift (consumerMappings currentPlan) . wrMappings) previous
+                currentObligations = either (const []) id (bindingHoles merged)
+                newHoles = maybe [] (newBindingObligations currentObligations . wrBindingObligations) previous
+            createDirectoryIfMissing True out
+            dispositions <- traverse (writeWorkspaceModule out) (wpModules plan)
+            TIO.writeFile buildManifestPath (renderManifest (T.pack manifestName) modules merged)
+            TIO.writeFile recordPath (renderWorkspaceRecord (currentWorkspaceRecord plan))
+            pure $
+                Right
+                    WorkspaceScaffoldReport
+                        { wsrManifestPath = wsManifestPath workspace
+                        , wsrOutDir = out
+                        , wsrService = wsService workspace
+                        , wsrContext = wpContext plan
+                        , wsrMembers = map wmPath (wsMembers workspace)
+                        , wsrDispositions = dispositions
+                        , wsrBuildManifestPath = buildManifestPath
+                        , wsrRecordPath = recordPath
+                        , wsrPreviousManifest = do
+                            record <- previous
+                            if wrManifest record == T.pack manifestName then Nothing else Just (wrManifest record)
+                        , wsrStale = stale
+                        , wsrOwnershipMoves = ownershipMoves previous (wpModules plan)
+                        , wsrConsumerPlan = currentPlan
+                        , wsrConstraintPlan = constraintPlan merged currentPlan
+                        , wsrMappingDrift = drift
+                        , wsrNewHoles = newHoles
+                        }
+  where
+    workspace = wpWorkspace plan
+    merged = wsMergedSpec workspace
+    modules = map fst (wpModules plan)
+    manifestName = takeFileName (wsManifestPath workspace)
+    recordPath = out </> workspaceRecordFileName (wsService workspace)
+    buildManifestPath = out </> workspaceManifestFileName (wsService workspace)
+    previousFiles previous = [(wrmKind row, wrmPath row) | row <- maybe [] wrModules previous]
+
+readWorkspaceRecord :: FilePath -> IO (Maybe WorkspaceRecord)
+readWorkspaceRecord path = do
+    exists <- doesFileExist path
+    if exists then parseWorkspaceRecord <$> TIO.readFile path else pure Nothing
+
+{- | The record this run writes: the plan's modules with their owners, the
+canonical member list, and the merged graph's mappings and obligations.
+-}
+currentWorkspaceRecord :: WorkspacePlan -> WorkspaceRecord
+currentWorkspaceRecord plan =
+    WorkspaceRecord
+        { wrService = wsService workspace
+        , wrManifest = T.pack (takeFileName (wsManifestPath workspace))
+        , wrContext = wsContext workspace
+        , wrModuleRoot = moduleRoot ctx
+        , wrLayout = layoutLabel ctx
+        , wrMembers = map wmPath (wsMembers workspace)
+        , wrModules =
+            [ WorkspaceModuleRow
+                { wrmKind = kind m
+                , wrmPath = modulePath m
+                , wrmOwner = provenanceOwner provenance
+                }
+            | (m, provenance) <- wpModules plan
+            ]
+        , wrMappings = consumerMappings (consumerPlan merged)
+        , wrBindingObligations = either (const []) id (bindingHoles merged)
+        , wrAdopted = []
+        }
+  where
+    workspace = wpWorkspace plan
+    merged = wsMergedSpec workspace
+    ctx = wpContext plan
+
+layoutLabel :: Context -> Text
+layoutLabel ctx = case placement ctx of GeneratedPrefix -> "prefixed"; CollocatedLeaf -> "collocated"
+
+{- | Paths this run still produces whose owning member changed. Computed against
+the previous record before stale detection, and never overlapping it: a moved
+module's path is still in the current plan, so it was never a removal.
+-}
+ownershipMoves :: Maybe WorkspaceRecord -> [(ScaffoldModule, ModuleProvenance)] -> [OwnershipMove]
+ownershipMoves previous current =
+    [ OwnershipMove
+        { omPath = modulePath m
+        , omPrevious = wrmOwner row
+        , omCurrent = provenanceOwner provenance
+        }
+    | (m, provenance) <- current
+    , Just row <- [Map.lookup (modulePath m) previousByPath]
+    , wrmOwner row /= provenanceOwner provenance
+    ]
+  where
+    previousByPath = Map.fromList [(wrmPath row, row) | row <- maybe [] wrModules previous]
+
+{- | Write one module. Generated modules whose bytes already match are left
+alone and reported 'Unchanged'; hole modules keep the create-once rule. The
+single-spec 'Keiro.Dsl.ScaffoldRun.executeScaffold' is untouched, so its report
+bytes are unaffected.
+-}
+writeWorkspaceModule ::
+    FilePath ->
+    (ScaffoldModule, ModuleProvenance) ->
+    IO (ScaffoldModule, ModuleProvenance, WriteDisposition)
+writeWorkspaceModule out (m, provenance) = do
+    let path = out </> modulePath m
+    exists <- doesFileExist path
+    case kind m of
+        HoleStub
+            | exists -> pure (m, provenance, Skipped)
+            | otherwise -> write path Created
+        Generated
+            | exists -> do
+                existing <- TIO.readFile path
+                if existing == moduleText m
+                    then pure (m, provenance, Unchanged)
+                    else write path Overwritten
+            | otherwise -> write path Overwritten
+  where
+    write path disposition = do
+        createDirectoryIfMissing True (takeDirectory path)
+        TIO.writeFile path (moduleText m)
+        pure (m, provenance, disposition)
+
+{- | The report a successful whole-workspace scaffold prints, following the
+single-spec report's shape so the two stay readable side by side: the header
+names the service instead of a spec, each module line carries its owning member,
+and the stale section keeps the exact "keiro-dsl never deletes files." sentence.
+-}
+renderWorkspaceScaffoldReport :: WorkspaceScaffoldReport -> [Text]
+renderWorkspaceScaffoldReport report =
+    [ "workspace: "
+        <> wsrService report
+        <> " ("
+        <> T.pack (wsrManifestPath report)
+        <> ") -> "
+        <> T.pack (wsrOutDir report)
+        <> " (module-root="
+        <> rootLabel
+        <> ", layout="
+        <> layoutLabel ctx
+        <> ")"
+    , "members:  " <> T.intercalate ", " (map T.pack (wsrMembers report))
+    ]
+        <> map moduleLine dispositions
+        <> [ "firewall: OK (" <> tshow generatedCount <> " generated modules scanned, 0 forbidden operators)"
+           , harnessLine
+           , dependencyLine
+           , "manifest: " <> T.pack (wsrBuildManifestPath report)
+           , "record:   " <> T.pack (wsrRecordPath report)
+           ]
+        <> previousManifestNote
+        <> constraintSection
+        <> newHolesSection
+        <> mappingDriftSection
+        <> ownershipSection
+        <> staleSection
+  where
+    ctx = wsrContext report
+    dispositions = wsrDispositions report
+    rootLabel = if T.null (moduleRoot ctx) then "(none)" else moduleRoot ctx
+    names = [moduleNameOf (modulePath m) | (m, _, _) <- dispositions]
+    nameWidth = maximum (1 : map T.length names)
+    moduleLine (m, provenance, disposition) =
+        "  "
+            <> kindTag (kind m)
+            <> "  "
+            <> pad (moduleNameOf (modulePath m))
+            <> "  "
+            <> dispositionTag disposition
+            <> "  "
+            <> ownerTag provenance
+    kindTag Generated = "generated"
+    kindTag HoleStub = "hole     "
+    dispositionTag Overwritten = "(overwritten)"
+    dispositionTag Created = "(created)"
+    dispositionTag Skipped = "(skipped: already present)"
+    dispositionTag Unchanged = "(unchanged)"
+    ownerTag ContextLevel = "(context-level)"
+    ownerTag (MemberOwned path) = T.pack path
+    pad name = name <> T.replicate (nameWidth - T.length name) " "
+    generatedCount = length [() | (m, _, _) <- dispositions, kind m == Generated]
+    harnesses =
+        sortOn
+            id
+            [ moduleNameOf (modulePath m)
+            | (m, _, _) <- dispositions
+            , any (`T.isSuffixOf` moduleNameOf (modulePath m)) [".Harness", ".ProcessHarness", ".WorkflowFacts"]
+            ]
+    harnessLine = case harnesses of
+        [] -> "harness:  (none emitted)"
+        _ -> "harness:  run `cabal test <your-component>` over " <> T.unwords harnesses
+    dependencyLine =
+        "dependency plan: consumer packages "
+            <> renderBracketed (consumerPackages (wsrConsumerPlan report))
+            <> ", consumer modules "
+            <> renderBracketed (consumerModules (wsrConsumerPlan report))
+    previousManifestNote = case wsrPreviousManifest report of
+        Just previous -> ["note: the previous workspace record was written from manifest " <> previous]
+        Nothing -> []
+    constraintSection = case wsrConstraintPlan report of
+        [] -> []
+        constraints -> "constraint plan:" : map ("  " <>) constraints
+    newHolesSection = case wsrNewHoles report of
+        [] -> []
+        obligations ->
+            ["newly required holes since last scaffold: " <> tshow (length obligations)]
+                <> concatMap obligationLines obligations
+    obligationLines hole =
+        [ "  " <> holeModule hole
+        , "    " <> holeSignature hole <> " (" <> obligationKindLabel (holeKind hole) <> ")"
+        ]
+    mappingDriftSection = case wsrMappingDrift report of
+        [] -> []
+        drifts ->
+            ["mapping drift: " <> tshow (length drifts) <> " declaration(s) changed since the previous scaffold:"]
+                <> concatMap driftLines drifts
+    driftLines drift =
+        [ "  " <> driftSpecName drift
+        , "    previous: " <> maybe "(absent)" renderMappingIdentity (driftPrevious drift)
+        , "    current:  " <> maybe "(absent)" renderMappingIdentity (driftCurrent drift)
+        ]
+    ownershipSection = case wsrOwnershipMoves report of
+        [] -> []
+        moves ->
+            ["ownership moves: " <> tshow (length moves) <> " module(s) changed owning member (content unaffected):"]
+                <> [ "  " <> T.pack (omPath move) <> "  " <> ownerName (omPrevious move) <> " -> " <> ownerName (omCurrent move)
+                   | move <- moves
+                   ]
+    ownerName = maybe "(context-level)" T.pack
+    staleSection = case wsrStale report of
+        [] -> []
+        stale ->
+            [ "stale: "
+                <> tshow (length stale)
+                <> " file(s) from a previous scaffold of workspace "
+                <> wsrService report
+                <> " are no longer produced by this workspace:"
+            ]
+                <> map staleLine stale
+                <> ["note: keiro-dsl never deletes files."]
+    staleLine stale = case staleKind stale of
+        Generated -> "  generated " <> T.pack (stalePath stale) <> "  (safe to delete; still on disk)"
+        HoleStub -> "  hole      " <> T.pack (stalePath stale) <> "  (hand-owned — review before deleting)"
+
+renderBracketed :: [Text] -> Text
+renderBracketed values = "[" <> T.intercalate ", " values <> "]"
+
+tshow :: (Show a) => a -> Text
+tshow = T.pack . show

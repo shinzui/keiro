@@ -22,7 +22,8 @@ import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBan
 import Keiro.Dsl.ScaffoldRun (executeScaffold, planScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
-import Keiro.Dsl.Workspace (WorkspaceDiagnostic (..), checkWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest, wsContext, wsMergedSpec)
+import Keiro.Dsl.Workspace (WorkspaceDiagnostic (..), WorkspaceSpec (..), checkWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
+import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffold, planWorkspaceScaffoldWithGoldens, renderWorkspaceScaffoldReport)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
 import System.Exit (ExitCode (..), exitFailure)
@@ -153,7 +154,8 @@ run :: Command -> IO ()
 run (Parse fp) | isWorkspacePath fp = runWorkspaceParse fp
 run (Check fp emit explainBindings coverageOptions)
     | isWorkspacePath fp = runWorkspaceCheck fp emit explainBindings coverageOptions
-run (Scaffold fp _ _ _ _ _ _) | isWorkspacePath fp = stagedWorkspaceRefusal "workspace scaffolding is not yet supported; it lands with docs/plans/154-scaffold-whole-workspaces-atomically-with-workspace-keyed-records-and-adoption-from-per-context-records.md"
+run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest)
+    | isWorkspacePath fp = runWorkspaceScaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest
 run (Diff fp _ _ _ _ _ _ _) | isWorkspacePath fp = stagedWorkspaceRefusal "workspace diff is not yet supported; it lands with docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md"
 run (Parse fp) = do
     input <- TIO.readFile fp
@@ -301,6 +303,82 @@ runWorkspaceCheck fp emit explainBindings coverageOptions = do
                     coverageOk <- runCheckCoverage fp spec coverageOptions
                     when (coverageOk && not emit && not explainBindings) (putStrLn "OK")
                     when (not coverageOk) exitFailure
+
+{- | @scaffold@ on a workspace manifest: compose the whole service, then plan
+and emit the complete module set for every member in one invocation.
+
+Every refusal — a member that will not parse, a cross-member conflict, a
+validation error anywhere in the merged graph, a module-path collision, a golden
+fixture stranded beside a member, a Generated target without the banner — is
+raised before the first output byte changes, exactly as on the single-file path.
+
+The context is folded with the same precedence the single-file path uses: a CLI
+flag beats the workspace authority, which (per EP-153) beats a member clause.
+The single-file branch below is not touched, so existing users' bytes are
+unchanged by construction.
+-}
+runWorkspaceScaffold ::
+    FilePath ->
+    FilePath ->
+    Maybe String ->
+    Bool ->
+    Bool ->
+    Maybe FilePath ->
+    Maybe (String, FilePath) ->
+    IO ()
+runWorkspaceScaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest = do
+    loaded <- loadWorkspace (fileContentSource (takeDirectory fp)) fp
+    case loaded of
+        Left failure -> do
+            mapM_ (TIO.hPutStrLn stderr) (renderWorkspaceFailure fp failure)
+            exitFailure
+        Right workspace -> do
+            -- Validation gate: never scaffold an invalid service. Abort on any
+            -- error-severity diagnostic before writing a single module.
+            let diags = checkWorkspace workspace
+            mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) diags
+            when (any ((== Error) . wdSeverity) diags) exitFailure
+            let spec = wsMergedSpec workspace
+                ctx = workspaceContext cliRoot cliCollocate workspace
+                goldenRoot = fromMaybe (takeDirectory fp </> "golden-payloads") cliGoldens
+            goldens <- loadGoldenPayloads goldenRoot spec
+            case ( planWorkspaceScaffoldWithGoldens goldens goldenRoot ctx workspace
+                 , traverse (\(name, _) -> codecComparisonModule ctx spec (T.pack name)) comparisonRequest
+                 ) of
+                (Left refusals, _) -> do
+                    mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
+                    exitFailure
+                (_, Left comparisonError) -> TIO.hPutStrLn stderr comparisonError >> exitFailure
+                (Right plan, Right comparisonModule) -> do
+                    comparisonReady <- preflightComparison out comparisonRequest comparisonModule
+                    case comparisonReady of
+                        Left comparisonError -> TIO.hPutStrLn stderr comparisonError >> exitFailure
+                        Right () -> do
+                            result <- executeWorkspaceScaffold out forceGeneratedOverwrite plan
+                            case result of
+                                Left refusals -> do
+                                    mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
+                                    exitFailure
+                                Right report -> do
+                                    mapM_ (TIO.hPutStrLn stderr) (renderWorkspaceScaffoldReport report)
+                                    writeComparison comparisonRequest comparisonModule
+
+{- | Fold the workspace's module-root and layout authority with the CLI
+overrides to a 'Context'. Precedence is CLI flag > workspace authority >
+built-in default; EP-153 already resolved the manifest-versus-member question
+into 'wsModuleRoot' and 'wsLayout', so this mirrors 'mkContext' exactly one
+level up.
+-}
+workspaceContext :: Maybe String -> Bool -> WorkspaceSpec -> Context
+workspaceContext cliRoot cliCollocate workspace =
+    Context
+        { contextName = wsContext workspace
+        , moduleRoot = maybe (fromMaybe "" (wsModuleRoot workspace)) T.pack cliRoot
+        , placement =
+            if cliCollocate
+                then CollocatedLeaf
+                else fromMaybe GeneratedPrefix (wsLayout workspace)
+        }
 
 {- | A command that recognizes a workspace manifest but whose whole-workspace
 implementation lands in a named later plan. Naming the owning plan keeps the
