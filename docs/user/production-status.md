@@ -3,6 +3,19 @@
 Keiro v1 is production-shaped for controlled early use. It is not yet a
 turnkey, externally polished framework.
 
+## Availability
+
+The five published packages — `keiro-core`, `keiro`, `keiro-pgmq`,
+`keiro-migrations`, and `keiro-dsl` — are on Hackage and share one version.
+They are released together, each with its own git tag. `keiro-test-support` and
+`jitsurei` are internal and are not published.
+
+Every library and executable dependency carries a PVP upper bound, so a
+breaking upstream release cannot silently enter your build plan. The corollary
+is that upper bounds may lag a dependency you already run; a Hackage metadata
+revision, not a new release, is the normal fix. Test-suite-only dependencies
+are deliberately left open — they do not affect consumers.
+
 ## What Is Implemented
 
 The current library includes:
@@ -16,8 +29,13 @@ The current library includes:
 - multi-event command output (one command appends zero, one, or many events in
   one optimistic batch);
 - same-transaction SQL continuations for inline projections;
-- advisory snapshots with an explicit `FoldVersion` helper for hand-written
-  fold invalidation;
+- advisory snapshots whose discriminator (codec version, register layout, and
+  control-state shape) invalidates stale seeds automatically, plus
+  `withFoldFingerprint`/`FoldVersion` for fold changes that register layout
+  alone cannot see, and a sampled runtime witness
+  (`RunCommandOptions.seedVerifySampleRate`, one in 1000 usable seeds by
+  default) that full-replays a hit and emits `keiro.snapshot.seed.divergence`
+  on a mismatch without blocking the command;
 - read-model metadata, consistency modes, and position waits;
 - explicitly registered read models; atomically fenced rebuilds; category-scoped
   strong reads; and async projection outcomes that prevent checkpointing fenced
@@ -38,7 +56,17 @@ The current library includes:
 - named-step durable workflows (`Keiro.Workflow`): `step`/`sleep`/`awakeable` plus
   child workflows, a journal per workflow (`wf:<name>-<id>`), a crash-recovery
   resume worker, journal snapshots, `continueAsNew` journal rotation, the `patch`
-  versioning API, and `keiro.workflow.*` observability;
+  versioning API, lease renewal at fresh actions and await arms
+  (`WorkflowRunOptions.leaseHeartbeat`, so a healthy long advance is not charged
+  a crash attempt), the operator recovery API
+  `Keiro.Workflow.Instance.resurrectFailedWorkflow`, and `keiro.workflow.*`
+  observability;
+- a read-only pre-deploy replay gate (`Keiro.ReplayAudit`): replays real streams
+  through a candidate binary in affected-event `AuditTargeted` or `AuditFull`
+  mode, compares accepted snapshot seeds against full replay over RFC 8785
+  canonical JSON, reports `ReplayOk`/`ReplayFailed`/`SeedDivergence` with stable
+  digests, and exposes `auditExitCode` for CI. Generated DSL services assemble
+  one context-wide `Generated.<Context>.ReplayAudit.auditTargets`;
 - LISTEN/NOTIFY push delivery (`Keiro.Wake`, `runWorkflowResumeWorkerPush`):
   sub-second wakeups for the resume worker and subscription loops over kiroku's
   existing per-store notifier, with a durable poll fallback and no new connections;
@@ -53,7 +81,7 @@ The current library includes:
 - durable rejected-dispatch records plus idempotent replay of Kiroku
   subscription dead letters;
 - native `pg-migrate` components for Kiroku and Keiro framework tables, composed
-  in dependency order by `keiro-migrate`.
+  in dependency order by `keiro-migrate`;
 - the `keiro-dsl` typed-spec toolchain across aggregates, process managers,
   routers, integration, queues, read models, and durable workflows, including
   structural/opaque consumer mappings, total bindings, generated private-event
@@ -111,6 +139,17 @@ managers and timers remain the saga-style / time-based coordination layer; reach
 for a workflow when the process reads as one long-running function with in-line
 waits. See the [Durable Workflows guide](../guides/durable-workflows.md).
 
+### Snapshot seed verification is sampled, not exhaustive
+
+Snapshot discriminators reject seeds whose codec version, register layout, or
+control-state shape changed, and the runtime witness full-replays a sampled
+fraction of accepted seeds to catch divergence the discriminator cannot see.
+Both are detection, not prevention: a fold change invisible to register layout
+still needs an explicit `withFoldFingerprint` token, and the default one-in-1000
+sample rate means divergence is found eventually rather than immediately. Run
+`Keiro.ReplayAudit` before deploying a changed fold surface instead of relying
+on the sample.
+
 ### APIs are low-level
 
 The command, projection, read-model, process-manager, and timer APIs expose the
@@ -131,6 +170,8 @@ Use Keiro v1 in production only with explicit guardrails:
 - pin dependency revisions;
 - run the full test suite in CI;
 - add application-level codec and projection idempotency tests;
+- gate deploys on a `Keiro.ReplayAudit` run against real streams — targeted for
+  a known affected set, full when the fold surface changed;
 - document operational repair procedures;
 - treat API changes as expected until the library reaches a stronger stability
   milestone.
