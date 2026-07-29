@@ -1,3 +1,6 @@
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 {- | Service workspaces: several complete @.keiro@ member files validated,
 scaffolded, and diffed as __one service contract__.
 
@@ -43,20 +46,65 @@ module Keiro.Dsl.Workspace (
 
     -- * Member paths
     normalizeMemberPath,
+
+    -- * Loading members
+    ContentSource (..),
+    fileContentSource,
+    loadWorkspace,
+
+    -- * The composed service graph
+    WorkspaceSpec (..),
+    WorkspaceMember (..),
+    OwnershipIndex (..),
+    declarationOwner,
+    nodeOwner,
+    LineMap (..),
+    resolveWorkspaceLine,
+    composeWorkspace,
+    oneMemberWorkspace,
+    checkWorkspace,
+
+    -- * Multi-file diagnostics
+    WorkspaceDiagnostic (..),
+    WorkspaceLocation (..),
+    WorkspaceFile (..),
+    WorkspaceFailure (..),
+    renderWorkspaceDiagnostic,
+    renderWorkspaceFailure,
+    workspaceDisplayPath,
+
+    -- * Line relocation
+    relocateLocs,
+    collectLocs,
 ) where
 
+import Control.Exception qualified as Exception
+import Data.Bifunctor (first)
 import Data.Char (isAscii, isDigit, isLetter, toLower)
-import Data.List (sortOn)
+import Data.Functor.Const (Const (..))
+import Data.Functor.Identity (Identity (..))
+import Data.List (nub, sort, sortOn)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 import Data.Void (Void)
-import Keiro.Dsl.Grammar (Loc (..), Placement (..))
-import Keiro.Dsl.Parser (ParseError)
+import GHC.Generics
+import Keiro.Dsl.Grammar
+import Keiro.Dsl.Parser (ParseError, parseSpec)
+import Keiro.Dsl.Scaffold (Context (..))
+import Keiro.Dsl.ScaffoldRun (Refusal (..), planScaffoldWithGoldens)
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), nodeIdentity, validateSpec)
+import System.Directory (doesFileExist)
+import System.FilePath (takeBaseName, takeDirectory, takeFileName, (</>))
 import Text.Megaparsec hiding (ParseError)
 import Text.Megaparsec.Char (char, space1)
 import Text.Megaparsec.Char.Lexer qualified as L
+import Text.Read (readMaybe)
 
 {- | A parsed workspace manifest. Members are held in canonical order
 (codepoint-sorted normalized paths), so two manifests that list the same
@@ -255,7 +303,7 @@ buildManifest :: Int -> [Clause] -> WP WorkspaceManifest
 buildManifest startOffset clauses = do
     case clauses of
         [] -> failAt startOffset "workspace manifest must begin with a 'service <name>' clause"
-        first : _ -> case first of
+        leading : _ -> case leading of
             ClService{} -> pure ()
             other -> failAt (clauseOffset other) "the first clause of a workspace manifest must be 'service <name>'"
     (service, serviceLoc) <- case [(name, loc) | ClService _ loc name <- clauses] of
@@ -347,3 +395,898 @@ renderWorkspaceManifest manifest =
 renderPlacement :: Placement -> Text
 renderPlacement GeneratedPrefix = "prefixed"
 renderPlacement CollocatedLeaf = "collocated"
+
+--------------------------------------------------------------------------------
+-- Generic line relocation
+--------------------------------------------------------------------------------
+
+{- | Everything in the AST that carries source lines. The generic default walks
+a value's 'Generic' representation and applies the function at every 'Loc'
+field, however deeply nested.
+
+The instance list below covers every type in "Keiro.Dsl.Grammar". Completeness
+is compiler-enforced rather than reviewed by eye: the generic default demands a
+'HasLocs' instance for each field type, so a new AST type is a build error here
+until it is listed, and no 'Loc' can be silently missed.
+-}
+class HasLocs a where
+    traverseLocs :: (Applicative f) => (Loc -> f Loc) -> a -> f a
+    default traverseLocs :: (Generic a, GHasLocs (Rep a), Applicative f) => (Loc -> f Loc) -> a -> f a
+    traverseLocs f = fmap to . gtraverseLocs f . from
+
+class GHasLocs rep where
+    gtraverseLocs :: (Applicative f) => (Loc -> f Loc) -> rep p -> f (rep p)
+
+instance GHasLocs V1 where
+    gtraverseLocs _ = pure
+
+instance GHasLocs U1 where
+    gtraverseLocs _ = pure
+
+instance (GHasLocs a, GHasLocs b) => GHasLocs (a :*: b) where
+    gtraverseLocs f (a :*: b) = (:*:) <$> gtraverseLocs f a <*> gtraverseLocs f b
+
+instance (GHasLocs a, GHasLocs b) => GHasLocs (a :+: b) where
+    gtraverseLocs f (L1 a) = L1 <$> gtraverseLocs f a
+    gtraverseLocs f (R1 b) = R1 <$> gtraverseLocs f b
+
+instance (GHasLocs a) => GHasLocs (M1 i c a) where
+    gtraverseLocs f (M1 a) = M1 <$> gtraverseLocs f a
+
+instance (HasLocs c) => GHasLocs (K1 i c) where
+    gtraverseLocs f (K1 c) = K1 <$> traverseLocs f c
+
+-- The one interesting instance: this is where the function actually fires.
+instance HasLocs Loc where
+    traverseLocs f = f
+
+-- Leaf types that carry no location.
+instance HasLocs Int where
+    traverseLocs _ = pure
+
+instance HasLocs Integer where
+    traverseLocs _ = pure
+
+instance HasLocs Double where
+    traverseLocs _ = pure
+
+instance HasLocs Bool where
+    traverseLocs _ = pure
+
+instance HasLocs Char where
+    traverseLocs _ = pure
+
+instance HasLocs Text where
+    traverseLocs _ = pure
+
+instance (HasLocs a) => HasLocs [a] where
+    traverseLocs f = traverse (traverseLocs f)
+
+instance (HasLocs a) => HasLocs (Maybe a) where
+    traverseLocs f = traverse (traverseLocs f)
+
+instance (HasLocs a, HasLocs b) => HasLocs (a, b) where
+    traverseLocs f (a, b) = (,) <$> traverseLocs f a <*> traverseLocs f b
+
+instance (HasLocs a, HasLocs b) => HasLocs (Either a b) where
+    traverseLocs f (Left a) = Left <$> traverseLocs f a
+    traverseLocs f (Right b) = Right <$> traverseLocs f b
+
+{- | Rewrite every source line in a spec. This is a compiler line map, not
+textual inclusion: only line numbers move, and 'Keiro.Dsl.Grammar.Loc''s 'Eq'
+instance deliberately ignores the line, so relocation cannot change any
+equality-based behavior.
+-}
+relocateLocs :: (Int -> Int) -> Spec -> Spec
+relocateLocs shift = runIdentity . traverseLocs (Identity . Loc . shift . unLoc)
+
+{- | Every source line the spec's AST carries, in traversal order. Exists so a
+test can prove 'relocateLocs' misses nothing: relocate by a known offset and
+assert the collected multiset shifted exactly.
+-}
+collectLocs :: Spec -> [Int]
+collectLocs = getConst . traverseLocs (\l -> Const [unLoc l])
+
+--------------------------------------------------------------------------------
+-- Multi-file diagnostics
+--------------------------------------------------------------------------------
+
+{- | Which file a workspace diagnostic points at. Member paths are stored
+manifest-relative — the canonical identity a scaffold record or diff report can
+key on — and joined with the manifest's directory only at render time.
+-}
+data WorkspaceFile
+    = -- | The manifest itself.
+      WorkspaceManifestFile
+    | -- | A member, by its normalized manifest-relative path.
+      WorkspaceMemberFile !FilePath
+    deriving stock (Eq, Ord, Show)
+
+{- | One cited source position. 'wlRole' explains why a /secondary/ position is
+relevant ("also declared here", "member declares context 'kotei'"); it is
+unused for the primary position, which carries the diagnostic's own message.
+-}
+data WorkspaceLocation = WorkspaceLocation
+    { wlFile :: !WorkspaceFile
+    , wlLine :: !Int
+    , wlRole :: !Text
+    }
+    deriving stock (Eq, Show)
+
+{- | A diagnostic that can cite several files at once — the whole point of
+whole-service checking. The first location is primary; the rest render as
+indented notes. The code comes from the same append-only registry as
+single-spec diagnostics ("Keiro.Dsl.Validate"), so every gate stays
+correlatable by code.
+-}
+data WorkspaceDiagnostic = WorkspaceDiagnostic
+    { wdLocations :: !(NonEmpty WorkspaceLocation)
+    , wdSeverity :: !Severity
+    , wdCode :: !DiagnosticCode
+    , wdMessage :: !Text
+    }
+    deriving stock (Eq, Show)
+
+{- | Why a workspace could not be produced. The three constructors are the
+three stages at which loading can stop: the manifest could not be read, it
+could not be parsed, or the members were read but the service refused to
+compose.
+-}
+data WorkspaceFailure
+    = WorkspaceManifestUnreadable !Text
+    | WorkspaceManifestUnparseable !ParseError
+    | WorkspaceRefused !(NonEmpty WorkspaceDiagnostic)
+    deriving stock (Eq, Show)
+
+{- | The clickable path for a cited file: the manifest as the user typed it, or
+the manifest's directory joined with the member's relative path.
+-}
+workspaceDisplayPath :: FilePath -> WorkspaceFile -> FilePath
+workspaceDisplayPath manifestPath = \case
+    WorkspaceManifestFile -> manifestPath
+    WorkspaceMemberFile relative ->
+        let dir = takeDirectory manifestPath
+         in if dir == "." then relative else dir </> relative
+
+{- | Render one diagnostic. The primary location keeps the established
+single-file shape so existing consumers and greps keep working; each additional
+location follows on an indented continuation line.
+
+@
+…/domain/shared.keiro:3: error[WorkspaceDuplicateDeclaration]: duplicate declaration 'ProjectId' …
+  …/domain/project.keiro:4: note: also declared here
+@
+-}
+renderWorkspaceDiagnostic :: FilePath -> WorkspaceDiagnostic -> Text
+renderWorkspaceDiagnostic manifestPath diagnostic =
+    T.intercalate "\n" (primary : notes)
+  where
+    primaryLocation :| secondary = wdLocations diagnostic
+    primary =
+        renderAt primaryLocation
+            <> ": "
+            <> severityWord
+            <> "["
+            <> T.pack (show (wdCode diagnostic))
+            <> "]: "
+            <> wdMessage diagnostic
+    notes = ["  " <> renderAt location <> ": note: " <> wlRole location | location <- secondary]
+    renderAt location =
+        T.pack (workspaceDisplayPath manifestPath (wlFile location))
+            <> ":"
+            <> T.pack (show (wlLine location))
+    severityWord = case wdSeverity diagnostic of Error -> "error"; Warning -> "warning"
+
+-- | Render a whole failure as the lines a command should print to stderr.
+renderWorkspaceFailure :: FilePath -> WorkspaceFailure -> [Text]
+renderWorkspaceFailure manifestPath = \case
+    WorkspaceManifestUnreadable reason ->
+        ["cannot read workspace manifest " <> T.pack manifestPath <> ": " <> reason]
+    WorkspaceManifestUnparseable err -> [err]
+    WorkspaceRefused diagnostics ->
+        map (renderWorkspaceDiagnostic manifestPath) (NE.toList diagnostics)
+
+--------------------------------------------------------------------------------
+-- The composed graph
+--------------------------------------------------------------------------------
+
+{- | Maps a merged-spec line back to the member that owns it. Each entry is
+@(exclusiveLow, inclusiveHigh, memberPath)@: merged line @n@ belongs to the
+entry with @low < n <= high@, and the member's own line is @n - low@.
+-}
+newtype LineMap = LineMap {lmRanges :: [(Int, Int, FilePath)]}
+    deriving stock (Eq, Show)
+
+{- | Where each shared declaration and each node was defined. Keys are
+@(namespace, name)@ — namespaces are @id@, @enum@, @rule@, @mapped@ for
+declarations and the node kind ("aggregate", "readmodel", …) for nodes, the
+same keying the single-spec duplicate-node rule uses. Values are the owning
+member's manifest-relative path and its /original/ (unrelocated) location.
+-}
+data OwnershipIndex = OwnershipIndex
+    { oiDeclarations :: !(Map (Text, Name) (FilePath, Loc))
+    , oiNodes :: !(Map (Text, Name) (FilePath, Loc))
+    }
+    deriving stock (Eq, Show)
+
+-- | Which member owns a shared declaration, e.g. @declarationOwner index "id" "ProjectId"@.
+declarationOwner :: OwnershipIndex -> Text -> Name -> Maybe (FilePath, Loc)
+declarationOwner index namespace name = Map.lookup (namespace, name) (oiDeclarations index)
+
+-- | Which member owns a node, e.g. @nodeOwner index "aggregate" "Project"@.
+nodeOwner :: OwnershipIndex -> Text -> Name -> Maybe (FilePath, Loc)
+nodeOwner index kind name = Map.lookup (kind, name) (oiNodes index)
+
+-- | One member of a composed workspace.
+data WorkspaceMember = WorkspaceMember
+    { wmPath :: !FilePath
+    -- ^ Normalized, manifest-relative.
+    , wmSpec :: !Spec
+    -- ^ Exactly as parsed: line numbers are the member's own.
+    , wmLineBase :: !Int
+    -- ^ Added to this member's lines to place them in the merged spec.
+    , wmLineCount :: !Int
+    -- ^ Source lines in the member file.
+    }
+    deriving stock (Eq, Show)
+
+{- | A whole service, composed from its members and ready to be checked,
+scaffolded, or diffed as one contract.
+
+'wsMergedSpec' is the load-bearing field: it is a single 'Spec' holding every
+member's declarations and nodes in canonical member order, with line numbers
+relocated into disjoint ranges. Because it is an ordinary 'Spec', the existing
+whole-spec validation, type-graph resolution, coverage, and binding analysis
+run over it unchanged — cross-file references resolve by name exactly as if the
+members had been one file, with no risk of a node-specific rule diverging
+between the single-file and workspace paths.
+-}
+data WorkspaceSpec = WorkspaceSpec
+    { wsService :: !Text
+    -- ^ The stable workspace identity (the manifest's @service@ name).
+    , wsManifestPath :: !FilePath
+    , wsContext :: !Name
+    -- ^ The members' unanimous @context@.
+    , wsModuleRoot :: !(Maybe Text)
+    , wsLayout :: !(Maybe Placement)
+    , wsMembers :: ![WorkspaceMember]
+    -- ^ Canonical order.
+    , wsMergedSpec :: !Spec
+    , wsLineMap :: !LineMap
+    , wsOwnership :: !OwnershipIndex
+    }
+    deriving stock (Eq, Show)
+
+{- | Resolve a merged-spec line to @(member path, that member's own line)@.
+'Nothing' means the line belongs to no member — render it against the manifest.
+-}
+resolveWorkspaceLine :: WorkspaceSpec -> Int -> Maybe (FilePath, Int)
+resolveWorkspaceLine workspace n
+    | n <= 0 = Nothing
+    | otherwise =
+        listToMaybe
+            [ (path, n - low)
+            | (low, high, path) <- lmRanges (wsLineMap workspace)
+            , n > low
+            , n <= high
+            ]
+
+{- | A single @.keiro@ file as a one-member workspace. The identity is the
+file's base name, the merged spec is the spec itself, and the line map is the
+identity, so @checkWorkspace (oneMemberWorkspace fp spec)@ yields exactly
+@validateSpec spec@ attributed to @fp@. Downstream plans use this as the
+uniform input type for single-file inputs.
+-}
+oneMemberWorkspace :: FilePath -> Spec -> WorkspaceSpec
+oneMemberWorkspace path spec =
+    WorkspaceSpec
+        { wsService = T.pack (takeBaseName path)
+        , wsManifestPath = path
+        , wsContext = specContext spec
+        , wsModuleRoot = specModuleRoot spec
+        , wsLayout = specLayout spec
+        , wsMembers =
+            [ WorkspaceMember
+                { wmPath = relative
+                , wmSpec = spec
+                , wmLineBase = 0
+                , wmLineCount = maximum (0 : collectLocs spec)
+                }
+            ]
+        , wsMergedSpec = spec
+        , wsLineMap = LineMap [(0, maxBound, relative)]
+        , wsOwnership = ownershipOf [(relative, spec)]
+        }
+  where
+    relative = takeFileName path
+
+{- | Validate a composed workspace. This runs the /existing/ whole-spec
+validator over the merged spec once and maps each diagnostic's line back
+through the line map, so the workspace and single-file paths can never diverge
+on what counts as valid.
+-}
+checkWorkspace :: WorkspaceSpec -> [WorkspaceDiagnostic]
+checkWorkspace workspace =
+    [ WorkspaceDiagnostic
+        { wdLocations = pure (locationFor (line diagnostic))
+        , wdSeverity = severity diagnostic
+        , wdCode = code diagnostic
+        , wdMessage = message diagnostic
+        }
+    | diagnostic <- validateSpec (wsMergedSpec workspace)
+    ]
+  where
+    locationFor n = case resolveWorkspaceLine workspace n of
+        Just (path, original) -> WorkspaceLocation (WorkspaceMemberFile path) original ""
+        -- A line owned by no member (the placeholder location 'Loc 0') is the
+        -- workspace's own; point at the manifest rather than invent a member.
+        Nothing -> WorkspaceLocation WorkspaceManifestFile (max 1 n) ""
+
+--------------------------------------------------------------------------------
+-- Composition
+--------------------------------------------------------------------------------
+
+{- | Compose parsed members into one service graph, or refuse with every
+relevant file and line cited.
+
+The third argument supplies one entry per manifest member as
+@(normalized manifest-relative path, source text, parsed spec)@. The source
+text is needed for two things the AST cannot provide: counting lines for the
+line map, and locating the @context@\/@module@\/@layout@ clause lines that
+'Keiro.Dsl.Grammar.Spec' does not record, so a refusal can point at the clause
+an author actually wrote. The scan is used for diagnostics only, never for
+semantics.
+
+Composition proceeds in a fixed order, and every stage's refusals are collected
+before any is reported — a workspace with two problems reports both. The stages
+are: the members' @context@ must be unanimous; the manifest is the
+@module@\/@layout@ authority and members must be absent-or-exactly-equal; every
+shared declaration has exactly one owning member (identical duplicates are
+refused, they never silently merge); every node identity has exactly one owning
+member; and no two members may claim generated module paths that collide under
+case folding.
+-}
+composeWorkspace ::
+    FilePath ->
+    WorkspaceManifest ->
+    [(FilePath, Text, Spec)] ->
+    Either (NonEmpty WorkspaceDiagnostic) WorkspaceSpec
+composeWorkspace manifestPath manifest supplied
+    | (d : ds) <- unsupplied = Left (d :| ds)
+    | (d : ds) <- refusals = Left (d :| ds)
+    | otherwise = Right composed
+  where
+    ordered =
+        [ (ref, lookup (wmrPath ref) [(path, (text, spec)) | (path, text, spec) <- supplied])
+        | ref <- NE.toList (wmfMembers manifest)
+        ]
+    unsupplied =
+        [ WorkspaceDiagnostic
+            { wdLocations = pure (manifestLocation (wmrLoc ref) "")
+            , wdSeverity = Error
+            , wdCode = WorkspaceMemberUnreadable
+            , wdMessage = "workspace member '" <> T.pack (wmrPath ref) <> "' was not supplied to the composer"
+            }
+        | (ref, Nothing) <- ordered
+        ]
+    entries = [(ref, text, spec) | (ref, Just (text, spec)) <- ordered]
+
+    refusals =
+        contextRefusals
+            <> moduleRefusals
+            <> layoutRefusals
+            <> declarationRefusals
+            <> nodeRefusals
+            <> collisionRefusals
+
+    --------------------------------------------------------------------------
+    -- Effective context
+    --------------------------------------------------------------------------
+    declaredContexts = nub [specContext spec | (_, _, spec) <- entries]
+    effectiveContext = case entries of
+        (_, _, spec) : _ -> specContext spec
+        [] -> ""
+    contextRefusals
+        | length declaredContexts <= 1 = []
+        | otherwise =
+            [ WorkspaceDiagnostic
+                { wdLocations =
+                    NE.fromList
+                        [ memberLocation ref (clauseLine "context" text) ("member declares context '" <> specContext spec <> "'")
+                        | (ref, text, spec) <- entries
+                        ]
+                , wdSeverity = Error
+                , wdCode = WorkspaceContextMismatch
+                , wdMessage =
+                    "workspace '"
+                        <> wmfService manifest
+                        <> "' members declare different contexts ("
+                        <> T.intercalate ", " (sort declaredContexts)
+                        <> "); every member of one workspace must declare the same context"
+                }
+            ]
+
+    --------------------------------------------------------------------------
+    -- Effective module root and layout
+    --------------------------------------------------------------------------
+    (effectiveModuleRoot, moduleRefusals) =
+        resolveAuthority "module" id (wmfModuleRoot manifest) (wmfModuleRootLoc manifest) specModuleRoot
+    (effectiveLayout, layoutRefusals) =
+        resolveAuthority "layout" renderPlacement (wmfLayout manifest) (wmfLayoutLoc manifest) specLayout
+
+    resolveAuthority ::
+        (Eq a) =>
+        Text ->
+        (a -> Text) ->
+        Maybe a ->
+        Loc ->
+        (Spec -> Maybe a) ->
+        (Maybe a, [WorkspaceDiagnostic])
+    resolveAuthority clauseKeyword renderValue manifestValue manifestLoc memberValue =
+        case manifestValue of
+            Just authority ->
+                ( Just authority
+                , [ WorkspaceDiagnostic
+                        { wdLocations =
+                            manifestLocation manifestLoc ""
+                                :| [ memberLocation ref (clauseLine clauseKeyword text) ("member declares " <> clauseKeyword <> " " <> renderValue value)
+                                   | (ref, text, value) <- disagreeing
+                                   ]
+                        , wdSeverity = Error
+                        , wdCode = WorkspaceAuthorityConflict
+                        , wdMessage =
+                            "workspace manifest declares "
+                                <> clauseKeyword
+                                <> " "
+                                <> renderValue authority
+                                <> ", so every member's "
+                                <> clauseKeyword
+                                <> " clause must be absent or exactly equal"
+                        }
+                  | not (null disagreeing)
+                  ]
+                )
+              where
+                disagreeing =
+                    [ (ref, text, value)
+                    | (ref, text, spec) <- entries
+                    , Just value <- [memberValue spec]
+                    , value /= authority
+                    ]
+            Nothing
+                | length (nub (map thd declared)) <= 1 -> (listToMaybe (map thd declared), [])
+                | otherwise ->
+                    ( Nothing
+                    ,
+                        [ WorkspaceDiagnostic
+                            { wdLocations =
+                                NE.fromList
+                                    [ memberLocation ref (clauseLine clauseKeyword text) ("member declares " <> clauseKeyword <> " " <> renderValue value)
+                                    | (ref, text, value) <- declared
+                                    ]
+                            , wdSeverity = Error
+                            , wdCode = WorkspaceAuthorityConflict
+                            , wdMessage =
+                                "the workspace manifest declares no "
+                                    <> clauseKeyword
+                                    <> " clause, so the members that declare one must agree; they do not"
+                            }
+                        ]
+                    )
+              where
+                declared = [(ref, text, value) | (ref, text, spec) <- entries, Just value <- [memberValue spec]]
+      where
+        thd (_, _, value) = value
+
+    --------------------------------------------------------------------------
+    -- Single-owner declarations and nodes
+    --------------------------------------------------------------------------
+    declarationSites =
+        [ (name, (namespace, ref, loc))
+        | (ref, _, spec) <- entries
+        , (namespace, name, loc) <- sharedDeclarations spec
+        ]
+    declarationRefusals =
+        [ WorkspaceDiagnostic
+            { wdLocations =
+                NE.fromList
+                    [ memberLocation ref (Just (unLoc loc)) ("also declared here, as " <> namespace <> " '" <> name <> "'")
+                    | (namespace, ref, loc) <- sites
+                    ]
+            , wdSeverity = Error
+            , wdCode = WorkspaceDuplicateDeclaration
+            , wdMessage =
+                "duplicate declaration '"
+                    <> name
+                    <> "': a shared declaration has exactly one owning member (identical duplicates do not merge)"
+            }
+        | (name, sites) <- groupSites declarationSites
+        , length (nub [wmrPath ref | (_, ref, _) <- sites]) > 1
+        ]
+
+    nodeSites =
+        [ ((kind, name), (ref, loc))
+        | (ref, _, spec) <- entries
+        , node <- specNodes spec
+        , let (kind, name, loc) = nodeIdentity node
+        ]
+    nodeRefusals =
+        [ WorkspaceDiagnostic
+            { wdLocations =
+                NE.fromList
+                    [ memberLocation ref (Just (unLoc loc)) ("also defined here")
+                    | (ref, loc) <- sites
+                    ]
+            , wdSeverity = Error
+            , wdCode = WorkspaceDuplicateNodeName
+            , wdMessage =
+                "duplicate "
+                    <> kind
+                    <> " node name '"
+                    <> name
+                    <> "': a node has exactly one owning member"
+            }
+        | ((kind, name), sites) <- groupSites nodeSites
+        , length (nub [wmrPath ref | (ref, _) <- sites]) > 1
+        ]
+
+    --------------------------------------------------------------------------
+    -- Merged spec and line map
+    --------------------------------------------------------------------------
+    lineCounts = [max 1 (length (T.lines text)) | (_, text, _) <- entries]
+    lineBases = scanl (+) 0 lineCounts
+    members =
+        [ WorkspaceMember
+            { wmPath = wmrPath ref
+            , wmSpec = spec
+            , wmLineBase = base
+            , wmLineCount = memberLines
+            }
+        | ((ref, _, spec), base, memberLines) <- zip3 entries lineBases lineCounts
+        ]
+    relocatedSpecs = [relocateLocs (shiftBy (wmLineBase member)) (wmSpec member) | member <- members]
+    -- The placeholder location 'Loc 0' must stay 0: shifting it would land it
+    -- inside the previous member's range and mis-attribute the diagnostic.
+    shiftBy base n = if n <= 0 then n else n + base
+    lineMap =
+        LineMap
+            [ (wmLineBase member, wmLineBase member + wmLineCount member, wmPath member)
+            | member <- members
+            ]
+    mergedSpec =
+        Spec
+            { specContext = effectiveContext
+            , specModuleRoot = effectiveModuleRoot
+            , specLayout = effectiveLayout
+            , specIds = concatMap specIds relocatedSpecs
+            , specEnums = concatMap specEnums relocatedSpecs
+            , specRules = concatMap specRules relocatedSpecs
+            , specMapped = concatMap specMapped relocatedSpecs
+            , specNodes = concatMap specNodes relocatedSpecs
+            }
+
+    --------------------------------------------------------------------------
+    -- Cross-member generated-path collisions
+    --------------------------------------------------------------------------
+    plannerContext =
+        Context
+            { contextName = effectiveContext
+            , moduleRoot = fromMaybe "" effectiveModuleRoot
+            , placement = fromMaybe GeneratedPrefix effectiveLayout
+            }
+    collisionRefusals
+        -- The effective context/module/layout are only meaningful once the
+        -- earlier stages agree; without them there is no honest planner input.
+        | not (null contextRefusals && null moduleRefusals && null layoutRefusals) = []
+        -- Only ask the scaffold planner about a spec that already validates.
+        -- An invalid merged spec is 'checkWorkspace''s report to make, and the
+        -- planner is only designed to see specs that passed validation.
+        | any ((== Error) . severity) (validateSpec mergedSpec) = []
+        | otherwise = case planScaffoldWithGoldens [] plannerContext mergedSpec of
+            Right _ -> []
+            Left plannerRefusals -> concatMap crossMemberCollision plannerRefusals
+    crossMemberCollision (PathCollision path origins) =
+        [ WorkspaceDiagnostic
+            { wdLocations =
+                NE.fromList
+                    [ WorkspaceLocation (WorkspaceMemberFile owner) original ("claimed here by " <> origin)
+                    | (origin, owner, original) <- resolved
+                    ]
+            , wdSeverity = Error
+            , wdCode = WorkspacePathCollision
+            , wdMessage =
+                "generated module path '"
+                    <> T.pack path
+                    <> "' is claimed by nodes in more than one member; on a case-insensitive filesystem these are one file"
+            }
+        | length (nub [owner | (_, owner, _) <- resolved]) > 1
+        ]
+      where
+        resolved =
+            [ (origin, owner, original)
+            | origin <- origins
+            , Just mergedLine <- [originLine origin]
+            , Just (owner, original) <- [lookupLine mergedLine]
+            ]
+    crossMemberCollision _ = []
+    lookupLine n =
+        listToMaybe
+            [ (path, n - low)
+            | (low, high, path) <- lmRanges lineMap
+            , n > low
+            , n <= high
+            ]
+
+    --------------------------------------------------------------------------
+    -- Result
+    --------------------------------------------------------------------------
+    composed =
+        WorkspaceSpec
+            { wsService = wmfService manifest
+            , wsManifestPath = manifestPath
+            , wsContext = effectiveContext
+            , wsModuleRoot = effectiveModuleRoot
+            , wsLayout = effectiveLayout
+            , wsMembers = members
+            , wsMergedSpec = mergedSpec
+            , wsLineMap = lineMap
+            , wsOwnership = ownershipOf [(wmPath member, wmSpec member) | member <- members]
+            }
+
+    manifestLocation loc role = WorkspaceLocation WorkspaceManifestFile (max 1 (unLoc loc)) role
+    memberLocation ref found role =
+        WorkspaceLocation (WorkspaceMemberFile (wmrPath ref)) (fromMaybe 1 found) role
+
+-- | Group @(key, site)@ pairs by key, preserving first-appearance order.
+groupSites :: (Ord k) => [(k, v)] -> [(k, [v])]
+groupSites pairs =
+    [ (key, reverse sites)
+    | key <- nub (map fst pairs)
+    , Just sites <- [Map.lookup key grouped]
+    ]
+  where
+    grouped = Map.fromListWith (<>) [(key, [value]) | (key, value) <- pairs]
+
+-- | The four shared-declaration namespaces of one spec, with names and lines.
+sharedDeclarations :: Spec -> [(Text, Name, Loc)]
+sharedDeclarations spec =
+    [("id", idName d, idLoc d) | d <- specIds spec]
+        <> [("enum", enumName d, enumLoc d) | d <- specEnums spec]
+        <> [("rule", ruleName d, ruleLoc d) | d <- specRules spec]
+        <> [("mapped", mappedDeclName d, mappedDeclLoc d) | d <- specMapped spec]
+
+mappedDeclName :: MappedDecl -> Name
+mappedDeclName MappedStructural{msName = name} = name
+mappedDeclName MappedOpaque{moName = name} = name
+
+mappedDeclLoc :: MappedDecl -> Loc
+mappedDeclLoc MappedStructural{msLoc = loc} = loc
+mappedDeclLoc MappedOpaque{moLoc = loc} = loc
+
+-- | Build the ownership index from members carrying their original locations.
+ownershipOf :: [(FilePath, Spec)] -> OwnershipIndex
+ownershipOf members =
+    OwnershipIndex
+        { oiDeclarations =
+            Map.fromList
+                [ ((namespace, name), (path, loc))
+                | (path, spec) <- members
+                , (namespace, name, loc) <- sharedDeclarations spec
+                ]
+        , oiNodes =
+            Map.fromList
+                [ ((kind, name), (path, loc))
+                | (path, spec) <- members
+                , node <- specNodes spec
+                , let (kind, name, loc) = nodeIdentity node
+                ]
+        }
+
+{- | The line of the first non-comment source line whose first word is the
+given clause keyword. Used only to point a refusal at the @context@,
+@module@, or @layout@ clause an author wrote, because 'Spec' records no
+location for them.
+-}
+clauseLine :: Text -> Text -> Maybe Int
+clauseLine clauseKeyword source =
+    listToMaybe
+        [ index
+        | (index, raw) <- zip [1 ..] (T.lines source)
+        , (leading : _) <- [T.words (T.takeWhile (/= '#') raw)]
+        , leading == clauseKeyword
+        ]
+
+{- | The merged-spec line embedded in a scaffold module's origin string, which
+"Keiro.Dsl.Scaffold" formats as @\<kind\> \<name\> (line N)@. Context-level
+modules carry no line and yield 'Nothing', which is correct: they belong to the
+workspace, not to any one member, so they can never be a cross-member
+collision.
+-}
+originLine :: Text -> Maybe Int
+originLine origin = do
+    withoutClose <- T.stripSuffix ")" origin
+    let (before, after) = T.breakOnEnd " (line " withoutClose
+    if T.null before then Nothing else readMaybe (T.unpack after)
+
+--------------------------------------------------------------------------------
+-- Loading
+--------------------------------------------------------------------------------
+
+{- | How the loader obtains file contents. 'csRead' receives a path relative to
+the workspace root (the manifest's own directory); 'Left' is a human-readable
+read-failure reason.
+
+This seam exists so the same loader can read from the working tree now and
+from @git show \<rev\>:\<path\>@ blobs later, when whole-workspace @diff@ must
+resolve a workspace as it existed at an older revision without re-implementing
+composition.
+-}
+newtype ContentSource = ContentSource
+    { csRead :: FilePath -> IO (Either Text Text)
+    }
+
+-- | Read files from a directory on disk.
+fileContentSource :: FilePath -> ContentSource
+fileContentSource root =
+    ContentSource
+        { csRead = \relative -> do
+            let full = if root == "." then relative else root </> relative
+            exists <- doesFileExist full
+            if not exists
+                then pure (Left ("no such file: " <> T.pack full))
+                else do
+                    attempt <- Exception.try (TIO.readFile full)
+                    pure $ case attempt of
+                        Left readError -> Left (T.pack (show (readError :: Exception.IOException)))
+                        Right contents -> Right contents
+        }
+
+{- | Read a manifest and all its members through a content source, then compose
+them into one service graph.
+
+Member read and parse failures are collected, not fail-fast: a workspace with
+two unreadable members reports both, which matters when a whole service is
+being adopted at once.
+-}
+loadWorkspace :: ContentSource -> FilePath -> IO (Either WorkspaceFailure WorkspaceSpec)
+loadWorkspace source manifestPath = do
+    manifestRead <- csRead source (takeFileName manifestPath)
+    case manifestRead of
+        Left reason -> pure (Left (WorkspaceManifestUnreadable reason))
+        Right manifestText -> case parseWorkspaceManifest manifestPath manifestText of
+            Left err -> pure (Left (WorkspaceManifestUnparseable err))
+            Right manifest -> do
+                results <- traverse readMember (NE.toList (wmfMembers manifest))
+                case [diagnostic | Left diagnostic <- results] of
+                    (d : ds) -> pure (Left (WorkspaceRefused (d :| ds)))
+                    [] ->
+                        pure
+                            ( first
+                                WorkspaceRefused
+                                (composeWorkspace manifestPath manifest [entry | Right entry <- results])
+                            )
+  where
+    readMember ref = do
+        result <- csRead source (wmrPath ref)
+        pure $ case result of
+            Left reason -> Left (memberFailure ref WorkspaceMemberUnreadable ("workspace member '" <> T.pack (wmrPath ref) <> "' could not be read: " <> reason))
+            Right text -> case parseSpec (workspaceDisplayPath manifestPath (WorkspaceMemberFile (wmrPath ref))) text of
+                Left err ->
+                    Left
+                        ( memberFailure
+                            ref
+                            WorkspaceMemberParseFailed
+                            ("workspace member '" <> T.pack (wmrPath ref) <> "' failed to parse:\n" <> err)
+                        )
+                Right spec -> Right (wmrPath ref, text, spec)
+    memberFailure ref failureCode note =
+        WorkspaceDiagnostic
+            { wdLocations = pure (WorkspaceLocation WorkspaceManifestFile (max 1 (unLoc (wmrLoc ref))) "")
+            , wdSeverity = Error
+            , wdCode = failureCode
+            , wdMessage = note
+            }
+
+--------------------------------------------------------------------------------
+-- 'HasLocs' coverage of the AST
+--
+-- One line per type in "Keiro.Dsl.Grammar". A new AST type fails to compile
+-- here until it is added, which is what makes 'relocateLocs' provably total.
+--------------------------------------------------------------------------------
+
+instance HasLocs AdvanceNode
+instance HasLocs Aggregate
+instance HasLocs Atom
+instance HasLocs BackoffSpec
+instance HasLocs BindRow
+instance HasLocs CmpOp
+instance HasLocs Command
+instance HasLocs Consistency
+instance HasLocs ContractEvent
+instance HasLocs ContractField
+instance HasLocs ContractNode
+instance HasLocs ContractType
+instance HasLocs CorrelateDecl
+instance HasLocs DecodeSpec
+instance HasLocs DerivStrategy
+instance HasLocs Derivation
+instance HasLocs DeriveSpec
+instance HasLocs Disp
+instance HasLocs DispAction
+instance HasLocs DispatchDisposition
+instance HasLocs DispatchNode
+instance HasLocs Disposition
+instance HasLocs DispositionRow
+instance HasLocs EmitMapRow
+instance HasLocs EmitNode
+instance HasLocs EnumDecl
+instance HasLocs EnvelopeBinding
+instance HasLocs EnvelopeLayer
+instance HasLocs Event
+instance HasLocs EventBody
+instance HasLocs Expr
+instance HasLocs Field
+instance HasLocs FieldBinding
+instance HasLocs FireAtExpr
+instance HasLocs FireDisposition
+instance HasLocs FireNode
+instance HasLocs FireOutcome
+instance HasLocs HandleNode
+instance HasLocs HaskellSource
+instance HasLocs Hole
+instance HasLocs IdDecl
+instance HasLocs IdExpr
+instance HasLocs IdStrategy
+instance HasLocs InboxAction
+instance HasLocs InkPersist
+instance HasLocs InputDecl
+instance HasLocs IntakeNode
+instance HasLocs MappedDecl
+instance HasLocs MappedShape
+instance HasLocs Mapping
+instance HasLocs Node
+instance HasLocs OnMissing
+instance HasLocs OperationNode
+instance HasLocs OperationShape
+instance HasLocs PgmqDispatchNode
+instance HasLocs Placement
+instance HasLocs PolicyChoice
+instance HasLocs Presence
+instance HasLocs ProcessNode
+instance HasLocs ProjectionSpec
+instance HasLocs PublisherNode
+instance HasLocs ReadModelNode
+instance HasLocs RegDecl
+instance HasLocs RegInitial
+instance HasLocs ResolveDecl
+instance HasLocs ResolveSource
+instance HasLocs RmColumn
+instance HasLocs RmFeed
+instance HasLocs RmScope
+instance HasLocs RouterDispatchNode
+instance HasLocs RouterNode
+instance HasLocs RuleDecl
+instance HasLocs SagaRef
+instance HasLocs SnapPolicy
+instance HasLocs SnapshotSpec
+instance HasLocs Spec
+instance HasLocs StateDecl
+instance HasLocs TimerNode
+instance HasLocs Transition
+instance HasLocs TransitionMode
+instance HasLocs TypeExpr
+instance HasLocs UnionEncoding
+instance HasLocs UnknownFields
+instance HasLocs WfBodyItem
+instance HasLocs WireArm
+instance HasLocs WireEnum
+instance HasLocs WireField
+instance HasLocs WireSource
+instance HasLocs WireSpec
+instance HasLocs WorkflowNode
+instance HasLocs WorkqueueNode
+instance HasLocs WqDispRow
+instance HasLocs WqField
+instance HasLocs WqGroupKey
+instance HasLocs WqOrdering
+instance HasLocs WqProvision

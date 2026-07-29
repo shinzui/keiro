@@ -1,0 +1,19 @@
+context alpha
+
+id AlphaId prefix=alp
+
+aggregate Alpha
+  regs
+    alphaId AlphaId = placeholder
+    state AlphaVertex = Pending
+  states Pending Done!
+
+  command DoThing { alphaId attempt:Int }
+  event ThingCompleted { alphaId attempt:Int }
+
+  Pending -- DoThing -->
+    write state := Done
+    emit ThingCompleted
+    goto Done
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

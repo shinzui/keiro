@@ -1,0 +1,19 @@
+context demo-project
+
+id ProjectId prefix=proj
+
+aggregate Project
+  regs
+    projectId ProjectId = placeholder
+    state ProjectVertex = Pending
+  states Pending Done!
+
+  command DoThing { projectId attempt:Int }
+  event ThingCompleted { projectId attempt:Int }
+
+  Pending -- DoThing -->
+    write state := Done
+    emit ThingCompleted
+    goto Done
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

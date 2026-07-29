@@ -41,7 +41,7 @@ import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileNam
 import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), StaleModule (..), WriteDisposition (..), executeScaffold, planScaffold, renderRefusals, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
-import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, validateSpec)
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, renderDiagnostic, validateSpec)
 import Keiro.Dsl.Workspace
 import System.Directory (createDirectory, createDirectoryIfMissing, doesFileExist, getTemporaryDirectory, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
@@ -2517,6 +2517,136 @@ main = hspec $ do
                 "a manifest listing another manifest"
                 "service demo\nspec domain/other.keiro-workspace\n"
                 "must name a .keiro spec"
+        describe "line relocation" $ do
+            it "shifts every location the AST carries, and only the locations" $ do
+                spec <- specOf "test/fixtures/reservation.keiro"
+                let shifted = relocateLocs (+ 1000) spec
+                collectLocs spec `shouldSatisfy` (not . null)
+                collectLocs shifted `shouldBe` map (+ 1000) (collectLocs spec)
+                -- Loc's Eq deliberately ignores the line, so relocation cannot
+                -- change any equality-based behavior anywhere downstream.
+                shifted `shouldBe` spec
+            it "leaves the placeholder location alone so it never lands inside a member range" $ do
+                spec <- specOf "test/fixtures/reservation.keiro"
+                let blanked = relocateLocs (const 0) spec
+                    reshifted = relocateLocs (\n -> if n <= 0 then n else n + 500) blanked
+                collectLocs reshifted `shouldBe` map (const 0) (collectLocs spec)
+        describe "composition" $ do
+            it "resolves cross-file ids, enums, mapped types, and read-model feeds" $ do
+                workspace <- shouldComposeWorkspace canonicalWorkspacePath
+                wsService workspace `shouldBe` "demo-project"
+                wsContext workspace `shouldBe` "demo-project"
+                wsModuleRoot workspace `shouldBe` Just "Demo.Modules.Project"
+                wsLayout workspace `shouldBe` Just CollocatedLeaf
+                map wmPath (wsMembers workspace)
+                    `shouldBe` [ "domain/project-artifact.keiro"
+                               , "domain/project.keiro"
+                               , "domain/shared.keiro"
+                               ]
+                -- Every member is individually incomplete; together they check.
+                checkWorkspace workspace `shouldBe` []
+            it "records which member owns each shared declaration and node" $ do
+                workspace <- shouldComposeWorkspace canonicalWorkspacePath
+                let ownership = wsOwnership workspace
+                fmap fst (declarationOwner ownership "id" "ProjectId")
+                    `shouldBe` Just "domain/shared.keiro"
+                fmap fst (declarationOwner ownership "enum" "ProjectPhase")
+                    `shouldBe` Just "domain/shared.keiro"
+                fmap fst (declarationOwner ownership "rule" "phaseIsTerminal")
+                    `shouldBe` Just "domain/shared.keiro"
+                fmap fst (declarationOwner ownership "mapped" "ProjectSummary")
+                    `shouldBe` Just "domain/shared.keiro"
+                fmap fst (nodeOwner ownership "aggregate" "Project")
+                    `shouldBe` Just "domain/project.keiro"
+                fmap fst (nodeOwner ownership "aggregate" "ProjectArtifact")
+                    `shouldBe` Just "domain/project-artifact.keiro"
+                fmap fst (nodeOwner ownership "readmodel" "project_activity")
+                    `shouldBe` Just "domain/project-artifact.keiro"
+            it "maps every merged line back to the member that wrote it" $ do
+                workspace <- shouldComposeWorkspace canonicalWorkspacePath
+                let bases = [(wmPath m, wmLineBase m, wmLineCount m) | m <- wsMembers workspace]
+                -- Ranges are disjoint and contiguous from zero.
+                map (\(_, base, _) -> base) bases `shouldBe` scanl (+) 0 (init [c | (_, _, c) <- bases])
+                sequence_
+                    [ resolveWorkspaceLine workspace (base + offset) `shouldBe` Just (path, offset)
+                    | (path, base, memberLines) <- bases
+                    , offset <- [1, memberLines]
+                    ]
+                resolveWorkspaceLine workspace 0 `shouldBe` Nothing
+            it "is insensitive to the order members are listed in" $ do
+                canonical <- shouldComposeWorkspace canonicalWorkspacePath
+                reordered <- shouldComposeWorkspace reorderedWorkspacePath
+                reordered{wsManifestPath = wsManifestPath canonical} `shouldBe` canonical
+            it "checks a single .keiro file as a one-member workspace, diagnostic for diagnostic" $ do
+                let fixtures =
+                        [ "test/fixtures/reservation.keiro"
+                        , "test/fixtures/consumer-types.keiro"
+                        , "test/fixtures/aggregate-bad-refs.keiro"
+                        , "test/fixtures/readmodel.keiro"
+                        ]
+                forM_ fixtures $ \path -> do
+                    spec <- specOf path
+                    let workspace = oneMemberWorkspace path spec
+                        viaWorkspace = map (renderWorkspaceDiagnostic path) (checkWorkspace workspace)
+                        direct = map (renderDiagnostic path) (validateSpec spec)
+                    viaWorkspace `shouldBe` direct
+                -- At least one of those fixtures must actually produce errors,
+                -- or the equivalence claim is vacuous.
+                badRefs <- specOf "test/fixtures/aggregate-bad-refs.keiro"
+                checkWorkspace (oneMemberWorkspace "test/fixtures/aggregate-bad-refs.keiro" badRefs)
+                    `shouldSatisfy` any ((== Error) . wdSeverity)
+        describe "composition refusals" $ do
+            let refusesWith path expectedCode expectedFiles = do
+                    diagnostics <- shouldRefuseWorkspace path
+                    map wdCode (NE.toList diagnostics) `shouldContain` [expectedCode]
+                    let cited =
+                            [ wlFile location
+                            | diagnostic <- NE.toList diagnostics
+                            , wdCode diagnostic == expectedCode
+                            , location <- NE.toList (wdLocations diagnostic)
+                            ]
+                    sort (nubOrd cited) `shouldBe` sort expectedFiles
+            it "refuses members that declare different contexts, citing every context clause" $
+                refusesWith
+                    "test/fixtures/workspace-context-mismatch/service.keiro-workspace"
+                    WorkspaceContextMismatch
+                    [WorkspaceMemberFile "domain/a.keiro", WorkspaceMemberFile "domain/b.keiro"]
+            it "refuses a member layout clause that contradicts the manifest authority" $
+                refusesWith
+                    "test/fixtures/workspace-authority-conflict/service.keiro-workspace"
+                    WorkspaceAuthorityConflict
+                    [WorkspaceManifestFile, WorkspaceMemberFile "domain/b.keiro"]
+            it "refuses a textually identical shared declaration owned by two members" $
+                refusesWith
+                    "test/fixtures/workspace-dup-decl/service.keiro-workspace"
+                    WorkspaceDuplicateDeclaration
+                    [WorkspaceMemberFile "domain/project.keiro", WorkspaceMemberFile "domain/shared.keiro"]
+            it "refuses one aggregate defined in two members" $
+                refusesWith
+                    "test/fixtures/workspace-dup-node/service.keiro-workspace"
+                    WorkspaceDuplicateNodeName
+                    [WorkspaceMemberFile "domain/a.keiro", WorkspaceMemberFile "domain/b.keiro"]
+            it "refuses generated paths that collide across members under case folding" $
+                refusesWith
+                    "test/fixtures/workspace-path-collision/service.keiro-workspace"
+                    WorkspacePathCollision
+                    [WorkspaceMemberFile "domain/a.keiro", WorkspaceMemberFile "domain/b.keiro"]
+            it "reports a listed member that is missing from disk" $
+                refusesWith
+                    "test/fixtures/workspace-missing-member/service.keiro-workspace"
+                    WorkspaceMemberUnreadable
+                    [WorkspaceManifestFile]
+            it "reports a member that does not parse" $
+                refusesWith
+                    "test/fixtures/workspace-member-parse-failed/service.keiro-workspace"
+                    WorkspaceMemberParseFailed
+                    [WorkspaceManifestFile]
+            it "surfaces a cross-file unresolved reference through the merged validator" $ do
+                workspace <- shouldComposeWorkspace "test/fixtures/workspace-unresolved/service.keiro-workspace"
+                let errors = [d | d <- checkWorkspace workspace, wdSeverity d == Error]
+                map wdCode errors `shouldContain` [GuardAtomOutOfScope]
+                [wlFile location | d <- errors, location <- NE.toList (wdLocations d)]
+                    `shouldContain` [WorkspaceMemberFile "domain/project.keiro"]
 
 comparisonProvenance :: CompareProvenance
 comparisonProvenance =
@@ -2943,6 +3073,44 @@ isLoweringRefusal (Right _) = False
 -- | The canonical positive workspace fixture: three members under one context.
 canonicalWorkspacePath :: FilePath
 canonicalWorkspacePath = "test/fixtures/workspace/service.keiro-workspace"
+
+-- | The same members as 'canonicalWorkspacePath', listed in reverse order.
+reorderedWorkspacePath :: FilePath
+reorderedWorkspacePath = "test/fixtures/workspace/service-reordered.keiro-workspace"
+
+{- | Load and compose a workspace fixture, failing the test on a refusal. The
+fixture path is package-relative; the loader is rooted at the manifest's own
+directory, exactly as the CLI roots it.
+-}
+shouldComposeWorkspace :: FilePath -> IO WorkspaceSpec
+shouldComposeWorkspace path = do
+    resolved <- resolveTestPath path
+    loaded <- loadWorkspace (fileContentSource (takeDirectory resolved)) resolved
+    case loaded of
+        Left failure ->
+            expectationFailure (T.unpack (T.intercalate "\n" (renderWorkspaceFailure resolved failure)))
+                >> error "unreachable"
+        Right workspace -> pure workspace{wsManifestPath = path}
+
+-- | Load a workspace fixture expecting a compose refusal, and return it.
+shouldRefuseWorkspace :: FilePath -> IO (NonEmpty WorkspaceDiagnostic)
+shouldRefuseWorkspace path = do
+    resolved <- resolveTestPath path
+    loaded <- loadWorkspace (fileContentSource (takeDirectory resolved)) resolved
+    case loaded of
+        Left (WorkspaceRefused diagnostics) -> pure diagnostics
+        Left other ->
+            expectationFailure
+                ("expected compose refusals, got:\n" <> T.unpack (T.intercalate "\n" (renderWorkspaceFailure resolved other)))
+                >> error "unreachable"
+        Right _ -> expectationFailure ("expected " <> path <> " to be refused") >> error "unreachable"
+
+-- | Order-preserving deduplication for comparing cited file sets.
+nubOrd :: (Eq a) => [a] -> [a]
+nubOrd = go []
+  where
+    go seen [] = reverse seen
+    go seen (x : xs) = if x `elem` seen then go seen xs else go (x : seen) xs
 
 -- | Parse a workspace manifest, failing the test on a refusal.
 shouldParseManifest :: FilePath -> T.Text -> IO WorkspaceManifest

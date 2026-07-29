@@ -1,0 +1,2 @@
+service demo-project
+spec ../escape.keiro

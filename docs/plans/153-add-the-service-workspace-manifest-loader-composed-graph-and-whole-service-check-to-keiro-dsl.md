@@ -75,16 +75,24 @@ changes, no diff changes, no adoption/migration work.**
       `domain/project-artifact.keiro`); each member parses standalone and its residual
       standalone diagnostics are exactly the cross-file references the workspace must
       resolve. (2026-07-29)
-- [ ] M2: `ContentSource` abstraction plus `fileContentSource`; `loadWorkspace` reads the
-      manifest and all members through it.
-- [ ] M2: Pure `composeWorkspace` producing `WorkspaceSpec` (merged spec, line map,
+- [x] M2: `ContentSource` abstraction plus `fileContentSource`; `loadWorkspace` reads the
+      manifest and all members through it, collecting every member read/parse failure
+      rather than failing fast. (2026-07-29)
+- [x] M2: Pure `composeWorkspace` producing `WorkspaceSpec` (merged spec, line map,
       ownership index, effective context/module-root/layout) or multi-location refusals for
-      every refusal class listed in Milestone 2.
-- [ ] M2: Generic `Loc` relocation and line map land; merged-spec `validateSpec`
-      diagnostics resolve back to member `file:line`.
-- [ ] M2: Cross-member case-folded generated-path collision refusal at compose/check time.
-- [ ] M2: API-level tests green: cross-file reference resolution on the positive fixture,
-      one-member-workspace equivalence property, member-order permutation determinism.
+      every refusal class listed in Milestone 2. (2026-07-29)
+- [x] M2: Generic `Loc` relocation and line map land; merged-spec `validateSpec`
+      diagnostics resolve back to member `file:line`. Completeness is compiler-enforced:
+      the `HasLocs` instance list covers all 96 `Grammar` types and a new AST type is a
+      build error until listed. (2026-07-29)
+- [x] M2: Cross-member case-folded generated-path collision refusal at compose/check time
+      (fixture `workspace-path-collision/`, aggregates `Run` and `RUn` in different
+      members). (2026-07-29)
+- [x] M2: API-level tests green: cross-file reference resolution on the positive fixture,
+      one-member-workspace equivalence property, member-order permutation determinism,
+      relocation completeness, and one test per refusal class asserting the exact
+      `DiagnosticCode` and the exact set of cited files. Suite at 334 examples, 0
+      failures. (2026-07-29)
 - [ ] M3: `keiro-dsl check <manifest>` wired through the dispatch with multi-file
       diagnostic rendering; `--emit`, `--explain-bindings`, and coverage flags work against
       the merged graph.
@@ -289,6 +297,62 @@ implementation. Provide concise evidence.
   service workspace" as a checked semantic property, gives EP-2/EP-3 the uniform
   input type they need for the fallback, and still guarantees byte-identical behavior
   for every existing user because the old code path literally did not change.
+  Date: 2026-07-29
+
+- Decision (M2, revising this plan's Interfaces list): manifest **syntax and structure**
+  errors carry no `DiagnosticCode`; only **composition** refusals do. The
+  `DiagnosticCode` enum therefore gains seven constructors — `WorkspaceMemberUnreadable`,
+  `WorkspaceMemberParseFailed`, `WorkspaceContextMismatch`, `WorkspaceAuthorityConflict`,
+  `WorkspaceDuplicateDeclaration`, `WorkspaceDuplicateNodeName`, `WorkspacePathCollision`
+  — and **not** the originally listed `WorkspaceDuplicateMember` and
+  `WorkspaceInvalidMemberPath`.
+  Rationale: a malformed `.keiro` file produces a megaparsec parse error with no
+  `DiagnosticCode` and never reaches `validateSpec`; a malformed manifest is exactly the
+  same situation one level up, and it never reaches the composer. Adding codes for
+  constructors nothing can ever emit would put dead entries in an append-only registry
+  that can never be removed. The two refusals remain fully tested (M1 pins their messages
+  and positions) and remain honest CLI failures; they are simply not *graph* diagnostics.
+  Consequence for later plans: EP-2 and EP-3 must not expect those two codes.
+  Date: 2026-07-29
+
+- Decision (M2): a workspace diagnostic's locations store the **manifest-relative** member
+  path, with an explicit `WorkspaceFile` sum distinguishing the manifest from a member,
+  and the manifest's directory is joined on only at render time.
+  Rationale: the manifest-relative path is the canonical identity EP-2 keys scaffold
+  record ownership on and EP-3 compares across revisions — a display path baked with
+  whatever the user typed on the command line is not stable. Rendering still produces the
+  clickable `dirname(manifest)/member:line` the plan fixes, via
+  `workspaceDisplayPath`. Without the sum, rendering could not tell a manifest citation
+  (join nothing) from a member citation (join the directory).
+  Date: 2026-07-29
+
+- Decision (M2): the cross-member generated-path collision check runs the existing pure
+  planner once on the merged spec and resolves each `PathCollision`'s origin strings back
+  to owning members by parsing the `(line N)` suffix that
+  `Keiro.Dsl.Scaffold.nodeOrigin` emits, then looking that merged line up in the line map.
+  It is skipped entirely when an earlier compose stage refused, or when
+  `validateSpec` on the merged spec reports any error.
+  Rationale: the planner's `origin` is the only existing seam from a planned module back
+  to the node that produced it, and because the merged spec's lines are already relocated
+  the embedded line resolves uniquely to one member. Running the planner once (rather than
+  once per member) is what makes context-level modules — the `StructuralProjections`
+  facade and the replay-audit assembly, which have no line in their origin and are emitted
+  exactly once for the whole context — incapable of producing a false collision. The
+  validity guard exists because the scaffolder is only ever fed specs that passed
+  validation; feeding it an invalid merged spec would be a new and unproven code path, and
+  `checkWorkspace` reports those errors anyway.
+  Date: 2026-07-29
+
+- Decision (M2): `relocateLocs` and `collectLocs` are two uses of one generic
+  `HasLocs` class whose method is an `Applicative` traversal
+  (`traverseLocs :: Applicative f => (Loc -> f Loc) -> a -> f a`), instantiated at
+  `Identity` for relocation and `Const [Int]` for collection.
+  Rationale: one traversal cannot drift from the other, which is precisely the risk a
+  separate collector would carry — the collector exists to *prove* the relocator misses
+  nothing, so they must walk identically by construction. Completeness across the AST is
+  enforced by the compiler rather than by review: the generic default demands a `HasLocs`
+  instance for every field type, so the 96-line instance list fails to build the moment
+  `Grammar` grows a type.
   Date: 2026-07-29
 
 - Decision: Detecting "a source file assigned to two workspaces" (IR-2's cross-manifest
@@ -1055,10 +1119,12 @@ renderWorkspaceDiagnostic :: FilePath -> WorkspaceDiagnostic -> Text
 ```
 
 `Keiro.Dsl.Validate` (`keiro-dsl/src/Keiro/Dsl/Validate.hs`): `DiagnosticCode` extended
-append-only with `WorkspaceContextMismatch`, `WorkspaceAuthorityConflict`,
-`WorkspaceDuplicateDeclaration`, `WorkspaceDuplicateNodeName`,
-`WorkspaceDuplicateMember`, `WorkspaceMemberUnreadable`, `WorkspaceMemberParseFailed`,
-`WorkspaceInvalidMemberPath`, `WorkspacePathCollision`; `nodeIdentity` exported.
+append-only with the seven **composition** refusal codes
+`WorkspaceMemberUnreadable`, `WorkspaceMemberParseFailed`, `WorkspaceContextMismatch`,
+`WorkspaceAuthorityConflict`, `WorkspaceDuplicateDeclaration`,
+`WorkspaceDuplicateNodeName`, and `WorkspacePathCollision`; `nodeIdentity` exported.
+(Manifest syntax and structure errors — duplicate members, invalid member paths — carry
+no code, exactly as a `.keiro` parse error carries none; see the M2 Decision Log entry.)
 `validateSpec`, `Diagnostic`, and `renderDiagnostic` are unchanged. `Keiro.Dsl.Workspace`
 imports `Validate` (codes, severity, `validateSpec`), `Parser`, `Grammar`,
 `PrettyPrint`, `Scaffold`/`ScaffoldRun` (pure planner for the collision check only);

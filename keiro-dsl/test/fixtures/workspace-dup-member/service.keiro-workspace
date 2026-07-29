@@ -1,0 +1,3 @@
+service demo-project
+spec domain/a.keiro
+spec ./domain/a.keiro

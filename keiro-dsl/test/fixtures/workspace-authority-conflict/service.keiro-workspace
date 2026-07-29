@@ -1,0 +1,4 @@
+service demo-project
+layout collocated
+spec domain/a.keiro
+spec domain/b.keiro

@@ -1,0 +1,19 @@
+context demo-project
+
+id RUnId prefix=run2
+
+aggregate RUn
+  regs
+    rUnId RUnId = placeholder
+    state RUnVertex = Pending
+  states Pending Done!
+
+  command Redo { rUnId attempt:Int }
+  event Redone { rUnId attempt:Int }
+
+  Pending -- Redo -->
+    write state := Done
+    emit Redone
+    goto Done
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

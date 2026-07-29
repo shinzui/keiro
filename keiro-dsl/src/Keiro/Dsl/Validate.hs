@@ -16,6 +16,7 @@ module Keiro.Dsl.Validate (
     validateSpec,
     derivedQueueTrio,
     sagaCategoryError,
+    nodeIdentity,
 ) where
 
 import Data.Bits (xor)
@@ -261,6 +262,19 @@ data DiagnosticCode
     | CodecCompareDifference
     | CodecCompareCoverageGap
     | CodecCompareInvalidInput
+    | -- MasterPlan 26 / EP-153: whole-service composition refusals, emitted by
+      -- "Keiro.Dsl.Workspace" when several @.keiro@ members are composed into
+      -- one service graph. They live in this registry, not a parallel enum, so
+      -- every gate stays correlatable by code (ADR 0004). Manifest syntax and
+      -- structure errors deliberately have no code here: like a @.keiro@ parse
+      -- error, they are refused before any graph exists to diagnose.
+      WorkspaceMemberUnreadable
+    | WorkspaceMemberParseFailed
+    | WorkspaceContextMismatch
+    | WorkspaceAuthorityConflict
+    | WorkspaceDuplicateDeclaration
+    | WorkspaceDuplicateNodeName
+    | WorkspacePathCollision
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

@@ -1,0 +1,9 @@
+# The same workspace as service.keiro-workspace, with the members listed in
+# reverse order. Membership is a set, so this must be byte-identical after
+# `parse` and produce identical `check` output.
+service demo-project
+layout collocated
+module Demo.Modules.Project
+spec domain/shared.keiro
+spec domain/project.keiro
+spec domain/project-artifact.keiro

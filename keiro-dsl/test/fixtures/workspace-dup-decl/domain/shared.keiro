@@ -1,0 +1,5 @@
+context demo-project
+
+id ProjectId prefix=proj
+
+enum ProjectPhase { Draft=draft Active=active }

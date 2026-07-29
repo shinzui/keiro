@@ -1,0 +1,3 @@
+service demo-project
+spec domain/project.keiro
+spec domain/shared.keiro
