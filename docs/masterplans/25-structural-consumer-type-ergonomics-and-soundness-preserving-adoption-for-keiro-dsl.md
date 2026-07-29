@@ -153,7 +153,10 @@ EP-9), [ADR 0003](../adr/0003-snapshot-compatibility-is-a-three-component-discri
 (guard-evolution remedies the brownfield guide EP-2 must teach), and
 [ADR 0012](../adr/0012-structural-consumer-mappings-use-one-schema-authority-and-total-bindings.md)
 (single event-schema authority, total bindings, separate snapshot-cache boundary, and generated
-Keiki projection provenance). Cross-repository context:
+Keiki projection provenance), and
+[ADR 0013](../adr/0013-structural-coverage-is-reporting-first-and-opacity-gates-are-opt-in.md)
+(reporting-first structural coverage, opt-in named-root policy, and migration-evidence-only codec
+comparison). Cross-repository context:
 the originating Mori request is plan
 `mori://shinzui/mori/plans/171-extend-keiro-dsl-for-structural-mori-domain-contracts` and
 Mori's ADR `mori://shinzui/mori/okf/adrs/concepts/ADR-6`, cited by IR-1. They explain the
@@ -172,7 +175,7 @@ request's origin but do not constrain the reusable Keiro API beyond the local de
 | 6 | Implement the IR-1 spec layer: resolved type graph, structural and opaque declarations, check and diff | docs/plans/149-implement-the-ir-1-spec-layer-resolved-type-graph-structural-and-opaque-declarations-check-and-diff.md | EP-5 | None | Complete |
 | 7 | Implement the IR-1 generation layer: total bindings, codecs, Keiki projection facade, scaffold, and conformance harness | docs/plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md | EP-6, Keiki 0.4 | EP-4 | Complete |
 | 8 | Reduce binding boilerplate: skeleton scaffolds, exact nominal derivation, and explain-bindings | docs/plans/151-reduce-binding-boilerplate-skeleton-scaffolds-derived-nominal-bindings-and-explain-bindings.md | EP-7 | None | Complete |
-| 9 | Gather migration evidence with historical codec comparison and supported-root coverage reporting | docs/plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md | EP-7 | EP-8 | In Progress |
+| 9 | Gather migration evidence with historical codec comparison and supported-root coverage reporting | docs/plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md | EP-7 | EP-8 | Complete |
 
 
 ## Dependency Graph
@@ -302,8 +305,10 @@ is implemented and released.
 - [x] 2026-07-28: EP-7 shared `0.4.0.0` release preparation approved and completed; all mandatory release gates pass, while annotated tags, pushes, and publication remain assigned to the initiative release train
 - [x] 2026-07-28: EP-8 create-once binding skeletons, granular scaffold-record obligations, and exact newly-required-hole reporting landed
 - [x] 2026-07-28: EP-8 exact nominal bindings and `check --explain-bindings` landed; the conformance ring, four mutations, strict ADR validation, and `just verify` pass
-- [ ] EP-9: Explicit historical-codec comparison over a finite corpus landed
-- [ ] EP-9: Supported-root structural/opaque and snapshot-boundary report landed; guides updated; ADR distillation complete
+- [x] 2026-07-28: EP-9 explicit historical-codec comparison over a finite corpus landed;
+      both mismatch and generated-equivalent consumer controls pass their expected outcomes
+- [x] 2026-07-28: EP-9 supported-root structural/opaque and snapshot-boundary reporting landed;
+      opt-in gates, guides, ADR 0013, mutation proof, and full verification completed
 
 
 ## Surprises & Discoveries
@@ -370,6 +375,14 @@ Recorded during child-plan drafting (2026-07-28):
 - Exact generic representations cannot reveal the module containing the binding value. EP-8 keeps
   the successful API free of a forgeable promoted-path argument and uses GHC's exact invocation
   source span, plus a stable custom error directing the author to that scaffolded module.
+- A historical union spelling can differ while still demonstrating that the same semantic arm was
+  exercised. EP-9 therefore observes both raw historical JSON for missing/null evidence and the
+  successfully decoded value normalized through the generated codec for semantic arm coverage;
+  the spelling mismatch remains a comparison failure.
+- A second executable in the main `keiro-dsl` package makes the established
+  `cabal run keiro-dsl -- ...` package target ambiguous. EP-9 keeps its hand-owned consumer runner
+  as the sole executable of a small local package rooted at `keiro-dsl/test`, while the assertion
+  suite remains part of `keiro-dsl`.
 
 
 ## Decision Log
@@ -466,6 +479,24 @@ Recorded during child-plan drafting (2026-07-28):
   competing fixture APIs, and prevent generated-module cycles through existing domain IDs/enums.
   Date: 2026-07-28
 
+- Decision: Historical codec comparison is a pure library engine plus an opt-in generated module
+  compiled and invoked by consumer-owned test code; it never participates in runtime codec
+  selection. Reports compare RFC 8785 JSON meaning over a finite corpus and classify every
+  observation as parity or explicit version/upcaster work.
+  Rationale: An explicit `HistoricalCodec a` is the only honest way to identify the old behavior,
+  and a standalone `keiro-dsl` process cannot execute that Haskell value. Consumer compilation
+  preserves one generated wire authority and makes the finite-evidence boundary explicit.
+  Date: 2026-07-28
+
+- Decision: Structural coverage inventories only named roots supported by the mapped graph;
+  private event payloads are structural/opaque/`Json`, mapped registers are labeled
+  consumer-JSON cache boundaries, and queues/contracts remain unsupported/not-applicable.
+  Rejection is opt-in.
+  Rationale: A broad percentage would invent evidence for surfaces this graph does not model and
+  turn honest opacity into a default failure. ADR 0013 records reporting-first policy, while ADR
+  0004 records the explicit named-root gates.
+  Date: 2026-07-28
+
 
 ## Outcomes & Retrospective
 
@@ -494,6 +525,22 @@ The landed conformance bindings fell from 56 to 30 semantic lines, goldens staye
 four structural mutations turn red, and `just verify` passes. ADR 0012 records these as downstream
 conveniences under its existing single-authority and total-binding rules; EP-8 is Complete.
 
+EP-9 completed the migration-evidence layer. A pure canonical-JSON comparison engine, opt-in
+generated consumer module, explicit historical codec, atomic machine report, and compiled
+five-arm conformance corpus now distinguish exact parity from required version/upcaster work.
+The consumer control proves the successful cutover case; the quirky historical case, uncovered
+arm, rejected golden, opaque selection, and deliberately lenient mutation all fail at their
+intended boundaries. Coverage reports named private-event and consumer-JSON register roots,
+keeps unsupported surfaces explicit, and makes both existing-opacity and growth rejection
+operator opt-ins. The guides, accepted ADR 0013, amended ADR 0004, and full repository gate pass;
+EP-9 is Complete.
+
+All nine ExecPlans are now Complete. The initiative delivers the structural/opaque IR-1 core,
+Keiki 0.4 projection adoption, total bindings and generated codecs, authoring ergonomics,
+compatibility and replay gates, brownfield migration evidence, supported-root coverage reporting,
+and the adopter documentation promised by this MasterPlan without introducing a second wire
+authority or upgrading finite evidence into a structural guarantee.
+
 
 ---
 
@@ -519,3 +566,7 @@ release gates; EP-8 and EP-9 are now hard-dependency-ready while publication rem
 Revision note: Closed EP-8 after landing owner-grouped create-once binding skeletons, granular
 new-hole reporting, exact nominal derivation, binding explanations, and passing full verification;
 EP-9 may now consume its fixture conveniences, 2026-07-28.
+
+Revision note: Closed EP-9 after landing consumer-compiled historical codec comparison,
+reporting-first structural/opaque coverage, accepted ADR 0013, positive/negative and mutation
+proofs, and passing full verification; all nine ExecPlans are Complete, 2026-07-28.

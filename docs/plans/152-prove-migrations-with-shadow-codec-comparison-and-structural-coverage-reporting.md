@@ -62,7 +62,8 @@ Experiment B) for the capability requested by
       non-production comparison module; the consumer-owned runner and generalized Experiment B
       corpus prove omitted-key and legacy-tag differences while covering every optional/null and
       five-arm union branch; `keiro-dsl-test` passes 297 examples and
-      `keiro-dsl-conformance-codec-compare` passes all eight assertions.
+      `keiro-dsl-conformance-codec-compare` passes all ten assertions, including the
+      generated-equivalent positive control.
 - [x] 2026-07-28: Milestone 3 completed: `Keiro.Dsl.Coverage` reports named private-event,
       explicit-`Json`, opaque, and consumer-JSON register boundaries; `check` and `diff` write
       stable JSON and human summaries; diff records previous counts/deltas; the two rejection
@@ -72,7 +73,12 @@ Experiment B) for the capability requested by
       consumer-compiled comparison and reporting-first coverage workflows; OKF allocated and
       validated ADR 0013; ADR 0004's gate inventory and bundle log record the new evidence
       boundaries; strict OKF validation and `just adr-validate` pass for 13 concepts.
-- [ ] Final: Proposal Test answers recorded, ADR distillation pass, plan marked complete.
+- [x] 2026-07-28: Final acceptance completed: all ten Proposal Test answers were verified
+      against the landed interfaces and tests; the generated-equivalent consumer control exits
+      successfully with authority framing; the deliberately lenient comparison mutation made
+      `keiro-dsl-conformance-codec-compare` fail at `omitted key is not parity`, was reverted,
+      and the suite returned green; ADR distillation found no decision beyond accepted ADRs
+      0012/0013 and amended ADR 0004; `just verify` passes.
 
 
 ## Surprises & Discoveries
@@ -102,6 +108,10 @@ Experiment B) for the capability requested by
   two future-tense statements from before plans 150 and 152. The implementation replaced those
   statements with the actual structural projection and comparison workflows instead of creating
   a supplemental appendix.
+- Adding a second executable to the main `keiro-dsl` package made the established package-name
+  target ambiguous. The consumer runner therefore lives as the sole executable of the local
+  package rooted at `keiro-dsl/test`; the main `cabal run keiro-dsl -- ...` workflow remains
+  unchanged.
 
 
 ## Decision Log
@@ -258,6 +268,16 @@ now distinguishes coverage reporting from historical equivalence and replay evid
 makes the opt-in policy durable, and ADR 0004 locates it beside the other earliest-sound-boundary
 gates.
 
+Final acceptance exercised both consumer outcomes through the generated runner: the quirky
+historical codec produces four explicit differences and a failing report, while a
+generated-equivalent historical codec over the same five-arm shape produces a successful report
+with the mandatory authority framing. Replacing semantic classification temporarily with
+unconditional parity made the conformance suite fail specifically on the omitted-key-versus-null
+assertion; restoring the classifier returned all ten assertions to green. The full repository
+gate passes. ADR distillation found no additional durable choice: ADR 0012 already owns schema
+authority, ADR 0013 owns reporting-first opacity policy, and ADR 0004 owns gate placement. EP-9
+and this ExecPlan are Complete.
+
 
 ## Context and Orientation
 
@@ -356,8 +376,15 @@ Relevant local ADRs (filenames scanned in `docs/adr/`; only these are relevant):
 - `docs/adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md` (ADR-3) is
   background for why snapshots are one of the four persisted surfaces the coverage report
   enumerates; no change to it is planned.
+- `docs/adr/0012-structural-consumer-mappings-use-one-schema-authority-and-total-bindings.md`
+  (ADR-12) owns the generated-codec authority, total binding, and consumer-JSON snapshot-cache
+  boundary that the comparator and coverage report preserve.
+- `docs/adr/0013-structural-coverage-is-reporting-first-and-opacity-gates-are-opt-in.md`
+  (ADR-13), allocated and accepted by this plan, owns the reporting-first coverage policy and
+  the rule that comparison evidence never becomes runtime authority.
 
-No existing local ADR covers shadow comparison or coverage policy; Milestone 4 creates one.
+No further ADR is needed after implementation; the decisions above and ADR 0004 cover the landed
+architectural boundaries.
 The `docs/adr/` directory is a profile-governed OKF bundle (`docs/adr/profile.dhall`,
 reserved `log.md`); ADR authoring must follow the ID-allocation and strict-validation
 workflow in `.claude/skills/exec-plan/ADR.md`, restated concretely in Milestone 4.
@@ -631,13 +658,13 @@ keep them in sync with what you create):
 
 ```bash
 cabal run keiro-dsl -- scaffold \
-  keiro-dsl/test/conformance-codec-compare/artifact-store.keiro \
-  --out keiro-dsl/test/conformance-codec-compare \
-  --codec-comparison ArtifactRef \
-  --comparison-out keiro-dsl/test/conformance-codec-compare/Generated/ArtifactStore/Structural/CodecCompare/ArtifactRef.hs
-cabal run keiro-dsl-codec-compare-artifact-ref -- \
-  --historical-goldens keiro-dsl/test/conformance-codec-compare/fixtures/artifact-ref \
-  --report /tmp/artifact-ref-compare.json
+  keiro-dsl/test/fixtures/structural-conformance.keiro \
+  --out keiro-dsl/test/conformance-structural \
+  --codec-comparison ArtifactInfo \
+  --comparison-out keiro-dsl/test/conformance-structural/Generated/StructuralConformance/Structural/CodecCompare/ArtifactInfo.hs
+cabal run keiro-dsl-codec-compare-artifact-info -- \
+  --historical-goldens keiro-dsl/test/conformance-codec-compare/fixtures/artifact-info \
+  --report /tmp/artifact-info-compare.json
 ```
 
 The second executable is the repo-local, hand-owned `Main` that supplies the explicit
@@ -648,18 +675,22 @@ Expected output shape (values illustrative; the framing lines are mandatory and 
 in intent):
 
 ```text
-codec comparison: ArtifactRef (canonical-type "keiro.conformance.ArtifactRef.v1", binding-version "1")
-historical codec: "keiro.conformance.ArtifactRef.aeson" version "legacy-v3"
-observations: 12 (9 historical decode goldens, 3 typed encode cases)
-  encode parity: 2/3 (RFC 8785 canonical form)
-  structural decode agreement: 8/9
-requires explicit version/upcaster work: 2 observations  [CodecCompareDifference]
-  typed-case/absent-description [encode] at /description
-    historical encoder omits "description" when absent; generated codec emits null
-  fixtures/artifact-ref/arm-canonical.json [decode] at /tag
-    union tag "Canonical" (historical) vs declared wire tag "canonical"
+codec comparison: conformance.structural.ArtifactInfo.v1 (binding-version "1")
+historical codec: "conformance.structural.ArtifactInfo.aeson" version "legacy-v3"
+observations: 10
+  encode parity: 2/5 (RFC 8785 canonical form)
+  structural decode agreement: 4/5
+requires explicit version/upcaster work: 4 observations  [CodecCompareDifference]
+  local-file-no-hash [encode] at /artifact_hash
+    historical encoder omitted artifact_hash; generated codec emitted null
+  repo-path [encode] at /artifact_hash
+    historical encoder omitted artifact_hash; generated codec emitted null
+  canonical [encode] at /artifact_hash
+    historical encoder omitted artifact_hash; generated codec emitted null
+  fixtures/artifact-info/canonical.json [decode] at <root>
+    generated structural decoder rejected historical union tag "Canonical"
 coverage gaps: 0
-result: NOT PARITY — 2 differences
+result: NOT PARITY — 4 differences
 This comparison is MIGRATION EVIDENCE ONLY. After cutover the generated structural
 codec is the sole wire authority. This runner is never a runtime fallback and never
 upgrades an opaque declaration to structural. Resolve each difference with an explicit
@@ -669,7 +700,10 @@ contract; "close enough" is not an outcome.
 
 The hand-owned executable exits `1` on that transcript (differences present) and `0` only when
 every applicable observation is `JsonParity`, no input issue exists, and no coverage gap exists; on the passing
-case the same authority framing block still prints. `/tmp/artifact-ref-compare.json` contains
+case the same authority framing block still prints. The conformance suite's
+`generatedEquivalentArtifactInfoCodec` control removes both categories of historical quirk and
+asserts that the generated runner succeeds while retaining that framing.
+`/tmp/artifact-info-compare.json` contains
 the machine report with an `"authority"` field carrying the same statement, a structured
 `"provenance"` object, and per-difference `"pointer"`/`"reason"` fields.
 
@@ -687,7 +721,7 @@ Milestone 3's coverage report:
 
 ```bash
 cabal run keiro-dsl -- check \
-  keiro-dsl/test/conformance-codec-compare/artifact-store.keiro \
+  keiro-dsl/test/fixtures/structural-conformance.keiro \
   --coverage-report /tmp/coverage.json
 ```
 
@@ -695,8 +729,8 @@ Expected human summary (shape, not exact numbers):
 
 ```text
 structural/opaque boundaries (reporting only):
-  private-event-payloads artifact-store/Artifact: 5 mapped roots (4 structural, 1 opaque)
-  snapshot-registers     artifact-store/Artifact: 2 mapped roots; encoding=consumer-json-cache; invalidation=tracked
+  private-event-payloads: 2 mapped roots (1 structural, 1 opaque, 0 Json boundaries)
+  snapshot-registers: 2 mapped roots (1 structural, 1 opaque, 0 Json boundaries); encoding=consumer-json-cache; invalidation=tracked
   queue-payloads: unsupported
   public-contracts: not-applicable (separately owned grammar)
 coverage report written to /tmp/coverage.json
@@ -773,7 +807,7 @@ against the landed code.
    resolve to opaque declarations rather than "helpfully" comparing them, because
    accepting them is the first step of the silent-upgrade path. Verification: code review
    of the runner's import graph plus the conformance suite's assertion that an opaque
-   name an opaque declaration, with a message naming this rule.
+   selection cannot name an opaque declaration, with a message naming this rule.
 2. **Replay.** Unaffected. This plan generates no events, edges, or registers; replay
    semantics are exactly plan 150's. The coverage walk is a read-only traversal of the
    resolved graph.
@@ -829,6 +863,16 @@ against the landed code.
     fail) demonstrates the suite actually guards the classification rather than the
     transcript text. If any of these can be made to pass while the machinery is
     incomplete, the guarantee is not landed.
+
+Verification result (2026-07-28): all ten answers match the landed API and observations.
+`keiro-dsl-test` pins opaque-selection refusal, invalid historical input, complete total-algebra
+coverage, stable codes, default CLI behavior, and opt-in coverage gates. The compiled consumer
+suite pins the two historical mismatch classes, missing-arm rejection, authority framing, and a
+generated-equivalent successful control. The required mutation replaced value classification
+with unconditional parity; the suite went red at `omitted key is not parity`, and passed all ten
+assertions after restoration. These observations close questions 1, 6, 7, and 10 directly; the
+remaining answers are structural consequences of the read-only module/import boundaries and
+were confirmed during final review.
 
 
 ## Idempotence and Recovery

@@ -3,6 +3,7 @@
 
 module Conformance.CodecCompare.Historical (
     historicalArtifactInfoCodec,
+    generatedEquivalentArtifactInfoCodec,
 )
 where
 
@@ -11,6 +12,7 @@ import Data.Aeson (Value (..), object, withObject, withText, (.!=), (.:), (.:?),
 import Data.Aeson.Types (Parser, parseEither)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Generated.StructuralConformance.ArtifactCatalog.Codec qualified as GeneratedCodec
 import Keiro.Dsl.CodecCompare (HistoricalCodec (..))
 
 historicalArtifactInfoCodec :: HistoricalCodec Domain.ArtifactInfo
@@ -20,6 +22,20 @@ historicalArtifactInfoCodec =
         , hcVersion = "legacy-v3"
         , hcEncode = encodeArtifactInfo
         , hcDecode = either (Left . T.pack) Right . parseEither parseArtifactInfo
+        }
+
+{- | Acceptance control: this stands in for the historical codec after its two
+migration quirks have been removed.  Keeping it beside the genuinely
+historical codec lets the consumer-level test exercise the runner's success
+exit condition as well as its refusal path.
+-}
+generatedEquivalentArtifactInfoCodec :: HistoricalCodec Domain.ArtifactInfo
+generatedEquivalentArtifactInfoCodec =
+    HistoricalCodec
+        { hcIdentity = "conformance.structural.ArtifactInfo.generated-equivalent"
+        , hcVersion = "cutover-v4"
+        , hcEncode = GeneratedCodec.encodeArtifactInfoMapped
+        , hcDecode = GeneratedCodec.decodeArtifactInfoMapped
         }
 
 encodeArtifactInfo :: Domain.ArtifactInfo -> Value

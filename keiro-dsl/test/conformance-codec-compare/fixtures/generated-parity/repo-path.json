@@ -1,0 +1,10 @@
+{
+  "artifact_key": "artifact-repo",
+  "display_name": "Repository path",
+  "artifact_hash": "sha256:01",
+  "artifact_kind": "guide",
+  "location": {"tag": "repo_path", "contents": "docs/artifact.md"},
+  "metadata": {"note": "repository"},
+  "active": true,
+  "tags": ["cutover"]
+}

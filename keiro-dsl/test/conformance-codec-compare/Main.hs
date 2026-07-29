@@ -2,7 +2,7 @@
 
 module Main (main) where
 
-import Conformance.CodecCompare.Historical (historicalArtifactInfoCodec)
+import Conformance.CodecCompare.Historical (generatedEquivalentArtifactInfoCodec, historicalArtifactInfoCodec)
 import Control.Monad (unless)
 import Data.Text qualified as T
 import Generated.StructuralConformance.Structural.CodecCompare.ArtifactInfo (compareWithHistorical)
@@ -13,6 +13,7 @@ main :: IO ()
 main = do
     report <- compareWithHistorical historicalArtifactInfoCodec corpusPath
     missingArm <- compareWithHistorical historicalArtifactInfoCodec missingArmPath
+    parityReport <- compareWithHistorical generatedEquivalentArtifactInfoCodec parityCorpusPath
     let differences =
             [ difference
             | observation <- crObservations report
@@ -27,12 +28,15 @@ main = do
             , ("differences make the report fail", not (reportSucceeded report))
             , ("authority framing is mandatory", "MIGRATION EVIDENCE ONLY" `T.isInfixOf` renderCompareReport report)
             , ("missing canonical arm is a coverage gap", any isCanonicalGap (crCoverageGaps missingArm))
+            , ("removing the historical quirks yields parity", reportSucceeded parityReport)
+            , ("parity retains authority framing", "MIGRATION EVIDENCE ONLY" `T.isInfixOf` renderCompareReport parityReport)
             ]
     mapM_ (\(label, ok) -> putStrLn ((if ok then "PASS  " else "FAIL  ") <> label)) assertions
     unless (all snd assertions) exitFailure
   where
     corpusPath = "test/conformance-codec-compare/fixtures/artifact-info"
     missingArmPath = "test/conformance-codec-compare/fixtures/missing-arm"
+    parityCorpusPath = "test/conformance-codec-compare/fixtures/generated-parity"
 
 isArtifactHashDifference :: ComparisonDifference -> Bool
 isArtifactHashDifference difference = case difference of
