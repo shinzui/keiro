@@ -104,7 +104,12 @@ changes, no diff changes, no adoption/migration work.**
       (`git diff --name-status b0a4875 -- keiro-dsl/test/` shows `M` only for the test
       driver `Main.hs`; every fixture line is an addition); `CHANGELOG.md` updated;
       MasterPlan 26 registry row and Progress entries ticked. (2026-07-29)
-- [ ] Final: ADR distillation pass done; Outcomes & Retrospective written.
+- [x] Final: ADR distillation pass done — ADR-14 holds the durable design and was amended
+      during M3 to draw the diagnostic-code boundary at composition (`okf log add` +
+      `just adr-validate` green, `OK: 14 concepts`); Outcomes & Retrospective written;
+      MasterPlan 26 registry row set to Complete with its three EP-1 Progress entries
+      ticked and five cross-plan discoveries recorded for EP-2/EP-3/EP-4;
+      `just verify` exits 0. (2026-07-29)
 
 
 ## Surprises & Discoveries
