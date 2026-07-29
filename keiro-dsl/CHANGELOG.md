@@ -6,6 +6,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.4.0.0 — 2026-07-28
+
 ### New Features
 
 - Structural scaffolding now creates hand-owned binding/fixture/initial
@@ -14,9 +16,19 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   private shape types, and provides `check --explain-bindings` for deterministic
   package/module/signature/use-site reports.
 
-## 0.4.0.0 — 2026-07-28
+- Adds `Keiro.Dsl.CodecCompare`, a historical-codec comparison engine that
+  classifies RFC 8785 canonical-JSON parity between a declared codec and a
+  historical one, reports structured migration differences and declared-versus-
+  observed branch coverage gaps, and writes stable reports atomically.
+  `scaffold --codec-comparison MAPPED-NAME --comparison-out FILE` emits a
+  non-production comparison module and runner for one structural mapped type.
 
-### New Features
+- Adds `Keiro.Dsl.Coverage` and reporting-only `--coverage-report FILE` on both
+  `check` and `diff`, recording structural and opaque mapped-root coverage as
+  JSON. `check --fail-on-opaque` fails when a private persisted root still
+  contains an opaque boundary; `diff --fail-on-opaque-increase` fails when a
+  change adds a named opaque boundary. Without the flags, coverage is purely
+  informational.
 
 - Adds checked `mapped structural` and `mapped opaque` declarations with a
   resolved, total type-expression graph. Validation rejects recursive,

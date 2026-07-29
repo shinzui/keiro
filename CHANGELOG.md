@@ -6,13 +6,6 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
-### New Features
-
-- Structural consumer mappings gain create-once binding skeletons, granular
-  newly-required-hole reporting, exact opt-in `GHC.Generics` bindings, and
-  `keiro-dsl check --explain-bindings`; wire policy remains exclusively in the
-  checked declaration and generated codec.
-
 ## 0.4.0.0 — 2026-07-28
 
 ### Breaking Changes
@@ -42,6 +35,20 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### New Features
 
+- Structural consumer mappings gain create-once binding skeletons, granular
+  newly-required-hole reporting, exact opt-in `GHC.Generics` bindings, and
+  `keiro-dsl check --explain-bindings`; wire policy remains exclusively in the
+  checked declaration and generated codec.
+- `keiro-dsl` gains a historical-codec comparison engine
+  (`Keiro.Dsl.CodecCompare`) plus `scaffold --codec-comparison`/`--comparison-out`,
+  proving a migration by classifying RFC 8785 canonical-JSON parity between the
+  declared codec and a historical one and reporting branch-coverage gaps. The
+  generated comparison module and runner are non-production evidence, never a
+  wire authority.
+- `keiro-dsl` gains reporting-only structural and opaque coverage
+  (`Keiro.Dsl.Coverage`) via `check --coverage-report` and
+  `diff --coverage-report`, with opt-in `check --fail-on-opaque` and
+  `diff --fail-on-opaque-increase` gates for private persisted roots.
 - `keiro-dsl` now accepts checked structural and opaque consumer-type declarations with nested
   records, enums, tagged unions, collections, optional/default policies, canonical identities,
   binding or codec provenance, and register initials. Its resolved type graph drives stable
