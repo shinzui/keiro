@@ -22,6 +22,7 @@ import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBan
 import Keiro.Dsl.ScaffoldRun (executeScaffold, planScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
+import Keiro.Dsl.Workspace (isWorkspacePath, parseWorkspaceManifest, renderWorkspaceManifest)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
 import System.Exit (ExitCode (..), exitFailure)
@@ -141,12 +142,18 @@ sinceOpt :: Parser String
 sinceOpt = strOption (long "since" <> metavar "GIT-REF" <> help "Git ref to diff the spec against (e.g. HEAD, a tag, a branch)")
 
 fileArg :: Parser FilePath
-fileArg = argument str (metavar "FILE" <> help "Path to a .keiro spec (use /dev/stdin for stdin)")
+fileArg = argument str (metavar "FILE" <> help "Path to a .keiro spec or .keiro-workspace manifest (use /dev/stdin for stdin)")
 
 kindArg :: Parser String
 kindArg = argument str (metavar "KIND" <> help "Node kind to scaffold a starter spec for")
 
 run :: Command -> IO ()
+-- Workspace dispatch. A @FILE@ ending in @.keiro-workspace@ is a workspace
+-- manifest; everything else takes the untouched single-file path below.
+run (Parse fp) | isWorkspacePath fp = runWorkspaceParse fp
+run (Check fp _ _ _) | isWorkspacePath fp = stagedWorkspaceRefusal "whole-service check lands in a later milestone of docs/plans/153-add-the-service-workspace-manifest-loader-composed-graph-and-whole-service-check-to-keiro-dsl.md"
+run (Scaffold fp _ _ _ _ _ _) | isWorkspacePath fp = stagedWorkspaceRefusal "workspace scaffolding is not yet supported; it lands with docs/plans/154-scaffold-whole-workspaces-atomically-with-workspace-keyed-records-and-adoption-from-per-context-records.md"
+run (Diff fp _ _ _ _ _ _ _) | isWorkspacePath fp = stagedWorkspaceRefusal "workspace diff is not yet supported; it lands with docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md"
 run (Parse fp) = do
     input <- TIO.readFile fp
     case parseSpec fp input of
@@ -245,6 +252,27 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
                             mapM_ (\path -> Aeson.encodeFile path (diffReport effectiveGate changes)) reportOut
                             coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
                             if any (gatedBreaking effectiveGate) changes || not coverageOk then exitFailure else pure ()
+
+{- | @parse@ on a workspace manifest: read it, parse it, and print it back in
+canonical form (clauses in order, members codepoint-sorted).
+-}
+runWorkspaceParse :: FilePath -> IO ()
+runWorkspaceParse fp = do
+    input <- TIO.readFile fp
+    case parseWorkspaceManifest fp input of
+        Left err -> do
+            hPutStrLn stderr (T.unpack err)
+            exitFailure
+        Right manifest -> TIO.putStrLn (renderWorkspaceManifest manifest)
+
+{- | A command that recognizes a workspace manifest but whose whole-workspace
+implementation lands in a named later plan. Naming the owning plan keeps the
+refusal honest while the MasterPlan is only partly delivered, and prevents the
+misleading megaparsec error a manifest would otherwise produce if it were
+handed to the @.keiro@ parser.
+-}
+stagedWorkspaceRefusal :: String -> IO ()
+stagedWorkspaceRefusal message = hPutStrLn stderr message >> exitFailure
 
 shouldExplain :: Change -> Bool
 shouldExplain Additive{} = False

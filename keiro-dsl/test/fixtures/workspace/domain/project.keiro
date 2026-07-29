@@ -1,0 +1,29 @@
+context demo-project
+
+aggregate Project
+  regs
+    projectId ProjectId      = placeholder
+    phase     ProjectPhase   = Draft
+    summary   ProjectSummary = initial
+  states Unregistered Live Closed!
+
+  command RegisterProject { projectId initialSummary:ProjectSummary }
+  command RetireProject   { projectId phaseIsTerminal:Bool }
+
+  event ProjectRegistered = fields(RegisterProject)
+  event ProjectRetired    { projectId }
+
+  Unregistered -- RegisterProject -->
+    write phase   := Active
+    write summary := initialSummary
+    emit  ProjectRegistered
+    goto  Live
+  Live -- RetireProject -->
+    guard phaseIsTerminal
+    write phase := Retired
+    emit  ProjectRetired
+    goto  Closed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  projection project_activity key=projectId
+    status-map { ProjectRegistered=>registered ProjectRetired=>retired }

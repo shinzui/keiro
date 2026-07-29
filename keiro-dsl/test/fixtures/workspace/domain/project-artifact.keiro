@@ -1,0 +1,30 @@
+context demo-project
+
+readmodel project_activity {
+  table = "project_activity"
+  schema = "demo_project"
+  columns {
+    project_id text required
+    status text required
+  }
+  version = 1
+  shape = "fnv1a:2b484a02644bc021"
+  consistency = Eventual
+  feed = inline
+}
+
+aggregate ProjectArtifact
+  regs
+    projectId ProjectId    = placeholder
+    phase     ProjectPhase = Draft
+  states Empty Recorded
+
+  command RecordArtifact { projectId artifactSummary:ProjectSummary }
+  event  ArtifactRecorded = fields(RecordArtifact)
+
+  Empty -- RecordArtifact -->
+    write phase := Active
+    emit  ArtifactRecorded
+    goto  Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

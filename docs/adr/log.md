@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-07-29
+* **Added**: Record the service workspace identity, single-owner member composition, and manifest authority rules (plan 153)
+
 ## 2026-07-28
 * **Update**: Amend ADR 0004 with reporting-only coverage, opt-in opacity gates, and consumer-compiled historical codec evidence ownership (plan 152).
 * **Added**: Record reporting-first mapped-type coverage, named structural/opaque boundaries, and explicit operator-owned opacity gates (plan 152).

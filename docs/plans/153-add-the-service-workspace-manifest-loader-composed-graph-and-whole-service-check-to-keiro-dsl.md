@@ -55,16 +55,26 @@ changes, no diff changes, no adoption/migration work.**
 
 ## Progress
 
-- [ ] M1: `Keiro.Dsl.Workspace` module created with the manifest AST, megaparsec parser,
+- [x] M1: `Keiro.Dsl.Workspace` module created with the manifest AST, megaparsec parser,
       and canonical pretty-printer; module added to `exposed-modules` in
-      `keiro-dsl/keiro-dsl.cabal`.
-- [ ] M1: `keiro-dsl parse` dispatches on the `.keiro-workspace` extension and round-trips
+      `keiro-dsl/keiro-dsl.cabal`. (2026-07-29)
+- [x] M1: `keiro-dsl parse` dispatches on the `.keiro-workspace` extension and round-trips
       the manifest canonically; `check`, `scaffold`, and `diff` on a manifest print explicit
       staged-refusal messages naming plans 154/155 (check's refusal is replaced in M3).
-- [ ] M1: Manifest unit and property tests green (round trip, canonical sorting, duplicate
-      member refusal, invalid path refusal, missing `service` refusal).
-- [ ] M1: Workspace ADR allocated with `okf id next` (expected `ADR-14`, never guessed),
-      written, `docs/adr/log.md` advanced with `okf log add`, `just adr-validate` green.
+      (2026-07-29)
+- [x] M1: Manifest unit and property tests green (round trip, canonical sorting, duplicate
+      member refusal, invalid path refusal, missing `service` refusal) — 13 refusal cases
+      plus the round-trip property; suite at 319 examples, 0 failures. (2026-07-29)
+- [x] M1: Workspace ADR allocated with `okf id next` (`ADR-14`, confirmed by the command,
+      never guessed), written as
+      `docs/adr/0014-service-workspaces-compose-single-owner-members-under-one-manifest-identity.md`,
+      `docs/adr/log.md` advanced with `okf log add`, `just adr-validate` green
+      (`OK: 14 concepts`). (2026-07-29)
+- [x] M1: Positive fixture workspace authored at `keiro-dsl/test/fixtures/workspace/`
+      (manifest plus `domain/shared.keiro`, `domain/project.keiro`,
+      `domain/project-artifact.keiro`); each member parses standalone and its residual
+      standalone diagnostics are exactly the cross-file references the workspace must
+      resolve. (2026-07-29)
 - [ ] M2: `ContentSource` abstraction plus `fileContentSource`; `loadWorkspace` reads the
       manifest and all members through it.
 - [ ] M2: Pure `composeWorkspace` producing `WorkspaceSpec` (merged spec, line map,
@@ -90,7 +100,45 @@ changes, no diff changes, no adoption/migration work.**
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **`okf log add` does not accept `--profile`.** This plan's Concrete Steps quoted
+  `okf log add docs/adr --profile docs/adr/profile.dhall <file> "<message>"`; the real
+  interface is `okf log add BUNDLE [CONCEPT_ID] [--kind KIND] (-m|--message MESSAGE)
+  [--date YYYY-MM-DD]`. The working invocation is below; Concrete Steps has been corrected.
+
+  ```text
+  $ okf log add docs/adr --kind Added -m "Record the service workspace identity, …"
+  Wrote log.md for 2026-07-29
+  $ just adr-validate
+  OK: 14 concepts
+  ```
+
+  Note `just adr-validate` fails with `timestamp date … is newer than log.md newest entry`
+  until the log is advanced, so the two steps are not independently skippable.
+  (2026-07-29)
+
+- **The positive fixture's members are individually invalid in exactly the right way.**
+  Checking each member alone leaves precisely the diagnostics that only the workspace can
+  resolve, which is direct evidence that M3's composed check is doing real cross-file work
+  rather than re-running three independent checks:
+
+  ```text
+  $ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace/domain/project.keiro
+  …project.keiro:16: error[GuardAtomOutOfScope]: atom 'Active' … resolves to no register, command field, enum constructor, or rule
+  …project.keiro:21: error[GuardAtomOutOfScope]: atom 'Retired' … resolves to no register, command field, enum constructor, or rule
+  …project.keiro:28: warning[RmProjectionWithoutNode]: projection 'project_activity' has no readmodel node…
+  $ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace/domain/project-artifact.keiro
+  …project-artifact.keiro:3: error[RmInlineFeedUnreferenced]: readmodel 'project_activity' declares feed = inline but no aggregate projection references it
+  …project-artifact.keiro:25: error[GuardAtomOutOfScope]: atom 'Active' … resolves to no register, command field, enum constructor, or rule
+  ```
+
+  `domain/shared.keiro` alone prints `OK` — a declarations-only member is self-contained.
+  (2026-07-29)
+
+- **Two distinct "no service" refusals, not one.** An empty manifest cannot name an
+  offending clause, so it gets `workspace manifest must begin with a 'service <name>'
+  clause`, while a manifest that starts with any other clause gets `the first clause of a
+  workspace manifest must be 'service <name>'` positioned at that clause. Both are pinned
+  by tests. (2026-07-29)
 
 
 ## Decision Log
@@ -530,9 +578,13 @@ Edits:
    print the staged refusal to stderr and exit 1 —
    `scaffold`: `workspace scaffolding is not yet supported; it lands with docs/plans/154-scaffold-whole-workspaces-atomically-with-workspace-keyed-records-and-adoption-from-per-context-records.md`;
    `diff`: `workspace diff is not yet supported; it lands with docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md`;
-   `check`: `whole-service check lands in a later milestone of this plan` (replaced in
-   M3). Update `fileArg`'s help text to `"Path to a .keiro spec or .keiro-workspace
-   manifest (use /dev/stdin for stdin)"`.
+   `check`: `whole-service check lands in a later milestone of
+   docs/plans/153-add-the-service-workspace-manifest-loader-composed-graph-and-whole-service-check-to-keiro-dsl.md`
+   (replaced in M3; the message names the plan document rather than saying "this plan"
+   so it is meaningful to a user who is not reading the plan). Update `fileArg`'s help
+   text to `"Path to a .keiro spec or .keiro-workspace manifest (use /dev/stdin for
+   stdin)"`. The four dispatch clauses are added as new leading equations of `run`, so
+   every existing single-file branch stays textually unchanged.
 3. `keiro-dsl/test/Main.hs` — a new `describe "service workspace (EP-153)"` block:
    round-trip unit tests for the canonical example; a QuickCheck property over a small
    `WorkspaceManifest` generator (`parse . render == Right`, and `render . parse .
@@ -560,14 +612,16 @@ Edits:
    `.keiro` file is a one-member workspace. Then advance the reserved log and validate:
 
    ```bash
-   okf log add docs/adr --profile docs/adr/profile.dhall <the-new-record-file> "Record the service workspace identity and ownership decision"
+   okf log add docs/adr --kind Added -m "Record the service workspace identity, single-owner member composition, and manifest authority rules (plan 153)"
    just adr-validate
    ```
 
-   (If the local `okf log add` invocation differs, follow `okf log add --help`; the
+   (Verified 2026-07-29: `okf log add` takes `BUNDLE [CONCEPT_ID] [--kind KIND]
+   (-m|--message MESSAGE) [--date YYYY-MM-DD]` and does **not** accept `--profile`. The
    non-negotiable outcome is that `just adr-validate` — which runs
    `okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce
-   --log-enforce` — passes.)
+   --log-enforce` — passes; it fails with `timestamp date … is newer than log.md newest
+   entry` until the log is advanced.)
 
 Acceptance: `cabal test keiro-dsl-test` green including the new block;
 `cabal run keiro-dsl -- parse <manifest>` prints the canonical manifest and re-parsing
@@ -821,21 +875,32 @@ okf id next docs/adr --profile docs/adr/profile.dhall ADR
 just adr-validate
 ```
 
-Expected Milestone 1 transcript (canonical round trip; a second `parse` of the printed
-output must produce identical bytes):
+Milestone 1 transcript, captured verbatim on 2026-07-29 (canonical round trip; a second
+`parse` of the printed output produces identical bytes). Note the manifest source has a
+leading `#` comment and the canonical output drops it, exactly like the member
+pretty-printer:
 
 ```text
-$ cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/workspace/service.keiro-workspace
+$ cabal run -v0 keiro-dsl -- parse keiro-dsl/test/fixtures/workspace/service.keiro-workspace
 service demo-project
 module Demo.Modules.Project
 layout collocated
 spec domain/project-artifact.keiro
 spec domain/project.keiro
 spec domain/shared.keiro
+exit=0
 
-$ cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/workspace/service.keiro-workspace --out /tmp/x
+$ cabal run -v0 keiro-dsl -- scaffold keiro-dsl/test/fixtures/workspace/service.keiro-workspace --out /tmp/x
 workspace scaffolding is not yet supported; it lands with docs/plans/154-scaffold-whole-workspaces-atomically-with-workspace-keyed-records-and-adoption-from-per-context-records.md
-(exit 1)
+exit=1
+
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace/service.keiro-workspace
+whole-service check lands in a later milestone of docs/plans/153-add-the-service-workspace-manifest-loader-composed-graph-and-whole-service-check-to-keiro-dsl.md
+exit=1
+
+$ cabal run -v0 keiro-dsl -- diff keiro-dsl/test/fixtures/workspace/service.keiro-workspace --since HEAD
+workspace diff is not yet supported; it lands with docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md
+exit=1
 ```
 
 ```bash

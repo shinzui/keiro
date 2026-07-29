@@ -1,0 +1,21 @@
+context demo-project
+
+id ProjectId prefix=proj
+
+enum ProjectPhase { Draft=draft Active=active Retired=retired }
+
+rule phaseIsTerminal : ProjectPhase -> Bool
+  ex Draft => false ; Active => false ; Retired => true
+
+mapped structural record ProjectSummary {
+  haskell package=demo-project-domain module=Demo.Project.Domain type=ProjectSummary
+  binding = "Demo.Project.KeiroBindings.projectSummaryBinding"
+  binding-version = "1"
+  canonical-type = "demo.project.ProjectSummary.v1"
+  fixtures = "Demo.Project.KeiroBindings.projectSummaryCases"
+  initial = "Demo.Project.KeiroBindings.emptyProjectSummary"
+  wire object constructor=ProjectSummary unknown-fields=reject {
+    title as "title" : Text required
+    owner as "owner" : Text required
+  }
+}

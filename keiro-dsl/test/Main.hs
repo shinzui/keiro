@@ -14,6 +14,7 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft, isRight)
 import Data.List (partition, sort)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as T
@@ -41,6 +42,7 @@ import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (.
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, validateSpec)
+import Keiro.Dsl.Workspace
 import System.Directory (createDirectory, createDirectoryIfMissing, doesFileExist, getTemporaryDirectory, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
@@ -2402,6 +2404,120 @@ main = hspec $ do
             let plainHoles = [moduleText m | m <- plainMods, kind m == HoleStub]
             plainHoles `shouldSatisfy` all (not . T.isInfixOf "B.replayOnly")
 
+    describe "service workspace (EP-153)" $ do
+        describe "manifest grammar" $ do
+            it "round-trips the canonical fixture manifest byte-for-byte" $ do
+                source <- readTestText canonicalWorkspacePath
+                manifest <- shouldParseManifest canonicalWorkspacePath source
+                wmfService manifest `shouldBe` "demo-project"
+                wmfModuleRoot manifest `shouldBe` Just "Demo.Modules.Project"
+                wmfLayout manifest `shouldBe` Just CollocatedLeaf
+                map wmrPath (NE.toList (wmfMembers manifest))
+                    `shouldBe` [ "domain/project-artifact.keiro"
+                               , "domain/project.keiro"
+                               , "domain/shared.keiro"
+                               ]
+                renderWorkspaceManifest manifest
+                    `shouldBe` T.intercalate
+                        "\n"
+                        [ "service demo-project"
+                        , "module Demo.Modules.Project"
+                        , "layout collocated"
+                        , "spec domain/project-artifact.keiro"
+                        , "spec domain/project.keiro"
+                        , "spec domain/shared.keiro"
+                        ]
+            it "treats membership as a set: source order changes neither the AST nor the bytes" $ do
+                canonical <- readTestText canonicalWorkspacePath >>= shouldParseManifest canonicalWorkspacePath
+                reordered <-
+                    shouldParseManifest "<reordered>" $
+                        T.unlines
+                            [ "service demo-project"
+                            , "layout collocated"
+                            , "spec domain/shared.keiro"
+                            , "module Demo.Modules.Project"
+                            , "spec domain/project.keiro"
+                            , "spec ./domain/project-artifact.keiro"
+                            ]
+                reordered `shouldBe` canonical
+                renderWorkspaceManifest reordered `shouldBe` renderWorkspaceManifest canonical
+            it "satisfies parse . render == id and render . parse . render == render" $
+                property $
+                    forAll genWorkspaceManifest $ \manifest ->
+                        let rendered = renderWorkspaceManifest manifest
+                         in case parseWorkspaceManifest "<generated>" rendered of
+                                Left err -> counterexample (T.unpack err) False
+                                Right reparsed ->
+                                    counterexample (T.unpack rendered) $
+                                        reparsed == manifest && renderWorkspaceManifest reparsed == rendered
+            it "recognizes a workspace manifest by extension, case-insensitively" $ do
+                map
+                    isWorkspacePath
+                    [ "service.keiro-workspace"
+                    , "a/b/Service.KEIRO-Workspace"
+                    , "service.keiro"
+                    , ".keiro-workspace"
+                    , "keiro-workspace"
+                    ]
+                    `shouldBe` [True, True, False, False, False]
+        describe "manifest refusals" $ do
+            let rejects label source expected =
+                    it label $ case parseWorkspaceManifest "<manifest>" source of
+                        Right _ -> expectationFailure ("expected a refusal, got a manifest for:\n" <> T.unpack source)
+                        Left err -> T.unpack err `shouldContain` expected
+            rejects
+                "an empty manifest"
+                "# only a comment\n"
+                "must begin with a 'service <name>' clause"
+            rejects
+                "a manifest with no service clause"
+                "spec domain/a.keiro\n"
+                "first clause of a workspace manifest must be 'service <name>'"
+            rejects
+                "a manifest whose first clause is not service"
+                "module Demo\nservice demo\nspec domain/a.keiro\n"
+                "first clause of a workspace manifest must be 'service <name>'"
+            rejects
+                "a duplicate service clause"
+                "service demo\nservice demo\nspec domain/a.keiro\n"
+                "duplicate 'service' clause"
+            rejects
+                "a duplicate module clause"
+                "service demo\nmodule Demo\nmodule Demo\nspec domain/a.keiro\n"
+                "duplicate 'module' clause"
+            rejects
+                "a duplicate layout clause"
+                "service demo\nlayout prefixed\nlayout prefixed\nspec domain/a.keiro\n"
+                "duplicate 'layout' clause"
+            rejects
+                "a manifest with no members"
+                "service demo\nmodule Demo\n"
+                "must list at least one 'spec <path>.keiro' member"
+            rejects
+                "the same member listed twice"
+                "service demo\nspec domain/a.keiro\nspec ./domain/a.keiro\n"
+                "duplicate workspace member 'domain/a.keiro'"
+            rejects
+                "two members that differ only by case"
+                "service demo\nspec domain/a.keiro\nspec domain/A.keiro\n"
+                "differ only by case"
+            rejects
+                "an absolute member path"
+                "service demo\nspec /etc/a.keiro\n"
+                "must be relative, not absolute"
+            rejects
+                "a member path escaping the manifest directory"
+                "service demo\nspec ../escape.keiro\n"
+                "must not contain '..' segments"
+            rejects
+                "a member that is not a .keiro spec"
+                "service demo\nspec domain/a.txt\n"
+                "must name a .keiro spec"
+            rejects
+                "a manifest listing another manifest"
+                "service demo\nspec domain/other.keiro-workspace\n"
+                "must name a .keiro spec"
+
 comparisonProvenance :: CompareProvenance
 comparisonProvenance =
     CompareProvenance
@@ -2823,6 +2939,45 @@ isLoweringRefusal (Left refusals) = any isLowering refusals
     isLowering LoweringRefusal{} = True
     isLowering _ = False
 isLoweringRefusal (Right _) = False
+
+-- | The canonical positive workspace fixture: three members under one context.
+canonicalWorkspacePath :: FilePath
+canonicalWorkspacePath = "test/fixtures/workspace/service.keiro-workspace"
+
+-- | Parse a workspace manifest, failing the test on a refusal.
+shouldParseManifest :: FilePath -> T.Text -> IO WorkspaceManifest
+shouldParseManifest path source = case parseWorkspaceManifest path source of
+    Left err -> expectationFailure (T.unpack err) >> error "unreachable"
+    Right manifest -> pure manifest
+
+{- | Generate a canonical workspace manifest. Members are drawn from a pool of
+paths that are distinct even under case folding and are held sorted, which is
+the invariant every parsed manifest satisfies.
+-}
+genWorkspaceManifest :: Gen WorkspaceManifest
+genWorkspaceManifest = do
+    service <- elements ["demo-project", "mori", "kotei", "a1", "svc-2"]
+    moduleRoot <- elements [Nothing, Just "Demo", Just "Demo.Modules.Project"]
+    layout <- elements [Nothing, Just GeneratedPrefix, Just CollocatedLeaf]
+    chosen <-
+        sublistOf
+            [ "a.keiro"
+            , "d-e_f.keiro"
+            , "domain/b.keiro"
+            , "domain/sub/c.keiro"
+            , "x1.keiro"
+            ]
+            `suchThat` (not . null)
+    pure
+        WorkspaceManifest
+            { wmfService = service
+            , wmfServiceLoc = Loc 1
+            , wmfModuleRoot = moduleRoot
+            , wmfModuleRootLoc = Loc 2
+            , wmfLayout = layout
+            , wmfLayoutLoc = Loc 3
+            , wmfMembers = NE.fromList [WorkspaceMemberRef path (Loc 4) | path <- sort chosen]
+            }
 
 -- | Parse a fixture into a 'Spec', failing the test on a parse error.
 specOf :: FilePath -> IO Spec
