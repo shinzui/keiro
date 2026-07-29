@@ -1,0 +1,40 @@
+WARNING: OrderStatus enum-constructor Expired: new constructor with wire spelling 'expired' is used by Order.reg.status; invalidate or rebuild snapshots before values using the new arm hydrate [EnumCtorAdded]
+    vector: private-history-read=compatible old-binary-read-new-events=compatible snapshot-hydration=advisory
+    declared: domain/shared.keiro:3
+    use-site: Order.reg.status (domain/order.keiro:3)
+WARNING: OrderStatus enum-constructor Expired: new constructor with wire spelling 'expired' is used by Shipment.reg.status; invalidate or rebuild snapshots before values using the new arm hydrate [EnumCtorAdded]
+    vector: private-history-read=compatible old-binary-read-new-events=compatible snapshot-hydration=advisory
+    declared: domain/shared.keiro:3
+    use-site: Shipment.reg.status (domain/shipment.keiro:3)
+WARNING: OrderStatus enum-constructor Expired: new constructor with wire spelling 'expired' is used by Order.event.OrderClosed.finalStatus; deploy consumers before producers emit the new arm [EnumCtorAdded]
+    vector: private-history-read=compatible old-binary-read-new-events=breaking rollout=producer-last
+    declared: domain/shared.keiro:3
+    use-site: Order.event.OrderClosed.finalStatus (domain/order.keiro:3)
+WARNING: OrderStatus enum-constructor Expired: new constructor with wire spelling 'expired' is used by Shipment.event.ShipmentCompleted.finalStatus; deploy consumers before producers emit the new arm [EnumCtorAdded]
+    vector: private-history-read=compatible old-binary-read-new-events=breaking rollout=producer-last
+    declared: domain/shared.keiro:3
+    use-site: Shipment.event.ShipmentCompleted.finalStatus (domain/shipment.keiro:3)
+WARNING: Order mapped-command Order command CloseOrder .details : SharedDetails .field label["label"].type: wire type changed; version and upcast every affected private event root [MappedFieldTypeChanged]
+    vector: private-history-read=compatible old-binary-read-new-events=compatible consumer-build=advisory
+    declared: domain/shared.keiro:5
+    use-site: Order command CloseOrder .details : SharedDetails .field label["label"].type (domain/order.keiro:3)
+BREAKING: Order mapped-event Order event OrderClosed .details : SharedDetails .field label["label"].type: wire type changed; version and upcast every affected private event root [MappedFieldTypeChanged]
+    vector: private-history-read=breaking old-binary-read-new-events=breaking rollout=stop-the-world
+    declared: domain/shared.keiro:5
+    use-site: Order event OrderClosed .details : SharedDetails .field label["label"].type (domain/order.keiro:3)
+WARNING: Order mapped-register Order register details : SharedDetails .field label["label"].type: wire type changed; version and upcast every affected private event root [MappedFieldTypeChanged]
+    vector: private-history-read=compatible old-binary-read-new-events=compatible snapshot-hydration=advisory
+    declared: domain/shared.keiro:5
+    use-site: Order register details : SharedDetails .field label["label"].type (domain/order.keiro:3)
+WARNING: Shipment mapped-command Shipment command CompleteShipment .details : SharedDetails .field label["label"].type: wire type changed; version and upcast every affected private event root [MappedFieldTypeChanged]
+    vector: private-history-read=compatible old-binary-read-new-events=compatible consumer-build=advisory
+    declared: domain/shared.keiro:5
+    use-site: Shipment command CompleteShipment .details : SharedDetails .field label["label"].type (domain/shipment.keiro:3)
+BREAKING: Shipment mapped-event Shipment event ShipmentCompleted .details : SharedDetails .field label["label"].type: wire type changed; version and upcast every affected private event root [MappedFieldTypeChanged]
+    vector: private-history-read=breaking old-binary-read-new-events=breaking rollout=stop-the-world
+    declared: domain/shared.keiro:5
+    use-site: Shipment event ShipmentCompleted .details : SharedDetails .field label["label"].type (domain/shipment.keiro:3)
+WARNING: Order transitions Order: aggregate fold surface changed: replay now interprets the existing log under the new fold. Old snapshots are invalidated automatically once the regenerated fold fingerprint deploys; if the change is fold-neutral confirm it, otherwise re-scaffold and redeploy, and bump `state-codec version=` for any accompanying Holes-only change. [AggFoldSurfaceChanged]
+    vector: private-history-read=advisory old-binary-read-new-events=compatible snapshot-hydration=advisory
+    declared: domain/order.keiro:3
+    use-site: Order.transitions (domain/order.keiro:3)

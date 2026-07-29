@@ -12,6 +12,7 @@ import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft, isRight)
+import Data.Foldable (toList)
 import Data.List (partition, sort, (\\))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
@@ -44,6 +45,7 @@ import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, renderDiagnostic, validateSpec)
 import Keiro.Dsl.Workspace
 import Keiro.Dsl.WorkspaceAdoption
+import Keiro.Dsl.WorkspaceDiff
 import Keiro.Dsl.WorkspaceRecord
 import Keiro.Dsl.WorkspaceScaffold
 import System.Directory (createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly)
@@ -2761,6 +2763,78 @@ main = hspec $ do
             newRenamed <- loadFrom renamedMembers renamedFiles >>= expectLoaded
             diffSpecs (wsMergedSpec oldRenamed) (wsMergedSpec newRenamed) `shouldBe` []
 
+    describe "workspace diff ownership and unified reports (EP-155 M2)" $ do
+        it "classifies shared declarations at use sites across every member with owned citations" $ do
+            old <- shouldComposeWorkspace "test/fixtures/workspace-diff-old/service.keiro-workspace"
+            new <- shouldComposeWorkspace "test/fixtures/workspace-diff-new/service.keiro-workspace"
+            let changes = diffWorkspaces old new
+                enumChanges = filter ((== EnumCtorAdded) . changeCode . wcChange) changes
+                mappedChanges = filter ((== MappedFieldTypeChanged) . changeCode . wcChange) changes
+                citedFiles workspaceChanges =
+                    [ osFile site
+                    | change <- workspaceChanges
+                    , (_, Just site) <- wcUseSites change
+                    ]
+            enumChanges `shouldSatisfy` (not . null)
+            mappedChanges `shouldSatisfy` (not . null)
+            let enumWireChanges =
+                    [ change
+                    | workspaceChange <- enumChanges
+                    , let change = wcChange workspaceChange
+                    , OldBinaryReadNewEvents `elem` breakingSurfaces change
+                    ]
+            enumWireChanges `shouldSatisfy` (not . null)
+            enumWireChanges `shouldSatisfy` all (not . gatedBreaking defaultGate)
+            enumWireChanges `shouldSatisfy` all (gatedBreaking (gateWith [OldBinaryReadNewEvents]))
+            map (fmap osFile . wcDeclarationSite) (enumChanges <> mappedChanges)
+                `shouldSatisfy` all (== Just "domain/shared.keiro")
+            citedFiles enumChanges `shouldContain` ["domain/order.keiro", "domain/shipment.keiro"]
+            citedFiles mappedChanges `shouldContain` ["domain/order.keiro", "domain/shipment.keiro"]
+            let rendered = T.intercalate "\n" (map renderWorkspaceFinding (enumChanges <> mappedChanges))
+            rendered `shouldSatisfy` T.isInfixOf "    declared: domain/shared.keiro:3"
+            rendered `shouldSatisfy` T.isInfixOf "    use-site: Order"
+            rendered `shouldSatisfy` T.isInfixOf "(domain/order.keiro:"
+            rendered `shouldSatisfy` T.isInfixOf "(domain/shipment.keiro:"
+            golden <- readTestText "test/fixtures/workspace-diff-new/workspace.diff.golden"
+            T.unlines (map renderWorkspaceFinding changes) `shouldBe` golden
+
+        it "emits one additive version-1 report with workspace provenance" $ do
+            old <- shouldComposeWorkspace "test/fixtures/workspace-diff-old/service.keiro-workspace"
+            new <- shouldComposeWorkspace "test/fixtures/workspace-diff-new/service.keiro-workspace"
+            let changes = diffWorkspaces old new
+                meta =
+                    WorkspaceMeta
+                        { wmIdentity = wsService new
+                        , wmManifest = "service.keiro-workspace"
+                        , wmSince = "HEAD"
+                        , wmMembersOld = map wmPath (wsMembers old)
+                        , wmMembersNew = map wmPath (wsMembers new)
+                        , wmAdoptionBaseline = False
+                        }
+            case Aeson.toJSON (workspaceDiffReport meta defaultGate changes) of
+                Aeson.Object report -> do
+                    KeyMap.lookup "schema" report `shouldBe` Just (Aeson.String "keiro-dsl/diff-report/1")
+                    case KeyMap.lookup "workspace" report of
+                        Just (Aeson.Object workspace) -> do
+                            KeyMap.lookup "identity" workspace `shouldBe` Just (Aeson.String "workspace-diff")
+                            KeyMap.lookup "adoptionBaseline" workspace `shouldBe` Just (Aeson.Bool False)
+                        other -> expectationFailure ("missing workspace report metadata: " <> show other)
+                    case KeyMap.lookup "findings" report of
+                        Just (Aeson.Array findings) -> do
+                            findings `shouldSatisfy` (not . null)
+                            let objects = [finding | Aeson.Object finding <- toList findings]
+                            objects `shouldSatisfy` any (KeyMap.member "declaration")
+                            objects `shouldSatisfy` any (KeyMap.member "useSites")
+                        other -> expectationFailure ("missing workspace findings: " <> show other)
+                other -> expectationFailure ("workspace report was not an object: " <> show other)
+
+        it "computes one replay-impact value over both aggregates" $ do
+            old <- shouldComposeWorkspace "test/fixtures/workspace-diff-old/service.keiro-workspace"
+            new <- shouldComposeWorkspace "test/fixtures/workspace-diff-new/service.keiro-workspace"
+            case ReplayImpact.replayImpact (wsMergedSpec old) (wsMergedSpec new) of
+                ReplayAffected affected -> Map.keysSet affected `shouldBe` Set.fromList ["Order", "Shipment"]
+                ReplayNeutral -> expectationFailure "shared mapped evolution unexpectedly reported replay-neutral"
+
     describe "workspace scaffold (EP-154)" $ do
         describe "workspace record" $ do
             it "round-trips modules, owners, members, mappings, obligations, and adoptions" $ do
@@ -3619,6 +3693,18 @@ changeCode :: Change -> DiagnosticCode
 changeCode (Additive kind) = ckCode kind
 changeCode (Advisory kind) = ckCode kind
 changeCode (Breaking kind) = ckCode kind
+
+breakingSurfaces :: Change -> [CompatibilitySurface]
+breakingSurfaces change =
+    [ surface
+    | surface <- [minBound .. maxBound]
+    , verdictFor surface (ckVector kind) == VBreaking
+    ]
+  where
+    kind = case change of
+        Additive value -> value
+        Advisory value -> value
+        Breaking value -> value
 
 -- | The same members as 'canonicalWorkspacePath', listed in reverse order.
 reorderedWorkspacePath :: FilePath

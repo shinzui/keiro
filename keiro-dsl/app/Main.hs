@@ -23,12 +23,13 @@ import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBan
 import Keiro.Dsl.ScaffoldRun (executeScaffold, planScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
-import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceManifest (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
+import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
+import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReport)
 import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffold, planWorkspaceScaffoldWithGoldens, renderWorkspaceScaffoldReport)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
 import System.Exit (ExitCode (..), exitFailure)
-import System.FilePath (makeRelative, normalise, takeDirectory, takeFileName, (</>))
+import System.FilePath (isAbsolute, makeRelative, normalise, takeDirectory, takeFileName, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcessWithExitCode)
 
@@ -434,17 +435,28 @@ runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain re
                                                     )
                                             let oldSpec = wsMergedSpec oldWorkspace
                                                 newSpec = wsMergedSpec newWorkspace
-                                            written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) emitGoldensRoot
+                                                goldenRoot = fmap (workspaceGoldenRoot fp) emitGoldensRoot
+                                            written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) goldenRoot
                                             mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
-                                            let changes = diffSpecs oldSpec newSpec
+                                            let workspaceChanges = diffWorkspaces oldWorkspace newWorkspace
+                                                changes = map wcChange workspaceChanges
                                                 impact = replayImpact oldSpec newSpec
                                                 effectiveGate = gateWith gatedSurfaces
-                                            mapM_ (TIO.putStrLn . renderFinding) changes
+                                                reportMeta =
+                                                    WorkspaceMeta
+                                                        { wmIdentity = wsService newWorkspace
+                                                        , wmManifest = fp
+                                                        , wmSince = T.pack ref
+                                                        , wmMembersOld = map wmPath (wsMembers oldWorkspace)
+                                                        , wmMembersNew = map wmPath (wsMembers newWorkspace)
+                                                        , wmAdoptionBaseline = adoptionBaseline
+                                                        }
+                                            mapM_ (TIO.putStrLn . renderWorkspaceFinding) workspaceChanges
                                             when explain $
                                                 mapM_ (TIO.putStrLn . renderExplainBlock) (filter shouldExplain changes)
                                             TIO.putStrLn (renderReplayImpact impact)
                                             mapM_ (`Aeson.encodeFile` impact) replayImpactOut
-                                            mapM_ (\path -> Aeson.encodeFile path (diffReport effectiveGate changes)) reportOut
+                                            mapM_ (\path -> Aeson.encodeFile path (workspaceDiffReport reportMeta effectiveGate workspaceChanges)) reportOut
                                             coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
                                             if any (gatedBreaking effectiveGate) changes || not coverageOk then exitFailure else pure ()
 
@@ -507,6 +519,11 @@ emptyWorkspaceBaseline workspace =
         , wsLineMap = LineMap []
         , wsOwnership = OwnershipIndex mempty mempty
         }
+
+workspaceGoldenRoot :: FilePath -> FilePath -> FilePath
+workspaceGoldenRoot manifestPath requested
+    | isAbsolute requested = requested
+    | otherwise = normalise (takeDirectory manifestPath </> requested)
 
 printWorkspaceFailure :: FilePath -> WorkspaceFailure -> IO a
 printWorkspaceFailure fp failure = printWorkspaceFailureLines fp failure >> exitFailure

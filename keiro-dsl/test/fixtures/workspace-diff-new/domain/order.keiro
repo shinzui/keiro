@@ -1,0 +1,18 @@
+context workspace-diff
+
+aggregate Order
+  regs
+    status  OrderStatus  = Pending
+    details SharedDetails = initial
+  states Open Closed!
+
+  command CloseOrder { finalStatus:OrderStatus details:SharedDetails }
+  event OrderClosed = fields(CloseOrder)
+
+  Open -- CloseOrder -->
+    write status  := finalStatus
+    write details := details
+    emit  OrderClosed
+    goto  Closed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

@@ -9,6 +9,11 @@ module Keiro.Dsl.DiffReport (
     Remedy (..),
     DiffReport,
     diffReport,
+    OwnedSite (..),
+    WorkspaceChange (..),
+    WorkspaceMeta (..),
+    WorkspaceDiffReport,
+    workspaceDiffReport,
     remediationFor,
     renderRemedy,
     renderFinding,
@@ -21,6 +26,7 @@ module Keiro.Dsl.DiffReport (
 ) where
 
 import Data.Aeson (ToJSON (..), Value, object, (.=))
+import Data.Aeson.Types (Pair)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Set (Set)
@@ -51,6 +57,42 @@ data DiffReport = DiffReport
 diffReport :: Set CompatibilitySurface -> [Change] -> DiffReport
 diffReport = DiffReport
 
+-- | One source location from a composed workspace's ownership index.
+data OwnedSite = OwnedSite
+    { osFile :: !FilePath
+    , osLine :: !Int
+    }
+    deriving stock (Eq, Show)
+
+-- | A merged-graph finding enriched with declaration and use-site ownership.
+data WorkspaceChange = WorkspaceChange
+    { wcChange :: !Change
+    , wcDeclarationSite :: !(Maybe OwnedSite)
+    , wcUseSites :: ![(Text, Maybe OwnedSite)]
+    }
+    deriving stock (Eq, Show)
+
+-- | Provenance for the two workspace graphs compared by one command.
+data WorkspaceMeta = WorkspaceMeta
+    { wmIdentity :: !Text
+    , wmManifest :: !FilePath
+    , wmSince :: !Text
+    , wmMembersOld :: ![FilePath]
+    , wmMembersNew :: ![FilePath]
+    , wmAdoptionBaseline :: !Bool
+    }
+    deriving stock (Eq, Show)
+
+data WorkspaceDiffReport = WorkspaceDiffReport
+    { workspaceReportMeta :: !WorkspaceMeta
+    , workspaceReportGate :: !(Set CompatibilitySurface)
+    , workspaceReportFindings :: ![WorkspaceChange]
+    }
+    deriving stock (Eq, Show)
+
+workspaceDiffReport :: WorkspaceMeta -> Set CompatibilitySurface -> [WorkspaceChange] -> WorkspaceDiffReport
+workspaceDiffReport = WorkspaceDiffReport
+
 instance ToJSON DiffReport where
     toJSON report =
         object
@@ -60,21 +102,62 @@ instance ToJSON DiffReport where
             , "findings" .= map (findingValue (reportGate report)) (reportFindings report)
             ]
 
+instance ToJSON WorkspaceDiffReport where
+    toJSON report =
+        object
+            [ "schema" .= ("keiro-dsl/diff-report/1" :: Text)
+            , "gate" .= map surfaceName (Set.toAscList (workspaceReportGate report))
+            , "breaking" .= any (gatedBreaking (workspaceReportGate report) . wcChange) (workspaceReportFindings report)
+            , "findings" .= map (workspaceFindingValue (workspaceReportGate report)) (workspaceReportFindings report)
+            , "workspace" .= workspaceMetaValue (workspaceReportMeta report)
+            ]
+
 findingValue :: Set CompatibilitySurface -> Change -> Value
-findingValue gate change =
+findingValue gate change = object (findingPairs gate change)
+
+workspaceFindingValue :: Set CompatibilitySurface -> WorkspaceChange -> Value
+workspaceFindingValue gate workspaceChange =
     object
-        [ "label" .= labelName (deriveLabel gate (ckVector kind))
-        , "node" .= ckNode kind
-        , "facet" .= ckFacet kind
-        , "subject" .= ckSubject kind
-        , "code" .= T.pack (show (ckCode kind))
-        , "paths" .= ckPaths kind
-        , "vector" .= vectorValue (ckVector kind)
-        , "detail" .= ckDetail kind
-        , "remedies" .= map renderRemedy (NonEmpty.toList (remediationFor (ckContext kind) (ckCode kind)))
-        ]
+        ( findingPairs gate (wcChange workspaceChange)
+            <> maybe [] (\site -> ["declaration" .= ownedSiteValue site]) (wcDeclarationSite workspaceChange)
+            <> ["useSites" .= map useSiteValue (wcUseSites workspaceChange) | not (null (wcUseSites workspaceChange))]
+        )
+
+findingPairs :: Set CompatibilitySurface -> Change -> [Pair]
+findingPairs gate change =
+    [ "label" .= labelName (deriveLabel gate (ckVector kind))
+    , "node" .= ckNode kind
+    , "facet" .= ckFacet kind
+    , "subject" .= ckSubject kind
+    , "code" .= T.pack (show (ckCode kind))
+    , "paths" .= ckPaths kind
+    , "vector" .= vectorValue (ckVector kind)
+    , "detail" .= ckDetail kind
+    , "remedies" .= map renderRemedy (NonEmpty.toList (remediationFor (ckContext kind) (ckCode kind)))
+    ]
   where
     kind = changeKind change
+
+ownedSiteValue :: OwnedSite -> Value
+ownedSiteValue site = object ["file" .= osFile site, "line" .= osLine site]
+
+useSiteValue :: (Text, Maybe OwnedSite) -> Value
+useSiteValue (path, site) =
+    object
+        ( ["path" .= path]
+            <> maybe [] (\owned -> ["file" .= osFile owned, "line" .= osLine owned]) site
+        )
+
+workspaceMetaValue :: WorkspaceMeta -> Value
+workspaceMetaValue meta =
+    object
+        [ "identity" .= wmIdentity meta
+        , "manifest" .= wmManifest meta
+        , "since" .= wmSince meta
+        , "membersOld" .= wmMembersOld meta
+        , "membersNew" .= wmMembersNew meta
+        , "adoptionBaseline" .= wmAdoptionBaseline meta
+        ]
 
 vectorValue :: CompatibilityVector -> Value
 vectorValue vector =

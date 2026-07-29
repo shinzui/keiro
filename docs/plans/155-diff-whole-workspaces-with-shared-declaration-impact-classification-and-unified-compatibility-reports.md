@@ -68,20 +68,20 @@ and exit code 0. The existing single-file diff path is unchanged in behavior and
       renamed between revisions) and a diff-test.sh workspace scenario — 2026-07-29T18:18:45Z
 - [x] M1: single-file diff path proven unchanged (existing diff-test.sh scenarios and
       unit suite green without edits to their expectations) — 2026-07-29T18:18:45Z
-- [ ] M2: `Keiro.Dsl.WorkspaceDiff` module — `diffWorkspaces`, ownership annotation of
-      merged-graph findings (declaration site + use sites)
-- [ ] M2: rendering of file citations as indented continuation lines under the
-      existing headline/vector grammar
-- [ ] M2: unified reports — one findings stream, one `replayImpact`, one
+- [x] M2: `Keiro.Dsl.WorkspaceDiff` module — `diffWorkspaces`, ownership annotation of
+      merged-graph findings (declaration site + use sites) — 2026-07-29T18:28:37Z
+- [x] M2: rendering of file citations as indented continuation lines under the
+      existing headline/vector grammar — 2026-07-29T18:28:37Z
+- [x] M2: unified reports — one findings stream, one `replayImpact`, one
       `coverageDiffReport` keyed by the manifest path; `--gate`/exit semantics over
-      merged findings
-- [ ] M2: `keiro-dsl/diff-report/1` extended additively with `declaration`,
+      merged findings — 2026-07-29T18:28:37Z
+- [x] M2: `keiro-dsl/diff-report/1` extended additively with `declaration`,
       `useSites`, and top-level `workspace` keys including adoption-baseline metadata
-      (workspace inputs only)
-- [ ] M2: `--emit-goldens` resolves a relative DIR against the manifest's directory
-      (one workspace golden root, matching plan 154's layout decision)
-- [ ] M2: fixture workspace pair (old/new) with a shared-declaration change; golden
-      output test; cross-member use-site assertions
+      (workspace inputs only) — 2026-07-29T18:28:37Z
+- [x] M2: `--emit-goldens` resolves a relative DIR against the manifest's directory
+      (one workspace golden root, matching plan 154's layout decision) — 2026-07-29T18:28:37Z
+- [x] M2: fixture workspace pair (old/new) with a shared-declaration change; golden
+      output test; cross-member use-site assertions — 2026-07-29T18:28:37Z
 - [ ] M3: `OwnershipMoved` and `WorkspaceAuthorityChanged` appended to
       `DiagnosticCode`; `classifyCompatibility` and `remediationFor` rows;
       `RemedyRescaffoldWorkspace`
@@ -107,6 +107,16 @@ and exit code 0. The existing single-file diff path is unchanged in behavior and
   nothing to feed that loader, so the old side is an explicitly empty `Spec` carrying
   the current workspace's identity and authority. Evidence: the in-memory added /
   removed / renamed test and the real-git adoption scenario both pass. (2026-07-29)
+
+- **Workspace ownership is intentionally top-level, not field-level.**
+  `OwnershipIndex` stores the original `Loc` of each shared declaration or node, while
+  `Change.ckPaths` carries the exact nested use path but no source span. Consequently,
+  `declared:` cites the changed shared declaration line, and each `use-site:` cites the
+  owning aggregate/read-model declaration line while preserving the exact nested path
+  in text. The workspace diff golden pins this meaning. Keeping `Change` unchanged also
+  means mapped-use findings recover the changed mapped declaration from the established
+  `" : <MappedName>"` segment of `ckSubject`; the golden and no-missing-owner assertions
+  are tripwires for drift in that existing renderer contract. (2026-07-29)
 
 
 ## Decision Log

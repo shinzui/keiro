@@ -1,0 +1,16 @@
+context workspace-diff
+
+aggregate Shipment
+  regs
+    status OrderStatus = Pending
+  states PendingShipment CompletedShipment!
+
+  command CompleteShipment { finalStatus:OrderStatus details:SharedDetails }
+  event ShipmentCompleted = fields(CompleteShipment)
+
+  PendingShipment -- CompleteShipment -->
+    write status := finalStatus
+    emit  ShipmentCompleted
+    goto  CompletedShipment
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

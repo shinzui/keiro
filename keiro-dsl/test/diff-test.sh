@@ -237,9 +237,11 @@ cp "$FIX/reservation.keiro" "$ADOPTION/reservation.keiro"
 git -C "$DEMO" add workspace-adoption/reservation.keiro
 git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "pre-workspace member baseline"
 printf 'service reservation-adoption\nspec reservation.keiro\n' > "$ADOPTION/service.keiro-workspace"
-if output="$("$EXE" diff --since HEAD "$ADOPTION/service.keiro-workspace" 2>&1)" \
+ADOPTION_REPORT="$ADOPTION/adoption-report.json"
+if output="$("$EXE" diff --since HEAD --report-out "$ADOPTION_REPORT" "$ADOPTION/service.keiro-workspace" 2>&1)" \
     && [[ "$output" == *"workspace adoption baseline:"* \
-    && "$output" == *"replay-neutral:"* ]]; then
+    && "$output" == *"replay-neutral:"* ]] \
+    && grep -q '"adoptionBaseline":true' "$ADOPTION_REPORT"; then
   echo "$output"
   echo "ok: adoption diffs existing member blobs even before the manifest is committed"
 else
@@ -247,4 +249,51 @@ else
   echo "FAIL: adoption baseline did not compose the old service"; exit 1
 fi
 
-echo "PASS: diff --since gates single specs and whole workspaces without weakening existing breaks"
+echo "== 14) shared workspace changes cite every member and emit one service report =="
+CITATIONS="$DEMO/workspace-citations"
+mkdir -p "$CITATIONS"
+cp -R "$FIX/workspace-diff-old/." "$CITATIONS/"
+git -C "$DEMO" add workspace-citations
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "workspace citation baseline"
+cp -R "$FIX/workspace-diff-new/." "$CITATIONS/"
+WORKSPACE_REPORT="$CITATIONS/workspace-report.json"
+WORKSPACE_COVERAGE="$CITATIONS/workspace-coverage.json"
+if output="$("$EXE" diff --since HEAD --report-out "$WORKSPACE_REPORT" --coverage-report "$WORKSPACE_COVERAGE" "$CITATIONS/service.keiro-workspace" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: shared mapped wire change did not block"; exit 1
+elif [[ "$output" == *"declared: domain/shared.keiro:3"* \
+    && "$output" == *"use-site: Order"* \
+    && "$output" == *"use-site: Shipment"* \
+    && "$output" == *"replay-affected:"* \
+    && -s "$WORKSPACE_REPORT" \
+    && -s "$WORKSPACE_COVERAGE" ]] \
+    && grep -q '"schema":"keiro-dsl/diff-report/1"' "$WORKSPACE_REPORT" \
+    && grep -q '"identity":"workspace-diff"' "$WORKSPACE_REPORT" \
+    && grep -q '"declaration":' "$WORKSPACE_REPORT" \
+    && grep -q '"useSites":' "$WORKSPACE_REPORT"; then
+  echo "$output"
+  echo "ok: whole-service findings, replay impact, coverage, and report share one merged graph"
+else
+  echo "$output"
+  echo "FAIL: whole-service citations or unified reports were incomplete"; exit 1
+fi
+
+echo "== 15) relative workspace golden roots resolve beside the manifest =="
+WORKSPACE_GOLDENS="$DEMO/workspace-goldens"
+mkdir -p "$WORKSPACE_GOLDENS"
+cp "$FIX/reservation.keiro" "$WORKSPACE_GOLDENS/reservation.keiro"
+printf 'service reservation-goldens\nspec reservation.keiro\n' > "$WORKSPACE_GOLDENS/service.keiro-workspace"
+git -C "$DEMO" add workspace-goldens
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "workspace golden baseline"
+cp "$FIX/reservation-v2.keiro" "$WORKSPACE_GOLDENS/reservation.keiro"
+if output="$("$EXE" diff --since HEAD --emit-goldens golden-payloads "$WORKSPACE_GOLDENS/service.keiro-workspace" 2>&1)" \
+    && [[ "$output" == *"golden: wrote synthesized weak stand-in"* \
+    && -s "$WORKSPACE_GOLDENS/golden-payloads/hospital-capacity/Reservation/TransferReservationCreated.v1.json" ]]; then
+  echo "$output"
+  echo "ok: relative golden output is manifest-adjacent"
+else
+  echo "$output"
+  echo "FAIL: workspace golden output did not use the manifest-adjacent root"; exit 1
+fi
+
+echo "PASS: diff --since gates single specs and whole workspaces with owned unified reports"

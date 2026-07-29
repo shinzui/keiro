@@ -1,0 +1,4 @@
+service workspace-diff
+spec domain/order.keiro
+spec domain/shared.keiro
+spec domain/shipment.keiro
