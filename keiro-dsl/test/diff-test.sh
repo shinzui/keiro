@@ -296,4 +296,23 @@ else
   echo "FAIL: workspace golden output did not use the manifest-adjacent root"; exit 1
 fi
 
+echo "== 16) moving an unchanged aggregate is ownership-only and non-blocking =="
+MOVES="$DEMO/workspace-moves"
+mkdir -p "$MOVES"
+cp -R "$FIX/workspace-diff-old/." "$MOVES/"
+git -C "$DEMO" add workspace-moves
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "workspace ownership baseline"
+cp -R "$FIX/workspace-diff-moved/." "$MOVES/"
+if output="$("$EXE" diff --since HEAD "$MOVES/service.keiro-workspace" 2>&1)" \
+    && [[ "$output" == *"[OwnershipMoved]"* \
+    && "$output" == *"domain/shipment.keiro -> domain/order.keiro"* \
+    && "$output" != *"BREAKING:"* \
+    && "$output" != *"ADDITIVE:"* ]]; then
+  echo "$output"
+  echo "ok: ownership motion is visible without wire churn or a failing gate"
+else
+  echo "$output"
+  echo "FAIL: unchanged ownership motion was hidden, blocking, or misclassified"; exit 1
+fi
+
 echo "PASS: diff --since gates single specs and whole workspaces with owned unified reports"

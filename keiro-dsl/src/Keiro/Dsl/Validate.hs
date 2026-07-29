@@ -275,6 +275,10 @@ data DiagnosticCode
     | WorkspaceDuplicateDeclaration
     | WorkspaceDuplicateNodeName
     | WorkspacePathCollision
+    | -- MasterPlan 26 / EP-155: whole-workspace diff facts. These are
+      -- advisory consumer-build obligations, distinct from wire evolution.
+      OwnershipMoved
+    | WorkspaceAuthorityChanged
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

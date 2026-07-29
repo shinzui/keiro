@@ -21,14 +21,18 @@ import Data.List (find)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
-import Keiro.Dsl.Diff (Change (..), ChangeKind (..), diffSpecs)
+import Keiro.Dsl.Diff (Change (..), ChangeKind (..), advisoryAt, consumerBuildContext, diffSpecs)
 import Keiro.Dsl.DiffReport (OwnedSite (..), WorkspaceChange (..), WorkspaceDiffReport, WorkspaceMeta (..), renderFinding, workspaceDiffReport)
-import Keiro.Dsl.Grammar (Loc (..), Name)
+import Keiro.Dsl.Grammar (Loc (..), Name, Placement (..))
+import Keiro.Dsl.Validate (DiagnosticCode (..))
 import Keiro.Dsl.Workspace (OwnershipIndex (..), WorkspaceSpec (..))
 
 -- | Diff two composed service graphs and cite every participant we can resolve.
 diffWorkspaces :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
-diffWorkspaces old new = map annotate (diffSpecs (wsMergedSpec old) (wsMergedSpec new))
+diffWorkspaces old new =
+    map annotate (diffSpecs (wsMergedSpec old) (wsMergedSpec new))
+        <> ownershipMoveChanges old new
+        <> authorityChanges old new
   where
     annotate change =
         WorkspaceChange
@@ -92,3 +96,68 @@ changeKind :: Change -> ChangeKind
 changeKind (Additive kind) = kind
 changeKind (Advisory kind) = kind
 changeKind (Breaking kind) = kind
+
+ownershipMoveChanges :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
+ownershipMoveChanges old new =
+    [ WorkspaceChange
+        { wcChange =
+            advisoryAt
+                (consumerBuildContext name [])
+                name
+                "ownership"
+                name
+                OwnershipMoved
+                ( "declaration moved "
+                    <> T.pack oldFile
+                    <> " -> "
+                    <> T.pack newFile
+                    <> "; source ownership changed while wire evolution remains independently classified"
+                )
+        , wcDeclarationSite = Just (OwnedSite newFile (unLoc newLoc))
+        , wcUseSites = []
+        }
+    | (key@(_, name), (oldFile, _)) <- Map.toAscList (ownershipEntries (wsOwnership old))
+    , Just (newFile, newLoc) <- [Map.lookup key (ownershipEntries (wsOwnership new))]
+    , oldFile /= newFile
+    ]
+
+ownershipEntries :: OwnershipIndex -> Map.Map (Text, Name) (FilePath, Loc)
+ownershipEntries ownership = oiDeclarations ownership <> oiNodes ownership
+
+authorityChanges :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
+authorityChanges old new =
+    concat
+        [ changed "service-identity" (wsService old) (wsService new) serviceDetail
+        , changed "context" (wsContext old) (wsContext new) contextDetail
+        , changed "module-root" (renderModuleRoot (wsModuleRoot old)) (renderModuleRoot (wsModuleRoot new)) moduleDetail
+        , changed "layout" (renderLayout (wsLayout old)) (renderLayout (wsLayout new)) layoutDetail
+        ]
+  where
+    changed field before after detail
+        | before == after = []
+        | otherwise =
+            [ WorkspaceChange
+                { wcChange =
+                    advisoryAt
+                        (consumerBuildContext (wsService new) [])
+                        (wsService new)
+                        "workspace-authority"
+                        field
+                        WorkspaceAuthorityChanged
+                        (field <> " changed '" <> before <> "' -> '" <> after <> "'; " <> detail)
+                , wcDeclarationSite = Nothing
+                , wcUseSites = []
+                }
+            ]
+    serviceDetail = "scaffold and compatibility history are re-keyed; follow the workspace adoption path"
+    contextDetail = "generated module namespaces change, and read-model registry/subscription identities may emit separate DerivedIdentityChanged findings"
+    moduleDetail = "generated module paths change without changing persisted wire identity"
+    layoutDetail = "generated module placement changes without changing persisted wire identity"
+
+renderModuleRoot :: Maybe Text -> Text
+renderModuleRoot = maybe "(default)" id
+
+renderLayout :: Maybe Placement -> Text
+renderLayout Nothing = "(default)"
+renderLayout (Just GeneratedPrefix) = "prefixed"
+renderLayout (Just CollocatedLeaf) = "collocated"

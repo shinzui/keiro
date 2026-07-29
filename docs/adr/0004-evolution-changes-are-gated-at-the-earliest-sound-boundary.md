@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-07-28T23:53:01Z
+timestamp: 2026-07-29T18:35:37Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -79,6 +79,7 @@ The landed inventory is:
 | Private enum constructor addition | — | One `EnumCtorAdded` finding per containing event/register path; event use is old-binary/new-event breaking and register use is snapshot-hydration advisory | Deploy consumers before producers and invalidate/rebuild affected snapshots |
 | Snapshot-cache invalidation | Snapshot contract from ADR 0003 | `snapshot-hydration=advisory` identifies rebuild rather than event upcast work | The three-component discriminator rejects stale seeds; bump `state-codec version=` for invisible hand-owned changes |
 | Public contract change | Single-spec ownership checks only | Existing contract codes classify `public-consumer` independently from private history and identity | Deploy compatible consumers before producers or revise/version the contract |
+| Workspace ownership or authority change | Workspace composition establishes one owner and one manifest authority per service (ADR 0014) | `OwnershipMoved` and `WorkspaceAuthorityChanged` are consumer-build advisories beside, never instead of, merged-graph wire findings | Re-scaffold the whole workspace so its record follows ownership and authority; existing wire findings keep their own remediation and gates |
 
 Every cross-spec finding carries a compatibility vector over six surfaces:
 `private-history-read`, `old-binary-read-new-events`,
@@ -94,6 +95,21 @@ their context-sensitive refinement. `--report-out` writes schema
 `keiro-dsl/diff-report/1`; object keys and containing paths are append-only and
 readers must ignore unknown keys. The existing replay-impact JSON contract is
 unchanged.
+
+For a `.keiro-workspace` input, the cross-spec boundary is the two composed
+service graphs, not any individual member file. The old graph is reconstructed
+from the manifest and member blobs at the requested git revision; the new graph
+comes from the working tree. Shared declarations are therefore classified at
+every use site across every member. Changing only a declaration's owning member
+emits `OwnershipMoved`; changing the manifest's service, effective context,
+module root, or layout emits `WorkspaceAuthorityChanged`. Both codes carry only
+a `consumer-build=advisory` verdict and cannot block any gate. They never
+suppress accompanying wire or persisted-identity findings — for example, a
+context rename still emits the existing `DerivedIdentityChanged` breaks for
+read-model registry and subscription names. Workspace reports retain schema
+`keiro-dsl/diff-report/1` and add only ignore-unknown `workspace`,
+`declaration`, and `useSites` keys. ADR 0014 defines the workspace identity,
+single-owner rule, and manifest authority used at this boundary.
 
 The replay-impact machine contract is
 `{"verdict":"replay-neutral"}` or

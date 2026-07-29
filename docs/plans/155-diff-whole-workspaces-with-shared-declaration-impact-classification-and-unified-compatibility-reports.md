@@ -82,18 +82,18 @@ and exit code 0. The existing single-file diff path is unchanged in behavior and
       (one workspace golden root, matching plan 154's layout decision) — 2026-07-29T18:28:37Z
 - [x] M2: fixture workspace pair (old/new) with a shared-declaration change; golden
       output test; cross-member use-site assertions — 2026-07-29T18:28:37Z
-- [ ] M3: `OwnershipMoved` and `WorkspaceAuthorityChanged` appended to
+- [x] M3: `OwnershipMoved` and `WorkspaceAuthorityChanged` appended to
       `DiagnosticCode`; `classifyCompatibility` and `remediationFor` rows;
-      `RemedyRescaffoldWorkspace`
-- [ ] M3: ownership-move detection in `diffWorkspaces` (node and shared-declaration
-      owner changed, content unchanged ⇒ single advisory finding, zero wire findings)
-- [ ] M3: workspace authority change reporting (context rename, module-root move,
-      layout flip, service identity rename) distinct from wire evolution
-- [ ] M3: tests — moved-unchanged-aggregate scenario, renamed member, authority
-      change alongside its derived read-model breaking findings
-- [ ] M3: ADR-4 inventory amendment for the two new codes and the whole-workspace
-      diff boundary; `okf log add`; `just adr-validate` green
-- [ ] Final: Outcomes & Retrospective written; ADR distillation pass done
+      `RemedyRescaffoldWorkspace` — 2026-07-29T18:37:28Z
+- [x] M3: ownership-move detection in `diffWorkspaces` (node and shared-declaration
+      owner changed, content unchanged ⇒ single advisory finding, zero wire findings) — 2026-07-29T18:37:28Z
+- [x] M3: workspace authority change reporting (context rename, module-root move,
+      layout flip, service identity rename) distinct from wire evolution — 2026-07-29T18:37:28Z
+- [x] M3: tests — moved-unchanged-aggregate scenario, renamed member, authority
+      change alongside its derived read-model breaking findings — 2026-07-29T18:37:28Z
+- [x] M3: ADR-4 inventory amendment for the two new codes and the whole-workspace
+      diff boundary; `okf log add`; `just adr-validate` green — 2026-07-29T18:37:28Z
+- [x] Final: Outcomes & Retrospective written; ADR distillation pass done — 2026-07-29T18:37:28Z
 
 
 ## Surprises & Discoveries
@@ -117,6 +117,12 @@ and exit code 0. The existing single-file diff path is unchanged in behavior and
   means mapped-use findings recover the changed mapped declaration from the established
   `" : <MappedName>"` segment of `ckSubject`; the golden and no-missing-owner assertions
   are tripwires for drift in that existing renderer contract. (2026-07-29)
+
+- **The flat ADR bundle makes `okf log add docs/adr ADR-4 ...` warn that the
+  concept was not found even though it correctly advances the root `log.md`.** No
+  manual fallback was used: the command wrote the expected 2026-07-29 update entry,
+  and `just adr-validate` passed strict profile and log enforcement over all 15
+  concepts. (2026-07-29)
 
 
 ## Decision Log
@@ -225,10 +231,41 @@ and exit code 0. The existing single-file diff path is unchanged in behavior and
   implementation started — see the revision note at the bottom of this plan.)
   Date: 2026-07-29
 
+- Decision: The workspace-only report value types (`OwnedSite`, `WorkspaceChange`,
+  `WorkspaceMeta`, and `WorkspaceDiffReport`) are defined beside the version-1 JSON
+  encoder in `Keiro.Dsl.DiffReport` and re-exported from
+  `Keiro.Dsl.WorkspaceDiff`.
+  Rationale: `WorkspaceDiff` consumes `renderFinding`, while `DiffReport` must encode
+  owned findings; defining the types in `WorkspaceDiff` would introduce a module
+  cycle. Keeping the values at the schema owner preserves one JSON authority, while
+  re-exporting them from `WorkspaceDiff` preserves the public whole-workspace API the
+  plan promised.
+  Date: 2026-07-29
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-3 is complete. `keiro-dsl diff <manifest> --since <rev>` now reconstructs the
+old manifest and member set from git blobs, composes both revisions through EP-1's
+loader, and applies the unchanged single-spec differ to the two merged graphs. The
+first-manifest adoption case composes old blobs from the current membership and marks
+that provenance in the workspace report. Shared enum and mapped-type changes fan out
+across every member use site with top-level owner citations; compatibility, replay,
+coverage, and golden emission each operate once over the service. A relative golden
+root is manifest-adjacent, matching EP-2.
+
+Ownership and authority changes are separate advisory facts. An unchanged aggregate
+moved between members emits only `OwnershipMoved` and remains non-blocking under every
+gate; a context rename emits `WorkspaceAuthorityChanged` beside any existing derived
+identity breaks rather than weakening them. ADR-4 now records the composed-workspace
+diff boundary and both append-only codes, with its bundle log advanced by `okf`.
+
+Validation evidence at completion: `cabal build keiro-dsl` passes;
+`cabal test keiro-dsl-test` passes 372 examples with zero failures;
+`bash keiro-dsl/test/diff-test.sh` passes all 16 single-file and workspace scenarios;
+and `just adr-validate` reports `OK: 15 concepts`. No package dependency was added,
+and the single-file command branch and report encoder remain separate and regression-
+covered.
 
 
 ## Context and Orientation

@@ -28,6 +28,7 @@ module Keiro.Dsl.Diff (
     publicContractContext,
     persistedIdentityContext,
     consumerBuildContext,
+    advisoryAt,
     changeContextRoot,
     changeContextPaths,
     classifyCompatibility,
@@ -247,6 +248,7 @@ load-bearing for codes such as 'EnumCtorAdded' that vary by use site.
 -}
 classifyCompatibility :: ChangeContext -> DiagnosticCode -> CompatibilityVector
 classifyCompatibility context code
+    | code `elem` [OwnershipMoved, WorkspaceAuthorityChanged] = mappedBuildVector
     | code == MappedFieldAddedWithDefault = mappedFieldAdditionVector context
     | code `elem` [MappedArmAdded, MappedEnumValueAdded] = mappedDirectionalAdditionVector context
     | code `elem` mappedWireBreakingCodes = mappedWireBreakingVector context
@@ -1926,6 +1928,7 @@ contextFor label root facet subject code =
             | code `elem` publicCodes -> publicContractContext root paths
             | code `elem` queueCodes -> queueContext root paths
             | code `elem` identityCodes -> persistedIdentityContext root paths
+            | code `elem` [OwnershipMoved, WorkspaceAuthorityChanged] -> consumerBuildContext root paths
             | code == AggFoldSurfaceChanged -> snapshotContext root paths
             | code == EnumCtorAdded -> ChangeContext root paths ContextGeneral label
             | code `elem` privateCodes -> privateEventContext root paths

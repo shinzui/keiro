@@ -24,7 +24,7 @@ import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
 import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
-import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
+import Keiro.Dsl.DiffReport (Remedy (..), diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingHoles, bindingObligations, renderBindingObligations)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldSurface)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
@@ -2835,6 +2835,91 @@ main = hspec $ do
                 ReplayAffected affected -> Map.keysSet affected `shouldBe` Set.fromList ["Order", "Shipment"]
                 ReplayNeutral -> expectationFailure "shared mapped evolution unexpectedly reported replay-neutral"
 
+    describe "workspace ownership and authority changes (EP-155 M3)" $ do
+        it "reports an unchanged aggregate move once without wire evolution" $ do
+            old <- shouldComposeWorkspace "test/fixtures/workspace-diff-old/service.keiro-workspace"
+            moved <- shouldComposeWorkspace "test/fixtures/workspace-diff-moved/service.keiro-workspace"
+            let changes = diffWorkspaces old moved
+            map (changeCode . wcChange) changes `shouldBe` [OwnershipMoved]
+            forM_ changes $ \workspaceMove -> do
+                let move = wcChange workspaceMove
+                move `shouldSatisfy` isAdvisory
+                move `shouldSatisfy` (not . gatedBreaking defaultGate)
+                move `shouldSatisfy` (not . gatedBreaking (gateWith [minBound .. maxBound]))
+                deriveLabel defaultGate (ckVector (workspaceChangeKind move)) `shouldBe` LabelAdvisory
+                remediationFor (ckContext (workspaceChangeKind move)) OwnershipMoved
+                    `shouldBe` (RemedyRescaffoldWorkspace :| [])
+                renderWorkspaceFinding workspaceMove
+                    `shouldSatisfy` T.isInfixOf "declaration moved domain/shipment.keiro -> domain/order.keiro"
+
+        it "treats a member rename as the same owner-map change" $ do
+            old <- shouldComposeWorkspace "test/fixtures/workspace-diff-old/service.keiro-workspace"
+            let ownership = wsOwnership old
+                renamed =
+                    old
+                        { wsOwnership =
+                            ownership
+                                { oiNodes =
+                                    Map.adjust
+                                        (\(_, loc) -> ("domain/shipping.keiro", loc))
+                                        ("aggregate", "Shipment")
+                                        (oiNodes ownership)
+                                }
+                        }
+                moves = filter ((== OwnershipMoved) . changeCode . wcChange) (diffWorkspaces old renamed)
+            length moves `shouldBe` 1
+            forM_ moves $ \move ->
+                renderWorkspaceFinding move `shouldSatisfy` T.isInfixOf "domain/shipment.keiro -> domain/shipping.keiro"
+
+        it "reports ownership motion beside an independently classified wire edit" $ do
+            old <- shouldComposeWorkspace "test/fixtures/workspace-diff-old/service.keiro-workspace"
+            edited <- shouldComposeWorkspace "test/fixtures/workspace-diff-new/service.keiro-workspace"
+            let ownership = wsOwnership edited
+                movedAndEdited =
+                    edited
+                        { wsOwnership =
+                            ownership
+                                { oiNodes =
+                                    Map.adjust
+                                        (\(_, loc) -> ("domain/order.keiro", loc))
+                                        ("aggregate", "Shipment")
+                                        (oiNodes ownership)
+                                }
+                        }
+                codes = map (changeCode . wcChange) (diffWorkspaces old movedAndEdited)
+            codes `shouldContain` [OwnershipMoved]
+            codes `shouldContain` [MappedFieldTypeChanged]
+
+        it "reports context authority separately from derived read-model identity breaks" $ do
+            old <- shouldComposeWorkspace canonicalWorkspacePath
+            let newContext = "demo-project-renamed"
+                renamed =
+                    old
+                        { wsContext = newContext
+                        , wsMergedSpec = (wsMergedSpec old){specContext = newContext}
+                        }
+                changes = diffWorkspaces old renamed
+                codes = map (changeCode . wcChange) changes
+            codes `shouldContain` [WorkspaceAuthorityChanged]
+            codes `shouldContain` [DerivedIdentityChanged]
+            map wcChange changes `shouldSatisfy` any (gatedBreaking defaultGate)
+
+        it "keeps service, module-root, and layout authority advisories non-blocking" $ do
+            old <- shouldComposeWorkspace canonicalWorkspacePath
+            let changed =
+                    old
+                        { wsService = "demo-project-renamed"
+                        , wsModuleRoot = Just "Demo.Modules.Renamed"
+                        , wsLayout = Just GeneratedPrefix
+                        }
+                authority = filter ((== WorkspaceAuthorityChanged) . changeCode . wcChange) (diffWorkspaces old changed)
+            length authority `shouldBe` 3
+            forM_ (map wcChange authority) $ \change -> do
+                deriveLabel defaultGate (ckVector (workspaceChangeKind change)) `shouldBe` LabelAdvisory
+                change `shouldSatisfy` (not . gatedBreaking (gateWith [minBound .. maxBound]))
+                remediationFor (ckContext (workspaceChangeKind change)) WorkspaceAuthorityChanged
+                    `shouldBe` (RemedyRescaffoldWorkspace :| [RemedyRecompileConsumers])
+
     describe "workspace scaffold (EP-154)" $ do
         describe "workspace record" $ do
             it "round-trips modules, owners, members, mappings, obligations, and adoptions" $ do
@@ -3705,6 +3790,11 @@ breakingSurfaces change =
         Additive value -> value
         Advisory value -> value
         Breaking value -> value
+
+workspaceChangeKind :: Change -> ChangeKind
+workspaceChangeKind (Additive kind) = kind
+workspaceChangeKind (Advisory kind) = kind
+workspaceChangeKind (Breaking kind) = kind
 
 -- | The same members as 'canonicalWorkspacePath', listed in reverse order.
 reorderedWorkspacePath :: FilePath

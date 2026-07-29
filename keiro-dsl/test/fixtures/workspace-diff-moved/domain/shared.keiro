@@ -1,0 +1,15 @@
+context workspace-diff
+
+enum OrderStatus { Pending=pending Completed=completed }
+
+mapped structural record SharedDetails {
+  haskell package=workspace-domain module=Workspace.Domain type=SharedDetails
+  binding = "Workspace.KeiroBindings.sharedDetailsBinding"
+  binding-version = "1"
+  canonical-type = "workspace.SharedDetails.v1"
+  fixtures = "Workspace.KeiroBindings.sharedDetailsCases"
+  initial = "Workspace.KeiroBindings.emptySharedDetails"
+  wire object constructor=SharedDetails unknown-fields=reject {
+    label as "label" : Text required
+  }
+}

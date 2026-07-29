@@ -3,7 +3,9 @@
 The JSON schema identifier is @keiro-dsl/diff-report/1@.  Consumers must
 ignore unknown object keys.  Vector keys and entries in the @paths@ array are
 append-only so later nested type-expression work can refine findings without
-invalidating version-1 readers.
+invalidating version-1 readers. Workspace inputs add a top-level @workspace@
+object and optional per-finding @declaration@ and @useSites@ keys; single-file
+reports keep their original bytes.
 -}
 module Keiro.Dsl.DiffReport (
     Remedy (..),
@@ -44,6 +46,7 @@ data Remedy
     | RemedyReplayOnlyEdge
     | RemedyStateCodecBump
     | RemedyRecompileConsumers
+    | RemedyRescaffoldWorkspace
     | RemedyRunConformance
     | RemedyDoNotDeploy Text
     deriving stock (Eq, Show)
@@ -173,6 +176,8 @@ vectorValue vector =
 
 remediationFor :: ChangeContext -> DiagnosticCode -> NonEmpty Remedy
 remediationFor context code
+    | code == OwnershipMoved = RemedyRescaffoldWorkspace :| []
+    | code == WorkspaceAuthorityChanged = RemedyRescaffoldWorkspace :| [RemedyRecompileConsumers]
     | code == AggGuardTightened = RemedyReplayOnlyEdge :| [RemedyRunConformance]
     | code == AggFoldSurfaceChanged = RemedyStateCodecBump :| [RemedyRunConformance]
     | code `elem` mappedWireCodes = mappedWireRemedy
@@ -291,6 +296,7 @@ renderRemedy remedy = case remedy of
     RemedyReplayOnlyEdge -> "add the computed replay-only edge described by docs/adr/0002-replay-only-edges-are-the-sanctioned-remedy-for-guard-tightening.md"
     RemedyStateCodecBump -> "invalidate and rebuild snapshots by bumping state-codec version when automatic fingerprinting cannot see the change"
     RemedyRecompileConsumers -> "recompile every affected consumer against the generated interface"
+    RemedyRescaffoldWorkspace -> "re-run the whole-workspace scaffold so the record's ownership and golden roots follow the change"
     RemedyRunConformance -> "run the generated conformance and historical fixture suites"
     RemedyDoNotDeploy detail -> detail
 

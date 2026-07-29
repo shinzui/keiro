@@ -123,7 +123,7 @@ locally as a new ADR by EP-1 (expected `ADR-14` via `okf id next`).
 |---|-------|------|-----------|-----------|--------|
 | 1 | Add the service workspace manifest, loader, composed graph, and whole-service check | docs/plans/153-add-the-service-workspace-manifest-loader-composed-graph-and-whole-service-check-to-keiro-dsl.md | None | None | Complete |
 | 2 | Scaffold whole workspaces atomically with workspace-keyed records and adoption from per-context records | docs/plans/154-scaffold-whole-workspaces-atomically-with-workspace-keyed-records-and-adoption-from-per-context-records.md | EP-1 | None | Complete |
-| 3 | Diff whole workspaces with shared-declaration impact classification and unified compatibility reports | docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md | EP-1 | None | In Progress |
+| 3 | Diff whole workspaces with shared-declaration impact classification and unified compatibility reports | docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md | EP-1 | None | Complete |
 | 4 | Prove per-aggregate workspace adoption with fleet-style fixtures, acceptance tests, and documentation | docs/plans/156-prove-per-aggregate-workspace-adoption-with-fleet-style-fixtures-acceptance-tests-and-documentation.md | EP-1, EP-2, EP-3 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -218,9 +218,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-2: Adoption path from existing per-context records with migration report
       (`Keiro.Dsl.WorkspaceAdoption`, ADR-15
       `docs/adr/0015-workspace-scaffold-history-is-workspace-keyed-with-attributable-adoption.md`) — 2026-07-29
-- [ ] EP-3: Workspace resolution at `--since` from git blobs (manifest and members at the old revision)
-- [ ] EP-3: Shared-declaration use-site classification and unified compatibility/replay/coverage reports
-- [ ] EP-3: Ownership-move reporting distinct from wire evolution
+- [x] EP-3: Workspace resolution at `--since` from git blobs (manifest and members at the old revision) — 2026-07-29
+- [x] EP-3: Shared-declaration use-site classification and unified compatibility/replay/coverage reports — 2026-07-29
+- [x] EP-3: Ownership-move reporting distinct from wire evolution
+      (`OwnershipMoved`, `WorkspaceAuthorityChanged`, and ADR-4 amendment) — 2026-07-29
 - [ ] EP-4: Fleet-style per-aggregate fixture workspace and acceptance tests for every IR-2 bullet
 - [ ] EP-4: Migration end-to-end tests from independent same-context scaffolds
 - [ ] EP-4: Adoption and scaffolding documentation for one-file and per-aggregate layouts
@@ -314,6 +315,21 @@ interactions between child plans. Provide concise evidence.
   pre-existing single-file branches textually untouched, which is what guarantees
   byte-identical behavior for existing users. (2026-07-29)
 
+- **Whole-workspace diff citations are top-level owner spans plus exact semantic
+  paths.** EP-1's `OwnershipIndex` stores each shared declaration or node's original
+  `Loc`, while the existing differ stores exact nested uses as `ckPaths` without field
+  spans. EP-3 therefore renders a precise semantic path and cites the owning
+  declaration's start line. **EP-4 must assert this established shape rather than
+  expecting nested field source lines that no current graph carries.** The committed
+  workspace diff golden is the contract tripwire. (2026-07-29)
+
+- **Workspace report values live at the JSON schema owner and are re-exported by the
+  diff wrapper.** `OwnedSite`, `WorkspaceChange`, `WorkspaceMeta`, and
+  `WorkspaceDiffReport` are defined in `Keiro.Dsl.DiffReport` to avoid a cycle
+  (`WorkspaceDiff` needs `renderFinding`; the report needs owned changes), then
+  re-exported from `Keiro.Dsl.WorkspaceDiff`. EP-4 should consume the wrapper's public
+  API, not depend on the defining module as an ownership claim. (2026-07-29)
+
 
 ## Decision Log
 
@@ -389,4 +405,10 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(To be filled during and after implementation.)
+EP-3 completed the third of four work streams. `diff` now reconstructs and composes
+both workspace revisions, classifies shared changes across all members, emits one set
+of owned compatibility/replay/coverage reports, and reports ownership or authority
+motion separately from wire evolution. The completed child validated 372 unit
+examples, 16 real-git diff scenarios, and the strict 15-record ADR bundle. EP-4 is now
+the only remaining plan and can exercise the finished `check`, `scaffold`, and `diff`
+surfaces together in fleet-style adoption tests and documentation.
