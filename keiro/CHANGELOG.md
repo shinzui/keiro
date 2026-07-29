@@ -6,6 +6,15 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.4.0.1 — 2026-07-28
+
+### Other Changes
+
+- Adds PVP upper bounds to every dependency that previously carried a lower
+  bound only, so `cabal check` reports no packaging warnings. No API or
+  behaviour change from 0.4.0.0, which was tagged but never published.
+
+
 ## 0.4.0.0 — 2026-07-28
 
 ### Breaking Changes
