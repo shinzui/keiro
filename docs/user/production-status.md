@@ -16,7 +16,8 @@ The current library includes:
 - multi-event command output (one command appends zero, one, or many events in
   one optimistic batch);
 - same-transaction SQL continuations for inline projections;
-- advisory snapshots;
+- advisory snapshots with an explicit `FoldVersion` helper for hand-written
+  fold invalidation;
 - read-model metadata, consistency modes, and position waits;
 - explicitly registered read models; atomically fenced rebuilds; category-scoped
   strong reads; and async projection outcomes that prevent checkpointing fenced
@@ -54,8 +55,10 @@ The current library includes:
 - native `pg-migrate` components for Kiroku and Keiro framework tables, composed
   in dependency order by `keiro-migrate`.
 - the `keiro-dsl` typed-spec toolchain across aggregates, process managers,
-  routers, integration, queues, read models, and durable workflows, with
-  validation, safe scaffolding, conformance harnesses, and evolution diffs.
+  routers, integration, queues, read models, and durable workflows, including
+  structural/opaque consumer mappings, total bindings, generated private-event
+  codecs, safe scaffolding, conformance harnesses, compatibility-vector diffs,
+  finite historical codec comparison, and supported-root coverage reports.
 
 The repository test suite exercises these paths against an ephemeral PostgreSQL
 database.
@@ -67,7 +70,8 @@ Keiro is a reasonable fit when:
 - your team controls the application and deployment environment;
 - PostgreSQL is already part of the system;
 - you want a library, not a separate workflow/event-store server;
-- you can write explicit codecs and migration tests;
+- you can write explicit codecs and migration tests, or adopt checked
+  structural declarations with finite historical-comparison evidence;
 - you can make async handlers idempotent;
 - you are comfortable with low-level Haskell APIs while v1 ergonomics mature.
 
@@ -115,8 +119,10 @@ runtime primitives directly. Higher-level ergonomic facades are future work.
 ### Migration ownership is split
 
 Keiro ships `keiro-migrate` for Kiroku and Keiro framework tables. Application
-read-model tables, codec evolution, and deployment sequencing remain
-application responsibilities.
+read-model tables, codec evolution, historical-corpus selection, and deployment
+sequencing remain application responsibilities. The DSL can classify changes
+and compare an explicit historical codec over a finite corpus, but it does not
+turn that evidence into an automatic production migration.
 
 ## Recommendation
 

@@ -18,7 +18,9 @@ are adopting:
 - [Replayability Safety](../user/replay-safety.md) explains the validation
   guarantee that keeps unchecked streams out of command runners.
 - [Typed Specifications With `keiro-dsl`](../user/typed-spec-toolchain.md)
-  covers the spec/check/scaffold/diff loop for generated service surfaces.
+  covers structural/opaque consumer mappings, binding authoring, the
+  spec/check/scaffold loop, compatibility vectors, coverage reports, and
+  historical comparison tooling.
 - [The Guarantee Ledger](dsl-guarantees-and-hand-written-services.md) explains
   which guarantees every validated service gets below the DSL, which exist only
   with a spec, and what a hand-written service must supply for itself.
@@ -27,8 +29,9 @@ are adopting:
   `EventStream` values at runner boundaries.
 - [Brownfield Migration And Transducer Modeling](brownfield-migration-and-transducer-modeling.md)
   is for migrating an existing service onto keiro: modeling decisions as
-  solver-visible scalars, lifecycle vertices, one stream per entity, and the
-  goldens-first shadow-compared versioned migration path.
+  solver-visible scalars, lifecycle vertices, one stream per entity, authoring
+  structural bindings from create-once skeletons or exact nominal derivation,
+  and the goldens-first shadow-compared versioned migration path.
 - [Evolve Events Safely](evolve-events-safely.md) shows the event codec and the
   version-1-to-version-2 upcaster.
 - [Project Read Models](project-read-models.md) builds the inline order summary

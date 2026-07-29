@@ -89,8 +89,10 @@ up regardless of whether a spec exists.
 
 The DSL adds cross-version evidence. `keiro-dsl diff` loads the old spec text
 with `git show`, reads the current spec text, parses both, emits requested
-goldens and replay-impact data, classifies their differences, and exits with
-failure when any change is breaking (`keiro-dsl/app/Main.hs:150-175`). That
+goldens and replay-impact data, and classifies every finding over six distinct
+compatibility surfaces. The default gate preserves the earlier blocking
+behavior; `--gate`, `--explain`, and `--report-out` add operator-selected
+surfaces, remediation detail, and a stable JSON report. That
 lets CI ask questions a single runtime value cannot answer: whether the new
 binary reads old history, whether old and new replicas can coexist during a
 rollout, whether a snapshot must be rebuilt, and whether a public consumer
@@ -99,11 +101,13 @@ universal label.
 
 The generated harness supplies a second DSL-only layer. It validates the
 filled transducer, round-trips current event shapes, checks representative
-transitions, and decodes genuine old payload goldens when provided
-(`keiro-dsl/src/Keiro/Dsl/Harness.hs:1-16,371-411,437-459`). Golden emission
-must happen while both shapes exist because the current spec cannot reconstruct
-an older payload; generated goldens never overwrite hand-captured payloads
-(`keiro-dsl/src/Keiro/Dsl/Goldens.hs:1-7`).
+transitions, compares forward execution with replay over every final register,
+and decodes genuine old payload goldens when provided. For structural mapped
+types it also checks both binding laws, declared wire-policy cases, fixture
+branch coverage, and generated projection-witness agreement; opaque mappings
+receive boundary checks only. Golden emission must happen while both shapes
+exist because the current spec cannot reconstruct an older payload, and
+generated goldens never overwrite hand-captured payloads.
 
 These guarantees stop at the spec-visible surface. The diff pipeline reads
 only the two spec texts (`keiro-dsl/app/Main.hs:150-170`). The scaffolder emits
@@ -122,9 +126,9 @@ describes the replay-only remedy when a guard tightens, and
 defines snapshot compatibility. Event payload encoding and snapshot-cache
 encoding are separate surfaces: `defaultStateCodec` serializes the consumer's
 state through its JSON instances and registers through Keiki's register-file
-JSON codec (`keiro/src/Keiro/Snapshot/Codec.hs:1-15,34-54`). A generated event
-codec or future structural mapping must not be described as executing that
-snapshot representation.
+JSON codec. Landed structural mappings generate the private event codec and
+feed their wire/binding identity into snapshot invalidation, but they do not
+execute or claim structural coverage over the consumer-JSON snapshot cache.
 
 
 ## The ledger: what a hand-written service gives up, ranked by silence
@@ -137,13 +141,13 @@ then moves toward failures that are loud but delayed.
 First, snapshot invalidation becomes a manual contract. DSL scaffolding
 composes a fingerprint of the spec-visible fold into the snapshot discriminator
 and explicitly warns that Holes-only changes remain invisible
-(`keiro-dsl/src/Keiro/Dsl/Scaffold.hs:1846-1869`). A hand-written service may
-call `withFoldFingerprint`, but it must maintain that token itself, or bump
-`stateCodecVersion` whenever an otherwise invisible fold change lands
-(`keiro/src/Keiro/Snapshot/Codec.hs:11-15,56-69`). Forgetting can accept a
-stale snapshot with no error. The planned helper in EP-3
-(`docs/plans/146-give-hand-written-services-first-class-fold-fingerprint-snapshot-invalidation.md`)
-targets this cost but does not exist yet.
+(`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`). A hand-written service should use
+`defaultStateCodecWithFold (FoldVersion "...")` and change that token whenever
+its fold semantics change; `stateCodecVersion` remains the encoding version.
+The helper composes the token into the same snapshot discriminator used by
+generated fingerprints, so an old seed becomes a normal cache miss and forces
+one full replay. Forgetting the token change can still accept a stale snapshot
+with no error.
 
 Second, removing a field under a tolerant JSON decoder can still decode while
 silently changing meaning. DSL evolution classifies the unguarded removal as
@@ -163,10 +167,11 @@ loses that easy source of compatibility evidence.
 
 ### Rank 3: loud failures move from CI to production
 
-The generated harness can expose codec mistakes before deployment through
-current-shape round trips and old-payload decoding
-(`keiro-dsl/src/Keiro/Dsl/Harness.hs:394-411,437-459`). Without equivalent
-hand-owned tests, the first witness may be the next production hydration.
+The generated harness can expose codec and fold mistakes before deployment
+through current-shape round trips, old-payload decoding, forward/replay
+equality, and—when mapped types are present—binding, wire-policy, branch, and
+projection assertions. Without equivalent hand-owned tests, the first witness
+may be the next production hydration.
 `HydrationDecodeFailed`, `HydrationReplayFailed`, and `EncodeFailed` are typed
 `CommandError` constructors, so the failures are loud and recoverable, but
 they arrive after affected data is touched (`keiro/src/Keiro/Command.hs:174-203`).

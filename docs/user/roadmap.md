@@ -14,7 +14,7 @@ in `CHANGELOG.md`. See `docs/user/production-status.md` for adoption posture.
 
 | Phase | Theme | User-visible outcome |
 |---|---|---|
-| Current baseline | Event-sourcing v1 core (0.1.0.0) | The full v1 substrate — commands (multi-event), codecs, snapshots, read models, process managers, routers, timers, outbox, inbox, integration events, OpenTelemetry tracing, and migrations — is released for controlled internal use, with a worked-examples app and long-form guides. |
+| Current baseline | Event-sourcing v1 core (repository source line 0.4.0.0) | The v1 substrate plus structural/opaque consumer mappings, compatibility-vector evolution reports, and migration-evidence tooling is prepared in the coordinated 0.4.0.0 package line; tags and publication remain part of the release train. |
 | Phase 1 | Stabilize existing core | Complete: multi-event command output landed, the repository test suite exercises the core paths, and migrations/snapshots have production guidance. |
 | Phase 2 | Complete v1 workflow substrate | Complete: outbox, inbox, OpenTelemetry tracing and metrics, process-manager snapshot guidance, and the timer stuck-row recovery API and runbook. |
 | Phase 3 | Read-side maturity | Async projections, subscriptions, and position waits get stronger consistency and scaling options. |
@@ -28,7 +28,7 @@ in `CHANGELOG.md`. See `docs/user/production-status.md` for adoption posture.
 | Typed streams, codecs, upcasters | Available now | Public v1 authoring surface. |
 | Command cycle | Available now | `runCommand`, `ValidatedEventStream` replayability checks, optimistic retry, caller-supplied event ids, same-transaction SQL continuations, and ambient command metadata. |
 | Multi-event command output | Available now | One command appends zero, one, or many events in one optimistic-concurrency batch. |
-| Snapshots | Available now | Default codec uses `keiki-codec-json` and `regFileShapeHash`; snapshot hydration plus tail replay is tested. |
+| Snapshots | Available now | The default codec uses `keiki-codec-json` and shape hashes; `defaultStateCodecWithFold` adds a hand-owned `FoldVersion`, and snapshot hydration plus tail replay is tested. |
 | Read models and projections | Available now | Inline is transactional and receives `RecordedEvent` metadata; async is at-least-once today. |
 | Process managers | Available now | V1 workflow substrate for sagas and choreography. |
 | Routers (effectful fan-out) | Available now | `Keiro.Router`: stateless content-based router / recipient list; targets resolved effectfully from read models. |
@@ -42,21 +42,25 @@ in `CHANGELOG.md`. See `docs/user/production-status.md` for adoption posture.
 | Push delivery and subscription sharding | Available now | `Keiro.Wake` wakes poll-loop workers from Kiroku's existing notifier (no new connections, durable poll fallback); `Keiro.Subscription.Shard` leases consumer-group buckets across a worker pool with coordinator-free failover. |
 | Pre-deploy replay audit | Available now | `Keiro.ReplayAudit` replays real streams through a candidate binary in `AuditTargeted` or `AuditFull` mode and blocks a deploy on `auditExitCode`. |
 | Postgres work queues | Available now | `keiro-pgmq`: PGMQ-backed job queues with retry/DLQ policy and the versioned `keiroJobCodec` envelope. See [Work Queues](work-queues.md). |
-| Typed service specifications | Available now | `keiro-dsl` checks, scaffolds, emits conformance harnesses, and classifies persistence-aware evolution across aggregate, coordination, integration, queue, read-model, and workflow nodes. |
+| Typed service specifications | Available now | `keiro-dsl` adds structural/opaque consumer mappings, total bindings and generated codecs, binding skeletons/explanations, conformance harnesses, six-surface compatibility vectors, historical codec comparison, and supported-root coverage reporting alongside the existing node families. |
 | Exactly-once async projections | Planned v1.x / upstream-dependent | Blocks on transactional Shibuya/Kiroku checkpoint handling. |
 | Prefix subscriptions | Planned v1.x / upstream-dependent | Needed for `pm:` and future `wf:` stream families at scale. |
 | Durable execution runtime | Available now | `Keiro.Workflow`: named-step `Workflow es a`, durable `sleep`, awakeables, child workflows, a crash-recovery resume worker, and journal snapshots (`keiro_workflow_steps` + `keiro_awakeables`). Continue-as-new journal rotation (`continueAsNew`/`restoreSeed`) keeps unbounded histories bounded; the `patch` API gives stable, journaled branch decisions for cross-cutting workflow-logic changes. |
 
 ## Current Baseline
 
-Keiro v1 is a library-shaped event-sourcing framework on PostgreSQL, released as
-`0.1.0.0`.
+Keiro v1 is a library-shaped event-sourcing framework on PostgreSQL. This
+working tree is aligned on the coordinated `0.4.0.0` source line; consult the
+release notes and package registry before choosing a published bound.
 
 Implemented today:
 
 - typed stream names through `Keiro.Stream`;
 - event codecs, schema versions, known event-type validation, and upcasters
   through `Keiro.Codec`;
+- structural consumer bindings through `Keiro.Codec.Structural`, plus checked
+  structural/opaque declarations, generated codecs, compatibility vectors, and
+  migration-evidence reports through `keiro-dsl`;
 - the author-facing `EventStream` contract around Keiki `SymTransducer`, plus
   the `ValidatedEventStream` command boundary for replayability safety;
 - `runCommand` with optimistic concurrency retry, caller-supplied event ids,
@@ -306,7 +310,7 @@ Goal: make the library easier to learn, operate, and upgrade.
 | Work item | Status | Expected outcome |
 |---|---|---|
 | Worked-examples app | Available now | `jitsurei` shows commands, snapshots, read models, PMs, routers, timers, outbox, inbox, and integration events together. |
-| Long-form guides | Available now | `docs/guides/` covers the command side, event evolution, read models, PMs & timers, snapshots, integration events, routers, and a combined incident-response example. |
+| Long-form guides | Available now | `docs/guides/` covers the command side, event evolution, the DSL guarantee ledger, brownfield structural adoption, read models, PMs & timers, snapshots, integration events, routers, and combined examples. |
 | Haddocks | Partially complete | Each public module gets reference docs and copy-pasteable examples. |
 | Stability policy | Planned | Users know what can break before a stronger public API milestone. |
 | Read-model migration guide | Planned | Application-owned query tables have clear migration ownership. |

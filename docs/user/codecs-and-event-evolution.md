@@ -42,6 +42,29 @@ It returns Kiroku `EventData` with:
 Use `encodeForAppendWithMetadata` when you need to merge additional JSON object
 metadata with the schema version.
 
+## Structural Consumer-Owned Payloads
+
+`keiro-dsl` can use an existing application type without making that type's
+current Aeson instances a second private-event schema authority. A
+`mapped structural` declaration owns the keys, tags, presence, nullability,
+defaults, and unknown-field policy; generated code executes that declaration.
+A total `StructuralBinding` only converts between the consumer value and the
+generated private shape.
+
+Use `mapped opaque` when the consumer codec must remain authoritative or the
+conversion from every declared shape cannot be total. Keiro delegates to the
+consumer `ToJSON`/`FromJSON` instances exactly at that boundary and makes no
+nested compatibility claim below it. Event payload encoding remains separate
+from mapped-register snapshot encoding: snapshots are a consumer-JSON cache
+whose mapping fingerprint controls invalidation.
+
+For the declaration, binding, generated-harness, and coverage contracts, see
+[Typed Specifications](typed-spec-toolchain.md#consumer-owned-mapped-types).
+For an existing codec, capture historical JSON and follow the finite
+[shadow-comparison workflow](../guides/brownfield-migration-and-transducer-modeling.md#shadow-comparison-of-old-and-new-codecs)
+before cutover. A passing comparison is migration evidence, not a runtime
+fallback or a transfer of wire authority.
+
 ## Decoding
 
 `decodeRecorded`:

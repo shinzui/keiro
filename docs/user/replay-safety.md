@@ -163,9 +163,9 @@ application code to preserve these properties:
   functions must remain idempotent because those workers are at-least-once;
 - snapshots are an optimization only. A corrupt or incompatible snapshot falls
   back to full event replay, so replay from events must remain correct;
-- a fold change outside the snapshot discriminator — notably a hand-written or
-  Holes-only guard/update edit with no `stateCodecVersion` bump — can accept a
-  stale snapshot seed;
+- a fold change outside the snapshot discriminator — notably a hand-written
+  edit with no new `FoldVersion`, or a generated Holes-only edit with no
+  declared snapshot codec-version bump — can accept a stale snapshot seed;
 - a deprecated event is not necessarily replayable. Removing its emitting
   transition leaves already-stored events with no inverting edge even when they
   still decode.
@@ -188,8 +188,9 @@ Keiro's evolution gates make the detectable parts explicit:
 
 - DSL-visible fold edits produce `AggFoldSurfaceChanged`, and the snapshot
   discriminator automatically invalidates old seeds for generated services.
-  Hand-written and Holes-only fold changes must still bump
-  `stateCodecVersion`.
+  Hand-written services should use `defaultStateCodecWithFold` and change its
+  `FoldVersion`; generated Holes-only fold changes must still bump the declared
+  snapshot codec version because the generator cannot inspect those bodies.
 - Event retirement is a two-stage protocol. Keep the live emitter while the
   event is `retiring`; at cutover, mark it `deprecated` and keep an equivalent
   `replay-only` transition. `DeprecatedEventReplayHazard` warns when that

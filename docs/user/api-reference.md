@@ -62,6 +62,37 @@ events during hydration or projection handling. Prefer `mkCodec` over the raw
 `Codec` constructor; `validateEventStreamWith` runs it anyway when building a
 `ValidatedEventStream`.
 
+## `Keiro.Codec.Structural`
+
+Types and functions:
+
+- `StructuralBinding (..)`
+- `FixtureCases (..)`
+- `bindingDomainRoundTrip`
+- `bindingShapeRoundTrip`
+- `encodeViaBinding`
+- `decodeViaBinding`
+
+This is the stable boundary between a consumer-owned Haskell type and the
+private shape generated from a `mapped structural` declaration. A binding is
+total in both directions and contains no wire policy. `encodeViaBinding` and
+`decodeViaBinding` support the sanctioned delegation direction when a consumer
+JSON instance should call the generated shape codec; generated structural
+codecs never delegate authority to a consumer instance.
+
+## `Keiro.Codec.Structural.Generic`
+
+Types and functions:
+
+- `GNominalBinding`
+- `genericStructuralBinding`
+
+Use the opt-in generic binding only when constructor names/order, selector
+names/order, arity, and field types match exactly. Any mismatch is a compile
+error directing the author to fill the create-once binding skeleton instead.
+The derivation constructs/destructs values only; it cannot change keys, tags,
+presence, nullability, or defaults.
+
 ## `Keiro.EventStream`
 
 Types:
@@ -131,11 +162,14 @@ Types and functions:
 - `encodeSnapshotStrict`
 - `writeSnapshotEncoded`
 - `writeSnapshot`
-- re-exports from `Keiro.Snapshot.Codec`;
+- `FoldVersion (..)`, `defaultStateCodec`,
+  `defaultStateCodecWithFold`, and `withFoldFingerprint` from
+  `Keiro.Snapshot.Codec`;
 - re-exports from `Keiro.Snapshot.Schema`.
 
 Most applications use snapshots indirectly through `EventStream.stateCodec` and
-`runCommand`.
+`runCommand`. Prefer `defaultStateCodecWithFold` for a hand-written fold and
+change its `FoldVersion` whenever event-folding behavior changes.
 
 ## `Keiro.Snapshot.Schema`
 
@@ -514,11 +548,20 @@ for the queue-payload rollout rules.
 
 ## `Keiro.Dsl.*` (package `keiro-dsl`)
 
-The library exposes the grammar, parser, pretty-printer, validator, diff
-classifier, scaffolder, scaffold planner/runner, manifest, read-model shape,
-starter skeleton, and harness modules. Most applications use the `keiro-dsl`
-executable instead: `parse`, `check`, `scaffold`, `diff --since`, and
-`new <kind>`. See [Typed Specifications](typed-spec-toolchain.md).
+The library exposes the grammar, parser, pretty-printer, validator, type graph,
+compatibility-vector differ and JSON report, coverage inventory, historical
+codec-comparison engine, binding-obligation report, scaffolder,
+planner/runner, manifest, starter skeleton, and harness modules. In particular,
+`Keiro.Dsl.TypeGraph`, `Keiro.Dsl.Coverage`, `Keiro.Dsl.CodecCompare`, and
+`Keiro.Dsl.ExplainBindings` are public library surfaces for tooling and
+consumer-compiled migration tests.
+
+Most applications use the executable instead: `parse`, `check`, `scaffold`,
+`diff --since`, and `new <kind>`. The newer opt-in workflows include
+`check --explain-bindings`, `check|diff --coverage-report`,
+`diff --gate|--explain|--report-out`, and
+`scaffold --codec-comparison ... --comparison-out ...`. See
+[Typed Specifications](typed-spec-toolchain.md).
 
 ## `Keiro.Prelude`
 

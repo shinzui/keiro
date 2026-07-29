@@ -18,16 +18,18 @@ pieces those modules import.
   projections, process managers, and timers.
 - [Replayability Safety](replay-safety.md): the `ValidatedEventStream` boundary,
   hidden-input rejection, and what replay safety does and does not guarantee.
-- [Typed Specifications With `keiro-dsl`](typed-spec-toolchain.md): check,
-  scaffold, harness, and evolution gates for `.keiro` service specs.
+- [Typed Specifications With `keiro-dsl`](typed-spec-toolchain.md): structural
+  and opaque consumer mappings, check, scaffold, generated harnesses,
+  compatibility vectors, and migration-evidence tooling.
 - [Choosing A Primitive](../guides/choosing-a-primitive.md): the routing map for
   deciding between an `EventStream`, Keiki composition, a projection, a process
   manager, or a router.
 - [Command Cycle](command-cycle.md): how `runCommand` works and how to handle
   errors, retries, idempotency, and inline SQL.
 - [Codecs And Event Evolution](codecs-and-event-evolution.md): event type tags,
-  schema versions, upcasters, and decode failures.
-- [Snapshots](snapshots.md): enabling advisory snapshot hydration.
+  schema versions, upcasters, structural codec authority, and decode failures.
+- [Snapshots](snapshots.md): enabling advisory snapshot hydration and assigning
+  a hand-owned `FoldVersion` to hand-written folds.
 - [Read Models And Projections](read-models-and-projections.md): strong,
   eventual, and position-wait reads.
 - [Process Managers And Timers](process-managers-and-timers.md): event-sourced
@@ -101,8 +103,10 @@ The v1 library includes:
   [Work Queues](work-queues.md));
 - OpenTelemetry command/producer/consumer spans and opt-in worker metrics
   through `Keiro.Telemetry`.
-- checked `.keiro` specifications, safe scaffolding, conformance harnesses, and
-  persistence-aware diffs through the `keiro-dsl` package.
+- checked `.keiro` specifications, structural/opaque consumer-owned mappings,
+  generated binding/codec conformance, safe scaffolding, compatibility-vector
+  diffs, historical codec comparison, and supported-root coverage reporting
+  through the `keiro-dsl` package.
 
 The top-level `Keiro` module re-exports the core stream, codec, event-stream,
 command, router, and snapshot APIs. Import read-model, projection,

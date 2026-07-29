@@ -259,8 +259,17 @@ coverage.
 brownfield guide and cross-links `adopting-keiro-from-tan-event-source.md`,
 `evolution-and-replayability.md`, and `migrating-to-validated-event-stream.md`. EP-8 and EP-9
 each append the sections documenting their new commands to EP-2's guide (and the
-evolution guide where relevant) as part of their own acceptance, so the guides never describe
-tooling that does not exist.
+evolution guide where relevant) as part of their own acceptance. The final integration pass
+must also revisit EP-1's early guarantee ledger after the later plans land, so future-tense
+descriptions of the snapshot helper, structural mappings, and harness do not survive completion.
+
+**User documentation corpus** (`docs/user/`). Existing reference pages are part of the final
+integration surface even though no child plan owns them exclusively. EP-3 changes the preferred
+snapshot recipe in `snapshots.md`, `replay-safety.md`, and `api-reference.md`; EP-5 changes the
+`typed-spec-toolchain.md` diff contract; EP-6 through EP-9 add mapped-type grammar, public
+binding APIs, generated conformance, historical comparison, and coverage behavior that must be
+discoverable from `typed-spec-toolchain.md`, the API/codec references, and the user index and
+status pages.
 
 **ADR 0004's gate-inventory table.** Its amendment protocol ("the inventory is amended when a
 later child plan changes a gate's ownership") binds EP-4 (new conformance-CI gate row), EP-5
@@ -309,6 +318,9 @@ is implemented and released.
       both mismatch and generated-equivalent consumer controls pass their expected outcomes
 - [x] 2026-07-28: EP-9 supported-root structural/opaque and snapshot-boundary reporting landed;
       opt-in gates, guides, ADR 0013, mutation proof, and full verification completed
+- [x] 2026-07-28: Reconciled the completed initiative across `docs/user/` and `docs/guides/`;
+      removed pre-landing language, documented the public binding/fold APIs and mapped grammar,
+      refreshed CLI and harness behavior, and passed offline link and diff-hygiene checks
 
 
 ## Surprises & Discoveries
@@ -383,6 +395,11 @@ Recorded during child-plan drafting (2026-07-28):
   `cabal run keiro-dsl -- ...` package target ambiguous. EP-9 keeps its hand-owned consumer runner
   as the sole executable of a small local package rooted at `keiro-dsl/test`, while the assertion
   suite remains part of `keiro-dsl`.
+- Completing documentation plans early was useful, but left EP-1's guarantee ledger and the
+  pre-existing `docs/user/` references describing the pre-EP-3/pre-IR-1 world. Later plans
+  correctly appended their owned brownfield/evolution sections, yet no registry row owned the
+  final public-reference reconciliation. A MasterPlan-level integration pass is therefore
+  necessary whenever early documentation describes capabilities landed by later child plans.
 
 
 ## Decision Log
@@ -497,6 +514,16 @@ Recorded during child-plan drafting (2026-07-28):
   0004 records the explicit named-root gates.
   Date: 2026-07-28
 
+- Decision: Treat reconciliation of existing `docs/user/` references and early initiative
+  guides as a MasterPlan completion responsibility, even when child-plan acceptance already
+  covered newly created or explicitly anchored guide sections.
+  Rationale: The shipped APIs were correct and the brownfield/evolution appendices were current,
+  but the user toolchain, snapshot, replay-safety, API, codec, status, and roadmap pages still
+  omitted the new capability, while the guarantee ledger explicitly called a landed helper and
+  structural mapping future work. A user following those pages would receive contradictory
+  guidance despite all implementation plans being Complete.
+  Date: 2026-07-28
+
 
 ## Outcomes & Retrospective
 
@@ -541,6 +568,14 @@ compatibility and replay gates, brownfield migration evidence, supported-root co
 and the adopter documentation promised by this MasterPlan without introducing a second wire
 authority or upgrading finite evidence into a structural guarantee.
 
+A post-completion documentation integration pass reconciled that shipped behavior across the
+existing user corpus as well as the initiative-owned guides. The user toolchain reference now
+documents mapped declarations, bindings, generated conformance, compatibility vectors,
+comparison, and coverage; snapshot and replay references prefer `FoldVersion`; the API and codec
+references expose the structural integration surface; discovery/status pages describe the
+coordinated 0.4.0.0 source line without claiming publication; and the guarantee ledger no longer
+describes landed capabilities as future work. Offline link checking and `git diff --check` pass.
+
 
 ---
 
@@ -570,3 +605,8 @@ EP-9 may now consume its fixture conveniences, 2026-07-28.
 Revision note: Closed EP-9 after landing consumer-compiled historical codec comparison,
 reporting-first structural/opaque coverage, accepted ADR 0013, positive/negative and mutation
 proofs, and passing full verification; all nine ExecPlans are Complete, 2026-07-28.
+
+Revision note: Reconciled the completed initiative across existing user references and the early
+guarantee ledger, documenting the landed mapped-type, binding, snapshot, diff, conformance,
+comparison, and coverage contracts and recording public-doc reconciliation as a MasterPlan
+integration responsibility, 2026-07-28.
