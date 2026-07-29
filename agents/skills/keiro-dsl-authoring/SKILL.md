@@ -77,6 +77,9 @@ cabal run keiro-dsl -- check   <file.keiro> [--emit]   # validate; --emit pretty
 cabal run keiro-dsl -- scaffold <file.keiro> --out DIR # validate, then emit @generated + create-if-absent holes
                             [--module-root Acme] [--collocate] [--force-generated-overwrite]
 cabal run keiro-dsl -- diff --since <git-ref> <file.keiro>  # classify ADDITIVE/WARNING/BREAKING; BREAKING gates a merge
+cabal run keiro-dsl -- check <service.keiro-workspace>       # compose and validate every member as one service
+cabal run keiro-dsl -- scaffold <service.keiro-workspace> --out DIR
+cabal run keiro-dsl -- diff --since <git-ref> <service.keiro-workspace>
 cabal run keiro-dsl -- new <kind>                      # print a minimal valid skeleton (kinds below)
 ```
 
@@ -97,3 +100,10 @@ use it only when overwriting an adopted file is intentional. A successful run pr
 module disposition and the manifest path and writes a per-context scaffold record. If a
 later run no longer produces recorded paths, its exit-0 `stale:` report never deletes them:
 delete `generated` entries only after review, and treat `hole` entries as hand-owned code.
+
+A workspace manifest lists complete same-context member specs with `spec <relative.keiro>`
+lines. Shared declarations have exactly one owning member: duplicates are refused even
+when their text is identical, so resolve a conflict by moving the declaration to one owner,
+never by copying it. Workspace scaffold history uses
+`keiro-dsl-scaffold-record.workspace.<service>.txt`; a first run over legacy same-context
+output adopts only record- or banner-attributable files and deletes nothing.

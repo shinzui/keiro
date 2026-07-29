@@ -124,7 +124,7 @@ locally as a new ADR by EP-1 (expected `ADR-14` via `okf id next`).
 | 1 | Add the service workspace manifest, loader, composed graph, and whole-service check | docs/plans/153-add-the-service-workspace-manifest-loader-composed-graph-and-whole-service-check-to-keiro-dsl.md | None | None | Complete |
 | 2 | Scaffold whole workspaces atomically with workspace-keyed records and adoption from per-context records | docs/plans/154-scaffold-whole-workspaces-atomically-with-workspace-keyed-records-and-adoption-from-per-context-records.md | EP-1 | None | Complete |
 | 3 | Diff whole workspaces with shared-declaration impact classification and unified compatibility reports | docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md | EP-1 | None | Complete |
-| 4 | Prove per-aggregate workspace adoption with fleet-style fixtures, acceptance tests, and documentation | docs/plans/156-prove-per-aggregate-workspace-adoption-with-fleet-style-fixtures-acceptance-tests-and-documentation.md | EP-1, EP-2, EP-3 | None | Not Started |
+| 4 | Prove per-aggregate workspace adoption with fleet-style fixtures, acceptance tests, and documentation | docs/plans/156-prove-per-aggregate-workspace-adoption-with-fleet-style-fixtures-acceptance-tests-and-documentation.md | EP-1, EP-2, EP-3 | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -222,9 +222,9 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [x] EP-3: Shared-declaration use-site classification and unified compatibility/replay/coverage reports — 2026-07-29
 - [x] EP-3: Ownership-move reporting distinct from wire evolution
       (`OwnershipMoved`, `WorkspaceAuthorityChanged`, and ADR-4 amendment) — 2026-07-29
-- [ ] EP-4: Fleet-style per-aggregate fixture workspace and acceptance tests for every IR-2 bullet
-- [ ] EP-4: Migration end-to-end tests from independent same-context scaffolds
-- [ ] EP-4: Adoption and scaffolding documentation for one-file and per-aggregate layouts
+- [x] EP-4: Fleet-style per-aggregate fixture workspace and acceptance tests for every IR-2 bullet — 2026-07-29
+- [x] EP-4: Migration end-to-end tests from independent same-context scaffolds — 2026-07-29
+- [x] EP-4: Adoption and scaffolding documentation for one-file and per-aggregate layouts — 2026-07-29
 
 
 ## Surprises & Discoveries
@@ -330,6 +330,14 @@ interactions between child plans. Provide concise evidence.
   re-exported from `Keiro.Dsl.WorkspaceDiff`. EP-4 should consume the wrapper's public
   API, not depend on the defining module as an ownership claim. (2026-07-29)
 
+- **The prerequisite plans already produced the right fleet fixture and acceptance
+  seams.** EP-4 promoted `keiro-dsl/test/fixtures/workspace/` rather than creating a
+  duplicate `workspace-fleet/`: EP-1 owns its composition tests, EP-2 owns its plan and
+  filesystem tests, and EP-3's separate old/new fixtures own shared-declaration evolution.
+  EP-4 added the missing CLI assertion that parse, validation, and collision failures in
+  any member leave the prior output tree and bookkeeping byte-identical. The final suite
+  has 373 examples and zero failures. (2026-07-29)
+
 
 ## Decision Log
 
@@ -405,10 +413,21 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-EP-3 completed the third of four work streams. `diff` now reconstructs and composes
-both workspace revisions, classifies shared changes across all members, emits one set
-of owned compatibility/replay/coverage reports, and reports ownership or authority
-motion separately from wire evolution. The completed child validated 372 unit
-examples, 16 real-git diff scenarios, and the strict 15-record ADR bundle. EP-4 is now
-the only remaining plan and can exercise the finished `check`, `scaffold`, and `diff`
-surfaces together in fleet-style adoption tests and documentation.
+**Initiative completed 2026-07-29.** All four child plans are Complete. A service can
+now keep complete aggregates in separate same-context member files under one versioned
+manifest, and `parse`, `check`, `scaffold`, and `diff` treat that manifest as one service
+contract. Composition resolves shared declarations once with single-owner enforcement
+and multi-file diagnostics. Scaffolding plans the full module set, emits context-level
+modules once, keeps collision-proof workspace-keyed history with per-module ownership,
+adopts attributable legacy output without deletion, and proves refusal-before-write.
+Diff reconstructs both member sets from Git, classifies shared evolution at every owned
+use site, and separates ownership/authority motion from wire evolution.
+
+EP-4 closed the initiative with a bullet-by-bullet IR-2 traceability sweep, 373 green DSL
+examples, a falsification check of determinism and atomicity assertions, and documentation
+for single-file, fresh workspace, and legacy-adoption workflows. The final ADR
+distillation pass found the durable context already recorded: ADR-14 owns workspace
+identity/canonical single-owner composition; ADR-15 owns workspace-keyed history and
+attributable adoption; ADR-4 owns the composed diff boundary and its advisory codes;
+ADRs 12 and 13 continue to constrain schema authority and reporting-first coverage.
+No new ADR was warranted for acceptance evidence or documentation wording.

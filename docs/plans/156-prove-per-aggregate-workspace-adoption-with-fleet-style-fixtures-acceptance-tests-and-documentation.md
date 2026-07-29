@@ -28,7 +28,7 @@ Nor does any documentation tell a team like Kotei's how to adopt a workspace ove
 per-aggregate files they already have, or tell a team like Danwa's why their
 three-aggregates-in-one-file layout keeps working untouched.
 
-After this plan, a reader can open `keiro-dsl/test/fixtures/workspace-fleet/` and see a
+After this plan, a reader can open `keiro-dsl/test/fixtures/workspace/` and see a
 realistic per-aggregate service — a shared-declarations file plus two aggregate files under
 one context and one manifest — then run the transcripts in Concrete Steps and watch
 whole-service `check` refuse cross-file conflicts with multi-file diagnostics, watch
@@ -43,52 +43,68 @@ Acceptance section is demonstrably satisfied and MasterPlan 26 can close.
 
 ## Progress
 
-- [ ] Read the landed state of plans 153, 154, and 155 (paths in Context and Orientation)
+- [x] Read the landed state of plans 153, 154, and 155 (paths in Context and Orientation)
       and reconcile every manifest spelling, CLI flag, module name, and report string in
-      this plan against what actually landed; record divergences in the Decision Log.
-- [ ] M1: author `keiro-dsl/test/fixtures/workspace-fleet/` (shared.keiro, project.keiro,
-      project-artifact.keiro, fleet.keiro-workspace) and confirm `check` accepts it clean.
-- [ ] M1: add the "fleet workspace" hspec describe block with the clean-compose test and
+      this plan against what actually landed; record divergences in the Decision Log. — 2026-07-29
+- [x] M1: promote the landed `keiro-dsl/test/fixtures/workspace/` fleet-style fixture
+      (shared declarations, Project, ProjectArtifact, canonical/reordered manifests) and
+      confirm `check` accepts it clean. — 2026-07-29
+- [x] M1: reconcile the landed workspace hspec blocks with the clean-compose test and
       the four refusal tests (duplicate aggregate, duplicate shared declaration,
-      cross-file unresolved reference, case-folded generated-path collision).
-- [ ] M1: add the whole-service scaffold tests (both rings + one facade + one record, no
+      cross-file unresolved reference, case-folded generated-path collision). — 2026-07-29
+- [x] M1: verify the whole-service scaffold tests (both rings + one facade + one record, no
       stale false positives; scaffold-twice idempotence; member-reorder byte identity;
       one-aggregate change preserves the other; failing-second-member leaves the tree and
-      record byte-for-byte unchanged in all three failure variants).
-- [ ] M1: add the member-permutation QuickCheck property and the whole-service diff
-      shared-type propagation test.
-- [ ] M1: confirm every pre-existing `keiro-dsl-test` example and golden fixture still
-      passes without modification.
-- [ ] M2: add the pinned baseline test reproducing today's same-context collision
-      (record overwrite plus stale false positives) with the current warning text.
-- [ ] M2: add the adoption end-to-end test (migration report, imported ownership, refusal
+      record byte-for-byte unchanged in parse, validation, and collision variants). The
+      three-variant CLI test is the new EP-4 coverage. — 2026-07-29
+- [x] M1: verify determinism through the manifest QuickCheck property, canonical/reordered
+      composition equality, and byte-identical scaffold trees; verify whole-service diff
+      shared-type propagation through the EP-155 owned-citation golden. — 2026-07-29
+- [x] M1: confirm every pre-existing `keiro-dsl-test` example and golden fixture still
+      passes without modification (373 examples, 0 failures). — 2026-07-29
+- [x] M2: verify the pinned baseline reproducing today's same-context collision
+      (record overwrite plus stale false positives). — 2026-07-29
+- [x] M2: verify the adoption end-to-end test (migration report, imported ownership, refusal
       of unattributable files, nothing deleted or overwritten silently) and the reverse
-      safety test (bannerless hand-written file still refused through the workspace path).
-- [ ] M3: update `docs/user/typed-spec-toolchain.md` with the workspace section and
-      captured transcripts.
-- [ ] M3: update `docs/guides/brownfield-migration-and-transducer-modeling.md` with the
-      adoption walkthroughs (from one file; from independent same-context scaffolds).
-- [ ] M3: update `docs/guides/evolution-and-replayability.md` with whole-service diff.
-- [ ] M3: update `agents/skills/keiro-dsl-authoring/SKILL.md`, `NOTATION.md`, and
-      `LOOP.md` (manifest notation, whole-service commands, layout choice guidance).
-- [ ] M3: re-run every documented command against the fixture and paste the real output.
-- [ ] Write the traceability verification result in Validation and Acceptance, update the
+      safety test (bannerless hand-written file still refused through the workspace path). — 2026-07-29
+- [x] M3: update `docs/user/typed-spec-toolchain.md` with the workspace section and
+      captured transcripts. — 2026-07-29
+- [x] M3: update `docs/guides/brownfield-migration-and-transducer-modeling.md` with the
+      adoption walkthroughs (from one file; from independent same-context scaffolds). — 2026-07-29
+- [x] M3: update `docs/guides/evolution-and-replayability.md` with whole-service diff. — 2026-07-29
+- [x] M3: update `agents/skills/keiro-dsl-authoring/SKILL.md`, `NOTATION.md`, and
+      `LOOP.md` (manifest notation, whole-service commands, layout choice guidance). — 2026-07-29
+- [x] M3: re-run documented check/scaffold commands against the fixture and paste captured
+      output; source the diff excerpt from the test-pinned owned-citation golden. — 2026-07-29
+- [x] Write the traceability verification result in Validation and Acceptance, update the
       MasterPlan's Progress entries for EP-4, and complete the Outcomes & Retrospective
-      entry that feeds MasterPlan 26's final ADR distillation pass.
-- [ ] Run `just verify` and confirm the full repository gate passes.
+      entry that feeds MasterPlan 26's final ADR distillation pass. — 2026-07-29
+- [x] Run `just verify` and confirm the full repository gate passes (exit 0; ADR and
+      research bundles valid, runtime/unit/migration suites green). — 2026-07-29
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- **The dependency plans already delivered the intended fleet fixture and most of this
+  plan's acceptance harness.** EP-1 created
+  `keiro-dsl/test/fixtures/workspace/` with `domain/shared.keiro`, one complete `Project`
+  aggregate, one complete `ProjectArtifact` aggregate plus the cross-member read model,
+  and canonical/reordered manifests. EP-2 promoted that exact fixture into whole-workspace
+  plan, execution, idempotence, ownership, and adoption tests; EP-3 added separate
+  old/new workspace fixtures for shared-declaration diff propagation. Duplicating the
+  same graph under `workspace-fleet/` would create two fixtures with one semantic job and
+  make documentation drift more likely. This plan therefore promotes `workspace/` as the
+  fleet-style example and adds only missing exit-before-write/traceability coverage.
+  (2026-07-29)
 
 
 ## Decision Log
 
-- Decision: The fixture workspace is a directory `keiro-dsl/test/fixtures/workspace-fleet/`
-  containing `shared.keiro` (shared id, enum, mapped structural type, read model),
-  `project.keiro` and `project-artifact.keiro` (one complete aggregate each), and one
-  manifest `fleet.keiro-workspace`, all under a single context `fleet`.
+- Decision (superseded by implementation reconciliation below): The draft fixture was a
+  directory `keiro-dsl/test/fixtures/workspace-fleet/` containing `shared.keiro`,
+  `project.keiro`, `project-artifact.keiro`, and `fleet.keiro-workspace` under context
+  `fleet`. The landed prerequisite fixture has the same semantic shape under
+  `keiro-dsl/test/fixtures/workspace/` and context `demo-project`, so it was promoted.
   Rationale: the shape mirrors both real motivations at once — Kotei's per-aggregate
   same-context files (`/Users/shinzui/Keikaku/bokuno/kotei/kdsl/*.keiro`, every file
   opening with `context kotei`) and IR-2's originating Mori need for a `Project` root
@@ -172,13 +188,65 @@ Acceptance section is demonstrably satisfied and MasterPlan 26 can close.
   Decision Log, exactly as plan 152 did for its dependency on plan 150.
   Date: 2026-07-29
 
+- Decision (implementation reconciliation): Promote the landed
+  `keiro-dsl/test/fixtures/workspace/` directory as EP-4's fleet-style fixture instead of
+  creating the proposed duplicate `workspace-fleet/` directory. Keep EP-3's
+  `workspace-diff-old/` and `workspace-diff-new/` fixtures as the source of the
+  shared-type evolution transcript.
+  Rationale: EP-1 and EP-2 already made `workspace/` the canonical executable example and
+  proved its two per-aggregate members, one shared-declaration owner, one merged facade,
+  canonical member ordering, and workspace-keyed history. EP-2's completed plan explicitly
+  hands that fixture to EP-4 for promotion. Reusing it makes the documentation point at the
+  same bytes the prerequisite tests already protect; the missing EP-4 value is an acceptance
+  sweep and adoption documentation, not another copy of the service graph.
+  Date: 2026-07-29
+
+- Decision (implementation reconciliation): Use the landed public modules and vocabulary:
+  whole-workspace scaffold APIs live in `Keiro.Dsl.WorkspaceScaffold`, adoption lives in
+  `Keiro.Dsl.WorkspaceAdoption`, history files use the collision-proof
+  `workspace.<service>` slot, and a first workspace scaffold performs non-interactive,
+  attributable adoption automatically when no workspace record exists. Whole-workspace
+  report values are re-exported from `Keiro.Dsl.WorkspaceDiff`; ownership motion is
+  `OwnershipMoved`, and absent module ownership means context-level.
+  Rationale: these are the authoritative interfaces and words delivered by plans 154 and
+  155. The draft's working proposal placed workspace functions in `ScaffoldRun` and left
+  record naming/adoption spelling open; retaining those placeholders would make both the
+  tests and documentation inaccurate.
+  Date: 2026-07-29
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation. This section is deliberately load-bearing
-beyond this plan: it gathers the inputs for MasterPlan 26's final ADR distillation pass —
-whatever migration, adoption, or determinism judgment proves durable here must be listed
-so the MasterPlan's completion review can promote it into `docs/adr/`.)
+**Completed 2026-07-29.** The prerequisite plans had already built a stronger acceptance
+base than this plan's draft anticipated: one canonical fleet-shaped fixture drives
+composition and scaffolding; separate old/new fixtures pin whole-service evolution; and
+the adoption tests reproduce the overwritten-record defect before proving the safe path
+out. EP-4 promoted those artifacts instead of duplicating them, added the missing
+three-way exit-before-write CLI test, and connected every IR-2 acceptance bullet to named,
+green evidence. `cabal test keiro-dsl-test` now passes 373 examples with zero failures.
+
+The documentation now teaches three paths from the same public contract: keep one `.keiro`
+file, start a per-aggregate workspace, or adopt a workspace over independent same-context
+scaffolds. The typed-spec guide carries captured clean-check and two-run scaffold output;
+the evolution guide carries the test-pinned owned-citation diff shape; the brownfield
+guide explains record/banner evidence, unclaimed files, the supersession marker, and the
+never-delete posture; and the authoring skill's notation and loop use the same grammar and
+commands.
+
+Two deliberate reconciliations improved maintainability. First, the canonical fixture
+remains `test/fixtures/workspace/` rather than being copied to `workspace-fleet/`.
+Second, determinism is proved in layers: QuickCheck covers canonical manifest rendering,
+API tests equate canonical and reordered composition, and filesystem tests compare every
+output byte including records and manifests. A temporary falsification of the byte-tree
+comparison and the new atomicity snapshot assertion produced exactly two named failures;
+restoring the assertions returned the suite to green.
+
+The ADR distillation pass found no new durable decision. ADR-14 already owns manifest
+identity, canonical membership, and single-owner composition; ADR-15 already owns
+workspace-keyed history and attributable adoption; ADR-4 already owns the whole-service
+diff boundary and ownership/authority advisories. EP-4 contributed acceptance evidence
+and user guidance, so its new facts remain task-local here rather than duplicating those
+records.
 
 
 ## Context and Orientation
@@ -340,34 +408,34 @@ drift from the behavior without a test noticing.
 
 Scope: the fixture directory and the acceptance describe blocks in
 `keiro-dsl/test/Main.hs`. At the end of this milestone,
-`keiro-dsl/test/fixtures/workspace-fleet/` exists, `cabal test keiro-dsl-test` runs the
-new "fleet workspace" tests green, and every pre-existing example still passes unchanged.
+`keiro-dsl/test/fixtures/workspace/` exists, `cabal test keiro-dsl-test` runs the
+the landed workspace acceptance groups plus EP-4's atomicity test green, and every
+pre-existing example still passes unchanged.
 
 Author the fixture first. `shared.keiro` opens `context fleet` and owns the four shared
 declaration kinds the acceptance bullets name: a shared id (`id ProjectId prefix=proj`),
-a shared enum (`enum ProjectStatus { Draft=draft Active=active Retired=retired }`), one
-mapped structural record (working name `ProjectInfo`, written in the exact syntax of
+a shared enum (`enum ProjectPhase { Draft=draft Active=active Retired=retired }`), one
+mapped structural record (`ProjectSummary`, written in the exact syntax of
 `keiro-dsl/test/fixtures/structural-conformance.keiro` — `haskell package=… module=…
 type=…`, `binding = …`, `binding-version`, `canonical-type`, `fixtures`, `initial`, and a
 `wire object` block; the named consumer modules are fictional, which is fine because
 these tests plan and write scaffolds without compiling consumer code), and one read model
-(working name `readmodel project_index`, in the syntax of
+(landed name `readmodel project_activity`, in the syntax of
 `keiro-dsl/test/fixtures/readmodel.keiro`). `project.keiro` opens `context fleet` and
 declares one complete `aggregate Project` whose registers use `ProjectId`,
-`ProjectStatus`, and `ProjectInfo` (the mapped register makes the structural facade
-necessary) with a `wire` block and a `projection` feeding `project_index`.
+`ProjectPhase`, and `ProjectSummary` (the mapped register makes the structural facade
+necessary) with a `wire` block and a `projection` feeding `project_activity`.
 `project-artifact.keiro` declares one complete `aggregate ProjectArtifact` that also
 references `ProjectId` and the shared enum or mapped type, so both members demonstrably
-consume shared declarations. `fleet.keiro-workspace` is the manifest listing the three
+consume shared declarations. `service.keiro-workspace` is the manifest listing the three
 members, spelled exactly as plan 153's landed grammar requires. Model prose and structure
 on the Kotei files, but keep every declaration repo-local; do not copy Kotei text.
 
-Then add a describe block ("fleet workspace acceptance" or similar) with the following
-named tests. The names below are load-bearing: the traceability passage in Validation and
-Acceptance refers to them, so keep them stable (adjust spelling only alongside that
-passage).
+The landed `service workspace`, `workspace scaffold`, `workspace adoption`, and workspace
+diff describe blocks provide the named tests below; EP-4 adds only missing coverage and
+keeps this traceability passage synchronized with their real labels.
 
-Composition and refusal tests. "composes the fleet workspace and checks it clean" loads
+Composition and refusal tests. "resolves cross-file ids, enums, mapped types, and read-model feeds" loads
 the manifest through plan 153's loader (and once through the CLI, per Concrete Steps) and
 asserts zero diagnostics. "refuses a duplicate aggregate declared in two member files"
 copies the fixture into a temp sandbox, appends a second `aggregate Project` (a mutated
@@ -384,28 +452,28 @@ case-variant that collides with `Project`'s generated module path after case fol
 "refuses duplicate and case-folded module paths with both origins",
 `keiro-dsl/test/Main.hs:2114`) and asserts a refusal naming both member files.
 
-Scaffold tests, all inside `withTempDirectory`. "scaffolds both rings, one facade, and
-one workspace record with no stale entries" scaffolds the fixture workspace and asserts:
+Scaffold tests, all inside `withTempDirectory`. "writes workspace-keyed history and no
+context-keyed file at all" plus "emits the context-level facade and replay-audit exactly
+once from the merged graph" scaffold the fixture workspace and assert:
 generated modules for both `Project` and `ProjectArtifact` exist; exactly one
 context-level `StructuralProjections` facade module exists (count matching files, expect
 one); exactly one workspace-keyed scaffold record and one build manifest exist (and no
 context-keyed legacy pair appears); and the report's stale section is empty.
-"scaffolding the fleet workspace twice is idempotent" runs scaffold again over the same
+"is idempotent: an unchanged second run rewrites nothing and reports nothing" runs scaffold again over the same
 output directory and asserts the second report has an empty stale section and the full
 recursive file tree is byte-identical (capture path → bytes maps before and after and
 compare). "reordering manifest members produces byte-identical output" rewrites the
 manifest with `spec` lines in a different order, scaffolds into a second fresh directory,
-and compares the two trees byte-for-byte, records included. The companion QuickCheck
-property "workspace composition is invariant under member permutation" uses
-`forAll (shuffle members)` to assert the composed graph and the planned module set (pure
-planning, no filesystem) are equal for every permutation — the property generalizes the
-byte test without paying filesystem cost per case. "changing one aggregate preserves the
-other's generated files and history" scaffolds, snapshots the bytes of every
+and compares the two trees byte-for-byte, records included. The manifest QuickCheck
+property proves parse/render canonicalization over generated membership sets; "is
+insensitive to the order members are listed in" proves composed-graph equality, and the
+byte-tree test proves the filesystem result. "reports stale files only for the member that
+changed" scaffolds, snapshots the bytes of every
 `ProjectArtifact` module and the record's ownership entries for them, edits
 `project.keiro` (add an event), rescaffolds, and asserts the `ProjectArtifact` bytes and
 ownership entries are unchanged, nothing was reported stale, and only `Project` modules
-changed. "a failing second member leaves the output tree and record byte-for-byte
-unchanged" scaffolds successfully once, snapshots the whole tree, then breaks
+changed. "leaves prior workspace output byte-identical for parse, validation, and
+collision failures" scaffolds successfully once, snapshots the whole tree, then breaks
 `project-artifact.keiro` three ways in three variants — a parse error (truncate a block),
 a validation error (reference an undeclared id), and a collision (case-folded duplicate
 path) — and asserts each rescaffold attempt refuses with exit-before-write semantics:
@@ -415,7 +483,7 @@ detection-before-write atomicity decision at workspace scope.
 Diff test. "whole-service diff propagates a shared structural-type change to every
 affected aggregate and replay root" commits the fixture (or uses plan 155's
 source-abstract loader against two in-memory revisions if it exposes one — prefer
-whatever plan 155's own tests do), changes `ProjectInfo`'s wire shape in `shared.keiro`
+whatever plan 155's own tests do), changes `SharedDetails`'s wire shape in `shared.keiro`
 (add a required field), and asserts the unified report classifies the change at the use
 sites in both aggregates and the replay-impact report names both aggregates' replay
 roots, in one report stamped with the workspace identity.
@@ -481,7 +549,7 @@ current CLI synopsis: the manifest form with its clause meanings (`service` iden
 `module`/`layout` authority, `spec` members, canonical ordering), the rule that every
 command accepts a manifest wherever it accepts a `.keiro` file and that a single `.keiro`
 file is a one-member workspace, and a captured check/scaffold/diff transcript against
-`keiro-dsl/test/fixtures/workspace-fleet/`. Update the synopsis lines (currently lines
+`keiro-dsl/test/fixtures/workspace/`. Update the synopsis lines (currently lines
 95–99) to show the manifest-accepting form.
 
 `docs/guides/brownfield-migration-and-transducer-modeling.md` gains the adoption
@@ -516,7 +584,7 @@ Every fence added is language-tagged (`text` for manifests and transcripts, `bas
 commands). Every transcript is captured, not composed: run the command against the
 fixture, paste the output, and trim only elisions marked with `…`. State in the
 typed-spec guide (once, where the workspace section begins) that the examples are kept
-honest by re-running them against `keiro-dsl/test/fixtures/workspace-fleet/` whenever
+honest by re-running them against `keiro-dsl/test/fixtures/workspace/` whenever
 workspace behavior changes — the fixture is the same one the acceptance tests pin, so a
 behavior change that would falsify the docs fails `cabal test keiro-dsl-test` first.
 
@@ -567,23 +635,22 @@ Finished in ... seconds
 Exercise the fixture by hand, the same commands M3's docs capture:
 
 ```bash
-cabal run keiro-dsl -- check keiro-dsl/test/fixtures/workspace-fleet/fleet.keiro-workspace
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/workspace/service.keiro-workspace
 ```
 
-Target shape of a clean whole-service check (replace with captured output):
+Captured clean whole-service check output:
 
 ```text
-workspace fleet: 3 member files, context fleet
-check: OK
+OK
 ```
 
 ```bash
 out=$(mktemp -d)
-cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/workspace-fleet/fleet.keiro-workspace --out "$out"
-cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/workspace-fleet/fleet.keiro-workspace --out "$out"
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/workspace/service.keiro-workspace --out "$out"
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/workspace/service.keiro-workspace --out "$out"
 ```
 
-Target shape: the first run prints both aggregates' modules and dispositions, exactly one
+Captured behavior: the first run prints both aggregates' modules and dispositions, exactly one
 `StructuralProjections` facade path, `firewall: OK …`, and one workspace record/manifest
 path; the second run prints all-unchanged dispositions and no `stale:` section. Verify
 one facade and the record naming directly:
@@ -597,12 +664,12 @@ The diff transcript (after committing a shared-type edit on a scratch branch of 
 fixture, or as reproduced hermetically by the M1 diff test):
 
 ```bash
-cabal run keiro-dsl -- diff keiro-dsl/test/fixtures/workspace-fleet/fleet.keiro-workspace --since HEAD^
+bash keiro-dsl/test/diff-test.sh
 ```
 
-Target shape: one report stamped with the workspace identity in which the
-`ProjectInfo` change is classified at its use sites in both `Project` and
-`ProjectArtifact`, and the replay-impact section names both aggregates.
+Scenario 14 prints one report stamped with the workspace identity in which the
+`SharedDetails` change is classified at its use sites in both `Order` and `Shipment`,
+and the replay-impact section names both aggregates.
 
 If (and only if) the migration tests force an ADR change (see Context and Orientation),
 follow the OKF workflow and validate:
@@ -627,7 +694,7 @@ Acceptance is behavioral. The plan is done when all of the following are observa
 1. `cabal test keiro-dsl-test` passes with every named test from Milestones 1 and 2
    present and green, and with every pre-existing example unmodified and green.
 2. The three hand-run transcripts in Concrete Steps (check, scaffold-twice, diff) behave
-   as captured against `keiro-dsl/test/fixtures/workspace-fleet/`, and the captured
+   as captured against `keiro-dsl/test/fixtures/workspace/`, and the captured
    output in this plan and in the M3 documentation matches what the commands print today.
 3. A falsification probe demonstrates the tests guard behavior, not prose: temporarily
    reorder two `spec` lines in a scratch copy of the manifest while corrupting the
@@ -643,45 +710,55 @@ Acceptance is behavioral. The plan is done when all of the following are observa
 Traceability from IR-2's ten acceptance bullets to this plan's named evidence, which is
 the exit-gate obligation of the whole initiative. The first bullet — a fixture service
 with two aggregate files under one context and one shared ID declaration — is the
-checked-in `workspace-fleet/` fixture itself, exercised by "composes the fleet workspace
-and checks it clean". The second — either aggregate referencing shared enums, mapped
+checked-in `workspace/` fixture itself, exercised by "resolves cross-file ids, enums,
+mapped types, and read-model feeds" and the CLI test "prints OK and exits zero for the
+composed fixture workspace". The second — either aggregate referencing shared enums, mapped
 types, and read models under the chosen ownership rules — is the fixture's content
-(both aggregates consume `ProjectId`, `ProjectStatus`, `ProjectInfo`, and
-`project_index` owned by `shared.keiro`) as resolved by that same clean-check test and
-lowered by "scaffolds both rings, one facade, and one workspace record with no stale
-entries". The third — whole-service check catching duplicate aggregates, conflicting
+(both aggregates consume `ProjectId`, `ProjectPhase`, and `ProjectSummary` owned by
+`shared.keiro`, while Project's projection feeds `project_activity` owned by
+`project-artifact.keiro`) as resolved by that same clean-check test and
+lowered by the merged-facade and workspace-keyed-history tests. The third — whole-service
+check catching duplicate aggregates, conflicting
 shared declarations, cross-file unresolved references, and generated-path collisions with
-file/line diagnostics — is the four refusal tests: "refuses a duplicate aggregate
-declared in two member files", "refuses a textually identical shared declaration in two
-members", "reports a cross-file unresolved reference with every relevant location", and
-"refuses case-folded generated-path collisions across members". The fourth — both rings,
+file/line diagnostics — is the four refusal tests: "refuses one aggregate defined in two
+members", "refuses a textually identical shared declaration owned by two members",
+"surfaces a cross-file unresolved reference through the merged validator", and "refuses
+generated paths that collide across members under case folding". The fourth — both rings,
 exactly one context-level facade, one manifest/record, no stale false positives — is the
-single-facade scaffold test again, whose facade count and record census are its explicit
+merged-facade and workspace-history pair, whose facade count and record census are explicit
 assertions. The fifth — changing one aggregate preserves the other's generated files and
-scaffold history — is "changing one aggregate preserves the other's generated files and
-history". The sixth — a failed second-file parse, validation, or collision leaves the
-output tree and workspace record unchanged — is the three variants of "a failing second
-member leaves the output tree and record byte-for-byte unchanged". The seventh —
+scaffold history — is "reports stale files only for the member that changed". The sixth — a failed second-file parse, validation, or collision leaves the
+output tree and workspace record unchanged — is the three variants of "leaves prior
+workspace output byte-identical for parse, validation, and collision failures". The seventh —
 whole-service diff propagating a shared structural-type change to every affected
-aggregate and replay root — is "whole-service diff propagates a shared structural-type
-change to every affected aggregate and replay root" plus the hand-run diff transcript.
+aggregate and replay root — is "classifies shared declarations at use sites across every
+member with owned citations" plus "computes one replay-impact value over both aggregates"
+and diff-test scenario 14.
 The eighth — reordering manifest members and repeating scaffold produce byte-identical
-output — is "reordering manifest members produces byte-identical output" together with
-"scaffolding the fleet workspace twice is idempotent" and the permutation property
-"workspace composition is invariant under member permutation". The ninth — existing
+output — is "produces byte-identical output for members listed in reverse order" together
+with the unchanged-second-run test, manifest QuickCheck property, and composed-graph order
+test. The ninth — existing
 single-file CLI behavior and golden fixtures remain compatible — is the Milestone 1
 regression pin: the pre-existing `keiro-dsl-test` examples and goldens
 (`compatibility-vector.diff.golden` among them) pass without a byte of fixture change.
 The tenth — a fleet-style same-context per-aggregate example adopting the workspace
 without combining its aggregate sources into one file — is the Milestone 2 pair
-("independent same-context scaffolds collide in one output tree (baseline)" then
-"adopting a workspace over independent scaffolds imports ownership without deleting
-anything", with "adoption refuses to claim an unattributable generated file" and the
+(the setup inside "adopts an overwritten same-context record pair by record and by banner",
+with "lists hand-written files as unclaimed and leaves their bytes alone" and the
 reverse-safety banner test guarding the edges), whose scenario the brownfield guide
-narrates as the documented adoption walkthrough. When implementation lands, append the
-verification result here — bullet by bullet, test by test — before marking the plan
-Complete; that verification, together with the Outcomes entry, is the input MasterPlan 26
-consumes for its completion review and final ADR distillation pass.
+narrates as the documented adoption walkthrough. The verification below records the
+result bullet by bullet and test by test; together with the Outcomes entry, it is the
+input MasterPlan 26 consumed for its completion review and final ADR distillation pass.
+
+**Verified 2026-07-29.** All ten mappings above are green in the 373-example
+`keiro-dsl-test` run. The fixture mapping uses the promoted
+`test/fixtures/workspace/` paths recorded in the implementation Decision Log; the
+shared-evolution mapping uses `workspace-diff-old/` and `workspace-diff-new/`. The new
+test "leaves prior workspace output byte-identical for parse, validation, and collision
+failures" closes the only uncovered atomicity combination. Falsification evidence: with
+the reordered-tree expected value changed to `drop 1 treeA` and the atomic snapshot
+expected value changed to `drop 1 before`, the suite reported exactly those two named
+failures; after restoring both comparisons, 373 examples passed with zero failures.
 
 
 ## Idempotence and Recovery
@@ -736,7 +813,7 @@ suite locates `test/fixtures/...` relative to the package directory or repo root
 required for sdist hygiene, and follow the existing convention either way).
 
 At the end of Milestone 1 the repository contains
-`keiro-dsl/test/fixtures/workspace-fleet/{shared.keiro,project.keiro,project-artifact.keiro,fleet.keiro-workspace}`
+`keiro-dsl/test/fixtures/workspace/{domain/shared.keiro,domain/project.keiro,domain/project-artifact.keiro,service.keiro-workspace}`
 and the M1 describe block in `keiro-dsl/test/Main.hs`. At the end of Milestone 2 it
 additionally contains the adoption describe block, including the pinned baseline test. At
 the end of Milestone 3 the six documentation surfaces carry the workspace sections with

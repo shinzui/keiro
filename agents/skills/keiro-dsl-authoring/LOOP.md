@@ -15,6 +15,8 @@ cabal run keiro-dsl -- parse service.keiro
 ```
 
 It echoes the spec pretty-printed. A parse error is line-numbered; fix the notation.
+For a multi-file service, parse the `.keiro-workspace` manifest to inspect its canonical
+member order.
 
 ### 3. Check (the gate — before any Haskell)
 
@@ -26,6 +28,8 @@ cabal run keiro-dsl -- check service.keiro ; echo "exit=$?"
 `OK` / exit 0 means every required decision is present and no dangerous inversion is stated
 the wrong way. Any `error[Code]` (exit non-zero) names the rule and line — fix the spec, not
 the generated code. Warnings (e.g. benign-inversion notices) are informational and pass.
+For a multi-file service, pass the manifest path to the same command. `check` composes all
+members first, resolves cross-file references once, and cites each owning file and line.
 Common diagnostics you must resolve in the spec (the warning-only codes are called out):
 
 - Syntax and generated names: positioned parse errors reject raw newlines in strings and
@@ -100,6 +104,11 @@ emitted `keiro-dsl-manifest.<context>.txt` carries paste-ready `other-modules:`/
 blocks for the consuming Cabal stanza. Re-scaffold after every spec change and resolve the
 stale report before adding the generated tree to a component.
 
+For a multi-file service, pass the manifest path instead of one member. The planner sees
+the complete member set before writing, emits context-level modules once, and stores
+workspace-keyed history with per-module ownership. Never scaffold workspace members
+independently into the same output tree after adoption.
+
 ### 5. Fill the holes
 
 Open the hole modules. Each hole is a typed signature with a `-- HOLE …` annotation carrying
@@ -135,6 +144,9 @@ When you later change the spec, gate the change against history:
 ```bash
 cabal run keiro-dsl -- diff --since <git-ref> service.keiro ; echo "exit=$?"
 ```
+
+Use the workspace manifest path here too when the service has multiple members; the old
+manifest and member set are reconstructed from Git and classified as one service.
 
 `BREAKING` (exit non-zero) means an on-disk event payload could now fail to decode — add a
 versioned event + `upcast from v(N-1) = HOLE`, or a `deprecated event`, until it reports

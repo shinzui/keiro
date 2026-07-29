@@ -291,6 +291,49 @@ authority.
      anchor: binding-authoring-tooling
      (binding skeleton scaffolds and `check --explain-bindings` sections land here) -->
 
+### Choose one file or a service workspace
+
+A small service can keep dense, cross-referenced declarations in one `.keiro` file.
+A larger service can keep each complete aggregate in its own member file and put
+shared declarations in one owning member. Both layouts describe one service contract;
+the latter uses a versioned `.keiro-workspace` manifest:
+
+```text
+service demo-project
+module Demo.Modules.Project
+layout collocated
+spec domain/project-artifact.keiro
+spec domain/project.keiro
+spec domain/shared.keiro
+```
+
+Choose per-aggregate members when review ownership and fleet symmetry matter. Keep one
+file while the service is small or declarations are easier to review together. Switching
+later is a source-ownership move, not a new wire identity: generated module paths derive
+from context and node names, not member paths.
+
+To adopt one existing multi-aggregate file, write a manifest listing it as the only
+member and scaffold the manifest. You may split whole aggregates into member files later;
+move each shared declaration to exactly one owner rather than copying it. The merged
+scaffold emits the same aggregate rings and records ownership moves separately.
+
+To adopt output produced by several independent same-context scaffolds, keep the existing
+output tree and run the workspace scaffold once:
+
+```bash
+cabal run keiro-dsl -- scaffold path/to/service.keiro-workspace --out src
+```
+
+When no workspace record exists, this first run automatically inspects the surviving
+context-keyed record. Files named by it are claimed with `record` evidence; planned
+Generated files whose old record was overwritten can be claimed only when their
+`-- @generated` banner supplies `banner` evidence. The command writes and prints
+`keiro-dsl-migration-report.workspace.<service>.txt`, appends a forward-compatible
+`superseded-by:` marker to the legacy record, and records each claim's provenance.
+Hole files, unrelated hand-written files, and likely-stale paths remain unclaimed for
+human review. Nothing is deleted. A bannerless file at a planned Generated path still
+refuses the whole run without changing its bytes.
+
 
 ## Part B: The migration path
 

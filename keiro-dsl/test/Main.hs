@@ -3196,6 +3196,27 @@ main = hspec $ do
                         case planWorkspaceScaffold "goldens" (workspaceContext broken) broken of
                             Right _ -> expectationFailure "expected the broken workspace to refuse"
                             Left _ -> doesDirectoryExist target `shouldReturn` False
+            it "leaves prior workspace output byte-identical for parse, validation, and collision failures" $
+                withWorkspaceFixture "keiro-dsl-workspace-atomic-cli" id $ \root out workspace -> do
+                    _ <- executePlannedWorkspaceScaffold out workspace
+                    before <- treeSnapshot out
+                    let member = root </> "domain/project-artifact.keiro"
+                        manifest = root </> "service.keiro-workspace"
+                    original <- TIO.readFile member
+                    let failures =
+                            [ ("parse", "context demo-project\naggregate !!!\n")
+                            , ("validation", T.replace "ProjectId" "MissingProjectId" original)
+                            , ("collision", T.replace "aggregate ProjectArtifact" "aggregate PROJECT" original)
+                            ]
+                    forM_ failures $ \(failureKind, brokenSource) -> do
+                        TIO.writeFile member brokenSource
+                        (exitCode, stdoutText, stderrText) <-
+                            runKeiroDsl ["scaffold", manifest, "--out", out]
+                        unless (exitCode == ExitFailure 1) $
+                            expectationFailure
+                                (failureKind <> " failure unexpectedly scaffolded:\n" <> stdoutText <> stderrText)
+                        treeSnapshot out `shouldReturn` before
+                        TIO.writeFile member original
             it "refuses the whole workspace for one bannerless Generated target, changing nothing" $
                 withWorkspaceFixture "keiro-dsl-workspace-banner" id $ \_ out workspace -> do
                     plan <- shouldPlanWorkspaceSpec workspace

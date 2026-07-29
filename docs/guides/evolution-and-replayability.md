@@ -67,8 +67,8 @@ one actually checks, because none of them checks everything:
 1. **The compiler.** Exhaustiveness of pattern matches over your event/command
    types. Nothing about stored data.
 2. **`keiro-dsl check` and `keiro-dsl diff --since <git-ref>`** (DSL services
-   only). `check` validates a single spec (contiguous upcaster holes, no
-   emitted deprecated events, disposition tables). `diff` compares the spec
+   only). `check` validates a single spec or composed workspace (contiguous
+   upcaster holes, no emitted deprecated events, disposition tables). `diff` compares the service
    against a git ref and gives every finding a compatibility vector over
    `private-history-read`, `old-binary-read-new-events`,
    `snapshot-hydration`, `public-consumer`, `persisted-identity`, and
@@ -86,6 +86,26 @@ one actually checks, because none of them checks everything:
    only with that report. The differ also advises on spec-visible aggregate fold,
    process/router decide, and timer-payload changes, and prints a replay-only
    twin for guard tightening. Hole bodies remain invisible to it.
+
+For a `.keiro-workspace` input, both commands operate on one composed service graph.
+`diff` reads the old manifest and old member set from Git, emits one compatibility
+stream, one replay-impact report, and one coverage report, and cites the shared
+declaration owner plus every aggregate use site. For example, the checked workspace
+diff fixture records one shared mapped change at both roots:
+
+```text
+BREAKING: Order mapped-event ... [MappedFieldTypeChanged]
+    declared: domain/shared.keiro:5
+    use-site: Order event OrderClosed ... (domain/order.keiro:3)
+BREAKING: Shipment mapped-event ... [MappedFieldTypeChanged]
+    declared: domain/shared.keiro:5
+    use-site: Shipment event ShipmentCompleted ... (domain/shipment.keiro:3)
+```
+
+Moving an unchanged declaration or aggregate between members emits the non-blocking
+`OwnershipMoved` advisory and asks for a whole-workspace rescaffold; it is not wire
+evolution. Context/module/layout/service authority changes are likewise reported as
+`WorkspaceAuthorityChanged` beside, never instead of, any real derived-identity break.
 3. **The generated harness** (DSL services only). Round-trips current-shape
    events, asserts `validateTransducer` is clean, and exercises each supplied
    versioned old-payload golden through `decodeRaw`. Capture old shapes while
