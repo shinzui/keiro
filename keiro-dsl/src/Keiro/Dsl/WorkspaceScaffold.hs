@@ -75,6 +75,7 @@ import Keiro.Dsl.ScaffoldRun (
  )
 import Keiro.Dsl.Validate (nodeIdentity)
 import Keiro.Dsl.Workspace (WorkspaceMember (..), WorkspaceSpec (..), declarationOwner, nodeOwner)
+import Keiro.Dsl.WorkspaceAdoption (MigrationReport (..), adoptedRows, adoptionReport, markLegacyRecordSuperseded, renderMigrationReport)
 import Keiro.Dsl.WorkspaceRecord
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath (takeDirectory, takeFileName, (</>))
@@ -302,6 +303,8 @@ data WorkspaceScaffoldReport = WorkspaceScaffoldReport
     , wsrConstraintPlan :: ![Text]
     , wsrMappingDrift :: ![MappingDrift]
     , wsrNewHoles :: ![BindingHole]
+    , wsrMigration :: !(Maybe MigrationReport)
+    -- ^ Present only on the run that adopted pre-workspace scaffold output.
     }
     deriving stock (Eq, Show)
 
@@ -334,6 +337,12 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
         [] -> do
             previous <- readWorkspaceRecord recordPath
             stale <- staleAgainst out (map modulePath modules) (previousFiles previous)
+            -- Adoption is a one-shot, guarded by the absence of workspace
+            -- history: once this workspace owns the directory there is nothing
+            -- left to import, and the migration report stays as written.
+            migration <- case previous of
+                Just _ -> pure Nothing
+                Nothing -> adoptionReport out (wsContext workspace) service modules
             let currentPlan = consumerPlan merged
                 drift = maybe [] (mappingDrift (consumerMappings currentPlan) . wrMappings) previous
                 currentObligations = either (const []) id (bindingHoles merged)
@@ -341,7 +350,20 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
             createDirectoryIfMissing True out
             dispositions <- traverse (writeWorkspaceModule out) (wpModules plan)
             TIO.writeFile buildManifestPath (renderManifest (T.pack manifestName) modules merged)
-            TIO.writeFile recordPath (renderWorkspaceRecord (currentWorkspaceRecord plan))
+            -- Adoption provenance is durable history, not a one-run note: a
+            -- later run that adopts nothing carries the previous rows forward,
+            -- or the record would silently forget where its files came from.
+            let adopted = case migration of
+                    Just report -> adoptedRows report
+                    Nothing -> maybe [] wrAdopted previous
+            TIO.writeFile recordPath (renderWorkspaceRecord (currentWorkspaceRecord plan adopted))
+            case migration of
+                Nothing -> pure ()
+                Just report -> do
+                    TIO.writeFile
+                        (out </> workspaceMigrationReportFileName service)
+                        (T.unlines (renderMigrationReport report))
+                    markLegacyRecordSuperseded out (wsContext workspace) service
             pure $
                 Right
                     WorkspaceScaffoldReport
@@ -362,14 +384,16 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
                         , wsrConstraintPlan = constraintPlan merged currentPlan
                         , wsrMappingDrift = drift
                         , wsrNewHoles = newHoles
+                        , wsrMigration = migration
                         }
   where
     workspace = wpWorkspace plan
     merged = wsMergedSpec workspace
     modules = map fst (wpModules plan)
+    service = wsService workspace
     manifestName = takeFileName (wsManifestPath workspace)
-    recordPath = out </> workspaceRecordFileName (wsService workspace)
-    buildManifestPath = out </> workspaceManifestFileName (wsService workspace)
+    recordPath = out </> workspaceRecordFileName service
+    buildManifestPath = out </> workspaceManifestFileName service
     previousFiles previous = [(wrmKind row, wrmPath row) | row <- maybe [] wrModules previous]
 
 readWorkspaceRecord :: FilePath -> IO (Maybe WorkspaceRecord)
@@ -378,10 +402,11 @@ readWorkspaceRecord path = do
     if exists then parseWorkspaceRecord <$> TIO.readFile path else pure Nothing
 
 {- | The record this run writes: the plan's modules with their owners, the
-canonical member list, and the merged graph's mappings and obligations.
+canonical member list, the merged graph's mappings and obligations, and any
+files adopted from pre-workspace scaffold output.
 -}
-currentWorkspaceRecord :: WorkspacePlan -> WorkspaceRecord
-currentWorkspaceRecord plan =
+currentWorkspaceRecord :: WorkspacePlan -> [AdoptedRow] -> WorkspaceRecord
+currentWorkspaceRecord plan adopted =
     WorkspaceRecord
         { wrService = wsService workspace
         , wrManifest = T.pack (takeFileName (wsManifestPath workspace))
@@ -399,7 +424,7 @@ currentWorkspaceRecord plan =
             ]
         , wrMappings = consumerMappings (consumerPlan merged)
         , wrBindingObligations = either (const []) id (bindingHoles merged)
-        , wrAdopted = []
+        , wrAdopted = adopted
         }
   where
     workspace = wpWorkspace plan
@@ -484,6 +509,7 @@ renderWorkspaceScaffoldReport report =
            , "record:   " <> T.pack (wsrRecordPath report)
            ]
         <> previousManifestNote
+        <> migrationSection
         <> constraintSection
         <> newHolesSection
         <> mappingDriftSection
@@ -532,6 +558,7 @@ renderWorkspaceScaffoldReport report =
     previousManifestNote = case wsrPreviousManifest report of
         Just previous -> ["note: the previous workspace record was written from manifest " <> previous]
         Nothing -> []
+    migrationSection = maybe [] renderMigrationReport (wsrMigration report)
     constraintSection = case wsrConstraintPlan report of
         [] -> []
         constraints -> "constraint plan:" : map ("  " <>) constraints

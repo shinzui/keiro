@@ -12,7 +12,7 @@ import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Either (isLeft, isRight)
-import Data.List (partition, sort)
+import Data.List (partition, sort, (\\))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -43,6 +43,7 @@ import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, renderDiagnostic, validateSpec)
 import Keiro.Dsl.Workspace
+import Keiro.Dsl.WorkspaceAdoption
 import Keiro.Dsl.WorkspaceRecord
 import Keiro.Dsl.WorkspaceScaffold
 import System.Directory (createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly)
@@ -3022,6 +3023,114 @@ main = hspec $ do
                     secondErr `shouldSatisfy` (not . isInfixOfString "(overwritten)")
                     treeSnapshot out `shouldReturn` tree
 
+        describe "workspace adoption" $ do
+            it "adopts an overwritten same-context record pair by record and by banner" $
+                withInlineWorkspace "keiro-dsl-workspace-adopt" adoptionMembers $ \_ out workspace -> do
+                    -- Reproduce today's defect first: two same-context specs
+                    -- scaffolded independently into one directory, the second
+                    -- replacing the first's record and calling its files stale.
+                    specA <- parseInlineSpec "domain/a.keiro" adoptionMemberA
+                    specB <- parseInlineSpec "domain/b.keiro" adoptionMemberB
+                    let ctx = defaultContext "adoption-demo"
+                    legacyA <- executePlannedScaffold out "domain/a.keiro" ctx specA
+                    legacyB <- executePlannedScaffold out "domain/b.keiro" ctx specB
+                    reportStale legacyB `shouldSatisfy` (not . null)
+                    legacyBefore <- TIO.readFile (out </> recordFileName "adoption-demo")
+
+                    report <- executePlannedWorkspaceScaffold out workspace
+                    wsrStale report `shouldBe` []
+                    case wsrMigration report of
+                        Nothing -> expectationFailure "expected the first workspace run to adopt"
+                        Just migration -> do
+                            let generatedOf run = sort [modulePath m | (m, _) <- reportDispositions run, kind m == Generated]
+                                claimedBy evidence = sort [cfPath entry | entry <- mrClaimed migration, cfEvidence entry == evidence]
+                            -- The surviving record attributes B's files; A's
+                            -- files survived only as banners, which is exactly
+                            -- the orphan case the overwrite created.
+                            claimedBy ClaimedFromRecord `shouldBe` generatedOf legacyB
+                            claimedBy ClaimedFromBanner `shouldBe` sort (generatedOf legacyA \\ generatedOf legacyB)
+                            claimedBy ClaimedFromBanner `shouldSatisfy` (not . null)
+                            mrLikelyStale migration `shouldBe` []
+                            mrLegacyRecord migration
+                                `shouldBe` Just (recordFileName "adoption-demo", "domain/b.keiro")
+                            -- Provenance is persisted, not merely printed.
+                            recorded <- parseWorkspaceRecord <$> TIO.readFile (wsrRecordPath report)
+                            fmap (sort . map adPath . wrAdopted) recorded
+                                `shouldBe` Just (sort (map cfPath (mrClaimed migration)))
+                            fmap (sort . nubOrd . map adEvidence . wrAdopted) recorded
+                                `shouldBe` Just ["banner", "record"]
+                            persisted <- TIO.readFile (out </> "keiro-dsl-migration-report.workspace.adoption-demo.txt")
+                            persisted `shouldBe` T.unlines (renderMigrationReport migration)
+                            renderWorkspaceScaffoldReport report
+                                `shouldSatisfy` any (T.isInfixOf "adopting pre-workspace scaffold output")
+
+                    -- The legacy record gained one line and nothing else: it
+                    -- still parses to the same value for an old binary.
+                    legacyAfter <- TIO.readFile (out </> recordFileName "adoption-demo")
+                    T.lines legacyAfter `shouldSatisfy` elem (supersededByLine "adoption-demo")
+                    parseRecord legacyAfter `shouldBe` parseRecord legacyBefore
+                    T.lines legacyAfter
+                        `shouldBe` T.lines legacyBefore <> [supersededByLine "adoption-demo"]
+
+                    -- Adoption is not a content change: the generated tree is
+                    -- what a fresh workspace scaffold of the same members emits.
+                    withInlineWorkspace "keiro-dsl-workspace-adopt-fresh" adoptionMembers $ \_ fresh freshWorkspace -> do
+                        freshReport <- executePlannedWorkspaceScaffold fresh freshWorkspace
+                        wsrMigration freshReport `shouldBe` Nothing
+                        adoptedTree <- treeSnapshot out
+                        freshTree <- treeSnapshot fresh
+                        haskellOnly adoptedTree `shouldBe` haskellOnly freshTree
+            it "lists hand-written files as unclaimed and leaves their bytes alone" $
+                withInlineWorkspace "keiro-dsl-workspace-unclaimed" adoptionMembers $ \_ out workspace -> do
+                    plan <- shouldPlanWorkspaceSpec workspace
+                    case [modulePath m | (m, _) <- wpModules plan, kind m == HoleStub] of
+                        [] -> expectationFailure "adoption fixture emits no hole module"
+                        holePath : _ -> do
+                            writeFileWithParents (out </> holePath) "-- hand filled\n"
+                            writeFileWithParents (out </> "Notes.hs") "module Notes where\n"
+                            report <- executePlannedWorkspaceScaffold out workspace
+                            case wsrMigration report of
+                                Nothing -> expectationFailure "expected a report for a directory holding hand-written files"
+                                Just migration -> do
+                                    mrLegacyRecord migration `shouldBe` Nothing
+                                    mrClaimed migration `shouldBe` []
+                                    mrUnclaimed migration `shouldBe` sort [holePath, "Notes.hs"]
+                            TIO.readFile (out </> holePath) `shouldReturn` "-- hand filled\n"
+                            TIO.readFile (out </> "Notes.hs") `shouldReturn` "module Notes where\n"
+            it "never claims a bannerless file at a planned Generated path" $
+                withInlineWorkspace "keiro-dsl-workspace-unattributable" adoptionMembers $ \_ out workspace -> do
+                    plan <- shouldPlanWorkspaceSpec workspace
+                    case [modulePath m | (m, _) <- wpModules plan, kind m == Generated] of
+                        [] -> expectationFailure "adoption fixture emits no Generated module"
+                        target : _ -> do
+                            writeFileWithParents (out </> target) "hand owned\n"
+                            refused <- executeWorkspaceScaffold out False plan
+                            refused `shouldSatisfy` isMissingBannerRefusal
+                            TIO.readFile (out </> target) `shouldReturn` "hand owned\n"
+                            doesFileExist (out </> "keiro-dsl-migration-report.workspace.adoption-demo.txt")
+                                `shouldReturn` False
+            it "adopts at most once, and the second run is an ordinary idempotent run" $
+                withInlineWorkspace "keiro-dsl-workspace-adopt-once" adoptionMembers $ \_ out workspace -> do
+                    specA <- parseInlineSpec "domain/a.keiro" adoptionMemberA
+                    _ <- executePlannedScaffold out "domain/a.keiro" (defaultContext "adoption-demo") specA
+                    first <- executePlannedWorkspaceScaffold out workspace
+                    wsrMigration first `shouldSatisfy` \case Just _ -> True; Nothing -> False
+                    before <- treeSnapshot out
+                    reportBefore <- TIO.readFile (out </> "keiro-dsl-migration-report.workspace.adoption-demo.txt")
+                    legacyBefore <- TIO.readFile (out </> recordFileName "adoption-demo")
+
+                    second <- executePlannedWorkspaceScaffold out workspace
+                    wsrMigration second `shouldBe` Nothing
+                    wsrStale second `shouldBe` []
+                    map thd3 (wsrDispositions second) `shouldSatisfy` all (`elem` [Unchanged, Skipped])
+                    treeSnapshot out `shouldReturn` before
+                    TIO.readFile (out </> "keiro-dsl-migration-report.workspace.adoption-demo.txt")
+                        `shouldReturn` reportBefore
+                    legacyAfter <- TIO.readFile (out </> recordFileName "adoption-demo")
+                    legacyAfter `shouldBe` legacyBefore
+                    length (filter (== supersededByLine "adoption-demo") (T.lines legacyAfter))
+                        `shouldBe` 1
+
 comparisonProvenance :: CompareProvenance
 comparisonProvenance =
     CompareProvenance
@@ -3595,6 +3704,74 @@ withWorkspaceFixture template orderMembers act =
             )
         workspace <- loadTempWorkspace root
         act root out workspace
+
+{- | Materialize an inline workspace — a manifest plus literal member sources —
+in a fresh temporary directory, and hand the callback its root, a sibling output
+directory, and the composed workspace.
+-}
+withInlineWorkspace ::
+    String ->
+    (T.Text, [(FilePath, T.Text)]) ->
+    (FilePath -> FilePath -> WorkspaceSpec -> IO a) ->
+    IO a
+withInlineWorkspace template (service, members) act =
+    withTempDirectory template $ \base -> do
+        let root = base </> "workspace"
+            out = base </> "out"
+        forM_ members $ \(relative, source) -> writeFileWithParents (root </> relative) source
+        TIO.writeFile
+            (root </> "service.keiro-workspace")
+            ( T.unlines
+                (("service " <> service) : ["spec " <> T.pack relative | (relative, _) <- members])
+            )
+        workspace <- loadTempWorkspace root
+        act root out workspace
+
+{- | Two independently valid members under one context. Each is a complete spec
+that the pre-workspace single-file scaffolder accepts, which is what lets a test
+reproduce the overwritten-record defect before adopting.
+-}
+adoptionMembers :: (T.Text, [(FilePath, T.Text)])
+adoptionMembers = ("adoption-demo", [("domain/a.keiro", adoptionMemberA), ("domain/b.keiro", adoptionMemberB)])
+
+adoptionMemberA :: T.Text
+adoptionMemberA =
+    T.unlines
+        [ "context adoption-demo"
+        , ""
+        , "aggregate Counter"
+        , "  regs"
+        , "    count Int = 0"
+        , "    state CounterVertex = Pending"
+        , "  states Pending Done!"
+        , "  command Bump { count:Int }"
+        , "  event CountBumped { count:Int }"
+        , "  Pending -- Bump --> emit CountBumped ; goto Done"
+        ]
+
+adoptionMemberB :: T.Text
+adoptionMemberB =
+    T.unlines
+        [ "context adoption-demo"
+        , ""
+        , "aggregate Widget"
+        , "  regs"
+        , "    size Int = 0"
+        , "    state WidgetVertex = Draft"
+        , "  states Draft Shipped!"
+        , "  command Ship { size:Int }"
+        , "  event WidgetShipped { size:Int }"
+        , "  Draft -- Ship --> emit WidgetShipped ; goto Shipped"
+        ]
+
+writeFileWithParents :: FilePath -> T.Text -> IO ()
+writeFileWithParents path contents = do
+    createDirectoryIfMissing True (takeDirectory path)
+    TIO.writeFile path contents
+
+-- | Only the Haskell sources of a tree snapshot, dropping bookkeeping files.
+haskellOnly :: [(FilePath, T.Text)] -> [(FilePath, T.Text)]
+haskellOnly entries = [entry | entry@(path, _) <- entries, ".hs" `T.isSuffixOf` T.pack path]
 
 -- | Compose a workspace that a test just wrote to disk.
 loadTempWorkspace :: FilePath -> IO WorkspaceSpec

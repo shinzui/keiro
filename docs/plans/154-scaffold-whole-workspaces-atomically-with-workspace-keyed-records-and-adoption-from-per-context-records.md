@@ -113,15 +113,21 @@ This section must always reflect the actual current state of the work.
       (359 examples, 0 failures); single-file record names and bytes pinned by the
       pre-existing `structural scaffold record` and `scaffold gates` groups. — 2026-07-29
 - [x] M2 commit with the mandated trailers. — 2026-07-29
-- [ ] M3: Adoption path: legacy per-context record discovery, claim rules (record-attributed
-      or banner-attributed only), `MigrationReport`, persisted
+- [x] M3: Adoption path in the new `keiro-dsl/src/Keiro/Dsl/WorkspaceAdoption.hs`: legacy
+      per-context record discovery, claim rules (record-attributed or banner-attributed
+      only), `MigrationReport`, persisted
       `keiro-dsl-migration-report.workspace.<service>.txt`, `superseded-by:` marker append.
-- [ ] M3: Adoption tests: import from an overwritten same-context record pair; unclaimed
-      hand-written files listed and untouched; legacy records still parse after the marker;
-      second workspace run performs no adoption.
-- [ ] M3: New ADR for the workspace scaffold-history and adoption model (handle via
-      `okf id next`), `log.md` updated, strict validation green.
-- [ ] M3 commit with the mandated trailers.
+      — 2026-07-29
+- [x] M3: Adoption tests: import from an overwritten same-context record pair (both evidence
+      kinds); unclaimed hand-written files listed and untouched; a bannerless Generated
+      target still refuses and writes no report; legacy record still parses after the marker
+      and gained exactly that one line; second workspace run performs no adoption and is
+      idempotent. — 2026-07-29
+- [x] M3: New ADR for the workspace scaffold-history and adoption model
+      (`docs/adr/0015-workspace-scaffold-history-is-workspace-keyed-with-attributable-adoption.md`,
+      handle `ADR-15` allocated with `okf id next`), `log.md` updated with `okf log add`,
+      `just adr-validate` green (`OK: 15 concepts`). — 2026-07-29
+- [x] M3 commit with the mandated trailers. — 2026-07-29
 - [ ] Final: update MasterPlan 26 Progress entries for EP-2, write Outcomes & Retrospective,
       perform the ADR distillation pass.
 
@@ -155,6 +161,22 @@ implementation. Provide concise evidence.
   That is a better test than the planned one — it proves the gates agree, not only the
   emitters — and it is why the member-path prefix on `origin` is suppressed for a
   one-member workspace (Decision Log). (2026-07-29)
+
+- **Adoption provenance was silently dropped by the next run, and the one-shot test caught
+  it.** The first draft wrote `wrAdopted` only from the current run's migration report, so
+  the second (non-adopting) run rewrote the record with an empty `adopted` list — the
+  workspace forgot where its files came from, one run after learning it. The
+  "adopts at most once" test failed on a whole-tree byte comparison:
+
+  ```text
+  1) workspace adoption, adopts at most once, and the second run is an ordinary
+     idempotent run
+       expected: […keiro-dsl-scaffold-record.workspace.adoption-demo.txt with adopted rows…]
+        but got: […the same record without them…]
+  ```
+
+  Fixed by carrying the previous record's rows forward whenever a run adopts nothing.
+  Adoption provenance is durable history, not a per-run note. (2026-07-29)
 
 - **Binding skeleton modules are grouped by owning module, not by declaration.**
   `bindingSkeletonModules` (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`) groups obligations by
@@ -334,6 +356,29 @@ implementation. Provide concise evidence.
   actually owes (MasterPlan 26 Decision Log) is *detection before the first write*, which a
   preflight satisfies exactly as the pre-existing banner check does. Carrying the root in the
   refusal lets the message name where to move the files.
+  Date: 2026-07-29
+
+- Decision: The adoption model lives in its own module,
+  `keiro-dsl/src/Keiro/Dsl/WorkspaceAdoption.hs`, rather than inside
+  `Keiro.Dsl.WorkspaceRecord` (the plan offered either).
+  Rationale: `WorkspaceRecord` is a persistence schema — pure, no filesystem. Adoption walks
+  the output tree, reads legacy records, and inspects banners. Keeping the schema free of IO
+  keeps its round-trip property easy to state and test, and gives the adoption rules one
+  place to be read and argued about.
+  Date: 2026-07-29
+
+- Decision: A run that adopts nothing carries the previous record's `adopted` rows forward.
+  Rationale: found by the one-shot test (Surprises). Adoption provenance answers "where did
+  these files come from", which stays true forever; recomputing it per run would erase it on
+  the very next scaffold. The `adopted` rows are history, and history accumulates.
+  Date: 2026-07-29
+
+- Decision: The unclaimed list excludes planned Generated paths.
+  Rationale: the report says unclaimed files are "left untouched", and a file at a planned
+  Generated path is about to be written by this very run (either it carries the banner and is
+  claimed, or the run already refused, or `--force-generated-overwrite` was passed). Listing
+  it as untouched would be false. What remains is genuinely untouched: files at hole paths,
+  which the create-once rule protects, and files the plan never mentions.
   Date: 2026-07-29
 
 - Decision: `wsrMigration` is added to `WorkspaceScaffoldReport` in M3, when

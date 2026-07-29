@@ -54,6 +54,7 @@ library
     Keiro.Dsl.TypeGraph
     Keiro.Dsl.Validate
     Keiro.Dsl.Workspace
+    Keiro.Dsl.WorkspaceAdoption
     Keiro.Dsl.WorkspaceRecord
     Keiro.Dsl.WorkspaceScaffold
 
