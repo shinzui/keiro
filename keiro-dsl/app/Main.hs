@@ -6,6 +6,7 @@ module Main (main) where
 
 import Control.Monad (when)
 import Data.Aeson qualified as Aeson
+import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
@@ -22,12 +23,12 @@ import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBan
 import Keiro.Dsl.ScaffoldRun (executeScaffold, planScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
-import Keiro.Dsl.Workspace (WorkspaceDiagnostic (..), WorkspaceSpec (..), checkWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
+import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceManifest (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
 import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffold, planWorkspaceScaffoldWithGoldens, renderWorkspaceScaffoldReport)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
 import System.Exit (ExitCode (..), exitFailure)
-import System.FilePath (makeRelative, normalise, takeDirectory, (</>))
+import System.FilePath (makeRelative, normalise, takeDirectory, takeFileName, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcessWithExitCode)
 
@@ -156,7 +157,8 @@ run (Check fp emit explainBindings coverageOptions)
     | isWorkspacePath fp = runWorkspaceCheck fp emit explainBindings coverageOptions
 run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest)
     | isWorkspacePath fp = runWorkspaceScaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest
-run (Diff fp _ _ _ _ _ _ _) | isWorkspacePath fp = stagedWorkspaceRefusal "workspace diff is not yet supported; it lands with docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md"
+run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions)
+    | isWorkspacePath fp = runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions
 run (Parse fp) = do
     input <- TIO.readFile fp
     case parseSpec fp input of
@@ -363,6 +365,155 @@ runWorkspaceScaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGold
                                     mapM_ (TIO.hPutStrLn stderr) (renderWorkspaceScaffoldReport report)
                                     writeComparison comparisonRequest comparisonModule
 
+{- | @diff@ on a workspace manifest: compose the working-tree service and the
+service described by the manifest and member blobs at @--since@, then feed both
+merged specs through the existing differ, replay-impact analysis, coverage
+report, golden emission, and gates.
+
+The historical side is read exclusively through 'ContentSource'.  In
+particular, member paths are joined textually beneath the manifest's
+repository-relative directory; they are never canonicalized because an old
+member may no longer exist in the working tree.
+-}
+runWorkspaceDiff ::
+    FilePath ->
+    String ->
+    Maybe FilePath ->
+    Maybe FilePath ->
+    [CompatibilitySurface] ->
+    Bool ->
+    Maybe FilePath ->
+    Maybe DiffCoverageOptions ->
+    IO ()
+runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions = do
+    let dir = takeDirectory fp
+    rootRes <- git dir ["rev-parse", "--show-toplevel"]
+    case rootRes of
+        Left err -> hPutStrLn stderr err >> exitFailure
+        Right rootRaw -> do
+            let repoRoot = trim rootRaw
+            absFp <- canonicalizePath fp
+            let relManifestPath = makeRelative repoRoot absFp
+                relManifestDir = takeDirectory relManifestPath
+                oldSource = gitContentSource repoRoot ref relManifestDir
+            refRes <- git repoRoot ["cat-file", "-e", ref <> "^{commit}"]
+            case refRes of
+                Left err -> hPutStrLn stderr err >> exitFailure
+                Right _ -> do
+                    newLoaded <- loadWorkspace (fileContentSource dir) fp
+                    case newLoaded of
+                        Left failure -> printWorkspaceFailure fp failure
+                        Right newWorkspace -> do
+                            currentManifestText <- TIO.readFile fp
+                            case parseWorkspaceManifest fp currentManifestText of
+                                Left err -> hPutStrLn stderr (T.unpack err) >> exitFailure
+                                Right currentManifest -> do
+                                    oldManifestRes <- git repoRoot ["show", ref <> ":" <> relManifestPath]
+                                    (adoptionBaseline, oldLoaded) <- case oldManifestRes of
+                                        Right _ -> do
+                                            loaded <- loadWorkspace oldSource fp
+                                            pure (False, loaded)
+                                        Left _ -> do
+                                            loaded <- loadAdoptionBaseline oldSource fp currentManifest newWorkspace
+                                            pure (True, loaded)
+                                    case oldLoaded of
+                                        Left failure -> do
+                                            printWorkspaceFailureLines fp failure
+                                            when adoptionBaseline $
+                                                hPutStrLn stderr "workspace adoption baseline could not be composed; commit the workspace manifest before diffing across it, or fix the member files at the old revision"
+                                            exitFailure
+                                        Right oldWorkspace -> do
+                                            when adoptionBaseline $
+                                                putStrLn
+                                                    ( "workspace adoption baseline: "
+                                                        <> fp
+                                                        <> " does not exist at "
+                                                        <> ref
+                                                        <> "; composing the old service from the current members' blobs at "
+                                                        <> ref
+                                                    )
+                                            let oldSpec = wsMergedSpec oldWorkspace
+                                                newSpec = wsMergedSpec newWorkspace
+                                            written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) emitGoldensRoot
+                                            mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
+                                            let changes = diffSpecs oldSpec newSpec
+                                                impact = replayImpact oldSpec newSpec
+                                                effectiveGate = gateWith gatedSurfaces
+                                            mapM_ (TIO.putStrLn . renderFinding) changes
+                                            when explain $
+                                                mapM_ (TIO.putStrLn . renderExplainBlock) (filter shouldExplain changes)
+                                            TIO.putStrLn (renderReplayImpact impact)
+                                            mapM_ (`Aeson.encodeFile` impact) replayImpactOut
+                                            mapM_ (\path -> Aeson.encodeFile path (diffReport effectiveGate changes)) reportOut
+                                            coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
+                                            if any (gatedBreaking effectiveGate) changes || not coverageOk then exitFailure else pure ()
+
+-- | A @git show@ backed source rooted at a workspace manifest directory.
+gitContentSource :: FilePath -> String -> FilePath -> ContentSource
+gitContentSource repoRoot ref relManifestDir =
+    ContentSource
+        { csRead = \relative -> do
+            let relPath = normalise (relManifestDir </> relative)
+            result <- git repoRoot ["show", ref <> ":" <> relPath]
+            pure $ case result of
+                Left err -> Left (T.pack ("git show " <> ref <> ":" <> relPath <> " failed: " <> trim err))
+                Right contents -> Right (T.pack contents)
+        }
+
+{- | Build the historical side for the commit that introduces a workspace
+manifest.  Current members absent from the old revision contribute no nodes;
+members that do exist are still parsed and composed by the ordinary workspace
+loader, so malformed or mutually inconsistent old specs remain hard refusals.
+-}
+loadAdoptionBaseline ::
+    ContentSource ->
+    FilePath ->
+    WorkspaceManifest ->
+    WorkspaceSpec ->
+    IO (Either WorkspaceFailure WorkspaceSpec)
+loadAdoptionBaseline oldSource manifestPath currentManifest newWorkspace = do
+    present <- traverse presentAtRevision (NE.toList (wmfMembers currentManifest))
+    case NE.nonEmpty [member | (member, True) <- present] of
+        Nothing -> pure (Right (emptyWorkspaceBaseline newWorkspace))
+        Just members ->
+            let oldManifest = currentManifest{wmfMembers = members}
+                manifestName = takeFileName manifestPath
+                baselineSource =
+                    ContentSource
+                        { csRead = \relative ->
+                            if relative == manifestName
+                                then pure (Right (renderWorkspaceManifest oldManifest))
+                                else csRead oldSource relative
+                        }
+             in loadWorkspace baselineSource manifestPath
+  where
+    presentAtRevision member = do
+        result <- csRead oldSource (wmrPath member)
+        pure (member, either (const False) (const True) result)
+
+-- | The sound old side when every current member is new at the adoption ref.
+emptyWorkspaceBaseline :: WorkspaceSpec -> WorkspaceSpec
+emptyWorkspaceBaseline workspace =
+    workspace
+        { wsMembers = []
+        , wsMergedSpec =
+            (wsMergedSpec workspace)
+                { specIds = []
+                , specEnums = []
+                , specRules = []
+                , specMapped = []
+                , specNodes = []
+                }
+        , wsLineMap = LineMap []
+        , wsOwnership = OwnershipIndex mempty mempty
+        }
+
+printWorkspaceFailure :: FilePath -> WorkspaceFailure -> IO a
+printWorkspaceFailure fp failure = printWorkspaceFailureLines fp failure >> exitFailure
+
+printWorkspaceFailureLines :: FilePath -> WorkspaceFailure -> IO ()
+printWorkspaceFailureLines fp = mapM_ (TIO.hPutStrLn stderr) . renderWorkspaceFailure fp
+
 {- | Fold the workspace's module-root and layout authority with the CLI
 overrides to a 'Context'. Precedence is CLI flag > workspace authority >
 built-in default; EP-153 already resolved the manifest-versus-member question
@@ -379,15 +530,6 @@ workspaceContext cliRoot cliCollocate workspace =
                 then CollocatedLeaf
                 else fromMaybe GeneratedPrefix (wsLayout workspace)
         }
-
-{- | A command that recognizes a workspace manifest but whose whole-workspace
-implementation lands in a named later plan. Naming the owning plan keeps the
-refusal honest while the MasterPlan is only partly delivered, and prevents the
-misleading megaparsec error a manifest would otherwise produce if it were
-handed to the @.keiro@ parser.
--}
-stagedWorkspaceRefusal :: String -> IO ()
-stagedWorkspaceRefusal message = hPutStrLn stderr message >> exitFailure
 
 shouldExplain :: Change -> Bool
 shouldExplain Additive{} = False

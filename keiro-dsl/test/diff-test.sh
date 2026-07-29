@@ -211,4 +211,40 @@ else
   echo "FAIL: golden emission overwrote or re-reported existing evidence"; exit 1
 fi
 
-echo "PASS: diff --since gates compatibility surfaces, nested mapped types, and golden evidence without weakening existing breaks"
+echo "== 12) workspace diff resolves manifest and members from git blobs =="
+WORKSPACE="$DEMO/workspace-diff"
+mkdir -p "$WORKSPACE"
+cp "$FIX/reservation.keiro" "$WORKSPACE/reservation.keiro"
+printf 'service reservation-service\nspec reservation.keiro\n' > "$WORKSPACE/service.keiro-workspace"
+git -C "$DEMO" add workspace-diff
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "workspace diff baseline"
+cp "$FIX/reservation-fieldadd.keiro" "$WORKSPACE/reservation.keiro"
+if output="$("$EXE" diff --since HEAD "$WORKSPACE/service.keiro-workspace" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: whole-workspace field addition was not flagged breaking"; exit 1
+elif [[ "$output" == *"[EvtFieldAddedWithoutBump]"* ]]; then
+  echo "$output"
+  echo "ok: workspace manifest and old member blob resolve as one historical service"
+else
+  echo "$output"
+  echo "FAIL: workspace diff used the wrong classification"; exit 1
+fi
+
+echo "== 13) workspace adoption baseline uses current members' old blobs =="
+ADOPTION="$DEMO/workspace-adoption"
+mkdir -p "$ADOPTION"
+cp "$FIX/reservation.keiro" "$ADOPTION/reservation.keiro"
+git -C "$DEMO" add workspace-adoption/reservation.keiro
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "pre-workspace member baseline"
+printf 'service reservation-adoption\nspec reservation.keiro\n' > "$ADOPTION/service.keiro-workspace"
+if output="$("$EXE" diff --since HEAD "$ADOPTION/service.keiro-workspace" 2>&1)" \
+    && [[ "$output" == *"workspace adoption baseline:"* \
+    && "$output" == *"replay-neutral:"* ]]; then
+  echo "$output"
+  echo "ok: adoption diffs existing member blobs even before the manifest is committed"
+else
+  echo "$output"
+  echo "FAIL: adoption baseline did not compose the old service"; exit 1
+fi
+
+echo "PASS: diff --since gates single specs and whole workspaces without weakening existing breaks"

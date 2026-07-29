@@ -56,18 +56,18 @@ and exit code 0. The existing single-file diff path is unchanged in behavior and
 
 ## Progress
 
-- [ ] M1: git-blob content provider in `keiro-dsl/app/Main.hs` (repo-root resolution,
-      manifest-relative member paths, `git show <rev>:<relpath>`)
-- [ ] M1: old-side workspace resolution — manifest text at `<rev>`, old member set
-      composed through EP-1's loader with the blob provider
-- [ ] M1: adoption fallback when the manifest does not exist at `<rev>` (old side
-      composed from the current members' old blobs; printed notice; report metadata)
-- [ ] M1: member-absent-at-rev handling (new member ⇒ additive whole-node surface;
-      old-manifest member missing as a blob ⇒ refusal with guidance)
-- [ ] M1: unit tests over an in-memory content provider (member added / removed /
-      renamed between revisions) and a diff-test.sh workspace scenario
-- [ ] M1: single-file diff path proven unchanged (existing diff-test.sh scenarios and
-      unit suite green without edits to their expectations)
+- [x] M1: git-blob content provider in `keiro-dsl/app/Main.hs` (repo-root resolution,
+      manifest-relative member paths, `git show <rev>:<relpath>`) — 2026-07-29T18:18:45Z
+- [x] M1: old-side workspace resolution — manifest text at `<rev>`, old member set
+      composed through EP-1's loader with the blob provider — 2026-07-29T18:18:45Z
+- [x] M1: adoption fallback when the manifest does not exist at `<rev>` (old side
+      composed from the current members' old blobs; printed notice) — 2026-07-29T18:18:45Z
+- [x] M1: member-absent-at-rev handling (new member ⇒ additive whole-node surface;
+      old-manifest member missing as a blob ⇒ refusal with guidance) — 2026-07-29T18:18:45Z
+- [x] M1: unit tests over an in-memory content provider (member added / removed /
+      renamed between revisions) and a diff-test.sh workspace scenario — 2026-07-29T18:18:45Z
+- [x] M1: single-file diff path proven unchanged (existing diff-test.sh scenarios and
+      unit suite green without edits to their expectations) — 2026-07-29T18:18:45Z
 - [ ] M2: `Keiro.Dsl.WorkspaceDiff` module — `diffWorkspaces`, ownership annotation of
       merged-graph findings (declaration site + use sites)
 - [ ] M2: rendering of file citations as indented continuation lines under the
@@ -76,7 +76,8 @@ and exit code 0. The existing single-file diff path is unchanged in behavior and
       `coverageDiffReport` keyed by the manifest path; `--gate`/exit semantics over
       merged findings
 - [ ] M2: `keiro-dsl/diff-report/1` extended additively with `declaration`,
-      `useSites`, and top-level `workspace` keys (workspace inputs only)
+      `useSites`, and top-level `workspace` keys including adoption-baseline metadata
+      (workspace inputs only)
 - [ ] M2: `--emit-goldens` resolves a relative DIR against the manifest's directory
       (one workspace golden root, matching plan 154's layout decision)
 - [ ] M2: fixture workspace pair (old/new) with a shared-declaration change; golden
@@ -97,7 +98,15 @@ and exit code 0. The existing single-file diff path is unchanged in behavior and
 
 ## Surprises & Discoveries
 
-(None yet.)
+- **The existing `loadWorkspace` reads the manifest through the same source by base
+  name, which makes adoption filtering possible without adding a second parser or
+  loader API.** The adoption path injects a canonical manifest containing only member
+  blobs present at the old revision into a wrapper `ContentSource`; member parsing and
+  composition remain entirely inside EP-1's loader. When no current member existed at
+  the revision, the manifest grammar's non-empty-member invariant means there is
+  nothing to feed that loader, so the old side is an explicitly empty `Spec` carrying
+  the current workspace's identity and authority. Evidence: the in-memory added /
+  removed / renamed test and the real-git adoption scenario both pass. (2026-07-29)
 
 
 ## Decision Log

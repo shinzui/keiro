@@ -123,7 +123,7 @@ locally as a new ADR by EP-1 (expected `ADR-14` via `okf id next`).
 |---|-------|------|-----------|-----------|--------|
 | 1 | Add the service workspace manifest, loader, composed graph, and whole-service check | docs/plans/153-add-the-service-workspace-manifest-loader-composed-graph-and-whole-service-check-to-keiro-dsl.md | None | None | Complete |
 | 2 | Scaffold whole workspaces atomically with workspace-keyed records and adoption from per-context records | docs/plans/154-scaffold-whole-workspaces-atomically-with-workspace-keyed-records-and-adoption-from-per-context-records.md | EP-1 | None | Complete |
-| 3 | Diff whole workspaces with shared-declaration impact classification and unified compatibility reports | docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md | EP-1 | None | Not Started |
+| 3 | Diff whole workspaces with shared-declaration impact classification and unified compatibility reports | docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md | EP-1 | None | In Progress |
 | 4 | Prove per-aggregate workspace adoption with fleet-style fixtures, acceptance tests, and documentation | docs/plans/156-prove-per-aggregate-workspace-adoption-with-fleet-style-fixtures-acceptance-tests-and-documentation.md | EP-1, EP-2, EP-3 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.

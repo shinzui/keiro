@@ -2711,6 +2711,56 @@ main = hspec $ do
                         Left err -> expectationFailure err
                         Right value -> coverageSpecPath value `shouldBe` Just (T.pack canonicalWorkspacePath)
 
+    describe "workspace diff revision loading (EP-155 M1)" $ do
+        it "composes added, removed, and renamed members through an in-memory content source" $ do
+            project <- readTestText "test/fixtures/workspace/domain/project.keiro"
+            artifact <- readTestText "test/fixtures/workspace/domain/project-artifact.keiro"
+            shared <- readTestText "test/fixtures/workspace/domain/shared.keiro"
+            let extra = "context demo-project\n\nid ExtraId prefix=extra\n"
+                manifest members =
+                    T.unlines
+                        ( ["service demo-project", "module Demo.Modules.Project", "layout collocated"]
+                            <> ["spec " <> T.pack member | member <- members]
+                        )
+                baseFiles =
+                    Map.fromList
+                        [ ("domain/project.keiro", project)
+                        , ("domain/project-artifact.keiro", artifact)
+                        , ("domain/shared.keiro", shared)
+                        ]
+                loadFrom members files =
+                    loadWorkspace
+                        (memoryContentSource (Map.insert "service.keiro-workspace" (manifest members) files))
+                        "service.keiro-workspace"
+                baseMembers = ["domain/project.keiro", "domain/project-artifact.keiro", "domain/shared.keiro"]
+                expectLoaded result = case result of
+                    Left failure -> expectationFailure (show failure) >> error "unreachable"
+                    Right workspace -> pure workspace
+
+            oldAdded <- loadFrom baseMembers baseFiles >>= expectLoaded
+            newAdded <-
+                loadFrom
+                    (baseMembers <> ["domain/extra.keiro"])
+                    (Map.insert "domain/extra.keiro" extra baseFiles)
+                    >>= expectLoaded
+            map changeCode (diffSpecs (wsMergedSpec oldAdded) (wsMergedSpec newAdded))
+                `shouldContain` [DeclarationAdded]
+
+            oldRemoved <- loadFrom baseMembers baseFiles >>= expectLoaded
+            newRemoved <-
+                loadFrom
+                    ["domain/project.keiro", "domain/shared.keiro"]
+                    (Map.delete "domain/project-artifact.keiro" baseFiles)
+                    >>= expectLoaded
+            map changeCode (diffSpecs (wsMergedSpec oldRemoved) (wsMergedSpec newRemoved))
+                `shouldContain` [EvtRemovedNotDeprecated]
+
+            oldRenamed <- loadFrom baseMembers baseFiles >>= expectLoaded
+            let renamedMembers = ["domain/project-renamed.keiro", "domain/project-artifact.keiro", "domain/shared.keiro"]
+                renamedFiles = Map.insert "domain/project-renamed.keiro" project (Map.delete "domain/project.keiro" baseFiles)
+            newRenamed <- loadFrom renamedMembers renamedFiles >>= expectLoaded
+            diffSpecs (wsMergedSpec oldRenamed) (wsMergedSpec newRenamed) `shouldBe` []
+
     describe "workspace scaffold (EP-154)" $ do
         describe "workspace record" $ do
             it "round-trips modules, owners, members, mappings, obligations, and adoptions" $ do
@@ -3556,6 +3606,19 @@ isLoweringRefusal (Right _) = False
 -- | The canonical positive workspace fixture: three members under one context.
 canonicalWorkspacePath :: FilePath
 canonicalWorkspacePath = "test/fixtures/workspace/service.keiro-workspace"
+
+-- | Deterministic workspace source used to model git blobs without invoking git.
+memoryContentSource :: Map.Map FilePath T.Text -> ContentSource
+memoryContentSource files =
+    ContentSource
+        { csRead = \path ->
+            pure $ maybe (Left ("missing in-memory content: " <> T.pack path)) Right (Map.lookup path files)
+        }
+
+changeCode :: Change -> DiagnosticCode
+changeCode (Additive kind) = ckCode kind
+changeCode (Advisory kind) = ckCode kind
+changeCode (Breaking kind) = ckCode kind
 
 -- | The same members as 'canonicalWorkspacePath', listed in reverse order.
 reorderedWorkspacePath :: FilePath
