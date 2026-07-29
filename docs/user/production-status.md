@@ -18,7 +18,10 @@ are deliberately left open — they do not affect consumers.
 
 ## What Is Implemented
 
-The current library includes:
+Grouped by functionality. Unless noted, everything below lives in `keiro` and
+`keiro-core`.
+
+### Event sourcing core
 
 - typed stream names;
 - event codecs with schema versions and upcasters;
@@ -27,59 +30,85 @@ The current library includes:
 - command execution with hydration, replay, decision, optimistic append, and
   retry;
 - multi-event command output (one command appends zero, one, or many events in
-  one optimistic batch);
-- same-transaction SQL continuations for inline projections;
+  one optimistic batch).
+
+### Snapshots and replay safety
+
 - advisory snapshots whose discriminator (codec version, register layout, and
   control-state shape) invalidates stale seeds automatically, plus
   `withFoldFingerprint`/`FoldVersion` for fold changes that register layout
-  alone cannot see, and a sampled runtime witness
-  (`RunCommandOptions.seedVerifySampleRate`, one in 1000 usable seeds by
-  default) that full-replays a hit and emits `keiro.snapshot.seed.divergence`
-  on a mismatch without blocking the command;
-- read-model metadata, consistency modes, and position waits;
-- explicitly registered read models; atomically fenced rebuilds; category-scoped
-  strong reads; and async projection outcomes that prevent checkpointing fenced
-  events;
-- event-sourced process managers, with snapshot-policy guidance and a tested
-  PM-state-stream snapshot example;
-- stateless, effectful fan-out routers;
-- durable timer storage and worker helpers, plus a stuck-row recovery API
-  (find/requeue/cancel/dead-letter);
-- a transactional outbox with per-key ordering, backoff, and dead-lettering,
-  plus a Kafka producer adapter;
-- an idempotent inbox with claim/retry/release/dead transitions and GC, plus
-  Shibuya and Kafka consumer adapters;
-- the cross-context integration-event envelope;
-- OpenTelemetry command/producer/consumer spans and opt-in worker metrics
-  (outbox/inbox/timer/projection backlog, lag, duplicate, dead-letter, and
-  stuck-timer instruments);
-- named-step durable workflows (`Keiro.Workflow`): `step`/`sleep`/`awakeable` plus
-  child workflows, a journal per workflow (`wf:<name>-<id>`), a crash-recovery
-  resume worker, journal snapshots, `continueAsNew` journal rotation, the `patch`
-  versioning API, lease renewal at fresh actions and await arms
-  (`WorkflowRunOptions.leaseHeartbeat`, so a healthy long advance is not charged
-  a crash attempt), the operator recovery API
-  `Keiro.Workflow.Instance.resurrectFailedWorkflow`, and `keiro.workflow.*`
-  observability;
+  alone cannot see;
+- a sampled runtime witness (`RunCommandOptions.seedVerifySampleRate`, one in
+  1000 usable seeds by default) that full-replays a snapshot hit and emits
+  `keiro.snapshot.seed.divergence` on a mismatch without blocking the command;
 - a read-only pre-deploy replay gate (`Keiro.ReplayAudit`): replays real streams
   through a candidate binary in affected-event `AuditTargeted` or `AuditFull`
   mode, compares accepted snapshot seeds against full replay over RFC 8785
   canonical JSON, reports `ReplayOk`/`ReplayFailed`/`SeedDivergence` with stable
   digests, and exposes `auditExitCode` for CI. Generated DSL services assemble
-  one context-wide `Generated.<Context>.ReplayAudit.auditTargets`;
-- LISTEN/NOTIFY push delivery (`Keiro.Wake`, `runWorkflowResumeWorkerPush`):
-  sub-second wakeups for the resume worker and subscription loops over kiroku's
-  existing per-store notifier, with a durable poll fallback and no new connections;
-- consumer-group sharding for category subscriptions (`Keiro.Subscription.Shard`,
-  `runShardedSubscriptionGroup`): a pool of identical workers leases kiroku
-  consumer-group buckets to drain a high-volume category disjointly, with
-  automatic, coordinator-free failover when a worker dies;
+  one context-wide `Generated.<Context>.ReplayAudit.auditTargets`.
+
+### Read models and projections
+
+- same-transaction SQL continuations for inline projections;
+- read-model metadata, consistency modes, and position waits;
+- explicitly registered read models; atomically fenced rebuilds; category-scoped
+  strong reads; and async projection outcomes that prevent checkpointing fenced
+  events.
+
+### Coordination
+
+- event-sourced process managers, with snapshot-policy guidance and a tested
+  PM-state-stream snapshot example;
+- stateless, effectful fan-out routers;
+- durable timer storage and worker helpers, plus a stuck-row recovery API
+  (find/requeue/cancel/dead-letter).
+
+### Durable workflows
+
+- named-step durable workflows (`Keiro.Workflow`): `step`/`sleep`/`awakeable`
+  plus child workflows, a journal per workflow (`wf:<name>-<id>`), a
+  crash-recovery resume worker, journal snapshots, `continueAsNew` journal
+  rotation, and the `patch` versioning API;
+- lease renewal at fresh actions and await arms
+  (`WorkflowRunOptions.leaseHeartbeat`), so a healthy long advance is not
+  charged a crash attempt;
+- the operator recovery API `Keiro.Workflow.Instance.resurrectFailedWorkflow`,
+  plus `keiro.workflow.*` observability.
+
+### Messaging and integration
+
+- a transactional outbox with per-key ordering, backoff, and dead-lettering,
+  plus a Kafka producer adapter;
+- an idempotent inbox with claim/retry/release/dead transitions and GC, plus
+  Shibuya and Kafka consumer adapters;
+- the cross-context integration-event envelope;
 - Postgres-native work queues (`keiro-pgmq`): typed PGMQ jobs with retry and
   dead-letter policy, continuous workers or bounded drains, per-group FIFO
   delivery, standard/unlogged/partitioned provisioning, DLQ redrive and
   archive-then-purge retention, and a one-span-per-delivery tracing contract;
 - durable rejected-dispatch records plus idempotent replay of Kiroku
-  subscription dead letters;
+  subscription dead letters.
+
+### Delivery and scale-out
+
+- LISTEN/NOTIFY push delivery (`Keiro.Wake`, `runWorkflowResumeWorkerPush`):
+  sub-second wakeups for the resume worker and subscription loops over kiroku's
+  existing per-store notifier, with a durable poll fallback and no new
+  connections;
+- consumer-group sharding for category subscriptions (`Keiro.Subscription.Shard`,
+  `runShardedSubscriptionGroup`): a pool of identical workers leases kiroku
+  consumer-group buckets to drain a high-volume category disjointly, with
+  automatic, coordinator-free failover when a worker dies.
+
+### Observability
+
+- OpenTelemetry command/producer/consumer spans and opt-in worker metrics
+  (outbox/inbox/timer/projection backlog, lag, duplicate, dead-letter, and
+  stuck-timer instruments).
+
+### Schema and tooling
+
 - native `pg-migrate` components for Kiroku and Keiro framework tables, composed
   in dependency order by `keiro-migrate`;
 - the `keiro-dsl` typed-spec toolchain across aggregates, process managers,
