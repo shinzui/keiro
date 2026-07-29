@@ -122,7 +122,7 @@ locally as a new ADR by EP-1 (expected `ADR-14` via `okf id next`).
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Add the service workspace manifest, loader, composed graph, and whole-service check | docs/plans/153-add-the-service-workspace-manifest-loader-composed-graph-and-whole-service-check-to-keiro-dsl.md | None | None | Complete |
-| 2 | Scaffold whole workspaces atomically with workspace-keyed records and adoption from per-context records | docs/plans/154-scaffold-whole-workspaces-atomically-with-workspace-keyed-records-and-adoption-from-per-context-records.md | EP-1 | None | In Progress |
+| 2 | Scaffold whole workspaces atomically with workspace-keyed records and adoption from per-context records | docs/plans/154-scaffold-whole-workspaces-atomically-with-workspace-keyed-records-and-adoption-from-per-context-records.md | EP-1 | None | Complete |
 | 3 | Diff whole workspaces with shared-declaration impact classification and unified compatibility reports | docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md | EP-1 | None | Not Started |
 | 4 | Prove per-aggregate workspace adoption with fleet-style fixtures, acceptance tests, and documentation | docs/plans/156-prove-per-aggregate-workspace-adoption-with-fleet-style-fixtures-acceptance-tests-and-documentation.md | EP-1, EP-2, EP-3 | None | Not Started |
 
@@ -212,9 +212,12 @@ and the milestone. This section provides an at-a-glance view of the entire initi
       handle allocated with `okf id next`) — 2026-07-29
 - [x] EP-1: Loader and composed `WorkspaceSpec` graph with cross-file resolution and conflict refusal — 2026-07-29
 - [x] EP-1: Whole-service `check` through the CLI with multi-file diagnostics and fixtures — 2026-07-29
-- [ ] EP-2: Workspace-keyed record/manifest schema and whole-workspace plan phase with cross-member collision refusal
-- [ ] EP-2: Whole-workspace execution, stale detection, idempotence, and member-order determinism
-- [ ] EP-2: Adoption path from existing per-context records with migration report
+- [x] EP-2: Workspace-keyed record/manifest schema and whole-workspace plan phase with cross-member collision refusal
+      (`Keiro.Dsl.WorkspaceRecord`, `Keiro.Dsl.WorkspaceScaffold`) — 2026-07-29
+- [x] EP-2: Whole-workspace execution, stale detection, idempotence, and member-order determinism — 2026-07-29
+- [x] EP-2: Adoption path from existing per-context records with migration report
+      (`Keiro.Dsl.WorkspaceAdoption`, ADR-15
+      `docs/adr/0015-workspace-scaffold-history-is-workspace-keyed-with-attributable-adoption.md`) — 2026-07-29
 - [ ] EP-3: Workspace resolution at `--since` from git blobs (manifest and members at the old revision)
 - [ ] EP-3: Shared-declaration use-site classification and unified compatibility/replay/coverage reports
 - [ ] EP-3: Ownership-move reporting distinct from wire evolution
@@ -263,6 +266,46 @@ interactions between child plans. Provide concise evidence.
   validation. **EP-2 must keep its own intra-member collision gate**: `check` still does
   not catch a collision that lives entirely inside one member, and must not start to —
   that would change existing single-file behavior. (2026-07-29)
+
+- **`Keiro.Dsl.Workspace` imports `Keiro.Dsl.ScaffoldRun`, so no `WorkspaceSpec`-taking
+  function can live in `ScaffoldRun`.** EP-1's cross-member collision check calls
+  `planScaffoldWithGoldens`, which makes the dependency one-way and permanent. EP-2's plan
+  had specified `planWorkspaceScaffoldWithGoldens` and `executeWorkspaceScaffold` as
+  additions to `ScaffoldRun.hs`; they landed in new modules
+  `keiro-dsl/src/Keiro/Dsl/WorkspaceScaffold.hs` and
+  `keiro-dsl/src/Keiro/Dsl/WorkspaceAdoption.hs` instead, with `ScaffoldRun` exporting the
+  gates and helpers they reuse (`pureRefusals`, `missingGeneratedBanners`, `staleAgainst`,
+  `constraintPlan`, `mappingDrift`, `newBindingObligations`). **EP-3 must plan for the same
+  constraint**: whole-workspace diffing consumes `WorkspaceSpec` and so cannot extend
+  `Keiro.Dsl.Diff` if that module ever becomes a `Workspace` dependency — today it is not,
+  so `Diff` is still open to it, but check before assuming. (2026-07-29)
+
+- **Ownership is now first-class, and EP-1's origin-string parsing can be retired.** EP-2
+  added `scaffoldStructuralOwners` and `bindingSkeletonOwners` to `Keiro.Dsl.Scaffold`
+  (each defined so the existing function is `map fst` of it) plus `nodeIdentity` lookups
+  through `wsOwnership`, giving every planned module a structured
+  `ModuleProvenance = ContextLevel | MemberOwned FilePath`. EP-1's collision check still
+  recovers ownership by parsing `nodeOrigin`'s `(line N)` suffix; it works and is proven by
+  the `workspace-path-collision` fixture, so it was left alone rather than rewritten
+  mid-initiative, but the structured seam now exists if it becomes a maintenance problem.
+  **EP-3 should consume `ModuleProvenance`/the record's optional `owner` field, not
+  origins.** (2026-07-29)
+
+- **An ownership move must be classified as path-unchanged-owner-changed, and EP-3 must
+  match it exactly.** `OwnershipMove { omPath, omPrevious, omCurrent }` in
+  `Keiro.Dsl.WorkspaceScaffold` is computed against the previous workspace record before
+  stale detection and can never overlap it, because a moved module's path is still produced.
+  `Nothing` on either side means context-level. The scaffold report proves the move is not a
+  content change: the test asserts every disposition is `unchanged`/`skipped`. A diff that
+  reported such a move as a removal plus an addition would contradict the record.
+  (2026-07-29)
+
+- **A binding skeleton can belong to no single member.** `bindingSkeletonModules` groups
+  obligations by owning module, and its own comment notes that several mapped declarations
+  may intentionally share one leaf binding module — across members, in a workspace. Such a
+  module is recorded as context-level (owner absent), the same as the facade and the
+  replay-audit assembly. **EP-3 and EP-4 must not assume ownerless implies "facade or
+  replay-audit".** (2026-07-29)
 
 - **`oneMemberWorkspace :: FilePath -> Spec -> WorkspaceSpec` is available and proven
   equivalent** to single-spec validation, diagnostic for diagnostic, over four fixtures
@@ -316,6 +359,26 @@ interactions between child plans. Provide concise evidence.
   as another spec's stale output, which needs ownership in the record; unchanged
   single-file naming preserves backward compatibility for every existing consumer
   (Kotei, Danwa) until they opt into a workspace.
+  Date: 2026-07-29
+
+- Decision: EP-2's scaffold-history and adoption model is recorded as its own ADR
+  ([ADR-15](../adr/0015-workspace-scaffold-history-is-workspace-keyed-with-attributable-adoption.md))
+  rather than as an amendment to EP-1's ADR-14, and it fixes the record file naming that
+  ADR-14 left open.
+  Rationale: the `docs/adr` profile is one decision per file, and the two records have
+  different lifecycles — ADR-14 answers "what is a workspace", ADR-15 answers "what does a
+  workspace leave on disk". The Integration Points section allowed either; the fallback of
+  amending ADR-14 for naming was unnecessary because ADR-14 deliberately said nothing about
+  record file names.
+  Date: 2026-07-29
+
+- Decision: EP-3 and EP-4 keep EP-2's exact ownership vocabulary: an ownership move is
+  path-unchanged-with-changed-owner, an absent owner means context-level, and neither is a
+  content change.
+  Rationale: the scaffold record is the durable statement of what the workspace produced;
+  a diff that classified the same event differently would contradict a file on disk that a
+  human can read. Recorded here because it is the integration point EP-2 and EP-3 share
+  without depending on each other.
   Date: 2026-07-29
 
 

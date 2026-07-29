@@ -128,8 +128,9 @@ This section must always reflect the actual current state of the work.
       handle `ADR-15` allocated with `okf id next`), `log.md` updated with `okf log add`,
       `just adr-validate` green (`OK: 15 concepts`). — 2026-07-29
 - [x] M3 commit with the mandated trailers. — 2026-07-29
-- [ ] Final: update MasterPlan 26 Progress entries for EP-2, write Outcomes & Retrospective,
-      perform the ADR distillation pass.
+- [x] Final: update MasterPlan 26 Progress entries for EP-2, write Outcomes & Retrospective,
+      perform the ADR distillation pass (ADR-15 carries every durable decision; the rest is
+      task-local and stays here). — 2026-07-29
 
 
 ## Surprises & Discoveries
@@ -414,7 +415,65 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+**Delivered, against the original purpose.** `keiro-dsl scaffold
+<manifest>.keiro-workspace --out DIR` plans and emits the complete generated module set
+for every member in one invocation. All eight acceptance bullets in Validation and
+Acceptance are observable, each pinned by a test in `keiro-dsl/test/Main.hs` under
+`workspace record`, `workspace plan`, `workspace scaffold`, and `workspace adoption`. The
+suite went from 351 to 363 examples, 0 failures, with the pre-existing single-file tests —
+including the record pin and the module-root-flip test whose behavior this plan
+deliberately preserves — untouched and passing.
+
+The manual check from Concrete Steps behaves as the plan predicted:
+
+```text
+$ cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/workspace/service.keiro-workspace --out /tmp/ws-demo
+workspace: demo-project (…/service.keiro-workspace) -> /tmp/ws-demo (module-root=Demo.Modules.Project, layout=collocated)
+members:  domain/project-artifact.keiro, domain/project.keiro, domain/shared.keiro
+  generated  …Generated.StructuralProjections   (overwritten)  (context-level)
+  generated  …Generated.ReplayAudit             (overwritten)  (context-level)
+  generated  …Project.Generated.Domain          (overwritten)  domain/project.keiro
+  …
+record:   /tmp/ws-demo/keiro-dsl-scaffold-record.workspace.demo-project.txt
+
+$ cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/workspace/service.keiro-workspace --out /tmp/ws-demo
+  generated  …Generated.StructuralProjections   (unchanged)  (context-level)
+  …
+```
+
+Exactly one `StructuralProjections` and one `ReplayAudit`, both context-level; every
+member-owned module names its member; the second run rewrites nothing.
+
+**Deviations from the plan as written**, all in the Decision Log with rationale: the code
+landed in two new modules (`Keiro.Dsl.WorkspaceScaffold`, `Keiro.Dsl.WorkspaceAdoption`)
+rather than in `ScaffoldRun.hs`, because `Keiro.Dsl.Workspace` imports `ScaffoldRun`;
+`planWorkspaceScaffoldWithGoldens` gained the golden-root argument and the golden-root
+divergence check is an IO preflight rather than a pure plan gate; `GoldenRootDivergence`
+carries the root as well as the stranded paths; and `wsrMigration` arrived with its type in
+M3 instead of as a stub in M2.
+
+**What the tests taught, beyond passing.** Two of them changed the design. The one-member
+equivalence test was written to compare `Either [Refusal] [ScaffoldModule]` rather than only
+the success case, which proved the *gates* agree as well as the emitters — and forced the
+decision to suppress the member-path origin prefix for a single-member workspace so the
+comparison could be total. The adoption one-shot test compared whole trees and caught the
+record silently losing its `adopted` rows on the second run.
+
+**Gaps and follow-ups, none blocking.**
+
+- EP-3 (plan 155) must classify an ownership move exactly as `OwnershipMove` records it:
+  path unchanged, owner changed, no stale and no new entry. `provenanceOwner` and the
+  record's optional `owner` field are the shared vocabulary.
+- EP-4 (plan 156) can promote `keiro-dsl/test/fixtures/workspace/` as its fleet-style
+  fixture; it already exercises three members, a shared declaration owner, two aggregates in
+  different files, and a read model. The adoption end-to-end story it tests is implementable
+  from `withInlineWorkspace` plus `adoptionMembers` in `keiro-dsl/test/Main.hs`.
+- A binding skeleton whose obligations span two members is recorded as context-level. No
+  fixture exercises that shape yet — the rule is implemented and commented but only
+  indirectly covered. Worth a fixture when a real multi-member mapped graph appears.
+- Migration report content is asserted structurally (claimed sets, evidence kinds, unclaimed
+  sets) rather than pinned as golden text, deliberately: the wording should be free to
+  improve without a test edit.
 
 
 ## Context and Orientation
