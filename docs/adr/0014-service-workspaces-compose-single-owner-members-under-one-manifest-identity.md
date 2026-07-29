@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Service workspaces compose single-owner members under one manifest identity
 description: A keiro service may span several .keiro files, composed as one graph through a versioned manifest whose service name is the durable identity and whose members each own their declarations outright.
-timestamp: 2026-07-29T14:48:07Z
+timestamp: 2026-07-29T15:15:15Z
 docId: ADR-14
 status: Accepted
 date: 2026-07-29
@@ -94,6 +94,14 @@ relocated into a disjoint line range, so any diagnostic resolves back to one
 `(member file, original line)`. Workspace refusals reuse the shared
 append-only diagnostic-code registry rather than a parallel enum, and carry a
 non-empty list of locations so one refusal can cite every file involved.
+
+The registry boundary is drawn at composition. Refusals that a *composed graph*
+produces get codes; refusals raised while *reading the manifest itself* — a
+member listed twice, a member path that is absolute or escapes the tree — do
+not, because a malformed manifest never reaches the composer, exactly as a
+malformed `.keiro` file never reaches the spec validator and carries no code
+either. Codes are append-only and can never be retired, so constructors nothing
+can emit must not be minted.
 
 **Dispatch is by file extension.** A `FILE` argument ending in
 `.keiro-workspace` is a workspace manifest; anything else takes the single-file

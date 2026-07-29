@@ -22,7 +22,7 @@ import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBan
 import Keiro.Dsl.ScaffoldRun (executeScaffold, planScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
-import Keiro.Dsl.Workspace (isWorkspacePath, parseWorkspaceManifest, renderWorkspaceManifest)
+import Keiro.Dsl.Workspace (WorkspaceDiagnostic (..), checkWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest, wsContext, wsMergedSpec)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
 import System.Exit (ExitCode (..), exitFailure)
@@ -151,7 +151,8 @@ run :: Command -> IO ()
 -- Workspace dispatch. A @FILE@ ending in @.keiro-workspace@ is a workspace
 -- manifest; everything else takes the untouched single-file path below.
 run (Parse fp) | isWorkspacePath fp = runWorkspaceParse fp
-run (Check fp _ _ _) | isWorkspacePath fp = stagedWorkspaceRefusal "whole-service check lands in a later milestone of docs/plans/153-add-the-service-workspace-manifest-loader-composed-graph-and-whole-service-check-to-keiro-dsl.md"
+run (Check fp emit explainBindings coverageOptions)
+    | isWorkspacePath fp = runWorkspaceCheck fp emit explainBindings coverageOptions
 run (Scaffold fp _ _ _ _ _ _) | isWorkspacePath fp = stagedWorkspaceRefusal "workspace scaffolding is not yet supported; it lands with docs/plans/154-scaffold-whole-workspaces-atomically-with-workspace-keyed-records-and-adoption-from-per-context-records.md"
 run (Diff fp _ _ _ _ _ _ _) | isWorkspacePath fp = stagedWorkspaceRefusal "workspace diff is not yet supported; it lands with docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md"
 run (Parse fp) = do
@@ -264,6 +265,42 @@ runWorkspaceParse fp = do
             hPutStrLn stderr (T.unpack err)
             exitFailure
         Right manifest -> TIO.putStrLn (renderWorkspaceManifest manifest)
+
+{- | @check@ on a workspace manifest: compose the whole service from its member
+@.keiro@ files and validate it as one contract. Diagnostics are rendered
+against the member file and line that produced them, and a single diagnostic
+may cite several files at once.
+
+The success options work against the merged graph, which is an ordinary 'Spec':
+@--emit@ prints the canonical whole-service view, @--explain-bindings@ lists the
+service's binding obligations, and the coverage options report on the merged
+mapped-type graph with the manifest as the report's subject.
+-}
+runWorkspaceCheck :: FilePath -> Bool -> Bool -> Maybe CheckCoverageOptions -> IO ()
+runWorkspaceCheck fp emit explainBindings coverageOptions = do
+    loaded <- loadWorkspace (fileContentSource (takeDirectory fp)) fp
+    case loaded of
+        Left failure -> do
+            mapM_ (TIO.hPutStrLn stderr) (renderWorkspaceFailure fp failure)
+            exitFailure
+        Right workspace -> do
+            let diags = checkWorkspace workspace
+                spec = wsMergedSpec workspace
+            mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) diags
+            if any ((== Error) . wdSeverity) diags
+                then exitFailure
+                else do
+                    when emit (TIO.putStrLn (renderSpec spec))
+                    if explainBindings
+                        then case bindingObligations spec of
+                            Left graphErrors -> do
+                                hPutStrLn stderr ("validated workspace did not resolve its mapped type graph: " <> show graphErrors)
+                                exitFailure
+                            Right obligations -> TIO.putStrLn (renderBindingObligations (wsContext workspace) obligations)
+                        else pure ()
+                    coverageOk <- runCheckCoverage fp spec coverageOptions
+                    when (coverageOk && not emit && not explainBindings) (putStrLn "OK")
+                    when (not coverageOk) exitFailure
 
 {- | A command that recognizes a workspace manifest but whose whole-workspace
 implementation lands in a named later plan. Naming the owning plan keeps the

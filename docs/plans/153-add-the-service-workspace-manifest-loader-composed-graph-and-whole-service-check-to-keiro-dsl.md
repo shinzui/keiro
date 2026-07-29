@@ -93,13 +93,17 @@ changes, no diff changes, no adoption/migration work.**
       relocation completeness, and one test per refusal class asserting the exact
       `DiagnosticCode` and the exact set of cited files. Suite at 334 examples, 0
       failures. (2026-07-29)
-- [ ] M3: `keiro-dsl check <manifest>` wired through the dispatch with multi-file
+- [x] M3: `keiro-dsl check <manifest>` wired through the dispatch with multi-file
       diagnostic rendering; `--emit`, `--explain-bindings`, and coverage flags work against
-      the merged graph.
-- [ ] M3: Positive fixture workspace and one negative fixture workspace per refusal class
-      under `keiro-dsl/test/fixtures/`, each asserted by exact `DiagnosticCode`.
-- [ ] M3: Full existing suite green with zero changes to existing fixtures or golden bytes;
-      `CHANGELOG.md` updated; MasterPlan 26 registry row and Progress entries ticked.
+      the merged graph. (2026-07-29)
+- [x] M3: Positive fixture workspace and one negative fixture workspace per refusal class
+      under `keiro-dsl/test/fixtures/`, each asserted by exact `DiagnosticCode` (the two
+      manifest-boundary fixtures by exact refusal message — see the M2 Decision Log entry
+      on why those carry no code). (2026-07-29)
+- [x] M3: Full existing suite green with zero changes to existing fixtures or golden bytes
+      (`git diff --name-status b0a4875 -- keiro-dsl/test/` shows `M` only for the test
+      driver `Main.hs`; every fixture line is an addition); `CHANGELOG.md` updated;
+      MasterPlan 26 registry row and Progress entries ticked. (2026-07-29)
 - [ ] Final: ADR distillation pass done; Outcomes & Retrospective written.
 
 
@@ -374,7 +378,62 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+**Completed 2026-07-29.** The Purpose section's headline command works: a
+`.keiro-workspace` manifest naming three member files is checked as one service, and
+`cabal run keiro-dsl -- check keiro-dsl/test/fixtures/workspace/service.keiro-workspace`
+prints `OK`. Every member of that fixture is individually *invalid* — `project.keiro`
+uses enum constructors declared in `shared.keiro`, `project-artifact.keiro` declares an
+inline-feed read model that only `project.keiro`'s projection references — so the green
+result is direct evidence that composition, not three independent checks, is doing the
+work. `check --explain-bindings` makes the same point in one line: a single binding
+obligation lists use sites from both aggregate members against a mapped type declared in
+a third.
+
+What exists that did not before: `Keiro.Dsl.Workspace` (manifest AST, parser, canonical
+renderer, `ContentSource` loader, pure `composeWorkspace`, `WorkspaceSpec` with line map
+and ownership index, `checkWorkspace`, multi-file diagnostics and their rendering,
+generic `Loc` relocation); seven appended `DiagnosticCode` constructors and an exported
+`nodeIdentity`; extension-based CLI dispatch on all four file-taking commands with a real
+`check` and honest staged refusals for `scaffold`/`diff`; twelve fixture workspaces; 39
+new tests (302 → 341 examples, 0 failures); and ADR-14.
+
+Measured against the plan's Validation and Acceptance list, all seven items hold. The one
+substantive divergence is recorded in the Decision Log: manifest-boundary refusals carry
+no `DiagnosticCode`, so the enum gained seven constructors rather than nine, and the two
+manifest-level fixtures are asserted by exact message rather than by code. That is a
+narrowing of the interface EP-2/EP-3 were told to expect and is flagged in MasterPlan 26's
+Surprises section for them.
+
+Lessons worth carrying forward:
+
+- **Compiler-enforced completeness beat reviewed completeness.** The `HasLocs` generic
+  traversal has 96 hand-listed instances, which looks like the kind of list that rots.
+  It cannot: the generic default demands an instance for every field type, so a new
+  `Grammar` type is a build error until listed. That is a much stronger guarantee than
+  the `collectLocs`-based test alone, which only samples the fixtures it is given.
+
+- **Merging into one `Spec` was the highest-leverage decision in the plan.** Whole-service
+  validation, type-graph resolution, coverage, and binding analysis all came for free and
+  are structurally incapable of diverging from the single-file path, because they are
+  literally the same call. The entire multi-file story then reduces to one line map. The
+  1600-line `Validate.hs` was not touched.
+
+- **Building the positive fixture *before* the composer paid off.** Running `check` on
+  each member alone produced exactly the diagnostics the workspace must resolve
+  (`GuardAtomOutOfScope` for cross-file enum constructors, `RmInlineFeedUnreferenced` for
+  the cross-file read-model feed), which turned "does composition work?" into a concrete,
+  falsifiable list before a line of the composer existed.
+
+- **The scaffold planner's `origin` string is load-bearing and shouldn't stay that way.**
+  Recovering module ownership by parsing `(line N)` out of a display string works and is
+  tested, but EP-2 owns per-module source ownership and should give it a real field;
+  see MasterPlan 26's Surprises section.
+
+Deliberate gaps, all owned elsewhere and none of them silent: workspace `scaffold` (plan
+154) and workspace `diff` (plan 155) refuse with messages naming those plans; a source
+file assigned to two different manifests is not detected (EP-2's record ownership is
+where it becomes observable); an intra-member generated-path collision remains
+scaffold-time behavior, unchanged.
 
 
 ## Context and Orientation
@@ -860,9 +919,13 @@ primary location first in the established shape, additional locations as indente
 notes:
 
 ```text
-keiro-dsl/test/fixtures/workspace-dup-decl/domain/shared.keiro:3: error[WorkspaceDuplicateDeclaration]: duplicate declaration 'ProjectId': a shared declaration has exactly one owning member (identical duplicates do not merge)
-  keiro-dsl/test/fixtures/workspace-dup-decl/domain/project.keiro:4: note: also declared here
+keiro-dsl/test/fixtures/workspace-dup-decl/domain/project.keiro:3: error[WorkspaceDuplicateDeclaration]: duplicate declaration 'ProjectId': a shared declaration has exactly one owning member (identical duplicates do not merge)
+  keiro-dsl/test/fixtures/workspace-dup-decl/domain/shared.keiro:3: note: also declared here, as id 'ProjectId'
 ```
+
+(The primary location is the member that comes first in canonical member order —
+`project` sorts before `shared` — not the "original" declaration, because under the
+single-owner rule neither duplicate is privileged.)
 
 **Fixtures.** All under `keiro-dsl/test/fixtures/`, one directory per workspace. The
 positive fixture `workspace/` (built in M2, exercised end-to-end here):
@@ -879,19 +942,26 @@ positive fixture `workspace/` (built in M2, exercised end-to-end here):
   `ProjectArtifact` aggregate, plus a read model feeding from `Project` (the cross-file
   node reference).
 
-Negative fixtures, one refusal class each, asserted by exact code and by the presence
-of every expected location in the rendered output: `workspace-context-mismatch/` (two
-members, different contexts), `workspace-authority-conflict/` (manifest `layout
-collocated`, member `layout prefixed`), `workspace-dup-decl/` (textually identical
-`id ProjectId` in two members — the no-silent-merge proof), `workspace-dup-node/`
-(aggregate `Project` defined in two members), `workspace-dup-member/` (same `spec`
-path twice — manifest-level), `workspace-missing-member/` (listed member absent —
-`WorkspaceMemberUnreadable`), `workspace-invalid-member-path/` (a `../escape.keiro`
-member), `workspace-path-collision/` (aggregates `Run` and `RUn` in different members —
+Negative fixtures, one refusal class each, asserted by exact code and by the exact set
+of files cited in the rendered output: `workspace-context-mismatch/` (two members,
+different contexts), `workspace-authority-conflict/` (manifest `layout collocated`,
+member `layout prefixed`), `workspace-dup-decl/` (textually identical `id ProjectId` in
+two members — the no-silent-merge proof), `workspace-dup-node/` (aggregate `Project`
+defined in two members, with distinct id declarations so the node rule fires alone),
+`workspace-missing-member/` (listed member absent — `WorkspaceMemberUnreadable`),
+`workspace-member-parse-failed/` (a member that is not a valid spec —
+`WorkspaceMemberParseFailed`, with the member's own parse error nested in the message),
+`workspace-path-collision/` (aggregates `Run` and `RUn` in different members —
 case-folds to one generated path), and `workspace-unresolved/` (an aggregate using an
-enum no member declares — this one is *not* a compose refusal: it proves the merged
+atom no member declares — this one is *not* a compose refusal: it proves the merged
 `validateSpec` catches cross-file unresolved references and that the line map
 attributes the diagnostic to the right member file and line).
+
+Two further fixtures cover the manifest boundary, which is reached *before* any graph
+exists and therefore carries no `DiagnosticCode` (see the M2 Decision Log entry): they
+are asserted by their exact refusal message and position instead —
+`workspace-dup-member/` (the same `spec` path listed twice) and
+`workspace-invalid-member-path/` (a `../escape.keiro` member).
 
 Also add a reordered copy of the positive manifest
 (`workspace/service-reordered.keiro-workspace` listing the same members in reverse) and
@@ -979,26 +1049,110 @@ cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/workspace/service-reordered
   && echo "canonical bytes identical"
 ```
 
-Expected (abridged) Milestone 3 transcripts — messages may be refined during
-implementation, but codes, cited files, and exit codes are contractual:
+Milestone 3 transcripts, captured verbatim on 2026-07-29 (abridged only where a
+refusal repeats per generated module). Note the primary location is the member that
+appears first in canonical member order, and the note lines carry the rest:
 
 ```text
-$ cabal run keiro-dsl -- check keiro-dsl/test/fixtures/workspace/service.keiro-workspace
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace/service.keiro-workspace
 OK
+exit=0
 
-$ cabal run keiro-dsl -- check keiro-dsl/test/fixtures/workspace-dup-decl/service.keiro-workspace
-keiro-dsl/test/fixtures/workspace-dup-decl/domain/shared.keiro:3: error[WorkspaceDuplicateDeclaration]: duplicate declaration 'ProjectId': a shared declaration has exactly one owning member (identical duplicates do not merge)
-  keiro-dsl/test/fixtures/workspace-dup-decl/domain/project.keiro:4: note: also declared here
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace-dup-decl/service.keiro-workspace
+keiro-dsl/test/fixtures/workspace-dup-decl/domain/project.keiro:3: error[WorkspaceDuplicateDeclaration]: duplicate declaration 'ProjectId': a shared declaration has exactly one owning member (identical duplicates do not merge)
+  keiro-dsl/test/fixtures/workspace-dup-decl/domain/shared.keiro:3: note: also declared here, as id 'ProjectId'
 exit=1
 
-$ cabal run keiro-dsl -- check keiro-dsl/test/fixtures/workspace-unresolved/service.keiro-workspace
-keiro-dsl/test/fixtures/workspace-unresolved/domain/project.keiro:12: error[...]: ... unknown type 'MissingEnum' ...
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace-unresolved/service.keiro-workspace
+keiro-dsl/test/fixtures/workspace-unresolved/domain/project.keiro:12: error[GuardAtomOutOfScope]: atom 'MissingPhase' in transition 'Pending -- DoProject' resolves to no register, command field, enum constructor, or rule
+exit=1
+
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace-context-mismatch/service.keiro-workspace
+keiro-dsl/test/fixtures/workspace-context-mismatch/domain/a.keiro:1: error[WorkspaceContextMismatch]: workspace 'demo-project' members declare different contexts (alpha, beta); every member of one workspace must declare the same context
+  keiro-dsl/test/fixtures/workspace-context-mismatch/domain/b.keiro:1: note: member declares context 'beta'
+exit=1
+
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace-authority-conflict/service.keiro-workspace
+keiro-dsl/test/fixtures/workspace-authority-conflict/service.keiro-workspace:2: error[WorkspaceAuthorityConflict]: workspace manifest declares layout collocated, so every member's layout clause must be absent or exactly equal
+  keiro-dsl/test/fixtures/workspace-authority-conflict/domain/b.keiro:2: note: member declares layout prefixed
+exit=1
+
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace-dup-node/service.keiro-workspace
+keiro-dsl/test/fixtures/workspace-dup-node/domain/a.keiro:5: error[WorkspaceDuplicateNodeName]: duplicate aggregate node name 'Project': a node has exactly one owning member
+  keiro-dsl/test/fixtures/workspace-dup-node/domain/b.keiro:5: note: also defined here
+exit=1
+
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace-path-collision/service.keiro-workspace
+keiro-dsl/test/fixtures/workspace-path-collision/domain/a.keiro:5: error[WorkspacePathCollision]: generated module path 'DemoProject/Run/Holes.hs' is claimed by nodes in more than one member; on a case-insensitive filesystem these are one file
+  keiro-dsl/test/fixtures/workspace-path-collision/domain/b.keiro:5: note: claimed here by aggregate RUn (line 24)
+… five more, one per colliding generated module (Codec, Domain, EventStream, Harness, Projection) …
+exit=1
+
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace-missing-member/service.keiro-workspace
+keiro-dsl/test/fixtures/workspace-missing-member/service.keiro-workspace:3: error[WorkspaceMemberUnreadable]: workspace member 'domain/b.keiro' could not be read: no such file: keiro-dsl/test/fixtures/workspace-missing-member/domain/b.keiro
+exit=1
+
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace-member-parse-failed/service.keiro-workspace
+keiro-dsl/test/fixtures/workspace-member-parse-failed/service.keiro-workspace:3: error[WorkspaceMemberParseFailed]: workspace member 'domain/b.keiro' failed to parse:
+keiro-dsl/test/fixtures/workspace-member-parse-failed/domain/b.keiro:6:11:
+  |
+6 |   command !!! not a spec !!!
+  |           ^
+unexpected '!'
+expecting '_'
 exit=1
 ```
 
-(The unresolved case's code is whatever the existing single-spec validator emits for an
-unknown field type — the point is that the *existing* diagnostic surfaces with the
-*member's* path and original line.)
+The two manifest-boundary refusals are megaparsec errors positioned at the offending
+`spec` line, with no `DiagnosticCode` — a malformed manifest never reaches the composer,
+exactly as a malformed `.keiro` file never reaches `validateSpec`:
+
+```text
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace-dup-member/service.keiro-workspace
+keiro-dsl/test/fixtures/workspace-dup-member/service.keiro-workspace:3:1:
+  |
+3 | spec ./domain/a.keiro
+  | ^
+duplicate workspace member 'domain/a.keiro': membership is a set
+exit=1
+
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace-invalid-member-path/service.keiro-workspace
+keiro-dsl/test/fixtures/workspace-invalid-member-path/service.keiro-workspace:2:1:
+  |
+2 | spec ../escape.keiro
+  | ^
+member path must not contain '..' segments: '../escape.keiro'
+exit=1
+```
+
+Determinism, verified the same day — reordering members changes neither the canonical
+manifest bytes nor the merged whole-service view:
+
+```text
+$ diff <(cabal run -v0 keiro-dsl -- parse keiro-dsl/test/fixtures/workspace/service-reordered.keiro-workspace) \
+       <(cabal run -v0 keiro-dsl -- parse keiro-dsl/test/fixtures/workspace/service.keiro-workspace) \
+  && echo "canonical bytes identical"
+canonical bytes identical
+
+$ diff <(cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace/service-reordered.keiro-workspace --emit) \
+       <(cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace/service.keiro-workspace --emit) \
+  && echo "merged spec identical"
+merged spec identical
+```
+
+`--explain-bindings` is the clearest single piece of evidence that the graph resolved
+once rather than three times: one obligation lists use sites from **both** aggregate
+members against a mapped type declared in a **third**:
+
+```text
+$ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/workspace/service.keiro-workspace --explain-bindings
+binding obligations for context demo-project
+  Demo.Project.KeiroBindings (package demo-project-domain)
+    projectSummaryBinding :: StructuralBinding Demo.Project.Domain.ProjectSummary ProjectSummaryShape
+      reason: binding — structural mapped type ProjectSummary (ProjectArtifact command RecordArtifact .artifactSummary : ProjectSummary; ProjectArtifact event ArtifactRecorded .artifactSummary : ProjectSummary; Project command RegisterProject .initialSummary : ProjectSummary; Project event ProjectRegistered .initialSummary : ProjectSummary; Project register summary : ProjectSummary)
+      provenance: binding-version "1"
+    …
+```
 
 ```bash
 # Final gates:

@@ -6,6 +6,38 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### New Features
+
+- Adds **service workspaces**: a `.keiro-workspace` manifest names a service and
+  lists its member `.keiro` files, and `keiro-dsl check <manifest>` validates
+  them as one service contract. Shared ids, enums, rules, and mapped structural
+  types resolve once across all members, so an aggregate in one file may use a
+  declaration or feed a read model owned by another. A single `.keiro` file is
+  unchanged and behaves as a one-member workspace.
+
+  Membership is a set: member paths are normalized and canonically sorted, so
+  listing order changes neither the parsed manifest nor any output. Composition
+  refuses, before producing a graph, when members declare different contexts,
+  when a member's `module`/`layout` clause contradicts the manifest authority,
+  when a shared declaration or node is owned by two members (identical
+  duplicates never silently merge), or when two members claim generated module
+  paths that collide under case folding. One diagnostic can cite several files:
+  the primary location keeps the established
+  `<file>:<line>: error[<Code>]: <message>` shape and each further location
+  follows as an indented `note:` line.
+
+  `check --emit`, `--explain-bindings`, `--coverage-report`, and
+  `--fail-on-opaque` all work against the merged whole-service graph.
+  `keiro-dsl parse <manifest>` round-trips the manifest canonically.
+  `scaffold` and `diff` recognize a manifest and refuse with a message naming
+  the plan that implements them.
+
+  New `Keiro.Dsl.Workspace` module; new append-only `DiagnosticCode`
+  constructors `WorkspaceMemberUnreadable`, `WorkspaceMemberParseFailed`,
+  `WorkspaceContextMismatch`, `WorkspaceAuthorityConflict`,
+  `WorkspaceDuplicateDeclaration`, `WorkspaceDuplicateNodeName`, and
+  `WorkspacePathCollision`; `Keiro.Dsl.Validate.nodeIdentity` is now exported.
+
 ## 0.4.0.1 — 2026-07-28
 
 ### Other Changes

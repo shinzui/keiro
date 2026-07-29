@@ -2647,6 +2647,66 @@ main = hspec $ do
                 map wdCode errors `shouldContain` [GuardAtomOutOfScope]
                 [wlFile location | d <- errors, location <- NE.toList (wdLocations d)]
                     `shouldContain` [WorkspaceMemberFile "domain/project.keiro"]
+        describe "multi-file diagnostic rendering" $ do
+            it "puts the primary location in the established shape and every other file on a note line" $ do
+                diagnostics <- shouldRefuseWorkspace "test/fixtures/workspace-dup-decl/service.keiro-workspace"
+                let manifest = "keiro-dsl/test/fixtures/workspace-dup-decl/service.keiro-workspace"
+                map (renderWorkspaceDiagnostic manifest) (NE.toList diagnostics)
+                    `shouldBe` [ T.intercalate
+                                    "\n"
+                                    [ "keiro-dsl/test/fixtures/workspace-dup-decl/domain/project.keiro:3: error[WorkspaceDuplicateDeclaration]: duplicate declaration 'ProjectId': a shared declaration has exactly one owning member (identical duplicates do not merge)"
+                                    , "  keiro-dsl/test/fixtures/workspace-dup-decl/domain/shared.keiro:3: note: also declared here, as id 'ProjectId'"
+                                    ]
+                               ]
+        describe "whole-service check through the CLI" $ do
+            it "prints OK and exits zero for the composed fixture workspace" $ do
+                (exitCode, out, err) <- runKeiroDsl ["check", canonicalWorkspacePath]
+                unless (exitCode == ExitSuccess) (expectationFailure (out <> err))
+                lines out `shouldBe` ["OK"]
+            it "exits non-zero and names every involved file for a cross-file refusal" $ do
+                (exitCode, _, err) <-
+                    runKeiroDsl ["check", "test/fixtures/workspace-dup-decl/service.keiro-workspace"]
+                exitCode `shouldBe` ExitFailure 1
+                err `shouldContain` "error[WorkspaceDuplicateDeclaration]"
+                err `shouldContain` "workspace-dup-decl/domain/project.keiro:3"
+                err `shouldContain` "workspace-dup-decl/domain/shared.keiro:3"
+            it "attributes a merged-graph validation error to the member that wrote it" $ do
+                (exitCode, _, err) <-
+                    runKeiroDsl ["check", "test/fixtures/workspace-unresolved/service.keiro-workspace"]
+                exitCode `shouldBe` ExitFailure 1
+                err `shouldContain` "workspace-unresolved/domain/project.keiro:12: error[GuardAtomOutOfScope]"
+            it "produces byte-identical output for a manifest whose members are listed in reverse" $ do
+                (canonicalCode, canonicalOut, _) <- runKeiroDsl ["check", canonicalWorkspacePath, "--emit"]
+                (reorderedCode, reorderedOut, _) <- runKeiroDsl ["check", reorderedWorkspacePath, "--emit"]
+                canonicalCode `shouldBe` ExitSuccess
+                reorderedCode `shouldBe` ExitSuccess
+                reorderedOut `shouldBe` canonicalOut
+                (_, canonicalParse, _) <- runKeiroDsl ["parse", canonicalWorkspacePath]
+                (_, reorderedParse, _) <- runKeiroDsl ["parse", reorderedWorkspacePath]
+                reorderedParse `shouldBe` canonicalParse
+            it "keeps the single-file path working, byte for byte" $ do
+                (exitCode, out, err) <- runKeiroDsl ["check", "test/fixtures/reservation.keiro"]
+                unless (exitCode == ExitSuccess) (expectationFailure (out <> err))
+                lines out `shouldBe` ["OK"]
+            it "explains bindings and reports coverage against the merged graph" $ do
+                (bindingsCode, bindingsOut, _) <-
+                    runKeiroDsl ["check", canonicalWorkspacePath, "--explain-bindings"]
+                bindingsCode `shouldBe` ExitSuccess
+                bindingsOut `shouldContain` "binding obligations for context demo-project"
+                -- The obligation's use sites span both aggregate members, which
+                -- is only possible because the graph was resolved once, merged.
+                bindingsOut `shouldContain` "Project register summary : ProjectSummary"
+                bindingsOut `shouldContain` "ProjectArtifact command RecordArtifact .artifactSummary : ProjectSummary"
+                withTempDirectory "keiro-dsl-workspace-coverage" $ \out -> do
+                    let reportPath = out </> "coverage.json"
+                    (coverageCode, coverageOut, _) <-
+                        runKeiroDsl ["check", canonicalWorkspacePath, "--coverage-report", reportPath]
+                    coverageCode `shouldBe` ExitSuccess
+                    coverageOut `shouldContain` "structural/opaque boundaries (reporting only)"
+                    report <- Aeson.eitherDecodeFileStrict reportPath
+                    case report of
+                        Left err -> expectationFailure err
+                        Right value -> coverageSpecPath value `shouldBe` Just (T.pack canonicalWorkspacePath)
 
 comparisonProvenance :: CompareProvenance
 comparisonProvenance =
@@ -3104,6 +3164,28 @@ shouldRefuseWorkspace path = do
                 ("expected compose refusals, got:\n" <> T.unpack (T.intercalate "\n" (renderWorkspaceFailure resolved other)))
                 >> error "unreachable"
         Right _ -> expectationFailure ("expected " <> path <> " to be refused") >> error "unreachable"
+
+{- | Invoke the built @keiro-dsl@ executable. Fixture paths are resolved first,
+so the test works whether it runs from the package directory or the repository
+root.
+-}
+runKeiroDsl :: [String] -> IO (ExitCode, String, String)
+runKeiroDsl arguments = do
+    resolved <- traverse resolveArgument arguments
+    readProcessWithExitCode "cabal" (["run", "-v0", "keiro-dsl", "--"] <> resolved) ""
+  where
+    resolveArgument argument
+        | "test/fixtures/" `isPrefixOfString` argument = resolveTestPath argument
+        | otherwise = pure argument
+    isPrefixOfString prefix value = take (length prefix) value == prefix
+
+-- | The @spec@ field of a coverage report, i.e. what the report says it covers.
+coverageSpecPath :: Value -> Maybe T.Text
+coverageSpecPath value = case value of
+    Aeson.Object fields -> case KeyMap.lookup "spec" fields of
+        Just (Aeson.String path) -> Just path
+        _ -> Nothing
+    _ -> Nothing
 
 -- | Order-preserving deduplication for comparing cited file sets.
 nubOrd :: (Eq a) => [a] -> [a]

@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-07-29
+* **Update**: Draw the diagnostic-code boundary at composition: manifest syntax refusals stay uncoded like spec parse errors (plan 153)
 * **Added**: Record the service workspace identity, single-owner member composition, and manifest authority rules (plan 153)
 
 ## 2026-07-28

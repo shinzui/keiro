@@ -814,6 +814,14 @@ composeWorkspace manifestPath manifest supplied
     (effectiveLayout, layoutRefusals) =
         resolveAuthority "layout" renderPlacement (wmfLayout manifest) (wmfLayoutLoc manifest) specLayout
 
+    -- The absent-or-exactly-equal authority rule, shared by @module@ and
+    -- @layout@. When the manifest declares the clause it is the authority and
+    -- every member's clause must be absent or identical — never silently
+    -- overridden. When the manifest is silent, the members that declare the
+    -- clause must agree unanimously, and that value becomes effective. Both
+    -- halves exist so adoption needs no member edits: a fleet whose members
+    -- carry no clauses can put the authority wholly in the manifest, and a file
+    -- that already declares one can keep it when it becomes a member.
     resolveAuthority ::
         (Eq a) =>
         Text ->

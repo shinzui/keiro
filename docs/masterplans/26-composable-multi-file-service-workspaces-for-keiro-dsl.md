@@ -121,7 +121,7 @@ locally as a new ADR by EP-1 (expected `ADR-14` via `okf id next`).
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Add the service workspace manifest, loader, composed graph, and whole-service check | docs/plans/153-add-the-service-workspace-manifest-loader-composed-graph-and-whole-service-check-to-keiro-dsl.md | None | None | In Progress |
+| 1 | Add the service workspace manifest, loader, composed graph, and whole-service check | docs/plans/153-add-the-service-workspace-manifest-loader-composed-graph-and-whole-service-check-to-keiro-dsl.md | None | None | Complete |
 | 2 | Scaffold whole workspaces atomically with workspace-keyed records and adoption from per-context records | docs/plans/154-scaffold-whole-workspaces-atomically-with-workspace-keyed-records-and-adoption-from-per-context-records.md | EP-1 | None | Not Started |
 | 3 | Diff whole workspaces with shared-declaration impact classification and unified compatibility reports | docs/plans/155-diff-whole-workspaces-with-shared-declaration-impact-classification-and-unified-compatibility-reports.md | EP-1 | None | Not Started |
 | 4 | Prove per-aggregate workspace adoption with fleet-style fixtures, acceptance tests, and documentation | docs/plans/156-prove-per-aggregate-workspace-adoption-with-fleet-style-fixtures-acceptance-tests-and-documentation.md | EP-1, EP-2, EP-3 | None | Not Started |
@@ -207,9 +207,11 @@ it proves contentious during implementation).
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-1: Workspace manifest grammar, parser, and identity decision recorded as ADR
-- [ ] EP-1: Loader and composed `WorkspaceSpec` graph with cross-file resolution and conflict refusal
-- [ ] EP-1: Whole-service `check` through the CLI with multi-file diagnostics and fixtures
+- [x] EP-1: Workspace manifest grammar, parser, and identity decision recorded as ADR
+      (`docs/adr/0014-service-workspaces-compose-single-owner-members-under-one-manifest-identity.md`,
+      handle allocated with `okf id next`) — 2026-07-29
+- [x] EP-1: Loader and composed `WorkspaceSpec` graph with cross-file resolution and conflict refusal — 2026-07-29
+- [x] EP-1: Whole-service `check` through the CLI with multi-file diagnostics and fixtures — 2026-07-29
 - [ ] EP-2: Workspace-keyed record/manifest schema and whole-workspace plan phase with cross-member collision refusal
 - [ ] EP-2: Whole-workspace execution, stale detection, idempotence, and member-order determinism
 - [ ] EP-2: Adoption path from existing per-context records with migration report
@@ -226,7 +228,48 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 Document cross-plan insights, dependency changes, scope adjustments, or unexpected
 interactions between child plans. Provide concise evidence.
 
-(None yet.)
+- **EP-1 delivered seven workspace `DiagnosticCode`s, not nine.** Manifest syntax and
+  structure refusals (a member listed twice, an invalid member path) carry no code,
+  because a malformed manifest never reaches the composer — exactly as a malformed
+  `.keiro` file never reaches `validateSpec` and carries no code either. Adding
+  constructors nothing can emit would put permanently dead entries in an append-only
+  registry. **EP-2 and EP-3 must not expect `WorkspaceDuplicateMember` or
+  `WorkspaceInvalidMemberPath`.** The codes that exist are
+  `WorkspaceMemberUnreadable`, `WorkspaceMemberParseFailed`, `WorkspaceContextMismatch`,
+  `WorkspaceAuthorityConflict`, `WorkspaceDuplicateDeclaration`,
+  `WorkspaceDuplicateNodeName`, and `WorkspacePathCollision`. (2026-07-29)
+
+- **The only existing seam from a planned module back to its owning node is the origin
+  string.** `Keiro.Dsl.Scaffold.nodeOrigin` formats it as `<kind> <name> (line N)`, and
+  EP-1's cross-member collision check recovers ownership by parsing that suffix and
+  resolving the line through the workspace line map. It works — the
+  `workspace-path-collision` fixture proves it end to end — but it is string-shaped.
+  **EP-2 needs per-module source ownership as a first-class record field**, so EP-2
+  should add a structured owner to `ScaffoldModule` (or to the planner's result) rather
+  than parsing origins, and may then simplify EP-1's collision check to use it. Note the
+  happy accident this seam gives for free: context-level modules (the
+  `StructuralProjections` facade, the replay-audit assembly) carry no line, are emitted
+  once for the whole merged spec, and therefore cannot produce a false cross-member
+  collision. (2026-07-29)
+
+- **`ContentSource` is rooted at the manifest's own directory, and the manifest is read
+  through it by base name.** So EP-3's git-blob source must be rooted at the manifest's
+  *repository-relative directory* at the target revision, after which every member path
+  from the manifest resolves unchanged. This is why member paths are constrained to stay
+  inside the manifest's tree. (2026-07-29)
+
+- **EP-1's cross-member collision check is deliberately skipped when the merged spec has
+  any error diagnostic**, because the scaffold planner is only ever fed specs that passed
+  validation. **EP-2 must keep its own intra-member collision gate**: `check` still does
+  not catch a collision that lives entirely inside one member, and must not start to —
+  that would change existing single-file behavior. (2026-07-29)
+
+- **`oneMemberWorkspace :: FilePath -> Spec -> WorkspaceSpec` is available and proven
+  equivalent** to single-spec validation, diagnostic for diagnostic, over four fixtures
+  including one that produces errors. EP-2 and EP-3 can take `WorkspaceSpec` as their
+  only input type and route single `.keiro` files through it — while the CLI keeps the
+  pre-existing single-file branches textually untouched, which is what guarantees
+  byte-identical behavior for existing users. (2026-07-29)
 
 
 ## Decision Log
