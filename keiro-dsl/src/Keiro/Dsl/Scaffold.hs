@@ -27,9 +27,11 @@ module Keiro.Dsl.Scaffold (
     holePrefixFor,
     scaffoldReplayAudit,
     scaffoldStructural,
+    scaffoldStructuralOwners,
     codecComparisonModule,
     codecComparisonBanner,
     bindingSkeletonModules,
+    bindingSkeletonOwners,
     scaffoldAggregate,
     scaffoldProcess,
     scaffoldRouter,
@@ -396,21 +398,40 @@ only generated wire representations. The projection facade contains only
 schema-derived Keiki field witnesses; neither layer owns consumer behavior.
 -}
 scaffoldStructural :: Context -> Spec -> [ScaffoldModule]
-scaffoldStructural ctx spec = case resolveTypeGraph spec of
+scaffoldStructural ctx spec = map fst (scaffoldStructuralOwners ctx spec)
+
+{- | 'scaffoldStructural' paired with the mapped declarations each module was
+emitted for. A shape module names exactly one declaration; a binding skeleton
+names every declaration whose obligations it carries (several declarations may
+share one leaf binding module); the projection facade names __none__, because it
+is emitted once for the whole context from the complete resolved graph.
+
+This is the attribution seam whole-workspace scaffolding needs: a workspace
+emits from one merged spec, and this list says which declaration — and therefore
+which member file — produced each structural module, without parsing the
+human-readable 'origin' string.
+-}
+scaffoldStructuralOwners :: Context -> Spec -> [(ScaffoldModule, [Name])]
+scaffoldStructuralOwners ctx spec = case resolveTypeGraph spec of
     Left _ -> []
-    Right graph -> map (shapeModule ctx graph) structural <> projectionModules <> bindingSkeletonModules ctx spec graph
+    Right graph ->
+        [(shapeModule ctx graph entry, [sdName (fst entry)]) | entry <- structural]
+            <> projectionModules
+            <> bindingSkeletonOwners ctx spec graph
       where
         structural =
             [ (declaration, shape)
             | ResolvedStructural declaration shape <- Map.elems (tgDeclarations graph)
             ]
         projectionModules =
-            [ ScaffoldModule
-                { modulePath = T.unpack (T.replace "." "/" (structuralProjectionModule ctx) <> ".hs")
-                , moduleText = emitStructuralProjections ctx graph
-                , kind = Generated
-                , origin = "context " <> specContext spec <> " mapped structural facade"
-                }
+            [ ( ScaffoldModule
+                    { modulePath = T.unpack (T.replace "." "/" (structuralProjectionModule ctx) <> ".hs")
+                    , moduleText = emitStructuralProjections ctx graph
+                    , kind = Generated
+                    , origin = "context " <> specContext spec <> " mapped structural facade"
+                    }
+              , []
+              )
             | not (null (projectionSpecs graph))
             ]
 
@@ -637,10 +658,19 @@ owner. Multiple mapped declarations may intentionally share a leaf binding
 module, so grouping happens by module rather than by declaration.
 -}
 bindingSkeletonModules :: Context -> Spec -> TypeGraph -> [ScaffoldModule]
-bindingSkeletonModules ctx spec graph = case bindingObligations spec of
+bindingSkeletonModules ctx spec graph = map fst (bindingSkeletonOwners ctx spec graph)
+
+{- | 'bindingSkeletonModules' paired with the mapped declarations whose
+obligations each skeleton carries, in first-appearance order. A skeleton shared
+by declarations from different member files therefore names all of them, which
+is what lets whole-workspace scaffolding treat it as context-level rather than
+attributing it to an arbitrary member.
+-}
+bindingSkeletonOwners :: Context -> Spec -> TypeGraph -> [(ScaffoldModule, [Name])]
+bindingSkeletonOwners ctx spec graph = case bindingObligations spec of
     Left _ -> []
     Right obligations ->
-        [ emitBindingSkeleton ctx graph owner entries
+        [ (emitBindingSkeleton ctx graph owner entries, nub (map obligationMappedName entries))
         | (owner, entries) <- Map.toAscList (Map.fromListWith (<>) [(obligationModule obligation, [obligation]) | obligation <- obligations])
         ]
 

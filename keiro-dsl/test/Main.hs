@@ -24,13 +24,13 @@ import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
-import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingObligations, renderBindingObligations)
+import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingHoles, bindingObligations, renderBindingObligations)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldSurface)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
-import Keiro.Dsl.MappedConsumer (ConsumerPlan (..))
+import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
 import Keiro.Dsl.Parser (parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
@@ -43,6 +43,8 @@ import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, renderDiagnostic, validateSpec)
 import Keiro.Dsl.Workspace
+import Keiro.Dsl.WorkspaceRecord
+import Keiro.Dsl.WorkspaceScaffold
 import System.Directory (createDirectory, createDirectoryIfMissing, doesFileExist, getTemporaryDirectory, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
@@ -2708,6 +2710,159 @@ main = hspec $ do
                         Left err -> expectationFailure err
                         Right value -> coverageSpecPath value `shouldBe` Just (T.pack canonicalWorkspacePath)
 
+    describe "workspace scaffold (EP-154)" $ do
+        describe "workspace record" $ do
+            it "round-trips modules, owners, members, mappings, obligations, and adoptions" $ do
+                workspace <- shouldComposeWorkspace canonicalWorkspacePath
+                let record = sampleWorkspaceRecord workspace
+                    rendered = renderWorkspaceRecord record
+                parseWorkspaceRecord rendered `shouldBe` Just record
+                -- The header pins the schema: a v1 context-keyed record and a
+                -- workspace record can never be read as each other.
+                T.lines rendered `shouldSatisfy` \case
+                    header : _ -> header == "keiro-dsl workspace scaffold record v1"
+                    [] -> False
+                parseRecord rendered `shouldBe` Nothing
+                parseWorkspaceRecord (T.replace "record v1" "record v2" rendered) `shouldBe` Nothing
+            it "ignores unknown rows and unknown JSON keys, and keeps context-level rows ownerless" $ do
+                workspace <- shouldComposeWorkspace canonicalWorkspacePath
+                let record = sampleWorkspaceRecord workspace
+                    rendered = renderWorkspaceRecord record
+                parseWorkspaceRecord (T.replace "service: " "future-row: retained\nservice: " rendered)
+                    `shouldBe` Just record
+                parseWorkspaceRecord (T.replace "\"kind\":\"generated\"" "\"kind\":\"generated\",\"future\":1" rendered)
+                    `shouldBe` Just record
+                [row | row <- wrModules record, wrmOwner row == Nothing]
+                    `shouldSatisfy` (not . null)
+            it "rejects unsafe module, owner, member, and adoption paths" $ do
+                workspace <- shouldComposeWorkspace canonicalWorkspacePath
+                let rendered = renderWorkspaceRecord (sampleWorkspaceRecord workspace)
+                    corrupt from to = parseWorkspaceRecord (T.replace from to rendered)
+                corrupt "member domain/shared.keiro" "member /etc/passwd" `shouldBe` Nothing
+                corrupt "member domain/shared.keiro" "member ../escape.keiro" `shouldBe` Nothing
+                corrupt "\"owner\":\"domain/shared.keiro\"" "\"owner\":\"../shared.keiro\"" `shouldBe` Nothing
+                corrupt "\"path\":\"claimed/One.hs\"" "\"path\":\"/tmp/One.hs\"" `shouldBe` Nothing
+            it "keys history by service in a slot no context name can reach" $ do
+                -- A context name is lexed as letters/digits/_/- and can never
+                -- contain a dot, so the workspace slot cannot alias a legacy
+                -- record even when the service is named after its context.
+                workspaceRecordFileName "demo-project"
+                    `shouldBe` "keiro-dsl-scaffold-record.workspace.demo-project.txt"
+                workspaceManifestFileName "demo-project"
+                    `shouldBe` "keiro-dsl-manifest.workspace.demo-project.txt"
+                workspaceRecordFileName "demo-project" `shouldNotBe` recordFileName "demo-project"
+                map
+                    (T.isInfixOf "." . T.pack)
+                    [ workspaceRecordFileName "demo-project"
+                    , recordFileName "demo-project"
+                    ]
+                    `shouldBe` [True, True]
+                supersededByLine "demo-project"
+                    `shouldBe` "superseded-by: keiro-dsl-scaffold-record.workspace.demo-project.txt"
+
+        describe "workspace plan" $ do
+            it "emits the context-level facade and replay-audit exactly once from the merged graph" $ do
+                plan <- shouldPlanWorkspace canonicalWorkspacePath
+                let modules = map fst (wpModules plan)
+                    facades = [m | m <- modules, "StructuralProjections.hs" `isSuffixOfPath` m]
+                    audits = [m | m <- modules, "ReplayAudit.hs" `isSuffixOfPath` m]
+                    shapes = [m | m <- modules, "Structural/Shape/ProjectSummary.hs" `isSuffixOfPath` m]
+                length facades `shouldBe` 1
+                length audits `shouldBe` 1
+                length shapes `shouldBe` 1
+                -- The audit assembles aggregates owned by two different member
+                -- files, which is only possible from one merged graph.
+                forM_ audits $ \audit -> do
+                    moduleText audit `shouldSatisfy` T.isInfixOf "Project.projectEventStream"
+                    moduleText audit `shouldSatisfy` T.isInfixOf "ProjectArtifact.projectArtifactEventStream"
+            it "attributes every module to its owning member and leaves shared ones context-level" $ do
+                plan <- shouldPlanWorkspace canonicalWorkspacePath
+                let memberPaths = map wmPath (wsMembers (wpWorkspace plan))
+                    ownerOf suffix =
+                        case [provenance | (m, provenance) <- wpModules plan, suffix `isSuffixOfPath` m] of
+                            [provenance] -> Just provenance
+                            _ -> Nothing
+                ownerOf "StructuralProjections.hs" `shouldBe` Just ContextLevel
+                ownerOf "ReplayAudit.hs" `shouldBe` Just ContextLevel
+                ownerOf "Structural/Shape/ProjectSummary.hs"
+                    `shouldBe` Just (MemberOwned "domain/shared.keiro")
+                ownerOf "Project/Generated/Domain.hs"
+                    `shouldBe` Just (MemberOwned "domain/project.keiro")
+                ownerOf "ProjectArtifact/Generated/Domain.hs"
+                    `shouldBe` Just (MemberOwned "domain/project-artifact.keiro")
+                ownerOf "Project_activity/Generated/ReadModel.hs"
+                    `shouldBe` Just (MemberOwned "domain/project-artifact.keiro")
+                -- No module may claim an owner that is not a member of the
+                -- workspace: the record's owner column has to stay resolvable.
+                map (provenanceOwner . snd) (wpModules plan)
+                    `shouldSatisfy` all (maybe True (`elem` memberPaths))
+            it "plans a one-member workspace byte-identically to the single-file path" $ do
+                let fixtures =
+                        [ "test/fixtures/reservation.keiro"
+                        , "test/fixtures/consumer-types.keiro"
+                        , "test/fixtures/readmodel.keiro"
+                        , "test/fixtures/hospital-surge.keiro"
+                        ]
+                -- Modules and refusals both: hospital-surge refuses on both
+                -- paths, which proves the gates agree as well as the emitters.
+                forM_ fixtures $ \path -> do
+                    spec <- specOf path
+                    let ctx = defaultContext (specContext spec)
+                        workspace = oneMemberWorkspace path spec
+                    fmap (map fst . wpModules) (planWorkspaceScaffold "goldens" ctx workspace)
+                        `shouldBe` planScaffold ctx spec
+                -- The equality is not vacuous: at least one fixture plans, and
+                -- its per-node modules are attributed to the single member.
+                spec <- specOf "test/fixtures/reservation.keiro"
+                let workspace = oneMemberWorkspace "test/fixtures/reservation.keiro" spec
+                case planWorkspaceScaffold "goldens" (defaultContext (specContext spec)) workspace of
+                    Left refusals -> expectationFailure ("reservation should plan: " <> show refusals)
+                    Right plan -> do
+                        wpModules plan `shouldSatisfy` (not . null)
+                        map snd (wpModules plan)
+                            `shouldSatisfy` all (`elem` [ContextLevel, MemberOwned "reservation.keiro"])
+                        map snd (wpModules plan)
+                            `shouldSatisfy` elem (MemberOwned "reservation.keiro")
+            it "computes obligations from the complete merged graph, spanning members" $ do
+                workspace <- shouldComposeWorkspace canonicalWorkspacePath
+                case bindingObligations (wsMergedSpec workspace) of
+                    Left graphErrors -> expectationFailure ("merged graph did not resolve: " <> show graphErrors)
+                    Right obligations ->
+                        case [o | o <- obligations, obligationMappedName o == "ProjectSummary", obligationKind o == BindingValue] of
+                            [obligation] -> do
+                                obligationUseSites obligation
+                                    `shouldSatisfy` any (T.isInfixOf "Project register summary")
+                                obligationUseSites obligation
+                                    `shouldSatisfy` any (T.isInfixOf "ProjectArtifact command RecordArtifact")
+                            found -> expectationFailure ("expected one ProjectSummary binding obligation, got " <> show (length found))
+            it "refuses a case-folded path collision across members, naming both files" $ do
+                workspace <- shouldComposeWorkspace canonicalWorkspacePath
+                let collided = withCaseVariantAggregate workspace
+                case planWorkspaceScaffold "goldens" (workspaceContext collided) collided of
+                    Right _ -> expectationFailure "expected a cross-member path collision refusal"
+                    Left refusals -> do
+                        let origins = concat [os | PathCollision _ os <- refusals]
+                        origins `shouldSatisfy` any (T.isInfixOf "domain/project.keiro: ")
+                        origins `shouldSatisfy` any (T.isInfixOf "domain/project-artifact.keiro: ")
+            it "refuses golden fixtures stranded beside a member instead of under the workspace root" $
+                withTempDirectory "keiro-dsl-workspace-goldens" $ \root -> do
+                    workspace <- writeGoldenWorkspace root
+                    let workspaceGoldens = root </> "golden-payloads"
+                        fixture = "hospital-capacity/Reservation/TransferReservationCreated.v1.json"
+                        beside = root </> "domain/golden-payloads" </> fixture
+                    goldenRootDivergence workspaceGoldens workspace `shouldReturn` []
+                    createDirectoryIfMissing True (takeDirectory beside)
+                    TIO.writeFile beside "{}\n"
+                    refusals <- goldenRootDivergence workspaceGoldens workspace
+                    refusals `shouldBe` [GoldenRootDivergence workspaceGoldens [beside]]
+                    renderRefusals refusals
+                        `shouldSatisfy` any (T.isInfixOf "one golden root per workspace")
+                    -- The same fixture under the workspace root is no divergence.
+                    let atRoot = workspaceGoldens </> fixture
+                    createDirectoryIfMissing True (takeDirectory atRoot)
+                    TIO.writeFile atRoot "{}\n"
+                    goldenRootDivergence workspaceGoldens workspace `shouldReturn` []
+
 comparisonProvenance :: CompareProvenance
 comparisonProvenance =
     CompareProvenance
@@ -3151,6 +3306,100 @@ shouldComposeWorkspace path = do
             expectationFailure (T.unpack (T.intercalate "\n" (renderWorkspaceFailure resolved failure)))
                 >> error "unreachable"
         Right workspace -> pure workspace{wsManifestPath = path}
+
+{- | The 'Context' a workspace scaffolds under, with no CLI overrides: the
+members' unanimous context name, the manifest's module-root and layout
+authority, and the built-in defaults where the manifest is silent.
+-}
+workspaceContext :: WorkspaceSpec -> Context
+workspaceContext workspace =
+    Context
+        { contextName = wsContext workspace
+        , moduleRoot = maybe "" id (wsModuleRoot workspace)
+        , placement = maybe GeneratedPrefix id (wsLayout workspace)
+        }
+
+-- | Compose and plan a workspace fixture, failing the test on any refusal.
+shouldPlanWorkspace :: FilePath -> IO WorkspacePlan
+shouldPlanWorkspace path = do
+    workspace <- shouldComposeWorkspace path
+    case planWorkspaceScaffold "goldens" (workspaceContext workspace) workspace of
+        Left refusals -> expectationFailure ("unexpected workspace plan refusal: " <> show refusals) >> error "unreachable"
+        Right plan -> pure plan
+
+-- | Does a scaffolded module's path end in this suffix?
+isSuffixOfPath :: FilePath -> ScaffoldModule -> Bool
+isSuffixOfPath suffix m = T.pack suffix `T.isSuffixOf` T.pack (modulePath m)
+
+{- | A workspace record built from real composed data plus two synthetic
+adoption rows, so the round-trip test exercises every row kind including the
+JSON encodings shared with the v1 record.
+-}
+sampleWorkspaceRecord :: WorkspaceSpec -> WorkspaceRecord
+sampleWorkspaceRecord workspace =
+    WorkspaceRecord
+        { wrService = wsService workspace
+        , wrManifest = "service.keiro-workspace"
+        , wrContext = wsContext workspace
+        , wrModuleRoot = maybe "" id (wsModuleRoot workspace)
+        , wrLayout = "collocated"
+        , wrMembers = map wmPath (wsMembers workspace)
+        , wrModules =
+            [ WorkspaceModuleRow Generated "Demo/Generated/StructuralProjections.hs" Nothing
+            , WorkspaceModuleRow Generated "Demo/Project/Generated/Domain.hs" (Just "domain/project.keiro")
+            , WorkspaceModuleRow HoleStub "Demo/Project/Holes.hs" (Just "domain/shared.keiro")
+            ]
+        , wrMappings = consumerMappings (consumerPlan (wsMergedSpec workspace))
+        , wrBindingObligations = either (const []) id (bindingHoles (wsMergedSpec workspace))
+        , wrAdopted =
+            [ AdoptedRow "claimed/One.hs" "record" (Just "keiro-dsl-scaffold-record.demo-project.txt") (Just "project.keiro")
+            , AdoptedRow "claimed/Two.hs" "banner" Nothing Nothing
+            ]
+        }
+
+{- | The canonical workspace with a case-variant copy of one member's aggregate
+grafted onto another member. Composition refuses this shape (EP-153 catches it
+at the earliest boundary), so the planner's own cross-member collision gate can
+only be exercised by constructing the graph directly — which is exactly what
+this does, mirroring the single-file @caseVariant@ construction.
+-}
+withCaseVariantAggregate :: WorkspaceSpec -> WorkspaceSpec
+withCaseVariantAggregate workspace = case [aggregate | NAggregate aggregate <- specNodes merged, aggName aggregate == "Project"] of
+    [] -> error "canonical workspace fixture has no Project aggregate"
+    aggregate : _ ->
+        let shouted = aggregate{aggName = T.toUpper (aggName aggregate)}
+            ownership = wsOwnership workspace
+         in workspace
+                { wsMergedSpec = merged{specNodes = specNodes merged <> [NAggregate shouted]}
+                , wsOwnership =
+                    ownership
+                        { oiNodes =
+                            Map.insert
+                                ("aggregate", aggName shouted)
+                                ("domain/project-artifact.keiro", Loc 1)
+                                (oiNodes ownership)
+                        }
+                }
+  where
+    merged = wsMergedSpec workspace
+
+{- | Write a one-member workspace whose member declares an upcaster, so its
+golden payload fixture has a canonical location. Returns the composed
+workspace; the caller decides where the fixture lives.
+-}
+writeGoldenWorkspace :: FilePath -> IO WorkspaceSpec
+writeGoldenWorkspace root = do
+    source <- readTestText "test/fixtures/reservation-v2.keiro"
+    createDirectoryIfMissing True (root </> "domain")
+    TIO.writeFile (root </> "domain/reservation.keiro") source
+    let manifestPath = root </> "service.keiro-workspace"
+    TIO.writeFile manifestPath "service gold-demo\nspec domain/reservation.keiro\n"
+    loaded <- loadWorkspace (fileContentSource root) manifestPath
+    case loaded of
+        Left failure ->
+            expectationFailure (T.unpack (T.intercalate "\n" (renderWorkspaceFailure manifestPath failure)))
+                >> error "unreachable"
+        Right workspace -> pure workspace
 
 -- | Load a workspace fixture expecting a compose refusal, and return it.
 shouldRefuseWorkspace :: FilePath -> IO (NonEmpty WorkspaceDiagnostic)

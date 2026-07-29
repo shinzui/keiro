@@ -68,25 +68,36 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Confirm EP-1 (plan 153) is Complete: `.keiro-workspace` grammar, `Keiro.Dsl.Workspace`
+- [x] Confirm EP-1 (plan 153) is Complete: `.keiro-workspace` grammar, `Keiro.Dsl.Workspace`
       loader/`WorkspaceSpec`, per-declaration/per-node owner map, effective context, CLI
       dispatch, and compose-time conflict refusals are merged. Record the actual exported
-      names and any deviations from the working names assumed in this plan.
-- [ ] M1: Create `keiro-dsl/src/Keiro/Dsl/WorkspaceRecord.hs` with `WorkspaceRecord`,
+      names and any deviations from the working names assumed in this plan. — 2026-07-29
+      (names as assumed: `WorkspaceSpec`, `wsMergedSpec`, `wsOwnership`, `wsMembers`,
+      `wmPath`/`wmSpec`, `declarationOwner`, `nodeOwner`, `oneMemberWorkspace`,
+      `loadWorkspace`, `checkWorkspace`, `fileContentSource`, `isWorkspacePath`. One
+      deviation with consequences: `Keiro.Dsl.Workspace` **imports**
+      `Keiro.Dsl.ScaffoldRun`, so this plan's new functions cannot live there — see the
+      Decision Log.)
+- [x] M1: Create `keiro-dsl/src/Keiro/Dsl/WorkspaceRecord.hs` with `WorkspaceRecord`,
       `renderWorkspaceRecord`, `parseWorkspaceRecord`, `workspaceRecordFileName`,
       `workspaceManifestFileName`; register the module in `keiro-dsl/keiro-dsl.cabal`.
-- [ ] M1: Round-trip, forward-compatibility (unknown rows), path-safety, and
-      name-non-collision tests for the workspace record in `keiro-dsl/test/Main.hs`.
-- [ ] M1: Add `planWorkspaceScaffoldWithGoldens`, `WorkspacePlan`, `ModuleProvenance` to
-      `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs`; module set built once from the merged spec
-      with per-node ownership attribution and member-path-augmented origins.
-- [ ] M1: Golden-root divergence refusal (`GoldenRootDivergence`) and workspace golden-root
-      resolution wired into the plan phase.
-- [ ] M1: Plan-phase tests: cross-member case-folded collision cites both member files;
-      facade emitted once from merged graph; one-member workspace module set byte-identical
-      to the single-file path; obligations (`ExplainBindings`, consumer plan, constraints)
-      computed from the complete merged graph.
-- [ ] M1 commit with the mandated trailers.
+      — 2026-07-29
+- [x] M1: Round-trip, forward-compatibility (unknown rows), path-safety, and
+      name-non-collision tests for the workspace record in `keiro-dsl/test/Main.hs`
+      (describe-group `workspace record`). — 2026-07-29
+- [x] M1: Add `planWorkspaceScaffoldWithGoldens`, `WorkspacePlan`, `ModuleProvenance` — in
+      the new `keiro-dsl/src/Keiro/Dsl/WorkspaceScaffold.hs` rather than `ScaffoldRun.hs`
+      (module cycle; Decision Log); module set built once from the merged spec with
+      structural per-declaration and per-node ownership attribution and
+      member-path-augmented origins. — 2026-07-29
+- [x] M1: Golden-root divergence refusal (`GoldenRootDivergence`) as an IO preflight
+      (`goldenRootDivergence`), with the workspace golden root carried on `WorkspacePlan`.
+      — 2026-07-29
+- [x] M1: Plan-phase tests: cross-member case-folded collision cites both member files;
+      facade and replay-audit emitted once from merged graph; one-member workspace module
+      set *and refusal set* identical to the single-file path; obligations computed from
+      the complete merged graph and spanning members. — 2026-07-29
+- [x] M1 commit with the mandated trailers. — 2026-07-29
 - [ ] M2: Add `executeWorkspaceScaffold`, `WorkspaceScaffoldReport`, `OwnershipMove`,
       `Unchanged` disposition, and `renderWorkspaceScaffoldReport` to `ScaffoldRun.hs`.
 - [ ] M2: Wire the workspace branch of the `Scaffold` command in `keiro-dsl/app/Main.hs`
@@ -116,7 +127,38 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- **`Keiro.Dsl.Workspace` imports `Keiro.Dsl.ScaffoldRun`, so the workspace scaffold
+  functions cannot live in `ScaffoldRun`.** EP-1's cross-member collision check calls
+  `planScaffoldWithGoldens` (`keiro-dsl/src/Keiro/Dsl/Workspace.hs` line 100 imports
+  `Keiro.Dsl.ScaffoldRun (Refusal (..), planScaffoldWithGoldens)`), so a
+  `planWorkspaceScaffoldWithGoldens :: … -> WorkspaceSpec -> …` in `ScaffoldRun` would be a
+  module cycle. The work landed in a new module `Keiro.Dsl.WorkspaceScaffold` instead, and
+  `ScaffoldRun` grew a small documented export section for the pieces the workspace path
+  reuses (`pureRefusals`, `missingGeneratedBanners`, `staleAgainst`, `constraintPlan`,
+  `mappingDrift`, `newBindingObligations`, plus two render helpers). Nothing was
+  duplicated. (2026-07-29)
+
+- **The one-member-workspace equivalence is stronger than planned: it holds for refusals
+  too.** The plan asked for module-set equality on fixtures that plan successfully. The
+  test as written compares `Either [Refusal] [ScaffoldModule]` for four fixtures, and
+  `test/fixtures/hospital-surge.keiro` refuses identically on both paths:
+
+  ```text
+  Left [LoweringRefusal ["AggregateEmpty: aggregate 'Surge' must declare at least one
+  command, event, and transition", …]]
+  ```
+
+  That is a better test than the planned one — it proves the gates agree, not only the
+  emitters — and it is why the member-path prefix on `origin` is suppressed for a
+  one-member workspace (Decision Log). (2026-07-29)
+
+- **Binding skeleton modules are grouped by owning module, not by declaration.**
+  `bindingSkeletonModules` (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`) groups obligations by
+  `obligationModule`, and its own comment says "Multiple mapped declarations may
+  intentionally share a leaf binding module". In a workspace those declarations can be
+  owned by *different* members, so a single skeleton has no single owner. The attribution
+  rule handles it explicitly (Decision Log); EP-3 must expect skeletons to appear as
+  context-level in the record whenever their declarations span members. (2026-07-29)
 
 
 ## Decision Log
@@ -235,6 +277,67 @@ implementation. Provide concise evidence.
   idempotent (report proves zero changes)"; today's `Overwritten` disposition cannot
   distinguish a byte-identical rewrite from a change. Confining the new disposition to the
   workspace path preserves single-file report bytes.
+  Date: 2026-07-29
+
+
+- Decision: Whole-workspace planning and execution live in a new module
+  `keiro-dsl/src/Keiro/Dsl/WorkspaceScaffold.hs`, not in `ScaffoldRun.hs` as this plan
+  originally specified. `ScaffoldRun` exports the gates and helpers the workspace path
+  reuses under a documented "Shared with whole-workspace scaffolding" section.
+  Rationale: `Keiro.Dsl.Workspace` imports `Keiro.Dsl.ScaffoldRun` for EP-1's cross-member
+  collision check, so a `WorkspaceSpec`-taking function in `ScaffoldRun` is a module cycle.
+  Exporting the gates keeps the "reuse, never duplicate" property the plan required — a
+  workspace and a single spec still run literally the same `pureRefusals`,
+  `missingGeneratedBanners`, and stale comparison — while removing the cycle. The single
+  alternative (moving EP-1's collision check out of `Workspace`) would have re-opened
+  merged code for no behavioral gain.
+  Date: 2026-07-29
+
+- Decision: Module ownership is attributed **structurally**, through two new seams in
+  `Keiro.Dsl.Scaffold` — `scaffoldStructuralOwners` (each structural module paired with the
+  mapped declarations it was emitted for) and `bindingSkeletonOwners` — plus `nodeIdentity`
+  for node-produced modules. The `origin` string is never parsed.
+  Rationale: MasterPlan 26's Surprises section records that EP-1 had to recover ownership by
+  parsing `nodeOrigin`'s `(line N)` suffix and asks EP-2 to make ownership first-class. Both
+  new functions are defined so the existing ones are `map fst` of them, which makes the
+  emitted set provably unchanged rather than argued to be.
+  Date: 2026-07-29
+
+- Decision: A structural module is `MemberOwned` only when *every* declaration it was
+  emitted for resolves to the same member; otherwise it is `ContextLevel`.
+  Rationale: binding skeletons group by owning module, and two mapped declarations owned by
+  different members may legitimately share one leaf binding module. Attributing such a
+  skeleton to one of them would make the other member's obligations look like an ownership
+  move whenever the grouping order changed. Context-level is the honest answer: the module
+  belongs to the service, not to a member.
+  Date: 2026-07-29
+
+- Decision: The member-path prefix on a module's `origin` is added only when the workspace
+  has more than one member.
+  Rationale: the prefix exists to disambiguate a cross-member refusal; with one member there
+  is nothing to disambiguate, and suppressing it makes the one-member workspace identical to
+  the single-file path in *every* field of `ScaffoldModule`, so the equivalence test can
+  compare whole values instead of a projection.
+  Date: 2026-07-29
+
+- Decision: `planWorkspaceScaffoldWithGoldens` takes the resolved golden root as an extra
+  argument and `WorkspacePlan` carries it; the golden-root divergence check is the IO
+  function `goldenRootDivergence`, run as a pre-write preflight beside the banner check
+  rather than inside the pure plan. `GoldenRootDivergence` carries the root as well as the
+  stranded fixture paths.
+  Rationale: deciding whether a member-adjacent fixture exists and the workspace root lacks
+  it is a filesystem question, so it cannot be a pure plan-phase gate. The contract this plan
+  actually owes (MasterPlan 26 Decision Log) is *detection before the first write*, which a
+  preflight satisfies exactly as the pre-existing banner check does. Carrying the root in the
+  refusal lets the message name where to move the files.
+  Date: 2026-07-29
+
+- Decision: The workspace record stores the manifest's **file name** (`manifest:`), not the
+  path the user typed.
+  Rationale: members are relative to the manifest's directory, so the directory is wherever
+  the manifest sits; recording the invoking path would make the record's bytes depend on the
+  working directory and would break the byte-identical-output property the determinism test
+  asserts across two temp directories.
   Date: 2026-07-29
 
 

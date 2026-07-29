@@ -14,6 +14,19 @@ module Keiro.Dsl.ScaffoldRun (
     executeScaffold,
     renderRefusals,
     renderScaffoldReport,
+
+    -- * Shared with whole-workspace scaffolding ("Keiro.Dsl.WorkspaceScaffold")
+
+    --
+    -- $shared
+    pureRefusals,
+    missingGeneratedBanners,
+    staleAgainst,
+    constraintPlan,
+    mappingDrift,
+    newBindingObligations,
+    obligationKindLabel,
+    renderMappingIdentity,
 ) where
 
 import Data.List (sortOn)
@@ -34,15 +47,33 @@ import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..), resolv
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import System.FilePath (takeDirectory, (</>))
 
+{- $shared
+These are the pieces whole-workspace scaffolding reuses verbatim rather than
+reimplementing, so a workspace and a single spec can never disagree about what
+counts as a refusal, what counts as stale, or how an identity renders.
+"Keiro.Dsl.WorkspaceScaffold" cannot live in this module because
+"Keiro.Dsl.Workspace" already imports it (its cross-member collision check asks
+the planner), so the seam is exports rather than shared privates.
+-}
+
 data Refusal
     = PathCollision !FilePath ![Text]
     | FirewallBreach ![(FilePath, Text, Int)]
     | LoweringRefusal ![Text]
     | MissingGeneratedBanner ![FilePath]
     | ImportCycle ![Text]
+    | {- | Golden payload fixtures found beside a workspace member that the one
+      workspace golden root does not have. Raised only by the workspace path.
+      -}
+      GoldenRootDivergence !FilePath ![FilePath]
     deriving stock (Eq, Show)
 
-data WriteDisposition = Overwritten | Created | Skipped
+{- | What one module write did. 'Unchanged' is produced only by the workspace
+write path, which compares bytes before overwriting a Generated module so that
+an idempotent re-run is observable in the report; the single-spec 'writeModule'
+never produces it.
+-}
+data WriteDisposition = Overwritten | Created | Skipped | Unchanged
     deriving stock (Eq, Show)
 
 data StaleModule = StaleModule
@@ -110,13 +141,24 @@ planScaffold = planScaffoldWithGoldens []
 planScaffoldWithGoldens :: [GoldenPayload] -> Context -> Spec -> Either [Refusal] [ScaffoldModule]
 planScaffoldWithGoldens goldens ctx spec =
     let modules = scaffoldModulesWithGoldens goldens ctx spec
-        breaches = firewallBreaches modules
-        refusals =
-            collisionRefusals modules
-                <> dependencyRefusals ctx spec modules
-                <> [FirewallBreach breaches | not (null breaches)]
-                <> [LoweringRefusal lowering | let lowering = scaffoldRefusals spec, not (null lowering)]
-     in if null refusals then Right modules else Left refusals
+     in case pureRefusals ctx spec modules of
+            [] -> Right modules
+            refusals -> Left refusals
+
+{- | Every pure refusal gate, over an already-built module set: case-folded path
+collisions, generated\/consumer collisions and import cycles, firewall breaches,
+and lowering refusals. Whole-workspace planning builds its module set from the
+merged spec and then runs exactly this, so no gate can apply to one input shape
+and not the other.
+-}
+pureRefusals :: Context -> Spec -> [ScaffoldModule] -> [Refusal]
+pureRefusals ctx spec modules =
+    collisionRefusals modules
+        <> dependencyRefusals ctx spec modules
+        <> [FirewallBreach breaches | not (null breaches)]
+        <> [LoweringRefusal lowering | let lowering = scaffoldRefusals spec, not (null lowering)]
+  where
+    breaches = firewallBreaches modules
 
 dependencyRefusals :: Context -> Spec -> [ScaffoldModule] -> [Refusal]
 dependencyRefusals ctx spec modules = collisionWithConsumers <> namespaceCycles
@@ -264,10 +306,17 @@ readRecord path = do
     if exists then parseRecord <$> TIO.readFile path else pure Nothing
 
 existingStale :: FilePath -> [ScaffoldModule] -> ScaffoldRecord -> IO [StaleModule]
-existingStale out modules record = fmap concat $ mapM stillExists removed
+existingStale out modules record = staleAgainst out (map modulePath modules) (recFiles record)
+
+{- | The files a previous run recorded that the current plan no longer produces
+and that are still on disk. keiro-dsl never deletes; this is what the report
+lists for a human to review.
+-}
+staleAgainst :: FilePath -> [FilePath] -> [(ModuleKind, FilePath)] -> IO [StaleModule]
+staleAgainst out currentPathList previous = fmap concat $ mapM stillExists removed
   where
-    currentPaths = Set.fromList (map modulePath modules)
-    removed = [(fileKind, path) | (fileKind, path) <- recFiles record, path `Set.notMember` currentPaths]
+    currentPaths = Set.fromList currentPathList
+    removed = [(fileKind, path) | (fileKind, path) <- previous, path `Set.notMember` currentPaths]
     stillExists (fileKind, path) = do
         exists <- doesFileExist (out </> path)
         pure [StaleModule fileKind path | exists]
@@ -336,6 +385,14 @@ renderRefusals = concatMap render
         , "  " <> T.intercalate " -> " path
         , "  keep bindings in a leaf module that imports only Structural.Shape.* and Keiro.Codec.Structural"
         ]
+    render (GoldenRootDivergence root paths) =
+        [ "error: golden payload fixtures live beside a workspace member instead of under the workspace golden root -- refusing to scaffold"
+        ]
+            <> ["  " <> T.pack path | path <- paths]
+            <> [ "  move these files under " <> T.pack root <> "; keiro-dsl reads one golden root per workspace"
+               , "  (a fixture the root lacks would be silently replaced by a synthesized stand-in)"
+               , "nothing was written"
+               ]
 
 renderScaffoldReport :: ScaffoldReport -> [Text]
 renderScaffoldReport report =
@@ -367,6 +424,7 @@ renderScaffoldReport report =
     dispositionTag Overwritten = "(overwritten)"
     dispositionTag Created = "(created)"
     dispositionTag Skipped = "(skipped: already present)"
+    dispositionTag Unchanged = "(unchanged)"
     pad name = name <> T.replicate (nameWidth - T.length name) " "
     generatedCount = length [() | (m, _) <- dispositions, kind m == Generated]
     harnesses =

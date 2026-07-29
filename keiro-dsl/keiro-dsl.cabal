@@ -54,6 +54,8 @@ library
     Keiro.Dsl.TypeGraph
     Keiro.Dsl.Validate
     Keiro.Dsl.Workspace
+    Keiro.Dsl.WorkspaceRecord
+    Keiro.Dsl.WorkspaceScaffold
 
   build-depends:
     , aeson               >=2.2.1 && <2.3
