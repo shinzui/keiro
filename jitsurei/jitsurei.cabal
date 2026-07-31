@@ -71,8 +71,8 @@ library
     , hasql                 >=1.10
     , hasql-pool            >=1.2
     , hasql-transaction     >=1.1
-    , keiki                 >=0.5     && <0.6
-    , keiki-codec-json      >=0.5     && <0.6
+    , keiki                 >=0.6     && <0.7
+    , keiki-codec-json      >=0.6     && <0.7
     , keiro
     , keiro-pgmq
     , kiroku-store          >=0.3     && <0.4

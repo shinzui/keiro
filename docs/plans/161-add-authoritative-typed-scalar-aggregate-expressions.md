@@ -80,8 +80,11 @@ so an accidental parse cannot become an unofficial contract.
 - [x] 2026-07-31: Added the version-2 located scalar grammar, exact scalar/path/literal resolver,
   explicit generated-versus-Hole ownership syntax, and stable diagnostics. Version 1 retains its
   historical grammar and AST spelling; the complete `keiro-dsl-test` suite passes 407 examples.
-- [ ] Milestone 3: make generated version-2 transducers own declared guards and writes, add the
-  explicit Hole-owned transition escape hatch and output hooks, and preserve version-1 scaffolding.
+- [x] 2026-07-31: Added authoritative version-2 `Expressions` and `Transducer` modules, typed
+  create-once event-output hooks, stable per-transition Hole functions and `FoldVersion` tokens,
+  and dynamic snapshot fingerprint composition. The compiled mixed-ownership scalar scaffold
+  passes `ghc -fno-code` against published Keiki `0.6.0.0`; all 409 DSL examples pass and the
+  existing version-1 generated-byte regressions remain green.
 - [ ] Milestone 4: add compiled, property, mutation, parser-version, replay, snapshot, and
   Hole-boundary regression tests.
 - [ ] Milestone 5: update notation, user documentation, changelog, diff remedies, relevant ADRs,
@@ -131,6 +134,14 @@ so an accidental parse cannot become an unofficial contract.
 - 2026-07-31: The existing nominal-scalar conformance transition compared opaque nominal values.
   Under authoritative version-2 checking it must use explicit `implementation hole`, matching the
   documented boundary that nominal symbolic comparison is not yet evidence-bearing.
+- 2026-07-31: Keiki deliberately represents predicates as `HsPred` and writable values as `Term`;
+  there is no structural predicate-to-Bool-term conversion in release `0.6.0.0`. Version 2
+  therefore admits comparisons and Boolean conjunction/disjunction as guards, while Bool writes
+  accept scalar literals, roots, and projections but reject predicate-valued expressions at
+  checking time instead of lowering an opaque application.
+- 2026-07-31: The generated symbolic-operator firewall now exempts only aggregate files ending in
+  `/Expressions.hs` or `/Transducer.hs`. Those two modules are the intended generated Keiki
+  authority; all other generated modules retain the previous firewall.
 
 
 ## Decision Log
@@ -217,6 +228,13 @@ so an accidental parse cannot become an unofficial contract.
   structural-consumer-type MasterPlan.
   Rationale: Scalar expression execution and generated ownership form an independently
   schedulable change with their own acceptance evidence.
+  Date: 2026-07-31
+
+- Decision: Treat comparisons and Boolean conjunction/disjunction as predicate-valued syntax,
+  not writable Bool terms. Bool register writes accept direct Bool literals, roots, and checked
+  projections; a predicate-valued write fails before scaffolding.
+  Rationale: Released Keiki `0.6.0.0` separates `HsPred` from `Term ... Bool` and has no structural
+  predicate-to-term operation. An opaque Haskell conversion would evade symbolic update evidence.
   Date: 2026-07-31
 
 - Decision: Continue Keiro implementation against immutable published Keiki `0.6.0.0` while

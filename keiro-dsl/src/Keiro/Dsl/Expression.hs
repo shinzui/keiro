@@ -299,7 +299,13 @@ resolveWriteExpr environment registerName expression =
             Left _ -> Right unresolvedSentinel
             Right expected -> case resolveScalarExpr environment (ExpectScalarType expected) expression of
                 Left diagnostics -> Left (fmap writeDiagnostic diagnostics)
-                Right resolved -> Right resolved
+                Right resolved
+                    | predicateValued resolved ->
+                        failure
+                            (typedScalarLoc resolved)
+                            ScalarOperatorUnsupported
+                            "comparison and Boolean operators are guard predicates and cannot be written as scalar terms"
+                    | otherwise -> Right resolved
               where
                 writeDiagnostic diagnostic
                     | expressionDiagnosticCode diagnostic == ScalarOperandTypeMismatch =
@@ -524,6 +530,20 @@ scalarLeaf = \case
     AggregateNominal{} -> True
     AggregateVertex{} -> False
     AggregateMapped{} -> False
+
+predicateValued :: TypedScalarExpr -> Bool
+predicateValued expression = case typedScalarNode expression of
+    TypedEqual{} -> True
+    TypedNotEqual{} -> True
+    TypedCompare{} -> True
+    TypedAnd{} -> True
+    TypedOr{} -> True
+    TypedLiteral{} -> False
+    TypedRoot{} -> False
+    TypedProject{} -> False
+    TypedAdd{} -> False
+    TypedSubtract{} -> False
+    TypedMultiply{} -> False
 
 contextualLiteral :: Expr -> Bool
 contextualLiteral = \case

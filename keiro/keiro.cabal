@@ -119,8 +119,8 @@ library
     , hs-opentelemetry-api                   >=1.0      && <1.1
     , hs-opentelemetry-propagator-w3c        >=1.0      && <1.1
     , hs-opentelemetry-semantic-conventions  >=1.40     && <2
-    , keiki                                  >=0.5      && <0.6
-    , keiki-codec-json                       >=0.5      && <0.6
+    , keiki                                  >=0.6      && <0.7
+    , keiki-codec-json                       >=0.6      && <0.7
     , keiro-core                             ^>=0.5.0.0
     , kiroku-store                           >=0.3      && <0.4
     , lens                                   >=5.2      && <5.4

@@ -275,15 +275,29 @@ main = hspec $ do
             parseSource "round-trip.keiro" (renderSource parsed) `shouldBe` Right parsed
             case [aggregate | NAggregate aggregate <- specNodes (parsedSpec parsed)] of
                 [aggregate] -> case aggTransitions aggregate of
-                    [transition] -> do
+                    transition : holeTransition : [] -> do
                         tImplementation transition `shouldBe` GeneratedImplementation
+                        tImplementation holeTransition `shouldBe` HoleImplementation
                         let environment = expressionEnvironment (parsedSpec parsed) aggregate transition
                         case lookup "reserved" (tWrites transition) >>= either (const Nothing) Just . resolveWriteExpr environment "reserved" of
                             Just resolved -> do
                                 typedScalarType resolved `shouldBe` AggregateNatural
                                 show (typedScalarNode resolved) `shouldContain` "TotalNaturalArithmetic"
                             Nothing -> expectationFailure "reserved write did not resolve"
-                    _ -> expectationFailure "expected one scalar transition"
+                        let modules = scaffoldAggregate (defaultContext (specContext (parsedSpec parsed))) (parsedSpec parsed) aggregate
+                            expressions = generatedTextEndingIn "Expressions.hs" modules
+                            transducer = generatedTextEndingIn "Transducer.hs" modules
+                            holes = holeTextEndingIn "Holes.hs" modules
+                        map modulePath modules `shouldSatisfy` any (T.isSuffixOf "Expressions.hs" . T.pack)
+                        map modulePath modules `shouldSatisfy` any (T.isSuffixOf "Transducer.hs" . T.pack)
+                        expressions `shouldSatisfy` T.isInfixOf "K.tsub (d.requested) (B.reg @\"capacity\")"
+                        transducer `shouldSatisfy` T.isInfixOf "B.requireGuard (Expressions.transition1OpenAdjustGuard d)"
+                        transducer `shouldSatisfy` T.isInfixOf "B.slot @\"balance\" =: Expressions.transition1OpenAdjustWriteBalance d"
+                        holes `shouldSatisfy` T.isInfixOf "transition1OpenAdjustOutput1Adjusted"
+                        holes `shouldSatisfy` T.isInfixOf "transition2ReviewedCloseHoleFoldVersion"
+                        holes `shouldSatisfy` (not . T.isInfixOf "scalarAccountTransducer")
+                        firewallBreaches modules `shouldBe` []
+                    _ -> expectationFailure "expected one generated and one Hole scalar transition"
                 _ -> expectationFailure "expected one scalar aggregate"
 
         it "rejects Int arithmetic and mixed numeric operands before scaffolding" $ do
@@ -305,6 +319,25 @@ main = hspec $ do
                         ]
             spec <- parseInlineSpec "<scalar-errors>" source
             errorCodes spec `shouldContain` [AggregateExpressionOperatorUnsupported, AggregateExpressionOperandTypeMismatch]
+
+        it "rejects predicate-valued Bool writes that Keiki cannot represent as scalar terms" $ do
+            let source =
+                    T.unlines
+                        [ "language keiro-dsl 2"
+                        , "context scalar-bool-write"
+                        , "aggregate Flag"
+                        , "  regs"
+                        , "    active Bool = False"
+                        , "  states Open Closed!"
+                        , "  command Set { active:Bool }"
+                        , "  event SetEvent = fields(Set)"
+                        , "  Open -- Set -->"
+                        , "    write active := cmd.active == true"
+                        , "    emit SetEvent"
+                        , "    goto Closed"
+                        ]
+            spec <- parseInlineSpec "<scalar-bool-write>" source
+            errorCodes spec `shouldContain` [AggregateExpressionOperatorUnsupported]
 
         it "requires explicit roots for a same-named register and command field" $ do
             let source =
@@ -347,6 +380,36 @@ main = hspec $ do
                 Right value -> pure value
             errorCodes (parsedSpec parsed) `shouldContain` [AggregateTransitionOwnershipConflict]
             renderSource parsed `shouldSatisfy` T.isInfixOf "implementation hole"
+
+        it "generates a stable per-transition Hole boundary and fold token" $ do
+            let source =
+                    T.unlines
+                        [ "language keiro-dsl 2"
+                        , "context scalar-hole"
+                        , "aggregate Counter"
+                        , "  regs"
+                        , "    amount Integer = 0"
+                        , "  states Open Closed!"
+                        , "  command Set { amount:Integer }"
+                        , "  event SetEvent = fields(Set)"
+                        , "  Open -- Set -->"
+                        , "    implementation hole"
+                        , "    emit SetEvent"
+                        , "    goto Closed"
+                        ]
+            spec <- parseInlineSpec "<scalar-hole-valid>" source
+            aggregate <- case [value | NAggregate value <- specNodes spec] of
+                [value] -> pure value
+                _ -> expectationFailure "expected one Hole aggregate" >> fail "unreachable"
+            let modules = scaffoldAggregate (defaultContext (specContext spec)) spec aggregate
+                transducer = generatedTextEndingIn "Transducer.hs" modules
+                holes = holeTextEndingIn "Holes.hs" modules
+            errorCodes spec `shouldBe` []
+            transducer `shouldSatisfy` T.isInfixOf "Holes.transition1OpenSetHole d"
+            transducer `shouldSatisfy` T.isInfixOf "foldToken Holes.transition1OpenSetHoleFoldVersion"
+            holes `shouldSatisfy` T.isInfixOf "transition1OpenSetHole _d = B.requireGuard K.PTop"
+            holes `shouldSatisfy` T.isInfixOf "transition1OpenSetHoleFoldVersion = FoldVersion"
+            holes `shouldSatisfy` (not . T.isInfixOf "counterTransducer")
 
         it "pins v1 and collection rejection at their stable boundaries" $ do
             v1Source <- readTestText "test/fixtures/aggregate-scalar-expressions-v1-rejects.keiro"
@@ -2686,6 +2749,12 @@ main = hspec $ do
             firewallBreaches [forbidden] `shouldBe` [("Gen/Builder.hs", "import:Keiki.Builder", 1)]
             firewallBreaches [restricted] `shouldBe` [("Gen/CoreBad.hs", "import:Keiki.Core", 1)]
             firewallBreaches [allowed] `shouldBe` []
+        it "exempts only the authoritative generated expression/transducer module paths" $ do
+            let expressions = syntheticGenerated "Gen/Aggregate/Expressions.hs" "import Keiki.Core qualified as K\nx = K.lit 1"
+                transducer = syntheticGenerated "Gen/Aggregate/Transducer.hs" "import Keiki.Builder qualified as B\nx = B.slot"
+                ordinary = syntheticGenerated "Gen/Aggregate/Projection.hs" "import Keiki.Builder qualified as B"
+            firewallBreaches [expressions, transducer] `shouldBe` []
+            firewallBreaches [ordinary] `shouldBe` [("Gen/Aggregate/Projection.hs", "import:Keiki.Builder", 1)]
         it "finds no breach in real scaffolder output (aggregate + process fixtures)" $ do
             aggMods <- scaffoldFixture "test/fixtures/reservation.keiro"
             procMods <- scaffoldProcessFixture "test/fixtures/hospital-surge.keiro"
@@ -3996,6 +4065,11 @@ syntheticGenerated path contents =
 
 generatedTextEndingIn :: T.Text -> [ScaffoldModule] -> T.Text
 generatedTextEndingIn suffix modules = case [moduleText m | m <- modules, kind m == Generated, suffix `T.isSuffixOf` T.pack (modulePath m)] of
+    contents : _ -> contents
+    [] -> ""
+
+holeTextEndingIn :: T.Text -> [ScaffoldModule] -> T.Text
+holeTextEndingIn suffix modules = case [moduleText m | m <- modules, kind m == HoleStub, suffix `T.isSuffixOf` T.pack (modulePath m)] of
     contents : _ -> contents
     [] -> ""
 

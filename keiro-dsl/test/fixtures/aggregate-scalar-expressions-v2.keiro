@@ -9,12 +9,14 @@ aggregate ScalarAccount
     label Text = ""
     active Bool = False
     openedAt Time = "2026-01-01T00:00:00Z"
-  states Open Closed!
+  states Open Reviewed Closed!
 
   command Adjust {
     balance:Integer requested:Natural label:Text active:Bool observedAt:Time
   }
+  command Close { balance:Integer }
   event Adjusted = fields(Adjust)
+  event ClosedEvent = fields(Close)
 
   Open -- Adjust -->
     guard cmd.balance + reg.balance >= -100
@@ -27,6 +29,11 @@ aggregate ScalarAccount
     write active := cmd.active
     write openedAt := cmd.observedAt
     emit Adjusted
+    goto Reviewed
+
+  Reviewed -- Close -->
+    implementation hole
+    emit ClosedEvent
     goto Closed
 
   wire kind=ctorName fields=camelCase schemaVersion=1
