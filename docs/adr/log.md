@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-07-31
+* **Add**: Propose explicit generated or Hole behavior ownership for aggregate transitions so the escape hatch remains permanent without allowing silent overrides.
 * **Update**: Accept ADR 0016 after source-language dispatch, provenance inspection, workspace composition, scaffold history, and replay-neutral diff conformance landed (plan 160).
 * **Added**: Record source-language parser dispatch, per-document provenance around semantic Spec, and provenance-only compatibility (plan 160).
 * **Update**: Amend ADR 0004 with earliest-boundary direct aggregate type, initial-value, and guard-capability diagnostics (plan 157).
