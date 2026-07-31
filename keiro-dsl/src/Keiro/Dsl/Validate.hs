@@ -32,6 +32,7 @@ import Data.Text qualified as T
 import Data.Word (Word64)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.NominalType qualified as Nominal
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
 import Keiro.Dsl.TypeGraph
 import Numeric (showHex)
@@ -289,6 +290,16 @@ data DiagnosticCode
     | -- EP-160: append-only source-language composition and diff facts.
       WorkspaceLanguageVersionMismatch
     | SourceLanguageDeclarationChanged
+    | -- EP-158: checked consumer-owned nominal IDs, enums, and scalars.
+      NominalMissingIngredient
+    | NominalInvalidHaskellSource
+    | NominalInvalidQualifiedName
+    | NominalInvalidIdentity
+    | NominalInvalidIdPrefix
+    | NominalUnsupportedRepresentation
+    | NominalEmptyEnumRepresentation
+    | NominalMissingInitialValue
+    | NominalNameCollision
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -328,11 +339,44 @@ line for stable, readable output.
 -}
 validateSpec :: Spec -> [Diagnostic]
 validateSpec spec =
-    sortOn line (validateNames spec ++ validateMapped spec ++ validateAggregateTypes spec ++ specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
+    sortOn line (validateNames spec ++ validateMapped spec ++ validateNominal spec ++ validateAggregateTypes spec ++ specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
+
+validateNominal :: Spec -> [Diagnostic]
+validateNominal spec = case Nominal.resolveNominalTypes spec of
+    Right _ -> []
+    Left errors -> map nominalTypeDiagnostic (NE.toList errors)
+
+nominalTypeDiagnostic :: Nominal.NominalTypeError -> Diagnostic
+nominalTypeDiagnostic nominalError = case nominalError of
+    Nominal.NominalMissingIngredient name loc ingredient ->
+        problem loc NominalMissingIngredient $ "nominal declaration '" <> name <> "' is missing required " <> ingredient <> " provenance"
+    Nominal.NominalInvalidHaskellSource name loc ingredient ->
+        problem loc NominalInvalidHaskellSource $ "nominal declaration '" <> name <> "' has an invalid Haskell " <> ingredient <> " name"
+    Nominal.NominalInvalidQualifiedValue name loc ingredient value ->
+        problem loc NominalInvalidQualifiedName $
+            "nominal declaration '" <> name <> "' has invalid " <> ingredient <> " symbol '" <> value <> "'; expected a module path plus a lower-initial value"
+    Nominal.NominalInvalidIdentity name loc ingredient value ->
+        problem loc NominalInvalidIdentity $ "nominal declaration '" <> name <> "' has invalid " <> ingredient <> " '" <> value <> "'"
+    Nominal.NominalInvalidIdPrefix name loc prefix detail ->
+        problem loc NominalInvalidIdPrefix $ "bound id '" <> name <> "' has invalid TypeID prefix '" <> prefix <> "': " <> detail
+    Nominal.NominalUnsupportedScalar name loc representation ->
+        problem loc NominalUnsupportedRepresentation $
+            "nominal scalar '" <> name <> "' uses unsupported representation '" <> representation <> "'; supported representations are Text, Int, Natural, Bool, and Time"
+    Nominal.NominalEmptyEnum name loc ->
+        problem loc NominalEmptyEnumRepresentation $ "enum '" <> name <> "' must declare at least one closed representation constructor"
+    Nominal.NominalMissingRegisterInitial name loc registerName ->
+        problem loc NominalMissingInitialValue $
+            "consumer-owned nominal type '" <> name <> "' is used by register '" <> registerName <> "' and must name an initial symbol"
+    Nominal.NominalDeclarationCollision name loc categories ->
+        problem loc NominalNameCollision $ "declaration name '" <> name <> "' collides across " <> T.intercalate ", " categories
+  where
+    problem loc diagnosticCode detail = mkErr (locLine loc) diagnosticCode (detail <> "; GHC and conformance validate consumer function bodies")
 
 -- | Resolve every direct aggregate type once at the earliest semantic gate.
 validateAggregateTypes :: Spec -> [Diagnostic]
-validateAggregateTypes spec = concatMap aggregateRules aggregates
+validateAggregateTypes spec = case Nominal.resolveNominalTypes spec of
+    Left _ -> []
+    Right _ -> concatMap aggregateRules aggregates
   where
     symbols = aggregateSymbols spec
     aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
@@ -401,7 +445,7 @@ validateAggregateTypes spec = concatMap aggregateRules aggregates
         [] -> case [field | command <- aggCommands aggregate, cmdName command == tCommand transition, field <- cmdFields command, aggregateFieldName field == name] of
             field : _ -> inferAggregateFieldType symbols aggregate CommandFieldUse field
             [] -> case [enumName declaration | declaration <- specEnums spec, name `elem` map fst (enumCtors declaration)] of
-                enumType : _ -> pure (AggregateEnum enumType)
+                enumType : _ -> resolveAggregateType symbols (tLoc transition) CommandFieldUse (TRef enumType)
                 []
                     | name `elem` map stName (aggStates aggregate) -> pure (AggregateVertex (aggName aggregate <> "Vertex"))
                     | Just rule <- firstMatching ((== name) . ruleName) (specRules spec) ->
@@ -933,6 +977,7 @@ validateNames spec =
     concat
         [ concatMap idNames (specIds spec)
         , concatMap enumNames (specEnums spec)
+        , concatMap nominalNames (specNominalScalars spec)
         , concatMap nodeNames (specNodes spec)
         ]
   where
@@ -944,6 +989,9 @@ validateNames spec =
             ++ concatMap
                 (\(ctor, _) -> constructorName ("constructor of enum '" <> enumName declaration <> "'") ctor (enumLoc declaration))
                 (enumCtors declaration)
+
+    nominalNames declaration =
+        constructorName "nominal scalar name" (nominalScalarName declaration) (nominalScalarLoc declaration)
 
     nodeNames = \case
         NAggregate aggregate -> aggregateNames aggregate
@@ -1976,19 +2024,29 @@ validateAggregate spec agg =
 
     registerInitialScope = concatMap checkRegisterInitial (aggRegs agg)
     checkRegisterInitial r = case [e | e <- specEnums spec, TRef (enumName e) == regType r] of
-        (e : _) ->
-            [ outOfScope r "constructor of enum" (enumName e)
-            | regInitialBare r `notElem` map (Just . fst) (enumCtors e)
-            ]
+        (e : _) -> case enumBinding e of
+            Just _ ->
+                [ outOfScope r "declaration-owned symbol selected by" "initial"
+                | regInitialBare r /= Just "initial"
+                ]
+            Nothing ->
+                [ outOfScope r "constructor of enum" (enumName e)
+                | regInitialBare r `notElem` map (Just . fst) (enumCtors e)
+                ]
         []
             | regType r == TRef (aggName agg <> "Vertex") ->
                 [ outOfScope r "state of aggregate" (aggName agg)
                 | maybe True (`Set.notMember` states) (regInitialBare r)
                 ]
-            | regType r `elem` map (TRef . idName) (specIds spec) ->
-                [ outOfScope r "literal" "placeholder"
-                | regInitialBare r /= Just "placeholder"
-                ]
+            | Just identifier <- firstMatching (\declaration -> regType r == TRef (idName declaration)) (specIds spec) -> case idBinding identifier of
+                Just _ ->
+                    [ outOfScope r "declaration-owned symbol selected by" "initial"
+                    | regInitialBare r /= Just "initial"
+                    ]
+                Nothing ->
+                    [ outOfScope r "literal" "placeholder"
+                    | regInitialBare r /= Just "placeholder"
+                    ]
             | otherwise -> []
     outOfScope r expected domain =
         mkErr (locLine (regLoc r)) RegisterInitialOutOfScope $

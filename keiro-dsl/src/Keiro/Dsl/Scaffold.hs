@@ -80,6 +80,7 @@ import Keiro.Dsl.CodecCompare (BranchArm (..), BranchField (..), BranchSchema (.
 import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind (..), bindingObligations)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.NominalType
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (sagaCategoryError)
@@ -3225,8 +3226,12 @@ data FieldCat
 
 fieldCat :: Agg -> ResolvedAggregateType -> FieldCat
 fieldCat a ty
-    | AggregateId{} <- ty = IdCat
-    | AggregateEnum{} <- ty = EnumCat
+    | AggregateNominal nominal <- ty
+    , IdRepresentation{} <- resolvedNominalRepresentation nominal =
+        IdCat
+    | AggregateNominal nominal <- ty
+    , EnumRepresentation{} <- resolvedNominalRepresentation nominal =
+        EnumCat
     | Just (ResolvedStructural declaration shape) <- mappedDeclFor a ty = MappedStructuralCat declaration shape
     | Just (ResolvedOpaque declaration) <- mappedDeclFor a ty = MappedOpaqueCat declaration
     | otherwise = OtherCat
@@ -3303,7 +3308,9 @@ scaffoldRefusals spec =
                 Left _ -> [initialRefusal aggregate register resolved]
     initialRefusal aggregate register resolved = case resolved of
         AggregateText -> label "RegTextInitialNotQuoted" "must use a quoted Text initial"
-        AggregateEnum name -> label "RegInitialNotEnumCtor" ("must start at a constructor of enum '" <> name <> "'")
+        AggregateNominal nominal
+            | EnumRepresentation{} <- resolvedNominalRepresentation nominal ->
+                label "RegInitialNotEnumCtor" ("must start at the declaration-owned initial for enum '" <> resolvedNominalName nominal <> "'")
         AggregateMapped{} -> label "MappedRegisterInitialMissing" "requires the mapped declaration's initial symbol"
         _ -> label "RegInitialInvalidLiteral" ("has an invalid " <> aggregateCanonicalName resolved <> " initial")
       where

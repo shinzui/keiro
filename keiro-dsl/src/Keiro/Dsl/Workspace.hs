@@ -1017,6 +1017,7 @@ composeWorkspace manifestPath manifest supplied
             , specIds = concatMap specIds relocatedSpecs
             , specEnums = concatMap specEnums relocatedSpecs
             , specRules = concatMap specRules relocatedSpecs
+            , specNominalScalars = concatMap specNominalScalars relocatedSpecs
             , specMapped = concatMap specMapped relocatedSpecs
             , specNodes = concatMap specNodes relocatedSpecs
             }
@@ -1110,6 +1111,7 @@ sharedDeclarations spec =
     [("id", idName d, idLoc d) | d <- specIds spec]
         <> [("enum", enumName d, enumLoc d) | d <- specEnums spec]
         <> [("rule", ruleName d, ruleLoc d) | d <- specRules spec]
+        <> [("nominal", nominalScalarName d, nominalScalarLoc d) | d <- specNominalScalars spec]
         <> [("mapped", mappedDeclName d, mappedDeclLoc d) | d <- specMapped spec]
 
 mappedDeclName :: MappedDecl -> Name
@@ -1304,6 +1306,8 @@ instance HasLocs IntakeNode
 instance HasLocs MappedDecl
 instance HasLocs MappedShape
 instance HasLocs Mapping
+instance HasLocs NominalBindingDecl
+instance HasLocs NominalScalarDecl
 instance HasLocs Node
 instance HasLocs OnMissing
 instance HasLocs OperationNode

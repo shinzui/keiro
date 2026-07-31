@@ -19,6 +19,7 @@ import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Text qualified as AesonText
 import Data.List (find)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Text (Text)
@@ -27,6 +28,7 @@ import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as TL
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.NominalType
 import Keiro.Dsl.Scaffold (Agg (..), ResolvedCtor (..), defaultContext, resolveAgg)
 import Keiro.Dsl.TypeGraph
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist)
@@ -156,15 +158,14 @@ renderGolden spec aggregate event =
 sampleValue :: Maybe TypeGraph -> Spec -> Agg -> ResolvedAggregateType -> Value
 sampleValue graph spec _aggregate resolvedType =
     case resolvedType of
-        AggregateId fieldType ->
-            case find ((== fieldType) . idName) (specIds spec) of
-                Just identifier -> String (idPrefix identifier <> "_01hzy3v7q2e8kaw2m5x0d41n9c")
-                Nothing -> String "id_sample"
-        AggregateEnum fieldType ->
-            case find ((== fieldType) . enumName) (specEnums spec) of
-                Just enum
-                    | (_, wireValue) : _ <- enumCtors enum -> String wireValue
-                _ -> String "sample"
+        AggregateNominal nominal -> case resolvedNominalRepresentation nominal of
+            IdRepresentation prefix -> String (prefix <> "_01hzy3v7q2e8kaw2m5x0d41n9c")
+            EnumRepresentation constructors -> String (snd (NE.head constructors))
+            ScalarRepresentation NominalText -> String "sample"
+            ScalarRepresentation NominalInt -> Number 1
+            ScalarRepresentation NominalNatural -> Number 1
+            ScalarRepresentation NominalBool -> Bool True
+            ScalarRepresentation NominalTime -> String "2026-01-02T03:04:05.123456789012Z"
         AggregateVertex vertexType ->
             String
                 ( fromMaybe

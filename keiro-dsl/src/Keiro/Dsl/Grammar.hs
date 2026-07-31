@@ -27,6 +27,8 @@ module Keiro.Dsl.Grammar (
     WireArm (..),
     MappedShape (..),
     HaskellSource (..),
+    NominalBindingDecl (..),
+    NominalScalarDecl (..),
     MappedDecl (..),
 
     -- * The eight hole-kind types
@@ -170,6 +172,7 @@ and its prefix tag.
 data IdDecl = IdDecl
     { idName :: !Name
     , idPrefix :: !Text
+    , idBinding :: !(Maybe NominalBindingDecl)
     , idLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
@@ -180,6 +183,7 @@ constructor carries its wire spelling (the right-hand side of @=@).
 data EnumDecl = EnumDecl
     { enumName :: !Name
     , enumCtors :: ![(Name, Text)]
+    , enumBinding :: !(Maybe NominalBindingDecl)
     , enumLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
@@ -276,6 +280,35 @@ data HaskellSource = HaskellSource
     { hsPackage :: !Text
     , hsModule :: !Text
     , hsType :: !Name
+    }
+    deriving stock (Eq, Ord, Show, Generic)
+
+{- | Parser-facing facts for a total consumer-owned nominal binding.
+
+The fields remain optional only so validation can report every missing fact at
+the owning declaration. Downstream code consumes the checked nominal registry.
+-}
+data NominalBindingDecl = NominalBindingDecl
+    { nominalHaskell :: !(Maybe HaskellSource)
+    , nominalBinding :: !(Maybe Text)
+    , nominalBindingVersion :: !(Maybe Text)
+    , nominalCanonicalType :: !(Maybe Text)
+    , nominalFixtures :: !(Maybe Text)
+    , nominalInitial :: !(Maybe Text)
+    , nominalLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+{- | A consumer-owned nominal scalar over one declared representation name.
+
+The raw representation name is retained so @keiro-dsl check@ owns the stable
+unsupported-representation diagnostic instead of the low-level parser.
+-}
+data NominalScalarDecl = NominalScalarDecl
+    { nominalScalarName :: !Name
+    , nominalScalarRepresentation :: !Name
+    , nominalScalarBinding :: !NominalBindingDecl
+    , nominalScalarLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
 
@@ -1176,6 +1209,7 @@ data Spec = Spec
     , specIds :: ![IdDecl]
     , specEnums :: ![EnumDecl]
     , specRules :: ![RuleDecl]
+    , specNominalScalars :: ![NominalScalarDecl]
     , specMapped :: ![MappedDecl]
     , specNodes :: ![Node]
     }

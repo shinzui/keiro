@@ -58,6 +58,13 @@ import Keiki.Operators qualified as K
 import Keiki.Shape (CanonicalStateShape)
 import Keiro
 import Keiro qualified as KeiroRoot
+import Keiro.Codec.Nominal (
+    NominalBinding (..),
+    NominalFixture (..),
+    NominalFixtureCases (..),
+    nominalDomainRoundTrip,
+    nominalRepresentationRoundTrip,
+ )
 import Keiro.Codec.Structural (
     StructuralBinding (..),
     bindingDomainRoundTrip,
@@ -702,6 +709,29 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             decodeViaBinding pairBinding decodePairShape encoded `shouldBe` Right (9, False)
             decodeViaBinding pairBinding (const (Left "shape-error")) Aeson.Null
                 `shouldBe` Left "shape-error"
+
+    describe "Keiro.Codec.Nominal" $ do
+        let swappedBinding :: NominalBinding (Int, Bool) (Bool, Int)
+            swappedBinding =
+                NominalBinding
+                    { nominalToRepresentation = \(amount, enabled) -> (enabled, amount)
+                    , nominalFromRepresentation = \(enabled, amount) -> (amount, enabled)
+                    }
+            fixtures =
+                NominalFixtureCases
+                    ( NominalFixture "enabled" (object ["enabled" Aeson..= True, "amount" Aeson..= (7 :: Int)]) (7, True)
+                        :| [NominalFixture "disabled" (object ["enabled" Aeson..= False, "amount" Aeson..= (9 :: Int)]) (9, False)]
+                    )
+
+        it "checks both total nominal binding laws" $ do
+            nominalDomainRoundTrip swappedBinding (7, True) `shouldBe` True
+            nominalRepresentationRoundTrip swappedBinding (False, 9) `shouldBe` True
+
+        it "retains labelled expected-wire fixtures" $
+            nominalFixtureCases fixtures
+                `shouldBe` ( NominalFixture "enabled" (object ["enabled" Aeson..= True, "amount" Aeson..= (7 :: Int)]) (7, True)
+                                :| [NominalFixture "disabled" (object ["enabled" Aeson..= False, "amount" Aeson..= (9 :: Int)]) (9, False)]
+                           )
 
     describe "Keiro.EventStream" $ do
         it "constructs an author-facing EventStream contract" $ do

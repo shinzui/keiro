@@ -53,6 +53,7 @@ Source selection completes before the selected body grammar is run.
 parseSource :: FilePath -> Text -> Either ParseFailure ParsedSource
 parseSource src input = do
     sourceLanguage <- selectSourceLanguage src input
+    ensureBodyFeatures src sourceLanguage input
     definition <- case lookupLanguageDefinition (effectiveLanguageVersion sourceLanguage) of
         Just value -> Right value
         Nothing -> Left (unsupportedDiagnostic src sourceLanguage)
@@ -64,8 +65,10 @@ parseSource src input = do
                 LanguageBodyParserV1 ->
                     sc
                         *> case sourceLanguage of
-                            LegacyUnversioned -> pSpec <* eof
-                            DeclaredLanguage{} -> pDeclaredPreamble *> pSpec <* eof
+                            LegacyUnversioned -> pSpec False <* eof
+                            DeclaredLanguage{} -> pDeclaredPreamble *> pSpec False <* eof
+                LanguageBodyParserV2 ->
+                    sc *> pDeclaredPreamble *> pSpec True <* eof
          in case runParser parser src input of
                 Left bundle -> Left (BodyGrammarFailure (T.pack (errorBundlePretty bundle)))
                 Right spec -> Right spec
@@ -154,6 +157,32 @@ isLanguageLine :: SignificantLine -> Bool
 isLanguageLine line = case T.words (significantLineText line) of
     "language" : _ -> True
     _ -> False
+
+{- | Reject syntax owned by a successor before the frozen predecessor grammar
+can turn it into generic parser noise.
+-}
+ensureBodyFeatures :: FilePath -> SourceLanguage -> Text -> Either ParseFailure ()
+ensureBodyFeatures src sourceLanguage input =
+    case filter requiresNominalSyntax (significantLines input) of
+        marker : _
+            | languageVersionNumber (effectiveLanguageVersion sourceLanguage) < 2 ->
+                Left
+                    ( SourceLanguageFailure
+                        SourceLanguageDiagnostic
+                            { sourceLanguageErrorCode = LanguageFeatureRequiresVersion
+                            , sourceLanguageSource = src
+                            , sourceLanguageLoc = Loc (significantLineNumber marker)
+                            , sourceLanguageToken = Just (languageVersionText (effectiveLanguageVersion sourceLanguage))
+                            , sourceLanguageDeclaredVersion = Just (effectiveLanguageVersion sourceLanguage)
+                            , sourceLanguageSupportedVersions = supportedLanguageVersions
+                            }
+                    )
+        _ -> Right ()
+  where
+    requiresNominalSyntax line =
+        case T.words (significantLineText line) of
+            "mapped" : "nominal" : _ -> True
+            wordsFound -> "using" `elem` wordsFound
 
 --------------------------------------------------------------------------------
 -- Lexer
@@ -348,16 +377,17 @@ data TopItem
     = TIId IdDecl
     | TIEnum EnumDecl
     | TIRule RuleDecl
+    | TINominalScalar NominalScalarDecl
     | TIMapped MappedDecl
     | TINode Node
 
-pSpec :: P Spec
-pSpec = do
+pSpec :: Bool -> P Spec
+pSpec nominalSyntax = do
     keyword "context"
     ctx <- wireWord
     mroot <- optional pModuleClause
     mlayout <- optional pLayoutClause
-    items <- many pTopItem
+    items <- many (pTopItem nominalSyntax)
     pure
         Spec
             { specContext = ctx
@@ -366,6 +396,7 @@ pSpec = do
             , specIds = [d | TIId d <- items]
             , specEnums = [d | TIEnum d <- items]
             , specRules = [d | TIRule d <- items]
+            , specNominalScalars = [d | TINominalScalar d <- items]
             , specMapped = [d | TIMapped d <- items]
             , specNodes = [n | TINode n <- items]
             }
@@ -397,44 +428,48 @@ pModulePrefix = lexeme $ do
         cs <- many identChar
         pure (T.pack (c : cs))
 
-pTopItem :: P TopItem
-pTopItem =
+pTopItem :: Bool -> P TopItem
+pTopItem nominalSyntax =
     choice
-        [ TIId <$> pIdDecl
-        , TIEnum <$> pEnumDecl
-        , TIRule <$> pRuleDecl
-        , TIMapped <$> pMappedDecl
-        , TINode . NRouter <$> pRouter
-        , TINode . NProcess <$> pProcess
-        , TINode . NContract <$> pContract
-        , TINode . NIntake <$> pIntake
-        , TINode . NEmit <$> pEmit
-        , TINode . NPublisher <$> pPublisher
-        , TINode . NWorkqueue <$> pWorkqueue
-        , TINode . NPgmqDispatch <$> pPgmqDispatch
-        , TINode . NReadModel <$> pReadModel
-        , TINode . NWorkflow <$> pWorkflow
-        , TINode . NOperation <$> pOperation
-        , TINode . NAggregate <$> pAggregate
-        ]
+        ( [ TIId <$> pIdDecl nominalSyntax
+          , TIEnum <$> pEnumDecl nominalSyntax
+          , TIRule <$> pRuleDecl
+          , pMappedTopItem nominalSyntax
+          ]
+            ++ [ TINode . NRouter <$> pRouter
+               , TINode . NProcess <$> pProcess
+               , TINode . NContract <$> pContract
+               , TINode . NIntake <$> pIntake
+               , TINode . NEmit <$> pEmit
+               , TINode . NPublisher <$> pPublisher
+               , TINode . NWorkqueue <$> pWorkqueue
+               , TINode . NPgmqDispatch <$> pPgmqDispatch
+               , TINode . NReadModel <$> pReadModel
+               , TINode . NWorkflow <$> pWorkflow
+               , TINode . NOperation <$> pOperation
+               , TINode . NAggregate <$> pAggregate
+               ]
+        )
 
-pIdDecl :: P IdDecl
-pIdDecl = do
+pIdDecl :: Bool -> P IdDecl
+pIdDecl nominalSyntax = do
     loc <- getLoc
     keyword "id"
     name <- ident
     _ <- symbol "prefix"
     _ <- symbol "="
     pfx <- wireWord
-    pure IdDecl{idName = name, idPrefix = pfx, idLoc = loc}
+    binding <- if nominalSyntax then optional pUsingNominalBinding else pure Nothing
+    pure IdDecl{idName = name, idPrefix = pfx, idBinding = binding, idLoc = loc}
 
-pEnumDecl :: P EnumDecl
-pEnumDecl = do
+pEnumDecl :: Bool -> P EnumDecl
+pEnumDecl nominalSyntax = do
     loc <- getLoc
     keyword "enum"
     name <- ident
     ctors <- braces (many pEnumCtor)
-    pure EnumDecl{enumName = name, enumCtors = ctors, enumLoc = loc}
+    binding <- if nominalSyntax then optional pUsingNominalBinding else pure Nothing
+    pure EnumDecl{enumName = name, enumCtors = ctors, enumBinding = binding, enumLoc = loc}
   where
     pEnumCtor = do
         c <- ident
@@ -469,7 +504,7 @@ pRuleDecl = do
         pure (c, e)
 
 --------------------------------------------------------------------------------
--- Consumer-owned mapped types (EP-149)
+-- Consumer-owned mapped and nominal types
 --------------------------------------------------------------------------------
 
 data MappedKind = MappedRecord | MappedEnum | MappedUnion
@@ -485,61 +520,120 @@ data MappedClause
     | MCCodecVersion Text
     | MCShape MappedShape
 
-pMappedDecl :: P MappedDecl
-pMappedDecl = do
+pMappedTopItem :: Bool -> P TopItem
+pMappedTopItem nominalSyntax = do
     loc <- getLoc
     keyword "mapped"
-    choice [pStructural loc, pOpaque loc]
-  where
-    pStructural loc = do
-        keyword "structural"
-        kind <-
-            choice
-                [ MappedRecord <$ keyword "record"
-                , MappedEnum <$ keyword "enum"
-                , MappedUnion <$ keyword "union"
-                ]
-        name <- ident
-        clauses <- braces (many (pStructuralClause kind))
-        hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
-        binding <- oneClause "binding" (\case MCBinding value -> Just value; _ -> Nothing) clauses
-        bindingVersion <- oneClause "binding-version" (\case MCBindingVersion value -> Just value; _ -> Nothing) clauses
-        canonical <- oneClause "canonical-type" (\case MCCanonical value -> Just value; _ -> Nothing) clauses
-        fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
-        initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
-        shape <- requiredClause "wire" (\case MCShape value -> Just value; _ -> Nothing) clauses
-        pure
-            MappedStructural
-                { msName = name
-                , msHaskell = hs
-                , msBinding = binding
-                , msBindingVersion = bindingVersion
-                , msCanonical = canonical
-                , msFixtures = fixtures
-                , msInitial = initial
-                , msShape = shape
-                , msLoc = loc
-                }
+    choice
+        ( [TINominalScalar <$> pNominalScalarAfterMapped loc | nominalSyntax]
+            ++ [ TIMapped <$> pMappedStructural loc
+               , TIMapped <$> pMappedOpaque loc
+               ]
+        )
 
-    pOpaque loc = do
-        keyword "opaque"
-        name <- ident
-        clauses <- braces (many pOpaqueClause)
-        hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
-        codec <- oneClause "codec" (\case MCCodec value -> Just value; _ -> Nothing) clauses
-        version <- oneClause "version" (\case MCCodecVersion value -> Just value; _ -> Nothing) clauses
-        fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
-        initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
-        pure
-            MappedOpaque
-                { moName = name
-                , moHaskell = hs
-                , moCodecId = codec
-                , moCodecVersion = version
-                , moFixtures = fixtures
-                , moInitial = initial
-                , moLoc = loc
-                }
+pMappedStructural :: Loc -> P MappedDecl
+pMappedStructural loc = do
+    keyword "structural"
+    kind <-
+        choice
+            [ MappedRecord <$ keyword "record"
+            , MappedEnum <$ keyword "enum"
+            , MappedUnion <$ keyword "union"
+            ]
+    name <- ident
+    clauses <- braces (many (pStructuralClause kind))
+    hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
+    binding <- oneClause "binding" (\case MCBinding value -> Just value; _ -> Nothing) clauses
+    bindingVersion <- oneClause "binding-version" (\case MCBindingVersion value -> Just value; _ -> Nothing) clauses
+    canonical <- oneClause "canonical-type" (\case MCCanonical value -> Just value; _ -> Nothing) clauses
+    fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
+    initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
+    shape <- requiredClause "wire" (\case MCShape value -> Just value; _ -> Nothing) clauses
+    pure
+        MappedStructural
+            { msName = name
+            , msHaskell = hs
+            , msBinding = binding
+            , msBindingVersion = bindingVersion
+            , msCanonical = canonical
+            , msFixtures = fixtures
+            , msInitial = initial
+            , msShape = shape
+            , msLoc = loc
+            }
+
+pMappedOpaque :: Loc -> P MappedDecl
+pMappedOpaque loc = do
+    keyword "opaque"
+    name <- ident
+    clauses <- braces (many pOpaqueClause)
+    hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
+    codec <- oneClause "codec" (\case MCCodec value -> Just value; _ -> Nothing) clauses
+    version <- oneClause "version" (\case MCCodecVersion value -> Just value; _ -> Nothing) clauses
+    fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
+    initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
+    pure
+        MappedOpaque
+            { moName = name
+            , moHaskell = hs
+            , moCodecId = codec
+            , moCodecVersion = version
+            , moFixtures = fixtures
+            , moInitial = initial
+            , moLoc = loc
+            }
+
+pNominalScalarAfterMapped :: Loc -> P NominalScalarDecl
+pNominalScalarAfterMapped loc = do
+    keyword "nominal"
+    name <- ident
+    _ <- symbol ":"
+    representation <- ident
+    binding <- pNominalBindingBlock loc
+    pure
+        NominalScalarDecl
+            { nominalScalarName = name
+            , nominalScalarRepresentation = representation
+            , nominalScalarBinding = binding
+            , nominalScalarLoc = loc
+            }
+
+pUsingNominalBinding :: P NominalBindingDecl
+pUsingNominalBinding = do
+    keyword "using"
+    loc <- getLoc
+    pNominalBindingBlock loc
+
+pNominalBindingBlock :: Loc -> P NominalBindingDecl
+pNominalBindingBlock loc = do
+    clauses <- braces (many pNominalClause)
+    hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
+    binding <- oneClause "binding" (\case MCBinding value -> Just value; _ -> Nothing) clauses
+    bindingVersion <- oneClause "binding-version" (\case MCBindingVersion value -> Just value; _ -> Nothing) clauses
+    canonical <- oneClause "canonical-type" (\case MCCanonical value -> Just value; _ -> Nothing) clauses
+    fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
+    initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
+    pure
+        NominalBindingDecl
+            { nominalHaskell = hs
+            , nominalBinding = binding
+            , nominalBindingVersion = bindingVersion
+            , nominalCanonicalType = canonical
+            , nominalFixtures = fixtures
+            , nominalInitial = initial
+            , nominalLoc = loc
+            }
+
+pNominalClause :: P MappedClause
+pNominalClause =
+    choice
+        [ MCHaskell <$> pHaskellSource
+        , MCBindingVersion <$> pQuotedFact "binding-version"
+        , MCBinding <$> pQuotedFact "binding"
+        , MCCanonical <$> pQuotedFact "canonical-type"
+        , MCFixtures <$> pQuotedFact "fixtures"
+        , MCInitial <$> pQuotedFact "initial"
+        ]
 
 pStructuralClause :: MappedKind -> P MappedClause
 pStructuralClause kind =

@@ -1,0 +1,101 @@
+language keiro-dsl 2
+context nominal-scalars
+
+id OrderId prefix=ord using {
+  haskell package=nominal-conformance module=NominalConformance.Domain type=OrderId
+  binding = "NominalConformance.Bindings.orderIdBinding"
+  binding-version = "1"
+  canonical-type = "nominal.OrderId.v1"
+  fixtures = "NominalConformance.Bindings.orderIdFixtures"
+  initial = "NominalConformance.Bindings.initialOrderId"
+}
+
+enum OrderStatus { Draft=draft Submitted=submitted } using {
+  haskell package=nominal-conformance module=NominalConformance.Domain type=OrderStatus
+  binding = "NominalConformance.Bindings.orderStatusBinding"
+  binding-version = "1"
+  canonical-type = "nominal.OrderStatus.v1"
+  fixtures = "NominalConformance.Bindings.orderStatusFixtures"
+  initial = "NominalConformance.Bindings.initialOrderStatus"
+}
+
+mapped nominal AccountNumber : Text {
+  haskell package=nominal-conformance module=NominalConformance.Domain type=AccountNumber
+  binding = "NominalConformance.Bindings.accountNumberBinding"
+  binding-version = "1"
+  canonical-type = "nominal.AccountNumber.v1"
+  fixtures = "NominalConformance.Bindings.accountNumberFixtures"
+  initial = "NominalConformance.Bindings.initialAccountNumber"
+}
+
+mapped nominal RiskScore : Int {
+  haskell package=nominal-conformance module=NominalConformance.Domain type=RiskScore
+  binding = "NominalConformance.Bindings.riskScoreBinding"
+  binding-version = "1"
+  canonical-type = "nominal.RiskScore.v1"
+  fixtures = "NominalConformance.Bindings.riskScoreFixtures"
+  initial = "NominalConformance.Bindings.initialRiskScore"
+}
+
+mapped nominal SequenceNumber : Natural {
+  haskell package=nominal-conformance module=NominalConformance.Domain type=SequenceNumber
+  binding = "NominalConformance.Bindings.sequenceNumberBinding"
+  binding-version = "1"
+  canonical-type = "nominal.SequenceNumber.v1"
+  fixtures = "NominalConformance.Bindings.sequenceNumberFixtures"
+  initial = "NominalConformance.Bindings.initialSequenceNumber"
+}
+
+mapped nominal FeatureFlag : Bool {
+  haskell package=nominal-conformance module=NominalConformance.Domain type=FeatureFlag
+  binding = "NominalConformance.Bindings.featureFlagBinding"
+  binding-version = "1"
+  canonical-type = "nominal.FeatureFlag.v1"
+  fixtures = "NominalConformance.Bindings.featureFlagFixtures"
+  initial = "NominalConformance.Bindings.initialFeatureFlag"
+}
+
+mapped nominal ObservedAt : Time {
+  haskell package=nominal-conformance module=NominalConformance.Domain type=ObservedAt
+  binding = "NominalConformance.Bindings.observedAtBinding"
+  binding-version = "1"
+  canonical-type = "nominal.ObservedAt.v1"
+  fixtures = "NominalConformance.Bindings.observedAtFixtures"
+  initial = "NominalConformance.Bindings.initialObservedAt"
+}
+
+aggregate NominalLedger
+  regs
+    orderId OrderId = initial
+    status OrderStatus = initial
+    accountNumber AccountNumber = initial
+    riskScore RiskScore = initial
+    sequenceNumber SequenceNumber = initial
+    featureFlag FeatureFlag = initial
+    observedAt ObservedAt = initial
+  states Empty Recorded!
+
+  command RecordNominals {
+    orderId:OrderId status:OrderStatus accountNumber:AccountNumber riskScore:RiskScore
+    sequenceNumber:SequenceNumber featureFlag:FeatureFlag observedAt:ObservedAt
+  }
+  event NominalsRecorded {
+    orderId:OrderId status:OrderStatus accountNumber:AccountNumber riskScore:RiskScore
+    sequenceNumber:SequenceNumber featureFlag:FeatureFlag observedAt:ObservedAt
+  }
+
+  Empty -- RecordNominals -->
+    guard accountNumber == accountNumber && riskScore >= riskScore && sequenceNumber >= sequenceNumber && featureFlag == featureFlag && observedAt >= observedAt
+    write orderId := orderId
+    write status := status
+    write accountNumber := accountNumber
+    write riskScore := riskScore
+    write sequenceNumber := sequenceNumber
+    write featureFlag := featureFlag
+    write observedAt := observedAt
+    emit NominalsRecorded
+    goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  snapshot every 1
+    state-codec version=1 shape-hash="nominal-scalars-v1"

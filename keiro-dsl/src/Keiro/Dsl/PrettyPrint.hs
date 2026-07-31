@@ -66,6 +66,8 @@ docSpec s =
             ++ blankAfter (specEnums s)
             ++ map docRule (specRules s)
             ++ blankAfter (specRules s)
+            ++ map docNominalScalar (specNominalScalars s)
+            ++ blankAfter (specNominalScalars s)
             ++ map docMapped (specMapped s)
             ++ blankAfter (specMapped s)
             ++ map docNode (specNodes s)
@@ -77,12 +79,26 @@ docLayout GeneratedPrefix = "prefixed"
 docLayout CollocatedLeaf = "collocated"
 
 docId :: IdDecl -> Doc ann
-docId d = "id" <+> pretty (idName d) <+> ("prefix=" <> pretty (idPrefix d))
+docId d =
+    case idBinding d of
+        Nothing -> "id" <+> pretty (idName d) <+> ("prefix=" <> pretty (idPrefix d))
+        Just binding ->
+            vsep $
+                ["id" <+> pretty (idName d) <+> ("prefix=" <> pretty (idPrefix d)) <+> "using" <+> "{"]
+                    ++ map (indent 2) (docNominalBindingFacts binding)
+                    ++ ["}"]
 
 docEnum :: EnumDecl -> Doc ann
 docEnum d =
-    "enum" <+> pretty (enumName d) <+> braced (map ctor (enumCtors d))
+    case enumBinding d of
+        Nothing -> enumHeader
+        Just binding ->
+            vsep $
+                [enumHeader <+> "using" <+> "{"]
+                    ++ map (indent 2) (docNominalBindingFacts binding)
+                    ++ ["}"]
   where
+    enumHeader = "enum" <+> pretty (enumName d) <+> braced (map ctor (enumCtors d))
     ctor (c, w) = pretty c <> "=" <> pretty w
 
 docRule :: RuleDecl -> Doc ann
@@ -114,6 +130,27 @@ docMapped MappedOpaque{moName = name, moHaskell = haskell, moCodecId = codec, mo
             ++ maybe [] (pure . indent 2 . docQuotedFact "fixtures") fixtures
             ++ maybe [] (pure . indent 2 . docQuotedFact "initial") initial
             ++ ["}"]
+
+docNominalScalar :: NominalScalarDecl -> Doc ann
+docNominalScalar declaration =
+    vsep $
+        [ "mapped nominal"
+            <+> pretty (nominalScalarName declaration)
+            <+> ":"
+            <+> pretty (nominalScalarRepresentation declaration)
+            <+> "{"
+        ]
+            ++ map (indent 2) (docNominalBindingFacts (nominalScalarBinding declaration))
+            ++ ["}"]
+
+docNominalBindingFacts :: NominalBindingDecl -> [Doc ann]
+docNominalBindingFacts binding =
+    maybe [] (pure . docHaskellSource) (nominalHaskell binding)
+        ++ maybe [] (pure . docQuotedFact "binding") (nominalBinding binding)
+        ++ maybe [] (pure . docQuotedFact "binding-version") (nominalBindingVersion binding)
+        ++ maybe [] (pure . docQuotedFact "canonical-type") (nominalCanonicalType binding)
+        ++ maybe [] (pure . docQuotedFact "fixtures") (nominalFixtures binding)
+        ++ maybe [] (pure . docQuotedFact "initial") (nominalInitial binding)
 
 docShapeKind :: MappedShape -> Doc ann
 docShapeKind (ShapeRecord _ _ _) = "record"

@@ -1,0 +1,10 @@
+language keiro-dsl 2
+context nominal-errors
+
+id OrderId prefix=bad_ using {
+  haskell package=domain module=Domain.Order type=OrderId
+  binding = "Domain.Bindings.orderIdBinding"
+  binding-version = "1"
+  canonical-type = "domain.OrderId.v1"
+  fixtures = "Domain.Bindings.orderIdFixtures"
+}

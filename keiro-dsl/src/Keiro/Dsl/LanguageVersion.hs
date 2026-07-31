@@ -83,7 +83,9 @@ declaredLanguageVersionMaybe LegacyUnversioned = Nothing
 declaredLanguageVersionMaybe DeclaredLanguage{declaredLanguageVersion = version} = Just version
 
 -- | The body-parser configuration selected by a released version.
-data LanguageBodyParser = LanguageBodyParserV1
+data LanguageBodyParser
+    = LanguageBodyParserV1
+    | LanguageBodyParserV2
     deriving stock (Eq, Show)
 
 -- | One append-only released-language registry entry.
@@ -97,9 +99,14 @@ data LanguageDefinition = LanguageDefinition
 version1 :: LanguageVersion
 version1 = LanguageVersion 1
 
+version2 :: LanguageVersion
+version2 = LanguageVersion 2
+
 -- | The authoritative, append-only registry of released language contracts.
 languageRegistry :: NonEmpty LanguageDefinition
-languageRegistry = LanguageDefinition version1 Nothing LanguageBodyParserV1 :| []
+languageRegistry =
+    LanguageDefinition version1 Nothing LanguageBodyParserV1
+        :| [LanguageDefinition version2 (Just version1) LanguageBodyParserV2]
 
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion
@@ -143,6 +150,7 @@ data SourceLanguageErrorCode
     | UnsupportedLanguageVersion
     | DuplicateLanguagePreamble
     | MisplacedLanguagePreamble
+    | LanguageFeatureRequiresVersion
     deriving stock (Eq, Ord, Show)
 
 sourceLanguageErrorCodeText :: SourceLanguageErrorCode -> Text
@@ -187,6 +195,11 @@ renderSourceLanguageDiagnostic diagnostic =
             "duplicate language preamble; exactly one may appear before `context`"
         MisplacedLanguagePreamble ->
             "misplaced language preamble; it must be the first significant clause before `context`"
+        LanguageFeatureRequiresVersion ->
+            "nominal binding syntax requires keiro-dsl language version "
+                <> languageVersionText (NE.last (sourceLanguageSupportedVersions diagnostic))
+                <> "; selected version "
+                <> maybe token languageVersionText (sourceLanguageDeclaredVersion diagnostic)
 
 -- | A parsed document with its source declaration preserved beside its graph.
 data ParsedSource = ParsedSource

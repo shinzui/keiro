@@ -1,0 +1,4 @@
+language keiro-dsl 1
+context nominal-errors
+
+mapped nominal AccountNumber : Text {}

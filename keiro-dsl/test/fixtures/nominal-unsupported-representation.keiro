@@ -1,0 +1,10 @@
+language keiro-dsl 2
+context nominal-errors
+
+mapped nominal AccountNumber : Decimal {
+  haskell package=domain module=Domain.Account type=AccountNumber
+  binding = "Domain.Bindings.accountNumberBinding"
+  binding-version = "1"
+  canonical-type = "domain.AccountNumber.v1"
+  fixtures = "Domain.Bindings.accountNumberFixtures"
+}

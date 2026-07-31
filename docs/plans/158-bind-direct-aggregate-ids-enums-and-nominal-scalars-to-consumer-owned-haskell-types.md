@@ -4,6 +4,7 @@ slug: bind-direct-aggregate-ids-enums-and-nominal-scalars-to-consumer-owned-hask
 title: "Bind direct aggregate IDs enums and nominal scalars to consumer-owned Haskell types"
 kind: exec-plan
 created_at: 2026-07-31T14:46:35Z
+intention: intention_01kywm9cd8ey1t3rg8ngsa9fxr
 ---
 
 # Bind direct aggregate IDs enums and nominal scalars to consumer-owned Haskell types
@@ -47,13 +48,17 @@ This section must always reflect the actual current state of the work.
 - [x] 2026-07-31: Validated this plan against the current parser, resolver, generator, codec,
   snapshot, record, workspace, and Keiki symbolic APIs; ADRs 3, 4, 12, and 15; and the released
   `mmzk-typeid` 0.7.1.1 source and upstream tag.
-- [ ] Prerequisite: complete plan 160 and confirm that the landed language-version registry has
-  no unchecked work before adding syntax in this plan.
-- [ ] Milestone 1: publish the total nominal-binding runtime contract and add version-gated,
-  canonical syntax for bound direct IDs, bound direct enums, and nominal scalars.
-- [ ] Milestone 2: resolve every declaration into one checked nominal-type registry and reject
-  invalid prefixes, incomplete provenance, refined scalar claims, name collisions, and missing
-  register initials at `keiro-dsl check`.
+- [x] 2026-07-31: Confirmed plan 160 is complete: its Progress section has no unchecked rows,
+  version 1 is the released parser contract, and the successor syntax can be allocated without
+  widening version 1 or legacy-unversioned sources.
+- [x] 2026-07-31: Milestone 1 published the total `Keiro.Codec.Nominal` contract and registered
+  the canonical direct-ID, direct-enum, and nominal-scalar forms exclusively in language version
+  2. Focused runtime tests report 2 examples and the nominal parser/checker slice reports 5
+  examples, both with zero failures.
+- [x] 2026-07-31: Milestone 2 added the checked `NominalTypeRegistry`, integrated it with aggregate
+  type resolution, initials and capabilities, and allocated located diagnostics for incomplete
+  provenance, invalid Haskell or qualified names, invalid identity and TypeID prefix, unsupported
+  or empty representations, missing register initials, and cross-category name collisions.
 - [ ] Milestone 3: drive domain, codec, projection, fixture, manifest, record, fingerprint, diff,
   replay-impact, scaffold, and workspace output from the checked model while preserving the
   existing generated path for unbound IDs and enums.
@@ -97,6 +102,15 @@ implementation. Provide concise evidence.
   checked APIs.
 - 2026-07-31: Plan 160 is still entirely unchecked. This plan may define the successor grammar,
   but implementation must not silently widen legacy or released version 1 syntax.
+- 2026-07-31: The prerequisite changed after this plan's validation pass: plan 160 is now fully
+  complete, with 15 focused source examples, 394 full DSL examples, a successful all-package
+  build, native flake checks, and accepted ADR 16 recorded in its Outcomes section.
+- 2026-07-31: The append-only validation codes allocated by the checked nominal registry are
+  `NominalMissingIngredient`, `NominalInvalidHaskellSource`, `NominalInvalidQualifiedName`,
+  `NominalInvalidIdentity`, `NominalInvalidIdPrefix`, `NominalUnsupportedRepresentation`,
+  `NominalEmptyEnumRepresentation`, `NominalMissingInitialValue`, and `NominalNameCollision`.
+  The version-1 boundary uses the source-language code `LanguageFeatureRequiresVersion`, so invalid
+  successor syntax does not cascade into ordinary parser or nominal diagnostics.
 
 
 ## Decision Log
@@ -208,8 +222,10 @@ this section into docs/adr/. Keep task-local execution details here.
 
 The 2026-07-31 plan-validation pass replaced a partial, potentially lossy codec boundary with a
 total category-specific representation model and corrected the solver, snapshot, record, and
-workspace claims to match released code. No production code or ADR changed during this planning
-revision. Implementation and measured outcomes remain pending.
+workspace claims to match released code. Milestones 1 and 2 now provide the public total binding
+API, version-2 syntax and pretty printer, workspace relocation, one checked nominal registry,
+aggregate lowering, exact text/JSON binding obligations, and stable earliest-boundary diagnostics.
+Generation, compatibility records, compiled conformance, documentation, and ADR amendments remain.
 
 
 ## Context and Orientation

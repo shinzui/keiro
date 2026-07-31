@@ -40,6 +40,7 @@ library
   import:          warnings, shared
   exposed-modules:
     Keiro.Codec
+    Keiro.Codec.Nominal
     Keiro.Codec.Structural
     Keiro.Codec.Structural.Generic
     Keiro.EventStream

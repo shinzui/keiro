@@ -91,6 +91,7 @@ library
     keiro-core:Keiro.Codec,
     keiro-core:Keiro.Codec.Structural,
     keiro-core:Keiro.Codec.Structural.Generic,
+    keiro-core:Keiro.Codec.Nominal,
     keiro-core:Keiro.EventStream,
     keiro-core:Keiro.EventStream.Validate,
     keiro-core:Keiro.Integration.Event,

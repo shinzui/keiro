@@ -34,6 +34,7 @@ import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, h
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
+import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
 import Keiro.Dsl.Parser (parseSource, parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
@@ -99,17 +100,56 @@ main = hspec $ do
             failureCode "language keiro-dsl 0\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
             failureCode "language keiro-dsl nope\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
             failureCode "language keiro-dsl -1\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
-            failureCode "language keiro-dsl 2\ncontext hospital-capacity\n" `shouldBe` Just UnsupportedLanguageVersion
+            failureCode "language keiro-dsl 3\ncontext hospital-capacity\n" `shouldBe` Just UnsupportedLanguageVersion
             failureCode "language keiro-dsl 1\nlanguage keiro-dsl 1\ncontext hospital-capacity\n" `shouldBe` Just DuplicateLanguagePreamble
             failureCode "context hospital-capacity\nlanguage keiro-dsl 1\n" `shouldBe` Just MisplacedLanguagePreamble
 
         it "rejects a future version before parsing an invalid v1 body" $
-            case parseSource "future.keiro" "language keiro-dsl 2\nthis is not a v1 body\n" of
+            case parseSource "future.keiro" "language keiro-dsl 3\nthis is not a v2 body\n" of
                 Left failure@(SourceLanguageFailure diagnostic) -> do
                     sourceLanguageErrorCode diagnostic `shouldBe` UnsupportedLanguageVersion
-                    renderParseFailure failure `shouldSatisfy` T.isInfixOf "supported versions: 1"
+                    renderParseFailure failure `shouldSatisfy` T.isInfixOf "supported versions: 1, 2"
                     renderParseFailure failure `shouldNotSatisfy` T.isInfixOf "expecting `context`"
                 other -> expectationFailure ("expected source-language failure, got " <> show other)
+
+        it "accepts and canonically round-trips nominal declarations only in v2" $ do
+            let nominalSource =
+                    T.unlines
+                        [ "language keiro-dsl 2"
+                        , "context orders"
+                        , "id OrderId prefix=ord using {"
+                        , "  haskell package=orders-domain module=Orders.Id type=OrderId"
+                        , "  binding = \"Orders.KeiroBindings.orderIdBinding\""
+                        , "  binding-version = \"1\""
+                        , "  canonical-type = \"orders.OrderId.v1\""
+                        , "  fixtures = \"Orders.KeiroBindings.orderIdFixtures\""
+                        , "}"
+                        , "enum OrderStatus { Draft=draft Submitted=submitted } using {"
+                        , "  haskell package=orders-domain module=Orders.Order type=OrderStatus"
+                        , "  binding = \"Orders.KeiroBindings.orderStatusBinding\""
+                        , "  binding-version = \"1\""
+                        , "  canonical-type = \"orders.OrderStatus.v1\""
+                        , "  fixtures = \"Orders.KeiroBindings.orderStatusFixtures\""
+                        , "}"
+                        , "mapped nominal AccountNumber : Text {"
+                        , "  haskell package=orders-domain module=Orders.Account type=AccountNumber"
+                        , "  binding = \"Orders.KeiroBindings.accountNumberBinding\""
+                        , "  binding-version = \"1\""
+                        , "  canonical-type = \"orders.AccountNumber.v1\""
+                        , "  fixtures = \"Orders.KeiroBindings.accountNumberFixtures\""
+                        , "  initial = \"Orders.KeiroBindings.initialAccountNumber\""
+                        , "}"
+                        ]
+            parsed <- parseRight "nominal.keiro" nominalSource
+            length (specIds (parsedSpec parsed)) `shouldBe` 1
+            length (specEnums (parsedSpec parsed)) `shouldBe` 1
+            length (specNominalScalars (parsedSpec parsed)) `shouldBe` 1
+            parseSource "nominal-round-trip.keiro" (renderSource parsed) `shouldBe` Right parsed
+
+        it "reports successor nominal syntax as one language-version diagnostic under v1 and legacy" $ do
+            let body = "context orders\nmapped nominal AccountNumber : Text {}\n"
+            failureCode ("language keiro-dsl 1\n" <> body) `shouldBe` Just LanguageFeatureRequiresVersion
+            failureCode body `shouldBe` Just LanguageFeatureRequiresVersion
 
         it "reports a declaration-only rewrite without semantic, generated, fold, or replay impact" $ do
             fixture <- readTestText "test/fixtures/reservation.keiro"
@@ -170,6 +210,13 @@ main = hspec $ do
                     , "language-malformed.keiro"
                     , "language-misplaced.keiro"
                     , "language-zero.keiro"
+                    , "nominal-bad-qualified.keiro"
+                    , "nominal-invalid-prefix.keiro"
+                    , "nominal-missing-facts.keiro"
+                    , "nominal-missing-initial.keiro"
+                    , "nominal-name-collision.keiro"
+                    , "nominal-scalars.keiro"
+                    , "nominal-unsupported-representation.keiro"
                     ]
 
         it "checks v1, rejects a future contract once, and inspects legacy explicitly" $ do
@@ -180,7 +227,7 @@ main = hspec $ do
             (futureCode, _, futureErr) <- runKeiroDsl ["check", "test/fixtures/language-future.keiro"]
             futureCode `shouldBe` ExitFailure 1
             T.count "UnsupportedLanguageVersion" (T.pack futureErr) `shouldBe` 1
-            futureErr `shouldContain` "supported versions: 1"
+            futureErr `shouldContain` "supported versions: 1, 2"
             futureErr `shouldNotContain` "expecting `context`"
             (legacyCode, legacyOut, legacyErr) <- runKeiroDsl ["inspect", "test/fixtures/language-legacy.keiro", "--format=json"]
             legacyCode `shouldBe` ExitSuccess
@@ -191,7 +238,7 @@ main = hspec $ do
 
         it "preserves a workspace member's source-selection code beneath outer attribution" $ do
             let manifest = "service demo\nspec domain/future.keiro\n"
-                futureSource = "language keiro-dsl 2\nthis body must not parse\n"
+                futureSource = "language keiro-dsl 3\nthis body must not parse\n"
                 source = memoryContentSource (Map.fromList [("service.keiro-workspace", manifest), ("domain/future.keiro", futureSource)])
             loaded <- loadWorkspace source "service.keiro-workspace"
             case loaded of
@@ -214,6 +261,52 @@ main = hspec $ do
                     map (fmap osFile . wcDeclarationSite) changes `shouldBe` [Just (wmPath firstMember)]
                     map wcChange changes `shouldSatisfy` all (not . gatedBreaking (gateWith [minBound .. maxBound]))
                 _ -> expectationFailure "canonical workspace had no member"
+
+    describe "nominal consumer types" $ do
+        it "resolves every category through one checked registry and explains exact obligations" $ do
+            spec <- specOf "test/fixtures/nominal-scalars.keiro"
+            errorCodes spec `shouldBe` []
+            registry <- case resolveNominalTypes spec of
+                Left errors -> expectationFailure (show errors) >> fail "unreachable"
+                Right value -> pure value
+            Map.keys (nominalTypes registry)
+                `shouldBe` ["AccountNumber", "FeatureFlag", "ObservedAt", "OrderId", "OrderStatus", "RiskScore", "SequenceNumber"]
+            obligations <- either (\errors -> expectationFailure (show errors) >> pure []) pure (bindingObligations spec)
+            length obligations `shouldBe` 21
+            map obligationCategory obligations `shouldSatisfy` all (`elem` ["nominal-id", "nominal-enum", "nominal-scalar"])
+            let signatures = map obligationSignature obligations
+            forM_
+                [ "orderIdBinding :: NominalBinding NominalConformance.Domain.OrderId (KindID \"ord\")"
+                , "orderStatusBinding :: NominalBinding NominalConformance.Domain.OrderStatus Generated.NominalScalars.Nominal.Shape.OrderStatus.OrderStatusRepresentation"
+                , "accountNumberBinding :: NominalBinding NominalConformance.Domain.AccountNumber Text"
+                , "orderIdFixtures :: NominalFixtureCases NominalConformance.Domain.OrderId"
+                , "initialAccountNumber :: NominalConformance.Domain.AccountNumber"
+                ]
+                (`shouldSatisfy` (`elem` signatures))
+            map obligationCanonicalType obligations `shouldSatisfy` all (/= Nothing)
+            let rendered = renderBindingObligations (specContext spec) obligations
+            rendered `shouldSatisfy` T.isInfixOf "nominal-id type OrderId"
+            rendered `shouldSatisfy` T.isInfixOf "canonical-type: \"nominal.OrderId.v1\""
+            case obligations of
+                firstObligation : _ ->
+                    (Aeson.eitherDecode (Aeson.encode firstObligation) :: Either String BindingObligation)
+                        `shouldBe` Right firstObligation
+                [] -> expectationFailure "expected nominal binding obligations"
+
+        it "allocates distinct stable diagnostics for incomplete or incompatible nominal declarations" $ do
+            missing <- errorCodesOf "test/fixtures/nominal-missing-facts.keiro"
+            missing `shouldBe` replicate 5 NominalMissingIngredient
+            errorCodesOf "test/fixtures/nominal-bad-qualified.keiro" `shouldReturn` [NominalInvalidQualifiedName]
+            errorCodesOf "test/fixtures/nominal-invalid-prefix.keiro" `shouldReturn` [NominalInvalidIdPrefix]
+            errorCodesOf "test/fixtures/nominal-unsupported-representation.keiro" `shouldReturn` [NominalUnsupportedRepresentation]
+            errorCodesOf "test/fixtures/nominal-missing-initial.keiro" `shouldReturn` [NominalMissingInitialValue]
+            errorCodesOf "test/fixtures/nominal-name-collision.keiro" `shouldReturn` [NominalNameCollision, NominalNameCollision]
+
+        it "keeps v1 rejection at the source-language boundary" $ do
+            source <- readTestText "test/fixtures/nominal-v1.keiro"
+            case parseSource "nominal-v1.keiro" source of
+                Left (SourceLanguageFailure diagnostic) -> sourceLanguageErrorCode diagnostic `shouldBe` LanguageFeatureRequiresVersion
+                other -> expectationFailure ("expected source-language refusal, got " <> show other)
 
     describe "historical codec comparison" $ do
         it "treats object-key order as RFC 8785 parity" $ do
@@ -468,8 +561,10 @@ main = hspec $ do
                     , AggregateBool
                     , AggregateTime
                     , AggregateNatural
-                    , AggregateId "EntityId"
-                    , AggregateEnum "Status"
+                    , AggregateNominal (ResolvedNominalType "EntityId" (IdRepresentation "ent") GeneratedNominal noLoc)
+                    , AggregateNominal (ResolvedNominalType "Status" (EnumRepresentation (("Active", "active") :| [])) GeneratedNominal noLoc)
+                    , AggregateNominal (ResolvedNominalType "Amount" (ScalarRepresentation NominalInt) (consumerNominalFor "Amount") noLoc)
+                    , AggregateNominal (ResolvedNominalType "Label" (ScalarRepresentation NominalText) (consumerNominalFor "Label") noLoc)
                     , AggregateVertex "EntityVertex"
                     , AggregateMapped (MappedKey "ConsumerValue")
                     ]
@@ -479,16 +574,23 @@ main = hspec $ do
                         AggregateInt -> SolverVisible
                         AggregateTime -> SolverVisible
                         AggregateNatural -> SolverVisible
+                        AggregateNominal nominal -> case resolvedNominalRepresentation nominal of
+                            ScalarRepresentation NominalInt -> SolverVisible
+                            ScalarRepresentation NominalNatural -> SolverVisible
+                            ScalarRepresentation NominalTime -> SolverVisible
+                            _ -> Unsupported
                         _ -> Unsupported
                     EqualityGuardUse -> case resolvedType of
                         AggregateMapped{} -> Unsupported
-                        AggregateId{} -> OpaqueOnly
-                        AggregateEnum{} -> OpaqueOnly
+                        AggregateNominal nominal -> case resolvedNominalRepresentation nominal of
+                            ScalarRepresentation{} -> SolverVisible
+                            _ -> OpaqueOnly
                         AggregateVertex{} -> OpaqueOnly
                         _ -> SolverVisible
                     _ -> case resolvedType of
-                        AggregateId{} -> OpaqueOnly
-                        AggregateEnum{} -> OpaqueOnly
+                        AggregateNominal nominal -> case resolvedNominalRepresentation nominal of
+                            ScalarRepresentation{} -> SolverVisible
+                            _ -> OpaqueOnly
                         AggregateVertex{} -> OpaqueOnly
                         AggregateMapped{} -> OpaqueOnly
                         _ -> SolverVisible
@@ -627,7 +729,7 @@ main = hspec $ do
         it "keeps existing ids and enums outside the mapped-reference namespace" $ do
             let spec =
                     (mappedSpec [completeStructural "A" (recordShape [TRef "ExistingId"])])
-                        { specIds = [IdDecl "ExistingId" "id" noLoc]
+                        { specIds = [IdDecl "ExistingId" "id" Nothing noLoc]
                         }
             resolveTypeGraph spec `shouldSatisfy` hasTypeGraphError isUnresolved
         it "fingerprints wire identity while ignoring Haskell selector names" $ do
@@ -4742,7 +4844,7 @@ isUnresolved TGUnresolvedRef{} = True
 isUnresolved _ = False
 
 mappedSpec :: [MappedDecl] -> Spec
-mappedSpec declarations = Spec "mapped-test" Nothing Nothing [] [] [] declarations []
+mappedSpec declarations = Spec "mapped-test" Nothing Nothing [] [] [] [] declarations []
 
 completeStructural :: Name -> MappedShape -> MappedDecl
 completeStructural name shape =
@@ -5114,7 +5216,7 @@ misplacedDispatchIdSpec =
     T.replace
         "    schedule timer\n\n  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)\n"
         "    dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)\n    schedule timer\n"
-        (renderSpec (Spec "svc" Nothing Nothing [] [] [] [] [NProcess (processWithLiteral "literal")]))
+        (renderSpec (Spec "svc" Nothing Nothing [] [] [] [] [] [NProcess (processWithLiteral "literal")]))
 
 lineNumberContaining :: T.Text -> T.Text -> Int
 lineNumberContaining needle = go 1 . T.lines
@@ -5224,7 +5326,7 @@ timerDecimalSpec value =
     T.replace
         "max-attempts 5"
         ("max-attempts " <> value)
-        (renderSpec (Spec "svc" Nothing Nothing [] [] [] [] [NProcess (processWithLiteral "literal")]))
+        (renderSpec (Spec "svc" Nothing Nothing [] [] [] [] [] [NProcess (processWithLiteral "literal")]))
 
 identifierHygieneSpec :: T.Text
 identifierHygieneSpec =
@@ -5277,6 +5379,7 @@ emptyStatesSpec =
         "svc"
         Nothing
         Nothing
+        []
         []
         []
         []
@@ -5344,6 +5447,7 @@ escapedSpec value =
         "escape"
         Nothing
         Nothing
+        []
         []
         []
         []
@@ -5830,11 +5934,23 @@ nodeTag = \case
     NWorkflow _ -> "workflow"
     NOperation _ -> "operation"
 
+consumerNominalFor :: Name -> NominalOwnership
+consumerNominalFor name =
+    ConsumerNominal
+        ConsumerNominalBinding
+            { consumerNominalHaskell = HaskellSource "domain" "Domain.Types" name
+            , consumerNominalBinding = QualifiedValueName "Domain.Bindings.binding"
+            , consumerNominalBindingVersion = BindingVersion "1"
+            , consumerNominalCanonical = CanonicalTypeId ("domain." <> name <> ".v1")
+            , consumerNominalFixtures = QualifiedValueName "Domain.Bindings.fixtures"
+            , consumerNominalInitial = Just (QualifiedValueName "Domain.Bindings.initialValue")
+            }
+
 genId :: Gen IdDecl
-genId = IdDecl <$> genName <*> genWire <*> pure noLoc
+genId = IdDecl <$> genName <*> genWire <*> pure Nothing <*> pure noLoc
 
 genEnum :: Gen EnumDecl
-genEnum = EnumDecl <$> genName <*> smallList ((,) <$> genName <*> genWire) <*> pure noLoc
+genEnum = EnumDecl <$> genName <*> smallList ((,) <$> genName <*> genWire) <*> pure Nothing <*> pure noLoc
 
 genRule :: Gen RuleDecl
 genRule =
@@ -5937,7 +6053,7 @@ genSpec = do
     rules <- smallList genRule
     mapped <- genMappedDecls
     nodes <- smallList genNode
-    pure (Spec contextName moduleRoot layout ids enums rules mapped nodes)
+    pure (Spec contextName moduleRoot layout ids enums rules [] mapped nodes)
   where
     genNode =
         oneof

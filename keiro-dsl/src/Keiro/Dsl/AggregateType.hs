@@ -29,8 +29,8 @@ module Keiro.Dsl.AggregateType (
     registerInitialCanonicalName,
 ) where
 
-import Control.Applicative ((<|>))
 import Data.Char (toUpper)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
@@ -41,6 +41,7 @@ import Data.Time.Calendar (toGregorian)
 import Data.Time.Clock (UTCTime (..), diffTimeToPicoseconds)
 import Data.Time.Format.ISO8601 (iso8601ParseM)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.NominalType
 import Keiro.Dsl.TypeGraph
 import Numeric.Natural (Natural)
 import Text.Read (readMaybe)
@@ -68,36 +69,28 @@ data ResolvedAggregateType
     | AggregateBool
     | AggregateTime
     | AggregateNatural
-    | AggregateId !Name
-    | AggregateEnum !Name
+    | AggregateNominal !ResolvedNominalType
     | AggregateVertex !Name
     | AggregateMapped !MappedKey
     deriving stock (Eq, Ord, Show)
 
 data AggregateSymbols = AggregateSymbols
-    { symbolIds :: !(Set Name)
-    , symbolEnums :: !(Map Name [Name])
+    { symbolNominals :: !(Map Name ResolvedNominalType)
     , symbolVertices :: !(Map Name [Name])
     , symbolMapped :: !(Map MappedKey ResolvedMappedDecl)
-    , symbolMappedNames :: !(Set Name)
     }
 
 aggregateSymbols :: Spec -> AggregateSymbols
 aggregateSymbols spec =
     AggregateSymbols
-        { symbolIds = Set.fromList (map idName (specIds spec))
-        , symbolEnums = Map.fromList [(enumName declaration, map fst (enumCtors declaration)) | declaration <- specEnums spec]
+        { symbolNominals = either (const Map.empty) nominalTypes (resolveNominalTypes spec)
         , symbolVertices =
             Map.fromList
                 [ (aggName aggregate <> "Vertex", map stName (aggStates aggregate))
                 | NAggregate aggregate <- specNodes spec
                 ]
         , symbolMapped = either (const Map.empty) tgDeclarations (resolveTypeGraph spec)
-        , symbolMappedNames = Set.fromList (map mappedName (specMapped spec))
         }
-  where
-    mappedName MappedStructural{msName = name} = name
-    mappedName MappedOpaque{moName = name} = name
 
 data AggregateTypeErrorReason
     = UnknownAggregateType !Name
@@ -126,10 +119,9 @@ resolveAggregateType symbols loc useSite expression = do
         TList{} -> unsupportedShape
         TMap{} -> unsupportedShape
         TRef name
-            | name `Set.member` symbolIds symbols -> pure (AggregateId name)
-            | Map.member name (symbolEnums symbols) -> pure (AggregateEnum name)
+            | Just nominal <- Map.lookup name (symbolNominals symbols) -> pure (AggregateNominal nominal)
             | Map.member name (symbolVertices symbols) -> pure (AggregateVertex name)
-            | name `Set.member` symbolMappedNames symbols -> pure (AggregateMapped (MappedKey name))
+            | Map.member (MappedKey name) (symbolMapped symbols) -> pure (AggregateMapped (MappedKey name))
             | otherwise -> Left (AggregateTypeError loc useSite (UnknownAggregateType name))
     case aggregateCapability useSite resolved of
         Unsupported -> Left (AggregateTypeError loc useSite (UnsupportedAggregateCapability resolved))
@@ -148,10 +140,9 @@ inferAggregateFieldType symbols aggregate useSite field =
             expression : _ -> expression
             [] ->
                 let candidate = pascal (aggregateFieldName field)
-                 in if candidate `Set.member` symbolIds symbols
-                        || Map.member candidate (symbolEnums symbols)
+                 in if Map.member candidate (symbolNominals symbols)
                         || Map.member candidate (symbolVertices symbols)
-                        || candidate `Set.member` symbolMappedNames symbols
+                        || Map.member (MappedKey candidate) (symbolMapped symbols)
                         then TRef candidate
                         else TText
 
@@ -164,10 +155,9 @@ aggregateCapability useSite resolved = case useSite of
         AggregateInt -> SolverVisible
         AggregateTime -> SolverVisible
         AggregateNatural -> SolverVisible
+        AggregateNominal nominal -> nominalOrderingCapability nominal
         AggregateText -> Unsupported
         AggregateBool -> Unsupported
-        AggregateId{} -> Unsupported
-        AggregateEnum{} -> Unsupported
         AggregateVertex{} -> Unsupported
         AggregateMapped{} -> Unsupported
     CommandFieldUse -> solverVisibility resolved
@@ -186,10 +176,25 @@ solverVisibility resolved = case resolved of
     AggregateBool -> SolverVisible
     AggregateTime -> SolverVisible
     AggregateNatural -> SolverVisible
-    AggregateId{} -> OpaqueOnly
-    AggregateEnum{} -> OpaqueOnly
+    AggregateNominal nominal -> nominalSolverVisibility nominal
     AggregateVertex{} -> OpaqueOnly
     AggregateMapped{} -> OpaqueOnly
+
+nominalSolverVisibility :: ResolvedNominalType -> AggregateCapability
+nominalSolverVisibility nominal = case resolvedNominalRepresentation nominal of
+    ScalarRepresentation{} -> SolverVisible
+    IdRepresentation{} -> OpaqueOnly
+    EnumRepresentation{} -> OpaqueOnly
+
+nominalOrderingCapability :: ResolvedNominalType -> AggregateCapability
+nominalOrderingCapability nominal = case resolvedNominalRepresentation nominal of
+    ScalarRepresentation NominalInt -> SolverVisible
+    ScalarRepresentation NominalNatural -> SolverVisible
+    ScalarRepresentation NominalTime -> SolverVisible
+    ScalarRepresentation NominalText -> Unsupported
+    ScalarRepresentation NominalBool -> Unsupported
+    IdRepresentation{} -> Unsupported
+    EnumRepresentation{} -> Unsupported
 
 aggregateCanonicalName :: ResolvedAggregateType -> Text
 aggregateCanonicalName resolved = case resolved of
@@ -198,8 +203,7 @@ aggregateCanonicalName resolved = case resolved of
     AggregateBool -> "Bool"
     AggregateTime -> "Time"
     AggregateNatural -> "Natural"
-    AggregateId name -> name
-    AggregateEnum name -> name
+    AggregateNominal nominal -> resolvedNominalName nominal
     AggregateVertex name -> name
     AggregateMapped key -> unMappedKey key
 
@@ -219,6 +223,9 @@ typeExprCanonicalName expression = case expression of
 aggregateHaskellType :: AggregateSymbols -> ResolvedAggregateType -> Text
 aggregateHaskellType symbols resolved = case resolved of
     AggregateTime -> "UTCTime"
+    AggregateNominal nominal -> case resolvedNominalOwnership nominal of
+        GeneratedNominal -> resolvedNominalName nominal
+        ConsumerNominal binding -> renderHaskellSource (consumerNominalHaskell binding)
     AggregateMapped key -> case Map.lookup key (symbolMapped symbols) of
         Just declaration -> renderHaskellSource (mappedHaskell declaration)
         Nothing -> unMappedKey key
@@ -236,6 +243,9 @@ aggregateImports symbols resolved = case resolved of
             , "Data.Time.Clock (UTCTime(..), picosecondsToDiffTime)"
             ]
     AggregateNatural -> Set.singleton "Numeric.Natural (Natural)"
+    AggregateNominal nominal -> case resolvedNominalOwnership nominal of
+        GeneratedNominal -> Set.empty
+        ConsumerNominal binding -> Set.singleton (hsModule (consumerNominalHaskell binding) <> " qualified")
     AggregateMapped key -> case Map.lookup key (symbolMapped symbols) of
         Just declaration -> Set.singleton (hsModule (mappedHaskell declaration) <> " qualified")
         Nothing -> Set.empty
@@ -247,6 +257,9 @@ aggregateImports symbols resolved = case resolved of
 aggregatePackages :: AggregateSymbols -> ResolvedAggregateType -> Set Text
 aggregatePackages symbols resolved = case resolved of
     AggregateTime -> Set.singleton "time"
+    AggregateNominal nominal -> case resolvedNominalOwnership nominal of
+        GeneratedNominal -> Set.empty
+        ConsumerNominal binding -> Set.singleton (hsPackage (consumerNominalHaskell binding))
     AggregateMapped key -> case Map.lookup key (symbolMapped symbols) of
         Just declaration -> Set.singleton (hsPackage (mappedHaskell declaration))
         Nothing -> Set.empty
@@ -262,16 +275,24 @@ aggregateSampleHaskell symbols fieldName resolved = case resolved of
     AggregateBool -> "False"
     AggregateTime -> "(UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012))"
     AggregateNatural -> "0"
-    AggregateId name -> "(" <> name <> " \"sample\")"
-    AggregateEnum name -> firstConstructor name
+    AggregateNominal nominal -> nominalSample nominal
     AggregateVertex name -> firstConstructor name
     AggregateMapped key -> case Map.lookup key (symbolMapped symbols) of
         Just declaration -> "(snd (NonEmpty.head (fixtureCases " <> unQualifiedValueName (mappedFixtures declaration) <> ")))"
         Nothing -> unMappedKey key <> ".sample"
   where
-    firstConstructor name = case Map.lookup name (symbolEnums symbols) <|> Map.lookup name (symbolVertices symbols) of
+    firstConstructor name = case Map.lookup name (symbolVertices symbols) of
         Just (constructor : _) -> constructor
         _ -> name
+    nominalSample nominal = case resolvedNominalOwnership nominal of
+        ConsumerNominal binding ->
+            "(nominalFixtureDomain (NonEmpty.head (nominalFixtureCases "
+                <> unQualifiedValueName (consumerNominalFixtures binding)
+                <> ")))"
+        GeneratedNominal -> case resolvedNominalRepresentation nominal of
+            IdRepresentation{} -> "(" <> resolvedNominalName nominal <> " \"sample\")"
+            EnumRepresentation constructors -> fst (NE.head constructors)
+            ScalarRepresentation{} -> resolvedNominalName nominal <> ".sample"
     mappedFixtures (ResolvedStructural declaration _) = sdFixtures declaration
     mappedFixtures (ResolvedOpaque declaration) = odFixtures declaration
 
@@ -283,6 +304,7 @@ data ResolvedRegisterInitial
     | InitialNatural !Natural
     | InitialId !Name
     | InitialNamed !ResolvedAggregateType !Name
+    | InitialNominal !Name !QualifiedValueName
     | InitialMapped !MappedKey !QualifiedValueName
     deriving stock (Eq, Show)
 
@@ -306,10 +328,18 @@ resolveRegisterInitial symbols loc resolved syntax = case resolved of
             Just number | number >= 0 -> pure (InitialNatural (fromInteger number))
             _ -> invalid "Natural initials must be non-negative integral literals"
         RegInitText _ -> invalid "Natural initials must be unquoted non-negative integral literals"
-    AggregateId name -> case syntax of
-        RegInitBare "placeholder" -> pure (InitialId name)
-        _ -> invalid "ID initials must use placeholder"
-    AggregateEnum name -> namedInitial name (Map.lookup name (symbolEnums symbols))
+    AggregateNominal nominal -> case resolvedNominalOwnership nominal of
+        ConsumerNominal binding -> case syntax of
+            RegInitBare "initial" -> case consumerNominalInitial binding of
+                Just value -> pure (InitialNominal (resolvedNominalName nominal) value)
+                Nothing -> invalid "consumer-owned nominal register type must declare an initial symbol"
+            _ -> invalid "consumer-owned nominal register initials must use the bare initial token"
+        GeneratedNominal -> case resolvedNominalRepresentation nominal of
+            IdRepresentation{} -> case syntax of
+                RegInitBare "placeholder" -> pure (InitialId (resolvedNominalName nominal))
+                _ -> invalid "ID initials must use placeholder"
+            EnumRepresentation constructors -> namedInitial (resolvedNominalName nominal) (Just (map fst (NE.toList constructors)))
+            ScalarRepresentation{} -> invalid "generated nominal scalars are unsupported"
     AggregateVertex name -> namedInitial name (Map.lookup name (symbolVertices symbols))
     AggregateMapped key -> case syntax of
         RegInitBare "initial" -> case Map.lookup key (symbolMapped symbols) >>= mappedInitial of
@@ -346,6 +376,7 @@ renderRegisterInitial initial = case initial of
     InitialNamed resolved constructor -> case resolved of
         AggregateVertex vertexType -> T.dropEnd (T.length ("Vertex" :: Text)) vertexType <> constructor
         _ -> constructor
+    InitialNominal _ value -> unQualifiedValueName value
     InitialMapped _ value -> unQualifiedValueName value
 
 registerInitialCanonicalName :: ResolvedRegisterInitial -> Text
@@ -357,6 +388,7 @@ registerInitialCanonicalName initial = case initial of
     InitialNatural value -> T.pack (show value)
     InitialId{} -> "placeholder"
     InitialNamed _ constructor -> constructor
+    InitialNominal{} -> "initial"
     InitialMapped{} -> "initial"
 
 pascal :: Text -> Text
