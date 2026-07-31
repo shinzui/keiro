@@ -4427,7 +4427,7 @@ normalizeGenerated text =
                 else
                     let members =
                             sort
-                                . map (T.unwords . T.words)
+                                . map (T.replace " (" "(" . T.unwords . T.words)
                                 . T.splitOn ","
                                 . T.dropEnd 1
                                 $ T.drop 2 explicit

@@ -2184,10 +2184,10 @@ emitDomain :: Agg -> Text
 emitDomain a =
     nl $
         [ "{-# LANGUAGE DataKinds #-}"
-        , "{-# LANGUAGE DuplicateRecordFields #-}"
         ]
             ++ ["{-# LANGUAGE DeriveAnyClass #-}" | hasSnapshot a]
-            ++ [ "{-# LANGUAGE OverloadedStrings #-}"
+            ++ [ "{-# LANGUAGE DuplicateRecordFields #-}"
+               , "{-# LANGUAGE OverloadedStrings #-}"
                , "{-# LANGUAGE TemplateHaskell #-}"
                , "{-# LANGUAGE TypeApplications #-}"
                , "{-# OPTIONS_GHC -Wno-unused-top-binds #-}"

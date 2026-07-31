@@ -61,8 +61,9 @@ Milestone 1 and must use the released packages rather than a sibling checkout.
 - [x] Milestone 4 — On 2026-07-31, added the exhaustive capability matrix, clean-spec QuickCheck
   property, negative and alias fixtures, one-member workspace parity, generated-tree freshness,
   and a restoring mutation test that turns exactly the dishonest Natural replay register red.
-- [ ] Milestone 5 — Update authoring and user documentation, amend durable ADRs, add the
-  changelog entry, and pass focused, full Cabal, Nix, and OKF validation.
+- [x] Milestone 5 — On 2026-07-31, updated authoring/user documentation and the changelog,
+  amended ADRs 0004 and 0012 plus their bundle log, and passed focused tests, `cabal build all`,
+  `cabal test all`, `nix flake check`, both required OKF validations, and `git diff --check`.
 
 
 ## Surprises & Discoveries
@@ -73,11 +74,18 @@ Milestone 1 and must use the released packages rather than a sibling checkout.
   whole repository with the same global `GHC2024` edition already declared by every Cabal common
   stanza, rather than copying an `ImportQualifiedPost` pragma into each generated module.
 
+- 2026-07-31: Once the new conformance tree became tracked, Fourmolu exposed two fixture-freshness
+  assumptions: it canonically sorted `DeriveAnyClass` before `DuplicateRecordFields` and printed
+  constructor imports as `UTCTime (..)`. The generator now emits the canonical pragma order, and
+  the established whitespace-normalized freshness comparator also normalizes constructor-import
+  spacing while continuing to compare the imported names exactly.
+
 - 2026-07-31: Cabal 3.16 splits whitespace inside a single `--test-options` value before Hspec
   receives it, so the plan's literal `--match aggregate type capabilities` form was interpreted as
-  three arguments. The equivalent whitespace-free regex forms
-  `--match=aggregate.*type.*capabilities` and `--match=aggregate.*scalar.*diagnostics` select the
-  intended groups and pass. The concrete commands below now use that reproducible form.
+  three arguments. A whitespace-free wildcard selected zero examples, which a terse passing Cabal
+  transcript did not make obvious. Two explicit arguments — `--test-option=--match` followed by
+  `--test-option='aggregate type capabilities'` — preserve the Hspec match string, run the intended
+  five examples and 100 QuickCheck cases, and are now used below.
 
 - 2026-07-31: An explicit `UTCTime` constructor is syntactically total but still needs parentheses
   when inserted as a generated constructor argument. Disposable scaffold inspection caught the
@@ -206,7 +214,34 @@ Milestone 1 and must use the released packages rather than a sibling checkout.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The plan delivered one exported `Keiro.Dsl.AggregateType` authority and removed raw aggregate-type
+allowlists from validation, generated domain/codec/snapshot/harness code, imports and packages,
+goldens, fingerprints, replay impact, diff, scaffold refusals, and workspace relocation. Aggregate
+fields and registers now carry `TypeExpr`; aliases and bare-field inference resolve once; five
+append-only diagnostics enforce the use-site capability matrix before generation.
+
+Direct `Time` and `Natural` now pass `check`, scaffold, compile, encode, snapshot, and replay.
+Time initials are parsed once and emitted as explicit picosecond-exact `UTCTime` constructors;
+Natural initials and JSON remain non-negative and integral. `Time`/`UTCTime` share compatibility
+and fold identities. Imports and manifest packages are minimal, deterministic scaffolds contain no
+partial or ambient-time path, and the existing scaffold-record schema needed no change.
+
+The compiled scalar conformance suite contributes 16 end-to-end assertions against published
+Keiki `0.5.0.0`. Its restoring mutation test proves the forward/replay check is discriminating by
+turning exactly the dishonest Natural register red. Unit coverage exhaustively enumerates every
+resolved type/use-site pair, exercises all requested negative and alias cases, proves one-member
+workspace parity, and checks that 100 generated clean scalar specs have total lowering.
+
+The only intentional qualification is location granularity: semantic diagnostics retain Keiro's
+existing exact-row `Loc` and workspace-attribution contract, while the arithmetic parser error is
+exact to line and column. No second aggregate-only diagnostic location protocol was introduced.
+The work also aligned standalone Fourmolu parsing with the `GHC2024` edition already used by every
+Cabal common stanza.
+
+Final evidence on 2026-07-31: `cabal build all` and `cabal test all` pass; the DSL suite reports
+382 examples with zero failures; `nix flake check` passes both local checks; improvement-request
+validation reports `OK: 4 concepts`; strict ADR validation reports `OK: 15 concepts`; repeated
+scalar scaffolds are byte-identical; and `git diff --check` is clean.
 
 
 ## Context and Orientation
@@ -470,10 +505,12 @@ Then run the new focused unit tests as they are added:
 
 ```bash
 cabal test keiro-dsl-test \
-  --test-options='--match=aggregate.*type.*capabilities' \
+  --test-option=--match \
+  --test-option='aggregate type capabilities' \
   --test-show-details=direct
 cabal test keiro-dsl-test \
-  --test-options='--match=aggregate.*scalar.*diagnostics' \
+  --test-option=--match \
+  --test-option='aggregate scalar diagnostics' \
   --test-show-details=direct
 ```
 
@@ -535,7 +572,8 @@ Expected output is empty. Run the compiled proof and the generated-tree freshnes
 cabal test keiro-dsl-conformance-aggregate-scalars \
   --test-show-details=direct
 cabal test keiro-dsl-test \
-  --test-options='--match aggregate scalar scaffold conformance' \
+  --test-option=--match \
+  --test-option='keeps the committed scalar conformance generated tree fresh' \
   --test-show-details=direct
 ```
 
@@ -547,7 +585,8 @@ Run the focused compatibility and workspace tests after Milestone 4:
 
 ```bash
 cabal test keiro-dsl-test \
-  --test-options='--match aggregate scalar' \
+  --test-option=--match \
+  --test-option='aggregate scalar' \
   --test-show-details=direct
 ```
 
