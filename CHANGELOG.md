@@ -6,6 +6,70 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.6.0.0 — 2026-07-31
+
+All published packages move to 0.6.0.0 together. The cycle is dominated by
+`keiro-dsl`, which gains an explicit source-language contract, nominal consumer
+bindings, and authoritative scalar aggregate expressions. `keiro-core` and
+`keiro` gain the nominal codec surface and move to Keiki 0.6; `keiro-pgmq` and
+`keiro-migrations` are released with the set.
+
+### Breaking Changes
+
+- **keiro-core**, **keiro**: require the exact-`Integer` / total-`Natural`
+  Keiki releases (`keiki >=0.6 && <0.7`, `keiki-codec-json >=0.6 && <0.7`),
+  replacing the previous `>=0.4 && <0.5` bounds.
+- **keiro**, **keiro-pgmq**: the internal `keiro-core` bound moves to
+  `^>=0.6.0.0`.
+- **keiro-dsl**: `DiagnosticCode` gains the aggregate-type codes
+  (`AggregateTypeUnknown`, `AggregateTypeUnsupportedAtUse`,
+  `AggregateRegisterInitialInvalid`, `AggregateGuardTypeMismatch`,
+  `AggregateGuardCapabilityUnsupported`), the source-language codes
+  (`WorkspaceLanguageVersionMismatch`, `SourceLanguageDeclarationChanged`), the
+  nominal check and diff codes, and the scalar-expression codes. The additions
+  are append-only, but exhaustive matches must be extended.
+- **keiro-dsl**: the public expression AST gains located arithmetic, scalar
+  literals, explicit roots/paths, and transition implementation ownership;
+  aggregate command/event fields use the located `AggregateField` type and
+  aggregate register types use `TypeExpr` instead of a raw `Name`. Exhaustive
+  matches over `Expr`, `TypeExpr`, or transition implementation must be
+  extended.
+
+### New Features
+
+- **keiro-core**: adds the public total `Keiro.Codec.Nominal` binding and
+  fixture API that generated nominal consumer codecs are checked against;
+  **keiro** re-exports it so generated consumers keep a single direct
+  dependency.
+- **keiro-dsl**: adds an explicit source-language contract. A
+  first-significant-clause `language keiro-dsl 1` preamble selects the frozen
+  released v1 parser before body parsing; unsupported future versions fail at
+  that boundary, and unversioned input remains readable as
+  `legacy-unversioned` and is never silently rewritten. Adds
+  `Keiro.Dsl.LanguageVersion`, `keiro-dsl inspect FILE --format=json`, and
+  source-language rows in scaffold and workspace records.
+- **keiro-dsl**: adds language version 2 syntax and the public total
+  `Keiro.Codec.Nominal`-backed binding path for consumer-owned aggregate IDs,
+  enums, and nominal scalar wrappers, with a checked nominal registry,
+  prefix-safe `KindID` codecs, closed private enum representations, and
+  diff-visible nominal provenance.
+- **keiro-dsl**: adds `Keiro.Dsl.AggregateType`, the single resolution and
+  capability policy shared by validation, lowering, imports, packages, samples,
+  fold fingerprints, diffs, replay impact, and scaffold refusals. Direct
+  aggregate `Time` and `Natural` fields and registers now check, scaffold,
+  compile, encode, snapshot, and replay.
+- **keiro-dsl**: adds authoritative version-2 scalar aggregate expressions —
+  typed `reg.`/`cmd.` roots, required structural scalar paths, all scalar
+  literal families, exact `Integer` `+`/`-`/`*` and total `Natural`
+  `+`/monus/`*` — plus generated per-aggregate `Expressions` and `Transducer`
+  modules. Every version-2 transition is exclusively generated-owned or
+  explicitly `implementation hole`. Version-1 generated output remains frozen.
+
+### Other Changes
+
+- Language extensions are centralized in the shared cabal stanzas and the tree
+  is reformatted onto the latest Fourmolu template. No behaviour change.
+
 ## 0.5.0.0 — 2026-07-31
 
 All published packages move to 0.5.0.0 together. The entire cycle is

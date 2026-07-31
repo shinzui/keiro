@@ -6,6 +6,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.6.0.0 — 2026-07-31
+
 ### Breaking Changes
 
 - `DiagnosticCode` gains `AggregateTypeUnknown`,

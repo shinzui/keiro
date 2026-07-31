@@ -6,6 +6,19 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.6.0.0 — 2026-07-31
+
+### Breaking Changes
+
+- Requires the exact-`Integer` / total-`Natural` Keiki release
+  (`keiki >=0.6 && <0.7`), replacing the previous `>=0.4 && <0.5` bound.
+
+### New Features
+
+- Adds the public total `Keiro.Codec.Nominal` module: the binding and fixture
+  API that generated nominal consumer codecs (bound aggregate IDs, enums, and
+  nominal scalar wrappers) are checked against.
+
 ## 0.5.0.0 — 2026-07-31
 
 No changes this release. Released with the package set for the `keiro-dsl`

@@ -6,6 +6,20 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.6.0.0 — 2026-07-31
+
+### Breaking Changes
+
+- Requires the exact-`Integer` / total-`Natural` Keiki releases
+  (`keiki >=0.6 && <0.7`, `keiki-codec-json >=0.6 && <0.7`), replacing the
+  previous `>=0.4 && <0.5` bounds.
+
+### New Features
+
+- Re-exports `Keiro.Codec.Nominal` from `keiro-core`, so generated nominal
+  consumer bindings keep a single direct `keiro` dependency alongside the
+  existing structural binding re-exports.
+
 ## 0.5.0.0 — 2026-07-31
 
 No changes this release. Released with the package set for the `keiro-dsl`
