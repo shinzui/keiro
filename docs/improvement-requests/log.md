@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-07-30
+* **Addition**: IR-3 requests an explicit terminal outbox rejection outcome so downstream
+  applications can finalize intentional refusals without retrying or reporting success.
+
 ## 2026-07-29
 * **Addition**: IR-2 requests first-class multi-file service composition for per-aggregate Keiro specs, including shared declaration resolution, whole-service validation/diffing, and atomic context-level scaffolding.
 
