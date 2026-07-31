@@ -1,9 +1,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Keiro.Migrations.ExpectedSchema (
-    expectedSchemaFiles,
+module Keiro.Migrations.ExpectedSchema
+  ( expectedSchemaFiles,
     withMaterializedExpectedSchema,
-) where
+  )
+where
 
 import Codd.Extras.ExpectedSchema qualified as ExpectedSchema
 import Data.ByteString (ByteString)
@@ -16,4 +17,4 @@ expectedSchemaFiles = $(embedDir "expected-schema")
 
 withMaterializedExpectedSchema :: (FilePath -> IO a) -> IO a
 withMaterializedExpectedSchema action =
-    ExpectedSchema.withMaterializedExpectedSchema "keiro-expected-schema" expectedSchemaFiles action
+  ExpectedSchema.withMaterializedExpectedSchema "keiro-expected-schema" expectedSchemaFiles action

@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedRecordDot #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 {- | EP-3 M5 full-service conformance: a complete process service — the
 scaffolded Surge (saga) + Hospital (target) aggregates with FILLED

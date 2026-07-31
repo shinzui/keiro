@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 
 {- | EP-4 M5 full-service conformance: a complete integration service — the
 scaffolded inbox dedupe/disposition plus a filled inbox transaction runner

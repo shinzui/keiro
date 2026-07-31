@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 
 -- HAND-FILLED pgmq dispatch service (EP-5 M5 full-service integration): the
 -- declarative Job value (queue + codec + retry policy, all from the scaffolded

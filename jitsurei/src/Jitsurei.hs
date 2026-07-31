@@ -1,5 +1,5 @@
-module Jitsurei (
-    module Jitsurei.AgentQualRouter,
+module Jitsurei
+  ( module Jitsurei.AgentQualRouter,
     module Jitsurei.Database,
     module Jitsurei.Diagrams,
     module Jitsurei.Domain,
@@ -15,7 +15,7 @@ module Jitsurei (
     module Jitsurei.ShipmentNotices,
     module Jitsurei.Snapshots,
     module Jitsurei.Timers,
-)
+  )
 where
 
 import Jitsurei.AgentQualRouter

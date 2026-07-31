@@ -1,10 +1,10 @@
-module Jitsurei.Diagrams (
-    fulfillmentStreamMermaid,
+module Jitsurei.Diagrams
+  ( fulfillmentStreamMermaid,
     orderStreamMermaid,
     incidentStreamMermaid,
     pageStreamMermaid,
     escalationStreamMermaid,
-)
+  )
 where
 
 import Data.Text (Text)

@@ -1,5 +1,4 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 -- HAND-FILLED process-manager value (EP-3 M5 full-service integration): the
 -- @handle@ hole filled against the live Keiro.ProcessManager API, wiring the

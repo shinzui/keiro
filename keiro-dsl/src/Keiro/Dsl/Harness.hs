@@ -196,8 +196,7 @@ emitReadModelHarness genPrefix ctx readModel =
 emitProcessHarness :: Text -> ProcessNode -> Text
 emitProcessHarness genPrefix p =
   nl
-    [ "{-# LANGUAGE OverloadedStrings #-}",
-      generatedBanner,
+    [ generatedBanner,
       "module " <> genPrefix <> ".ProcessHarness (processHarnessValues) where",
       "",
       "{- | (label, value): the spec's deterministic process/timer decisions,",
@@ -281,8 +280,7 @@ locSuffix loc = case unLoc loc of
 emitWorkflowFacts :: Text -> WorkflowNode -> Text
 emitWorkflowFacts genPrefix w =
   nl
-    [ "{-# LANGUAGE OverloadedStrings #-}",
-      generatedBanner,
+    [ generatedBanner,
       "module " <> genPrefix <> ".WorkflowFacts (workflowFacts) where",
       "",
       "{- | (label, value): the workflow's deterministic decisions, pinned as pure",
@@ -317,9 +315,7 @@ emitWorkflowFacts genPrefix w =
 emitWorkflowRuntime :: Text -> WorkflowNode -> Text
 emitWorkflowRuntime genPrefix w =
   nl $
-    [ "{-# LANGUAGE ImportQualifiedPost #-}",
-      "{-# LANGUAGE OverloadedStrings #-}",
-      generatedBanner,
+    [ generatedBanner,
       "module " <> genPrefix <> ".WorkflowRuntime",
       "  ( workflowName",
       "  , awaitAwakeableId",
@@ -376,8 +372,7 @@ emitHarness :: [GoldenPayload] -> Agg -> Text
 emitHarness goldens a =
   nl $
     [ "{-# LANGUAGE DataKinds #-}",
-      "{-# LANGUAGE OverloadedLabels #-}",
-      "{-# LANGUAGE OverloadedStrings #-}"
+      "{-# LANGUAGE OverloadedLabels #-}"
     ]
       ++ ["{-# LANGUAGE TypeApplications #-}" | hasMappedHarness a]
       ++ [ generatedBanner,

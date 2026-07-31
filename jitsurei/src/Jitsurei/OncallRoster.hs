@@ -1,13 +1,12 @@
-{- | The on-call roster read model for the escalation worked example.
-
-Maps a service to the responders currently on call for it, ordered by tier. The
-'pagingRouter' in "Jitsurei.Paging" queries this to discover *who to page* for an
-incident — a data-dependent recipient set that is not derivable from the
-@IncidentRaised@ event alone, which is exactly why paging is a router (effectful
-target resolution) rather than a process manager.
--}
-module Jitsurei.OncallRoster (
-    ResponderId (..),
+-- | The on-call roster read model for the escalation worked example.
+--
+-- Maps a service to the responders currently on call for it, ordered by tier. The
+-- 'pagingRouter' in "Jitsurei.Paging" queries this to discover *who to page* for an
+-- incident — a data-dependent recipient set that is not derivable from the
+-- @IncidentRaised@ event alone, which is exactly why paging is a router (effectful
+-- target resolution) rather than a process manager.
+module Jitsurei.OncallRoster
+  ( ResponderId (..),
     responderIdText,
     Responder (..),
     serviceOncallReadModel,
@@ -15,7 +14,7 @@ module Jitsurei.OncallRoster (
     initializeOncallRosterTable,
     insertOncallStmt,
     selectOncallStmt,
-)
+  )
 where
 
 import Contravariant.Extras (contrazip3)
@@ -33,83 +32,83 @@ import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 newtype ResponderId = ResponderId Text
-    deriving stock (Generic, Eq, Ord, Show)
+  deriving stock (Generic, Eq, Ord, Show)
 
 responderIdText :: ResponderId -> Text
 responderIdText (ResponderId value) = value
 
 data Responder = Responder
-    { responderId :: !ResponderId
-    , tier :: !Int
-    }
-    deriving stock (Generic, Eq, Ord, Show)
+  { responderId :: !ResponderId,
+    tier :: !Int
+  }
+  deriving stock (Generic, Eq, Ord, Show)
 
 serviceOncallReadModel :: ReadModel Service [Responder]
 serviceOncallReadModel =
-    ReadModel
-        { name = "jitsurei-service-oncall"
-        , tableName = "jitsurei_service_oncall"
-        , -- This paging demo keeps its unqualified DDL/DML, so its table resolves
-          -- in the store search_path's first schema (kiroku). Only the order-summary
-          -- read model is migrated to a user-configured schema (EP-4 / MasterPlan 12).
-          schema = "kiroku"
-        , subscriptionName = "jitsurei-service-oncall-sub"
-        , version = 1
-        , shapeHash = "jitsurei-service-oncall-v1"
-        , defaultConsistency = Eventual
-        , strongScope = EntireLog
-        , query = \(Service service) -> Tx.statement service selectOncallStmt
-        }
+  ReadModel
+    { name = "jitsurei-service-oncall",
+      tableName = "jitsurei_service_oncall",
+      -- This paging demo keeps its unqualified DDL/DML, so its table resolves
+      -- in the store search_path's first schema (kiroku). Only the order-summary
+      -- read model is migrated to a user-configured schema (EP-4 / MasterPlan 12).
+      schema = "kiroku",
+      subscriptionName = "jitsurei-service-oncall-sub",
+      version = 1,
+      shapeHash = "jitsurei-service-oncall-v1",
+      defaultConsistency = Eventual,
+      strongScope = EntireLog,
+      query = \(Service service) -> Tx.statement service selectOncallStmt
+    }
 
 -- | Create and register the on-call read model at application startup.
 initializeOncallRoster :: (Store :> es) => Eff es ()
 initializeOncallRoster = do
-    runTransaction initializeOncallRosterTable
-    _ <-
-        registerReadModel
-            serviceOncallReadModel.name
-            serviceOncallReadModel.version
-            serviceOncallReadModel.shapeHash
-    pure ()
+  runTransaction initializeOncallRosterTable
+  _ <-
+    registerReadModel
+      serviceOncallReadModel.name
+      serviceOncallReadModel.version
+      serviceOncallReadModel.shapeHash
+  pure ()
 
 initializeOncallRosterTable :: Tx.Transaction ()
 initializeOncallRosterTable =
-    Tx.sql
-        """
-        CREATE TABLE IF NOT EXISTS jitsurei_service_oncall (
-          service TEXT NOT NULL,
-          responder_id TEXT NOT NULL,
-          tier INT NOT NULL
-        )
-        """
+  Tx.sql
+    """
+    CREATE TABLE IF NOT EXISTS jitsurei_service_oncall (
+      service TEXT NOT NULL,
+      responder_id TEXT NOT NULL,
+      tier INT NOT NULL
+    )
+    """
 
 insertOncallStmt :: Statement (Text, Text, Int32) ()
 insertOncallStmt =
-    preparable
-        """
-        INSERT INTO jitsurei_service_oncall (service, responder_id, tier)
-        VALUES ($1, $2, $3)
-        """
-        ( contrazip3
-            (E.param (E.nonNullable E.text))
-            (E.param (E.nonNullable E.text))
-            (E.param (E.nonNullable E.int4))
-        )
-        D.noResult
+  preparable
+    """
+    INSERT INTO jitsurei_service_oncall (service, responder_id, tier)
+    VALUES ($1, $2, $3)
+    """
+    ( contrazip3
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int4))
+    )
+    D.noResult
 
 selectOncallStmt :: Statement Text [Responder]
 selectOncallStmt =
-    preparable
-        """
-        SELECT responder_id, tier
-        FROM jitsurei_service_oncall
-        WHERE service = $1
-        ORDER BY tier, responder_id
-        """
-        (E.param (E.nonNullable E.text))
-        ( D.rowList
-            ( Responder
-                <$> (ResponderId <$> D.column (D.nonNullable D.text))
-                <*> (fromIntegral <$> D.column (D.nonNullable D.int4))
-            )
+  preparable
+    """
+    SELECT responder_id, tier
+    FROM jitsurei_service_oncall
+    WHERE service = $1
+    ORDER BY tier, responder_id
+    """
+    (E.param (E.nonNullable E.text))
+    ( D.rowList
+        ( Responder
+            <$> (ResponderId <$> D.column (D.nonNullable D.text))
+            <*> (fromIntegral <$> D.column (D.nonNullable D.int4))
         )
+    )

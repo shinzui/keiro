@@ -1,5 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-
 -- | Test driver for keiro-dsl. EP-1 milestone 1 tests: the @parse . pretty@
 -- round-trip property over generated specs, and a unit test pinning the shape
 -- of the canonical Reservation fixture.

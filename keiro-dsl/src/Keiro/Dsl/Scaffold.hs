@@ -503,9 +503,7 @@ codecComparisonBanner =
 emitCodecComparison :: Context -> Text -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Aggregate -> Text
 emitCodecComparison ctx moduleName graph declaration shape owner =
   nl
-    [ "{-# LANGUAGE ImportQualifiedPost #-}",
-      "{-# LANGUAGE OverloadedStrings #-}",
-      "",
+    [ "",
       codecComparisonBanner,
       "-- This module compares historical and generated codecs in consumer-owned tests only.",
       "-- It is never a runtime fallback and never changes the generated codec's authority.",
@@ -1454,7 +1452,6 @@ emitContractGen genPrefix c =
   nl $
     [ "{-# LANGUAGE DuplicateRecordFields #-}",
       "{-# LANGUAGE OverloadedRecordDot #-}",
-      "{-# LANGUAGE OverloadedStrings #-}",
       "{-# OPTIONS_GHC -Wno-unused-top-binds #-}",
       generatedBanner,
       "module " <> genPrefix <> ".Contract",
@@ -1716,7 +1713,6 @@ emitWorkqueueGen :: Text -> WorkqueueNode -> Text
 emitWorkqueueGen genPrefix w =
   nl $
     [ "{-# LANGUAGE OverloadedRecordDot #-}",
-      "{-# LANGUAGE OverloadedStrings #-}",
       "{-# OPTIONS_GHC -Wno-unused-top-binds #-}",
       generatedBanner,
       "module " <> genPrefix <> ".Queue",
@@ -1800,8 +1796,7 @@ emitWorkqueueGen genPrefix w =
 emitQueueCodec :: Text -> WorkqueueNode -> Text
 emitQueueCodec genPrefix w =
   nl
-    [ "{-# LANGUAGE OverloadedStrings #-}",
-      generatedBanner,
+    [ generatedBanner,
       "{- | Versioned job payload envelope: @{\\\"v\\\",\\\"t\\\",\\\"data\\\"}@.",
       "",
       "Deploy workers before producers when raising its schema version. Do not",
@@ -1843,8 +1838,7 @@ emitQueueCodec genPrefix w =
 emitQueuePolicy :: Text -> WorkqueueNode -> Text
 emitQueuePolicy genPrefix w =
   nl $
-    [ "{-# LANGUAGE OverloadedStrings #-}",
-      generatedBanner,
+    [ generatedBanner,
       "module " <> genPrefix <> ".QueuePolicy",
       "  ( retryPolicy, jobOutcomeFor",
       "  , jobOrdering, jobTuningFor, queueProvision",
@@ -1943,8 +1937,7 @@ readModelStem = lowerFirst . T.concat . map pascal . T.splitOn "_" . rmName
 emitReadModelTable :: Text -> Text -> ReadModelNode -> Text
 emitReadModelTable tableModule stem readModel =
   nl
-    [ "{-# LANGUAGE OverloadedStrings #-}",
-      generatedBanner,
+    [ generatedBanner,
       "module " <> tableModule <> " (" <> qualifiedName <> ") where",
       "",
       "import Data.Text (Text)",
@@ -1961,7 +1954,6 @@ emitReadModelGen :: Context -> Text -> Text -> Text -> Text -> ReadModelNode -> 
 emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readModel =
   nl $
     [ "{-# LANGUAGE OverloadedRecordDot #-}",
-      "{-# LANGUAGE OverloadedStrings #-}",
       generatedBanner,
       "module " <> readModelModule <> ".ReadModel",
       "  ( " <> T.intercalate "\n  , " exports,
@@ -2144,8 +2136,7 @@ scaffoldRouter ctx router =
 emitRouterGen :: Text -> RouterNode -> Text
 emitRouterGen genPrefix router =
   nl $
-    [ "{-# LANGUAGE OverloadedStrings #-}",
-      generatedBanner,
+    [ generatedBanner,
       "module " <> genPrefix <> ".Router",
       "  ( " <> stem <> "Name",
       "  , " <> stem <> "WorkerOptions",
@@ -2267,8 +2258,7 @@ scaffoldProcess ctx p =
 emitProcessGen :: Text -> Text -> Text -> ProcessNode -> Text
 emitProcessGen _ctxPascal genPrefix _holePrefix p =
   nl $
-    [ "{-# LANGUAGE OverloadedStrings #-}",
-      generatedBanner,
+    [ generatedBanner,
       "module " <> genPrefix <> ".Process",
       "  ( " <> lo <> "ProcessName",
       "  , " <> lo <> "Category",
@@ -2400,7 +2390,6 @@ emitDomain a =
     ]
       ++ ["{-# LANGUAGE DeriveAnyClass #-}" | hasSnapshot a]
       ++ [ "{-# LANGUAGE DuplicateRecordFields #-}",
-           "{-# LANGUAGE OverloadedStrings #-}",
            "{-# LANGUAGE TemplateHaskell #-}",
            "{-# LANGUAGE TypeApplications #-}",
            "{-# OPTIONS_GHC -Wno-unused-top-binds #-}",
@@ -2607,7 +2596,6 @@ emitCodec a =
       ++ ["{-# LANGUAGE TypeApplications #-}" | hasConsumerNominalIdCodec a]
       ++ ["{-# LANGUAGE LambdaCase #-}" | hasConsumerNominalCodec a]
       ++ [ "{-# LANGUAGE OverloadedRecordDot #-}",
-           "{-# LANGUAGE OverloadedStrings #-}",
            generatedBanner,
            "module " <> aGenPrefix a <> ".Codec (",
            "    " <> lowerFirst (aName a) <> "Codec,",
@@ -3272,7 +3260,6 @@ emitExpressions aggregate
         [ "{-# LANGUAGE DataKinds #-}",
           "{-# LANGUAGE OverloadedLabels #-}",
           "{-# LANGUAGE OverloadedRecordDot #-}",
-          "{-# LANGUAGE OverloadedStrings #-}",
           "{-# LANGUAGE TypeApplications #-}",
           generatedBanner
         ]
@@ -3879,7 +3866,6 @@ emitProjection a = case aProjection a of
   Just p ->
     nl
       [ "{-# LANGUAGE OverloadedRecordDot #-}",
-        "{-# LANGUAGE OverloadedStrings #-}",
         generatedBanner,
         "module " <> aGenPrefix a <> ".Projection",
         "  ( " <> lowerFirst (projTable p) <> "Projection",
@@ -4008,7 +3994,6 @@ emitVersion2Holes aggregate =
       "{-# LANGUAGE DataKinds #-}",
       "{-# LANGUAGE DuplicateRecordFields #-}",
       "{-# LANGUAGE OverloadedRecordDot #-}",
-      "{-# LANGUAGE OverloadedStrings #-}",
       "{-# LANGUAGE QualifiedDo #-}",
       "{-# LANGUAGE TypeApplications #-}",
       "-- This is a HAND-OWNED version-2 hook module. keiro-dsl creates it once",

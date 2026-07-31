@@ -1,19 +1,18 @@
-{- | The spec evolution differ. 'diffSpecs' compares an /old/ and a /new/ 'Spec'
-and classifies changes over the persisted decode and identity surfaces.
-
-Changes are __ADDITIVE__ when they preserve stored data, __WARNING__ when they
-change forward behaviour without invalidating persisted data, and __BREAKING__
-when stored payloads may stop decoding or persisted identities may be re-keyed.
-The @diff --since@ CLI exits non-zero only when a breaking change is present.
-
-Every 'Node' constructor maps to a 'NodeFamily', and 'familyRegistry' contains
-exactly one entry for each family.  A family is either handled by an explicit
-differ or carries a non-empty out-of-scope rationale.  This makes omissions
-visible when the grammar grows instead of silently treating new node kinds as
-safe.
--}
-module Keiro.Dsl.Diff (
-    Change (..),
+-- | The spec evolution differ. 'diffSpecs' compares an /old/ and a /new/ 'Spec'
+-- and classifies changes over the persisted decode and identity surfaces.
+--
+-- Changes are __ADDITIVE__ when they preserve stored data, __WARNING__ when they
+-- change forward behaviour without invalidating persisted data, and __BREAKING__
+-- when stored payloads may stop decoding or persisted identities may be re-keyed.
+-- The @diff --since@ CLI exits non-zero only when a breaking change is present.
+--
+-- Every 'Node' constructor maps to a 'NodeFamily', and 'familyRegistry' contains
+-- exactly one entry for each family.  A family is either handled by an explicit
+-- differ or carries a non-empty out-of-scope rationale.  This makes omissions
+-- visible when the grammar grows instead of silently treating new node kinds as
+-- safe.
+module Keiro.Dsl.Diff
+  ( Change (..),
     ChangeKind (..),
     Label (..),
     CompatibilitySurface (..),
@@ -51,7 +50,8 @@ module Keiro.Dsl.Diff (
     pairByName,
     readModelDiff,
     classifyWorkflowBody,
-) where
+  )
+where
 
 import Data.Char (toUpper)
 import Data.List (find, (\\))
@@ -65,95 +65,94 @@ import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, languageVersionText, sourceFormText)
 import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped, renderMappedSubject)
-import Keiro.Dsl.PrettyPrint (
-    renderHandleSurface,
+import Keiro.Dsl.PrettyPrint
+  ( renderHandleSurface,
     renderResolveSurface,
     renderRouterDispatchSurface,
     renderTimerPayloadSurface,
     renderTransition,
- )
+  )
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.TypeGraph (UsePath (..), UseSite (..))
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
 -- | A classified spec change.
 data Change
-    = Additive ChangeKind
-    | Advisory ChangeKind
-    | Breaking ChangeKind
-    deriving stock (Eq, Show)
+  = Additive ChangeKind
+  | Advisory ChangeKind
+  | Breaking ChangeKind
+  deriving stock (Eq, Show)
 
 -- | The stable headline classification retained by the text interface.
 data Label = LabelAdditive | LabelAdvisory | LabelBreaking
-    deriving stock (Eq, Show)
+  deriving stock (Eq, Show)
 
 -- | Independently gateable compatibility questions for one finding.
 data CompatibilitySurface
-    = PrivateHistoryRead
-    | OldBinaryReadNewEvents
-    | SnapshotHydration
-    | PublicConsumer
-    | PersistedIdentity
-    | ConsumerBuild
-    deriving stock (Eq, Ord, Show, Enum, Bounded)
+  = PrivateHistoryRead
+  | OldBinaryReadNewEvents
+  | SnapshotHydration
+  | PublicConsumer
+  | PersistedIdentity
+  | ConsumerBuild
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | A verdict on one surface.  Constructor order is deliberately not policy.
 data SurfaceVerdict = VCompatible | VAdvisory | VBreaking | VNotApplicable
-    deriving stock (Eq, Show)
+  deriving stock (Eq, Show)
 
 -- | Deployment ordering that remains after byte compatibility is classified.
 data RolloutConstraint
-    = RolloutStopTheWorld
-    | RolloutWorkersFirst
-    | RolloutDrainRequired
-    | RolloutProducerLast
-    deriving stock (Eq, Ord, Show)
+  = RolloutStopTheWorld
+  | RolloutWorkersFirst
+  | RolloutDrainRequired
+  | RolloutProducerLast
+  deriving stock (Eq, Ord, Show)
 
 -- | The explicit, compile-forcing compatibility result for one finding.
 data CompatibilityVector = CompatibilityVector
-    { cvPrivateHistoryRead :: !SurfaceVerdict
-    , cvOldBinaryReadNewEvents :: !SurfaceVerdict
-    , cvSnapshotHydration :: !SurfaceVerdict
-    , cvPublicConsumer :: !SurfaceVerdict
-    , cvPersistedIdentity :: !SurfaceVerdict
-    , cvConsumerBuild :: !SurfaceVerdict
-    , cvRollout :: !(Set RolloutConstraint)
-    }
-    deriving stock (Eq, Show)
+  { cvPrivateHistoryRead :: !SurfaceVerdict,
+    cvOldBinaryReadNewEvents :: !SurfaceVerdict,
+    cvSnapshotHydration :: !SurfaceVerdict,
+    cvPublicConsumer :: !SurfaceVerdict,
+    cvPersistedIdentity :: !SurfaceVerdict,
+    cvConsumerBuild :: !SurfaceVerdict,
+    cvRollout :: !(Set RolloutConstraint)
+  }
+  deriving stock (Eq, Show)
 
 data ContextKind
-    = ContextGeneral
-    | ContextPrivateEvent
-    | ContextPrivateEventAddition
-    | ContextSnapshot
-    | ContextQueue
-    | ContextPublicContract
-    | ContextPersistedIdentity
-    | ContextConsumerBuild
-    deriving stock (Eq, Show)
+  = ContextGeneral
+  | ContextPrivateEvent
+  | ContextPrivateEventAddition
+  | ContextSnapshot
+  | ContextQueue
+  | ContextPublicContract
+  | ContextPersistedIdentity
+  | ContextConsumerBuild
+  deriving stock (Eq, Show)
 
-{- | Facts that select a compatibility row.  The constructor stays private so
-callers cannot manufacture contradictory ownership and surface claims.
--}
+-- | Facts that select a compatibility row.  The constructor stays private so
+-- callers cannot manufacture contradictory ownership and surface claims.
 data ChangeContext = ChangeContext
-    { changeContextRoot :: !Name
-    , changeContextPaths :: ![Text]
-    , contextKind :: !ContextKind
-    , contextOriginalLabel :: !Label
-    }
-    deriving stock (Eq, Show)
+  { changeContextRoot :: !Name,
+    changeContextPaths :: ![Text],
+    contextKind :: !ContextKind,
+    contextOriginalLabel :: !Label
+  }
+  deriving stock (Eq, Show)
 
 data ChangeKind = ChangeKind
-    { ckNode :: !Name
-    , ckFacet :: !Text
-    , ckSubject :: !Text
-    , ckCode :: !DiagnosticCode
-    , ckContext :: !ChangeContext
-    , ckVector :: !CompatibilityVector
-    , ckPaths :: ![Text]
-    , ckDetail :: !Text
-    }
-    deriving stock (Eq, Show)
+  { ckNode :: !Name,
+    ckFacet :: !Text,
+    ckSubject :: !Text,
+    ckCode :: !DiagnosticCode,
+    ckContext :: !ChangeContext,
+    ckVector :: !CompatibilityVector,
+    ckPaths :: ![Text],
+    ckDetail :: !Text
+  }
+  deriving stock (Eq, Show)
 
 privateEventContext :: Name -> [Text] -> ChangeContext
 privateEventContext root paths = ChangeContext root paths ContextPrivateEvent LabelBreaking
@@ -178,320 +177,319 @@ consumerBuildContext root paths = ChangeContext root paths ContextConsumerBuild 
 
 compatibleVector :: CompatibilityVector
 compatibleVector =
-    CompatibilityVector
-        VCompatible
-        VCompatible
-        VNotApplicable
-        VNotApplicable
-        VNotApplicable
-        VNotApplicable
-        Set.empty
+  CompatibilityVector
+    VCompatible
+    VCompatible
+    VNotApplicable
+    VNotApplicable
+    VNotApplicable
+    VNotApplicable
+    Set.empty
 
 sourceProvenanceVector :: CompatibilityVector
 sourceProvenanceVector =
-    CompatibilityVector
-        VCompatible
-        VCompatible
-        VCompatible
-        VCompatible
-        VCompatible
-        VCompatible
-        Set.empty
+  CompatibilityVector
+    VCompatible
+    VCompatible
+    VCompatible
+    VCompatible
+    VCompatible
+    VCompatible
+    Set.empty
 
 privateDecodeBreakingVector :: CompatibilityVector
 privateDecodeBreakingVector =
-    CompatibilityVector
-        VBreaking
-        VBreaking
-        VAdvisory
-        VNotApplicable
-        VNotApplicable
-        VNotApplicable
-        (Set.singleton RolloutStopTheWorld)
+  CompatibilityVector
+    VBreaking
+    VBreaking
+    VAdvisory
+    VNotApplicable
+    VNotApplicable
+    VNotApplicable
+    (Set.singleton RolloutStopTheWorld)
 
 persistedIdentityBreakingVector :: CompatibilityVector
 persistedIdentityBreakingVector =
-    CompatibilityVector
-        VNotApplicable
-        VNotApplicable
-        VNotApplicable
-        VNotApplicable
-        VBreaking
-        VNotApplicable
-        Set.empty
+  CompatibilityVector
+    VNotApplicable
+    VNotApplicable
+    VNotApplicable
+    VNotApplicable
+    VBreaking
+    VNotApplicable
+    Set.empty
 
 publicBreakingVector :: CompatibilityVector
 publicBreakingVector =
-    CompatibilityVector
-        VNotApplicable
-        VNotApplicable
-        VNotApplicable
-        VBreaking
-        VNotApplicable
-        VNotApplicable
-        (Set.singleton RolloutProducerLast)
+  CompatibilityVector
+    VNotApplicable
+    VNotApplicable
+    VNotApplicable
+    VBreaking
+    VNotApplicable
+    VNotApplicable
+    (Set.singleton RolloutProducerLast)
 
 queueBreakingVector :: CompatibilityVector
 queueBreakingVector =
-    CompatibilityVector
-        VBreaking
-        VBreaking
-        VNotApplicable
-        VNotApplicable
-        VAdvisory
-        VNotApplicable
-        (Set.singleton RolloutWorkersFirst)
+  CompatibilityVector
+    VBreaking
+    VBreaking
+    VNotApplicable
+    VNotApplicable
+    VAdvisory
+    VNotApplicable
+    (Set.singleton RolloutWorkersFirst)
 
 advisoryVector :: CompatibilitySurface -> Set RolloutConstraint -> CompatibilityVector
 advisoryVector surface rollout =
-    compatibleVector
-        { cvPrivateHistoryRead = verdict PrivateHistoryRead
-        , cvOldBinaryReadNewEvents = verdict OldBinaryReadNewEvents
-        , cvSnapshotHydration = verdict SnapshotHydration
-        , cvPublicConsumer = verdict PublicConsumer
-        , cvPersistedIdentity = verdict PersistedIdentity
-        , cvConsumerBuild = verdict ConsumerBuild
-        , cvRollout = rollout
-        }
+  compatibleVector
+    { cvPrivateHistoryRead = verdict PrivateHistoryRead,
+      cvOldBinaryReadNewEvents = verdict OldBinaryReadNewEvents,
+      cvSnapshotHydration = verdict SnapshotHydration,
+      cvPublicConsumer = verdict PublicConsumer,
+      cvPersistedIdentity = verdict PersistedIdentity,
+      cvConsumerBuild = verdict ConsumerBuild,
+      cvRollout = rollout
+    }
   where
     verdict candidate
-        | candidate == surface = VAdvisory
-        | otherwise = verdictFor candidate compatibleVector
+      | candidate == surface = VAdvisory
+      | otherwise = verdictFor candidate compatibleVector
 
-{- | Classify one code at an explicitly owned use site.  Codes emitted by the
-differ are grouped by their actual persisted/public surface; the context is
-load-bearing for codes such as 'EnumCtorAdded' that vary by use site.
--}
+-- | Classify one code at an explicitly owned use site.  Codes emitted by the
+-- differ are grouped by their actual persisted/public surface; the context is
+-- load-bearing for codes such as 'EnumCtorAdded' that vary by use site.
 classifyCompatibility :: ChangeContext -> DiagnosticCode -> CompatibilityVector
 classifyCompatibility context code
-    | code == SourceLanguageDeclarationChanged = sourceProvenanceVector
-    | code `elem` [OwnershipMoved, WorkspaceAuthorityChanged] = mappedBuildVector
-    | code == MappedFieldAddedWithDefault = mappedFieldAdditionVector context
-    | code `elem` [MappedArmAdded, MappedEnumValueAdded] = mappedDirectionalAdditionVector context
-    | code `elem` mappedWireBreakingCodes = mappedWireBreakingVector context
-    | code `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged] = mappedBuildVector
-    | code == MappedBindingChanged = mappedBindingVector context
-    | code `elem` [MappedInitialChanged, MappedCanonicalTypeChanged] = mappedSnapshotBuildVector context
-    | code == NominalFixturesChanged = mappedBuildVector
-    | code == NominalBindingChanged = mappedBindingVector context
-    | code `elem` [NominalInitialChanged, NominalCanonicalTypeChanged] = mappedSnapshotBuildVector context
-    | code == NominalRepresentationChanged = mappedWireBreakingVector context
-    | code == NominalIdDecoderTightened =
-        (advisoryVector PrivateHistoryRead Set.empty){cvConsumerBuild = VAdvisory}
-    | code == MappedDeclAdded = compatibleVector
-    | code `elem` privateDecodeCodes = privateDecodeBreakingVector
-    | code `elem` identityCodes = persistedIdentityBreakingVector
-    | code `elem` publicBreakingCodes = publicBreakingVector
-    | code `elem` queueBreakingCodes = queueBreakingVector
-    | code `elem` readModelBreakingCodes = persistedIdentityBreakingVector
-    | code == ContractSchemaVersionBumped = advisoryVector PublicConsumer (Set.singleton RolloutProducerLast)
-    | code == AggFoldSurfaceChanged =
-        (advisoryVector PrivateHistoryRead Set.empty){cvSnapshotHydration = VAdvisory}
-    | code == AggGuardTightened = advisoryVector PrivateHistoryRead Set.empty
-    | code `elem` [RouterDecideSurfaceChanged, ProcessDecideSurfaceChanged] =
-        compatibleVector{cvRollout = Set.singleton RolloutDrainRequired}
-    | code == ProcessTimerPayloadChanged = advisoryVector PrivateHistoryRead (Set.singleton RolloutProducerLast)
-    | code == TimerWindowChanged = advisoryVector PrivateHistoryRead Set.empty
-    | code == ProjectionChanged = advisoryVector PersistedIdentity Set.empty
-    | code == EmitMappingChanged = advisoryVector PublicConsumer (Set.singleton RolloutProducerLast)
-    | code == DecodePostureChanged = advisoryVector PublicConsumer Set.empty
-    | code == IntakePersistenceChanged = advisoryVector PrivateHistoryRead Set.empty
-    | code `elem` [PublisherPolicyChanged, DispatchRetargeted] = advisoryVector PersistedIdentity Set.empty
-    | code `elem` [DeprecatedEventReplayHazard, EventRetirementInProgress] = advisoryVector PrivateHistoryRead Set.empty
-    | code == EventUndeprecated = advisoryVector OldBinaryReadNewEvents (Set.singleton RolloutProducerLast)
-    | code == EnumCtorAdded = case contextKind context of
-        ContextPrivateEventAddition ->
-            compatibleVector
-                { cvOldBinaryReadNewEvents = VBreaking
-                , cvRollout = Set.singleton RolloutProducerLast
-                }
-        ContextSnapshot -> advisoryVector SnapshotHydration Set.empty
-        _ -> compatibleVector
-    | code `elem` additiveCodes = compatibleVector
-    | otherwise = case contextOriginalLabel context of
-        LabelAdditive -> compatibleVector
-        LabelAdvisory -> advisoryVector (surfaceForContext context) Set.empty
-        LabelBreaking -> breakingVectorForContext context
+  | code == SourceLanguageDeclarationChanged = sourceProvenanceVector
+  | code `elem` [OwnershipMoved, WorkspaceAuthorityChanged] = mappedBuildVector
+  | code == MappedFieldAddedWithDefault = mappedFieldAdditionVector context
+  | code `elem` [MappedArmAdded, MappedEnumValueAdded] = mappedDirectionalAdditionVector context
+  | code `elem` mappedWireBreakingCodes = mappedWireBreakingVector context
+  | code `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged] = mappedBuildVector
+  | code == MappedBindingChanged = mappedBindingVector context
+  | code `elem` [MappedInitialChanged, MappedCanonicalTypeChanged] = mappedSnapshotBuildVector context
+  | code == NominalFixturesChanged = mappedBuildVector
+  | code == NominalBindingChanged = mappedBindingVector context
+  | code `elem` [NominalInitialChanged, NominalCanonicalTypeChanged] = mappedSnapshotBuildVector context
+  | code == NominalRepresentationChanged = mappedWireBreakingVector context
+  | code == NominalIdDecoderTightened =
+      (advisoryVector PrivateHistoryRead Set.empty) {cvConsumerBuild = VAdvisory}
+  | code == MappedDeclAdded = compatibleVector
+  | code `elem` privateDecodeCodes = privateDecodeBreakingVector
+  | code `elem` identityCodes = persistedIdentityBreakingVector
+  | code `elem` publicBreakingCodes = publicBreakingVector
+  | code `elem` queueBreakingCodes = queueBreakingVector
+  | code `elem` readModelBreakingCodes = persistedIdentityBreakingVector
+  | code == ContractSchemaVersionBumped = advisoryVector PublicConsumer (Set.singleton RolloutProducerLast)
+  | code == AggFoldSurfaceChanged =
+      (advisoryVector PrivateHistoryRead Set.empty) {cvSnapshotHydration = VAdvisory}
+  | code == AggGuardTightened = advisoryVector PrivateHistoryRead Set.empty
+  | code `elem` [RouterDecideSurfaceChanged, ProcessDecideSurfaceChanged] =
+      compatibleVector {cvRollout = Set.singleton RolloutDrainRequired}
+  | code == ProcessTimerPayloadChanged = advisoryVector PrivateHistoryRead (Set.singleton RolloutProducerLast)
+  | code == TimerWindowChanged = advisoryVector PrivateHistoryRead Set.empty
+  | code == ProjectionChanged = advisoryVector PersistedIdentity Set.empty
+  | code == EmitMappingChanged = advisoryVector PublicConsumer (Set.singleton RolloutProducerLast)
+  | code == DecodePostureChanged = advisoryVector PublicConsumer Set.empty
+  | code == IntakePersistenceChanged = advisoryVector PrivateHistoryRead Set.empty
+  | code `elem` [PublisherPolicyChanged, DispatchRetargeted] = advisoryVector PersistedIdentity Set.empty
+  | code `elem` [DeprecatedEventReplayHazard, EventRetirementInProgress] = advisoryVector PrivateHistoryRead Set.empty
+  | code == EventUndeprecated = advisoryVector OldBinaryReadNewEvents (Set.singleton RolloutProducerLast)
+  | code == EnumCtorAdded = case contextKind context of
+      ContextPrivateEventAddition ->
+        compatibleVector
+          { cvOldBinaryReadNewEvents = VBreaking,
+            cvRollout = Set.singleton RolloutProducerLast
+          }
+      ContextSnapshot -> advisoryVector SnapshotHydration Set.empty
+      _ -> compatibleVector
+  | code `elem` additiveCodes = compatibleVector
+  | otherwise = case contextOriginalLabel context of
+      LabelAdditive -> compatibleVector
+      LabelAdvisory -> advisoryVector (surfaceForContext context) Set.empty
+      LabelBreaking -> breakingVectorForContext context
   where
     privateDecodeCodes =
-        [ EvtFieldAddedWithoutBump
-        , EvtFieldRemovedSameVersion
-        , EvtFieldTypeChanged
-        , EvtVersionDecreased
-        , EvtVersionMissingUpcaster
-        , UpcasterChainGap
-        , EvtRemovedNotDeprecated
-        , EnumCtorRemoved
-        , EnumWireSpellingChanged
-        , WireSpecChanged
-        , ProcessInputChanged
-        , WorkflowShapeChanged
-        , WorkflowBodyChanged
-        , WorkflowPatchRemoved
-        , WorkflowContinueSeedChanged
-        ]
+      [ EvtFieldAddedWithoutBump,
+        EvtFieldRemovedSameVersion,
+        EvtFieldTypeChanged,
+        EvtVersionDecreased,
+        EvtVersionMissingUpcaster,
+        UpcasterChainGap,
+        EvtRemovedNotDeprecated,
+        EnumCtorRemoved,
+        EnumWireSpellingChanged,
+        WireSpecChanged,
+        ProcessInputChanged,
+        WorkflowShapeChanged,
+        WorkflowBodyChanged,
+        WorkflowPatchRemoved,
+        WorkflowContinueSeedChanged
+      ]
     identityCodes =
-        [ DerivedIdentityChanged
-        , IdPrefixChanged
-        , DedupeIdentityChanged
-        , QueueIdentityChanged
-        , RouterStableNameChanged
-        , WorkflowStableNameChanged
-        ]
+      [ DerivedIdentityChanged,
+        IdPrefixChanged,
+        DedupeIdentityChanged,
+        QueueIdentityChanged,
+        RouterStableNameChanged,
+        WorkflowStableNameChanged
+      ]
     publicBreakingCodes =
-        [ ContractEventRemoved
-        , ContractFieldChanged
-        , ContractDiscriminatorChanged
-        , ContractTopicChanged
-        , ContractSchemaVersionDecreased
-        ]
+      [ ContractEventRemoved,
+        ContractFieldChanged,
+        ContractDiscriminatorChanged,
+        ContractTopicChanged,
+        ContractSchemaVersionDecreased
+      ]
     queueBreakingCodes = [WqPayloadFieldChanged, WqOrderingChanged, WqProvisionChanged, WqGroupKeyChanged]
     readModelBreakingCodes =
-        [ ReadModelVersionDecreased
-        , ReadModelShapeChangedWithoutBump
-        , ReadModelFeedChanged
-        , ReadModelConsistencyWeakened
-        ]
+      [ ReadModelVersionDecreased,
+        ReadModelShapeChangedWithoutBump,
+        ReadModelFeedChanged,
+        ReadModelConsistencyWeakened
+      ]
     additiveCodes =
-        [ DeclarationAdded
-        , VersionBumped
-        , CompatibilityStrengthened
-        , EventRetirementAbandoned
-        , ContractEventAdded
-        , ContractTopicAdded
-        , WorkflowEvolutionGuardAdded
-        ]
+      [ DeclarationAdded,
+        VersionBumped,
+        CompatibilityStrengthened,
+        EventRetirementAbandoned,
+        ContractEventAdded,
+        ContractTopicAdded,
+        WorkflowEvolutionGuardAdded
+      ]
 
 mappedWireBreakingCodes :: [DiagnosticCode]
 mappedWireBreakingCodes =
-    [ MappedFieldAddedNoDefault
-    , MappedFieldRemoved
-    , MappedFieldTypeChanged
-    , MappedPresenceChanged
-    , MappedNullabilityChanged
-    , MappedDefaultRemoved
-    , MappedDefaultChanged
-    , MappedWireKeyChanged
-    , MappedUnionEncodingChanged
-    , MappedArmRemoved
-    , MappedArmTagChanged
-    , MappedEnumValueRemoved
-    , MappedEnumSpellingChanged
-    , MappedOpaqueCodecChanged
-    , MappedModeCrossed
-    , MappedDeclRemoved
-    ]
+  [ MappedFieldAddedNoDefault,
+    MappedFieldRemoved,
+    MappedFieldTypeChanged,
+    MappedPresenceChanged,
+    MappedNullabilityChanged,
+    MappedDefaultRemoved,
+    MappedDefaultChanged,
+    MappedWireKeyChanged,
+    MappedUnionEncodingChanged,
+    MappedArmRemoved,
+    MappedArmTagChanged,
+    MappedEnumValueRemoved,
+    MappedEnumSpellingChanged,
+    MappedOpaqueCodecChanged,
+    MappedModeCrossed,
+    MappedDeclRemoved
+  ]
 
 mappedFieldAdditionVector :: ChangeContext -> CompatibilityVector
 mappedFieldAdditionVector context = case contextKind context of
-    ContextPrivateEvent ->
-        compatibleVector
-            { cvOldBinaryReadNewEvents = oldBinaryVerdict
-            , cvRollout = rollout
-            }
-      where
-        rejectsUnknown = contextOriginalLabel context == LabelBreaking
-        oldBinaryVerdict = if rejectsUnknown then VBreaking else VCompatible
-        rollout = if rejectsUnknown then Set.singleton RolloutProducerLast else Set.empty
-    ContextSnapshot -> mappedSnapshotVector
-    ContextConsumerBuild -> mappedBuildVector
-    _ -> compatibleVector
+  ContextPrivateEvent ->
+    compatibleVector
+      { cvOldBinaryReadNewEvents = oldBinaryVerdict,
+        cvRollout = rollout
+      }
+    where
+      rejectsUnknown = contextOriginalLabel context == LabelBreaking
+      oldBinaryVerdict = if rejectsUnknown then VBreaking else VCompatible
+      rollout = if rejectsUnknown then Set.singleton RolloutProducerLast else Set.empty
+  ContextSnapshot -> mappedSnapshotVector
+  ContextConsumerBuild -> mappedBuildVector
+  _ -> compatibleVector
 
 mappedDirectionalAdditionVector :: ChangeContext -> CompatibilityVector
 mappedDirectionalAdditionVector context = case contextKind context of
-    ContextPrivateEvent ->
-        compatibleVector
-            { cvOldBinaryReadNewEvents = VBreaking
-            , cvRollout = Set.singleton RolloutProducerLast
-            }
-    ContextSnapshot -> mappedSnapshotVector
-    ContextConsumerBuild -> mappedBuildVector
-    _ -> compatibleVector
+  ContextPrivateEvent ->
+    compatibleVector
+      { cvOldBinaryReadNewEvents = VBreaking,
+        cvRollout = Set.singleton RolloutProducerLast
+      }
+  ContextSnapshot -> mappedSnapshotVector
+  ContextConsumerBuild -> mappedBuildVector
+  _ -> compatibleVector
 
 mappedWireBreakingVector :: ChangeContext -> CompatibilityVector
 mappedWireBreakingVector context = case contextKind context of
-    ContextPrivateEvent ->
-        CompatibilityVector
-            VBreaking
-            VBreaking
-            VNotApplicable
-            VNotApplicable
-            VNotApplicable
-            VNotApplicable
-            (Set.singleton RolloutStopTheWorld)
-    ContextSnapshot -> mappedSnapshotVector
-    ContextConsumerBuild -> mappedBuildVector
-    _ -> mappedBuildVector
+  ContextPrivateEvent ->
+    CompatibilityVector
+      VBreaking
+      VBreaking
+      VNotApplicable
+      VNotApplicable
+      VNotApplicable
+      VNotApplicable
+      (Set.singleton RolloutStopTheWorld)
+  ContextSnapshot -> mappedSnapshotVector
+  ContextConsumerBuild -> mappedBuildVector
+  _ -> mappedBuildVector
 
 mappedBuildVector :: CompatibilityVector
 mappedBuildVector =
-    CompatibilityVector
-        VCompatible
-        VCompatible
-        VNotApplicable
-        VNotApplicable
-        VNotApplicable
-        VAdvisory
-        Set.empty
+  CompatibilityVector
+    VCompatible
+    VCompatible
+    VNotApplicable
+    VNotApplicable
+    VNotApplicable
+    VAdvisory
+    Set.empty
 
 mappedSnapshotVector :: CompatibilityVector
 mappedSnapshotVector =
-    CompatibilityVector
-        VCompatible
-        VCompatible
-        VAdvisory
-        VNotApplicable
-        VNotApplicable
-        VNotApplicable
-        Set.empty
+  CompatibilityVector
+    VCompatible
+    VCompatible
+    VAdvisory
+    VNotApplicable
+    VNotApplicable
+    VNotApplicable
+    Set.empty
 
 mappedBindingVector :: ChangeContext -> CompatibilityVector
 mappedBindingVector context = case contextKind context of
-    ContextPrivateEvent ->
-        CompatibilityVector
-            VAdvisory
-            VAdvisory
-            VNotApplicable
-            VNotApplicable
-            VNotApplicable
-            VAdvisory
-            Set.empty
-    ContextSnapshot ->
-        mappedSnapshotVector{cvConsumerBuild = VAdvisory}
-    _ -> mappedBuildVector
+  ContextPrivateEvent ->
+    CompatibilityVector
+      VAdvisory
+      VAdvisory
+      VNotApplicable
+      VNotApplicable
+      VNotApplicable
+      VAdvisory
+      Set.empty
+  ContextSnapshot ->
+    mappedSnapshotVector {cvConsumerBuild = VAdvisory}
+  _ -> mappedBuildVector
 
 mappedSnapshotBuildVector :: ChangeContext -> CompatibilityVector
 mappedSnapshotBuildVector context = case contextKind context of
-    ContextSnapshot -> mappedSnapshotVector{cvConsumerBuild = VAdvisory}
-    _ -> mappedBuildVector
+  ContextSnapshot -> mappedSnapshotVector {cvConsumerBuild = VAdvisory}
+  _ -> mappedBuildVector
 
 surfaceForContext :: ChangeContext -> CompatibilitySurface
 surfaceForContext context = case contextKind context of
-    ContextPrivateEvent -> PrivateHistoryRead
-    ContextPrivateEventAddition -> OldBinaryReadNewEvents
-    ContextSnapshot -> SnapshotHydration
-    ContextQueue -> PrivateHistoryRead
-    ContextPublicContract -> PublicConsumer
-    ContextPersistedIdentity -> PersistedIdentity
-    ContextConsumerBuild -> ConsumerBuild
-    ContextGeneral -> PrivateHistoryRead
+  ContextPrivateEvent -> PrivateHistoryRead
+  ContextPrivateEventAddition -> OldBinaryReadNewEvents
+  ContextSnapshot -> SnapshotHydration
+  ContextQueue -> PrivateHistoryRead
+  ContextPublicContract -> PublicConsumer
+  ContextPersistedIdentity -> PersistedIdentity
+  ContextConsumerBuild -> ConsumerBuild
+  ContextGeneral -> PrivateHistoryRead
 
 breakingVectorForContext :: ChangeContext -> CompatibilityVector
 breakingVectorForContext context = case contextKind context of
-    ContextPublicContract -> publicBreakingVector
-    ContextPersistedIdentity -> persistedIdentityBreakingVector
-    ContextQueue -> queueBreakingVector
-    ContextConsumerBuild -> (advisoryVector ConsumerBuild Set.empty){cvConsumerBuild = VBreaking}
-    _ -> privateDecodeBreakingVector
+  ContextPublicContract -> publicBreakingVector
+  ContextPersistedIdentity -> persistedIdentityBreakingVector
+  ContextQueue -> queueBreakingVector
+  ContextConsumerBuild -> (advisoryVector ConsumerBuild Set.empty) {cvConsumerBuild = VBreaking}
+  _ -> privateDecodeBreakingVector
 
 verdictFor :: CompatibilitySurface -> CompatibilityVector -> SurfaceVerdict
 verdictFor surface vector = case surface of
-    PrivateHistoryRead -> cvPrivateHistoryRead vector
-    OldBinaryReadNewEvents -> cvOldBinaryReadNewEvents vector
-    SnapshotHydration -> cvSnapshotHydration vector
-    PublicConsumer -> cvPublicConsumer vector
-    PersistedIdentity -> cvPersistedIdentity vector
-    ConsumerBuild -> cvConsumerBuild vector
+  PrivateHistoryRead -> cvPrivateHistoryRead vector
+  OldBinaryReadNewEvents -> cvOldBinaryReadNewEvents vector
+  SnapshotHydration -> cvSnapshotHydration vector
+  PublicConsumer -> cvPublicConsumer vector
+  PersistedIdentity -> cvPersistedIdentity vector
+  ConsumerBuild -> cvConsumerBuild vector
 
 defaultGate :: Set CompatibilitySurface
 defaultGate = Set.delete OldBinaryReadNewEvents (Set.fromList [minBound .. maxBound])
@@ -501,9 +499,9 @@ gateWith surfaces = defaultGate <> Set.fromList surfaces
 
 deriveLabel :: Set CompatibilitySurface -> CompatibilityVector -> Label
 deriveLabel gate vector
-    | any ((== VBreaking) . (`verdictFor` vector)) (Set.toList gate) = LabelBreaking
-    | any (`elem` [VAdvisory, VBreaking]) verdicts || not (Set.null (cvRollout vector)) = LabelAdvisory
-    | otherwise = LabelAdditive
+  | any ((== VBreaking) . (`verdictFor` vector)) (Set.toList gate) = LabelBreaking
+  | any (`elem` [VAdvisory, VBreaking]) verdicts || not (Set.null (cvRollout vector)) = LabelAdvisory
+  | otherwise = LabelAdditive
   where
     verdicts = [verdictFor surface vector | surface <- [minBound .. maxBound]]
 
@@ -527,26 +525,26 @@ isAdvisory (Breaking _) = False
 
 -- | Both specs supplied to a node-family differ, always old then new.
 data DiffEnv = DiffEnv
-    { deOld :: !Spec
-    , deNew :: !Spec
-    }
-    deriving stock (Eq, Show)
+  { deOld :: !Spec,
+    deNew :: !Spec
+  }
+  deriving stock (Eq, Show)
 
 -- | The closed set of node families currently present in 'Node'.
 data NodeFamily
-    = FamAggregate
-    | FamProcess
-    | FamRouter
-    | FamContract
-    | FamIntake
-    | FamEmit
-    | FamPublisher
-    | FamWorkqueue
-    | FamPgmqDispatch
-    | FamReadModel
-    | FamWorkflow
-    | FamOperation
-    deriving stock (Eq, Ord, Show, Enum, Bounded)
+  = FamAggregate
+  | FamProcess
+  | FamRouter
+  | FamContract
+  | FamIntake
+  | FamEmit
+  | FamPublisher
+  | FamWorkqueue
+  | FamPgmqDispatch
+  | FamReadModel
+  | FamWorkflow
+  | FamOperation
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | Total by construction: one explicit arm per 'Node' constructor.
 familyOf :: Node -> NodeFamily
@@ -565,100 +563,99 @@ familyOf (NOperation _) = FamOperation
 
 -- | A family either has a differ or an explicit reason it is not compared.
 data FamilyDiff
-    = DiffFamily (DiffEnv -> [Change])
-    | OutOfDiffScope Text
+  = DiffFamily (DiffEnv -> [Change])
+  | OutOfDiffScope Text
 
 -- | Pair the old and new declarations of one node family by stable name.
 data Paired n = Paired
-    { prMatched :: ![(n, n)]
-    , prAdded :: ![n]
-    , prRemoved :: ![n]
-    }
-    deriving stock (Eq, Show)
+  { prMatched :: ![(n, n)],
+    prAdded :: ![n],
+    prRemoved :: ![n]
+  }
+  deriving stock (Eq, Show)
 
 pairByName :: (Node -> Maybe n) -> (n -> Name) -> DiffEnv -> Paired n
 pairByName project nameOf env =
-    Paired
-        { prMatched =
-            [ (oldNode, newNode)
-            | newNode <- newNodes
-            , Just oldNode <- [find ((== nameOf newNode) . nameOf) oldNodes]
-            ]
-        , prAdded =
-            [ newNode
-            | newNode <- newNodes
-            , isNothing (find ((== nameOf newNode) . nameOf) oldNodes)
-            ]
-        , prRemoved =
-            [ oldNode
-            | oldNode <- oldNodes
-            , isNothing (find ((== nameOf oldNode) . nameOf) newNodes)
-            ]
-        }
+  Paired
+    { prMatched =
+        [ (oldNode, newNode)
+        | newNode <- newNodes,
+          Just oldNode <- [find ((== nameOf newNode) . nameOf) oldNodes]
+        ],
+      prAdded =
+        [ newNode
+        | newNode <- newNodes,
+          isNothing (find ((== nameOf newNode) . nameOf) oldNodes)
+        ],
+      prRemoved =
+        [ oldNode
+        | oldNode <- oldNodes,
+          isNothing (find ((== nameOf oldNode) . nameOf) newNodes)
+        ]
+    }
   where
     oldNodes = mapMaybe project (specNodes (deOld env))
     newNodes = mapMaybe project (specNodes (deNew env))
 
-{- | Registry invariant: every 'Node' constructor maps to a family via the
-total 'familyOf' case, and every family occurs exactly once here.  The unit
-suite enforces registry coverage and non-empty out-of-scope rationales.
--}
+-- | Registry invariant: every 'Node' constructor maps to a family via the
+-- total 'familyOf' case, and every family occurs exactly once here.  The unit
+-- suite enforces registry coverage and non-empty out-of-scope rationales.
 familyRegistry :: [(NodeFamily, FamilyDiff)]
 familyRegistry =
-    [ (FamAggregate, DiffFamily aggregateDiff)
-    , (FamProcess, DiffFamily processDiff)
-    , (FamRouter, DiffFamily routerDiff)
-    , (FamContract, DiffFamily contractDiff)
-    , (FamIntake, DiffFamily intakeDiff)
-    , (FamEmit, DiffFamily emitDiff)
-    , (FamPublisher, DiffFamily publisherDiff)
-    , (FamWorkqueue, DiffFamily workqueueDiff)
-    , (FamPgmqDispatch, DiffFamily pgmqDispatchDiff)
-    , (FamReadModel, DiffFamily readModelDiff)
-    , (FamWorkflow, DiffFamily workflowDiff)
-    , (FamOperation, OutOfDiffScope "operations own no persisted decode or identity surface; their references and workflow signal/await pairing are single-spec validation concerns")
-    ]
+  [ (FamAggregate, DiffFamily aggregateDiff),
+    (FamProcess, DiffFamily processDiff),
+    (FamRouter, DiffFamily routerDiff),
+    (FamContract, DiffFamily contractDiff),
+    (FamIntake, DiffFamily intakeDiff),
+    (FamEmit, DiffFamily emitDiff),
+    (FamPublisher, DiffFamily publisherDiff),
+    (FamWorkqueue, DiffFamily workqueueDiff),
+    (FamPgmqDispatch, DiffFamily pgmqDispatchDiff),
+    (FamReadModel, DiffFamily readModelDiff),
+    (FamWorkflow, DiffFamily workflowDiff),
+    (FamOperation, OutOfDiffScope "operations own no persisted decode or identity surface; their references and workflow signal/await pairing are single-spec validation concerns")
+  ]
 
 diffSpecs :: Spec -> Spec -> [Change]
 diffSpecs old new =
-    sharedDeclarationDiff env
-        ++ concatMap (runFamily env . snd) familyRegistry
+  sharedDeclarationDiff env
+    ++ concatMap (runFamily env . snd) familyRegistry
   where
     env = DiffEnv old new
 
 -- | Compare provenance first, then delegate semantic graphs to 'diffSpecs'.
 diffSources :: ParsedSource -> ParsedSource -> [Change]
 diffSources old new =
-    sourceLanguageChange
-        (specContext (parsedSpec new))
-        "declaration"
-        (parsedSourceLanguage old)
-        (parsedSourceLanguage new)
-        <> diffSpecs (parsedSpec old) (parsedSpec new)
+  sourceLanguageChange
+    (specContext (parsedSpec new))
+    "declaration"
+    (parsedSourceLanguage old)
+    (parsedSourceLanguage new)
+    <> diffSpecs (parsedSpec old) (parsedSpec new)
 
 -- | One all-compatible source-provenance finding, reusable per workspace member.
 sourceLanguageChange :: Name -> Text -> SourceLanguage -> SourceLanguage -> [Change]
 sourceLanguageChange root subject old new
-    | old == new = []
-    | otherwise =
-        [ mkChange
-            LabelAdditive
-            (ChangeContext root [] ContextGeneral LabelAdditive)
-            root
-            "source-language"
-            subject
-            SourceLanguageDeclarationChanged
-            ( "source form changed "
-                <> renderSourceLanguage old
-                <> " -> "
-                <> renderSourceLanguage new
-                <> "; the effective semantic contract is unchanged"
-            )
-        ]
+  | old == new = []
+  | otherwise =
+      [ mkChange
+          LabelAdditive
+          (ChangeContext root [] ContextGeneral LabelAdditive)
+          root
+          "source-language"
+          subject
+          SourceLanguageDeclarationChanged
+          ( "source form changed "
+              <> renderSourceLanguage old
+              <> " -> "
+              <> renderSourceLanguage new
+              <> "; the effective semantic contract is unchanged"
+          )
+      ]
   where
     renderSourceLanguage sourceLanguage =
-        sourceFormText sourceLanguage
-            <> maybe "" ((" v" <>) . languageVersionText) (declaredLanguageVersionMaybe sourceLanguage)
+      sourceFormText sourceLanguage
+        <> maybe "" ((" v" <>) . languageVersionText) (declaredLanguageVersionMaybe sourceLanguage)
 
 runFamily :: DiffEnv -> FamilyDiff -> [Change]
 runFamily env (DiffFamily f) = f env
@@ -674,64 +671,64 @@ mappedDeclarationDiff env = concatMap mappedFindingChanges (diffMapped (deOld en
 
 mappedFindingChanges :: MappedFinding -> [Change]
 mappedFindingChanges finding
-    | mfCode finding == MappedDeclAdded = [mappedDeclarationChange LabelAdditive finding]
-    | mfCode finding `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged] =
-        [mappedBuildChange finding]
-    | mfCode finding `elem` [MappedInitialChanged, MappedCanonicalTypeChanged] =
-        mappedBuildChange finding : map (mappedUseChange finding) registerPaths
-    | null paths = [mappedBuildChange finding]
-    | otherwise = map (mappedUseChange finding) paths
+  | mfCode finding == MappedDeclAdded = [mappedDeclarationChange LabelAdditive finding]
+  | mfCode finding `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged] =
+      [mappedBuildChange finding]
+  | mfCode finding `elem` [MappedInitialChanged, MappedCanonicalTypeChanged] =
+      mappedBuildChange finding : map (mappedUseChange finding) registerPaths
+  | null paths = [mappedBuildChange finding]
+  | otherwise = map (mappedUseChange finding) paths
   where
     paths = mfUsePaths finding
-    registerPaths = [path | path@UsePath{upRoot = RootRegister{}} <- paths]
+    registerPaths = [path | path@UsePath {upRoot = RootRegister {}} <- paths]
 
 mappedBuildChange :: MappedFinding -> Change
 mappedBuildChange finding =
-    mappedChange context (mfDeclaration finding) "mapped-build" subject finding
+  mappedChange context (mfDeclaration finding) "mapped-build" subject finding
   where
     subject = declarationSubject finding
     renderedPaths = map (\path -> renderMappedSubject path (mfLeaf finding)) (mfUsePaths finding)
-    context = (consumerBuildContext (mfDeclaration finding) renderedPaths){contextOriginalLabel = LabelAdvisory}
+    context = (consumerBuildContext (mfDeclaration finding) renderedPaths) {contextOriginalLabel = LabelAdvisory}
 
 mappedDeclarationChange :: Label -> MappedFinding -> Change
 mappedDeclarationChange label finding =
-    mappedChange context (mfDeclaration finding) "mapped-declaration" (declarationSubject finding) finding
+  mappedChange context (mfDeclaration finding) "mapped-declaration" (declarationSubject finding) finding
   where
     context = ChangeContext (mfDeclaration finding) [] ContextGeneral label
 
 mappedUseChange :: MappedFinding -> UsePath -> Change
 mappedUseChange finding path =
-    mappedChange context root facet subject finding
+  mappedChange context root facet subject finding
   where
     subject = renderMappedSubject path (mfLeaf finding)
     (root, facet, kind) = case upRoot path of
-        RootCommandField aggregate _ _ _ -> (aggregate, "mapped-command", ContextConsumerBuild)
-        RootEventField aggregate _ _ _ -> (aggregate, "mapped-event", ContextPrivateEvent)
-        RootRegister aggregate _ _ -> (aggregate, "mapped-register", ContextSnapshot)
+      RootCommandField aggregate _ _ _ -> (aggregate, "mapped-command", ContextConsumerBuild)
+      RootEventField aggregate _ _ _ -> (aggregate, "mapped-event", ContextPrivateEvent)
+      RootRegister aggregate _ _ -> (aggregate, "mapped-register", ContextSnapshot)
     context = ChangeContext root [subject] kind (mappedContextHint finding kind)
 
 mappedContextHint :: MappedFinding -> ContextKind -> Label
 mappedContextHint finding kind = case kind of
-    ContextSnapshot -> LabelAdvisory
-    ContextConsumerBuild -> LabelAdvisory
-    ContextPrivateEvent
-        | mfCode finding == MappedFieldAddedWithDefault -> case mfOldUnknownFields finding of
-            Just IgnoreUnknown -> LabelAdditive
-            _ -> LabelBreaking
-        | mfCode finding `elem` [MappedArmAdded, MappedEnumValueAdded] -> LabelAdvisory
-        | mfCode finding `elem` [MappedBindingChanged, MappedInitialChanged, MappedCanonicalTypeChanged] -> LabelAdvisory
-        | otherwise -> LabelBreaking
-    _ -> LabelAdvisory
+  ContextSnapshot -> LabelAdvisory
+  ContextConsumerBuild -> LabelAdvisory
+  ContextPrivateEvent
+    | mfCode finding == MappedFieldAddedWithDefault -> case mfOldUnknownFields finding of
+        Just IgnoreUnknown -> LabelAdditive
+        _ -> LabelBreaking
+    | mfCode finding `elem` [MappedArmAdded, MappedEnumValueAdded] -> LabelAdvisory
+    | mfCode finding `elem` [MappedBindingChanged, MappedInitialChanged, MappedCanonicalTypeChanged] -> LabelAdvisory
+    | otherwise -> LabelBreaking
+  _ -> LabelAdvisory
 
 mappedChange :: ChangeContext -> Name -> Text -> Text -> MappedFinding -> Change
 mappedChange context node facet subject finding =
-    mkChange label context node facet subject (mfCode finding) (mfDetail finding)
+  mkChange label context node facet subject (mfCode finding) (mfDetail finding)
   where
     label = deriveLabel defaultGate (classifyCompatibility context (mfCode finding))
 
 declarationSubject :: MappedFinding -> Text
 declarationSubject finding =
-    mfDeclaration finding <> if T.null (mfLeaf finding) then "" else " " <> mfLeaf finding
+  mfDeclaration finding <> if T.null (mfLeaf finding) then "" else " " <> mfLeaf finding
 
 nodeAggregate :: Node -> Maybe Aggregate
 nodeAggregate (NAggregate a) = Just a
@@ -777,132 +774,131 @@ nodeWorkflow :: Node -> Maybe WorkflowNode
 nodeWorkflow (NWorkflow workflow) = Just workflow
 nodeWorkflow _ = Nothing
 
-{- | Router identity is replay-sensitive: the stable name and key feed every
-target-keyed dispatch id, and the target selects the persisted stream family.
--}
+-- | Router identity is replay-sensitive: the stable name and key feed every
+-- target-keyed dispatch id, and the target selects the persisted stream family.
 routerDiff :: DiffEnv -> [Change]
 routerDiff env =
-    concatMap (uncurry routerPairDiff) (prMatched paired)
-        ++ [additive (rtId router) "router" (rtId router) DeclarationAdded "new router declaration" | router <- prAdded paired]
-        ++ [breaking (rtId router) "router-identity" (rtId router) RouterStableNameChanged "router removed while replayable source events may still derive target-keyed dispatch ids from its stable identity" | router <- prRemoved paired]
+  concatMap (uncurry routerPairDiff) (prMatched paired)
+    ++ [additive (rtId router) "router" (rtId router) DeclarationAdded "new router declaration" | router <- prAdded paired]
+    ++ [breaking (rtId router) "router-identity" (rtId router) RouterStableNameChanged "router removed while replayable source events may still derive target-keyed dispatch ids from its stable identity" | router <- prRemoved paired]
   where
     paired = pairByName nodeRouter rtId env
 
 routerPairDiff :: RouterNode -> RouterNode -> [Change]
 routerPairDiff oldRouter newRouter =
-    stableName
-        ++ keyDerivation
-        ++ target
-        ++ routerDecideSurfaceDiff oldRouter newRouter
+  stableName
+    ++ keyDerivation
+    ++ target
+    ++ routerDecideSurfaceDiff oldRouter newRouter
   where
     nodeName = rtId newRouter
     stableName =
-        [ breaking nodeName "router-stable-name" nodeName RouterStableNameChanged $
-            "router stable name changed from '" <> rtName oldRouter <> "' to '" <> rtName newRouter <> "'; every deterministicRouterCommandId is re-keyed, so redelivery can duplicate the full resolved fan-out"
-        | rtName oldRouter /= rtName newRouter
-        ]
+      [ breaking nodeName "router-stable-name" nodeName RouterStableNameChanged $
+          "router stable name changed from '" <> rtName oldRouter <> "' to '" <> rtName newRouter <> "'; every deterministicRouterCommandId is re-keyed, so redelivery can duplicate the full resolved fan-out"
+      | rtName oldRouter /= rtName newRouter
+      ]
     keyDerivation =
-        [ breaking nodeName "router-key" (corrField (rtKey newRouter)) DerivedIdentityChanged "router key field or derivation changed; replay derives different target dispatch ids"
-        | rtKey oldRouter /= rtKey newRouter
-        ]
+      [ breaking nodeName "router-key" (corrField (rtKey newRouter)) DerivedIdentityChanged "router key field or derivation changed; replay derives different target dispatch ids"
+      | rtKey oldRouter /= rtKey newRouter
+      ]
     target =
-        [ breaking nodeName "router-target" (rtTarget newRouter) DerivedIdentityChanged "router target aggregate changed; replay addresses a different persisted stream family"
-        | rtTarget oldRouter /= rtTarget newRouter
-        ]
+      [ breaking nodeName "router-target" (rtTarget newRouter) DerivedIdentityChanged "router target aggregate changed; replay addresses a different persisted stream family"
+      | rtTarget oldRouter /= rtTarget newRouter
+      ]
 
 routerDecideSurfaceDiff :: RouterNode -> RouterNode -> [Change]
 routerDecideSurfaceDiff oldRouter newRouter =
-    [ advisory
-        (rtId newRouter)
-        "router-decide"
-        (rtId newRouter)
-        RouterDecideSurfaceChanged
-        "router dispatch surface changed: a source event redelivered across the deploy dispatches under the same deterministic ids, so half-old/half-new fan-out merges silently. Drain or pause the router's subscription and replay or discard dead letters before deploying; see docs/user/deploy-ordering.md. Hole-only decide changes are not visible to diff; the same drain rule applies to those too."
-    | oldSurface /= newSurface
-    ]
+  [ advisory
+      (rtId newRouter)
+      "router-decide"
+      (rtId newRouter)
+      RouterDecideSurfaceChanged
+      "router dispatch surface changed: a source event redelivered across the deploy dispatches under the same deterministic ids, so half-old/half-new fan-out merges silently. Drain or pause the router's subscription and replay or discard dead letters before deploying; see docs/user/deploy-ordering.md. Hole-only decide changes are not visible to diff; the same drain rule applies to those too."
+  | oldSurface /= newSurface
+  ]
   where
     oldSurface =
-        ( renderResolveSurface (rtResolve oldRouter)
-        , renderRouterDispatchSurface (rtDispatch oldRouter)
-        )
+      ( renderResolveSurface (rtResolve oldRouter),
+        renderRouterDispatchSurface (rtDispatch oldRouter)
+      )
     newSurface =
-        ( renderResolveSurface (rtResolve newRouter)
-        , renderRouterDispatchSurface (rtDispatch newRouter)
-        )
+      ( renderResolveSurface (rtResolve newRouter),
+        renderRouterDispatchSurface (rtDispatch newRouter)
+      )
 
 readModelDiff :: DiffEnv -> [Change]
 readModelDiff env =
-    concatMap (uncurry (readModelPairDiff env)) (prMatched paired)
-        ++ concatMap addedReadModelDiff (prAdded paired)
-        ++ concatMap removedReadModelDiff (prRemoved paired)
+  concatMap (uncurry (readModelPairDiff env)) (prMatched paired)
+    ++ concatMap addedReadModelDiff (prAdded paired)
+    ++ concatMap removedReadModelDiff (prRemoved paired)
   where
     paired = pairByName nodeReadModel rmName env
 
 readModelPairDiff :: DiffEnv -> ReadModelNode -> ReadModelNode -> [Change]
 readModelPairDiff env oldReadModel newReadModel =
-    versionChanges
-        ++ shapeChanges
-        ++ identityChanges
-        ++ feedChanges
-        ++ consistencyChanges
-        ++ scopeChanges
+  versionChanges
+    ++ shapeChanges
+    ++ identityChanges
+    ++ feedChanges
+    ++ consistencyChanges
+    ++ scopeChanges
   where
     nodeName = rmName newReadModel
     versionChanges
-        | rmVersion newReadModel < rmVersion oldReadModel =
-            [ breaking nodeName "read-model-version" nodeName ReadModelVersionDecreased ("version decreased from " <> tInt (rmVersion oldReadModel) <> " to " <> tInt (rmVersion newReadModel))
-            ]
-        | rmVersion newReadModel > rmVersion oldReadModel =
-            [ additive nodeName "read-model-version" nodeName VersionBumped ("version increased from " <> tInt (rmVersion oldReadModel) <> " to " <> tInt (rmVersion newReadModel) <> "; register and rebuild the new shape before serving it")
-            ]
-        | otherwise = []
+      | rmVersion newReadModel < rmVersion oldReadModel =
+          [ breaking nodeName "read-model-version" nodeName ReadModelVersionDecreased ("version decreased from " <> tInt (rmVersion oldReadModel) <> " to " <> tInt (rmVersion newReadModel))
+          ]
+      | rmVersion newReadModel > rmVersion oldReadModel =
+          [ additive nodeName "read-model-version" nodeName VersionBumped ("version increased from " <> tInt (rmVersion oldReadModel) <> " to " <> tInt (rmVersion newReadModel) <> "; register and rebuild the new shape before serving it")
+          ]
+      | otherwise = []
     oldShape = (rmColumns oldReadModel, rmShape oldReadModel)
     newShape = (rmColumns newReadModel, rmShape newReadModel)
     shapeChanges =
-        [ breaking nodeName "read-model-shape" nodeName ReadModelShapeChangedWithoutBump ("declared columns or captured shape hash changed at version " <> tInt (rmVersion newReadModel) <> "; bump version and rebuild")
-        | oldShape /= newShape
-        , rmVersion oldReadModel == rmVersion newReadModel
-        ]
+      [ breaking nodeName "read-model-shape" nodeName ReadModelShapeChangedWithoutBump ("declared columns or captured shape hash changed at version " <> tInt (rmVersion newReadModel) <> "; bump version and rebuild")
+      | oldShape /= newShape,
+        rmVersion oldReadModel == rmVersion newReadModel
+      ]
     oldRegistry = registryNameFor (specContext (deOld env)) oldReadModel
     newRegistry = registryNameFor (specContext (deNew env)) newReadModel
     oldSubscription = subscriptionNameFor (specContext (deOld env)) oldReadModel
     newSubscription = subscriptionNameFor (specContext (deNew env)) newReadModel
     identityChanges =
-        [ breaking nodeName "read-model-identity" nodeName DerivedIdentityChanged ("registry name changed '" <> oldRegistry <> "' -> '" <> newRegistry <> "'; the old registration row is orphaned")
-        | oldRegistry /= newRegistry
-        ]
-            ++ [ breaking nodeName "read-model-table" nodeName DerivedIdentityChanged ("qualified table changed '" <> qualifiedIdentity oldReadModel <> "' -> '" <> qualifiedIdentity newReadModel <> "'; existing data remains under the old identity")
-               | (rmSchema oldReadModel, rmTable oldReadModel) /= (rmSchema newReadModel, rmTable newReadModel)
-               ]
-            ++ [ breaking nodeName "read-model-subscription" nodeName DerivedIdentityChanged ("subscription changed '" <> oldSubscription <> "' -> '" <> newSubscription <> "'; the worker cursor remains under the old identity")
-               | oldSubscription /= newSubscription
-               ]
+      [ breaking nodeName "read-model-identity" nodeName DerivedIdentityChanged ("registry name changed '" <> oldRegistry <> "' -> '" <> newRegistry <> "'; the old registration row is orphaned")
+      | oldRegistry /= newRegistry
+      ]
+        ++ [ breaking nodeName "read-model-table" nodeName DerivedIdentityChanged ("qualified table changed '" <> qualifiedIdentity oldReadModel <> "' -> '" <> qualifiedIdentity newReadModel <> "'; existing data remains under the old identity")
+           | (rmSchema oldReadModel, rmTable oldReadModel) /= (rmSchema newReadModel, rmTable newReadModel)
+           ]
+        ++ [ breaking nodeName "read-model-subscription" nodeName DerivedIdentityChanged ("subscription changed '" <> oldSubscription <> "' -> '" <> newSubscription <> "'; the worker cursor remains under the old identity")
+           | oldSubscription /= newSubscription
+           ]
     feedChanges =
-        [ breaking nodeName "read-model-feed" nodeName ReadModelFeedChanged ("feed changed " <> renderFeed (rmFeed oldReadModel) <> " -> " <> renderFeed (rmFeed newReadModel) <> "; projection wiring and rebuild identities changed")
-        | rmFeed oldReadModel /= rmFeed newReadModel
-        ]
+      [ breaking nodeName "read-model-feed" nodeName ReadModelFeedChanged ("feed changed " <> renderFeed (rmFeed oldReadModel) <> " -> " <> renderFeed (rmFeed newReadModel) <> "; projection wiring and rebuild identities changed")
+      | rmFeed oldReadModel /= rmFeed newReadModel
+      ]
     consistencyChanges = case (rmConsistency oldReadModel, rmConsistency newReadModel) of
-        (Strong, Eventual) ->
-            [breaking nodeName "read-model-consistency" nodeName ReadModelConsistencyWeakened "default consistency changed Strong -> Eventual; callers lose the cursor-wait guarantee"]
-        (Eventual, Strong) ->
-            [additive nodeName "read-model-consistency" nodeName CompatibilityStrengthened "default consistency changed Eventual -> Strong; callers gain a cursor-wait guarantee"]
-        _ -> []
+      (Strong, Eventual) ->
+        [breaking nodeName "read-model-consistency" nodeName ReadModelConsistencyWeakened "default consistency changed Strong -> Eventual; callers lose the cursor-wait guarantee"]
+      (Eventual, Strong) ->
+        [additive nodeName "read-model-consistency" nodeName CompatibilityStrengthened "default consistency changed Eventual -> Strong; callers gain a cursor-wait guarantee"]
+      _ -> []
     oldScope = effectiveScope (rmScope oldReadModel)
     newScope = effectiveScope (rmScope newReadModel)
     scopeChanges
-        | oldScope == newScope = []
-        | scopeStrengthened oldScope newScope =
-            [additive nodeName "read-model-scope" nodeName CompatibilityStrengthened ("Strong scope widened " <> renderScope oldScope <> " -> " <> renderScope newScope)]
-        | otherwise =
-            [breaking nodeName "read-model-scope" nodeName ReadModelConsistencyWeakened ("Strong scope changed " <> renderScope oldScope <> " -> " <> renderScope newScope <> "; callers no longer wait on the same event surface")]
+      | oldScope == newScope = []
+      | scopeStrengthened oldScope newScope =
+          [additive nodeName "read-model-scope" nodeName CompatibilityStrengthened ("Strong scope widened " <> renderScope oldScope <> " -> " <> renderScope newScope)]
+      | otherwise =
+          [breaking nodeName "read-model-scope" nodeName ReadModelConsistencyWeakened ("Strong scope changed " <> renderScope oldScope <> " -> " <> renderScope newScope <> "; callers no longer wait on the same event surface")]
 
 addedReadModelDiff :: ReadModelNode -> [Change]
 addedReadModelDiff readModel =
-    [additive (rmName readModel) "read-model" (rmName readModel) DeclarationAdded "new read model"]
+  [additive (rmName readModel) "read-model" (rmName readModel) DeclarationAdded "new read model"]
 
 removedReadModelDiff :: ReadModelNode -> [Change]
 removedReadModelDiff readModel =
-    [breaking (rmName readModel) "read-model-identity" (rmName readModel) DerivedIdentityChanged "read model removed while registered metadata, data, subscription cursors, and callers may remain"]
+  [breaking (rmName readModel) "read-model-identity" (rmName readModel) DerivedIdentityChanged "read model removed while registered metadata, data, subscription cursors, and callers may remain"]
 
 qualifiedIdentity :: ReadModelNode -> Text
 qualifiedIdentity readModel = rmSchema readModel <> "." <> rmTable readModel
@@ -925,159 +921,156 @@ renderScope (RmCategory categoryName) = "category '" <> categoryName <> "'"
 
 aggregateDiff :: DiffEnv -> [Change]
 aggregateDiff env =
-    concatMap
-        (\(oldAggregate, newAggregate) -> aggregatePairDiff (deOld env) (deNew env) oldAggregate newAggregate)
-        (prMatched paired)
-        ++ concatMap addedAggregateDiff (prAdded paired)
-        ++ concatMap removedAggregateDiff (prRemoved paired)
+  concatMap
+    (\(oldAggregate, newAggregate) -> aggregatePairDiff (deOld env) (deNew env) oldAggregate newAggregate)
+    (prMatched paired)
+    ++ concatMap addedAggregateDiff (prAdded paired)
+    ++ concatMap removedAggregateDiff (prRemoved paired)
   where
     paired = pairByName nodeAggregate aggName env
 
 aggregatePairDiff :: Spec -> Spec -> Aggregate -> Aggregate -> [Change]
 aggregatePairDiff oldSpec newSpec oldAgg newAgg =
-    concatMap (eventDiff oldAgg newAgg) (aggEvents newAgg)
-        ++ removedEvents oldAgg newAgg
-        ++ wireDiff oldAgg newAgg
-        ++ projectionDiff oldAgg newAgg
-        ++ guardTighteningDiff oldAgg newAgg
-        ++ transitionSurfaceDiff oldSpec newSpec oldAgg newAgg
+  concatMap (eventDiff oldAgg newAgg) (aggEvents newAgg)
+    ++ removedEvents oldAgg newAgg
+    ++ wireDiff oldAgg newAgg
+    ++ projectionDiff oldAgg newAgg
+    ++ guardTighteningDiff oldAgg newAgg
+    ++ transitionSurfaceDiff oldSpec newSpec oldAgg newAgg
 
-{- | Report replay-fold evolution. Regenerated scaffold code carries the new
-fingerprint and invalidates old snapshots, so this remains advisory.
--}
+-- | Report replay-fold evolution. Regenerated scaffold code carries the new
+-- fingerprint and invalidates old snapshots, so this remains advisory.
 transitionSurfaceDiff :: Spec -> Spec -> Aggregate -> Aggregate -> [Change]
 transitionSurfaceDiff oldSpec newSpec oldAgg newAgg
-    | aggregateFoldSurface oldSpec oldAgg == aggregateFoldSurface newSpec newAgg = []
-    | otherwise =
-        [ advisory
-            (aggName newAgg)
-            "transitions"
-            (aggName newAgg)
-            AggFoldSurfaceChanged
-            "aggregate fold surface changed: replay now interprets the existing log under the new fold. Old snapshots are invalidated automatically once the regenerated fold fingerprint deploys; if the change is fold-neutral confirm it, otherwise re-scaffold and redeploy, and bump `state-codec version=` for any accompanying Holes-only change."
-        ]
+  | aggregateFoldSurface oldSpec oldAgg == aggregateFoldSurface newSpec newAgg = []
+  | otherwise =
+      [ advisory
+          (aggName newAgg)
+          "transitions"
+          (aggName newAgg)
+          AggFoldSurfaceChanged
+          "aggregate fold surface changed: replay now interprets the existing log under the new fold. Old snapshots are invalidated automatically once the regenerated fold fingerprint deploys; if the change is fold-neutral confirm it, otherwise re-scaffold and redeploy, and bump `state-codec version=` for any accompanying Holes-only change."
+      ]
 
-{- | Plan 143: guard changes are replay-relevant. Hydration re-inverts each
-stored event and re-checks the edge guard, so a stored event legally appended
-under the old guard may no longer satisfy the new one — the next command on
-any stream containing such an event fails hydration with no inverting edge.
-The remedy is mechanical, so the tool computes it: the removed region is
-@old-guard ∧ ¬new-guard@ ('complementExpr' eliminates the negation inside the
-existing grammar), and the advisory prints a paste-ready replay-only twin
-carrying that region with the OLD transition's writes\/emits\/goto. Whether
-history should stay replayable (paste the twin) or be truncated instead is a
-business decision, so the twin is never auto-applied.
-
-Detection is conservative: any guard change on a paired live (source,
-command) transition where the new spec declares a guard and does not already
-contain a replay-only twin for the pair. A pure loosening also matches; the
-advisory says how to confirm no stored data is affected (the replay audit,
-docs/plans/142) rather than guessing.
--}
+-- | Plan 143: guard changes are replay-relevant. Hydration re-inverts each
+-- stored event and re-checks the edge guard, so a stored event legally appended
+-- under the old guard may no longer satisfy the new one — the next command on
+-- any stream containing such an event fails hydration with no inverting edge.
+-- The remedy is mechanical, so the tool computes it: the removed region is
+-- @old-guard ∧ ¬new-guard@ ('complementExpr' eliminates the negation inside the
+-- existing grammar), and the advisory prints a paste-ready replay-only twin
+-- carrying that region with the OLD transition's writes\/emits\/goto. Whether
+-- history should stay replayable (paste the twin) or be truncated instead is a
+-- business decision, so the twin is never auto-applied.
+--
+-- Detection is conservative: any guard change on a paired live (source,
+-- command) transition where the new spec declares a guard and does not already
+-- contain a replay-only twin for the pair. A pure loosening also matches; the
+-- advisory says how to confirm no stored data is affected (the replay audit,
+-- docs/plans/142) rather than guessing.
 guardTighteningDiff :: Aggregate -> Aggregate -> [Change]
 guardTighteningDiff oldAgg newAgg =
-    [ advisory (aggName newAgg) "transition" subject AggGuardTightened detail
-    | newT <- aggTransitions newAgg
-    , tMode newT == TmLive
-    , Just oldT <-
-        [ find
-            (\o -> tSource o == tSource newT && tCommand o == tCommand newT && tMode o == TmLive)
-            (aggTransitions oldAgg)
-        ]
-    , tGuard newT /= tGuard oldT
-    , Just newGuard <- [tGuard newT]
-    , not (hasReplayOnlyTwin newT)
-    , let subject = tSource newT <> " -- " <> tCommand newT
-    , let removedRegion =
-            maybe (complementExpr newGuard) (\o -> EAnd o (complementExpr newGuard)) (tGuard oldT)
-    , let twin = oldT{tGuard = Just removedRegion, tMode = TmReplayOnly}
-    , let detail =
-            "guard changed on "
-                <> subject
-                <> ". Stored events appended under the old guard may no longer invert: "
-                <> "the next command on any stream containing one fails hydration with "
-                <> "no inverting edge. Either confirm via the replay audit that no stored "
-                <> "stream exercises the removed region, or keep history replayable by "
-                <> "adding the computed replay-only twin (the removed region with the old "
-                <> "transition's writes/emits/goto):\n\n"
-                <> renderTransition twin
-    ]
+  [ advisory (aggName newAgg) "transition" subject AggGuardTightened detail
+  | newT <- aggTransitions newAgg,
+    tMode newT == TmLive,
+    Just oldT <-
+      [ find
+          (\o -> tSource o == tSource newT && tCommand o == tCommand newT && tMode o == TmLive)
+          (aggTransitions oldAgg)
+      ],
+    tGuard newT /= tGuard oldT,
+    Just newGuard <- [tGuard newT],
+    not (hasReplayOnlyTwin newT),
+    let subject = tSource newT <> " -- " <> tCommand newT,
+    let removedRegion =
+          maybe (complementExpr newGuard) (\o -> EAnd o (complementExpr newGuard)) (tGuard oldT),
+    let twin = oldT {tGuard = Just removedRegion, tMode = TmReplayOnly},
+    let detail =
+          "guard changed on "
+            <> subject
+            <> ". Stored events appended under the old guard may no longer invert: "
+            <> "the next command on any stream containing one fails hydration with "
+            <> "no inverting edge. Either confirm via the replay audit that no stored "
+            <> "stream exercises the removed region, or keep history replayable by "
+            <> "adding the computed replay-only twin (the removed region with the old "
+            <> "transition's writes/emits/goto):\n\n"
+            <> renderTransition twin
+  ]
   where
     hasReplayOnlyTwin newT =
-        any
-            (\t -> tMode t == TmReplayOnly && tSource t == tSource newT && tCommand t == tCommand newT)
-            (aggTransitions newAgg)
+      any
+        (\t -> tMode t == TmReplayOnly && tSource t == tSource newT && tCommand t == tCommand newT)
+        (aggTransitions newAgg)
 
 addedAggregateDiff :: Aggregate -> [Change]
 addedAggregateDiff newAgg =
-    [ additive (aggName newAgg) "event" (evName e) DeclarationAdded "new event type (new aggregate)"
-    | e <- aggEvents newAgg
-    ]
+  [ additive (aggName newAgg) "event" (evName e) DeclarationAdded "new event type (new aggregate)"
+  | e <- aggEvents newAgg
+  ]
 
 removedAggregateDiff :: Aggregate -> [Change]
 removedAggregateDiff oldAgg =
-    [ breaking (aggName oldAgg) "event" (evName e) EvtRemovedNotDeprecated "aggregate removed; its event tags are no longer decodable"
-    | e <- aggEvents oldAgg
-    ]
+  [ breaking (aggName oldAgg) "event" (evName e) EvtRemovedNotDeprecated "aggregate removed; its event tags are no longer decodable"
+  | e <- aggEvents oldAgg
+  ]
 
 -- | Per-event classification for an event present in the new aggregate.
 eventDiff :: Aggregate -> Aggregate -> Event -> [Change]
 eventDiff oldAgg newAgg e =
-    case find ((== evName e) . evName) (aggEvents oldAgg) of
-        Nothing ->
-            [additive (aggName newAgg) "event" (evName e) DeclarationAdded "new event type"]
-        Just oldE
-            | evVersion e > evVersion oldE ->
-                if evVersion e == evVersion oldE + 1 && evUpcastFrom e `hasSource` evVersion oldE
-                    then
-                        [additive (aggName newAgg) "event" (evName e) VersionBumped ("new version v" <> tInt (evVersion e) <> " with upcaster from v" <> tInt (evVersion oldE))]
-                            ++ [ breaking
-                                    (aggName newAgg)
-                                    "event"
-                                    (evName e)
-                                    UpcasterChainGap
-                                    ( "bumping v"
-                                        <> tInt (evVersion oldE)
-                                        <> " to v"
-                                        <> tInt (evVersion e)
-                                        <> " replaced the 'upcast from v"
-                                        <> tInt vanishedSource
-                                        <> "' rung; stored v"
-                                        <> tInt vanishedSource
-                                        <> " payloads can no longer decode"
-                                    )
-                               | Just (vanishedSource, _) <- [evUpcastFrom oldE]
-                               , not (aggregateHasUpcasterSource newAgg vanishedSource)
-                               ]
-                    else
-                        [ breaking
-                            (aggName newAgg)
-                            "event"
-                            (evName e)
-                            EvtVersionMissingUpcaster
-                            ( "version changed from v"
-                                <> tInt (evVersion oldE)
-                                <> " to v"
-                                <> tInt (evVersion e)
-                                <> " without the required contiguous upcaster from v"
-                                <> tInt (evVersion oldE)
-                            )
-                        ]
-            | evVersion e < evVersion oldE ->
-                [breaking (aggName newAgg) "event" (evName e) EvtVersionDecreased ("version decreased from v" <> tInt (evVersion oldE) <> " to v" <> tInt (evVersion e))]
-            | otherwise ->
-                sameVersionEventDiff oldAgg newAgg oldE e
+  case find ((== evName e) . evName) (aggEvents oldAgg) of
+    Nothing ->
+      [additive (aggName newAgg) "event" (evName e) DeclarationAdded "new event type"]
+    Just oldE
+      | evVersion e > evVersion oldE ->
+          if evVersion e == evVersion oldE + 1 && evUpcastFrom e `hasSource` evVersion oldE
+            then
+              [additive (aggName newAgg) "event" (evName e) VersionBumped ("new version v" <> tInt (evVersion e) <> " with upcaster from v" <> tInt (evVersion oldE))]
+                ++ [ breaking
+                       (aggName newAgg)
+                       "event"
+                       (evName e)
+                       UpcasterChainGap
+                       ( "bumping v"
+                           <> tInt (evVersion oldE)
+                           <> " to v"
+                           <> tInt (evVersion e)
+                           <> " replaced the 'upcast from v"
+                           <> tInt vanishedSource
+                           <> "' rung; stored v"
+                           <> tInt vanishedSource
+                           <> " payloads can no longer decode"
+                       )
+                   | Just (vanishedSource, _) <- [evUpcastFrom oldE],
+                     not (aggregateHasUpcasterSource newAgg vanishedSource)
+                   ]
+            else
+              [ breaking
+                  (aggName newAgg)
+                  "event"
+                  (evName e)
+                  EvtVersionMissingUpcaster
+                  ( "version changed from v"
+                      <> tInt (evVersion oldE)
+                      <> " to v"
+                      <> tInt (evVersion e)
+                      <> " without the required contiguous upcaster from v"
+                      <> tInt (evVersion oldE)
+                  )
+              ]
+      | evVersion e < evVersion oldE ->
+          [breaking (aggName newAgg) "event" (evName e) EvtVersionDecreased ("version decreased from v" <> tInt (evVersion oldE) <> " to v" <> tInt (evVersion e))]
+      | otherwise ->
+          sameVersionEventDiff oldAgg newAgg oldE e
 
-{- | Events present in the old aggregate but absent in the new one. Removing a
-tag entirely is breaking; deprecation preserves decoding but needs a retained
-replay-only emitter to preserve replay.
--}
+-- | Events present in the old aggregate but absent in the new one. Removing a
+-- tag entirely is breaking; deprecation preserves decoding but needs a retained
+-- replay-only emitter to preserve replay.
 removedEvents :: Aggregate -> Aggregate -> [Change]
 removedEvents oldAgg newAgg =
-    [ breaking (aggName newAgg) "event" (evName oldE) EvtRemovedNotDeprecated "event removed entirely; its stored payloads can neither decode nor replay. Deprecating instead restores decode-ability only — replay still fails on live streams unless an equivalent replay-only emitting transition is retained; truncate or terminalize affected streams before deleting it"
-    | oldE <- aggEvents oldAgg
-    , isNothing (find ((== evName oldE) . evName) (aggEvents newAgg))
-    ]
+  [ breaking (aggName newAgg) "event" (evName oldE) EvtRemovedNotDeprecated "event removed entirely; its stored payloads can neither decode nor replay. Deprecating instead restores decode-ability only — replay still fails on live streams unless an equivalent replay-only emitting transition is retained; truncate or terminalize affected streams before deleting it"
+  | oldE <- aggEvents oldAgg,
+    isNothing (find ((== evName oldE) . evName) (aggEvents newAgg))
+  ]
 
 hasSource :: Maybe (Int, Hole) -> Int -> Bool
 hasSource (Just (m, _)) n = m == n
@@ -1085,29 +1078,29 @@ hasSource Nothing _ = False
 
 aggregateHasUpcasterSource :: Aggregate -> Int -> Bool
 aggregateHasUpcasterSource aggregate source =
-    any ((== Just source) . fmap fst . evUpcastFrom) (aggEvents aggregate)
+  any ((== Just source) . fmap fst . evUpcastFrom) (aggEvents aggregate)
 
 hasReplayOnlyEmitter :: Aggregate -> Name -> Bool
 hasReplayOnlyEmitter aggregate eventName =
-    any
-        (\transition -> tMode transition == TmReplayOnly && eventName `elem` tEmits transition)
-        (aggTransitions aggregate)
+  any
+    (\transition -> tMode transition == TmReplayOnly && eventName `elem` tEmits transition)
+    (aggTransitions aggregate)
 
 eventFieldSigs :: Aggregate -> Event -> [(Name, Maybe TypeExpr)]
 eventFieldSigs agg e = case evBody e of
-    EventFields fs -> map fieldSig fs
-    EventFromCommand cn ->
-        maybe [] (map fieldSig . cmdFields) (find ((== cn) . cmdName) (aggCommands agg))
+  EventFields fs -> map fieldSig fs
+  EventFromCommand cn ->
+    maybe [] (map fieldSig . cmdFields) (find ((== cn) . cmdName) (aggCommands agg))
   where
     fieldSig f = (aggregateFieldName f, aggregateFieldType f)
 
 sameVersionEventDiff :: Aggregate -> Aggregate -> Event -> Event -> [Change]
 sameVersionEventDiff oldAgg newAgg oldE newE =
-    addedChanges
-        ++ removedChanges
-        ++ typeChanges
-        ++ deprecationChanges
-        ++ retirementChanges
+  addedChanges
+    ++ removedChanges
+    ++ typeChanges
+    ++ deprecationChanges
+    ++ retirementChanges
   where
     oldFields = eventFieldSigs oldAgg oldE
     newFields = eventFieldSigs newAgg newE
@@ -1116,57 +1109,57 @@ sameVersionEventDiff oldAgg newAgg oldE newE =
     added = newNames \\ oldNames
     removed = oldNames \\ newNames
     changed =
-        [ (field, oldType, newType)
-        | (field, oldType) <- oldFields
-        , Just newType <- [lookup field newFields]
-        , oldType /= newType
-        ]
+      [ (field, oldType, newType)
+      | (field, oldType) <- oldFields,
+        Just newType <- [lookup field newFields],
+        oldType /= newType
+      ]
     addedChanges =
-        [ breaking (aggName newAgg) "event" (evName newE) EvtFieldAddedWithoutBump ("field(s) " <> commas added <> " added at the same version v" <> tInt (evVersion newE) <> " without a version bump or upcaster")
-        | not (null added)
-        ]
+      [ breaking (aggName newAgg) "event" (evName newE) EvtFieldAddedWithoutBump ("field(s) " <> commas added <> " added at the same version v" <> tInt (evVersion newE) <> " without a version bump or upcaster")
+      | not (null added)
+      ]
     removedChanges =
-        [ breaking (aggName newAgg) "event" (evName newE) EvtFieldRemovedSameVersion ("field(s) " <> commas removed <> " removed at the same version v" <> tInt (evVersion newE))
-        | not (null removed)
-        ]
+      [ breaking (aggName newAgg) "event" (evName newE) EvtFieldRemovedSameVersion ("field(s) " <> commas removed <> " removed at the same version v" <> tInt (evVersion newE))
+      | not (null removed)
+      ]
     typeChanges =
-        [ breaking
-            (aggName newAgg)
-            "event-field"
-            (evName newE <> "." <> field)
-            EvtFieldTypeChanged
-            ("type changed " <> renderAggregateFieldType oldType <> " -> " <> renderAggregateFieldType newType <> " at the same version v" <> tInt (evVersion newE))
-        | (field, oldType, newType) <- changed
-        ]
+      [ breaking
+          (aggName newAgg)
+          "event-field"
+          (evName newE <> "." <> field)
+          EvtFieldTypeChanged
+          ("type changed " <> renderAggregateFieldType oldType <> " -> " <> renderAggregateFieldType newType <> " at the same version v" <> tInt (evVersion newE))
+      | (field, oldType, newType) <- changed
+      ]
     deprecationChanges
-        | not (evDeprecated oldE) && evDeprecated newE =
-            [ if hasReplayOnlyEmitter newAgg (evName newE)
-                then
-                    advisory
-                        (aggName newAgg)
-                        "event"
-                        (evName newE)
-                        EventRetirementInProgress
-                        "event deprecated and removed from the live write path, while an equivalent replay-only transition preserves hydration. Retain that transition until every affected stream is terminal, truncated, or passes the replay audit"
-                else
-                    advisory
-                        (aggName newAgg)
-                        "event"
-                        (evName newE)
-                        DeprecatedEventReplayHazard
-                        ( "event deprecated: old payloads remain decodable but are no longer replayable — hydration of live streams containing them fails at the first command (HydrationNoInvertingEdge). Add an equivalent replay-only emitting transition or confirm every affected stream is terminal or truncated before deploying"
-                            <> if evRetiring oldE then "" else "; consider a 'retiring event' stage first"
-                        )
-            ]
-        | evDeprecated oldE && not (evDeprecated newE) && not (evRetiring newE) =
-            [advisory (aggName newAgg) "event" (evName newE) EventUndeprecated "event returned to the write surface; old payloads remain decodable but new writes resume"]
-        | otherwise = []
+      | not (evDeprecated oldE) && evDeprecated newE =
+          [ if hasReplayOnlyEmitter newAgg (evName newE)
+              then
+                advisory
+                  (aggName newAgg)
+                  "event"
+                  (evName newE)
+                  EventRetirementInProgress
+                  "event deprecated and removed from the live write path, while an equivalent replay-only transition preserves hydration. Retain that transition until every affected stream is terminal, truncated, or passes the replay audit"
+              else
+                advisory
+                  (aggName newAgg)
+                  "event"
+                  (evName newE)
+                  DeprecatedEventReplayHazard
+                  ( "event deprecated: old payloads remain decodable but are no longer replayable — hydration of live streams containing them fails at the first command (HydrationNoInvertingEdge). Add an equivalent replay-only emitting transition or confirm every affected stream is terminal or truncated before deploying"
+                      <> if evRetiring oldE then "" else "; consider a 'retiring event' stage first"
+                  )
+          ]
+      | evDeprecated oldE && not (evDeprecated newE) && not (evRetiring newE) =
+          [advisory (aggName newAgg) "event" (evName newE) EventUndeprecated "event returned to the write surface; old payloads remain decodable but new writes resume"]
+      | otherwise = []
     retirementChanges
-        | not (evRetiring oldE) && evRetiring newE =
-            [advisory (aggName newAgg) "event" (evName newE) EventRetirementInProgress "retirement started; keep the live emitting transition until affected streams are terminal or truncated, then cut over to deprecated plus an equivalent replay-only emitting transition"]
-        | evRetiring oldE && not (evRetiring newE) && not (evDeprecated newE) =
-            [additive (aggName newAgg) "event" (evName newE) EventRetirementAbandoned "event retirement abandoned; ordinary live writes continue"]
-        | otherwise = []
+      | not (evRetiring oldE) && evRetiring newE =
+          [advisory (aggName newAgg) "event" (evName newE) EventRetirementInProgress "retirement started; keep the live emitting transition until affected streams are terminal or truncated, then cut over to deprecated plus an equivalent replay-only emitting transition"]
+      | evRetiring oldE && not (evRetiring newE) && not (evDeprecated newE) =
+          [additive (aggName newAgg) "event" (evName newE) EventRetirementAbandoned "event retirement abandoned; ordinary live writes continue"]
+      | otherwise = []
 
 renderAggregateFieldType :: Maybe TypeExpr -> Text
 renderAggregateFieldType Nothing = "(declared)"
@@ -1178,15 +1171,15 @@ renderFieldType (Just name) = name
 
 wireDiff :: Aggregate -> Aggregate -> [Change]
 wireDiff oldAgg newAgg
-    | effectiveWire (aggWire oldAgg) == effectiveWire (aggWire newAgg) = []
-    | otherwise =
-        [ breaking
-            (aggName newAgg)
-            "wire"
-            (aggName newAgg)
-            WireSpecChanged
-            ("effective wire convention changed " <> renderWire (effectiveWire (aggWire oldAgg)) <> " -> " <> renderWire (effectiveWire (aggWire newAgg)))
-        ]
+  | effectiveWire (aggWire oldAgg) == effectiveWire (aggWire newAgg) = []
+  | otherwise =
+      [ breaking
+          (aggName newAgg)
+          "wire"
+          (aggName newAgg)
+          WireSpecChanged
+          ("effective wire convention changed " <> renderWire (effectiveWire (aggWire oldAgg)) <> " -> " <> renderWire (effectiveWire (aggWire newAgg)))
+      ]
 
 effectiveWire :: Maybe WireSpec -> (Text, Text)
 effectiveWire Nothing = ("ctorName", "camelCase")
@@ -1197,43 +1190,43 @@ renderWire (kindName, fieldNames) = "kind=" <> kindName <> ", fields=" <> fieldN
 
 projectionDiff :: Aggregate -> Aggregate -> [Change]
 projectionDiff oldAggregate newAggregate
-    | projectionSurface (aggProjection oldAggregate) == projectionSurface (aggProjection newAggregate) = []
-    | otherwise =
-        [ advisory
-            (aggName newAggregate)
-            "projection"
-            (aggName newAggregate)
-            ProjectionChanged
-            "projection table, consistency, key, or status mapping changed; coordinate the read-model migration"
-        ]
+  | projectionSurface (aggProjection oldAggregate) == projectionSurface (aggProjection newAggregate) = []
+  | otherwise =
+      [ advisory
+          (aggName newAggregate)
+          "projection"
+          (aggName newAggregate)
+          ProjectionChanged
+          "projection table, consistency, key, or status mapping changed; coordinate the read-model migration"
+      ]
 
 projectionSurface :: Maybe ProjectionSpec -> Maybe (Name, Maybe Consistency, Name, Maybe Mapping)
 projectionSurface projection = do
-    value <- projection
-    pure (projTable value, projConsistency value, projKey value, projStatusMap value)
+  value <- projection
+  pure (projTable value, projConsistency value, projKey value, projStatusMap value)
 
 idDiff :: DiffEnv -> [Change]
 idDiff env =
-    concatMap (uncurry (idPairDiff (deOld env))) (prMatched paired)
-        ++ concatMap addedIdDiff (prAdded paired)
-        ++ concatMap removedIdDiff (prRemoved paired)
+  concatMap (uncurry (idPairDiff (deOld env))) (prMatched paired)
+    ++ concatMap addedIdDiff (prAdded paired)
+    ++ concatMap removedIdDiff (prRemoved paired)
   where
     paired = pairDeclarations idName (specIds (deOld env)) (specIds (deNew env))
 
 idPairDiff :: Spec -> IdDecl -> IdDecl -> [Change]
 idPairDiff oldSpec oldId newId =
-    [ breaking (idName newId) "id-prefix" (idName newId) IdPrefixChanged ("prefix changed '" <> idPrefix oldId <> "' -> '" <> idPrefix newId <> "'; stored and newly minted ids no longer share an identity domain")
-    | idPrefix oldId /= idPrefix newId
-    ]
-        <> nominalBindingDeclDiff oldSpec "id" (idName newId) (idBinding oldId) (idBinding newId)
-        <> [ nominalUseChange
-                use
-                NominalIdDecoderTightened
-                "adopting a checked KindID binding tightens historical decoding; keep a committed valid old-payload fixture and run the targeted real-log audit for this event"
-           | idBinding oldId == Nothing
-           , isJust (idBinding newId)
-           , use@NominalEventUse{} <- nominalUses oldSpec (idName oldId)
-           ]
+  [ breaking (idName newId) "id-prefix" (idName newId) IdPrefixChanged ("prefix changed '" <> idPrefix oldId <> "' -> '" <> idPrefix newId <> "'; stored and newly minted ids no longer share an identity domain")
+  | idPrefix oldId /= idPrefix newId
+  ]
+    <> nominalBindingDeclDiff oldSpec "id" (idName newId) (idBinding oldId) (idBinding newId)
+    <> [ nominalUseChange
+           use
+           NominalIdDecoderTightened
+           "adopting a checked KindID binding tightens historical decoding; keep a committed valid old-payload fixture and run the targeted real-log audit for this event"
+       | idBinding oldId == Nothing,
+         isJust (idBinding newId),
+         use@NominalEventUse {} <- nominalUses oldSpec (idName oldId)
+       ]
 
 addedIdDiff :: IdDecl -> [Change]
 addedIdDiff declaration = [additive (idName declaration) "id-prefix" (idName declaration) DeclarationAdded "new id declaration"]
@@ -1243,254 +1236,254 @@ removedIdDiff declaration = [breaking (idName declaration) "id-prefix" (idName d
 
 enumDiff :: DiffEnv -> [Change]
 enumDiff env =
-    concatMap (uncurry (enumPairDiff (deOld env))) (prMatched paired)
-        ++ concatMap addedEnumDiff (prAdded paired)
-        ++ concatMap (removedEnumDiff (deOld env)) (prRemoved paired)
+  concatMap (uncurry (enumPairDiff (deOld env))) (prMatched paired)
+    ++ concatMap addedEnumDiff (prAdded paired)
+    ++ concatMap (removedEnumDiff (deOld env)) (prRemoved paired)
   where
     paired = pairDeclarations enumName (specEnums (deOld env)) (specEnums (deNew env))
 
 enumPairDiff :: Spec -> EnumDecl -> EnumDecl -> [Change]
 enumPairDiff oldSpec oldEnum newEnum =
-    [ breaking (enumName newEnum) "enum-constructor" ctor EnumCtorRemoved ("constructor removed; stored wire value '" <> wire <> "' no longer decodes" <> enumUsageSuffix oldSpec (enumName oldEnum))
-    | (ctor, wire) <- enumCtors oldEnum
-    , isNothing (lookup ctor (enumCtors newEnum))
-    ]
-        ++ [ breaking (enumName newEnum) "enum-constructor" ctor EnumWireSpellingChanged ("wire spelling changed '" <> oldWire <> "' -> '" <> newWire <> "'; stored values using the old spelling no longer decode" <> enumUsageSuffix oldSpec (enumName oldEnum))
-           | (ctor, oldWire) <- enumCtors oldEnum
-           , Just newWire <- [lookup ctor (enumCtors newEnum)]
-           , oldWire /= newWire
-           ]
-        ++ concat
-            [ enumAdditionDiff oldSpec newEnum ctor wire
-            | (ctor, wire) <- enumCtors newEnum
-            , isNothing (lookup ctor (enumCtors oldEnum))
-            ]
-            <> nominalBindingDeclDiff oldSpec "enum" (enumName newEnum) (enumBinding oldEnum) (enumBinding newEnum)
+  [ breaking (enumName newEnum) "enum-constructor" ctor EnumCtorRemoved ("constructor removed; stored wire value '" <> wire <> "' no longer decodes" <> enumUsageSuffix oldSpec (enumName oldEnum))
+  | (ctor, wire) <- enumCtors oldEnum,
+    isNothing (lookup ctor (enumCtors newEnum))
+  ]
+    ++ [ breaking (enumName newEnum) "enum-constructor" ctor EnumWireSpellingChanged ("wire spelling changed '" <> oldWire <> "' -> '" <> newWire <> "'; stored values using the old spelling no longer decode" <> enumUsageSuffix oldSpec (enumName oldEnum))
+       | (ctor, oldWire) <- enumCtors oldEnum,
+         Just newWire <- [lookup ctor (enumCtors newEnum)],
+         oldWire /= newWire
+       ]
+    ++ concat
+      [ enumAdditionDiff oldSpec newEnum ctor wire
+      | (ctor, wire) <- enumCtors newEnum,
+        isNothing (lookup ctor (enumCtors oldEnum))
+      ]
+      <> nominalBindingDeclDiff oldSpec "enum" (enumName newEnum) (enumBinding oldEnum) (enumBinding newEnum)
 
 nominalScalarDiff :: DiffEnv -> [Change]
 nominalScalarDiff env =
-    concatMap (uncurry scalarPairDiff) (prMatched paired)
-        <> [nominalDeclarationChange (nominalScalarName declaration) DeclarationAdded "new nominal scalar declaration" | declaration <- prAdded paired]
-        <> [nominalDeclarationChange (nominalScalarName declaration) NominalRepresentationChanged "nominal scalar declaration removed while persisted uses may remain" | declaration <- prRemoved paired]
+  concatMap (uncurry scalarPairDiff) (prMatched paired)
+    <> [nominalDeclarationChange (nominalScalarName declaration) DeclarationAdded "new nominal scalar declaration" | declaration <- prAdded paired]
+    <> [nominalDeclarationChange (nominalScalarName declaration) NominalRepresentationChanged "nominal scalar declaration removed while persisted uses may remain" | declaration <- prRemoved paired]
   where
     paired = pairDeclarations nominalScalarName (specNominalScalars (deOld env)) (specNominalScalars (deNew env))
     scalarPairDiff oldDeclaration newDeclaration =
-        [ nominalDeclarationChange
-            (nominalScalarName newDeclaration)
-            NominalRepresentationChanged
-            ( "nominal scalar representation changed '"
-                <> nominalScalarRepresentation oldDeclaration
-                <> "' -> '"
-                <> nominalScalarRepresentation newDeclaration
-                <> "'"
-            )
-        | nominalScalarRepresentation oldDeclaration /= nominalScalarRepresentation newDeclaration
-        ]
-            <> nominalBindingDeclDiff
-                (deOld env)
-                "scalar"
-                (nominalScalarName newDeclaration)
-                (Just (nominalScalarBinding oldDeclaration))
-                (Just (nominalScalarBinding newDeclaration))
+      [ nominalDeclarationChange
+          (nominalScalarName newDeclaration)
+          NominalRepresentationChanged
+          ( "nominal scalar representation changed '"
+              <> nominalScalarRepresentation oldDeclaration
+              <> "' -> '"
+              <> nominalScalarRepresentation newDeclaration
+              <> "'"
+          )
+      | nominalScalarRepresentation oldDeclaration /= nominalScalarRepresentation newDeclaration
+      ]
+        <> nominalBindingDeclDiff
+          (deOld env)
+          "scalar"
+          (nominalScalarName newDeclaration)
+          (Just (nominalScalarBinding oldDeclaration))
+          (Just (nominalScalarBinding newDeclaration))
 
 data NominalUse
-    = NominalCommandUse !Name !Name !Name
-    | NominalEventUse !Name !Name !Name
-    | NominalRegisterUse !Name !Name
+  = NominalCommandUse !Name !Name !Name
+  | NominalEventUse !Name !Name !Name
+  | NominalRegisterUse !Name !Name
 
 nominalUses :: Spec -> Name -> [NominalUse]
 nominalUses spec target = concatMap usesInAggregate [aggregate | NAggregate aggregate <- specNodes spec]
   where
     usesInAggregate aggregate =
-        [ NominalCommandUse (aggName aggregate) (cmdName command) (aggregateFieldName field)
-        | command <- aggCommands aggregate
-        , field <- cmdFields command
-        , fieldReferences target field
-        ]
-            <> [ NominalEventUse (aggName aggregate) (evName event) (aggregateFieldName field)
-               | event <- aggEvents aggregate
-               , field <- eventFields aggregate event
-               , fieldReferences target field
-               ]
-            <> [ NominalRegisterUse (aggName aggregate) (regName register)
-               | register <- aggRegs aggregate
-               , regType register == TRef target
-               ]
+      [ NominalCommandUse (aggName aggregate) (cmdName command) (aggregateFieldName field)
+      | command <- aggCommands aggregate,
+        field <- cmdFields command,
+        fieldReferences target field
+      ]
+        <> [ NominalEventUse (aggName aggregate) (evName event) (aggregateFieldName field)
+           | event <- aggEvents aggregate,
+             field <- eventFields aggregate event,
+             fieldReferences target field
+           ]
+        <> [ NominalRegisterUse (aggName aggregate) (regName register)
+           | register <- aggRegs aggregate,
+             regType register == TRef target
+           ]
     eventFields aggregate event = case evBody event of
-        EventFields fields -> fields
-        EventFromCommand commandName -> concat [cmdFields command | command <- aggCommands aggregate, cmdName command == commandName]
+      EventFields fields -> fields
+      EventFromCommand commandName -> concat [cmdFields command | command <- aggCommands aggregate, cmdName command == commandName]
     fieldReferences targetName field = case aggregateFieldType field of
-        Just (TRef typeName) -> typeName == targetName
-        Just _ -> False
-        Nothing -> pascalName (aggregateFieldName field) == targetName
+      Just (TRef typeName) -> typeName == targetName
+      Just _ -> False
+      Nothing -> pascalName (aggregateFieldName field) == targetName
     pascalName value = case T.uncons value of
-        Nothing -> value
-        Just (initialChar, rest) -> T.cons (toUpper initialChar) rest
+      Nothing -> value
+      Just (initialChar, rest) -> T.cons (toUpper initialChar) rest
 
 nominalBindingDeclDiff :: Spec -> Text -> Name -> Maybe NominalBindingDecl -> Maybe NominalBindingDecl -> [Change]
 nominalBindingDeclDiff oldSpec category name oldBinding newBinding =
-    concat
-        [ nominalFinding NominalBindingChanged "binding source, symbol, or version changed; rebuild every consumer use and audit persisted event uses because hand-written conversion behavior is opaque"
-        | bindingRuntimeFacts oldBinding /= bindingRuntimeFacts newBinding
-        ]
-        <> concat
-            [ nominalFinding NominalFixturesChanged "fixture symbol changed; rerun nominal conformance without claiming runtime wire behavior changed"
-            | (nominalFixtures =<< oldBinding) /= (nominalFixtures =<< newBinding)
-            ]
-        <> concat
-            [ nominalFinding NominalCanonicalTypeChanged "canonical nominal identity changed; rebuild consumers and invalidate snapshot caches at register uses"
-            | (nominalCanonicalType =<< oldBinding) /= (nominalCanonicalType =<< newBinding)
-            ]
-        <> concat
-            [ nominalFinding NominalInitialChanged "consumer-owned initial value symbol changed; rebuild and invalidate snapshot-bearing register streams"
-            | (nominalInitial =<< oldBinding) /= (nominalInitial =<< newBinding)
-            ]
+  concat
+    [ nominalFinding NominalBindingChanged "binding source, symbol, or version changed; rebuild every consumer use and audit persisted event uses because hand-written conversion behavior is opaque"
+    | bindingRuntimeFacts oldBinding /= bindingRuntimeFacts newBinding
+    ]
+    <> concat
+      [ nominalFinding NominalFixturesChanged "fixture symbol changed; rerun nominal conformance without claiming runtime wire behavior changed"
+      | (nominalFixtures =<< oldBinding) /= (nominalFixtures =<< newBinding)
+      ]
+    <> concat
+      [ nominalFinding NominalCanonicalTypeChanged "canonical nominal identity changed; rebuild consumers and invalidate snapshot caches at register uses"
+      | (nominalCanonicalType =<< oldBinding) /= (nominalCanonicalType =<< newBinding)
+      ]
+    <> concat
+      [ nominalFinding NominalInitialChanged "consumer-owned initial value symbol changed; rebuild and invalidate snapshot-bearing register streams"
+      | (nominalInitial =<< oldBinding) /= (nominalInitial =<< newBinding)
+      ]
   where
     bindingRuntimeFacts declaration =
-        ( nominalHaskell =<< declaration
-        , nominalBinding =<< declaration
-        , nominalBindingVersion =<< declaration
-        )
+      ( nominalHaskell =<< declaration,
+        nominalBinding =<< declaration,
+        nominalBindingVersion =<< declaration
+      )
     nominalFinding code detail =
-        nominalDeclarationChange name code (category <> " " <> detail)
-            : [nominalUseChange use code detail | use <- nominalUses oldSpec name, includeUse code use]
+      nominalDeclarationChange name code (category <> " " <> detail)
+        : [nominalUseChange use code detail | use <- nominalUses oldSpec name, includeUse code use]
     includeUse NominalFixturesChanged _ = False
-    includeUse NominalCanonicalTypeChanged NominalRegisterUse{} = True
+    includeUse NominalCanonicalTypeChanged NominalRegisterUse {} = True
     includeUse NominalCanonicalTypeChanged _ = False
-    includeUse NominalInitialChanged NominalRegisterUse{} = True
+    includeUse NominalInitialChanged NominalRegisterUse {} = True
     includeUse NominalInitialChanged _ = False
-    includeUse _ NominalCommandUse{} = False
+    includeUse _ NominalCommandUse {} = False
     includeUse _ _ = True
 
 nominalDeclarationChange :: Name -> DiagnosticCode -> Text -> Change
 nominalDeclarationChange name code detail =
-    mkChange
-        (deriveLabel defaultGate vector)
-        context
-        name
-        "nominal-build"
-        name
-        code
-        detail
+  mkChange
+    (deriveLabel defaultGate vector)
+    context
+    name
+    "nominal-build"
+    name
+    code
+    detail
   where
-    context = (consumerBuildContext name [name]){contextOriginalLabel = LabelAdvisory}
+    context = (consumerBuildContext name [name]) {contextOriginalLabel = LabelAdvisory}
     vector = classifyCompatibility context code
 
 nominalUseChange :: NominalUse -> DiagnosticCode -> Text -> Change
 nominalUseChange use code detail =
-    mkChange (deriveLabel defaultGate vector) context root facet subject code detail
+  mkChange (deriveLabel defaultGate vector) context root facet subject code detail
   where
     (root, facet, subject, kind) = case use of
-        NominalCommandUse aggregate command field -> (aggregate, "nominal-command", aggregate <> " command " <> command <> " ." <> field, ContextConsumerBuild)
-        NominalEventUse aggregate event field -> (aggregate, "nominal-event", aggregate <> " event " <> event <> " ." <> field, ContextPrivateEvent)
-        NominalRegisterUse aggregate register -> (aggregate, "nominal-register", aggregate <> " register " <> register, ContextSnapshot)
+      NominalCommandUse aggregate command field -> (aggregate, "nominal-command", aggregate <> " command " <> command <> " ." <> field, ContextConsumerBuild)
+      NominalEventUse aggregate event field -> (aggregate, "nominal-event", aggregate <> " event " <> event <> " ." <> field, ContextPrivateEvent)
+      NominalRegisterUse aggregate register -> (aggregate, "nominal-register", aggregate <> " register " <> register, ContextSnapshot)
     context = ChangeContext root [subject] kind LabelAdvisory
     vector = classifyCompatibility context code
 
 addedEnumDiff :: EnumDecl -> [Change]
 addedEnumDiff enumDecl =
-    [additive (enumName enumDecl) "enum-constructor" ctor EnumCtorAdded ("new enum constructor with wire spelling '" <> wire <> "'") | (ctor, wire) <- enumCtors enumDecl]
+  [additive (enumName enumDecl) "enum-constructor" ctor EnumCtorAdded ("new enum constructor with wire spelling '" <> wire <> "'") | (ctor, wire) <- enumCtors enumDecl]
 
 enumAdditionDiff :: Spec -> EnumDecl -> Name -> Text -> [Change]
 enumAdditionDiff oldSpec enumDecl ctor wire = case enumUsages oldSpec (enumName enumDecl) of
-    [] ->
-        [ additive
+  [] ->
+    [ additive
+        (enumName enumDecl)
+        "enum-constructor"
+        ctor
+        EnumCtorAdded
+        ("new constructor with wire spelling '" <> wire <> "'")
+    ]
+  usages -> map finding usages
+  where
+    finding usage
+      | ".reg." `T.isInfixOf` usage =
+          advisoryAt
+            (snapshotContext (enumName enumDecl) [usage])
             (enumName enumDecl)
             "enum-constructor"
             ctor
             EnumCtorAdded
-            ("new constructor with wire spelling '" <> wire <> "'")
-        ]
-    usages -> map finding usages
-  where
-    finding usage
-        | ".reg." `T.isInfixOf` usage =
-            advisoryAt
-                (snapshotContext (enumName enumDecl) [usage])
-                (enumName enumDecl)
-                "enum-constructor"
-                ctor
-                EnumCtorAdded
-                ("new constructor with wire spelling '" <> wire <> "' is used by " <> usage <> "; invalidate or rebuild snapshots before values using the new arm hydrate")
-        | otherwise =
-            advisoryAt
-                (privateEventAdditionContext (enumName enumDecl) [usage])
-                (enumName enumDecl)
-                "enum-constructor"
-                ctor
-                EnumCtorAdded
-                ("new constructor with wire spelling '" <> wire <> "' is used by " <> usage <> "; deploy consumers before producers emit the new arm")
+            ("new constructor with wire spelling '" <> wire <> "' is used by " <> usage <> "; invalidate or rebuild snapshots before values using the new arm hydrate")
+      | otherwise =
+          advisoryAt
+            (privateEventAdditionContext (enumName enumDecl) [usage])
+            (enumName enumDecl)
+            "enum-constructor"
+            ctor
+            EnumCtorAdded
+            ("new constructor with wire spelling '" <> wire <> "' is used by " <> usage <> "; deploy consumers before producers emit the new arm")
 
 removedEnumDiff :: Spec -> EnumDecl -> [Change]
 removedEnumDiff oldSpec enumDecl =
-    [ breaking (enumName enumDecl) "enum-constructor" ctor EnumCtorRemoved ("enum removed; stored wire value '" <> wire <> "' no longer decodes" <> enumUsageSuffix oldSpec (enumName enumDecl))
-    | (ctor, wire) <- enumCtors enumDecl
-    ]
+  [ breaking (enumName enumDecl) "enum-constructor" ctor EnumCtorRemoved ("enum removed; stored wire value '" <> wire <> "' no longer decodes" <> enumUsageSuffix oldSpec (enumName enumDecl))
+  | (ctor, wire) <- enumCtors enumDecl
+  ]
 
 enumUsageSuffix :: Spec -> Name -> Text
 enumUsageSuffix spec enumType = case enumUsages spec enumType of
-    [] -> ""
-    usages -> "; used by " <> commas usages
+  [] -> ""
+  usages -> "; used by " <> commas usages
 
 enumUsages :: Spec -> Name -> [Text]
 enumUsages spec enumType =
-    [aggName agg <> ".reg." <> regName reg | agg <- aggregates, reg <- aggRegs agg, regType reg == TRef enumType]
-        ++ [ aggName agg <> ".event." <> evName event <> "." <> field
-           | agg <- aggregates
-           , event <- aggEvents agg
-           , (field, Just fieldTypeName) <- eventFieldSigs agg event
-           , fieldTypeName == TRef enumType
-           ]
+  [aggName agg <> ".reg." <> regName reg | agg <- aggregates, reg <- aggRegs agg, regType reg == TRef enumType]
+    ++ [ aggName agg <> ".event." <> evName event <> "." <> field
+       | agg <- aggregates,
+         event <- aggEvents agg,
+         (field, Just fieldTypeName) <- eventFieldSigs agg event,
+         fieldTypeName == TRef enumType
+       ]
   where
     aggregates = [agg | NAggregate agg <- specNodes spec]
 
 pairDeclarations :: (n -> Name) -> [n] -> [n] -> Paired n
 pairDeclarations nameOf oldNodes newNodes =
-    Paired
-        { prMatched =
-            [ (oldNode, newNode)
-            | newNode <- newNodes
-            , Just oldNode <- [find ((== nameOf newNode) . nameOf) oldNodes]
-            ]
-        , prAdded = [newNode | newNode <- newNodes, isNothing (find ((== nameOf newNode) . nameOf) oldNodes)]
-        , prRemoved = [oldNode | oldNode <- oldNodes, isNothing (find ((== nameOf oldNode) . nameOf) newNodes)]
-        }
+  Paired
+    { prMatched =
+        [ (oldNode, newNode)
+        | newNode <- newNodes,
+          Just oldNode <- [find ((== nameOf newNode) . nameOf) oldNodes]
+        ],
+      prAdded = [newNode | newNode <- newNodes, isNothing (find ((== nameOf newNode) . nameOf) oldNodes)],
+      prRemoved = [oldNode | oldNode <- oldNodes, isNothing (find ((== nameOf oldNode) . nameOf) newNodes)]
+    }
 
 contractDiff :: DiffEnv -> [Change]
 contractDiff env =
-    concatMap (uncurry contractPairDiff) (prMatched paired)
-        ++ concatMap addedContractDiff (prAdded paired)
-        ++ concatMap removedContractDiff (prRemoved paired)
+  concatMap (uncurry contractPairDiff) (prMatched paired)
+    ++ concatMap addedContractDiff (prAdded paired)
+    ++ concatMap removedContractDiff (prRemoved paired)
   where
     paired = pairByName nodeContract ctrName env
 
 contractPairDiff :: ContractNode -> ContractNode -> [Change]
 contractPairDiff oldContract newContract =
-    schemaChanges
-        ++ discriminatorChanges
-        ++ topicChanges
-        ++ concatMap eventPairChanges matchedEvents
-        ++ concatMap addedEventChanges addedEvents
-        ++ concatMap removedEventChanges removedEvents'
+  schemaChanges
+    ++ discriminatorChanges
+    ++ topicChanges
+    ++ concatMap eventPairChanges matchedEvents
+    ++ concatMap addedEventChanges addedEvents
+    ++ concatMap removedEventChanges removedEvents'
   where
     schemaChanges =
-        [ breaking
-            (ctrName newContract)
-            "schema-version"
-            (ctrName newContract)
-            ContractSchemaVersionDecreased
-            ("schemaVersion decreased from " <> tInt (ctrSchemaVersion oldContract) <> " to " <> tInt (ctrSchemaVersion newContract))
-        | ctrSchemaVersion newContract < ctrSchemaVersion oldContract
-        ]
+      [ breaking
+          (ctrName newContract)
+          "schema-version"
+          (ctrName newContract)
+          ContractSchemaVersionDecreased
+          ("schemaVersion decreased from " <> tInt (ctrSchemaVersion oldContract) <> " to " <> tInt (ctrSchemaVersion newContract))
+      | ctrSchemaVersion newContract < ctrSchemaVersion oldContract
+      ]
     discriminatorChanges =
-        [ breaking
-            (ctrName newContract)
-            "discriminator"
-            (ctrName newContract)
-            ContractDiscriminatorChanged
-            ("discriminator changed " <> ctrDiscriminator oldContract <> " -> " <> ctrDiscriminator newContract)
-        | ctrDiscriminator oldContract /= ctrDiscriminator newContract
-        ]
+      [ breaking
+          (ctrName newContract)
+          "discriminator"
+          (ctrName newContract)
+          ContractDiscriminatorChanged
+          ("discriminator changed " <> ctrDiscriminator oldContract <> " -> " <> ctrDiscriminator newContract)
+      | ctrDiscriminator oldContract /= ctrDiscriminator newContract
+      ]
     topicChanges = contractTopicDiff oldContract newContract
     eventPairs = pairDeclarations ceName (ctrEvents oldContract) (ctrEvents newContract)
     matchedEvents = prMatched eventPairs
@@ -1498,82 +1491,82 @@ contractPairDiff oldContract newContract =
     removedEvents' = prRemoved eventPairs
     eventPairChanges (oldEvent, newEvent) = contractEventDiff oldContract newContract oldEvent newEvent
     addedEventChanges event =
-        [additive (ctrName newContract) "contract-event" (ceName event) ContractEventAdded "new contract event"]
+      [additive (ctrName newContract) "contract-event" (ceName event) ContractEventAdded "new contract event"]
     removedEventChanges event =
-        [breaking (ctrName newContract) "contract-event" (ceName event) ContractEventRemoved "contract event removed; existing cross-service payloads no longer have a declared decoder"]
+      [breaking (ctrName newContract) "contract-event" (ceName event) ContractEventRemoved "contract event removed; existing cross-service payloads no longer have a declared decoder"]
 
 addedContractDiff :: ContractNode -> [Change]
 addedContractDiff contract =
-    [additive (ctrName contract) "contract-event" (ceName event) ContractEventAdded "new event in a new contract" | event <- ctrEvents contract]
+  [additive (ctrName contract) "contract-event" (ceName event) ContractEventAdded "new event in a new contract" | event <- ctrEvents contract]
 
 removedContractDiff :: ContractNode -> [Change]
 removedContractDiff contract =
-    [breaking (ctrName contract) "contract-event" (ceName event) ContractEventRemoved "contract removed; its cross-service event decoder is no longer declared" | event <- ctrEvents contract]
+  [breaking (ctrName contract) "contract-event" (ceName event) ContractEventRemoved "contract removed; its cross-service event decoder is no longer declared" | event <- ctrEvents contract]
 
 contractTopicDiff :: ContractNode -> ContractNode -> [Change]
 contractTopicDiff oldContract newContract =
-    [ breaking
-        (ctrName newContract)
-        "contract-topic"
-        alias
-        ContractTopicChanged
-        ("topic alias removed; previous topic was '" <> oldTopic <> "'")
-    | (alias, oldTopic) <- ctrTopics oldContract
-    , isNothing (lookup alias (ctrTopics newContract))
-    ]
-        ++ [ breaking
-                (ctrName newContract)
-                "contract-topic"
-                alias
-                ContractTopicChanged
-                ("real topic changed '" <> oldTopic <> "' -> '" <> newTopic <> "'")
-           | (alias, oldTopic) <- ctrTopics oldContract
-           , Just newTopic <- [lookup alias (ctrTopics newContract)]
-           , oldTopic /= newTopic
-           ]
-        ++ [ additive (ctrName newContract) "contract-topic" alias ContractTopicAdded ("new topic alias for '" <> topic <> "'")
-           | (alias, topic) <- ctrTopics newContract
-           , isNothing (lookup alias (ctrTopics oldContract))
-           ]
+  [ breaking
+      (ctrName newContract)
+      "contract-topic"
+      alias
+      ContractTopicChanged
+      ("topic alias removed; previous topic was '" <> oldTopic <> "'")
+  | (alias, oldTopic) <- ctrTopics oldContract,
+    isNothing (lookup alias (ctrTopics newContract))
+  ]
+    ++ [ breaking
+           (ctrName newContract)
+           "contract-topic"
+           alias
+           ContractTopicChanged
+           ("real topic changed '" <> oldTopic <> "' -> '" <> newTopic <> "'")
+       | (alias, oldTopic) <- ctrTopics oldContract,
+         Just newTopic <- [lookup alias (ctrTopics newContract)],
+         oldTopic /= newTopic
+       ]
+    ++ [ additive (ctrName newContract) "contract-topic" alias ContractTopicAdded ("new topic alias for '" <> topic <> "'")
+       | (alias, topic) <- ctrTopics newContract,
+         isNothing (lookup alias (ctrTopics oldContract))
+       ]
 
 contractEventDiff :: ContractNode -> ContractNode -> ContractEvent -> ContractEvent -> [Change]
 contractEventDiff oldContract newContract oldEvent newEvent =
-    topicAliasChange
-        ++ removedFieldChanges
-        ++ changedFieldChanges
-        ++ addedFieldChanges
+  topicAliasChange
+    ++ removedFieldChanges
+    ++ changedFieldChanges
+    ++ addedFieldChanges
   where
     fieldPairs = pairDeclarations cfName (ceFields oldEvent) (ceFields newEvent)
     topicAliasChange =
-        [ breaking
-            (ctrName newContract)
-            "contract-topic"
-            (ceName newEvent)
-            ContractTopicChanged
-            ("event topic alias changed " <> ceTopic oldEvent <> " -> " <> ceTopic newEvent)
-        | ceTopic oldEvent /= ceTopic newEvent
-        ]
+      [ breaking
+          (ctrName newContract)
+          "contract-topic"
+          (ceName newEvent)
+          ContractTopicChanged
+          ("event topic alias changed " <> ceTopic oldEvent <> " -> " <> ceTopic newEvent)
+      | ceTopic oldEvent /= ceTopic newEvent
+      ]
     removedFieldChanges =
-        [ breaking (ctrName newContract) "contract-field" (ceName newEvent <> "." <> cfName field) ContractFieldChanged "field removed; existing messages still carry the old contract shape"
-        | field <- prRemoved fieldPairs
-        ]
+      [ breaking (ctrName newContract) "contract-field" (ceName newEvent <> "." <> cfName field) ContractFieldChanged "field removed; existing messages still carry the old contract shape"
+      | field <- prRemoved fieldPairs
+      ]
     changedFieldChanges =
-        [ breaking
-            (ctrName newContract)
-            "contract-field"
-            (ceName newEvent <> "." <> cfName newField)
-            ContractFieldChanged
-            ("field type changed " <> renderContractType (cfType oldField) <> " -> " <> renderContractType (cfType newField))
-        | (oldField, newField) <- prMatched fieldPairs
-        , cfType oldField /= cfType newField
-        ]
+      [ breaking
+          (ctrName newContract)
+          "contract-field"
+          (ceName newEvent <> "." <> cfName newField)
+          ContractFieldChanged
+          ("field type changed " <> renderContractType (cfType oldField) <> " -> " <> renderContractType (cfType newField))
+      | (oldField, newField) <- prMatched fieldPairs,
+        cfType oldField /= cfType newField
+      ]
     addedFieldChanges =
-        [ if ctrSchemaVersion newContract > ctrSchemaVersion oldContract
-            then advisory (ctrName newContract) "contract-field" subject ContractSchemaVersionBumped ("field added with schemaVersion bump " <> tInt (ctrSchemaVersion oldContract) <> " -> " <> tInt (ctrSchemaVersion newContract) <> "; coordinate the cross-service rollout")
-            else breaking (ctrName newContract) "contract-field" subject ContractFieldChanged "field added without a schemaVersion bump; older in-flight messages do not contain it"
-        | field <- prAdded fieldPairs
-        , let subject = ceName newEvent <> "." <> cfName field
-        ]
+      [ if ctrSchemaVersion newContract > ctrSchemaVersion oldContract
+          then advisory (ctrName newContract) "contract-field" subject ContractSchemaVersionBumped ("field added with schemaVersion bump " <> tInt (ctrSchemaVersion oldContract) <> " -> " <> tInt (ctrSchemaVersion newContract) <> "; coordinate the cross-service rollout")
+          else breaking (ctrName newContract) "contract-field" subject ContractFieldChanged "field added without a schemaVersion bump; older in-flight messages do not contain it"
+      | field <- prAdded fieldPairs,
+        let subject = ceName newEvent <> "." <> cfName field
+      ]
 
 renderContractType :: ContractType -> Text
 renderContractType (CTypeId prefix) = "typeid '" <> prefix <> "'"
@@ -1582,53 +1575,53 @@ renderContractType CInt = "int"
 
 workqueueDiff :: DiffEnv -> [Change]
 workqueueDiff env =
-    concatMap (uncurry workqueuePairDiff) (prMatched paired)
-        ++ concatMap addedWorkqueueDiff (prAdded paired)
-        ++ concatMap removedWorkqueueDiff (prRemoved paired)
+  concatMap (uncurry workqueuePairDiff) (prMatched paired)
+    ++ concatMap addedWorkqueueDiff (prAdded paired)
+    ++ concatMap removedWorkqueueDiff (prRemoved paired)
   where
     paired = pairByName nodeWorkqueue wqName env
 
 workqueuePairDiff :: WorkqueueNode -> WorkqueueNode -> [Change]
 workqueuePairDiff oldQueue newQueue =
-    concatMap pairedFieldDiff (prMatched fields)
-        ++ concatMap addedFieldDiff (prAdded fields)
-        ++ concatMap removedFieldDiff (prRemoved fields)
-        ++ queueIdentityDiff oldQueue newQueue
-        ++ queuePolicyDiff oldQueue newQueue
+  concatMap pairedFieldDiff (prMatched fields)
+    ++ concatMap addedFieldDiff (prAdded fields)
+    ++ concatMap removedFieldDiff (prRemoved fields)
+    ++ queueIdentityDiff oldQueue newQueue
+    ++ queuePolicyDiff oldQueue newQueue
   where
     -- wqPayloadName is a generated Haskell type name, not a wire-visible name.
     fields = pairDeclarations wqfName (wqPayload oldQueue) (wqPayload newQueue)
     pairedFieldDiff (oldField, newField)
-        | wqfWire oldField /= wqfWire newField = [payloadBreaking newField ("wire name changed '" <> wqfWire oldField <> "' -> '" <> wqfWire newField <> "'")]
-        | wqfType oldField /= wqfType newField = [payloadBreaking newField ("type changed " <> wqfType oldField <> " -> " <> wqfType newField)]
-        | not (wqfRequired oldField) && wqfRequired newField = [payloadBreaking newField "field changed from optional to required; queued jobs may omit it"]
-        | wqfRequired oldField && not (wqfRequired newField) = [additive (wqName newQueue) "payload-field" (wqfName newField) CompatibilityStrengthened "field changed from required to optional"]
-        | otherwise = []
+      | wqfWire oldField /= wqfWire newField = [payloadBreaking newField ("wire name changed '" <> wqfWire oldField <> "' -> '" <> wqfWire newField <> "'")]
+      | wqfType oldField /= wqfType newField = [payloadBreaking newField ("type changed " <> wqfType oldField <> " -> " <> wqfType newField)]
+      | not (wqfRequired oldField) && wqfRequired newField = [payloadBreaking newField "field changed from optional to required; queued jobs may omit it"]
+      | wqfRequired oldField && not (wqfRequired newField) = [additive (wqName newQueue) "payload-field" (wqfName newField) CompatibilityStrengthened "field changed from required to optional"]
+      | otherwise = []
     addedFieldDiff field
-        | wqfRequired field = [payloadBreaking field "new required field; queued jobs do not contain it"]
-        | otherwise = [additive (wqName newQueue) "payload-field" (wqfName field) CompatibilityStrengthened "new optional field"]
+      | wqfRequired field = [payloadBreaking field "new required field; queued jobs do not contain it"]
+      | otherwise = [additive (wqName newQueue) "payload-field" (wqfName field) CompatibilityStrengthened "new optional field"]
     removedFieldDiff field = [payloadBreaking field "field removed; queued jobs still contain the old payload shape"]
     payloadBreaking field detail = breaking (wqName newQueue) "payload-field" (wqfName field) WqPayloadFieldChanged detail
 
 addedWorkqueueDiff :: WorkqueueNode -> [Change]
 addedWorkqueueDiff queue =
-    [additive (wqName queue) "payload-field" (wqfName field) DeclarationAdded "field belongs to a new workqueue payload" | field <- wqPayload queue]
+  [additive (wqName queue) "payload-field" (wqfName field) DeclarationAdded "field belongs to a new workqueue payload" | field <- wqPayload queue]
 
 removedWorkqueueDiff :: WorkqueueNode -> [Change]
 removedWorkqueueDiff queue =
-    [breaking (wqName queue) "payload-field" (wqfName field) WqPayloadFieldChanged "workqueue removed while persisted jobs may still carry this payload" | field <- wqPayload queue]
-        ++ [breaking (wqName queue) "queue-identity" (wqName queue) QueueIdentityChanged "workqueue removed; its physical queue, DLQ, and pgmq table may still hold state"]
+  [breaking (wqName queue) "payload-field" (wqfName field) WqPayloadFieldChanged "workqueue removed while persisted jobs may still carry this payload" | field <- wqPayload queue]
+    ++ [breaking (wqName queue) "queue-identity" (wqName queue) QueueIdentityChanged "workqueue removed; its physical queue, DLQ, and pgmq table may still hold state"]
 
 queueIdentityDiff :: WorkqueueNode -> WorkqueueNode -> [Change]
 queueIdentityDiff oldQueue newQueue =
-    [ breaking
-        (wqName newQueue)
-        "queue-identity"
-        (wqName newQueue)
-        QueueIdentityChanged
-        "logical, physical, DLQ, or table name changed; queued jobs and dispatch dedupe records remain under the old identity"
-    | queueIdentity oldQueue /= queueIdentity newQueue
-    ]
+  [ breaking
+      (wqName newQueue)
+      "queue-identity"
+      (wqName newQueue)
+      QueueIdentityChanged
+      "logical, physical, DLQ, or table name changed; queued jobs and dispatch dedupe records remain under the old identity"
+  | queueIdentity oldQueue /= queueIdentity newQueue
+  ]
 
 queueIdentity :: WorkqueueNode -> (Text, Text, Text, Text)
 queueIdentity queue = (wqLogical queue, wqPhysical queue, wqDlq queue, wqTable queue)
@@ -1638,20 +1631,20 @@ queuePolicyDiff oldQueue newQueue = ordering ++ provision ++ groupKey
   where
     nodeName = wqName newQueue
     ordering =
-        [ breaking nodeName "queue-ordering" nodeName WqOrderingChanged $
-            "ordering changed " <> renderWqOrdering (wqOrdering oldQueue) <> " -> " <> renderWqOrdering (wqOrdering newQueue) <> "; consumers were written against the old delivery-order contract"
-        | wqOrdering oldQueue /= wqOrdering newQueue
-        ]
+      [ breaking nodeName "queue-ordering" nodeName WqOrderingChanged $
+          "ordering changed " <> renderWqOrdering (wqOrdering oldQueue) <> " -> " <> renderWqOrdering (wqOrdering newQueue) <> "; consumers were written against the old delivery-order contract"
+      | wqOrdering oldQueue /= wqOrdering newQueue
+      ]
     provision =
-        [ breaking nodeName "queue-provision" nodeName WqProvisionChanged $
-            "provision changed " <> renderWqProvision (wqProvision oldQueue) <> " -> " <> renderWqProvision (wqProvision newQueue) <> "; provisioning is create-time only, so migrate the existing queue operationally before changing the spec"
-        | wqProvision oldQueue /= wqProvision newQueue
-        ]
+      [ breaking nodeName "queue-provision" nodeName WqProvisionChanged $
+          "provision changed " <> renderWqProvision (wqProvision oldQueue) <> " -> " <> renderWqProvision (wqProvision newQueue) <> "; provisioning is create-time only, so migrate the existing queue operationally before changing the spec"
+      | wqProvision oldQueue /= wqProvision newQueue
+      ]
     groupKey =
-        [ breaking nodeName "queue-group-key" nodeName WqGroupKeyChanged $
-            "group key derivation changed " <> renderWqGroupKey (wqGroupKey oldQueue) <> " -> " <> renderWqGroupKey (wqGroupKey newQueue) <> "; FIFO messages are re-partitioned across durable ordering groups"
-        | wqGroupKey oldQueue /= wqGroupKey newQueue
-        ]
+      [ breaking nodeName "queue-group-key" nodeName WqGroupKeyChanged $
+          "group key derivation changed " <> renderWqGroupKey (wqGroupKey oldQueue) <> " -> " <> renderWqGroupKey (wqGroupKey newQueue) <> "; FIFO messages are re-partitioned across durable ordering groups"
+      | wqGroupKey oldQueue /= wqGroupKey newQueue
+      ]
 
 renderWqOrdering :: WqOrdering -> Text
 renderWqOrdering WqUnordered = "unordered"
@@ -1666,136 +1659,136 @@ renderWqProvision (WqPartitioned interval duration) = "partitioned(interval=" <>
 renderWqGroupKey :: Maybe WqGroupKey -> Text
 renderWqGroupKey Nothing = "none"
 renderWqGroupKey (Just groupKey) =
-    gkField groupKey
-        <> " via "
-        <> gkVia groupKey
-        <> maybe "" (" fixture " <>) (gkFixture groupKey)
+  gkField groupKey
+    <> " via "
+    <> gkVia groupKey
+    <> maybe "" (" fixture " <>) (gkFixture groupKey)
 
 processDiff :: DiffEnv -> [Change]
 processDiff env =
-    concatMap (uncurry processPairDiff) (prMatched paired)
-        ++ concatMap addedProcessDiff (prAdded paired)
-        ++ concatMap removedProcessDiff (prRemoved paired)
+  concatMap (uncurry processPairDiff) (prMatched paired)
+    ++ concatMap addedProcessDiff (prAdded paired)
+    ++ concatMap removedProcessDiff (prRemoved paired)
   where
     paired = pairByName nodeProcess procId env
 
 processPairDiff :: ProcessNode -> ProcessNode -> [Change]
 processPairDiff oldProcess newProcess =
-    concatMap pairedFieldDiff (prMatched fields)
-        ++ map (fieldChange "field added; source events at the old shape cannot populate it") (prAdded fields)
-        ++ map (fieldChange "field removed; the generated process input decoder changed") (prRemoved fields)
-        ++ processIdentityDiff oldProcess newProcess
-        ++ processTimerWindowDiff oldProcess newProcess
-        ++ processDecideSurfaceDiff oldProcess newProcess
-        ++ processTimerPayloadDiff oldProcess newProcess
+  concatMap pairedFieldDiff (prMatched fields)
+    ++ map (fieldChange "field added; source events at the old shape cannot populate it") (prAdded fields)
+    ++ map (fieldChange "field removed; the generated process input decoder changed") (prRemoved fields)
+    ++ processIdentityDiff oldProcess newProcess
+    ++ processTimerWindowDiff oldProcess newProcess
+    ++ processDecideSurfaceDiff oldProcess newProcess
+    ++ processTimerPayloadDiff oldProcess newProcess
   where
     -- inName is a generated Haskell type name; the wire shape is inFields.
     fields = pairDeclarations fieldName (inFields (procInput oldProcess)) (inFields (procInput newProcess))
     pairedFieldDiff (oldField, newField)
-        | fieldType oldField /= fieldType newField = [fieldChange ("type changed " <> renderFieldType (fieldType oldField) <> " -> " <> renderFieldType (fieldType newField)) newField]
-        | otherwise = []
+      | fieldType oldField /= fieldType newField = [fieldChange ("type changed " <> renderFieldType (fieldType oldField) <> " -> " <> renderFieldType (fieldType newField)) newField]
+      | otherwise = []
     fieldChange detail field = breaking (procId newProcess) "input-field" (fieldName field) ProcessInputChanged (detail <> "; version the source event before changing process input")
 
 addedProcessDiff :: ProcessNode -> [Change]
 addedProcessDiff process =
-    [additive (procId process) "input-field" (fieldName field) DeclarationAdded "field belongs to a new process input" | field <- inFields (procInput process)]
+  [additive (procId process) "input-field" (fieldName field) DeclarationAdded "field belongs to a new process input" | field <- inFields (procInput process)]
 
 removedProcessDiff :: ProcessNode -> [Change]
 removedProcessDiff process =
-    [breaking (procId process) "input-field" (fieldName field) ProcessInputChanged "process removed while persisted source events may still require this input decoder" | field <- inFields (procInput process)]
-        ++ [breaking (procId process) "derived-identity" (procId process) DerivedIdentityChanged "process removed while persisted saga, dispatch, and timer identities may still exist"]
+  [breaking (procId process) "input-field" (fieldName field) ProcessInputChanged "process removed while persisted source events may still require this input decoder" | field <- inFields (procInput process)]
+    ++ [breaking (procId process) "derived-identity" (procId process) DerivedIdentityChanged "process removed while persisted saga, dispatch, and timer identities may still exist"]
 
 processIdentityDiff :: ProcessNode -> ProcessNode -> [Change]
 processIdentityDiff oldProcess newProcess =
-    [ breaking
-        (procId newProcess)
-        "derived-identity"
-        (procId newProcess)
-        DerivedIdentityChanged
-        "process name, correlation derivation, saga stream category, timer id prefix, or fired-event-id prefix changed; replays and retries no longer derive the persisted identity"
-    | processIdentity oldProcess /= processIdentity newProcess
-    ]
+  [ breaking
+      (procId newProcess)
+      "derived-identity"
+      (procId newProcess)
+      DerivedIdentityChanged
+      "process name, correlation derivation, saga stream category, timer id prefix, or fired-event-id prefix changed; replays and retries no longer derive the persisted identity"
+  | processIdentity oldProcess /= processIdentity newProcess
+  ]
 
 processIdentity :: ProcessNode -> (Text, Name, Name, Text, Text, Text)
 processIdentity process =
-    ( procName process
-    , corrField (procCorrelate process)
-    , corrVia (procCorrelate process)
-    , sagaCategory (procSaga process)
-    , idePrefix (tmId (procTimer process))
-    , idePrefix (fireFiredEventId (tmFire (procTimer process)))
-    )
+  ( procName process,
+    corrField (procCorrelate process),
+    corrVia (procCorrelate process),
+    sagaCategory (procSaga process),
+    idePrefix (tmId (procTimer process)),
+    idePrefix (fireFiredEventId (tmFire (procTimer process)))
+  )
 
 processTimerWindowDiff :: ProcessNode -> ProcessNode -> [Change]
 processTimerWindowDiff oldProcess newProcess =
-    [ advisory
-        (procId newProcess)
-        "timer"
-        (tmName (procTimer newProcess))
-        TimerWindowChanged
-        ( "fireAt source/window changed "
-            <> renderFireAt (tmFireAt (procTimer oldProcess))
-            <> " -> "
-            <> renderFireAt (tmFireAt (procTimer newProcess))
-            <> "; already-scheduled timers keep their persisted deadline"
-        )
-    | tmFireAt (procTimer oldProcess) /= tmFireAt (procTimer newProcess)
-    ]
+  [ advisory
+      (procId newProcess)
+      "timer"
+      (tmName (procTimer newProcess))
+      TimerWindowChanged
+      ( "fireAt source/window changed "
+          <> renderFireAt (tmFireAt (procTimer oldProcess))
+          <> " -> "
+          <> renderFireAt (tmFireAt (procTimer newProcess))
+          <> "; already-scheduled timers keep their persisted deadline"
+      )
+  | tmFireAt (procTimer oldProcess) /= tmFireAt (procTimer newProcess)
+  ]
 
 processDecideSurfaceDiff :: ProcessNode -> ProcessNode -> [Change]
 processDecideSurfaceDiff oldProcess newProcess =
-    [ advisory
-        (procId newProcess)
-        "process-decide"
-        (procId newProcess)
-        ProcessDecideSurfaceChanged
-        "process dispatch surface changed: a source event redelivered across the deploy dispatches under the same deterministic ids, so half-old/half-new fan-out merges silently. Drain or pause the process subscription and replay or discard dead letters before deploying; see docs/user/deploy-ordering.md. Hole-only decide changes are not visible to diff; the same drain rule applies to those too."
-    | renderHandleSurface (procHandle oldProcess)
-        /= renderHandleSurface (procHandle newProcess)
-    ]
+  [ advisory
+      (procId newProcess)
+      "process-decide"
+      (procId newProcess)
+      ProcessDecideSurfaceChanged
+      "process dispatch surface changed: a source event redelivered across the deploy dispatches under the same deterministic ids, so half-old/half-new fan-out merges silently. Drain or pause the process subscription and replay or discard dead letters before deploying; see docs/user/deploy-ordering.md. Hole-only decide changes are not visible to diff; the same drain rule applies to those too."
+  | renderHandleSurface (procHandle oldProcess)
+      /= renderHandleSurface (procHandle newProcess)
+  ]
 
 processTimerPayloadDiff :: ProcessNode -> ProcessNode -> [Change]
 processTimerPayloadDiff oldProcess newProcess =
-    [ advisory
-        (procId newProcess)
-        "timer-payload"
-        (tmName (procTimer newProcess))
-        ProcessTimerPayloadChanged
-        "timer payload shape changed: rows scheduled before the deploy carry the old shape, unversioned, and fire under new code — the fire decoder must accept every historically scheduled shape or the timer dead-letters after maxAttempts. Hole-only timer-decoder changes are not visible to diff; the same drain rule applies to those too."
-    | renderTimerPayloadSurface (procTimer oldProcess)
-        /= renderTimerPayloadSurface (procTimer newProcess)
-    ]
+  [ advisory
+      (procId newProcess)
+      "timer-payload"
+      (tmName (procTimer newProcess))
+      ProcessTimerPayloadChanged
+      "timer payload shape changed: rows scheduled before the deploy carry the old shape, unversioned, and fire under new code — the fire decoder must accept every historically scheduled shape or the timer dead-letters after maxAttempts. Hole-only timer-decoder changes are not visible to diff; the same drain rule applies to those too."
+  | renderTimerPayloadSurface (procTimer oldProcess)
+      /= renderTimerPayloadSurface (procTimer newProcess)
+  ]
 
 renderFireAt :: FireAtExpr -> Text
 renderFireAt expression = "input." <> faField expression <> " + " <> faWindow expression
 
 workflowDiff :: DiffEnv -> [Change]
 workflowDiff env =
-    concatMap (uncurry workflowPairDiff) (prMatched paired)
-        ++ concatMap addedWorkflowDiff (prAdded paired)
-        ++ concatMap removedWorkflowDiff (prRemoved paired)
+  concatMap (uncurry workflowPairDiff) (prMatched paired)
+    ++ concatMap addedWorkflowDiff (prAdded paired)
+    ++ concatMap removedWorkflowDiff (prRemoved paired)
   where
     paired = pairByName nodeWorkflow wfId env
 
 workflowPairDiff :: WorkflowNode -> WorkflowNode -> [Change]
 workflowPairDiff oldWorkflow newWorkflow =
-    inputChanges
-        ++ outputChanges
-        ++ classifyWorkflowBody oldWorkflow newWorkflow
-        ++ workflowIdentityDiff oldWorkflow newWorkflow
+  inputChanges
+    ++ outputChanges
+    ++ classifyWorkflowBody oldWorkflow newWorkflow
+    ++ workflowIdentityDiff oldWorkflow newWorkflow
   where
     fields = pairDeclarations fieldName (wfInputFields oldWorkflow) (wfInputFields newWorkflow)
     inputChanges =
-        [workflowShape field "input field added; journaled inputs at the old shape do not contain it" | field <- prAdded fields]
-            ++ [workflowShape field "input field removed; journaled inputs still contain the old shape" | field <- prRemoved fields]
-            ++ [ workflowShape newField ("input field type changed " <> renderFieldType (fieldType oldField) <> " -> " <> renderFieldType (fieldType newField))
-               | (oldField, newField) <- prMatched fields
-               , fieldType oldField /= fieldType newField
-               ]
+      [workflowShape field "input field added; journaled inputs at the old shape do not contain it" | field <- prAdded fields]
+        ++ [workflowShape field "input field removed; journaled inputs still contain the old shape" | field <- prRemoved fields]
+        ++ [ workflowShape newField ("input field type changed " <> renderFieldType (fieldType oldField) <> " -> " <> renderFieldType (fieldType newField))
+           | (oldField, newField) <- prMatched fields,
+             fieldType oldField /= fieldType newField
+           ]
     outputChanges =
-        [ breaking (wfId newWorkflow) "workflow-output" (wfOutput newWorkflow) WorkflowShapeChanged ("output type changed " <> wfOutput oldWorkflow <> " -> " <> wfOutput newWorkflow <> "; persisted outcomes may no longer decode")
-        | wfOutput oldWorkflow /= wfOutput newWorkflow
-        ]
+      [ breaking (wfId newWorkflow) "workflow-output" (wfOutput newWorkflow) WorkflowShapeChanged ("output type changed " <> wfOutput oldWorkflow <> " -> " <> wfOutput newWorkflow <> "; persisted outcomes may no longer decode")
+      | wfOutput oldWorkflow /= wfOutput newWorkflow
+      ]
     workflowShape field detail = breaking (wfId newWorkflow) "workflow-input" (fieldName field) WorkflowShapeChanged detail
 
 addedWorkflowDiff :: WorkflowNode -> [Change]
@@ -1806,57 +1799,57 @@ removedWorkflowDiff workflow = [breaking (wfId workflow) "workflow" (wfId workfl
 
 workflowIdentityDiff :: WorkflowNode -> WorkflowNode -> [Change]
 workflowIdentityDiff oldWorkflow newWorkflow =
-    [ breaking
-        (wfId newWorkflow)
-        "workflow-name"
-        (wfId newWorkflow)
-        WorkflowStableNameChanged
-        ("stable name changed '" <> wfStable oldWorkflow <> "' -> '" <> wfStable newWorkflow <> "'; in-flight journals remain under the old stream name")
-    | wfStable oldWorkflow /= wfStable newWorkflow
-    ]
-        ++ [ breaking
-                (wfId newWorkflow)
-                "derived-identity"
-                (wfId newWorkflow)
-                DerivedIdentityChanged
-                "workflow id source field or derivation changed; journal and deterministic child/step identities no longer coalesce with persisted executions"
-           | (wfIdField oldWorkflow, wfIdVia oldWorkflow) /= (wfIdField newWorkflow, wfIdVia newWorkflow)
-           ]
+  [ breaking
+      (wfId newWorkflow)
+      "workflow-name"
+      (wfId newWorkflow)
+      WorkflowStableNameChanged
+      ("stable name changed '" <> wfStable oldWorkflow <> "' -> '" <> wfStable newWorkflow <> "'; in-flight journals remain under the old stream name")
+  | wfStable oldWorkflow /= wfStable newWorkflow
+  ]
+    ++ [ breaking
+           (wfId newWorkflow)
+           "derived-identity"
+           (wfId newWorkflow)
+           DerivedIdentityChanged
+           "workflow id source field or derivation changed; journal and deterministic child/step identities no longer coalesce with persisted executions"
+       | (wfIdField oldWorkflow, wfIdVia oldWorkflow) /= (wfIdField newWorkflow, wfIdVia newWorkflow)
+       ]
 
 intakeDiff :: DiffEnv -> [Change]
 intakeDiff env =
-    concatMap (uncurry intakePairDiff) (prMatched paired)
-        ++ concatMap addedIntakeDiff (prAdded paired)
-        ++ concatMap removedIntakeDiff (prRemoved paired)
+  concatMap (uncurry intakePairDiff) (prMatched paired)
+    ++ concatMap addedIntakeDiff (prAdded paired)
+    ++ concatMap removedIntakeDiff (prRemoved paired)
   where
     paired = pairByName nodeIntake inkName env
 
 intakePairDiff :: IntakeNode -> IntakeNode -> [Change]
 intakePairDiff oldIntake newIntake =
-    [ breaking
-        (inkName newIntake)
-        "dedupe-identity"
-        (inkName newIntake)
-        DedupeIdentityChanged
-        "dedupe key or policy changed; redelivered messages no longer match their persisted dedupe record"
-    | (inkDedupeKey oldIntake, inkDedupePolicy oldIntake) /= (inkDedupeKey newIntake, inkDedupePolicy newIntake)
-    ]
-        ++ [ advisory
-                (inkName newIntake)
-                "decode-posture"
-                (inkName newIntake)
-                DecodePostureChanged
-                "envelope/body decode posture changed; future messages are accepted or rejected differently"
-           | inkDecode oldIntake /= inkDecode newIntake
-           ]
-        ++ [ advisory
-                (inkName newIntake)
-                "inbox-persistence"
-                (inkName newIntake)
-                IntakePersistenceChanged
-                ("success-path envelope persistence changed " <> renderInkPersist (inkPersist oldIntake) <> " -> " <> renderInkPersist (inkPersist newIntake) <> "; existing rows are unchanged while future successful rows retain a different envelope shape")
-           | inkPersist oldIntake /= inkPersist newIntake
-           ]
+  [ breaking
+      (inkName newIntake)
+      "dedupe-identity"
+      (inkName newIntake)
+      DedupeIdentityChanged
+      "dedupe key or policy changed; redelivered messages no longer match their persisted dedupe record"
+  | (inkDedupeKey oldIntake, inkDedupePolicy oldIntake) /= (inkDedupeKey newIntake, inkDedupePolicy newIntake)
+  ]
+    ++ [ advisory
+           (inkName newIntake)
+           "decode-posture"
+           (inkName newIntake)
+           DecodePostureChanged
+           "envelope/body decode posture changed; future messages are accepted or rejected differently"
+       | inkDecode oldIntake /= inkDecode newIntake
+       ]
+    ++ [ advisory
+           (inkName newIntake)
+           "inbox-persistence"
+           (inkName newIntake)
+           IntakePersistenceChanged
+           ("success-path envelope persistence changed " <> renderInkPersist (inkPersist oldIntake) <> " -> " <> renderInkPersist (inkPersist newIntake) <> "; existing rows are unchanged while future successful rows retain a different envelope shape")
+       | inkPersist oldIntake /= inkPersist newIntake
+       ]
 
 renderInkPersist :: InkPersist -> Text
 renderInkPersist InkPersistFull = "full-envelope"
@@ -1870,38 +1863,38 @@ removedIntakeDiff intake = [breaking (inkName intake) "dedupe-identity" (inkName
 
 emitDiff :: DiffEnv -> [Change]
 emitDiff env =
-    concatMap (uncurry emitPairDiff) (prMatched paired)
-        ++ concatMap addedEmitDiff (prAdded paired)
-        ++ concatMap removedEmitDiff (prRemoved paired)
+  concatMap (uncurry emitPairDiff) (prMatched paired)
+    ++ concatMap addedEmitDiff (prAdded paired)
+    ++ concatMap removedEmitDiff (prRemoved paired)
   where
     paired = pairByName nodeEmit emName env
 
 emitPairDiff :: EmitNode -> EmitNode -> [Change]
 emitPairDiff oldEmit newEmit =
-    [ breaking
-        (emName newEmit)
-        "derived-identity"
-        "messageId"
-        DerivedIdentityChanged
-        "messageId derive prefix changed; outbox retries no longer coalesce with persisted messages"
-    | emMessageId oldEmit /= emMessageId newEmit
-    ]
-        ++ [ breaking
-                (emName newEmit)
-                "derived-identity"
-                "idempotencyKey"
-                DerivedIdentityChanged
-                "idempotencyKey derive prefix changed; downstream dedupe no longer matches persisted messages"
-           | emIdempotencyKey oldEmit /= emIdempotencyKey newEmit
-           ]
-        ++ [ advisory
-                (emName newEmit)
-                "emit-mapping"
-                (emName newEmit)
-                EmitMappingChanged
-                "emit key, status discriminant, mapping rows, or explicit skip posture changed"
-           | emitMapping oldEmit /= emitMapping newEmit
-           ]
+  [ breaking
+      (emName newEmit)
+      "derived-identity"
+      "messageId"
+      DerivedIdentityChanged
+      "messageId derive prefix changed; outbox retries no longer coalesce with persisted messages"
+  | emMessageId oldEmit /= emMessageId newEmit
+  ]
+    ++ [ breaking
+           (emName newEmit)
+           "derived-identity"
+           "idempotencyKey"
+           DerivedIdentityChanged
+           "idempotencyKey derive prefix changed; downstream dedupe no longer matches persisted messages"
+       | emIdempotencyKey oldEmit /= emIdempotencyKey newEmit
+       ]
+    ++ [ advisory
+           (emName newEmit)
+           "emit-mapping"
+           (emName newEmit)
+           EmitMappingChanged
+           "emit key, status discriminant, mapping rows, or explicit skip posture changed"
+       | emitMapping oldEmit /= emitMapping newEmit
+       ]
 
 emitMapping :: EmitNode -> (Name, Name, [EmitMapRow], Bool)
 emitMapping emit = (emKey emit, emDiscriminant emit, emMap emit, emSkip emit)
@@ -1914,31 +1907,31 @@ removedEmitDiff emit = [breaking (emName emit) "derived-identity" (emName emit) 
 
 publisherDiff :: DiffEnv -> [Change]
 publisherDiff env =
-    concatMap (uncurry publisherPairDiff) (prMatched paired)
-        ++ concatMap addedPublisherDiff (prAdded paired)
-        ++ concatMap removedPublisherDiff (prRemoved paired)
+  concatMap (uncurry publisherPairDiff) (prMatched paired)
+    ++ concatMap addedPublisherDiff (prAdded paired)
+    ++ concatMap removedPublisherDiff (prRemoved paired)
   where
     paired = pairByName nodePublisher pubName env
 
 publisherPairDiff :: PublisherNode -> PublisherNode -> [Change]
 publisherPairDiff oldPublisher newPublisher =
-    -- maxAttempts/backoff are retry tuning, not persisted decode or identity.
-    [ breaking
-        (pubName newPublisher)
-        "derived-identity"
-        "outboxId"
-        DerivedIdentityChanged
-        "stable outbox-id source field changed; retries no longer coalesce with persisted outbox rows"
-    | pubOutboxField oldPublisher /= pubOutboxField newPublisher
-    ]
-        ++ [ advisory
-                (pubName newPublisher)
-                "publisher-policy"
-                (pubName newPublisher)
-                PublisherPolicyChanged
-                ("ordering changed " <> pubOrdering oldPublisher <> " -> " <> pubOrdering newPublisher)
-           | pubOrdering oldPublisher /= pubOrdering newPublisher
-           ]
+  -- maxAttempts/backoff are retry tuning, not persisted decode or identity.
+  [ breaking
+      (pubName newPublisher)
+      "derived-identity"
+      "outboxId"
+      DerivedIdentityChanged
+      "stable outbox-id source field changed; retries no longer coalesce with persisted outbox rows"
+  | pubOutboxField oldPublisher /= pubOutboxField newPublisher
+  ]
+    ++ [ advisory
+           (pubName newPublisher)
+           "publisher-policy"
+           (pubName newPublisher)
+           PublisherPolicyChanged
+           ("ordering changed " <> pubOrdering oldPublisher <> " -> " <> pubOrdering newPublisher)
+       | pubOrdering oldPublisher /= pubOrdering newPublisher
+       ]
 
 addedPublisherDiff :: PublisherNode -> [Change]
 addedPublisherDiff publisher = [additive (pubName publisher) "publisher" (pubName publisher) DeclarationAdded "new publisher"]
@@ -1948,39 +1941,39 @@ removedPublisherDiff publisher = [breaking (pubName publisher) "derived-identity
 
 pgmqDispatchDiff :: DiffEnv -> [Change]
 pgmqDispatchDiff env =
-    concatMap (uncurry pgmqDispatchPairDiff) (prMatched paired)
-        ++ concatMap addedPgmqDispatchDiff (prAdded paired)
-        ++ concatMap removedPgmqDispatchDiff (prRemoved paired)
+  concatMap (uncurry pgmqDispatchPairDiff) (prMatched paired)
+    ++ concatMap addedPgmqDispatchDiff (prAdded paired)
+    ++ concatMap removedPgmqDispatchDiff (prRemoved paired)
   where
     paired = pairByName nodePgmqDispatch pdName env
 
 pgmqDispatchPairDiff :: PgmqDispatchNode -> PgmqDispatchNode -> [Change]
 pgmqDispatchPairDiff oldDispatch newDispatch =
-    [ breaking
-        (pdName newDispatch)
-        "dedupe-identity"
-        (pdName newDispatch)
-        DedupeIdentityChanged
-        "dispatch dedupe key/read-model/queue surface changed; prior enqueue records no longer match"
-    | dispatchDedupe oldDispatch /= dispatchDedupe newDispatch
-    ]
-        ++ [ advisory
-                (pdName newDispatch)
-                "retarget"
-                (pdName newDispatch)
-                DispatchRetargeted
-                "source read model or target queue changed; future fan-out is routed differently"
-           | dispatchTargets oldDispatch /= dispatchTargets newDispatch
-           ]
+  [ breaking
+      (pdName newDispatch)
+      "dedupe-identity"
+      (pdName newDispatch)
+      DedupeIdentityChanged
+      "dispatch dedupe key/read-model/queue surface changed; prior enqueue records no longer match"
+  | dispatchDedupe oldDispatch /= dispatchDedupe newDispatch
+  ]
+    ++ [ advisory
+           (pdName newDispatch)
+           "retarget"
+           (pdName newDispatch)
+           DispatchRetargeted
+           "source read model or target queue changed; future fan-out is routed differently"
+       | dispatchTargets oldDispatch /= dispatchTargets newDispatch
+       ]
 
 dispatchDedupe :: PgmqDispatchNode -> (Name, Name, Text, Name, Text)
 dispatchDedupe dispatch =
-    ( pdDedupKey dispatch
-    , pdDedupReadModel dispatch
-    , pdDedupReadModelField dispatch
-    , pdDedupQueue dispatch
-    , pdDedupQueueField dispatch
-    )
+  ( pdDedupKey dispatch,
+    pdDedupReadModel dispatch,
+    pdDedupReadModelField dispatch,
+    pdDedupQueue dispatch,
+    pdDedupQueueField dispatch
+  )
 
 dispatchTargets :: PgmqDispatchNode -> (Name, Name)
 dispatchTargets dispatch = (pdSourceReadModel dispatch, pdEnqueueTo dispatch)
@@ -1991,30 +1984,29 @@ addedPgmqDispatchDiff dispatch = [additive (pdName dispatch) "dispatch" (pdName 
 removedPgmqDispatchDiff :: PgmqDispatchNode -> [Change]
 removedPgmqDispatchDiff dispatch = [breaking (pdName dispatch) "dedupe-identity" (pdName dispatch) DedupeIdentityChanged "dispatch removed while persisted queue and read-model dedupe records may remain"]
 
-{- | Classify the runtime's sanctioned workflow-evolution mechanisms before
-falling back to the conservative unguarded-body rule.
--}
+-- | Classify the runtime's sanctioned workflow-evolution mechanisms before
+-- falling back to the conservative unguarded-body rule.
 classifyWorkflowBody :: WorkflowNode -> WorkflowNode -> [Change]
 classifyWorkflowBody oldWorkflow newWorkflow
-    | oldBody == newBody = []
-    | not (null removedPatchIds) = map removedPatch removedPatchIds
-    | Just (oldSeedType, newSeedType) <- changedSeed =
-        [ breaking nodeName "workflow-continue-as-new" nodeName WorkflowContinueSeedChanged $
-            "continueAsNew seed type changed " <> oldSeedType <> " -> " <> newSeedType <> "; the next generation's restoreSeed must decode the seed written by the previous generation"
-        ]
-    | safeAdditions =
-        map addedPatch newPatchIds
-            ++ [ additive nodeName "workflow-continue-as-new" seedType WorkflowEvolutionGuardAdded "terminal continueAsNew is additive; old generations carry no rotation marker"
-               | Just seedType <- [appendedSeed]
-               ]
-    | otherwise =
-        [ breaking
-            nodeName
-            "workflow-body"
-            nodeName
-            WorkflowBodyChanged
-            "workflow body labels, kinds, result types, or order changed without a new patch guard; wrap a cross-cutting change in patch, or rename the replay label for one changed step"
-        ]
+  | oldBody == newBody = []
+  | not (null removedPatchIds) = map removedPatch removedPatchIds
+  | Just (oldSeedType, newSeedType) <- changedSeed =
+      [ breaking nodeName "workflow-continue-as-new" nodeName WorkflowContinueSeedChanged $
+          "continueAsNew seed type changed " <> oldSeedType <> " -> " <> newSeedType <> "; the next generation's restoreSeed must decode the seed written by the previous generation"
+      ]
+  | safeAdditions =
+      map addedPatch newPatchIds
+        ++ [ additive nodeName "workflow-continue-as-new" seedType WorkflowEvolutionGuardAdded "terminal continueAsNew is additive; old generations carry no rotation marker"
+           | Just seedType <- [appendedSeed]
+           ]
+  | otherwise =
+      [ breaking
+          nodeName
+          "workflow-body"
+          nodeName
+          WorkflowBodyChanged
+          "workflow body labels, kinds, result types, or order changed without a new patch guard; wrap a cross-cutting change in patch, or rename the replay label for one changed step"
+      ]
   where
     nodeName = wfId newWorkflow
     oldBody = normaliseWorkflowBody (wfBody oldWorkflow)
@@ -2026,23 +2018,23 @@ classifyWorkflowBody oldWorkflow newWorkflow
     oldSeed = terminalContinueSeed oldBody
     newSeed = terminalContinueSeed newBody
     changedSeed = case (oldSeed, newSeed) of
-        (Just oldSeedType, Just newSeedType)
-            | oldSeedType /= newSeedType -> Just (oldSeedType, newSeedType)
-        _ -> Nothing
+      (Just oldSeedType, Just newSeedType)
+        | oldSeedType /= newSeedType -> Just (oldSeedType, newSeedType)
+      _ -> Nothing
     appendedSeed = case (oldSeed, newSeed) of
-        (Nothing, Just seedType) -> Just seedType
-        _ -> Nothing
+      (Nothing, Just seedType) -> Just seedType
+      _ -> Nothing
     strippedNewBody = stripNewPatches newPatchIds newBody
     comparableNewBody = case appendedSeed of
-        Just _ -> dropTerminalContinue strippedNewBody
-        Nothing -> strippedNewBody
+      Just _ -> dropTerminalContinue strippedNewBody
+      Nothing -> strippedNewBody
     safeAdditions =
-        (not (null newPatchIds) || isJust appendedSeed)
-            && comparableNewBody == oldBody
+      (not (null newPatchIds) || isJust appendedSeed)
+        && comparableNewBody == oldBody
     removedPatch patchId =
-        breaking nodeName "workflow-patch" patchId WorkflowPatchRemoved "patch id existed in the old spec but was removed; the differ cannot prove that no workflow generation still replays its journaled branch"
+      breaking nodeName "workflow-patch" patchId WorkflowPatchRemoved "patch id existed in the old spec but was removed; the differ cannot prove that no workflow generation still replays its journaled branch"
     addedPatch patchId =
-        additive nodeName "workflow-patch" patchId WorkflowEvolutionGuardAdded "new patch guard contains the entire body change, so in-flight generations retain their journaled branch"
+      additive nodeName "workflow-patch" patchId WorkflowEvolutionGuardAdded "new patch guard contains the entire body change, so in-flight generations retain their journaled branch"
 
 normaliseWorkflowBody :: [WfBodyItem] -> [WfBodyItem]
 normaliseWorkflowBody = map go
@@ -2069,115 +2061,115 @@ stripNewPatches newPatchIds = concatMap go
 
 terminalContinueSeed :: [WfBodyItem] -> Maybe Name
 terminalContinueSeed items = case reverse items of
-    WfContinueAsNew seedType _ : _ -> Just seedType
-    _ -> Nothing
+  WfContinueAsNew seedType _ : _ -> Just seedType
+  _ -> Nothing
 
 dropTerminalContinue :: [WfBodyItem] -> [WfBodyItem]
 dropTerminalContinue items = case reverse items of
-    WfContinueAsNew{} : rest -> reverse rest
-    _ -> items
+  WfContinueAsNew {} : rest -> reverse rest
+  _ -> items
 
 additive :: Name -> Text -> Text -> DiagnosticCode -> Text -> Change
 additive n facet subj code detail =
-    mkChange LabelAdditive (contextFor LabelAdditive n facet subj code) n facet subj code detail
+  mkChange LabelAdditive (contextFor LabelAdditive n facet subj code) n facet subj code detail
 
 breaking :: Name -> Text -> Text -> DiagnosticCode -> Text -> Change
 breaking n facet subj code detail =
-    mkChange LabelBreaking (contextFor LabelBreaking n facet subj code) n facet subj code detail
+  mkChange LabelBreaking (contextFor LabelBreaking n facet subj code) n facet subj code detail
 
 advisory :: Name -> Text -> Text -> DiagnosticCode -> Text -> Change
 advisory n facet subj code detail =
-    mkChange LabelAdvisory (contextFor LabelAdvisory n facet subj code) n facet subj code detail
+  mkChange LabelAdvisory (contextFor LabelAdvisory n facet subj code) n facet subj code detail
 
 advisoryAt :: ChangeContext -> Name -> Text -> Text -> DiagnosticCode -> Text -> Change
 advisoryAt context n facet subj code detail =
-    mkChange LabelAdvisory context n facet subj code detail
+  mkChange LabelAdvisory context n facet subj code detail
 
 mkChange :: Label -> ChangeContext -> Name -> Text -> Text -> DiagnosticCode -> Text -> Change
 mkChange label context n facet subj code detail =
-    wrap
-        ChangeKind
-            { ckNode = n
-            , ckFacet = facet
-            , ckSubject = subj
-            , ckCode = code
-            , ckContext = context
-            , ckVector = classifyCompatibility context code
-            , ckPaths = changeContextPaths context
-            , ckDetail = detail
-            }
+  wrap
+    ChangeKind
+      { ckNode = n,
+        ckFacet = facet,
+        ckSubject = subj,
+        ckCode = code,
+        ckContext = context,
+        ckVector = classifyCompatibility context code,
+        ckPaths = changeContextPaths context,
+        ckDetail = detail
+      }
   where
     wrap = case label of
-        LabelAdditive -> Additive
-        LabelAdvisory -> Advisory
-        LabelBreaking -> Breaking
+      LabelAdditive -> Additive
+      LabelAdvisory -> Advisory
+      LabelBreaking -> Breaking
 
 contextFor :: Label -> Name -> Text -> Text -> DiagnosticCode -> ChangeContext
 contextFor label root facet subject code =
-    setLabel $ case () of
-        _
-            | code `elem` publicCodes -> publicContractContext root paths
-            | code `elem` queueCodes -> queueContext root paths
-            | code `elem` identityCodes -> persistedIdentityContext root paths
-            | code `elem` [OwnershipMoved, WorkspaceAuthorityChanged] -> consumerBuildContext root paths
-            | code == AggFoldSurfaceChanged -> snapshotContext root paths
-            | code == EnumCtorAdded -> ChangeContext root paths ContextGeneral label
-            | code `elem` privateCodes -> privateEventContext root paths
-            | otherwise -> ChangeContext root paths ContextGeneral label
+  setLabel $ case () of
+    _
+      | code `elem` publicCodes -> publicContractContext root paths
+      | code `elem` queueCodes -> queueContext root paths
+      | code `elem` identityCodes -> persistedIdentityContext root paths
+      | code `elem` [OwnershipMoved, WorkspaceAuthorityChanged] -> consumerBuildContext root paths
+      | code == AggFoldSurfaceChanged -> snapshotContext root paths
+      | code == EnumCtorAdded -> ChangeContext root paths ContextGeneral label
+      | code `elem` privateCodes -> privateEventContext root paths
+      | otherwise -> ChangeContext root paths ContextGeneral label
   where
     paths = [pathFor root facet subject]
-    setLabel context = context{contextOriginalLabel = label}
+    setLabel context = context {contextOriginalLabel = label}
     publicCodes =
-        [ ContractEventRemoved
-        , ContractFieldChanged
-        , ContractDiscriminatorChanged
-        , ContractTopicChanged
-        , ContractSchemaVersionDecreased
-        , ContractSchemaVersionBumped
-        , ContractEventAdded
-        , ContractTopicAdded
-        ]
+      [ ContractEventRemoved,
+        ContractFieldChanged,
+        ContractDiscriminatorChanged,
+        ContractTopicChanged,
+        ContractSchemaVersionDecreased,
+        ContractSchemaVersionBumped,
+        ContractEventAdded,
+        ContractTopicAdded
+      ]
     queueCodes = [WqPayloadFieldChanged, WqOrderingChanged, WqProvisionChanged, WqGroupKeyChanged, QueueIdentityChanged]
     identityCodes =
-        [ DerivedIdentityChanged
-        , IdPrefixChanged
-        , DedupeIdentityChanged
-        , RouterStableNameChanged
-        , WorkflowStableNameChanged
-        , ReadModelVersionDecreased
-        , ReadModelShapeChangedWithoutBump
-        , ReadModelFeedChanged
-        , ReadModelConsistencyWeakened
-        ]
+      [ DerivedIdentityChanged,
+        IdPrefixChanged,
+        DedupeIdentityChanged,
+        RouterStableNameChanged,
+        WorkflowStableNameChanged,
+        ReadModelVersionDecreased,
+        ReadModelShapeChangedWithoutBump,
+        ReadModelFeedChanged,
+        ReadModelConsistencyWeakened
+      ]
     privateCodes =
-        [ EvtFieldAddedWithoutBump
-        , EvtFieldRemovedSameVersion
-        , EvtFieldTypeChanged
-        , EvtVersionDecreased
-        , EvtVersionMissingUpcaster
-        , UpcasterChainGap
-        , EvtRemovedNotDeprecated
-        , EnumCtorRemoved
-        , EnumWireSpellingChanged
-        , WireSpecChanged
-        , ProcessInputChanged
-        , WorkflowShapeChanged
-        , WorkflowBodyChanged
-        , WorkflowPatchRemoved
-        , WorkflowContinueSeedChanged
-        , AggGuardTightened
-        , DeprecatedEventReplayHazard
-        , EventRetirementInProgress
-        , EventUndeprecated
-        , ProcessTimerPayloadChanged
-        ]
+      [ EvtFieldAddedWithoutBump,
+        EvtFieldRemovedSameVersion,
+        EvtFieldTypeChanged,
+        EvtVersionDecreased,
+        EvtVersionMissingUpcaster,
+        UpcasterChainGap,
+        EvtRemovedNotDeprecated,
+        EnumCtorRemoved,
+        EnumWireSpellingChanged,
+        WireSpecChanged,
+        ProcessInputChanged,
+        WorkflowShapeChanged,
+        WorkflowBodyChanged,
+        WorkflowPatchRemoved,
+        WorkflowContinueSeedChanged,
+        AggGuardTightened,
+        DeprecatedEventReplayHazard,
+        EventRetirementInProgress,
+        EventUndeprecated,
+        ProcessTimerPayloadChanged
+      ]
 
 pathFor :: Name -> Text -> Text -> Text
 pathFor root facet subject
-    | facet `elem` ["event", "event-field"] = root <> ".event." <> subject
-    | facet `elem` ["contract-event", "contract-field"] = root <> ".event." <> subject
-    | root == subject = root <> "." <> facet
-    | otherwise = root <> "." <> facet <> "." <> subject
+  | facet `elem` ["event", "event-field"] = root <> ".event." <> subject
+  | facet `elem` ["contract-event", "contract-field"] = root <> ".event." <> subject
+  | root == subject = root <> "." <> facet
+  | otherwise = root <> "." <> facet <> "." <> subject
 
 commas :: [Text] -> Text
 commas = T.intercalate ", "

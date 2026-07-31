@@ -6,4 +6,4 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 
 data Item = Exact {first :: Text}
-    deriving stock (Generic)
+  deriving stock (Generic)

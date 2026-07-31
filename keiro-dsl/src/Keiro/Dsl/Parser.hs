@@ -1,19 +1,18 @@
-{- | The megaparsec parser for the keiro DSL. Turns @.keiro@ text into the typed
-'Spec' AST. The notation is keyword-driven: newlines and @#@-comments are
-whitespace, structure comes from keywords (@aggregate@, @regs@, @states@,
-@command@, @event@, @wire@, @projection@) and the transition arrow
-@Src -- Command --> clauses@. Guards and write right-hand sides are parsed as
-a typed 'Expr' (never an opaque string) so the validator can scope-check them.
--}
-module Keiro.Dsl.Parser (
-    ParseError,
+-- | The megaparsec parser for the keiro DSL. Turns @.keiro@ text into the typed
+-- 'Spec' AST. The notation is keyword-driven: newlines and @#@-comments are
+-- whitespace, structure comes from keywords (@aggregate@, @regs@, @states@,
+-- @command@, @event@, @wire@, @projection@) and the transition arrow
+-- @Src -- Command --> clauses@. Guards and write right-hand sides are parsed as
+-- a typed 'Expr' (never an opaque string) so the validator can scope-check them.
+module Keiro.Dsl.Parser
+  ( ParseError,
     ParseFailure (..),
     ParsedSource (..),
     parseSource,
     parseSpec,
     parseSpecText,
     renderParseFailure,
-)
+  )
 where
 
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
@@ -36,10 +35,9 @@ type ParseError = Text
 
 type P = Parsec Void Text
 
-{- | Parse a @.keiro@ source. The 'FilePath' is used only as the source name in
-diagnostics (megaparsec's line/column reporting); it need not exist on disk.
-This is the canonical signature shared across all keiro-dsl plans.
--}
+-- | Parse a @.keiro@ source. The 'FilePath' is used only as the source name in
+-- diagnostics (megaparsec's line/column reporting); it need not exist on disk.
+-- This is the canonical signature shared across all keiro-dsl plans.
 parseSpec :: FilePath -> Text -> Either ParseError Spec
 parseSpec src input = parsedSpec <$> first renderParseFailure (parseSource src input)
 
@@ -47,147 +45,145 @@ parseSpec src input = parsedSpec <$> first renderParseFailure (parseSource src i
 parseSpecText :: Text -> Either ParseError Spec
 parseSpecText = parseSpec "<input>"
 
-{- | Parse a source without discarding the language contract selected for it.
-Source selection completes before the selected body grammar is run.
--}
+-- | Parse a source without discarding the language contract selected for it.
+-- Source selection completes before the selected body grammar is run.
 parseSource :: FilePath -> Text -> Either ParseFailure ParsedSource
 parseSource src input = do
-    sourceLanguage <- selectSourceLanguage src input
-    ensureBodyFeatures src sourceLanguage input
-    definition <- case lookupLanguageDefinition (effectiveLanguageVersion sourceLanguage) of
-        Just value -> Right value
-        Nothing -> Left (unsupportedDiagnostic src sourceLanguage)
-    spec <- parseSelectedBody definition sourceLanguage
-    pure ParsedSource{parsedSourceLanguage = sourceLanguage, parsedSpec = spec}
+  sourceLanguage <- selectSourceLanguage src input
+  ensureBodyFeatures src sourceLanguage input
+  definition <- case lookupLanguageDefinition (effectiveLanguageVersion sourceLanguage) of
+    Just value -> Right value
+    Nothing -> Left (unsupportedDiagnostic src sourceLanguage)
+  spec <- parseSelectedBody definition sourceLanguage
+  pure ParsedSource {parsedSourceLanguage = sourceLanguage, parsedSpec = spec}
   where
     parseSelectedBody definition sourceLanguage =
-        let parser = case definitionBodyParser definition of
-                LanguageBodyParserV1 ->
-                    sc
-                        *> case sourceLanguage of
-                            LegacyUnversioned -> pSpec False <* eof
-                            DeclaredLanguage{} -> pDeclaredPreamble *> pSpec False <* eof
-                LanguageBodyParserV2 ->
-                    sc *> pDeclaredPreamble *> pSpec True <* eof
-         in case runParser parser src input of
-                Left bundle -> Left (BodyGrammarFailure (T.pack (errorBundlePretty bundle)))
-                Right spec -> Right spec
+      let parser = case definitionBodyParser definition of
+            LanguageBodyParserV1 ->
+              sc
+                *> case sourceLanguage of
+                  LegacyUnversioned -> pSpec False <* eof
+                  DeclaredLanguage {} -> pDeclaredPreamble *> pSpec False <* eof
+            LanguageBodyParserV2 ->
+              sc *> pDeclaredPreamble *> pSpec True <* eof
+       in case runParser parser src input of
+            Left bundle -> Left (BodyGrammarFailure (T.pack (errorBundlePretty bundle)))
+            Right spec -> Right spec
 
 -- | Consume a preamble already validated by 'selectSourceLanguage'.
 pDeclaredPreamble :: P ()
 pDeclaredPreamble = do
-    keyword "language"
-    keyword "keiro-dsl"
-    _ <- lexeme (some digitChar)
-    pure ()
+  keyword "language"
+  keyword "keiro-dsl"
+  _ <- lexeme (some digitChar)
+  pure ()
 
 data SignificantLine = SignificantLine
-    { significantLineNumber :: !Int
-    , significantLineText :: !Text
-    }
+  { significantLineNumber :: !Int,
+    significantLineText :: !Text
+  }
 
 selectSourceLanguage :: FilePath -> Text -> Either ParseFailure SourceLanguage
 selectSourceLanguage src input =
-    case significantLines input of
+  case significantLines input of
+    [] -> Right LegacyUnversioned
+    firstLine : rest ->
+      case filter isLanguageLine (firstLine : rest) of
         [] -> Right LegacyUnversioned
-        firstLine : rest ->
-            case filter isLanguageLine (firstLine : rest) of
-                [] -> Right LegacyUnversioned
-                languageLine : laterLanguageLines
-                    | significantLineNumber languageLine /= significantLineNumber firstLine ->
-                        Left (sourceFailure MisplacedLanguagePreamble languageLine Nothing Nothing)
-                    | otherwise -> do
-                        version <- parsePreamble languageLine
-                        case laterLanguageLines of
-                            duplicateLine : _ ->
-                                Left (sourceFailure DuplicateLanguagePreamble duplicateLine Nothing Nothing)
-                            [] -> case lookupLanguageDefinition version of
-                                Nothing -> Left (sourceFailure UnsupportedLanguageVersion languageLine (Just (languageVersionText version)) (Just version))
-                                Just _ -> Right (DeclaredLanguage version (Loc (significantLineNumber languageLine)))
+        languageLine : laterLanguageLines
+          | significantLineNumber languageLine /= significantLineNumber firstLine ->
+              Left (sourceFailure MisplacedLanguagePreamble languageLine Nothing Nothing)
+          | otherwise -> do
+              version <- parsePreamble languageLine
+              case laterLanguageLines of
+                duplicateLine : _ ->
+                  Left (sourceFailure DuplicateLanguagePreamble duplicateLine Nothing Nothing)
+                [] -> case lookupLanguageDefinition version of
+                  Nothing -> Left (sourceFailure UnsupportedLanguageVersion languageLine (Just (languageVersionText version)) (Just version))
+                  Just _ -> Right (DeclaredLanguage version (Loc (significantLineNumber languageLine)))
   where
     sourceFailure code line tokenText declared =
-        SourceLanguageFailure
-            SourceLanguageDiagnostic
-                { sourceLanguageErrorCode = code
-                , sourceLanguageSource = src
-                , sourceLanguageLoc = Loc (significantLineNumber line)
-                , sourceLanguageToken = tokenText
-                , sourceLanguageDeclaredVersion = declared
-                , sourceLanguageSupportedVersions = supportedLanguageVersions
-                }
+      SourceLanguageFailure
+        SourceLanguageDiagnostic
+          { sourceLanguageErrorCode = code,
+            sourceLanguageSource = src,
+            sourceLanguageLoc = Loc (significantLineNumber line),
+            sourceLanguageToken = tokenText,
+            sourceLanguageDeclaredVersion = declared,
+            sourceLanguageSupportedVersions = supportedLanguageVersions
+          }
 
     parsePreamble line = case T.words (significantLineText line) of
-        ["language", "keiro-dsl", tokenText]
-            | T.all (\c -> isAscii c && isDigit c) tokenText && not (T.null tokenText) ->
-                case TR.decimal tokenText :: Either String (Natural, Text) of
-                    Right (value, "") -> case languageVersion value of
-                        Just version -> Right version
-                        Nothing -> invalid line tokenText
-                    _ -> invalid line tokenText
-        wordsFound -> invalid line (T.unwords wordsFound)
+      ["language", "keiro-dsl", tokenText]
+        | T.all (\c -> isAscii c && isDigit c) tokenText && not (T.null tokenText) ->
+            case TR.decimal tokenText :: Either String (Natural, Text) of
+              Right (value, "") -> case languageVersion value of
+                Just version -> Right version
+                Nothing -> invalid line tokenText
+              _ -> invalid line tokenText
+      wordsFound -> invalid line (T.unwords wordsFound)
 
     invalid line tokenText =
-        Left (sourceFailure InvalidLanguageVersion line (Just tokenText) Nothing)
+      Left (sourceFailure InvalidLanguageVersion line (Just tokenText) Nothing)
 
 unsupportedDiagnostic :: FilePath -> SourceLanguage -> ParseFailure
 unsupportedDiagnostic src sourceLanguage =
-    SourceLanguageFailure
-        SourceLanguageDiagnostic
-            { sourceLanguageErrorCode = UnsupportedLanguageVersion
-            , sourceLanguageSource = src
-            , sourceLanguageLoc = case sourceLanguage of
-                LegacyUnversioned -> Loc 1
-                DeclaredLanguage{languageVersionLoc = loc} -> loc
-            , sourceLanguageToken = Just (languageVersionText (effectiveLanguageVersion sourceLanguage))
-            , sourceLanguageDeclaredVersion = Just (effectiveLanguageVersion sourceLanguage)
-            , sourceLanguageSupportedVersions = supportedLanguageVersions
-            }
+  SourceLanguageFailure
+    SourceLanguageDiagnostic
+      { sourceLanguageErrorCode = UnsupportedLanguageVersion,
+        sourceLanguageSource = src,
+        sourceLanguageLoc = case sourceLanguage of
+          LegacyUnversioned -> Loc 1
+          DeclaredLanguage {languageVersionLoc = loc} -> loc,
+        sourceLanguageToken = Just (languageVersionText (effectiveLanguageVersion sourceLanguage)),
+        sourceLanguageDeclaredVersion = Just (effectiveLanguageVersion sourceLanguage),
+        sourceLanguageSupportedVersions = supportedLanguageVersions
+      }
 
 significantLines :: Text -> [SignificantLine]
 significantLines =
-    mapMaybe significant . zip [1 ..] . T.lines
+  mapMaybe significant . zip [1 ..] . T.lines
   where
     significant (lineNumber, line) =
-        let content = T.strip (T.takeWhile (/= '#') line)
-         in if T.null content
-                then Nothing
-                else Just SignificantLine{significantLineNumber = lineNumber, significantLineText = content}
+      let content = T.strip (T.takeWhile (/= '#') line)
+       in if T.null content
+            then Nothing
+            else Just SignificantLine {significantLineNumber = lineNumber, significantLineText = content}
 
 isLanguageLine :: SignificantLine -> Bool
 isLanguageLine line = case T.words (significantLineText line) of
-    "language" : _ -> True
-    _ -> False
+  "language" : _ -> True
+  _ -> False
 
-{- | Reject syntax owned by a successor before the frozen predecessor grammar
-can turn it into generic parser noise.
--}
+-- | Reject syntax owned by a successor before the frozen predecessor grammar
+-- can turn it into generic parser noise.
 ensureBodyFeatures :: FilePath -> SourceLanguage -> Text -> Either ParseFailure ()
 ensureBodyFeatures src sourceLanguage input =
-    case filter requiresSuccessorSyntax (significantLines input) of
-        marker : _
-            | languageVersionNumber (effectiveLanguageVersion sourceLanguage) < 2 ->
-                Left
-                    ( SourceLanguageFailure
-                        SourceLanguageDiagnostic
-                            { sourceLanguageErrorCode = LanguageFeatureRequiresVersion
-                            , sourceLanguageSource = src
-                            , sourceLanguageLoc = Loc (significantLineNumber marker)
-                            , sourceLanguageToken = Just (languageVersionText (effectiveLanguageVersion sourceLanguage))
-                            , sourceLanguageDeclaredVersion = Just (effectiveLanguageVersion sourceLanguage)
-                            , sourceLanguageSupportedVersions = supportedLanguageVersions
-                            }
-                    )
-        _ -> Right ()
+  case filter requiresSuccessorSyntax (significantLines input) of
+    marker : _
+      | languageVersionNumber (effectiveLanguageVersion sourceLanguage) < 2 ->
+          Left
+            ( SourceLanguageFailure
+                SourceLanguageDiagnostic
+                  { sourceLanguageErrorCode = LanguageFeatureRequiresVersion,
+                    sourceLanguageSource = src,
+                    sourceLanguageLoc = Loc (significantLineNumber marker),
+                    sourceLanguageToken = Just (languageVersionText (effectiveLanguageVersion sourceLanguage)),
+                    sourceLanguageDeclaredVersion = Just (effectiveLanguageVersion sourceLanguage),
+                    sourceLanguageSupportedVersions = supportedLanguageVersions
+                  }
+            )
+    _ -> Right ()
   where
     requiresSuccessorSyntax line =
-        case wordsFound of
-            "mapped" : "nominal" : _ -> True
-            _ ->
-                "using" `elem` wordsFound
-                    || "Integer" `elem` wordsFound
-                    || "implementation hole" `T.isInfixOf` content
-                    || "reg." `T.isInfixOf` content
-                    || "cmd." `T.isInfixOf` content
+      case wordsFound of
+        "mapped" : "nominal" : _ -> True
+        _ ->
+          "using" `elem` wordsFound
+            || "Integer" `elem` wordsFound
+            || "implementation hole" `T.isInfixOf` content
+            || "reg." `T.isInfixOf` content
+            || "cmd." `T.isInfixOf` content
       where
         content = significantLineText line
         wordsFound = T.words content
@@ -206,9 +202,8 @@ lexeme = L.lexeme sc
 symbol :: Text -> P Text
 symbol = L.symbol sc
 
-{- | A reserved keyword: the literal word not followed by an identifier
-character (so @goto@ matches @goto@ but not @gotoX@).
--}
+-- | A reserved keyword: the literal word not followed by an identifier
+-- character (so @goto@ matches @goto@ but not @gotoX@).
 keyword :: Text -> P ()
 keyword w = (lexeme . try) (string' w *> notFollowedBy (identChar <|> (char '-' *> identChar)))
   where
@@ -233,146 +228,141 @@ asciiAlphaNum = satisfy (\c -> isAscii c && isAlphaNum c)
 failAt :: Int -> String -> P a
 failAt offset message = region (setErrorOffset offset) (fail message)
 
-{- | Parse a decimal as an unbounded Integer, then reject values that cannot be
-represented as Int. Parsing L.decimal directly at Int silently wraps.
--}
+-- | Parse a decimal as an unbounded Integer, then reject values that cannot be
+-- represented as Int. Parsing L.decimal directly at Int silently wraps.
 boundedDecimal :: P Int
 boundedDecimal = do
-    offset <- getOffset
-    value <- lexeme (L.decimal :: P Integer)
-    checkedDecimal offset value
+  offset <- getOffset
+  value <- lexeme (L.decimal :: P Integer)
+  checkedDecimal offset value
 
 checkedDecimal :: Int -> Integer -> P Int
 checkedDecimal offset value
-    | value > fromIntegral (maxBound :: Int) =
-        failAt
-            offset
-            ( "decimal literal "
-                <> show value
-                <> " is out of range (maximum "
-                <> show (maxBound :: Int)
-                <> ")"
-            )
-    | otherwise = pure (fromIntegral value)
+  | value > fromIntegral (maxBound :: Int) =
+      failAt
+        offset
+        ( "decimal literal "
+            <> show value
+            <> " is out of range (maximum "
+            <> show (maxBound :: Int)
+            <> ")"
+        )
+  | otherwise = pure (fromIntegral value)
 
-{- | Words that may not be used as bare identifiers, because they introduce a
-different construct and would otherwise be swallowed (e.g. @aggregate@ ending
-one node and beginning the next).
--}
+-- | Words that may not be used as bare identifiers, because they introduce a
+-- different construct and would otherwise be swallowed (e.g. @aggregate@ ending
+-- one node and beginning the next).
 reservedWords :: [Text]
 reservedWords =
-    [ "context"
-    , "module"
-    , "layout"
-    , "prefixed"
-    , "collocated"
-    , "id"
-    , "enum"
-    , "rule"
-    , "mapped"
-    , "ex"
-    , "aggregate"
-    , "regs"
-    , "states"
-    , "command"
-    , "event"
-    , "wire"
-    , "projection"
-    , "snapshot"
-    , "category"
-    , "guard"
-    , "write"
-    , "emit"
-    , "goto"
-    , "fields"
-    , "status-map"
-    , "true"
-    , "false"
-    , "retiring"
-    , "deprecated"
-    , "upcast"
-    , "from"
-    , "HOLE"
-    , "process"
-    , "router"
-    , "dispatch-each"
-    , "resolve"
-    , "read-model"
-    , "dispatch"
-    , -- EP-4 integration: structural keywords never used as identifiers, so a
-      -- list like @accept A B C@ stops at the next block keyword.
-      "intake"
-    , "contract"
-    , "topic"
-    , "accept"
-    , "bind"
-    , "dedupe"
-    , "persist"
-    , "decode"
-    , "disposition"
-    , "publisher"
-    , "map"
-    , -- EP-5 pgmq structural keywords.
-      "workqueue"
-    , "queue"
-    , "payload"
-    , "retry"
-    , "fanout"
-    , "dedup"
-    , "enqueue"
-    , "seenIn"
-    , -- EP-6 workflow/operation: reserved so the multi-word result-type parse and
-      -- node boundaries don't swallow the next block keyword.
-      "workflow"
-    , "operation"
-    , "consistency"
-    , "body"
-    , "step"
-    , "await"
-    , "sleep"
-    , "child"
-    , "patch"
-    , "continueAsNew"
-    , -- EP-107 read-model structural words. Clause labels such as table and
-      -- schema remain usable identifiers because their block parser consumes
-      -- them with symbol-style matching.
-      "readmodel"
-    , "columns"
-    , "feed"
-    , "scope"
-    , "shape"
-    ]
+  [ "context",
+    "module",
+    "layout",
+    "prefixed",
+    "collocated",
+    "id",
+    "enum",
+    "rule",
+    "mapped",
+    "ex",
+    "aggregate",
+    "regs",
+    "states",
+    "command",
+    "event",
+    "wire",
+    "projection",
+    "snapshot",
+    "category",
+    "guard",
+    "write",
+    "emit",
+    "goto",
+    "fields",
+    "status-map",
+    "true",
+    "false",
+    "retiring",
+    "deprecated",
+    "upcast",
+    "from",
+    "HOLE",
+    "process",
+    "router",
+    "dispatch-each",
+    "resolve",
+    "read-model",
+    "dispatch",
+    -- EP-4 integration: structural keywords never used as identifiers, so a
+    -- list like @accept A B C@ stops at the next block keyword.
+    "intake",
+    "contract",
+    "topic",
+    "accept",
+    "bind",
+    "dedupe",
+    "persist",
+    "decode",
+    "disposition",
+    "publisher",
+    "map",
+    -- EP-5 pgmq structural keywords.
+    "workqueue",
+    "queue",
+    "payload",
+    "retry",
+    "fanout",
+    "dedup",
+    "enqueue",
+    "seenIn",
+    -- EP-6 workflow/operation: reserved so the multi-word result-type parse and
+    -- node boundaries don't swallow the next block keyword.
+    "workflow",
+    "operation",
+    "consistency",
+    "body",
+    "step",
+    "await",
+    "sleep",
+    "child",
+    "patch",
+    "continueAsNew",
+    -- EP-107 read-model structural words. Clause labels such as table and
+    -- schema remain usable identifiers because their block parser consumes
+    -- them with symbol-style matching.
+    "readmodel",
+    "columns",
+    "feed",
+    "scope",
+    "shape"
+  ]
 
-{- | A CamelCase / snake_case identifier (no dashes): type names, register
-names, command\/event\/state names, enum constructors, projection keys.
--}
+-- | A CamelCase / snake_case identifier (no dashes): type names, register
+-- names, command\/event\/state names, enum constructors, projection keys.
 ident :: P Name
 ident = (lexeme . try) $ do
-    c <- asciiLetter <|> char '_'
-    cs <- many identChar
-    let w = T.pack (c : cs)
-    if w `elem` reservedWords
-        then fail ("unexpected reserved word " <> T.unpack w)
-        else pure w
+  c <- asciiLetter <|> char '_'
+  cs <- many identChar
+  let w = T.pack (c : cs)
+  if w `elem` reservedWords
+    then fail ("unexpected reserved word " <> T.unpack w)
+    else pure w
 
-{- | A wire-spelling token, which may contain dashes (@partial-divert@,
-@hospital-capacity@). Used for the context name, id prefixes, enum wire
-spellings, and status-map values.
--}
+-- | A wire-spelling token, which may contain dashes (@partial-divert@,
+-- @hospital-capacity@). Used for the context name, id prefixes, enum wire
+-- spellings, and status-map values.
 wireWord :: P Text
 wireWord = lexeme $ do
-    c <- asciiLetter <|> asciiDigit
-    cs <- many (identChar <|> char '-')
-    pure (T.pack (c : cs))
+  c <- asciiLetter <|> asciiDigit
+  cs <- many (identChar <|> char '-')
+  pure (T.pack (c : cs))
 
-{- | Patch ids use wire-word spelling, but admit @:@ so the validator can emit
-the domain-specific 'WorkflowPatchIdInvalid' diagnostic at the owning item.
--}
+-- | Patch ids use wire-word spelling, but admit @:@ so the validator can emit
+-- the domain-specific 'WorkflowPatchIdInvalid' diagnostic at the owning item.
 patchIdWord :: P Text
 patchIdWord = lexeme $ do
-    c <- asciiLetter <|> asciiDigit
-    cs <- many (identChar <|> char '-' <|> char ':')
-    pure (T.pack (c : cs))
+  c <- asciiLetter <|> asciiDigit
+  cs <- many (identChar <|> char '-' <|> char ':')
+  pure (T.pack (c : cs))
 
 getLoc :: P Loc
 getLoc = (Loc . unPos . sourceLine) <$> getSourcePos
@@ -382,32 +372,32 @@ getLoc = (Loc . unPos . sourceLine) <$> getSourcePos
 --------------------------------------------------------------------------------
 
 data TopItem
-    = TIId IdDecl
-    | TIEnum EnumDecl
-    | TIRule RuleDecl
-    | TINominalScalar NominalScalarDecl
-    | TIMapped MappedDecl
-    | TINode Node
+  = TIId IdDecl
+  | TIEnum EnumDecl
+  | TIRule RuleDecl
+  | TINominalScalar NominalScalarDecl
+  | TIMapped MappedDecl
+  | TINode Node
 
 pSpec :: Bool -> P Spec
 pSpec nominalSyntax = do
-    keyword "context"
-    ctx <- wireWord
-    mroot <- optional pModuleClause
-    mlayout <- optional pLayoutClause
-    items <- many (pTopItem nominalSyntax)
-    pure
-        Spec
-            { specContext = ctx
-            , specModuleRoot = mroot
-            , specLayout = mlayout
-            , specIds = [d | TIId d <- items]
-            , specEnums = [d | TIEnum d <- items]
-            , specRules = [d | TIRule d <- items]
-            , specNominalScalars = [d | TINominalScalar d <- items]
-            , specMapped = [d | TIMapped d <- items]
-            , specNodes = [n | TINode n <- items]
-            }
+  keyword "context"
+  ctx <- wireWord
+  mroot <- optional pModuleClause
+  mlayout <- optional pLayoutClause
+  items <- many (pTopItem nominalSyntax)
+  pure
+    Spec
+      { specContext = ctx,
+        specModuleRoot = mroot,
+        specLayout = mlayout,
+        specIds = [d | TIId d <- items],
+        specEnums = [d | TIEnum d <- items],
+        specRules = [d | TIRule d <- items],
+        specNominalScalars = [d | TINominalScalar d <- items],
+        specMapped = [d | TIMapped d <- items],
+        specNodes = [n | TINode n <- items]
+      }
 
 -- | @module Acme.Services@ — the optional namespace-prefix clause.
 pModuleClause :: P Text
@@ -416,100 +406,99 @@ pModuleClause = keyword "module" *> pModulePrefix
 -- | @layout (prefixed|collocated)@ — the optional placement-style clause.
 pLayoutClause :: P Placement
 pLayoutClause =
-    keyword "layout"
-        *> choice
-            [ GeneratedPrefix <$ keyword "prefixed"
-            , CollocatedLeaf <$ keyword "collocated"
-            ]
+  keyword "layout"
+    *> choice
+      [ GeneratedPrefix <$ keyword "prefixed",
+        CollocatedLeaf <$ keyword "collocated"
+      ]
 
-{- | A dotted module prefix: one-or-more PascalCase segments joined by dots,
-e.g. @Acme@ or @Acme.Services@.
--}
+-- | A dotted module prefix: one-or-more PascalCase segments joined by dots,
+-- e.g. @Acme@ or @Acme.Services@.
 pModulePrefix :: P Text
 pModulePrefix = lexeme $ do
-    seg0 <- pSeg
-    segs <- many (char '.' *> pSeg)
-    pure (T.intercalate "." (seg0 : segs))
+  seg0 <- pSeg
+  segs <- many (char '.' *> pSeg)
+  pure (T.intercalate "." (seg0 : segs))
   where
     pSeg = do
-        c <- asciiUpper
-        cs <- many identChar
-        pure (T.pack (c : cs))
+      c <- asciiUpper
+      cs <- many identChar
+      pure (T.pack (c : cs))
 
 pTopItem :: Bool -> P TopItem
 pTopItem nominalSyntax =
-    choice
-        ( [ TIId <$> pIdDecl nominalSyntax
-          , TIEnum <$> pEnumDecl nominalSyntax
-          , TIRule <$> pRuleDecl nominalSyntax
-          , pMappedTopItem nominalSyntax
-          ]
-            ++ [ TINode . NRouter <$> pRouter
-               , TINode . NProcess <$> pProcess
-               , TINode . NContract <$> pContract
-               , TINode . NIntake <$> pIntake
-               , TINode . NEmit <$> pEmit
-               , TINode . NPublisher <$> pPublisher
-               , TINode . NWorkqueue <$> pWorkqueue
-               , TINode . NPgmqDispatch <$> pPgmqDispatch
-               , TINode . NReadModel <$> pReadModel
-               , TINode . NWorkflow <$> pWorkflow
-               , TINode . NOperation <$> pOperation
-               , TINode . NAggregate <$> pAggregate nominalSyntax
-               ]
-        )
+  choice
+    ( [ TIId <$> pIdDecl nominalSyntax,
+        TIEnum <$> pEnumDecl nominalSyntax,
+        TIRule <$> pRuleDecl nominalSyntax,
+        pMappedTopItem nominalSyntax
+      ]
+        ++ [ TINode . NRouter <$> pRouter,
+             TINode . NProcess <$> pProcess,
+             TINode . NContract <$> pContract,
+             TINode . NIntake <$> pIntake,
+             TINode . NEmit <$> pEmit,
+             TINode . NPublisher <$> pPublisher,
+             TINode . NWorkqueue <$> pWorkqueue,
+             TINode . NPgmqDispatch <$> pPgmqDispatch,
+             TINode . NReadModel <$> pReadModel,
+             TINode . NWorkflow <$> pWorkflow,
+             TINode . NOperation <$> pOperation,
+             TINode . NAggregate <$> pAggregate nominalSyntax
+           ]
+    )
 
 pIdDecl :: Bool -> P IdDecl
 pIdDecl nominalSyntax = do
-    loc <- getLoc
-    keyword "id"
-    name <- ident
-    _ <- symbol "prefix"
-    _ <- symbol "="
-    pfx <- wireWord
-    binding <- if nominalSyntax then optional pUsingNominalBinding else pure Nothing
-    pure IdDecl{idName = name, idPrefix = pfx, idBinding = binding, idLoc = loc}
+  loc <- getLoc
+  keyword "id"
+  name <- ident
+  _ <- symbol "prefix"
+  _ <- symbol "="
+  pfx <- wireWord
+  binding <- if nominalSyntax then optional pUsingNominalBinding else pure Nothing
+  pure IdDecl {idName = name, idPrefix = pfx, idBinding = binding, idLoc = loc}
 
 pEnumDecl :: Bool -> P EnumDecl
 pEnumDecl nominalSyntax = do
-    loc <- getLoc
-    keyword "enum"
-    name <- ident
-    ctors <- braces (many pEnumCtor)
-    binding <- if nominalSyntax then optional pUsingNominalBinding else pure Nothing
-    pure EnumDecl{enumName = name, enumCtors = ctors, enumBinding = binding, enumLoc = loc}
+  loc <- getLoc
+  keyword "enum"
+  name <- ident
+  ctors <- braces (many pEnumCtor)
+  binding <- if nominalSyntax then optional pUsingNominalBinding else pure Nothing
+  pure EnumDecl {enumName = name, enumCtors = ctors, enumBinding = binding, enumLoc = loc}
   where
     pEnumCtor = do
-        c <- ident
-        _ <- symbol "="
-        w <- wireWord
-        pure (c, w)
+      c <- ident
+      _ <- symbol "="
+      w <- wireWord
+      pure (c, w)
 
 pRuleDecl :: Bool -> P RuleDecl
 pRuleDecl scalarSyntax = do
-    loc <- getLoc
-    keyword "rule"
-    name <- ident
-    _ <- symbol ":"
-    dom <- ident
-    _ <- symbol "->"
-    cod <- ident
-    keyword "ex"
-    cases <- sepBy1 pCase (symbol ";")
-    pure
-        RuleDecl
-            { ruleName = name
-            , ruleDomain = dom
-            , ruleCodomain = cod
-            , ruleCases = cases
-            , ruleLoc = loc
-            }
+  loc <- getLoc
+  keyword "rule"
+  name <- ident
+  _ <- symbol ":"
+  dom <- ident
+  _ <- symbol "->"
+  cod <- ident
+  keyword "ex"
+  cases <- sepBy1 pCase (symbol ";")
+  pure
+    RuleDecl
+      { ruleName = name,
+        ruleDomain = dom,
+        ruleCodomain = cod,
+        ruleCases = cases,
+        ruleLoc = loc
+      }
   where
     pCase = do
-        c <- ident
-        _ <- symbol "=>"
-        e <- pExpr scalarSyntax
-        pure (c, e)
+      c <- ident
+      _ <- symbol "=>"
+      e <- pExpr scalarSyntax
+      pure (c, e)
 
 --------------------------------------------------------------------------------
 -- Consumer-owned mapped and nominal types
@@ -518,367 +507,367 @@ pRuleDecl scalarSyntax = do
 data MappedKind = MappedRecord | MappedEnum | MappedUnion
 
 data MappedClause
-    = MCHaskell HaskellSource
-    | MCBinding Text
-    | MCBindingVersion Text
-    | MCCanonical Text
-    | MCFixtures Text
-    | MCInitial Text
-    | MCCodec Text
-    | MCCodecVersion Text
-    | MCShape MappedShape
+  = MCHaskell HaskellSource
+  | MCBinding Text
+  | MCBindingVersion Text
+  | MCCanonical Text
+  | MCFixtures Text
+  | MCInitial Text
+  | MCCodec Text
+  | MCCodecVersion Text
+  | MCShape MappedShape
 
 pMappedTopItem :: Bool -> P TopItem
 pMappedTopItem nominalSyntax = do
-    loc <- getLoc
-    keyword "mapped"
-    choice
-        ( [TINominalScalar <$> pNominalScalarAfterMapped loc | nominalSyntax]
-            ++ [ TIMapped <$> pMappedStructural loc
-               , TIMapped <$> pMappedOpaque loc
-               ]
-        )
+  loc <- getLoc
+  keyword "mapped"
+  choice
+    ( [TINominalScalar <$> pNominalScalarAfterMapped loc | nominalSyntax]
+        ++ [ TIMapped <$> pMappedStructural loc,
+             TIMapped <$> pMappedOpaque loc
+           ]
+    )
 
 pMappedStructural :: Loc -> P MappedDecl
 pMappedStructural loc = do
-    keyword "structural"
-    kind <-
-        choice
-            [ MappedRecord <$ keyword "record"
-            , MappedEnum <$ keyword "enum"
-            , MappedUnion <$ keyword "union"
-            ]
-    name <- ident
-    clauses <- braces (many (pStructuralClause kind))
-    hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
-    binding <- oneClause "binding" (\case MCBinding value -> Just value; _ -> Nothing) clauses
-    bindingVersion <- oneClause "binding-version" (\case MCBindingVersion value -> Just value; _ -> Nothing) clauses
-    canonical <- oneClause "canonical-type" (\case MCCanonical value -> Just value; _ -> Nothing) clauses
-    fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
-    initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
-    shape <- requiredClause "wire" (\case MCShape value -> Just value; _ -> Nothing) clauses
-    pure
-        MappedStructural
-            { msName = name
-            , msHaskell = hs
-            , msBinding = binding
-            , msBindingVersion = bindingVersion
-            , msCanonical = canonical
-            , msFixtures = fixtures
-            , msInitial = initial
-            , msShape = shape
-            , msLoc = loc
-            }
+  keyword "structural"
+  kind <-
+    choice
+      [ MappedRecord <$ keyword "record",
+        MappedEnum <$ keyword "enum",
+        MappedUnion <$ keyword "union"
+      ]
+  name <- ident
+  clauses <- braces (many (pStructuralClause kind))
+  hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
+  binding <- oneClause "binding" (\case MCBinding value -> Just value; _ -> Nothing) clauses
+  bindingVersion <- oneClause "binding-version" (\case MCBindingVersion value -> Just value; _ -> Nothing) clauses
+  canonical <- oneClause "canonical-type" (\case MCCanonical value -> Just value; _ -> Nothing) clauses
+  fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
+  initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
+  shape <- requiredClause "wire" (\case MCShape value -> Just value; _ -> Nothing) clauses
+  pure
+    MappedStructural
+      { msName = name,
+        msHaskell = hs,
+        msBinding = binding,
+        msBindingVersion = bindingVersion,
+        msCanonical = canonical,
+        msFixtures = fixtures,
+        msInitial = initial,
+        msShape = shape,
+        msLoc = loc
+      }
 
 pMappedOpaque :: Loc -> P MappedDecl
 pMappedOpaque loc = do
-    keyword "opaque"
-    name <- ident
-    clauses <- braces (many pOpaqueClause)
-    hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
-    codec <- oneClause "codec" (\case MCCodec value -> Just value; _ -> Nothing) clauses
-    version <- oneClause "version" (\case MCCodecVersion value -> Just value; _ -> Nothing) clauses
-    fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
-    initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
-    pure
-        MappedOpaque
-            { moName = name
-            , moHaskell = hs
-            , moCodecId = codec
-            , moCodecVersion = version
-            , moFixtures = fixtures
-            , moInitial = initial
-            , moLoc = loc
-            }
+  keyword "opaque"
+  name <- ident
+  clauses <- braces (many pOpaqueClause)
+  hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
+  codec <- oneClause "codec" (\case MCCodec value -> Just value; _ -> Nothing) clauses
+  version <- oneClause "version" (\case MCCodecVersion value -> Just value; _ -> Nothing) clauses
+  fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
+  initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
+  pure
+    MappedOpaque
+      { moName = name,
+        moHaskell = hs,
+        moCodecId = codec,
+        moCodecVersion = version,
+        moFixtures = fixtures,
+        moInitial = initial,
+        moLoc = loc
+      }
 
 pNominalScalarAfterMapped :: Loc -> P NominalScalarDecl
 pNominalScalarAfterMapped loc = do
-    keyword "nominal"
-    name <- ident
-    _ <- symbol ":"
-    representation <- ident
-    binding <- pNominalBindingBlock loc
-    pure
-        NominalScalarDecl
-            { nominalScalarName = name
-            , nominalScalarRepresentation = representation
-            , nominalScalarBinding = binding
-            , nominalScalarLoc = loc
-            }
+  keyword "nominal"
+  name <- ident
+  _ <- symbol ":"
+  representation <- ident
+  binding <- pNominalBindingBlock loc
+  pure
+    NominalScalarDecl
+      { nominalScalarName = name,
+        nominalScalarRepresentation = representation,
+        nominalScalarBinding = binding,
+        nominalScalarLoc = loc
+      }
 
 pUsingNominalBinding :: P NominalBindingDecl
 pUsingNominalBinding = do
-    keyword "using"
-    loc <- getLoc
-    pNominalBindingBlock loc
+  keyword "using"
+  loc <- getLoc
+  pNominalBindingBlock loc
 
 pNominalBindingBlock :: Loc -> P NominalBindingDecl
 pNominalBindingBlock loc = do
-    clauses <- braces (many pNominalClause)
-    hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
-    binding <- oneClause "binding" (\case MCBinding value -> Just value; _ -> Nothing) clauses
-    bindingVersion <- oneClause "binding-version" (\case MCBindingVersion value -> Just value; _ -> Nothing) clauses
-    canonical <- oneClause "canonical-type" (\case MCCanonical value -> Just value; _ -> Nothing) clauses
-    fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
-    initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
-    pure
-        NominalBindingDecl
-            { nominalHaskell = hs
-            , nominalBinding = binding
-            , nominalBindingVersion = bindingVersion
-            , nominalCanonicalType = canonical
-            , nominalFixtures = fixtures
-            , nominalInitial = initial
-            , nominalLoc = loc
-            }
+  clauses <- braces (many pNominalClause)
+  hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
+  binding <- oneClause "binding" (\case MCBinding value -> Just value; _ -> Nothing) clauses
+  bindingVersion <- oneClause "binding-version" (\case MCBindingVersion value -> Just value; _ -> Nothing) clauses
+  canonical <- oneClause "canonical-type" (\case MCCanonical value -> Just value; _ -> Nothing) clauses
+  fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
+  initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
+  pure
+    NominalBindingDecl
+      { nominalHaskell = hs,
+        nominalBinding = binding,
+        nominalBindingVersion = bindingVersion,
+        nominalCanonicalType = canonical,
+        nominalFixtures = fixtures,
+        nominalInitial = initial,
+        nominalLoc = loc
+      }
 
 pNominalClause :: P MappedClause
 pNominalClause =
-    choice
-        [ MCHaskell <$> pHaskellSource
-        , MCBindingVersion <$> pQuotedFact "binding-version"
-        , MCBinding <$> pQuotedFact "binding"
-        , MCCanonical <$> pQuotedFact "canonical-type"
-        , MCFixtures <$> pQuotedFact "fixtures"
-        , MCInitial <$> pQuotedFact "initial"
-        ]
+  choice
+    [ MCHaskell <$> pHaskellSource,
+      MCBindingVersion <$> pQuotedFact "binding-version",
+      MCBinding <$> pQuotedFact "binding",
+      MCCanonical <$> pQuotedFact "canonical-type",
+      MCFixtures <$> pQuotedFact "fixtures",
+      MCInitial <$> pQuotedFact "initial"
+    ]
 
 pStructuralClause :: MappedKind -> P MappedClause
 pStructuralClause kind =
-    choice
-        [ MCHaskell <$> pHaskellSource
-        , MCBindingVersion <$> pQuotedFact "binding-version"
-        , MCBinding <$> pQuotedFact "binding"
-        , MCCanonical <$> pQuotedFact "canonical-type"
-        , MCFixtures <$> pQuotedFact "fixtures"
-        , MCInitial <$> pQuotedFact "initial"
-        , MCShape <$> pMappedShape kind
-        ]
+  choice
+    [ MCHaskell <$> pHaskellSource,
+      MCBindingVersion <$> pQuotedFact "binding-version",
+      MCBinding <$> pQuotedFact "binding",
+      MCCanonical <$> pQuotedFact "canonical-type",
+      MCFixtures <$> pQuotedFact "fixtures",
+      MCInitial <$> pQuotedFact "initial",
+      MCShape <$> pMappedShape kind
+    ]
 
 pOpaqueClause :: P MappedClause
 pOpaqueClause =
-    choice
-        [ MCHaskell <$> pHaskellSource
-        , MCCodec <$> pQuotedFact "codec"
-        , MCCodecVersion <$> pQuotedFact "version"
-        , MCFixtures <$> pQuotedFact "fixtures"
-        , MCInitial <$> pQuotedFact "initial"
-        ]
+  choice
+    [ MCHaskell <$> pHaskellSource,
+      MCCodec <$> pQuotedFact "codec",
+      MCCodecVersion <$> pQuotedFact "version",
+      MCFixtures <$> pQuotedFact "fixtures",
+      MCInitial <$> pQuotedFact "initial"
+    ]
 
 pHaskellSource :: P HaskellSource
 pHaskellSource = do
-    keyword "haskell"
-    keyword "package"
-    _ <- symbol "="
-    packageName <- wireWord
-    keyword "module"
-    _ <- symbol "="
-    moduleName <- pModulePrefix
-    keyword "type"
-    _ <- symbol "="
-    typeName <- ident
-    pure HaskellSource{hsPackage = packageName, hsModule = moduleName, hsType = typeName}
+  keyword "haskell"
+  keyword "package"
+  _ <- symbol "="
+  packageName <- wireWord
+  keyword "module"
+  _ <- symbol "="
+  moduleName <- pModulePrefix
+  keyword "type"
+  _ <- symbol "="
+  typeName <- ident
+  pure HaskellSource {hsPackage = packageName, hsModule = moduleName, hsType = typeName}
 
 pQuotedFact :: Text -> P Text
 pQuotedFact factName = keyword factName *> symbol "=" *> stringLit
 
 pMappedShape :: MappedKind -> P MappedShape
 pMappedShape kind = do
-    keyword "wire"
-    case kind of
-        MappedRecord -> do
-            keyword "object"
-            keyword "constructor"
-            _ <- symbol "="
-            constructor <- ident
-            unknownFields <- pUnknownFieldsFact
-            fields <- braces (many pWireField)
-            pure (ShapeRecord constructor unknownFields fields)
-        MappedEnum -> do
-            keyword "string"
-            ShapeEnum <$> braces (many pWireEnum)
-        MappedUnion -> do
-            keyword "tagged-object"
-            keyword "tag"
-            _ <- symbol "="
-            tagField <- stringLit
-            keyword "contents"
-            _ <- symbol "="
-            contentsField <- stringLit
-            unknownFields <- pUnknownFieldsFact
-            arms <- braces (many pWireArm)
-            pure (ShapeUnion (TaggedObject tagField contentsField unknownFields) arms)
+  keyword "wire"
+  case kind of
+    MappedRecord -> do
+      keyword "object"
+      keyword "constructor"
+      _ <- symbol "="
+      constructor <- ident
+      unknownFields <- pUnknownFieldsFact
+      fields <- braces (many pWireField)
+      pure (ShapeRecord constructor unknownFields fields)
+    MappedEnum -> do
+      keyword "string"
+      ShapeEnum <$> braces (many pWireEnum)
+    MappedUnion -> do
+      keyword "tagged-object"
+      keyword "tag"
+      _ <- symbol "="
+      tagField <- stringLit
+      keyword "contents"
+      _ <- symbol "="
+      contentsField <- stringLit
+      unknownFields <- pUnknownFieldsFact
+      arms <- braces (many pWireArm)
+      pure (ShapeUnion (TaggedObject tagField contentsField unknownFields) arms)
 
 pUnknownFieldsFact :: P UnknownFields
 pUnknownFieldsFact = do
-    keyword "unknown-fields"
-    _ <- symbol "="
-    choice [RejectUnknown <$ keyword "reject", IgnoreUnknown <$ keyword "ignore"]
+  keyword "unknown-fields"
+  _ <- symbol "="
+  choice [RejectUnknown <$ keyword "reject", IgnoreUnknown <$ keyword "ignore"]
 
 pWireField :: P WireField
 pWireField = do
-    loc <- getLoc
-    haskellName <- ident
-    keyword "as"
-    wireKey <- stringLit
-    _ <- symbol ":"
-    fieldType <- pMappedTypeExpr
-    presence <- choice [PRequired <$ keyword "required", POptional <$ keyword "optional"]
-    onMissing <- optional (keyword "on-missing" *> symbol "=" *> pOnMissing)
-    pure
-        WireField
-            { wfHaskell = haskellName
-            , wfKey = wireKey
-            , wfType = fieldType
-            , wfPresence = presence
-            , wfOnMissing = onMissing
-            , wfLoc = loc
-            }
+  loc <- getLoc
+  haskellName <- ident
+  keyword "as"
+  wireKey <- stringLit
+  _ <- symbol ":"
+  fieldType <- pMappedTypeExpr
+  presence <- choice [PRequired <$ keyword "required", POptional <$ keyword "optional"]
+  onMissing <- optional (keyword "on-missing" *> symbol "=" *> pOnMissing)
+  pure
+    WireField
+      { wfHaskell = haskellName,
+        wfKey = wireKey,
+        wfType = fieldType,
+        wfPresence = presence,
+        wfOnMissing = onMissing,
+        wfLoc = loc
+      }
 
 pWireEnum :: P WireEnum
 pWireEnum = do
-    loc <- getLoc
-    constructor <- ident
-    keyword "as"
-    wireTag <- stringLit
-    pure WireEnum{weCtor = constructor, weTag = wireTag, weLoc = loc}
+  loc <- getLoc
+  constructor <- ident
+  keyword "as"
+  wireTag <- stringLit
+  pure WireEnum {weCtor = constructor, weTag = wireTag, weLoc = loc}
 
 pWireArm :: P WireArm
 pWireArm = do
-    loc <- getLoc
-    constructor <- ident
-    keyword "as"
-    wireTag <- stringLit
-    payload <- optional (symbol ":" *> pMappedTypeExpr)
-    pure WireArm{waCtor = constructor, waTag = wireTag, waPayload = payload, waLoc = loc}
+  loc <- getLoc
+  constructor <- ident
+  keyword "as"
+  wireTag <- stringLit
+  payload <- optional (symbol ":" *> pMappedTypeExpr)
+  pure WireArm {waCtor = constructor, waTag = wireTag, waPayload = payload, waLoc = loc}
 
 pMappedTypeExpr :: P TypeExpr
 pMappedTypeExpr =
-    choice
-        [ TOptional <$> (keyword "Optional" *> pTypeArgument)
-        , TList <$> (keyword "List" *> pTypeArgument)
-        , TMap <$> (keyword "Map" *> pTypeArgument)
-        , TText <$ keyword "Text"
-        , TInt <$ keyword "Int"
-        , TInteger <$ keyword "Integer"
-        , TBool <$ keyword "Bool"
-        , TNatural <$ keyword "Natural"
-        , TTime <$ (keyword "Time" <|> keyword "UTCTime")
-        , TJson <$ keyword "Json"
-        , TRef <$> ident
-        ]
+  choice
+    [ TOptional <$> (keyword "Optional" *> pTypeArgument),
+      TList <$> (keyword "List" *> pTypeArgument),
+      TMap <$> (keyword "Map" *> pTypeArgument),
+      TText <$ keyword "Text",
+      TInt <$ keyword "Int",
+      TInteger <$ keyword "Integer",
+      TBool <$ keyword "Bool",
+      TNatural <$ keyword "Natural",
+      TTime <$ (keyword "Time" <|> keyword "UTCTime"),
+      TJson <$ keyword "Json",
+      TRef <$> ident
+    ]
   where
     pTypeArgument = parens pMappedTypeExpr <|> pTypeAtom
     pTypeAtom =
-        choice
-            [ TText <$ keyword "Text"
-            , TInt <$ keyword "Int"
-            , TInteger <$ keyword "Integer"
-            , TBool <$ keyword "Bool"
-            , TNatural <$ keyword "Natural"
-            , TTime <$ (keyword "Time" <|> keyword "UTCTime")
-            , TJson <$ keyword "Json"
-            , TRef <$> ident
-            ]
+      choice
+        [ TText <$ keyword "Text",
+          TInt <$ keyword "Int",
+          TInteger <$ keyword "Integer",
+          TBool <$ keyword "Bool",
+          TNatural <$ keyword "Natural",
+          TTime <$ (keyword "Time" <|> keyword "UTCTime"),
+          TJson <$ keyword "Json",
+          TRef <$> ident
+        ]
 
 pOnMissing :: P OnMissing
 pOnMissing =
-    choice
-        [ OmNull <$ keyword "null"
-        , OmEmptyList <$ (symbol "[" *> symbol "]")
-        , OmEmptyMap <$ (symbol "{" *> symbol "}")
-        , OmBool True <$ keyword "true"
-        , OmBool False <$ keyword "false"
-        , OmText <$> stringLit
-        , OmInt <$> integerLiteral
-        , OmCtor <$> ident
-        ]
+  choice
+    [ OmNull <$ keyword "null",
+      OmEmptyList <$ (symbol "[" *> symbol "]"),
+      OmEmptyMap <$ (symbol "{" *> symbol "}"),
+      OmBool True <$ keyword "true",
+      OmBool False <$ keyword "false",
+      OmText <$> stringLit,
+      OmInt <$> integerLiteral,
+      OmCtor <$> ident
+    ]
 
 integerLiteral :: P Integer
 integerLiteral = lexeme (L.signed (pure ()) L.decimal)
 
 oneClause :: String -> (MappedClause -> Maybe a) -> [MappedClause] -> P (Maybe a)
 oneClause clauseName select clauses =
-    case mapMaybe select clauses of
-        [] -> pure Nothing
-        [value] -> pure (Just value)
-        _ -> fail ("duplicate " <> clauseName <> " clause in mapped declaration")
+  case mapMaybe select clauses of
+    [] -> pure Nothing
+    [value] -> pure (Just value)
+    _ -> fail ("duplicate " <> clauseName <> " clause in mapped declaration")
 
 requiredClause :: String -> (MappedClause -> Maybe a) -> [MappedClause] -> P a
 requiredClause clauseName select clauses = do
-    found <- oneClause clauseName select clauses
-    maybe (fail ("missing " <> clauseName <> " clause in mapped structural declaration")) pure found
+  found <- oneClause clauseName select clauses
+  maybe (fail ("missing " <> clauseName <> " clause in mapped structural declaration")) pure found
 
 --------------------------------------------------------------------------------
 -- Aggregate node
 --------------------------------------------------------------------------------
 
 data BodyItem
-    = BICommand Command
-    | BIEvent Event
-    | BIWire WireSpec
-    | BIProjection ProjectionSpec
-    | BISnapshot SnapshotSpec
-    | BITransition Transition
+  = BICommand Command
+  | BIEvent Event
+  | BIWire WireSpec
+  | BIProjection ProjectionSpec
+  | BISnapshot SnapshotSpec
+  | BITransition Transition
 
 pAggregate :: Bool -> P Aggregate
 pAggregate scalarSyntax = do
-    loc <- getLoc
-    keyword "aggregate"
-    name <- ident
-    regs <- pRegsBlock
-    states <- pStatesLine
-    positionedItems <- many ((,) <$> getOffset <*> pBodyItem scalarSyntax)
-    let items = map snd positionedItems
-        wireOffsets = [offset | (offset, BIWire _) <- positionedItems]
-        projectionOffsets = [offset | (offset, BIProjection _) <- positionedItems]
-        snapshotOffsets = [offset | (offset, BISnapshot _) <- positionedItems]
-    case wireOffsets of
-        _ : duplicateOffset : _ ->
-            failAt duplicateOffset ("duplicate wire block in aggregate " <> T.unpack name <> " (only one is allowed)")
-        _ -> pure ()
-    case projectionOffsets of
-        _ : duplicateOffset : _ ->
-            failAt duplicateOffset ("duplicate projection block in aggregate " <> T.unpack name <> " (only one is allowed)")
-        _ -> pure ()
-    case snapshotOffsets of
-        _ : duplicateOffset : _ ->
-            failAt duplicateOffset ("duplicate snapshot block in aggregate " <> T.unpack name <> " (only one is allowed)")
-        _ -> pure ()
-    pure
-        Aggregate
-            { aggName = name
-            , aggRegs = regs
-            , aggStates = states
-            , aggCommands = [c | BICommand c <- items]
-            , aggEvents = [e | BIEvent e <- items]
-            , aggTransitions = [t | BITransition t <- items]
-            , aggWire = listToMaybe [w | BIWire w <- items]
-            , aggProjection = listToMaybe [p | BIProjection p <- items]
-            , aggSnapshot = listToMaybe [s | BISnapshot s <- items]
-            , aggLoc = loc
-            }
+  loc <- getLoc
+  keyword "aggregate"
+  name <- ident
+  regs <- pRegsBlock
+  states <- pStatesLine
+  positionedItems <- many ((,) <$> getOffset <*> pBodyItem scalarSyntax)
+  let items = map snd positionedItems
+      wireOffsets = [offset | (offset, BIWire _) <- positionedItems]
+      projectionOffsets = [offset | (offset, BIProjection _) <- positionedItems]
+      snapshotOffsets = [offset | (offset, BISnapshot _) <- positionedItems]
+  case wireOffsets of
+    _ : duplicateOffset : _ ->
+      failAt duplicateOffset ("duplicate wire block in aggregate " <> T.unpack name <> " (only one is allowed)")
+    _ -> pure ()
+  case projectionOffsets of
+    _ : duplicateOffset : _ ->
+      failAt duplicateOffset ("duplicate projection block in aggregate " <> T.unpack name <> " (only one is allowed)")
+    _ -> pure ()
+  case snapshotOffsets of
+    _ : duplicateOffset : _ ->
+      failAt duplicateOffset ("duplicate snapshot block in aggregate " <> T.unpack name <> " (only one is allowed)")
+    _ -> pure ()
+  pure
+    Aggregate
+      { aggName = name,
+        aggRegs = regs,
+        aggStates = states,
+        aggCommands = [c | BICommand c <- items],
+        aggEvents = [e | BIEvent e <- items],
+        aggTransitions = [t | BITransition t <- items],
+        aggWire = listToMaybe [w | BIWire w <- items],
+        aggProjection = listToMaybe [p | BIProjection p <- items],
+        aggSnapshot = listToMaybe [s | BISnapshot s <- items],
+        aggLoc = loc
+      }
   where
     listToMaybe xs = case xs of (x : _) -> Just x; [] -> Nothing
 
 pRegsBlock :: P [RegDecl]
 pRegsBlock = do
-    keyword "regs"
-    many pRegDecl
+  keyword "regs"
+  many pRegDecl
 
 pRegDecl :: P RegDecl
 pRegDecl = do
-    loc <- getLoc
-    name <- ident
-    ty <- pMappedTypeExpr
-    _ <- symbol "="
-    initial <- (RegInitText <$> stringLit) <|> (RegInitBare <$> (ident <|> signedDecimalText))
-    pure RegDecl{regName = name, regType = ty, regInitial = initial, regLoc = loc}
+  loc <- getLoc
+  name <- ident
+  ty <- pMappedTypeExpr
+  _ <- symbol "="
+  initial <- (RegInitText <$> stringLit) <|> (RegInitBare <$> (ident <|> signedDecimalText))
+  pure RegDecl {regName = name, regType = ty, regInitial = initial, regLoc = loc}
 
 pStatesLine :: P [StateDecl]
 pStatesLine = do
-    keyword "states"
-    many pStateDecl
+  keyword "states"
+  many pStateDecl
   where
     -- A state decl is an identifier with an optional terminal @!@. The
     -- @notFollowedBy@ lookahead stops the list before a transition whose source
@@ -887,160 +876,159 @@ pStatesLine = do
     -- between them. The @try@ backtracks so the identifier is left for
     -- 'pTransition'.
     pStateDecl = try $ do
-        loc <- getLoc
-        -- A @replay-only@ transition marker directly after the states line
-        -- must not be swallowed: 'ident' would take @replay@ (hyphens are
-        -- not identifier characters) and strand @-only@.
-        notFollowedBy (keyword "replay-only")
-        n <- ident
-        term <- option False (True <$ symbol "!")
-        notFollowedBy (symbol "--")
-        pure StateDecl{stName = n, stTerminal = term, stLoc = loc}
+      loc <- getLoc
+      -- A @replay-only@ transition marker directly after the states line
+      -- must not be swallowed: 'ident' would take @replay@ (hyphens are
+      -- not identifier characters) and strand @-only@.
+      notFollowedBy (keyword "replay-only")
+      n <- ident
+      term <- option False (True <$ symbol "!")
+      notFollowedBy (symbol "--")
+      pure StateDecl {stName = n, stTerminal = term, stLoc = loc}
 
 pBodyItem :: Bool -> P BodyItem
 pBodyItem scalarSyntax =
-    choice
-        [ BICommand <$> pCommand
-        , BIEvent <$> pEvent
-        , BIWire <$> pWire
-        , BIProjection <$> pProjection
-        , BISnapshot <$> pSnapshot
-        , BITransition <$> pTransition scalarSyntax
-        ]
+  choice
+    [ BICommand <$> pCommand,
+      BIEvent <$> pEvent,
+      BIWire <$> pWire,
+      BIProjection <$> pProjection,
+      BISnapshot <$> pSnapshot,
+      BITransition <$> pTransition scalarSyntax
+    ]
 
 pSnapshot :: P SnapshotSpec
 pSnapshot = do
-    loc <- getLoc
-    keyword "snapshot"
-    policy <-
-        choice
-            [ SnapEvery <$> (keyword "every" *> boundedDecimal)
-            , SnapOnTerminal <$ symbol "on-terminal"
-            ]
-    _ <- symbol "state-codec"
-    _ <- symbol "version" *> symbol "="
-    version <- boundedDecimal
-    _ <- symbol "shape-hash" *> symbol "="
-    hash <- stringLit
-    pure SnapshotSpec{snapPolicy = policy, snapCodecVersion = version, snapShapeHash = hash, snapLoc = loc}
+  loc <- getLoc
+  keyword "snapshot"
+  policy <-
+    choice
+      [ SnapEvery <$> (keyword "every" *> boundedDecimal),
+        SnapOnTerminal <$ symbol "on-terminal"
+      ]
+  _ <- symbol "state-codec"
+  _ <- symbol "version" *> symbol "="
+  version <- boundedDecimal
+  _ <- symbol "shape-hash" *> symbol "="
+  hash <- stringLit
+  pure SnapshotSpec {snapPolicy = policy, snapCodecVersion = version, snapShapeHash = hash, snapLoc = loc}
 
 pCommand :: P Command
 pCommand = do
-    loc <- getLoc
-    keyword "command"
-    name <- ident
-    fs <- braces (many pAggregateField)
-    pure Command{cmdName = name, cmdFields = fs, cmdLoc = loc}
+  loc <- getLoc
+  keyword "command"
+  name <- ident
+  fs <- braces (many pAggregateField)
+  pure Command {cmdName = name, cmdFields = fs, cmdLoc = loc}
 
 pAggregateField :: P AggregateField
 pAggregateField = do
-    loc <- getLoc
-    n <- ident
-    mty <- optional (symbol ":" *> pMappedTypeExpr)
-    pure AggregateField{aggregateFieldName = n, aggregateFieldType = mty, aggregateFieldLoc = loc}
+  loc <- getLoc
+  n <- ident
+  mty <- optional (symbol ":" *> pMappedTypeExpr)
+  pure AggregateField {aggregateFieldName = n, aggregateFieldType = mty, aggregateFieldLoc = loc}
 
 pField :: P Field
 pField = do
-    n <- ident
-    mty <- optional (symbol ":" *> ident)
-    pure Field{fieldName = n, fieldType = mty}
+  n <- ident
+  mty <- optional (symbol ":" *> ident)
+  pure Field {fieldName = n, fieldType = mty}
 
 pEvent :: P Event
 pEvent = do
-    loc <- getLoc
-    (retiring, deprecated) <-
-        option
-            (False, False)
-            ( choice
-                [ (True, False) <$ keyword "retiring"
-                , (False, True) <$ keyword "deprecated"
-                ]
-            )
-    keyword "event"
-    name <- ident
-    ver <- option 1 pVersion
-    body <-
-        choice
-            [ EventFromCommand <$> (symbol "=" *> keyword "fields" *> parens ident)
-            , EventFields <$> braces (many pAggregateField)
-            ]
-    up <- optional pUpcast
-    pure
-        Event
-            { evName = name
-            , evBody = body
-            , evVersion = ver
-            , evUpcastFrom = up
-            , evRetiring = retiring
-            , evDeprecated = deprecated
-            , evLoc = loc
-            }
+  loc <- getLoc
+  (retiring, deprecated) <-
+    option
+      (False, False)
+      ( choice
+          [ (True, False) <$ keyword "retiring",
+            (False, True) <$ keyword "deprecated"
+          ]
+      )
+  keyword "event"
+  name <- ident
+  ver <- option 1 pVersion
+  body <-
+    choice
+      [ EventFromCommand <$> (symbol "=" *> keyword "fields" *> parens ident),
+        EventFields <$> braces (many pAggregateField)
+      ]
+  up <- optional pUpcast
+  pure
+    Event
+      { evName = name,
+        evBody = body,
+        evVersion = ver,
+        evUpcastFrom = up,
+        evRetiring = retiring,
+        evDeprecated = deprecated,
+        evLoc = loc
+      }
   where
     pUpcast = do
-        keyword "upcast"
-        keyword "from"
-        m <- pVersion
-        _ <- symbol "="
-        keyword "HOLE"
-        pure (m, Hole)
+      keyword "upcast"
+      keyword "from"
+      m <- pVersion
+      _ <- symbol "="
+      keyword "HOLE"
+      pure (m, Hole)
 
-{- | A @vN@ schema-version token (e.g. @v2@). Fails (backtracking) on anything
-that is not @v@ immediately followed by digits.
--}
+-- | A @vN@ schema-version token (e.g. @v2@). Fails (backtracking) on anything
+-- that is not @v@ immediately followed by digits.
 pVersion :: P Int
 pVersion = do
-    offset <- getOffset
-    value <- lexeme (try (char 'v' *> (L.decimal :: P Integer) <* notFollowedBy identChar))
-    checkedDecimal offset value
+  offset <- getOffset
+  value <- lexeme (try (char 'v' *> (L.decimal :: P Integer) <* notFollowedBy identChar))
+  checkedDecimal offset value
 
 pWire :: P WireSpec
 pWire = do
-    keyword "wire"
-    _ <- symbol "kind"
-    _ <- symbol "="
-    k <- wireWord
-    _ <- symbol "fields"
-    _ <- symbol "="
-    f <- wireWord
-    _ <- symbol "schemaVersion"
-    _ <- symbol "="
-    v <- boundedDecimal
-    pure WireSpec{wireKind = k, wireFields = f, wireSchemaVersion = v}
+  keyword "wire"
+  _ <- symbol "kind"
+  _ <- symbol "="
+  k <- wireWord
+  _ <- symbol "fields"
+  _ <- symbol "="
+  f <- wireWord
+  _ <- symbol "schemaVersion"
+  _ <- symbol "="
+  v <- boundedDecimal
+  pure WireSpec {wireKind = k, wireFields = f, wireSchemaVersion = v}
 
 pProjection :: P ProjectionSpec
 pProjection = do
-    loc <- getLoc
-    keyword "projection"
-    table <- ident
-    cons <- optional (symbol "consistency" *> symbol "=" *> pConsistency)
-    _ <- symbol "key"
-    _ <- symbol "="
-    k <- ident
-    sm <- optional pStatusMap
-    pure
-        ProjectionSpec
-            { projTable = table
-            , projConsistency = cons
-            , projKey = k
-            , projStatusMap = sm
-            , projLoc = loc
-            }
+  loc <- getLoc
+  keyword "projection"
+  table <- ident
+  cons <- optional (symbol "consistency" *> symbol "=" *> pConsistency)
+  _ <- symbol "key"
+  _ <- symbol "="
+  k <- ident
+  sm <- optional pStatusMap
+  pure
+    ProjectionSpec
+      { projTable = table,
+        projConsistency = cons,
+        projKey = k,
+        projStatusMap = sm,
+        projLoc = loc
+      }
   where
     pConsistency =
-        choice [Strong <$ keyword "Strong", Eventual <$ keyword "Eventual"]
+      choice [Strong <$ keyword "Strong", Eventual <$ keyword "Eventual"]
 
 pStatusMap :: P Mapping
 pStatusMap = do
-    keyword "status-map"
-    partial <- option False (True <$ keyword "partial")
-    pairs <- braces (many pPair)
-    pure Mapping{mapPairs = pairs, mapPartial = partial}
+  keyword "status-map"
+  partial <- option False (True <$ keyword "partial")
+  pairs <- braces (many pPair)
+  pure Mapping {mapPairs = pairs, mapPartial = partial}
   where
     pPair = do
-        l <- ident
-        _ <- symbol "=>"
-        r <- wireWord
-        pure (l, r)
+      l <- ident
+      _ <- symbol "=>"
+      r <- wireWord
+      pure (l, r)
 
 --------------------------------------------------------------------------------
 -- Integration contract (EP-4)
@@ -1048,537 +1036,537 @@ pStatusMap = do
 
 pContract :: P ContractNode
 pContract = do
-    loc <- getLoc
-    keyword "contract"
-    nm <- ident
-    _ <- symbol "{"
-    keyword "schemaVersion"
-    sv <- boundedDecimal
-    keyword "discriminator"
-    disc <- ident
-    topics <- many pTopic
-    events <- many pContractEvent
-    _ <- symbol "}"
-    pure
-        ContractNode
-            { ctrName = nm
-            , ctrSchemaVersion = sv
-            , ctrDiscriminator = disc
-            , ctrTopics = topics
-            , ctrEvents = events
-            , ctrLoc = loc
-            }
+  loc <- getLoc
+  keyword "contract"
+  nm <- ident
+  _ <- symbol "{"
+  keyword "schemaVersion"
+  sv <- boundedDecimal
+  keyword "discriminator"
+  disc <- ident
+  topics <- many pTopic
+  events <- many pContractEvent
+  _ <- symbol "}"
+  pure
+    ContractNode
+      { ctrName = nm,
+        ctrSchemaVersion = sv,
+        ctrDiscriminator = disc,
+        ctrTopics = topics,
+        ctrEvents = events,
+        ctrLoc = loc
+      }
   where
     pTopic = do
-        keyword "topic"
-        alias <- ident
-        t <- stringLit
-        pure (alias, t)
+      keyword "topic"
+      alias <- ident
+      t <- stringLit
+      pure (alias, t)
     pContractEvent = do
-        keyword "event"
-        nm <- ident
-        keyword "on"
-        topicAlias <- ident
-        fs <- braces (many pContractField)
-        pure ContractEvent{ceName = nm, ceTopic = topicAlias, ceFields = fs}
+      keyword "event"
+      nm <- ident
+      keyword "on"
+      topicAlias <- ident
+      fs <- braces (many pContractField)
+      pure ContractEvent {ceName = nm, ceTopic = topicAlias, ceFields = fs}
     pContractField = do
-        n <- ident
-        _ <- symbol ":"
-        ty <- pContractType
-        _ <- optional (symbol ";")
-        pure ContractField{cfName = n, cfType = ty}
+      n <- ident
+      _ <- symbol ":"
+      ty <- pContractType
+      _ <- optional (symbol ";")
+      pure ContractField {cfName = n, cfType = ty}
     pContractType =
-        choice
-            [ CTypeId <$> (keyword "typeid" *> stringLit)
-            , CText <$ keyword "text"
-            , CInt <$ keyword "int"
-            ]
+      choice
+        [ CTypeId <$> (keyword "typeid" *> stringLit),
+          CText <$ keyword "text",
+          CInt <$ keyword "int"
+        ]
 
 pIntake :: P IntakeNode
 pIntake = do
-    loc <- getLoc
-    keyword "intake"
-    nm <- ident
-    _ <- symbol "{"
-    keyword "contract"
-    ctr <- ident
-    keyword "topic"
-    tp <- ident
-    keyword "accept"
-    acc <- some ident
-    binds <- many pBindRow
-    keyword "dedupe"
-    keyword "key"
-    dk <- ident
-    keyword "policy"
-    dp <- ident
-    persistence <-
-        option InkPersistFull $
-            keyword "persist"
-                *> symbol "="
-                *> choice
-                    [ InkPersistFull <$ keyword "full-envelope"
-                    , InkPersistDedupeOnly <$ keyword "dedupe-only"
-                    ]
-    dec <- pDecode
-    disp <- pDisposition
-    _ <- symbol "}"
-    pure
-        IntakeNode
-            { inkName = nm
-            , inkContract = ctr
-            , inkTopic = tp
-            , inkAccept = acc
-            , inkBinds = binds
-            , inkDedupeKey = dk
-            , inkDedupePolicy = dp
-            , inkPersist = persistence
-            , inkDecode = dec
-            , inkDisposition = disp
-            , inkLoc = loc
-            }
+  loc <- getLoc
+  keyword "intake"
+  nm <- ident
+  _ <- symbol "{"
+  keyword "contract"
+  ctr <- ident
+  keyword "topic"
+  tp <- ident
+  keyword "accept"
+  acc <- some ident
+  binds <- many pBindRow
+  keyword "dedupe"
+  keyword "key"
+  dk <- ident
+  keyword "policy"
+  dp <- ident
+  persistence <-
+    option InkPersistFull $
+      keyword "persist"
+        *> symbol "="
+        *> choice
+          [ InkPersistFull <$ keyword "full-envelope",
+            InkPersistDedupeOnly <$ keyword "dedupe-only"
+          ]
+  dec <- pDecode
+  disp <- pDisposition
+  _ <- symbol "}"
+  pure
+    IntakeNode
+      { inkName = nm,
+        inkContract = ctr,
+        inkTopic = tp,
+        inkAccept = acc,
+        inkBinds = binds,
+        inkDedupeKey = dk,
+        inkDedupePolicy = dp,
+        inkPersist = persistence,
+        inkDecode = dec,
+        inkDisposition = disp,
+        inkLoc = loc
+      }
   where
     pBindRow = do
-        keyword "bind"
-        f <- ident
-        keyword "from"
-        src <- pWireSource
-        req <- option False (True <$ keyword "required")
-        xc <- option False (True <$ (keyword "cross-check" *> keyword "body"))
-        pure BindRow{brField = f, brSource = src, brRequired = req, brCrossCheck = xc}
+      keyword "bind"
+      f <- ident
+      keyword "from"
+      src <- pWireSource
+      req <- option False (True <$ keyword "required")
+      xc <- option False (True <$ (keyword "cross-check" *> keyword "body"))
+      pure BindRow {brField = f, brSource = src, brRequired = req, brCrossCheck = xc}
     pWireSource =
-        choice
-            [ SrcHeader <$> (keyword "header" *> stringLit)
-            , SrcKafkaKey <$ keyword "kafka-key"
-            , SrcKafkaCursor <$ keyword "kafka-cursor"
-            , SrcBody <$ keyword "body"
-            ]
+      choice
+        [ SrcHeader <$> (keyword "header" *> stringLit),
+          SrcKafkaKey <$ keyword "kafka-key",
+          SrcKafkaCursor <$ keyword "kafka-cursor",
+          SrcBody <$ keyword "body"
+        ]
     pDecode = do
-        keyword "decode"
-        _ <- symbol "{"
-        keyword "envelope"
-        env <- pEnvelopePolicy
-        keyword "body"
-        strict <- (True <$ keyword "strict") <|> (False <$ keyword "lenient")
-        keyword "schemaVersion"
-        _ <- symbol "=="
-        v <- boundedDecimal
-        _ <- symbol "}"
-        pure DecodeSpec{decEnvelope = env, decBodyStrict = strict, decBodySchemaVersion = v}
+      keyword "decode"
+      _ <- symbol "{"
+      keyword "envelope"
+      env <- pEnvelopePolicy
+      keyword "body"
+      strict <- (True <$ keyword "strict") <|> (False <$ keyword "lenient")
+      keyword "schemaVersion"
+      _ <- symbol "=="
+      v <- boundedDecimal
+      _ <- symbol "}"
+      pure DecodeSpec {decEnvelope = env, decBodyStrict = strict, decBodySchemaVersion = v}
     pEnvelopePolicy = do
-        a <- wireWord
-        b <- wireWord
-        pure (a <> " " <> b)
+      a <- wireWord
+      b <- wireWord
+      pure (a <> " " <> b)
     pDisposition = do
-        keyword "disposition"
-        rows <- braces (many pDispositionRow)
-        pure rows
+      keyword "disposition"
+      rows <- braces (many pDispositionRow)
+      pure rows
     pDispositionRow = do
-        loc <- getLoc
-        o <- ident
-        _ <- symbol "=>"
-        act <- pInboxAction
-        pure DispositionRow{drOutcome = o, drAction = act, drLoc = loc}
+      loc <- getLoc
+      o <- ident
+      _ <- symbol "=>"
+      act <- pInboxAction
+      pure DispositionRow {drOutcome = o, drAction = act, drLoc = loc}
     pInboxAction =
-        choice
-            [ IAckOk <$ keyword "ackOk"
-            , IRetry <$> (keyword "retry" *> pWindow)
-            , IDeadLetter <$> (keyword "deadLetter" *> optional stringLit)
-            ]
+      choice
+        [ IAckOk <$ keyword "ackOk",
+          IRetry <$> (keyword "retry" *> pWindow),
+          IDeadLetter <$> (keyword "deadLetter" *> optional stringLit)
+        ]
 
 pEmit :: P EmitNode
 pEmit = do
-    loc <- getLoc
-    keyword "emit"
-    nm <- ident
-    _ <- symbol "{"
-    keyword "contract"
-    ctr <- ident
-    keyword "topic"
-    tp <- ident
-    keyword "source"
-    src <- stringLit
-    keyword "key"
-    k <- ident
-    keyword "map"
-    disc <- ident
-    (rows, skip) <- braces pMapRows
-    keyword "messageId"
-    mid <- pDerive
-    keyword "idempotencyKey"
-    idk <- pDerive
-    _ <- symbol "}"
-    pure
-        EmitNode
-            { emName = nm
-            , emContract = ctr
-            , emTopic = tp
-            , emSource = src
-            , emKey = k
-            , emDiscriminant = disc
-            , emMap = rows
-            , emSkip = skip
-            , emMessageId = mid
-            , emIdempotencyKey = idk
-            , emLoc = loc
-            }
+  loc <- getLoc
+  keyword "emit"
+  nm <- ident
+  _ <- symbol "{"
+  keyword "contract"
+  ctr <- ident
+  keyword "topic"
+  tp <- ident
+  keyword "source"
+  src <- stringLit
+  keyword "key"
+  k <- ident
+  keyword "map"
+  disc <- ident
+  (rows, skip) <- braces pMapRows
+  keyword "messageId"
+  mid <- pDerive
+  keyword "idempotencyKey"
+  idk <- pDerive
+  _ <- symbol "}"
+  pure
+    EmitNode
+      { emName = nm,
+        emContract = ctr,
+        emTopic = tp,
+        emSource = src,
+        emKey = k,
+        emDiscriminant = disc,
+        emMap = rows,
+        emSkip = skip,
+        emMessageId = mid,
+        emIdempotencyKey = idk,
+        emLoc = loc
+      }
   where
     pMapRows = do
-        rows <- many pMapRow
-        skip <- option False (True <$ try (symbol "_" *> symbol "=>" *> keyword "skip"))
-        pure (rows, skip)
+      rows <- many pMapRow
+      skip <- option False (True <$ try (symbol "_" *> symbol "=>" *> keyword "skip"))
+      pure (rows, skip)
     pMapRow = try $ do
-        loc <- getLoc
-        v <- stringLit
-        _ <- symbol "=>"
-        ev <- ident
-        pure EmitMapRow{emrValue = v, emrEvent = ev, emrLoc = loc}
+      loc <- getLoc
+      v <- stringLit
+      _ <- symbol "=>"
+      ev <- ident
+      pure EmitMapRow {emrValue = v, emrEvent = ev, emrLoc = loc}
     pDerive = do
-        keyword "derive"
-        pfx <- optional stringLit
-        keyword "hole"
-        pure DeriveSpec{dsPrefix = pfx}
+      keyword "derive"
+      pfx <- optional stringLit
+      keyword "hole"
+      pure DeriveSpec {dsPrefix = pfx}
 
 pPublisher :: P PublisherNode
 pPublisher = do
-    loc <- getLoc
-    keyword "publisher"
-    nm <- ident
-    _ <- symbol "{"
-    keyword "emit"
-    em <- ident
-    keyword "ordering"
-    ord <- ident
-    keyword "maxAttempts"
-    ma <- boundedDecimal
-    keyword "backoff"
-    bk <- ident
-    bw <- pWindow
-    bm <- optional (keyword "max" *> symbol "=" *> pWindow)
-    multiplier <- optional (keyword "multiplier" *> symbol "=" *> decimalText)
-    keyword "outboxId"
-    keyword "stable"
-    keyword "from"
-    obf <- ident
-    _ <- symbol "}"
-    pure
-        PublisherNode
-            { pubName = nm
-            , pubEmit = em
-            , pubOrdering = ord
-            , pubMaxAttempts = ma
-            , pubBackoff = BackoffSpec{boKind = bk, boWindow = bw, boMax = bm, boMultiplier = multiplier}
-            , pubOutboxField = obf
-            , pubLoc = loc
-            }
+  loc <- getLoc
+  keyword "publisher"
+  nm <- ident
+  _ <- symbol "{"
+  keyword "emit"
+  em <- ident
+  keyword "ordering"
+  ord <- ident
+  keyword "maxAttempts"
+  ma <- boundedDecimal
+  keyword "backoff"
+  bk <- ident
+  bw <- pWindow
+  bm <- optional (keyword "max" *> symbol "=" *> pWindow)
+  multiplier <- optional (keyword "multiplier" *> symbol "=" *> decimalText)
+  keyword "outboxId"
+  keyword "stable"
+  keyword "from"
+  obf <- ident
+  _ <- symbol "}"
+  pure
+    PublisherNode
+      { pubName = nm,
+        pubEmit = em,
+        pubOrdering = ord,
+        pubMaxAttempts = ma,
+        pubBackoff = BackoffSpec {boKind = bk, boWindow = bw, boMax = bm, boMultiplier = multiplier},
+        pubOutboxField = obf,
+        pubLoc = loc
+      }
 
 pWorkqueue :: P WorkqueueNode
 pWorkqueue = do
-    loc <- getLoc
-    keyword "workqueue"
-    nm <- ident
-    _ <- symbol "{"
-    keyword "queue"
-    _ <- symbol "logical" *> symbol "="
-    logical <- stringLit
-    keyword "derive"
-    _ <- symbol "physical" *> symbol "="
-    phys <- stringLit
-    _ <- symbol "dlq" *> symbol "="
-    dlqName <- stringLit
-    _ <- symbol "table" *> symbol "="
-    tbl <- stringLit
-    ordering <- option WqUnordered pOrdering
-    groupKey <- optional pGroupKey
-    provision <- option WqStandard pProvision
-    keyword "payload"
-    pn <- ident
-    fields <- braces (many pWqField)
-    keyword "retry"
-    _ <- symbol "maxRetries" *> symbol "="
-    mr <- boundedDecimal
-    _ <- symbol "delay" *> symbol "="
-    dl <- pWindow
-    _ <- symbol "dlq" *> symbol "="
-    dlqOn <- (True <$ keyword "on") <|> (False <$ keyword "off")
-    keyword "disposition"
-    disp <- braces (many pWqDispRow)
-    _ <- symbol "}"
-    pure
-        WorkqueueNode
-            { wqName = nm
-            , wqLogical = logical
-            , wqPhysical = phys
-            , wqDlq = dlqName
-            , wqTable = tbl
-            , wqOrdering = ordering
-            , wqGroupKey = groupKey
-            , wqProvision = provision
-            , wqPayloadName = pn
-            , wqPayload = fields
-            , wqMaxRetries = mr
-            , wqDelay = dl
-            , wqDlqOn = dlqOn
-            , wqDisposition = disp
-            , wqLoc = loc
-            }
+  loc <- getLoc
+  keyword "workqueue"
+  nm <- ident
+  _ <- symbol "{"
+  keyword "queue"
+  _ <- symbol "logical" *> symbol "="
+  logical <- stringLit
+  keyword "derive"
+  _ <- symbol "physical" *> symbol "="
+  phys <- stringLit
+  _ <- symbol "dlq" *> symbol "="
+  dlqName <- stringLit
+  _ <- symbol "table" *> symbol "="
+  tbl <- stringLit
+  ordering <- option WqUnordered pOrdering
+  groupKey <- optional pGroupKey
+  provision <- option WqStandard pProvision
+  keyword "payload"
+  pn <- ident
+  fields <- braces (many pWqField)
+  keyword "retry"
+  _ <- symbol "maxRetries" *> symbol "="
+  mr <- boundedDecimal
+  _ <- symbol "delay" *> symbol "="
+  dl <- pWindow
+  _ <- symbol "dlq" *> symbol "="
+  dlqOn <- (True <$ keyword "on") <|> (False <$ keyword "off")
+  keyword "disposition"
+  disp <- braces (many pWqDispRow)
+  _ <- symbol "}"
+  pure
+    WorkqueueNode
+      { wqName = nm,
+        wqLogical = logical,
+        wqPhysical = phys,
+        wqDlq = dlqName,
+        wqTable = tbl,
+        wqOrdering = ordering,
+        wqGroupKey = groupKey,
+        wqProvision = provision,
+        wqPayloadName = pn,
+        wqPayload = fields,
+        wqMaxRetries = mr,
+        wqDelay = dl,
+        wqDlqOn = dlqOn,
+        wqDisposition = disp,
+        wqLoc = loc
+      }
   where
     pOrdering = do
-        _ <- symbol "ordering"
-        choice
-            [ WqUnordered <$ symbol "unordered"
-            , WqFifoThroughput <$ symbol "fifo-throughput"
-            , WqFifoRoundRobin <$ symbol "fifo-roundrobin"
-            ]
+      _ <- symbol "ordering"
+      choice
+        [ WqUnordered <$ symbol "unordered",
+          WqFifoThroughput <$ symbol "fifo-throughput",
+          WqFifoRoundRobin <$ symbol "fifo-roundrobin"
+        ]
     pGroupKey = do
-        _ <- symbol "group" *> symbol "key" *> symbol "from"
-        field <- ident
-        _ <- symbol "via"
-        via <- ident
-        fixture <- optional (symbol "fixture" *> stringLit)
-        pure WqGroupKey{gkField = field, gkVia = via, gkFixture = fixture}
+      _ <- symbol "group" *> symbol "key" *> symbol "from"
+      field <- ident
+      _ <- symbol "via"
+      via <- ident
+      fixture <- optional (symbol "fixture" *> stringLit)
+      pure WqGroupKey {gkField = field, gkVia = via, gkFixture = fixture}
     pProvision = do
-        _ <- symbol "provision"
-        choice
-            [ WqStandard <$ symbol "standard"
-            , WqUnlogged <$ symbol "unlogged"
-            , do
-                _ <- symbol "partitioned" *> symbol "("
-                _ <- symbol "interval" *> symbol "="
-                interval <- stringLit
-                _ <- symbol "," *> symbol "retention" *> symbol "="
-                retention <- stringLit
-                _ <- symbol ")"
-                pure (WqPartitioned interval retention)
-            ]
+      _ <- symbol "provision"
+      choice
+        [ WqStandard <$ symbol "standard",
+          WqUnlogged <$ symbol "unlogged",
+          do
+            _ <- symbol "partitioned" *> symbol "("
+            _ <- symbol "interval" *> symbol "="
+            interval <- stringLit
+            _ <- symbol "," *> symbol "retention" *> symbol "="
+            retention <- stringLit
+            _ <- symbol ")"
+            pure (WqPartitioned interval retention)
+        ]
     pWqField = do
-        n <- ident
-        _ <- symbol "->"
-        w <- stringLit
-        ty <- ident
-        req <- option False (True <$ keyword "required")
-        pure WqField{wqfName = n, wqfWire = w, wqfType = ty, wqfRequired = req}
+      n <- ident
+      _ <- symbol "->"
+      w <- stringLit
+      ty <- ident
+      req <- option False (True <$ keyword "required")
+      pure WqField {wqfName = n, wqfWire = w, wqfType = ty, wqfRequired = req}
     pWqDispRow = do
-        loc <- getLoc
-        o <- ident
-        _ <- symbol "->"
-        act <- choice [IAckOk <$ keyword "ackOk", IRetry <$> (keyword "retry" *> pWindow), IDeadLetter <$> (keyword "deadLetter" *> optional stringLit)]
-        pure WqDispRow{wqdOutcome = o, wqdAction = act, wqdLoc = loc}
+      loc <- getLoc
+      o <- ident
+      _ <- symbol "->"
+      act <- choice [IAckOk <$ keyword "ackOk", IRetry <$> (keyword "retry" *> pWindow), IDeadLetter <$> (keyword "deadLetter" *> optional stringLit)]
+      pure WqDispRow {wqdOutcome = o, wqdAction = act, wqdLoc = loc}
 
 pReadModel :: P ReadModelNode
 pReadModel = do
-    loc <- getLoc
-    keyword "readmodel"
-    name <- ident
-    _ <- symbol "{"
-    _ <- symbol "table" *> symbol "="
-    table <- stringLit
-    _ <- symbol "schema" *> symbol "="
-    schema <- stringLit
-    _ <- symbol "columns"
-    columns <- braces (many pColumn)
-    _ <- symbol "version" *> symbol "="
-    version <- boundedDecimal
-    _ <- symbol "shape" *> symbol "="
-    shape <- stringLit
-    _ <- symbol "consistency" *> symbol "="
-    consistency <- pConsistency
-    scope <- optional (symbol "scope" *> symbol "=" *> pScope)
-    _ <- symbol "feed" *> symbol "="
-    feed <- pFeed
-    subscription <- optional (symbol "subscription" *> symbol "=" *> stringLit)
-    _ <- symbol "}"
-    pure
-        ReadModelNode
-            { rmName = name
-            , rmTable = table
-            , rmSchema = schema
-            , rmColumns = columns
-            , rmVersion = version
-            , rmShape = shape
-            , rmConsistency = consistency
-            , rmScope = scope
-            , rmFeed = feed
-            , rmSubscription = subscription
-            , rmLoc = loc
-            }
+  loc <- getLoc
+  keyword "readmodel"
+  name <- ident
+  _ <- symbol "{"
+  _ <- symbol "table" *> symbol "="
+  table <- stringLit
+  _ <- symbol "schema" *> symbol "="
+  schema <- stringLit
+  _ <- symbol "columns"
+  columns <- braces (many pColumn)
+  _ <- symbol "version" *> symbol "="
+  version <- boundedDecimal
+  _ <- symbol "shape" *> symbol "="
+  shape <- stringLit
+  _ <- symbol "consistency" *> symbol "="
+  consistency <- pConsistency
+  scope <- optional (symbol "scope" *> symbol "=" *> pScope)
+  _ <- symbol "feed" *> symbol "="
+  feed <- pFeed
+  subscription <- optional (symbol "subscription" *> symbol "=" *> stringLit)
+  _ <- symbol "}"
+  pure
+    ReadModelNode
+      { rmName = name,
+        rmTable = table,
+        rmSchema = schema,
+        rmColumns = columns,
+        rmVersion = version,
+        rmShape = shape,
+        rmConsistency = consistency,
+        rmScope = scope,
+        rmFeed = feed,
+        rmSubscription = subscription,
+        rmLoc = loc
+      }
   where
     pColumn =
-        RmColumn
-            <$> wireWord
-            <*> ident
-            <*> option False (True <$ keyword "required")
+      RmColumn
+        <$> wireWord
+        <*> ident
+        <*> option False (True <$ keyword "required")
     pConsistency = choice [Strong <$ keyword "Strong", Eventual <$ keyword "Eventual"]
     pScope =
-        choice
-            [ RmEntireLog <$ keyword "entire-log"
-            , RmCategory <$> (keyword "category" *> stringLit)
-            ]
+      choice
+        [ RmEntireLog <$ keyword "entire-log",
+          RmCategory <$> (keyword "category" *> stringLit)
+        ]
     pFeed = choice [RmInline <$ keyword "inline", RmSubscription <$ keyword "subscription"]
 
 pPgmqDispatch :: P PgmqDispatchNode
 pPgmqDispatch = do
-    loc <- getLoc
-    keyword "dispatch"
-    nm <- ident
-    _ <- symbol "{"
-    keyword "source"
-    _ <- symbol "readModel" *> symbol "="
-    srm <- ident
-    _ <- symbol "key" *> symbol "="
-    sk <- ident
-    keyword "fanout"
-    _ <- symbol "body" *> symbol "="
-    fb <- ident
-    keyword "dedup"
-    _ <- symbol "key" *> symbol "="
-    dk <- ident
-    _ <- keyword "seenIn" *> symbol "readModel" *> symbol "="
-    drm <- ident
-    _ <- symbol "field" *> symbol "="
-    drmf <- ident
-    _ <- keyword "seenIn" *> symbol "queue" *> symbol "="
-    dq <- ident
-    _ <- symbol "field" *> symbol "="
-    dqf <- ident
-    keyword "enqueue"
-    _ <- symbol "to" *> symbol "="
-    enq <- ident
-    _ <- symbol "}"
-    pure
-        PgmqDispatchNode
-            { pdName = nm
-            , pdSourceReadModel = srm
-            , pdSourceKey = sk
-            , pdFanoutBody = fb
-            , pdDedupKey = dk
-            , pdDedupReadModel = drm
-            , pdDedupReadModelField = drmf
-            , pdDedupQueue = dq
-            , pdDedupQueueField = dqf
-            , pdEnqueueTo = enq
-            , pdLoc = loc
-            }
+  loc <- getLoc
+  keyword "dispatch"
+  nm <- ident
+  _ <- symbol "{"
+  keyword "source"
+  _ <- symbol "readModel" *> symbol "="
+  srm <- ident
+  _ <- symbol "key" *> symbol "="
+  sk <- ident
+  keyword "fanout"
+  _ <- symbol "body" *> symbol "="
+  fb <- ident
+  keyword "dedup"
+  _ <- symbol "key" *> symbol "="
+  dk <- ident
+  _ <- keyword "seenIn" *> symbol "readModel" *> symbol "="
+  drm <- ident
+  _ <- symbol "field" *> symbol "="
+  drmf <- ident
+  _ <- keyword "seenIn" *> symbol "queue" *> symbol "="
+  dq <- ident
+  _ <- symbol "field" *> symbol "="
+  dqf <- ident
+  keyword "enqueue"
+  _ <- symbol "to" *> symbol "="
+  enq <- ident
+  _ <- symbol "}"
+  pure
+    PgmqDispatchNode
+      { pdName = nm,
+        pdSourceReadModel = srm,
+        pdSourceKey = sk,
+        pdFanoutBody = fb,
+        pdDedupKey = dk,
+        pdDedupReadModel = drm,
+        pdDedupReadModelField = drmf,
+        pdDedupQueue = dq,
+        pdDedupQueueField = dqf,
+        pdEnqueueTo = enq,
+        pdLoc = loc
+      }
 
 pWorkflow :: P WorkflowNode
 pWorkflow = do
-    loc <- getLoc
-    keyword "workflow"
-    wid <- ident
-    keyword "name"
-    nm <- stringLit
-    keyword "in"
-    inTy <- ident
-    inFields <- option [] (braces (many pField))
-    keyword "out"
-    outTy <- ident
-    keyword "id"
-    keyword "from"
-    keyword "input"
-    idField <- optional (symbol "." *> ident)
-    keyword "via"
-    idVia <- ident
-    keyword "body"
-    body <- many pWfBodyItem
-    pure
-        WorkflowNode
-            { wfId = wid
-            , wfStable = nm
-            , wfInput = inTy
-            , wfInputFields = inFields
-            , wfOutput = outTy
-            , wfIdField = idField
-            , wfIdVia = idVia
-            , wfBody = body
-            , wfLoc = loc
-            }
+  loc <- getLoc
+  keyword "workflow"
+  wid <- ident
+  keyword "name"
+  nm <- stringLit
+  keyword "in"
+  inTy <- ident
+  inFields <- option [] (braces (many pField))
+  keyword "out"
+  outTy <- ident
+  keyword "id"
+  keyword "from"
+  keyword "input"
+  idField <- optional (symbol "." *> ident)
+  keyword "via"
+  idVia <- ident
+  keyword "body"
+  body <- many pWfBodyItem
+  pure
+    WorkflowNode
+      { wfId = wid,
+        wfStable = nm,
+        wfInput = inTy,
+        wfInputFields = inFields,
+        wfOutput = outTy,
+        wfIdField = idField,
+        wfIdVia = idVia,
+        wfBody = body,
+        wfLoc = loc
+      }
   where
     pWfBodyItem =
-        choice
-            [ do
-                loc <- getLoc
-                WfStep <$> (keyword "step" *> wireWord) <*> (symbol "->" *> ident) <*> pure loc
-            , do
-                loc <- getLoc
-                WfAwait <$> (keyword "await" *> wireWord) <*> (symbol "->" *> ident) <*> pure loc
-            , do
-                loc <- getLoc
-                WfSleep <$> (keyword "sleep" *> wireWord) <*> (keyword "after" *> ident) <*> pure loc
-            , do
-                loc <- getLoc
-                WfChild
-                    <$> (keyword "child" *> wireWord)
-                    <*> (keyword "id" *> keyword "input" *> keyword "via" *> ident)
-                    <*> (symbol "->" *> ident)
-                    <*> pure loc
-            , do
-                loc <- getLoc
-                WfPatch
-                    <$> (keyword "patch" *> patchIdWord)
-                    <*> braces (many pWfBodyItem)
-                    <*> pure loc
-            , do
-                loc <- getLoc
-                WfContinueAsNew <$> (keyword "continueAsNew" *> ident) <*> pure loc
-            ]
+      choice
+        [ do
+            loc <- getLoc
+            WfStep <$> (keyword "step" *> wireWord) <*> (symbol "->" *> ident) <*> pure loc,
+          do
+            loc <- getLoc
+            WfAwait <$> (keyword "await" *> wireWord) <*> (symbol "->" *> ident) <*> pure loc,
+          do
+            loc <- getLoc
+            WfSleep <$> (keyword "sleep" *> wireWord) <*> (keyword "after" *> ident) <*> pure loc,
+          do
+            loc <- getLoc
+            WfChild
+              <$> (keyword "child" *> wireWord)
+              <*> (keyword "id" *> keyword "input" *> keyword "via" *> ident)
+              <*> (symbol "->" *> ident)
+              <*> pure loc,
+          do
+            loc <- getLoc
+            WfPatch
+              <$> (keyword "patch" *> patchIdWord)
+              <*> braces (many pWfBodyItem)
+              <*> pure loc,
+          do
+            loc <- getLoc
+            WfContinueAsNew <$> (keyword "continueAsNew" *> ident) <*> pure loc
+        ]
 
 pOperation :: P OperationNode
 pOperation = do
-    loc <- getLoc
-    keyword "operation"
-    nm <- ident
-    shape <-
-        choice
-            [ pCommandOp
-            , pQueryOp
-            , pSignalOp
-            , pRunOp
-            ]
-    pure OperationNode{opName = nm, opShape = shape, opLoc = loc}
+  loc <- getLoc
+  keyword "operation"
+  nm <- ident
+  shape <-
+    choice
+      [ pCommandOp,
+        pQueryOp,
+        pSignalOp,
+        pRunOp
+      ]
+  pure OperationNode {opName = nm, opShape = shape, opLoc = loc}
   where
     pCommandOp = do
-        keyword "command"
-        keyword "on"
-        agg <- ident
-        _ <- keyword "stream" *> keyword "from"
-        sf <- ident
-        keyword "via"
-        sv <- ident
-        proj <- option [] (keyword "project" *> brackets (many ident))
-        pure (CommandOp agg sf sv proj)
+      keyword "command"
+      keyword "on"
+      agg <- ident
+      _ <- keyword "stream" *> keyword "from"
+      sf <- ident
+      keyword "via"
+      sv <- ident
+      proj <- option [] (keyword "project" *> brackets (many ident))
+      pure (CommandOp agg sf sv proj)
     pQueryOp = do
-        keyword "query"
-        rm <- ident
-        keyword "input"
-        inp <- ident
-        keyword "result"
-        res <- pTypeExpr
-        cons <- option "Strong" (keyword "consistency" *> ident)
-        pure (QueryOp rm inp res cons)
+      keyword "query"
+      rm <- ident
+      keyword "input"
+      inp <- ident
+      keyword "result"
+      res <- pTypeExpr
+      cons <- option "Strong" (keyword "consistency" *> ident)
+      pure (QueryOp rm inp res cons)
     pSignalOp = do
-        keyword "signal"
-        lbl <- wireWord
-        keyword "of"
-        wf <- ident
-        _ <- keyword "key" *> keyword "from"
-        kf <- ident
-        keyword "via"
-        kv <- ident
-        keyword "value"
-        val <- ident
-        pure (SignalOp lbl wf kf kv val)
+      keyword "signal"
+      lbl <- wireWord
+      keyword "of"
+      wf <- ident
+      _ <- keyword "key" *> keyword "from"
+      kf <- ident
+      keyword "via"
+      kv <- ident
+      keyword "value"
+      val <- ident
+      pure (SignalOp lbl wf kf kv val)
     pRunOp = do
-        keyword "run"
-        wf <- ident
-        keyword "input"
-        inp <- ident
-        _ <- keyword "outcome" *> symbol "->"
-        oc <- ident
-        pure (RunOp wf inp oc)
+      keyword "run"
+      wf <- ident
+      keyword "input"
+      inp <- ident
+      _ <- keyword "outcome" *> symbol "->"
+      oc <- ident
+      pure (RunOp wf inp oc)
     -- A result type expression, possibly multi-word like @Maybe TransferDecision@.
     pTypeExpr = do
-        ws <- some ident
-        pure (T.unwords ws)
+      ws <- some ident
+      pure (T.unwords ws)
 
 --------------------------------------------------------------------------------
 -- Process manager + durable timer (EP-3)
@@ -1586,340 +1574,338 @@ pOperation = do
 
 pProcess :: P ProcessNode
 pProcess = do
-    loc <- getLoc
-    keyword "process"
-    pid <- ident
-    keyword "name"
-    nm <- stringLit
-    inp <- pInputDecl
-    corr <- pCorrelate
-    saga <- pSaga
-    keyword "target"
-    tgt <- ident
-    projs <- keyword "projections" *> brackets (many ident)
-    handle <- pHandle
-    _ <- optional pDispatchIdLine
-    rejected <- pPolicyLine "rejected"
-    poison <- pPolicyLine "poison"
-    timer <- pTimerNode
-    pure
-        ProcessNode
-            { procId = pid
-            , procName = nm
-            , procInput = inp
-            , procCorrelate = corr
-            , procSaga = saga
-            , procTarget = tgt
-            , procProjections = projs
-            , procHandle = handle
-            , procRejected = rejected
-            , procPoison = poison
-            , procTimer = timer
-            , procLoc = loc
-            }
+  loc <- getLoc
+  keyword "process"
+  pid <- ident
+  keyword "name"
+  nm <- stringLit
+  inp <- pInputDecl
+  corr <- pCorrelate
+  saga <- pSaga
+  keyword "target"
+  tgt <- ident
+  projs <- keyword "projections" *> brackets (many ident)
+  handle <- pHandle
+  _ <- optional pDispatchIdLine
+  rejected <- pPolicyLine "rejected"
+  poison <- pPolicyLine "poison"
+  timer <- pTimerNode
+  pure
+    ProcessNode
+      { procId = pid,
+        procName = nm,
+        procInput = inp,
+        procCorrelate = corr,
+        procSaga = saga,
+        procTarget = tgt,
+        procProjections = projs,
+        procHandle = handle,
+        procRejected = rejected,
+        procPoison = poison,
+        procTimer = timer,
+        procLoc = loc
+      }
 
 pRouter :: P RouterNode
 pRouter = do
-    loc <- getLoc
-    keyword "router"
-    rid <- ident
-    keyword "name"
-    nm <- stringLit
-    inp <- pInputDecl
-    key <- pRouterKey
-    resolved <- pResolveDecl
-    keyword "target"
-    target <- ident
-    projections <- keyword "projections" *> brackets (many ident)
-    dispatch <- pRouterDispatch
-    pRouterDispatchIdLine
-    rejected <- pPolicyLine "rejected"
-    poison <- pPolicyLine "poison"
-    pure
-        RouterNode
-            { rtId = rid
-            , rtName = nm
-            , rtInput = inp
-            , rtKey = key
-            , rtResolve = resolved
-            , rtTarget = target
-            , rtProjections = projections
-            , rtDispatch = dispatch
-            , rtRejected = rejected
-            , rtPoison = poison
-            , rtLoc = loc
-            }
+  loc <- getLoc
+  keyword "router"
+  rid <- ident
+  keyword "name"
+  nm <- stringLit
+  inp <- pInputDecl
+  key <- pRouterKey
+  resolved <- pResolveDecl
+  keyword "target"
+  target <- ident
+  projections <- keyword "projections" *> brackets (many ident)
+  dispatch <- pRouterDispatch
+  pRouterDispatchIdLine
+  rejected <- pPolicyLine "rejected"
+  poison <- pPolicyLine "poison"
+  pure
+    RouterNode
+      { rtId = rid,
+        rtName = nm,
+        rtInput = inp,
+        rtKey = key,
+        rtResolve = resolved,
+        rtTarget = target,
+        rtProjections = projections,
+        rtDispatch = dispatch,
+        rtRejected = rejected,
+        rtPoison = poison,
+        rtLoc = loc
+      }
 
 pRouterKey :: P CorrelateDecl
 pRouterKey = do
-    keyword "key"
-    _ <- keyword "input" *> symbol "."
-    field <- ident
-    keyword "via"
-    via <- ident
-    pure CorrelateDecl{corrField = field, corrVia = via}
+  keyword "key"
+  _ <- keyword "input" *> symbol "."
+  field <- ident
+  keyword "via"
+  via <- ident
+  pure CorrelateDecl {corrField = field, corrVia = via}
 
 pResolveDecl :: P ResolveDecl
 pResolveDecl = do
-    loc <- getLoc
-    keyword "resolve"
-    keyword "stable"
-    keyword "via"
-    source <- choice [ResolveReadModel <$> (keyword "read-model" *> ident), ResolveHole <$ keyword "hole"]
-    keyword "row"
-    row <- braces (many ident)
-    pure ResolveDecl{rvSource = source, rvRow = row, rvLoc = loc}
+  loc <- getLoc
+  keyword "resolve"
+  keyword "stable"
+  keyword "via"
+  source <- choice [ResolveReadModel <$> (keyword "read-model" *> ident), ResolveHole <$ keyword "hole"]
+  keyword "row"
+  row <- braces (many ident)
+  pure ResolveDecl {rvSource = source, rvRow = row, rvLoc = loc}
 
 pRouterDispatch :: P RouterDispatchNode
 pRouterDispatch = do
-    loc <- getLoc
-    keyword "dispatch-each"
-    command <- ident
-    fields <- braces (many pFieldBinding)
-    disposition <-
-        DispatchDisposition
-            <$> (keyword "on-appended" *> pDisp)
-            <*> (symbol ";" *> keyword "on-duplicate" *> pDisp)
-            <*> (symbol ";" *> keyword "on-failed" *> pDisp)
-    pure RouterDispatchNode{rdCommand = command, rdFields = fields, rdDisposition = disposition, rdLoc = loc}
+  loc <- getLoc
+  keyword "dispatch-each"
+  command <- ident
+  fields <- braces (many pFieldBinding)
+  disposition <-
+    DispatchDisposition
+      <$> (keyword "on-appended" *> pDisp)
+      <*> (symbol ";" *> keyword "on-duplicate" *> pDisp)
+      <*> (symbol ";" *> keyword "on-failed" *> pDisp)
+  pure RouterDispatchNode {rdCommand = command, rdFields = fields, rdDisposition = disposition, rdLoc = loc}
 
 pRouterDispatchIdLine :: P ()
 pRouterDispatchIdLine = do
-    keyword "dispatch-id"
-    _ <- symbol "strategy" *> symbol "=" *> keyword "uuidv5"
-    _ <- symbol "from" *> symbol "=" *> parens fixedInputs
-    pure ()
+  keyword "dispatch-id"
+  _ <- symbol "strategy" *> symbol "=" *> keyword "uuidv5"
+  _ <- symbol "from" *> symbol "=" *> parens fixedInputs
+  pure ()
   where
     fixedInputs = do
-        keyword "name"
-        _ <- symbol ","
-        keyword "key"
-        _ <- symbol ","
-        keyword "sourceEventId"
-        _ <- symbol ","
-        keyword "targetStreamName"
-        _ <- symbol ","
-        keyword "occurrence"
+      keyword "name"
+      _ <- symbol ","
+      keyword "key"
+      _ <- symbol ","
+      keyword "sourceEventId"
+      _ <- symbol ","
+      keyword "targetStreamName"
+      _ <- symbol ","
+      keyword "occurrence"
 
 pPolicyLine :: Text -> P PolicyChoice
 pPolicyLine clause = keyword clause *> symbol "=>" *> pPolicyChoice
 
 pPolicyChoice :: P PolicyChoice
 pPolicyChoice =
-    choice
-        [ PolHalt <$ keyword "halt"
-        , PolDeadLetter <$ keyword "deadLetter"
-        , PolSkip <$ keyword "skip"
-        ]
+  choice
+    [ PolHalt <$ keyword "halt",
+      PolDeadLetter <$ keyword "deadLetter",
+      PolSkip <$ keyword "skip"
+    ]
 
 pInputDecl :: P InputDecl
 pInputDecl = do
-    keyword "input"
-    nm <- ident
-    fs <- braces (many pField)
-    pure InputDecl{inName = nm, inFields = fs}
+  keyword "input"
+  nm <- ident
+  fs <- braces (many pField)
+  pure InputDecl {inName = nm, inFields = fs}
 
 pCorrelate :: P CorrelateDecl
 pCorrelate = do
-    keyword "correlate"
-    _ <- keyword "input" *> symbol "."
-    f <- ident
-    keyword "via"
-    v <- ident
-    pure CorrelateDecl{corrField = f, corrVia = v}
+  keyword "correlate"
+  _ <- keyword "input" *> symbol "."
+  f <- ident
+  keyword "via"
+  v <- ident
+  pure CorrelateDecl {corrField = f, corrVia = v}
 
 pSaga :: P SagaRef
 pSaga = do
-    keyword "saga"
-    agg <- ident
-    keyword "category"
-    categoryName <- stringLit
-    pure SagaRef{sagaAgg = agg, sagaCategory = categoryName}
+  keyword "saga"
+  agg <- ident
+  keyword "category"
+  categoryName <- stringLit
+  pure SagaRef {sagaAgg = agg, sagaCategory = categoryName}
 
 pHandle :: P HandleNode
 pHandle = do
-    keyword "on"
-    onName <- ident
-    adv <- pAdvance
-    disps <- many pDispatch
-    keyword "schedule"
-    sched <- ident
-    pure HandleNode{hOn = onName, hAdvance = adv, hDispatch = disps, hSchedule = sched}
+  keyword "on"
+  onName <- ident
+  adv <- pAdvance
+  disps <- many pDispatch
+  keyword "schedule"
+  sched <- ident
+  pure HandleNode {hOn = onName, hAdvance = adv, hDispatch = disps, hSchedule = sched}
 
 pAdvance :: P AdvanceNode
 pAdvance = do
-    keyword "advance"
-    cmd <- ident
-    fs <- braces (many pFieldBinding)
-    pure AdvanceNode{advCommand = cmd, advFields = fs}
+  keyword "advance"
+  cmd <- ident
+  fs <- braces (many pFieldBinding)
+  pure AdvanceNode {advCommand = cmd, advFields = fs}
 
 pDispatch :: P DispatchNode
 pDispatch = do
-    loc <- getLoc
-    keyword "dispatch"
-    tgt <- ident
-    _ <- symbol "@"
-    key <- dottedRef
-    cmd <- ident
-    fs <- braces (many pFieldBinding)
-    disp <-
-        DispatchDisposition
-            <$> (keyword "on-appended" *> pDisp)
-            <*> (symbol ";" *> keyword "on-duplicate" *> pDisp)
-            <*> (symbol ";" *> keyword "on-failed" *> pDisp)
-    pure DispatchNode{dispTarget = tgt, dispKey = key, dispCommand = cmd, dispFields = fs, dispDisposition = disp, dispLoc = loc}
+  loc <- getLoc
+  keyword "dispatch"
+  tgt <- ident
+  _ <- symbol "@"
+  key <- dottedRef
+  cmd <- ident
+  fs <- braces (many pFieldBinding)
+  disp <-
+    DispatchDisposition
+      <$> (keyword "on-appended" *> pDisp)
+      <*> (symbol ";" *> keyword "on-duplicate" *> pDisp)
+      <*> (symbol ";" *> keyword "on-failed" *> pDisp)
+  pure DispatchNode {dispTarget = tgt, dispKey = key, dispCommand = cmd, dispFields = fs, dispDisposition = disp, dispLoc = loc}
 
 pDisp :: P Disp
 pDisp =
-    choice
-        [ DAckOk <$ keyword "AckOk"
-        , DRetry <$ keyword "Retry"
-        , DDeadLetter <$> (keyword "DeadLetter" *> stringLit)
-        ]
+  choice
+    [ DAckOk <$ keyword "AckOk",
+      DRetry <$ keyword "Retry",
+      DDeadLetter <$> (keyword "DeadLetter" *> stringLit)
+    ]
 
 -- The dispatch-id line is a fixed, runtime-owned strategy; parse and discard.
 pDispatchIdLine :: P ()
 pDispatchIdLine = do
-    keyword "dispatch-id"
-    _ <- symbol "strategy" *> symbol "=" *> ident
-    _ <- symbol "from" *> symbol "=" *> parens (sepBy dottedRef (symbol ","))
-    pure ()
+  keyword "dispatch-id"
+  _ <- symbol "strategy" *> symbol "=" *> ident
+  _ <- symbol "from" *> symbol "=" *> parens (sepBy dottedRef (symbol ","))
+  pure ()
 
 pTimerNode :: P TimerNode
 pTimerNode = do
-    loc <- getLoc
-    keyword "timer"
-    nm <- ident
-    tid <- keyword "id" *> pIdExpr
-    fat <- keyword "fireAt" *> pFireAt
-    pay <- keyword "payload" *> braces (many pFieldBinding)
-    fire <- pFire
-    _ <- keyword "decode" *> keyword "unknown-status" *> symbol "=>"
-    unk <- ident
-    keyword "max-attempts"
-    ma <- boundedDecimal
-    keyword "dead-letter"
-    dl <- stringLit
-    pure
-        TimerNode
-            { tmName = nm
-            , tmId = tid
-            , tmFireAt = fat
-            , tmPayload = pay
-            , tmFire = fire
-            , tmDecodeUnknown = unk
-            , tmMaxAttempts = ma
-            , tmDeadLetter = dl
-            , tmLoc = loc
-            }
+  loc <- getLoc
+  keyword "timer"
+  nm <- ident
+  tid <- keyword "id" *> pIdExpr
+  fat <- keyword "fireAt" *> pFireAt
+  pay <- keyword "payload" *> braces (many pFieldBinding)
+  fire <- pFire
+  _ <- keyword "decode" *> keyword "unknown-status" *> symbol "=>"
+  unk <- ident
+  keyword "max-attempts"
+  ma <- boundedDecimal
+  keyword "dead-letter"
+  dl <- stringLit
+  pure
+    TimerNode
+      { tmName = nm,
+        tmId = tid,
+        tmFireAt = fat,
+        tmPayload = pay,
+        tmFire = fire,
+        tmDecodeUnknown = unk,
+        tmMaxAttempts = ma,
+        tmDeadLetter = dl,
+        tmLoc = loc
+      }
 
 pIdExpr :: P IdExpr
 pIdExpr = do
-    keyword "uuidv5"
-    pfx <- stringLit
-    _ <- symbol "<>"
-    _ <- ident -- correlationId (fixed)
-    pure IdExpr{ideStrategy = UuidV5Id, idePrefix = pfx}
+  keyword "uuidv5"
+  pfx <- stringLit
+  _ <- symbol "<>"
+  _ <- ident -- correlationId (fixed)
+  pure IdExpr {ideStrategy = UuidV5Id, idePrefix = pfx}
 
 pFireAt :: P FireAtExpr
 pFireAt = do
-    _ <- keyword "input" *> symbol "."
-    f <- ident
-    _ <- symbol "+"
-    w <- pWindow
-    pure FireAtExpr{faField = f, faWindow = w}
+  _ <- keyword "input" *> symbol "."
+  f <- ident
+  _ <- symbol "+"
+  w <- pWindow
+  pure FireAtExpr {faField = f, faWindow = w}
 
 pWindow :: P Text
 pWindow = lexeme $ do
-    ds <- some digitChar
-    u <- choice [char 's', char 'm', char 'h'] <?> "time unit: s, m, or h"
-    notFollowedBy letterChar <?> "time unit: s, m, or h"
-    pure (T.pack (ds <> [u]))
+  ds <- some digitChar
+  u <- choice [char 's', char 'm', char 'h'] <?> "time unit: s, m, or h"
+  notFollowedBy letterChar <?> "time unit: s, m, or h"
+  pure (T.pack (ds <> [u]))
 
 decimalText :: P Text
 decimalText = lexeme $ do
-    whole <- some digitChar
-    fractional <- optional (char '.' *> some digitChar)
-    pure (T.pack (whole <> maybe "" ('.' :) fractional))
+  whole <- some digitChar
+  fractional <- optional (char '.' *> some digitChar)
+  pure (T.pack (whole <> maybe "" ('.' :) fractional))
 
 signedDecimalText :: P Text
 signedDecimalText = lexeme $ do
-    sign <- optional (char '-')
-    digits <- some digitChar
-    fractional <- optional (char '.' *> some digitChar)
-    pure (T.pack (maybe "" pure sign <> digits <> maybe "" ('.' :) fractional))
+  sign <- optional (char '-')
+  digits <- some digitChar
+  fractional <- optional (char '.' *> some digitChar)
+  pure (T.pack (maybe "" pure sign <> digits <> maybe "" ('.' :) fractional))
 
 pFire :: P FireNode
 pFire = do
-    keyword "fire"
-    keyword "dispatch"
-    tgt <- ident
-    _ <- symbol "@"
-    key <- dottedRef
-    cmd <- ident
-    fs <- braces (many pFieldBinding)
-    fid <- keyword "fired-event-id" *> pIdExpr
-    disp <-
-        FireDisposition
-            <$> (keyword "on-ok" *> pFireOutcome)
-            <*> (symbol ";" *> keyword "on-reject" *> pFireOutcome)
-            <*> (symbol ";" *> keyword "on-ambiguous" *> pFireOutcome)
-            <*> (symbol ";" *> keyword "on-error" *> pFireOutcome)
-            <*> (symbol ";" *> keyword "not-mine" *> pFireOutcome)
-    pure FireNode{fireTarget = tgt, fireKey = key, fireCommand = cmd, fireFields = fs, fireFiredEventId = fid, fireDisposition = disp}
+  keyword "fire"
+  keyword "dispatch"
+  tgt <- ident
+  _ <- symbol "@"
+  key <- dottedRef
+  cmd <- ident
+  fs <- braces (many pFieldBinding)
+  fid <- keyword "fired-event-id" *> pIdExpr
+  disp <-
+    FireDisposition
+      <$> (keyword "on-ok" *> pFireOutcome)
+      <*> (symbol ";" *> keyword "on-reject" *> pFireOutcome)
+      <*> (symbol ";" *> keyword "on-ambiguous" *> pFireOutcome)
+      <*> (symbol ";" *> keyword "on-error" *> pFireOutcome)
+      <*> (symbol ";" *> keyword "not-mine" *> pFireOutcome)
+  pure FireNode {fireTarget = tgt, fireKey = key, fireCommand = cmd, fireFields = fs, fireFiredEventId = fid, fireDisposition = disp}
 
 pFireOutcome :: P FireOutcome
 pFireOutcome = choice [OFired <$ keyword "Fired", ORetry <$ keyword "Retry"]
 
 pFieldBinding :: P FieldBinding
 pFieldBinding = do
-    n <- ident
-    v <- optional (symbol "=" *> pBindingValue)
-    pure FieldBinding{fbName = n, fbValue = v}
+  n <- ident
+  v <- optional (symbol "=" *> pBindingValue)
+  pure FieldBinding {fbName = n, fbValue = v}
 
 -- | A binding value: a quoted string (kept quoted) or a dotted reference.
 pBindingValue :: P Text
 pBindingValue = choice [quoted, dottedRef]
   where
     quoted = do
-        s <- stringLit
-        pure ("\"" <> s <> "\"")
+      s <- stringLit
+      pure ("\"" <> s <> "\"")
 
-{- | A dotted/plain reference token like @input.hospitalId@, @timer.id@,
-@correlationId@.
--}
+-- | A dotted/plain reference token like @input.hospitalId@, @timer.id@,
+-- @correlationId@.
 dottedRef :: P Text
 dottedRef = lexeme $ do
-    c <- asciiLetter
-    cs <- many (asciiAlphaNum <|> char '_' <|> char '.')
-    pure (T.pack (c : cs))
+  c <- asciiLetter
+  cs <- many (asciiAlphaNum <|> char '_' <|> char '.')
+  pure (T.pack (c : cs))
 
-{- | A double-quoted string literal, returning raw (unescaped) inner text.
-The surface syntax supports a closed escape set so unknown escapes remain
-available for backward-compatible extensions.
--}
+-- | A double-quoted string literal, returning raw (unescaped) inner text.
+-- The surface syntax supports a closed escape set so unknown escapes remain
+-- available for backward-compatible extensions.
 stringLit :: P Text
 stringLit = lexeme $ do
-    _ <- char '"'
-    s <- many strChar
-    _ <- char '"'
-    pure (T.pack s)
+  _ <- char '"'
+  s <- many strChar
+  _ <- char '"'
+  pure (T.pack s)
   where
     strChar =
-        choice
-            [ char '\\' *> escapeCode
-            , char '\n' *> fail "unescaped newline in string literal (write \\n)"
-            , anySingleBut '"'
-            ]
+      choice
+        [ char '\\' *> escapeCode,
+          char '\n' *> fail "unescaped newline in string literal (write \\n)",
+          anySingleBut '"'
+        ]
     escapeCode =
-        choice
-            [ '"' <$ char '"'
-            , '\\' <$ char '\\'
-            , '\n' <$ char 'n'
-            , '\t' <$ char 't'
-            , '\r' <$ char 'r'
-            , anySingle >>= \c -> fail ("unknown escape sequence \\" <> [c] <> " in string literal")
-            ]
+      choice
+        [ '"' <$ char '"',
+          '\\' <$ char '\\',
+          '\n' <$ char 'n',
+          '\t' <$ char 't',
+          '\r' <$ char 'r',
+          anySingle >>= \c -> fail ("unknown escape sequence \\" <> [c] <> " in string literal")
+        ]
 
 brackets :: P a -> P a
 brackets = between (symbol "[") (symbol "]")
@@ -1929,69 +1915,69 @@ brackets = between (symbol "[") (symbol "]")
 --------------------------------------------------------------------------------
 
 data Clause
-    = CGuard Expr
-    | CWrite Name Expr
-    | CEmit Name
-    | CGoto Name
-    | CImplementationHole
+  = CGuard Expr
+  | CWrite Name Expr
+  | CEmit Name
+  | CGoto Name
+  | CImplementationHole
 
 pTransition :: Bool -> P Transition
 pTransition scalarSyntax = do
-    startOffset <- getOffset
-    loc <- getLoc
-    -- Plan 143: a @replay-only@ prefix marks the transition as serving
-    -- inversion only; it lowers to a keiki 'ReplayOnly' edge.
-    mode <- option TmLive (TmReplayOnly <$ keyword "replay-only")
-    src <- ident
-    _ <- symbol "--"
-    cmd <- ident
-    _ <- symbol "-->"
-    positionedClauses <- many ((,) <$> getOffset <*> (pClause scalarSyntax <* optional (symbol ";")))
-    let clauses = map snd positionedClauses
-        gotos = [(offset, target) | (offset, CGoto target) <- positionedClauses]
-        holeOffsets = [offset | (offset, CImplementationHole) <- positionedClauses]
-        transitionName = T.unpack src <> " -- " <> T.unpack cmd
-    gt <- case gotos of
-        [] -> failAt startOffset ("transition " <> transitionName <> " is missing a goto clause")
-        [(_, target)] -> pure target
-        (_, firstTarget) : (duplicateOffset, _) : _ ->
-            failAt
-                duplicateOffset
-                ("duplicate goto clause (transition " <> transitionName <> " already declared goto " <> T.unpack firstTarget <> ")")
-    case holeOffsets of
-        _ : duplicateOffset : _ -> failAt duplicateOffset ("duplicate implementation hole clause in transition " <> transitionName)
-        _ -> pure ()
-    let guards = [e | CGuard e <- clauses]
-    pure
-        Transition
-            { tSource = src
-            , tCommand = cmd
-            , tImplementation = case holeOffsets of
-                _ : _ -> HoleImplementation
-                [] | scalarSyntax -> GeneratedImplementation
-                [] -> LegacyHoleImplementation
-            , tGuard = case guards of [] -> Nothing; es -> Just (foldr1 EAnd es)
-            , tWrites = [(r, e) | CWrite r e <- clauses]
-            , tEmits = [n | CEmit n <- clauses]
-            , tGoto = gt
-            , tMode = mode
-            , tLoc = loc
-            }
+  startOffset <- getOffset
+  loc <- getLoc
+  -- Plan 143: a @replay-only@ prefix marks the transition as serving
+  -- inversion only; it lowers to a keiki 'ReplayOnly' edge.
+  mode <- option TmLive (TmReplayOnly <$ keyword "replay-only")
+  src <- ident
+  _ <- symbol "--"
+  cmd <- ident
+  _ <- symbol "-->"
+  positionedClauses <- many ((,) <$> getOffset <*> (pClause scalarSyntax <* optional (symbol ";")))
+  let clauses = map snd positionedClauses
+      gotos = [(offset, target) | (offset, CGoto target) <- positionedClauses]
+      holeOffsets = [offset | (offset, CImplementationHole) <- positionedClauses]
+      transitionName = T.unpack src <> " -- " <> T.unpack cmd
+  gt <- case gotos of
+    [] -> failAt startOffset ("transition " <> transitionName <> " is missing a goto clause")
+    [(_, target)] -> pure target
+    (_, firstTarget) : (duplicateOffset, _) : _ ->
+      failAt
+        duplicateOffset
+        ("duplicate goto clause (transition " <> transitionName <> " already declared goto " <> T.unpack firstTarget <> ")")
+  case holeOffsets of
+    _ : duplicateOffset : _ -> failAt duplicateOffset ("duplicate implementation hole clause in transition " <> transitionName)
+    _ -> pure ()
+  let guards = [e | CGuard e <- clauses]
+  pure
+    Transition
+      { tSource = src,
+        tCommand = cmd,
+        tImplementation = case holeOffsets of
+          _ : _ -> HoleImplementation
+          [] | scalarSyntax -> GeneratedImplementation
+          [] -> LegacyHoleImplementation,
+        tGuard = case guards of [] -> Nothing; es -> Just (foldr1 EAnd es),
+        tWrites = [(r, e) | CWrite r e <- clauses],
+        tEmits = [n | CEmit n <- clauses],
+        tGoto = gt,
+        tMode = mode,
+        tLoc = loc
+      }
 
 pClause :: Bool -> P Clause
 pClause scalarSyntax =
-    choice
-        ( [CImplementationHole <$ (keyword "implementation" *> keyword "hole") | scalarSyntax]
-            ++ [ CGuard <$> (keyword "guard" *> pExpr scalarSyntax)
-               , (\r e -> CWrite r e) <$> (keyword "write" *> ident) <*> (symbol ":=" *> pExpr scalarSyntax)
-               , try $ do
-                    keyword "emit"
-                    eventName <- ident
-                    notFollowedBy (symbol "{")
-                    pure (CEmit eventName)
-               , CGoto <$> (keyword "goto" *> ident)
-               ]
-        )
+  choice
+    ( [CImplementationHole <$ (keyword "implementation" *> keyword "hole") | scalarSyntax]
+        ++ [ CGuard <$> (keyword "guard" *> pExpr scalarSyntax),
+             (\r e -> CWrite r e) <$> (keyword "write" *> ident) <*> (symbol ":=" *> pExpr scalarSyntax),
+             try $ do
+               keyword "emit"
+               eventName <- ident
+               notFollowedBy (symbol "{")
+               pure (CEmit eventName),
+             CGoto <$> (keyword "goto" *> ident)
+           ]
+    )
 
 --------------------------------------------------------------------------------
 -- Expr sublanguage
@@ -1999,128 +1985,124 @@ pClause scalarSyntax =
 
 pExpr :: Bool -> P Expr
 pExpr scalarSyntax
-    | scalarSyntax = makeExprParser pScalarTerm scalarOperatorTable
-    | otherwise = makeExprParser pLegacyTerm legacyOperatorTable
+  | scalarSyntax = makeExprParser pScalarTerm scalarOperatorTable
+  | otherwise = makeExprParser pLegacyTerm legacyOperatorTable
 
 pLegacyTerm :: P Expr
 pLegacyTerm =
-    choice
-        [ parens (pExpr False)
-        , EAtom . ABool <$> (True <$ keyword "true" <|> False <$ keyword "false")
-        , EAtom . AName <$> ident
-        ]
+  choice
+    [ parens (pExpr False),
+      EAtom . ABool <$> (True <$ keyword "true" <|> False <$ keyword "false"),
+      EAtom . AName <$> ident
+    ]
 
-{- | Highest precedence first: relational comparisons bind tighter than @&&@,
-which binds tighter than @||@.
--}
+-- | Highest precedence first: relational comparisons bind tighter than @&&@,
+-- which binds tighter than @||@.
 legacyOperatorTable :: [[Operator P Expr]]
 legacyOperatorTable =
-    [ [InfixL arithmeticUnsupported]
-    ,
-        [ InfixN (ECmp OpLe <$ op "<=")
-        , InfixN (ECmp OpGe <$ op ">=")
-        , InfixN (ECmp OpEq <$ op "==")
-        , InfixN (ECmp OpNeq <$ op "!=")
-        , InfixN (ECmp OpLt <$ op "<")
-        , InfixN (ECmp OpGt <$ op ">")
-        ]
-    , [InfixL (EAnd <$ op "&&")]
-    , [InfixL (EOr <$ op "||")]
-    ]
+  [ [InfixL arithmeticUnsupported],
+    [ InfixN (ECmp OpLe <$ op "<="),
+      InfixN (ECmp OpGe <$ op ">="),
+      InfixN (ECmp OpEq <$ op "=="),
+      InfixN (ECmp OpNeq <$ op "!="),
+      InfixN (ECmp OpLt <$ op "<"),
+      InfixN (ECmp OpGt <$ op ">")
+    ],
+    [InfixL (EAnd <$ op "&&")],
+    [InfixL (EOr <$ op "||")]
+  ]
   where
     op s = symbol s
     arithmeticUnsupported = do
-        offset <- getOffset
-        operator <- lexeme (oneOf ['+', '-', '*', '/'])
-        failAt offset ("aggregate arithmetic operator '" <> [operator] <> "' is unsupported; compare or copy whole values instead")
+      offset <- getOffset
+      operator <- lexeme (oneOf ['+', '-', '*', '/'])
+      failAt offset ("aggregate arithmetic operator '" <> [operator] <> "' is unsupported; compare or copy whole values instead")
 
 pScalarTerm :: P Expr
 pScalarTerm =
-    choice
-        [ parens (pExpr True)
-        , collectionTermUnsupported
-        , try pIdLiteral
-        , do
-            loc <- getLoc
-            ELiteral loc . LiteralBool <$> (True <$ keyword "true" <|> False <$ keyword "false")
-        , do
-            loc <- getLoc
-            ELiteral loc . LiteralText <$> stringLit
-        , try $ do
-            loc <- getLoc
-            ELiteral loc . LiteralIntegral <$> integerLiteral
-        , pScalarPath
-        ]
+  choice
+    [ parens (pExpr True),
+      collectionTermUnsupported,
+      try pIdLiteral,
+      do
+        loc <- getLoc
+        ELiteral loc . LiteralBool <$> (True <$ keyword "true" <|> False <$ keyword "false"),
+      do
+        loc <- getLoc
+        ELiteral loc . LiteralText <$> stringLit,
+      try $ do
+        loc <- getLoc
+        ELiteral loc . LiteralIntegral <$> integerLiteral,
+      pScalarPath
+    ]
 
 pIdLiteral :: P Expr
 pIdLiteral = do
-    loc <- getLoc
-    constructor <- ident
-    value <- parens stringLit
-    pure (ELiteral loc (LiteralId constructor value))
+  loc <- getLoc
+  constructor <- ident
+  value <- parens stringLit
+  pure (ELiteral loc (LiteralId constructor value))
 
 pScalarPath :: P Expr
 pScalarPath = do
-    loc <- getLoc
-    firstName <- ident
-    rest <- many (symbol "." *> ident)
-    pure $ case (firstName, rest) of
-        ("reg", name : path) -> EPath loc RegisterRoot (name : path)
-        ("cmd", name : path) -> EPath loc CommandRoot (name : path)
-        (_, [constructor]) | startsUpper firstName -> ELiteral loc (LiteralQualified firstName constructor)
-        _ -> EPath loc UnqualifiedRoot (firstName : rest)
+  loc <- getLoc
+  firstName <- ident
+  rest <- many (symbol "." *> ident)
+  pure $ case (firstName, rest) of
+    ("reg", name : path) -> EPath loc RegisterRoot (name : path)
+    ("cmd", name : path) -> EPath loc CommandRoot (name : path)
+    (_, [constructor]) | startsUpper firstName -> ELiteral loc (LiteralQualified firstName constructor)
+    _ -> EPath loc UnqualifiedRoot (firstName : rest)
   where
     startsUpper value = maybe False (isUpper . fst) (T.uncons value)
 
 collectionTermUnsupported :: P Expr
 collectionTermUnsupported = do
-    offset <- getOffset
-    choice
-        [ () <$ symbol "["
-        , () <$ symbol "{"
-        , () <$ keyword "keys"
-        , () <$ keyword "values"
-        , () <$ keyword "any"
-        , () <$ keyword "all"
-        ]
-    failAt offset collectionExpressionMessage
+  offset <- getOffset
+  choice
+    [ () <$ symbol "[",
+      () <$ symbol "{",
+      () <$ keyword "keys",
+      () <$ keyword "values",
+      () <$ keyword "any",
+      () <$ keyword "all"
+    ]
+  failAt offset collectionExpressionMessage
 
 collectionExpressionMessage :: String
 collectionExpressionMessage = "CollectionExpressionUnsupported: collection expressions are reserved for plan 166"
 
 scalarOperatorTable :: [[Operator P Expr]]
 scalarOperatorTable =
-    [ [InfixL (op "*" *> located EMultiply)]
-    ,
-        [ InfixL (op "+" *> located EAdd)
-        , InfixL (op "-" *> located ESubtract)
-        , InfixL scalarArithmeticUnsupported
-        ]
-    ,
-        [ InfixN (ECmp OpLe <$ op "<=")
-        , InfixN (ECmp OpGe <$ op ">=")
-        , InfixN (ECmp OpEq <$ op "==")
-        , InfixN (ECmp OpNeq <$ op "!=")
-        , InfixN (ECmp OpLt <$ op "<")
-        , InfixN (ECmp OpGt <$ op ">")
-        , InfixN collectionOperatorUnsupported
-        ]
-    , [InfixL (EAnd <$ op "&&")]
-    , [InfixL (EOr <$ op "||")]
-    ]
+  [ [InfixL (op "*" *> located EMultiply)],
+    [ InfixL (op "+" *> located EAdd),
+      InfixL (op "-" *> located ESubtract),
+      InfixL scalarArithmeticUnsupported
+    ],
+    [ InfixN (ECmp OpLe <$ op "<="),
+      InfixN (ECmp OpGe <$ op ">="),
+      InfixN (ECmp OpEq <$ op "=="),
+      InfixN (ECmp OpNeq <$ op "!="),
+      InfixN (ECmp OpLt <$ op "<"),
+      InfixN (ECmp OpGt <$ op ">"),
+      InfixN collectionOperatorUnsupported
+    ],
+    [InfixL (EAnd <$ op "&&")],
+    [InfixL (EOr <$ op "||")]
+  ]
   where
     op value = symbol value
     located constructor = do
-        loc <- getLoc
-        pure (constructor loc)
+      loc <- getLoc
+      pure (constructor loc)
     scalarArithmeticUnsupported = do
-        offset <- getOffset
-        operator <- lexeme (oneOf ['/', '%'])
-        failAt offset ("aggregate arithmetic operator '" <> [operator] <> "' is unsupported")
+      offset <- getOffset
+      operator <- lexeme (oneOf ['/', '%'])
+      failAt offset ("aggregate arithmetic operator '" <> [operator] <> "' is unsupported")
     collectionOperatorUnsupported = do
-        offset <- getOffset
-        _ <- try (keyword "not" *> keyword "in") <|> keyword "in"
-        failAt offset collectionExpressionMessage
+      offset <- getOffset
+      _ <- try (keyword "not" *> keyword "in") <|> keyword "in"
+      failAt offset collectionExpressionMessage
 
 --------------------------------------------------------------------------------
 -- Helpers

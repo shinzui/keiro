@@ -1,6 +1,5 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 -- This is a HAND-OWNED consumer binding skeleton. keiro-dsl creates it once
 -- and never overwrites it. Fill each HOLE and run the generated harness.

@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 
 {- | EP-6 workflow runtime conformance: the scaffolded @WorkflowRuntime@ — the
 WorkflowName and the awakeable-id derivation — compiled against the LIVE

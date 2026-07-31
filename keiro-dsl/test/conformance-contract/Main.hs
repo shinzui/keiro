@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 
 {- | Conformance driver for the scaffolded EP-4 contract layer. Compiling this
 component proves the scaffolded @Generated.…Emergency.Contract@ module (the

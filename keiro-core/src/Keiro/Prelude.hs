@@ -1,24 +1,23 @@
-{- | The curated prelude shared across the Keiro packages.
-
-Re-exports a deliberately small slice of @base@, @aeson@, @text@, @time@,
-and the full @lens@ surface so modules can open with a single
-@import Keiro.Prelude@ and get a consistent, explicit set of names. The
-implicit @base@ @Prelude@ is expected to be disabled
-(@NoImplicitPrelude@); only the names listed here are in scope, which
-keeps event-sourcing code uniform and avoids accidental partial functions.
-
-The @generic-lens@ @Data.Generics.Labels@ orphan instances are imported
-for their effect only, enabling the @^. #field@ overloaded-label optics
-used throughout the codebase.
--}
-module Keiro.Prelude (
-    module X,
+-- | The curated prelude shared across the Keiro packages.
+--
+-- Re-exports a deliberately small slice of @base@, @aeson@, @text@, @time@,
+-- and the full @lens@ surface so modules can open with a single
+-- @import Keiro.Prelude@ and get a consistent, explicit set of names. The
+-- implicit @base@ @Prelude@ is expected to be disabled
+-- (@NoImplicitPrelude@); only the names listed here are in scope, which
+-- keeps event-sourcing code uniform and avoids accidental partial functions.
+--
+-- The @generic-lens@ @Data.Generics.Labels@ orphan instances are imported
+-- for their effect only, enabling the @^. #field@ overloaded-label optics
+-- used throughout the codebase.
+module Keiro.Prelude
+  ( module X,
     module Control.Lens,
-)
+  )
 where
 
-import "aeson" Data.Aeson as X (
-    FromJSON,
+import "aeson" Data.Aeson as X
+  ( FromJSON,
     Options,
     SumEncoding (..),
     ToJSON,
@@ -31,7 +30,7 @@ import "aeson" Data.Aeson as X (
     parseJSON,
     toEncoding,
     toJSON,
- )
+  )
 import "aeson-casing" Data.Aeson.Casing as X (aesonDrop, aesonPrefix, camelCase, pascalCase, snakeCase, trainCase)
 import "base" Control.Applicative as X ((<|>))
 import "base" Control.Monad as X (guard, unless, void, when)
@@ -54,8 +53,8 @@ import "generic-lens" Data.Generics.Labels ()
 import "lens" Control.Lens
 import "text" Data.Text as X (Text)
 import "time" Data.Time as X (UTCTime, getCurrentTime)
-import "base" Prelude as X (
-    Applicative (..),
+import "base" Prelude as X
+  ( Applicative (..),
     Bounded (..),
     Enum (..),
     IO,
@@ -63,4 +62,4 @@ import "base" Prelude as X (
     Show (..),
     error,
     pure,
- )
+  )

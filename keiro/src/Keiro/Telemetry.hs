@@ -1,31 +1,30 @@
-{- | Thin OpenTelemetry surface for the keiro library.
-
-This module is the single place keiro reaches for @hs-opentelemetry-api@
-and @hs-opentelemetry-semantic-conventions@. Callers configure a 'Tracer'
-on the application side (typically via @hs-opentelemetry-sdk@'s
-'OpenTelemetry.Trace.makeTracer'), then pass it through to keiro's
-publisher / consumer / command surfaces.
-
-When no tracer is supplied, every helper degrades to a thin pass-through
-(it calls the body and returns its value), so applications that do not
-yet wire OpenTelemetry are unaffected.
-
-# Attribute keys
-
-keiro links @hs-opentelemetry-semantic-conventions@ @1.40.0.0@ (generated
-from spec @v1.40@) directly. Every messaging.* / db.* typed 'AttributeKey'
-the keiro audit cites (@docs/research/opentelemetry-semconv-audit.md@) is
-imported from @OpenTelemetry.SemanticConventions@ and re-exported from this
-module, so 'Keiro.Telemetry' remains the one-stop telemetry surface for the
-library while every convention name is anchored to the spec-generated module
-rather than a hand-typed string.
-
-Only the @keiro.*@ keys ('keiro_stream_name', 'keiro_retry_attempt',
-'keiro_events_appended', 'keiro_replay_divergence') are defined locally: they
-are bespoke to keiro and have no upstream equivalent.
--}
-module Keiro.Telemetry (
-    -- * Span helpers
+-- | Thin OpenTelemetry surface for the keiro library.
+--
+-- This module is the single place keiro reaches for @hs-opentelemetry-api@
+-- and @hs-opentelemetry-semantic-conventions@. Callers configure a 'Tracer'
+-- on the application side (typically via @hs-opentelemetry-sdk@'s
+-- 'OpenTelemetry.Trace.makeTracer'), then pass it through to keiro's
+-- publisher / consumer / command surfaces.
+--
+-- When no tracer is supplied, every helper degrades to a thin pass-through
+-- (it calls the body and returns its value), so applications that do not
+-- yet wire OpenTelemetry are unaffected.
+--
+-- # Attribute keys
+--
+-- keiro links @hs-opentelemetry-semantic-conventions@ @1.40.0.0@ (generated
+-- from spec @v1.40@) directly. Every messaging.* / db.* typed 'AttributeKey'
+-- the keiro audit cites (@docs/research/opentelemetry-semconv-audit.md@) is
+-- imported from @OpenTelemetry.SemanticConventions@ and re-exported from this
+-- module, so 'Keiro.Telemetry' remains the one-stop telemetry surface for the
+-- library while every convention name is anchored to the spec-generated module
+-- rather than a hand-typed string.
+--
+-- Only the @keiro.*@ keys ('keiro_stream_name', 'keiro_retry_attempt',
+-- 'keiro_events_appended', 'keiro_replay_divergence') are defined locally: they
+-- are bespoke to keiro and have no upstream equivalent.
+module Keiro.Telemetry
+  ( -- * Span helpers
     Tracer,
     withProducerSpan,
     withConsumerSpan,
@@ -155,22 +154,33 @@ module Keiro.Telemetry (
 
     -- * Kiroku observability bridge
     kirokuEventBridge,
-)
+  )
 where
 
+import Keiro.Inbox.Kafka (KafkaInboundRecord)
+import Keiro.Integration.Event
+  ( IntegrationEvent,
+    TraceContext (..),
+    headerTraceParent,
+    headerTraceState,
+  )
+import Keiro.Outbox.Kafka (KafkaProducerRecord)
+import Keiro.Prelude
+import Keiro.Workflow.Types (StepName (..), WorkflowId (..), WorkflowName (..))
+import Kiroku.Store.Observability (KirokuEvent (..))
 import "base" Control.Exception (bracket)
 import "base" GHC.Stack (HasCallStack)
 import "bytestring" Data.ByteString qualified as ByteString
 import "hs-opentelemetry-api" OpenTelemetry.Attributes (emptyAttributes)
 import "hs-opentelemetry-api" OpenTelemetry.Attributes.Key (AttributeKey (..))
 import "hs-opentelemetry-api" OpenTelemetry.Context (insertSpan, lookupSpan)
-import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal (
-    attachContext,
+import "hs-opentelemetry-api" OpenTelemetry.Context.ThreadLocal
+  ( attachContext,
     detachContext,
     getContext,
- )
-import "hs-opentelemetry-api" OpenTelemetry.Metric.Core (
-    Counter,
+  )
+import "hs-opentelemetry-api" OpenTelemetry.Metric.Core
+  ( Counter,
     Gauge,
     Histogram,
     Meter,
@@ -181,9 +191,9 @@ import "hs-opentelemetry-api" OpenTelemetry.Metric.Core (
     meterCreateCounterInt64,
     meterCreateGaugeInt64,
     meterCreateHistogram,
- )
-import "hs-opentelemetry-api" OpenTelemetry.Trace.Core (
-    InstrumentationLibrary (..),
+  )
+import "hs-opentelemetry-api" OpenTelemetry.Trace.Core
+  ( InstrumentationLibrary (..),
     Span,
     SpanArguments (..),
     SpanKind (..),
@@ -192,9 +202,13 @@ import "hs-opentelemetry-api" OpenTelemetry.Trace.Core (
     defaultSpanArguments,
     inSpan',
     wrapSpanContext,
- )
-import "hs-opentelemetry-semantic-conventions" OpenTelemetry.SemanticConventions (
-    db_collection_name,
+  )
+import "hs-opentelemetry-propagator-w3c" OpenTelemetry.Propagator.W3CTraceContext
+  ( decodeSpanContext,
+    encodeSpanContext,
+  )
+import "hs-opentelemetry-semantic-conventions" OpenTelemetry.SemanticConventions
+  ( db_collection_name,
     db_namespace,
     db_operation_name,
     db_system_name,
@@ -208,42 +222,24 @@ import "hs-opentelemetry-semantic-conventions" OpenTelemetry.SemanticConventions
     messaging_operation_name,
     messaging_operation_type,
     messaging_system,
- )
+  )
 import "text" Data.Text qualified as Text
 import "text" Data.Text.Encoding qualified as TE
 import "unliftio-core" Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
-
-import Keiro.Inbox.Kafka (KafkaInboundRecord)
-import Keiro.Integration.Event (
-    IntegrationEvent,
-    TraceContext (..),
-    headerTraceParent,
-    headerTraceState,
- )
-import Keiro.Outbox.Kafka (KafkaProducerRecord)
-import Keiro.Prelude
-import Keiro.Workflow.Types (StepName (..), WorkflowId (..), WorkflowName (..))
-import Kiroku.Store.Observability (KirokuEvent (..))
-
-import "hs-opentelemetry-propagator-w3c" OpenTelemetry.Propagator.W3CTraceContext (
-    decodeSpanContext,
-    encodeSpanContext,
- )
 
 -- ---------------------------------------------------------------------------
 -- Bespoke keiro AttributeKeys
 -- ---------------------------------------------------------------------------
 
-{- $semconv_keys
-The messaging.* / db.* 'AttributeKey's re-exported here are imported
-directly from 'OpenTelemetry.SemanticConventions'
-(@hs-opentelemetry-semantic-conventions@ @1.40.0.0@). They are surfaced
-from this module so 'Keiro.Telemetry' stays the single telemetry import
-for the library; their definitions live upstream.
-
-The @keiro_*@ keys below are bespoke to keiro and have no upstream
-equivalent, so they are defined locally.
--}
+-- $semconv_keys
+-- The messaging.* / db.* 'AttributeKey's re-exported here are imported
+-- directly from 'OpenTelemetry.SemanticConventions'
+-- (@hs-opentelemetry-semantic-conventions@ @1.40.0.0@). They are surfaced
+-- from this module so 'Keiro.Telemetry' stays the single telemetry import
+-- for the library; their definitions live upstream.
+--
+-- The @keiro_*@ keys below are bespoke to keiro and have no upstream
+-- equivalent, so they are defined locally.
 
 keiro_stream_name :: AttributeKey Text
 keiro_stream_name = AttributeKey "keiro.stream.name"
@@ -270,246 +266,238 @@ keiro_workflow_step = AttributeKey "keiro.workflow.step"
 -- Span helpers
 -- ---------------------------------------------------------------------------
 
-{- | Run @body@ inside a @Producer@-kind span named @"send " <> destination@
-populated with the messaging attributes prescribed by
-@docs/research/opentelemetry-semconv-audit.md@ for the outbox publish
-site.
-
-When the supplied 'Tracer' is 'Nothing', the body runs unwrapped and the
-helper is a no-op pass-through. This keeps the cost of the helper at
-"one 'Maybe' branch" for applications that have not yet configured a
-tracer.
-
-The body receives the producer 'Span' so it can record a publish failure
-via 'recordPublishError'.
--}
+-- | Run @body@ inside a @Producer@-kind span named @"send " <> destination@
+-- populated with the messaging attributes prescribed by
+-- @docs/research/opentelemetry-semconv-audit.md@ for the outbox publish
+-- site.
+--
+-- When the supplied 'Tracer' is 'Nothing', the body runs unwrapped and the
+-- helper is a no-op pass-through. This keeps the cost of the helper at
+-- "one 'Maybe' branch" for applications that have not yet configured a
+-- tracer.
+--
+-- The body receives the producer 'Span' so it can record a publish failure
+-- via 'recordPublishError'.
 withProducerSpan ::
-    (MonadUnliftIO m, HasCallStack) =>
-    Maybe Tracer ->
-    IntegrationEvent ->
-    KafkaProducerRecord ->
-    (Maybe Span -> m a) ->
-    m a
+  (MonadUnliftIO m, HasCallStack) =>
+  Maybe Tracer ->
+  IntegrationEvent ->
+  KafkaProducerRecord ->
+  (Maybe Span -> m a) ->
+  m a
 withProducerSpan Nothing _ _ body = body Nothing
 withProducerSpan (Just tracer) event record body =
-    inSpan' tracer name args $ \sp -> do
-        setProducerAttributes sp event record
-        body (Just sp)
+  inSpan' tracer name args $ \sp -> do
+    setProducerAttributes sp event record
+    body (Just sp)
   where
     name = "send " <> (event ^. #destination)
-    args = defaultSpanArguments{kind = Producer}
+    args = defaultSpanArguments {kind = Producer}
 
-{- | Run @body@ inside a @Consumer@-kind span named @"process " <> topic@.
-
-Like 'withProducerSpan', the helper is a pass-through under a 'Nothing'
-tracer. The 'KafkaInboundRecord' is required so the helper can populate
-@messaging.kafka.offset@ and @messaging.destination.partition.id@
-without the caller threading them separately.
-
-The optional 'Text' is a consumer group name, recorded as
-@messaging.consumer.group.name@ when present. The 'IntegrationEvent' is
-attached when present (decode succeeded), so @messaging.message.id@
-is set; otherwise the helper records only the headers known from the
-broker record.
--}
+-- | Run @body@ inside a @Consumer@-kind span named @"process " <> topic@.
+--
+-- Like 'withProducerSpan', the helper is a pass-through under a 'Nothing'
+-- tracer. The 'KafkaInboundRecord' is required so the helper can populate
+-- @messaging.kafka.offset@ and @messaging.destination.partition.id@
+-- without the caller threading them separately.
+--
+-- The optional 'Text' is a consumer group name, recorded as
+-- @messaging.consumer.group.name@ when present. The 'IntegrationEvent' is
+-- attached when present (decode succeeded), so @messaging.message.id@
+-- is set; otherwise the helper records only the headers known from the
+-- broker record.
 withConsumerSpan ::
-    (MonadUnliftIO m, HasCallStack) =>
-    Maybe Tracer ->
-    -- | consumer group name (optional)
-    Maybe Text ->
-    KafkaInboundRecord ->
-    -- | decoded envelope; 'Nothing' on a decode failure path
-    Maybe IntegrationEvent ->
-    (Maybe Span -> m a) ->
-    m a
+  (MonadUnliftIO m, HasCallStack) =>
+  Maybe Tracer ->
+  -- | consumer group name (optional)
+  Maybe Text ->
+  KafkaInboundRecord ->
+  -- | decoded envelope; 'Nothing' on a decode failure path
+  Maybe IntegrationEvent ->
+  (Maybe Span -> m a) ->
+  m a
 withConsumerSpan Nothing _ _ _ body = body Nothing
 withConsumerSpan (Just tracer) consumerGroup record mEvent body =
-    withRemoteParent (record ^. #headers) $
-        inSpan' tracer name args $ \sp -> do
-            setConsumerAttributes sp consumerGroup record mEvent
-            body (Just sp)
+  withRemoteParent (record ^. #headers) $
+    inSpan' tracer name args $ \sp -> do
+      setConsumerAttributes sp consumerGroup record mEvent
+      body (Just sp)
   where
     name = "process " <> (record ^. #topic)
-    args = defaultSpanArguments{kind = Consumer}
+    args = defaultSpanArguments {kind = Consumer}
 
-{- | Run @body@ with the OpenTelemetry context temporarily augmented by a
-parent span extracted from the supplied header list via the W3C
-TraceContext propagator.
-
-When no @traceparent@ header is present (or it cannot be parsed) the
-body runs unwrapped, so the helper is safe to call unconditionally.
-
-This is the bridge that makes a 'Consumer'-kind span open in this
-process a *child* of the 'Producer'-kind span that emitted the message
-in the upstream process, joining the two traces by trace id.
--}
+-- | Run @body@ with the OpenTelemetry context temporarily augmented by a
+-- parent span extracted from the supplied header list via the W3C
+-- TraceContext propagator.
+--
+-- When no @traceparent@ header is present (or it cannot be parsed) the
+-- body runs unwrapped, so the helper is safe to call unconditionally.
+--
+-- This is the bridge that makes a 'Consumer'-kind span open in this
+-- process a *child* of the 'Producer'-kind span that emitted the message
+-- in the upstream process, joining the two traces by trace id.
 withRemoteParent ::
-    (MonadUnliftIO m) => [(Text, Text)] -> m a -> m a
+  (MonadUnliftIO m) => [(Text, Text)] -> m a -> m a
 withRemoteParent hs body =
-    case parentSpanContext hs of
-        Nothing -> body
-        Just spanCtx -> withRunInIO $ \runInIO -> do
-            ctx <- getContext
-            let newCtx = insertSpan (wrapSpanContext spanCtx) ctx
-            bracket
-                (attachContext newCtx)
-                detachContext
-                (const (runInIO body))
+  case parentSpanContext hs of
+    Nothing -> body
+    Just spanCtx -> withRunInIO $ \runInIO -> do
+      ctx <- getContext
+      let newCtx = insertSpan (wrapSpanContext spanCtx) ctx
+      bracket
+        (attachContext newCtx)
+        detachContext
+        (const (runInIO body))
   where
     parentSpanContext hsList =
-        let tp = fmap TE.encodeUtf8 (Prelude.lookup headerTraceParent hsList)
-            ts = fmap TE.encodeUtf8 (Prelude.lookup headerTraceState hsList)
-         in decodeSpanContext tp ts
+      let tp = fmap TE.encodeUtf8 (Prelude.lookup headerTraceParent hsList)
+          ts = fmap TE.encodeUtf8 (Prelude.lookup headerTraceState hsList)
+       in decodeSpanContext tp ts
 
-{- | Open an @Internal@ span around a command run, named after the resolved
-stream identifier. Attributes capture the stream name and (when the
-caller supplies it) the retry attempt number. The number of events
-appended is attached after a successful append by the caller via
-'addAttribute span keiro_events_appended n'.
--}
+-- | Open an @Internal@ span around a command run, named after the resolved
+-- stream identifier. Attributes capture the stream name and (when the
+-- caller supplies it) the retry attempt number. The number of events
+-- appended is attached after a successful append by the caller via
+-- 'addAttribute span keiro_events_appended n'.
 withCommandSpan ::
-    (MonadUnliftIO m, HasCallStack) =>
-    Maybe Tracer ->
-    -- | resolved stream name
-    Text ->
-    -- | retry attempt (1-based); 'Nothing' to omit
-    Maybe Int64 ->
-    (Maybe Span -> m a) ->
-    m a
+  (MonadUnliftIO m, HasCallStack) =>
+  Maybe Tracer ->
+  -- | resolved stream name
+  Text ->
+  -- | retry attempt (1-based); 'Nothing' to omit
+  Maybe Int64 ->
+  (Maybe Span -> m a) ->
+  m a
 withCommandSpan Nothing _ _ body = body Nothing
 withCommandSpan (Just tracer) streamName retryAttempt body =
-    inSpan' tracer streamName args $ \sp -> do
-        addAttribute sp (unkey keiro_stream_name) streamName
-        case retryAttempt of
-            Nothing -> pure ()
-            Just n -> addAttribute sp (unkey keiro_retry_attempt) n
-        body (Just sp)
+  inSpan' tracer streamName args $ \sp -> do
+    addAttribute sp (unkey keiro_stream_name) streamName
+    case retryAttempt of
+      Nothing -> pure ()
+      Just n -> addAttribute sp (unkey keiro_retry_attempt) n
+    body (Just sp)
   where
-    args = defaultSpanArguments{kind = Internal}
+    args = defaultSpanArguments {kind = Internal}
 
-{- | Open an @Internal@ span around a workflow run (or a single step/resume when
-a 'StepName' is supplied), named @"workflow " <> name@. Attributes carry the
-bespoke @keiro.workflow.name@, @keiro.workflow.id@, and — when present —
-@keiro.workflow.step@ keys. Like 'withCommandSpan', a 'Nothing' tracer makes the
-helper a pass-through, so it is safe to call unconditionally.
--}
+-- | Open an @Internal@ span around a workflow run (or a single step/resume when
+-- a 'StepName' is supplied), named @"workflow " <> name@. Attributes carry the
+-- bespoke @keiro.workflow.name@, @keiro.workflow.id@, and — when present —
+-- @keiro.workflow.step@ keys. Like 'withCommandSpan', a 'Nothing' tracer makes the
+-- helper a pass-through, so it is safe to call unconditionally.
 withWorkflowSpan ::
-    (MonadUnliftIO m, HasCallStack) =>
-    Maybe Tracer ->
-    WorkflowName ->
-    WorkflowId ->
-    Maybe StepName ->
-    (Maybe Span -> m a) ->
-    m a
+  (MonadUnliftIO m, HasCallStack) =>
+  Maybe Tracer ->
+  WorkflowName ->
+  WorkflowId ->
+  Maybe StepName ->
+  (Maybe Span -> m a) ->
+  m a
 withWorkflowSpan Nothing _ _ _ body = body Nothing
 withWorkflowSpan (Just tracer) name wid mStep body =
-    inSpan' tracer spanName args $ \sp -> do
-        addAttribute sp (unkey keiro_workflow_name) (unWorkflowName name)
-        addAttribute sp (unkey keiro_workflow_id) (unWorkflowId wid)
-        case mStep of
-            Nothing -> pure ()
-            Just s -> addAttribute sp (unkey keiro_workflow_step) (unStepName s)
-        body (Just sp)
+  inSpan' tracer spanName args $ \sp -> do
+    addAttribute sp (unkey keiro_workflow_name) (unWorkflowName name)
+    addAttribute sp (unkey keiro_workflow_id) (unWorkflowId wid)
+    case mStep of
+      Nothing -> pure ()
+      Just s -> addAttribute sp (unkey keiro_workflow_step) (unStepName s)
+    body (Just sp)
   where
     spanName = "workflow " <> unWorkflowName name
-    args = defaultSpanArguments{kind = Internal}
+    args = defaultSpanArguments {kind = Internal}
 
 -- ---------------------------------------------------------------------------
 -- W3C TraceContext bridge
 -- ---------------------------------------------------------------------------
 
-{- | Read the current thread-local span context and format it as a
-'TraceContext'. Returns 'Nothing' when no span is active on the current
-thread.
-
-The application is expected to have already configured the W3C
-propagator on its 'TracerProvider' (so the propagator is responsible for
-on-the-wire framing); this helper is the keiro-side bridge between the
-in-memory span and the keiro 'TraceContext' record stored on
-'IntegrationEvent' envelopes and outbox rows.
--}
+-- | Read the current thread-local span context and format it as a
+-- 'TraceContext'. Returns 'Nothing' when no span is active on the current
+-- thread.
+--
+-- The application is expected to have already configured the W3C
+-- propagator on its 'TracerProvider' (so the propagator is responsible for
+-- on-the-wire framing); this helper is the keiro-side bridge between the
+-- in-memory span and the keiro 'TraceContext' record stored on
+-- 'IntegrationEvent' envelopes and outbox rows.
 traceContextFromCurrentSpan :: (MonadIO m) => m (Maybe TraceContext)
 traceContextFromCurrentSpan = do
-    ctx <- getContext
-    case lookupSpan ctx of
-        Nothing -> pure Nothing
-        Just sp -> do
-            (traceparentBytes, tracestateBytes) <- liftIO (encodeSpanContext sp)
-            let traceparent = TE.decodeUtf8 traceparentBytes
-                tracestate
-                    | ByteString.null tracestateBytes = Nothing
-                    | otherwise = Just (TE.decodeUtf8 tracestateBytes)
-            pure (Just (TraceContext traceparent tracestate))
+  ctx <- getContext
+  case lookupSpan ctx of
+    Nothing -> pure Nothing
+    Just sp -> do
+      (traceparentBytes, tracestateBytes) <- liftIO (encodeSpanContext sp)
+      let traceparent = TE.decodeUtf8 traceparentBytes
+          tracestate
+            | ByteString.null tracestateBytes = Nothing
+            | otherwise = Just (TE.decodeUtf8 tracestateBytes)
+      pure (Just (TraceContext traceparent tracestate))
 
-{- | Lift a 'TraceContext' out of a flat @[(Text, Text)]@ header list. This
-is the mirror image of 'integrationHeaders': it does not validate the
-@traceparent@ format (the W3C propagator's parser does that at consume
-time); it merely converts the on-the-wire pair of headers to the keiro
-envelope record.
--}
+-- | Lift a 'TraceContext' out of a flat @[(Text, Text)]@ header list. This
+-- is the mirror image of 'integrationHeaders': it does not validate the
+-- @traceparent@ format (the W3C propagator's parser does that at consume
+-- time); it merely converts the on-the-wire pair of headers to the keiro
+-- envelope record.
 traceContextFromHeaders :: [(Text, Text)] -> Maybe TraceContext
 traceContextFromHeaders hs = case Prelude.lookup headerTraceParent hs of
-    Nothing -> Nothing
-    Just tp -> Just (TraceContext tp (Prelude.lookup headerTraceState hs))
+  Nothing -> Nothing
+  Just tp -> Just (TraceContext tp (Prelude.lookup headerTraceState hs))
 
-{- | Append the W3C @traceparent@ / @tracestate@ headers for the current
-thread-local span to the supplied header list. When no span is active
-on the current thread, the input list is returned unchanged.
-
-Used by adapters that build a flat header list from their own envelope
-(e.g. the outbox publisher) so the headers carry the active span
-context even if the caller did not capture a 'TraceContext' onto the
-event explicitly.
--}
+-- | Append the W3C @traceparent@ / @tracestate@ headers for the current
+-- thread-local span to the supplied header list. When no span is active
+-- on the current thread, the input list is returned unchanged.
+--
+-- Used by adapters that build a flat header list from their own envelope
+-- (e.g. the outbox publisher) so the headers carry the active span
+-- context even if the caller did not capture a 'TraceContext' onto the
+-- event explicitly.
 injectTraceContext :: (MonadIO m) => [(Text, Text)] -> m [(Text, Text)]
 injectTraceContext hs = do
-    mctx <- traceContextFromCurrentSpan
-    pure $ case mctx of
-        Nothing -> hs
-        Just tc ->
-            hs
-                ++ [(headerTraceParent, tc ^. #traceparent)]
-                ++ maybe [] (\ts -> [(headerTraceState, ts)]) (tc ^. #tracestate)
+  mctx <- traceContextFromCurrentSpan
+  pure $ case mctx of
+    Nothing -> hs
+    Just tc ->
+      hs
+        ++ [(headerTraceParent, tc ^. #traceparent)]
+        ++ maybe [] (\ts -> [(headerTraceState, ts)]) (tc ^. #tracestate)
 
 -- ---------------------------------------------------------------------------
 -- Internal helpers
 -- ---------------------------------------------------------------------------
 
 setProducerAttributes ::
-    (MonadIO m) => Span -> IntegrationEvent -> KafkaProducerRecord -> m ()
+  (MonadIO m) => Span -> IntegrationEvent -> KafkaProducerRecord -> m ()
 setProducerAttributes sp event _record = do
-    addAttribute sp (unkey messaging_system) ("kafka" :: Text)
-    addAttribute sp (unkey messaging_operation_type) ("publish" :: Text)
-    addAttribute sp (unkey messaging_operation_name) ("send" :: Text)
-    addAttribute sp (unkey messaging_destination_name) (event ^. #destination)
-    addAttribute sp (unkey messaging_message_id) (event ^. #messageId)
-    case event ^. #key of
-        Nothing -> pure ()
-        Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
+  addAttribute sp (unkey messaging_system) ("kafka" :: Text)
+  addAttribute sp (unkey messaging_operation_type) ("publish" :: Text)
+  addAttribute sp (unkey messaging_operation_name) ("send" :: Text)
+  addAttribute sp (unkey messaging_destination_name) (event ^. #destination)
+  addAttribute sp (unkey messaging_message_id) (event ^. #messageId)
+  case event ^. #key of
+    Nothing -> pure ()
+    Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
 
 setConsumerAttributes ::
-    (MonadIO m) =>
-    Span ->
-    Maybe Text ->
-    KafkaInboundRecord ->
-    Maybe IntegrationEvent ->
-    m ()
+  (MonadIO m) =>
+  Span ->
+  Maybe Text ->
+  KafkaInboundRecord ->
+  Maybe IntegrationEvent ->
+  m ()
 setConsumerAttributes sp consumerGroup record mEvent = do
-    addAttribute sp (unkey messaging_system) ("kafka" :: Text)
-    addAttribute sp (unkey messaging_operation_type) ("process" :: Text)
-    addAttribute sp (unkey messaging_operation_name) ("process" :: Text)
-    addAttribute sp (unkey messaging_destination_name) (record ^. #topic)
-    addAttribute sp (unkey messaging_destination_partition_id) (showText (record ^. #partition))
-    addAttribute sp (unkey messaging_kafka_offset) (record ^. #offset)
-    case record ^. #key of
-        Nothing -> pure ()
-        Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
-    case consumerGroup of
-        Nothing -> pure ()
-        Just g -> addAttribute sp (unkey messaging_consumer_group_name) g
-    case mEvent of
-        Nothing -> pure ()
-        Just event -> addAttribute sp (unkey messaging_message_id) (event ^. #messageId)
+  addAttribute sp (unkey messaging_system) ("kafka" :: Text)
+  addAttribute sp (unkey messaging_operation_type) ("process" :: Text)
+  addAttribute sp (unkey messaging_operation_name) ("process" :: Text)
+  addAttribute sp (unkey messaging_destination_name) (record ^. #topic)
+  addAttribute sp (unkey messaging_destination_partition_id) (showText (record ^. #partition))
+  addAttribute sp (unkey messaging_kafka_offset) (record ^. #offset)
+  case record ^. #key of
+    Nothing -> pure ()
+    Just k -> addAttribute sp (unkey messaging_kafka_message_key) k
+  case consumerGroup of
+    Nothing -> pure ()
+    Just g -> addAttribute sp (unkey messaging_consumer_group_name) g
+  case mEvent of
+    Nothing -> pure ()
+    Just event -> addAttribute sp (unkey messaging_message_id) (event ^. #messageId)
 
 showText :: (Show a) => a -> Text
 showText = Text.pack . show
@@ -518,394 +506,469 @@ showText = Text.pack . show
 -- Metrics surface
 -- ---------------------------------------------------------------------------
 
-{- $metrics
-Alongside the span helpers above, 'Keiro.Telemetry' exposes the library's
-metrics surface: a 'KeiroMetrics' record holding every instrument keiro
-records (built once from a 'Meter' by 'newKeiroMetrics'), and one
-@record*@ helper per instrument that takes a @'Maybe' 'KeiroMetrics'@ and
-no-ops on 'Nothing'. This mirrors the @'Maybe' 'Tracer'@ opt-in the span
-helpers use: an application that never configures a 'MeterProvider' pays
-only one 'Maybe' branch per recording site. The per-instrument name, unit,
-kind, and description are catalogued in
-@docs/research/opentelemetry-semconv-audit.md@.
--}
+-- $metrics
+-- Alongside the span helpers above, 'Keiro.Telemetry' exposes the library's
+-- metrics surface: a 'KeiroMetrics' record holding every instrument keiro
+-- records (built once from a 'Meter' by 'newKeiroMetrics'), and one
+-- @record*@ helper per instrument that takes a @'Maybe' 'KeiroMetrics'@ and
+-- no-ops on 'Nothing'. This mirrors the @'Maybe' 'Tracer'@ opt-in the span
+-- helpers use: an application that never configures a 'MeterProvider' pays
+-- only one 'Maybe' branch per recording site. The per-instrument name, unit,
+-- kind, and description are catalogued in
+-- @docs/research/opentelemetry-semconv-audit.md@.
 
-{- | The instrumentation scope keiro tags all its metric instruments with.
-Mirrors the @"keiro"@ scope name the span helpers use on the application's
-'Tracer'.
--}
+-- | The instrumentation scope keiro tags all its metric instruments with.
+-- Mirrors the @"keiro"@ scope name the span helpers use on the application's
+-- 'Tracer'.
 keiroInstrumentationLibrary :: InstrumentationLibrary
 keiroInstrumentationLibrary =
-    InstrumentationLibrary
-        { libraryName = "keiro"
-        , libraryVersion = ""
-        , librarySchemaUrl = ""
-        , libraryAttributes = emptyAttributes
-        }
+  InstrumentationLibrary
+    { libraryName = "keiro",
+      libraryVersion = "",
+      librarySchemaUrl = "",
+      libraryAttributes = emptyAttributes
+    }
 
 keiroOutboxBacklogName :: Text
 keiroOutboxBacklogName = "keiro.outbox.backlog"
+
 keiroOutboxPublishedName :: Text
 keiroOutboxPublishedName = "keiro.outbox.published"
+
 keiroOutboxRetriedName :: Text
 keiroOutboxRetriedName = "keiro.outbox.retried"
+
 keiroOutboxDeadletteredName :: Text
 keiroOutboxDeadletteredName = "keiro.outbox.deadlettered"
+
 keiroOutboxReclaimedName :: Text
 keiroOutboxReclaimedName = "keiro.outbox.reclaimed"
+
 keiroInboxProcessedName :: Text
 keiroInboxProcessedName = "keiro.inbox.processed"
+
 keiroInboxDuplicatesName :: Text
 keiroInboxDuplicatesName = "keiro.inbox.duplicates"
+
 keiroInboxFailedName :: Text
 keiroInboxFailedName = "keiro.inbox.failed"
+
 keiroInboxPoisonedName :: Text
 keiroInboxPoisonedName = "keiro.inbox.poisoned"
+
 keiroInboxBacklogName :: Text
 keiroInboxBacklogName = "keiro.inbox.backlog"
+
 keiroTimerBacklogName :: Text
 keiroTimerBacklogName = "keiro.timer.backlog"
+
 keiroTimerFireLagName :: Text
 keiroTimerFireLagName = "keiro.timer.fire.lag"
+
 keiroTimerAttemptsName :: Text
 keiroTimerAttemptsName = "keiro.timer.attempts"
+
 keiroTimerStuckName :: Text
 keiroTimerStuckName = "keiro.timer.stuck"
+
 keiroTimerRequeuedName :: Text
 keiroTimerRequeuedName = "keiro.timer.requeued"
+
 keiroProjectionLagName :: Text
 keiroProjectionLagName = "keiro.projection.lag"
+
 keiroProjectionWaitTimeoutsName :: Text
 keiroProjectionWaitTimeoutsName = "keiro.projection.wait.timeouts"
+
 keiroCommandConflictsName :: Text
 keiroCommandConflictsName = "keiro.command.conflicts"
+
 keiroCommandRetriesName :: Text
 keiroCommandRetriesName = "keiro.command.retries"
+
 keiroCommandDuplicatesName :: Text
 keiroCommandDuplicatesName = "keiro.command.duplicates"
+
 keiroSnapshotDecodeFailuresName :: Text
 keiroSnapshotDecodeFailuresName = "keiro.snapshot.decode.failures"
+
 keiroSnapshotEncodeFailuresName :: Text
 keiroSnapshotEncodeFailuresName = "keiro.snapshot.encode.failures"
+
 keiroSnapshotReadHitsName :: Text
 keiroSnapshotReadHitsName = "keiro.snapshot.read.hits"
+
 keiroSnapshotReadMissesName :: Text
 keiroSnapshotReadMissesName = "keiro.snapshot.read.misses"
+
 keiroSnapshotWriteFailuresName :: Text
 keiroSnapshotWriteFailuresName = "keiro.snapshot.write.failures"
+
 keiroSnapshotApplyDivergenceName :: Text
 keiroSnapshotApplyDivergenceName = "keiro.snapshot.apply.divergence"
+
 keiroSnapshotSeedDivergenceName :: Text
 keiroSnapshotSeedDivergenceName = "keiro.snapshot.seed.divergence"
+
 keiroDispatchFailedName :: Text
 keiroDispatchFailedName = "keiro.dispatch.failed"
+
 keiroDispatchDeadletteredName :: Text
 keiroDispatchDeadletteredName = "keiro.dispatch.deadlettered"
+
 keiroSubscriptionDeadletteredName :: Text
 keiroSubscriptionDeadletteredName = "keiro.subscription.deadlettered"
+
 keiroDispatchDuplicatesName :: Text
 keiroDispatchDuplicatesName = "keiro.dispatch.duplicates"
+
 keiroDispatchPoisonName :: Text
 keiroDispatchPoisonName = "keiro.dispatch.poison"
+
 keiroWorkflowStepsExecutedName :: Text
 keiroWorkflowStepsExecutedName = "keiro.workflow.steps.executed"
+
 keiroWorkflowStepsReplayedName :: Text
 keiroWorkflowStepsReplayedName = "keiro.workflow.steps.replayed"
+
 keiroWorkflowResumedName :: Text
 keiroWorkflowResumedName = "keiro.workflow.resumed"
+
 keiroWorkflowFailedName :: Text
 keiroWorkflowFailedName = "keiro.workflow.failed"
+
 keiroWorkflowResumeErrorsName :: Text
 keiroWorkflowResumeErrorsName = "keiro.workflow.resume.errors"
+
 keiroWorkflowLeaseSkippedName :: Text
 keiroWorkflowLeaseSkippedName = "keiro.workflow.lease.skipped"
+
 keiroWorkflowJournalLengthName :: Text
 keiroWorkflowJournalLengthName = "keiro.workflow.journal.length"
+
 keiroWorkflowAwakeablesPendingName :: Text
 keiroWorkflowAwakeablesPendingName = "keiro.workflow.awakeables.pending"
+
 keiroWorkflowActiveName :: Text
 keiroWorkflowActiveName = "keiro.workflow.active"
 
-{- | All metric instruments the keiro library records, built once from a
-'Meter' by 'newKeiroMetrics'. Workers accept a @'Maybe' 'KeiroMetrics'@ and
-treat 'Nothing' as "record nothing"; the per-instrument recording helpers in
-this module take @'Maybe' 'KeiroMetrics'@ so call sites stay one-liners.
-
-Instrument kinds follow the keiro metrics policy: backlog and lag are
-synchronous gauges recorded by each worker per poll pass; tallies are
-monotonic counters; distributions are histograms. See
-@docs/research/opentelemetry-semconv-audit.md@ for the per-instrument
-name / unit / kind / description catalogue.
--}
+-- | All metric instruments the keiro library records, built once from a
+-- 'Meter' by 'newKeiroMetrics'. Workers accept a @'Maybe' 'KeiroMetrics'@ and
+-- treat 'Nothing' as "record nothing"; the per-instrument recording helpers in
+-- this module take @'Maybe' 'KeiroMetrics'@ so call sites stay one-liners.
+--
+-- Instrument kinds follow the keiro metrics policy: backlog and lag are
+-- synchronous gauges recorded by each worker per poll pass; tallies are
+-- monotonic counters; distributions are histograms. See
+-- @docs/research/opentelemetry-semconv-audit.md@ for the per-instrument
+-- name / unit / kind / description catalogue.
 data KeiroMetrics = KeiroMetrics
-    { outboxBacklog :: Gauge Int64
-    , outboxPublished :: Counter Int64
-    , outboxRetried :: Counter Int64
-    , outboxDeadlettered :: Counter Int64
-    , outboxReclaimed :: Counter Int64
-    , inboxProcessed :: Counter Int64
-    , inboxDuplicates :: Counter Int64
-    , inboxFailed :: Counter Int64
-    , inboxPoisoned :: Counter Int64
-    , inboxBacklog :: Gauge Int64
-    , timerBacklog :: Gauge Int64
-    , timerFireLag :: Histogram
-    , timerAttempts :: Histogram
-    , timerStuck :: Gauge Int64
-    , timerRequeued :: Counter Int64
-    , projectionLag :: Gauge Int64
-    , projectionWaitTimeouts :: Counter Int64
-    , commandConflicts :: Counter Int64
-    , commandRetries :: Counter Int64
-    , commandDuplicates :: Counter Int64
-    , snapshotDecodeFailures :: Counter Int64
-    , snapshotEncodeFailures :: Counter Int64
-    , snapshotReadHits :: Counter Int64
-    , snapshotReadMisses :: Counter Int64
-    , snapshotWriteFailures :: Counter Int64
-    , snapshotApplyDivergence :: Counter Int64
-    , snapshotSeedDivergence :: Counter Int64
-    , dispatchFailed :: Counter Int64
-    , dispatchDeadlettered :: Counter Int64
-    , subscriptionDeadlettered :: Counter Int64
-    , dispatchDuplicates :: Counter Int64
-    , dispatchPoison :: Counter Int64
-    , workflowStepsExecuted :: Counter Int64
-    , workflowStepsReplayed :: Counter Int64
-    , workflowResumed :: Counter Int64
-    , workflowFailed :: Counter Int64
-    , workflowResumeErrors :: Counter Int64
-    , workflowLeaseSkipped :: Counter Int64
-    , workflowActive :: Gauge Int64
-    , workflowJournalLength :: Histogram
-    , workflowAwakeablesPending :: Gauge Int64
-    }
+  { outboxBacklog :: Gauge Int64,
+    outboxPublished :: Counter Int64,
+    outboxRetried :: Counter Int64,
+    outboxDeadlettered :: Counter Int64,
+    outboxReclaimed :: Counter Int64,
+    inboxProcessed :: Counter Int64,
+    inboxDuplicates :: Counter Int64,
+    inboxFailed :: Counter Int64,
+    inboxPoisoned :: Counter Int64,
+    inboxBacklog :: Gauge Int64,
+    timerBacklog :: Gauge Int64,
+    timerFireLag :: Histogram,
+    timerAttempts :: Histogram,
+    timerStuck :: Gauge Int64,
+    timerRequeued :: Counter Int64,
+    projectionLag :: Gauge Int64,
+    projectionWaitTimeouts :: Counter Int64,
+    commandConflicts :: Counter Int64,
+    commandRetries :: Counter Int64,
+    commandDuplicates :: Counter Int64,
+    snapshotDecodeFailures :: Counter Int64,
+    snapshotEncodeFailures :: Counter Int64,
+    snapshotReadHits :: Counter Int64,
+    snapshotReadMisses :: Counter Int64,
+    snapshotWriteFailures :: Counter Int64,
+    snapshotApplyDivergence :: Counter Int64,
+    snapshotSeedDivergence :: Counter Int64,
+    dispatchFailed :: Counter Int64,
+    dispatchDeadlettered :: Counter Int64,
+    subscriptionDeadlettered :: Counter Int64,
+    dispatchDuplicates :: Counter Int64,
+    dispatchPoison :: Counter Int64,
+    workflowStepsExecuted :: Counter Int64,
+    workflowStepsReplayed :: Counter Int64,
+    workflowResumed :: Counter Int64,
+    workflowFailed :: Counter Int64,
+    workflowResumeErrors :: Counter Int64,
+    workflowLeaseSkipped :: Counter Int64,
+    workflowActive :: Gauge Int64,
+    workflowJournalLength :: Histogram,
+    workflowAwakeablesPending :: Gauge Int64
+  }
 
-{- | Construct every keiro metric instrument from a 'Meter'. Call this once at
-application start after building an SDK 'OpenTelemetry.Metric.Core.MeterProvider'
-and obtaining a 'Meter' (e.g. @getMeter mp keiroInstrumentationLibrary@), then
-thread the resulting 'KeiroMetrics' into workers as @'Just' metrics@. Under a
-no-op meter every instrument is itself a no-op, so this is safe to call
-unconditionally.
--}
+-- | Construct every keiro metric instrument from a 'Meter'. Call this once at
+-- application start after building an SDK 'OpenTelemetry.Metric.Core.MeterProvider'
+-- and obtaining a 'Meter' (e.g. @getMeter mp keiroInstrumentationLibrary@), then
+-- thread the resulting 'KeiroMetrics' into workers as @'Just' metrics@. Under a
+-- no-op meter every instrument is itself a no-op, so this is safe to call
+-- unconditionally.
 newKeiroMetrics :: (MonadIO m) => Meter -> m KeiroMetrics
 newKeiroMetrics meter = liftIO $ do
-    outboxBacklog' <- gaugeI64 keiroOutboxBacklogName "{event}" "Outbox rows awaiting publish."
-    outboxPublished' <- counterI64 keiroOutboxPublishedName "{event}" "Outbox events successfully published."
-    outboxRetried' <- counterI64 keiroOutboxRetriedName "{event}" "Outbox publish attempts that failed and will retry."
-    outboxDeadlettered' <- counterI64 keiroOutboxDeadletteredName "{event}" "Outbox events parked after exhausting retries."
-    outboxReclaimed' <- counterI64 keiroOutboxReclaimedName "{event}" "Outbox rows reclaimed from a crashed or stalled publisher."
-    inboxProcessed' <- counterI64 keiroInboxProcessedName "{message}" "Inbox messages processed successfully."
-    inboxDuplicates' <- counterI64 keiroInboxDuplicatesName "{message}" "Inbox messages skipped as duplicates."
-    inboxFailed' <- counterI64 keiroInboxFailedName "{message}" "Inbox messages whose handler failed."
-    inboxPoisoned' <- counterI64 keiroInboxPoisonedName "{message}" "Inbox messages dead-lettered after exhausting handler attempts."
-    inboxBacklog' <- gaugeI64 keiroInboxBacklogName "{message}" "Inbox messages awaiting processing."
-    timerBacklog' <- gaugeI64 keiroTimerBacklogName "{timer}" "Due timers awaiting firing."
-    timerFireLag' <- histogram keiroTimerFireLagName "ms" "Delay between a timer's scheduled time and when it fired."
-    timerAttempts' <- histogram keiroTimerAttemptsName "{attempt}" "Number of attempts a timer took to fire."
-    timerStuck' <- gaugeI64 keiroTimerStuckName "{timer}" "Timers stuck in the Firing state past threshold."
-    timerRequeued' <- counterI64 keiroTimerRequeuedName "{timer}" "Timers moved from firing back to scheduled after a stale claim."
-    projectionLag' <- gaugeI64 keiroProjectionLagName "{event}" "Events between the log head and a projection's checkpoint."
-    projectionWaitTimeouts' <- counterI64 keiroProjectionWaitTimeoutsName "{timeout}" "Position-wait calls that timed out before the projection caught up."
-    commandConflicts' <- counterI64 keiroCommandConflictsName "{conflict}" "Optimistic-concurrency conflicts observed by command runners."
-    commandRetries' <- counterI64 keiroCommandRetriesName "{retry}" "Command retry attempts started after an optimistic-concurrency conflict."
-    commandDuplicates' <- counterI64 keiroCommandDuplicatesName "{event}" "Command appends rejected as duplicate deterministic event ids."
-    snapshotDecodeFailures' <- counterI64 keiroSnapshotDecodeFailuresName "{failure}" "Snapshot rows whose bytes failed to decode; hydration fell back to full replay."
-    snapshotEncodeFailures' <- counterI64 keiroSnapshotEncodeFailuresName "{failure}" "Post-commit snapshot encodes that failed and were swallowed."
-    snapshotReadHits' <- counterI64 keiroSnapshotReadHitsName "{read}" "Snapshot lookups that yielded a usable hydration seed."
-    snapshotReadMisses' <- counterI64 keiroSnapshotReadMissesName "{read}" "Snapshot lookups that fell back to full replay."
-    snapshotWriteFailures' <- counterI64 keiroSnapshotWriteFailuresName "{failure}" "Post-commit snapshot writes that failed and were swallowed."
-    snapshotApplyDivergence' <- counterI64 keiroSnapshotApplyDivergenceName "{failure}" "Just-appended event batches that failed to replay from the pre-command state; the stream is poisoned and its next hydration will fail."
-    snapshotSeedDivergence' <- counterI64 keiroSnapshotSeedDivergenceName "{failure}" "Sampled snapshot seeds whose encoded state disagreed with a full replay through the seed version."
-    dispatchFailed' <- counterI64 keiroDispatchFailedName "{command}" "Process-manager/router dispatch commands that failed."
-    dispatchDeadlettered' <- counterI64 keiroDispatchDeadletteredName "{command}" "Rejected process-manager/router dispatch commands handled by dead-letter or skip policy."
-    subscriptionDeadlettered' <- counterI64 keiroSubscriptionDeadletteredName "{event}" "Kiroku source events dead-lettered by an explicit disposition or retry exhaustion."
-    dispatchDuplicates' <- counterI64 keiroDispatchDuplicatesName "{command}" "Process-manager/router dispatch commands skipped as duplicate deterministic event ids."
-    dispatchPoison' <- counterI64 keiroDispatchPoisonName "{message}" "Process-manager/router worker messages classified as poison."
-    workflowStepsExecuted' <- counterI64 keiroWorkflowStepsExecutedName "{step}" "Workflow steps that ran their action (a journal miss)."
-    workflowStepsReplayed' <- counterI64 keiroWorkflowStepsReplayedName "{step}" "Workflow steps short-circuited to a recorded result (a journal hit)."
-    workflowResumed' <- counterI64 keiroWorkflowResumedName "{workflow}" "Workflow re-invocations performed by the resume worker."
-    workflowFailed' <- counterI64 keiroWorkflowFailedName "{workflow}" "Workflow instances marked terminally failed by the resume worker."
-    workflowResumeErrors' <- counterI64 keiroWorkflowResumeErrorsName "{error}" "Transient store errors observed by the workflow resume worker."
-    workflowLeaseSkipped' <- counterI64 keiroWorkflowLeaseSkippedName "{workflow}" "Workflow instances skipped because another worker owns their lease."
-    workflowActive' <- gaugeI64 keiroWorkflowActiveName "{workflow}" "Workflow runs currently in progress in this process."
-    workflowJournalLength' <- histogram keiroWorkflowJournalLengthName "{event}" "Journal event count of a workflow at completion."
-    workflowAwakeablesPending' <- gaugeI64 keiroWorkflowAwakeablesPendingName "{awakeable}" "Awakeables awaiting an external signal."
-    pure
-        KeiroMetrics
-            { outboxBacklog = outboxBacklog'
-            , outboxPublished = outboxPublished'
-            , outboxRetried = outboxRetried'
-            , outboxDeadlettered = outboxDeadlettered'
-            , outboxReclaimed = outboxReclaimed'
-            , inboxProcessed = inboxProcessed'
-            , inboxDuplicates = inboxDuplicates'
-            , inboxFailed = inboxFailed'
-            , inboxPoisoned = inboxPoisoned'
-            , inboxBacklog = inboxBacklog'
-            , timerBacklog = timerBacklog'
-            , timerFireLag = timerFireLag'
-            , timerAttempts = timerAttempts'
-            , timerStuck = timerStuck'
-            , timerRequeued = timerRequeued'
-            , projectionLag = projectionLag'
-            , projectionWaitTimeouts = projectionWaitTimeouts'
-            , commandConflicts = commandConflicts'
-            , commandRetries = commandRetries'
-            , commandDuplicates = commandDuplicates'
-            , snapshotDecodeFailures = snapshotDecodeFailures'
-            , snapshotEncodeFailures = snapshotEncodeFailures'
-            , snapshotReadHits = snapshotReadHits'
-            , snapshotReadMisses = snapshotReadMisses'
-            , snapshotWriteFailures = snapshotWriteFailures'
-            , snapshotApplyDivergence = snapshotApplyDivergence'
-            , snapshotSeedDivergence = snapshotSeedDivergence'
-            , dispatchFailed = dispatchFailed'
-            , dispatchDeadlettered = dispatchDeadlettered'
-            , subscriptionDeadlettered = subscriptionDeadlettered'
-            , dispatchDuplicates = dispatchDuplicates'
-            , dispatchPoison = dispatchPoison'
-            , workflowStepsExecuted = workflowStepsExecuted'
-            , workflowStepsReplayed = workflowStepsReplayed'
-            , workflowResumed = workflowResumed'
-            , workflowFailed = workflowFailed'
-            , workflowResumeErrors = workflowResumeErrors'
-            , workflowLeaseSkipped = workflowLeaseSkipped'
-            , workflowActive = workflowActive'
-            , workflowJournalLength = workflowJournalLength'
-            , workflowAwakeablesPending = workflowAwakeablesPending'
-            }
+  outboxBacklog' <- gaugeI64 keiroOutboxBacklogName "{event}" "Outbox rows awaiting publish."
+  outboxPublished' <- counterI64 keiroOutboxPublishedName "{event}" "Outbox events successfully published."
+  outboxRetried' <- counterI64 keiroOutboxRetriedName "{event}" "Outbox publish attempts that failed and will retry."
+  outboxDeadlettered' <- counterI64 keiroOutboxDeadletteredName "{event}" "Outbox events parked after exhausting retries."
+  outboxReclaimed' <- counterI64 keiroOutboxReclaimedName "{event}" "Outbox rows reclaimed from a crashed or stalled publisher."
+  inboxProcessed' <- counterI64 keiroInboxProcessedName "{message}" "Inbox messages processed successfully."
+  inboxDuplicates' <- counterI64 keiroInboxDuplicatesName "{message}" "Inbox messages skipped as duplicates."
+  inboxFailed' <- counterI64 keiroInboxFailedName "{message}" "Inbox messages whose handler failed."
+  inboxPoisoned' <- counterI64 keiroInboxPoisonedName "{message}" "Inbox messages dead-lettered after exhausting handler attempts."
+  inboxBacklog' <- gaugeI64 keiroInboxBacklogName "{message}" "Inbox messages awaiting processing."
+  timerBacklog' <- gaugeI64 keiroTimerBacklogName "{timer}" "Due timers awaiting firing."
+  timerFireLag' <- histogram keiroTimerFireLagName "ms" "Delay between a timer's scheduled time and when it fired."
+  timerAttempts' <- histogram keiroTimerAttemptsName "{attempt}" "Number of attempts a timer took to fire."
+  timerStuck' <- gaugeI64 keiroTimerStuckName "{timer}" "Timers stuck in the Firing state past threshold."
+  timerRequeued' <- counterI64 keiroTimerRequeuedName "{timer}" "Timers moved from firing back to scheduled after a stale claim."
+  projectionLag' <- gaugeI64 keiroProjectionLagName "{event}" "Events between the log head and a projection's checkpoint."
+  projectionWaitTimeouts' <- counterI64 keiroProjectionWaitTimeoutsName "{timeout}" "Position-wait calls that timed out before the projection caught up."
+  commandConflicts' <- counterI64 keiroCommandConflictsName "{conflict}" "Optimistic-concurrency conflicts observed by command runners."
+  commandRetries' <- counterI64 keiroCommandRetriesName "{retry}" "Command retry attempts started after an optimistic-concurrency conflict."
+  commandDuplicates' <- counterI64 keiroCommandDuplicatesName "{event}" "Command appends rejected as duplicate deterministic event ids."
+  snapshotDecodeFailures' <- counterI64 keiroSnapshotDecodeFailuresName "{failure}" "Snapshot rows whose bytes failed to decode; hydration fell back to full replay."
+  snapshotEncodeFailures' <- counterI64 keiroSnapshotEncodeFailuresName "{failure}" "Post-commit snapshot encodes that failed and were swallowed."
+  snapshotReadHits' <- counterI64 keiroSnapshotReadHitsName "{read}" "Snapshot lookups that yielded a usable hydration seed."
+  snapshotReadMisses' <- counterI64 keiroSnapshotReadMissesName "{read}" "Snapshot lookups that fell back to full replay."
+  snapshotWriteFailures' <- counterI64 keiroSnapshotWriteFailuresName "{failure}" "Post-commit snapshot writes that failed and were swallowed."
+  snapshotApplyDivergence' <- counterI64 keiroSnapshotApplyDivergenceName "{failure}" "Just-appended event batches that failed to replay from the pre-command state; the stream is poisoned and its next hydration will fail."
+  snapshotSeedDivergence' <- counterI64 keiroSnapshotSeedDivergenceName "{failure}" "Sampled snapshot seeds whose encoded state disagreed with a full replay through the seed version."
+  dispatchFailed' <- counterI64 keiroDispatchFailedName "{command}" "Process-manager/router dispatch commands that failed."
+  dispatchDeadlettered' <- counterI64 keiroDispatchDeadletteredName "{command}" "Rejected process-manager/router dispatch commands handled by dead-letter or skip policy."
+  subscriptionDeadlettered' <- counterI64 keiroSubscriptionDeadletteredName "{event}" "Kiroku source events dead-lettered by an explicit disposition or retry exhaustion."
+  dispatchDuplicates' <- counterI64 keiroDispatchDuplicatesName "{command}" "Process-manager/router dispatch commands skipped as duplicate deterministic event ids."
+  dispatchPoison' <- counterI64 keiroDispatchPoisonName "{message}" "Process-manager/router worker messages classified as poison."
+  workflowStepsExecuted' <- counterI64 keiroWorkflowStepsExecutedName "{step}" "Workflow steps that ran their action (a journal miss)."
+  workflowStepsReplayed' <- counterI64 keiroWorkflowStepsReplayedName "{step}" "Workflow steps short-circuited to a recorded result (a journal hit)."
+  workflowResumed' <- counterI64 keiroWorkflowResumedName "{workflow}" "Workflow re-invocations performed by the resume worker."
+  workflowFailed' <- counterI64 keiroWorkflowFailedName "{workflow}" "Workflow instances marked terminally failed by the resume worker."
+  workflowResumeErrors' <- counterI64 keiroWorkflowResumeErrorsName "{error}" "Transient store errors observed by the workflow resume worker."
+  workflowLeaseSkipped' <- counterI64 keiroWorkflowLeaseSkippedName "{workflow}" "Workflow instances skipped because another worker owns their lease."
+  workflowActive' <- gaugeI64 keiroWorkflowActiveName "{workflow}" "Workflow runs currently in progress in this process."
+  workflowJournalLength' <- histogram keiroWorkflowJournalLengthName "{event}" "Journal event count of a workflow at completion."
+  workflowAwakeablesPending' <- gaugeI64 keiroWorkflowAwakeablesPendingName "{awakeable}" "Awakeables awaiting an external signal."
+  pure
+    KeiroMetrics
+      { outboxBacklog = outboxBacklog',
+        outboxPublished = outboxPublished',
+        outboxRetried = outboxRetried',
+        outboxDeadlettered = outboxDeadlettered',
+        outboxReclaimed = outboxReclaimed',
+        inboxProcessed = inboxProcessed',
+        inboxDuplicates = inboxDuplicates',
+        inboxFailed = inboxFailed',
+        inboxPoisoned = inboxPoisoned',
+        inboxBacklog = inboxBacklog',
+        timerBacklog = timerBacklog',
+        timerFireLag = timerFireLag',
+        timerAttempts = timerAttempts',
+        timerStuck = timerStuck',
+        timerRequeued = timerRequeued',
+        projectionLag = projectionLag',
+        projectionWaitTimeouts = projectionWaitTimeouts',
+        commandConflicts = commandConflicts',
+        commandRetries = commandRetries',
+        commandDuplicates = commandDuplicates',
+        snapshotDecodeFailures = snapshotDecodeFailures',
+        snapshotEncodeFailures = snapshotEncodeFailures',
+        snapshotReadHits = snapshotReadHits',
+        snapshotReadMisses = snapshotReadMisses',
+        snapshotWriteFailures = snapshotWriteFailures',
+        snapshotApplyDivergence = snapshotApplyDivergence',
+        snapshotSeedDivergence = snapshotSeedDivergence',
+        dispatchFailed = dispatchFailed',
+        dispatchDeadlettered = dispatchDeadlettered',
+        subscriptionDeadlettered = subscriptionDeadlettered',
+        dispatchDuplicates = dispatchDuplicates',
+        dispatchPoison = dispatchPoison',
+        workflowStepsExecuted = workflowStepsExecuted',
+        workflowStepsReplayed = workflowStepsReplayed',
+        workflowResumed = workflowResumed',
+        workflowFailed = workflowFailed',
+        workflowResumeErrors = workflowResumeErrors',
+        workflowLeaseSkipped = workflowLeaseSkipped',
+        workflowActive = workflowActive',
+        workflowJournalLength = workflowJournalLength',
+        workflowAwakeablesPending = workflowAwakeablesPending'
+      }
   where
     counterI64 :: Text -> Text -> Text -> IO (Counter Int64)
     counterI64 name unit desc =
-        meterCreateCounterInt64 meter name (Just unit) (Just desc) defaultAdvisoryParameters
+      meterCreateCounterInt64 meter name (Just unit) (Just desc) defaultAdvisoryParameters
     gaugeI64 :: Text -> Text -> Text -> IO (Gauge Int64)
     gaugeI64 name unit desc =
-        meterCreateGaugeInt64 meter name (Just unit) (Just desc) defaultAdvisoryParameters
+      meterCreateGaugeInt64 meter name (Just unit) (Just desc) defaultAdvisoryParameters
     histogram :: Text -> Text -> Text -> IO Histogram
     histogram name unit desc =
-        meterCreateHistogram meter name (Just unit) (Just desc) defaultAdvisoryParameters
+      meterCreateHistogram meter name (Just unit) (Just desc) defaultAdvisoryParameters
 
 -- Internal: record an Int64 on the counter selected by @sel@, or do nothing.
 recordCounter ::
-    (MonadIO m) => (KeiroMetrics -> Counter Int64) -> Maybe KeiroMetrics -> Int64 -> m ()
+  (MonadIO m) => (KeiroMetrics -> Counter Int64) -> Maybe KeiroMetrics -> Int64 -> m ()
 recordCounter _ Nothing _ = pure ()
 recordCounter sel (Just ms) n = liftIO (counterAdd (sel ms) n emptyAttributes)
 
 -- Internal: record an Int64 on the gauge selected by @sel@, or do nothing.
 recordGaugeI64 ::
-    (MonadIO m) => (KeiroMetrics -> Gauge Int64) -> Maybe KeiroMetrics -> Int64 -> m ()
+  (MonadIO m) => (KeiroMetrics -> Gauge Int64) -> Maybe KeiroMetrics -> Int64 -> m ()
 recordGaugeI64 _ Nothing _ = pure ()
 recordGaugeI64 sel (Just ms) n = liftIO (gaugeRecord (sel ms) n emptyAttributes)
 
 -- Internal: record a Double on the histogram selected by @sel@, or do nothing.
 recordHistogram ::
-    (MonadIO m) => (KeiroMetrics -> Histogram) -> Maybe KeiroMetrics -> Double -> m ()
+  (MonadIO m) => (KeiroMetrics -> Histogram) -> Maybe KeiroMetrics -> Double -> m ()
 recordHistogram _ Nothing _ = pure ()
 recordHistogram sel (Just ms) v = liftIO (histogramRecord (sel ms) v emptyAttributes)
 
 recordOutboxBacklog :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordOutboxBacklog = recordGaugeI64 outboxBacklog
+
 recordOutboxPublished :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordOutboxPublished = recordCounter outboxPublished
+
 recordOutboxRetried :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordOutboxRetried = recordCounter outboxRetried
+
 recordOutboxDeadlettered :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordOutboxDeadlettered = recordCounter outboxDeadlettered
+
 recordOutboxReclaimed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordOutboxReclaimed = recordCounter outboxReclaimed
+
 recordInboxProcessed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordInboxProcessed = recordCounter inboxProcessed
+
 recordInboxDuplicates :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordInboxDuplicates = recordCounter inboxDuplicates
+
 recordInboxFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordInboxFailed = recordCounter inboxFailed
+
 recordInboxPoisoned :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordInboxPoisoned = recordCounter inboxPoisoned
+
 recordInboxBacklog :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordInboxBacklog = recordGaugeI64 inboxBacklog
+
 recordTimerBacklog :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordTimerBacklog = recordGaugeI64 timerBacklog
+
 recordTimerFireLag :: (MonadIO m) => Maybe KeiroMetrics -> Double -> m ()
 recordTimerFireLag = recordHistogram timerFireLag
+
 recordTimerAttempts :: (MonadIO m) => Maybe KeiroMetrics -> Double -> m ()
 recordTimerAttempts = recordHistogram timerAttempts
+
 recordTimerStuck :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordTimerStuck = recordGaugeI64 timerStuck
+
 recordTimerRequeued :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordTimerRequeued = recordCounter timerRequeued
+
 recordProjectionLag :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordProjectionLag = recordGaugeI64 projectionLag
+
 recordProjectionWaitTimeouts :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordProjectionWaitTimeouts = recordCounter projectionWaitTimeouts
+
 recordCommandConflicts :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordCommandConflicts = recordCounter commandConflicts
+
 recordCommandRetries :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordCommandRetries = recordCounter commandRetries
+
 recordCommandDuplicates :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordCommandDuplicates = recordCounter commandDuplicates
+
 recordSnapshotDecodeFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotDecodeFailures = recordCounter snapshotDecodeFailures
+
 recordSnapshotEncodeFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotEncodeFailures = recordCounter snapshotEncodeFailures
+
 recordSnapshotReadHits :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotReadHits = recordCounter snapshotReadHits
+
 recordSnapshotReadMisses :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotReadMisses = recordCounter snapshotReadMisses
+
 recordSnapshotWriteFailures :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotWriteFailures = recordCounter snapshotWriteFailures
+
 recordSnapshotApplyDivergence :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotApplyDivergence = recordCounter snapshotApplyDivergence
+
 recordSnapshotSeedDivergence :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSnapshotSeedDivergence = recordCounter snapshotSeedDivergence
+
 recordDispatchFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordDispatchFailed = recordCounter dispatchFailed
+
 recordDispatchDeadLettered :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordDispatchDeadLettered = recordCounter dispatchDeadlettered
+
 recordSubscriptionDeadLettered :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordSubscriptionDeadLettered = recordCounter subscriptionDeadlettered
+
 recordDispatchDuplicate :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordDispatchDuplicate = recordCounter dispatchDuplicates
+
 recordDispatchPoison :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordDispatchPoison = recordCounter dispatchPoison
+
 recordWorkflowStepExecuted :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowStepExecuted = recordCounter workflowStepsExecuted
+
 recordWorkflowStepReplayed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowStepReplayed = recordCounter workflowStepsReplayed
+
 recordWorkflowResumed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowResumed = recordCounter workflowResumed
+
 recordWorkflowFailed :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowFailed = recordCounter workflowFailed
+
 recordWorkflowResumeErrors :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowResumeErrors = recordCounter workflowResumeErrors
+
 recordWorkflowLeaseSkipped :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowLeaseSkipped = recordCounter workflowLeaseSkipped
+
 recordWorkflowActive :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowActive = recordGaugeI64 workflowActive
+
 recordWorkflowJournalLength :: (MonadIO m) => Maybe KeiroMetrics -> Double -> m ()
 recordWorkflowJournalLength = recordHistogram workflowJournalLength
+
 recordWorkflowAwakeablesPending :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordWorkflowAwakeablesPending = recordGaugeI64 workflowAwakeablesPending
 
-{- | Feed Kiroku store events into Keiro metrics, then delegate every event to
-the application's existing event handler. Install this as (or inside) the
-@eventHandler@ on Kiroku's @ConnectionSettings@ at store construction; pass
-@const (pure ())@ when there is no other handler.
-
-'KirokuEventSubscriptionDeadLettered' is the terminal retry-exhaustion signal:
-the acknowledgement bridge exposes the current delivery attempt, but does not
-tell a handler that its retry reply consumed the final attempt. For current
-dead-letter depth, query Kiroku's durable table rather than treating this
-monotonic counter as a gauge:
-
-> SELECT count(*) FROM kiroku.dead_letters WHERE subscription_name = $1
-
-The delegate runs synchronously, matching Kiroku's event-handler contract, so
-it should remain fast and non-blocking.
--}
+-- | Feed Kiroku store events into Keiro metrics, then delegate every event to
+-- the application's existing event handler. Install this as (or inside) the
+-- @eventHandler@ on Kiroku's @ConnectionSettings@ at store construction; pass
+-- @const (pure ())@ when there is no other handler.
+--
+-- 'KirokuEventSubscriptionDeadLettered' is the terminal retry-exhaustion signal:
+-- the acknowledgement bridge exposes the current delivery attempt, but does not
+-- tell a handler that its retry reply consumed the final attempt. For current
+-- dead-letter depth, query Kiroku's durable table rather than treating this
+-- monotonic counter as a gauge:
+--
+-- > SELECT count(*) FROM kiroku.dead_letters WHERE subscription_name = $1
+--
+-- The delegate runs synchronously, matching Kiroku's event-handler contract, so
+-- it should remain fast and non-blocking.
 kirokuEventBridge :: Maybe KeiroMetrics -> (KirokuEvent -> IO ()) -> KirokuEvent -> IO ()
 kirokuEventBridge metrics delegate event = do
-    case event of
-        KirokuEventSubscriptionDeadLettered{} -> recordSubscriptionDeadLettered metrics 1
-        _ -> pure ()
-    delegate event
+  case event of
+    KirokuEventSubscriptionDeadLettered {} -> recordSubscriptionDeadLettered metrics 1
+    _ -> pure ()
+  delegate event

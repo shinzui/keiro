@@ -1,6 +1,5 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 -- HAND-FILLED workflow body (EP-6 M5 full-service integration): the ordered
 -- step/await body — the behaviour-bearing hole — written against the live

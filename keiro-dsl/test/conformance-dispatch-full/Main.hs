@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 
 {- | EP-5 M5 full-service conformance: a complete pgmq dispatch service — the
 scaffolded Job codec + retry policy plus a filled worker handler, assembled
