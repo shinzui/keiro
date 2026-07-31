@@ -1,3 +1,4 @@
+language keiro-dsl 1
 context mapped-missing-canonical
 
 mapped structural record Thing {

@@ -4,8 +4,8 @@ Run everything from the repo root (`/Users/shinzui/Keikaku/bokuno/keiro`).
 
 ### 1. Write the spec
 
-Author `service.keiro` in the notation (`NOTATION.md`). Start from `context <name>` and add
-exactly the nodes the feature needs. Prefer the smallest spec that captures the decisions;
+Author `service.keiro` in the notation (`NOTATION.md`). Start with `language keiro-dsl 1`, then
+`context <name>`, and add exactly the nodes the feature needs. Prefer the smallest spec that captures the decisions;
 the deterministic boilerplate is derived, so don't hand-write it.
 
 ### 2. Parse (sanity)
@@ -17,6 +17,17 @@ cabal run keiro-dsl -- parse service.keiro
 It echoes the spec pretty-printed. A parse error is line-numbered; fix the notation.
 For a multi-file service, parse the `.keiro-workspace` manifest to inspect its canonical
 member order.
+
+To audit source-language provenance rather than normalized notation, inspect the source or
+workspace:
+
+```bash
+cabal run keiro-dsl -- inspect service.keiro --format=json
+```
+
+Declared version 1 is preserved. An unversioned source is reported as `legacy-unversioned` with
+effective version 1 and is not silently rewritten. An unsupported future version is rejected
+before its body is parsed.
 
 ### 3. Check (the gate — before any Haskell)
 
@@ -33,7 +44,9 @@ members first, resolves cross-file references once, and cites each owning file a
 Common diagnostics you must resolve in the spec (the warning-only codes are called out):
 
 - Syntax and generated names: positioned parse errors reject raw newlines in strings and
-  duplicate `wire`, `projection`, or transition `goto` clauses. `IdentHaskellKeyword`,
+  duplicate `wire`, `projection`, or transition `goto` clauses. Source selection separately
+  reports `InvalidLanguageVersion`, `UnsupportedLanguageVersion`,
+  `DuplicateLanguagePreamble`, or `MisplacedLanguagePreamble`. `IdentHaskellKeyword`,
   `IdentNotConstructorSafe`, `VertexCtorCollision`, `DuplicateNodeName`,
   `DuplicateEnumCtor`, `DuplicateEnumWire`, `DuplicateIdPrefix`, `DuplicateCommandName`,
   and `DuplicateEventName` reject names that would collide or generate illegal Haskell.

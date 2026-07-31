@@ -71,7 +71,8 @@ motivation and an honest account of what keiro deliberately gives up.
   (`Keiro.Outbox`, `Keiro.Inbox`);
 - durable rejected-dispatch records and idempotent subscription dead-letter
   replay (`Keiro.DeadLetter`);
-- a typed `.keiro` toolchain that checks cross-node policy, scaffolds generated
+- a versioned typed `.keiro` toolchain that selects an explicit released
+  language contract before parsing, checks cross-node policy, scaffolds generated
   modules and create-once holes, emits harnesses, and gates persistence-aware
   evolution (`keiro-dsl`);
 - native dependency-ordered database migration components and the
@@ -107,7 +108,7 @@ effect handling, and **Streamly** for streaming reads and worker loops.
   Postgres-backed work queue built on `pgmq-hs` and shibuya's pgmq adapter.
 - `keiro-dsl/` — typed-specification (`.keiro`) toolchain for aggregates,
   process managers, routers, integration, queues, read models, and durable
-  workflows: parse / check / scaffold / harness / diff.
+  workflows: language inspection / parse / check / scaffold / harness / diff.
 - `keiro-migrations/` — native `pg-migrate` component and CLI for the Kiroku and
   Keiro PostgreSQL schemas, plus verified legacy-Codd import evidence.
 - `keiro-test-support/` — shared PostgreSQL test fixtures for the test suites.

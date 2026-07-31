@@ -37,20 +37,22 @@ valid kinds when the argument is unrecognised.
 -}
 skeletonFor :: Text -> Either Text Text
 skeletonFor kind = case kind of
-    "aggregate" -> Right aggregateSkeleton
-    "process" -> Right processSkeleton
-    "router" -> Right routerSkeleton
-    "contract" -> Right contractSkeleton
-    "intake" -> Right intakeSkeleton
-    "emit" -> Right emitSkeleton
-    "publisher" -> Right emitSkeleton
-    "workqueue" -> Right workqueueSkeleton
-    "dispatch" -> Right workqueueSkeleton
-    "workflow" -> Right workflowSkeleton
-    "operation" -> Right workflowSkeleton
+    "aggregate" -> Right (versioned aggregateSkeleton)
+    "process" -> Right (versioned processSkeleton)
+    "router" -> Right (versioned routerSkeleton)
+    "contract" -> Right (versioned contractSkeleton)
+    "intake" -> Right (versioned intakeSkeleton)
+    "emit" -> Right (versioned emitSkeleton)
+    "publisher" -> Right (versioned emitSkeleton)
+    "workqueue" -> Right (versioned workqueueSkeleton)
+    "dispatch" -> Right (versioned workqueueSkeleton)
+    "workflow" -> Right (versioned workflowSkeleton)
+    "operation" -> Right (versioned workflowSkeleton)
     other ->
         Left $
             "unknown kind '" <> other <> "'. Valid kinds: " <> T.intercalate ", " skeletonKinds
+  where
+    versioned source = "language keiro-dsl 1\n" <> source
 
 aggregateSkeleton :: Text
 aggregateSkeleton =

@@ -1,3 +1,4 @@
+language keiro-dsl 1
 context aggregate-scalars-unsupported
 
 aggregate BrokenScalars

@@ -1,3 +1,4 @@
+language keiro-dsl 1
 context hospital-capacity
 
 id  TransferReservationId  prefix=rsv

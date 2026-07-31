@@ -53,7 +53,7 @@ import Keiro.Dsl.WorkspaceScaffold
 import System.Directory (createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
-import System.FilePath (takeDirectory, (</>))
+import System.FilePath (takeDirectory, takeExtension, (</>))
 import System.IO (hClose, openTempFile)
 import System.Process (readProcessWithExitCode)
 import Test.Hspec hiding (Spec)
@@ -113,8 +113,9 @@ main = hspec $ do
 
         it "reports a declaration-only rewrite without semantic, generated, fold, or replay impact" $ do
             fixture <- readTestText "test/fixtures/reservation.keiro"
-            legacySource <- parseRight "legacy.keiro" fixture
-            declaredSource <- parseRight "declared.keiro" ("language keiro-dsl 1\n" <> fixture)
+            let legacyFixture = T.unlines (drop 1 (T.lines fixture))
+            legacySource <- parseRight "legacy.keiro" legacyFixture
+            declaredSource <- parseRight "declared.keiro" fixture
             let oldSpec = parsedSpec legacySource
                 newSpec = parsedSpec declaredSource
                 changes = diffSources legacySource declaredSource
@@ -142,8 +143,8 @@ main = hspec $ do
             sourceErr `shouldBe` ""
             sourceOut `shouldContain` "\"schema\":\"keiro-dsl/source-inspection/1\""
             sourceOut `shouldContain` "\"kind\":\"source\""
-            sourceOut `shouldContain` "\"sourceForm\":\"legacy-unversioned\""
-            sourceOut `shouldContain` "\"declaredLanguageVersion\":null"
+            sourceOut `shouldContain` "\"sourceForm\":\"declared\""
+            sourceOut `shouldContain` "\"declaredLanguageVersion\":1"
             sourceOut `shouldContain` "\"effectiveLanguageVersion\":1"
             (workspaceCode, workspaceOut, workspaceErr) <- runKeiroDsl ["inspect", canonicalWorkspacePath, "--format=json"]
             workspaceCode `shouldBe` ExitSuccess
@@ -151,6 +152,42 @@ main = hspec $ do
             workspaceOut `shouldContain` "\"kind\":\"workspace\""
             workspaceOut `shouldContain` "\"service\":\"demo-project\""
             workspaceOut `shouldSatisfy` orderedSubstrings ["domain/project-artifact.keiro", "domain/project.keiro", "domain/shared.keiro"]
+
+        it "keeps only the named source-version compatibility fixtures outside canonical v1" $ do
+            fixtureTree <- treeSnapshot "test/fixtures"
+            let withoutCanonicalV1 =
+                    sort
+                        [ path
+                        | (path, contents) <- fixtureTree
+                        , takeExtension path == ".keiro"
+                        , "language keiro-dsl 1" `notElem` T.lines contents
+                        ]
+            withoutCanonicalV1
+                `shouldBe` sort
+                    [ "language-duplicate.keiro"
+                    , "language-future.keiro"
+                    , "language-legacy.keiro"
+                    , "language-malformed.keiro"
+                    , "language-misplaced.keiro"
+                    , "language-zero.keiro"
+                    ]
+
+        it "checks v1, rejects a future contract once, and inspects legacy explicitly" $ do
+            (v1Code, v1Out, v1Err) <- runKeiroDsl ["check", "test/fixtures/language-v1.keiro"]
+            v1Code `shouldBe` ExitSuccess
+            v1Out `shouldBe` "OK\n"
+            v1Err `shouldBe` ""
+            (futureCode, _, futureErr) <- runKeiroDsl ["check", "test/fixtures/language-future.keiro"]
+            futureCode `shouldBe` ExitFailure 1
+            T.count "UnsupportedLanguageVersion" (T.pack futureErr) `shouldBe` 1
+            futureErr `shouldContain` "supported versions: 1"
+            futureErr `shouldNotContain` "expecting `context`"
+            (legacyCode, legacyOut, legacyErr) <- runKeiroDsl ["inspect", "test/fixtures/language-legacy.keiro", "--format=json"]
+            legacyCode `shouldBe` ExitSuccess
+            legacyErr `shouldBe` ""
+            legacyOut `shouldContain` "\"sourceForm\":\"legacy-unversioned\""
+            legacyOut `shouldContain` "\"declaredLanguageVersion\":null"
+            legacyOut `shouldContain` "\"effectiveLanguageVersion\":1"
 
         it "preserves a workspace member's source-selection code beneath outer attribution" $ do
             let manifest = "service demo\nspec domain/future.keiro\n"
@@ -168,15 +205,15 @@ main = hspec $ do
 
         it "attributes a workspace provenance-only diff to the changed member" $ do
             workspace <- shouldComposeWorkspace canonicalWorkspacePath
-            case (languageVersion 1, wsMembers workspace) of
-                (Just version, firstMember : remaining) -> do
-                    let changedMember = firstMember{wmSourceLanguage = DeclaredLanguage version noLoc}
+            case wsMembers workspace of
+                firstMember : remaining -> do
+                    let changedMember = firstMember{wmSourceLanguage = LegacyUnversioned}
                         changedWorkspace = workspace{wsMembers = changedMember : remaining}
                         changes = diffWorkspaces workspace changedWorkspace
                     map (changeCode . wcChange) changes `shouldBe` [SourceLanguageDeclarationChanged]
                     map (fmap osFile . wcDeclarationSite) changes `shouldBe` [Just (wmPath firstMember)]
                     map wcChange changes `shouldSatisfy` all (not . gatedBreaking (gateWith [minBound .. maxBound]))
-                _ -> expectationFailure "canonical workspace had no member or v1 was unavailable"
+                _ -> expectationFailure "canonical workspace had no member"
 
     describe "historical codec comparison" $ do
         it "treats object-key order as RFC 8785 parity" $ do
@@ -522,10 +559,10 @@ main = hspec $ do
         it "reports unsupported shapes, invalid initials, and mismatched guards at stable lines" $ do
             diagnostics <- diagnosticsOf "test/fixtures/aggregate-scalars-unsupported.keiro"
             [(code diagnostic, line diagnostic) | diagnostic <- diagnostics, severity diagnostic == Error]
-                `shouldBe` [ (AggregateRegisterInitialInvalid, 5)
-                           , (AggregateRegisterInitialInvalid, 6)
-                           , (AggregateTypeUnsupportedAtUse, 9)
-                           , (AggregateGuardTypeMismatch, 12)
+                `shouldBe` [ (AggregateRegisterInitialInvalid, 6)
+                           , (AggregateRegisterInitialInvalid, 7)
+                           , (AggregateTypeUnsupportedAtUse, 10)
+                           , (AggregateGuardTypeMismatch, 13)
                            ]
             map message diagnostics `shouldSatisfy` any (T.isInfixOf "non-negative integral literals")
             map message diagnostics `shouldSatisfy` any (T.isInfixOf "ISO-8601 UTC timestamps")
@@ -534,17 +571,17 @@ main = hspec $ do
             source <- readTestText "test/fixtures/aggregate-scalars-arithmetic.keiro"
             err <- parseErrorOf "test/fixtures/aggregate-scalars-arithmetic.keiro" source
             err `shouldSatisfy` T.isInfixOf "aggregate arithmetic operator '+' is unsupported"
-            err `shouldSatisfy` T.isInfixOf "aggregate-scalars-arithmetic.keiro:11:39:"
+            err `shouldSatisfy` T.isInfixOf "aggregate-scalars-arithmetic.keiro:12:39:"
         it "covers unknown, container, fractional, out-of-range, and ordering failures" $ do
             diagnostics <- diagnosticsOf "test/fixtures/aggregate-scalars-invalid-capabilities.keiro"
             [(code diagnostic, line diagnostic) | diagnostic <- diagnostics, severity diagnostic == Error]
-                `shouldBe` [ (AggregateRegisterInitialInvalid, 5)
-                           , (AggregateRegisterInitialInvalid, 6)
-                           , (AggregateTypeUnknown, 9)
-                           , (AggregateTypeUnsupportedAtUse, 9)
-                           , (AggregateTypeUnsupportedAtUse, 9)
-                           , (AggregateTypeUnsupportedAtUse, 9)
-                           , (AggregateGuardCapabilityUnsupported, 12)
+                `shouldBe` [ (AggregateRegisterInitialInvalid, 6)
+                           , (AggregateRegisterInitialInvalid, 7)
+                           , (AggregateTypeUnknown, 10)
+                           , (AggregateTypeUnsupportedAtUse, 10)
+                           , (AggregateTypeUnsupportedAtUse, 10)
+                           , (AggregateTypeUnsupportedAtUse, 10)
+                           , (AggregateGuardCapabilityUnsupported, 13)
                            ]
         it "keeps one-member workspace diagnostics identical to the single file" $ do
             direct <- diagnosticsOf "test/fixtures/aggregate-scalars-unsupported.keiro"
@@ -1240,7 +1277,7 @@ main = hspec $ do
             incomplete `shouldContain` [WqDispositionIncomplete]
             duplicateSpec <- specOf "test/fixtures/workqueue-dup-row.keiro"
             let duplicateDiagnostics = [d | d <- validateSpec duplicateSpec, code d == DispositionDuplicateOutcome]
-            map line duplicateDiagnostics `shouldBe` [17]
+            map line duplicateDiagnostics `shouldBe` [18]
         it "checks the captured queueRef dlq and table fixtures" $ do
             dlqCodes <- errorCodesOf "test/fixtures/workqueue-dlq-divergent.keiro"
             dlqCodes `shouldContain` [WqDlqDivergence]
@@ -2749,8 +2786,8 @@ main = hspec $ do
                     ]
                     `shouldBe` [True, True, False, False, False]
         describe "manifest refusals" $ do
-            let rejects label source expected =
-                    it label $ case parseWorkspaceManifest "<manifest>" source of
+            let rejects description source expected =
+                    it description $ case parseWorkspaceManifest "<manifest>" source of
                         Right _ -> expectationFailure ("expected a refusal, got a manifest for:\n" <> T.unpack source)
                         Left err -> T.unpack err `shouldContain` expected
             rejects
@@ -2942,8 +2979,8 @@ main = hspec $ do
                 map (renderWorkspaceDiagnostic manifest) (NE.toList diagnostics)
                     `shouldBe` [ T.intercalate
                                     "\n"
-                                    [ "keiro-dsl/test/fixtures/workspace-dup-decl/domain/project.keiro:3: error[WorkspaceDuplicateDeclaration]: duplicate declaration 'ProjectId': a shared declaration has exactly one owning member (identical duplicates do not merge)"
-                                    , "  keiro-dsl/test/fixtures/workspace-dup-decl/domain/shared.keiro:3: note: also declared here, as id 'ProjectId'"
+                                    [ "keiro-dsl/test/fixtures/workspace-dup-decl/domain/project.keiro:4: error[WorkspaceDuplicateDeclaration]: duplicate declaration 'ProjectId': a shared declaration has exactly one owning member (identical duplicates do not merge)"
+                                    , "  keiro-dsl/test/fixtures/workspace-dup-decl/domain/shared.keiro:4: note: also declared here, as id 'ProjectId'"
                                     ]
                                ]
         describe "whole-service check through the CLI" $ do
@@ -2956,13 +2993,13 @@ main = hspec $ do
                     runKeiroDsl ["check", "test/fixtures/workspace-dup-decl/service.keiro-workspace"]
                 exitCode `shouldBe` ExitFailure 1
                 err `shouldContain` "error[WorkspaceDuplicateDeclaration]"
-                err `shouldContain` "workspace-dup-decl/domain/project.keiro:3"
-                err `shouldContain` "workspace-dup-decl/domain/shared.keiro:3"
+                err `shouldContain` "workspace-dup-decl/domain/project.keiro:4"
+                err `shouldContain` "workspace-dup-decl/domain/shared.keiro:4"
             it "attributes a merged-graph validation error to the member that wrote it" $ do
                 (exitCode, _, err) <-
                     runKeiroDsl ["check", "test/fixtures/workspace-unresolved/service.keiro-workspace"]
                 exitCode `shouldBe` ExitFailure 1
-                err `shouldContain` "workspace-unresolved/domain/project.keiro:12: error[GuardAtomOutOfScope]"
+                err `shouldContain` "workspace-unresolved/domain/project.keiro:13: error[GuardAtomOutOfScope]"
             it "produces byte-identical output for a manifest whose members are listed in reverse" $ do
                 (canonicalCode, canonicalOut, _) <- runKeiroDsl ["check", canonicalWorkspacePath, "--emit"]
                 (reorderedCode, reorderedOut, _) <- runKeiroDsl ["check", reorderedWorkspacePath, "--emit"]
@@ -3074,7 +3111,7 @@ main = hspec $ do
             citedFiles enumChanges `shouldContain` ["domain/order.keiro", "domain/shipment.keiro"]
             citedFiles mappedChanges `shouldContain` ["domain/order.keiro", "domain/shipment.keiro"]
             let rendered = T.intercalate "\n" (map renderWorkspaceFinding (enumChanges <> mappedChanges))
-            rendered `shouldSatisfy` T.isInfixOf "    declared: domain/shared.keiro:3"
+            rendered `shouldSatisfy` T.isInfixOf "    declared: domain/shared.keiro:4"
             rendered `shouldSatisfy` T.isInfixOf "    use-site: Order"
             rendered `shouldSatisfy` T.isInfixOf "(domain/order.keiro:"
             rendered `shouldSatisfy` T.isInfixOf "(domain/shipment.keiro:"

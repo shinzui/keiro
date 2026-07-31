@@ -2,9 +2,9 @@
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
 description: A .keiro document selects a released parser contract before grammar parsing, while its declared/effective language provenance remains separate from the semantic Spec graph used by validation, composition, and replay analysis.
-timestamp: 2026-07-31T16:45:19Z
+timestamp: 2026-07-31T17:30:13Z
 docId: ADR-16
-status: Proposed
+status: Accepted
 date: 2026-07-31
 ---
 
@@ -12,12 +12,12 @@ date: 2026-07-31
 
 Date: 2026-07-31
 
-Status: Proposed
+Status: Accepted
 
 
 ## Context
 
-Every `.keiro` source currently starts at `context` and is parsed by one grammar into
+Before this decision, every `.keiro` source started at `context` and was parsed by one grammar into
 `Keiro.Dsl.Grammar.Spec`. Nothing in the source says which parser and semantic contract the
 author intended. A newer tool can therefore accept syntax that an older tool rejects while both
 appear to be reading the same unversioned language.

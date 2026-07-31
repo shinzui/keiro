@@ -22,17 +22,21 @@ edit a `-- @generated` module.
 
 ## The load-bearing rules (read these first)
 
-1. **Never edit a `-- @generated` line.** Those modules are overwritten on every `scaffold`.
+1. **Declare the released language contract.** Every new complete source starts with
+   `language keiro-dsl 1`, before `context`. Version 1 is frozen: do not add later syntax to its
+   parser. Unversioned sources are accepted only as the explicit legacy form whose effective
+   version is 1; ordinary parse/pretty preserves that distinction and does not migrate them.
+2. **Never edit a `-- @generated` line.** Those modules are overwritten on every `scaffold`.
    Fill only the create-if-absent `Holes.hs` / `ProcessHoles.hs` modules, against the
    signatures the generated layer exports.
-2. **The firewall invariant.** No `-- @generated` module ever contains a keiki symbolic
+3. **The firewall invariant.** No `-- @generated` module ever contains a keiki symbolic
    operator (`./=`, `.==`, `.||`, `lit`, `B.slot`, `B.requireGuard`). Those appear only in
    the hand-owned hole modules you write. If you find one in a generated module, that's a
    bug in the scaffolder, not something to "fix" in place.
-3. **Time is injected, never sampled.** A deadline/sleep is computed from a timestamp carried
+4. **Time is injected, never sampled.** A deadline/sleep is computed from a timestamp carried
    in the input (e.g. `observedAt`), never from a wall-clock read. The validator enforces
    this; don't try to work around it.
-4. **The dangerous decisions are explicit on purpose.** Inbox `duplicate => ackOk` (a replay
+5. **The dangerous decisions are explicit on purpose.** Inbox `duplicate => ackOk` (a replay
    is success), `previouslyFailed => deadLetter` (not retry), pgmq `storeFailure => retry`
    (transient) vs `decodeFailure => deadLetter` (poison), timer `on-reject => Fired` (a
    rejected replay is benign success). The checker forces you to state each one; state them
@@ -42,7 +46,7 @@ edit a `-- @generated` module.
    acknowledging it. If you handle duplicates by hand, call that function, fold `True` into
    the duplicate result, and surface `False` as the original failure; never treat a bare
    `DuplicateEvent` as success because event-id uniqueness is global.
-5. **The harness — not the scaffold — pins behaviour.** Two agents can fill the holes
+6. **The harness — not the scaffold — pins behaviour.** Two agents can fill the holes
    differently but correctly and both pass; one wrong guard/mapping/disposition fails a
    specific named harness test. Run it. The harness also proves **replay-safety**: the
    generated `EventStream` module now emits two bindings — a raw `xEventStreamDef ::
@@ -74,6 +78,7 @@ Run from the repo root (`/Users/shinzui/Keikaku/bokuno/keiro`):
 ```bash
 cabal run keiro-dsl -- parse   <file.keiro>            # parse + pretty-print (proves it's a real spec)
 cabal run keiro-dsl -- check   <file.keiro> [--emit]   # validate; --emit pretty-prints the spec on success
+cabal run keiro-dsl -- inspect <file.keiro> --format=json # report declared/effective language provenance
 cabal run keiro-dsl -- scaffold <file.keiro> --out DIR # validate, then emit @generated + create-if-absent holes
                             [--module-root Acme] [--collocate] [--force-generated-overwrite]
 cabal run keiro-dsl -- diff --since <git-ref> <file.keiro>  # classify ADDITIVE/WARNING/BREAKING; BREAKING gates a merge
@@ -102,7 +107,8 @@ later run no longer produces recorded paths, its exit-0 `stale:` report never de
 delete `generated` entries only after review, and treat `hole` entries as hand-owned code.
 
 A workspace manifest lists complete same-context member specs with `spec <relative.keiro>`
-lines. Shared declarations have exactly one owning member: duplicates are refused even
+lines. Each newly authored member declares `language keiro-dsl 1`; inspection reports every
+member in canonical path order. Shared declarations have exactly one owning member: duplicates are refused even
 when their text is identical, so resolve a conflict by moving the declaration to one owner,
 never by copying it. Workspace scaffold history uses
 `keiro-dsl-scaffold-record.workspace.<service>.txt`; a first run over legacy same-context

@@ -1,3 +1,4 @@
+language keiro-dsl 1
 context mapped-illtyped-default
 
 mapped structural record Thing {

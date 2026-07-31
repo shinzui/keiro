@@ -1,13 +1,33 @@
 # keiro-dsl conformance corpus
 
-Worked examples of the typed-spec toolchain: every committed `.keiro` fixture, every
-compiled conformance component, and every mutation/gate script. Paths are relative to
-`keiro-dsl/` in the keiro repository. Start with the valid fixture for a surface, then use
-its negative or diff variants to see the exact guardrails.
+Worked examples of the typed-spec toolchain: the curated `.keiro` fixtures below, every compiled
+conformance component, and every mutation/gate script. Paths are relative to `keiro-dsl/` in the
+keiro repository. Start with the valid fixture for a surface, then use its negative or diff
+variants to see the exact guardrails. The test suite separately enforces that all ordinary
+fixtures declare `language keiro-dsl 1` and that only the named source-version fixtures differ.
 
-## Complete fixture inventory
+## Source-language contract fixtures
 
-This is the complete 121-fixture inventory as of 2026-07-14. Every path below resolves.
+| Fixture | Role / primary coverage |
+| --- | --- |
+| `test/fixtures/language-v1.keiro` | valid declared v1 source |
+| `test/fixtures/language-legacy.keiro` | compatible unversioned source with effective version 1 |
+| `test/fixtures/language-future.keiro` | unsupported future version rejected before body parsing |
+| `test/fixtures/language-malformed.keiro` | malformed non-decimal version token |
+| `test/fixtures/language-zero.keiro` | invalid zero version |
+| `test/fixtures/language-duplicate.keiro` | duplicate preamble refusal |
+| `test/fixtures/language-misplaced.keiro` | preamble-after-context refusal |
+
+Version 1 is frozen. A later syntax feature must add a successor registry entry and a fixture
+showing that the released v1 parser still rejects the new syntax. General source/workspace upgrade
+automation remains deferred to
+[IR-5](../improvement-requests/add-version-aware-keiro-dsl-upgrade-and-fleet-rewrite-tooling.md).
+
+## Core fixture inventory
+
+This curated inventory covers the primary feature, negative, and evolution surfaces. Every path
+below resolves; the complete machine-checked fixture set contains 218 `.keiro` files as of
+2026-07-31.
 
 | Fixture | Role / primary coverage |
 | --- | --- |

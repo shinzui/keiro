@@ -1,8 +1,23 @@
 # keiro-dsl notation reference
 
-A `.keiro` file is `context <name>` followed by top-level declarations and nodes. `#` begins a
-line comment; whitespace/newlines are insignificant (structure comes from keywords). Every
-node family below is parsed, validated, and round-tripped by the toolchain.
+A `.keiro` file begins with the released language contract, then `context <name>`, followed by
+top-level declarations and nodes:
+
+```text
+language keiro-dsl 1
+context hospital-capacity
+```
+
+The preamble must be the first significant clause; comments and whitespace may precede it.
+Version 1 is frozen. Later syntax must use a registered successor version and retain a fixture
+proving that v1 rejects the new form. A missing preamble remains readable as
+`legacy-unversioned` with effective version 1, but parse/pretty never adds a declaration. Use
+`keiro-dsl inspect <file.keiro> --format=json` to see declared and effective versions. Upgrade
+and fleet-rewrite automation is deferred to
+`docs/improvement-requests/add-version-aware-keiro-dsl-upgrade-and-fleet-rewrite-tooling.md`.
+
+`#` begins a line comment; whitespace/newlines are insignificant (structure comes from
+keywords). Every node family below is parsed, validated, and round-tripped by the toolchain.
 
 Double-quoted strings support `\"`, `\\`, `\n`, `\t`, and `\r`; write line breaks as
 `\n` because raw newlines inside a quoted string are rejected. An aggregate may contain
@@ -12,6 +27,7 @@ exactly one `goto`; duplicates are positioned parse errors.
 ## Shared declarations
 
 ```text
+language keiro-dsl 1
 context hospital-capacity
 
 id   TransferReservationId  prefix=rsv          # an id newtype over Text
@@ -32,6 +48,7 @@ Two optional clauses may follow `context <name>` to control where the emitted mo
 are optional; a spec that omits them scaffolds exactly as today.
 
 ```text
+language keiro-dsl 1
 context hospital-capacity
 module Acme.Services        # optional PascalCase namespace prefix for every emitted module
 layout collocated          # placement style: `prefixed` (default) or `collocated`
@@ -437,6 +454,7 @@ Run from the keiro repo root (or use the `keiro-dsl/bin/keiro-dsl` wrapper on yo
 keiro-dsl new      <kind>                       # print a minimal valid skeleton for a node kind
 keiro-dsl parse    <file.keiro>                 # parse + pretty-print it back
 keiro-dsl check    <file.keiro> [--emit]        # validate; --emit pretty-prints the spec on success
+keiro-dsl inspect  <file.keiro> --format=json   # report declared/effective language provenance
 keiro-dsl scaffold <file.keiro> --out DIR \     # validate, emit @generated + holes + manifest, self-check firewall
   [--module-root Acme] [--collocate] [--force-generated-overwrite]
                                                 # placement overrides clauses; force is an explicit adoption override
@@ -449,7 +467,7 @@ keiro-dsl diff     --since <git-ref> <service.keiro-workspace>
 ### Workspace manifest
 
 A multi-file service uses a separate `.keiro-workspace` file. Each member is still a
-complete `.keiro` spec and every member declares the same context.
+complete `.keiro` spec, starts with `language keiro-dsl 1`, and declares the same context.
 
 ```text
 service demo-project
@@ -487,3 +505,8 @@ declarations have exactly one owning member; identical duplicates do not merge.
   manifest with per-module member ownership; the single-file names remain unchanged.
 - Exit codes gate CI: a non-zero `check`/`scaffold`/`diff` is the signal — fix the **spec**, not the
   generated code. Use `/dev/stdin` as the file to read from stdin.
+
+The workspace manifest itself is unversioned. `inspect <service.keiro-workspace>
+--format=json` loads its members and reports each member's source form and effective version in
+canonical path order. Legacy and declared-v1 members may compose because both select v1; members
+with different effective versions are refused before semantic graph merge.

@@ -5,7 +5,8 @@ to `/Users/shinzui/Keikaku/bokuno/keiro`.
 
 ## 1. The spec
 
-`keiro-dsl/test/fixtures/reservation.keiro` declares one `aggregate Reservation`: three id
+`keiro-dsl/test/fixtures/reservation.keiro` starts with `language keiro-dsl 1` and declares one
+`aggregate Reservation`: three id
 types, three enums, a `rule`, four registers, six states (three terminal), two commands, two
 events, two transitions (the first with a guard `divertStatus != TotalDivert ||
 lifeCriticalOverride` and a register write), a `wire` line, and a `projection` with a
@@ -14,7 +15,11 @@ lifeCriticalOverride` and a register write), a `wire` line, and a `projection` w
 ```bash
 cabal run keiro-dsl -- parse keiro-dsl/test/fixtures/reservation.keiro   # round-trips
 cabal run keiro-dsl -- check keiro-dsl/test/fixtures/reservation.keiro   # OK, exit 0
+cabal run keiro-dsl -- inspect keiro-dsl/test/fixtures/reservation.keiro --format=json
 ```
+
+`parse` retains the declaration. `inspect` reports source form `declared` and both declared and
+effective version 1; it is the provenance check to use before syntax evolution work.
 
 ## 2. Scaffold
 
