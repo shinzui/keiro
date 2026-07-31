@@ -31,10 +31,11 @@ import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldSurface
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
-import Keiro.Dsl.Parser (parseSpec)
-import Keiro.Dsl.PrettyPrint (renderSpec, renderTransition)
+import Keiro.Dsl.Parser (parseSource, parseSpec)
+import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
@@ -60,6 +61,50 @@ import Test.QuickCheck
 
 main :: IO ()
 main = hspec $ do
+    describe "source language version" $ do
+        let legacy = "context hospital-capacity\n"
+            declared = "# leading comment\n\nlanguage keiro-dsl 1\ncontext hospital-capacity\n"
+            failureCode source = case parseSource "source.keiro" source of
+                Left (SourceLanguageFailure diagnostic) -> Just (sourceLanguageErrorCode diagnostic)
+                _ -> Nothing
+            parseRight name source = case parseSource name source of
+                Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+                Right value -> pure value
+            declaredVersionOf DeclaredLanguage{declaredLanguageVersion = version} = Just version
+            declaredVersionOf LegacyUnversioned = Nothing
+
+        it "selects declared v1 after comments while preserving semantic equality" $ do
+            legacySource <- parseRight "legacy.keiro" legacy
+            declaredSource <- parseRight "declared.keiro" declared
+            parsedSpec legacySource `shouldBe` parsedSpec declaredSource
+            parsedSourceLanguage legacySource `shouldBe` LegacyUnversioned
+            declaredVersionOf (parsedSourceLanguage declaredSource) `shouldBe` languageVersion 1
+            effectiveLanguageVersion (parsedSourceLanguage legacySource)
+                `shouldBe` effectiveLanguageVersion (parsedSourceLanguage declaredSource)
+
+        it "retains explicit declarations in source rendering and leaves legacy unversioned" $ do
+            legacySource <- parseRight "legacy.keiro" legacy
+            declaredSource <- parseRight "declared.keiro" declared
+            renderSource legacySource `shouldBe` "context hospital-capacity\n"
+            renderSource declaredSource `shouldBe` "language keiro-dsl 1\ncontext hospital-capacity\n"
+            parseSpec "declared.keiro" declared `shouldBe` Right (parsedSpec declaredSource)
+
+        it "classifies invalid, unsupported, duplicate, and misplaced preambles" $ do
+            failureCode "language keiro-dsl 0\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
+            failureCode "language keiro-dsl nope\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
+            failureCode "language keiro-dsl -1\ncontext hospital-capacity\n" `shouldBe` Just InvalidLanguageVersion
+            failureCode "language keiro-dsl 2\ncontext hospital-capacity\n" `shouldBe` Just UnsupportedLanguageVersion
+            failureCode "language keiro-dsl 1\nlanguage keiro-dsl 1\ncontext hospital-capacity\n" `shouldBe` Just DuplicateLanguagePreamble
+            failureCode "context hospital-capacity\nlanguage keiro-dsl 1\n" `shouldBe` Just MisplacedLanguagePreamble
+
+        it "rejects a future version before parsing an invalid v1 body" $
+            case parseSource "future.keiro" "language keiro-dsl 2\nthis is not a v1 body\n" of
+                Left failure@(SourceLanguageFailure diagnostic) -> do
+                    sourceLanguageErrorCode diagnostic `shouldBe` UnsupportedLanguageVersion
+                    renderParseFailure failure `shouldSatisfy` T.isInfixOf "supported versions: 1"
+                    renderParseFailure failure `shouldNotSatisfy` T.isInfixOf "expecting `context`"
+                other -> expectationFailure ("expected source-language failure, got " <> show other)
+
     describe "historical codec comparison" $ do
         it "treats object-key order as RFC 8785 parity" $ do
             let historical = object ["z" .= (1 :: Int), "a" .= (2 :: Int)]

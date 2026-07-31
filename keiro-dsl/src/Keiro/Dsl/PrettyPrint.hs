@@ -7,6 +7,7 @@ scheme so left-associative @&&@/@||@ and non-associative comparisons re-parse
 to the identical AST.
 -}
 module Keiro.Dsl.PrettyPrint (
+    renderSource,
     renderSpec,
     renderTransition,
     renderExpr,
@@ -20,12 +21,21 @@ where
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.LanguageVersion
 import Prettyprinter
 import Prettyprinter.Render.Text (renderStrict)
 
 -- | Render a whole spec to text.
 renderSpec :: Spec -> Text
 renderSpec = renderDoc . docSpec
+
+-- | Render a source while preserving whether it explicitly declared a version.
+renderSource :: ParsedSource -> Text
+renderSource ParsedSource{parsedSourceLanguage = sourceLanguage, parsedSpec = spec} =
+    case sourceLanguage of
+        LegacyUnversioned -> renderSpec spec
+        DeclaredLanguage{declaredLanguageVersion = version} ->
+            "language keiro-dsl " <> languageVersionText version <> "\n" <> renderSpec spec
 
 renderHandleSurface :: HandleNode -> Text
 renderHandleSurface = renderDoc . docHandle

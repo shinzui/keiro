@@ -4,6 +4,7 @@ slug: add-an-explicit-keiro-dsl-language-version-contract
 title: "Add an explicit Keiro DSL language version contract"
 kind: exec-plan
 created_at: 2026-07-31T14:46:35Z
+intention: intention_01kywhnmdbeyh9yrbddw1knh3y
 ---
 
 # Add an explicit Keiro DSL language version contract
@@ -37,8 +38,10 @@ creates the stable parser-dispatch and provenance boundary required by the alrea
 
 ## Progress
 
-- [ ] Milestone 1: add the source-language model, version registry, provenance-preserving parse
-  entry point, and early preamble diagnostics while retaining the existing semantic `Spec` API.
+- [x] (2026-07-31T17:04:05Z) Milestone 1: added the source-language model, append-only v1
+  registry, provenance-preserving parse entry point, source-aware renderer, and early preamble
+  diagnostics while retaining the existing semantic `Spec` API. The focused test run passed 8
+  examples (including the 4 new source-language examples) with 0 failures.
 - [ ] Milestone 2: route CLI and workspace loading through the new entry point; add inspection,
   record provenance, and provenance-only diff reporting without changing fold/replay semantics.
 - [ ] Milestone 3: declare version 1 in Keiro-owned fixtures, skeletons, and documentation; add
@@ -75,6 +78,11 @@ creates the stable parser-dispatch and provenance boundary required by the alrea
 - 2026-07-31: Mori identifies `mori://shinzui/keiro/packages/keiro-dsl` and reports multiple
   registered Keiro dependents, but the local project has no curated Mori docs for this package.
   Fleet inspection and rewriting remain IR-5 work; no dependent checkout is edited by this plan.
+- 2026-07-31: Cabal splits the originally planned
+  `--test-options='--match=source language version'` value before Hspec receives it, producing
+  `unexpected argument 'language'`. The stable focused invocation is
+  `--test-options='--match=source'`; it selected the new group plus four pre-existing examples and
+  passed 8 examples with 0 failures.
 
 
 ## Decision Log
@@ -285,7 +293,7 @@ Run from `/Users/shinzui/Keikaku/bokuno/keiro` after each milestone. During impl
 the test filter with the final exact Hspec group name if it differs:
 
 ```bash
-cabal test keiro-dsl-test --test-options='--match=source language version'
+cabal test keiro-dsl-test --test-options='--match=source'
 cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/language-v1.keiro
 cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/language-future.keiro
 cabal run -v0 keiro-dsl -- inspect keiro-dsl/test/fixtures/language-legacy.keiro --format=json
@@ -447,3 +455,7 @@ diff/replay surfaces, scaffold records, 211-file fixture corpus, ADRs, and Mori 
 2026-07-31. Reworked the design around a source wrapper instead of a `Spec` field; made `inspect`
 and parse-boundary diagnostics explicit; corrected record, replay, IR-5, documentation, and
 fixture-migration claims; and recorded the durable boundary in ADR 16.
+
+Revision note: Began implementation on 2026-07-31, associated intention
+`intention_01kywhnmdbeyh9yrbddw1knh3y`, completed Milestone 1, recorded its focused validation,
+and corrected the Cabal/Hspec filter to the working single-token form.

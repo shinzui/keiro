@@ -41,6 +41,7 @@ library
     Keiro.Dsl.Goldens
     Keiro.Dsl.Grammar
     Keiro.Dsl.Harness
+    Keiro.Dsl.LanguageVersion
     Keiro.Dsl.Manifest
     Keiro.Dsl.MappedConsumer
     Keiro.Dsl.MappedDiff

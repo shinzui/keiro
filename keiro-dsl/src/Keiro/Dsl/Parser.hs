@@ -7,18 +7,26 @@ a typed 'Expr' (never an opaque string) so the validator can scope-check them.
 -}
 module Keiro.Dsl.Parser (
     ParseError,
+    ParseFailure (..),
+    ParsedSource (..),
+    parseSource,
     parseSpec,
     parseSpecText,
+    renderParseFailure,
 )
 where
 
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
+import Data.Bifunctor (first)
 import Data.Char (isAlpha, isAlphaNum, isAscii, isDigit, isUpper)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Read qualified as TR
 import Data.Void (Void)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.LanguageVersion
+import Numeric.Natural (Natural)
 import Text.Megaparsec hiding (ParseError)
 import Text.Megaparsec.Char (char, digitChar, letterChar, space1)
 import Text.Megaparsec.Char.Lexer qualified as L
@@ -33,14 +41,119 @@ diagnostics (megaparsec's line/column reporting); it need not exist on disk.
 This is the canonical signature shared across all keiro-dsl plans.
 -}
 parseSpec :: FilePath -> Text -> Either ParseError Spec
-parseSpec src input =
-    case runParser (sc *> pSpec <* eof) src input of
-        Left bundle -> Left (T.pack (errorBundlePretty bundle))
-        Right spec -> Right spec
+parseSpec src input = parsedSpec <$> first renderParseFailure (parseSource src input)
 
 -- | Convenience wrapper for callers without a source name (tests, stdin).
 parseSpecText :: Text -> Either ParseError Spec
 parseSpecText = parseSpec "<input>"
+
+{- | Parse a source without discarding the language contract selected for it.
+Source selection completes before the selected body grammar is run.
+-}
+parseSource :: FilePath -> Text -> Either ParseFailure ParsedSource
+parseSource src input = do
+    sourceLanguage <- selectSourceLanguage src input
+    definition <- case lookupLanguageDefinition (effectiveLanguageVersion sourceLanguage) of
+        Just value -> Right value
+        Nothing -> Left (unsupportedDiagnostic src sourceLanguage)
+    spec <- parseSelectedBody definition sourceLanguage
+    pure ParsedSource{parsedSourceLanguage = sourceLanguage, parsedSpec = spec}
+  where
+    parseSelectedBody definition sourceLanguage =
+        let parser = case definitionBodyParser definition of
+                LanguageBodyParserV1 ->
+                    sc
+                        *> case sourceLanguage of
+                            LegacyUnversioned -> pSpec <* eof
+                            DeclaredLanguage{} -> pDeclaredPreamble *> pSpec <* eof
+         in case runParser parser src input of
+                Left bundle -> Left (BodyGrammarFailure (T.pack (errorBundlePretty bundle)))
+                Right spec -> Right spec
+
+-- | Consume a preamble already validated by 'selectSourceLanguage'.
+pDeclaredPreamble :: P ()
+pDeclaredPreamble = do
+    keyword "language"
+    keyword "keiro-dsl"
+    _ <- lexeme (some digitChar)
+    pure ()
+
+data SignificantLine = SignificantLine
+    { significantLineNumber :: !Int
+    , significantLineText :: !Text
+    }
+
+selectSourceLanguage :: FilePath -> Text -> Either ParseFailure SourceLanguage
+selectSourceLanguage src input =
+    case significantLines input of
+        [] -> Right LegacyUnversioned
+        firstLine : rest ->
+            case filter isLanguageLine (firstLine : rest) of
+                [] -> Right LegacyUnversioned
+                languageLine : laterLanguageLines
+                    | significantLineNumber languageLine /= significantLineNumber firstLine ->
+                        Left (sourceFailure MisplacedLanguagePreamble languageLine Nothing Nothing)
+                    | otherwise -> do
+                        version <- parsePreamble languageLine
+                        case laterLanguageLines of
+                            duplicateLine : _ ->
+                                Left (sourceFailure DuplicateLanguagePreamble duplicateLine Nothing Nothing)
+                            [] -> case lookupLanguageDefinition version of
+                                Nothing -> Left (sourceFailure UnsupportedLanguageVersion languageLine (Just (languageVersionText version)) (Just version))
+                                Just _ -> Right (DeclaredLanguage version (Loc (significantLineNumber languageLine)))
+  where
+    sourceFailure code line tokenText declared =
+        SourceLanguageFailure
+            SourceLanguageDiagnostic
+                { sourceLanguageErrorCode = code
+                , sourceLanguageSource = src
+                , sourceLanguageLoc = Loc (significantLineNumber line)
+                , sourceLanguageToken = tokenText
+                , sourceLanguageDeclaredVersion = declared
+                , sourceLanguageSupportedVersions = supportedLanguageVersions
+                }
+
+    parsePreamble line = case T.words (significantLineText line) of
+        ["language", "keiro-dsl", tokenText]
+            | T.all (\c -> isAscii c && isDigit c) tokenText && not (T.null tokenText) ->
+                case TR.decimal tokenText :: Either String (Natural, Text) of
+                    Right (value, "") -> case languageVersion value of
+                        Just version -> Right version
+                        Nothing -> invalid line tokenText
+                    _ -> invalid line tokenText
+        wordsFound -> invalid line (T.unwords wordsFound)
+
+    invalid line tokenText =
+        Left (sourceFailure InvalidLanguageVersion line (Just tokenText) Nothing)
+
+unsupportedDiagnostic :: FilePath -> SourceLanguage -> ParseFailure
+unsupportedDiagnostic src sourceLanguage =
+    SourceLanguageFailure
+        SourceLanguageDiagnostic
+            { sourceLanguageErrorCode = UnsupportedLanguageVersion
+            , sourceLanguageSource = src
+            , sourceLanguageLoc = case sourceLanguage of
+                LegacyUnversioned -> Loc 1
+                DeclaredLanguage{languageVersionLoc = loc} -> loc
+            , sourceLanguageToken = Just (languageVersionText (effectiveLanguageVersion sourceLanguage))
+            , sourceLanguageDeclaredVersion = Just (effectiveLanguageVersion sourceLanguage)
+            , sourceLanguageSupportedVersions = supportedLanguageVersions
+            }
+
+significantLines :: Text -> [SignificantLine]
+significantLines =
+    mapMaybe significant . zip [1 ..] . T.lines
+  where
+    significant (lineNumber, line) =
+        let content = T.strip (T.takeWhile (/= '#') line)
+         in if T.null content
+                then Nothing
+                else Just SignificantLine{significantLineNumber = lineNumber, significantLineText = content}
+
+isLanguageLine :: SignificantLine -> Bool
+isLanguageLine line = case T.words (significantLineText line) of
+    "language" : _ -> True
+    _ -> False
 
 --------------------------------------------------------------------------------
 -- Lexer
