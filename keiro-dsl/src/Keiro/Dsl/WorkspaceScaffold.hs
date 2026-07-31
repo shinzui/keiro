@@ -42,6 +42,7 @@ module Keiro.Dsl.WorkspaceScaffold (
 
     -- * Execution
     OwnershipMove (..),
+    WorkspaceSourceLanguageDrift (..),
     WorkspaceScaffoldReport (..),
     executeWorkspaceScaffold,
     renderWorkspaceScaffoldReport,
@@ -56,6 +57,7 @@ import Keiro.Dsl.ExplainBindings (BindingHole (..), bindingHoles)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessForWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.LanguageVersion (SourceLanguage, sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
 import Keiro.Dsl.Scaffold
@@ -283,6 +285,13 @@ data OwnershipMove = OwnershipMove
     }
     deriving stock (Eq, Show)
 
+data WorkspaceSourceLanguageDrift = WorkspaceSourceLanguageDrift
+    { wsldPath :: !FilePath
+    , wsldPrevious :: !SourceLanguage
+    , wsldCurrent :: !SourceLanguage
+    }
+    deriving stock (Eq, Show)
+
 -- | What one successful whole-workspace scaffold did.
 data WorkspaceScaffoldReport = WorkspaceScaffoldReport
     { wsrManifestPath :: !FilePath
@@ -302,6 +311,7 @@ data WorkspaceScaffoldReport = WorkspaceScaffoldReport
     , wsrConsumerPlan :: !ConsumerPlan
     , wsrConstraintPlan :: ![Text]
     , wsrMappingDrift :: ![MappingDrift]
+    , wsrSourceLanguageDrift :: ![WorkspaceSourceLanguageDrift]
     , wsrNewHoles :: ![BindingHole]
     , wsrMigration :: !(Maybe MigrationReport)
     -- ^ Present only on the run that adopted pre-workspace scaffold output.
@@ -345,6 +355,7 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
                 Nothing -> adoptionReport out (wsContext workspace) service modules
             let currentPlan = consumerPlan merged
                 drift = maybe [] (mappingDrift (consumerMappings currentPlan) . wrMappings) previous
+                languageDrift = workspaceSourceLanguageDrift workspace previous
                 currentObligations = either (const []) id (bindingHoles merged)
                 newHoles = maybe [] (newBindingObligations currentObligations . wrBindingObligations) previous
             createDirectoryIfMissing True out
@@ -383,6 +394,7 @@ executeWorkspaceScaffold out forceGeneratedOverwrite plan = do
                         , wsrConsumerPlan = currentPlan
                         , wsrConstraintPlan = constraintPlan merged currentPlan
                         , wsrMappingDrift = drift
+                        , wsrSourceLanguageDrift = languageDrift
                         , wsrNewHoles = newHoles
                         , wsrMigration = migration
                         }
@@ -414,6 +426,10 @@ currentWorkspaceRecord plan adopted =
         , wrModuleRoot = moduleRoot ctx
         , wrLayout = layoutLabel ctx
         , wrMembers = map wmPath (wsMembers workspace)
+        , wrSourceLanguages =
+            [ WorkspaceSourceLanguageRow (wmPath member) (wmSourceLanguage member)
+            | member <- wsMembers workspace
+            ]
         , wrModules =
             [ WorkspaceModuleRow
                 { wrmKind = kind m
@@ -430,6 +446,22 @@ currentWorkspaceRecord plan adopted =
     workspace = wpWorkspace plan
     merged = wsMergedSpec workspace
     ctx = wpContext plan
+
+workspaceSourceLanguageDrift :: WorkspaceSpec -> Maybe WorkspaceRecord -> [WorkspaceSourceLanguageDrift]
+workspaceSourceLanguageDrift workspace previous =
+    [ WorkspaceSourceLanguageDrift path oldLanguage newLanguage
+    | member <- wsMembers workspace
+    , let path = wmPath member
+          newLanguage = wmSourceLanguage member
+    , Just oldLanguage <- [Map.lookup path previousByPath]
+    , oldLanguage /= newLanguage
+    ]
+  where
+    previousByPath =
+        Map.fromList
+            [ (wrslPath row, wrslSourceLanguage row)
+            | row <- maybe [] wrSourceLanguages previous
+            ]
 
 layoutLabel :: Context -> Text
 layoutLabel ctx = case placement ctx of GeneratedPrefix -> "prefixed"; CollocatedLeaf -> "collocated"
@@ -513,6 +545,7 @@ renderWorkspaceScaffoldReport report =
         <> constraintSection
         <> newHolesSection
         <> mappingDriftSection
+        <> sourceLanguageDriftSection
         <> ownershipSection
         <> staleSection
   where
@@ -581,6 +614,18 @@ renderWorkspaceScaffoldReport report =
         , "    previous: " <> maybe "(absent)" renderMappingIdentity (driftPrevious drift)
         , "    current:  " <> maybe "(absent)" renderMappingIdentity (driftCurrent drift)
         ]
+    sourceLanguageDriftSection = case wsrSourceLanguageDrift report of
+        [] -> []
+        drifts ->
+            ["source-language drift: " <> tshow (length drifts) <> " member(s) changed provenance (generated module bytes are semantic and unaffected):"]
+                <> [ "  "
+                        <> T.pack (wsldPath drift)
+                        <> "  "
+                        <> sourceFormText (wsldPrevious drift)
+                        <> " -> "
+                        <> sourceFormText (wsldCurrent drift)
+                   | drift <- drifts
+                   ]
     ownershipSection = case wsrOwnershipMoves report of
         [] -> []
         moves ->

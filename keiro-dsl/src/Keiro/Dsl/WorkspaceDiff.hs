@@ -21,16 +21,18 @@ import Data.List (find)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
-import Keiro.Dsl.Diff (Change (..), ChangeKind (..), advisoryAt, consumerBuildContext, diffSpecs)
+import Keiro.Dsl.Diff (Change (..), ChangeKind (..), advisoryAt, consumerBuildContext, diffSpecs, sourceLanguageChange)
 import Keiro.Dsl.DiffReport (OwnedSite (..), WorkspaceChange (..), WorkspaceDiffReport, WorkspaceMeta (..), renderFinding, workspaceDiffReport)
 import Keiro.Dsl.Grammar (Loc (..), Name, Placement (..))
+import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.Validate (DiagnosticCode (..))
-import Keiro.Dsl.Workspace (OwnershipIndex (..), WorkspaceSpec (..))
+import Keiro.Dsl.Workspace (OwnershipIndex (..), WorkspaceMember (..), WorkspaceSpec (..))
 
 -- | Diff two composed service graphs and cite every participant we can resolve.
 diffWorkspaces :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
 diffWorkspaces old new =
-    map annotate (diffSpecs (wsMergedSpec old) (wsMergedSpec new))
+    memberLanguageChanges old new
+        <> map annotate (diffSpecs (wsMergedSpec old) (wsMergedSpec new))
         <> ownershipMoveChanges old new
         <> authorityChanges old new
   where
@@ -47,6 +49,23 @@ diffWorkspaces old new =
             }
       where
         kind = changeKind change
+
+memberLanguageChanges :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
+memberLanguageChanges old new =
+    [ WorkspaceChange
+        { wcChange = change
+        , wcDeclarationSite = Just (OwnedSite path (sourceLine (wmSourceLanguage newMember)))
+        , wcUseSites = []
+        }
+    | (path, newMember) <- Map.toAscList newByPath
+    , Just oldMember <- [Map.lookup path oldByPath]
+    , change <- sourceLanguageChange (wsService new) (T.pack path) (wmSourceLanguage oldMember) (wmSourceLanguage newMember)
+    ]
+  where
+    oldByPath = Map.fromList [(wmPath member, member) | member <- wsMembers old]
+    newByPath = Map.fromList [(wmPath member, member) | member <- wsMembers new]
+    sourceLine LegacyUnversioned = 1
+    sourceLine DeclaredLanguage{languageVersionLoc = Loc lineNumber} = lineNumber
 
 -- | Preserve the existing headline/vector bytes and append indented citations.
 renderWorkspaceFinding :: WorkspaceChange -> Text

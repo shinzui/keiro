@@ -42,8 +42,11 @@ creates the stable parser-dispatch and provenance boundary required by the alrea
   registry, provenance-preserving parse entry point, source-aware renderer, and early preamble
   diagnostics while retaining the existing semantic `Spec` API. The focused test run passed 8
   examples (including the 4 new source-language examples) with 0 failures.
-- [ ] Milestone 2: route CLI and workspace loading through the new entry point; add inspection,
-  record provenance, and provenance-only diff reporting without changing fold/replay semantics.
+- [x] (2026-07-31T17:23:31Z) Milestone 2: routed CLI and workspace loading through the
+  source-preserving entry point; added JSON inspection, per-member provenance, version-consistency
+  composition, additive record rows and drift reporting, and provenance-only diff findings. The
+  focused source suite passed 13 examples, the workspace suite passed 73 examples, and
+  `cabal build keiro-dsl` succeeded.
 - [ ] Milestone 3: declare version 1 in Keiro-owned fixtures, skeletons, and documentation; add
   legacy/future/malformed coverage; update the ADR and changelog; and complete validation.
 
@@ -83,6 +86,11 @@ creates the stable parser-dispatch and provenance boundary required by the alrea
   `unexpected argument 'language'`. The stable focused invocation is
   `--test-options='--match=source'`; it selected the new group plus four pre-existing examples and
   passed 8 examples with 0 failures.
+- 2026-07-31: Adding a preamble shifts the parser's in-memory source locations, so
+  `ScaffoldModule.origin` labels differ by one line even though module paths, kinds, and emitted
+  bytes are identical. Regression coverage therefore compares the actual generated-byte surface
+  separately from diagnostic-only origin metadata; fold fingerprints and replay impact also stay
+  unchanged.
 
 
 ## Decision Log
@@ -459,3 +467,6 @@ fixture-migration claims; and recorded the durable boundary in ADR 16.
 Revision note: Began implementation on 2026-07-31, associated intention
 `intention_01kywhnmdbeyh9yrbddw1knh3y`, completed Milestone 1, recorded its focused validation,
 and corrected the Cabal/Hspec filter to the working single-token form.
+
+Revision note: Completed Milestone 2 on 2026-07-31, recording the CLI/workspace inspection,
+source-aware scaffold-history, all-compatible provenance diff, and byte-level invariance evidence.

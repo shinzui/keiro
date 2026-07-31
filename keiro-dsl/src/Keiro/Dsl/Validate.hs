@@ -286,6 +286,9 @@ data DiagnosticCode
     | AggregateRegisterInitialInvalid
     | AggregateGuardTypeMismatch
     | AggregateGuardCapabilityUnsupported
+    | -- EP-160: append-only source-language composition and diff facts.
+      WorkspaceLanguageVersionMismatch
+    | SourceLanguageDeclarationChanged
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

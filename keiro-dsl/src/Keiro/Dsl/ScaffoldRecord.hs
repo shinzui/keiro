@@ -17,6 +17,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 import Keiro.Dsl.ExplainBindings (BindingHole (..))
+import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
 import Keiro.Dsl.Scaffold (ModuleKind (..))
 import System.FilePath (isAbsolute, splitDirectories)
@@ -25,6 +26,7 @@ data ScaffoldRecord = ScaffoldRecord
     { recSpecPath :: !Text
     , recModuleRoot :: !Text
     , recLayout :: !Text
+    , recSourceLanguage :: !SourceLanguage
     , recFiles :: ![(ModuleKind, FilePath)]
     , recMappings :: ![MappingIdentity]
     , recBindingObligations :: ![BindingHole]
@@ -38,6 +40,7 @@ renderRecord record =
         , "spec: " <> recSpecPath record
         , "module-root: " <> rootLabel
         , "layout: " <> recLayout record
+        , "source-language " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode (recSourceLanguage record)))
         ]
             <> map renderFile (recFiles record)
             <> map renderMapping (recMappings record)
@@ -62,6 +65,7 @@ parseRecord contents = case T.lines contents of
             specPath <- exactlyOne "spec: " rows
             rootLabel <- exactlyOne "module-root: " rows
             layout <- exactlyOne "layout: " rows
+            sourceLanguage <- parseSourceLanguage rows
             files <- traverse parseFile (filter isFileRow rows)
             mappings <- traverse parseMapping (filter ("mapping " `T.isPrefixOf`) rows)
             bindingEntries <- traverse parseBindingObligation (filter ("binding " `T.isPrefixOf`) rows)
@@ -73,6 +77,7 @@ parseRecord contents = case T.lines contents of
                             { recSpecPath = specPath
                             , recModuleRoot = if rootLabel == "(none)" then "" else rootLabel
                             , recLayout = layout
+                            , recSourceLanguage = sourceLanguage
                             , recFiles = files
                             , recMappings = mappings
                             , recBindingObligations = bindingEntries
@@ -98,6 +103,12 @@ parseRecord contents = case T.lines contents of
     parseBindingObligation row = do
         payload <- T.stripPrefix "binding " row
         Aeson.decodeStrict' (Text.encodeUtf8 payload)
+    parseSourceLanguage rows = case filter ("source-language " `T.isPrefixOf`) rows of
+        [] -> Just LegacyUnversioned
+        [row] -> do
+            payload <- T.stripPrefix "source-language " row
+            Aeson.decodeStrict' (Text.encodeUtf8 payload)
+        _ -> Nothing
     hasDuplicateMappingNames mappings =
         let names = map mappingSpecName mappings
          in length names /= length (nub names)

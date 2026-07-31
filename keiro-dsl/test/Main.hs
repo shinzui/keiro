@@ -24,7 +24,7 @@ import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.Coverage qualified as Coverage
-import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
+import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSources, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.DiffReport (Remedy (..), diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingHoles, bindingObligations, renderBindingObligations)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldSurface)
@@ -41,7 +41,7 @@ import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
-import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), StaleModule (..), WriteDisposition (..), executeScaffold, planScaffold, renderRefusals, renderScaffoldReport, scaffoldModules)
+import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, planScaffold, renderRefusals, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, renderDiagnostic, validateSpec)
@@ -72,6 +72,12 @@ main = hspec $ do
                 Right value -> pure value
             declaredVersionOf DeclaredLanguage{declaredLanguageVersion = version} = Just version
             declaredVersionOf LegacyUnversioned = Nothing
+            orderedSubstrings needles haystack = go (map T.pack needles) (T.pack haystack)
+              where
+                go [] _ = True
+                go (needle : rest) remaining =
+                    let (_, suffix) = T.breakOn needle remaining
+                     in not (T.null suffix) && go rest (T.drop (T.length needle) suffix)
 
         it "selects declared v1 after comments while preserving semantic equality" $ do
             legacySource <- parseRight "legacy.keiro" legacy
@@ -104,6 +110,73 @@ main = hspec $ do
                     renderParseFailure failure `shouldSatisfy` T.isInfixOf "supported versions: 1"
                     renderParseFailure failure `shouldNotSatisfy` T.isInfixOf "expecting `context`"
                 other -> expectationFailure ("expected source-language failure, got " <> show other)
+
+        it "reports a declaration-only rewrite without semantic, generated, fold, or replay impact" $ do
+            fixture <- readTestText "test/fixtures/reservation.keiro"
+            legacySource <- parseRight "legacy.keiro" fixture
+            declaredSource <- parseRight "declared.keiro" ("language keiro-dsl 1\n" <> fixture)
+            let oldSpec = parsedSpec legacySource
+                newSpec = parsedSpec declaredSource
+                changes = diffSources legacySource declaredSource
+                vectors = [ckVector kind | change <- changes, let kind = workspaceChangeKind change]
+            map changeCode changes `shouldBe` [SourceLanguageDeclarationChanged]
+            diffSpecs oldSpec newSpec `shouldBe` []
+            vectors `shouldSatisfy` all (\compatibility -> all ((== VCompatible) . (`verdictFor` compatibility)) [minBound .. maxBound])
+            case changes of
+                [change] ->
+                    remediationFor (ckContext (workspaceChangeKind change)) SourceLanguageDeclarationChanged
+                        `shouldBe` (RemedyNoSemanticAction :| [])
+                _ -> expectationFailure "expected one source-language change"
+            let generatedSurface spec =
+                    [ (modulePath scaffoldModule, moduleText scaffoldModule, kind scaffoldModule)
+                    | scaffoldModule <- scaffoldModules (defaultContext (specContext spec)) spec
+                    ]
+            generatedSurface oldSpec `shouldBe` generatedSurface newSpec
+            [aggregateFoldFingerprint oldSpec aggregate | NAggregate aggregate <- specNodes oldSpec]
+                `shouldBe` [aggregateFoldFingerprint newSpec aggregate | NAggregate aggregate <- specNodes newSpec]
+            ReplayImpact.replayImpact oldSpec newSpec `shouldBe` ReplayNeutral
+
+        it "exposes stable JSON inspection for a source and canonically ordered workspace members" $ do
+            (sourceCode, sourceOut, sourceErr) <- runKeiroDsl ["inspect", "test/fixtures/reservation.keiro", "--format=json"]
+            sourceCode `shouldBe` ExitSuccess
+            sourceErr `shouldBe` ""
+            sourceOut `shouldContain` "\"schema\":\"keiro-dsl/source-inspection/1\""
+            sourceOut `shouldContain` "\"kind\":\"source\""
+            sourceOut `shouldContain` "\"sourceForm\":\"legacy-unversioned\""
+            sourceOut `shouldContain` "\"declaredLanguageVersion\":null"
+            sourceOut `shouldContain` "\"effectiveLanguageVersion\":1"
+            (workspaceCode, workspaceOut, workspaceErr) <- runKeiroDsl ["inspect", canonicalWorkspacePath, "--format=json"]
+            workspaceCode `shouldBe` ExitSuccess
+            workspaceErr `shouldBe` ""
+            workspaceOut `shouldContain` "\"kind\":\"workspace\""
+            workspaceOut `shouldContain` "\"service\":\"demo-project\""
+            workspaceOut `shouldSatisfy` orderedSubstrings ["domain/project-artifact.keiro", "domain/project.keiro", "domain/shared.keiro"]
+
+        it "preserves a workspace member's source-selection code beneath outer attribution" $ do
+            let manifest = "service demo\nspec domain/future.keiro\n"
+                futureSource = "language keiro-dsl 2\nthis body must not parse\n"
+                source = memoryContentSource (Map.fromList [("service.keiro-workspace", manifest), ("domain/future.keiro", futureSource)])
+            loaded <- loadWorkspace source "service.keiro-workspace"
+            case loaded of
+                Left (WorkspaceRefused (diagnostic :| [])) -> do
+                    wdCode diagnostic `shouldBe` WorkspaceMemberParseFailed
+                    sourceLanguageErrorCode <$> wdSourceLanguageCause diagnostic
+                        `shouldBe` Just UnsupportedLanguageVersion
+                    renderWorkspaceDiagnostic "service.keiro-workspace" diagnostic
+                        `shouldSatisfy` T.isInfixOf "UnsupportedLanguageVersion"
+                other -> expectationFailure ("expected one attributed source-language refusal, got " <> show other)
+
+        it "attributes a workspace provenance-only diff to the changed member" $ do
+            workspace <- shouldComposeWorkspace canonicalWorkspacePath
+            case (languageVersion 1, wsMembers workspace) of
+                (Just version, firstMember : remaining) -> do
+                    let changedMember = firstMember{wmSourceLanguage = DeclaredLanguage version noLoc}
+                        changedWorkspace = workspace{wsMembers = changedMember : remaining}
+                        changes = diffWorkspaces workspace changedWorkspace
+                    map (changeCode . wcChange) changes `shouldBe` [SourceLanguageDeclarationChanged]
+                    map (fmap osFile . wcDeclarationSite) changes `shouldBe` [Just (wmPath firstMember)]
+                    map wcChange changes `shouldSatisfy` all (not . gatedBreaking (gateWith [minBound .. maxBound]))
+                _ -> expectationFailure "canonical workspace had no member or v1 was unavailable"
 
     describe "historical codec comparison" $ do
         it "treats object-key order as RFC 8785 parity" $ do
@@ -2366,18 +2439,47 @@ main = hspec $ do
                 reportStale report `shouldBe` []
                 renderScaffoldReport report `shouldSatisfy` all (not . T.isPrefixOf "stale:")
                 contents <- TIO.readFile (out </> recordFileName (specContext spec))
-                parseRecord contents
-                    `shouldBe` Just
+                let expected =
                         ScaffoldRecord
                             { recSpecPath = "counter.keiro"
                             , recModuleRoot = ""
                             , recLayout = "prefixed"
+                            , recSourceLanguage = LegacyUnversioned
                             , recFiles = [(kind m, modulePath m) | (m, _) <- reportDispositions report]
                             , recMappings = []
                             , recBindingObligations = []
                             }
+                    sourceRows = filter ("source-language " `T.isPrefixOf`) (T.lines contents)
+                    withoutSourceRows = T.unlines (filter (not . T.isPrefixOf "source-language ") (T.lines contents))
+                parseRecord contents `shouldBe` Just expected
+                parseRecord withoutSourceRows `shouldBe` Just expected
+                case sourceRows of
+                    [sourceRow] -> do
+                        parseRecord (T.replace sourceRow (sourceRow <> "\n" <> sourceRow) contents) `shouldBe` Nothing
+                        parseRecord (T.replace sourceRow "source-language {malformed}" contents) `shouldBe` Nothing
+                    _ -> expectationFailure "expected exactly one source-language row"
                 parseRecord (T.replace "spec: " "future-field: retained\nspec: " contents) `shouldBe` parseRecord contents
                 parseRecord (T.replace "record v1" "record v2" contents) `shouldBe` Nothing
+        it "records declared provenance and reports a header-only scaffold drift" $
+            withTempDirectory "keiro-dsl-language-drift" $ \out -> do
+                spec <- parseInlineSpec "<language-drift>" loweringAggregateSpec
+                let ctx = defaultContext (specContext spec)
+                modules <- case planScaffold ctx spec of
+                    Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+                    Right planned -> pure planned
+                _ <- executePlannedScaffold out "counter.keiro" ctx spec
+                case languageVersion 1 of
+                    Nothing -> expectationFailure "version 1 was not constructible"
+                    Just version -> do
+                        let declared = DeclaredLanguage version noLoc
+                        result <- executeScaffoldWithLanguage out False "counter.keiro" declared ctx spec modules
+                        case result of
+                            Left refusals -> expectationFailure (show refusals)
+                            Right report -> do
+                                reportSourceLanguageDrift report
+                                    `shouldBe` Just (SourceLanguageDrift LegacyUnversioned declared)
+                                contents <- TIO.readFile (reportRecordPath report)
+                                recSourceLanguage <$> parseRecord contents `shouldBe` Just declared
 
     describe "faithful scaffold lowering" $ do
         it "escapes a trailing-backslash payload literal exactly once" $ do
@@ -3125,6 +3227,21 @@ main = hspec $ do
                     `shouldBe` Just record
                 [row | row <- wrModules record, wrmOwner row == Nothing]
                     `shouldSatisfy` (not . null)
+            it "treats absent source-language rows as legacy and rejects partial, duplicate, or malformed rows" $ do
+                workspace <- shouldComposeWorkspace canonicalWorkspacePath
+                let record = sampleWorkspaceRecord workspace
+                    rendered = renderWorkspaceRecord record
+                    sourceRows = filter ("source-language " `T.isPrefixOf`) (T.lines rendered)
+                    withoutSourceRows = T.unlines (filter (not . T.isPrefixOf "source-language ") (T.lines rendered))
+                    legacyRows = [WorkspaceSourceLanguageRow path LegacyUnversioned | path <- wrMembers record]
+                parseWorkspaceRecord withoutSourceRows
+                    `shouldBe` Just record{wrSourceLanguages = legacyRows}
+                case sourceRows of
+                    firstRow : secondRow : _ -> do
+                        parseWorkspaceRecord (T.unlines (filter (/= secondRow) (T.lines rendered))) `shouldBe` Nothing
+                        parseWorkspaceRecord (T.replace firstRow (firstRow <> "\n" <> firstRow) rendered) `shouldBe` Nothing
+                        parseWorkspaceRecord (T.replace firstRow "source-language {malformed}" rendered) `shouldBe` Nothing
+                    _ -> expectationFailure "expected multiple workspace source-language rows"
             it "rejects unsafe module, owner, member, and adoption paths" $ do
                 workspace <- shouldComposeWorkspace canonicalWorkspacePath
                 let rendered = renderWorkspaceRecord (sampleWorkspaceRecord workspace)
@@ -4076,6 +4193,10 @@ sampleWorkspaceRecord workspace =
         , wrModuleRoot = maybe "" id (wsModuleRoot workspace)
         , wrLayout = "collocated"
         , wrMembers = map wmPath (wsMembers workspace)
+        , wrSourceLanguages =
+            [ WorkspaceSourceLanguageRow (wmPath member) (wmSourceLanguage member)
+            | member <- wsMembers workspace
+            ]
         , wrModules =
             [ WorkspaceModuleRow Generated "Demo/Generated/StructuralProjections.hs" Nothing
             , WorkspaceModuleRow Generated "Demo/Project/Generated/Domain.hs" (Just "domain/project.keiro")

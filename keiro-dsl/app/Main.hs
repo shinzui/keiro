@@ -5,22 +5,26 @@ optparse-applicative command tree.
 module Main (main) where
 
 import Control.Monad (when)
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Text qualified as AesonText
 import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
+import Data.Text.Lazy.IO qualified as TLIO
 import Keiro.Dsl.Coverage qualified as Coverage
-import Keiro.Dsl.Diff (Change (..), CompatibilitySurface, diffSpecs, gateWith, gatedBreaking)
+import Keiro.Dsl.Diff (Change (..), CompatibilitySurface, diffSources, gateWith, gatedBreaking)
 import Keiro.Dsl.DiffReport (diffReport, parseSurfaceName, renderExplainBlock, renderFinding)
 import Keiro.Dsl.ExplainBindings (bindingObligations, renderBindingObligations)
 import Keiro.Dsl.Goldens (emitGoldenPayloads, loadGoldenPayloads)
 import Keiro.Dsl.Grammar (Placement (..), Spec (..))
-import Keiro.Dsl.Parser (parseSpec)
-import Keiro.Dsl.PrettyPrint (renderSpec)
+import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, effectiveLanguageVersion, sourceFormText)
+import Keiro.Dsl.Parser (parseSource, renderParseFailure)
+import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
 import Keiro.Dsl.ReplayImpact (renderReplayImpact, replayImpact)
 import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule)
-import Keiro.Dsl.ScaffoldRun (executeScaffold, planScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
+import Keiro.Dsl.ScaffoldRun (executeScaffoldWithLanguage, planScaffoldWithGoldens, renderRefusals, renderScaffoldReport)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.Validate (Diagnostic (..), Severity (..), renderDiagnostic, validateSpec)
 import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure, WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
@@ -36,9 +40,12 @@ import System.Process (readProcessWithExitCode)
 data Command
     = Parse FilePath
     | Check FilePath Bool Bool (Maybe CheckCoverageOptions)
+    | Inspect FilePath InspectionFormat
     | Scaffold FilePath FilePath (Maybe String) Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
     | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath) (Maybe DiffCoverageOptions)
     | New String
+
+data InspectionFormat = InspectionJson
 
 data CheckCoverageOptions = CheckCoverageOptions
     { checkCoveragePath :: !FilePath
@@ -67,6 +74,9 @@ commands =
             <> command
                 "check"
                 (info (Check <$> fileArg <*> emitSwitch <*> explainBindingsSwitch <*> checkCoverageOptions <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
+            <> command
+                "inspect"
+                (info (Inspect <$> fileArg <*> inspectionFormatOpt <**> helper) (progDesc "Inspect source-language provenance for a .keiro file or workspace as JSON"))
             <> command
                 "scaffold"
                 (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> optional goldensOpt <*> codecComparisonOpts <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
@@ -150,36 +160,48 @@ fileArg = argument str (metavar "FILE" <> help "Path to a .keiro spec or .keiro-
 kindArg :: Parser String
 kindArg = argument str (metavar "KIND" <> help "Node kind to scaffold a starter spec for")
 
+inspectionFormatOpt :: Parser InspectionFormat
+inspectionFormatOpt =
+    option
+        (eitherReader parseFormat)
+        (long "format" <> metavar "json" <> value InspectionJson <> help "Inspection output format (json)")
+  where
+    parseFormat "json" = Right InspectionJson
+    parseFormat other = Left ("unsupported inspection format: " <> other <> " (expected json)")
+
 run :: Command -> IO ()
 -- Workspace dispatch. A @FILE@ ending in @.keiro-workspace@ is a workspace
 -- manifest; everything else takes the untouched single-file path below.
 run (Parse fp) | isWorkspacePath fp = runWorkspaceParse fp
 run (Check fp emit explainBindings coverageOptions)
     | isWorkspacePath fp = runWorkspaceCheck fp emit explainBindings coverageOptions
+run (Inspect fp format)
+    | isWorkspacePath fp = runWorkspaceInspect fp format
 run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest)
     | isWorkspacePath fp = runWorkspaceScaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest
 run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions)
     | isWorkspacePath fp = runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions
 run (Parse fp) = do
     input <- TIO.readFile fp
-    case parseSpec fp input of
-        Left err -> do
-            hPutStrLn stderr (T.unpack err)
+    case parseSource fp input of
+        Left failure -> do
+            hPutStrLn stderr (T.unpack (renderParseFailure failure))
             exitFailure
-        Right spec -> TIO.putStrLn (renderSpec spec)
+        Right parsedSource -> TIO.putStrLn (renderSource parsedSource)
 run (Check fp emit explainBindings coverageOptions) = do
     input <- TIO.readFile fp
-    case parseSpec fp input of
-        Left err -> do
-            hPutStrLn stderr (T.unpack err)
+    case parseSource fp input of
+        Left failure -> do
+            hPutStrLn stderr (T.unpack (renderParseFailure failure))
             exitFailure
-        Right spec -> do
+        Right parsedSource -> do
+            let spec = parsedSpec parsedSource
             let diags = validateSpec spec
             mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
             if any ((== Error) . severity) diags
                 then exitFailure
                 else do
-                    when emit (TIO.putStrLn (renderSpec spec))
+                    when emit (TIO.putStrLn (renderSource parsedSource))
                     if explainBindings
                         then case bindingObligations spec of
                             Left graphErrors -> do
@@ -192,11 +214,12 @@ run (Check fp emit explainBindings coverageOptions) = do
                     when (not coverageOk) exitFailure
 run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens comparisonRequest) = do
     input <- TIO.readFile fp
-    case parseSpec fp input of
-        Left err -> do
-            hPutStrLn stderr (T.unpack err)
+    case parseSource fp input of
+        Left failure -> do
+            hPutStrLn stderr (T.unpack (renderParseFailure failure))
             exitFailure
-        Right spec -> do
+        Right parsedSource -> do
+            let spec = parsedSpec parsedSource
             -- Validation gate: never scaffold an invalid spec. Abort on any
             -- error-severity diagnostic before writing a single module.
             let diags = validateSpec spec
@@ -215,7 +238,7 @@ run (Scaffold fp out cliRoot cliCollocate forceGeneratedOverwrite cliGoldens com
                     case comparisonReady of
                         Left comparisonError -> TIO.hPutStrLn stderr comparisonError >> exitFailure
                         Right () -> do
-                            result <- executeScaffold out forceGeneratedOverwrite fp ctx spec modules
+                            result <- executeScaffoldWithLanguage out forceGeneratedOverwrite fp (parsedSourceLanguage parsedSource) ctx spec modules
                             case result of
                                 Left refusals -> do
                                     mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
@@ -227,6 +250,11 @@ run (New kind) =
     case skeletonFor (T.pack kind) of
         Left err -> hPutStrLn stderr (T.unpack err) >> exitFailure
         Right skel -> TIO.putStr skel
+run (Inspect fp InspectionJson) = do
+    input <- TIO.readFile fp
+    case parseSource fp input of
+        Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
+        Right parsedSource -> TLIO.putStrLn (AesonText.encodeToLazyText (sourceInspection fp (parsedSourceLanguage parsedSource)))
 run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions) = do
     -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.
     let dir = takeDirectory fp
@@ -242,12 +270,14 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
                 Left err -> hPutStrLn stderr ("git show " <> ref <> ":" <> relPath <> " failed:\n" <> err) >> exitFailure
                 Right oldText -> do
                     newText <- TIO.readFile fp
-                    case (,) <$> parseSpec (ref <> ":" <> relPath) (T.pack oldText) <*> parseSpec fp newText of
-                        Left perr -> hPutStrLn stderr (T.unpack perr) >> exitFailure
-                        Right (oldSpec, newSpec) -> do
+                    case (,) <$> parseSource (ref <> ":" <> relPath) (T.pack oldText) <*> parseSource fp newText of
+                        Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
+                        Right (oldSource, newSource) -> do
+                            let oldSpec = parsedSpec oldSource
+                                newSpec = parsedSpec newSource
                             written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) emitGoldensRoot
                             mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
-                            let changes = diffSpecs oldSpec newSpec
+                            let changes = diffSources oldSource newSource
                                 impact = replayImpact oldSpec newSpec
                                 effectiveGate = gateWith gatedSurfaces
                             mapM_ (TIO.putStrLn . renderFinding) changes
@@ -270,6 +300,47 @@ runWorkspaceParse fp = do
             hPutStrLn stderr (T.unpack err)
             exitFailure
         Right manifest -> TIO.putStrLn (renderWorkspaceManifest manifest)
+
+sourceInspection :: FilePath -> SourceLanguage -> Aeson.Value
+sourceInspection path sourceLanguage =
+    Aeson.object
+        [ "schema" .= ("keiro-dsl/source-inspection/1" :: T.Text)
+        , "kind" .= ("source" :: T.Text)
+        , "path" .= path
+        , "sourceForm" .= sourceFormText sourceLanguage
+        , "declaredLanguageVersion" .= declaredLanguageVersionMaybe sourceLanguage
+        , "effectiveLanguageVersion" .= effectiveLanguageVersion sourceLanguage
+        ]
+
+runWorkspaceInspect :: FilePath -> InspectionFormat -> IO ()
+runWorkspaceInspect fp InspectionJson = do
+    loaded <- loadWorkspace (fileContentSource (takeDirectory fp)) fp
+    case loaded of
+        Left failure -> do
+            mapM_ (TIO.hPutStrLn stderr) (renderWorkspaceFailure fp failure)
+            exitFailure
+        Right workspace ->
+            TLIO.putStrLn
+                ( AesonText.encodeToLazyText
+                    ( Aeson.object
+                        [ "schema" .= ("keiro-dsl/source-inspection/1" :: T.Text)
+                        , "kind" .= ("workspace" :: T.Text)
+                        , "path" .= fp
+                        , "service" .= wsService workspace
+                        , "members" .= map memberInspection (wsMembers workspace)
+                        ]
+                    )
+                )
+  where
+    memberInspection member =
+        Aeson.object
+            [ "path" .= wmPath member
+            , "sourceForm" .= sourceFormText sourceLanguage
+            , "declaredLanguageVersion" .= declaredLanguageVersionMaybe sourceLanguage
+            , "effectiveLanguageVersion" .= effectiveLanguageVersion sourceLanguage
+            ]
+      where
+        sourceLanguage = wmSourceLanguage member
 
 {- | @check@ on a workspace manifest: compose the whole service from its member
 @.keiro@ files and validate it as one contract. Diagnostics are rendered

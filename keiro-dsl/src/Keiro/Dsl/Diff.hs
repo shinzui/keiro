@@ -39,6 +39,8 @@ module Keiro.Dsl.Diff (
     gatedBreaking,
     isBreaking,
     isAdvisory,
+    diffSources,
+    sourceLanguageChange,
     diffSpecs,
     DiffEnv (..),
     NodeFamily (..),
@@ -60,6 +62,7 @@ import Data.Text qualified as T
 import Keiro.Dsl.AggregateType (typeExprCanonicalName)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, languageVersionText, sourceFormText)
 import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped, renderMappedSubject)
 import Keiro.Dsl.PrettyPrint (
     renderHandleSurface,
@@ -183,6 +186,17 @@ compatibleVector =
         VNotApplicable
         Set.empty
 
+sourceProvenanceVector :: CompatibilityVector
+sourceProvenanceVector =
+    CompatibilityVector
+        VCompatible
+        VCompatible
+        VCompatible
+        VCompatible
+        VCompatible
+        VCompatible
+        Set.empty
+
 privateDecodeBreakingVector :: CompatibilityVector
 privateDecodeBreakingVector =
     CompatibilityVector
@@ -249,6 +263,7 @@ load-bearing for codes such as 'EnumCtorAdded' that vary by use site.
 -}
 classifyCompatibility :: ChangeContext -> DiagnosticCode -> CompatibilityVector
 classifyCompatibility context code
+    | code == SourceLanguageDeclarationChanged = sourceProvenanceVector
     | code `elem` [OwnershipMoved, WorkspaceAuthorityChanged] = mappedBuildVector
     | code == MappedFieldAddedWithDefault = mappedFieldAdditionVector context
     | code `elem` [MappedArmAdded, MappedEnumValueAdded] = mappedDirectionalAdditionVector context
@@ -603,6 +618,40 @@ diffSpecs old new =
         ++ concatMap (runFamily env . snd) familyRegistry
   where
     env = DiffEnv old new
+
+-- | Compare provenance first, then delegate semantic graphs to 'diffSpecs'.
+diffSources :: ParsedSource -> ParsedSource -> [Change]
+diffSources old new =
+    sourceLanguageChange
+        (specContext (parsedSpec new))
+        "declaration"
+        (parsedSourceLanguage old)
+        (parsedSourceLanguage new)
+        <> diffSpecs (parsedSpec old) (parsedSpec new)
+
+-- | One all-compatible source-provenance finding, reusable per workspace member.
+sourceLanguageChange :: Name -> Text -> SourceLanguage -> SourceLanguage -> [Change]
+sourceLanguageChange root subject old new
+    | old == new = []
+    | otherwise =
+        [ mkChange
+            LabelAdditive
+            (ChangeContext root [] ContextGeneral LabelAdditive)
+            root
+            "source-language"
+            subject
+            SourceLanguageDeclarationChanged
+            ( "source form changed "
+                <> renderSourceLanguage old
+                <> " -> "
+                <> renderSourceLanguage new
+                <> "; the effective semantic contract is unchanged"
+            )
+        ]
+  where
+    renderSourceLanguage sourceLanguage =
+        sourceFormText sourceLanguage
+            <> maybe "" ((" v" <>) . languageVersionText) (declaredLanguageVersionMaybe sourceLanguage)
 
 runFamily :: DiffEnv -> FamilyDiff -> [Change]
 runFamily env (DiffFamily f) = f env

@@ -47,6 +47,7 @@ rejected rather than joined to an output root.
 module Keiro.Dsl.WorkspaceRecord (
     WorkspaceRecord (..),
     WorkspaceModuleRow (..),
+    WorkspaceSourceLanguageRow (..),
     AdoptedRow (..),
     renderWorkspaceRecord,
     parseWorkspaceRecord,
@@ -59,11 +60,12 @@ module Keiro.Dsl.WorkspaceRecord (
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.:?), (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as BL
-import Data.List (nub)
+import Data.List (nub, sort)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 import Keiro.Dsl.ExplainBindings (BindingHole (..))
+import Keiro.Dsl.LanguageVersion (SourceLanguage (..), declaredLanguageVersionMaybe, effectiveLanguageVersion, sourceFormText)
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
 import Keiro.Dsl.Scaffold (ModuleKind (..))
 import System.FilePath (isAbsolute, splitDirectories)
@@ -102,6 +104,35 @@ instance FromJSON WorkspaceModuleRow where
                 , wrmPath = T.unpack (path :: Text)
                 , wrmOwner = T.unpack <$> (owner :: Maybe Text)
                 }
+
+-- | One member's source-language provenance in a workspace record.
+data WorkspaceSourceLanguageRow = WorkspaceSourceLanguageRow
+    { wrslPath :: !FilePath
+    , wrslSourceLanguage :: !SourceLanguage
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON WorkspaceSourceLanguageRow where
+    toJSON row =
+        object
+            [ "path" .= T.pack (wrslPath row)
+            , "sourceForm" .= sourceFormText sourceLanguage
+            , "declaredLanguageVersion" .= declaredLanguageVersionMaybe sourceLanguage
+            , "effectiveLanguageVersion" .= effectiveLanguageVersion sourceLanguage
+            ]
+      where
+        sourceLanguage = wrslSourceLanguage row
+
+instance FromJSON WorkspaceSourceLanguageRow where
+    parseJSON value@(Aeson.Object fields) = do
+        path <- fields .: "path"
+        sourceLanguage <- parseJSON value
+        pure
+            WorkspaceSourceLanguageRow
+                { wrslPath = T.unpack (path :: Text)
+                , wrslSourceLanguage = sourceLanguage
+                }
+    parseJSON _ = fail "WorkspaceSourceLanguageRow must be an object"
 
 {- | One file imported into workspace history from pre-workspace scaffold
 output. @adEvidence@ is @record@ when a legacy per-context scaffold record
@@ -155,6 +186,7 @@ data WorkspaceRecord = WorkspaceRecord
     , wrLayout :: !Text
     , wrMembers :: ![FilePath]
     -- ^ Canonically ordered manifest-relative member paths.
+    , wrSourceLanguages :: ![WorkspaceSourceLanguageRow]
     , wrModules :: ![WorkspaceModuleRow]
     , wrMappings :: ![MappingIdentity]
     , wrBindingObligations :: ![BindingHole]
@@ -176,6 +208,7 @@ renderWorkspaceRecord record =
         , "layout: " <> wrLayout record
         ]
             <> ["member " <> T.pack path | path <- wrMembers record]
+            <> ["source-language " <> encodeRow row | row <- wrSourceLanguages record]
             <> ["module " <> encodeRow row | row <- wrModules record]
             <> ["mapping " <> encodeRow mapping | mapping <- wrMappings record]
             <> ["binding " <> encodeRow obligation | obligation <- wrBindingObligations record]
@@ -200,6 +233,7 @@ parseWorkspaceRecord contents = case T.lines contents of
             rootLabel <- exactlyOne "module-root: " rows
             layout <- exactlyOne "layout: " rows
             members <- traverse safePath [path | row <- rows, Just path <- [T.stripPrefix "member " row]]
+            sourceLanguages <- parseSourceLanguages members rows
             modules <- traverse (decodeRow "module ") (rowsWith "module " rows)
             checkedModules <- traverse checkedModule modules
             mappings <- traverse (decodeRow "mapping ") (rowsWith "mapping " rows)
@@ -220,6 +254,7 @@ parseWorkspaceRecord contents = case T.lines contents of
                             , wrModuleRoot = if rootLabel == "(none)" then "" else rootLabel
                             , wrLayout = layout
                             , wrMembers = members
+                            , wrSourceLanguages = sourceLanguages
                             , wrModules = checkedModules
                             , wrMappings = mappings
                             , wrBindingObligations = obligations
@@ -241,6 +276,17 @@ parseWorkspaceRecord contents = case T.lines contents of
     checkedAdoption row = do
         path <- safePath (T.pack (adPath row))
         pure row{adPath = path}
+    parseSourceLanguages members rows = case rowsWith "source-language " rows of
+        [] -> Just [WorkspaceSourceLanguageRow path LegacyUnversioned | path <- members]
+        sourceRows -> do
+            decoded <- traverse (decodeRow "source-language ") sourceRows
+            checked <- traverse checkedSourceLanguage decoded
+            if hasDuplicates (map wrslPath checked) || sort (map wrslPath checked) /= sort members
+                then Nothing
+                else Just checked
+    checkedSourceLanguage row = do
+        path <- safePath (T.pack (wrslPath row))
+        pure row{wrslPath = path}
     safePath raw =
         let path = T.unpack raw
          in if null path || isAbsolute path || ".." `elem` splitDirectories path

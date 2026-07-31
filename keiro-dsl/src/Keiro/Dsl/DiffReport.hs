@@ -48,6 +48,7 @@ data Remedy
     | RemedyRecompileConsumers
     | RemedyRescaffoldWorkspace
     | RemedyRunConformance
+    | RemedyNoSemanticAction
     | RemedyDoNotDeploy Text
     deriving stock (Eq, Show)
 
@@ -176,6 +177,7 @@ vectorValue vector =
 
 remediationFor :: ChangeContext -> DiagnosticCode -> NonEmpty Remedy
 remediationFor context code
+    | code == SourceLanguageDeclarationChanged = RemedyNoSemanticAction :| []
     | code == OwnershipMoved = RemedyRescaffoldWorkspace :| []
     | code == WorkspaceAuthorityChanged = RemedyRescaffoldWorkspace :| [RemedyRecompileConsumers]
     | code == AggGuardTightened = RemedyReplayOnlyEdge :| [RemedyRunConformance]
@@ -298,6 +300,7 @@ renderRemedy remedy = case remedy of
     RemedyRecompileConsumers -> "recompile every affected consumer against the generated interface"
     RemedyRescaffoldWorkspace -> "re-run the whole-workspace scaffold so the record's ownership and golden roots follow the change"
     RemedyRunConformance -> "run the generated conformance and historical fixture suites"
+    RemedyNoSemanticAction -> "no semantic action is required; only source-language provenance changed"
     RemedyDoNotDeploy detail -> detail
 
 renderFinding :: Change -> Text

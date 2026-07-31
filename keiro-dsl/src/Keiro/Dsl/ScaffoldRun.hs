@@ -6,12 +6,14 @@ module Keiro.Dsl.ScaffoldRun (
     WriteDisposition (..),
     StaleModule (..),
     MappingDrift (..),
+    SourceLanguageDrift (..),
     ScaffoldReport (..),
     scaffoldModules,
     scaffoldModulesWithGoldens,
     planScaffold,
     planScaffoldWithGoldens,
     executeScaffold,
+    executeScaffoldWithLanguage,
     renderRefusals,
     renderScaffoldReport,
 
@@ -39,6 +41,7 @@ import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), 
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.Harness (harnessForWithGoldens, harnessProcess, harnessReadModel, harnessRouter, harnessWorkflow)
+import Keiro.Dsl.LanguageVersion (SourceLanguage (..), sourceFormText)
 import Keiro.Dsl.Manifest (moduleNameOf, renderManifest)
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.Scaffold
@@ -89,6 +92,12 @@ data MappingDrift = MappingDrift
     }
     deriving stock (Eq, Show)
 
+data SourceLanguageDrift = SourceLanguageDrift
+    { languageDriftPrevious :: !SourceLanguage
+    , languageDriftCurrent :: !SourceLanguage
+    }
+    deriving stock (Eq, Show)
+
 data ScaffoldReport = ScaffoldReport
     { reportSpecPath :: !FilePath
     , reportOutDir :: !FilePath
@@ -101,6 +110,7 @@ data ScaffoldReport = ScaffoldReport
     , reportConsumerPlan :: !ConsumerPlan
     , reportConstraintPlan :: ![Text]
     , reportMappingDrift :: ![MappingDrift]
+    , reportSourceLanguageDrift :: !(Maybe SourceLanguageDrift)
     , reportNewHoles :: ![BindingHole]
     }
     deriving stock (Eq, Show)
@@ -227,7 +237,12 @@ manifest rewrite. Banner refusal is evaluated for the complete set before the
 output directory is created or any file is changed.
 -}
 executeScaffold :: FilePath -> Bool -> FilePath -> Context -> Spec -> [ScaffoldModule] -> IO (Either [Refusal] ScaffoldReport)
-executeScaffold out forceGeneratedOverwrite specPath ctx spec modules = do
+executeScaffold out forceGeneratedOverwrite specPath ctx spec modules =
+    executeScaffoldWithLanguage out forceGeneratedOverwrite specPath LegacyUnversioned ctx spec modules
+
+-- | Source-aware execution used by the CLI; semantic planning still receives only 'Spec'.
+executeScaffoldWithLanguage :: FilePath -> Bool -> FilePath -> SourceLanguage -> Context -> Spec -> [ScaffoldModule] -> IO (Either [Refusal] ScaffoldReport)
+executeScaffoldWithLanguage out forceGeneratedOverwrite specPath sourceLanguage ctx spec modules = do
     bannerless <- if forceGeneratedOverwrite then pure [] else missingGeneratedBanners out modules
     if not (null bannerless)
         then pure (Left [MissingGeneratedBanner bannerless])
@@ -237,13 +252,18 @@ executeScaffold out forceGeneratedOverwrite specPath ctx spec modules = do
             stale <- maybe (pure []) (existingStale out modules) previousRecord
             let currentConsumerPlan = consumerPlan spec
                 drift = maybe [] (mappingDrift (consumerMappings currentConsumerPlan) . recMappings) previousRecord
+                languageDrift = do
+                    previous <- previousRecord
+                    if recSourceLanguage previous == sourceLanguage
+                        then Nothing
+                        else Just (SourceLanguageDrift (recSourceLanguage previous) sourceLanguage)
                 currentObligations = either (const []) id (bindingHoles spec)
                 newHoles = maybe [] (newBindingObligations currentObligations . recBindingObligations) previousRecord
             createDirectoryIfMissing True out
             dispositions <- mapM (writeModule out) modules
             let manifestPath = out </> ("keiro-dsl-manifest." <> T.unpack (specContext spec) <> ".txt")
             TIO.writeFile manifestPath (renderManifest (T.pack specPath) modules spec)
-            TIO.writeFile recordPath (renderRecord (currentRecord specPath ctx spec modules))
+            TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx spec modules))
             pure $
                 Right
                     ScaffoldReport
@@ -258,6 +278,7 @@ executeScaffold out forceGeneratedOverwrite specPath ctx spec modules = do
                         , reportConsumerPlan = currentConsumerPlan
                         , reportConstraintPlan = constraintPlan spec currentConsumerPlan
                         , reportMappingDrift = drift
+                        , reportSourceLanguageDrift = languageDrift
                         , reportNewHoles = newHoles
                         }
 
@@ -324,12 +345,13 @@ staleAgainst out currentPathList previous = fmap concat $ mapM stillExists remov
         exists <- doesFileExist (out </> path)
         pure [StaleModule fileKind path | exists]
 
-currentRecord :: FilePath -> Context -> Spec -> [ScaffoldModule] -> ScaffoldRecord
-currentRecord specPath ctx spec modules =
+currentRecord :: FilePath -> SourceLanguage -> Context -> Spec -> [ScaffoldModule] -> ScaffoldRecord
+currentRecord specPath sourceLanguage ctx spec modules =
     ScaffoldRecord
         { recSpecPath = T.pack specPath
         , recModuleRoot = moduleRoot ctx
         , recLayout = case placement ctx of GeneratedPrefix -> "prefixed"; CollocatedLeaf -> "collocated"
+        , recSourceLanguage = sourceLanguage
         , recFiles = [(kind m, modulePath m) | m <- modules]
         , recMappings = consumerMappings (consumerPlan spec)
         , recBindingObligations = either (const []) id (bindingHoles spec)
@@ -412,6 +434,7 @@ renderScaffoldReport report =
         <> constraintSection
         <> newHolesSection
         <> mappingDriftSection
+        <> sourceLanguageDriftSection
         <> staleSection
   where
     ctx = reportContext report
@@ -474,6 +497,15 @@ renderScaffoldReport report =
         , "    previous: " <> maybe "(absent)" renderMappingIdentity (driftPrevious drift)
         , "    current:  " <> maybe "(absent)" renderMappingIdentity (driftCurrent drift)
         ]
+    sourceLanguageDriftSection = case reportSourceLanguageDrift report of
+        Nothing -> []
+        Just drift ->
+            [ "source-language drift: "
+                <> sourceFormText (languageDriftPrevious drift)
+                <> " -> "
+                <> sourceFormText (languageDriftCurrent drift)
+                <> " (generated module bytes are semantic and unaffected)"
+            ]
     staleSection = case reportStale report of
         [] -> []
         stale ->

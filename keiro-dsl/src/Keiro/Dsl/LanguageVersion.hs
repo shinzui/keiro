@@ -12,6 +12,7 @@ module Keiro.Dsl.LanguageVersion (
     languageVersionText,
     SourceLanguage (..),
     sourceFormText,
+    declaredLanguageVersionMaybe,
     effectiveLanguageVersion,
     LanguageBodyParser (..),
     LanguageDefinition (..),
@@ -28,12 +29,13 @@ module Keiro.Dsl.LanguageVersion (
 )
 where
 
+import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.:?), (.=))
 import Data.List (find)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Data.Text qualified as T
-import Keiro.Dsl.Grammar (Loc (..), Spec)
+import Keiro.Dsl.Grammar (Loc (..), Spec, noLoc)
 import Numeric.Natural (Natural)
 
 -- | A positive released Keiro DSL language version.
@@ -42,6 +44,14 @@ newtype LanguageVersion = LanguageVersion Natural
 
 instance Show LanguageVersion where
     show = T.unpack . languageVersionText
+
+instance ToJSON LanguageVersion where
+    toJSON = toJSON . languageVersionNumber
+
+instance FromJSON LanguageVersion where
+    parseJSON value = do
+        raw <- parseJSON value
+        maybe (fail "language version must be a positive decimal") pure (languageVersion raw)
 
 -- | Construct a version, rejecting zero because released versions are positive.
 languageVersion :: Natural -> Maybe LanguageVersion
@@ -67,6 +77,10 @@ data SourceLanguage
 sourceFormText :: SourceLanguage -> Text
 sourceFormText LegacyUnversioned = "legacy-unversioned"
 sourceFormText DeclaredLanguage{} = "declared"
+
+declaredLanguageVersionMaybe :: SourceLanguage -> Maybe LanguageVersion
+declaredLanguageVersionMaybe LegacyUnversioned = Nothing
+declaredLanguageVersionMaybe DeclaredLanguage{declaredLanguageVersion = version} = Just version
 
 -- | The body-parser configuration selected by a released version.
 data LanguageBodyParser = LanguageBodyParserV1
@@ -98,6 +112,30 @@ lookupLanguageDefinition version =
 effectiveLanguageVersion :: SourceLanguage -> LanguageVersion
 effectiveLanguageVersion LegacyUnversioned = version1
 effectiveLanguageVersion DeclaredLanguage{declaredLanguageVersion = version} = version
+
+instance ToJSON SourceLanguage where
+    toJSON sourceLanguage =
+        object
+            [ "sourceForm" .= sourceFormText sourceLanguage
+            , "declaredLanguageVersion" .= declaredLanguageVersionMaybe sourceLanguage
+            , "effectiveLanguageVersion" .= effectiveLanguageVersion sourceLanguage
+            ]
+
+instance FromJSON SourceLanguage where
+    parseJSON = withObject "SourceLanguage" $ \fields -> do
+        sourceForm <- fields .: "sourceForm"
+        declared <- fields .:? "declaredLanguageVersion"
+        effective <- fields .: "effectiveLanguageVersion"
+        case (sourceForm :: Text, declared) of
+            ("legacy-unversioned", Nothing)
+                | effective == effectiveLanguageVersion LegacyUnversioned -> pure LegacyUnversioned
+                | otherwise -> fail "legacy-unversioned source must select effective language version 1"
+            ("declared", Just version)
+                | effective == version -> pure (DeclaredLanguage version noLoc)
+                | otherwise -> fail "declared and effective language versions must match"
+            ("legacy-unversioned", Just _) -> fail "legacy-unversioned source cannot declare a language version"
+            ("declared", Nothing) -> fail "declared source must include declaredLanguageVersion"
+            (other, _) -> fail ("unknown source form: " <> T.unpack other)
 
 -- | Stable codes for failures detected before a body grammar is selected.
 data SourceLanguageErrorCode
