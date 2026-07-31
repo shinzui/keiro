@@ -4,18 +4,34 @@ title: Support first-class aggregate Time and Natural lowering
 description: >-
   Make direct aggregate timestamp and natural-number fields scaffold to their truthful Haskell
   types, and make keiro-dsl check reject every type the selected scaffold cannot lower.
-timestamp: 2026-07-31T12:41:30Z
+timestamp: 2026-07-31T13:41:01Z
 requestId: IR-4
 status: proposed
 origin: mori://shinzui/mori
+reviews:
+  - kind: model
+    reviewer: codex
+    reviewed_at: 2026-07-31T13:41:01Z
+    document_timestamp: 2026-07-31T13:41:01Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: openai
+    model: gpt-5
+    effort: unspecified
+    context: >-
+      In-repository review against Keiro's parser, validator, resolved mapped-type graph,
+      scaffolder, generated codecs, snapshots, and conformance harness; the Mori-resolved Keiki
+      source at commits af8a14f and 7a93fa5; and the published keiki-0.5.0.0 Hackage release and
+      matching upstream v0.5.0.0 tag that contain those changes.
 ---
 
 # Improvement Request: Support First-Class Aggregate `Time` and `Natural` Lowering
 
 ## Status
 
-**Proposed.** This blocks Mori MasterPlan 22 from scaffolding its Project and ProjectArtifact
-aggregates without weakening timestamps to `Text` and revision numbers to `Int`.
+**Proposed, technically validated.** This blocks Mori MasterPlan 22 from scaffolding its Project
+and ProjectArtifact aggregates without weakening timestamps to `Text` and revision numbers to
+`Int`.
 
 
 ## Context
@@ -84,8 +100,8 @@ Register support must be explicit rather than accidental:
   and an unbounded SMT-integer representation constrained to the non-negative domain.
 - `Natural` equality and ordering guards use that released Keiki capability. Generic symbolic
   arithmetic remains unavailable until every operation preserves Haskell semantics; in
-  particular, Haskell `Natural` subtraction saturates at zero and is not ordinary SMT integer
-  subtraction.
+  particular, Haskell `Natural` subtraction throws `Underflow` when the mathematical result would
+  be negative, while ordinary SMT integer subtraction returns that negative integer.
 - Snapshot-bearing `Natural` registers use Keiki's pinned `CanonicalTypeName Natural` and the
   generic register JSON codec. Field/event and snapshot tests must reject negative or fractional
   JSON values.

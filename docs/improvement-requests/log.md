@@ -1,6 +1,10 @@
 # Bundle Update Log
 
 ## 2026-07-31
+* **Review**: IR-4 passes an in-repository technical-accuracy review against the current Keiro
+  implementation and the released Keiki `Natural` capability. The review corrected the
+  description of Haskell `Natural` subtraction from saturation to `Underflow` and records that
+  the required capability is published in Keiki `0.5.0.0` on Hackage with a matching upstream tag.
 * **Addition**: IR-4 requests truthful direct aggregate lowering for `Time` and `Natural`, plus a
   shared validation/scaffolding capability model so a clean check cannot fail later on type
   lowering.
