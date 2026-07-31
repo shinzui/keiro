@@ -4,19 +4,51 @@ title: Support composable multi-file service specifications in keiro-dsl
 description: >-
   Let one Keiro service keep complete aggregates in separate .keiro files while resolving shared
   declarations, validating the whole service, and scaffolding context-level outputs atomically.
-timestamp: 2026-07-29T13:44:00Z
+timestamp: 2026-07-31T23:44:22Z
 requestId: IR-2
 status: proposed
 origin: mori://shinzui/mori
+reviews:
+  - kind: model
+    reviewer: codex
+    reviewed_at: 2026-07-31T23:44:22Z
+    document_timestamp: 2026-07-31T23:44:22Z
+    scope: technical-accuracy
+    outcome: changes-requested
+    provider: openai
+    model: gpt-5
+    effort: unspecified
+    context: >-
+      Keiro 0.6.0.0 workspace check/scaffold exercise against Mori's two-aggregate service found
+      that one resolved shared declaration is emitted as incompatible nominal types in both
+      generated aggregate modules, failing IR-2 and ADR-0014 acceptance.
 ---
 
 # Improvement Request: Support Composable Multi-File Service Specifications in `keiro-dsl`
 
 ## Status
 
-**Proposed.** This request belongs to `shinzui/keiro` and originates from Mori MasterPlan 22.
-Mori can proceed on released Keiro 0.4 by using distinct scaffold contexts for its Project and
-ProjectArtifact aggregate files, so IR-2 is an improvement rather than a release blocker.
+**Proposed, with a release-blocking acceptance failure in Keiro 0.6.0.0.** This request belongs to
+`shinzui/keiro` and originates from Mori MasterPlan 22. The workspace checker and atomic scaffold
+entrypoint have landed, but the generated Haskell does not yet satisfy the single nominal type
+requirement below. Mori must not adopt the workspace scaffold until that identity split is fixed.
+
+
+## Keiro 0.6.0.0 Implementation Finding
+
+Scaffolding Mori's two-member Project workspace with Keiro 0.6.0.0 emits independent declarations
+of `ProjectId` and `ProjectArtifactKind` in both
+`Mori.Modules.Project.Generated.Domain` and
+`Mori.Modules.ProjectArtifact.Generated.Domain`. The workspace resolver therefore has one logical
+declaration, but generated consumers receive two incompatible Haskell types. It also emits the
+shared enum in an aggregate that does not use it.
+
+This is not merely a module-layout preference: it fails this request's acceptance requirement to
+"produce one nominal generated type for a shared declaration such as `ProjectId`" and ADR-0014's
+single-authority rule. The fix must give a shared declaration one generated owner and make every
+aggregate module import that same nominal type. A version-2 consumer binding may intentionally
+select an existing consumer-owned type, but it must not be required to hide duplicate default
+generation.
 
 
 ## Context

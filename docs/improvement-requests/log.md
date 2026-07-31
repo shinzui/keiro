@@ -1,6 +1,17 @@
 # Bundle Update Log
 
 ## 2026-07-31
+* **Review finding**: IR-2 remains incomplete in Keiro 0.6.0.0 because workspace scaffolding emits
+  separate nominal Haskell declarations for one shared logical `ProjectId` in each aggregate
+  module; its status now records this release-blocking acceptance failure.
+* **Addition**: IR-14 requests a versioned, enforceable runtime contract for declared ID prefixes
+  without silently breaking persisted legacy events.
+* **Addition**: IR-13 requests generated-owned event output mappings when `fields(Command)` already
+  specifies a total identity copy.
+* **Addition**: IR-12 requests type-safe equality for generated and consumer-bound nominal IDs and
+  enums in aggregate expressions.
+* **Addition**: IR-11 requests grammar-aware language-preamble and feature detection after Keiro
+  0.6.0.0 misclassified Mori's nested `language` field as a file preamble.
 * **Review and planning**: IR-3 was revalidated against the current outbox implementation and is
   linked to plan 165 for its public outcome, durable rejected status,
   ordering, crash/recovery, telemetry, migration, and compatibility implementation.
