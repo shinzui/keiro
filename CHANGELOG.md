@@ -6,6 +6,50 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.5.0.0 — 2026-07-31
+
+All published packages move to 0.5.0.0 together. The entire cycle is
+`keiro-dsl`; `keiro-core`, `keiro`, `keiro-pgmq`, and `keiro-migrations` have no
+changes and are released with the set.
+
+### Breaking Changes
+
+- **keiro-dsl**: `DiagnosticCode` gains nine append-only constructors
+  (`WorkspaceMemberUnreadable`, `WorkspaceMemberParseFailed`,
+  `WorkspaceContextMismatch`, `WorkspaceAuthorityConflict`,
+  `WorkspaceDuplicateDeclaration`, `WorkspaceDuplicateNodeName`,
+  `WorkspacePathCollision`, `OwnershipMoved`, `WorkspaceAuthorityChanged`),
+  `ScaffoldRun.Refusal` gains `GoldenRootDivergence`,
+  `ScaffoldRun.WriteDisposition` gains `Unchanged`, and `DiffReport.Remedy`
+  gains `RemedyRescaffoldWorkspace`. Exhaustive matches over these types must be
+  extended; no existing behaviour changed.
+
+### New Features
+
+- **keiro-dsl**: adds **service workspaces**. A `.keiro-workspace` manifest names
+  a service and lists its member `.keiro` files, and the whole toolchain now
+  operates on the composed service:
+
+  - `check <manifest>` validates the members as one contract — shared ids,
+    enums, rules, and mapped structural types resolve once across all members,
+    so an aggregate in one file may use a declaration owned by another or feed a
+    read model declared in a third. Composition refuses on context disagreement,
+    manifest-authority conflicts, duplicate declarations or nodes, and
+    case-folded generated-path collisions, citing every relevant file.
+  - `scaffold <manifest> --out DIR` emits the complete module set for every
+    member in one atomic invocation, with workspace-keyed history, per-module
+    member ownership (so a node moved between files is an ownership move, not a
+    stale/new pair), observable idempotence, and evidence-based adoption of
+    pre-existing per-context output.
+  - `diff <manifest> --since <rev>` composes the historical workspace from git
+    and diffs it as one service, annotating findings with owning file and line
+    and adding non-blocking `OwnershipMoved` / `WorkspaceAuthorityChanged`
+    consumer-build advisories.
+
+  A single `.keiro` file is unchanged and behaves as a one-member workspace; the
+  `keiro-dsl/diff-report/1` JSON schema and all single-file report bytes are
+  preserved. Recorded as ADR-14 and ADR-15, with ADR-4 amended.
+
 ## 0.4.0.1 — 2026-07-28
 
 ### Other Changes

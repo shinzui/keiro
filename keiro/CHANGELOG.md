@@ -6,6 +6,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.5.0.0 — 2026-07-31
+
+No changes this release. Released with the package set for the `keiro-dsl`
+0.5.0.0 whole-workspace work.
+
 ## 0.4.0.1 — 2026-07-28
 
 ### Other Changes
