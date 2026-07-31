@@ -2,7 +2,7 @@
 type: Research Document
 title: Workflow & Durable-Execution Prior Art — Survey for keiro
 description: Compare workflow and durable-execution systems to identify capabilities Keiro should adopt or avoid.
-timestamp: "2026-05-08T20:29:19-07:00"
+timestamp: "2026-05-09T03:29:19Z"
 researchId: RES-6
 status: active
 scope: Workflow, saga, event-sourcing, and durable-execution prior art relevant to Keiro v1 and v2.

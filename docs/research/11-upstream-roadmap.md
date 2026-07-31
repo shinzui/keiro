@@ -2,7 +2,7 @@
 type: Research Document
 title: Upstream Roadmap for Kiroku and Keiki — keiro
 description: Track upstream Kiroku and Keiki capabilities required or desired by Keiro and their delivery status.
-timestamp: "2026-06-03T21:01:31-07:00"
+timestamp: "2026-06-04T04:01:31Z"
 researchId: RES-12
 status: active
 scope: Cross-repository substrate work in Kiroku and Keiki that affects Keiro's roadmap.

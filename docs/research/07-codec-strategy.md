@@ -2,7 +2,7 @@
 type: Research Document
 title: Codec and Event Schema Strategy — keiro
 description: Define Keiro's event codec, type-tag, schema-version, upcaster, unknown-event, and testing strategy.
-timestamp: "2026-05-19T14:37:23-07:00"
+timestamp: "2026-05-19T21:37:23Z"
 researchId: RES-8
 status: active
 scope: Event serialization and schema evolution across Keiro's command, replay, and snapshot paths.

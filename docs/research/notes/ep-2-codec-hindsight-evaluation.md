@@ -2,7 +2,7 @@
 type: Research Document
 title: Hindsight Library Evaluation for Keiro EP-2 Codec Layer
 description: Evaluate whether Keiro should adopt, borrow from, or reject Hindsight's type-level event-versioning design.
-timestamp: "2026-05-19T14:37:23-07:00"
+timestamp: "2026-05-19T21:37:23Z"
 researchId: RES-17
 status: active
 scope: Hindsight's API and design tradeoffs relative to the Keiro EP-2 codec layer.

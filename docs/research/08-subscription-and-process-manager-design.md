@@ -2,7 +2,7 @@
 type: Research Document
 title: Subscriptions, Projections, and Process Managers — keiro
 description: Design Keiro's projection, process-manager, inbox, outbox, concurrency, failure, and observability surfaces.
-timestamp: "2026-05-17T08:37:26-07:00"
+timestamp: "2026-05-17T15:37:26Z"
 researchId: RES-9
 status: active
 scope: Keiro's synchronous and asynchronous read-side and event-driven coordination architecture.

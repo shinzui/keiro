@@ -2,7 +2,7 @@
 type: Research Document
 title: Kiroku Event Store — Current State Survey
 description: Survey Kiroku's read-side, append, subscription, snapshot, and transaction capabilities relevant to Keiro.
-timestamp: "2026-05-14T11:10:30-07:00"
+timestamp: "2026-05-14T18:10:30Z"
 researchId: RES-2
 status: active
 scope: The Kiroku event-store APIs and behavior that form Keiro's persistence substrate.

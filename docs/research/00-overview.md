@@ -2,7 +2,7 @@
 type: Research Document
 title: Research Overview — 経路 (keiro)
 description: Synthesize the Keiro research corpus and index its supporting surveys and designs.
-timestamp: "2026-07-28T04:14:04-07:00"
+timestamp: "2026-07-28T11:14:04Z"
 researchId: RES-1
 status: active
 scope: Keiro's architectural foundations, dependency capabilities, and implementation direction.

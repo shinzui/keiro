@@ -2,7 +2,7 @@
 type: Research Document
 title: keiro snapshot strategy and hydration acceleration
 description: Design advisory snapshots, compatibility checks, policies, read/write paths, retention, and operations.
-timestamp: "2026-05-17T08:37:26-07:00"
+timestamp: "2026-05-17T15:37:26Z"
 researchId: RES-10
 status: active
 scope: Snapshot storage and accelerated hydration for Keiro event streams and workflows.

@@ -2,7 +2,7 @@
 type: Research Document
 title: Read Model Query API and Lifecycle Design
 description: Design typed read-model queries, consistency modes, lifecycle operations, and their substrate contracts.
-timestamp: "2026-07-13T11:55:18-07:00"
+timestamp: "2026-07-13T18:55:18Z"
 researchId: RES-13
 status: active
 scope: Keiro's read-model query surface, consistency guarantees, rebuilds, and operational lifecycle.

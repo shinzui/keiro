@@ -2,7 +2,7 @@
 type: Research Document
 title: OpenTelemetry semantic-conventions audit
 description: Audit Keiro instrumentation sites against the OpenTelemetry semantic conventions and record gaps and actions.
-timestamp: "2026-07-23T12:34:06-07:00"
+timestamp: "2026-07-23T19:34:06Z"
 researchId: RES-16
 status: active
 scope: Keiro tracing and metrics instrumentation governed by OpenTelemetry semantic conventions.
