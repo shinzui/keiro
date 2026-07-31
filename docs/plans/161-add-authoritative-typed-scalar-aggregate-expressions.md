@@ -67,17 +67,16 @@ so an accidental parse cannot become an unofficial contract.
 - [x] 2026-07-31: Prerequisite plan 160 completed versioned CLI/workspace loading and froze
   language version 1; its full suite passed 394 examples, `cabal build all` and native
   `nix flake check` passed, and ADR 16 was accepted.
-- [x] 2026-07-31: Implemented exact `Integer` and total Natural arithmetic in Keiki, exposed
-  conservative predicate verification, passed 809 coordinated examples/properties plus native
-  flake and extracted-sdist checks, and published `keiki`, `keiki-codec-json`, and
+- [x] 2026-07-31: Built on Keiki `0.5.0.0`'s exact `Integer` arithmetic, added total Natural
+  arithmetic and conservative predicate verification, passed 809 coordinated examples/properties
+  plus native flake and extracted-sdist checks, and published `keiki`, `keiki-codec-json`, and
   `keiki-codec-json-test` version `0.6.0.0` to Hackage. Hackage preferred metadata lists the
   release and the published core tarball SHA-256 is
   `f61942daacaf7965ec0a5d05aa7ae4258e3363aff027cd2cb59c9774b6878c63`.
-- [ ] Final external acceptance gate / Milestone 1 remaining: have the maintainer push local
-  annotated tag `v0.6.0.0`, which
-  resolves to `c8f2c343ce03f42e10de77d684769f15ad30feda`, then verify that exact commit with
-  `git ls-remote --tags https://github.com/shinzui/keiki.git`. The dependency repository's release
-  runbook explicitly forbids the agent from pushing the tag automatically.
+- [x] 2026-07-31: Verified the maintainer-pushed upstream annotated tag `v0.6.0.0`: tag object
+  `710235ca81375e7de1a32e34d071f0e634127763` peels to the exact release commit
+  `c8f2c343ce03f42e10de77d684769f15ad30feda`. Hackage preferred metadata also lists `0.6.0.0`, so
+  Milestone 1 and the final external acceptance gate are complete.
 - [x] 2026-07-31: Added the version-2 located scalar grammar, exact scalar/path/literal resolver,
   explicit generated-versus-Hole ownership syntax, and stable diagnostics. Version 1 retains its
   historical grammar and AST spelling; the complete `keiro-dsl-test` suite passes 407 examples.
@@ -97,8 +96,8 @@ so an accidental parse cannot become an unofficial contract.
   all`, the full suite (413 DSL, 378 Keiro, 58 PGMQ with two documented pending cases, 26
   migration, and 21 Jitsurei examples plus every compiled conformance service), all eight scalar
   mutations, native `nix flake check`, 17-concept strict ADR validation, and `git diff --check`
-  passed. Implementation, documentation, and repository validation are complete; only the
-  maintainer-owned upstream Keiki tag push remains open.
+  passed. Implementation, documentation, dependency release, and repository validation are
+  complete.
 
 
 ## Surprises & Discoveries
@@ -135,8 +134,10 @@ so an accidental parse cannot become an unofficial contract.
   used as release authority.
 - 2026-07-31: Keiki's coordinated release runbook requires `keiki`, `keiki-codec-json`, and
   `keiki-codec-json-test` to ship in one release window and explicitly reserves Git tag pushes for
-  the maintainer. All three `0.6.0.0` packages are published and the local annotated tag resolves
-  to the release commit, but the upstream tag is intentionally not yet present.
+  the maintainer. All three `0.6.0.0` packages are published, and the maintainer-pushed upstream
+  annotated tag `v0.6.0.0` peels from tag object
+  `710235ca81375e7de1a32e34d071f0e634127763` to release commit
+  `c8f2c343ce03f42e10de77d684769f15ad30feda`.
 - 2026-07-31: Parser keywords are global in the current combinator layer. Reserving plan-166
   collection words there initially broke a version-1 field named `values`; keeping those words
   legal in declarations while rejecting them specifically in version-2 expression positions
@@ -269,8 +270,16 @@ so an accidental parse cannot become an unofficial contract.
   required by the dependency repository's release runbook.
   Rationale: Hackage preferred metadata and the downloaded tarball now provide release authority
   for dependency resolution, while honoring the producer repository's explicit no-automatic-push
-  rule avoids an unauthorized external Git mutation. Final plan acceptance still requires the
-  matching upstream tag.
+  rule avoids an unauthorized external Git mutation. The maintainer later pushed the matching
+  upstream tag and satisfied the deferred acceptance gate.
+  Date: 2026-07-31
+
+- Decision: Accept Keiki `0.6.0.0` as the dependency floor after verifying both Hackage metadata
+  and the maintainer-pushed upstream annotated tag.
+  Rationale: Hackage lists `0.6.0.0`, and upstream tag `v0.6.0.0` peels to the exact published
+  release commit `c8f2c343ce03f42e10de77d684769f15ad30feda`. Exact `Integer` arithmetic was already
+  released in `0.5.0.0`; `0.6.0.0` supplies the total Natural monus and conservative predicate
+  verification required by this plan.
   Date: 2026-07-31
 
 - Decision: Generate a labelled per-transition ownership and predicate-verification report beside
@@ -286,9 +295,10 @@ so an accidental parse cannot become an unofficial contract.
 Version 2 now has an executable, typed scalar language rather than advisory guard/write comments.
 Its checked AST resolves explicit roots, required structural paths, literals, and total arithmetic,
 then generates the Keiki term/predicate/update trees used by both concrete execution and symbolic
-analysis. Exact `Integer` arithmetic and Natural monus came from published Keiki `0.6.0.0`;
-machine-`Int` arithmetic, partial Natural subtraction, implicit coercions, collection syntax, and a
-second production evaluator remain excluded.
+analysis. Exact `Integer` arithmetic came from Keiki `0.5.0.0`; published Keiki `0.6.0.0` added
+total Natural monus and conservative predicate verification. Machine-`Int` arithmetic, partial
+Natural subtraction, implicit coercions, collection syntax, and a second production evaluator
+remain excluded.
 
 Every version-2 transition now has one semantic owner. Generated-owned transitions execute their
 declared expressions through generated `Expressions` and `Transducer` modules. Explicit
@@ -301,10 +311,10 @@ The compiled conformance service supplies 39 labelled checks and a finite 360-ca
 direct execution, encoded replay, full replay after snapshot invalidation, and symbolic formulas.
 Eight independent mutations prove the owning checks fail for monus, guard/write authority, Hole
 exclusivity, event/target envelopes, fold versions, and conservative verification. ADRs 3, 4, 12,
-16, and 17 plus the user/API/migration documentation now record the durable contract. All local
-implementation and validation work is complete. Final plan acceptance remains intentionally open
-until the maintainer pushes Keiki tag `v0.6.0.0` at
-`c8f2c343ce03f42e10de77d684769f15ad30feda` and the upstream tag is verified.
+16, and 17 plus the user/API/migration documentation now record the durable contract. The
+maintainer-pushed upstream Keiki tag `v0.6.0.0` peels to the exact published release commit, so all
+implementation, validation, documentation, dependency-release, and external acceptance gates are
+complete.
 
 
 ## Context and Orientation
@@ -362,8 +372,9 @@ generated and checked.
 ## Plan of Work
 
 Milestone 1 establishes the dependency contract before Keiro accepts arithmetic syntax. Use Mori
-to inspect the current Keiki source. Add or coordinate a Keiki change that gives exact `Integer`
-and Natural operations one structural concrete/symbolic meaning. Natural monus must translate as
+to inspect the current Keiki source. Confirm the existing exact `Integer` contract and add or
+coordinate a Keiki change that gives Natural operations one structural concrete/symbolic meaning.
+Natural monus must translate as
 `ite (a >= b) (a - b) 0`; it must not use Haskell's partial `Natural (-)` or generic subtraction.
 An opaque application, free Boolean, skipped result, solver `Unknown`, or timeout cannot count as
 verification of a generated scalar guard. Release Keiki first, verify Hackage preferred-version
@@ -660,11 +671,12 @@ Generated assembly retains the declared event/target/mode envelope and validates
 conformance. There is no aggregate-wide replacement transducer. Keiki's released concrete
 evaluator and symbolic translator remain the only production interpreters.
 
-The only anticipated new external capability is a released version of
-`mori://shinzui/keiki/packages/keiki` exposing exact `Integer` evidence, total Natural
-add/multiply/monus terms, and a queryable verified-versus-unknown symbolic result. Do not name the
-version or PVP bounds until Milestone 1 verifies Hackage and the matching upstream tag. No
-collection term dependency belongs in this plan.
+The external capability is released by `mori://shinzui/keiki/packages/keiki` version `0.6.0.0`,
+which retains the exact `Integer` evidence released in `0.5.0.0` and adds total Natural
+add/multiply/monus terms plus a queryable verified-versus-unknown symbolic result. The Keiro
+dependency range is `keiki >=0.6 && <0.7`; Hackage metadata and upstream tag `v0.6.0.0` both resolve
+that release to commit `c8f2c343ce03f42e10de77d684769f15ad30feda`. No collection term dependency
+belongs in this plan.
 
 Plan 160's language-version registry is a hard prerequisite. This plan reserves successor version
 2. Plan 158 must either be deliberately co-released and tested under the same version-2 parser or
@@ -700,5 +712,10 @@ before Milestone 1 can be closed.
 
 Revision note (2026-07-31): Recorded the completed grammar, generated ownership, conformance,
 mutation, documentation, ADR, build, full-suite, and native Nix gates. Also recorded the Seihou
-template migration and centralized Cabal language-extension authority. The only remaining
-acceptance action is the maintainer-owned upstream Keiki tag push.
+template migration and centralized Cabal language-extension authority. At that revision, the only
+remaining acceptance action was the maintainer-owned upstream Keiki tag push.
+
+Revision note (2026-07-31): Verified that the maintainer-pushed upstream Keiki `v0.6.0.0` tag peels
+to the exact published release commit, closed Milestone 1 and final plan acceptance, and corrected
+release provenance: exact `Integer` arithmetic shipped in `0.5.0.0`, while `0.6.0.0` added total
+Natural monus and conservative predicate verification.
