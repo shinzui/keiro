@@ -2399,7 +2399,6 @@ emitDomain a =
         ]
             ++ ["{-# LANGUAGE DeriveAnyClass #-}" | hasSnapshot a]
             ++ [ "{-# LANGUAGE DuplicateRecordFields #-}"
-               , "{-# LANGUAGE LambdaCase #-}"
                , "{-# LANGUAGE OverloadedStrings #-}"
                , "{-# LANGUAGE TemplateHaskell #-}"
                , "{-# LANGUAGE TypeApplications #-}"
@@ -2606,8 +2605,8 @@ emitCodec a =
     nl $
         ["{-# LANGUAGE DataKinds #-}" | hasConsumerNominalIdCodec a]
             ++ ["{-# LANGUAGE TypeApplications #-}" | hasConsumerNominalIdCodec a]
-            ++ [ "{-# LANGUAGE LambdaCase #-}"
-               , "{-# LANGUAGE OverloadedRecordDot #-}"
+            ++ ["{-# LANGUAGE LambdaCase #-}" | hasConsumerNominalCodec a]
+            ++ [ "{-# LANGUAGE OverloadedRecordDot #-}"
                , "{-# LANGUAGE OverloadedStrings #-}"
                , generatedBanner
                , "module " <> aGenPrefix a <> ".Codec ("

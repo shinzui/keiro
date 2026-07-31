@@ -148,7 +148,7 @@ resolveNominalTypes spec = do
         [ NominalDeclarationCollision name loc categories
         | (name, occurrences) <- Map.toList originsByName
         , let categories = map fst occurrences
-        , length occurrences > 1
+        , Set.size (Set.fromList categories) > 1
         , (_, loc) <- occurrences
         ]
     originsByName = Map.fromListWith (<>) [(name, [(category, loc)]) | (name, category, loc) <- origins]
