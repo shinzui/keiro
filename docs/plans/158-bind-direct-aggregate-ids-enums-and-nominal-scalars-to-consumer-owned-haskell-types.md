@@ -17,15 +17,25 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 After this change, an aggregate author can use an existing domain type for a direct aggregate
 identifier, enum, or scalar instead of accepting a second generated wrapper. For example, an
-`OrderId` declared by an application as `KindID "ord"` can remain the type used by commands,
-events, registers, snapshots, JSON codecs, and harness fixtures. A nominal `AccountNumber` over
-`Text` likewise remains distinct from every other text-valued field without being flattened to
-`Text` in generated code.
+`OrderId` declared by an application as a type synonym or wrapper around `KindID "ord"` remains
+the type used by generated commands, events, registers, snapshot caches, and harness fixtures. A
+nominal `AccountNumber` over `Text` likewise remains distinct from every other text-valued field
+without being flattened to `Text` in generated domain code.
 
-The behavior is visible by scaffolding a fixture whose ID, enum, and nominal scalar all point at
-consumer-owned modules, compiling the generated service without duplicate type declarations, and
-round-tripping values through JSON, snapshot, forward execution, and replay. Prefix validation for
-an ID must happen at decode and fixture boundaries, not merely remain descriptive metadata.
+Keiro still owns the private-event wire representation. A bound ID crosses a typed
+`KindID "ord"` representation, a bound enum crosses a generated closed representation, and a
+bound scalar crosses exactly one built-in representation. These conversions are total in both
+directions. Consequently the existing pure event encoder cannot emit an invalid ID prefix or an
+unknown enum spelling, while the decoder rejects malformed or wrong-prefix ID text before it can
+construct the consumer type. A scalar whose constructor can reject a built-in value is refined,
+not merely nominal, and remains outside this feature; it must use `mapped opaque` until Keiro has
+an explicit refined-mapping contract.
+
+The behavior is visible by scaffolding and compiling a fixture whose ID, enum, and nominal scalar
+all point at consumer-owned types. The generated domain module contains no duplicate public type,
+the generated event codec round-trips the declared wire values, a wrong TypeID prefix fails at
+decode, snapshots round-trip through the existing consumer-owned cache instances, and forward
+execution reaches the same registers as replay.
 
 
 ## Progress
@@ -34,13 +44,21 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: specify and parse consumer bindings for direct IDs, enums, and nominal scalars.
-- [ ] Milestone 2: resolve the declarations into one checked nominal-type model and diagnose
-  missing or incompatible binding facts at `keiro-dsl check`.
-- [ ] Milestone 3: make every scaffold, codec, snapshot, manifest, diff, fingerprint, and harness
-  consumer use the checked model.
-- [ ] Milestone 4: add compiled conformance fixtures, mutation tests, documentation, ADR updates,
-  and full validation.
+- [x] 2026-07-31: Validated this plan against the current parser, resolver, generator, codec,
+  snapshot, record, workspace, and Keiki symbolic APIs; ADRs 3, 4, 12, and 15; and the released
+  `mmzk-typeid` 0.7.1.1 source and upstream tag.
+- [ ] Prerequisite: complete plan 160 and confirm that the landed language-version registry has
+  no unchecked work before adding syntax in this plan.
+- [ ] Milestone 1: publish the total nominal-binding runtime contract and add version-gated,
+  canonical syntax for bound direct IDs, bound direct enums, and nominal scalars.
+- [ ] Milestone 2: resolve every declaration into one checked nominal-type registry and reject
+  invalid prefixes, incomplete provenance, refined scalar claims, name collisions, and missing
+  register initials at `keiro-dsl check`.
+- [ ] Milestone 3: drive domain, codec, projection, fixture, manifest, record, fingerprint, diff,
+  replay-impact, scaffold, and workspace output from the checked model while preserving the
+  existing generated path for unbound IDs and enums.
+- [ ] Milestone 4: add the compiled conformance ring, negative and mutation tests, documentation,
+  ADR amendments, and full repository validation.
 
 
 ## Surprises & Discoveries
@@ -52,34 +70,121 @@ implementation. Provide concise evidence.
   diffing, but generated IDs are still `newtype X = X Text`; no generated decoder enforces the
   prefix. The nominal binding therefore has to carry executable conversion behavior, not just a
   Haskell type name.
+- 2026-07-31: Adopting a bound ID tightens the decoder even when its declared prefix and valid
+  wire bytes are unchanged: historical payloads that the old `Text` wrapper accepted may fail the
+  new `KindID` parser. Diff and conformance must expose this brownfield read risk and require the
+  targeted real-log audit before deployment.
 - 2026-07-31: Existing plan 151's “nominal bindings” are exact bindings between consumer-owned
   structural records and generated wire shapes. They do not bind direct aggregate scalar, ID, or
   enum declarations, so this work is not covered by that completed plan.
+- 2026-07-31: The proposed partial inverse was incompatible with both the current pure
+  `Codec.encode :: event -> Value` contract and ADR 12. A total binding through a typed or closed
+  intermediate representation keeps encoding total; `Either` belongs only to parsing wire bytes
+  into that representation.
+- 2026-07-31: Keiki discovers symbolic support by exact `Typeable` equality with its curated
+  built-in types. Wrapping a consumer value with `TApp1 toRepresentation` would remain opaque and
+  each occurrence would become an unrelated symbolic variable. The existing `FieldProjection`
+  and `FieldWitness` API is the sound reusable boundary for a whole-value nominal projection.
+- 2026-07-31: `defaultStateCodec` serializes registers through consumer `ToJSON` and `FromJSON`.
+  Event-codec binding coverage must not be described as snapshot-codec authority; nominal
+  provenance instead invalidates the rebuildable snapshot cache, as ADRs 3 and 12 require.
+- 2026-07-31: ADR 15 explicitly keeps staged temporary-tree replacement out of scope for whole
+  workspaces. Safety is complete-graph detection-before-write, byte comparison for generated
+  modules, and recoverable deterministic reruns.
+- 2026-07-31: Mori resolved `mori://MMZK1526/mmzk-typeid/packages/mmzk-typeid` to the source used
+  for this audit. Hackage and upstream both identify 0.7.1.1 as the current release/tag;
+  `Data.TypeID.checkPrefix`, `Data.KindID.parseText`, and `Data.KindID.toText` provide the required
+  checked APIs.
+- 2026-07-31: Plan 160 is still entirely unchecked. This plan may define the successor grammar,
+  but implementation must not silently widen legacy or released version 1 syntax.
 
 
 ## Decision Log
 
 Record every decision made while working on the plan.
 
-- Decision: Add an explicit `mapped nominal` declaration for scalar wrappers and optional
-  consumer-binding blocks to direct `id` and `enum` declarations.
-  Rationale: Nominality and wire representation are different facts. Reusing the checked mapped
-  binding vocabulary keeps package, module, type, binding symbol, fixture, and version provenance
-  explicit while preserving the convenient direct aggregate syntax.
+- Decision: Use `using { ... }` for the optional binding block on direct `id` and `enum`
+  declarations, and retain `mapped nominal Name : Representation { ... }` for nominal scalars.
+  Rationale: `using` makes the additive direct-declaration extension unambiguous and gives IDs and
+  enums one canonical form. The scalar spelling stays adjacent to structural and opaque consumer
+  mappings while the AST stores nominal scalars separately from the structural `TypeGraph`.
   Date: 2026-07-31
 
-- Decision: A nominal scalar must declare exactly one built-in representation from `Text`, `Int`,
-  `Natural`, `Bool`, or `Time`; IDs use their declared TypeID prefix and enums use their existing
-  wire spellings as their representations.
-  Rationale: Keiro can only validate, sample, compare, snapshot, and lower a consumer type when its
-  semantic and wire domains are known. `mapped opaque` remains the escape hatch for types without
-  a Keiro-visible representation.
+- Decision: A `NominalBinding domain representation` has two total functions and no semantic
+  error channel. A bound ID's representation is `KindID prefix`; a bound enum's representation is
+  a generated closed datatype; a scalar's representation is exactly one of `Text`, `Int`,
+  `Natural`, `Bool`, or `UTCTime`.
+  Rationale: Every representation value is valid, so `fromRepresentation` can be total and the
+  pure event encoder cannot produce an invalid prefix or spelling. Wire parsing remains the only
+  partial step. This extends rather than weakens ADR 12's total-binding rule.
   Date: 2026-07-31
 
-- Decision: Bindings are total bidirectional conversions and versioned provenance, not Haskell
-  type aliases or unchecked coercions.
-  Rationale: Generated command/event code, codecs, fixtures, and Keiki terms must agree on one
-  representation. A type name alone cannot enforce ID prefixes or detect lossy conversions.
+- Decision: Exclude refined scalar types whose constructors reject, normalize, or quotient values
+  of the declared built-in representation.
+  Rationale: Such a consumer is not isomorphic to the built-in domain. Allowing a partial inverse
+  would hide policy from `check` and `diff`; `mapped opaque` is the honest existing boundary until
+  a separately designed refined mode exists.
+  Date: 2026-07-31
+
+- Decision: Every consumer binding requires `haskell`, `binding`, `binding-version`,
+  `canonical-type`, and `fixtures`; `initial` is required only when the type is used by a
+  register. Fixtures pair a consumer value with its expected JSON wire value.
+  Rationale: Round-trip laws alone cannot detect a consistent but wrong permutation or
+  normalization. Expected wire values check declared enum spellings, scalar representations, and
+  ID text, while canonical identity and provenance keep snapshots, diffs, and scaffold drift
+  attributable.
+  Date: 2026-07-31
+
+- Decision: Bound nominal scalars expose equality and the existing ordering subset through a
+  generated whole-value `FieldProjection` facade; bound IDs and enums remain opaque to Keiki.
+  Rationale: Keiki's `TApp1` is intentionally opaque. Its existing coherent witness API supplies
+  shared solver variables for a direct register or matched input and needs no cross-repository API
+  change. Current `.keiro` guards still scaffold as Hole comments, so the plan promises a typed
+  helper and compiled conformance evidence, not automatic guard lowering. The DSL does not add
+  arithmetic syntax or capability in this plan.
+  Date: 2026-07-31
+
+- Decision: Event codecs use the nominal binding, while snapshot caches continue to use consumer
+  `ToJSON`, `FromJSON`, and `CanonicalTypeName` instances and are invalidated by nominal
+  provenance changes.
+  Rationale: This is the existing snapshot architecture recorded by ADRs 3 and 12. Replacing the
+  register-file state codec is a materially larger feature and is unnecessary for safe consumer
+  type reuse.
+  Date: 2026-07-31
+
+- Decision: Treat a binding source, symbol, or version change as wire-byte neutral but not as
+  provably replay-neutral.
+  Rationale: Keiro cannot inspect hand-written conversion behavior. Diff therefore reports the
+  consumer rebuild everywhere, targets historical event types when the nominal appears in an old
+  event, and includes snapshot-bearing streams when it appears in a register. A fixture-symbol-only
+  change reruns conformance but does not by itself claim runtime behavior changed.
+  Date: 2026-07-31
+
+- Decision: Classify adoption of a bound ID at an existing event use as a decoder-tightening
+  historical-read advisory even when the prefix fingerprint is unchanged.
+  Rationale: The former generated `Text` wrapper accepted malformed and wrong-prefix historical
+  values. Committed old-payload fixtures verify known history and the targeted real-log audit checks
+  production streams; valid declared TypeID bytes need no upcast.
+  Date: 2026-07-31
+
+- Decision: Plan 160 is a hard prerequisite and this syntax is registered in the next unreleased
+  language version, expected to be version 2 after plan 160 lands version 1.
+  Rationale: Version 1 must not silently widen. Version 1 and legacy sources reject the new forms;
+  an author opts in by changing the preamble and performing the documented source rewrite.
+  Date: 2026-07-31
+
+- Decision: Persist nominal mapping provenance in a new `nominal-mapping` record row while keeping
+  existing `mapping` row JSON unchanged.
+  Rationale: Current v1 record readers ignore unknown row kinds but fail an unknown mode inside a
+  known `mapping` row. A new row kind preserves backward readability and lets new readers detect
+  duplicates and drift across both row kinds.
+  Date: 2026-07-31
+
+- Decision: Preserve ADR 15's detection-before-write workspace contract; do not add a staging and
+  rename protocol in this plan.
+  Rationale: All spec, ownership, collision, golden-root, and obligation preflights run before the
+  first write. A later GHC failure in hand-owned consumer code leaves deterministic generated
+  output that can be corrected and regenerated, not a falsely claimed transaction.
   Date: 2026-07-31
 
 - Decision: Generated types remain the default when a direct ID or enum has no consumer binding.
@@ -101,7 +206,10 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The 2026-07-31 plan-validation pass replaced a partial, potentially lossy codec boundary with a
+total category-specific representation model and corrected the solver, snapshot, record, and
+workspace claims to match released code. No production code or ADR changed during this planning
+revision. Implementation and measured outcomes remain pending.
 
 
 ## Context and Orientation
@@ -118,39 +226,75 @@ their obligations and provenance.
 every enum as a generated Haskell data type. It also owns most generated imports and direct-value
 samples. `keiro-dsl/src/Keiro/Dsl/AggregateType.hs` is the emerging single resolver for aggregate
 type identities and capabilities; this plan must extend that resolver instead of creating another
-allowlist. `Goldens.hs`, `Manifest.hs`, `FoldFingerprint.hs`, `ReplayImpact.hs`, `Diff.hs`, and the
-generated codec, snapshot, and harness paths all consume the same resolved identity.
+allowlist. Its current `ResolvedAggregateType` treats direct IDs and enums as opaque and discovers
+mapped types through `TypeGraph`. `Goldens.hs`, `Manifest.hs`, `FoldFingerprint.hs`,
+`ReplayImpact.hs`, `Diff.hs`, and the generated codec, snapshot, projection, and harness paths all
+consume parts of the resolved identity and must be reconciled.
+
+`keiro-core/src/Keiro/Codec/Structural.hs` publishes the existing total structural binding. Add
+the parallel generic nominal contract in `keiro-core/src/Keiro/Codec/Nominal.hs`; it is a
+consumer-facing runtime integration point and must carry the same stability warning. `keiro-core`
+does not need a TypeID dependency because the representation is a type parameter. The DSL checker
+and generated ID codec do need the checked TypeID APIs.
+
+`keiro-core/src/Keiro/Codec.hs` fixes event encoding at `event -> Value`, so an encoding-time
+semantic failure cannot be added locally by the generator. `keiro/src/Keiro/Snapshot/Codec.hs`
+uses the consumer instances required by `RegFileToJSON`; nominal event-codec conformance therefore
+does not replace snapshot-cache conformance. `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` and
+`WorkspaceScaffold.hs` preflight before writing but do not stage a temporary tree.
+
+The Keiki dependency is `mori://shinzui/keiki/packages/keiki`. Its `FieldProjection` and
+`FieldWitness` API gives a generated facade a coherent, total projection from a consumer type to a
+built-in scalar for direct register and matched-input guards. Its `TApp1` escape hatch is opaque to
+the symbolic translator, so this plan must not implement nominal visibility as an ordinary
+function application.
 
 The authoritative `KindID` dependency is
 `mori://MMZK1526/mmzk-typeid/packages/mmzk-typeid`. Its `Data.KindID` API provides
-`KindID prefix`, checked `parseText`, and `toText`; a generated `Text` wrapper does not provide the
-same type-level or decode-time prefix guarantee.
+`KindID prefix`, checked `parseText`, and `toText`; `Data.TypeID.checkPrefix` validates a prefix
+available only at DSL-check time. Hackage and the upstream `v0.7.1.1` tag agreed on release 0.7.1.1
+during this audit. The repository already uses `mmzk-typeid >=0.7 && <0.8` in `keiro/keiro.cabal`.
 
 [ADR 12](../adr/0012-structural-consumer-mappings-use-one-schema-authority-and-total-bindings.md)
 requires a single schema authority and total consumer bindings. This plan extends that rule to
-nominal values. [ADR 4](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md)
-requires invalid or incomplete mappings to fail during checking, before scaffolding. The completed
+nominal values without introducing a partial inverse. [ADR 4](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md)
+requires invalid or incomplete mappings to fail during checking, before scaffolding.
+[ADR 3](../adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md) keeps snapshots
+as invalidatable replay caches, and
+[ADR 15](../adr/0015-workspace-scaffold-history-is-workspace-keyed-with-attributable-adoption.md)
+requires whole-workspace detection-before-write rather than staged replacement. The completed
 [plan 149](149-implement-the-ir-1-spec-layer-resolved-type-graph-structural-and-opaque-declarations-check-and-diff.md) supplies
 the structural binding pattern, while
 [plan 151](151-reduce-binding-boilerplate-skeleton-scaffolds-derived-nominal-bindings-and-explain-bindings.md) does
 not cover scalar/ID nominality.
 
-In this plan, the “representation” is the Keiro-visible built-in value used for guards and wire
-encoding. The “consumer type” is the application's nominal Haskell type. A “nominal binding” is a
-versioned total conversion between those two types plus deterministic fixtures and an initial
-value where the declaration is used by a register.
+In this plan, the “wire value” is the JSON stored in an event. A “representation” is the total,
+typed value immediately inside that wire boundary: `KindID prefix` for an ID, a generated closed
+datatype for an enum, or a built-in scalar for a nominal scalar. The “consumer type” is the
+application's nominal Haskell type. A “nominal binding” is a versioned total isomorphism between
+the consumer and representation types. A “wire fixture” pairs a consumer value with the JSON that
+the generated codec must emit. A “refined scalar” is a consumer type that accepts only a subset of
+its proposed built-in representation and is deliberately not a nominal binding.
 
 
 ## Plan of Work
 
-Milestone 1 adds syntax and a lossless AST. Extend `Grammar.hs`, `Parser.hs`, and
-`PrettyPrint.hs` so the following declarations round-trip:
+Milestone 1 first reconciles plan 160's landed version types and publishes the generic runtime
+contract. Add `Keiro.Codec.Nominal` under `keiro-core/src/Keiro/Codec/Nominal.hs`, with total
+`NominalBinding`, labelled expected-wire fixtures, and two law helpers. Add focused tests to the
+existing `keiro-test` suite before any generator consumes it. Then extend `Grammar.hs`,
+`Parser.hs`, and `PrettyPrint.hs` so the next language-version parser, expected to be version 2,
+accepts and round-trips these canonical declarations:
 
 ```keiro
-id OrderId prefix=ord {
+language keiro-dsl 2
+context orders
+
+id OrderId prefix=ord using {
   haskell package=orders-domain module=Orders.Id type=OrderId
   binding = "Orders.KeiroBindings.orderIdBinding"
   binding-version = "1"
+  canonical-type = "orders.OrderId.v1"
   fixtures = "Orders.KeiroBindings.orderIdFixtures"
 }
 
@@ -161,6 +305,7 @@ enum OrderStatus {
   haskell package=orders-domain module=Orders.Order type=OrderStatus
   binding = "Orders.KeiroBindings.orderStatusBinding"
   binding-version = "1"
+  canonical-type = "orders.OrderStatus.v1"
   fixtures = "Orders.KeiroBindings.orderStatusFixtures"
 }
 
@@ -168,60 +313,151 @@ mapped nominal AccountNumber : Text {
   haskell package=orders-domain module=Orders.Account type=AccountNumber
   binding = "Orders.KeiroBindings.accountNumberBinding"
   binding-version = "1"
+  canonical-type = "orders.AccountNumber.v1"
   fixtures = "Orders.KeiroBindings.accountNumberFixtures"
   initial = "Orders.KeiroBindings.initialAccountNumber"
 }
 ```
 
-The exact delimiters above are part of acceptance: pretty printing must produce one canonical
-form and parse it back. Add located, append-only diagnostic codes for duplicate clauses,
-unsupported nominal representations, missing binding facts, and name collisions. Update workspace
-relocation and merge instances at the same time.
+The exact delimiters and clause order above are acceptance requirements. The combined parser route
+for the `mapped` keyword must select nominal, structural, or opaque before parsing mode-specific
+clauses; do not add a later alternative that fails after consuming `mapped`. Version 1 and legacy
+unversioned parsers must reject these forms with the language-version diagnostic rather than
+partially accepting them. Store nominal scalar declarations separately from `MappedDecl` so the
+existing structural `TypeGraph` folds do not gain a semantically unrelated partial case. Extend
+workspace relocation, merged-spec construction, and `HasLocs` instances in the same milestone.
 
-Milestone 2 introduces checked nominal declarations in a focused module such as
-`keiro-dsl/src/Keiro/Dsl/NominalType.hs` and integrates them into `AggregateType.hs`. Reuse
-`HaskellSource`, `QualifiedValueName`, and `BindingVersion`. Resolve a direct type to either a
-generated definition or a consumer-owned nominal binding with its representation and capabilities.
-Validate ID prefixes both as legal TypeID prefixes and as part of the binding's conformance
-fixtures. Add `explain-bindings --json` obligations for the binding, fixtures, and optional initial
-symbol just as structural declarations already do.
+Milestone 2 adds `keiro-dsl/src/Keiro/Dsl/NominalType.hs`. Reuse `HaskellSource`,
+`QualifiedValueName`, `BindingVersion`, and `CanonicalTypeId`, but expose only checked values after
+validation. One registry covers unbound and bound direct IDs, unbound and bound direct enums, and
+bound nominal scalars. Integrate it into `AggregateType.hs` so type identity, Haskell lowering,
+imports, packages, samples, capability checks, initial values, and canonical fingerprints consume
+the same resolved nominal value.
 
-Milestone 3 removes direct-name special cases from downstream consumers. `Scaffold.hs` must import
-consumer modules and binding symbols, omit the generated ID/enum/scalar declaration, and lower
-commands, events, registers, snapshots, and Keiki terms through the binding. Update `Goldens.hs`,
-`Manifest.hs`, `FoldFingerprint.hs`, `ReplayImpact.hs`, `Diff.hs`, `MappedConsumer.hs`,
-`ScaffoldRun.hs`, `ScaffoldRecord.hs`, and `WorkspaceRecord.hs` so binding identity/version and
-representation changes are visible. A change of package/module/type/binding/version is a source
-compatibility change; a change of ID prefix, enum wire spelling, or scalar representation retains
-its existing wire/replay severity.
+At this boundary, call `Data.TypeID.checkPrefix` for every bound ID prefix. Require all binding
+facts when a consumer block is present, require a non-empty fixture symbol, validate qualified
+names, reject a nominal scalar representation outside the five built-ins, and require `initial`
+only for actual register use. A direct bound enum register initial never renders a DSL constructor
+as though it were a consumer constructor; it uses the declared consumer initial symbol. Add stable,
+located, append-only diagnostics for each omission or incompatibility and extend name-collision
+checks across ID, enum, nominal scalar, mapped, rule, and node declarations. Extend
+`ExplainBindings.hs` to print the exact category-specific binding, fixture, canonical identity,
+and conditional initial signatures in text and JSON.
 
-Milestone 4 adds a compiled conformance service under `keiro-dsl/test/conformance-nominal-scalars/`
-and fixtures under `keiro-dsl/test/fixtures/`. Cover `KindID "ord"`, a consumer enum, and Text,
-Natural, and Time nominal wrappers. The suite must prove JSON and snapshot round trips, exact ID
-prefix rejection, command execution, replay, deterministic scaffolding, binding-version diffing,
-and a mutation that makes an intentionally dishonest conversion fail. Update the authoring guide,
-typed toolchain guide, changelog, ADR 12, and ADR 4 if the implementation adds new diagnostic or
-binding invariants.
+Milestone 3 makes code generation and compatibility reporting consume the registry. For bound IDs
+and enums, `Scaffold.hs` imports the consumer type and omits the public generated domain
+declaration. It generates a private enum representation leaf module, a create-once binding
+skeleton, and codec functions. ID decoding first parses JSON text with
+`Data.KindID.parseText @prefix`, then applies the total binding; encoding applies the binding then
+`Data.KindID.toText`. Enum JSON maps only between declared wire spellings and its closed generated
+representation. Scalar JSON uses the existing built-in Aeson parser and encoder around the total
+binding. No generated runtime codec path uses `coerce`, `read`, an unsafe TypeID parser, `error`,
+or a partial pattern. Create-once hand-owned skeletons may use the repository's labelled `HOLE`
+stubs until the consumer supplies a binding.
+
+Generate one context-level `NominalProjections` facade for bound scalar types used by direct
+register or matched-input guards. Each type gets one stable nominal tag with `FieldOwner` equal to
+the consumer type, `FieldResult` equal to the built-in representation, `fieldShapeId` equal to the
+declared canonical type, and `projectFieldValue` equal to `nominalToRepresentation binding`.
+Holes use `regProj` and `inpProj`; event/command codecs do not use this facade. Do not claim or
+generate `.keiro` guard execution, computed-base projections, output/update projections, ID/enum
+symbolic visibility, or nominal arithmetic.
+
+Update `Goldens.hs`, `Manifest.hs`, `FoldFingerprint.hs`, `ReplayImpact.hs`, `Diff.hs`,
+`MappedConsumer.hs`, `ScaffoldRun.hs`, `ScaffoldRecord.hs`, `WorkspaceRecord.hs`,
+`WorkspaceScaffold.hs`, and every scaffold/harness helper that exhaustively consumes aggregate
+types. Wire fingerprints contain ID prefix, enum constructor/wire pairs, or scalar representation,
+not consumer naming. Consumer package/module/type, canonical type, binding symbol/version, fixture
+symbol, and optional initial remain separately diff-visible provenance. A binding source, symbol,
+or version change leaves the declared JSON bytes unchanged but is not provably replay-neutral:
+report consumer rebuild at every use, target affected old event types for event uses, and include
+snapshot-bearing streams plus snapshot invalidation for register uses. A fixture-symbol-only
+change is an evidence/build finding. Representation, prefix, or enum wire changes retain their
+existing use-site-specific wire and replay classifications. Binding adoption/removal receives the
+same conservative use-site treatment and must not silently reuse a prior generated type. In
+addition, adopting a bound ID at an existing event field reports the decoder-tightening
+historical-read advisory even when the prefix fingerprint is unchanged; its deployment gate is a
+passing committed old-payload fixture plus the targeted real-log audit, not a fabricated upcast of
+already-valid bytes.
+
+Persist nominal provenance using `nominal-mapping` rows in both record formats. New readers merge
+ordinary and nominal rows for duplicate-name checks and drift; old readers ignore the new row kind.
+Do not change the JSON emitted for existing `mapping` rows or the single-file record header. Add
+the consumer package and, for bound IDs, `mmzk-typeid` to generated Cabal requirements. Keep
+snapshot execution honest: bound nominal registers require consumer `ToJSON`, `FromJSON`, and
+`CanonicalTypeName`; the harness verifies their cache round trip and canonical identity, while the
+event binding and its version contribute to fold/snapshot invalidation.
+
+Milestone 4 adds `keiro-dsl-conformance-nominal-scalars` under
+`keiro-dsl/test/conformance-nominal-scalars/` and source fixtures under
+`keiro-dsl/test/fixtures/`. Cover a consumer `OrderId` over `KindID "ord"`, a consumer enum whose
+constructors deliberately differ from the generated representation, and nominal wrappers over
+Text, Int, Natural, Bool, and Time. Include command-only, event-only, and register use sites. The
+suite proves expected JSON bytes, both binding laws, canonical identity, ID wrong-prefix and
+malformed-text rejection, unknown enum rejection, snapshot-cache round trip, scalar projection
+witness agreement, supported equality/ordering checks, forward execution, decoded replay, and
+deterministic scaffolding. Enum fixtures must cover every generated representation constructor
+and every declared wire spelling exactly once. For each fixture, the harness parses the expected
+wire into the representation, compares it with `nominalToRepresentation`, and exercises both laws;
+ID and scalar fixtures remain explicitly finite evidence.
+
+For the bound-ID adoption case, keep a versioned pre-adoption event payload containing a valid
+`ord` TypeID and prove the new decoder still reads it. Keep explicit malformed and wrong-prefix
+payloads as rejection cases. Diff the unbound and bound fixtures and assert the named
+decoder-tightening finding targets the containing event and replay audit without claiming that
+valid bytes require an upcast.
+
+Add check-fail fixtures for incomplete facts, bad qualified names, invalid TypeID prefix,
+unsupported representation, missing register initial, cross-category name collision, and
+version-1 syntax use. Add a compile-fail fixture showing that the former partial `Either` inverse
+does not inhabit `NominalBinding`; refined types remain rejected at the DSL check boundary. Add
+mutations that transpose enum representations, change an expected scalar wire value, and change
+the ID suffix in only one binding direction; each must turn the owning conformance gate red.
+Update the authoring guide, typed toolchain guide, language-version migration note, changelog, ADR
+12's total-binding inventory, and ADR 4's earliest-boundary inventory. ADRs 3 and 15 need changes
+only if implementation changes their existing contracts, which this plan does not intend.
 
 
 ## Concrete Steps
 
 Run all commands from `/Users/shinzui/Keikaku/bokuno/keiro`.
 
+Before implementation, prove the hard prerequisite is complete. The first command must produce no
+unchecked progress rows; otherwise stop this plan and finish plan 160.
+
 ```bash
-cabal test keiro-dsl-test --test-options='--match=nominal.*binding'
-cabal test keiro-dsl-conformance-nominal-scalars
-cabal test keiro-dsl-test
-cabal build all
-nix flake check
+rg -n '^- \[ \]' docs/plans/160-add-an-explicit-keiro-dsl-language-version-contract.md
+sed -n '1,280p' docs/plans/160-add-an-explicit-keiro-dsl-language-version-contract.md
 ```
 
-The focused tests should report no failures, and the conformance executable should print one pass
-for generated-definition compatibility, consumer ID prefix rejection, consumer enum wire parity,
-each scalar representation, snapshot round trip, forward execution, and replay. Inspect two clean
-scaffolds to prove determinism:
+Reconfirm dependency ownership and the released API before changing a Cabal dependency. At the
+time of this revision, Hackage's first normal version and the highest upstream tag are both
+0.7.1.1.
 
 ```bash
+mori registry search mmzk-typeid
+mori registry show MMZK1526/mmzk-typeid --full
+mori path mori://MMZK1526/mmzk-typeid/packages/mmzk-typeid
+curl -fsSL https://hackage.haskell.org/package/mmzk-typeid/preferred.json
+git ls-remote --tags https://github.com/MMZK1526/mmzk-typeid.git
+```
+
+Implement milestone tests incrementally, then run the focused gates:
+
+```bash
+cabal test keiro-test --test-options='--match=Keiro.Codec.Nominal'
+cabal test keiro-dsl-test --test-options='--match=nominal'
+cabal test keiro-dsl-conformance-nominal-scalars
+```
+
+The focused tests must report no failures. The conformance output must name successful checks for
+the two binding laws, expected wire parity, wrong-prefix rejection, every scalar representation,
+projection agreement, snapshot cache, forward execution, and replay. Inspect a version-2 fixture
+and then two clean scaffolds:
+
+```bash
+cabal run keiro-dsl -- check keiro-dsl/test/fixtures/nominal-scalars.keiro
+cabal run keiro-dsl -- pretty keiro-dsl/test/fixtures/nominal-scalars.keiro
 tmp_a=$(mktemp -d)
 tmp_b=$(mktemp -d)
 cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/nominal-scalars.keiro --out "$tmp_a"
@@ -229,88 +465,265 @@ cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/nominal-scalars.keiro --
 diff -ru "$tmp_a" "$tmp_b"
 ```
 
-Expected final output from `diff` is empty. The implementation session must record the allocated
-diagnostic codes and replace these example transcripts with actual test counts.
+Expected final output from `diff` is empty. Prove version isolation with a fixture containing the
+new syntax under language version 1; `check` must fail once with the language-version diagnostic,
+not with downstream parser noise. Run the mutation scripts and assert that each exits non-zero for
+the intended named assertion.
+
+Finish with the repository gates:
+
+```bash
+cabal test keiro-dsl-test
+cabal test keiro-dsl-conformance-nominal-scalars
+cabal build all
+just adr-validate
+nix flake check
+```
+
+The implementation session must record the allocated diagnostic codes, record-schema behavior,
+dependency version verification, mutation outputs, and actual test counts in Progress and
+Surprises & Discoveries.
 
 
 ## Validation and Acceptance
 
 Acceptance requires all of the following:
 
-1. The three declaration forms above parse, pretty-print canonically, survive workspace merging,
-   and appear with their binding provenance in `explain-bindings --json` and scaffold records.
-2. A clean spec imports and uses the consumer types directly. Generated modules contain no second
-   `OrderId`, `OrderStatus`, or `AccountNumber` declaration and no unchecked `coerce`, `read`, or
-   partial conversion.
-3. `KindID "ord"` values round-trip, while JSON containing a different prefix fails decoding at a
-   typed boundary. The DSL's `prefix=ord` affects executable behavior, fixtures, diffing, and
-   fingerprints.
-4. Bound scalar values retain the built-in representation's equality/ordering capability and no
-   additional arithmetic capability. Bound enums and IDs remain opaque in Keiki unless a later
-   plan explicitly adds a symbolic binding.
-5. Missing binding, version, fixtures, or a required register initial fails `keiro-dsl check` at the
-   declaration. An invalid binding fixture fails the compiled conformance target.
-6. Specs without binding blocks generate byte-for-byte equivalent domain types to the current
-   behavior, apart from deliberate formatter or scaffold-record version changes.
-7. Binding identity/version and representation changes are reported by `keiro-dsl diff`; wire or
-   replay-affecting changes retain the earliest-sound-boundary classifications required by ADR 4.
+1. The three declaration forms above are accepted only by the registered successor language
+   parser, pretty-print canonically, survive workspace merging and location relocation, and appear
+   with exact category-specific obligations in text/JSON explanation and both scaffold records.
+2. A clean spec imports and uses the consumer types directly. Generated domain modules contain no
+   second `OrderId`, `OrderStatus`, or `AccountNumber` declaration. Generated runtime modules
+   contain no `coerce`, unchecked TypeID parser, `read`, partial pattern, or generated `error`.
+   Create-once skeletons may contain only the established labelled `HOLE` stubs and must fail the
+   owning compiled gate until the consumer replaces them.
+3. The public nominal API has total conversions. The generated ID representation is
+   `KindID "ord"`; wrong-prefix and malformed JSON text fail before consumer construction, and the
+   encoder can emit only the type-level prefix. The checked prefix, runtime codec, fixture evidence,
+   diff, golden, and fingerprint all agree on `ord`.
+4. The generated enum representation has exactly the declared constructors and JSON spellings.
+   Unknown spellings fail parsing. A consumer enum with different constructor names round-trips
+   through total binding cases that cover every representation constructor and declared wire
+   spelling exactly once, proving the generator never assumes consumer constructors equal DSL
+   constructors.
+5. Text, Int, Natural, Bool, and Time nominal wrappers round-trip their expected JSON values. A
+   scalar projection facade exposes equality for all five and ordering only for the existing Int,
+   Natural, and Time subset. The DSL and generated facade add no arithmetic capability; IDs and
+   enums remain opaque.
+6. Missing Haskell source, binding, binding version, canonical type, fixtures, or a required
+   register initial fails `keiro-dsl check` at the owning declaration. Invalid prefix, unsupported
+   representation, bad qualified symbol, and cross-category name collision have distinct stable
+   codes. GHC and conformance, not `check`, validate hand-written function bodies.
+7. Bound event fields use the generated wire codec; bound registers use the consumer type and the
+   existing snapshot cache instances. Canonical identity is checked, a snapshot round trip passes,
+   and changing binding/canonical/initial provenance invalidates the snapshot discriminator without
+   being misreported as event-wire proof.
+8. Binding law, expected-wire, wrong-prefix, enum-transposition, and one-direction ID mutations each
+   fail their named compiled assertion. A passing finite fixture corpus is described as evidence,
+   never as a proof for all consumer values.
+9. Specs without binding blocks preserve the current generated ID/enum domain and codec bytes when
+   interpreted under their existing language version. Under the successor version, any changed
+   formatter or provenance bytes are pinned and explained; no silent wrapper-to-consumer fallback
+   occurs.
+10. Diff output separates consumer build, snapshot hydration, wire history, and replay surfaces.
+    Binding/source/fixture-only changes are JSON-byte neutral, but source/symbol/version changes
+    conservatively target old event uses and register snapshot streams because hand-written
+    behavior is opaque; fixture-symbol-only changes rerun conformance without claiming runtime
+    change. Prefix, enum spelling, and scalar representation changes retain ADR 4's
+    earliest-sound use-site classifications.
+    Adopting a bound ID at an existing event use additionally emits the decoder-tightening
+    historical-read advisory, names the affected event, and requires the targeted real-log audit.
+11. Existing `mapping` rows remain byte-identical. Old record readers ignore new
+    `nominal-mapping` rows, new readers round-trip both row kinds, and duplicate declaration names
+    across them are rejected before scaffold output changes.
+12. Single-file and workspace scaffolds run all complete-graph preflights before writing; an
+    unchanged rerun writes no generated module bytes and produces an empty clean-tree diff.
 
 
 ## Idempotence and Recovery
 
-Parser, validation, scaffold, and test generation are deterministic and safe to repeat. Keep AST,
-resolver, and downstream lowering changes in separate checkpoints so a failed conformance compile
-can be traced to one boundary. The scaffolder must stage generated output and replace it only after
-all binding obligations validate; an invalid consumer module must never leave a half-updated tree.
+Parser, validation, scaffold, and test generation are deterministic and safe to repeat. Keep the
+runtime API, AST/version parser, checked resolver, generation, record, and conformance changes in
+separate working checkpoints so a failure can be traced to one boundary. Follow ADR 15: perform
+every spec, workspace, ownership, collision, golden-root, path, and binding-obligation preflight
+over the complete input before creating the output directory or writing the first byte. Compare
+generated bytes and skip unchanged files. Do not introduce a staging/rename claim or transaction.
+
+A consumer binding or snapshot instance is hand-owned Haskell and can still fail after generation
+when GHC compiles the service. That failure may leave new deterministic generated modules and
+create-once skeletons on disk. Correct the hand-owned module and rerun scaffold; generated modules
+are reproducible, Hole stubs are never overwritten, record history is written only after the
+scaffold write phase succeeds, and no file is deleted automatically.
 
 If the syntax proves ambiguous, retain the parsed AST tests, adjust only the surface delimiters,
-and regenerate fixtures through the canonical pretty-printer. If a binding-version change makes a
-consumer tree stale, rerun scaffold after updating the application binding; never weaken the
-version comparison or fall back to generated wrappers silently.
+and regenerate fixtures through the version-specific canonical pretty-printer. Do not widen
+version 1 as a recovery shortcut. If a binding-version change makes a consumer tree stale, update
+the application binding, expected-wire fixtures, and any register snapshot version obligation,
+then rerun scaffold. Never weaken provenance comparison, accept a partial inverse, or fall back to
+generated wrappers silently.
 
 
 ## Interfaces and Dependencies
 
-`Keiro.Dsl.Grammar` must expose declaration fields equivalent to:
+`Keiro.Codec.Nominal` in `keiro-core` must publish a stable contract equivalent to:
 
 ```haskell
-data NominalRepresentation = NominalText | NominalInt | NominalNatural | NominalBool | NominalTime
+data NominalBinding domain representation = NominalBinding
+  { nominalToRepresentation :: domain -> representation
+  , nominalFromRepresentation :: representation -> domain
+  }
 
+data NominalFixture domain = NominalFixture
+  { nominalFixtureLabel :: Text
+  , nominalFixtureWire :: Value
+  , nominalFixtureDomain :: domain
+  }
+
+newtype NominalFixtureCases domain = NominalFixtureCases
+  { nominalFixtureCases :: NonEmpty (NominalFixture domain)
+  }
+
+nominalDomainRoundTrip
+  :: Eq domain
+  => NominalBinding domain representation
+  -> domain
+  -> Bool
+
+nominalRepresentationRoundTrip
+  :: Eq representation
+  => NominalBinding domain representation
+  -> representation
+  -> Bool
+```
+
+The module Haddock must say that both conversions are total, the generated codec remains the wire
+authority, and a refined consumer must not use this API. If plan 151's generic representation
+machinery can be reused without weakening its exactness checks, add
+`genericNominalBinding`; otherwise explicit skeletons are sufficient for this plan.
+
+`Keiro.Dsl.Grammar` must expose parser-facing fields equivalent to:
+
+```haskell
 data NominalBindingDecl = NominalBindingDecl
   { nominalHaskell :: Maybe HaskellSource
   , nominalBinding :: Maybe Text
   , nominalBindingVersion :: Maybe Text
+  , nominalCanonicalType :: Maybe Text
   , nominalFixtures :: Maybe Text
   , nominalInitial :: Maybe Text
   , nominalLoc :: Loc
   }
+
+data NominalScalarDecl = NominalScalarDecl
+  { nominalScalarName :: Name
+  , nominalScalarRepresentation :: Name
+  , nominalScalarBinding :: NominalBindingDecl
+  , nominalScalarLoc :: Loc
+  }
 ```
 
-`IdDecl` and `EnumDecl` gain `Maybe NominalBindingDecl`; a new nominal-scalar declaration carries
-its representation. The checked layer must expose a resolved type containing `GeneratedNominal`
-or `ConsumerNominal` plus `QualifiedValueName`, `BindingVersion`, representation, fixtures, and
-optional initial symbol.
+`IdDecl` and `EnumDecl` gain `Maybe NominalBindingDecl`; `Spec` gains a separate nominal-scalar
+collection. The parser retains the scalar representation as a located name so `check`, rather
+than low-level parser failure, owns the stable unsupported-representation diagnostic. Parser
+binding fields remain optional only so `check` can issue complete located diagnostics. The
+checked `NominalType` layer must make missing facts unrepresentable, resolve the raw name to the
+closed representation set, and expose values equivalent to:
+
+```haskell
+data NominalScalarRepresentation
+  = NominalText
+  | NominalInt
+  | NominalNatural
+  | NominalBool
+  | NominalTime
+
+data NominalRepresentation
+  = IdRepresentation Text
+  | EnumRepresentation (NonEmpty (Name, Text))
+  | ScalarRepresentation NominalScalarRepresentation
+
+data NominalOwnership
+  = GeneratedNominal
+  | ConsumerNominal ConsumerNominalBinding
+
+data ResolvedNominalType = ResolvedNominalType
+  { resolvedNominalName :: Name
+  , resolvedNominalRepresentation :: NominalRepresentation
+  , resolvedNominalOwnership :: NominalOwnership
+  }
+
+data ConsumerNominalBinding = ConsumerNominalBinding
+  { consumerNominalHaskell :: HaskellSource
+  , consumerNominalBinding :: QualifiedValueName
+  , consumerNominalBindingVersion :: BindingVersion
+  , consumerNominalCanonical :: CanonicalTypeId
+  , consumerNominalFixtures :: QualifiedValueName
+  , consumerNominalInitial :: Maybe QualifiedValueName
+  }
+```
+
+`AggregateType.hs` should contain one nominal constructor backed by this resolved value rather
+than separate downstream binding lookups for IDs, enums, and scalars. Its exhaustive functions for
+canonical name, Haskell type, imports, packages, sample, capabilities, and register initial must
+all pattern-match the resolved ownership and representation.
+
+Generated binding signatures are category-specific and appear exactly in `--explain-bindings`:
+
+```haskell
+orderIdBinding
+  :: NominalBinding Orders.Id.OrderId (KindID "ord")
+
+orderStatusBinding
+  :: NominalBinding
+       Orders.Order.OrderStatus
+       Generated.Orders.Nominal.Shape.OrderStatus.OrderStatusRepresentation
+
+accountNumberBinding
+  :: NominalBinding Orders.Account.AccountNumber Text
+
+orderIdFixtures :: NominalFixtureCases Orders.Id.OrderId
+initialAccountNumber :: Orders.Account.AccountNumber
+```
+
+The generated enum representation module imports neither a binding nor a consumer module. Binding
+skeletons may import the consumer module and representation leaf; generated codecs may then import
+the binding without a module cycle, following the structural shape discipline in ADR 12.
 
 Plan 160's released language-version registry is a hard prerequisite. This plan must register the
 nominal-binding syntax under the next allocated language version (or a jointly allocated version
 when deliberately released with another syntax plan), preserve older parser behavior, and document
-the manual source rewrite until IR-5 provides `keiro-dsl upgrade`.
+the manual source rewrite until IR-5 provides `keiro-dsl upgrade`. If version 2 has already been
+allocated by implementation time, select the next unreleased version and update every example and
+fixture in this plan before writing code.
 
-Generated code must consume a public binding contract equivalent to:
+Use `Data.TypeID.checkPrefix`, checked `Data.KindID.parseText`, and `Data.KindID.toText` from
+`mori://MMZK1526/mmzk-typeid/packages/mmzk-typeid`; do not reconstruct or validate TypeIDs with
+string splitting. Add a direct `mmzk-typeid >=0.7 && <0.8` dependency to the `keiro-dsl` library
+and the new conformance suite, matching `keiro/keiro.cabal`, only after repeating the registry and
+tag verification in Concrete Steps. Generated manifests add `mmzk-typeid` only for a bound ID.
+`keiro-core`'s generic nominal API adds no new external dependency.
 
-```haskell
-data NominalBinding consumer representation = NominalBinding
-  { toRepresentation :: consumer -> representation
-  , fromRepresentation :: representation -> Either Text consumer
-  }
-```
+For a nominal consumer used in a generated domain ADT, GHC must see the existing `Eq` and `Show`
+requirements. A register use additionally requires `CanonicalTypeName`, `ToJSON`, and `FromJSON`
+for the snapshot cache. The harness checks `canonicalTypeName (Proxy @consumer)` against the
+declared `canonical-type`; Keiro does not generate an orphan instance. Binding, fixtures, and
+initial symbols are hand-owned modules in the scaffold target component; `haskell package=` names
+the package that owns the consumer type and is the external dependency added to the manifest.
 
-The actual home may be Keiki if symbolic conversion must be shared, but Keiro owns the JSON,
-snapshot, fixture, and prefix-conformance requirements. Use checked `Data.KindID.parseText` and
-`Data.KindID.toText` from `mori://MMZK1526/mmzk-typeid/packages/mmzk-typeid`; do not reconstruct
-or validate TypeIDs with string splitting. No dependency bound changes are allowed without
-verifying the authoritative package registry and upstream release tag at implementation time.
+Extend `MappingIdentity` with nominal provenance for internal drift/diff use, but render it under a
+new `nominal-mapping` row in `ScaffoldRecord` and `WorkspaceRecord`. New parsers accept both row
+kinds, ignore unknown JSON keys, reject duplicate spec names across the combined set, and continue
+to parse existing records byte-for-byte. Existing `mapping` JSON schema and row bytes do not
+change.
 
 
 Revision note: Detached this plan from the completed structural-consumer-type MasterPlan so it is
 an independent implementation unit, 2026-07-31.
+
+Revision note (2026-07-31): Validated the design against the landed Keiro and Keiki APIs, ADRs 3,
+4, 12, and 15, Mori-resolved `mmzk-typeid` source, Hackage 0.7.1.1, and upstream tag v0.7.1.1.
+Replaced the unsafe partial inverse with total category-specific representations, required
+canonical and expected-wire evidence, version-gated the syntax behind plan 160, corrected solver
+and snapshot claims, made opaque binding changes and bound-ID adoption conservatively
+replay-visible, preserved record backward compatibility with a new row kind, and aligned recovery
+with workspace detection-before-write.
