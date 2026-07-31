@@ -4,7 +4,7 @@ title: Aggregate transitions have explicit generated or Hole behavior ownership
 description: Each aggregate transition is exclusively generated-owned or explicitly Hole-owned, preserving an honest permanent escape hatch without allowing hand-written code to override checked DSL behavior.
 timestamp: 2026-07-31T17:38:52Z
 docId: ADR-17
-status: Proposed
+status: Accepted
 date: 2026-07-31
 ---
 
@@ -12,7 +12,7 @@ date: 2026-07-31
 
 Date: 2026-07-31
 
-Status: Proposed
+Status: Accepted
 
 
 ## Context
@@ -44,6 +44,14 @@ lowered into structural Keiki terms, and necessarily executed by the generated t
 hand-owned module may construct declared event/output values, but it cannot replace the transition
 predicate, reorder or override its writes, or supply an alternative aggregate transducer.
 
+The landed scaffold expresses this boundary with one generated `Expressions`
+module and one generated `Transducer` module per version-2 aggregate.
+`Expressions` exports stable typed guard/write terms. `Transducer` exports the
+assembled machine, its fold fingerprint, `BehaviorOwnership`, and a labelled
+aggregate-specific `...PredicateVerifications` action. That action runs the
+conservative verifier from `mori://shinzui/keiki/packages/keiki` over each
+assembled edge; an opaque predicate reports `UnverifiedOpaque`.
+
 The source may instead select `implementation hole` for one transition. A Hole-owned transition
 does not admit DSL `guard` or `write` clauses: two simultaneous behavior authorities are invalid.
 The hand-owned implementation supplies arbitrary Keiki predicate and update terms. Generated code
@@ -61,6 +69,13 @@ supplied Keiki structure and generated conformance compares forward execution wi
 replay. Structural terms may receive Keiki's ordinary symbolic result. Opaque applications remain
 allowed as escape-hatch behavior but are reported as opaque or unverified, never as successful
 symbolic proof.
+
+The create-once Holes module exposes one stable function for each Hole-owned
+transition and a sibling `...HoleFoldVersion` value. Event-field output hooks
+remain hand-owned for both ownership modes, but the generated transducer calls
+them inside its declared emit envelope. A Hole function cannot return an
+alternative target or event kind because those choices are absent from its
+interface.
 
 Changing ownership is a semantic and replay-affecting change. Diff reports the old and new owner,
 the fold fingerprint changes, and snapshot compatibility misses. Migration from an existing

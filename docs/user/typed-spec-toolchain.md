@@ -19,12 +19,13 @@ context hospital-capacity
 The preamble is the first significant clause; comments and whitespace may come
 before it. Version 1 is frozen at this repository state. Language version 2
 registers consumer-owned bindings for direct IDs, direct enums, and nominal
-scalars. Sources that do not use those forms can remain on version 1. To adopt
-one, change the preamble to `language keiro-dsl 2`, add the binding declaration,
-canonicalize it with `pretty`, then run `check --explain-bindings` and the
-generated compiled harness. Version 1 and legacy-unversioned sources reject the
-successor syntax at the language boundary; the tool never silently upgrades a
-file.
+scalars, and adds authoritative typed scalar aggregate expressions with
+explicit generated-or-Hole transition ownership. Sources that do not use those
+forms can remain on version 1. To adopt version 2, change the preamble,
+canonicalize the source with `pretty`, run `check --explain-bindings`,
+re-scaffold, and run the generated compiled harness. Version 1 and
+legacy-unversioned sources reject successor syntax at the language boundary;
+the tool never silently upgrades a file.
 
 Existing sources without a preamble remain readable as `legacy-unversioned` and
 select effective version 1. Parse and pretty-print preserve that source form:
@@ -62,49 +63,79 @@ accepts `aggregate`, `process`, `router`, `contract`, `intake`, `emit`,
 
 ## Direct aggregate scalar types
 
-Aggregate commands, events, and registers share one checked type model. In
-addition to `Text`, `Int`, and `Bool`, they accept direct `Time` and `Natural`
-values:
+Aggregate commands, events, and registers share one checked type model. Direct
+scalars are `Text`, `Int`, `Integer`, `Bool`, `Time`, and `Natural`. Under
+language version 2, guards and writes use explicit `reg.` and `cmd.` roots and
+are compiled into the generated Keiki transducer:
 
 ```text
-aggregate ScalarLedger
+language keiro-dsl 2
+context accounting
+
+aggregate Account
   regs
-    observedAt Time = "2026-01-02T03:04:05.123456789012Z"
-    revision Natural = 0
-  states Empty Recorded!
-  command Record { observedAt:Time revision:Natural }
-  event ScalarsRecorded { observedAt:Time revision:Natural }
-  Empty -- Record -->
-    guard observedAt >= observedAt && revision >= revision
-    write observedAt := observedAt
-    write revision := revision
-    emit ScalarsRecorded
-    goto Recorded
+    balance Integer = 0
+    reserved Natural = 0
+    capacity Natural = 5
+    openedAt Time = "2026-01-02T03:04:05.123456789012Z"
+  states Open Adjusted!
+  command Adjust { amount:Integer requested:Natural observedAt:Time }
+  event AccountAdjusted = fields(Adjust)
+  Open -- Adjust -->
+    guard cmd.amount + reg.balance >= -100
+      && reg.reserved + cmd.requested <= reg.capacity
+      && cmd.observedAt >= reg.openedAt
+    write balance := reg.balance + cmd.amount * 2
+    write reserved := reg.reserved + (cmd.requested - reg.capacity)
+    emit AccountAdjusted
+    goto Adjusted
   wire kind=ctorName fields=camelCase schemaVersion=1
 ```
 
-`UTCTime` is an accepted source alias but normalized output always spells the
-type `Time`. Checking parses a quoted ISO-8601 register initial once; generated
-Haskell uses an explicit `UTCTime` value and preserves picosecond precision
-through event JSON, snapshots, forward execution, and replay. A `Natural`
-initial must be an integral value greater than or equal to zero. Its JSON codec
-accepts zero and positive integers and rejects negative or fractional values.
+`Integer` arithmetic is exact for `+`, `-`, and `*`. `Natural` supports the
+same operators, with subtraction defined as total monus:
+`a - b = max 0 (a - b)`, so `2 - 5` is `0`. `Int` remains available for
+literals, equality, ordering, and whole-value writes, but its arithmetic is
+rejected because the symbolic domain does not model machine-width overflow.
+Division, remainder, mixed numeric types, implicit coercion, and Time
+arithmetic are also rejected by `check`.
 
-Equality is solver-visible for the five direct scalar types. Ordering is
-solver-visible for `Int`, `Time`, and `Natural`; it is rejected for `Text`,
-`Bool`, ids, enums, vertices, and mapped values. The expression language has no
-aggregate arithmetic: an attempted `+`, `-`, `*`, or `/` fails at the operator
-instead of being deferred to generated Haskell. This is especially important
-for `Natural`, whose Haskell subtraction may underflow rather than saturate.
+Equality is solver-visible for all six direct scalar types. Ordering is
+solver-visible for `Int`, `Integer`, `Time`, and `Natural`; it is rejected for
+`Text` and `Bool`. Quoted literals resolve contextually as `Text` or ISO-8601
+UTC `Time`; integral literals resolve contextually as `Int`, `Integer`, or
+`Natural`; Bool literals are `true` and `false`. Qualified `Enum.Constructor`
+and `IdType("prefix_...")` literals are checked for whole-value writes, but ID
+and enum comparisons remain unavailable until their nominal symbolic encoding
+is structural. Predicate-valued expressions cannot be written to a Bool
+register because Keiki predicates and Bool terms are distinct.
+
+An unqualified name is accepted only when exactly one active command field or
+register matches it. If both match, use `cmd.name` or `reg.name`. Dotted paths
+may cross required `mapped structural record` fields and must end at a
+supported scalar leaf. Optional, union, collection, `Json`, and opaque
+boundaries fail before scaffolding. Multiplication binds above
+addition/subtraction, which bind above a non-associative comparison;
+comparisons bind above `&&`, and `&&` binds above `||`.
+
+`UTCTime` is an accepted source type alias but canonical output spells `Time`.
+Checking parses a quoted ISO-8601 register initial once; generated Haskell uses
+an explicit `UTCTime` value and preserves picosecond precision through event
+JSON, snapshots, forward execution, and replay. A `Natural` initial must be a
+non-negative integral value, and its JSON codec rejects negative or fractional
+values.
 
 A bare field keeps the established inference order: exactly matching register,
 PascalCase id/enum/vertex/mapped declaration, then `Text`. Direct `Json`,
 `Optional`, `List`, and `Map` aggregate fields are not supported; express those
 wire shapes through a `mapped structural` declaration. Stable diagnostics make
-the boundary actionable: `AggregateTypeUnknown`,
-`AggregateTypeUnsupportedAtUse`, `AggregateRegisterInitialInvalid`,
-`AggregateGuardTypeMismatch`, and `AggregateGuardCapabilityUnsupported` all
-come from `check`, before scaffolding can write output.
+the boundary actionable. Type errors retain the `AggregateType*` codes;
+expression errors use the `AggregateExpression*` family for roots, paths,
+literals, operands, operators, Boolean contexts, and writes. Collection
+spellings reserved for
+[plan 166](../plans/166-evaluate-bounded-aggregate-collection-membership-and-quantification.md)
+fail as `CollectionExpressionUnsupported`. All come from `check`, before
+scaffolding can write output.
 
 ## Consumer-owned mapped types
 
@@ -327,8 +358,9 @@ the spec and scaffold again.
 For structural mappings, generated files include one private shape leaf module
 per declaration, aggregate codecs derived from the declared wire policy, and a
 `StructuralProjections` facade containing eligible scalar `FieldWitness`
-values. Hand-written Holes may use those witnesses with Keiki's `regProj` and
-`inpProj`; the DSL does not claim nested field-path syntax of its own.
+values. Version-2 generated expressions use those witnesses for checked dotted
+paths through required structural records. Hand-written Hole implementations
+may use the same witnesses with Keiki's `regProj` and `inpProj`.
 
 For nominal bindings, generated files include private enum-representation leaf
 modules as needed, a context-level `NominalProjections` facade for eligible
@@ -336,6 +368,39 @@ scalars, and create-once binding skeletons. Scaffold records persist these as
 separate `nominal-mapping` rows so older readers can ignore them without
 changing existing `mapping` JSON. Consumer packages are added to the manifest;
 bound IDs also add `mmzk-typeid`.
+
+For each version-2 aggregate, generated ownership adds an `Expressions` module
+with stable typed guard/write functions and a `Transducer` module that assembles
+the declared command, predicate, ordered writes, emits, target, and transition
+mode. Generated ownership is the default; event-field constructors remain
+create-once hooks, but no hand-owned module can replace a generated guard or
+write.
+
+Use `implementation hole` on a transition whose predicate or updates cannot be
+expressed by the scalar language:
+
+```text
+Reviewed -- Close -->
+  implementation hole
+  emit ClosedEvent
+  goto Closed
+```
+
+That transition may not also contain DSL `guard` or `write` clauses. Its
+create-once Holes module supplies one stable transition function and one
+`FoldVersion`; generated code still owns command matching, live/replay mode,
+event kinds, and target state. Bump the token whenever the Hole predicate or
+updates change. The generated aggregate fold fingerprint incorporates it, so a
+token change invalidates stale snapshots. Changing Hole behavior without the
+bump is a contract violation.
+
+The generated transducer exports `BehaviorOwnership` and an aggregate-specific
+`...PredicateVerifications` action. Run it in conformance CI. Generated terms
+are checked through the conservative verifier from
+`mori://shinzui/keiki/packages/keiki`; an opaque Hole remains
+`UnverifiedOpaque` rather than being reported as verified. Version-1
+whole-transducer Holes are unchanged. Migration to version 2 is manual because
+the scaffolder never overwrites or claims to translate consumer behavior.
 
 The scaffolder plans the complete write before touching disk. It refuses
 invalid specs, module-path/case-fold collisions, scaffold-unsafe identifiers,

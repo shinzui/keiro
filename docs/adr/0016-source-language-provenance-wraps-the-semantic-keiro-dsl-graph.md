@@ -45,6 +45,13 @@ declaration unless a later upgrade operation rewrites the file. Once a language 
 released, new syntax or semantics must be registered under a successor version with its
 predecessor relation. Existing version parsers and their rejection fixtures are not widened.
 
+**Version 2 is the first successor contract.** It registers consumer-owned
+direct ID/enum/nominal bindings, `Integer`, typed scalar roots, literals,
+required structural paths and arithmetic, plus explicit generated-or-Hole
+transition ownership. Version 1 rejects the first such token before version-2
+semantic checking. Collection expression spellings are reserved but rejected
+under version 2; reserving a token is not an implicit language feature.
+
 **Source provenance wraps, rather than inhabits, the semantic graph.** Parsing the full contract
 produces a source value containing both `SourceLanguage` and the existing semantic `Spec`.
 `Spec`, `validateSpec`, aggregate fold fingerprints, and replay-impact analysis remain concerned
@@ -88,6 +95,9 @@ fleet planning remain in
 - Adding a new grammar feature requires both a successor registry entry and fixtures proving the
   released predecessor still rejects the new form. This is deliberate maintenance work rather
   than an automatic property of the parser-combinator library.
+- A version-2 expression is not accepted merely because its tokens parse. Its
+  roots, paths, literals, operators, result type, and transition owner must all
+  resolve before generated code is emitted.
 - Keeping compatibility wrappers that return `Spec` is safe only because parser dispatch has
   already happened; callers needing provenance must use the source-level API.
 - No external package dependency is introduced. `Natural`/`NonEmpty` come from existing base
@@ -124,3 +134,6 @@ tooling may rewrite the declaration.
 - [ADR 0015](0015-workspace-scaffold-history-is-workspace-keyed-with-attributable-adoption.md)
   defines the append-only, workspace-keyed scaffold history extended with per-member language
   provenance.
+- [ADR 0017](0017-aggregate-transitions-have-explicit-generated-or-hole-behavior-ownership.md)
+  defines the behavior-ownership seam introduced by the version-2 expression
+  contract.

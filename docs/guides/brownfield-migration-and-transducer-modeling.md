@@ -81,16 +81,15 @@ data PlaceOrderData = PlaceOrderData
   }
 ```
 
-Keiki 0.4 also has typed `FieldProjection` witnesses consumed through
-`regProj` and `inpProj`. Keiro generates those witnesses from a consumer-owned
-structural mapping through the API landed by
+The Keiki API at `mori://shinzui/keiki/packages/keiki` has typed
+`FieldProjection` witnesses consumed through `regProj` and `inpProj`. Keiro
+generates those witnesses from a consumer-owned structural mapping through the API landed by
 [`docs/plans/150`](../plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md).
-A hand-written Holes module may use the generated facade for a genuine scalar
-field. That facility is deliberately narrow: projections are guard-only,
-start from a direct register or matched-input field, and return a result in
-Keiki's curated symbolic registry. It does not create checked nested `.keiro`
-paths, because the current scaffolder renders guard intent as comments rather
-than lowering that text into the running transducer.
+Language version 2 uses the generated facade for checked `reg.path` and
+`cmd.path` expressions; the path must cross required structural record fields
+and end at a supported scalar. The generated transducer executes the same term
+tree that symbolic analysis sees. A hand-written Hole may use the facade too.
+Optional, union, collection, JSON, and opaque paths stay outside this boundary.
 
 The negative rule is as important as the convenience. If a predicate cannot be
 represented by Keiki's symbolic language, call it opaque, keep the

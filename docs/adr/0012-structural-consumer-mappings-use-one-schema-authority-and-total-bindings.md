@@ -32,13 +32,13 @@ snapshot codec. The snapshot is a rebuildable cache protected by the
 three-component discriminator in ADR 0003, not another claim that the DSL owns
 all serialization of the consumer type.
 
-Keiki 0.4 adds typed symbolic field projections through `FieldProjection`,
-`FieldWitness`, `regProj`, and `inpProj`. The validator permits these
-projections only in guards and only from a direct register or matched input
-field. Projection results must belong to Keiki's curated symbolic registry;
-ordered comparisons require its still-smaller ordering registry. Keiki validates
-the symbolic term and supplies `fieldWitnessAgrees` for concrete agreement tests, but it intentionally cannot prove
-that a consumer-written witness came from the same schema as Keiro's codec.
+The Keiki API at `mori://shinzui/keiki/packages/keiki` supplies typed symbolic
+field projections through `FieldProjection`, `FieldWitness`, `regProj`, and
+`inpProj`. Projection results must belong to Keiki's curated symbolic registry;
+ordered comparisons require its still-smaller ordering registry. Keiki
+validates the symbolic term and supplies `fieldWitnessAgrees` for concrete
+agreement tests, but it intentionally cannot prove that a consumer-written
+witness came from the same schema as Keiro's codec.
 
 Direct aggregate types had a parallel authority problem. Parsing, validation,
 Haskell rendering, imports, Cabal dependencies, initial values, deterministic
@@ -57,13 +57,16 @@ type, import, package, initial, codec, snapshot, sample, compatibility, and
 fingerprint consumers use that resolved value; they do not reconstruct support
 from a raw type name.
 
-`Time` and `UTCTime` are one resolved `Time` identity. Direct `Time` and
-`Natural` are solver-visible for equality and ordering, while Natural numeric
-arithmetic is deliberately not inferred from those capabilities. Direct
-`Json`, `Optional`, `List`, and `Map` remain unsupported aggregate shapes and
-must cross the structural-mapping boundary described below. A clean checked
-spec has total deterministic lowering; scaffolding retains a refusal only as an
-internal invariant defense.
+`Time` and `UTCTime` are one resolved `Time` identity. Direct `Integer` joins
+`Text`, `Int`, `Bool`, `Time`, and `Natural`. Language-version-2 expression
+resolution attaches explicit arithmetic evidence rather than inferring it from
+generic scalar visibility: `Integer` has exact `+`, `-`, and `*`; `Natural`
+has `+`, `*`, and total truncated subtraction; machine `Int` has no arithmetic
+because symbolic integers do not model overflow. Direct `Json`, `Optional`,
+`List`, and `Map` remain unsupported aggregate shapes and must cross the
+structural-mapping boundary described below. A clean checked spec has total
+deterministic lowering; scaffolding retains a refusal only as an internal
+invariant defense.
 
 A structural mapped type has exactly one wire-schema authority: its `.keiro`
 declaration, resolved into a generated shape and executed by the generated
@@ -173,26 +176,30 @@ exactly. A mismatch is a compile-time refusal directing the author to the explic
 derivation never strips prefixes, coerces values, guesses a permutation, or acquires wire-policy
 capabilities.
 
-For every eligible scalar leaf path in a structural mapped record, the generation layer may
-emit a narrow projection facade containing one canonical nominal tag type,
+For every eligible scalar leaf path in a structural mapped record, the generation layer emits a
+narrow projection facade containing one canonical nominal tag type,
 `FieldProjection` instance, and `FieldWitness`. It derives the concrete getter
 and symbolic metadata from the same resolved graph and total binding as the
-codec. The facade exposes Keiki 0.4's existing `regProj` and `inpProj`
-capability to hand-written Holes; it does not invent a second evaluator.
+codec. The facade exposes Keiki's `regProj` and `inpProj` capability to both
+generated version-2 expressions and hand-written Holes; it does not invent a
+second evaluator.
 The instance's owner is the consumer type; its shape id is the declaration's
 `canonical-type`; its field name is the RFC 6901 JSON Pointer for the wire-key path; and its total getter runs
 `bindingToShape` followed by generated shape selection. A nested path is eligible only through
 required total record fields, never through optional, union, collection, JSON, or opaque
 boundaries. The canonical tag is reused at every occurrence so Keiki's nominal `Typeable`
 identity shares repeated reads. Remaining eligibility follows Keiki's public constraints:
-direct register or matched input-field base, guard use only, a result in the curated symbolic
-registry, and the ordering subset when ordered comparison is required.
+direct register or matched input-field base, a result in the curated symbolic registry, and the
+ordering subset when ordered comparison is required.
 
-The DSL does not yet claim checked nested field-path syntax. Today guard and
-write expressions are rendered into create-once Holes as comments rather than
-lowered into executable generated transducers. A future syntax proposal must
-first define exact lowering and an equivalence or conformance gate connecting
-the checked DSL expression to the code that runs.
+Language version 2 claims checked dotted syntax only across those required
+record paths and only when the endpoint is a supported scalar. The expression
+resolver consumes the same graph and witness identity as the generated codec,
+then the generated `Expressions` module lowers the result into Keiki `Term` and
+`HsPred` trees. The generated transducer executes those exact trees during
+forward decisions and replay; there is no second pure-Haskell evaluator and no
+hand-owned override seam. Version 1 retains its historical comment/Holes
+surface unchanged.
 
 Private event/register schemas and public contract DTOs remain separate
 ownership domains. Structural private types are not reused in a public
@@ -239,14 +246,15 @@ the totality and ownership requirements above.
   and mapped-snapshot invalidation; keeping the token unchanged is a contract violation.
 - Generated projection witnesses have auditable provenance and are reusable by
   consumers other than Mori, while staying within Keiki's validated fragment.
-- Keiki 0.4 is a coordinated dependency/API migration: downstream exhaustive
-  matches must handle projection terms and the new validation/composition
-  warnings before the facade can ship.
+- Keiki 0.6 is the coordinated dependency floor for exact `Integer`, total
+  `Natural` monus, projection terms, and conservative predicate verification;
+  downstream exhaustive matches must handle those structures and results.
 - Snapshot compatibility is conservative and operationally honest: mapped
   schema changes invalidate and rebuild cached state rather than pretending the
   generated event codec decodes historical snapshots.
-- Nested `.keiro` guard syntax remains unavailable until it can be shown to
-  execute the same semantics the checker validates.
+- Version-2 nested scalar paths are limited to total required structural
+  records and execute the same generated Keiki structure the checker validates;
+  optional, union, collection, JSON, and opaque paths remain unavailable.
 - Generated codecs and projection facades may use consumer constructors and
   getters, but consumer JSON instances never become the private-event wire
   authority.

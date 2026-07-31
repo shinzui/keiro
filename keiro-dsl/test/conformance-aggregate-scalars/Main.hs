@@ -2,7 +2,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedRecordDot #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -40,7 +39,7 @@ main = do
                    , ("Natural JSON rejects a negative integer", naturalJsonRejects (Number (-1)))
                    , ("Natural JSON rejects a fractional number", naturalJsonRejects (Number 1.5))
                    , ("Natural canonical type name is stable", canonicalTypeName (Proxy @Natural) == "Natural")
-                   , ("Natural arithmetic remains opaque to Keiki", naturalArithmeticIsOpaque)
+                   , ("Natural arithmetic is structural in Keiki", naturalArithmeticIsStructural)
                    ]
     forM_ checks $ \(label, passed) ->
         putStrLn ((if passed then "PASS  " else "FAIL  ") <> label)
@@ -89,8 +88,8 @@ naturalJsonRejects value = case Aeson.fromJSON value :: Result Natural of
     Error _ -> True
     Success _ -> False
 
-naturalArithmeticIsOpaque :: Bool
-naturalArithmeticIsOpaque = any isOpaque warnings
+naturalArithmeticIsStructural :: Bool
+naturalArithmeticIsStructural = not (any isOpaque warnings)
   where
     warnings =
         validateTransducer

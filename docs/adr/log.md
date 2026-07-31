@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-07-31
+* **Update**: Accept ADR 0017 after authoritative scalar transducer conformance landed, and align ADRs 0003, 0004, 0012, and 0016 with generated/Hole ownership, exact arithmetic, conservative verification, and fold-version remedies (plan 161).
 * **Update**: Extend ADR 0012's total-binding inventory to consumer-owned direct IDs, enums, and nominal scalars (plan 158).
 * **Update**: Extend ADR 0004's earliest-boundary inventory with nominal declaration, provenance-diff, and bound-ID decoder-tightening gates (plan 158).
 * **Add**: Propose explicit generated or Hole behavior ownership for aggregate transitions so the escape hatch remains permanent without allowing silent overrides.

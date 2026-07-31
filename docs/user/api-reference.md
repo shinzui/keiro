@@ -103,6 +103,31 @@ Types:
 
 Use it to define an aggregate stream contract around a Keiki transducer.
 
+## Generated version-2 aggregate expression modules
+
+`keiro-dsl scaffold` emits two authoritative modules for each language-version-2
+aggregate:
+
+- `Generated.<Context>.<Aggregate>.Expressions` exports one typed Keiki
+  predicate for each declared guard and one typed Keiki term for each register
+  write;
+- `Generated.<Context>.<Aggregate>.Transducer` exports the assembled transducer,
+  the aggregate fold fingerprint, `BehaviorOwnership (GeneratedOwned,
+  HoleOwned)`, and an aggregate-specific `...PredicateVerifications` action.
+
+The verification action returns labelled ownership and the conservative
+`PredicateVerification` result from `mori://shinzui/keiki/packages/keiki` for
+every transition. Opaque Hole predicates remain `UnverifiedOpaque`.
+
+Generated-owned transitions execute the declared guard and writes directly.
+For a source transition marked `implementation hole`, the create-once
+`<Context>.<Aggregate>.Holes` module instead exposes a stable transition
+function and `FoldVersion`; generated code continues to own its structural
+command/event/target/mode envelope. Event-output field hooks remain create-once
+in both modes. Do not construct a replacement aggregate transducer in the
+Holes module, and bump the per-transition `FoldVersion` whenever Hole predicate
+or update behavior changes.
+
 ## `Keiro.EventStream.Validate`
 
 Types and functions:
@@ -554,7 +579,11 @@ codec-comparison engine, binding-obligation report, scaffolder,
 planner/runner, manifest, starter skeleton, and harness modules. In particular,
 `Keiro.Dsl.TypeGraph`, `Keiro.Dsl.Coverage`, `Keiro.Dsl.CodecCompare`, and
 `Keiro.Dsl.ExplainBindings` are public library surfaces for tooling and
-consumer-compiled migration tests.
+consumer-compiled migration tests. `Keiro.Dsl.Expression` exposes the checked
+version-2 scalar resolver and its typed roots, required projections, literals,
+arithmetic evidence, and stable expression diagnostics; consumers should use
+that resolver rather than reconstructing capability rules from the raw grammar
+AST.
 
 Most applications use the executable instead: `parse`, `check`, `scaffold`,
 `diff --since`, and `new <kind>`. The newer opt-in workflows include

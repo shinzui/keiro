@@ -109,16 +109,21 @@ receive boundary checks only. Golden emission must happen while both shapes
 exist because the current spec cannot reconstruct an older payload, and
 generated goldens never overwrite hand-captured payloads.
 
-These guarantees stop at the spec-visible surface. The diff pipeline reads
-only the two spec texts (`keiro-dsl/app/Main.hs:150-170`). The scaffolder emits
-the transducer into a create-once, hand-owned Holes module
-(`keiro-dsl/src/Keiro/Dsl/Scaffold.hs:1963-2005`), renders spec guards and writes
-as comments for the owner to implement (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs:2098-2108`),
-and creates upcaster bodies as hand-owned stubs
-(`keiro-dsl/src/Keiro/Dsl/Scaffold.hs:2018-2033`). The harness validates the
-Haskell transducer that was filled in, but `diff` cannot see hole or upcaster
-bodies. Therefore the DSL's cross-version guarantee is a matter of degree,
-not a binary “checked versus unchecked” claim.
+These guarantees stop at the spec-visible surface, but language version 2
+moves scalar aggregate behavior onto that surface. Its generated `Expressions`
+and `Transducer` modules execute the checked guard/write Keiki tree directly;
+a Holes module can supply event fields but cannot replace generated behavior.
+An explicitly `implementation hole` transition remains hand-owned only for its
+predicate and updates, within a generated command/event/target/mode envelope,
+and contributes a required manual `FoldVersion`. The generated ownership and
+predicate-verification report keeps an opaque Hole visibly unverified.
+
+Version 1 retains the historical create-once whole-transducer Hole, and
+upcaster bodies remain hand-owned stubs in both versions. `diff` reads spec
+text, not arbitrary Haskell bodies, so version-1 Hole/upcaster changes and the
+contents of a version-2 Hole remain outside semantic comparison. The DSL's
+cross-version guarantee is therefore still a matter of degree, not a binary
+“checked versus unchecked” claim.
 
 [ADR 0002](../adr/0002-replay-only-edges-are-the-sanctioned-remedy-for-guard-tightening.md)
 describes the replay-only remedy when a guard tightens, and
@@ -138,16 +143,15 @@ then moves toward failures that are loud but delayed.
 
 ### Rank 1: silent wrong state
 
-First, snapshot invalidation becomes a manual contract. DSL scaffolding
-composes a fingerprint of the spec-visible fold into the snapshot discriminator
-and explicitly warns that Holes-only changes remain invisible
-(`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`). A hand-written service should use
-`defaultStateCodecWithFold (FoldVersion "...")` and change that token whenever
-its fold semantics change; `stateCodecVersion` remains the encoding version.
-The helper composes the token into the same snapshot discriminator used by
-generated fingerprints, so an old seed becomes a normal cache miss and forces
-one full replay. Forgetting the token change can still accept a stale snapshot
-with no error.
+First, snapshot invalidation becomes a manual contract wherever fold behavior
+is hand-owned. A version-2 Hole exposes a per-transition `FoldVersion` that the
+generated aggregate fingerprint composes automatically; the author must bump
+it whenever the Hole predicate or updates change. Version-1 Holes and fully
+hand-written services must instead bump `stateCodecVersion` or use
+`defaultStateCodecWithFold (FoldVersion "...")`. `stateCodecVersion` remains the
+encoding version. Either token path makes an old seed a normal cache miss and
+forces one full replay; forgetting the manual bump can still accept a stale
+snapshot with no error.
 
 Second, removing a field under a tolerant JSON decoder can still decode while
 silently changing meaning. DSL evolution classifies the unguarded removal as

@@ -55,13 +55,19 @@ form:
 <state-hash>;fold=<fingerprint>
 ```
 
-The manual clause remains load-bearing. A change outside those derived
-surfaces — notably a hand-written update or guard, or logic changed only in a
-generated service's hand-owned Holes module — must bump `stateCodecVersion`.
-Hand-written services should instead use `defaultStateCodecWithFold` with an
-explicit, hand-owned `FoldVersion`; that first-class helper composes the token
-through `withFoldFingerprint` while making the ownership and bump obligation
-visible at the codec call site.
+The manual clause remains load-bearing. Language-version-2 Hole-owned
+transitions expose a required, hand-owned `FoldVersion` beside each stable Hole
+function. Generated transducer assembly length-prefixes those tokens into the
+aggregate fold fingerprint, so changing a Hole predicate or update requires a
+token bump and invalidates old snapshots. Changing the Hole while retaining the
+token is a contract violation.
+
+Behavior outside that version-2 boundary remains manual. A version-1
+whole-transducer Hole or another hand-written update/guard must bump
+`stateCodecVersion`. Hand-written services should instead use
+`defaultStateCodecWithFold` with an explicit `FoldVersion`; that first-class
+helper composes the token through `withFoldFingerprint` while making ownership
+and the bump obligation visible at the codec call site.
 
 `verifyAndSnapshot` keeps its existing behavior. After append, it applies the
 new events to the state hydration accepted and may persist that result. This is
@@ -78,6 +84,9 @@ construction.
   automatically under `defaultStateCodec`.
 - DSL-visible fold evolution invalidates snapshots automatically and also
   produces an `AggFoldSurfaceChanged` advisory at diff time.
+- Version-2 Hole behavior contributes its explicit per-transition
+  `FoldVersion`; bumping it invalidates snapshots even though arbitrary
+  hand-written terms are not inspectable by `diff`.
 - Upgrading a migrated database incurs a one-time full replay per stream whose
   old snapshot is encountered; persisted events remain the source of truth.
 - Invisible hand-written fold changes remain an explicit operational contract:

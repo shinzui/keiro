@@ -22,9 +22,26 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `NominalBindingChanged`, `NominalFixturesChanged`,
   `NominalCanonicalTypeChanged`, `NominalInitialChanged`,
   `NominalRepresentationChanged`, and `NominalIdDecoderTightened`.
+- `DiagnosticCode` gains `AggregateExpressionRootUnknown`,
+  `AggregateExpressionRootAmbiguous`, `AggregateExpressionPathInvalid`,
+  `AggregateExpressionPathUnsupported`, `AggregateExpressionLiteralNeedsType`,
+  `AggregateExpressionLiteralInvalid`,
+  `AggregateExpressionOperandTypeMismatch`,
+  `AggregateExpressionOperatorUnsupported`,
+  `AggregateExpressionBooleanRequired`,
+  `AggregateExpressionGuardBoolRequired`,
+  `AggregateExpressionWriteTargetUnknown`,
+  `AggregateExpressionWriteTypeMismatch`,
+  `AggregateTransitionOwnershipConflict`, and
+  `CollectionExpressionUnsupported`. The additions are append-only, but
+  exhaustive matches must be extended.
+- The public expression AST gains located arithmetic, scalar literals, explicit
+  roots/paths, and transition implementation ownership. Exhaustive matches over
+  `Expr`, `TypeExpr`, or transition implementation must be extended.
 - Aggregate command/event fields now use the located `AggregateField` type and
   aggregate register types use `TypeExpr` instead of a raw `Name`. The library
-  requires the Natural-capable `keiki >=0.5 && <0.6` release.
+  requires the exact-Integer/total-Natural `keiki >=0.6 && <0.7` and
+  `keiki-codec-json >=0.6 && <0.7` releases.
 
 ### New Features
 
@@ -46,6 +63,23 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   malformed/wrong-prefix ID and unknown-enum rejection, snapshot and canonical
   identity checks, projection agreement, forward/replay parity, mutation gates,
   and a compile-fail partial-inverse fixture.
+- Adds authoritative version-2 scalar aggregate expressions. Guards and writes
+  accept typed `reg.`/`cmd.` roots, required structural scalar paths, all scalar
+  literal families, exact `Integer` `+`/`-`/`*`, and total `Natural`
+  `+`/monus/`*`. Machine-`Int` arithmetic, coercion, division/remainder, Time
+  arithmetic, predicate-valued Bool writes, and collection expressions fail
+  before scaffolding.
+- Adds generated per-aggregate `Expressions` and `Transducer` modules. Every
+  version-2 transition is exclusively generated-owned or explicitly
+  `implementation hole`; Hole transitions retain a generated structural
+  envelope, require a per-transition `FoldVersion`, and expose conservative
+  ownership/predicate-verification reports where opaque terms remain
+  unverified. Version-1 generated output remains frozen.
+- Adds a compiled scalar-expression conformance service with a 360-case oracle,
+  concrete/symbolic/replay/snapshot agreement, all scalar literal families,
+  Natural `2 - 5 = 0`, required structural projection identity, and eight
+  mutation sentinels for arithmetic, authority, envelope, fold-version, and
+  verification drift.
 
 - Adds an explicit source-language contract. A first-significant-clause
   `language keiro-dsl 1` preamble selects the frozen released v1 parser before
@@ -73,8 +107,9 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   scaffold, compile, encode, snapshot, and replay. `Time`/`UTCTime` normalize
   to `Time` and lower to exact `UTCTime` constructors; Natural accepts only
   non-negative integral initials. Equality and ordering are checked against
-  Keiki's released symbolic capabilities, while aggregate arithmetic remains
-  deliberately outside the grammar.
+  Keiki's released symbolic capabilities. Version 1 retains the original
+  no-arithmetic grammar; version 2 adds only the exact/total arithmetic listed
+  above.
 - Direct aggregate `Json` and container shapes now parse far enough to receive
   a located remediation toward `mapped structural`, and malformed scalar
   initials, mismatched comparisons, and unsupported ordering fail during

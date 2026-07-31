@@ -342,6 +342,13 @@ events and re-checks guards (see [ground truth](#the-ground-truth-why-evolution-
   two edges — `HydrationAmbiguousInversion`.
 - *Changing an output template* changes what the inversion solves against.
 
+For a language-version-2 aggregate, the checked scalar guard and ordered writes
+are the runtime authority: the generated transducer executes the same Keiki
+term tree used for symbolic analysis. Changing a guard, write expression, or
+generated/Hole owner therefore changes the aggregate fold surface and snapshot
+fingerprint. A hand-owned module cannot quietly preserve the old behavior or
+replace the new expression.
+
 These failures are loud but delayed to the next hydration of an affected
 stream. **The guard-tightening case now has a first-class remedy**
 ([`docs/plans/143`](../plans/143-add-first-class-replay-only-transitions-for-guard-evolution.md)):
@@ -361,9 +368,10 @@ ambiguity). The procedure when you tighten a guard:
    replay audit answers this against real data), paste the twin — history
    stays replayable and the retired rule remains visible in the spec. If no
    stored data is affected (or you choose truncation), skip the twin.
-4. The scaffolder lowers the marker to `B.replayOnly` in the transducer
-   skeleton; hand-written services call `Keiki.Builder.replayOnly` in the
-   edge body (or set `mode = ReplayOnly` on a raw `Edge`).
+4. For version 2, the scaffolder lowers the marker and its checked scalar terms
+   into the generated transducer. Version-1 skeletons and hand-written services
+   call `Keiki.Builder.replayOnly` in the edge body (or set `mode = ReplayOnly`
+   on a raw `Edge`).
 
 The validator keeps the pattern disciplined: a `replay-only` transition with
 no `emit` is an error (`ReplayOnlyEmitsNothing` — it can invert nothing), and
@@ -387,6 +395,26 @@ them like schema edits (new event or new event version for the new
 behaviour), and remember `diff`'s tightening detection is conservative — it
 fires on any guard change without a twin, and the advisory's audit-or-paste
 choice covers the loosening case too.
+
+Register-write or ownership changes have no replay-only mechanical rewrite.
+Use this operational sequence:
+
+1. Run `check` and re-scaffold so the new generated fold fingerprint is present.
+2. Run `diff --replay-impact-out FILE`; `AggFoldSurfaceChanged` is advisory, but
+   the replay-impact report names the event histories and snapshot streams that
+   require audit.
+3. Run the candidate binary's targeted replay audit before switching traffic.
+   A failure or seeded/full-replay divergence blocks deployment.
+4. Expect snapshots under the old fingerprint to miss and full-replay. Budget
+   that load before rollout.
+
+For an `implementation hole` transition, generated code still owns the source,
+command, emitted event kinds, target, and live/replay-only mode. Change arbitrary
+predicate/update terms only together with the transition's hand-owned
+`FoldVersion`; then re-scaffold/rebuild and perform the same replay audit. An
+opaque predicate is valid escape-hatch behavior but remains visibly
+`UnverifiedOpaque`. Changing Hole behavior without a version bump is a contract
+violation that `diff` cannot observe.
 
 **Reason two: redelivery windows.** Process-manager and router dispatch is
 made idempotent by deterministic event ids derived from
@@ -660,9 +688,9 @@ DSL-only gates do not exist for hand-authored services.
 | Field removal, unguarded | BREAKING | versioned golden CI | decodes fine | **silent wrong state** in hand-written/tolerant codecs without a golden | Landed convention: [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md) |
 | Version bump + upcaster | ADDITIVE only with contiguous declarations | `mkCodec` checks chain; harness decodes old-shape golden | `GapInUpcasterChain`/`UpcasterError` if bypassed | hand-written semantic upcaster bugs | Landed: [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md), [140](../plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md) |
 | Deprecate event, live streams affected | `DeprecatedEventReplayHazard`; safe two-stage retirement advised | ε-variant rejected; replay-only edge validated | `HydrationNoInvertingEdge` if ignored | actual affected streams unknown until audit | Landed gate: [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md); [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit) |
-| Guard/output change vs old logs | `AggFoldSurfaceChanged`; tightening prints replay-only twin | new machine only | `HydrationReplayFailed` (loud/delayed) | inversion-compatible edits can shift state silently | [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (replay audit + digest diff) |
+| Guard/output change vs old logs | `AggFoldSurfaceChanged`; tightening prints replay-only twin; version-2 scalar guards/writes are generated authority | new machine plus generated concrete/symbolic conformance | `HydrationReplayFailed` (loud/delayed) | inversion-compatible edits can shift state silently | [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (replay audit + digest diff) |
 | Decide change over redelivery window | `RouterDecideSurfaceChanged` / `ProcessDecideSurfaceChanged` Advisory | — | deduped as benign duplicates | hole-only edits remain invisible | Landed: [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) + drain rule |
-| Fold change, snapshots enabled | DSL-visible: `AggFoldSurfaceChanged` + new fingerprint | three-component discriminator | full replay on mismatch | **manual-bump residual** for hand-written/Holes-only edits | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md); [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit backstop) |
+| Fold change, snapshots enabled | DSL-visible: `AggFoldSurfaceChanged` + new fingerprint; version-2 Hole changes require a per-transition `FoldVersion` bump | three-component discriminator and ownership/predicate-verification report | full replay on mismatch | **manual-bump residual** for version-1 Holes and other hand-written folds; an unbumped version-2 Hole is still a contract violation | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md); [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit backstop) |
 | Register slot change | n/a | register shape hash changes | full replay (benign) | mixed-deploy snapshot thrash | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
 | State type `s` structural change | n/a | state shape hash changes | full replay (benign) | same-shape semantic change needs manual bump | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
 | Timer payload shape | `ProcessTimerPayloadChanged` Advisory | — | timer dead-letter (loud/delayed) | hand-written: none | Landed: [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) |

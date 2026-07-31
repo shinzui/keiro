@@ -73,7 +73,8 @@ so an accidental parse cannot become an unofficial contract.
   `keiki-codec-json-test` version `0.6.0.0` to Hackage. Hackage preferred metadata lists the
   release and the published core tarball SHA-256 is
   `f61942daacaf7965ec0a5d05aa7ae4258e3363aff027cd2cb59c9774b6878c63`.
-- [ ] Milestone 1 remaining: have the maintainer push local annotated tag `v0.6.0.0`, which
+- [ ] Final external acceptance gate / Milestone 1 remaining: have the maintainer push local
+  annotated tag `v0.6.0.0`, which
   resolves to `c8f2c343ce03f42e10de77d684769f15ad30feda`, then verify that exact commit with
   `git ls-remote --tags https://github.com/shinzui/keiki.git`. The dependency repository's release
   runbook explicitly forbids the agent from pushing the tag automatically.
@@ -91,8 +92,13 @@ so an accidental parse cannot become an unofficial contract.
   identity, encoded/full replay, snapshot invalidation, generated/Hole ownership, and conservative
   Hole verification. Ten focused DSL examples and all eight mutation sentinels pass; version 1 and
   collection syntax still fail at their intended boundaries.
-- [ ] Milestone 5: update notation, user documentation, changelog, diff remedies, relevant ADRs,
-  and complete full repository and ADR validation.
+- [x] 2026-07-31: Completed Milestone 5 notation, API, migration, evolution, guarantee, changelog,
+  and diff-remedy documentation; accepted ADR 17 and updated ADRs 3, 4, 12, and 16. `cabal build
+  all`, the full suite (413 DSL, 378 Keiro, 58 PGMQ with two documented pending cases, 26
+  migration, and 21 Jitsurei examples plus every compiled conformance service), all eight scalar
+  mutations, native `nix flake check`, 17-concept strict ADR validation, and `git diff --check`
+  passed. Implementation, documentation, and repository validation are complete; only the
+  maintainer-owned upstream Keiki tag push remains open.
 
 
 ## Surprises & Discoveries
@@ -155,9 +161,14 @@ so an accidental parse cannot become an unofficial contract.
   service caught and corrected the generated `UTCTime (..)` import.
 - 2026-07-31: The repository was missing the `fourmolu.yaml` supplied by the current Seihou
   Haskell/Nix template. Upgrading the portable Seihou manifest, migrating `nix-haskell-flake`
-  from `0.11.1` to `0.13.0`, and adding that exact template file restored the repository's normal
-  formatter behavior without source-level extension workarounds or overwriting customized Nix
-  files.
+  from `0.11.1` to `0.13.0`, adding that exact template file, recording `GHC2024` in
+  `.seihou/config.dhall`, and mirroring it in `nix/treefmt.nix` restored the repository's normal
+  formatter behavior without overwriting customized Nix files. A stale treefmt cache initially
+  hid the one-time normalization; `nix fmt -- --no-cache` exposed and applied it. The resulting
+  cleanup removed all module-local `ImportQualifiedPost` and `OverloadedStrings` pragmas, stopped
+  the scaffolder and harness generators from recreating them, and kept the Cabal component
+  defaults authoritative. The full build, DSL generator-freshness suite, pre-commit hook, and
+  native flake checks pass in that state.
 
 
 ## Decision Log
@@ -272,20 +283,28 @@ so an accidental parse cannot become an unofficial contract.
 
 ## Outcomes & Retrospective
 
-The 2026-07-31 validation and split changed planning, not production code. Plan 161 now contains
-only the high-confidence scalar language and the generated execution boundary. It no longer makes
-that work wait for a bounded collection formalism. Machine-`Int` arithmetic, partial Natural
-subtraction, two production evaluators, and ignorable generated helpers remain excluded.
+Version 2 now has an executable, typed scalar language rather than advisory guard/write comments.
+Its checked AST resolves explicit roots, required structural paths, literals, and total arithmetic,
+then generates the Keiki term/predicate/update trees used by both concrete execution and symbolic
+analysis. Exact `Integer` arithmetic and Natural monus came from published Keiki `0.6.0.0`;
+machine-`Int` arithmetic, partial Natural subtraction, implicit coercions, collection syntax, and a
+second production evaluator remain excluded.
 
-The split also retained an explicit Hole-owned transition so a plan-166 NO-GO does not force Keiro
-to pretend every business predicate or update belongs in the DSL. That fallback deliberately
-loses source-level proof and automatic diff visibility and therefore carries conformance, opacity,
-and manual fold-version obligations. It remains available even if collection syntax later ships.
+Every version-2 transition now has one semantic owner. Generated-owned transitions execute their
+declared expressions through generated `Expressions` and `Transducer` modules. Explicit
+`implementation hole` transitions retain a checked structural envelope while carrying a manual
+fold version and reporting opaque Keiki behavior as unverified. This preserved the honest escape
+hatch needed if plan 166 concludes NO-GO, without allowing hand-written code to silently replace
+checked DSL behavior.
 
-Implementation and runtime outcomes remain pending. At each milestone, record the released Keiki
-dependency, concrete/symbolic agreement evidence, generated ownership migration experience, and
-remaining unverified surfaces. Before completion, distill durable decisions into the relevant
-ADRs.
+The compiled conformance service supplies 39 labelled checks and a finite 360-case oracle across
+direct execution, encoded replay, full replay after snapshot invalidation, and symbolic formulas.
+Eight independent mutations prove the owning checks fail for monus, guard/write authority, Hole
+exclusivity, event/target envelopes, fold versions, and conservative verification. ADRs 3, 4, 12,
+16, and 17 plus the user/API/migration documentation now record the durable contract. All local
+implementation and validation work is complete. Final plan acceptance remains intentionally open
+until the maintainer pushes Keiki tag `v0.6.0.0` at
+`c8f2c343ce03f42e10de77d684769f15ad30feda` and the upstream tag is verified.
 
 
 ## Context and Orientation
@@ -678,3 +697,8 @@ recorded full-suite, build, Nix, and ADR validation passed.
 Revision note (2026-07-31): Recorded the coordinated Keiki `0.6.0.0` Hackage release, exact
 published tarball and local release commit, and the maintainer-owned upstream tag push that remains
 before Milestone 1 can be closed.
+
+Revision note (2026-07-31): Recorded the completed grammar, generated ownership, conformance,
+mutation, documentation, ADR, build, full-suite, and native Nix gates. Also recorded the Seihou
+template migration and centralized Cabal language-extension authority. The only remaining
+acceptance action is the maintainer-owned upstream Keiki tag push.
