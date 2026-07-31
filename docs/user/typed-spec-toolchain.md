@@ -27,6 +27,52 @@ Use `keiro-dsl new <kind>` to print a minimal valid node skeleton. The CLI
 accepts `aggregate`, `process`, `router`, `contract`, `intake`, `emit`,
 `publisher`, `workqueue`, `dispatch`, `workflow`, and `operation`.
 
+## Direct aggregate scalar types
+
+Aggregate commands, events, and registers share one checked type model. In
+addition to `Text`, `Int`, and `Bool`, they accept direct `Time` and `Natural`
+values:
+
+```text
+aggregate ScalarLedger
+  regs
+    observedAt Time = "2026-01-02T03:04:05.123456789012Z"
+    revision Natural = 0
+  states Empty Recorded!
+  command Record { observedAt:Time revision:Natural }
+  event ScalarsRecorded { observedAt:Time revision:Natural }
+  Empty -- Record -->
+    guard observedAt >= observedAt && revision >= revision
+    write observedAt := observedAt
+    write revision := revision
+    emit ScalarsRecorded
+    goto Recorded
+  wire kind=ctorName fields=camelCase schemaVersion=1
+```
+
+`UTCTime` is an accepted source alias but normalized output always spells the
+type `Time`. Checking parses a quoted ISO-8601 register initial once; generated
+Haskell uses an explicit `UTCTime` value and preserves picosecond precision
+through event JSON, snapshots, forward execution, and replay. A `Natural`
+initial must be an integral value greater than or equal to zero. Its JSON codec
+accepts zero and positive integers and rejects negative or fractional values.
+
+Equality is solver-visible for the five direct scalar types. Ordering is
+solver-visible for `Int`, `Time`, and `Natural`; it is rejected for `Text`,
+`Bool`, ids, enums, vertices, and mapped values. The expression language has no
+aggregate arithmetic: an attempted `+`, `-`, `*`, or `/` fails at the operator
+instead of being deferred to generated Haskell. This is especially important
+for `Natural`, whose Haskell subtraction may underflow rather than saturate.
+
+A bare field keeps the established inference order: exactly matching register,
+PascalCase id/enum/vertex/mapped declaration, then `Text`. Direct `Json`,
+`Optional`, `List`, and `Map` aggregate fields are not supported; express those
+wire shapes through a `mapped structural` declaration. Stable diagnostics make
+the boundary actionable: `AggregateTypeUnknown`,
+`AggregateTypeUnsupportedAtUse`, `AggregateRegisterInitialInvalid`,
+`AggregateGuardTypeMismatch`, and `AggregateGuardCapabilityUnsupported` all
+come from `check`, before scaffolding can write output.
+
 ## Consumer-owned mapped types
 
 A structural mapping keeps the application type while making the `.keiro`
@@ -267,6 +313,10 @@ reconstruct from prose:
 - Aggregate status maps are exact and total unless explicitly marked
   `partial`; event evolution needs contiguous upcasters; snapshot policies need
   a valid codec version and captured live shape hash.
+- Aggregate commands, events, registers, guards, writes, codecs, snapshots,
+  samples, imports, and build dependencies consume one resolved type and
+  capability policy. Invalid scalar syntax or an unsupported use is rejected
+  by `check`, rather than becoming an unrepresentable generated field.
 - Structural mappings require qualified consumer/binding/fixture identities,
   non-empty canonical and binding versions, total/injective wire shapes, and an
   initial value whenever a mapped register needs one. Opaque mappings require

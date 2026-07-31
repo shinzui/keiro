@@ -1,0 +1,21 @@
+context aggregate-scalars
+
+aggregate ScalarLedger
+  regs
+    observedAt Time = "2026-01-02T03:04:05.123456789012Z"
+    revision Natural = 0
+  states Empty Recorded!
+
+  command Record { observedAt:Time revision:Natural }
+  event ScalarsRecorded { observedAt:Time revision:Natural }
+
+  Empty -- Record -->
+    guard observedAt >= observedAt && revision >= revision
+    write observedAt := observedAt
+    write revision := revision
+    emit ScalarsRecorded
+    goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  snapshot every 1
+    state-codec version=1 shape-hash="aggregate-scalars-v1"

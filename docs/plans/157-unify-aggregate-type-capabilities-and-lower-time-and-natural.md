@@ -43,22 +43,51 @@ Milestone 1 and must use the released packages rather than a sibling checkout.
 
 - [x] Release prerequisite — Keiki and keiki-codec-json `0.5.0.0` appeared in Hackage's
   preferred-version metadata and Keiki's upstream `v0.5.0.0` tag was verified on 2026-07-31.
-- [ ] Milestone 1 — Re-run the release preflight, introduce the canonical aggregate-type and
-  capability resolver, parse aggregate fields and registers as `TypeExpr`, and report stable,
-  located validation diagnostics.
-- [ ] Milestone 2 — Replace every aggregate lowering decision with the checked resolution,
-  including generated types, imports, package dependencies, codecs, snapshots, samples,
-  fingerprints, replay impact, diffs, and scaffold refusals.
-- [ ] Milestone 3 — Lower total `Time` and `Natural` register initials and add a compiled Keiki
-  conformance fixture covering commands, events, registers, guards, codecs, snapshots, forward
-  execution, and replay.
-- [ ] Milestone 4 — Add capability-matrix properties, negative and alias fixtures, workspace
-  parity, and mutation tests that prove validation and lowering cannot drift apart.
+- [x] Milestone 1 (resolver checkpoint) — On 2026-07-31, re-ran the release preflight, committed
+  the Keiki `0.5` dependency floor, introduced the canonical aggregate-type and capability
+  resolver, and changed aggregate fields and registers to parse `TypeExpr` with source locations.
+- [x] Milestone 1 (remaining) — On 2026-07-31, pinned the five append-only aggregate diagnostic
+  codes plus the localized arithmetic parser error with positive, negative, alias, and exact-row
+  tests; both focused test groups pass.
+- [x] Milestone 2 (lowering checkpoint) — On 2026-07-31, threaded resolved types through the
+  library's generated domain, codec, snapshot, golden, harness, fingerprint, replay-impact, diff,
+  refusal, and workspace paths; `cabal build lib:keiro-dsl` succeeds.
+- [x] Milestone 2 (remaining) — On 2026-07-31, proved type-directed minimal imports and packages,
+  byte-identical repeated scaffolds, and absence of generated `error`, `read`, runtime ISO-8601
+  parsing, and ambient clock access; the complete `keiro-dsl-test` regression suite passes.
+- [x] Milestone 3 — On 2026-07-31, added total explicit `Time` and `Natural` register initials and
+  the compiled `keiro-dsl-conformance-aggregate-scalars` suite. All 16 Keiki, codec, snapshot,
+  forward/replay, precision, rejection, canonical-name, and opaque-arithmetic assertions pass.
+- [x] Milestone 4 — On 2026-07-31, added the exhaustive capability matrix, clean-spec QuickCheck
+  property, negative and alias fixtures, one-member workspace parity, generated-tree freshness,
+  and a restoring mutation test that turns exactly the dishonest Natural replay register red.
 - [ ] Milestone 5 — Update authoring and user documentation, amend durable ADRs, add the
   changelog entry, and pass focused, full Cabal, Nix, and OKF validation.
 
 
 ## Surprises & Discoveries
+
+- 2026-07-31: The formatter's standalone GHC parser did not inherit Cabal's `GHC2024` language
+  defaults, so newly tracked conformance files containing the repository-standard postpositive
+  qualified imports failed the pre-commit hook even though they compiled. Fourmolu now parses the
+  whole repository with the same global `GHC2024` edition already declared by every Cabal common
+  stanza, rather than copying an `ImportQualifiedPost` pragma into each generated module.
+
+- 2026-07-31: Cabal 3.16 splits whitespace inside a single `--test-options` value before Hspec
+  receives it, so the plan's literal `--match aggregate type capabilities` form was interpreted as
+  three arguments. The equivalent whitespace-free regex forms
+  `--match=aggregate.*type.*capabilities` and `--match=aggregate.*scalar.*diagnostics` select the
+  intended groups and pass. The concrete commands below now use that reproducible form.
+
+- 2026-07-31: An explicit `UTCTime` constructor is syntactically total but still needs parentheses
+  when inserted as a generated constructor argument. Disposable scaffold inspection caught the
+  missing grouping before the committed conformance tree; the central sample and initial renderers
+  now emit parenthesized constructor expressions, and the compiled suite pins the result.
+
+- 2026-07-31: Adding a source location to aggregate fields caused the generic workspace AST
+  relocation traversal to fail compilation until `HasLocs AggregateField` was declared. This is a
+  useful compile-time guard: composed-workspace diagnostics cannot silently retain member-local
+  line numbers when the aggregate AST grows.
 
 - 2026-07-31: The implementation preflight reproduced the published `0.5.0.0` packages and tag,
   but the first constrained `cabal build all` failed during dependency solving because the local
@@ -126,6 +155,22 @@ Milestone 1 and must use the released packages rather than a sibling checkout.
   symbolically visible. Keiki deliberately omits `Natural` from its numeric symbolic registry
   because Haskell `Natural` subtraction throws `Underflow` for a negative mathematical result.
   The model must not infer arithmetic support from equality or ordering support.
+  Date: 2026-07-31
+
+- Decision: Make equality solver-visible for `Text`, `Int`, `Bool`, `Time`, and `Natural`, retain
+  id/enum/vertex equality as `OpaqueOnly`, reject mapped equality, and make ordering
+  solver-visible only for `Int`, `Time`, and `Natural`.
+  Rationale: This is the exact registry exposed by released Keiki `0.5.0.0`; in particular Keiki
+  does not claim ordered `Text`/`Bool`, mapped values have no single symbolic representation, and
+  opaque nominal values remain legal whole values without claiming solver visibility.
+  Date: 2026-07-31
+
+- Decision: Keep semantic validation diagnostics on the repository's established exact-row `Loc`
+  contract; pin the arithmetic syntax error to Megaparsec's exact line and column.
+  Rationale: `Diagnostic` and the composed-workspace relocation protocol deliberately carry rows,
+  while parser failures carry line and column. Expanding every persisted and workspace diagnostic
+  location solely for these append-only aggregate codes would create a second location contract;
+  the new field, register, and transition rows are precise within the existing semantic boundary.
   Date: 2026-07-31
 
 - Decision: Accept quoted ISO-8601 values for `Time` register initials, parse them during checking,
@@ -425,10 +470,10 @@ Then run the new focused unit tests as they are added:
 
 ```bash
 cabal test keiro-dsl-test \
-  --test-options='--match aggregate type capabilities' \
+  --test-options='--match=aggregate.*type.*capabilities' \
   --test-show-details=direct
 cabal test keiro-dsl-test \
-  --test-options='--match aggregate scalar diagnostics' \
+  --test-options='--match=aggregate.*scalar.*diagnostics' \
   --test-show-details=direct
 ```
 

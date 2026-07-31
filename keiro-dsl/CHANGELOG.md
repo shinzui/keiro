@@ -6,6 +6,34 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- `DiagnosticCode` gains `AggregateTypeUnknown`,
+  `AggregateTypeUnsupportedAtUse`, `AggregateRegisterInitialInvalid`,
+  `AggregateGuardTypeMismatch`, and `AggregateGuardCapabilityUnsupported`.
+  The additions are append-only, but exhaustive matches must be extended.
+- Aggregate command/event fields now use the located `AggregateField` type and
+  aggregate register types use `TypeExpr` instead of a raw `Name`. The library
+  requires the Natural-capable `keiki >=0.5 && <0.6` release.
+
+### New Features
+
+- Adds `Keiro.Dsl.AggregateType`, the single resolution and capability policy
+  used by aggregate validation, Haskell lowering, imports, packages, JSON and
+  snapshot samples, fold fingerprints, diffs, replay impact, and scaffold
+  refusals.
+- Direct aggregate `Time` and `Natural` fields and registers now check,
+  scaffold, compile, encode, snapshot, and replay. `Time`/`UTCTime` normalize
+  to `Time` and lower to exact `UTCTime` constructors; Natural accepts only
+  non-negative integral initials. Equality and ordering are checked against
+  Keiki's released symbolic capabilities, while aggregate arithmetic remains
+  deliberately outside the grammar.
+- Direct aggregate `Json` and container shapes now parse far enough to receive
+  a located remediation toward `mapped structural`, and malformed scalar
+  initials, mismatched comparisons, and unsupported ordering fail during
+  `check`. Generated imports and Cabal dependencies remain type-directed and
+  minimal.
+
 ## 0.5.0.0 — 2026-07-31
 
 ### Breaking Changes

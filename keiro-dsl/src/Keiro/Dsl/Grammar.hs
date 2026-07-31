@@ -48,6 +48,7 @@ module Keiro.Dsl.Grammar (
     RegInitial (..),
     RegDecl (..),
     StateDecl (..),
+    AggregateField (..),
     Field (..),
     Command (..),
     Event (..),
@@ -417,7 +418,7 @@ data RegInitial
 
 data RegDecl = RegDecl
     { regName :: !Name
-    , regType :: !Name
+    , regType :: !TypeExpr
     , regInitial :: !RegInitial
     , regLoc :: !Loc
     }
@@ -434,8 +435,19 @@ data StateDecl = StateDecl
     }
     deriving stock (Eq, Show, Generic)
 
-{- | A command/event field. A bare name (@fieldType = Nothing@) reuses the
-field's declared type elsewhere; @name:Type@ gives an explicit type.
+{- | An aggregate command/event field. A bare name reuses the field's inferred
+aggregate type; @name:Type@ accepts the complete 'TypeExpr' grammar so semantic
+validation can reject unsupported direct shapes with a located diagnostic.
+-}
+data AggregateField = AggregateField
+    { aggregateFieldName :: !Name
+    , aggregateFieldType :: !(Maybe TypeExpr)
+    , aggregateFieldLoc :: !Loc
+    }
+    deriving stock (Eq, Show, Generic)
+
+{- | A generic field used by process and router nodes. Aggregate fields are
+kept separate so widening aggregate syntax does not widen those node families.
 -}
 data Field = Field
     { fieldName :: !Name
@@ -446,7 +458,7 @@ data Field = Field
 -- | @command Name { field … }@ — a command constructor.
 data Command = Command
     { cmdName :: !Name
-    , cmdFields :: ![Field]
+    , cmdFields :: ![AggregateField]
     , cmdLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
@@ -482,7 +494,7 @@ data Event = Event
     deriving stock (Eq, Show, Generic)
 
 data EventBody
-    = EventFields ![Field]
+    = EventFields ![AggregateField]
     | EventFromCommand !Name
     deriving stock (Eq, Show, Generic)
 

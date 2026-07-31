@@ -13,7 +13,7 @@ mapped structural record Evidence {
 
 aggregate Holder
   regs
-    marker Bool = placeholder
+    marker Bool = False
   states Empty Done!
   command Compare { value:Time }
   Empty -- Compare --> guard value < value ; goto Done

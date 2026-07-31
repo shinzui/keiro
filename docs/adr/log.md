@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-07-31
+* **Update**: Amend ADR 0004 with earliest-boundary direct aggregate type, initial-value, and guard-capability diagnostics (plan 157).
+* **Update**: Amend ADR 0012 with the single resolved aggregate type/capability authority and total lowering contract (plan 157).
+
 ## 2026-07-29
 * **Update**: Record whole-workspace diff composition plus OwnershipMoved and WorkspaceAuthorityChanged advisory boundaries (plan 155).
 * **Added**: Record workspace-keyed scaffold history, per-module source ownership, and attributable adoption from per-context records (plan 154)

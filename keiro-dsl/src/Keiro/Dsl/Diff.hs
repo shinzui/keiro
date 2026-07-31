@@ -57,6 +57,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.AggregateType (typeExprCanonicalName)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped, renderMappedSubject)
@@ -1036,13 +1037,13 @@ hasReplayOnlyEmitter aggregate eventName =
         (\transition -> tMode transition == TmReplayOnly && eventName `elem` tEmits transition)
         (aggTransitions aggregate)
 
-eventFieldSigs :: Aggregate -> Event -> [(Name, Maybe Name)]
+eventFieldSigs :: Aggregate -> Event -> [(Name, Maybe TypeExpr)]
 eventFieldSigs agg e = case evBody e of
     EventFields fs -> map fieldSig fs
     EventFromCommand cn ->
         maybe [] (map fieldSig . cmdFields) (find ((== cn) . cmdName) (aggCommands agg))
   where
-    fieldSig f = (fieldName f, fieldType f)
+    fieldSig f = (aggregateFieldName f, aggregateFieldType f)
 
 sameVersionEventDiff :: Aggregate -> Aggregate -> Event -> Event -> [Change]
 sameVersionEventDiff oldAgg newAgg oldE newE =
@@ -1078,7 +1079,7 @@ sameVersionEventDiff oldAgg newAgg oldE newE =
             "event-field"
             (evName newE <> "." <> field)
             EvtFieldTypeChanged
-            ("type changed " <> renderFieldType oldType <> " -> " <> renderFieldType newType <> " at the same version v" <> tInt (evVersion newE))
+            ("type changed " <> renderAggregateFieldType oldType <> " -> " <> renderAggregateFieldType newType <> " at the same version v" <> tInt (evVersion newE))
         | (field, oldType, newType) <- changed
         ]
     deprecationChanges
@@ -1110,6 +1111,10 @@ sameVersionEventDiff oldAgg newAgg oldE newE =
         | evRetiring oldE && not (evRetiring newE) && not (evDeprecated newE) =
             [additive (aggName newAgg) "event" (evName newE) EventRetirementAbandoned "event retirement abandoned; ordinary live writes continue"]
         | otherwise = []
+
+renderAggregateFieldType :: Maybe TypeExpr -> Text
+renderAggregateFieldType Nothing = "(declared)"
+renderAggregateFieldType (Just expression) = typeExprCanonicalName expression
 
 renderFieldType :: Maybe Name -> Text
 renderFieldType Nothing = "(declared)"
@@ -1243,12 +1248,12 @@ enumUsageSuffix spec enumType = case enumUsages spec enumType of
 
 enumUsages :: Spec -> Name -> [Text]
 enumUsages spec enumType =
-    [aggName agg <> ".reg." <> regName reg | agg <- aggregates, reg <- aggRegs agg, regType reg == enumType]
+    [aggName agg <> ".reg." <> regName reg | agg <- aggregates, reg <- aggRegs agg, regType reg == TRef enumType]
         ++ [ aggName agg <> ".event." <> evName event <> "." <> field
            | agg <- aggregates
            , event <- aggEvents agg
            , (field, Just fieldTypeName) <- eventFieldSigs agg event
-           , fieldTypeName == enumType
+           , fieldTypeName == TRef enumType
            ]
   where
     aggregates = [agg | NAggregate agg <- specNodes spec]

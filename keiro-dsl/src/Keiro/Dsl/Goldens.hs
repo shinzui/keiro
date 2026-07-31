@@ -20,10 +20,12 @@ import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Text qualified as AesonText
 import Data.List (find)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as TL
+import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Scaffold (Agg (..), ResolvedCtor (..), defaultContext, resolveAgg)
 import Keiro.Dsl.TypeGraph
@@ -151,20 +153,40 @@ renderGolden spec aggregate event =
         (Key.fromText "kind", String (rcName event))
             : [(Key.fromText fieldName, sampleValue graph spec aggregate fieldType) | (fieldName, fieldType) <- rcFields event]
 
-sampleValue :: Maybe TypeGraph -> Spec -> Agg -> Text -> Value
-sampleValue graph spec _aggregate fieldType
-    | Just identifier <- find ((== fieldType) . idName) (specIds spec) =
-        String (idPrefix identifier <> "_01hzy3v7q2e8kaw2m5x0d41n9c")
-    | Just enum <- find ((== fieldType) . enumName) (specEnums spec)
-    , (_, wireValue) : _ <- enumCtors enum =
-        String wireValue
-    | Just resolved <- graph
-    , Just declaration <- Map.lookup (MappedKey fieldType) (tgDeclarations resolved) =
-        sampleMappedDeclaration resolved declaration
-    | fieldType == "Int" = Number 1
-    | fieldType == "Bool" = Bool True
-    | fieldType `elem` ["Time", "UTCTime"] = String "2026-01-01T00:00:00Z"
-    | otherwise = String "sample"
+sampleValue :: Maybe TypeGraph -> Spec -> Agg -> ResolvedAggregateType -> Value
+sampleValue graph spec _aggregate resolvedType =
+    case resolvedType of
+        AggregateId fieldType ->
+            case find ((== fieldType) . idName) (specIds spec) of
+                Just identifier -> String (idPrefix identifier <> "_01hzy3v7q2e8kaw2m5x0d41n9c")
+                Nothing -> String "id_sample"
+        AggregateEnum fieldType ->
+            case find ((== fieldType) . enumName) (specEnums spec) of
+                Just enum
+                    | (_, wireValue) : _ <- enumCtors enum -> String wireValue
+                _ -> String "sample"
+        AggregateVertex vertexType ->
+            String
+                ( fromMaybe
+                    "sample"
+                    ( stName
+                        <$> ( find ((== vertexType) . (<> "Vertex") . aggName) aggregates
+                                >>= listToMaybe . aggStates
+                            )
+                    )
+                )
+        AggregateMapped key
+            | Just resolved <- graph
+            , Just declaration <- Map.lookup key (tgDeclarations resolved) ->
+                sampleMappedDeclaration resolved declaration
+            | otherwise -> emptyObject
+        AggregateInt -> Number 1
+        AggregateNatural -> Number 1
+        AggregateBool -> Bool True
+        AggregateTime -> String "2026-01-02T03:04:05.123456789012Z"
+        AggregateText -> String "sample"
+  where
+    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
 
 sampleMappedDeclaration :: TypeGraph -> ResolvedMappedDecl -> Value
 sampleMappedDeclaration graph =

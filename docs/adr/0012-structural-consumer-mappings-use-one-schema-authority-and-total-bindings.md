@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
-description: Keiro-generated structural shapes own private-event wire policy; consumer bindings are total isomorphisms, snapshots remain a separately invalidated cache boundary, and Keiki projections are generated from the same schema authority.
-timestamp: 2026-07-28T22:36:14Z
+description: Keiro-generated structural shapes own private-event wire policy; aggregate scalar capabilities and structural mappings each resolve through one checked schema authority, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from that authority.
+timestamp: 2026-07-31T14:39:19Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -40,8 +40,30 @@ ordered comparisons require its still-smaller ordering registry. Keiki validates
 the symbolic term and supplies `fieldWitnessAgrees` for concrete agreement tests, but it intentionally cannot prove
 that a consumer-written witness came from the same schema as Keiro's codec.
 
+Direct aggregate types had a parallel authority problem. Parsing, validation,
+Haskell rendering, imports, Cabal dependencies, initial values, deterministic
+samples, codecs, snapshots, fingerprints, diffs, replay impact, and scaffold
+refusals each carried independent allowlists. A type could therefore pass
+`check` and still fail or become partial during generation.
+
 
 ## Decision
+
+Aggregate command fields, event fields, and registers resolve through one
+aggregate type authority before lowering. The resolution canonicalizes source
+aliases, preserves the established bare-field inference order, and classifies
+each use site as `SolverVisible`, `OpaqueOnly`, or `Unsupported`. All generated
+type, import, package, initial, codec, snapshot, sample, compatibility, and
+fingerprint consumers use that resolved value; they do not reconstruct support
+from a raw type name.
+
+`Time` and `UTCTime` are one resolved `Time` identity. Direct `Time` and
+`Natural` are solver-visible for equality and ordering, while Natural numeric
+arithmetic is deliberately not inferred from those capabilities. Direct
+`Json`, `Optional`, `List`, and `Map` remain unsupported aggregate shapes and
+must cross the structural-mapping boundary described below. A clean checked
+spec has total deterministic lowering; scaffolding retains a refusal only as an
+internal invariant defense.
 
 A structural mapped type has exactly one wire-schema authority: its `.keiro`
 declaration, resolved into a generated shape and executed by the generated
@@ -160,6 +182,12 @@ the totality and ownership requirements above.
 
 ## Consequences
 
+- Adding an aggregate type or capability requires extending the central
+  resolver and its exhaustive type-by-use-site matrix; an isolated parser,
+  validator, or generator allowlist is not a complete implementation.
+- Canonical aggregate identities feed diff, replay-impact, and fold/snapshot
+  fingerprints, so source aliases do not create compatibility churn while real
+  type or initial changes remain visible.
 - The binding API has no partial inverse or semantic-error channel. A binding that rejects or
   normalizes valid shapes violates the shape round-trip contract, and both directions have
   explicit law tests. `check` and `diff` still do not inspect hand-written Haskell.

@@ -55,6 +55,8 @@ aggregate Reservation
     note Text = "not requested"                            # Text initials are quoted
     reservationId TransferReservationId = placeholder     # required sentinel for id registers
     attempts Int = 0                                      # signed integer literals are supported
+    observedAt Time = "2026-01-02T03:04:05.123456789012Z" # checked ISO-8601, picosecond exact
+    revision Natural = 0                                  # non-negative integral literal
   states Unrequested Held Confirmed Expired!              # trailing ! = terminal (no outgoing)
 
   command RequestTransferReservation { reservationId hospitalId commandId divertStatus lifeCriticalOverride:Bool }
@@ -84,13 +86,33 @@ suffixes such as `Created` do not match `TransferReservationCreated`, and duplic
 dangling keys are errors. These dangling-key, uniqueness, and totality rules are owned by
 the checker; the scaffold's exact lookup is defense-in-depth.
 
-Scaffoldable aggregate register types and explicit command/event field types are `Text`,
-`Int`, `Bool`, the aggregate's generated `<Aggregate>Vertex`, and any `id` or `enum` type
-declared in the spec. `Text` register initials must be quoted; `Bool` uses `True`/`False`,
-`Int` uses a signed integer literal, enum/state registers use an in-domain constructor,
-and an id-typed register uses the bare `placeholder` sentinel (lowered to the id newtype's
-empty-text placeholder). The scaffolder refuses other types or initial shapes before
-writing anything.
+Direct aggregate register types and explicit command/event field types are `Text`, `Int`,
+`Bool`, `Time`, `Natural`, the aggregate's generated `<Aggregate>Vertex`, and any `id`,
+`enum`, or mapped type declared in the spec. `UTCTime` is accepted as a source alias and
+pretty-prints as the canonical spelling `Time`. `Time` lowers to `UTCTime` and adds the
+`time` package; `Natural` lowers to `Numeric.Natural.Natural` without adding a non-base
+package.
+
+`Text` register initials must be quoted; `Bool` uses `True`/`False`; `Int` uses a signed
+integer literal; `Natural` uses a non-negative integral literal; and `Time` uses a quoted
+ISO-8601 value such as `"2026-01-02T03:04:05.123456789012Z"`. Time initials are parsed by
+`check` and emitted as explicit `UTCTime` calendar/clock constructors, so generated code
+does not parse them or consult a clock at runtime. Enum/state registers use an in-domain
+constructor, and an id-typed register uses the bare `placeholder` sentinel (lowered to the
+id newtype's empty-text placeholder).
+
+A bare aggregate field first inherits an exactly matching register type, then tries the
+PascalCase field name as a declared id, enum, aggregate vertex, or mapped type, and finally
+falls back to `Text`. Equality guards support the five direct scalars; id, enum, and vertex
+equality remains an opaque Keiki boundary. Ordered comparison is supported only for `Int`,
+`Time`, and `Natural`. Aggregate arithmetic is not part of the expression grammar: `+`,
+`-`, `*`, or `/` fails at the operator with a remedy to compare or copy whole values.
+
+Direct aggregate `Json`, `Optional`, `List`, and `Map` shapes are deliberately unsupported.
+Declare a `mapped structural` type when an aggregate payload needs one of those shapes.
+`check` reports unknown types, unsupported shapes/use sites, invalid register initials,
+cross-type comparisons, and unsupported guard capabilities before scaffolding writes
+anything.
 
 All duration windows in the notation are decimal digits followed by exactly one unit:
 `s` (seconds), `m` (minutes), or `h` (hours). Thus `5m` means 300 seconds and `2h` means

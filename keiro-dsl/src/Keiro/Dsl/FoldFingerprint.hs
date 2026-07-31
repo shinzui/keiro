@@ -14,6 +14,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (fnv1a64)
@@ -34,12 +35,13 @@ aggregateFoldSurface spec aggregate =
     T.intercalate
         "\n"
         ( map stateSegment (aggStates aggregate)
-            ++ map registerSegment (aggRegs aggregate)
+            ++ map (registerSegment symbols) (aggRegs aggregate)
             ++ mappedRegisterSegments
             ++ map transitionSegment (aggTransitions aggregate)
             ++ map ruleSegment referencedRules
         )
   where
+    symbols = aggregateSymbols spec
     referencedRules =
         [ rule
         | rule <- specRules spec
@@ -50,7 +52,8 @@ aggregateFoldSurface spec aggregate =
         Right graph ->
             [ mappedRegisterSegment graph declaration
             | register <- aggRegs aggregate
-            , Just declaration <- [Map.lookup (MappedKey (regType register)) (tgDeclarations graph)]
+            , TRef typeName <- [regType register]
+            , Just declaration <- [Map.lookup (MappedKey typeName) (tgDeclarations graph)]
             ]
 
 mappedRegisterSegment :: TypeGraph -> ResolvedMappedDecl -> Text
@@ -80,14 +83,20 @@ stateSegment state =
         <> "|terminal="
         <> if stTerminal state then "true" else "false"
 
-registerSegment :: RegDecl -> Text
-registerSegment register =
+registerSegment :: AggregateSymbols -> RegDecl -> Text
+registerSegment symbols register =
     "reg:"
         <> regName register
         <> ":"
-        <> regType register
+        <> typeExprCanonicalName (regType register)
         <> "="
-        <> renderInitial (regInitial register)
+        <> canonicalInitial
+  where
+    canonicalInitial = case resolveAggregateType symbols (regLoc register) RegisterUse (regType register) of
+        Left _ -> renderInitial (regInitial register)
+        Right resolvedType -> case resolveRegisterInitial symbols (regLoc register) resolvedType (regInitial register) of
+            Left _ -> renderInitial (regInitial register)
+            Right resolvedInitial -> registerInitialCanonicalName resolvedInitial
 
 renderInitial :: RegInitial -> Text
 renderInitial (RegInitBare value) = value

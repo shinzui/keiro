@@ -9,7 +9,8 @@ The dependency set is a pure function of which 'Node' constructors occur in the
 spec. The mapping is grounded in the existing per-suite @build-depends@ in
 @keiro-dsl/keiro-dsl.cabal@:
 
-  * aggregate           => aeson, keiki, keiro, text     (keiro-dsl-conformance)
+  * aggregate           => aeson, keiki, keiro, text, and time only when a direct
+                           aggregate surface uses Time   (keiro-dsl-conformance)
   * process             => aeson, keiki, keiro, shibuya-core, text, time, uuid
                                                          (…-process-runtime)
   * contract            => aeson, text                   (…-contract)
@@ -33,8 +34,10 @@ module Keiro.Dsl.Manifest (
 ) where
 
 import Data.List (nub, sort)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
 import Keiro.Dsl.Scaffold (ScaffoldModule (..))
@@ -84,12 +87,12 @@ in the spec. @base@ is always included.
 -}
 manifestDependencies :: Spec -> [Text]
 manifestDependencies spec =
-    sort (nub ("base" : consumerPackages (consumerPlan spec) <> concatMap depsForNode (specNodes spec)))
+    sort (nub ("base" : consumerPackages (consumerPlan spec) <> concatMap (depsForNode spec) (specNodes spec)))
 
 -- | The dependencies a single node kind implies (see the module header table).
-depsForNode :: Node -> [Text]
-depsForNode n = case n of
-    NAggregate{} -> ["aeson", "keiki", "keiro", "text"]
+depsForNode :: Spec -> Node -> [Text]
+depsForNode spec n = case n of
+    NAggregate aggregate -> ["aeson", "keiki", "keiro", "text"] <> aggregateDependencies spec aggregate
     NProcess{} -> ["aeson", "keiki", "keiro", "shibuya-core", "text", "time", "uuid"]
     NRouter{} -> ["effectful-core", "keiro", "shibuya-core", "text"]
     NContract{} -> ["aeson", "text"]
@@ -103,3 +106,30 @@ depsForNode n = case n of
     NOperation{} -> ["effectful-core", "keiro", "text"]
   where
     integration = ["effectful-core", "hasql-transaction", "keiro", "kiroku-store"]
+
+aggregateDependencies :: Spec -> Aggregate -> [Text]
+aggregateDependencies spec aggregate =
+    Set.toAscList
+        ( Set.unions
+            [ aggregatePackages symbols resolvedType
+            | resolvedType <- resolvedTypes
+            ]
+        )
+  where
+    symbols = aggregateSymbols spec
+    resolvedTypes =
+        [ resolvedType
+        | register <- aggRegs aggregate
+        , Right resolvedType <- [resolveAggregateType symbols (regLoc register) RegisterUse (regType register)]
+        ]
+            <> [ resolvedType
+               | command <- aggCommands aggregate
+               , field <- cmdFields command
+               , Right resolvedType <- [inferAggregateFieldType symbols aggregate CommandFieldUse field]
+               ]
+            <> [ resolvedType
+               | event <- aggEvents aggregate
+               , EventFields fields <- [evBody event]
+               , field <- fields
+               , Right resolvedType <- [inferAggregateFieldType symbols aggregate EventFieldUse field]
+               ]

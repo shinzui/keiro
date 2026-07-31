@@ -1,0 +1,15 @@
+context aggregate-scalars-unsupported
+
+aggregate BrokenScalars
+  regs
+    revision Natural = -1
+    observedAt Time = "not-a-time"
+  states Empty Done!
+
+  command Record { metadata:Json observedAt:Time revision:Natural }
+  event Recorded { observedAt:Time revision:Natural }
+
+  Empty -- Record -->
+    guard observedAt == revision
+    emit Recorded
+    goto Done

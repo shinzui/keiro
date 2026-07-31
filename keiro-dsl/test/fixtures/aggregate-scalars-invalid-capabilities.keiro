@@ -1,0 +1,12 @@
+context aggregate-scalars-invalid-capabilities
+
+aggregate InvalidCapabilities
+  regs
+    fractional Natural = 1.5
+    impossibleAt Time = "2026-02-30T00:00:00Z"
+  states Empty Done!
+
+  command Inspect { mystery:Missing optionalValue:Optional(Text) values:List(Text) lookup:Map(Text) flag:Bool }
+  event Inspected { flag:Bool }
+
+  Empty -- Inspect --> guard flag < flag ; emit Inspected ; goto Done

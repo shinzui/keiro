@@ -2,7 +2,7 @@
 # fourmolu is taken from the ghc9124 package set so it matches the project's
 # compiler. Formatter set preserved from the old top-level treefmt.nix:
 # nixpkgs-fmt + fourmolu + cabal-fmt.
-{ inputs, ... }:
+{ inputs, lib, ... }:
 {
   imports = [ inputs.treefmt-nix.flakeModule ];
 
@@ -16,6 +16,7 @@
         programs.nixpkgs-fmt.enable = true;
         programs.fourmolu.enable = true;
         programs.fourmolu.package = haskellPkgs.fourmolu;
+        programs.fourmolu.ghcOpts = lib.mkAfter [ "GHC2024" ];
         programs.cabal-fmt.enable = true;
         # The keiro-dsl conformance slice is captured/scaffolded fixture source
         # (the `-- @generated` Generated.* modules plus a hand-filled Holes.hs).

@@ -1204,6 +1204,7 @@ loadWorkspace source manifestPath = do
 
 instance HasLocs AdvanceNode
 instance HasLocs Aggregate
+instance HasLocs AggregateField
 instance HasLocs Atom
 instance HasLocs BackoffSpec
 instance HasLocs BindRow

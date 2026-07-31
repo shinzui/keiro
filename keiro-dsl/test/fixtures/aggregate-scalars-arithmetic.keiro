@@ -1,0 +1,11 @@
+context aggregate-scalars-arithmetic
+
+aggregate BrokenArithmetic
+  regs
+    revision Natural = 0
+  states Empty Done!
+
+  command Advance { amount:Natural }
+  event Advanced { amount:Natural }
+
+  Empty -- Advance --> guard revision + amount > revision ; emit Advanced ; goto Done

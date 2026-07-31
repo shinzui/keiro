@@ -33,8 +33,10 @@ module Keiro.Dsl.Harness (
 
 import Data.List (find)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Goldens (GoldenPayload (..))
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.ReadModelShape (deriveShapeHash, registryNameFor, subscriptionNameFor)
@@ -394,6 +396,7 @@ emitHarness goldens a =
                , codecDecodeRawImport
                ]
             ++ mappedHarnessImports a
+            ++ aggregateHarnessImports a
             ++ goldenImports
             ++ [ ""
                , "{- | (label, passed). A driver runs these and exits non-zero on any False,"
@@ -584,7 +587,7 @@ forwardReplayDecl a t =
     , "            Right (replayVertex, " <> replayRegsName <> ") ->"
     , "              [ (prefix <> \"final vertex\", replayVertex == forwardVertex)"
     ]
-        ++ [ "              , (prefix <> \"register " <> regName reg <> "\", (replayRegs ! #" <> regName reg <> ") == (forwardRegs ! #" <> regName reg <> "))"
+        ++ [ "              , (prefix <> \"register " <> rrName reg <> "\", (replayRegs ! #" <> rrName reg <> ") == (forwardRegs ! #" <> rrName reg <> "))"
            | reg <- aRegs a
            ]
         ++ [ "              ]"
@@ -611,18 +614,25 @@ ctorExpr a rc =
   where
     args = T.concat [" " <> sampleValue a fieldName ty | (fieldName, ty) <- rcFields rc]
 
-sampleValue :: Agg -> Text -> Text -> Text
+sampleValue :: Agg -> Text -> ResolvedAggregateType -> Text
 sampleValue a fieldName ty = case fieldCat a ty of
-    IdCat -> "(" <> ty <> " \"sample\")"
-    EnumCat -> maybe ("(error \"no enum ctor\")") id (firstEnumCtor a ty)
+    IdCat -> aggregateSampleHaskell (aSymbols a) fieldName ty
+    EnumCat -> aggregateSampleHaskell (aSymbols a) fieldName ty
     MappedStructuralCat declaration _ -> fixtureSample (sdFixtures declaration)
     MappedOpaqueCat declaration -> fixtureSample (odFixtures declaration)
-    OtherCat
-        | ty == "Bool" -> "False"
-        | ty == "Int" -> "0"
-        | ty == "Text" -> tshow ("sample-" <> fieldName)
-        | ty == aVertexType a -> initialVertex a
-        | otherwise -> "(error \"sample: unsupported type " <> ty <> "\")"
+    OtherCat -> case ty of
+        AggregateVertex vertexType
+            | vertexType == aVertexType a -> initialVertex a
+        _ -> aggregateSampleHaskell (aSymbols a) fieldName ty
+
+aggregateHarnessImports :: Agg -> [Text]
+aggregateHarnessImports aggregate =
+    unique
+        [ "import " <> imported
+        | resolvedType <- map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate))
+        , AggregateTime <- [resolvedType]
+        , imported <- Set.toAscList (aggregateImports (aSymbols aggregate) resolvedType)
+        ]
 
 mappedHarnessImports :: Agg -> [Text]
 mappedHarnessImports aggregate
@@ -757,10 +767,13 @@ mappedHarnessDeclarations aggregate
             <> ["structuralWirePolicyAssertions" | not (null structuralWire)]
             <> ["structuralProjectionAssertions" | not (null (mappedProjectionSpecs aggregate))]
 
-mappedDeclaration :: Agg -> Text -> Maybe ResolvedMappedDecl
-mappedDeclaration aggregate name = do
+mappedDeclaration :: Agg -> ResolvedAggregateType -> Maybe ResolvedMappedDecl
+mappedDeclaration aggregate resolvedType = do
+    key <- case resolvedType of
+        AggregateMapped mappedKey -> Just mappedKey
+        _ -> Nothing
     graph <- aTypeGraph aggregate
-    Map.lookup (MappedKey name) (tgDeclarations graph)
+    Map.lookup key (tgDeclarations graph)
 
 bindingAssertionDecl :: Agg -> (StructuralDecl, ResolvedMappedShape) -> [Text]
 bindingAssertionDecl _aggregate (declaration, _shape) =
@@ -848,7 +861,7 @@ unionArmObligations shapeModule arm =
             ]
         _ -> []
 
-mappedEventAssertionDecl :: Agg -> (ResolvedCtor, Text, Text, ResolvedMappedDecl) -> [Text]
+mappedEventAssertionDecl :: Agg -> (ResolvedCtor, Text, ResolvedAggregateType, ResolvedMappedDecl) -> [Text]
 mappedEventAssertionDecl aggregate (event, fieldName, _fieldType, declaration) =
     [ ""
     , valueName <> "Assertions :: [(String, Bool)]"

@@ -138,9 +138,9 @@ mappedFieldSurface :: Spec -> Aggregate -> Event -> [(Name, Text)]
 mappedFieldSurface spec aggregate event = case resolveTypeGraph spec of
     Left _ -> []
     Right graph ->
-        [ (fieldName field, wireFingerprint graph typeName)
+        [ (aggregateFieldName field, wireFingerprint graph typeName)
         | field <- eventFields aggregate event
-        , typeName <- maybeToList (fieldType field)
+        , TRef typeName <- maybeToList (aggregateFieldType field)
         , Map.member (MappedKey typeName) (tgDeclarations graph)
         ]
 
@@ -148,12 +148,13 @@ mappedRegisterSurface :: Spec -> Aggregate -> [(Name, Name, Text)]
 mappedRegisterSurface spec aggregate = case resolveTypeGraph spec of
     Left _ -> []
     Right graph ->
-        [ (regName register, regType register, wireFingerprint graph (regType register))
+        [ (regName register, typeName, wireFingerprint graph typeName)
         | register <- aggRegs aggregate
-        , Map.member (MappedKey (regType register)) (tgDeclarations graph)
+        , TRef typeName <- [regType register]
+        , Map.member (MappedKey typeName) (tgDeclarations graph)
         ]
 
-eventFields :: Aggregate -> Event -> [Field]
+eventFields :: Aggregate -> Event -> [AggregateField]
 eventFields aggregate event = case evBody event of
     EventFields fields -> fields
     EventFromCommand commandName ->

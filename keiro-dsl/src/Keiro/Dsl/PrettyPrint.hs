@@ -655,7 +655,7 @@ docSnapshot snapshot =
     policyDoc SnapOnTerminal = "on-terminal"
 
 docReg :: RegDecl -> Doc ann
-docReg r = pretty (regName r) <+> pretty (regType r) <+> "=" <+> docRegInitial (regInitial r)
+docReg r = pretty (regName r) <+> docTypeExpr (regType r) <+> "=" <+> docRegInitial (regInitial r)
 
 docRegInitial :: RegInitial -> Doc ann
 docRegInitial (RegInitBare value) = pretty value
@@ -673,7 +673,12 @@ docState :: StateDecl -> Doc ann
 docState s = pretty (stName s) <> (if stTerminal s then "!" else mempty)
 
 docCommand :: Command -> Doc ann
-docCommand c = "command" <+> pretty (cmdName c) <+> braced (map docField (cmdFields c))
+docCommand c = "command" <+> pretty (cmdName c) <+> braced (map docAggregateField (cmdFields c))
+
+docAggregateField :: AggregateField -> Doc ann
+docAggregateField f = case aggregateFieldType f of
+    Nothing -> pretty (aggregateFieldName f)
+    Just ty -> pretty (aggregateFieldName f) <> ":" <> docTypeExpr ty
 
 docField :: Field -> Doc ann
 docField f = case fieldType f of
@@ -696,7 +701,7 @@ docEvent e =
             <> (if evVersion e > 1 then " v" <> pretty (evVersion e) else mempty)
     bodyDoc = case evBody e of
         EventFromCommand cmd -> "=" <+> ("fields(" <> pretty cmd <> ")")
-        EventFields fs -> braced (map docField fs)
+        EventFields fs -> braced (map docAggregateField fs)
     line1 = kw <+> nameVer <+> bodyDoc
 
 {- | Render one transition in concrete @.keiro@ syntax. Exported for @diff@'s

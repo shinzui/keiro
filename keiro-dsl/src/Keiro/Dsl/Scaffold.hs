@@ -50,6 +50,7 @@ module Keiro.Dsl.Scaffold (
 
     -- * Internal resolution, shared with "Keiro.Dsl.Harness"
     Agg (..),
+    ResolvedRegister (..),
     ResolvedCtor (..),
     StructuralProjection (..),
     resolveAgg,
@@ -71,8 +72,10 @@ import Data.Char (isAlpha, isAlphaNum, isUpper, ord, toLower, toUpper)
 import Data.List (find, groupBy, nub, sort, sortOn)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.AggregateType
 import Keiro.Dsl.CodecCompare (BranchArm (..), BranchField (..), BranchSchema (..))
 import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind (..), bindingObligations)
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint)
@@ -294,7 +297,7 @@ data Agg = Agg
     , aVertexType :: !Text
     , aIds :: ![IdDecl]
     , aEnums :: ![EnumDecl]
-    , aRegs :: ![RegDecl]
+    , aRegs :: ![ResolvedRegister]
     , aStates :: ![StateDecl]
     , aCommands :: ![ResolvedCtor]
     , aEvents :: ![ResolvedCtor]
@@ -305,17 +308,26 @@ data Agg = Agg
     , aFoldFingerprint :: !Text
     , aReadModels :: ![ReadModelNode]
     , aTypeGraph :: !(Maybe TypeGraph)
+    , aSymbols :: !AggregateSymbols
     , aGenPrefix :: !Text
     -- ^ e.g. @Generated.HospitalCapacity.Reservation@
     , aHolePrefix :: !Text
     -- ^ e.g. @HospitalCapacity.Reservation@
     }
 
+data ResolvedRegister = ResolvedRegister
+    { rrName :: !Name
+    , rrType :: !ResolvedAggregateType
+    , rrInitial :: !ResolvedRegisterInitial
+    , rrLoc :: !Loc
+    }
+    deriving stock (Eq, Show)
+
 -- | A command or event constructor with its fully-resolved field types.
 data ResolvedCtor = ResolvedCtor
     { rcName :: !Text
-    , rcFields :: ![(Text, Text)]
-    -- ^ (field name, resolved Haskell type)
+    , rcFields :: ![(Text, ResolvedAggregateType)]
+    -- ^ (field name, canonical aggregate type)
     , rcVersion :: !Int
     -- ^ EP-2: schema version (1 for commands and unversioned events).
     , rcUpcastFrom :: !(Maybe Int)
@@ -335,7 +347,7 @@ resolveAgg ctx spec agg =
         , aVertexType = vertexType
         , aIds = specIds spec
         , aEnums = specEnums spec
-        , aRegs = aggRegs agg
+        , aRegs = map resolveRegister (aggRegs agg)
         , aStates = aggStates agg
         , aCommands = map resolveCommand (aggCommands agg)
         , aEvents = map resolveEvent (aggEvents agg)
@@ -346,17 +358,19 @@ resolveAgg ctx spec agg =
         , aFoldFingerprint = aggregateFoldFingerprint spec agg
         , aReadModels = [readModel | NReadModel readModel <- specNodes spec]
         , aTypeGraph = either (const Nothing) Just (resolveTypeGraph spec)
+        , aSymbols = symbols
         , aGenPrefix = genPrefixFor ctx nm
         , aHolePrefix = holePrefixFor ctx nm
         }
   where
     nm = aggName agg
+    symbols = aggregateSymbols spec
     ctxPascal = pascalFromKebab (contextName ctx)
     vertexType = nm <> "Vertex"
     commandFieldTypes = [(cmdName c, cmdFields c) | c <- aggCommands agg]
-    resolveCommand c = (mkCtor (cmdName c) (cmdFields c)){rcVersion = 1, rcUpcastFrom = Nothing}
+    resolveCommand c = (mkCtor CommandFieldUse (cmdName c) (cmdFields c)){rcVersion = 1, rcUpcastFrom = Nothing}
     resolveEvent e =
-        (mkCtor (evName e) (eventFields e))
+        (mkCtor EventFieldUse (evName e) (eventFields e))
             { rcVersion = evVersion e
             , rcUpcastFrom = fst <$> evUpcastFrom e
             }
@@ -364,30 +378,23 @@ resolveAgg ctx spec agg =
         eventFields ev = case evBody ev of
             EventFields fs -> fs
             EventFromCommand cn -> fromMaybe [] (lookup cn commandFieldTypes)
-    mkCtor cn fs =
+    mkCtor useSite cn fs =
         ResolvedCtor
             { rcName = cn
-            , rcFields = map (\f -> (fieldName f, resolveFieldType f)) fs
+            , rcFields = map (\field -> (aggregateFieldName field, orDie (inferAggregateFieldType symbols agg useSite field))) fs
             , rcVersion = 1
             , rcUpcastFrom = Nothing
             }
-    regTypes = [(regName r, regType r) | r <- aggRegs agg]
-    idNames = map idName (specIds spec)
-    enumNames = map enumName (specEnums spec)
-    -- A bare field reuses a register's type if one shares its name; else it
-    -- Pascal-cases to a declared id/enum/vertex; else falls back to Text.
-    resolveFieldType f = case fieldType f of
-        Just ty -> ty
-        Nothing ->
-            let nme = fieldName f
-                pas = pascal nme
-             in case lookup nme regTypes of
-                    Just ty -> ty
-                    Nothing
-                        | pas `elem` idNames -> pas
-                        | pas `elem` enumNames -> pas
-                        | pas == vertexType -> pas
-                        | otherwise -> "Text"
+    resolveRegister register =
+        let resolvedType = orDie (resolveAggregateType symbols (regLoc register) RegisterUse (regType register))
+            resolvedInitial = orDie (resolveRegisterInitial symbols (regLoc register) resolvedType (regInitial register))
+         in ResolvedRegister
+                { rrName = regName register
+                , rrType = resolvedType
+                , rrInitial = resolvedInitial
+                , rrLoc = regLoc register
+                }
+    orDie = either (error . ("validated aggregate resolution failed: " <>) . show) id
 
 --------------------------------------------------------------------------------
 -- Entry point
@@ -1015,7 +1022,7 @@ projectionScalar = \case
     RInt -> Just "Int"
     RBool -> Just "Bool"
     RTime -> Just "UTCTime"
-    RNatural -> Nothing
+    RNatural -> Just "Natural"
     RJson -> Nothing
     ROptional{} -> Nothing
     RList{} -> Nothing
@@ -1038,14 +1045,15 @@ emitStructuralProjections ctx graph =
         , "{-# LANGUAGE TypeApplications #-}"
         , "{-# LANGUAGE TypeFamilies #-}"
         , generatedBanner
-        , "-- Equality witnesses are emitted for Text, Int, Bool, and UTCTime."
-        , "-- Only Int and UTCTime belong to Keiki's v1 ordered subset."
+        , "-- Equality witnesses are emitted for Text, Int, Bool, Natural, and UTCTime."
+        , "-- Int, Natural, and UTCTime belong to Keiki's ordered subset."
         , "module " <> moduleName
         , "  ( " <> T.intercalate "\n  , " (map spWitness specs)
         , "  ) where"
         , ""
         , "import Data.Text (Text)"
         , "import Data.Time (UTCTime)"
+        , "import Numeric.Natural (Natural)"
         , "import Keiro.Codec.Structural (bindingToShape)"
         , "import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)"
         ]
@@ -2300,10 +2308,10 @@ emitRegsType a =
         ["type " <> aName a <> "Regs ="]
             ++ regListLines a (aRegs a)
 
-regListLines :: Agg -> [RegDecl] -> [Text]
+regListLines :: Agg -> [ResolvedRegister] -> [Text]
 regListLines _ [] = ["  '[]"]
 regListLines a rs =
-    [ lead i <> "'(" <> tshow (regName r) <> ", " <> renderDomainType a (regType r) <> ")"
+    [ lead i <> "'(" <> tshow (rrName r) <> ", " <> renderDomainType a (rrType r) <> ")"
     | (i, r) <- zip [(0 :: Int) ..] rs
     ]
         ++ ["   ]"]
@@ -2321,68 +2329,51 @@ emitInitialRegs a =
   where
     chain [] = ["  RNil"]
     chain rs =
-        [ "  RCons (Proxy @" <> tshow (regName r) <> ") " <> regInitialValue a r <> " $"
+        [ "  RCons (Proxy @" <> tshow (rrName r) <> ") " <> regInitialValue r <> " $"
         | r <- init rs
         ]
-            ++ ["  RCons (Proxy @" <> tshow (regName lastR) <> ") " <> regInitialValue a lastR <> " RNil"]
+            ++ ["  RCons (Proxy @" <> tshow (rrName lastR) <> ") " <> regInitialValue lastR <> " RNil"]
       where
         lastR = last rs
 
 -- | The Haskell initial value for a register, by the category of its type.
-regInitialValue :: Agg -> RegDecl -> Text
-regInitialValue a r
-    | Just declaration <- mappedDeclFor a (regType r) = case mappedInitial declaration of
-        Just initialValue -> unQualifiedValueName initialValue
-        Nothing -> "(error \"mapped register initial rejected before generation\")"
-    | regType r `elem` idNames = "(" <> regType r <> " \"\")"
-    | regType r == aVertexType a = maybe "(error \"invalid vertex initial\")" (vertexCtor a) (bareInitial r)
-    | regType r == "Text" = maybe "(error \"Text initial must be quoted\")" tshow (textInitial r)
-    | otherwise = maybe "(error \"invalid register initial\")" id (bareInitial r)
-  where
-    idNames = map idName (aIds a)
-    bareInitial reg = case regInitial reg of
-        RegInitBare value -> Just value
-        RegInitText _ -> Nothing
-    textInitial reg = case regInitial reg of
-        RegInitText value -> Just value
-        RegInitBare _ -> Nothing
+regInitialValue :: ResolvedRegister -> Text
+regInitialValue = renderRegisterInitial . rrInitial
 
 domainConsumerImports :: Agg -> [Text]
 domainConsumerImports a =
     sort . nub $
-        [ hsModule (mappedHaskell declaration) <> " qualified"
-        | declaration <- mappedUses a
-        ]
+        Set.toList (Set.unions [aggregateImports (aSymbols a) resolved | resolved <- aggregateTypes])
             <> [ qualifiedModule initialValue <> " qualified"
                | declaration <- mappedUses a
                , initialValue <- maybeToListText (mappedInitial declaration)
                ]
+  where
+    aggregateTypes = map snd (concatMap rcFields (aCommands a <> aEvents a)) <> map rrType (aRegs a)
 
 mappedUses :: Agg -> [ResolvedMappedDecl]
 mappedUses a =
     [ declaration
-    | fieldType <-
+    | resolvedType <-
         map snd (concatMap rcFields (aCommands a <> aEvents a))
-            <> map regType (aRegs a)
-    , declaration <- maybeToListText (mappedDeclFor a fieldType)
+            <> map rrType (aRegs a)
+    , declaration <- maybeToListText (mappedDeclFor a resolvedType)
     ]
 
-mappedDeclFor :: Agg -> Text -> Maybe ResolvedMappedDecl
-mappedDeclFor a name = do
+mappedDeclFor :: Agg -> ResolvedAggregateType -> Maybe ResolvedMappedDecl
+mappedDeclFor a resolvedType = do
+    key <- case resolvedType of
+        AggregateMapped mappedKey -> Just mappedKey
+        _ -> Nothing
     graph <- aTypeGraph a
-    Map.lookup (MappedKey name) (tgDeclarations graph)
-
-mappedHaskell :: ResolvedMappedDecl -> HaskellSource
-mappedHaskell (ResolvedStructural declaration _) = sdHaskell declaration
-mappedHaskell (ResolvedOpaque declaration) = odHaskell declaration
+    Map.lookup key (tgDeclarations graph)
 
 mappedInitial :: ResolvedMappedDecl -> Maybe QualifiedValueName
 mappedInitial (ResolvedStructural declaration _) = sdInitial declaration
 mappedInitial (ResolvedOpaque declaration) = odInitial declaration
 
-renderDomainType :: Agg -> Text -> Text
-renderDomainType a fieldType =
-    maybe fieldType (renderHaskellSource . mappedHaskell) (mappedDeclFor a fieldType)
+renderDomainType :: Agg -> ResolvedAggregateType -> Text
+renderDomainType a = aggregateHaskellType (aSymbols a)
 
 maybeToListText :: Maybe value -> [value]
 maybeToListText = maybe [] pure
@@ -2577,8 +2568,8 @@ emitEncode a =
         tshow n
             <> " .= "
             <> case fieldCat a ty of
-                IdCat -> lowerFirst ty <> "Text payload." <> n
-                EnumCat -> lowerFirst ty <> "Text payload." <> n
+                IdCat -> lowerFirst (aggregateCanonicalName ty) <> "Text payload." <> n
+                EnumCat -> lowerFirst (aggregateCanonicalName ty) <> "Text payload." <> n
                 MappedStructuralCat declaration _ -> "encode" <> sdName declaration <> "Mapped payload." <> n
                 MappedOpaqueCat{} -> "toJSON payload." <> n
                 _ -> "payload." <> n
@@ -2604,8 +2595,8 @@ emitDecode a =
     -- The first field uses <$> (handled above), the rest <*>. We instead build
     -- a uniform list and join; for an empty record there are no fields.
     decodeField (n, ty) = case fieldCat a ty of
-        IdCat -> "(" <> ty <> " <$> o .: " <> tshow n <> ")"
-        EnumCat -> "(o .: " <> tshow n <> " >>= parse" <> ty <> ")"
+        IdCat -> "(" <> aggregateCanonicalName ty <> " <$> o .: " <> tshow n <> ")"
+        EnumCat -> "(o .: " <> tshow n <> " >>= parse" <> aggregateCanonicalName ty <> ")"
         MappedStructuralCat declaration _ -> "(o .: " <> tshow n <> " >>= parse" <> sdName declaration <> "Mapped)"
         MappedOpaqueCat{} -> "o .: " <> tshow n
         _ -> "o .: " <> tshow n
@@ -2640,10 +2631,10 @@ codecMappedDeclarations a = case aTypeGraph a of
         mapMaybe (\key -> Map.lookup key (tgDeclarations graph)) (sort (Map.keys selected))
       where
         roots =
-            [ MappedKey fieldType
+            [ key
             | event <- aEvents a
-            , (_, fieldType) <- rcFields event
-            , Map.member (MappedKey fieldType) (tgDeclarations graph)
+            , (_, AggregateMapped key) <- rcFields event
+            , Map.member key (tgDeclarations graph)
             ]
         selected =
             Map.fromList
@@ -3232,10 +3223,10 @@ data FieldCat
     | OtherCat
     deriving stock (Eq, Show)
 
-fieldCat :: Agg -> Text -> FieldCat
+fieldCat :: Agg -> ResolvedAggregateType -> FieldCat
 fieldCat a ty
-    | ty `elem` map idName (aIds a) = IdCat
-    | ty `elem` map enumName (aEnums a) = EnumCat
+    | AggregateId{} <- ty = IdCat
+    | AggregateEnum{} <- ty = EnumCat
     | Just (ResolvedStructural declaration shape) <- mappedDeclFor a ty = MappedStructuralCat declaration shape
     | Just (ResolvedOpaque declaration) <- mappedDeclFor a ty = MappedOpaqueCat declaration
     | otherwise = OtherCat
@@ -3277,58 +3268,46 @@ scaffoldRefusals spec =
     aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
     contracts = [contract | NContract contract <- specNodes spec]
     publishers = [publisher | NPublisher publisher <- specNodes spec]
-    idTypes = map idName (specIds spec)
-    enumTypes = map enumName (specEnums spec)
-    mappedTypes = case resolveTypeGraph spec of
-        Left _ -> []
-        Right graph -> map unMappedKey (Map.keys (tgDeclarations graph))
-    mappedDeclaration typeName = case resolveTypeGraph spec of
-        Left _ -> Nothing
-        Right graph -> Map.lookup (MappedKey typeName) (tgDeclarations graph)
-    enumCtorsFor ty = case [map fst (enumCtors enum) | enum <- specEnums spec, enumName enum == ty] of
-        ctors : _ -> ctors
-        [] -> []
+    symbols = aggregateSymbols spec
     aggregateRefusals aggregate =
         [ "AggregateEmpty: aggregate '" <> aggName aggregate <> "' must declare at least one command, event, and transition"
         | null (aggCommands aggregate) || null (aggEvents aggregate) || null (aggTransitions aggregate)
         ]
             <> concatMap (registerRefusals aggregate) (aggRegs aggregate)
-            <> [ "FieldTypeUnrepresentable: aggregate '" <> aggName aggregate <> "' field '" <> fieldName field <> "' has unsupported explicit type '" <> ty <> "'"
-               | field <- aggregateFields aggregate
-               , Just ty <- [fieldType field]
-               , not (supportedType aggregate ty)
-               ]
-    registerRefusals aggregate reg =
-        [ "RegTypeUnsupported: aggregate '" <> aggName aggregate <> "' register '" <> regName reg <> "' has unsupported type '" <> regType reg <> "'"
-        | not (supportedType aggregate (regType reg))
-        ]
-            <> [ "RegTextInitialNotQuoted: aggregate '" <> aggName aggregate <> "' Text register '" <> regName reg <> "' must use a quoted initial"
-               | regType reg == "Text"
-               , RegInitBare _ <- [regInitial reg]
-               ]
-            <> [ "RegInitialNotEnumCtor: aggregate '" <> aggName aggregate <> "' register '" <> regName reg <> "' must start at a constructor of enum '" <> regType reg <> "'"
-               | regType reg `elem` enumTypes
-               , case regInitial reg of
-                    RegInitBare value -> value `notElem` enumCtorsFor (regType reg)
-                    RegInitText _ -> True
-               ]
-            <> [ "RegInitialInvalidLiteral: aggregate '" <> aggName aggregate <> "' Bool register '" <> regName reg <> "' must start at True or False"
-               | regType reg == "Bool"
-               , case regInitial reg of RegInitBare value -> value `notElem` ["True", "False"]; RegInitText _ -> True
-               ]
-            <> [ "RegInitialInvalidLiteral: aggregate '" <> aggName aggregate <> "' Int register '" <> regName reg <> "' must start at an integer literal"
-               | regType reg == "Int"
-               , case regInitial reg of RegInitBare value -> (readMaybe (T.unpack value) :: Maybe Int) == Nothing; RegInitText _ -> True
-               ]
-            <> [ "MappedRegisterInitialMissing: aggregate '" <> aggName aggregate <> "' register '" <> regName reg <> "' requires the mapped declaration's initial symbol"
-               | Just declaration <- [mappedDeclaration (regType reg)]
-               , mappedInitial declaration == Nothing
-               ]
-    aggregateFields aggregate =
-        concatMap cmdFields (aggCommands aggregate)
-            <> concat [fields | event <- aggEvents aggregate, EventFields fields <- [evBody event]]
-    supportedType aggregate ty =
-        ty `elem` (["Text", "Int", "Bool", aggName aggregate <> "Vertex"] <> idTypes <> enumTypes <> mappedTypes)
+            <> concatMap (fieldRefusals aggregate CommandFieldUse) (concatMap cmdFields (aggCommands aggregate))
+            <> concatMap (fieldRefusals aggregate EventFieldUse) [field | event <- aggEvents aggregate, EventFields fields <- [evBody event], field <- fields]
+    fieldRefusals aggregate useSite field = case inferAggregateFieldType symbols aggregate useSite field of
+        Right _ -> []
+        Left _ ->
+            [ "FieldTypeUnrepresentable: aggregate '"
+                <> aggName aggregate
+                <> "' field '"
+                <> aggregateFieldName field
+                <> "' has unsupported explicit type '"
+                <> maybe "(inferred)" typeExprCanonicalName (aggregateFieldType field)
+                <> "'"
+            ]
+    registerRefusals aggregate register =
+        case resolveAggregateType symbols (regLoc register) RegisterUse (regType register) of
+            Left _ ->
+                [ "RegTypeUnsupported: aggregate '"
+                    <> aggName aggregate
+                    <> "' register '"
+                    <> regName register
+                    <> "' has unsupported type '"
+                    <> typeExprCanonicalName (regType register)
+                    <> "'"
+                ]
+            Right resolved -> case resolveRegisterInitial symbols (regLoc register) resolved (regInitial register) of
+                Right _ -> []
+                Left _ -> [initialRefusal aggregate register resolved]
+    initialRefusal aggregate register resolved = case resolved of
+        AggregateText -> label "RegTextInitialNotQuoted" "must use a quoted Text initial"
+        AggregateEnum name -> label "RegInitialNotEnumCtor" ("must start at a constructor of enum '" <> name <> "'")
+        AggregateMapped{} -> label "MappedRegisterInitialMissing" "requires the mapped declaration's initial symbol"
+        _ -> label "RegInitialInvalidLiteral" ("has an invalid " <> aggregateCanonicalName resolved <> " initial")
+      where
+        label codeName detail = codeName <> ": aggregate '" <> aggName aggregate <> "' register '" <> regName register <> "' " <> detail
     contractRefusals contract =
         [ "ContractEmpty: contract '" <> ctrName contract <> "' must declare at least one event"
         | null (ctrEvents contract)

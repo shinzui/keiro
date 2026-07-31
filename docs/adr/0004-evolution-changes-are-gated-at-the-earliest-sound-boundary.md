@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-07-29T18:35:37Z
+timestamp: 2026-07-31T14:39:19Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -47,6 +47,13 @@ Machine-readable `DiagnosticCode` values correlate `check` and `diff`.
 Human-readable text explains the operational remedy, but tooling depends on
 the code rather than prose.
 
+Aggregate type syntax and capabilities follow the same rule. Parsing establishes
+only a `TypeExpr`; `check` resolves it at the declaration or guard use site and
+rejects unknown types, unsupported direct shapes, invalid register initials,
+cross-type comparisons, and unsupported comparison capabilities. These codes are
+append-only. Scaffolding reuses the checked resolver as defense in depth but is
+not the first place an aggregate author learns that a type cannot be lowered.
+
 The landed inventory is:
 
 | Change class | Single-spec `check` | Cross-spec `diff` | Runtime boundary / CI |
@@ -68,6 +75,7 @@ The landed inventory is:
 | Router/process decide surface | — | `RouterDecideSurfaceChanged` / `ProcessDecideSurfaceChanged` Advisory | Drain the subscription redelivery window; hole-only changes keep the same manual rule |
 | Process timer payload | — | `ProcessTimerPayloadChanged` Advisory | Firers must decode every pending unversioned shape or the timer exhausts attempts and dead-letters |
 | Invalid mapped declaration (missing provenance, ambiguous or recursive reference, non-injective nullability, invalid default, encoding collision, unsupported guard, or missing register initial) | Stable mapped diagnostic at the owning declaration or use site | Not required | Correct the single-spec contract before generation; opaque mode remains an explicit, separately checked boundary |
+| Invalid direct aggregate type or capability (unknown type, direct Json/container shape, malformed Time or Natural initial, mismatched comparison, or unsupported ordering) | Stable aggregate diagnostic at the declaration, initial, or guard use site | Canonical resolved identities feed the existing aggregate diff and fold surfaces | Correct the spec before generation; a clean spec has total Time/Natural type, import, package, codec, snapshot, and sample lowering |
 | Mapped structural wire change | Single-spec shape remains valid | Recursive mapped diagnostic at every complete command, event, and register root path; event history, old-binary rollout, snapshot hydration, and consumer build are classified independently | Version and upcast affected events, rebuild affected snapshots, and recompile affected consumers according to the finding's compatibility vector |
 | Mapped source, binding, fixture, canonical identity, or opaque-codec provenance change | Required facts and identities are checked | Declaration-level build or identity finding; opaque codec-version changes remain historical-read hazards even when no structural shape is visible | Recompile consumers, bump binding provenance, or migrate the declared opaque codec as directed; no Haskell source inspection is claimed |
 | Structural binding correctness | The declaration names one total binding and a non-empty fixture corpus | Binding-version and canonical-identity changes are consumer-build findings | Generated conformance checks domain→shape→domain and shape→domain→shape for every fixture; a transposed-field mutation must fail |
@@ -161,3 +169,6 @@ The same evidence boundaries determine rollout ordering:
   workaround.
 - The inventory is amended when a later child plan changes a gate's ownership
   or closes one of the named audit residuals.
+- Aggregate type support cannot be introduced only in a generator template.
+  The parser, resolver, use-site capability check, and every lowering consumer
+  must agree before the type is admitted by `check`.

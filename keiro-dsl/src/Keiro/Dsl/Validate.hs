@@ -30,6 +30,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word64)
+import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
 import Keiro.Dsl.TypeGraph
@@ -279,6 +280,12 @@ data DiagnosticCode
       -- advisory consumer-build obligations, distinct from wire evolution.
       OwnershipMoved
     | WorkspaceAuthorityChanged
+    | -- EP-157: canonical aggregate type resolution and capabilities.
+      AggregateTypeUnknown
+    | AggregateTypeUnsupportedAtUse
+    | AggregateRegisterInitialInvalid
+    | AggregateGuardTypeMismatch
+    | AggregateGuardCapabilityUnsupported
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.
@@ -318,7 +325,143 @@ line for stable, readable output.
 -}
 validateSpec :: Spec -> [Diagnostic]
 validateSpec spec =
-    sortOn line (validateNames spec ++ validateMapped spec ++ specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
+    sortOn line (validateNames spec ++ validateMapped spec ++ validateAggregateTypes spec ++ specLevelRules spec ++ concatMap (validateNode spec) (specNodes spec))
+
+-- | Resolve every direct aggregate type once at the earliest semantic gate.
+validateAggregateTypes :: Spec -> [Diagnostic]
+validateAggregateTypes spec = concatMap aggregateRules aggregates
+  where
+    symbols = aggregateSymbols spec
+    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+
+    aggregateRules aggregate =
+        concatMap commandRules (aggCommands aggregate)
+            ++ concatMap eventRules (aggEvents aggregate)
+            ++ concatMap registerRules (aggRegs aggregate)
+            ++ concatMap (transitionRules aggregate) (aggTransitions aggregate)
+      where
+        commandRules command = concatMap (fieldRule aggregate CommandFieldUse) (cmdFields command)
+        eventRules event = case evBody event of
+            EventFields fields -> concatMap (fieldRule aggregate EventFieldUse) fields
+            EventFromCommand _ -> []
+        registerRules register = case resolveAggregateType symbols (regLoc register) RegisterUse (regType register) of
+            Left typeError -> [aggregateTypeDiagnostic typeError]
+            Right AggregateMapped{} -> []
+            Right resolved -> case resolveRegisterInitial symbols (regLoc register) resolved (regInitial register) of
+                Left initialError -> [aggregateTypeDiagnostic initialError]
+                Right _ -> []
+
+    fieldRule aggregate useSite field =
+        either (pure . aggregateTypeDiagnostic) (const []) (inferAggregateFieldType symbols aggregate useSite field)
+
+    transitionRules aggregate transition =
+        concatMap (comparisonRule aggregate transition) (maybe [] comparisons (tGuard transition))
+
+    comparisonRule aggregate transition (operator, left, right) =
+        case (expressionType aggregate transition left, expressionType aggregate transition right) of
+            (Right leftType, Right rightType)
+                | leftType /= rightType ->
+                    [ mkErr (locLine (tLoc transition)) AggregateGuardTypeMismatch $
+                        "comparison operands have different aggregate types '"
+                            <> aggregateCanonicalName leftType
+                            <> "' and '"
+                            <> aggregateCanonicalName rightType
+                            <> "'"
+                    ]
+                | aggregateCapability useSite leftType == Unsupported ->
+                    [ mkErr (locLine (tLoc transition)) AggregateGuardCapabilityUnsupported $
+                        renderAggregateUseSite useSite
+                            <> " is unsupported for aggregate type '"
+                            <> aggregateCanonicalName leftType
+                            <> "'"
+                    ]
+                | otherwise -> []
+            _ -> []
+      where
+        useSite = case operator of
+            OpEq -> EqualityGuardUse
+            OpNeq -> EqualityGuardUse
+            OpLt -> OrderingGuardUse
+            OpLe -> OrderingGuardUse
+            OpGt -> OrderingGuardUse
+            OpGe -> OrderingGuardUse
+
+    expressionType aggregate transition expression = case expression of
+        EAtom (ABool _) -> pure AggregateBool
+        EAtom (AName name) -> atomType aggregate transition name
+        EOr{} -> pure AggregateBool
+        EAnd{} -> pure AggregateBool
+        ECmp{} -> pure AggregateBool
+
+    atomType aggregate transition name = case [register | register <- aggRegs aggregate, regName register == name] of
+        register : _ -> resolveAggregateType symbols (regLoc register) RegisterUse (regType register)
+        [] -> case [field | command <- aggCommands aggregate, cmdName command == tCommand transition, field <- cmdFields command, aggregateFieldName field == name] of
+            field : _ -> inferAggregateFieldType symbols aggregate CommandFieldUse field
+            [] -> case [enumName declaration | declaration <- specEnums spec, name `elem` map fst (enumCtors declaration)] of
+                enumType : _ -> pure (AggregateEnum enumType)
+                []
+                    | name `elem` map stName (aggStates aggregate) -> pure (AggregateVertex (aggName aggregate <> "Vertex"))
+                    | Just rule <- firstMatching ((== name) . ruleName) (specRules spec) ->
+                        resolveAggregateType symbols (ruleLoc rule) EqualityGuardUse (nameTypeExpr (ruleCodomain rule))
+                    | otherwise -> Left (AggregateTypeError (tLoc transition) EqualityGuardUse (UnknownAggregateType name))
+
+    nameTypeExpr name = case name of
+        "Text" -> TText
+        "Int" -> TInt
+        "Bool" -> TBool
+        "Natural" -> TNatural
+        "Time" -> TTime
+        "UTCTime" -> TTime
+        "Json" -> TJson
+        _ -> TRef name
+
+    comparisons expression = case expression of
+        EOr left right -> comparisons left <> comparisons right
+        EAnd left right -> comparisons left <> comparisons right
+        ECmp operator left right -> (operator, left, right) : comparisons left <> comparisons right
+        EAtom{} -> []
+
+aggregateTypeDiagnostic :: AggregateTypeError -> Diagnostic
+aggregateTypeDiagnostic aggregateError =
+    mkErr (locLine (aggregateTypeErrorLoc aggregateError)) diagnosticCode diagnosticMessage
+  where
+    diagnosticCode = case aggregateTypeErrorReason aggregateError of
+        UnknownAggregateType{} -> AggregateTypeUnknown
+        UnsupportedAggregateShape{} -> AggregateTypeUnsupportedAtUse
+        UnsupportedAggregateCapability{} -> case aggregateTypeErrorUseSite aggregateError of
+            EqualityGuardUse -> AggregateGuardCapabilityUnsupported
+            OrderingGuardUse -> AggregateGuardCapabilityUnsupported
+            _ -> AggregateTypeUnsupportedAtUse
+        InvalidRegisterInitial{} -> AggregateRegisterInitialInvalid
+    diagnosticMessage = case aggregateTypeErrorReason aggregateError of
+        UnknownAggregateType name ->
+            "unknown aggregate type '" <> name <> "' at " <> renderAggregateUseSite (aggregateTypeErrorUseSite aggregateError)
+        UnsupportedAggregateShape expression ->
+            "direct aggregate type '"
+                <> typeExprCanonicalName expression
+                <> "' is unsupported at "
+                <> renderAggregateUseSite (aggregateTypeErrorUseSite aggregateError)
+                <> "; use a mapped structural declaration for Json or container shapes"
+        UnsupportedAggregateCapability resolved ->
+            renderAggregateUseSite (aggregateTypeErrorUseSite aggregateError)
+                <> " is unsupported for aggregate type '"
+                <> aggregateCanonicalName resolved
+                <> "'"
+        InvalidRegisterInitial resolved detail ->
+            "invalid " <> aggregateCanonicalName resolved <> " register initial: " <> detail
+
+renderAggregateUseSite :: AggregateUseSite -> Text
+renderAggregateUseSite useSite = case useSite of
+    CommandFieldUse -> "command field"
+    EventFieldUse -> "event field"
+    RegisterUse -> "register"
+    EqualityGuardUse -> "equality guard"
+    OrderingGuardUse -> "ordering guard"
+    WholeValueWriteUse -> "whole-value write"
+    CodecUse -> "JSON codec"
+    SnapshotUse -> "snapshot"
+    HarnessSampleUse -> "harness sample"
+    HaskellLoweringUse -> "Haskell lowering"
 
 {- | Validate consumer-owned mapped declarations without inspecting consumer
 Haskell. Symbol-shaped facts are checked lexically here; GHC remains the
@@ -699,19 +842,21 @@ mappedRegisterInitialRules spec graph =
     concatMap aggregateRules [aggregate | NAggregate aggregate <- specNodes spec]
   where
     aggregateRules aggregate = concatMap registerRule (aggRegs aggregate)
-    registerRule register = case Map.lookup (MappedKey (regType register)) (tgDeclarations graph) of
-        Nothing -> []
-        Just declaration -> case regInitial register of
-            RegInitBare "initial"
-                | mappedInitial declaration == Nothing ->
-                    [ mkErr (locLine (regLoc register)) MappedMissingInitialValue $
-                        "mapped register '" <> regName register <> "' requires declaration '" <> regType register <> "' to name an explicit initial value"
+    registerRule register = case regType register of
+        TRef typeName -> case Map.lookup (MappedKey typeName) (tgDeclarations graph) of
+            Nothing -> []
+            Just declaration -> case regInitial register of
+                RegInitBare "initial"
+                    | mappedInitial declaration == Nothing ->
+                        [ mkErr (locLine (regLoc register)) MappedMissingInitialValue $
+                            "mapped register '" <> regName register <> "' requires declaration '" <> typeName <> "' to name an explicit initial value"
+                        ]
+                    | otherwise -> []
+                _ ->
+                    [ mkErr (locLine (regLoc register)) RegisterInitialOutOfScope $
+                        "mapped register '" <> regName register <> "' must use the bare initial token; the declaration-owned symbol is verified by GHC"
                     ]
-                | otherwise -> []
-            _ ->
-                [ mkErr (locLine (regLoc register)) RegisterInitialOutOfScope $
-                    "mapped register '" <> regName register <> "' must use the bare initial token; the declaration-owned symbol is verified by GHC"
-                ]
+        _ -> []
     mappedInitial =
         foldMappedDecl
             MappedDeclAlgebra
@@ -724,31 +869,7 @@ only operate on Keiki's curated scalar set. Nested access has no spelling in
 the grammar, so it is unrepresentable rather than silently accepted.
 -}
 mappedGuardRules :: Spec -> TypeGraph -> [Diagnostic]
-mappedGuardRules spec graph =
-    [ mkErr (locLine (tLoc transition)) MappedGuardUnsupported $
-        "guard operand '" <> operand <> "' has non-symbolic type '" <> operandType <> "'; mapped values support whole-value copy, while guards are limited to Text, Int, Bool, and Time"
-    | NAggregate aggregate <- specNodes spec
-    , transition <- aggTransitions aggregate
-    , guardExpression <- maybe [] pure (tGuard transition)
-    , operand <- dedup (exprNames guardExpression)
-    , operandType <- maybeToList (guardOperandType aggregate transition operand)
-    , not (guardTypeSupported graph operandType)
-    ]
-  where
-    maybeToList = maybe [] pure
-
-guardOperandType :: Aggregate -> Transition -> Name -> Maybe Name
-guardOperandType aggregate transition operand =
-    case [regType register | register <- aggRegs aggregate, regName register == operand] of
-        value : _ -> Just value
-        [] -> case [fieldType field | command <- aggCommands aggregate, cmdName command == tCommand transition, field <- cmdFields command, fieldName field == operand] of
-            value : _ -> value
-            [] -> Nothing
-
-guardTypeSupported :: TypeGraph -> Name -> Bool
-guardTypeSupported graph typeName =
-    typeName `Set.member` Set.fromList ["Text", "Int", "Bool", "Time", "UTCTime"]
-        && Map.notMember (MappedKey typeName) (tgDeclarations graph)
+mappedGuardRules _spec _graph = []
 
 cabalPackageName :: Text -> Bool
 cabalPackageName packageName =
@@ -854,11 +975,11 @@ validateNames spec =
       where
         commandNames command =
             constructorName "command name" (cmdName command) (cmdLoc command)
-                ++ concatMap (\field -> fieldNameRule "command field" (fieldName field) (cmdLoc command)) (cmdFields command)
+                ++ concatMap (\field -> fieldNameRule "command field" (aggregateFieldName field) (aggregateFieldLoc field)) (cmdFields command)
         eventNames event =
             constructorName "event name" (evName event) (evLoc event)
                 ++ case evBody event of
-                    EventFields fields -> concatMap (\field -> fieldNameRule "event field" (fieldName field) (evLoc event)) fields
+                    EventFields fields -> concatMap (\field -> fieldNameRule "event field" (aggregateFieldName field) (aggregateFieldLoc field)) fields
                     EventFromCommand _ -> []
 
     processNames process =
@@ -1209,7 +1330,7 @@ validateOperation spec o = case opShape o of
         (aggregate : _) ->
             [ mkErr ol OperationUnresolvedRef $
                 "command operation '" <> opName o <> "' stream field '" <> streamField <> "' is not declared by any command of aggregate '" <> name <> "'"
-            | streamField `notElem` [fieldName field | command <- aggCommands aggregate, field <- cmdFields command]
+            | streamField `notElem` [aggregateFieldName field | command <- aggCommands aggregate, field <- cmdFields command]
             ]
     projectionRefs projections =
         [ mkErr ol OperationUnresolvedRef $
@@ -1600,7 +1721,7 @@ validateProcess spec p =
                     [ mkErr diagnosticLine ProcessFieldBindingUnresolved $
                         context <> " command '" <> command <> "' binds undeclared target field '" <> fbName binding <> "'"
                     | binding <- bindings
-                    , fbName binding `notElem` map fieldName (cmdFields declaration)
+                    , fbName binding `notElem` map aggregateFieldName (cmdFields declaration)
                     ]
         lookupAggregate name = case [aggregate | aggregate <- aggregates, aggName aggregate == name] of
             (aggregate : _) -> Just aggregate
@@ -1725,7 +1846,7 @@ validateRouter spec router =
                 [ mkErr dispatchLine RouterCommandUnknown $
                     "dispatch command '" <> rdCommand dispatch <> "' binds undeclared target field '" <> fbName binding <> "'"
                 | binding <- rdFields dispatch
-                , fbName binding `notElem` map fieldName (cmdFields command)
+                , fbName binding `notElem` map aggregateFieldName (cmdFields command)
                 ]
 
     readModelReference = case rvSource (rtResolve router) of
@@ -1812,7 +1933,7 @@ validateAggregate spec agg =
     states = Set.fromList (map stName (aggStates agg))
     terminals = Set.fromList [stName s | s <- aggStates agg, stTerminal s]
     commandFields :: Map Name [Name]
-    commandFields = Map.fromList [(cmdName c, map fieldName (cmdFields c)) | c <- aggCommands agg]
+    commandFields = Map.fromList [(cmdName c, map aggregateFieldName (cmdFields c)) | c <- aggCommands agg]
     commandNames = Map.keysSet commandFields
     eventNames = Set.fromList (map evName (aggEvents agg))
     enumCtorNames = Set.fromList [c | e <- specEnums spec, (c, _) <- enumCtors e]
@@ -1851,17 +1972,17 @@ validateAggregate spec agg =
         ]
 
     registerInitialScope = concatMap checkRegisterInitial (aggRegs agg)
-    checkRegisterInitial r = case [e | e <- specEnums spec, enumName e == regType r] of
+    checkRegisterInitial r = case [e | e <- specEnums spec, TRef (enumName e) == regType r] of
         (e : _) ->
             [ outOfScope r "constructor of enum" (enumName e)
             | regInitialBare r `notElem` map (Just . fst) (enumCtors e)
             ]
         []
-            | regType r == aggName agg <> "Vertex" ->
+            | regType r == TRef (aggName agg <> "Vertex") ->
                 [ outOfScope r "state of aggregate" (aggName agg)
                 | maybe True (`Set.notMember` states) (regInitialBare r)
                 ]
-            | regType r `elem` map idName (specIds spec) ->
+            | regType r `elem` map (TRef . idName) (specIds spec) ->
                 [ outOfScope r "literal" "placeholder"
                 | regInitialBare r /= Just "placeholder"
                 ]

@@ -429,19 +429,19 @@ collectUseSites :: Map Name MappedKey -> Spec -> [UseSite]
 collectUseSites keyByName spec = concatMap aggregateSites [aggregate | NAggregate aggregate <- specNodes spec]
   where
     aggregateSites aggregate =
-        [ RootCommandField (aggName aggregate) (cmdName command) (fieldName field) key
+        [ RootCommandField (aggName aggregate) (cmdName command) (aggregateFieldName field) key
         | command <- aggCommands aggregate
         , field <- cmdFields command
-        , key <- maybeToList (fieldType field >>= (`Map.lookup` keyByName))
+        , key <- maybeToList (aggregateFieldType field >>= typeRefName >>= (`Map.lookup` keyByName))
         ]
-            ++ [ RootEventField (aggName aggregate) (evName event) (fieldName field) key
+            ++ [ RootEventField (aggName aggregate) (evName event) (aggregateFieldName field) key
                | event <- aggEvents aggregate
                , field <- eventFields aggregate event
-               , key <- maybeToList (fieldType field >>= (`Map.lookup` keyByName))
+               , key <- maybeToList (aggregateFieldType field >>= typeRefName >>= (`Map.lookup` keyByName))
                ]
             ++ [ RootRegister (aggName aggregate) (regName register) key
                | register <- aggRegs aggregate
-               , key <- maybeToList (Map.lookup (regType register) keyByName)
+               , key <- maybeToList (typeRefName (regType register) >>= (`Map.lookup` keyByName))
                ]
 
     eventFields aggregate event = case evBody event of
@@ -450,6 +450,8 @@ collectUseSites keyByName spec = concatMap aggregateSites [aggregate | NAggregat
             concat [cmdFields command | command <- aggCommands aggregate, cmdName command == commandName]
 
     maybeToList = maybe [] pure
+    typeRefName (TRef name) = Just name
+    typeRefName _ = Nothing
 
 usePaths :: TypeGraph -> Name -> [UsePath]
 usePaths graph targetName = case Map.lookup (MappedKey targetName) (tgDeclarations graph) of

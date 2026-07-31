@@ -140,10 +140,13 @@ planScaffold = planScaffoldWithGoldens []
 
 planScaffoldWithGoldens :: [GoldenPayload] -> Context -> Spec -> Either [Refusal] [ScaffoldModule]
 planScaffoldWithGoldens goldens ctx spec =
-    let modules = scaffoldModulesWithGoldens goldens ctx spec
-     in case pureRefusals ctx spec modules of
-            [] -> Right modules
-            refusals -> Left refusals
+    case scaffoldRefusals spec of
+        lowering@(_ : _) -> Left [LoweringRefusal lowering]
+        [] ->
+            let modules = scaffoldModulesWithGoldens goldens ctx spec
+             in case pureRefusals ctx spec modules of
+                    [] -> Right modules
+                    refusals -> Left refusals
 
 {- | Every pure refusal gate, over an already-built module set: case-folded path
 collisions, generated\/consumer collisions and import cycles, firewall breaches,

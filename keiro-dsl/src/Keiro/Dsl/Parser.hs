@@ -653,7 +653,7 @@ pRegDecl :: P RegDecl
 pRegDecl = do
     loc <- getLoc
     name <- ident
-    ty <- ident
+    ty <- pMappedTypeExpr
     _ <- symbol "="
     initial <- (RegInitText <$> stringLit) <|> (RegInitBare <$> (ident <|> signedDecimalText))
     pure RegDecl{regName = name, regType = ty, regInitial = initial, regLoc = loc}
@@ -712,8 +712,15 @@ pCommand = do
     loc <- getLoc
     keyword "command"
     name <- ident
-    fs <- braces (many pField)
+    fs <- braces (many pAggregateField)
     pure Command{cmdName = name, cmdFields = fs, cmdLoc = loc}
+
+pAggregateField :: P AggregateField
+pAggregateField = do
+    loc <- getLoc
+    n <- ident
+    mty <- optional (symbol ":" *> pMappedTypeExpr)
+    pure AggregateField{aggregateFieldName = n, aggregateFieldType = mty, aggregateFieldLoc = loc}
 
 pField :: P Field
 pField = do
@@ -738,7 +745,7 @@ pEvent = do
     body <-
         choice
             [ EventFromCommand <$> (symbol "=" *> keyword "fields" *> parens ident)
-            , EventFields <$> braces (many pField)
+            , EventFields <$> braces (many pAggregateField)
             ]
     up <- optional pUpcast
     pure
@@ -1622,7 +1629,8 @@ signedDecimalText :: P Text
 signedDecimalText = lexeme $ do
     sign <- optional (char '-')
     digits <- some digitChar
-    pure (T.pack (maybe "" pure sign <> digits))
+    fractional <- optional (char '.' *> some digitChar)
+    pure (T.pack (maybe "" pure sign <> digits <> maybe "" ('.' :) fractional))
 
 pFire :: P FireNode
 pFire = do
@@ -1777,7 +1785,8 @@ which binds tighter than @||@.
 -}
 operatorTable :: [[Operator P Expr]]
 operatorTable =
-    [
+    [ [InfixL arithmeticUnsupported]
+    ,
         [ InfixN (ECmp OpLe <$ op "<=")
         , InfixN (ECmp OpGe <$ op ">=")
         , InfixN (ECmp OpEq <$ op "==")
@@ -1790,6 +1799,10 @@ operatorTable =
     ]
   where
     op s = symbol s
+    arithmeticUnsupported = do
+        offset <- getOffset
+        operator <- lexeme (oneOf ['+', '-', '*', '/'])
+        failAt offset ("aggregate arithmetic operator '" <> [operator] <> "' is unsupported; compare or copy whole values instead")
 
 --------------------------------------------------------------------------------
 -- Helpers

@@ -21,6 +21,7 @@ import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
+import Keiro.Dsl.AggregateType
 import Keiro.Dsl.CodecCompare
 import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
@@ -286,13 +287,13 @@ main = hspec $ do
                     , ("mapped-empty-identity.keiro", MappedInvalidIdentity)
                     , ("mapped-import-conflict.keiro", MappedImportConflict)
                     , ("mapped-illtyped-default.keiro", MappedDefaultIllTyped)
-                    , ("mapped-guard.keiro", MappedGuardUnsupported)
-                    , ("mapped-guard-natural.keiro", MappedGuardUnsupported)
+                    , ("mapped-guard.keiro", AggregateGuardCapabilityUnsupported)
                     ]
             forM_ cases $ \(fixture, expected) ->
                 errorCodesOf ("test/fixtures/" <> fixture) `shouldReturn` [expected]
-        it "keeps Time in Keiki's curated guard set while rejecting Natural" $
+        it "keeps Time and Natural in Keiki's curated comparison set" $ do
             errorCodesOf "test/fixtures/mapped-guard-time.keiro" `shouldReturn` []
+            errorCodesOf "test/fixtures/mapped-guard-natural.keiro" `shouldReturn` []
         it "rejects required defaults, missing optional policies, Int overflow, and negative Natural defaults" $ do
             let invalidFields =
                     [ WireField "requiredDefault" "requiredDefault" TText PRequired (Just (OmText "x")) noLoc
@@ -303,6 +304,141 @@ main = hspec $ do
                 declaration = completeStructural "Defaults" (ShapeRecord "Defaults" RejectUnknown invalidFields)
             errorCodes (mappedSpec [declaration])
                 `shouldBe` [MappedDefaultIllTyped, MappedMissingIngredient, MappedDefaultIllTyped, MappedDefaultIllTyped]
+
+    describe "aggregate type capabilities" $ do
+        it "enumerates the policy for every resolved type and use site" $ do
+            let resolvedTypes =
+                    [ AggregateText
+                    , AggregateInt
+                    , AggregateBool
+                    , AggregateTime
+                    , AggregateNatural
+                    , AggregateId "EntityId"
+                    , AggregateEnum "Status"
+                    , AggregateVertex "EntityVertex"
+                    , AggregateMapped (MappedKey "ConsumerValue")
+                    ]
+                useSites = [minBound .. maxBound]
+                expected useSite resolvedType = case useSite of
+                    OrderingGuardUse -> case resolvedType of
+                        AggregateInt -> SolverVisible
+                        AggregateTime -> SolverVisible
+                        AggregateNatural -> SolverVisible
+                        _ -> Unsupported
+                    EqualityGuardUse -> case resolvedType of
+                        AggregateMapped{} -> Unsupported
+                        AggregateId{} -> OpaqueOnly
+                        AggregateEnum{} -> OpaqueOnly
+                        AggregateVertex{} -> OpaqueOnly
+                        _ -> SolverVisible
+                    _ -> case resolvedType of
+                        AggregateId{} -> OpaqueOnly
+                        AggregateEnum{} -> OpaqueOnly
+                        AggregateVertex{} -> OpaqueOnly
+                        AggregateMapped{} -> OpaqueOnly
+                        _ -> SolverVisible
+                actual =
+                    [ (useSite, resolvedType, aggregateCapability useSite resolvedType)
+                    | useSite <- useSites
+                    , resolvedType <- resolvedTypes
+                    ]
+                wanted =
+                    [ (useSite, resolvedType, expected useSite resolvedType)
+                    | useSite <- useSites
+                    , resolvedType <- resolvedTypes
+                    ]
+            actual `shouldBe` wanted
+        it "lowers direct Time and Natural through every generated aggregate boundary" $ do
+            spec <- specOf "test/fixtures/aggregate-scalars.keiro"
+            errorCodes spec `shouldBe` []
+            let aggregate = onlyAggregate spec
+                generated =
+                    [ moduleText generatedModule
+                    | generatedModule <- scaffoldAggregate (defaultContext (specContext spec)) spec aggregate
+                    , Keiro.Dsl.Scaffold.kind generatedModule == Generated
+                    ]
+                domain = generatedTextEndingIn "Domain.hs" (scaffoldAggregate (defaultContext (specContext spec)) spec aggregate)
+            domain `shouldSatisfy` T.isInfixOf "observedAt :: !UTCTime"
+            domain `shouldSatisfy` T.isInfixOf "revision :: !Natural"
+            domain `shouldSatisfy` T.isInfixOf "UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012)"
+            domain `shouldSatisfy` T.isInfixOf "import Data.Time.Calendar (fromGregorian)"
+            domain `shouldSatisfy` T.isInfixOf "import Data.Time.Clock (UTCTime(..), picosecondsToDiffTime)"
+            domain `shouldSatisfy` T.isInfixOf "import Numeric.Natural (Natural)"
+            manifestDependencies spec `shouldContain` ["time"]
+            manifestDependencies spec `shouldNotContain` ["keiki-codec-json"]
+            generated `shouldSatisfy` all (not . T.isInfixOf "error")
+            generated `shouldSatisfy` all (not . T.isInfixOf "getCurrentTime")
+            generated `shouldSatisfy` all (not . T.isInfixOf "iso8601ParseM")
+        it "canonicalizes Time and UTCTime across pretty, diff, and fold identity" $ do
+            source <- readTestText "test/fixtures/aggregate-scalars.keiro"
+            canonical <- parseInlineSpec "<time>" source
+            alias <- parseInlineSpec "<utctime>" (T.replace ":Time" ":UTCTime" (T.replace " Time =" " UTCTime =" source))
+            renderSpec alias `shouldBe` renderSpec canonical
+            diffSpecs canonical alias `shouldBe` []
+            aggregateFoldFingerprint canonical (onlyAggregate canonical)
+                `shouldBe` aggregateFoldFingerprint alias (onlyAggregate alias)
+            aggregateFoldSurface canonical (onlyAggregate canonical)
+                `shouldBe` aggregateFoldSurface alias (onlyAggregate alias)
+        it "keeps the committed scalar conformance generated tree fresh" $ do
+            spec <- specOf "test/fixtures/aggregate-scalars.keiro"
+            let modules = scaffoldModules (defaultContext (specContext spec)) spec
+            forM_ [generatedModule | generatedModule <- modules, Keiro.Dsl.Scaffold.kind generatedModule == Generated] $ \generatedModule -> do
+                committed <- readTestText ("test/conformance-aggregate-scalars/" <> modulePath generatedModule)
+                normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText generatedModule)
+        it "never sends a clean scalar aggregate to a type scaffold refusal" $
+            property $
+                forAll (elements scalarRegisterCases) $ \(typeName, initialValue) ->
+                    case parseSpec "<clean-scalar>" (cleanScalarAggregateSpec typeName initialValue) of
+                        Left parseError -> counterexample (T.unpack parseError) False
+                        Right spec ->
+                            let diagnostics = [diagnostic | diagnostic <- validateSpec spec, severity diagnostic == Error]
+                                modules = scaffoldModules (defaultContext (specContext spec)) spec
+                             in counterexample
+                                    (show diagnostics <> "\n" <> show (scaffoldRefusals spec))
+                                    ( null diagnostics
+                                        && null (scaffoldRefusals spec)
+                                        && all (not . T.null . moduleText) modules
+                                    )
+
+    describe "aggregate scalar diagnostics" $ do
+        it "reports unsupported shapes, invalid initials, and mismatched guards at stable lines" $ do
+            diagnostics <- diagnosticsOf "test/fixtures/aggregate-scalars-unsupported.keiro"
+            [(code diagnostic, line diagnostic) | diagnostic <- diagnostics, severity diagnostic == Error]
+                `shouldBe` [ (AggregateRegisterInitialInvalid, 5)
+                           , (AggregateRegisterInitialInvalid, 6)
+                           , (AggregateTypeUnsupportedAtUse, 9)
+                           , (AggregateGuardTypeMismatch, 12)
+                           ]
+            map message diagnostics `shouldSatisfy` any (T.isInfixOf "non-negative integral literals")
+            map message diagnostics `shouldSatisfy` any (T.isInfixOf "ISO-8601 UTC timestamps")
+            map message diagnostics `shouldSatisfy` any (T.isInfixOf "mapped structural declaration")
+        it "rejects aggregate arithmetic at the operator" $ do
+            source <- readTestText "test/fixtures/aggregate-scalars-arithmetic.keiro"
+            err <- parseErrorOf "test/fixtures/aggregate-scalars-arithmetic.keiro" source
+            err `shouldSatisfy` T.isInfixOf "aggregate arithmetic operator '+' is unsupported"
+            err `shouldSatisfy` T.isInfixOf "aggregate-scalars-arithmetic.keiro:11:39:"
+        it "covers unknown, container, fractional, out-of-range, and ordering failures" $ do
+            diagnostics <- diagnosticsOf "test/fixtures/aggregate-scalars-invalid-capabilities.keiro"
+            [(code diagnostic, line diagnostic) | diagnostic <- diagnostics, severity diagnostic == Error]
+                `shouldBe` [ (AggregateRegisterInitialInvalid, 5)
+                           , (AggregateRegisterInitialInvalid, 6)
+                           , (AggregateTypeUnknown, 9)
+                           , (AggregateTypeUnsupportedAtUse, 9)
+                           , (AggregateTypeUnsupportedAtUse, 9)
+                           , (AggregateTypeUnsupportedAtUse, 9)
+                           , (AggregateGuardCapabilityUnsupported, 12)
+                           ]
+        it "keeps one-member workspace diagnostics identical to the single file" $ do
+            direct <- diagnosticsOf "test/fixtures/aggregate-scalars-unsupported.keiro"
+            composed <- shouldComposeWorkspace "test/fixtures/aggregate-scalars-workspace/service.keiro-workspace"
+            let directErrors =
+                    [(code diagnostic, line diagnostic, message diagnostic) | diagnostic <- direct, severity diagnostic == Error]
+                workspaceErrors =
+                    [ (wdCode diagnostic, wlLine (NE.head (wdLocations diagnostic)), wdMessage diagnostic)
+                    | diagnostic <- checkWorkspace composed
+                    , wdSeverity diagnostic == Error
+                    ]
+            workspaceErrors `shouldBe` directErrors
 
     describe "mapped type graph (EP-149)" $ do
         it "resolves checked declarations, transitive reachability, and every aggregate root path" $ do
@@ -2216,7 +2352,7 @@ main = hspec $ do
             scaffoldRefusals spec `shouldBe` []
             bare <- parseInlineSpec "<bare-text-initial>" (T.replace "\"hello world\"" "hello" loweringAggregateSpec)
             scaffoldRefusals bare `shouldSatisfy` any (T.isInfixOf "RegTextInitialNotQuoted")
-            unsupported <- parseInlineSpec "<unsupported-field>" (T.replace "count:Int" "count:Time" loweringAggregateSpec)
+            unsupported <- parseInlineSpec "<unsupported-field>" (T.replace "count:Int" "count:Json" loweringAggregateSpec)
             scaffoldRefusals unsupported `shouldSatisfy` any (T.isInfixOf "FieldTypeUnrepresentable")
         it "lowers seconds, minutes, hours, and both backoff constructors faithfully" $ do
             windowSeconds "90s" `shouldBe` Right 90
@@ -3402,6 +3538,29 @@ loweringAggregateSpec =
         , "  Pending -- Bump --> emit CountBumped ; goto Done"
         ]
 
+scalarRegisterCases :: [(T.Text, T.Text)]
+scalarRegisterCases =
+    [ ("Text", "\"sample\"")
+    , ("Int", "0")
+    , ("Bool", "False")
+    , ("Time", "\"2026-01-02T03:04:05.123456789012Z\"")
+    , ("Natural", "0")
+    ]
+
+cleanScalarAggregateSpec :: T.Text -> T.Text -> T.Text
+cleanScalarAggregateSpec typeName initialValue =
+    T.unlines
+        [ "context clean-scalar"
+        , ""
+        , "aggregate Scalar"
+        , "  regs"
+        , "    value " <> typeName <> " = " <> initialValue
+        , "  states Empty Done!"
+        , "  command Set { value:" <> typeName <> " }"
+        , "  event SetDone { value:" <> typeName <> " }"
+        , "  Empty -- Set --> write value := value ; emit SetDone ; goto Done"
+        ]
+
 exactStatusSpec :: T.Text
 exactStatusSpec =
     T.unlines
@@ -3452,7 +3611,7 @@ renameCounter (NAggregate aggregate) =
     NAggregate
         aggregate
             { aggName = "Widget"
-            , aggRegs = [reg{regType = if regType reg == "CounterVertex" then "WidgetVertex" else regType reg} | reg <- aggRegs aggregate]
+            , aggRegs = [reg{regType = if regType reg == TRef "CounterVertex" then TRef "WidgetVertex" else regType reg} | reg <- aggRegs aggregate]
             }
 renameCounter node = node
 
@@ -4330,13 +4489,13 @@ withoutVendorGeometry spec =
     stripNode (NAggregate aggregate) =
         NAggregate
             aggregate
-                { aggRegs = filter ((/= "VendorGeometry") . regType) (aggRegs aggregate)
+                { aggRegs = filter ((/= TRef "VendorGeometry") . regType) (aggRegs aggregate)
                 , aggCommands = map stripCommand (aggCommands aggregate)
                 , aggEvents = map stripEvent (aggEvents aggregate)
                 }
     stripNode node = node
-    stripCommand command = command{cmdFields = filter ((/= Just "VendorGeometry") . fieldType) (cmdFields command)}
-    stripEvent event = event{evBody = case evBody event of EventFields fields -> EventFields (filter ((/= Just "VendorGeometry") . fieldType) fields); body -> body}
+    stripCommand command = command{cmdFields = filter ((/= Just (TRef "VendorGeometry")) . aggregateFieldType) (cmdFields command)}
+    stripEvent event = event{evBody = case evBody event of EventFields fields -> EventFields (filter ((/= Just (TRef "VendorGeometry")) . aggregateFieldType) fields); body -> body}
 
 withMetadataJson :: Spec -> Spec
 withMetadataJson spec = spec{specMapped = map updateDeclaration (specMapped spec)}
@@ -5106,8 +5265,11 @@ genExpr = go (3 :: Int)
 genField :: Gen Field
 genField = Field <$> genName <*> oneof [pure Nothing, Just <$> genName]
 
+genAggregateField :: Gen AggregateField
+genAggregateField = AggregateField <$> genName <*> genMaybe (genTypeExpr []) <*> pure noLoc
+
 genReg :: Gen RegDecl
-genReg = RegDecl <$> genName <*> genName <*> genRegInitial <*> pure noLoc
+genReg = RegDecl <$> genName <*> genTypeExpr [] <*> genRegInitial <*> pure noLoc
 
 genRegInitial :: Gen RegInitial
 genRegInitial = oneof [RegInitBare <$> genName, RegInitText <$> genAdversarialText]
@@ -5116,7 +5278,7 @@ genState :: Gen StateDecl
 genState = StateDecl <$> genName <*> arbitrary <*> pure noLoc
 
 genCommand :: Gen Command
-genCommand = Command <$> genName <*> smallList genField <*> pure noLoc
+genCommand = Command <$> genName <*> smallList genAggregateField <*> pure noLoc
 
 genEvent :: Gen Event
 genEvent = do
@@ -5136,7 +5298,7 @@ genEvent = do
             , evLoc = noLoc
             }
   where
-    body = oneof [EventFromCommand <$> genName, EventFields <$> smallList genField]
+    body = oneof [EventFromCommand <$> genName, EventFields <$> smallList genAggregateField]
 
 genTransition :: Gen Transition
 genTransition =
