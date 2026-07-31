@@ -8,14 +8,32 @@ timestamp: 2026-07-30T14:36:35Z
 requestId: IR-3
 status: proposed
 origin: mori://shinzui/shikigami
+reviews:
+  - kind: model
+    reviewer: codex
+    reviewed_at: 2026-07-31T15:03:59Z
+    document_timestamp: 2026-07-30T14:36:35Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: openai
+    model: gpt-5
+    effort: unspecified
+    context: >-
+      Revalidated against the current PublishOutcome constructors, publisher failure/dead path,
+      ordering policies, outbox schema, telemetry, migrations, and downstream canonical origin
+      before authoring plan 165.
 ---
 
 # Improvement Request: Add an Explicit Terminal Outbox Rejection Outcome
 
 ## Status
 
-Proposed. This blocks Shikigami plan 19's final delivery-state implementation; handler-level
-truth work can proceed before the release exists.
+Proposed. This blocks
+`mori://shinzui/shikigami/plans/19-sink-delivery-truth-and-downstream-idempotency`'s final
+delivery-state implementation; handler-level
+truth work can proceed before the release exists. Implementation is now specified by
+[plan 165](../plans/165-add-terminal-outbox-publication-rejection-outcomes.md); this request remains
+proposed until that plan is implemented and released.
 
 ## Context
 

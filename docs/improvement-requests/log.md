@@ -1,6 +1,21 @@
 # Bundle Update Log
 
 ## 2026-07-31
+* **Review and planning**: IR-3 was revalidated against the current outbox implementation and is
+  linked to plan 165 for its public outcome, durable rejected status,
+  ordering, crash/recovery, telemetry, migration, and compatibility implementation.
+* **Addition**: IR-10 requests an optional atomic async-projection mode whose user SQL, fencing,
+  and Kiroku checkpoint advancement commit together through released store/adapter APIs.
+* **Addition**: IR-9 requests a bounded declarative dynamic-router selection language while
+  retaining effectful resolver holes as an explicit unchecked escape hatch.
+* **Addition**: IR-8 requests first-class atomic multi-stream command coordination above Kiroku's
+  lower-level transaction substrate.
+* **Addition**: IR-7 requests typed application rejection and no-op outcomes instead of reducing
+  every business refusal to generic `CommandRejected`.
+* **Addition**: IR-6 requests independent DSL, generated Haskell-selector, and JSON wire-key names
+  for direct aggregate fields.
+* **Addition**: IR-5 requests sequential version-aware `keiro-dsl upgrade` transforms and later
+  Mori-aware fleet rewrite planning after the declared-language-version foundation lands.
 * **Review**: IR-4 passes an in-repository technical-accuracy review against the current Keiro
   implementation and the released Keiki `Natural` capability. The review corrected the
   description of Haskell `Natural` subtraction from saturation to `Underflow` and records that
