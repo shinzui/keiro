@@ -19,16 +19,19 @@ module Keiro.Dsl.ReplayImpact (
 
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (delete, find)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Keiro.Dsl.AggregateType
 import Keiro.Dsl.FoldFingerprint (aggregateFoldSurface)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderTransition)
-import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), resolveTypeGraph, wireFingerprint)
+import Keiro.Dsl.TypeGraph (BindingVersion (..), CanonicalTypeId (..), MappedKey (..), QualifiedValueName (..), TypeGraph (..), resolveTypeGraph, wireFingerprint)
 
 -- | The smallest conservative audit input for one aggregate.
 data AggregateImpact = AggregateImpact
@@ -135,24 +138,65 @@ eventSurface spec aggregate event =
     (eventDecodeSurface event, mappedFieldSurface spec aggregate event)
 
 mappedFieldSurface :: Spec -> Aggregate -> Event -> [(Name, Text)]
-mappedFieldSurface spec aggregate event = case resolveTypeGraph spec of
-    Left _ -> []
-    Right graph ->
-        [ (aggregateFieldName field, wireFingerprint graph typeName)
+mappedFieldSurface spec aggregate event = mapped <> nominal
+  where
+    mapped = case resolveTypeGraph spec of
+        Left _ -> []
+        Right graph ->
+            [ (aggregateFieldName field, wireFingerprint graph typeName)
+            | field <- eventFields aggregate event
+            , TRef typeName <- maybeToList (aggregateFieldType field)
+            , Map.member (MappedKey typeName) (tgDeclarations graph)
+            ]
+    symbols = aggregateSymbols spec
+    nominal =
+        [ (aggregateFieldName field, nominalSurface resolved)
         | field <- eventFields aggregate event
-        , TRef typeName <- maybeToList (aggregateFieldType field)
-        , Map.member (MappedKey typeName) (tgDeclarations graph)
+        , Right (AggregateNominal resolved) <- [inferAggregateFieldType symbols aggregate EventFieldUse field]
         ]
 
 mappedRegisterSurface :: Spec -> Aggregate -> [(Name, Name, Text)]
-mappedRegisterSurface spec aggregate = case resolveTypeGraph spec of
-    Left _ -> []
-    Right graph ->
-        [ (regName register, typeName, wireFingerprint graph typeName)
+mappedRegisterSurface spec aggregate = mapped <> nominal
+  where
+    mapped = case resolveTypeGraph spec of
+        Left _ -> []
+        Right graph ->
+            [ (regName register, typeName, wireFingerprint graph typeName)
+            | register <- aggRegs aggregate
+            , TRef typeName <- [regType register]
+            , Map.member (MappedKey typeName) (tgDeclarations graph)
+            ]
+    symbols = aggregateSymbols spec
+    nominal =
+        [ (regName register, resolvedNominalName resolved, nominalSurface resolved)
         | register <- aggRegs aggregate
-        , TRef typeName <- [regType register]
-        , Map.member (MappedKey typeName) (tgDeclarations graph)
+        , Right (AggregateNominal resolved) <- [resolveAggregateType symbols (regLoc register) RegisterUse (regType register)]
         ]
+
+nominalSurface :: ResolvedNominalType -> Text
+nominalSurface nominal =
+    nominalRepresentationSurface (resolvedNominalRepresentation nominal)
+        <> case resolvedNominalOwnership nominal of
+            GeneratedNominal -> "|ownership=generated"
+            ConsumerNominal binding ->
+                Text.concat
+                    [ "|ownership=consumer"
+                    , "|canonical=" <> unCanonicalTypeId (consumerNominalCanonical binding)
+                    , "|binding=" <> unQualifiedValueName (consumerNominalBinding binding)
+                    , "|binding-version=" <> unBindingVersion (consumerNominalBindingVersion binding)
+                    , "|initial=" <> maybe "(none)" unQualifiedValueName (consumerNominalInitial binding)
+                    ]
+
+nominalRepresentationSurface :: NominalRepresentation -> Text
+nominalRepresentationSurface representation = case representation of
+    IdRepresentation prefix -> "id:" <> prefix
+    EnumRepresentation constructors -> "enum:" <> Text.intercalate "," [constructor <> "=" <> wire | (constructor, wire) <- NE.toList constructors]
+    ScalarRepresentation scalar -> case scalar of
+        NominalText -> "scalar:Text"
+        NominalInt -> "scalar:Int"
+        NominalNatural -> "scalar:Natural"
+        NominalBool -> "scalar:Bool"
+        NominalTime -> "scalar:Time"
 
 eventFields :: Aggregate -> Event -> [AggregateField]
 eventFields aggregate event = case evBody event of

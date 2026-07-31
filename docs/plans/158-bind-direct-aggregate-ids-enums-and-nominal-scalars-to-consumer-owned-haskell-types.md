@@ -59,11 +59,14 @@ This section must always reflect the actual current state of the work.
   type resolution, initials and capabilities, and allocated located diagnostics for incomplete
   provenance, invalid Haskell or qualified names, invalid identity and TypeID prefix, unsupported
   or empty representations, missing register initials, and cross-category name collisions.
-- [ ] Milestone 3: drive domain, codec, projection, fixture, manifest, record, fingerprint, diff,
-  replay-impact, scaffold, and workspace output from the checked model while preserving the
-  existing generated path for unbound IDs and enums.
-- [ ] Milestone 4: add the compiled conformance ring, negative and mutation tests, documentation,
-  ADR amendments, and full repository validation.
+- [x] 2026-07-31: Milestone 3 drove domain, codec, projection, fixture, manifest, record,
+  fingerprint, diff, replay-impact, scaffold, and workspace output from the checked model while
+  preserving unbound ID/enum generation. Two clean scaffolds produced identical trees, the
+  firewall scanned 8 generated modules with zero forbidden operators, and both record formats
+  round-trip 7 additive `nominal-mapping` rows without changing ordinary `mapping` rows.
+- [ ] Milestone 4: the compiled conformance ring, negative and mutation tests, authoring/toolchain
+  documentation, changelog, and ADR 4/12 amendments are complete. Focused tests report 2 runtime,
+  8 DSL, and 28 conformance checks with zero failures; the full DSL/build/ADR/flake sweep remains.
 
 
 ## Surprises & Discoveries
@@ -111,6 +114,19 @@ implementation. Provide concise evidence.
   `NominalEmptyEnumRepresentation`, `NominalMissingInitialValue`, and `NominalNameCollision`.
   The version-1 boundary uses the source-language code `LanguageFeatureRequiresVersion`, so invalid
   successor syntax does not cascade into ordinary parser or nominal diagnostics.
+- 2026-07-31: Provenance required six append-only diff/report codes:
+  `NominalBindingChanged`, `NominalFixturesChanged`, `NominalCanonicalTypeChanged`,
+  `NominalInitialChanged`, `NominalRepresentationChanged`, and
+  `NominalIdDecoderTightened`. This keeps evidence/build, snapshot hydration, declared wire, and
+  brownfield history risks distinct instead of overloading structural-mapping codes.
+- 2026-07-31: Existing readers already ignore unknown record row kinds but reject an unknown mode
+  inside a known `mapping` JSON row. Emitting `nominal-mapping` as its own row therefore preserved
+  old readability and existing mapping bytes in both single-file and workspace records; new
+  readers merge both kinds for duplicate detection and drift.
+- 2026-07-31: The compiled conformance ring has 28 named passing checks. Each deliberate mutation
+  failed its owning assertion: transposed enum representation, changed scalar expected wire, and
+  a one-direction ID suffix. The partial `Either` inverse fixture failed to typecheck because its
+  function cannot inhabit the total `representation -> domain` field.
 
 
 ## Decision Log
@@ -225,7 +241,13 @@ total category-specific representation model and corrected the solver, snapshot,
 workspace claims to match released code. Milestones 1 and 2 now provide the public total binding
 API, version-2 syntax and pretty printer, workspace relocation, one checked nominal registry,
 aggregate lowering, exact text/JSON binding obligations, and stable earliest-boundary diagnostics.
-Generation, compatibility records, compiled conformance, documentation, and ADR amendments remain.
+Generation now imports consumer-owned types directly, lowers prefix-checked IDs, closed enums and
+built-in nominal scalars through total bindings, emits whole-value nominal projections, and
+preserves nominal provenance across manifests, records, fold fingerprints, replay impact, and
+compatibility findings. A 28-check compiled conformance ring plus three mutation gates and one
+compile-fail fixture cover the executable boundary. Authoring/toolchain documentation, the
+changelog, and ADRs 4 and 12 now record the landed contract. The final repository-wide validation
+sweep remains before this plan can be closed.
 
 
 ## Context and Orientation

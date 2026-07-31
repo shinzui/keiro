@@ -50,7 +50,7 @@ renderRecord record =
     renderFile (Generated, path) = "generated " <> T.pack path
     renderFile (HoleStub, path) = "hole " <> T.pack path
     renderMapping mapping =
-        "mapping " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode mapping))
+        mappingRowPrefix mapping <> Text.decodeUtf8 (BL.toStrict (Aeson.encode mapping))
     renderBindingObligation obligation =
         "binding " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode obligation))
 
@@ -67,7 +67,9 @@ parseRecord contents = case T.lines contents of
             layout <- exactlyOne "layout: " rows
             sourceLanguage <- parseSourceLanguage rows
             files <- traverse parseFile (filter isFileRow rows)
-            mappings <- traverse parseMapping (filter ("mapping " `T.isPrefixOf`) rows)
+            ordinaryMappings <- traverse (parseMapping "mapping ") (filter ("mapping " `T.isPrefixOf`) rows)
+            nominalMappings <- traverse (parseMapping "nominal-mapping ") (filter ("nominal-mapping " `T.isPrefixOf`) rows)
+            let mappings = ordinaryMappings <> nominalMappings
             bindingEntries <- traverse parseBindingObligation (filter ("binding " `T.isPrefixOf`) rows)
             if hasDuplicateMappingNames mappings || hasDuplicateBindingObligations bindingEntries
                 then Nothing
@@ -97,8 +99,8 @@ parseRecord contents = case T.lines contents of
          in if null path || isAbsolute path || ".." `elem` splitDirectories path
                 then Nothing
                 else Just (fileKind, path)
-    parseMapping row = do
-        payload <- T.stripPrefix "mapping " row
+    parseMapping prefix row = do
+        payload <- T.stripPrefix prefix row
         Aeson.decodeStrict' (Text.encodeUtf8 payload)
     parseBindingObligation row = do
         payload <- T.stripPrefix "binding " row
@@ -125,3 +127,7 @@ parseRecord contents = case T.lines contents of
 
 recordFileName :: Text -> FilePath
 recordFileName context = "keiro-dsl-scaffold-record." <> T.unpack context <> ".txt"
+
+mappingRowPrefix :: MappingIdentity -> Text
+mappingRowPrefix NominalMapping{} = "nominal-mapping "
+mappingRowPrefix _ = "mapping "

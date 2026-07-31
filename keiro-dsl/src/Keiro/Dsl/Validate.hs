@@ -300,6 +300,12 @@ data DiagnosticCode
     | NominalEmptyEnumRepresentation
     | NominalMissingInitialValue
     | NominalNameCollision
+    | NominalBindingChanged
+    | NominalFixturesChanged
+    | NominalCanonicalTypeChanged
+    | NominalInitialChanged
+    | NominalRepresentationChanged
+    | NominalIdDecoderTightened
     deriving stock (Eq, Show)
 
 -- | A line-numbered, structured diagnostic.

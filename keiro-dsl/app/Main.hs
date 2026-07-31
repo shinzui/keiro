@@ -39,6 +39,7 @@ import System.Process (readProcessWithExitCode)
 
 data Command
     = Parse FilePath
+    | Pretty FilePath
     | Check FilePath Bool Bool (Maybe CheckCoverageOptions)
     | Inspect FilePath InspectionFormat
     | Scaffold FilePath FilePath (Maybe String) Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
@@ -71,6 +72,9 @@ commands =
         ( command
             "parse"
             (info (Parse <$> fileArg <**> helper) (progDesc "Parse a .keiro file and pretty-print it back"))
+            <> command
+                "pretty"
+                (info (Pretty <$> fileArg <**> helper) (progDesc "Parse a .keiro file and print its canonical source form"))
             <> command
                 "check"
                 (info (Check <$> fileArg <*> emitSwitch <*> explainBindingsSwitch <*> checkCoverageOptions <**> helper) (progDesc "Validate a .keiro file; print diagnostics and exit non-zero on any error"))
@@ -170,6 +174,7 @@ inspectionFormatOpt =
     parseFormat other = Left ("unsupported inspection format: " <> other <> " (expected json)")
 
 run :: Command -> IO ()
+run (Pretty fp) = run (Parse fp)
 -- Workspace dispatch. A @FILE@ ending in @.keiro-workspace@ is a workspace
 -- manifest; everything else takes the untouched single-file path below.
 run (Parse fp) | isWorkspacePath fp = runWorkspaceParse fp

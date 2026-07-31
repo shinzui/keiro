@@ -11,10 +11,12 @@ module Keiro.Dsl.MappedConsumer (
 
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
 import Data.List (nub, sort)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar (HaskellSource (..), Spec)
+import Keiro.Dsl.NominalType
 import Keiro.Dsl.TypeGraph
 
 data ConsumerPlan = ConsumerPlan
@@ -42,6 +44,19 @@ data MappingIdentity
         , mappingCodecIdentity :: !Text
         , mappingCodecVersion :: !Text
         }
+    | NominalMapping
+        { mappingSpecName :: !Text
+        , mappingNominalCategory :: !Text
+        , mappingNominalRepresentation :: !Text
+        , mappingCanonicalType :: !Text
+        , mappingPackage :: !Text
+        , mappingModule :: !Text
+        , mappingType :: !Text
+        , mappingBindingSymbol :: !Text
+        , mappingBindingVersion :: !Text
+        , mappingFixtureSymbol :: !Text
+        , mappingInitialSymbol :: !(Maybe Text)
+        }
     deriving stock (Eq, Show)
 
 instance ToJSON MappingIdentity where
@@ -67,6 +82,22 @@ instance ToJSON MappingIdentity where
             , "type" .= mappingType
             , "codecIdentity" .= mappingCodecIdentity
             , "codecVersion" .= mappingCodecVersion
+            ]
+    toJSON NominalMapping{mappingSpecName, mappingNominalCategory, mappingNominalRepresentation, mappingCanonicalType, mappingPackage, mappingModule, mappingType, mappingBindingSymbol, mappingBindingVersion, mappingFixtureSymbol, mappingInitialSymbol} =
+        object
+            [ "schema" .= (1 :: Int)
+            , "mode" .= ("nominal" :: Text)
+            , "specName" .= mappingSpecName
+            , "category" .= mappingNominalCategory
+            , "representation" .= mappingNominalRepresentation
+            , "canonicalType" .= mappingCanonicalType
+            , "package" .= mappingPackage
+            , "module" .= mappingModule
+            , "type" .= mappingType
+            , "bindingSymbol" .= mappingBindingSymbol
+            , "bindingVersion" .= mappingBindingVersion
+            , "fixtureSymbol" .= mappingFixtureSymbol
+            , "initialSymbol" .= mappingInitialSymbol
             ]
 
 instance FromJSON MappingIdentity where
@@ -94,19 +125,37 @@ instance FromJSON MappingIdentity where
                             <*> value .: "type"
                             <*> value .: "codecIdentity"
                             <*> value .: "codecVersion"
+                    "nominal" ->
+                        NominalMapping
+                            <$> value .: "specName"
+                            <*> value .: "category"
+                            <*> value .: "representation"
+                            <*> value .: "canonicalType"
+                            <*> value .: "package"
+                            <*> value .: "module"
+                            <*> value .: "type"
+                            <*> value .: "bindingSymbol"
+                            <*> value .: "bindingVersion"
+                            <*> value .: "fixtureSymbol"
+                            <*> value .: "initialSymbol"
                     _ -> fail "unknown mapping identity mode"
 
 consumerPlan :: Spec -> ConsumerPlan
-consumerPlan spec = case resolveTypeGraph spec of
-    Left _ -> ConsumerPlan [] [] []
-    Right graph ->
+consumerPlan spec = case (resolveTypeGraph spec, resolveNominalTypes spec) of
+    (Right graph, Right nominalRegistry) ->
         ConsumerPlan
-            { consumerPackages = uniqueSorted [hsPackage (mappedSource declaration) | declaration <- declarations]
-            , consumerModules = uniqueSorted (concatMap mappedModules declarations)
-            , consumerMappings = sortMappings (map mappingIdentity declarations)
+            { consumerPackages = uniqueSorted ([hsPackage (mappedSource declaration) | declaration <- declarations] <> map nominalPackage nominalBindings)
+            , consumerModules = uniqueSorted (concatMap mappedModules declarations <> concatMap nominalModules nominalBindings)
+            , consumerMappings = sortMappings (map mappingIdentity declarations <> map nominalMappingIdentity nominalBindings)
             }
       where
         declarations = Map.elems (tgDeclarations graph)
+        nominalBindings =
+            [ (nominal, binding)
+            | nominal <- Map.elems (nominalTypes nominalRegistry)
+            , ConsumerNominal binding <- [resolvedNominalOwnership nominal]
+            ]
+    _ -> ConsumerPlan [] [] []
 
 mappedSource :: ResolvedMappedDecl -> HaskellSource
 mappedSource (ResolvedStructural declaration _) = sdHaskell declaration
@@ -143,6 +192,52 @@ mappingIdentity (ResolvedOpaque declaration) =
         , mappingCodecIdentity = unCodecIdentity (odCodecIdentity declaration)
         , mappingCodecVersion = unCodecVersion (odCodecVersion declaration)
         }
+
+nominalMappingIdentity :: (ResolvedNominalType, ConsumerNominalBinding) -> MappingIdentity
+nominalMappingIdentity (nominal, binding) =
+    NominalMapping
+        { mappingSpecName = resolvedNominalName nominal
+        , mappingNominalCategory = nominalCategory nominal
+        , mappingNominalRepresentation = nominalRepresentationIdentity nominal
+        , mappingCanonicalType = unCanonicalTypeId (consumerNominalCanonical binding)
+        , mappingPackage = hsPackage source
+        , mappingModule = hsModule source
+        , mappingType = hsType source
+        , mappingBindingSymbol = unQualifiedValueName (consumerNominalBinding binding)
+        , mappingBindingVersion = unBindingVersion (consumerNominalBindingVersion binding)
+        , mappingFixtureSymbol = unQualifiedValueName (consumerNominalFixtures binding)
+        , mappingInitialSymbol = unQualifiedValueName <$> consumerNominalInitial binding
+        }
+  where
+    source = consumerNominalHaskell binding
+
+nominalPackage :: (ResolvedNominalType, ConsumerNominalBinding) -> Text
+nominalPackage (_, binding) = hsPackage (consumerNominalHaskell binding)
+
+nominalModules :: (ResolvedNominalType, ConsumerNominalBinding) -> [Text]
+nominalModules (_, binding) =
+    hsModule (consumerNominalHaskell binding)
+        : qualifiedModule (consumerNominalBinding binding)
+        : qualifiedModule (consumerNominalFixtures binding)
+        : maybe [] (pure . qualifiedModule) (consumerNominalInitial binding)
+
+nominalCategory :: ResolvedNominalType -> Text
+nominalCategory nominal = case resolvedNominalRepresentation nominal of
+    IdRepresentation{} -> "id"
+    EnumRepresentation{} -> "enum"
+    ScalarRepresentation{} -> "scalar"
+
+nominalRepresentationIdentity :: ResolvedNominalType -> Text
+nominalRepresentationIdentity nominal = case resolvedNominalRepresentation nominal of
+    IdRepresentation prefix -> "KindID:" <> prefix
+    EnumRepresentation constructors ->
+        "enum:" <> T.intercalate "," [constructor <> "=" <> wire | (constructor, wire) <- NE.toList constructors]
+    ScalarRepresentation representation -> case representation of
+        NominalText -> "Text"
+        NominalInt -> "Int"
+        NominalNatural -> "Natural"
+        NominalBool -> "Bool"
+        NominalTime -> "Time"
 
 qualifiedModule :: QualifiedValueName -> Text
 qualifiedModule qualified = T.dropEnd 1 (fst (T.breakOnEnd "." (unQualifiedValueName qualified)))

@@ -24,6 +24,7 @@ common shared
   default-language:   GHC2024
   default-extensions:
     DuplicateRecordFields
+    ImportQualifiedPost
     LambdaCase
     OverloadedStrings
 
@@ -158,6 +159,30 @@ test-suite keiro-dsl-conformance-aggregate-scalars
     , keiro
     , text   >=2.1  && <2.2
     , time   >=1.12 && <1.15
+
+-- EP-158: consumer-owned direct IDs, enums, and nominal scalar wrappers,
+-- checked KindID decoding, total bindings, projections, and snapshot caches.
+test-suite keiro-dsl-conformance-nominal-scalars
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-nominal-scalars
+  main-is:        Main.hs
+  other-modules:
+    Generated.NominalScalars.Nominal.Shape.OrderStatus
+    Generated.NominalScalars.NominalLedger.Codec
+    Generated.NominalScalars.NominalLedger.Domain
+    Generated.NominalScalars.NominalProjections
+    NominalConformance.Bindings
+    NominalConformance.Domain
+
+  build-depends:
+    , aeson        >=2.2  && <2.3
+    , base         >=4.21 && <5
+    , keiki        >=0.5  && <0.6
+    , keiro
+    , mmzk-typeid  >=0.7  && <0.8
+    , text         >=2.1  && <2.2
+    , time         >=1.12 && <1.15
 
 -- Plan 150 / IR-1: compiled structural consumer bindings, declared-wire
 -- codecs, generated projection witnesses, opaque boundaries, fixture branch

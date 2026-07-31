@@ -33,7 +33,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Manifest (manifestDependencies, moduleNameOf, renderManifest)
-import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
+import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
 import Keiro.Dsl.Parser (parseSource, parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
@@ -41,7 +41,7 @@ import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFo
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, holePrefixFor, scaffoldAggregate, scaffoldIntake, scaffoldProcess, scaffoldPublisher, scaffoldReadModel, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldWorkqueue, windowSeconds)
-import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName)
+import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord, recordFileName, renderRecord)
 import Keiro.Dsl.ScaffoldRun (MappingDrift (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleModule (..), WriteDisposition (..), executeScaffold, executeScaffoldWithLanguage, planScaffold, renderRefusals, renderScaffoldReport, scaffoldModules)
 import Keiro.Dsl.Skeleton (skeletonFor, skeletonKinds)
 import Keiro.Dsl.TypeGraph
@@ -307,6 +307,91 @@ main = hspec $ do
             case parseSource "nominal-v1.keiro" source of
                 Left (SourceLanguageFailure diagnostic) -> sourceLanguageErrorCode diagnostic `shouldBe` LanguageFeatureRequiresVersion
                 other -> expectationFailure ("expected source-language refusal, got " <> show other)
+
+        it "scaffolds consumer types, checked codecs, enum representation, projections, and deterministic manifests" $ do
+            spec <- specOf "test/fixtures/nominal-scalars.keiro"
+            let ctx = defaultContext (specContext spec)
+                modules = scaffoldModules ctx spec
+                moduleAt path = case [value | value <- modules, modulePath value == path] of
+                    [value] -> pure value
+                    values -> expectationFailure ("expected one module at " <> path <> ", got " <> show (map modulePath values)) >> fail "unreachable"
+            domainModule <- moduleAt "Generated/NominalScalars/NominalLedger/Domain.hs"
+            codecModule <- moduleAt "Generated/NominalScalars/NominalLedger/Codec.hs"
+            enumModule <- moduleAt "Generated/NominalScalars/Nominal/Shape/OrderStatus.hs"
+            projectionModule <- moduleAt "Generated/NominalScalars/NominalProjections.hs"
+            bindingModule <- moduleAt "NominalConformance/Bindings.hs"
+            moduleText domainModule `shouldSatisfy` T.isInfixOf "NominalConformance.Domain.OrderId"
+            moduleText domainModule `shouldSatisfy` (not . T.isInfixOf "newtype OrderId")
+            moduleText domainModule `shouldSatisfy` (not . T.isInfixOf "data OrderStatus =")
+            moduleText codecModule `shouldSatisfy` T.isInfixOf "KindID.parseText @\"ord\""
+            moduleText codecModule `shouldSatisfy` T.isInfixOf "KindID.toText (nominalToRepresentation"
+            moduleText codecModule `shouldSatisfy` T.isInfixOf "nominalFromRepresentation"
+            forM_ ["coerce", "unsafe", "read ", "error "] $ \forbidden ->
+                moduleText codecModule `shouldSatisfy` (not . T.isInfixOf forbidden)
+            moduleText enumModule `shouldSatisfy` T.isInfixOf "data OrderStatusRepresentation = Draft | Submitted"
+            moduleText enumModule `shouldSatisfy` (not . T.isInfixOf "NominalConformance")
+            moduleText projectionModule `shouldSatisfy` T.isInfixOf "type FieldOwner AccountNumberNominalProjection = NominalConformance.Domain.AccountNumber"
+            moduleText projectionModule `shouldSatisfy` T.isInfixOf "projectFieldValue _ = nominalToRepresentation NominalConformance.Bindings.accountNumberBinding"
+            kind bindingModule `shouldBe` HoleStub
+            moduleText bindingModule `shouldSatisfy` T.isInfixOf "orderIdBinding :: NominalBinding NominalConformance.Domain.OrderId (KindID \"ord\")"
+            firewallBreaches modules `shouldBe` []
+            scaffoldModules ctx spec `shouldBe` modules
+            manifestDependencies spec `shouldContain` ["mmzk-typeid", "nominal-conformance"]
+
+        it "persists nominal provenance in a separate forward-compatible row kind" $ do
+            spec <- specOf "test/fixtures/nominal-scalars.keiro"
+            workspace <- shouldComposeWorkspace canonicalWorkspacePath
+            let plan = consumerPlan spec
+                record =
+                    ScaffoldRecord
+                        { recSpecPath = "nominal-scalars.keiro"
+                        , recModuleRoot = ""
+                        , recLayout = "prefixed"
+                        , recSourceLanguage = LegacyUnversioned
+                        , recFiles = []
+                        , recMappings = consumerMappings plan
+                        , recBindingObligations = []
+                        }
+                encoded = renderRecord record
+                workspaceRecord =
+                    (sampleWorkspaceRecord workspace)
+                        { wrMappings = consumerMappings plan
+                        }
+                workspaceEncoded = renderWorkspaceRecord workspaceRecord
+            consumerPackages plan `shouldBe` ["nominal-conformance"]
+            length [() | NominalMapping{} <- consumerMappings plan] `shouldBe` 7
+            T.count "nominal-mapping " encoded `shouldBe` 7
+            T.count "\nmapping " encoded `shouldBe` 0
+            parseRecord encoded `shouldBe` Just record
+            T.count "nominal-mapping " workspaceEncoded `shouldBe` 7
+            T.count "\nmapping " workspaceEncoded `shouldBe` 0
+            parseWorkspaceRecord workspaceEncoded `shouldBe` Just workspaceRecord
+
+        it "reports bound-ID decoder tightening and makes binding provenance replay-visible" $ do
+            current <- specOf "test/fixtures/nominal-scalars.keiro"
+            let unbound = current{specIds = [declaration{idBinding = Nothing} | declaration <- specIds current]}
+                adoption = diffSpecs unbound current
+                decoderFindings = [kindOfChange change | change <- adoption, changeCode change == NominalIdDecoderTightened]
+            map ckSubject decoderFindings `shouldContain` ["NominalLedger event NominalsRecorded .orderId"]
+            decoderFindings `shouldSatisfy` all ((== VAdvisory) . verdictFor PrivateHistoryRead . ckVector)
+            let bumped =
+                    current
+                        { specIds =
+                            [ declaration
+                                { idBinding = fmap (\binding -> binding{nominalBindingVersion = Just "2"}) (idBinding declaration)
+                                }
+                            | declaration <- specIds current
+                            ]
+                        }
+                bindingChanges = diffSpecs current bumped
+            map changeCode bindingChanges `shouldContain` [NominalBindingChanged]
+            ReplayImpact.replayImpact current bumped `shouldSatisfy` \case
+                ReplayImpact.ReplayAffected impacts ->
+                    maybe False (\impact -> Set.member "NominalsRecorded" (ReplayImpact.eventTypes impact) && includeSnapshotStreams impact) (Map.lookup "NominalLedger" impacts)
+                ReplayImpact.ReplayNeutral -> False
+            case [aggregate | NAggregate aggregate <- specNodes current] of
+                aggregate : _ -> aggregateFoldSurface current aggregate `shouldNotBe` aggregateFoldSurface bumped aggregate
+                [] -> expectationFailure "expected nominal aggregate"
 
     describe "historical codec comparison" $ do
         it "treats object-key order as RFC 8785 parity" $ do

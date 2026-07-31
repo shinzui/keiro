@@ -210,7 +210,7 @@ renderWorkspaceRecord record =
             <> ["member " <> T.pack path | path <- wrMembers record]
             <> ["source-language " <> encodeRow row | row <- wrSourceLanguages record]
             <> ["module " <> encodeRow row | row <- wrModules record]
-            <> ["mapping " <> encodeRow mapping | mapping <- wrMappings record]
+            <> [mappingRowPrefix mapping <> encodeRow mapping | mapping <- wrMappings record]
             <> ["binding " <> encodeRow obligation | obligation <- wrBindingObligations record]
             <> ["adopted " <> encodeRow adopted | adopted <- wrAdopted record]
   where
@@ -236,7 +236,9 @@ parseWorkspaceRecord contents = case T.lines contents of
             sourceLanguages <- parseSourceLanguages members rows
             modules <- traverse (decodeRow "module ") (rowsWith "module " rows)
             checkedModules <- traverse checkedModule modules
-            mappings <- traverse (decodeRow "mapping ") (rowsWith "mapping " rows)
+            ordinaryMappings <- traverse (decodeRow "mapping ") (rowsWith "mapping " rows)
+            nominalMappings <- traverse (decodeRow "nominal-mapping ") (rowsWith "nominal-mapping " rows)
+            let mappings = ordinaryMappings <> nominalMappings
             obligations <- traverse (decodeRow "binding ") (rowsWith "binding " rows)
             adopted <- traverse (decodeRow "adopted ") (rowsWith "adopted " rows)
             checkedAdopted <- traverse checkedAdoption adopted
@@ -325,3 +327,7 @@ binaries and stays readable for humans; nothing is renamed or deleted.
 -}
 supersededByLine :: Text -> Text
 supersededByLine service = "superseded-by: " <> T.pack (workspaceRecordFileName service)
+
+mappingRowPrefix :: MappingIdentity -> Text
+mappingRowPrefix NominalMapping{} = "nominal-mapping "
+mappingRowPrefix _ = "mapping "

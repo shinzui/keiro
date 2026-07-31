@@ -4,8 +4,9 @@ Run everything from the repo root (`/Users/shinzui/Keikaku/bokuno/keiro`).
 
 ### 1. Write the spec
 
-Author `service.keiro` in the notation (`NOTATION.md`). Start with `language keiro-dsl 1`, then
-`context <name>`, and add exactly the nodes the feature needs. Prefer the smallest spec that captures the decisions;
+Author `service.keiro` in the notation (`NOTATION.md`). Start with `language keiro-dsl 1`, or
+select version 2 when the source binds a direct ID, enum, or nominal scalar to a consumer-owned
+type, then write `context <name>` and exactly the nodes the feature needs. Prefer the smallest spec that captures the decisions;
 the deterministic boilerplate is derived, so don't hand-write it.
 
 ### 2. Parse (sanity)
@@ -57,6 +58,12 @@ Common diagnostics you must resolve in the spec (the warning-only codes are call
   `ClockSampled`, `GuardAtomOutOfScope`, `EvtVersionMissingUpcaster`,
   `DeprecatedEventStillEmitted`, `SnapshotIntervalInvalid`, and
   `SnapshotCodecFixtureInvalid`. `WireSchemaVersionMismatch` is a warning.
+- Consumer-owned nominal types: `NominalMissingIngredient`,
+  `NominalInvalidHaskellSource`, `NominalInvalidQualifiedName`,
+  `NominalInvalidIdentity`, `NominalInvalidIdPrefix`,
+  `NominalUnsupportedRepresentation`, `NominalEmptyEnumRepresentation`,
+  `NominalMissingInitialValue`, and `NominalNameCollision`. Using nominal syntax under version 1
+  is rejected earlier as `LanguageFeatureRequiresVersion`.
 - Process, router, and worker policy: `SagaCategoryIllegal`, `ProcessFireAtNotInjected`,
   `ProcessDispatchIdSupplied`, `ProcessUnresolvedRef`, `ProcessFieldBindingUnresolved`,
   `ProcessTimerCeilingInvalid`, `RouterUnresolvedRef`, `RouterKeyFieldUnknown`,
@@ -136,6 +143,11 @@ For any hand-written duplicate path, follow the generated hole note and call
 target stream and attempted event id. Fold `True` into the duplicate outcome and preserve
 `False` as the original failure. Pattern-matching `DuplicateEvent` alone is unsafe because
 event ids are globally unique across streams.
+
+Consumer-owned nominal declarations also create typed, create-once binding skeletons. Implement
+both total directions and the declared fixture corpus. Do not return `Either`, hide validation in
+the inverse, or move JSON policy into the binding. A refined consumer type belongs behind
+`mapped opaque`.
 
 ### 6. Run the harness (pin behaviour)
 

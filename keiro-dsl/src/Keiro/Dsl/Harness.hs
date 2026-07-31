@@ -39,6 +39,7 @@ import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Goldens (GoldenPayload (..))
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.NominalType
 import Keiro.Dsl.ReadModelShape (deriveShapeHash, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.TypeGraph
@@ -396,6 +397,7 @@ emitHarness goldens a =
                , codecDecodeRawImport
                ]
             ++ mappedHarnessImports a
+            ++ nominalHarnessImports a
             ++ aggregateHarnessImports a
             ++ goldenImports
             ++ [ ""
@@ -417,6 +419,7 @@ emitHarness goldens a =
             ++ [ "  ]"
                ]
             ++ ["  ++ mappedConformanceAssertions" | hasMappedHarness a]
+            ++ ["  ++ nominalConformanceAssertions" | hasNominalHarness a]
             ++ [ "  ++ forwardReplay" <> tCommand t
                | t <- replayTransitions
                ]
@@ -436,6 +439,7 @@ emitHarness goldens a =
             ++ concatMap (forwardReplayDecl a) replayTransitions
             ++ concatMap (upcastDecl goldens a) upcastEvents
             ++ mappedHarnessDeclarations a
+            ++ nominalHarnessDeclarations a
   where
     nm = aName a
     -- Bake the clock-free result computed from the spec at scaffold time.
@@ -450,7 +454,7 @@ emitHarness goldens a =
     coreImports =
         ["applyEventsEither" | not (null replayTransitions)]
             ++ ["defaultValidationOptions", "step", "validateTransducer"]
-            ++ ["fieldWitnessAgrees" | not (null (mappedProjectionSpecs a))]
+            ++ ["fieldWitnessAgrees" | not (null (mappedProjectionSpecs a)) || not (null (nominalScalarHarnessTypes a))]
             ++ ["(!)" | not (null replayTransitions) && not (null (aRegs a))]
     upcastAssertions =
         [ "(" <> tshow (upcastLabel e m) <> ", upcasts" <> rcName e <> ")"
@@ -633,6 +637,91 @@ aggregateHarnessImports aggregate =
         , AggregateTime <- [resolvedType]
         , imported <- Set.toAscList (aggregateImports (aSymbols aggregate) resolvedType)
         ]
+
+nominalHarnessImports :: Agg -> [Text]
+nominalHarnessImports aggregate
+    | null nominals = []
+    | otherwise =
+        [ "import Data.List.NonEmpty qualified as NonEmpty"
+        , "import Keiro.Codec.Nominal (nominalDomainRoundTrip, nominalFixtureCases, nominalFixtureDomain, nominalRepresentationRoundTrip, nominalToRepresentation)"
+        ]
+            <> ["import " <> moduleName <> " qualified" | moduleName <- unique (fixtureModules <> bindingModules)]
+            <> ["import " <> nominalProjectionModule (aContext aggregate) <> " qualified as NominalProjections" | not (null (nominalScalarHarnessTypes aggregate))]
+  where
+    nominals = consumerNominalHarnessTypes aggregate
+    bindings = [binding | nominal <- nominals, ConsumerNominal binding <- [resolvedNominalOwnership nominal]]
+    fixtureModules =
+        [ fst (splitQualifiedHarness (unQualifiedValueName (consumerNominalFixtures binding)))
+        | binding <- bindings
+        ]
+    bindingModules =
+        [ fst (splitQualifiedHarness (unQualifiedValueName (consumerNominalBinding binding)))
+        | binding <- bindings
+        ]
+
+hasNominalHarness :: Agg -> Bool
+hasNominalHarness = not . null . consumerNominalHarnessTypes
+
+consumerNominalHarnessTypes :: Agg -> [ResolvedNominalType]
+consumerNominalHarnessTypes aggregate =
+    Map.elems . Map.fromList $
+        [ (resolvedNominalName nominal, nominal)
+        | resolvedType <- map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate)) <> map rrType (aRegs aggregate)
+        , AggregateNominal nominal <- [resolvedType]
+        , ConsumerNominal{} <- [resolvedNominalOwnership nominal]
+        ]
+
+nominalScalarHarnessTypes :: Agg -> [ResolvedNominalType]
+nominalScalarHarnessTypes aggregate =
+    [ nominal
+    | nominal <- consumerNominalHarnessTypes aggregate
+    , ScalarRepresentation{} <- [resolvedNominalRepresentation nominal]
+    ]
+
+nominalHarnessDeclarations :: Agg -> [Text]
+nominalHarnessDeclarations aggregate
+    | null nominals = []
+    | otherwise =
+        [ ""
+        , "nominalConformanceAssertions :: [(String, Bool)]"
+        , "nominalConformanceAssertions ="
+        ]
+            <> renderList assertions
+  where
+    nominals = consumerNominalHarnessTypes aggregate
+    assertions = concatMap assertionsFor nominals
+    assertionsFor nominal = case resolvedNominalOwnership nominal of
+        GeneratedNominal -> []
+        ConsumerNominal binding ->
+            [
+                ( "nominal domain law: " <> name
+                , "all (\\fixture -> nominalDomainRoundTrip " <> bindingName <> " (nominalFixtureDomain fixture)) " <> fixtures
+                )
+            ,
+                ( "nominal representation law: " <> name
+                , "all (\\fixture -> let domainValue = nominalFixtureDomain fixture in nominalRepresentationRoundTrip " <> bindingName <> " (nominalToRepresentation " <> bindingName <> " domainValue)) " <> fixtures
+                )
+            ]
+                <> [ ( "nominal projection agreement: " <> name
+                     , "all (\\fixture -> fieldWitnessAgrees NominalProjections."
+                        <> lowerFirst name
+                        <> "Witness (nominalToRepresentation "
+                        <> bindingName
+                        <> ") (nominalFixtureDomain fixture)) "
+                        <> fixtures
+                     )
+                   | ScalarRepresentation{} <- [resolvedNominalRepresentation nominal]
+                   ]
+          where
+            name = resolvedNominalName nominal
+            bindingName = unQualifiedValueName (consumerNominalBinding binding)
+            fixtureName = unQualifiedValueName (consumerNominalFixtures binding)
+            fixtures = "(NonEmpty.toList (nominalFixtureCases " <> fixtureName <> "))"
+    renderList values =
+        [ (if index == (0 :: Int) then "  [ " else "  , ") <> "(" <> tshow labelText <> ", " <> expression <> ")"
+        | (index, (labelText, expression)) <- zip [0 ..] values
+        ]
+            <> ["  ]"]
 
 mappedHarnessImports :: Agg -> [Text]
 mappedHarnessImports aggregate

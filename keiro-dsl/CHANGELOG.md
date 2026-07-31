@@ -13,11 +13,39 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `AggregateGuardTypeMismatch`, `AggregateGuardCapabilityUnsupported`,
   `WorkspaceLanguageVersionMismatch`, and `SourceLanguageDeclarationChanged`.
   The additions are append-only, but exhaustive matches must be extended.
+- `DiagnosticCode` also gains the nominal-check codes
+  `NominalMissingIngredient`, `NominalInvalidHaskellSource`,
+  `NominalInvalidQualifiedName`, `NominalInvalidIdentity`,
+  `NominalInvalidIdPrefix`, `NominalUnsupportedRepresentation`,
+  `NominalEmptyEnumRepresentation`, `NominalMissingInitialValue`, and
+  `NominalNameCollision`, plus the nominal diff codes
+  `NominalBindingChanged`, `NominalFixturesChanged`,
+  `NominalCanonicalTypeChanged`, `NominalInitialChanged`,
+  `NominalRepresentationChanged`, and `NominalIdDecoderTightened`.
 - Aggregate command/event fields now use the located `AggregateField` type and
   aggregate register types use `TypeExpr` instead of a raw `Name`. The library
   requires the Natural-capable `keiki >=0.5 && <0.6` release.
 
 ### New Features
+
+- Adds language version 2 syntax for binding direct aggregate IDs, enums, and
+  nominal scalar wrappers to consumer-owned Haskell types. Version 1 and
+  legacy-unversioned sources reject these declarations at source-language
+  dispatch. The `pretty` command is an explicit alias for canonical parsing and
+  rendering.
+- Adds the public total `Keiro.Codec.Nominal` binding/fixture API, a checked
+  nominal registry, generated prefix-safe `KindID` codecs, closed private enum
+  representations, built-in scalar codecs, create-once binding skeletons, and
+  context-level nominal scalar projections. Consumer-owned registers retain
+  the existing consumer-JSON snapshot cache boundary.
+- Nominal consumer provenance is fingerprinted and diff-visible, persisted in
+  additive `nominal-mapping` scaffold/workspace rows, and included in generated
+  package requirements. Bound-ID adoption at an existing event use reports a
+  named decoder-tightening historical-read advisory and targeted replay audit.
+- Adds a compiled nominal conformance ring with binding laws, pinned wire bytes,
+  malformed/wrong-prefix ID and unknown-enum rejection, snapshot and canonical
+  identity checks, projection agreement, forward/replay parity, mutation gates,
+  and a compile-fail partial-inverse fixture.
 
 - Adds an explicit source-language contract. A first-significant-clause
   `language keiro-dsl 1` preamble selects the frozen released v1 parser before

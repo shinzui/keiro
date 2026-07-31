@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-07-31
+* **Update**: Extend ADR 0012's total-binding inventory to consumer-owned direct IDs, enums, and nominal scalars (plan 158).
+* **Update**: Extend ADR 0004's earliest-boundary inventory with nominal declaration, provenance-diff, and bound-ID decoder-tightening gates (plan 158).
 * **Add**: Propose explicit generated or Hole behavior ownership for aggregate transitions so the escape hatch remains permanent without allowing silent overrides.
 * **Update**: Accept ADR 0016 after source-language dispatch, provenance inspection, workspace composition, scaffold history, and replay-neutral diff conformance landed (plan 160).
 * **Added**: Record source-language parser dispatch, per-document provenance around semantic Spec, and provenance-only compatibility (plan 160).

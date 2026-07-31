@@ -40,6 +40,7 @@ import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlan)
+import Keiro.Dsl.NominalType
 import Keiro.Dsl.Scaffold (ScaffoldModule (..))
 
 {- | Render a Cabal-pasteable manifest from the modules a scaffold run produced
@@ -114,6 +115,12 @@ aggregateDependencies spec aggregate =
             [ aggregatePackages symbols resolvedType
             | resolvedType <- resolvedTypes
             ]
+            <> Set.fromList
+                [ "mmzk-typeid"
+                | AggregateNominal nominal <- resolvedTypes
+                , IdRepresentation{} <- [resolvedNominalRepresentation nominal]
+                , ConsumerNominal{} <- [resolvedNominalOwnership nominal]
+                ]
         )
   where
     symbols = aggregateSymbols spec

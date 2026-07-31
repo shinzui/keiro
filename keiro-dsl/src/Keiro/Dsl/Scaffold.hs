@@ -56,6 +56,7 @@ module Keiro.Dsl.Scaffold (
     resolveAgg,
     projectionSpecs,
     resolveProjectionModules,
+    nominalProjectionModule,
     codecMappedDeclarations,
     FieldCat (..),
     fieldCat,
@@ -70,6 +71,8 @@ module Keiro.Dsl.Scaffold (
 
 import Data.Char (isAlpha, isAlphaNum, isUpper, ord, toLower, toUpper)
 import Data.List (find, groupBy, nub, sort, sortOn)
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Set qualified as Set
@@ -425,6 +428,8 @@ scaffoldStructuralOwners ctx spec = case resolveTypeGraph spec of
     Right graph ->
         [(shapeModule ctx graph entry, [sdName (fst entry)]) | entry <- structural]
             <> projectionModules
+            <> nominalRepresentationOwners ctx spec
+            <> nominalProjectionOwners ctx spec
             <> bindingSkeletonOwners ctx spec graph
       where
         structural =
@@ -678,19 +683,20 @@ bindingSkeletonOwners :: Context -> Spec -> TypeGraph -> [(ScaffoldModule, [Name
 bindingSkeletonOwners ctx spec graph = case bindingObligations spec of
     Left _ -> []
     Right obligations ->
-        [ (emitBindingSkeleton ctx graph owner entries, nub (map obligationMappedName entries))
+        [ (emitBindingSkeleton ctx spec graph owner entries, nub (map obligationMappedName entries))
         | (owner, entries) <- Map.toAscList (Map.fromListWith (<>) [(obligationModule obligation, [obligation]) | obligation <- obligations])
         ]
 
-emitBindingSkeleton :: Context -> TypeGraph -> Text -> [BindingObligation] -> ScaffoldModule
-emitBindingSkeleton ctx graph owner obligations =
+emitBindingSkeleton :: Context -> Spec -> TypeGraph -> Text -> [BindingObligation] -> ScaffoldModule
+emitBindingSkeleton ctx spec graph owner obligations =
     ScaffoldModule
         { modulePath = T.unpack (T.replace "." "/" owner <> ".hs")
         , moduleText =
             nl $
-                [ "{-# LANGUAGE LambdaCase #-}"
+                [ "{-# LANGUAGE DataKinds #-}"
+                , "{-# LANGUAGE LambdaCase #-}"
                 , ""
-                , "-- This is a HAND-OWNED structural binding skeleton. keiro-dsl creates it once"
+                , "-- This is a HAND-OWNED consumer binding skeleton. keiro-dsl creates it once"
                 , "-- and never overwrites it. Fill each HOLE and run the generated harness."
                 , "module " <> owner <> " ("
                 ]
@@ -700,7 +706,7 @@ emitBindingSkeleton ctx graph owner obligations =
                     <> [""]
                     <> intercalateBlank (map renderObligation obligations)
         , kind = HoleStub
-        , origin = "mapped structural binding skeleton " <> owner
+        , origin = "consumer binding skeleton " <> owner
         }
   where
     exportLines =
@@ -719,10 +725,45 @@ emitBindingSkeleton ctx graph owner obligations =
                    , Just (declaration, _) <- [structuralFor obligation]
                    ]
                 <> [ "Keiro.Codec.Structural (FixtureCases, StructuralBinding (..))"
-                   | any ((`elem` [BindingValue, FixtureValue]) . obligationKind) obligations
+                   | any (\obligation -> obligationCategory obligation == "structural" && obligationKind obligation `elem` [BindingValue, FixtureValue]) obligations
+                   ]
+                <> [ hsModule (consumerNominalHaskell binding) <> " qualified"
+                   | obligation <- obligations
+                   , Just (_, binding) <- [nominalFor obligation]
+                   ]
+                <> [ nominalRepresentationModule ctx (resolvedNominalName nominal) <> " qualified"
+                   | obligation <- obligations
+                   , obligationKind obligation == BindingValue
+                   , Just (nominal, _) <- [nominalFor obligation]
+                   , EnumRepresentation{} <- [resolvedNominalRepresentation nominal]
+                   ]
+                <> [ "Keiro.Codec.Nominal (NominalBinding (..), NominalFixtureCases)"
+                   | any ((/= "structural") . obligationCategory) obligations
+                   ]
+                <> [ "Data.KindID (KindID)"
+                   | obligation <- obligations
+                   , Just (nominal, _) <- [nominalFor obligation]
+                   , IdRepresentation{} <- [resolvedNominalRepresentation nominal]
+                   ]
+                <> [ "Data.Text (Text)"
+                   | obligation <- obligations
+                   , Just (nominal, _) <- [nominalFor obligation]
+                   , ScalarRepresentation NominalText <- [resolvedNominalRepresentation nominal]
+                   ]
+                <> [ "Data.Time (UTCTime)"
+                   | obligation <- obligations
+                   , Just (nominal, _) <- [nominalFor obligation]
+                   , ScalarRepresentation NominalTime <- [resolvedNominalRepresentation nominal]
+                   ]
+                <> [ "Numeric.Natural (Natural)"
+                   | obligation <- obligations
+                   , Just (nominal, _) <- [nominalFor obligation]
+                   , ScalarRepresentation NominalNatural <- [resolvedNominalRepresentation nominal]
                    ]
     renderObligation obligation = case structuralFor obligation of
-        Nothing -> ["-- HOLE: declaration disappeared before skeleton rendering"]
+        Nothing -> case nominalFor obligation of
+            Just (nominal, _) -> renderNominalObligation nominal obligation
+            Nothing -> ["-- HOLE: declaration disappeared before skeleton rendering"]
         Just (declaration, shape) -> case obligationKind obligation of
             BindingValue -> renderBinding ctx declaration shape obligation
             FixtureValue ->
@@ -738,6 +779,33 @@ emitBindingSkeleton ctx graph owner obligations =
     structuralFor obligation = case Map.lookup (MappedKey (obligationMappedName obligation)) (tgDeclarations graph) of
         Just (ResolvedStructural declaration shape) -> Just (declaration, shape)
         _ -> Nothing
+    nominalFor obligation = do
+        registry <- either (const Nothing) Just (resolveNominalTypes spec)
+        nominal <- lookupNominalType (obligationMappedName obligation) registry
+        binding <- case resolvedNominalOwnership nominal of
+            ConsumerNominal value -> Just value
+            GeneratedNominal -> Nothing
+        pure (nominal, binding)
+    renderNominalObligation nominal obligation = case obligationKind obligation of
+        BindingValue ->
+            [ "-- HOLE: complete both total directions; the generated codec remains wire authority."
+            , obligationSignature obligation
+            , obligationSymbol obligation <> " ="
+            , "  NominalBinding"
+            , "    { nominalToRepresentation = \\_domainValue -> error " <> tshow ("HOLE: fill " <> resolvedNominalName nominal <> " nominalToRepresentation")
+            , "    , nominalFromRepresentation = \\_representationValue -> error " <> tshow ("HOLE: fill " <> resolvedNominalName nominal <> " nominalFromRepresentation")
+            , "    }"
+            ]
+        FixtureValue ->
+            [ "-- HOLE: provide deterministic labelled expected-wire fixtures for " <> resolvedNominalName nominal
+            , obligationSignature obligation
+            , obligationSymbol obligation <> " = error " <> tshow ("HOLE: fill " <> resolvedNominalName nominal <> " fixtures")
+            ]
+        InitialValue ->
+            [ "-- HOLE: provide the initial register value for " <> resolvedNominalName nominal
+            , obligationSignature obligation
+            , obligationSymbol obligation <> " = error " <> tshow ("HOLE: fill " <> resolvedNominalName nominal <> " initial value")
+            ]
     intercalateBlank [] = []
     intercalateBlank (section : rest) = section <> concatMap ("" :) rest
 
@@ -821,6 +889,149 @@ structuralPrefix ctx = case placement ctx of
 
 structuralShapeModule :: Context -> Name -> Text
 structuralShapeModule ctx name = structuralPrefix ctx <> ".Shape." <> name
+
+nominalRepresentationModule :: Context -> Name -> Text
+nominalRepresentationModule ctx name = case placement ctx of
+    GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> ".Nominal.Shape." <> name
+    CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Nominal.Shape." <> name <> ".Generated"
+
+nominalRepresentationOwners :: Context -> Spec -> [(ScaffoldModule, [Name])]
+nominalRepresentationOwners ctx spec = case resolveNominalTypes spec of
+    Left _ -> []
+    Right registry ->
+        [ (nominalRepresentationModuleValue ctx nominal constructors, [resolvedNominalName nominal])
+        | nominal <- Map.elems (nominalTypes registry)
+        , ConsumerNominal{} <- [resolvedNominalOwnership nominal]
+        , EnumRepresentation constructors <- [resolvedNominalRepresentation nominal]
+        ]
+
+nominalRepresentationModuleValue :: Context -> ResolvedNominalType -> NonEmpty (Name, Text) -> ScaffoldModule
+nominalRepresentationModuleValue ctx nominal constructors =
+    ScaffoldModule
+        { modulePath = T.unpack (T.replace "." "/" moduleName <> ".hs")
+        , moduleText =
+            nl
+                [ "{-# LANGUAGE DeriveGeneric #-}"
+                , "{-# LANGUAGE LambdaCase #-}"
+                , generatedBanner
+                , "module " <> moduleName <> " (" <> representationType <> " (..), " <> encoderName <> ") where"
+                , ""
+                , "import Data.Text (Text)"
+                , "import GHC.Generics (Generic)"
+                , ""
+                , "data " <> representationType <> " = " <> T.intercalate " | " (map fst (NE.toList constructors))
+                , "  deriving stock (Eq, Generic, Ord, Show, Enum, Bounded)"
+                , ""
+                , encoderName <> " :: " <> representationType <> " -> Text"
+                , encoderName <> " = \\case"
+                , nl ["  " <> constructor <> " -> " <> tshow wire | (constructor, wire) <- NE.toList constructors]
+                ]
+        , kind = Generated
+        , origin = nodeOrigin "bound nominal enum representation" (resolvedNominalName nominal) (resolvedNominalLoc nominal)
+        }
+  where
+    moduleName = nominalRepresentationModule ctx (resolvedNominalName nominal)
+    representationType = resolvedNominalName nominal <> "Representation"
+    encoderName = lowerFirst (resolvedNominalName nominal) <> "RepresentationText"
+
+nominalProjectionModule :: Context -> Text
+nominalProjectionModule ctx = case placement ctx of
+    GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> ".NominalProjections"
+    CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Generated.NominalProjections"
+
+nominalProjectionOwners :: Context -> Spec -> [(ScaffoldModule, [Name])]
+nominalProjectionOwners ctx spec = case nominalProjectionTypes spec of
+    [] -> []
+    nominals ->
+        [
+            ( ScaffoldModule
+                { modulePath = T.unpack (T.replace "." "/" (nominalProjectionModule ctx) <> ".hs")
+                , moduleText = emitNominalProjections ctx nominals
+                , kind = Generated
+                , origin = "context " <> specContext spec <> " nominal scalar projection facade"
+                }
+            , []
+            )
+        ]
+
+nominalProjectionTypes :: Spec -> [ResolvedNominalType]
+nominalProjectionTypes spec =
+    Map.elems . Map.fromList $
+        [ (resolvedNominalName nominal, nominal)
+        | aggregate <- [value | NAggregate value <- specNodes spec]
+        , resolved <- registerTypes aggregate <> commandTypes aggregate
+        , AggregateNominal nominal <- [resolved]
+        , ConsumerNominal{} <- [resolvedNominalOwnership nominal]
+        , ScalarRepresentation{} <- [resolvedNominalRepresentation nominal]
+        ]
+  where
+    symbols = aggregateSymbols spec
+    registerTypes aggregate =
+        [ resolved
+        | register <- aggRegs aggregate
+        , Right resolved <- [resolveAggregateType symbols (regLoc register) RegisterUse (regType register)]
+        ]
+    commandTypes aggregate =
+        [ resolved
+        | command <- aggCommands aggregate
+        , field <- cmdFields command
+        , Right resolved <- [inferAggregateFieldType symbols aggregate CommandFieldUse field]
+        ]
+
+emitNominalProjections :: Context -> [ResolvedNominalType] -> Text
+emitNominalProjections ctx nominals =
+    nl $
+        [ "{-# LANGUAGE DataKinds #-}"
+        , "{-# LANGUAGE TypeApplications #-}"
+        , "{-# LANGUAGE TypeFamilies #-}"
+        , generatedBanner
+        , "module " <> moduleName <> " where"
+        , ""
+        ]
+            <> map ("import " <>) imports
+            <> [""]
+            <> [T.intercalate "\n\n" (map emitNominalProjection nominals)]
+  where
+    moduleName = nominalProjectionModule ctx
+    imports =
+        sort . nub $
+            [ "Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)"
+            , "Keiro.Codec.Nominal (nominalToRepresentation)"
+            ]
+                <> [hsModule (consumerNominalHaskell binding) <> " qualified" | nominal <- nominals, ConsumerNominal binding <- [resolvedNominalOwnership nominal]]
+                <> [qualifiedModule (consumerNominalBinding binding) <> " qualified" | nominal <- nominals, ConsumerNominal binding <- [resolvedNominalOwnership nominal]]
+                <> ["Data.Text (Text)" | any (hasScalar NominalText) nominals]
+                <> ["Data.Time (UTCTime)" | any (hasScalar NominalTime) nominals]
+                <> ["Numeric.Natural (Natural)" | any (hasScalar NominalNatural) nominals]
+    hasScalar wanted nominal = resolvedNominalRepresentation nominal == ScalarRepresentation wanted
+    emitNominalProjection nominal = case resolvedNominalOwnership nominal of
+        GeneratedNominal -> ""
+        ConsumerNominal binding ->
+            nl
+                [ "data " <> tagName
+                , ""
+                , "instance FieldProjection " <> tagName <> " where"
+                , "  type FieldName " <> tagName <> " = " <> tshow name
+                , "  type FieldOwner " <> tagName <> " = " <> renderHaskellSource (consumerNominalHaskell binding)
+                , "  type FieldResult " <> tagName <> " = " <> scalarHaskellType (resolvedNominalRepresentation nominal)
+                , "  fieldShapeId _ = " <> tshow (unCanonicalTypeId (consumerNominalCanonical binding))
+                , "  projectFieldValue _ = nominalToRepresentation " <> unQualifiedValueName (consumerNominalBinding binding)
+                , ""
+                , witnessName <> " :: FieldWitness " <> tagName
+                , witnessName <> " = fieldWitness @" <> tagName
+                ]
+          where
+            name = resolvedNominalName nominal
+            tagName = name <> "NominalProjection"
+            witnessName = lowerFirst name <> "Witness"
+    scalarHaskellType representation = case representation of
+        ScalarRepresentation NominalText -> "Text"
+        ScalarRepresentation NominalInt -> "Int"
+        ScalarRepresentation NominalNatural -> "Natural"
+        ScalarRepresentation NominalBool -> "Bool"
+        ScalarRepresentation NominalTime -> "UTCTime"
+        IdRepresentation{} -> "()"
+        EnumRepresentation{} -> "()"
 
 structuralProjectionModule :: Context -> Text
 structuralProjectionModule ctx = structuralPrefix ctx <> "Projections"
@@ -2188,6 +2399,7 @@ emitDomain a =
         ]
             ++ ["{-# LANGUAGE DeriveAnyClass #-}" | hasSnapshot a]
             ++ [ "{-# LANGUAGE DuplicateRecordFields #-}"
+               , "{-# LANGUAGE LambdaCase #-}"
                , "{-# LANGUAGE OverloadedStrings #-}"
                , "{-# LANGUAGE TemplateHaskell #-}"
                , "{-# LANGUAGE TypeApplications #-}"
@@ -2207,8 +2419,8 @@ emitDomain a =
             ++ [ "import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)"
                , ""
                , sectionsOf
-                    [ map (emitId a) (aIds a)
-                    , map (emitEnum a) (aEnums a)
+                    [ map (emitId a) [declaration | declaration <- aIds a, idBinding declaration == Nothing]
+                    , map (emitEnum a) [declaration | declaration <- aEnums a, enumBinding declaration == Nothing]
                     , [emitVertex a]
                     , map (emitRecord a) (aCommands a)
                     , [emitSum (aName a <> "Command") (aCommands a)]
@@ -2349,6 +2561,12 @@ domainConsumerImports a =
                | declaration <- mappedUses a
                , initialValue <- maybeToListText (mappedInitial declaration)
                ]
+            <> [ qualifiedModule initialValue <> " qualified"
+               | resolvedType <- aggregateTypes
+               , AggregateNominal nominal <- [resolvedType]
+               , ConsumerNominal binding <- [resolvedNominalOwnership nominal]
+               , initialValue <- maybeToListText (consumerNominalInitial binding)
+               ]
   where
     aggregateTypes = map snd (concatMap rcFields (aCommands a <> aEvents a)) <> map rrType (aRegs a)
 
@@ -2386,14 +2604,17 @@ maybeToListText = maybe [] pure
 emitCodec :: Agg -> Text
 emitCodec a =
     nl $
-        [ "{-# LANGUAGE OverloadedRecordDot #-}"
-        , "{-# LANGUAGE OverloadedStrings #-}"
-        , generatedBanner
-        , "module " <> aGenPrefix a <> ".Codec ("
-        , "    " <> lowerFirst (aName a) <> "Codec,"
-        , "    parse" <> aName a <> "Event,"
-        , "    encode" <> aName a <> "Event,"
-        ]
+        ["{-# LANGUAGE DataKinds #-}" | hasConsumerNominalIdCodec a]
+            ++ ["{-# LANGUAGE TypeApplications #-}" | hasConsumerNominalIdCodec a]
+            ++ [ "{-# LANGUAGE LambdaCase #-}"
+               , "{-# LANGUAGE OverloadedRecordDot #-}"
+               , "{-# LANGUAGE OverloadedStrings #-}"
+               , generatedBanner
+               , "module " <> aGenPrefix a <> ".Codec ("
+               , "    " <> lowerFirst (aName a) <> "Codec,"
+               , "    parse" <> aName a <> "Event,"
+               , "    encode" <> aName a <> "Event,"
+               ]
             ++ concatMap mappedExports (codecMappedDeclarations a)
             ++ [ ") where"
                , ""
@@ -2418,13 +2639,17 @@ emitCodec a =
             ++ [ "import Data.Text (Text)"
                , "import qualified Data.Text as T"
                ]
+            ++ ["import Data.KindID qualified as KindID" | hasConsumerNominalIdCodec a]
+            ++ ["import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)" | hasConsumerNominalCodec a]
             ++ ["import Keiro.Codec.Structural (bindingFromShape, bindingToShape)" | hasMappedCodec a]
             ++ [ "import Keiro.Codec (Codec (..), EventType (..))"
                , upcasterImport a
                ]
             ++ [nl (map ("import " <>) (codecMappedImports a)) | hasMappedCodec a]
+            ++ [nl (map ("import " <>) (codecNominalImports a)) | hasConsumerNominalCodec a]
             ++ [ ""
                , emitEnumParsers a
+               , emitConsumerNominalParsers a
                ]
             ++ [emitMappedCodecs a | hasMappedCodec a]
             ++ [ ""
@@ -2458,8 +2683,17 @@ emitCodec a =
 hasMappedCodec :: Agg -> Bool
 hasMappedCodec = not . null . codecMappedDeclarations
 
+hasConsumerNominalCodec :: Agg -> Bool
+hasConsumerNominalCodec = not . null . codecConsumerNominals
+
+hasConsumerNominalIdCodec :: Agg -> Bool
+hasConsumerNominalIdCodec aggregate =
+    any
+        (\nominal -> case resolvedNominalRepresentation nominal of IdRepresentation{} -> True; _ -> False)
+        (codecConsumerNominals aggregate)
+
 emitEnumParsers :: Agg -> Text
-emitEnumParsers a = sectionsOf [[emitEnumParser e | e <- aEnums a]]
+emitEnumParsers a = sectionsOf [[emitEnumParser declaration | declaration <- aEnums a, enumBinding declaration == Nothing]]
 
 emitEnumParser :: EnumDecl -> Text
 emitEnumParser d =
@@ -2469,6 +2703,37 @@ emitEnumParser d =
         ]
             ++ ["  " <> tshow w <> " -> pure " <> c | (c, w) <- enumCtors d]
             ++ ["  _ -> fail " <> tshow ("unknown " <> enumName d)]
+
+emitConsumerNominalParsers :: Agg -> Text
+emitConsumerNominalParsers aggregate = sectionsOf [map emitParser (codecConsumerNominals aggregate)]
+  where
+    emitParser nominal = case (resolvedNominalRepresentation nominal, resolvedNominalOwnership nominal) of
+        (IdRepresentation prefix, ConsumerNominal binding) ->
+            nl
+                [ parserName nominal <> " :: Text -> Parser " <> renderHaskellSource (consumerNominalHaskell binding)
+                , parserName nominal <> " input = case KindID.parseText @" <> tshow prefix <> " input of"
+                , "  Left reason -> fail (show reason)"
+                , "  Right representation -> pure (nominalFromRepresentation " <> unQualifiedValueName (consumerNominalBinding binding) <> " representation)"
+                ]
+        (EnumRepresentation constructors, ConsumerNominal binding) ->
+            nl $
+                [ parserName nominal <> " :: Text -> Parser " <> renderHaskellSource (consumerNominalHaskell binding)
+                , parserName nominal <> " = \\case"
+                ]
+                    <> [ "  "
+                            <> tshow wire
+                            <> " -> pure (nominalFromRepresentation "
+                            <> unQualifiedValueName (consumerNominalBinding binding)
+                            <> " "
+                            <> nominalRepresentationModule (aContext aggregate) (resolvedNominalName nominal)
+                            <> "."
+                            <> constructor
+                            <> ")"
+                       | (constructor, wire) <- NE.toList constructors
+                       ]
+                    <> ["  _ -> fail " <> tshow ("unknown " <> resolvedNominalName nominal <> " wire value")]
+        _ -> ""
+    parserName nominal = "parse" <> resolvedNominalName nominal <> "Nominal"
 
 emitCodecValue :: Agg -> Text
 emitCodecValue a =
@@ -2568,12 +2833,31 @@ emitEncode a =
     encodeField (n, ty) =
         tshow n
             <> " .= "
-            <> case fieldCat a ty of
-                IdCat -> lowerFirst (aggregateCanonicalName ty) <> "Text payload." <> n
-                EnumCat -> lowerFirst (aggregateCanonicalName ty) <> "Text payload." <> n
-                MappedStructuralCat declaration _ -> "encode" <> sdName declaration <> "Mapped payload." <> n
-                MappedOpaqueCat{} -> "toJSON payload." <> n
-                _ -> "payload." <> n
+            <> encodeFieldValue n ty
+    encodeFieldValue name ty = case ty of
+        AggregateNominal nominal -> encodeNominalValue nominal ("payload." <> name)
+        _ -> case fieldCat a ty of
+            MappedStructuralCat declaration _ -> "encode" <> sdName declaration <> "Mapped payload." <> name
+            MappedOpaqueCat{} -> "toJSON payload." <> name
+            _ -> "payload." <> name
+    encodeNominalValue nominal value = case resolvedNominalOwnership nominal of
+        GeneratedNominal -> case resolvedNominalRepresentation nominal of
+            IdRepresentation{} -> lowerFirst (resolvedNominalName nominal) <> "Text " <> value
+            EnumRepresentation{} -> lowerFirst (resolvedNominalName nominal) <> "Text " <> value
+            ScalarRepresentation{} -> value
+        ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
+            IdRepresentation{} -> "KindID.toText (nominalToRepresentation " <> bindingName binding <> " " <> value <> ")"
+            EnumRepresentation{} ->
+                nominalRepresentationModule (aContext a) (resolvedNominalName nominal)
+                    <> "."
+                    <> lowerFirst (resolvedNominalName nominal)
+                    <> "RepresentationText (nominalToRepresentation "
+                    <> bindingName binding
+                    <> " "
+                    <> value
+                    <> ")"
+            ScalarRepresentation{} -> "nominalToRepresentation " <> bindingName binding <> " " <> value
+    bindingName = unQualifiedValueName . consumerNominalBinding
 
 emitDecode :: Agg -> Text
 emitDecode a =
@@ -2595,12 +2879,44 @@ emitDecode a =
     fieldApps fs = " <$> " <> T.intercalate " <*> " (map decodeField fs)
     -- The first field uses <$> (handled above), the rest <*>. We instead build
     -- a uniform list and join; for an empty record there are no fields.
-    decodeField (n, ty) = case fieldCat a ty of
-        IdCat -> "(" <> aggregateCanonicalName ty <> " <$> o .: " <> tshow n <> ")"
-        EnumCat -> "(o .: " <> tshow n <> " >>= parse" <> aggregateCanonicalName ty <> ")"
-        MappedStructuralCat declaration _ -> "(o .: " <> tshow n <> " >>= parse" <> sdName declaration <> "Mapped)"
-        MappedOpaqueCat{} -> "o .: " <> tshow n
-        _ -> "o .: " <> tshow n
+    decodeField (n, ty) = case ty of
+        AggregateNominal nominal -> decodeNominalField n nominal
+        _ -> case fieldCat a ty of
+            MappedStructuralCat declaration _ -> "(o .: " <> tshow n <> " >>= parse" <> sdName declaration <> "Mapped)"
+            MappedOpaqueCat{} -> "o .: " <> tshow n
+            _ -> "o .: " <> tshow n
+    decodeNominalField name nominal = case resolvedNominalOwnership nominal of
+        GeneratedNominal -> case resolvedNominalRepresentation nominal of
+            IdRepresentation{} -> "(" <> resolvedNominalName nominal <> " <$> o .: " <> tshow name <> ")"
+            EnumRepresentation{} -> "(o .: " <> tshow name <> " >>= parse" <> resolvedNominalName nominal <> ")"
+            ScalarRepresentation{} -> "o .: " <> tshow name
+        ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
+            IdRepresentation{} -> "(o .: " <> tshow name <> " >>= parse" <> resolvedNominalName nominal <> "Nominal)"
+            EnumRepresentation{} -> "(o .: " <> tshow name <> " >>= parse" <> resolvedNominalName nominal <> "Nominal)"
+            ScalarRepresentation{} -> "(nominalFromRepresentation " <> unQualifiedValueName (consumerNominalBinding binding) <> " <$> o .: " <> tshow name <> ")"
+
+codecConsumerNominals :: Agg -> [ResolvedNominalType]
+codecConsumerNominals aggregate =
+    Map.elems . Map.fromList $
+        [ (resolvedNominalName nominal, nominal)
+        | event <- aEvents aggregate
+        , (_, AggregateNominal nominal) <- rcFields event
+        , ConsumerNominal{} <- [resolvedNominalOwnership nominal]
+        ]
+
+codecNominalImports :: Agg -> [Text]
+codecNominalImports aggregate =
+    sort . nub $
+        concat
+            [ [ hsModule (consumerNominalHaskell binding) <> " qualified"
+              , qualifiedModule (consumerNominalBinding binding) <> " qualified"
+              ]
+                <> [ nominalRepresentationModule (aContext aggregate) (resolvedNominalName nominal) <> " qualified"
+                   | EnumRepresentation{} <- [resolvedNominalRepresentation nominal]
+                   ]
+            | nominal <- codecConsumerNominals aggregate
+            , ConsumerNominal binding <- [resolvedNominalOwnership nominal]
+            ]
 
 codecMappedImports :: Agg -> [Text]
 codecMappedImports a = case aTypeGraph a of

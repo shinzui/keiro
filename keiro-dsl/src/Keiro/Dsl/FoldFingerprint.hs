@@ -9,6 +9,7 @@ module Keiro.Dsl.FoldFingerprint (
 ) where
 
 import Data.List (find)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
@@ -16,6 +17,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (fnv1a64)
 import Keiro.Dsl.TypeGraph
@@ -37,6 +39,7 @@ aggregateFoldSurface spec aggregate =
         ( map stateSegment (aggStates aggregate)
             ++ map (registerSegment symbols) (aggRegs aggregate)
             ++ mappedRegisterSegments
+            ++ nominalSegments
             ++ map transitionSegment (aggTransitions aggregate)
             ++ map ruleSegment referencedRules
         )
@@ -55,6 +58,54 @@ aggregateFoldSurface spec aggregate =
             , TRef typeName <- [regType register]
             , Just declaration <- [Map.lookup (MappedKey typeName) (tgDeclarations graph)]
             ]
+    nominalSegments = case resolveNominalTypes spec of
+        Left _ -> []
+        Right registry ->
+            [ nominalUseSegment useSite nominal binding
+            | (useSite, typeName) <- nominalUseNames aggregate
+            , Just nominal <- [lookupNominalType typeName registry]
+            , ConsumerNominal binding <- [resolvedNominalOwnership nominal]
+            ]
+
+nominalUseNames :: Aggregate -> [(Text, Name)]
+nominalUseNames aggregate =
+    [ ("register:" <> regName register, typeName)
+    | register <- aggRegs aggregate
+    , TRef typeName <- [regType register]
+    ]
+        <> [ ("event:" <> evName event <> "." <> aggregateFieldName field, typeName)
+           | event <- aggEvents aggregate
+           , field <- eventFields event
+           , TRef typeName <- maybe [] pure (aggregateFieldType field)
+           ]
+  where
+    eventFields event = case evBody event of
+        EventFields fields -> fields
+        EventFromCommand commandName -> concat [cmdFields command | command <- aggCommands aggregate, cmdName command == commandName]
+
+nominalUseSegment :: Text -> ResolvedNominalType -> ConsumerNominalBinding -> Text
+nominalUseSegment useSite nominal binding =
+    T.intercalate
+        "|"
+        [ "nominal-use:" <> useSite
+        , "name=" <> resolvedNominalName nominal
+        , "representation=" <> nominalRepresentationSegment (resolvedNominalRepresentation nominal)
+        , "canonical=" <> unCanonicalTypeId (consumerNominalCanonical binding)
+        , "binding=" <> unQualifiedValueName (consumerNominalBinding binding)
+        , "binding-version=" <> unBindingVersion (consumerNominalBindingVersion binding)
+        , "initial=" <> maybe "(none)" unQualifiedValueName (consumerNominalInitial binding)
+        ]
+
+nominalRepresentationSegment :: NominalRepresentation -> Text
+nominalRepresentationSegment representation = case representation of
+    IdRepresentation prefix -> "id:" <> prefix
+    EnumRepresentation constructors -> "enum:" <> T.intercalate "," [constructor <> "=" <> wire | (constructor, wire) <- NE.toList constructors]
+    ScalarRepresentation scalar -> case scalar of
+        NominalText -> "Text"
+        NominalInt -> "Int"
+        NominalNatural -> "Natural"
+        NominalBool -> "Bool"
+        NominalTime -> "Time"
 
 mappedRegisterSegment :: TypeGraph -> ResolvedMappedDecl -> Text
 mappedRegisterSegment graph (ResolvedStructural declaration _) =

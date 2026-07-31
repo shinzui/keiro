@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
-description: Keiro-generated structural shapes own private-event wire policy; aggregate scalar capabilities and structural mappings each resolve through one checked schema authority, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from that authority.
-timestamp: 2026-07-31T14:39:19Z
+description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate scalar capabilities and consumer mappings resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
+timestamp: 2026-07-31T18:46:49Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -90,6 +90,34 @@ type has an invariant that the structural grammar cannot express, the schema
 must be refined until every shape is valid or the type must use the honest
 opaque mode. A future refined mode would need an explicit, diff-visible
 contract; it must not be smuggled into `bindingFromShape`.
+
+The same total-binding rule applies when language version 2 binds a direct ID,
+direct enum, or nominal scalar to a consumer-owned Haskell type:
+
+```haskell
+data NominalBinding domain representation = NominalBinding
+  { nominalToRepresentation :: domain -> representation
+  , nominalFromRepresentation :: representation -> domain
+  }
+```
+
+The representation is `KindID prefix` for an ID, a generated closed datatype
+for an enum, or exactly one of `Text`, `Int`, `Natural`, `Bool`, or `UTCTime`
+for a nominal scalar. JSON parsing may reject malformed or wrong-prefix ID text
+or an unknown enum spelling before a representation exists; conversion from a
+valid representation is total. A consumer constructor that rejects,
+normalizes, or quotients representation values is refined rather than nominal
+and remains behind `mapped opaque` until a separately designed refined contract
+makes that policy visible.
+
+Nominal declarations carry the same mandatory provenance inventory as
+structural bindings: consumer package/module/type, qualified binding symbol,
+binding version, canonical type identity, and non-empty fixture symbol, plus an
+initial symbol when used by a register. The generated private-event codec owns
+ID prefix checks, enum spellings, and scalar JSON policy. Expected-wire fixtures
+exercise both binding laws and pin the declared bytes, but remain finite
+evidence. Existing `mapping` record rows are unchanged; nominal provenance uses
+an additive `nominal-mapping` row so old readers ignore it safely.
 
 Each structural declaration carries a mandatory application-owned `binding-version`. It must
 change whenever the domain↔shape behavior changes, even if the Haskell symbol and type do not.
@@ -191,6 +219,13 @@ the totality and ownership requirements above.
 - The binding API has no partial inverse or semantic-error channel. A binding that rejects or
   normalizes valid shapes violates the shape round-trip contract, and both directions have
   explicit law tests. `check` and `diff` still do not inspect hand-written Haskell.
+- Direct consumer-owned IDs, enums, and nominal scalars obey the same rule.
+  Prefix and enum-wire rejection belongs to parsing into the typed/closed
+  representation, not to `nominalFromRepresentation`; refined scalar
+  constructors remain opaque.
+- Bound scalar whole-value projections reuse the declared total nominal binding
+  and canonical identity. IDs and enums remain symbolically opaque, and no
+  nominal arithmetic capability is inferred.
 - Haskell does not prove the two laws for a hand-written binding. Declared fixture/shape cases
   and mutation tests are finite evidence; exact generic derivation can establish stronger
   representation correspondence. Documentation must not call a passing finite harness a proof

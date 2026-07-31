@@ -9,8 +9,8 @@ context hospital-capacity
 ```
 
 The preamble must be the first significant clause; comments and whitespace may precede it.
-Version 1 is frozen. Later syntax must use a registered successor version and retain a fixture
-proving that v1 rejects the new form. A missing preamble remains readable as
+Version 1 is frozen. Language version 2 adds consumer-owned nominal aggregate types; other
+version-1 notation remains unchanged. A missing preamble remains readable as
 `legacy-unversioned` with effective version 1, but parse/pretty never adds a declaration. Use
 `keiro-dsl inspect <file.keiro> --format=json` to see declared and effective versions. Upgrade
 and fleet-rewrite automation is deferred to
@@ -35,6 +35,61 @@ enum DivertStatus { Open=open TotalDivert=total-divert }   # Ctor=wire-spelling
 rule lifeCriticalOverride : PatientAcuity -> Bool
   ex RedTag => true ; YellowTag => false ; GreenTag => false
 ```
+
+### Consumer-owned nominal declarations (language version 2)
+
+Change the preamble to `language keiro-dsl 2` only when the source needs one of these forms.
+Version 1 and legacy-unversioned sources reject them at the language boundary. The source rewrite
+is otherwise mechanical: change the preamble, add the binding block, run `pretty`, then run
+`check --explain-bindings` and fill the create-once binding skeleton. Do not remove the old
+generated wrapper from consumer code until the generated tree and compiled conformance harness
+are green.
+
+```text
+language keiro-dsl 2
+context orders
+
+id OrderId prefix=ord using {
+  haskell package=orders-domain module=Orders.Id type=OrderId
+  binding = "Orders.KeiroBindings.orderIdBinding"
+  binding-version = "1"
+  canonical-type = "orders.OrderId.v1"
+  fixtures = "Orders.KeiroBindings.orderIdFixtures"
+}
+
+enum OrderStatus { Draft=draft Submitted=submitted } using {
+  haskell package=orders-domain module=Orders.Order type=OrderStatus
+  binding = "Orders.KeiroBindings.orderStatusBinding"
+  binding-version = "1"
+  canonical-type = "orders.OrderStatus.v1"
+  fixtures = "Orders.KeiroBindings.orderStatusFixtures"
+}
+
+mapped nominal AccountNumber : Text {
+  haskell package=orders-domain module=Orders.Account type=AccountNumber
+  binding = "Orders.KeiroBindings.accountNumberBinding"
+  binding-version = "1"
+  canonical-type = "orders.AccountNumber.v1"
+  fixtures = "Orders.KeiroBindings.accountNumberFixtures"
+  initial = "Orders.KeiroBindings.initialAccountNumber"
+}
+```
+
+A nominal binding is a total isomorphism between the consumer type and its private-event
+representation. IDs use `KindID "prefix"`, enums use a generated closed representation, and
+nominal scalars use exactly one of `Text`, `Int`, `Natural`, `Bool`, or `Time`. `initial` is
+required when a consumer-bound type is used by a register. Fixtures pair finite consumer values
+with expected JSON; they are evidence for the two laws and wire spellings, not proof for all
+values. A constructor that can reject, normalize, or identify distinct representation values is
+refined rather than nominal and must remain `mapped opaque`.
+
+Generated domain code imports the consumer type and does not emit a duplicate public wrapper.
+The private event codec remains Keiro-owned: it checks the TypeID prefix before constructing the
+consumer ID and maps enum JSON only through the generated closed representation. Snapshot caches
+still use the consumer's `ToJSON`, `FromJSON`, and `CanonicalTypeName` instances. Bound scalar
+registers also receive a context-level `NominalProjections` facade; equality is available for all
+five representations and ordering only for `Int`, `Natural`, and `Time`. IDs, enums, and nominal
+arithmetic remain opaque to Keiki.
 
 Identifiers use ASCII letters, digits, and underscores. Aggregate, process, workflow,
 type, and constructor names use `PascalCase`; fields and registers begin with a lowercase

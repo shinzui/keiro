@@ -299,6 +299,7 @@ constraintPlan spec plan = case resolveTypeGraph spec of
             <> T.intercalate ", " (baseConstraints mapping <> registerConstraints registerRoots mapping)
     baseConstraints StructuralMapping{} = ["Eq", "Show", "CanonicalTypeName", "StructuralBinding"]
     baseConstraints OpaqueMapping{} = ["Eq", "Show", "ToJSON", "FromJSON"]
+    baseConstraints NominalMapping{} = ["Eq", "Show", "NominalBinding"]
     registerConstraints roots mapping
         | MappedKey (mappingSpecName mapping) `Set.member` roots = ["register initial", "snapshot ToJSON", "snapshot FromJSON"]
         | otherwise = []
@@ -548,6 +549,21 @@ renderMappingIdentity OpaqueMapping{mappingPackage, mappingModule, mappingType, 
         <> mappingCodecIdentity
         <> " version="
         <> mappingCodecVersion
+renderMappingIdentity NominalMapping{mappingNominalCategory, mappingNominalRepresentation, mappingPackage, mappingModule, mappingType, mappingBindingSymbol, mappingBindingVersion} =
+    "nominal-"
+        <> mappingNominalCategory
+        <> " "
+        <> mappingPackage
+        <> ":"
+        <> mappingModule
+        <> "."
+        <> mappingType
+        <> " representation="
+        <> mappingNominalRepresentation
+        <> " binding="
+        <> mappingBindingSymbol
+        <> " version="
+        <> mappingBindingVersion
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show

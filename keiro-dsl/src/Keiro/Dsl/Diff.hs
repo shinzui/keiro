@@ -53,6 +53,7 @@ module Keiro.Dsl.Diff (
     classifyWorkflowBody,
 ) where
 
+import Data.Char (toUpper)
 import Data.List (find, (\\))
 import Data.Maybe (isJust, isNothing, mapMaybe)
 import Data.Set (Set)
@@ -271,6 +272,12 @@ classifyCompatibility context code
     | code `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged] = mappedBuildVector
     | code == MappedBindingChanged = mappedBindingVector context
     | code `elem` [MappedInitialChanged, MappedCanonicalTypeChanged] = mappedSnapshotBuildVector context
+    | code == NominalFixturesChanged = mappedBuildVector
+    | code == NominalBindingChanged = mappedBindingVector context
+    | code `elem` [NominalInitialChanged, NominalCanonicalTypeChanged] = mappedSnapshotBuildVector context
+    | code == NominalRepresentationChanged = mappedWireBreakingVector context
+    | code == NominalIdDecoderTightened =
+        (advisoryVector PrivateHistoryRead Set.empty){cvConsumerBuild = VAdvisory}
     | code == MappedDeclAdded = compatibleVector
     | code `elem` privateDecodeCodes = privateDecodeBreakingVector
     | code `elem` identityCodes = persistedIdentityBreakingVector
@@ -660,7 +667,7 @@ runFamily _ (OutOfDiffScope _) = []
 -- Rules are outside the decode and persisted-identity axes, but referenced
 -- rule bodies are compared as part of each aggregate's replay fold surface.
 sharedDeclarationDiff :: DiffEnv -> [Change]
-sharedDeclarationDiff env = enumDiff env ++ idDiff env ++ mappedDeclarationDiff env
+sharedDeclarationDiff env = enumDiff env ++ idDiff env ++ nominalScalarDiff env ++ mappedDeclarationDiff env
 
 mappedDeclarationDiff :: DiffEnv -> [Change]
 mappedDeclarationDiff env = concatMap mappedFindingChanges (diffMapped (deOld env) (deNew env))
@@ -1207,17 +1214,26 @@ projectionSurface projection = do
 
 idDiff :: DiffEnv -> [Change]
 idDiff env =
-    concatMap (uncurry idPairDiff) (prMatched paired)
+    concatMap (uncurry (idPairDiff (deOld env))) (prMatched paired)
         ++ concatMap addedIdDiff (prAdded paired)
         ++ concatMap removedIdDiff (prRemoved paired)
   where
     paired = pairDeclarations idName (specIds (deOld env)) (specIds (deNew env))
 
-idPairDiff :: IdDecl -> IdDecl -> [Change]
-idPairDiff oldId newId =
+idPairDiff :: Spec -> IdDecl -> IdDecl -> [Change]
+idPairDiff oldSpec oldId newId =
     [ breaking (idName newId) "id-prefix" (idName newId) IdPrefixChanged ("prefix changed '" <> idPrefix oldId <> "' -> '" <> idPrefix newId <> "'; stored and newly minted ids no longer share an identity domain")
     | idPrefix oldId /= idPrefix newId
     ]
+        <> nominalBindingDeclDiff oldSpec "id" (idName newId) (idBinding oldId) (idBinding newId)
+        <> [ nominalUseChange
+                use
+                NominalIdDecoderTightened
+                "adopting a checked KindID binding tightens historical decoding; keep a committed valid old-payload fixture and run the targeted real-log audit for this event"
+           | idBinding oldId == Nothing
+           , isJust (idBinding newId)
+           , use@NominalEventUse{} <- nominalUses oldSpec (idName oldId)
+           ]
 
 addedIdDiff :: IdDecl -> [Change]
 addedIdDiff declaration = [additive (idName declaration) "id-prefix" (idName declaration) DeclarationAdded "new id declaration"]
@@ -1249,6 +1265,127 @@ enumPairDiff oldSpec oldEnum newEnum =
             | (ctor, wire) <- enumCtors newEnum
             , isNothing (lookup ctor (enumCtors oldEnum))
             ]
+            <> nominalBindingDeclDiff oldSpec "enum" (enumName newEnum) (enumBinding oldEnum) (enumBinding newEnum)
+
+nominalScalarDiff :: DiffEnv -> [Change]
+nominalScalarDiff env =
+    concatMap (uncurry scalarPairDiff) (prMatched paired)
+        <> [nominalDeclarationChange (nominalScalarName declaration) DeclarationAdded "new nominal scalar declaration" | declaration <- prAdded paired]
+        <> [nominalDeclarationChange (nominalScalarName declaration) NominalRepresentationChanged "nominal scalar declaration removed while persisted uses may remain" | declaration <- prRemoved paired]
+  where
+    paired = pairDeclarations nominalScalarName (specNominalScalars (deOld env)) (specNominalScalars (deNew env))
+    scalarPairDiff oldDeclaration newDeclaration =
+        [ nominalDeclarationChange
+            (nominalScalarName newDeclaration)
+            NominalRepresentationChanged
+            ( "nominal scalar representation changed '"
+                <> nominalScalarRepresentation oldDeclaration
+                <> "' -> '"
+                <> nominalScalarRepresentation newDeclaration
+                <> "'"
+            )
+        | nominalScalarRepresentation oldDeclaration /= nominalScalarRepresentation newDeclaration
+        ]
+            <> nominalBindingDeclDiff
+                (deOld env)
+                "scalar"
+                (nominalScalarName newDeclaration)
+                (Just (nominalScalarBinding oldDeclaration))
+                (Just (nominalScalarBinding newDeclaration))
+
+data NominalUse
+    = NominalCommandUse !Name !Name !Name
+    | NominalEventUse !Name !Name !Name
+    | NominalRegisterUse !Name !Name
+
+nominalUses :: Spec -> Name -> [NominalUse]
+nominalUses spec target = concatMap usesInAggregate [aggregate | NAggregate aggregate <- specNodes spec]
+  where
+    usesInAggregate aggregate =
+        [ NominalCommandUse (aggName aggregate) (cmdName command) (aggregateFieldName field)
+        | command <- aggCommands aggregate
+        , field <- cmdFields command
+        , fieldReferences target field
+        ]
+            <> [ NominalEventUse (aggName aggregate) (evName event) (aggregateFieldName field)
+               | event <- aggEvents aggregate
+               , field <- eventFields aggregate event
+               , fieldReferences target field
+               ]
+            <> [ NominalRegisterUse (aggName aggregate) (regName register)
+               | register <- aggRegs aggregate
+               , regType register == TRef target
+               ]
+    eventFields aggregate event = case evBody event of
+        EventFields fields -> fields
+        EventFromCommand commandName -> concat [cmdFields command | command <- aggCommands aggregate, cmdName command == commandName]
+    fieldReferences targetName field = case aggregateFieldType field of
+        Just (TRef typeName) -> typeName == targetName
+        Just _ -> False
+        Nothing -> pascalName (aggregateFieldName field) == targetName
+    pascalName value = case T.uncons value of
+        Nothing -> value
+        Just (initialChar, rest) -> T.cons (toUpper initialChar) rest
+
+nominalBindingDeclDiff :: Spec -> Text -> Name -> Maybe NominalBindingDecl -> Maybe NominalBindingDecl -> [Change]
+nominalBindingDeclDiff oldSpec category name oldBinding newBinding =
+    concat
+        [ nominalFinding NominalBindingChanged "binding source, symbol, or version changed; rebuild every consumer use and audit persisted event uses because hand-written conversion behavior is opaque"
+        | bindingRuntimeFacts oldBinding /= bindingRuntimeFacts newBinding
+        ]
+        <> concat
+            [ nominalFinding NominalFixturesChanged "fixture symbol changed; rerun nominal conformance without claiming runtime wire behavior changed"
+            | (nominalFixtures =<< oldBinding) /= (nominalFixtures =<< newBinding)
+            ]
+        <> concat
+            [ nominalFinding NominalCanonicalTypeChanged "canonical nominal identity changed; rebuild consumers and invalidate snapshot caches at register uses"
+            | (nominalCanonicalType =<< oldBinding) /= (nominalCanonicalType =<< newBinding)
+            ]
+        <> concat
+            [ nominalFinding NominalInitialChanged "consumer-owned initial value symbol changed; rebuild and invalidate snapshot-bearing register streams"
+            | (nominalInitial =<< oldBinding) /= (nominalInitial =<< newBinding)
+            ]
+  where
+    bindingRuntimeFacts declaration =
+        ( nominalHaskell =<< declaration
+        , nominalBinding =<< declaration
+        , nominalBindingVersion =<< declaration
+        )
+    nominalFinding code detail =
+        nominalDeclarationChange name code (category <> " " <> detail)
+            : [nominalUseChange use code detail | use <- nominalUses oldSpec name, includeUse code use]
+    includeUse NominalFixturesChanged _ = False
+    includeUse NominalCanonicalTypeChanged NominalRegisterUse{} = True
+    includeUse NominalCanonicalTypeChanged _ = False
+    includeUse NominalInitialChanged NominalRegisterUse{} = True
+    includeUse NominalInitialChanged _ = False
+    includeUse _ NominalCommandUse{} = False
+    includeUse _ _ = True
+
+nominalDeclarationChange :: Name -> DiagnosticCode -> Text -> Change
+nominalDeclarationChange name code detail =
+    mkChange
+        (deriveLabel defaultGate vector)
+        context
+        name
+        "nominal-build"
+        name
+        code
+        detail
+  where
+    context = (consumerBuildContext name [name]){contextOriginalLabel = LabelAdvisory}
+    vector = classifyCompatibility context code
+
+nominalUseChange :: NominalUse -> DiagnosticCode -> Text -> Change
+nominalUseChange use code detail =
+    mkChange (deriveLabel defaultGate vector) context root facet subject code detail
+  where
+    (root, facet, subject, kind) = case use of
+        NominalCommandUse aggregate command field -> (aggregate, "nominal-command", aggregate <> " command " <> command <> " ." <> field, ContextConsumerBuild)
+        NominalEventUse aggregate event field -> (aggregate, "nominal-event", aggregate <> " event " <> event <> " ." <> field, ContextPrivateEvent)
+        NominalRegisterUse aggregate register -> (aggregate, "nominal-register", aggregate <> " register " <> register, ContextSnapshot)
+    context = ChangeContext root [subject] kind LabelAdvisory
+    vector = classifyCompatibility context code
 
 addedEnumDiff :: EnumDecl -> [Change]
 addedEnumDiff enumDecl =

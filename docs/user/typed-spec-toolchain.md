@@ -17,9 +17,14 @@ context hospital-capacity
 ```
 
 The preamble is the first significant clause; comments and whitespace may come
-before it. Version 1 is frozen at this repository state. New syntax must use a
-registered successor language version and keep a predecessor fixture proving
-that v1 still rejects it.
+before it. Version 1 is frozen at this repository state. Language version 2
+registers consumer-owned bindings for direct IDs, direct enums, and nominal
+scalars. Sources that do not use those forms can remain on version 1. To adopt
+one, change the preamble to `language keiro-dsl 2`, add the binding declaration,
+canonicalize it with `pretty`, then run `check --explain-bindings` and the
+generated compiled harness. Version 1 and legacy-unversioned sources reject the
+successor syntax at the language boundary; the tool never silently upgrades a
+file.
 
 Existing sources without a preamble remain readable as `legacy-unversioned` and
 select effective version 1. Parse and pretty-print preserve that source form:
@@ -102,6 +107,54 @@ the boundary actionable: `AggregateTypeUnknown`,
 come from `check`, before scaffolding can write output.
 
 ## Consumer-owned mapped types
+
+Language version 2 can keep an application's existing nominal type in direct
+aggregate commands, events, and registers:
+
+```text
+id OrderId prefix=ord using {
+  haskell package=orders-domain module=Orders.Id type=OrderId
+  binding = "Orders.KeiroBindings.orderIdBinding"
+  binding-version = "1"
+  canonical-type = "orders.OrderId.v1"
+  fixtures = "Orders.KeiroBindings.orderIdFixtures"
+}
+
+enum OrderStatus { Draft=draft Submitted=submitted } using {
+  haskell package=orders-domain module=Orders.Order type=OrderStatus
+  binding = "Orders.KeiroBindings.orderStatusBinding"
+  binding-version = "1"
+  canonical-type = "orders.OrderStatus.v1"
+  fixtures = "Orders.KeiroBindings.orderStatusFixtures"
+}
+
+mapped nominal AccountNumber : Text {
+  haskell package=orders-domain module=Orders.Account type=AccountNumber
+  binding = "Orders.KeiroBindings.accountNumberBinding"
+  binding-version = "1"
+  canonical-type = "orders.AccountNumber.v1"
+  fixtures = "Orders.KeiroBindings.accountNumberFixtures"
+  initial = "Orders.KeiroBindings.initialAccountNumber"
+}
+```
+
+`NominalBinding domain representation` has total conversions in both
+directions. Bound IDs cross a typed `KindID "prefix"`; bound enums cross a
+generated closed representation; nominal scalars cross exactly one of `Text`,
+`Int`, `Natural`, `Bool`, or `Time`. The event decoder validates ID text and its
+prefix before consumer construction, while enum decoding admits only declared
+wire spellings. A consumer constructor that rejects or normalizes a valid
+representation is refined, not nominal, and must use `mapped opaque`.
+
+The generated domain imports the application type rather than declaring a
+second wrapper. Expected-wire fixtures and both binding laws run in the
+consumer-compiled harness; finite fixtures remain evidence, not universal
+proof. A register additionally requires an `initial` symbol and consumer
+`ToJSON`, `FromJSON`, and `CanonicalTypeName` instances because snapshots remain
+consumer-JSON caches. Bound scalar registers expose a generated
+`NominalProjections` facade: equality is symbolic for all five representations,
+ordering only for `Int`, `Natural`, and `Time`, and nominal arithmetic is not
+introduced.
 
 A structural mapping keeps the application type while making the `.keiro`
 declaration the single authority for its private event wire shape. The
@@ -276,6 +329,13 @@ per declaration, aggregate codecs derived from the declared wire policy, and a
 `StructuralProjections` facade containing eligible scalar `FieldWitness`
 values. Hand-written Holes may use those witnesses with Keiki's `regProj` and
 `inpProj`; the DSL does not claim nested field-path syntax of its own.
+
+For nominal bindings, generated files include private enum-representation leaf
+modules as needed, a context-level `NominalProjections` facade for eligible
+scalars, and create-once binding skeletons. Scaffold records persist these as
+separate `nominal-mapping` rows so older readers can ignore them without
+changing existing `mapping` JSON. Consumer packages are added to the manifest;
+bound IDs also add `mmzk-typeid`.
 
 The scaffolder plans the complete write before touching disk. It refuses
 invalid specs, module-path/case-fold collisions, scaffold-unsafe identifiers,
