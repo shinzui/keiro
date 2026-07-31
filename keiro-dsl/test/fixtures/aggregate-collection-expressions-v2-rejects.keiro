@@ -1,0 +1,13 @@
+language keiro-dsl 2
+context aggregate-collection-expressions
+
+aggregate CollectionAccount
+  regs
+    active Bool = False
+  states Open Closed!
+  command Close { active:Bool }
+  event ClosedEvent = fields(Close)
+  Open -- Close -->
+    guard any([cmd.active])
+    emit ClosedEvent
+    goto Closed

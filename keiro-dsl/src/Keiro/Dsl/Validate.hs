@@ -31,6 +31,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word64)
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType qualified as Nominal
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
@@ -287,6 +288,20 @@ data DiagnosticCode
     | AggregateRegisterInitialInvalid
     | AggregateGuardTypeMismatch
     | AggregateGuardCapabilityUnsupported
+    | AggregateExpressionRootUnknown
+    | AggregateExpressionRootAmbiguous
+    | AggregateExpressionPathInvalid
+    | AggregateExpressionPathUnsupported
+    | AggregateExpressionLiteralNeedsType
+    | AggregateExpressionLiteralInvalid
+    | AggregateExpressionOperandTypeMismatch
+    | AggregateExpressionOperatorUnsupported
+    | AggregateExpressionBooleanRequired
+    | AggregateExpressionGuardBoolRequired
+    | AggregateExpressionWriteTargetUnknown
+    | AggregateExpressionWriteTypeMismatch
+    | AggregateTransitionOwnershipConflict
+    | CollectionExpressionUnsupported
     | -- EP-160: append-only source-language composition and diff facts.
       WorkspaceLanguageVersionMismatch
     | SourceLanguageDeclarationChanged
@@ -407,8 +422,44 @@ validateAggregateTypes spec = case Nominal.resolveNominalTypes spec of
     fieldRule aggregate useSite field =
         either (pure . aggregateTypeDiagnostic) (const []) (inferAggregateFieldType symbols aggregate useSite field)
 
-    transitionRules aggregate transition =
-        concatMap (comparisonRule aggregate transition) (maybe [] comparisons (tGuard transition))
+    transitionRules aggregate transition = case tImplementation transition of
+        LegacyHoleImplementation ->
+            concatMap (comparisonRule aggregate transition) (maybe [] comparisons (tGuard transition))
+        GeneratedImplementation ->
+            let environment = expressionEnvironment spec aggregate transition
+             in maybe [] (expressionDiagnostics . resolveGuardExpr environment) (tGuard transition)
+                    ++ concatMap (expressionDiagnostics . uncurry (resolveWriteExpr environment)) (tWrites transition)
+        HoleImplementation ->
+            [ mkErr (locLine (tLoc transition)) AggregateTransitionOwnershipConflict $
+                "transition '"
+                    <> tSource transition
+                    <> " -- "
+                    <> tCommand transition
+                    <> "' selects implementation hole and therefore cannot also declare guard or write clauses"
+            | tGuard transition /= Nothing || not (null (tWrites transition))
+            ]
+
+    expressionDiagnostics = either (map expressionDiagnostic . NE.toList) (const [])
+
+    expressionDiagnostic diagnostic =
+        mkErr
+            (locLine (expressionDiagnosticLoc diagnostic))
+            (expressionCode (expressionDiagnosticCode diagnostic))
+            (expressionDiagnosticMessage diagnostic)
+
+    expressionCode = \case
+        ScalarRootUnknown -> AggregateExpressionRootUnknown
+        ScalarRootAmbiguous -> AggregateExpressionRootAmbiguous
+        ScalarPathInvalid -> AggregateExpressionPathInvalid
+        ScalarPathUnsupported -> AggregateExpressionPathUnsupported
+        ScalarLiteralNeedsType -> AggregateExpressionLiteralNeedsType
+        ScalarLiteralInvalid -> AggregateExpressionLiteralInvalid
+        ScalarOperandTypeMismatch -> AggregateExpressionOperandTypeMismatch
+        ScalarOperatorUnsupported -> AggregateExpressionOperatorUnsupported
+        ScalarBooleanOperandRequired -> AggregateExpressionBooleanRequired
+        ScalarGuardBoolRequired -> AggregateExpressionGuardBoolRequired
+        ScalarWriteTargetUnknown -> AggregateExpressionWriteTargetUnknown
+        ScalarWriteTypeMismatch -> AggregateExpressionWriteTypeMismatch
 
     comparisonRule aggregate transition (operator, left, right) =
         case (expressionType aggregate transition left, expressionType aggregate transition right) of
@@ -445,6 +496,18 @@ validateAggregateTypes spec = case Nominal.resolveNominalTypes spec of
         EOr{} -> pure AggregateBool
         EAnd{} -> pure AggregateBool
         ECmp{} -> pure AggregateBool
+        EAdd _ left _ -> expressionType aggregate transition left
+        ESubtract _ left _ -> expressionType aggregate transition left
+        EMultiply _ left _ -> expressionType aggregate transition left
+        EPath loc _ path -> case path of
+            name : _ -> atomType aggregate transition name
+            [] -> Left (AggregateTypeError loc EqualityGuardUse (UnknownAggregateType "<empty-path>"))
+        ELiteral _ literal -> case literal of
+            LiteralBool{} -> pure AggregateBool
+            LiteralText{} -> pure AggregateText
+            LiteralIntegral{} -> Left (AggregateTypeError (exprLoc expression) EqualityGuardUse (UnknownAggregateType "<contextual-integral-literal>"))
+            LiteralQualified typeName _ -> resolveAggregateType symbols (exprLoc expression) EqualityGuardUse (TRef typeName)
+            LiteralId typeName _ -> resolveAggregateType symbols (exprLoc expression) EqualityGuardUse (TRef typeName)
 
     atomType aggregate transition name = case [register | register <- aggRegs aggregate, regName register == name] of
         register : _ -> resolveAggregateType symbols (regLoc register) RegisterUse (regType register)
@@ -472,6 +535,11 @@ validateAggregateTypes spec = case Nominal.resolveNominalTypes spec of
         EOr left right -> comparisons left <> comparisons right
         EAnd left right -> comparisons left <> comparisons right
         ECmp operator left right -> (operator, left, right) : comparisons left <> comparisons right
+        EAdd _ left right -> comparisons left <> comparisons right
+        ESubtract _ left right -> comparisons left <> comparisons right
+        EMultiply _ left right -> comparisons left <> comparisons right
+        EPath{} -> []
+        ELiteral{} -> []
         EAtom{} -> []
 
 aggregateTypeDiagnostic :: AggregateTypeError -> Diagnostic
@@ -825,6 +893,7 @@ defaultType graph =
         TypeExprAlgebra
             { onText = DefaultText
             , onInt = DefaultInt
+            , onInteger = DefaultInt
             , onBool = DefaultBool
             , onNatural = DefaultNatural
             , onTime = DefaultOther
@@ -865,6 +934,7 @@ hasNonInjectiveOptional graph =
             TypeExprAlgebra
                 { onText = nonNull
                 , onInt = nonNull
+                , onInteger = nonNull
                 , onBool = nonNull
                 , onNatural = nonNull
                 , onTime = nonNull
@@ -2413,6 +2483,12 @@ exprNames :: Expr -> [Name]
 exprNames (EOr a b) = exprNames a ++ exprNames b
 exprNames (EAnd a b) = exprNames a ++ exprNames b
 exprNames (ECmp _ a b) = exprNames a ++ exprNames b
+exprNames (EAdd _ a b) = exprNames a ++ exprNames b
+exprNames (ESubtract _ a b) = exprNames a ++ exprNames b
+exprNames (EMultiply _ a b) = exprNames a ++ exprNames b
+exprNames (EPath _ _ (name : _)) = [name]
+exprNames (EPath _ _ []) = []
+exprNames ELiteral{} = []
 exprNames (EAtom (AName n)) = [n]
 exprNames (EAtom (ABool _)) = []
 

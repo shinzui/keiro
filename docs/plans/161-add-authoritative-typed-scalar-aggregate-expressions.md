@@ -77,8 +77,9 @@ so an accidental parse cannot become an unofficial contract.
   resolves to `c8f2c343ce03f42e10de77d684769f15ad30feda`, then verify that exact commit with
   `git ls-remote --tags https://github.com/shinzui/keiki.git`. The dependency repository's release
   runbook explicitly forbids the agent from pushing the tag automatically.
-- [ ] Milestone 2: add the version-2 located scalar grammar and one typed expression resolver with
-  stable diagnostics while pinning version-1 rejection behavior.
+- [x] 2026-07-31: Added the version-2 located scalar grammar, exact scalar/path/literal resolver,
+  explicit generated-versus-Hole ownership syntax, and stable diagnostics. Version 1 retains its
+  historical grammar and AST spelling; the complete `keiro-dsl-test` suite passes 407 examples.
 - [ ] Milestone 3: make generated version-2 transducers own declared guards and writes, add the
   explicit Hole-owned transition escape hatch and output hooks, and preserve version-1 scaffolding.
 - [ ] Milestone 4: add compiled, property, mutation, parser-version, replay, snapshot, and
@@ -123,6 +124,13 @@ so an accidental parse cannot become an unofficial contract.
   `keiki-codec-json-test` to ship in one release window and explicitly reserves Git tag pushes for
   the maintainer. All three `0.6.0.0` packages are published and the local annotated tag resolves
   to the release commit, but the upstream tag is intentionally not yet present.
+- 2026-07-31: Parser keywords are global in the current combinator layer. Reserving plan-166
+  collection words there initially broke a version-1 field named `values`; keeping those words
+  legal in declarations while rejecting them specifically in version-2 expression positions
+  preserves the frozen grammar and still prevents an unofficial collection expression contract.
+- 2026-07-31: The existing nominal-scalar conformance transition compared opaque nominal values.
+  Under authoritative version-2 checking it must use explicit `implementation hole`, matching the
+  documented boundary that nominal symbolic comparison is not yet evidence-bearing.
 
 
 ## Decision Log

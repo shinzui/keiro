@@ -166,16 +166,23 @@ transitionSegment :: Transition -> Text
 transitionSegment transition =
     T.intercalate
         "|"
-        [ "transition:" <> renderMode (tMode transition)
-        , tSource transition
-        , tCommand transition
-        , "guard=" <> maybe "" renderExpr (tGuard transition)
-        , "writes=" <> T.intercalate ";" (map renderWrite (tWrites transition))
-        , "emits=" <> T.intercalate "," (tEmits transition)
-        , "goto=" <> tGoto transition
-        ]
+        ( [ "transition:" <> renderMode (tMode transition)
+          , tSource transition
+          , tCommand transition
+          ]
+            ++ implementationSegment
+            ++ [ "guard=" <> maybe "" renderExpr (tGuard transition)
+               , "writes=" <> T.intercalate ";" (map renderWrite (tWrites transition))
+               , "emits=" <> T.intercalate "," (tEmits transition)
+               , "goto=" <> tGoto transition
+               ]
+        )
   where
     renderWrite (registerName, expression) = registerName <> ":=" <> renderExpr expression
+    implementationSegment = case tImplementation transition of
+        LegacyHoleImplementation -> []
+        GeneratedImplementation -> ["implementation=generated"]
+        HoleImplementation -> ["implementation=hole"]
 
 renderMode :: TransitionMode -> Text
 renderMode TmLive = "live"
@@ -219,6 +226,12 @@ exprNames = \case
     EOr left right -> exprNames left <> exprNames right
     EAnd left right -> exprNames left <> exprNames right
     ECmp _ left right -> exprNames left <> exprNames right
+    EAdd _ left right -> exprNames left <> exprNames right
+    ESubtract _ left right -> exprNames left <> exprNames right
+    EMultiply _ left right -> exprNames left <> exprNames right
+    EPath _ _ (name : _) -> Set.singleton name
+    EPath _ _ [] -> Set.empty
+    ELiteral{} -> Set.empty
     EAtom (AName name) -> Set.singleton name
     EAtom (ABool _) -> Set.empty
 

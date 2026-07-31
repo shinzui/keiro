@@ -208,6 +208,7 @@ renderExprType =
         TypeExprAlgebra
             { onText = "Text"
             , onInt = "Int"
+            , onInteger = "Integer"
             , onBool = "Bool"
             , onNatural = "Natural"
             , onTime = "UTCTime"

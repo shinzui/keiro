@@ -431,6 +431,7 @@ jsonPathsFromExpr graph visited =
         TypeExprAlgebra
             { onText = []
             , onInt = []
+            , onInteger = []
             , onBool = []
             , onNatural = []
             , onTime = []

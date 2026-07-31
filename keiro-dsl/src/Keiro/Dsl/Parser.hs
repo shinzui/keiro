@@ -163,7 +163,7 @@ can turn it into generic parser noise.
 -}
 ensureBodyFeatures :: FilePath -> SourceLanguage -> Text -> Either ParseFailure ()
 ensureBodyFeatures src sourceLanguage input =
-    case filter requiresNominalSyntax (significantLines input) of
+    case filter requiresSuccessorSyntax (significantLines input) of
         marker : _
             | languageVersionNumber (effectiveLanguageVersion sourceLanguage) < 2 ->
                 Left
@@ -179,10 +179,18 @@ ensureBodyFeatures src sourceLanguage input =
                     )
         _ -> Right ()
   where
-    requiresNominalSyntax line =
-        case T.words (significantLineText line) of
+    requiresSuccessorSyntax line =
+        case wordsFound of
             "mapped" : "nominal" : _ -> True
-            wordsFound -> "using" `elem` wordsFound
+            _ ->
+                "using" `elem` wordsFound
+                    || "Integer" `elem` wordsFound
+                    || "implementation hole" `T.isInfixOf` content
+                    || "reg." `T.isInfixOf` content
+                    || "cmd." `T.isInfixOf` content
+      where
+        content = significantLineText line
+        wordsFound = T.words content
 
 --------------------------------------------------------------------------------
 -- Lexer
@@ -433,7 +441,7 @@ pTopItem nominalSyntax =
     choice
         ( [ TIId <$> pIdDecl nominalSyntax
           , TIEnum <$> pEnumDecl nominalSyntax
-          , TIRule <$> pRuleDecl
+          , TIRule <$> pRuleDecl nominalSyntax
           , pMappedTopItem nominalSyntax
           ]
             ++ [ TINode . NRouter <$> pRouter
@@ -447,7 +455,7 @@ pTopItem nominalSyntax =
                , TINode . NReadModel <$> pReadModel
                , TINode . NWorkflow <$> pWorkflow
                , TINode . NOperation <$> pOperation
-               , TINode . NAggregate <$> pAggregate
+               , TINode . NAggregate <$> pAggregate nominalSyntax
                ]
         )
 
@@ -477,8 +485,8 @@ pEnumDecl nominalSyntax = do
         w <- wireWord
         pure (c, w)
 
-pRuleDecl :: P RuleDecl
-pRuleDecl = do
+pRuleDecl :: Bool -> P RuleDecl
+pRuleDecl scalarSyntax = do
     loc <- getLoc
     keyword "rule"
     name <- ident
@@ -500,7 +508,7 @@ pRuleDecl = do
     pCase = do
         c <- ident
         _ <- symbol "=>"
-        e <- pExpr
+        e <- pExpr scalarSyntax
         pure (c, e)
 
 --------------------------------------------------------------------------------
@@ -752,6 +760,7 @@ pMappedTypeExpr =
         , TMap <$> (keyword "Map" *> pTypeArgument)
         , TText <$ keyword "Text"
         , TInt <$ keyword "Int"
+        , TInteger <$ keyword "Integer"
         , TBool <$ keyword "Bool"
         , TNatural <$ keyword "Natural"
         , TTime <$ (keyword "Time" <|> keyword "UTCTime")
@@ -764,6 +773,7 @@ pMappedTypeExpr =
         choice
             [ TText <$ keyword "Text"
             , TInt <$ keyword "Int"
+            , TInteger <$ keyword "Integer"
             , TBool <$ keyword "Bool"
             , TNatural <$ keyword "Natural"
             , TTime <$ (keyword "Time" <|> keyword "UTCTime")
@@ -811,14 +821,14 @@ data BodyItem
     | BISnapshot SnapshotSpec
     | BITransition Transition
 
-pAggregate :: P Aggregate
-pAggregate = do
+pAggregate :: Bool -> P Aggregate
+pAggregate scalarSyntax = do
     loc <- getLoc
     keyword "aggregate"
     name <- ident
     regs <- pRegsBlock
     states <- pStatesLine
-    positionedItems <- many ((,) <$> getOffset <*> pBodyItem)
+    positionedItems <- many ((,) <$> getOffset <*> pBodyItem scalarSyntax)
     let items = map snd positionedItems
         wireOffsets = [offset | (offset, BIWire _) <- positionedItems]
         projectionOffsets = [offset | (offset, BIProjection _) <- positionedItems]
@@ -887,15 +897,15 @@ pStatesLine = do
         notFollowedBy (symbol "--")
         pure StateDecl{stName = n, stTerminal = term, stLoc = loc}
 
-pBodyItem :: P BodyItem
-pBodyItem =
+pBodyItem :: Bool -> P BodyItem
+pBodyItem scalarSyntax =
     choice
         [ BICommand <$> pCommand
         , BIEvent <$> pEvent
         , BIWire <$> pWire
         , BIProjection <$> pProjection
         , BISnapshot <$> pSnapshot
-        , BITransition <$> pTransition
+        , BITransition <$> pTransition scalarSyntax
         ]
 
 pSnapshot :: P SnapshotSpec
@@ -1923,9 +1933,10 @@ data Clause
     | CWrite Name Expr
     | CEmit Name
     | CGoto Name
+    | CImplementationHole
 
-pTransition :: P Transition
-pTransition = do
+pTransition :: Bool -> P Transition
+pTransition scalarSyntax = do
     startOffset <- getOffset
     loc <- getLoc
     -- Plan 143: a @replay-only@ prefix marks the transition as serving
@@ -1935,9 +1946,10 @@ pTransition = do
     _ <- symbol "--"
     cmd <- ident
     _ <- symbol "-->"
-    positionedClauses <- many ((,) <$> getOffset <*> (pClause <* optional (symbol ";")))
+    positionedClauses <- many ((,) <$> getOffset <*> (pClause scalarSyntax <* optional (symbol ";")))
     let clauses = map snd positionedClauses
         gotos = [(offset, target) | (offset, CGoto target) <- positionedClauses]
+        holeOffsets = [offset | (offset, CImplementationHole) <- positionedClauses]
         transitionName = T.unpack src <> " -- " <> T.unpack cmd
     gt <- case gotos of
         [] -> failAt startOffset ("transition " <> transitionName <> " is missing a goto clause")
@@ -1946,11 +1958,18 @@ pTransition = do
             failAt
                 duplicateOffset
                 ("duplicate goto clause (transition " <> transitionName <> " already declared goto " <> T.unpack firstTarget <> ")")
+    case holeOffsets of
+        _ : duplicateOffset : _ -> failAt duplicateOffset ("duplicate implementation hole clause in transition " <> transitionName)
+        _ -> pure ()
     let guards = [e | CGuard e <- clauses]
     pure
         Transition
             { tSource = src
             , tCommand = cmd
+            , tImplementation = case holeOffsets of
+                _ : _ -> HoleImplementation
+                [] | scalarSyntax -> GeneratedImplementation
+                [] -> LegacyHoleImplementation
             , tGuard = case guards of [] -> Nothing; es -> Just (foldr1 EAnd es)
             , tWrites = [(r, e) | CWrite r e <- clauses]
             , tEmits = [n | CEmit n <- clauses]
@@ -1959,30 +1978,34 @@ pTransition = do
             , tLoc = loc
             }
 
-pClause :: P Clause
-pClause =
+pClause :: Bool -> P Clause
+pClause scalarSyntax =
     choice
-        [ CGuard <$> (keyword "guard" *> pExpr)
-        , (\r e -> CWrite r e) <$> (keyword "write" *> ident) <*> (symbol ":=" *> pExpr)
-        , try $ do
-            keyword "emit"
-            eventName <- ident
-            notFollowedBy (symbol "{")
-            pure (CEmit eventName)
-        , CGoto <$> (keyword "goto" *> ident)
-        ]
+        ( [CImplementationHole <$ (keyword "implementation" *> keyword "hole") | scalarSyntax]
+            ++ [ CGuard <$> (keyword "guard" *> pExpr scalarSyntax)
+               , (\r e -> CWrite r e) <$> (keyword "write" *> ident) <*> (symbol ":=" *> pExpr scalarSyntax)
+               , try $ do
+                    keyword "emit"
+                    eventName <- ident
+                    notFollowedBy (symbol "{")
+                    pure (CEmit eventName)
+               , CGoto <$> (keyword "goto" *> ident)
+               ]
+        )
 
 --------------------------------------------------------------------------------
 -- Expr sublanguage
 --------------------------------------------------------------------------------
 
-pExpr :: P Expr
-pExpr = makeExprParser pTerm operatorTable
+pExpr :: Bool -> P Expr
+pExpr scalarSyntax
+    | scalarSyntax = makeExprParser pScalarTerm scalarOperatorTable
+    | otherwise = makeExprParser pLegacyTerm legacyOperatorTable
 
-pTerm :: P Expr
-pTerm =
+pLegacyTerm :: P Expr
+pLegacyTerm =
     choice
-        [ parens pExpr
+        [ parens (pExpr False)
         , EAtom . ABool <$> (True <$ keyword "true" <|> False <$ keyword "false")
         , EAtom . AName <$> ident
         ]
@@ -1990,8 +2013,8 @@ pTerm =
 {- | Highest precedence first: relational comparisons bind tighter than @&&@,
 which binds tighter than @||@.
 -}
-operatorTable :: [[Operator P Expr]]
-operatorTable =
+legacyOperatorTable :: [[Operator P Expr]]
+legacyOperatorTable =
     [ [InfixL arithmeticUnsupported]
     ,
         [ InfixN (ECmp OpLe <$ op "<=")
@@ -2010,6 +2033,94 @@ operatorTable =
         offset <- getOffset
         operator <- lexeme (oneOf ['+', '-', '*', '/'])
         failAt offset ("aggregate arithmetic operator '" <> [operator] <> "' is unsupported; compare or copy whole values instead")
+
+pScalarTerm :: P Expr
+pScalarTerm =
+    choice
+        [ parens (pExpr True)
+        , collectionTermUnsupported
+        , try pIdLiteral
+        , do
+            loc <- getLoc
+            ELiteral loc . LiteralBool <$> (True <$ keyword "true" <|> False <$ keyword "false")
+        , do
+            loc <- getLoc
+            ELiteral loc . LiteralText <$> stringLit
+        , try $ do
+            loc <- getLoc
+            ELiteral loc . LiteralIntegral <$> integerLiteral
+        , pScalarPath
+        ]
+
+pIdLiteral :: P Expr
+pIdLiteral = do
+    loc <- getLoc
+    constructor <- ident
+    value <- parens stringLit
+    pure (ELiteral loc (LiteralId constructor value))
+
+pScalarPath :: P Expr
+pScalarPath = do
+    loc <- getLoc
+    firstName <- ident
+    rest <- many (symbol "." *> ident)
+    pure $ case (firstName, rest) of
+        ("reg", name : path) -> EPath loc RegisterRoot (name : path)
+        ("cmd", name : path) -> EPath loc CommandRoot (name : path)
+        (_, [constructor]) | startsUpper firstName -> ELiteral loc (LiteralQualified firstName constructor)
+        _ -> EPath loc UnqualifiedRoot (firstName : rest)
+  where
+    startsUpper value = maybe False (isUpper . fst) (T.uncons value)
+
+collectionTermUnsupported :: P Expr
+collectionTermUnsupported = do
+    offset <- getOffset
+    choice
+        [ () <$ symbol "["
+        , () <$ symbol "{"
+        , () <$ keyword "keys"
+        , () <$ keyword "values"
+        , () <$ keyword "any"
+        , () <$ keyword "all"
+        ]
+    failAt offset collectionExpressionMessage
+
+collectionExpressionMessage :: String
+collectionExpressionMessage = "CollectionExpressionUnsupported: collection expressions are reserved for plan 166"
+
+scalarOperatorTable :: [[Operator P Expr]]
+scalarOperatorTable =
+    [ [InfixL (op "*" *> located EMultiply)]
+    ,
+        [ InfixL (op "+" *> located EAdd)
+        , InfixL (op "-" *> located ESubtract)
+        , InfixL scalarArithmeticUnsupported
+        ]
+    ,
+        [ InfixN (ECmp OpLe <$ op "<=")
+        , InfixN (ECmp OpGe <$ op ">=")
+        , InfixN (ECmp OpEq <$ op "==")
+        , InfixN (ECmp OpNeq <$ op "!=")
+        , InfixN (ECmp OpLt <$ op "<")
+        , InfixN (ECmp OpGt <$ op ">")
+        , InfixN collectionOperatorUnsupported
+        ]
+    , [InfixL (EAnd <$ op "&&")]
+    , [InfixL (EOr <$ op "||")]
+    ]
+  where
+    op value = symbol value
+    located constructor = do
+        loc <- getLoc
+        pure (constructor loc)
+    scalarArithmeticUnsupported = do
+        offset <- getOffset
+        operator <- lexeme (oneOf ['/', '%'])
+        failAt offset ("aggregate arithmetic operator '" <> [operator] <> "' is unsupported")
+    collectionOperatorUnsupported = do
+        offset <- getOffset
+        _ <- try (keyword "not" *> keyword "in") <|> keyword "in"
+        failAt offset collectionExpressionMessage
 
 --------------------------------------------------------------------------------
 -- Helpers

@@ -540,6 +540,12 @@ exprNames :: Expr -> [Text]
 exprNames (EOr x y) = exprNames x ++ exprNames y
 exprNames (EAnd x y) = exprNames x ++ exprNames y
 exprNames (ECmp _ x y) = exprNames x ++ exprNames y
+exprNames (EAdd _ x y) = exprNames x ++ exprNames y
+exprNames (ESubtract _ x y) = exprNames x ++ exprNames y
+exprNames (EMultiply _ x y) = exprNames x ++ exprNames y
+exprNames (EPath _ _ (name : _)) = [name]
+exprNames (EPath _ _ []) = []
+exprNames ELiteral{} = []
 exprNames (EAtom (AName n)) = [n]
 exprNames (EAtom (ABool _)) = []
 

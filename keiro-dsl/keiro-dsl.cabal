@@ -38,6 +38,7 @@ library
     Keiro.Dsl.Diff
     Keiro.Dsl.DiffReport
     Keiro.Dsl.ExplainBindings
+    Keiro.Dsl.Expression
     Keiro.Dsl.FoldFingerprint
     Keiro.Dsl.Goldens
     Keiro.Dsl.Grammar

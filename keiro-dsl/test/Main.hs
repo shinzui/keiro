@@ -27,6 +27,7 @@ import Keiro.Dsl.Coverage qualified as Coverage
 import Keiro.Dsl.Diff (Change (..), ChangeKind (..), CompatibilitySurface (..), CompatibilityVector (..), FamilyDiff (..), Label (..), NodeFamily, RolloutConstraint (..), SurfaceVerdict (..), defaultGate, deriveLabel, diffSources, diffSpecs, familyRegistry, gateWith, gatedBreaking, isAdvisory, isBreaking, verdictFor)
 import Keiro.Dsl.DiffReport (Remedy (..), diffReport, parseSurfaceName, remediationFor, renderExplainBlock, renderFinding)
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), BindingObligationKind (..), bindingHoles, bindingObligations, renderBindingObligations)
+import Keiro.Dsl.Expression
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint, aggregateFoldSurface)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
@@ -205,6 +206,8 @@ main = hspec $ do
             withoutCanonicalV1
                 `shouldBe` sort
                     [ "language-duplicate.keiro"
+                    , "aggregate-collection-expressions-v2-rejects.keiro"
+                    , "aggregate-scalar-expressions-v2.keiro"
                     , "language-future.keiro"
                     , "language-legacy.keiro"
                     , "language-malformed.keiro"
@@ -261,6 +264,99 @@ main = hspec $ do
                     map (fmap osFile . wcDeclarationSite) changes `shouldBe` [Just (wmPath firstMember)]
                     map wcChange changes `shouldSatisfy` all (not . gatedBreaking (gateWith [minBound .. maxBound]))
                 _ -> expectationFailure "canonical workspace had no member"
+
+    describe "scalar expressions" $ do
+        it "parses, validates, and round-trips the authoritative v2 scalar fixture" $ do
+            source <- readTestText "test/fixtures/aggregate-scalar-expressions-v2.keiro"
+            parsed <- case parseSource "aggregate-scalar-expressions-v2.keiro" source of
+                Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+                Right value -> pure value
+            validateSpec (parsedSpec parsed) `shouldBe` []
+            parseSource "round-trip.keiro" (renderSource parsed) `shouldBe` Right parsed
+            case [aggregate | NAggregate aggregate <- specNodes (parsedSpec parsed)] of
+                [aggregate] -> case aggTransitions aggregate of
+                    [transition] -> do
+                        tImplementation transition `shouldBe` GeneratedImplementation
+                        let environment = expressionEnvironment (parsedSpec parsed) aggregate transition
+                        case lookup "reserved" (tWrites transition) >>= either (const Nothing) Just . resolveWriteExpr environment "reserved" of
+                            Just resolved -> do
+                                typedScalarType resolved `shouldBe` AggregateNatural
+                                show (typedScalarNode resolved) `shouldContain` "TotalNaturalArithmetic"
+                            Nothing -> expectationFailure "reserved write did not resolve"
+                    _ -> expectationFailure "expected one scalar transition"
+                _ -> expectationFailure "expected one scalar aggregate"
+
+        it "rejects Int arithmetic and mixed numeric operands before scaffolding" $ do
+            let source =
+                    T.unlines
+                        [ "language keiro-dsl 2"
+                        , "context scalar-errors"
+                        , "aggregate Counter"
+                        , "  regs"
+                        , "    machine Int = 0"
+                        , "    exact Integer = 0"
+                        , "  states Open Closed!"
+                        , "  command Add { machine:Int exact:Integer }"
+                        , "  event Added = fields(Add)"
+                        , "  Open -- Add -->"
+                        , "    guard cmd.machine + 1 >= 0 && cmd.exact == cmd.machine"
+                        , "    emit Added"
+                        , "    goto Closed"
+                        ]
+            spec <- parseInlineSpec "<scalar-errors>" source
+            errorCodes spec `shouldContain` [AggregateExpressionOperatorUnsupported, AggregateExpressionOperandTypeMismatch]
+
+        it "requires explicit roots for a same-named register and command field" $ do
+            let source =
+                    T.unlines
+                        [ "language keiro-dsl 2"
+                        , "context scalar-ambiguity"
+                        , "aggregate Counter"
+                        , "  regs"
+                        , "    amount Integer = 0"
+                        , "  states Open Closed!"
+                        , "  command Set { amount:Integer }"
+                        , "  event SetEvent = fields(Set)"
+                        , "  Open -- Set -->"
+                        , "    guard amount == 0"
+                        , "    emit SetEvent"
+                        , "    goto Closed"
+                        ]
+            spec <- parseInlineSpec "<scalar-ambiguity>" source
+            errorCodes spec `shouldContain` [AggregateExpressionRootAmbiguous]
+
+        it "enforces exclusive Hole ownership and preserves its canonical spelling" $ do
+            let source =
+                    T.unlines
+                        [ "language keiro-dsl 2"
+                        , "context scalar-hole"
+                        , "aggregate Counter"
+                        , "  regs"
+                        , "    amount Integer = 0"
+                        , "  states Open Closed!"
+                        , "  command Set { amount:Integer }"
+                        , "  event SetEvent = fields(Set)"
+                        , "  Open -- Set -->"
+                        , "    implementation hole"
+                        , "    guard cmd.amount >= 0"
+                        , "    emit SetEvent"
+                        , "    goto Closed"
+                        ]
+            parsed <- case parseSource "<scalar-hole>" source of
+                Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+                Right value -> pure value
+            errorCodes (parsedSpec parsed) `shouldContain` [AggregateTransitionOwnershipConflict]
+            renderSource parsed `shouldSatisfy` T.isInfixOf "implementation hole"
+
+        it "pins v1 and collection rejection at their stable boundaries" $ do
+            v1Source <- readTestText "test/fixtures/aggregate-scalar-expressions-v1-rejects.keiro"
+            case parseSource "v1.keiro" v1Source of
+                Left (SourceLanguageFailure diagnostic) -> sourceLanguageErrorCode diagnostic `shouldBe` LanguageFeatureRequiresVersion
+                other -> expectationFailure ("expected v1 source-language refusal, got " <> show other)
+            collectionSource <- readTestText "test/fixtures/aggregate-collection-expressions-v2-rejects.keiro"
+            case parseSource "collections.keiro" collectionSource of
+                Left failure -> renderParseFailure failure `shouldSatisfy` T.isInfixOf "CollectionExpressionUnsupported"
+                Right _ -> expectationFailure "collection syntax unexpectedly parsed"
 
     describe "nominal consumer types" $ do
         it "resolves every category through one checked registry and explains exact obligations" $ do
@@ -4056,6 +4152,7 @@ renderExprText e =
             Transition
                 { tSource = "S"
                 , tCommand = "C"
+                , tImplementation = LegacyHoleImplementation
                 , tGuard = Just e
                 , tWrites = []
                 , tEmits = []
@@ -4905,6 +5002,7 @@ expressionTags =
     TypeExprAlgebra
         { onText = ["text"]
         , onInt = ["int"]
+        , onInteger = ["integer"]
         , onBool = ["bool"]
         , onNatural = ["natural"]
         , onTime = ["time"]
@@ -5697,6 +5795,7 @@ genTransition =
     Transition
         <$> genName
         <*> genName
+        <*> pure LegacyHoleImplementation
         <*> genMaybe genExpr
         <*> smallList ((,) <$> genName <*> genExpr)
         <*> smallList genName
@@ -6114,6 +6213,8 @@ genTypeExpr names = sized (go . min 3)
             , (1, TList <$> go (depth - 1))
             , (1, TMap <$> go (depth - 1))
             ]
+    -- This generator renders through the unversioned/version-1 grammar. Keep
+    -- successor-only Integer coverage in the dedicated version-2 properties.
     base = elements ([TText, TInt, TBool, TNatural, TTime, TJson] ++ map TRef names)
 
 genOnMissing :: Gen OnMissing

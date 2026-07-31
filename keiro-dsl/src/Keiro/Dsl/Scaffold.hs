@@ -84,6 +84,7 @@ import Keiro.Dsl.ExplainBindings (BindingObligation (..), BindingObligationKind 
 import Keiro.Dsl.FoldFingerprint (aggregateFoldFingerprint)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
+import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (sagaCategoryError)
@@ -620,6 +621,7 @@ branchExpr graph =
         TypeExprAlgebra
             { onText = BranchScalar
             , onInt = BranchScalar
+            , onInteger = BranchScalar
             , onBool = BranchScalar
             , onNatural = BranchScalar
             , onTime = BranchScalar
@@ -1125,6 +1127,7 @@ exprRequirements ctx graph =
         TypeExprAlgebra
             { onText = [ReqText]
             , onInt = []
+            , onInteger = []
             , onBool = []
             , onNatural = [ReqNatural]
             , onTime = [ReqTime]
@@ -1144,6 +1147,7 @@ renderShapeType ctx graph =
         TypeExprAlgebra
             { onText = "Text"
             , onInt = "Int"
+            , onInteger = "Integer"
             , onBool = "Bool"
             , onNatural = "Natural"
             , onTime = "UTCTime"
@@ -1232,6 +1236,7 @@ projectionScalar :: ResolvedTypeExpr -> Maybe Text
 projectionScalar = \case
     RText -> Just "Text"
     RInt -> Just "Int"
+    RInteger -> Just "Integer"
     RBool -> Just "Bool"
     RTime -> Just "UTCTime"
     RNatural -> Just "Natural"
@@ -2974,6 +2979,7 @@ exprRefs =
         TypeExprAlgebra
             { onText = []
             , onInt = []
+            , onInteger = []
             , onBool = []
             , onNatural = []
             , onTime = []
@@ -3134,6 +3140,7 @@ encodeShapeExpr _a graph expression value =
         TypeExprAlgebra
             { onText = \v -> "toJSON (" <> v <> ")"
             , onInt = \v -> "toJSON (" <> v <> ")"
+            , onInteger = \v -> "toJSON (" <> v <> ")"
             , onBool = \v -> "toJSON (" <> v <> ")"
             , onNatural = \v -> "toJSON (" <> v <> ")"
             , onTime = \v -> "toJSON (" <> v <> ")"
@@ -3155,6 +3162,7 @@ decodeShapeExpr _a graph =
         TypeExprAlgebra
             { onText = "parseJSON"
             , onInt = "parseJSON"
+            , onInteger = "parseJSON"
             , onBool = "parseJSON"
             , onNatural = "parseJSON"
             , onTime = "parseJSON"
@@ -3666,28 +3674,7 @@ windowText = either (const "0") tshow' . windowSeconds
 
 -- | Render an Expr back to source-ish text for a hole annotation.
 renderGuard :: Expr -> Text
-renderGuard = go (0 :: Int)
-  where
-    go ctx e = parenIf (prec e < ctx) (body e)
-    body (EOr l r) = go 1 l <> " || " <> go 2 r
-    body (EAnd l r) = go 2 l <> " && " <> go 3 r
-    body (ECmp op l r) = go 4 l <> " " <> cmp op <> " " <> go 4 r
-    body (EAtom (AName n)) = n
-    body (EAtom (ABool True)) = "true"
-    body (EAtom (ABool False)) = "false"
-    prec :: Expr -> Int
-    prec EOr{} = 1
-    prec EAnd{} = 2
-    prec ECmp{} = 3
-    prec EAtom{} = 4
-    parenIf True s = "(" <> s <> ")"
-    parenIf False s = s
-    cmp OpEq = "=="
-    cmp OpNeq = "!="
-    cmp OpLt = "<"
-    cmp OpLe = "<="
-    cmp OpGt = ">"
-    cmp OpGe = ">="
+renderGuard = renderExpr
 
 --------------------------------------------------------------------------------
 -- Text helpers

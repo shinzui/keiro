@@ -231,6 +231,7 @@ docWireArm arm =
 docTypeExpr :: TypeExpr -> Doc ann
 docTypeExpr TText = "Text"
 docTypeExpr TInt = "Int"
+docTypeExpr TInteger = "Integer"
 docTypeExpr TBool = "Bool"
 docTypeExpr TNatural = "Natural"
 docTypeExpr TTime = "Time"
@@ -778,7 +779,8 @@ docTransition t =
         TmLive -> mempty
         TmReplayOnly -> "replay-only "
     clauses =
-        maybe [] (\g -> ["guard" <+> docExpr 0 g]) (tGuard t)
+        ["implementation hole" | tImplementation t == HoleImplementation]
+            ++ maybe [] (\g -> ["guard" <+> docExpr 0 g]) (tGuard t)
             ++ map (\(r, e) -> "write" <+> pretty r <+> ":=" <+> docExpr 0 e) (tWrites t)
             ++ map (\ev -> "emit" <+> pretty ev) (tEmits t)
             ++ ["goto" <+> pretty (tGoto t)]
@@ -809,7 +811,8 @@ docConsistency Eventual = "Eventual"
 
 {- | @showsPrec@-style expression renderer. The 'Int' is the minimum precedence
 allowed without parentheses in the current context. Precedence levels:
-@||@ = 1, @&&@ = 2, comparisons = 3, atoms = 4.
+@||@ = 1, @&&@ = 2, comparisons = 3, addition/subtraction = 4,
+multiplication = 5, atoms = 6.
 -}
 docExpr :: Int -> Expr -> Doc ann
 docExpr ctx e = parensIf (precOf e < ctx) (body e)
@@ -817,13 +820,41 @@ docExpr ctx e = parensIf (precOf e < ctx) (body e)
     body (EOr l r) = docExpr 1 l <+> "||" <+> docExpr 2 r
     body (EAnd l r) = docExpr 2 l <+> "&&" <+> docExpr 3 r
     body (ECmp op l r) = docExpr 4 l <+> docCmp op <+> docExpr 4 r
+    body (EAdd _ l r) = docExpr 4 l <+> "+" <+> docExpr 5 r
+    body (ESubtract _ l r) = docExpr 4 l <+> "-" <+> docExpr 5 r
+    body (EMultiply _ l r) = docExpr 5 l <+> "*" <+> docExpr 6 r
+    body (EPath _ root path) = docPath root path
+    body (ELiteral _ literal) = docLiteral literal
     body (EAtom a) = docAtom a
 
 precOf :: Expr -> Int
 precOf EOr{} = 1
 precOf EAnd{} = 2
 precOf ECmp{} = 3
-precOf EAtom{} = 4
+precOf EAdd{} = 4
+precOf ESubtract{} = 4
+precOf EMultiply{} = 5
+precOf EPath{} = 6
+precOf ELiteral{} = 6
+precOf EAtom{} = 6
+
+docRoot :: ExprRoot -> Doc ann
+docRoot UnqualifiedRoot = mempty
+docRoot RegisterRoot = "reg"
+docRoot CommandRoot = "cmd"
+
+docPath :: ExprRoot -> [Name] -> Doc ann
+docPath UnqualifiedRoot [] = mempty
+docPath UnqualifiedRoot (first : rest) = pretty first <> hcat (map (("." <>) . pretty) rest)
+docPath root path = docRoot root <> hcat (map (("." <>) . pretty) path)
+
+docLiteral :: ScalarLiteral -> Doc ann
+docLiteral (LiteralText value) = dquoted value
+docLiteral (LiteralIntegral value) = pretty value
+docLiteral (LiteralBool True) = "true"
+docLiteral (LiteralBool False) = "false"
+docLiteral (LiteralQualified typeName constructor) = pretty typeName <> "." <> pretty constructor
+docLiteral (LiteralId typeName value) = pretty typeName <> "(" <> dquoted value <> ")"
 
 docCmp :: CmpOp -> Doc ann
 docCmp OpEq = "=="

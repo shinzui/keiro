@@ -85,14 +85,7 @@ aggregate NominalLedger
   }
 
   Empty -- RecordNominals -->
-    guard accountNumber == accountNumber && riskScore >= riskScore && sequenceNumber >= sequenceNumber && featureFlag == featureFlag && observedAt >= observedAt
-    write orderId := orderId
-    write status := status
-    write accountNumber := accountNumber
-    write riskScore := riskScore
-    write sequenceNumber := sequenceNumber
-    write featureFlag := featureFlag
-    write observedAt := observedAt
+    implementation hole
     emit NominalsRecorded
     goto Recorded
 

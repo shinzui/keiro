@@ -196,7 +196,7 @@ renderSourceLanguageDiagnostic diagnostic =
         MisplacedLanguagePreamble ->
             "misplaced language preamble; it must be the first significant clause before `context`"
         LanguageFeatureRequiresVersion ->
-            "nominal binding syntax requires keiro-dsl language version "
+            "selected syntax requires keiro-dsl language version "
                 <> languageVersionText (NE.last (sourceLanguageSupportedVersions diagnostic))
                 <> "; selected version "
                 <> maybe token languageVersionText (sourceLanguageDeclaredVersion diagnostic)

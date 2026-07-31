@@ -182,6 +182,7 @@ sampleValue graph spec _aggregate resolvedType =
                 sampleMappedDeclaration resolved declaration
             | otherwise -> emptyObject
         AggregateInt -> Number 1
+        AggregateInteger -> Number 1
         AggregateNatural -> Number 1
         AggregateBool -> Bool True
         AggregateTime -> String "2026-01-02T03:04:05.123456789012Z"
@@ -230,6 +231,7 @@ sampleMappedExpression graph =
         TypeExprAlgebra
             { onText = String "sample"
             , onInt = Number 1
+            , onInteger = Number 1
             , onBool = Bool True
             , onNatural = Number 1
             , onTime = String "2026-01-01T00:00:00Z"

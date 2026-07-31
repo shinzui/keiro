@@ -1,0 +1,34 @@
+language keiro-dsl 2
+context aggregate-scalar-expressions
+
+aggregate ScalarAccount
+  regs
+    balance Integer = 0
+    reserved Natural = 0
+    capacity Natural = 10
+    label Text = ""
+    active Bool = False
+    openedAt Time = "2026-01-01T00:00:00Z"
+  states Open Closed!
+
+  command Adjust {
+    balance:Integer requested:Natural label:Text active:Bool observedAt:Time
+  }
+  event Adjusted = fields(Adjust)
+
+  Open -- Adjust -->
+    guard cmd.balance + reg.balance >= -100
+      && reg.reserved + cmd.requested <= reg.capacity
+      && cmd.observedAt >= reg.openedAt
+      && cmd.active == true
+    write balance := reg.balance + cmd.balance * 2
+    write reserved := reg.reserved + (cmd.requested - reg.capacity)
+    write label := cmd.label
+    write active := cmd.active
+    write openedAt := cmd.observedAt
+    emit Adjusted
+    goto Closed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  snapshot every 1
+    state-codec version=1 shape-hash="aggregate-scalar-expressions-v2"

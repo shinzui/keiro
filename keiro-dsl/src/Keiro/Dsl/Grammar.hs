@@ -42,6 +42,9 @@ module Keiro.Dsl.Grammar (
 
     -- * The Expr sublanguage
     Expr (..),
+    ExprRoot (..),
+    ScalarLiteral (..),
+    exprLoc,
     CmpOp (..),
     Atom (..),
     complementExpr,
@@ -57,6 +60,7 @@ module Keiro.Dsl.Grammar (
     EventBody (..),
     Hole (..),
     Transition (..),
+    TransitionImplementation (..),
     TransitionMode (..),
     WireSpec (..),
     ProjectionSpec (..),
@@ -209,6 +213,7 @@ data RuleDecl = RuleDecl
 data TypeExpr
     = TText
     | TInt
+    | TInteger
     | TBool
     | TNatural
     | TTime
@@ -395,8 +400,56 @@ data Expr
     = EOr !Expr !Expr
     | EAnd !Expr !Expr
     | ECmp !CmpOp !Expr !Expr
+    | EAdd !Loc !Expr !Expr
+    | ESubtract !Loc !Expr !Expr
+    | EMultiply !Loc !Expr !Expr
+    | EPath !Loc !ExprRoot ![Name]
+    | ELiteral !Loc !ScalarLiteral
     | EAtom !Atom
     deriving stock (Eq, Show, Generic)
+
+{- | The provenance of a version-2 scalar path. The first path segment is the
+register or active command-field name; remaining segments are required
+structural record fields.
+-}
+data ExprRoot
+    = UnqualifiedRoot
+    | RegisterRoot
+    | CommandRoot
+    deriving stock (Eq, Ord, Show, Generic)
+
+{- | Surface scalar literals whose final type is selected by the resolver.
+Quoted literals deliberately share one syntax for Text and Time; integral
+literals share one syntax for Int, Integer, and Natural. No numeric coercion
+follows from that syntactic sharing.
+-}
+data ScalarLiteral
+    = LiteralText !Text
+    | LiteralIntegral !Integer
+    | LiteralBool !Bool
+    | LiteralQualified !Name !Name
+    | LiteralId !Name !Text
+    deriving stock (Eq, Show, Generic)
+
+{- | Best available source row for an expression node. Version-2 atoms and
+arithmetic retain their exact row; legacy nodes fall back through children
+and ultimately to 'noLoc'.
+-}
+exprLoc :: Expr -> Loc
+exprLoc = \case
+    EOr left right -> firstLocated left right
+    EAnd left right -> firstLocated left right
+    ECmp _ left right -> firstLocated left right
+    EAdd loc _ _ -> loc
+    ESubtract loc _ _ -> loc
+    EMultiply loc _ _ -> loc
+    EPath loc _ _ -> loc
+    ELiteral loc _ -> loc
+    EAtom{} -> noLoc
+  where
+    firstLocated left right = case exprLoc left of
+        Loc 0 -> exprLoc right
+        loc -> loc
 
 data CmpOp = OpEq | OpNeq | OpLt | OpLe | OpGt | OpGe
     deriving stock (Eq, Show, Generic)
@@ -429,8 +482,10 @@ complementExpr = \case
     EOr l r -> EAnd (complementExpr l) (complementExpr r)
     EAnd l r -> EOr (complementExpr l) (complementExpr r)
     ECmp op l r -> ECmp (complementCmp op) l r
+    ELiteral loc (LiteralBool value) -> ELiteral loc (LiteralBool (not value))
     EAtom (ABool b) -> EAtom (ABool (not b))
-    e@(EAtom (AName _)) -> ECmp OpEq e (EAtom (ABool False))
+    e@(EAtom _) -> ECmp OpEq e (EAtom (ABool False))
+    e -> ECmp OpEq e (ELiteral (exprLoc e) (LiteralBool False))
   where
     complementCmp = \case
         OpEq -> OpNeq
@@ -543,6 +598,7 @@ indentation-stacked or @;@-separated on one line.
 data Transition = Transition
     { tSource :: !Name
     , tCommand :: !Name
+    , tImplementation :: !TransitionImplementation
     , tGuard :: !(Maybe Expr)
     , tWrites :: ![(Name, Expr)]
     , tEmits :: ![Name]
@@ -551,6 +607,17 @@ data Transition = Transition
     , tLoc :: !Loc
     }
     deriving stock (Eq, Show, Generic)
+
+{- | Exclusive behavior ownership. 'LegacyHoleImplementation' exists only for
+the frozen version-1 parser and preserves its create-once aggregate-wide
+transducer. Version 2 produces either generated ownership (the default) or
+an explicit per-transition Hole implementation.
+-}
+data TransitionImplementation
+    = LegacyHoleImplementation
+    | GeneratedImplementation
+    | HoleImplementation
+    deriving stock (Eq, Ord, Show, Generic)
 
 {- | Whether a transition serves forward execution or replay only (plan 143).
 A @replay-only@ transition lowers to a keiki 'ReplayOnly' edge: it is never

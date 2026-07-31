@@ -199,6 +199,7 @@ newtype MappedKey = MappedKey {unMappedKey :: Name}
 data ResolvedTypeExpr
     = RText
     | RInt
+    | RInteger
     | RBool
     | RNatural
     | RTime
@@ -361,6 +362,7 @@ resolveShape keyByName owner (ShapeUnion encoding arms) =
 resolveExpr :: Map Name MappedKey -> Name -> Loc -> TypeExpr -> Either TypeGraphError ResolvedTypeExpr
 resolveExpr _ _ _ TText = Right RText
 resolveExpr _ _ _ TInt = Right RInt
+resolveExpr _ _ _ TInteger = Right RInteger
 resolveExpr _ _ _ TBool = Right RBool
 resolveExpr _ _ _ TNatural = Right RNatural
 resolveExpr _ _ _ TTime = Right RTime
@@ -405,6 +407,7 @@ refsInExpr =
         TypeExprAlgebra
             { onText = Set.empty
             , onInt = Set.empty
+            , onInteger = Set.empty
             , onBool = Set.empty
             , onNatural = Set.empty
             , onTime = Set.empty
@@ -498,6 +501,7 @@ usePaths graph targetName = case Map.lookup (MappedKey targetName) (tgDeclaratio
     pathsInExpr visited = \case
         RText -> []
         RInt -> []
+        RInteger -> []
         RBool -> []
         RNatural -> []
         RTime -> []
@@ -537,6 +541,7 @@ renderUsePath (UsePath root segments) = renderRoot root <> T.concat (map renderS
 data TypeExprAlgebra a = TypeExprAlgebra
     { onText :: a
     , onInt :: a
+    , onInteger :: a
     , onBool :: a
     , onNatural :: a
     , onTime :: a
@@ -551,6 +556,7 @@ foldTypeExpr :: TypeExprAlgebra a -> ResolvedTypeExpr -> a
 foldTypeExpr algebra = \case
     RText -> onText algebra
     RInt -> onInt algebra
+    RInteger -> onInteger algebra
     RBool -> onBool algebra
     RNatural -> onNatural algebra
     RTime -> onTime algebra
@@ -633,6 +639,7 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
     wireExpr visited = \case
         RText -> "text"
         RInt -> "int"
+        RInteger -> "integer"
         RBool -> "bool"
         RNatural -> "natural"
         RTime -> "time"

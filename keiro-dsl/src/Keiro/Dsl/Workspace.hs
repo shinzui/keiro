@@ -1287,6 +1287,7 @@ instance HasLocs EnvelopeLayer
 instance HasLocs Event
 instance HasLocs EventBody
 instance HasLocs Expr
+instance HasLocs ExprRoot
 instance HasLocs Field
 instance HasLocs FieldBinding
 instance HasLocs FireAtExpr
@@ -1333,10 +1334,12 @@ instance HasLocs RuleDecl
 instance HasLocs SagaRef
 instance HasLocs SnapPolicy
 instance HasLocs SnapshotSpec
+instance HasLocs ScalarLiteral
 instance HasLocs Spec
 instance HasLocs StateDecl
 instance HasLocs TimerNode
 instance HasLocs Transition
+instance HasLocs TransitionImplementation
 instance HasLocs TransitionMode
 instance HasLocs TypeExpr
 instance HasLocs UnionEncoding

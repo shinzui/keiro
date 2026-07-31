@@ -66,6 +66,7 @@ data AggregateCapability = SolverVisible | OpaqueOnly | Unsupported
 data ResolvedAggregateType
     = AggregateText
     | AggregateInt
+    | AggregateInteger
     | AggregateBool
     | AggregateTime
     | AggregateNatural
@@ -111,6 +112,7 @@ resolveAggregateType symbols loc useSite expression = do
     resolved <- case expression of
         TText -> pure AggregateText
         TInt -> pure AggregateInt
+        TInteger -> pure AggregateInteger
         TBool -> pure AggregateBool
         TNatural -> pure AggregateNatural
         TTime -> pure AggregateTime
@@ -153,6 +155,7 @@ aggregateCapability useSite resolved = case useSite of
         _ -> solverVisibility resolved
     OrderingGuardUse -> case resolved of
         AggregateInt -> SolverVisible
+        AggregateInteger -> SolverVisible
         AggregateTime -> SolverVisible
         AggregateNatural -> SolverVisible
         AggregateNominal nominal -> nominalOrderingCapability nominal
@@ -173,6 +176,7 @@ solverVisibility :: ResolvedAggregateType -> AggregateCapability
 solverVisibility resolved = case resolved of
     AggregateText -> SolverVisible
     AggregateInt -> SolverVisible
+    AggregateInteger -> SolverVisible
     AggregateBool -> SolverVisible
     AggregateTime -> SolverVisible
     AggregateNatural -> SolverVisible
@@ -200,6 +204,7 @@ aggregateCanonicalName :: ResolvedAggregateType -> Text
 aggregateCanonicalName resolved = case resolved of
     AggregateText -> "Text"
     AggregateInt -> "Int"
+    AggregateInteger -> "Integer"
     AggregateBool -> "Bool"
     AggregateTime -> "Time"
     AggregateNatural -> "Natural"
@@ -211,6 +216,7 @@ typeExprCanonicalName :: TypeExpr -> Text
 typeExprCanonicalName expression = case expression of
     TText -> "Text"
     TInt -> "Int"
+    TInteger -> "Integer"
     TBool -> "Bool"
     TNatural -> "Natural"
     TTime -> "Time"
@@ -272,6 +278,7 @@ aggregateSampleHaskell :: AggregateSymbols -> Text -> ResolvedAggregateType -> T
 aggregateSampleHaskell symbols fieldName resolved = case resolved of
     AggregateText -> tshow ("sample-" <> fieldName)
     AggregateInt -> "0"
+    AggregateInteger -> "0"
     AggregateBool -> "False"
     AggregateTime -> "(UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012))"
     AggregateNatural -> "0"
@@ -299,6 +306,7 @@ aggregateSampleHaskell symbols fieldName resolved = case resolved of
 data ResolvedRegisterInitial
     = InitialText !Text
     | InitialInt !Int
+    | InitialInteger !Integer
     | InitialBool !Bool
     | InitialTime !UTCTime
     | InitialNatural !Natural
@@ -316,6 +324,9 @@ resolveRegisterInitial symbols loc resolved syntax = case resolved of
     AggregateInt -> case syntax of
         RegInitBare value -> maybe (invalid "Int initials must be integral literals in the Haskell Int range") (pure . InitialInt) (readMaybe (T.unpack value))
         RegInitText _ -> invalid "Int initials must be unquoted integral literals"
+    AggregateInteger -> case syntax of
+        RegInitBare value -> maybe (invalid "Integer initials must be integral literals") (pure . InitialInteger) (readMaybe (T.unpack value))
+        RegInitText _ -> invalid "Integer initials must be unquoted integral literals"
     AggregateBool -> case syntax of
         RegInitBare "True" -> pure (InitialBool True)
         RegInitBare "False" -> pure (InitialBool False)
@@ -358,6 +369,7 @@ renderRegisterInitial :: ResolvedRegisterInitial -> Text
 renderRegisterInitial initial = case initial of
     InitialText value -> tshow value
     InitialInt value -> T.pack (show value)
+    InitialInteger value -> T.pack (show value)
     InitialBool value -> if value then "True" else "False"
     InitialTime value ->
         let (year, month, day) = toGregorian (utctDay value)
@@ -383,6 +395,7 @@ registerInitialCanonicalName :: ResolvedRegisterInitial -> Text
 registerInitialCanonicalName initial = case initial of
     InitialText value -> tshow value
     InitialInt value -> T.pack (show value)
+    InitialInteger value -> T.pack (show value)
     InitialBool value -> if value then "True" else "False"
     InitialTime{} -> renderRegisterInitial initial
     InitialNatural value -> T.pack (show value)

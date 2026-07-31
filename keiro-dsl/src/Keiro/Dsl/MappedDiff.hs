@@ -79,6 +79,7 @@ data ShapeView
 data ExprView
     = ExprText
     | ExprInt
+    | ExprInteger
     | ExprBool
     | ExprNatural
     | ExprTime
@@ -112,6 +113,7 @@ exprView =
         TypeExprAlgebra
             { onText = ExprText
             , onInt = ExprInt
+            , onInteger = ExprInteger
             , onBool = ExprBool
             , onNatural = ExprNatural
             , onTime = ExprTime
