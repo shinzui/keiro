@@ -60,6 +60,13 @@ Milestone 1 and must use the released packages rather than a sibling checkout.
 
 ## Surprises & Discoveries
 
+- 2026-07-31: The implementation preflight reproduced the published `0.5.0.0` packages and tag,
+  but the first constrained `cabal build all` failed during dependency solving because the local
+  Cabal index only knew `keiki-codec-json` through `0.4.0.0`. Hackage's live preferred-version
+  endpoint already listed `0.5.0.0`, so this was a stale local package-index cache rather than a
+  missing release. After `cabal update`, the exact constrained `cabal build all` completed against
+  `keiki == 0.5.0.0` and `keiki-codec-json == 0.5.0.0` without source-compatibility changes.
+
 - 2026-07-31: The Hackage upload completed while the plan was under readiness review. Both `keiki`
   and `keiki-codec-json` now list `0.5.0.0` in preferred-version metadata, and the matching tag
   resolves to commit `3250780cffa1397cb320ebae69a326ee7554685f`. Inspection of that tag confirms
