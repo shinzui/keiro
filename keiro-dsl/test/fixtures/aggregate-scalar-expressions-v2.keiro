@@ -1,18 +1,39 @@
 language keiro-dsl 2
 context aggregate-scalar-expressions
 
+id RequestId prefix=req
+enum AccountMode { Normal=normal Restricted=restricted }
+
+mapped structural record Limits {
+  haskell package=keiro-dsl module=ScalarExpressions.Domain type=Limits
+  binding = "ScalarExpressions.Bindings.limitsBinding"
+  binding-version = "1"
+  canonical-type = "scalar-expressions.Limits.v1"
+  fixtures = "ScalarExpressions.Bindings.limitsCases"
+  initial = "ScalarExpressions.Bindings.initialLimits"
+  wire object constructor=Limits unknown-fields=reject {
+    minimum as "minimum" : Integer required
+    ceiling as "ceiling" : Natural required
+  }
+}
+
 aggregate ScalarAccount
   regs
     balance Integer = 0
     reserved Natural = 0
-    capacity Natural = 10
+    capacity Natural = 5
+    machine Int = 0
     label Text = ""
     active Bool = False
+    mode AccountMode = Normal
+    requestId RequestId = placeholder
     openedAt Time = "2026-01-01T00:00:00Z"
+    limits Limits = initial
   states Open Reviewed Closed!
 
   command Adjust {
-    balance:Integer requested:Natural label:Text active:Bool observedAt:Time
+    balance:Integer requested:Natural machine:Int label:Text active:Bool
+    mode:AccountMode requestId:RequestId observedAt:Time limits:Limits
   }
   command Close { balance:Integer }
   event Adjusted = fields(Adjust)
@@ -22,12 +43,17 @@ aggregate ScalarAccount
     guard cmd.balance + reg.balance >= -100
       && reg.reserved + cmd.requested <= reg.capacity
       && cmd.observedAt >= reg.openedAt
-      && cmd.active == true
+      && cmd.limits.minimum >= reg.limits.minimum
+      && cmd.active == false
     write balance := reg.balance + cmd.balance * 2
     write reserved := reg.reserved + (cmd.requested - reg.capacity)
-    write label := cmd.label
-    write active := cmd.active
-    write openedAt := cmd.observedAt
+    write machine := -7
+    write label := "adjusted"
+    write active := true
+    write mode := AccountMode.Restricted
+    write requestId := RequestId("req_00041061050r3gg28a1c60t3gf")
+    write openedAt := "2026-02-03T04:05:06Z"
+    write limits := cmd.limits
     emit Adjusted
     goto Reviewed
 

@@ -292,6 +292,8 @@ main = hspec $ do
             expressions `shouldSatisfy` T.isInfixOf "K.tsub (d.requested) (B.reg @\"capacity\")"
             transducer `shouldSatisfy` T.isInfixOf "B.requireGuard (Expressions.transition1OpenAdjustGuard d)"
             transducer `shouldSatisfy` T.isInfixOf "B.slot @\"balance\" =: Expressions.transition1OpenAdjustWriteBalance d"
+            transducer `shouldSatisfy` T.isInfixOf "scalarAccountPredicateVerifications"
+            transducer `shouldSatisfy` T.isInfixOf "S.verifyPredicate predicate"
             holes `shouldSatisfy` T.isInfixOf "transition1OpenAdjustOutput1Adjusted"
             holes `shouldSatisfy` T.isInfixOf "transition2ReviewedCloseHoleFoldVersion"
             holes `shouldSatisfy` (not . T.isInfixOf "scalarAccountTransducer")
@@ -318,6 +320,27 @@ main = hspec $ do
               ]
       spec <- parseInlineSpec "<scalar-errors>" source
       errorCodes spec `shouldContain` [AggregateExpressionOperatorUnsupported, AggregateExpressionOperandTypeMismatch]
+
+    it "rejects machine-Int arithmetic at both platform bounds" $ do
+      let source =
+            T.unlines
+              [ "language keiro-dsl 2",
+                "context scalar-int-bounds",
+                "aggregate Counter",
+                "  regs",
+                "    machine Int = 0",
+                "  states Open Closed!",
+                "  command Set { machine:Int }",
+                "  event SetEvent = fields(Set)",
+                "  Open -- Set -->",
+                "    guard cmd.machine + 1 >= " <> T.pack (show (minBound :: Int)),
+                "      && cmd.machine - 1 <= " <> T.pack (show (maxBound :: Int)),
+                "    emit SetEvent",
+                "    goto Closed"
+              ]
+      spec <- parseInlineSpec "<scalar-int-bounds>" source
+      length [() | diagnostic <- validateSpec spec, code diagnostic == AggregateExpressionOperatorUnsupported]
+        `shouldBe` 2
 
     it "rejects predicate-valued Bool writes that Keiki cannot represent as scalar terms" $ do
       let source =
@@ -419,6 +442,20 @@ main = hspec $ do
       case parseSource "collections.keiro" collectionSource of
         Left failure -> renderParseFailure failure `shouldSatisfy` T.isInfixOf "CollectionExpressionUnsupported"
         Right _ -> expectationFailure "collection syntax unexpectedly parsed"
+
+    it "keeps arithmetic operands intact when complementing a scalar comparison" $ do
+      let left = EAdd noLoc (EPath noLoc CommandRoot ["balance"]) (ELiteral noLoc (LiteralIntegral 2))
+          right = ESubtract noLoc (EPath noLoc RegisterRoot ["balance"]) (ELiteral noLoc (LiteralIntegral 3))
+          predicate = ECmp OpLt left right
+      complementExpr predicate `shouldBe` ECmp OpGe left right
+      complementExpr (complementExpr predicate) `shouldBe` predicate
+
+    it "keeps the committed scalar-expression conformance tree fresh" $ do
+      spec <- specOf "test/fixtures/aggregate-scalar-expressions-v2.keiro"
+      let modules = scaffoldModules (defaultContext (specContext spec)) spec
+      forM_ [generatedModule | generatedModule <- modules, kind generatedModule == Generated] $ \generatedModule -> do
+        committed <- readTestText ("test/conformance-scalar-expressions/" <> modulePath generatedModule)
+        normalizeGenerated committed `shouldBe` normalizeGenerated (moduleText generatedModule)
 
   describe "nominal consumer types" $ do
     it "resolves every category through one checked registry and explains exact obligations" $ do

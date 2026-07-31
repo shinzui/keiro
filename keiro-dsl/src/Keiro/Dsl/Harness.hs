@@ -385,7 +385,7 @@ emitHarness goldens a =
            "",
            "import " <> aGenPrefix a <> ".Domain",
            "import " <> aGenPrefix a <> ".Codec (encode" <> nm <> "Event, parse" <> nm <> "Event" <> codecValueImport <> mappedCodecHarnessExports a <> ")",
-           "import " <> aHolePrefix a <> ".Holes (" <> lowerFirst nm <> "Transducer)",
+           transducerImport a,
            "import Keiki.Core (" <> T.intercalate ", " coreImports <> ")",
            codecDecodeRawImport
          ]
@@ -466,6 +466,7 @@ emitHarness goldens a =
             "import Data.Text.Encoding (encodeUtf8)"
           ]
         else []
+
     upcastLabel event source =
       case goldenFor goldens event of
         Just _ -> "golden " <> rcName event <> ".v" <> tInt source <> " decodes"
@@ -473,6 +474,24 @@ emitHarness goldens a =
           "upcast "
             <> rcName event
             <> " chain wired (current-shape stand-in; add a golden payload)"
+
+transducerImport :: Agg -> Text
+transducerImport aggregate
+  | usesGeneratedTransducer aggregate =
+      "import "
+        <> aGenPrefix aggregate
+        <> ".Transducer ("
+        <> lowerFirst (aName aggregate)
+        <> "Transducer)"
+  | otherwise =
+      "import "
+        <> aHolePrefix aggregate
+        <> ".Holes ("
+        <> lowerFirst (aName aggregate)
+        <> "Transducer)"
+
+usesGeneratedTransducer :: Agg -> Bool
+usesGeneratedTransducer = any ((/= LegacyHoleImplementation) . tImplementation) . aTransitions
 
 -- | Decode a genuine embedded old payload when available. Without a golden,
 -- retain the weaker current-shape wiring assertion and label it honestly.

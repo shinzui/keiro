@@ -85,8 +85,12 @@ so an accidental parse cannot become an unofficial contract.
   and dynamic snapshot fingerprint composition. The compiled mixed-ownership scalar scaffold
   passes `ghc -fno-code` against published Keiki `0.6.0.0`; all 409 DSL examples pass and the
   existing version-1 generated-byte regressions remain green.
-- [ ] Milestone 4: add compiled, property, mutation, parser-version, replay, snapshot, and
-  Hole-boundary regression tests.
+- [x] 2026-07-31: Added the compiled scalar-expression conformance service with 39 labelled
+  assertions covering all scalar literal families, a finite 360-case reference oracle, exact
+  Integer/Natural concrete and symbolic agreement, Natural `2 - 5 = 0`, repeated structural-path
+  identity, encoded/full replay, snapshot invalidation, generated/Hole ownership, and conservative
+  Hole verification. Ten focused DSL examples and all eight mutation sentinels pass; version 1 and
+  collection syntax still fail at their intended boundaries.
 - [ ] Milestone 5: update notation, user documentation, changelog, diff remedies, relevant ADRs,
   and complete full repository and ADR validation.
 
@@ -142,6 +146,18 @@ so an accidental parse cannot become an unofficial contract.
 - 2026-07-31: The generated symbolic-operator firewall now exempts only aggregate files ending in
   `/Expressions.hs` or `/Transducer.hs`. Those two modules are the intended generated Keiki
   authority; all other generated modules retain the previous firewall.
+- 2026-07-31: The pre-version-2 harness always imported the aggregate-wide transducer from Holes,
+  so the first compiled successor fixture exposed that the harness also needed ownership-aware
+  transducer selection. It now imports the generated transducer only for version-2 ownership and
+  keeps the exact historical import for version 1.
+- 2026-07-31: A Time literal needs the `UTCTime` data constructor at term level. The disposable
+  compile used before the full literal fixture only needed the type, so the compiled conformance
+  service caught and corrected the generated `UTCTime (..)` import.
+- 2026-07-31: The repository was missing the `fourmolu.yaml` supplied by the current Seihou
+  Haskell/Nix template. Upgrading the portable Seihou manifest, migrating `nix-haskell-flake`
+  from `0.11.1` to `0.13.0`, and adding that exact template file restored the repository's normal
+  formatter behavior without source-level extension workarounds or overwriting customized Nix
+  files.
 
 
 ## Decision Log
@@ -244,6 +260,13 @@ so an accidental parse cannot become an unofficial contract.
   for dependency resolution, while honoring the producer repository's explicit no-automatic-push
   rule avoids an unauthorized external Git mutation. Final plan acceptance still requires the
   matching upstream tag.
+  Date: 2026-07-31
+
+- Decision: Generate a labelled per-transition ownership and predicate-verification report beside
+  the version-2 transducer.
+  Rationale: The runtime must expose Keiki's conservative result so an opaque Hole is observably
+  `UnverifiedOpaque`; relying on default validation, whose opacity warning is advisory and opt-in,
+  would not satisfy the ownership boundary's evidence contract.
   Date: 2026-07-31
 
 

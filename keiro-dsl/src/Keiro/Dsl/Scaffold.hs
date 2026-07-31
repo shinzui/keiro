@@ -3286,7 +3286,7 @@ emitExpressions aggregate
           ++ ["import Data.Text (Text)" | expressionUsesType AggregateText]
           ++ ["import Data.Time.Clock (UTCTime)" | expressionUsesType AggregateTime && not expressionUsesTimeLiteral]
           ++ ["import Data.Time.Calendar (fromGregorian)" | expressionUsesTimeLiteral]
-          ++ ["import Data.Time.Clock (UTCTime, picosecondsToDiffTime)" | expressionUsesTimeLiteral]
+          ++ ["import Data.Time.Clock (UTCTime (..), picosecondsToDiffTime)" | expressionUsesTimeLiteral]
           ++ ["import Numeric.Natural (Natural)" | expressionUsesType AggregateNatural]
           ++ structuralProjectionImport
           ++ nominalProjectionImport
@@ -3589,6 +3589,7 @@ emitGeneratedTransducer aggregate =
   nl $
     [ "{-# LANGUAGE BlockArguments #-}",
       "{-# LANGUAGE DataKinds #-}",
+      "{-# LANGUAGE GADTs #-}",
       "{-# LANGUAGE OverloadedRecordDot #-}",
       "{-# LANGUAGE QualifiedDo #-}",
       "{-# LANGUAGE TypeApplications #-}",
@@ -3596,13 +3597,17 @@ emitGeneratedTransducer aggregate =
       "module " <> aGenPrefix aggregate <> ".Transducer",
       "  ( " <> lowerFirst (aName aggregate) <> "Transducer",
       "  , " <> lowerFirst (aName aggregate) <> "FoldFingerprint",
+      "  , BehaviorOwnership (..)",
+      "  , " <> lowerFirst (aName aggregate) <> "PredicateVerifications",
       "  ) where",
       "",
       "import " <> aGenPrefix aggregate <> ".Domain",
       "import " <> aHolePrefix aggregate <> ".Holes qualified as Holes",
       "import Data.Text (Text)",
       "import Keiki.Builder qualified as B",
-      "import Keiki.Core (HsPred, SymTransducer)"
+      "import Keiki.Core (HsPred, SymTransducer)",
+      "import Keiki.Core qualified as K",
+      "import Keiki.Symbolic qualified as S"
     ]
       ++ ["import " <> aGenPrefix aggregate <> ".Expressions qualified as Expressions" | not (null (expressionFunctionNames aggregate))]
       ++ ["import Data.Text qualified as T" | anyHoleOwned aggregate]
@@ -3625,11 +3630,50 @@ emitGeneratedTransducer aggregate =
            "    _ -> False",
            "",
            lowerFirst (aName aggregate) <> "FoldFingerprint :: Text",
-           lowerFirst (aName aggregate) <> "FoldFingerprint = " <> foldFingerprintExpression aggregate
+           lowerFirst (aName aggregate) <> "FoldFingerprint = " <> foldFingerprintExpression aggregate,
+           "",
+           "data BehaviorOwnership = GeneratedOwned | HoleOwned",
+           "  deriving stock (Eq, Show)",
+           "",
+           "-- Every checked transition predicate is audited through Keiki's conservative",
+           "-- symbolic verifier. Opaque Hole terms remain explicitly unverified.",
+           lowerFirst (aName aggregate) <> "PredicateVerifications :: IO [(Text, BehaviorOwnership, S.PredicateVerification)]",
+           lowerFirst (aName aggregate) <> "PredicateVerifications = sequence",
+           nl (renderVerificationList aggregate),
+           " where",
+           "  verifyTransition label owner source edgeIndex =",
+           "    case drop edgeIndex (K.edgesOut " <> lowerFirst (aName aggregate) <> "Transducer source) of",
+           "      K.Edge predicate _ _ _ _ : _ -> (\\result -> (label, owner, result)) <$> S.verifyPredicate predicate",
+           "      [] -> pure (label, owner, S.UnverifiedSolverFailure \"generated transition edge missing\")"
          ]
 
 anyHoleOwned :: Agg -> Bool
 anyHoleOwned = any ((== HoleImplementation) . tImplementation) . aTransitions
+
+renderVerificationList :: Agg -> [Text]
+renderVerificationList aggregate =
+  [ (if listIndex == (0 :: Int) then "  [ " else "  , ")
+      <> "verifyTransition "
+      <> tshow (transitionStem transitionIndex transition)
+      <> " "
+      <> ownership
+      <> " "
+      <> vertexCtor aggregate source
+      <> " "
+      <> tshow' edgeIndex
+  | (listIndex, (source, edgeIndex, transitionIndex, transition)) <- zip [0 ..] entries,
+    let ownership = case tImplementation transition of
+          GeneratedImplementation -> "GeneratedOwned"
+          HoleImplementation -> "HoleOwned"
+          LegacyHoleImplementation -> error "legacy transition reached version-2 verification generation"
+  ]
+    <> ["  ]"]
+  where
+    entries =
+      [ (source, edgeIndex, transitionIndex, transition)
+      | (source, transitions) <- groupTransitionEntriesBySource aggregate,
+        (edgeIndex, (transitionIndex, transition)) <- zip [0 ..] transitions
+      ]
 
 foldFingerprintExpression :: Agg -> Text
 foldFingerprintExpression aggregate = case holeVersions of

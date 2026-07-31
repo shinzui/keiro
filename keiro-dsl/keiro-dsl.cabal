@@ -161,6 +161,39 @@ test-suite keiro-dsl-conformance-aggregate-scalars
     , text   >=2.1  && <2.2
     , time   >=1.12 && <1.15
 
+-- Plan 161: compiled authoritative version-2 scalar expressions, generated
+-- transition ownership, explicit Hole opacity/fold identity, and concrete,
+-- symbolic, codec-replay, and snapshot-invalidation agreement.
+test-suite keiro-dsl-conformance-aggregate-scalar-expressions
+  import:         warnings, shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-scalar-expressions
+  main-is:        Main.hs
+  other-modules:
+    AggregateScalarExpressions.ScalarAccount.Holes
+    Generated.AggregateScalarExpressions.ReplayAudit
+    Generated.AggregateScalarExpressions.ScalarAccount.Codec
+    Generated.AggregateScalarExpressions.ScalarAccount.Domain
+    Generated.AggregateScalarExpressions.ScalarAccount.EventStream
+    Generated.AggregateScalarExpressions.ScalarAccount.Expressions
+    Generated.AggregateScalarExpressions.ScalarAccount.Harness
+    Generated.AggregateScalarExpressions.ScalarAccount.Projection
+    Generated.AggregateScalarExpressions.ScalarAccount.Transducer
+    Generated.AggregateScalarExpressions.Structural.Shape.Limits
+    Generated.AggregateScalarExpressions.StructuralProjections
+    ScalarExpressions.Bindings
+    ScalarExpressions.Domain
+
+  build-depends:
+    , aeson       >=2.2  && <2.3
+    , base        >=4.21 && <5
+    , containers  >=0.6  && <0.8
+    , keiki       >=0.6  && <0.7
+    , keiro
+    , keiro-dsl
+    , text        >=2.1  && <2.2
+    , time        >=1.12 && <1.15
+
 -- EP-158: consumer-owned direct IDs, enums, and nominal scalar wrappers,
 -- checked KindID decoding, total bindings, projections, and snapshot caches.
 test-suite keiro-dsl-conformance-nominal-scalars
