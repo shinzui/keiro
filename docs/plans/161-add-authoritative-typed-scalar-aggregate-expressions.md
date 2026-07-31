@@ -4,6 +4,7 @@ slug: add-authoritative-typed-scalar-aggregate-expressions
 title: "Add authoritative typed scalar aggregate expressions"
 kind: exec-plan
 created_at: 2026-07-31T14:46:36Z
+intention: intention_01kyws5jasem48wvx85fqp01nk
 ---
 
 # Add authoritative typed scalar aggregate expressions
@@ -66,8 +67,16 @@ so an accidental parse cannot become an unofficial contract.
 - [x] 2026-07-31: Prerequisite plan 160 completed versioned CLI/workspace loading and froze
   language version 1; its full suite passed 394 examples, `cabal build all` and native
   `nix flake check` passed, and ADR 16 was accepted.
-- [ ] Milestone 1: prove and release the exact scalar Keiki capabilities needed for `Integer` and
-  total Natural arithmetic, then record the verified Hackage version and matching upstream tag.
+- [x] 2026-07-31: Implemented exact `Integer` and total Natural arithmetic in Keiki, exposed
+  conservative predicate verification, passed 809 coordinated examples/properties plus native
+  flake and extracted-sdist checks, and published `keiki`, `keiki-codec-json`, and
+  `keiki-codec-json-test` version `0.6.0.0` to Hackage. Hackage preferred metadata lists the
+  release and the published core tarball SHA-256 is
+  `f61942daacaf7965ec0a5d05aa7ae4258e3363aff027cd2cb59c9774b6878c63`.
+- [ ] Milestone 1 remaining: have the maintainer push local annotated tag `v0.6.0.0`, which
+  resolves to `c8f2c343ce03f42e10de77d684769f15ad30feda`, then verify that exact commit with
+  `git ls-remote --tags https://github.com/shinzui/keiki.git`. The dependency repository's release
+  runbook explicitly forbids the agent from pushing the tag automatically.
 - [ ] Milestone 2: add the version-2 located scalar grammar and one typed expression resolver with
   stable diagnostics while pinning version-1 rejection behavior.
 - [ ] Milestone 3: make generated version-2 transducers own declared guards and writes, add the
@@ -110,6 +119,10 @@ so an accidental parse cannot become an unofficial contract.
   `v0.5.0.0` resolved to commit `3250780cffa1397cb320ebae69a326ee7554685f` during the audit. That
   release lacks a total Natural arithmetic contract; the local Mori corpus agreed but was not
   used as release authority.
+- 2026-07-31: Keiki's coordinated release runbook requires `keiki`, `keiki-codec-json`, and
+  `keiki-codec-json-test` to ship in one release window and explicitly reserves Git tag pushes for
+  the maintainer. All three `0.6.0.0` packages are published and the local annotated tag resolves
+  to the release commit, but the upstream tag is intentionally not yet present.
 
 
 ## Decision Log
@@ -196,6 +209,15 @@ so an accidental parse cannot become an unofficial contract.
   structural-consumer-type MasterPlan.
   Rationale: Scalar expression execution and generated ownership form an independently
   schedulable change with their own acceptance evidence.
+  Date: 2026-07-31
+
+- Decision: Continue Keiro implementation against immutable published Keiki `0.6.0.0` while
+  leaving Milestone 1's upstream-tag verification open until the maintainer performs the push
+  required by the dependency repository's release runbook.
+  Rationale: Hackage preferred metadata and the downloaded tarball now provide release authority
+  for dependency resolution, while honoring the producer repository's explicit no-automatic-push
+  rule avoids an unauthorized external Git mutation. Final plan acceptance still requires the
+  matching upstream tag.
   Date: 2026-07-31
 
 
@@ -603,3 +625,7 @@ escape hatch remains available after future expression features ship.
 
 Revision note (2026-07-31): Marked the plan-160 language-version prerequisite complete after its
 recorded full-suite, build, Nix, and ADR validation passed.
+
+Revision note (2026-07-31): Recorded the coordinated Keiki `0.6.0.0` Hackage release, exact
+published tarball and local release commit, and the maintainer-owned upstream tag push that remains
+before Milestone 1 can be closed.
