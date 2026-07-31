@@ -1,5 +1,10 @@
 # Bundle Update Log
 
+## 2026-07-31
+* **Addition**: IR-4 requests truthful direct aggregate lowering for `Time` and `Natural`, plus a
+  shared validation/scaffolding capability model so a clean check cannot fail later on type
+  lowering.
+
 ## 2026-07-30
 * **Addition**: IR-3 requests an explicit terminal outbox rejection outcome so downstream
   applications can finalize intentional refusals without retrying or reporting success.
