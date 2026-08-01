@@ -1,0 +1,1 @@
+feature-integer-v1.keiro:4:1: error [LanguageFeatureRequiresVersion]: selected syntax requires keiro-dsl language version 3; selected version 1

@@ -1,0 +1,5 @@
+duplicate-clause.keiro:8:5:
+  |
+8 |     goto Open
+  |     ^
+duplicate goto clause (transition Open -- Move already declared goto Closed)

@@ -1,0 +1,5 @@
+escaped-string.keiro:6:22:
+  |
+6 |   topic events "bad\q"
+  |                      ^
+unknown escape sequence \q in string literal

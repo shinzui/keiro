@@ -1,0 +1,5 @@
+expression-error.keiro:10:9:
+   |
+10 |     goto Open
+   |         ^
+unexpected reserved word goto

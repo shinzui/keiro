@@ -1,0 +1,5 @@
+numeric-overflow.keiro:5:17:
+  |
+5 |   event Changed v18446744073709551617 { }
+  |                 ^
+decimal literal 18446744073709551617 is out of range (maximum 9223372036854775807)

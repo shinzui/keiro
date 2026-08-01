@@ -1,0 +1,7 @@
+keiro-dsl/test/fixtures/workspace-member-parse-failed/service.keiro-workspace:3: error[WorkspaceMemberParseFailed]: workspace member 'domain/b.keiro' failed to parse:
+keiro-dsl/test/fixtures/workspace-member-parse-failed/domain/b.keiro:7:11:
+  |
+7 |   command !!! not a spec !!!
+  |           ^
+unexpected '!'
+expecting '_'

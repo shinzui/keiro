@@ -1,0 +1,1 @@
+duplicate-preamble.keiro:2:1: error [DuplicateLanguagePreamble]: duplicate language preamble; exactly one may appear before `context`

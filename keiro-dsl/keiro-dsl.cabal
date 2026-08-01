@@ -103,6 +103,10 @@ test-suite keiro-dsl-test
   type:           exitcode-stdio-1.0
   hs-source-dirs: test
   main-is:        Main.hs
+  other-modules:
+    Keiro.Dsl.FrontendCompatibility
+    Keiro.Dsl.FrontendPublicApiProbe
+
   build-depends:
     , aeson       >=2.2  && <2.3
     , base        >=4.21 && <5

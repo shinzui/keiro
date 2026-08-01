@@ -38,10 +38,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: verify and record the released 0.7.0.0 source, package, and language-contract baseline.
-- [ ] Milestone 2: inventory every single-source and workspace frontend path and build the checked compatibility manifest.
-- [ ] Milestone 3: add the corpus parity, curated diagnostic, canonical-render, and public-API tests.
-- [ ] Milestone 4: run the focused oracle and complete package validation without production behavior changes.
+- [x] (2026-08-01T20:34:40Z) Milestone 1: verified the local and upstream `keiro-dsl-0.7.0.0` tag and the published Hackage package at release commit `c1c2c06df05afa456f4d55602c41527a7cbd5c2e`.
+- [x] (2026-08-01T20:48:58Z) Milestone 2: inventoried 17 library, workspace, and CLI frontend entry points and classified all 238 source fixtures plus 18 workspace manifests in the checked compatibility manifest.
+- [x] (2026-08-01T20:48:58Z) Milestone 3: added corpus parity, 13 curated byte-exact diagnostic goldens, canonical/source-contract round trips, one-member workspace parity, and explicit public-API type probes.
+- [x] (2026-08-01T20:55:00Z) Milestone 4: passed the 6-example focused oracle, the 445-example full Hspec suite, `cabal build all`, and `nix flake check` with no production parser or CLI diff.
 
 
 ## Surprises & Discoveries
@@ -54,6 +54,21 @@ implementation. Provide concise evidence.
   Evidence: Maintainer report on 2026-08-01.
   Impact: The oracle must still freeze all three released contracts, but no v2/v3 downstream fleet
   or source migration needs to be discovered by this baseline plan.
+
+- Observation: The authoritative Hackage artifact and the local/upstream annotated tag all identify
+  `keiro-dsl` 0.7.0.0; the tag resolves to commit
+  `c1c2c06df05afa456f4d55602c41527a7cbd5c2e`.
+  Evidence: `git show --no-patch keiro-dsl-0.7.0.0`, `git ls-remote --tags origin`, and
+  `https://hackage.haskell.org/package/keiro-dsl-0.7.0.0/keiro-dsl.cabal` on 2026-08-01.
+  Impact: The release gate is satisfied and the checked-in tree can now be treated as the fixed
+  compatibility authority for the frontend refactor.
+
+- Observation: The released `LanguageFeatureRequiresVersion` renderer names language version 3
+  for every version-1 feature refusal even though all four features have minimum version 2.
+  Evidence: The four `keiro-dsl/test/frontend-0.7/diagnostics/feature-*-v1.txt` goldens all contain
+  `requires keiro-dsl language version 3`; `languageFeatureMinimumVersion` returns version 2.
+  Impact: EP-175 may correct structured diagnostic metadata, but the legacy compatibility renderer
+  must preserve these 0.7 bytes unless a separately versioned compatibility decision is made.
 
 
 ## Decision Log
@@ -78,6 +93,12 @@ Record every decision made while working on the plan.
   Rationale: The purpose is to measure 0.7, not begin the frontend refactor early.
   Date: 2026-08-01
 
+- Decision: Make the manifest cover every checked-in `.keiro` and `.keiro-workspace` file under
+  `keiro-dsl/test/fixtures`, rather than maintain a non-source-data allowlist.
+  Rationale: Every file in that tree is an intentional frontend input. Exact set equality makes a
+  newly added or silently omitted fixture fail the focused oracle immediately.
+  Date: 2026-08-01
+
 
 ## Outcomes & Retrospective
 
@@ -86,7 +107,17 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The released 0.7.0.0 frontend now has a checked compatibility oracle covering all 256 frontend
+fixtures, 17 source-consuming entry points, canonical/source-contract round trips, representative
+single-member workspace parity, 13 curated byte-exact failures, and explicit parser/renderer/type
+selector probes. The focused group passed 6 examples and the full package suite passed 445 examples.
+No file under `keiro-dsl/src/` or `keiro-dsl/app/` changed.
+
+The principal lesson is that compatibility data must pin quirks as well as intended policy: the
+released feature-gate renderer says version 3 where the registry minimum is version 2. That
+rendering is now explicit evidence for EP-175 rather than an implicit behavior likely to drift.
+No ADR was changed during this baseline-only plan; ADR 16 already owns the durable rule that
+released language contracts and compatibility entry points remain frozen.
 
 
 ## Context and Orientation
@@ -198,7 +229,9 @@ git diff -- keiro-dsl/src keiro-dsl/app
 ```
 
 The focused and full suites exit zero, the build and native flake checks pass, and the final diff is
-empty. Update this section with exact observed counts when implemented.
+empty. Observed on 2026-08-01: the focused group passed 6 examples, the complete `keiro-dsl-test`
+suite passed 445 examples, `cabal build all` exited zero, and both aarch64-darwin flake checks
+(`treefmt` and `pre-commit`) passed.
 
 
 ## Validation and Acceptance

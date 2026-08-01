@@ -121,7 +121,7 @@ contract.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 172 | Freeze the Keiro DSL 0.7 language frontend contract | docs/plans/172-freeze-the-keiro-dsl-0-7-language-frontend-contract.md | None | None | Not Started |
+| 172 | Freeze the Keiro DSL 0.7 language frontend contract | docs/plans/172-freeze-the-keiro-dsl-0-7-language-frontend-contract.md | None | None | Complete |
 | 177 | Modernize keiro-dsl records and field access | docs/plans/177-modernize-keiro-dsl-records-and-field-access.md | EP-172 | None | Not Started |
 | 173 | Introduce located Keiro surface syntax and explicit lowering | docs/plans/173-introduce-located-keiro-surface-syntax-and-explicit-lowering.md | EP-177 | None | Not Started |
 | 174 | Modularize the Keiro Megaparsec grammar by language concern | docs/plans/174-modularize-the-keiro-megaparsec-grammar-by-language-concern.md | EP-173 | None | Not Started |
@@ -227,8 +227,8 @@ inventory work from EP-176 may be prepared earlier, but production cutover canno
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
 
-- [ ] EP-172: verify the published/tagged 0.7.0.0 baseline and inventory every source-consuming path.
-- [ ] EP-172: land the compatibility oracle, curated goldens, and public API compile probe.
+- [x] EP-172: verified the published/tagged 0.7.0.0 baseline and inventoried every source-consuming path (2026-08-01T20:48:58Z).
+- [x] EP-172: landed the compatibility oracle, curated goldens, and public API compile probe (2026-08-01T20:55:00Z).
 - [ ] EP-177: inventory every production record and publish the 0.7-to-next-major selector map.
 - [ ] EP-177: modernize records and field access while preserving wire/output and Keiki-label behavior.
 - [ ] EP-173: define exact source spans and a non-lossless located surface representation.
@@ -251,6 +251,13 @@ interactions between child plans. Provide concise evidence.
   Evidence: Maintainer report on 2026-08-01.
   Impact: Preserve v2/v3 as released test contracts, but perform the public record/API cleanup now
   without building fleet migration machinery for nonexistent v2/v3 adopters.
+
+- Observation: The 0.7 compatibility renderer reports version 3, rather than the registry minimum
+  version 2, in every `LanguageFeatureRequiresVersion` message.
+  Evidence: EP-172's four feature-gate goldens reproduce the released bytes while
+  `languageFeatureMinimumVersion` returns version 2.
+  Impact: EP-175 must distinguish corrected structured metadata from the pinned legacy renderer so
+  diagnostic modernization does not accidentally change CLI compatibility output.
 
 
 ## Decision Log
