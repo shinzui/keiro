@@ -19,6 +19,9 @@ module Keiro.Dsl.Parser.Core
   ( ContextualParseFailure (..),
     P,
     firstContextualFailure,
+    bundleFailureSpan,
+    bundleExpected,
+    bundleMessage,
     contextualFailureAt,
     requireLanguageFeatureAt,
     sc,
@@ -61,6 +64,7 @@ import Data.List.NonEmpty qualified as NE
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Dsl.Frontend.Internal
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Source
@@ -71,7 +75,8 @@ import Prelude hiding (span)
 
 data ContextualParseFailure = ContextualParseFailure
   { contextualFailureCode :: !SourceLanguageErrorCode,
-    contextualFailureLine :: !Int
+    contextualFailureFeature :: !(Maybe LanguageFeature),
+    contextualFailureSpan :: !SourceSpan
   }
   deriving stock (Eq, Ord, Show)
 
@@ -89,13 +94,42 @@ firstContextualFailure bundle =
     contextual : _ -> Just contextual
     [] -> Nothing
 
-contextualFailureAt :: Loc -> SourceLanguageErrorCode -> P a
-contextualFailureAt (Loc line) code = customFailure ContextualParseFailure {contextualFailureCode = code, contextualFailureLine = line}
+bundleFailureSpan :: ParseErrorBundle Text e -> SourceSpan
+bundleFailureSpan bundle =
+  SourceSpan
+    { source = sourceName position,
+      start = point,
+      end = point
+    }
+  where
+    offset = errorOffset (NE.head (bundleErrors bundle))
+    reachedState = reachOffsetNoLine offset (bundlePosState bundle)
+    position = pstateSourcePos reachedState
+    point = sourcePointAt offset position
 
-requireLanguageFeatureAt :: LanguageVersion -> LanguageFeature -> Loc -> P ()
-requireLanguageFeatureAt version feature loc
-  | languageSupportsFeature version feature = pure ()
-  | otherwise = contextualFailureAt loc LanguageFeatureRequiresVersion
+bundleExpected :: ParseErrorBundle Text e -> [Text]
+bundleExpected bundle =
+  case NE.head (bundleErrors bundle) of
+    TrivialError _ _ expected -> map (T.pack . show) (Set.toList expected)
+    FancyError {} -> []
+
+bundleMessage :: ParseErrorBundle Text ContextualParseFailure -> Text
+bundleMessage = T.pack . parseErrorTextPretty . NE.head . bundleErrors
+
+contextualFailureAt :: SourceSpan -> SourceLanguageErrorCode -> P a
+contextualFailureAt span code =
+  customFailure ContextualParseFailure {contextualFailureCode = code, contextualFailureFeature = Nothing, contextualFailureSpan = span}
+
+requireLanguageFeatureAt :: FrontendContext -> LanguageFeature -> SourceSpan -> P ()
+requireLanguageFeatureAt context feature span
+  | frontendSupportsFeature context feature = pure ()
+  | otherwise =
+      customFailure
+        ContextualParseFailure
+          { contextualFailureCode = LanguageFeatureRequiresVersion,
+            contextualFailureFeature = Just feature,
+            contextualFailureSpan = span
+          }
 
 -- | Space consumer: spaces, newlines, and @#@ line comments are all whitespace.
 sc :: P ()
@@ -326,15 +360,15 @@ ownedSyntaxLength = go 0 InSyntax 0 . T.unpack
           | isSpace character -> go (index + 1) InSyntax lastOwned rest
           | otherwise -> go (index + 1) InSyntax (index + 1) rest
 
-optionalLanguageFeature :: LanguageVersion -> LanguageFeature -> Text -> P a -> P (Maybe a)
-optionalLanguageFeature version feature marker parser
-  | languageSupportsFeature version feature = optional parser
+optionalLanguageFeature :: FrontendContext -> LanguageFeature -> Text -> P a -> P (Maybe a)
+optionalLanguageFeature context feature marker parser
+  | frontendSupportsFeature context feature = optional parser
   | otherwise = reject <|> pure Nothing
   where
     reject = do
-      loc <- getLoc
-      _ <- try (keyword marker)
-      contextualFailureAt loc LanguageFeatureRequiresVersion
+      locatedMarker <- withOwnedSpan (try (keyword marker))
+      requireLanguageFeatureAt context feature (spanOf locatedMarker)
+      fail "unreachable enabled feature in predecessor grammar"
 
 pField :: P Field
 pField = do

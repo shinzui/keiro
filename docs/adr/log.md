@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-08-01
+* **Update**: Record explicit released syntax/runtime profiles and structured span-aware frontend failure phases (EP-175).
 * **Update**: Record located surface syntax and explicit lowering before the normalized Spec graph.
 * **Update**: Record language-3 TypeID-v7 admission authority, safe-public and legacy-internal generated ownership, exact nominal domains, snapshot miss behavior, and boundary-specific evolution classification (plan 171).
 * **Update**: Record declaration-scoped nominal equality authority, shared-owner projection witnesses, exact consumer ID and enum domains, conservative legacy generated IDs, and generated-transition Hole omission (plan 170).

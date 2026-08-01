@@ -9,6 +9,7 @@ where
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
 import Data.Char (isUpper)
 import Data.Text qualified as T
+import Keiro.Dsl.Frontend.Internal (FrontendContext, frontendSupportsFeature)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Parser.Core
@@ -17,26 +18,24 @@ import Text.Megaparsec
 -- Expr sublanguage
 --------------------------------------------------------------------------------
 
-pExpr :: LanguageVersion -> P Expr
-pExpr version
-  | languageSupportsFeature version TypedAggregateExpressionSyntax = makeExprParser (pScalarTerm version) scalarOperatorTable
-  | otherwise = makeExprParser (pLegacyTerm version) legacyOperatorTable
+pExpr :: FrontendContext -> P Expr
+pExpr context
+  | frontendSupportsFeature context TypedAggregateExpressionSyntax = makeExprParser (pScalarTerm context) scalarOperatorTable
+  | otherwise = makeExprParser (pLegacyTerm context) legacyOperatorTable
 
-pLegacyTerm :: LanguageVersion -> P Expr
-pLegacyTerm version =
+pLegacyTerm :: FrontendContext -> P Expr
+pLegacyTerm context =
   choice
-    [ parens (pExpr version),
-      pUnsupportedScalarTerm version,
+    [ parens (pExpr context),
+      pUnsupportedScalarTerm context,
       EAtom . ABool <$> (True <$ keyword "true" <|> False <$ keyword "false"),
       EAtom . AName <$> ident
     ]
 
-pUnsupportedScalarTerm :: LanguageVersion -> P Expr
-pUnsupportedScalarTerm version = do
-  loc <- getLoc
-  _ <-
-    try ((keyword "reg" <|> keyword "cmd") *> symbol ".")
-  requireLanguageFeatureAt version TypedAggregateExpressionSyntax loc
+pUnsupportedScalarTerm :: FrontendContext -> P Expr
+pUnsupportedScalarTerm context = do
+  locatedRoot <- withOwnedSpan (try ((keyword "reg" <|> keyword "cmd") *> symbol "."))
+  requireLanguageFeatureAt context TypedAggregateExpressionSyntax (spanOf locatedRoot)
   fail "unreachable supported scalar term in predecessor grammar"
 
 -- | Highest precedence first: relational comparisons bind tighter than @&&@,
@@ -61,10 +60,10 @@ legacyOperatorTable =
       operator <- lexeme (oneOf ['+', '-', '*', '/'])
       failAt offset ("aggregate arithmetic operator '" <> [operator] <> "' is unsupported; compare or copy whole values instead")
 
-pScalarTerm :: LanguageVersion -> P Expr
-pScalarTerm version =
+pScalarTerm :: FrontendContext -> P Expr
+pScalarTerm context =
   choice
-    [ parens (pExpr version),
+    [ parens (pExpr context),
       collectionTermUnsupported,
       try pIdLiteral,
       do

@@ -4,7 +4,17 @@
 -- | Shared implementation behind the public frontend and parser compatibility
 -- facade. This module is intentionally not exposed by the package.
 module Keiro.Dsl.Frontend.Internal
-  ( FrontendFailure (..),
+  ( FrontendContext (..),
+    frontendLanguageVersion,
+    frontendSupportsFeature,
+    FrontendPhase (..),
+    FrontendErrorCode (..),
+    frontendErrorCodeText,
+    FrontendFailure (..),
+    frontendCompatibilityFailure,
+    frontendFailureFromSourceDiagnostic,
+    frontendFailureFromBody,
+    frontendFailureFromLowering,
     renderFrontendFailure,
     LoweringFailureCode (..),
     LoweringFailure (..),
@@ -15,27 +25,113 @@ where
 
 import Data.Foldable (traverse_)
 import Data.List (find)
+import Data.List.NonEmpty qualified as NE
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
-  ( ParseFailure,
+  ( LanguageDefinition,
+    LanguageFeature,
+    LanguageVersion,
+    ParseFailure (..),
     ParsedSource (..),
+    SourceLanguage,
+    SourceLanguageDiagnostic (..),
+    SourceLanguageErrorCode,
+    definitionVersion,
+    languageSupportsFeature,
     renderParseFailure,
+    sourceLanguageDiagnosticMessage,
+    sourceLanguageErrorCodeText,
   )
 import Keiro.Dsl.Source
 import Keiro.Dsl.Syntax
 import Prelude hiding (span)
 
--- | Transitional structured frontend error. EP-175 will add phase and code
--- metadata while this wrapper keeps the released parser failure intact.
-data FrontendFailure
-  = FrontendParseFailure !ParseFailure
+-- | The single released-language selection threaded through the modular
+-- grammar. Grammar productions ask this context about exact profile
+-- membership rather than comparing version numbers.
+data FrontendContext = FrontendContext
+  { source :: !FilePath,
+    language :: !SourceLanguage,
+    definition :: !LanguageDefinition
+  }
+  deriving stock (Eq, Show, Generic)
+
+frontendLanguageVersion :: FrontendContext -> LanguageVersion
+frontendLanguageVersion FrontendContext {definition} = definitionVersion definition
+
+frontendSupportsFeature :: FrontendContext -> LanguageFeature -> Bool
+frontendSupportsFeature context feature = languageSupportsFeature (frontendLanguageVersion context) feature
+
+data FrontendPhase
+  = SourceSelectionPhase
+  | BodyParsingPhase
+  | LoweringPhase
+  deriving stock (Eq, Ord, Show, Generic)
+
+data FrontendErrorCode
+  = SourceLanguageError !SourceLanguageErrorCode
+  | SourceSelectionSyntaxError
+  | BodySyntaxError
+  | LoweringError !LoweringFailureCode
+  deriving stock (Eq, Ord, Show, Generic)
+
+frontendErrorCodeText :: FrontendErrorCode -> Text
+frontendErrorCodeText = \case
+  SourceLanguageError code -> sourceLanguageErrorCodeText code
+  SourceSelectionSyntaxError -> "SourceSelectionSyntaxError"
+  BodySyntaxError -> "BodySyntaxError"
+  LoweringError code -> T.pack (show code)
+
+-- | A source-aware frontend failure. The compatibility projection is retained
+-- as data so the released parser facade can render byte-identical diagnostics
+-- without exposing Megaparsec types.
+data FrontendFailure = FrontendFailure
+  { phase :: !FrontendPhase,
+    code :: !FrontendErrorCode,
+    span :: !SourceSpan,
+    message :: !Text,
+    expected :: ![Text],
+    supportedVersions :: ![LanguageVersion],
+    compatibility :: !ParseFailure
+  }
   deriving stock (Eq, Show, Generic)
 
 renderFrontendFailure :: FrontendFailure -> Text
-renderFrontendFailure (FrontendParseFailure failure) = renderParseFailure failure
+renderFrontendFailure FrontendFailure {compatibility} = renderParseFailure compatibility
+
+frontendCompatibilityFailure :: FrontendFailure -> ParseFailure
+frontendCompatibilityFailure FrontendFailure {compatibility} = compatibility
+
+frontendFailureFromSourceDiagnostic :: FrontendPhase -> SourceSpan -> Maybe [LanguageVersion] -> SourceLanguageDiagnostic -> FrontendFailure
+frontendFailureFromSourceDiagnostic phase span supportedOverride diagnostic =
+  FrontendFailure
+    { phase,
+      code = SourceLanguageError (sourceLanguageErrorCode diagnostic),
+      span,
+      message = sourceLanguageDiagnosticMessage diagnostic,
+      expected = [],
+      supportedVersions = fromMaybe (NE.toList (sourceLanguageSupportedVersions diagnostic)) supportedOverride,
+      compatibility = SourceLanguageFailure diagnostic
+    }
+
+frontendFailureFromBody :: FrontendPhase -> SourceSpan -> Text -> [Text] -> ParseFailure -> FrontendFailure
+frontendFailureFromBody phase span message expected compatibility =
+  FrontendFailure
+    { phase,
+      code = case phase of
+        SourceSelectionPhase -> SourceSelectionSyntaxError
+        BodyParsingPhase -> BodySyntaxError
+        LoweringPhase -> BodySyntaxError,
+      span,
+      message,
+      expected,
+      supportedVersions = [],
+      compatibility
+    }
 
 data LoweringFailureCode
   = InvalidSourceSpan
@@ -67,6 +163,18 @@ renderLoweringFailure
       <> T.pack (show code)
       <> "]: "
       <> message
+
+frontendFailureFromLowering :: LoweringFailure -> FrontendFailure
+frontendFailureFromLowering failure@LoweringFailure {code, span, message} =
+  FrontendFailure
+    { phase = LoweringPhase,
+      code = LoweringError code,
+      span,
+      message,
+      expected = [],
+      supportedVersions = [],
+      compatibility = BodyGrammarFailure (renderLoweringFailure failure)
+    }
 
 -- | Remove document order and exact locations while projecting each top-level
 -- span's starting line into the compatibility 'Loc'.

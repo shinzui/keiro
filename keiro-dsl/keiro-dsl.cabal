@@ -123,6 +123,7 @@ test-suite keiro-dsl-test
   main-is:        Main.hs
   other-modules:
     Keiro.Dsl.FrontendCompatibility
+    Keiro.Dsl.FrontendProfiles
     Keiro.Dsl.FrontendPublicApiProbe
     Keiro.Dsl.FrontendSurface
 

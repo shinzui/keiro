@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-08-01T19:21:22Z
+timestamp: 2026-08-01T22:15:14Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -69,6 +69,15 @@ pairs the normalized graph with one effective runtime-semantics contract.
 Validation, scaffold/harness planning, fold fingerprints, diff, and replay
 impact receive that value. A mixed-version workspace or a mismatched
 source/service execution is refused before any output path is created.
+
+The language frontend makes those early boundaries machine-visible. A malformed or unsupported
+preamble fails in `SourceSelectionPhase`; an unexpected body token, misplaced/duplicate preamble,
+or disabled grammar production fails in `BodyParsingPhase`; invalid surface ownership or ordering
+fails in `LoweringPhase`. Each failure carries a stable code and exact primary source span before
+Megaparsec details are hidden. Human messages and the released `ParseFailure` rendering remain
+compatibility projections, so tooling branches on phase/code rather than scraping prose. Semantic
+validator `DiagnosticCode` values remain downstream because their evidence exists only after
+lowering.
 
 The landed inventory is:
 

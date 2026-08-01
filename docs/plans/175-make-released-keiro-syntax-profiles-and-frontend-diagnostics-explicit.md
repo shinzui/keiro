@@ -31,15 +31,32 @@ and CLI text remain compatibility wrappers and continue satisfying the EP-172 or
 
 ## Progress
 
-- [ ] Milestone 1: replace numeric feature/runtime inference with explicit released-language profiles.
-- [ ] Milestone 2: thread one selected frontend context through every modular grammar production.
-- [ ] Milestone 3: add structured span-aware source-selection, parse, and lowering failures.
-- [ ] Milestone 4: prove frozen v1/v2/v3 matrices, compatibility rendering, and ADR conformance.
+- [x] Milestone 1: replace numeric feature/runtime inference with explicit released-language profiles
+  (2026-08-01T22:21:24Z).
+- [x] Milestone 2: thread one selected frontend context through every modular grammar production
+  (2026-08-01T22:21:24Z).
+- [x] Milestone 3: add structured span-aware source-selection, parse, and lowering failures
+  (2026-08-01T22:21:24Z).
+- [x] Milestone 4: prove frozen v1/v2/v3 matrices, compatibility rendering, and ADR conformance
+  (2026-08-01T22:21:24Z).
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Observation: The released feature-gate renderer's “requires version” number is the last supported
+  registry version, not the feature's actual first or complete supporting-version set.
+  Evidence: Every successor feature belongs to profile 2, selected by versions 2 and 3, while the
+  frozen renderer says version 3 because `SourceLanguageDiagnostic` historically renders the last
+  registry entry.
+  Impact: Structured failures report supported versions `[2,3]`; their retained compatibility
+  projection still renders the byte-pinned version-3 message.
+
+- Observation: The historical `LanguageBodyParser` distinction is unnecessary after source
+  selection has resolved a definition.
+  Evidence: Legacy sources are the only inputs without a preamble; every `DeclaredLanguage` source
+  consumes its already-validated preamble before one profile-driven body grammar runs.
+  Impact: `definitionBodyParser` remains a 0.7 compatibility field but no production parser reads
+  it. `FrontendContext` and exact syntax-profile membership own active dispatch.
 
 
 ## Decision Log
@@ -75,10 +92,32 @@ and CLI text remain compatibility wrappers and continue satisfying the EP-172 or
   add unnecessary prefixes to newly introduced API.
   Date: 2026-08-01
 
+- Decision: Keep `LanguageBodyParser` and `definitionBodyParser` as inactive compatibility data for
+  this release rather than deleting the exposed names.
+  Rationale: Explicit profiles remove their policy role without creating an avoidable source-level
+  removal during a behavior-preserving frontend refactor.
+  Date: 2026-08-01
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The authoritative registry now reads: v1/profile-1/runtime-1;
+v2/profile-2/runtime-1; v3/profile-2/runtime-2. Syntax membership and runtime semantics are both
+read from those entries. `languageFeatureMinimumVersion` is derived by searching profiles, version
+4 receives no implicit policy, and no parser or semantic-contract module selects behavior with a
+numeric comparison.
+
+One `FrontendContext` carries the source, source-language selection, and exact registry definition
+through document, declaration, mapped, expression, and aggregate grammar. Advanced failures expose
+source-selection/body/lowering phase, stable code, exact span, message, expected items, and accurate
+supporting versions without exposing Megaparsec. The compatibility projection preserves all 13
+diagnostic goldens, including the historical feature-gate wording.
+
+Eight new profile/diagnostic examples cover every feature under v1/v2/v3, inert spellings,
+hypothetical v4, exact preamble/body/feature/lowering spans, and renderer parity. The complete suite
+passes with 462 examples and zero failures; `cabal build all`, strict validation of all 17 ADR
+concepts, and `nix flake check` pass. ADR 16 now owns explicit profile selection and the structured
+frontend boundary; ADR 4 owns its earliest-sound-phase placement.
 
 
 ## Context and Orientation
@@ -264,3 +303,7 @@ unchanged. Do not expose Megaparsec types. No dependency or bound change is requ
 
 2026-08-01: Removed cancelled EP-177 as a soft dependency and narrowed the record convention to
 new frontend-owned types. Existing selectors remain part of the EP-172 compatibility baseline.
+
+2026-08-01: Completed explicit profile/runtime registry policy, context-threaded feature checks,
+structured span-aware frontend failures, compatibility projection, v1/v2/v3 matrix tests, and the
+ADR 4/16 amendments.

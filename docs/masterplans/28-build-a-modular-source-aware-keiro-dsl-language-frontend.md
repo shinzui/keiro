@@ -118,7 +118,7 @@ cleanup without coupling it to the parser architecture.
 | 177 | Modernize keiro-dsl records and field access | docs/plans/177-modernize-keiro-dsl-records-and-field-access.md | EP-172 | None | Cancelled |
 | 173 | Introduce located Keiro surface syntax and explicit lowering | docs/plans/173-introduce-located-keiro-surface-syntax-and-explicit-lowering.md | EP-172 | None | Complete |
 | 174 | Modularize the Keiro Megaparsec grammar by language concern | docs/plans/174-modularize-the-keiro-megaparsec-grammar-by-language-concern.md | EP-173 | None | Complete |
-| 175 | Make released Keiro syntax profiles and frontend diagnostics explicit | docs/plans/175-make-released-keiro-syntax-profiles-and-frontend-diagnostics-explicit.md | EP-174 | None | Not Started |
+| 175 | Make released Keiro syntax profiles and frontend diagnostics explicit | docs/plans/175-make-released-keiro-syntax-profiles-and-frontend-diagnostics-explicit.md | EP-174 | None | Complete |
 | 176 | Cut over the Keiro toolchain to the language frontend and certify parity | docs/plans/176-cut-over-the-keiro-toolchain-to-the-language-frontend-and-certify-parity.md | EP-175 | EP-172, EP-173, EP-174 | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -227,8 +227,10 @@ and the milestone. This section provides an at-a-glance view of the entire initi
   (2026-08-01T21:58:28Z).
 - [x] EP-174: reduced `Keiro.Dsl.Parser` to the compatibility facade with the oracle green
   (2026-08-01T21:58:28Z).
-- [ ] EP-175: make every released syntax/runtime profile explicit in one registry.
-- [ ] EP-175: expose structured span-aware frontend failures with compatibility rendering.
+- [x] EP-175: made every released syntax/runtime profile explicit in one registry
+  (2026-08-01T22:21:24Z).
+- [x] EP-175: exposed structured span-aware frontend failures with compatibility rendering
+  (2026-08-01T22:21:24Z).
 - [ ] EP-176: route CLI, workspace, pretty, check, scaffold, diff, and replay paths through the frontend.
 - [ ] EP-176: remove the direct path, refresh docs/ADRs, and pass full release-quality validation.
 
@@ -273,6 +275,13 @@ interactions between child plans. Provide concise evidence.
   import-boundary tests, and passed all 454 examples, `cabal build all`, and `nix flake check`.
   Impact: EP-175 can change syntax-profile and diagnostic policy in named core/preamble/document
   owners instead of editing one monolithic parser.
+
+- Observation: Structured profile metadata can correct the meaning of supported versions without
+  changing the frozen compatibility renderer.
+  Evidence: EP-175 reports feature support as versions 2 and 3 from exact profile membership, while
+  its compatibility projection retains the historical text naming version 3; all 13 goldens pass.
+  Impact: New tooling consumes phase/code/span/profile data, while existing CLI and library callers
+  retain byte-identical diagnostics.
 
 
 ## Decision Log
@@ -367,3 +376,8 @@ amendment. EP-174 is now unblocked.
 2026-08-01: Marked EP-174 complete after extracting twelve internal parser modules, enforcing the
 facade/import boundaries, and passing the 454-example compatibility and conformance suite plus all
 package and native flake checks. EP-175 is now unblocked.
+
+2026-08-01: Marked EP-175 complete after making the three released registry entries explicit,
+threading one frontend context through profile-sensitive productions, exposing structured failures,
+amending ADRs 4 and 16, and passing the 462-example suite and release-quality checks. EP-176 is now
+unblocked.

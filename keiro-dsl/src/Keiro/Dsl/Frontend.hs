@@ -3,11 +3,18 @@
 -- Ordinary callers can continue to use "Keiro.Dsl.Parser". This module
 -- exposes the located surface/lowering seam without exposing Megaparsec.
 module Keiro.Dsl.Frontend
-  ( FrontendFailure (..),
+  ( FrontendContext (..),
+    frontendLanguageVersion,
+    frontendSupportsFeature,
+    FrontendPhase (..),
+    FrontendErrorCode (..),
+    frontendErrorCodeText,
+    FrontendFailure (..),
     renderFrontendFailure,
     LoweringFailureCode (..),
     LoweringFailure (..),
     renderLoweringFailure,
+    frontendFailureFromLowering,
     parseSurfaceSource,
     lowerSurfaceSource,
   )

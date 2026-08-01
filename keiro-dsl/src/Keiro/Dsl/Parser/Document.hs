@@ -6,10 +6,9 @@ module Keiro.Dsl.Parser.Document
   )
 where
 
-import Data.Bifunctor (first)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Keiro.Dsl.Frontend.Internal (FrontendFailure (..))
+import Keiro.Dsl.Frontend.Internal
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Parser.Aggregate (pAggregate)
@@ -28,34 +27,39 @@ import Text.Megaparsec
 import Prelude hiding (span)
 
 parseSurfaceSource :: FilePath -> Text -> Either FrontendFailure SurfaceSource
-parseSurfaceSource src input = first FrontendParseFailure $ do
+parseSurfaceSource src input = do
   sourceLanguage <- selectSourceLanguage src input
   definition <- case lookupLanguageDefinition (effectiveLanguageVersion sourceLanguage) of
     Just value -> Right value
-    Nothing -> Left (unsupportedDiagnostic src sourceLanguage)
-  parseSelectedBody definition sourceLanguage
+    Nothing -> error "keiro-dsl internal invariant: source selection returned an unregistered language"
+  parseSelectedBody FrontendContext {source = src, language = sourceLanguage, definition}
   where
-    parseSelectedBody definition sourceLanguage =
-      let version = definitionVersion definition
-          laterPreambleCode = case sourceLanguage of
+    parseSelectedBody context@FrontendContext {language = sourceLanguage} =
+      let laterPreambleCode = case sourceLanguage of
             LegacyUnversioned -> MisplacedLanguagePreamble
             DeclaredLanguage {} -> DuplicateLanguagePreamble
-          parser = case definitionBodyParser definition of
-            LanguageBodyParserV1 ->
-              sc
-                *> case sourceLanguage of
-                  LegacyUnversioned -> pSurfaceDocument src sourceLanguage Nothing version laterPreambleCode <* eof
-                  DeclaredLanguage {} -> do
-                    locatedPreamble <- withOwnedSpan (sourceLanguage <$ pDeclaredPreamble)
-                    pSurfaceDocument src sourceLanguage (Just locatedPreamble) version laterPreambleCode <* eof
-            LanguageBodyParserV2 ->
-              sc *> do
-                locatedPreamble <- withOwnedSpan (sourceLanguage <$ pDeclaredPreamble)
-                pSurfaceDocument src sourceLanguage (Just locatedPreamble) version laterPreambleCode <* eof
+          parser =
+            sc
+              *> case sourceLanguage of
+                LegacyUnversioned -> pSurfaceDocument context Nothing laterPreambleCode <* eof
+                DeclaredLanguage {} -> do
+                  locatedPreamble <- withOwnedSpan (sourceLanguage <$ pDeclaredPreamble)
+                  pSurfaceDocument context (Just locatedPreamble) laterPreambleCode <* eof
        in case runParser parser src input of
             Left bundle -> case firstContextualFailure bundle of
-              Just contextual -> Left (SourceLanguageFailure (contextualDiagnostic src sourceLanguage contextual))
-              Nothing -> Left (BodyGrammarFailure (T.pack (errorBundlePretty bundle)))
+              Just contextual ->
+                let diagnostic = contextualDiagnostic src sourceLanguage contextual
+                    supported = languageVersionsSupportingFeature <$> contextualFailureFeature contextual
+                 in Left (frontendFailureFromSourceDiagnostic BodyParsingPhase (contextualFailureSpan contextual) supported diagnostic)
+              Nothing ->
+                Left
+                  ( frontendFailureFromBody
+                      BodyParsingPhase
+                      (bundleFailureSpan bundle)
+                      (bundleMessage bundle)
+                      (bundleExpected bundle)
+                      (BodyGrammarFailure (T.pack (errorBundlePretty bundle)))
+                  )
             Right surface -> Right surface
 
 -- Top level
@@ -63,25 +67,24 @@ parseSurfaceSource src input = first FrontendParseFailure $ do
 
 pContextualPreamble :: SourceLanguageErrorCode -> P a
 pContextualPreamble code = do
-  loc <- getLoc
-  _ <- try pDeclaredPreamble
-  contextualFailureAt loc code
+  locatedPreamble <- withOwnedSpan (try pDeclaredPreamble)
+  contextualFailureAt (spanOf locatedPreamble) code
 
-pSurfaceDocument :: FilePath -> SourceLanguage -> Maybe (Located SourceLanguage) -> LanguageVersion -> SourceLanguageErrorCode -> P SurfaceSource
-pSurfaceDocument sourceName sourceLanguage preamble version laterPreambleCode = do
-  spec <- pSurfaceSpec version laterPreambleCode
+pSurfaceDocument :: FrontendContext -> Maybe (Located SourceLanguage) -> SourceLanguageErrorCode -> P SurfaceSource
+pSurfaceDocument context@FrontendContext {source = sourceName, language = sourceLanguage} preamble laterPreambleCode = do
+  spec <- pSurfaceSpec context laterPreambleCode
   pure SurfaceSource {source = sourceName, language = sourceLanguage, preamble, spec}
 
-pSurfaceSpec :: LanguageVersion -> SourceLanguageErrorCode -> P (Located SurfaceSpec)
-pSurfaceSpec version laterPreambleCode = do
+pSurfaceSpec :: FrontendContext -> SourceLanguageErrorCode -> P (Located SurfaceSpec)
+pSurfaceSpec context laterPreambleCode = do
   pContextualPreamble laterPreambleCode <|> pure ()
-  context <- withOwnedSpan (keyword "context" *> wireWord)
+  locatedContext <- withOwnedSpan (keyword "context" *> wireWord)
   moduleRoot <- optional (withOwnedSpan pModuleClause)
   layout <- optional (withOwnedSpan pLayoutClause)
-  parsedItems <- many (withOwnedSpan (pTopItem version laterPreambleCode))
+  parsedItems <- many (withOwnedSpan (pTopItem context laterPreambleCode))
   let items = map surfaceItem parsedItems
       elements = concatMap surfaceElements parsedItems
-  let contextSpan@SourceSpan {source, start} = spanOf context
+  let contextSpan@SourceSpan {source, start} = spanOf locatedContext
       finalSpan = case reverse items of
         item : _ -> spanOf item
         [] -> case layout of
@@ -91,7 +94,7 @@ pSurfaceSpec version laterPreambleCode = do
   pure
     Located
       { span = SourceSpan {source, start, end},
-        value = SurfaceSpec {context, moduleRoot, layout, items, elements}
+        value = SurfaceSpec {context = locatedContext, moduleRoot, layout, items, elements}
       }
   where
     surfaceItem Located {span, value = ParsedTopItem item _} = Located {span, value = item}
@@ -113,16 +116,16 @@ pLayoutClause =
 -- | A parsed top-level value plus any nested syntax evidence it owns.
 data ParsedTopItem = ParsedTopItem !SurfaceTopItem ![Located SurfaceElement]
 
-pTopItem :: LanguageVersion -> SourceLanguageErrorCode -> P ParsedTopItem
-pTopItem version laterPreambleCode =
+pTopItem :: FrontendContext -> SourceLanguageErrorCode -> P ParsedTopItem
+pTopItem context laterPreambleCode =
   choice
     ( [ pContextualPreamble laterPreambleCode,
-        plain (SurfaceId <$> pIdDecl version),
-        plain (SurfaceEnum <$> pEnumDecl version),
+        plain (SurfaceId <$> pIdDecl context),
+        plain (SurfaceEnum <$> pEnumDecl context),
         do
-          (rule, elements) <- pRuleDecl version
+          (rule, elements) <- pRuleDecl context
           pure (ParsedTopItem (SurfaceRule rule) elements),
-        plain (pMappedTopItem version)
+        plain (pMappedTopItem context)
       ]
         ++ [ plain (SurfaceNode . NRouter <$> pRouter),
              plain (SurfaceNode . NProcess <$> pProcess),
@@ -136,7 +139,7 @@ pTopItem version laterPreambleCode =
              plain (SurfaceNode . NWorkflow <$> pWorkflow),
              plain (SurfaceNode . NOperation <$> pOperation),
              do
-               (aggregate, elements) <- pAggregate version
+               (aggregate, elements) <- pAggregate context
                pure (ParsedTopItem (SurfaceNode (NAggregate aggregate)) elements)
            ]
     )

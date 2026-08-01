@@ -5,7 +5,6 @@ module Keiro.Dsl.Parser.Preamble
   ( contextualDiagnostic,
     pDeclaredPreamble,
     selectSourceLanguage,
-    unsupportedDiagnostic,
   )
 where
 
@@ -13,9 +12,11 @@ import Data.Char (isAscii, isDigit)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Read qualified as TR
+import Keiro.Dsl.Frontend.Internal
 import Keiro.Dsl.Grammar (Loc (..))
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Parser.Core
+import Keiro.Dsl.Source
 import Numeric.Natural (Natural)
 import Text.Megaparsec
 import Text.Megaparsec.Char (char)
@@ -25,7 +26,7 @@ contextualDiagnostic src sourceLanguage contextual =
   SourceLanguageDiagnostic
     { sourceLanguageErrorCode = code,
       sourceLanguageSource = src,
-      sourceLanguageLoc = Loc (contextualFailureLine contextual),
+      sourceLanguageLoc = Loc line,
       sourceLanguageToken = case code of
         LanguageFeatureRequiresVersion -> Just (languageVersionText effectiveVersion)
         _ -> Nothing,
@@ -36,6 +37,7 @@ contextualDiagnostic src sourceLanguage contextual =
     }
   where
     code = contextualFailureCode contextual
+    SourceSpan {start = SourcePoint {line}} = contextualFailureSpan contextual
     effectiveVersion = effectiveLanguageVersion sourceLanguage
 
 -- | Consume a preamble already validated by 'selectSourceLanguage'. This
@@ -52,14 +54,22 @@ pDeclaredPreamble = do
 -- leading whitespace and comments. Body lines are left entirely to
 -- 'pSurfaceSpec'.
 data InitialLanguageClause = InitialLanguageClause
-  { initialLanguageLine :: !Int,
+  { initialLanguageSpan :: !SourceSpan,
     initialLanguageText :: !Text
   }
 
-selectSourceLanguage :: FilePath -> Text -> Either ParseFailure SourceLanguage
+selectSourceLanguage :: FilePath -> Text -> Either FrontendFailure SourceLanguage
 selectSourceLanguage src input = do
   initialClause <- case runParser pInitialLanguageClause src input of
-    Left bundle -> Left (BodyGrammarFailure (T.pack (errorBundlePretty bundle)))
+    Left bundle ->
+      Left
+        ( frontendFailureFromBody
+            SourceSelectionPhase
+            (bundleFailureSpan bundle)
+            (bundleMessage bundle)
+            (bundleExpected bundle)
+            (BodyGrammarFailure (T.pack (errorBundlePretty bundle)))
+        )
     Right value -> Right value
   case initialClause of
     Nothing -> Right LegacyUnversioned
@@ -67,14 +77,17 @@ selectSourceLanguage src input = do
       version <- parsePreamble languageClause
       case lookupLanguageDefinition version of
         Nothing -> Left (sourceFailure UnsupportedLanguageVersion languageClause (Just (languageVersionText version)) (Just version))
-        Just _ -> Right (DeclaredLanguage version (Loc (initialLanguageLine languageClause)))
+        Just _ -> Right (DeclaredLanguage version (Loc (startLine (initialLanguageSpan languageClause))))
   where
     sourceFailure code line tokenText declared =
-      SourceLanguageFailure
+      frontendFailureFromSourceDiagnostic
+        SourceSelectionPhase
+        (initialLanguageSpan line)
+        Nothing
         SourceLanguageDiagnostic
           { sourceLanguageErrorCode = code,
             sourceLanguageSource = src,
-            sourceLanguageLoc = Loc (initialLanguageLine line),
+            sourceLanguageLoc = Loc (startLine (initialLanguageSpan line)),
             sourceLanguageToken = tokenText,
             sourceLanguageDeclaredVersion = declared,
             sourceLanguageSupportedVersions = supportedLanguageVersions
@@ -97,22 +110,8 @@ pInitialLanguageClause :: P (Maybe InitialLanguageClause)
 pInitialLanguageClause = sc *> optional pLanguageClause
   where
     pLanguageClause = do
-      position <- getSourcePos
       _ <- lookAhead (chunk "language" *> notFollowedBy (identChar <|> (char '-' *> identChar)))
-      rawLine <- takeWhileP (Just "language preamble") (\c -> c /= '\n' && c /= '\r')
+      locatedLine <- withOwnedSpan (takeWhileP (Just "language preamble") (\c -> c /= '\n' && c /= '\r'))
+      let rawLine = locatedValue locatedLine
       let content = T.strip (T.takeWhile (/= '#') rawLine)
-      pure InitialLanguageClause {initialLanguageLine = unPos (sourceLine position), initialLanguageText = content}
-
-unsupportedDiagnostic :: FilePath -> SourceLanguage -> ParseFailure
-unsupportedDiagnostic src sourceLanguage =
-  SourceLanguageFailure
-    SourceLanguageDiagnostic
-      { sourceLanguageErrorCode = UnsupportedLanguageVersion,
-        sourceLanguageSource = src,
-        sourceLanguageLoc = case sourceLanguage of
-          LegacyUnversioned -> Loc 1
-          DeclaredLanguage {languageVersionLoc = loc} -> loc,
-        sourceLanguageToken = Just (languageVersionText (effectiveLanguageVersion sourceLanguage)),
-        sourceLanguageDeclaredVersion = Just (effectiveLanguageVersion sourceLanguage),
-        sourceLanguageSupportedVersions = supportedLanguageVersions
-      }
+      pure InitialLanguageClause {initialLanguageSpan = spanOf locatedLine, initialLanguageText = content}

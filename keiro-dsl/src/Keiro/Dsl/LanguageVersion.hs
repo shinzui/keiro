@@ -14,16 +14,21 @@ module Keiro.Dsl.LanguageVersion
     declaredLanguageVersionMaybe,
     effectiveLanguageVersion,
     LanguageBodyParser (..),
+    SyntaxProfile,
+    syntaxProfileIdentifier,
+    syntaxProfileSupportsFeature,
     LanguageDefinition (..),
     languageRegistry,
     supportedLanguageVersions,
     lookupLanguageDefinition,
     LanguageFeature (..),
     languageFeatureMinimumVersion,
+    languageVersionsSupportingFeature,
     languageSupportsFeature,
     SourceLanguageErrorCode (..),
     sourceLanguageErrorCodeText,
     SourceLanguageDiagnostic (..),
+    sourceLanguageDiagnosticMessage,
     renderSourceLanguageDiagnostic,
     ParsedSource (..),
     ParseFailure (..),
@@ -35,8 +40,11 @@ import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.:?), 
 import Data.List (find)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar (Loc (..), Spec, noLoc)
 import Numeric.Natural (Natural)
 
@@ -90,13 +98,32 @@ data LanguageBodyParser
   | LanguageBodyParserV2
   deriving stock (Eq, Show)
 
+-- | An immutable, explicitly named set of source-language capabilities.
+-- Constructors stay private so a released profile can only be selected from
+-- the authoritative registry rather than widened ad hoc by parser callers.
+data SyntaxProfile = SyntaxProfile
+  { profileIdentifier :: !Text,
+    profileFeatures :: !(Set LanguageFeature)
+  }
+  deriving stock (Eq, Show, Generic)
+
+syntaxProfileIdentifier :: SyntaxProfile -> Text
+syntaxProfileIdentifier SyntaxProfile {profileIdentifier} = profileIdentifier
+
+syntaxProfileSupportsFeature :: SyntaxProfile -> LanguageFeature -> Bool
+syntaxProfileSupportsFeature SyntaxProfile {profileFeatures} feature = Set.member feature profileFeatures
+
 -- | One append-only released-language registry entry.
 data LanguageDefinition = LanguageDefinition
   { definitionVersion :: !LanguageVersion,
     definitionPredecessor :: !(Maybe LanguageVersion),
-    definitionBodyParser :: !LanguageBodyParser
+    -- | Compatibility projection retained for the 0.7 public API. Parser
+    -- dispatch uses 'definitionSyntaxProfile', never this historical tag.
+    definitionBodyParser :: !LanguageBodyParser,
+    definitionSyntaxProfile :: !SyntaxProfile,
+    definitionRuntimeSemantics :: !Text
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 version1 :: LanguageVersion
 version1 = LanguageVersion 1
@@ -110,10 +137,25 @@ version3 = LanguageVersion 3
 -- | The authoritative, append-only registry of released language contracts.
 languageRegistry :: NonEmpty LanguageDefinition
 languageRegistry =
-  LanguageDefinition version1 Nothing LanguageBodyParserV1
-    :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2,
-         LanguageDefinition version3 (Just version2) LanguageBodyParserV2
+  LanguageDefinition version1 Nothing LanguageBodyParserV1 profileV1 "keiro-dsl/runtime-semantics/1"
+    :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2 profileV2 "keiro-dsl/runtime-semantics/1",
+         LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 "keiro-dsl/runtime-semantics/2"
        ]
+
+profileV1 :: SyntaxProfile
+profileV1 = SyntaxProfile "keiro-dsl/syntax-profile/1" Set.empty
+
+profileV2 :: SyntaxProfile
+profileV2 =
+  SyntaxProfile
+    "keiro-dsl/syntax-profile/2"
+    ( Set.fromList
+        [ NominalBindingSyntax,
+          IntegerScalarSyntax,
+          TypedAggregateExpressionSyntax,
+          ExplicitTransitionImplementationSyntax
+        ]
+    )
 
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion
@@ -135,14 +177,21 @@ data LanguageFeature
 
 -- | The first released contract that owns each grammar feature.
 languageFeatureMinimumVersion :: LanguageFeature -> LanguageVersion
-languageFeatureMinimumVersion = \case
-  NominalBindingSyntax -> version2
-  IntegerScalarSyntax -> version2
-  TypedAggregateExpressionSyntax -> version2
-  ExplicitTransitionImplementationSyntax -> version2
+languageFeatureMinimumVersion feature =
+  case find (\definition -> syntaxProfileSupportsFeature (definitionSyntaxProfile definition) feature) (NE.toList languageRegistry) of
+    Just definition -> definitionVersion definition
+    Nothing -> error "keiro-dsl internal invariant: a released language feature has no owning profile"
+
+languageVersionsSupportingFeature :: LanguageFeature -> [LanguageVersion]
+languageVersionsSupportingFeature feature =
+  [ definitionVersion definition
+  | definition <- NE.toList languageRegistry,
+    syntaxProfileSupportsFeature (definitionSyntaxProfile definition) feature
+  ]
 
 languageSupportsFeature :: LanguageVersion -> LanguageFeature -> Bool
-languageSupportsFeature version feature = version >= languageFeatureMinimumVersion feature
+languageSupportsFeature version feature =
+  maybe False (\definition -> syntaxProfileSupportsFeature (definitionSyntaxProfile definition) feature) (lookupLanguageDefinition version)
 
 effectiveLanguageVersion :: SourceLanguage -> LanguageVersion
 effectiveLanguageVersion LegacyUnversioned = version1
@@ -203,9 +252,14 @@ renderSourceLanguageDiagnostic diagnostic =
     <> ":1: error ["
     <> sourceLanguageErrorCodeText code
     <> "]: "
-    <> detail
+    <> sourceLanguageDiagnosticMessage diagnostic
   where
     Loc line = sourceLanguageLoc diagnostic
+    code = sourceLanguageErrorCode diagnostic
+
+sourceLanguageDiagnosticMessage :: SourceLanguageDiagnostic -> Text
+sourceLanguageDiagnosticMessage diagnostic = detail
+  where
     code = sourceLanguageErrorCode diagnostic
     supported = T.intercalate ", " (map languageVersionText (NE.toList (sourceLanguageSupportedVersions diagnostic)))
     token = maybe "<missing>" id (sourceLanguageToken diagnostic)

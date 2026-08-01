@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Source language provenance wraps the semantic Keiro DSL graph
 description: A .keiro document selects a released parser contract, produces located surface syntax, and lowers into a normalized Spec wrapped by source provenance and one effective service semantic contract.
-timestamp: 2026-08-01T21:23:24Z
+timestamp: 2026-08-01T22:15:14Z
 docId: ADR-16
 status: Accepted
 date: 2026-07-31
@@ -45,6 +45,17 @@ declaration unless a later upgrade operation rewrites the file. Once a language 
 released, new syntax or semantics must be registered under a successor version with its
 predecessor relation. Existing version parsers and their rejection fixtures are not widened.
 
+**Every registry entry explicitly selects immutable syntax and runtime profiles.** A syntax
+profile is an exact named set of grammar capabilities, not a numeric minimum-version rule.
+Version 1 selects `keiro-dsl/syntax-profile/1`; versions 2 and 3 deliberately select
+`keiro-dsl/syntax-profile/2`. Versions 1 and 2 select
+`keiro-dsl/runtime-semantics/1`, while version 3 selects
+`keiro-dsl/runtime-semantics/2`. The parser threads the chosen definition through every production,
+and semantic planning reads the runtime discriminator from that same definition. Adding a larger
+version number therefore enables neither syntax nor runtime behavior until its registry entry
+chooses both values explicitly. The historical minimum-version query remains documentation and
+compatibility metadata only.
+
 **Version 2 is the first successor contract.** It registers consumer-owned
 direct ID/enum/nominal bindings, `Integer`, typed scalar roots, literals,
 required structural paths and arithmetic, plus explicit generated-or-Hole
@@ -76,6 +87,13 @@ released signatures and rendered failures. `Spec` equality, workspace compositio
 validation, canonical rendering, generated output, fingerprints, diffs, and replay analysis remain
 location- and surface-independent. Advanced callers may inspect the surface representation without
 depending on Megaparsec types.
+
+Advanced frontend failures are structured before they cross the parser facade. Each failure names
+source-selection, body-parsing, or lowering phase; carries a stable frontend or source-language
+code, an exact primary `SourceSpan`, a human message, and optional expected-token and supported-
+version data. Megaparsec bundles and custom error components remain internal. The released parser
+entry points project this data back to their existing `ParseFailure` and byte-pinned rendering;
+semantic validator diagnostics remain a downstream, line-compatible contract.
 
 **Workspace provenance is per member; the effective semantic contract is per service.** Each
 `WorkspaceMember` retains its own `SourceLanguage`; `wsMergedSpec` remains the composed semantic
@@ -119,6 +137,10 @@ fleet planning remain in
 - Adding a new grammar feature requires both a successor registry entry and fixtures proving the
   released predecessor still rejects the new form. This is deliberate maintenance work rather
   than an automatic property of the parser-combinator library.
+- A higher language version does not inherit a predecessor's feature set or runtime semantics by
+  ordering. Intentional reuse is visible as the same profile identifier in two registry entries.
+- Source-aware tools can branch on frontend phase, stable code, and exact span without parsing
+  human-readable Megaparsec output; compatibility callers retain the released text.
 - A version-2 expression is not accepted merely because its tokens parse. Its
   roots, paths, literals, operators, result type, and transition owner must all
   resolve before generated code is emitted.

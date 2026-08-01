@@ -28,6 +28,7 @@ import Keiro.Dsl.LanguageVersion
   ( LanguageVersion,
     ParsedSource (..),
     SourceLanguage (..),
+    definitionRuntimeSemantics,
     effectiveLanguageVersion,
     languageVersion,
     languageVersionNumber,
@@ -76,14 +77,11 @@ effectiveLanguageContract sourceLanguage =
 -- semantics a compile-visible registry change.
 effectiveLanguageContractForVersion :: LanguageVersion -> Maybe EffectiveLanguageContract
 effectiveLanguageContractForVersion version = do
-  _ <- lookupLanguageDefinition version
+  definition <- lookupLanguageDefinition version
   pure
     EffectiveLanguageContract
       { effectiveContractLanguageVersion = version,
-        effectiveRuntimeSemantics =
-          if languageVersionNumber version >= 3
-            then "keiro-dsl/runtime-semantics/2"
-            else "keiro-dsl/runtime-semantics/1"
+        effectiveRuntimeSemantics = definitionRuntimeSemantics definition
       }
 
 -- | Fold/replay discriminator for runtime semantics newer than the historical

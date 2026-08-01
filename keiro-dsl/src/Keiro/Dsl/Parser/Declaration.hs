@@ -6,6 +6,7 @@ module Keiro.Dsl.Parser.Declaration
   )
 where
 
+import Keiro.Dsl.Frontend.Internal (FrontendContext)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Parser.Core
@@ -15,24 +16,24 @@ import Keiro.Dsl.Source (Located, mapLocated)
 import Keiro.Dsl.Syntax (SurfaceElement (..))
 import Text.Megaparsec (many, sepBy1)
 
-pIdDecl :: LanguageVersion -> P IdDecl
-pIdDecl version = do
+pIdDecl :: FrontendContext -> P IdDecl
+pIdDecl context = do
   loc <- getLoc
   keyword "id"
   name <- ident
   _ <- symbol "prefix"
   _ <- symbol "="
   pfx <- wireWord
-  binding <- optionalLanguageFeature version NominalBindingSyntax "using" pUsingNominalBinding
+  binding <- optionalLanguageFeature context NominalBindingSyntax "using" pUsingNominalBinding
   pure IdDecl {idName = name, idPrefix = pfx, idBinding = binding, idLoc = loc}
 
-pEnumDecl :: LanguageVersion -> P EnumDecl
-pEnumDecl version = do
+pEnumDecl :: FrontendContext -> P EnumDecl
+pEnumDecl context = do
   loc <- getLoc
   keyword "enum"
   name <- ident
   ctors <- braces (many pEnumCtor)
-  binding <- optionalLanguageFeature version NominalBindingSyntax "using" pUsingNominalBinding
+  binding <- optionalLanguageFeature context NominalBindingSyntax "using" pUsingNominalBinding
   pure EnumDecl {enumName = name, enumCtors = ctors, enumBinding = binding, enumLoc = loc}
   where
     pEnumCtor = do
@@ -41,8 +42,8 @@ pEnumDecl version = do
       w <- wireWord
       pure (c, w)
 
-pRuleDecl :: LanguageVersion -> P (RuleDecl, [Located SurfaceElement])
-pRuleDecl version = do
+pRuleDecl :: FrontendContext -> P (RuleDecl, [Located SurfaceElement])
+pRuleDecl context = do
   loc <- getLoc
   keyword "rule"
   name <- ident
@@ -68,5 +69,5 @@ pRuleDecl version = do
     pCase = do
       c <- ident
       _ <- symbol "=>"
-      expression <- withOwnedSpan (pExpr version)
+      expression <- withOwnedSpan (pExpr context)
       pure ((c, locatedValue expression), mapLocated SurfaceExpression expression)

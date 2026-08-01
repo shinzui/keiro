@@ -10,6 +10,7 @@ where
 
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
+import Keiro.Dsl.Frontend.Internal (FrontendContext, frontendSupportsFeature)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Parser.Core
@@ -32,22 +33,23 @@ data MappedClause
   | MCCodecVersion Text
   | MCShape MappedShape
 
-pMappedTopItem :: LanguageVersion -> P SurfaceTopItem
-pMappedTopItem version = do
+pMappedTopItem :: FrontendContext -> P SurfaceTopItem
+pMappedTopItem context = do
   loc <- getLoc
   keyword "mapped"
   choice
-    [ if languageSupportsFeature version NominalBindingSyntax
+    [ if frontendSupportsFeature context NominalBindingSyntax
         then SurfaceNominalScalar <$> pNominalScalarAfterMapped loc
         else do
-          _ <- try (keyword "nominal")
-          contextualFailureAt loc LanguageFeatureRequiresVersion,
-      SurfaceMapped <$> pMappedStructural version loc,
+          marker <- withOwnedSpan (try (keyword "nominal"))
+          requireLanguageFeatureAt context NominalBindingSyntax (spanOf marker)
+          fail "unreachable enabled nominal syntax in predecessor grammar",
+      SurfaceMapped <$> pMappedStructural context loc,
       SurfaceMapped <$> pMappedOpaque loc
     ]
 
-pMappedStructural :: LanguageVersion -> Loc -> P MappedDecl
-pMappedStructural version loc = do
+pMappedStructural :: FrontendContext -> Loc -> P MappedDecl
+pMappedStructural context loc = do
   keyword "structural"
   kind <-
     choice
@@ -56,7 +58,7 @@ pMappedStructural version loc = do
         MappedUnion <$ keyword "union"
       ]
   name <- ident
-  clauses <- braces (many (pStructuralClause version kind))
+  clauses <- braces (many (pStructuralClause context kind))
   hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
   binding <- oneClause "binding" (\case MCBinding value -> Just value; _ -> Nothing) clauses
   bindingVersion <- oneClause "binding-version" (\case MCBindingVersion value -> Just value; _ -> Nothing) clauses
@@ -150,8 +152,8 @@ pNominalClause =
       MCInitial <$> pQuotedFact "initial"
     ]
 
-pStructuralClause :: LanguageVersion -> MappedKind -> P MappedClause
-pStructuralClause version kind =
+pStructuralClause :: FrontendContext -> MappedKind -> P MappedClause
+pStructuralClause context kind =
   choice
     [ MCHaskell <$> pHaskellSource,
       MCBindingVersion <$> pQuotedFact "binding-version",
@@ -159,7 +161,7 @@ pStructuralClause version kind =
       MCCanonical <$> pQuotedFact "canonical-type",
       MCFixtures <$> pQuotedFact "fixtures",
       MCInitial <$> pQuotedFact "initial",
-      MCShape <$> pMappedShape version kind
+      MCShape <$> pMappedShape context kind
     ]
 
 pOpaqueClause :: P MappedClause
@@ -189,8 +191,8 @@ pHaskellSource = do
 pQuotedFact :: Text -> P Text
 pQuotedFact factName = keyword factName *> symbol "=" *> stringLit
 
-pMappedShape :: LanguageVersion -> MappedKind -> P MappedShape
-pMappedShape version kind = do
+pMappedShape :: FrontendContext -> MappedKind -> P MappedShape
+pMappedShape context kind = do
   keyword "wire"
   case kind of
     MappedRecord -> do
@@ -199,7 +201,7 @@ pMappedShape version kind = do
       _ <- symbol "="
       constructor <- ident
       unknownFields <- pUnknownFieldsFact
-      fields <- braces (many (pWireField version))
+      fields <- braces (many (pWireField context))
       pure (ShapeRecord constructor unknownFields fields)
     MappedEnum -> do
       keyword "string"
@@ -213,7 +215,7 @@ pMappedShape version kind = do
       _ <- symbol "="
       contentsField <- stringLit
       unknownFields <- pUnknownFieldsFact
-      arms <- braces (many (pWireArm version))
+      arms <- braces (many (pWireArm context))
       pure (ShapeUnion (TaggedObject tagField contentsField unknownFields) arms)
 
 pUnknownFieldsFact :: P UnknownFields
@@ -222,14 +224,14 @@ pUnknownFieldsFact = do
   _ <- symbol "="
   choice [RejectUnknown <$ keyword "reject", IgnoreUnknown <$ keyword "ignore"]
 
-pWireField :: LanguageVersion -> P WireField
-pWireField version = do
+pWireField :: FrontendContext -> P WireField
+pWireField context = do
   loc <- getLoc
   haskellName <- ident
   keyword "as"
   wireKey <- stringLit
   _ <- symbol ":"
-  fieldType <- pMappedTypeExpr version
+  fieldType <- pMappedTypeExpr context
   presence <- choice [PRequired <$ keyword "required", POptional <$ keyword "optional"]
   onMissing <- optional (keyword "on-missing" *> symbol "=" *> pOnMissing)
   pure
@@ -250,24 +252,24 @@ pWireEnum = do
   wireTag <- stringLit
   pure WireEnum {weCtor = constructor, weTag = wireTag, weLoc = loc}
 
-pWireArm :: LanguageVersion -> P WireArm
-pWireArm version = do
+pWireArm :: FrontendContext -> P WireArm
+pWireArm context = do
   loc <- getLoc
   constructor <- ident
   keyword "as"
   wireTag <- stringLit
-  payload <- optional (symbol ":" *> pMappedTypeExpr version)
+  payload <- optional (symbol ":" *> pMappedTypeExpr context)
   pure WireArm {waCtor = constructor, waTag = wireTag, waPayload = payload, waLoc = loc}
 
-pMappedTypeExpr :: LanguageVersion -> P TypeExpr
-pMappedTypeExpr version =
+pMappedTypeExpr :: FrontendContext -> P TypeExpr
+pMappedTypeExpr context =
   choice
     [ TOptional <$> (keyword "Optional" *> pTypeArgument),
       TList <$> (keyword "List" *> pTypeArgument),
       TMap <$> (keyword "Map" *> pTypeArgument),
       TText <$ keyword "Text",
       TInt <$ keyword "Int",
-      TInteger <$ languageFeatureKeyword version IntegerScalarSyntax "Integer",
+      TInteger <$ languageFeatureKeyword context IntegerScalarSyntax "Integer",
       TBool <$ keyword "Bool",
       TNatural <$ keyword "Natural",
       TTime <$ (keyword "Time" <|> keyword "UTCTime"),
@@ -275,12 +277,12 @@ pMappedTypeExpr version =
       TRef <$> ident
     ]
   where
-    pTypeArgument = parens (pMappedTypeExpr version) <|> pTypeAtom
+    pTypeArgument = parens (pMappedTypeExpr context) <|> pTypeAtom
     pTypeAtom =
       choice
         [ TText <$ keyword "Text",
           TInt <$ keyword "Int",
-          TInteger <$ languageFeatureKeyword version IntegerScalarSyntax "Integer",
+          TInteger <$ languageFeatureKeyword context IntegerScalarSyntax "Integer",
           TBool <$ keyword "Bool",
           TNatural <$ keyword "Natural",
           TTime <$ (keyword "Time" <|> keyword "UTCTime"),
@@ -288,11 +290,10 @@ pMappedTypeExpr version =
           TRef <$> ident
         ]
 
-languageFeatureKeyword :: LanguageVersion -> LanguageFeature -> Text -> P ()
-languageFeatureKeyword version feature spelling = do
-  loc <- getLoc
-  keyword spelling
-  requireLanguageFeatureAt version feature loc
+languageFeatureKeyword :: FrontendContext -> LanguageFeature -> Text -> P ()
+languageFeatureKeyword context feature spelling = do
+  marker <- withOwnedSpan (keyword spelling)
+  requireLanguageFeatureAt context feature (spanOf marker)
 
 pOnMissing :: P OnMissing
 pOnMissing =

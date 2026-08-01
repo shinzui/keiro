@@ -14,9 +14,9 @@ where
 import Data.Bifunctor (first)
 import Data.Text (Text)
 import Keiro.Dsl.Frontend.Internal
-  ( FrontendFailure (..),
+  ( frontendCompatibilityFailure,
+    frontendFailureFromLowering,
     lowerSurfaceSource,
-    renderLoweringFailure,
   )
 import Keiro.Dsl.Grammar (Spec)
 import Keiro.Dsl.LanguageVersion
@@ -37,7 +37,5 @@ parseSpecText = parseSpec "<input>"
 -- | Parse a source without discarding its selected language contract.
 parseSource :: FilePath -> Text -> Either ParseFailure ParsedSource
 parseSource sourceName input = do
-  surface <- case parseSurfaceSource sourceName input of
-    Left (FrontendParseFailure parseFailure) -> Left parseFailure
-    Right value -> Right value
-  first (BodyGrammarFailure . renderLoweringFailure) (lowerSurfaceSource surface)
+  surface <- first frontendCompatibilityFailure (parseSurfaceSource sourceName input)
+  first (frontendCompatibilityFailure . frontendFailureFromLowering) (lowerSurfaceSource surface)

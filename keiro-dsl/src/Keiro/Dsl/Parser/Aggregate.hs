@@ -7,6 +7,7 @@ module Keiro.Dsl.Parser.Aggregate
 where
 
 import Data.Text qualified as T
+import Keiro.Dsl.Frontend.Internal (FrontendContext, frontendSupportsFeature)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Parser.Core
@@ -27,14 +28,14 @@ data BodyItem
   | BISnapshot SnapshotSpec
   | BITransition Transition [Located SurfaceElement]
 
-pAggregate :: LanguageVersion -> P (Aggregate, [Located SurfaceElement])
-pAggregate version = do
+pAggregate :: FrontendContext -> P (Aggregate, [Located SurfaceElement])
+pAggregate context = do
   loc <- getLoc
   keyword "aggregate"
   name <- ident
-  regs <- pRegsBlock version
+  regs <- pRegsBlock context
   states <- pStatesLine
-  positionedItems <- many ((,) <$> getOffset <*> pBodyItem version)
+  positionedItems <- many ((,) <$> getOffset <*> pBodyItem context)
   let items = map snd positionedItems
       wireOffsets = [offset | (offset, BIWire _) <- positionedItems]
       projectionOffsets = [offset | (offset, BIProjection _) <- positionedItems]
@@ -76,16 +77,16 @@ pAggregate version = do
       BIProjection _ -> []
       BISnapshot _ -> []
 
-pRegsBlock :: LanguageVersion -> P [RegDecl]
-pRegsBlock version = do
+pRegsBlock :: FrontendContext -> P [RegDecl]
+pRegsBlock context = do
   keyword "regs"
-  many (pRegDecl version)
+  many (pRegDecl context)
 
-pRegDecl :: LanguageVersion -> P RegDecl
-pRegDecl version = do
+pRegDecl :: FrontendContext -> P RegDecl
+pRegDecl context = do
   loc <- getLoc
   name <- ident
-  ty <- pMappedTypeExpr version
+  ty <- pMappedTypeExpr context
   _ <- symbol "="
   initial <- (RegInitText <$> stringLit) <|> (RegInitBare <$> (ident <|> signedDecimalText))
   pure RegDecl {regName = name, regType = ty, regInitial = initial, regLoc = loc}
@@ -112,15 +113,15 @@ pStatesLine = do
       notFollowedBy (symbol "--")
       pure StateDecl {stName = n, stTerminal = term, stLoc = loc}
 
-pBodyItem :: LanguageVersion -> P BodyItem
-pBodyItem version =
+pBodyItem :: FrontendContext -> P BodyItem
+pBodyItem context =
   choice
-    [ uncurry BICommand <$> pCommand version,
-      uncurry BIEvent <$> pEvent version,
+    [ uncurry BICommand <$> pCommand context,
+      uncurry BIEvent <$> pEvent context,
       BIWire <$> pWire,
       BIProjection <$> pProjection,
       BISnapshot <$> pSnapshot,
-      uncurry BITransition <$> pTransition version
+      uncurry BITransition <$> pTransition context
     ]
 
 pSnapshot :: P SnapshotSpec
@@ -139,26 +140,26 @@ pSnapshot = do
   hash <- stringLit
   pure SnapshotSpec {snapPolicy = policy, snapCodecVersion = version, snapShapeHash = hash, snapLoc = loc}
 
-pCommand :: LanguageVersion -> P (Command, [Located SurfaceElement])
-pCommand version = do
+pCommand :: FrontendContext -> P (Command, [Located SurfaceElement])
+pCommand context = do
   loc <- getLoc
   keyword "command"
   name <- ident
-  fields <- braces (many (withOwnedSpan (pAggregateField version)))
+  fields <- braces (many (withOwnedSpan (pAggregateField context)))
   pure
     ( Command {cmdName = name, cmdFields = map locatedValue fields, cmdLoc = loc},
       map (mapLocated (SurfaceField . aggregateFieldName)) fields
     )
 
-pAggregateField :: LanguageVersion -> P AggregateField
-pAggregateField version = do
+pAggregateField :: FrontendContext -> P AggregateField
+pAggregateField context = do
   loc <- getLoc
   n <- ident
-  mty <- optional (symbol ":" *> pMappedTypeExpr version)
+  mty <- optional (symbol ":" *> pMappedTypeExpr context)
   pure AggregateField {aggregateFieldName = n, aggregateFieldType = mty, aggregateFieldLoc = loc}
 
-pEvent :: LanguageVersion -> P (Event, [Located SurfaceElement])
-pEvent version = do
+pEvent :: FrontendContext -> P (Event, [Located SurfaceElement])
+pEvent context = do
   loc <- getLoc
   (retiring, deprecated) <-
     option
@@ -175,7 +176,7 @@ pEvent version = do
     choice
       [ (\commandName -> (EventFromCommand commandName, [])) <$> (symbol "=" *> keyword "fields" *> parens ident),
         do
-          fields <- braces (many (withOwnedSpan (pAggregateField version)))
+          fields <- braces (many (withOwnedSpan (pAggregateField context)))
           pure
             ( EventFields (map locatedValue fields),
               map (mapLocated (SurfaceField . aggregateFieldName)) fields
@@ -263,8 +264,8 @@ data Clause
   | CGoto Name
   | CImplementationHole
 
-pTransition :: LanguageVersion -> P (Transition, [Located SurfaceElement])
-pTransition version = do
+pTransition :: FrontendContext -> P (Transition, [Located SurfaceElement])
+pTransition context = do
   startOffset <- getOffset
   loc <- getLoc
   -- Plan 143: a @replay-only@ prefix marks the transition as serving
@@ -274,7 +275,7 @@ pTransition version = do
   _ <- symbol "--"
   cmd <- ident
   _ <- symbol "-->"
-  positionedClauses <- many ((,) <$> getOffset <*> (pClause version <* optional (symbol ";")))
+  positionedClauses <- many ((,) <$> getOffset <*> (pClause context <* optional (symbol ";")))
   let clauses = map (fst . snd) positionedClauses
       elements = concatMap (snd . snd) positionedClauses
       gotos = [(offset, target) | (offset, (CGoto target, _)) <- positionedClauses]
@@ -297,7 +298,7 @@ pTransition version = do
           tCommand = cmd,
           tImplementation = case holeOffsets of
             _ : _ -> HoleImplementation
-            [] | languageSupportsFeature version TypedAggregateExpressionSyntax -> GeneratedImplementation
+            [] | frontendSupportsFeature context TypedAggregateExpressionSyntax -> GeneratedImplementation
             [] -> LegacyHoleImplementation,
           tGuard = case guards of [] -> Nothing; es -> Just (foldr1 EAnd es),
           tWrites = [(r, e) | CWrite r e <- clauses],
@@ -309,23 +310,21 @@ pTransition version = do
       elements
     )
 
-pClause :: LanguageVersion -> P (Clause, [Located SurfaceElement])
-pClause version =
+pClause :: FrontendContext -> P (Clause, [Located SurfaceElement])
+pClause context =
   choice
     [ do
-        loc <- getLoc
-        keyword "implementation"
-        keyword "hole"
-        requireLanguageFeatureAt version ExplicitTransitionImplementationSyntax loc
+        marker <- withOwnedSpan (keyword "implementation" *> keyword "hole")
+        requireLanguageFeatureAt context ExplicitTransitionImplementationSyntax (spanOf marker)
         pure (CImplementationHole, []),
       do
         keyword "guard"
-        expression <- withOwnedSpan (pExpr version)
+        expression <- withOwnedSpan (pExpr context)
         pure (CGuard (locatedValue expression), [mapLocated SurfaceExpression expression]),
       do
         register <- keyword "write" *> ident
         _ <- symbol ":="
-        expression <- withOwnedSpan (pExpr version)
+        expression <- withOwnedSpan (pExpr context)
         pure (CWrite register (locatedValue expression), [mapLocated SurfaceExpression expression]),
       try $ do
         keyword "emit"
