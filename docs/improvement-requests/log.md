@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-08-01
+* **Addition**: IR-15 requests measurement and, if justified, removal of repeated remaining-input
+scans during Keiro DSL source-span capture while preserving exact spans and frozen parser
+compatibility; it is a parse-time tooling concern, not a generated-service runtime blocker.
 * **Implemented**: Close IR-12 after Plan 170 adds declaration-scoped ID and enum equality, exact consumer KindID and finite-enum domains, conservative legacy generated-ID verification, type-confusion diagnostics, replay/workspace conformance, and mutation evidence.
 * **Implemented**: Close IR-11 after Plan 167 recognizes preambles only before `context`, moves
 released feature markers to their owning grammar productions, preserves version-1 diagnostics,
