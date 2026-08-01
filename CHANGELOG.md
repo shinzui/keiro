@@ -6,7 +6,35 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.7.0.0 — 2026-08-01
+
+All published packages move to 0.7.0.0 together. The cycle is again dominated by
+`keiro-dsl`, which lands language version 3 and an enforced TypeID-v7 identifier
+domain, one deterministic owner for every generated service-level nominal, a
+retained semantic-contract boundary, and complete finite behavior conformance.
+`keiro-core` gains the published identifier-domain contract those generators
+target; `keiro`, `keiro-pgmq`, and `keiro-migrations` move with the set.
+
 ### Breaking Changes
+
+- **keiro-dsl**: language version 3 makes each generated prefix-bearing ID
+  abstract. Import `parseX`, `mkX`, and `xText` from
+  `Generated.<Context>.Nominals`; the raw constructor and
+  `unsafeXFromLegacyText` live only in the generated internal replay module.
+  Version 1, version 2, and legacy-unversioned generated output retain their
+  released constructor and decoder behavior.
+
+- **keiro-dsl**: generated service-level IDs and enums now live in one
+  context-level `Generated.<Context>.Nominals` module instead of being
+  redeclared in every aggregate `Domain`. Hand-owned modules that construct
+  these values must import the constructors from `Nominals` explicitly.
+  Re-scaffolding overwrites only generated files; event wire bytes and canonical
+  nominal identities are unchanged.
+
+- **keiro-dsl**: `DiagnosticCode` gains the append-only
+  `IdDomainContractChanged` constructor alongside those listed below.
+  Exhaustive matches must classify the new command/public-codec, replay,
+  snapshot, persisted-identity, and consumer-build vector.
 
 - **keiro-core**, **keiro**, **keiro-dsl**: require Keiki 0.7
   (`keiki >=0.7 && <0.8`, and `keiki-codec-json >=0.7 && <0.8` where used).
@@ -24,8 +52,41 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   that change vertex or registers without emitting an event are now rejected;
   an empty accepted edge is legal only as a true no-op.
 
+- **keiro-dsl**: requires `keiro-core ^>=0.7.0.0`. The 0.6.0.0 library
+  dependency on `keiro-core` carried no version constraint; the bound is now
+  explicit and moves in lockstep with the set.
+
 ### New Features
 
+- **keiro-core**: adds the public `Keiro.Codec.IdDomain` module — the frozen
+  `keiro-dsl/id-domain/typeid-v7/1` runtime contract for prefix-bearing
+  identifiers. Admission requires canonical lowercase TypeID-v7 text, the
+  declared prefix and one underscore, a 26-character Crockford suffix, and
+  UUIDv7 version/variant bits; `idDomainTextPattern` yields the matching exact
+  Keiki projection domain. **keiro** re-exports the module, so generated
+  version-3 bindings keep a single direct `keiro` dependency.
+- **keiro-dsl**: adds `language keiro-dsl 3`, selecting
+  `keiro-dsl/runtime-semantics/2`, with prefix-bearing IDs on the enforced
+  `keiro-dsl/id-domain/typeid-v7/1` contract. Generated and consumer-bound v3
+  IDs validate before binding conversion, current JSON decoding, literals, and
+  scaffold samples. Historical generated-event decoding retains an explicitly
+  named internal legacy constructor, while the same malformed text is rejected
+  at current command/public decoding with its JSON field path. Domain adoption
+  emits `IdDomainContractChanged`: old history remains readable, old snapshots
+  miss, public consumers break, consumer builds are advisory, and rollout is
+  producer-last.
+- **keiro-dsl**: plans one deterministic Haskell owner for every generated
+  service-level ID and enum across single-file and multi-file services.
+  Aggregate rings import only their resolved uses, unused declarations are not
+  imported into unrelated domains, and member reordering or ownership moves
+  leave generated nominal type identity unchanged.
+- **keiro-dsl**: adds the public `CheckedService`/`EffectiveLanguageContract`
+  semantic boundary. Single-source and workspace CLI routes retain the selected
+  contract through validation, scaffold and harness planning, generated fold
+  fingerprints, diff, replay-impact analysis, inspection JSON, and additive
+  scaffold-record rows. `Spec`-only APIs remain explicit legacy/version-1
+  compatibility wrappers, and grammar-only v1/v2 differences preserve generated
+  and fold bytes.
 - **keiro-dsl**: supports type-safe same-declaration ID and enum equality in
   generated aggregate guards. Consumer `KindID` IDs and finite enums use exact
   Keiki 0.7 projection domains with reconstructible models; legacy generated
@@ -52,6 +113,15 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   and every register are checked. Completeness fails by default, while honest
   Hole/unknown proof surfaces are separately gateable with
   `--fail-on-unverified`.
+
+### Bug Fixes
+
+- **keiro-dsl**: parses the optional `language keiro-dsl N` preamble only after
+  leading trivia and before `context`. Nested `language` fields and declarations
+  no longer look like misplaced or duplicate preambles, and version-2 feature
+  gates now arise from their grammar productions instead of raw source
+  substrings. Comments, strings, wire keys, and legal identifiers containing
+  `using`, `Integer`, `implementation hole`, `reg.`, or `cmd.` remain inert.
 
 ## 0.6.0.0 — 2026-07-31
 

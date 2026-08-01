@@ -6,6 +6,28 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.7.0.0 — 2026-08-01
+
+### Breaking Changes
+
+- Requires the conservative-projection Keiki release (`keiki >=0.7 && <0.8`),
+  replacing the previous `>=0.6 && <0.7` bound. Keiki 0.7 treats a predicate
+  that crosses a one-way generated projection as opaque to symbolic proof, so
+  verification may return `UnverifiedOpaque` where an earlier release reported a
+  `Verified*` result. Runtime codec and event-stream behavior is unchanged.
+
+### New Features
+
+- Adds the public `Keiro.Codec.IdDomain` module: the frozen
+  `keiro-dsl/id-domain/typeid-v7/1` runtime contract for prefix-bearing
+  TypeID-v7 identifiers. Exposes `IdDomainContract`, `IdDomainFailure`,
+  `IdNormalization`, `enforcedIdDomainVersion`, `typeIdV7Domain`,
+  `idDomainAcceptsText`, `validateIdDomainText`, `idDomainTextPattern`, and
+  `idDomainSampleText`. Admission requires canonical lowercase text, the
+  declared prefix and one underscore, a 26-character Crockford suffix, and
+  UUIDv7 version/variant bits; `idDomainTextPattern` yields the matching exact
+  Keiki projection domain. Adds a `mmzk-typeid >=0.7 && <0.8` dependency.
+
 ## 0.6.0.0 — 2026-07-31
 
 ### Breaking Changes

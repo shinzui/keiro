@@ -6,6 +6,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.7.0.0 — 2026-08-01
+
 ### Breaking Changes
 
 - Language version 3 makes each generated prefix-bearing ID abstract. Import
@@ -36,6 +38,10 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `AggregateEventlessStateChange` constructors. Exhaustive matches must be
   extended. A version-2 transition that emits no event may no longer change
   control state or registers; only an actual no-op is accepted.
+
+- Requires `keiro-core ^>=0.7.0.0` for the `Keiro.Codec.IdDomain` contract that
+  generated version-3 identifier code imports. The bound is now explicit; the
+  0.6.0.0 library dependency on `keiro-core` carried no version constraint.
 
 ### New Features
 
@@ -91,7 +97,7 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   fails incomplete or false evidence; `--fail-on-unverified` opts into a
   stricter proof policy.
 
-### Fixed
+### Bug Fixes
 
 - Parses the optional `language keiro-dsl N` preamble only after leading trivia
   and before `context`. Nested `language` fields and declarations no longer look

@@ -6,6 +6,24 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.7.0.0 — 2026-08-01
+
+### Breaking Changes
+
+- Requires the conservative-projection Keiki releases (`keiki >=0.7 && <0.8`,
+  `keiki-codec-json >=0.7 && <0.8`), replacing the previous `>=0.6 && <0.7`
+  bounds. Keiki 0.7 treats a predicate that crosses a one-way generated
+  projection as opaque to symbolic proof, so verification may return
+  `UnverifiedOpaque` where an earlier release reported a `Verified*` result.
+  Command execution and replay behavior are unchanged.
+- Requires `keiro-core ^>=0.7.0.0`.
+
+### New Features
+
+- Re-exports `Keiro.Codec.IdDomain` from `keiro-core`, so generated version-3
+  identifier bindings and harnesses keep a single direct `keiro` dependency
+  alongside the existing structural and nominal binding re-exports.
+
 ## 0.6.0.0 — 2026-07-31
 
 ### Breaking Changes
