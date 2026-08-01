@@ -4,9 +4,9 @@ title: Support composable multi-file service specifications in keiro-dsl
 description: >-
   Let one Keiro service keep complete aggregates in separate .keiro files while resolving shared
   declarations, validating the whole service, and scaffolding context-level outputs atomically.
-timestamp: 2026-08-01T00:14:56Z
+timestamp: 2026-08-01T15:50:45Z
 requestId: IR-2
-status: planned
+status: implemented
 origin: mori://shinzui/mori
 plan: docs/plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md
 reviews:
@@ -29,16 +29,16 @@ reviews:
 
 ## Status
 
-**Planned, with a release-blocking acceptance failure in Keiro 0.6.0.0.** The corrective work is
-owned by [Plan 168](../plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md)
-under [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md).
-This request belongs to
-`shinzui/keiro` and originates from Mori MasterPlan 22. The workspace checker and atomic scaffold
-entrypoint have landed, but the generated Haskell does not yet satisfy the single nominal type
-requirement below. Mori must not adopt the workspace scaffold until that identity split is fixed.
+**Implemented.** MasterPlan 26 delivered workspace composition, whole-service commands, atomic
+scaffolding/history, adoption, and diff. [Plan 168](../plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md)
+under [MasterPlan 27](../masterplans/27-repair-the-keiro-dsl-0-6-language-nominal-generation-and-workspace-regressions.md)
+closed the remaining Keiro 0.6.0.0 acceptance failure by giving shared generated IDs and enums one
+context-level Haskell owner. This request belongs to `shinzui/keiro` and originates from
+`mori://shinzui/mori/masterplans/22-model-first-class-schema-and-extension-domain-events`. Mori may
+now adopt the workspace scaffold subject to its ordinary generated-module import migration.
 
 
-## Keiro 0.6.0.0 Implementation Finding
+## Resolved Keiro 0.6.0.0 Implementation Finding
 
 Scaffolding Mori's two-member Project workspace with Keiro 0.6.0.0 emits independent declarations
 of `ProjectId` and `ProjectArtifactKind` in both
@@ -47,12 +47,25 @@ of `ProjectId` and `ProjectArtifactKind` in both
 declaration, but generated consumers receive two incompatible Haskell types. It also emits the
 shared enum in an aggregate that does not use it.
 
-This is not merely a module-layout preference: it fails this request's acceptance requirement to
+This was not merely a module-layout preference: it failed this request's acceptance requirement to
 "produce one nominal generated type for a shared declaration such as `ProjectId`" and ADR-0014's
 single-authority rule. The fix must give a shared declaration one generated owner and make every
 aggregate module import that same nominal type. A version-2 consumer binding may intentionally
 select an existing consumer-owned type, but it must not be required to hide duplicate default
 generation.
+
+The repair emits each generated service-level ID and enum once in a stable context `Nominals`
+module and makes aggregate rings import only their resolved uses. A compiled two-aggregate
+workspace passes `ProjectId` and `ProjectPhase` values between both rings and round-trips both
+generated codecs. The same merged two-aggregate graph produces identical module bytes through the
+single-file path; member reordering and repeated scaffolds are byte-identical. An unused shared enum
+is owned once but absent from unrelated aggregate imports.
+
+Adoption matches the actual 0.6 layout: the previous declarations were embedded in generated
+aggregate `Domain` modules, not separate nominal modules. Re-scaffolding overwrites those generated
+files, adds the context `Nominals` module, and leaves hand-owned files untouched. Hand-owned modules
+that construct generated nominal values import the new module explicitly. Event wire bytes,
+canonical nominal identity, and fold behavior remain unchanged.
 
 
 ## Context
@@ -234,6 +247,25 @@ The request is complete when Keiro demonstrates all of the following:
 - existing single-file CLI behavior and golden fixtures remain compatible; and
 - a fleet-style same-context per-aggregate example, such as Kotei's layout, can adopt the workspace
   without combining its aggregate sources into one file.
+
+
+## Closure Evidence
+
+The workspace implementation and its nominal repair now satisfy the complete acceptance list:
+
+- the canonical `demo-project` fixture composes two aggregates plus shared IDs, enums, a mapped
+  structural type, and a read model under one context;
+- composition and filesystem tests cover duplicate/conflicting declarations, unresolved
+  cross-file references, case-folded generated-path collisions, attribution, atomic refusal,
+  idempotence, member moves, and independent-spec adoption;
+- whole-workspace diff tests propagate shared structural changes to all owned use sites and produce
+  one replay-impact view;
+- the dedicated `workspace-nominal-proof` suite compiles both complete generated aggregate rings
+  against one `Nominals` module and passes shared values across them without conversion;
+- freshness tests compare the committed complete generated proof tree with the live workspace
+  planner, while single-file equivalence and member-order tests pin deterministic bytes; and
+- final validation passed all 423 `keiro-dsl-test` examples, the compiled conformance targets,
+  `cabal build all`, strict/log-enforced ADR validation, and `nix flake check`.
 
 
 ## Requested Deliverables

@@ -77,7 +77,7 @@ EP-159/EP-171 must update ADR 17/ADR 3 consequences where implementation changes
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 167 | Parse Keiro language preambles and feature gates from grammar context | docs/plans/167-parse-keiro-language-preambles-and-feature-gates-from-grammar-context.md | None | None | Not Started |
-| 168 | Give shared workspace nominal declarations one generated Haskell owner | docs/plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md | None | None | In Progress |
+| 168 | Give shared workspace nominal declarations one generated Haskell owner | docs/plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md | None | None | Complete |
 | 169 | Thread the effective Keiro language contract through semantic planning | docs/plans/169-thread-the-effective-keiro-language-contract-through-semantic-planning.md | None | EP-167 | Not Started |
 | 170 | Make nominal ID and enum equality exact in aggregate expressions | docs/plans/170-make-nominal-id-and-enum-equality-exact-in-aggregate-expressions.md | EP-168 | None | Not Started |
 | 159 | Generate complete reachable-state Holes and spec behavioral conformance, including declarative event outputs | docs/plans/159-generate-complete-reachable-state-holes-and-spec-behavioral-conformance.md | None | EP-170 | Not Started |
@@ -154,8 +154,8 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 
 - [ ] EP-167: adversarial language collision corpus and grammar-positioned preamble parsing.
 - [ ] EP-167: parsed/token-aware feature gates and complete compatibility validation.
-- [ ] EP-168: one planned nominal owner and use closure for single files and workspaces.
-- [ ] EP-168: compiled two-aggregate identity proof and non-destructive adoption.
+- [x] EP-168: one planned nominal owner and use closure for single files and workspaces.
+- [x] EP-168: compiled two-aggregate identity proof and non-destructive adoption.
 - [ ] EP-169: checked effective semantic contract routed through all semantic consumers.
 - [ ] EP-169: paired-version/workspace proof and ADR 16 amendment.
 - [ ] EP-170: Keiki 0.7 exact-projection adoption and checked nominal equality model.
@@ -185,6 +185,13 @@ interactions between child plans. Provide concise evidence.
   `7c5d433ef4455e9e626347f89cb3a416bad62e72`. The authoritative source exposes the detailed
   step/replay attribution, conservative projection classification, exact projection domains, and
   reconstructible models required by EP-159, EP-170, and EP-171.
+- 2026-08-01: EP-168 established `Generated.<Context>.Nominals` (or the collocated equivalent) as
+  the sole generated declaration and instance owner. EP-170 and EP-171 must extend that module;
+  aggregate `Domain` modules now import only their use closure and hand-owned constructor users
+  import `Nominals` explicitly.
+- 2026-08-01: Keiro 0.6 nominal adoption is a generated content/layout rewrite, not stale-module
+  cleanup: the old declarations were embedded in aggregate `Domain` modules. Focused adoption
+  coverage proves those generated files are replaced while a hand-owned Hole is untouched.
 
 
 ## Decision Log
@@ -233,7 +240,10 @@ Compare the result against the original vision. Before marking the MasterPlan co
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
-(Planning is updated for released Keiki 0.7.0.0; Keiro implementation has not started.)
+EP-168 is complete. Shared generated IDs and enums now have one stable context-level Haskell owner,
+with compiled cross-aggregate identity/codec proof, deterministic workspace and single-file plans,
+explicit non-destructive 0.6 adoption, and ADR 14 documentation. This closes the remaining IR-2
+acceptance failure and unblocks EP-170; the other five corrective workstreams remain open.
 
 
 Revision note: Updated the initiative for released Keiki `0.7.0.0`, verified on Hackage and through

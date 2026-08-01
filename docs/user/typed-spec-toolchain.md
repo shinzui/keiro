@@ -318,6 +318,7 @@ $ cabal run -v0 keiro-dsl -- scaffold keiro-dsl/test/fixtures/workspace/service.
 workspace: demo-project (…) -> /tmp/demo-project (module-root=Demo.Modules.Project, layout=collocated)
 members:  domain/project-artifact.keiro, domain/project.keiro, domain/shared.keiro
   generated  …StructuralProjections  (overwritten)  (context-level)
+  generated  …Generated.Nominals     (overwritten)  (context-level)
   generated  …ProjectArtifact.Generated.Domain  (overwritten)  domain/project-artifact.keiro
   generated  …Project.Generated.Domain          (overwritten)  domain/project.keiro
 record:   /tmp/demo-project/keiro-dsl-scaffold-record.workspace.demo-project.txt
@@ -328,11 +329,20 @@ $ cabal run -v0 keiro-dsl -- scaffold keiro-dsl/test/fixtures/workspace/service.
   generated  …Project.Generated.Domain          (unchanged)  domain/project.keiro
 ```
 
-The first run plans every member before writing, emits one context-level facade and
-one replay-audit assembly, and writes workspace-keyed record/manifest files. The
-second run reports generated modules as `unchanged`, holes as `skipped`, and no
-stale section. Any member parse error, validation error, collision, or banner
-refusal stops before the first output byte changes.
+The first run plans every member before writing, emits one context-level structural
+facade, one `Nominals` authority, and one replay-audit assembly, and writes
+workspace-keyed record/manifest files. The second run reports generated modules as
+`unchanged`, holes as `skipped`, and no stale section. Any member parse error,
+validation error, collision, or banner refusal stops before the first output byte
+changes.
+
+Every generated service-level `id` and `enum` is declared once in
+`<root>.Generated.<Context>.Nominals` (prefixed layout) or
+`<root>.<Context>.Generated.Nominals` (collocated layout). Aggregate rings import
+only their resolved uses from that module; an unused declaration remains available
+at the service authority but is absent from unrelated aggregate imports. A
+declaration's member file remains its diagnostic owner, not its Haskell type owner,
+so moving or reordering members does not change nominal identity.
 
 Whole-workspace `diff` reconstructs the manifest and its member set at `--since`
 and emits one compatibility, replay-impact, and coverage view. A shared mapped-type
@@ -368,6 +378,23 @@ scalars, and create-once binding skeletons. Scaffold records persist these as
 separate `nominal-mapping` rows so older readers can ignore them without
 changing existing `mapping` JSON. Consumer packages are added to the manifest;
 bound IDs also add `mmzk-typeid`.
+
+For generated (unbound) IDs and enums, the context-level `Nominals` module owns
+the Haskell declaration, JSON and `CanonicalTypeName` instances, and textual wire
+helpers. Generated domain, codec, expression, and harness modules import it
+directly. Because aggregate `Domain` modules no longer declare or implicitly
+export these constructors, a hand-owned Hole or application module that constructs
+one must also import it explicitly, for example:
+
+```haskell
+import Demo.Modules.Project.DemoProject.Generated.Nominals
+  ( ProjectId (..), ProjectPhase (..) )
+```
+
+The first re-scaffold from the original 0.6 layout adds `Nominals` and overwrites
+only generated aggregate files to replace embedded declarations with imports. It
+does not edit hand-owned modules or change event wire bytes, canonical nominal
+identity, or fold behavior.
 
 For each version-2 aggregate, generated ownership adds an `Expressions` module
 with stable typed guard/write functions and a `Transducer` module that assembles

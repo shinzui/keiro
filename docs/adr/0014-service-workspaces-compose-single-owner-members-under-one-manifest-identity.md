@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Service workspaces compose single-owner members under one manifest identity
 description: A keiro service may span several .keiro files, composed as one graph through a versioned manifest whose service name is the durable identity and whose members each own their declarations outright.
-timestamp: 2026-07-29T15:15:15Z
+timestamp: 2026-08-01T15:44:33Z
 docId: ADR-14
 status: Accepted
 date: 2026-07-29
@@ -72,6 +72,25 @@ type — and following ADR 0004 the conflict is refused at composition, the
 earliest boundary where both owning files are visible, rather than surfacing
 later as a scaffold path collision.
 
+**Generated Haskell nominals have one context-level authority.** Source-member
+ownership remains diagnostic provenance; it does not select a Haskell type
+owner. Every generated service-level id and enum is declared exactly once in
+the context `Nominals` module: `<root>.Generated.<Context>.Nominals` for the
+prefixed layout, or `<root>.<Context>.Generated.Nominals` for the collocated
+layout. The module name depends only on the effective context and layout, so
+moving or reordering members cannot split or rename the type. It owns the
+generated representation, JSON instances, canonical identity, and textual
+wire helpers for the complete declaration set, including declarations with no
+current aggregate use.
+
+Each aggregate ring imports only the generated nominals in its resolved use
+closure; codecs, expression lowering, and harnesses import their direct uses
+from the same authority. An aggregate `Domain` no longer redeclares or
+implicitly exports these constructors, so hand-owned modules that construct a
+generated id or enum import `Nominals` explicitly. Consumer-bound version-2
+nominals remain owned by their declared application module and total binding
+under ADR 0012 rather than being copied into the generated owner.
+
 **Context is member-declared and must be unanimous.** The manifest has no
 `context` clause: the member grammar already makes `context` mandatory, so a
 manifest clause would create a second authority that can only agree or conflict.
@@ -123,6 +142,13 @@ bytes are unchanged by construction.
 - Adopting a workspace can require real edits: a repository that repeats an
   identical `id RunId prefix=run` in three files must move it to one owning
   member. That is the intended cost of the single-owner rule.
+- Adopting the repaired nominal layout adds one generated `Nominals` module and
+  overwrites generated aggregate modules to replace embedded declarations with
+  imports. Keiro 0.6 did not emit separate aggregate-local nominal modules, so
+  there is no old module path to report stale; adoption is a generated-file
+  content/layout change, not wire or fold evolution. The scaffolder never edits
+  hand-owned files, although their source may need the explicit import noted
+  above.
 - Whole-workspace "atomicity" means every refusal, collision, parse error, and
   validation error is detected before the first output byte changes, extending
   the existing plan-then-write architecture across members. Staged
@@ -175,3 +201,6 @@ corrupted manifest into a misleading `.keiro` grammar error.
   justification for the single-owner declaration rule.
 - ADR 0013 keeps structural coverage reporting-first, so the whole-service
   coverage report aggregates without inventing gates.
+- [ExecPlan 168](../plans/168-give-shared-workspace-nominal-declarations-one-generated-haskell-owner.md)
+  implements the context-level nominal authority and its cross-aggregate
+  compile proof.

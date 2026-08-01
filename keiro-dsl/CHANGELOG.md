@@ -8,6 +8,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- Generated service-level IDs and enums now live in one context-level
+  `Generated.<Context>.Nominals` module instead of being redeclared in every
+  aggregate `Domain`. Hand-owned modules that construct these values must import
+  the constructors from `Nominals` explicitly. Re-scaffolding overwrites only
+  generated files; event wire bytes and canonical nominal identities are
+  unchanged.
+
 - Requires `keiki >=0.7 && <0.8`. Keiki 0.7 deliberately treats predicates
   crossing a one-way generated projection as opaque to symbolic proof, so
   verification may now return `UnverifiedOpaque` where an earlier release
@@ -21,6 +28,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   control state or registers; only an actual no-op is accepted.
 
 ### New Features
+
+- Plans one deterministic Haskell owner for every generated service-level ID and
+  enum across single-file and multi-file services. Aggregate rings import only
+  their resolved uses, unused declarations are not imported into unrelated
+  domains, and member reordering or ownership moves leave generated nominal type
+  identity unchanged. A compiled two-aggregate workspace conformance suite passes
+  shared ID and enum values across both rings and round-trips both codecs.
 
 - Generates version-2 events declared as `fields(Command)` directly from one
   checked total identity mapping. The runtime no longer imports a create-once

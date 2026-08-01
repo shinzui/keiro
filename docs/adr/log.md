@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-08-01
+* **Update**: Define the context-level generated Nominals authority, aggregate use-closure imports, and non-destructive Keiro 0.6 layout adoption (plan 168).
+
 ## 2026-07-31
 * **Update**: Accept ADR 0017 after authoritative scalar transducer conformance landed, and align ADRs 0003, 0004, 0012, and 0016 with generated/Hole ownership, exact arithmetic, conservative verification, and fold-version remedies (plan 161).
 * **Update**: Extend ADR 0012's total-binding inventory to consumer-owned direct IDs, enums, and nominal scalars (plan 158).

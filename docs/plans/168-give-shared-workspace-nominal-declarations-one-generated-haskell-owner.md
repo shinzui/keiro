@@ -40,9 +40,9 @@ This section must always reflect the actual current state of the work.
   into aggregate domains and their generated consumers, and preserve consumer-bound ownership.
 - [x] (2026-08-01T15:37:09Z) Milestone 3: compiled and executed a two-aggregate workspace conformance
   target with cross-ring nominal values and generated instances.
-- [ ] Milestone 4: add adoption/diff/freshness coverage, update ADR 14 and workspace documentation,
-  and run full validation. Freshness and member-order coverage are complete; durable documentation
-  and full validation remain.
+- [x] (2026-08-01T15:50:45Z) Milestone 4: added 0.6 adoption, ordering, single-file, and complete-tree
+  freshness coverage; updated ADR 14, workspace documentation, and the changelog; and passed full
+  validation.
 
 
 ## Surprises & Discoveries
@@ -66,6 +66,16 @@ implementation. Provide concise evidence.
   consumer-owned `ProjectSummary`, so it is suitable for ownership and deterministic-plan tests but
   not a self-contained compile target. The fixture was extended with an unused enum, while a minimal
   companion workspace supplies the executable cross-ring type-identity proof.
+
+- 2026-08-01: The full unit run's only intermediate failure was the starter-freshness sentinel for
+  `SkelProcess.Generated.MyService.Nominals`. Regenerating that machine-owned starter and adding the
+  module to its compiled suite restored 423/423 examples and proved the ownership rule also applies
+  to multi-aggregate `new process` output.
+
+- 2026-08-01: Keiro 0.6 embedded nominal declarations inside aggregate `Domain` modules; it did not
+  emit separate aggregate-local nominal modules. Adoption therefore overwrites generated domains
+  and adds the context module, with no obsolete nominal-only path to report stale. The focused
+  adoption test proves a hand-owned Hole remains byte-identical.
 
 
 ## Decision Log
@@ -108,7 +118,23 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(Implementation not started.)
+Completed on 2026-08-01. `Keiro.Dsl.Scaffold` now exposes a pure, deterministic nominal-generation
+plan and emits one context-level owner for every generated service ID and enum. Aggregate domains,
+codecs, expressions, and harnesses import only their direct resolved uses. Consumer-bound nominal
+ownership remains unchanged.
+
+The complete `workspace-nominal-proof` generated tree compiles both aggregate rings together,
+passes `ProjectId` and `ProjectPhase` values across them without conversion, and round-trips both
+generated codecs. The canonical workspace also proves one unused enum is owned once but absent from
+both aggregate imports, and its merged two-aggregate `Spec` produces the same module bytes through
+the single-file path. Reordering members, repeated scaffolds, 0.6 adoption, and starter freshness
+are covered.
+
+Validation passed with the dedicated workspace suite, the regenerated reservation, scalar, and
+skeleton conformance suites, all 423 `keiro-dsl-test` examples, `cabal build all`, ADR strict/log
+validation (17 concepts), and `nix flake check`. The durable ownership and adoption contract is now
+recorded in ADR 14. EP-170 and EP-171 can extend the single `Nominals` owner instead of introducing
+aggregate-local instances.
 
 
 ## Context and Orientation
@@ -160,11 +186,12 @@ and decode events on both sides, and exercise `ProjectPhase` values. Add negativ
 tests for duplicate declarations and generated-path collisions, but do not rely on a deliberately
 uncompilable Haskell fixture as the only regression test.
 
-Milestone 4 covers migration and evolution. A first scaffold over prior 0.6 history reports old
-aggregate-local generated nominal modules as stale generated artifacts and the new context module
-as added; it never deletes or claims hand-owned files. Wire/fold reports remain compatible when
-only authority moves. Repeated scaffolds and member reordering are byte-identical. Update
-workspace authoring documentation, `keiro-dsl/CHANGELOG.md`, ADR 14, and ADR bundle log.
+Milestone 4 covers migration and evolution. A first scaffold over prior 0.6 history overwrites the
+generated aggregate modules that embedded nominal declarations and adds the context module; there
+are no former nominal-only module paths to report stale. It never deletes, overwrites, or claims
+hand-owned files. Wire/fold reports remain compatible when only authority moves. Repeated scaffolds
+and member reordering are byte-identical. Update workspace authoring documentation,
+`keiro-dsl/CHANGELOG.md`, ADR 14, and the ADR bundle log.
 
 
 ## Concrete Steps
@@ -213,13 +240,20 @@ Add a checked value in `Keiro.Dsl.Scaffold` or a focused new module equivalent t
 data NominalGenerationOwner = NominalGenerationOwner
   { nominalDeclaration :: ResolvedNominalType
   , nominalModule :: Text
-  , nominalSourceOwner :: Maybe WorkspaceMemberRef
   , nominalUseSites :: Set NominalUseSite
   }
 
-planNominalGeneration :: Context -> Spec -> Either [ScaffoldRefusal] [NominalGenerationOwner]
+planNominalGeneration :: Context -> Spec -> Either (NonEmpty NominalTypeError) [NominalGenerationOwner]
 ```
 
-The module name is context/service-derived and independent of aggregate or member order. Plan 170
-must add equality projection tags and Plan 171 must add validated ID constructors to this one owner
-rather than reintroducing aggregate-local instances.
+The semantic planner deliberately consumes `Spec`, which has source locations but no workspace
+member-reference type. Workspace planning separately records the resulting module as
+`ContextLevel`; declaration/source ownership remains available in the workspace graph for
+diagnostics. The module name is context/service-derived and independent of aggregate or member
+order. Plan 170 must add equality projection tags and Plan 171 must add validated ID constructors
+to this one owner rather than reintroducing aggregate-local instances.
+
+
+Revision note (2026-08-01): Completed implementation, corrected the adoption description to match
+the actual embedded 0.6 layout, recorded the delivered planner interface, validation evidence, and
+ADR distillation, and closed the remaining IR-2 acceptance failure.
