@@ -6,6 +6,49 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.8.0.0 — 2026-08-01
+
+All published packages move to 0.8.0.0 together. The cycle is entirely `keiro-dsl`: the `.keiro`
+grammar is split into internal concern modules behind the stable `Keiro.Dsl.Parser` facade, a new
+located surface frontend is published as an advanced API, and the released-language registry now
+selects syntax profiles and runtime-semantics identities explicitly rather than inheriting them from
+numeric version ordering. `keiro-core`, `keiro`, `keiro-pgmq`, and `keiro-migrations` are unchanged
+and move with the set.
+
+### Breaking Changes
+
+- **keiro-dsl**: `LanguageDefinition` gains `definitionSyntaxProfile` and
+  `definitionRuntimeSemantics`. It is exported as `LanguageDefinition (..)`, so positional
+  construction and non-wildcard record patterns no longer compile. `definitionBodyParser` remains as
+  a compatibility projection but no longer drives parser dispatch.
+
+### New Features
+
+- **keiro-dsl**: publishes `Keiro.Dsl.Source`, `Keiro.Dsl.Syntax`, and `Keiro.Dsl.Frontend`.
+  Source-aware tooling can parse an ordered, located `SurfaceSource`, inspect exact half-open spans,
+  and lower explicitly to the existing `ParsedSource`/`Spec` semantic boundary.
+- **keiro-dsl**: structured frontend failures carry source-selection, body-parsing, and lowering
+  phases; stable codes; exact primary spans; messages; expected items; and supported-version
+  metadata. Megaparsec types remain internal.
+- **keiro-dsl**: adds `syntaxProfileIdentifier`, `syntaxProfileSupportsFeature`,
+  `languageVersionsSupportingFeature`, and `sourceLanguageDiagnosticMessage` to
+  `Keiro.Dsl.LanguageVersion`.
+
+### Other Changes
+
+- **keiro-dsl**: organizes the `.keiro` grammar into internal concern modules behind the stable
+  `Keiro.Dsl.Parser` compatibility facade. CLI and workspace members still parse once through that
+  facade; semantic checking, scaffolding, diffing, fingerprints, and replay consume only lowered
+  semantic values.
+- **keiro-dsl**: every released registry entry now selects an immutable syntax profile and
+  runtime-semantics identity. Version 3 deliberately reuses version 2's syntax profile; adding a
+  future version no longer inherits syntax or runtime behavior from numeric ordering.
+- **keiro-dsl**: `parseSource`, `parseSpec`, `parseSpecText`, their rendered diagnostics, the
+  complete 0.7 acceptance matrix, and generated Haskell bytes are unchanged. Canonical pretty
+  printing remains non-lossless: the located surface layer does not retain comments or whitespace.
+- **keiro-core**, **keiro**, **keiro-pgmq**, **keiro-migrations**: no changes; version moves with
+  the set. Internal `keiro-core` bounds bumped to `^>=0.8.0.0` in lockstep.
+
 ## 0.7.0.0 — 2026-08-01
 
 All published packages move to 0.7.0.0 together. The cycle is again dominated by

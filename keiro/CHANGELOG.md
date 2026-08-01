@@ -6,6 +6,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.8.0.0 — 2026-08-01
+
+No changes this release. Version moves with the package set.
+
 ## 0.7.0.0 — 2026-08-01
 
 ### Breaking Changes

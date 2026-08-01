@@ -6,7 +6,17 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
-### Added
+## 0.8.0.0 — 2026-08-01
+
+### Breaking Changes
+
+- `LanguageDefinition` gains two fields — `definitionSyntaxProfile` and
+  `definitionRuntimeSemantics`. The type is exported as `LanguageDefinition (..)` from
+  `Keiro.Dsl.LanguageVersion`, so positional construction and non-wildcard record patterns no longer
+  compile. `definitionBodyParser` is retained as a compatibility projection but is no longer
+  consulted for parser dispatch.
+
+### New Features
 
 - Adds the public `Keiro.Dsl.Source`, `Keiro.Dsl.Syntax`, and `Keiro.Dsl.Frontend` advanced API.
   Source-aware tooling can parse an ordered, located `SurfaceSource`, inspect exact half-open spans,
@@ -14,8 +24,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 - Adds structured frontend failures with source-selection, body-parsing, and lowering phases;
   stable codes; exact primary spans; messages; expected items; and supported-version metadata.
   Megaparsec types remain internal.
+- Adds `syntaxProfileIdentifier`, `syntaxProfileSupportsFeature`,
+  `languageVersionsSupportingFeature`, and `sourceLanguageDiagnosticMessage` to
+  `Keiro.Dsl.LanguageVersion`.
 
-### Changed
+### Other Changes
 
 - Organizes the `.keiro` grammar into internal concern modules behind the stable
   `Keiro.Dsl.Parser` compatibility facade. CLI and workspace members still parse once through that
@@ -27,6 +40,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 - Keeps `parseSource`, `parseSpec`, `parseSpecText`, their rendered diagnostics, the complete 0.7
   acceptance matrix, and generated Haskell bytes unchanged. Canonical pretty printing remains
   non-lossless: the located surface layer does not retain comments or whitespace.
+- Derives `languageFeatureMinimumVersion` and `languageSupportsFeature` from the registry's syntax
+  profiles instead of numeric version ordering.
 
 ## 0.7.0.0 — 2026-08-01
 
